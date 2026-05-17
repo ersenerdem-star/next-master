@@ -1070,14 +1070,6 @@ export function PortalPage() {
           <div className="portal-order-builder">
             <div className="portal-order-builder__meta">
               <div className="dashboard-stat">
-                <span>Price List</span>
-                <strong>{activeSnapshot.pricingProfile?.price_list_type || "-"}</strong>
-              </div>
-              <div className="dashboard-stat">
-                <span>Margin %</span>
-                <strong>{activeSnapshot.pricingProfile?.margin_percent == null ? "-" : `${activeSnapshot.pricingProfile.margin_percent}%`}</strong>
-              </div>
-              <div className="dashboard-stat">
                 <span>Currency</span>
                 <strong>{portalOrderCurrency}</strong>
               </div>

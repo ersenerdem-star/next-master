@@ -41,8 +41,6 @@ type PortalPartyProfile = {
   currency?: string;
   payment_terms?: string;
   contract_nr?: string;
-  price_list_type?: string;
-  price_list_margin_percent?: number | null;
   remarks?: string;
 };
 
@@ -189,8 +187,6 @@ export type PortalSnapshot = {
     paymentCount: number;
   };
   pricingProfile: {
-    price_list_type: string;
-    margin_percent: number | null;
     currency: string;
     payment_terms?: string;
     contract_nr?: string;

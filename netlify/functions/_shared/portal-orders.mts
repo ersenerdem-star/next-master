@@ -592,13 +592,6 @@ export async function preparePortalOrderLines(
   return {
     lines: prepared,
     pricingProfile: {
-      price_list_type: context.customerType,
-      margin_percent:
-        context.customerType === "B"
-          ? context.effectiveMarginB
-          : context.customerType === "C"
-            ? null
-            : context.effectiveMarginA,
       currency: context.currency,
       payment_terms: context.customer.payment_terms || "",
       contract_nr: context.customer.contract_nr || "",
