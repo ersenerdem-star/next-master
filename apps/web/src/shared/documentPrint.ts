@@ -144,13 +144,13 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
         @page { margin: 14mm 12mm 18mm; }
         body { font-family: "Helvetica Neue", Arial, sans-serif; color: #111827; margin: 0; font-size: 8.6pt; }
         .page { padding: 0; }
-        .header-shell { display:flex; justify-content:space-between; align-items:flex-start; gap:12mm; margin-bottom:4mm; width:100%; }
+        .header-shell { display:flex; justify-content:space-between; align-items:stretch; gap:12mm; margin-bottom:4mm; width:100%; }
         .header-left { display:flex; flex-direction:column; gap:3mm; align-items:flex-start; flex:0 1 108mm; max-width:108mm; min-width:0; }
-        .header-right { display:flex; justify-content:flex-end; align-items:flex-start; margin-left:auto; flex:0 0 60mm; width:60mm; }
+        .header-right { display:flex; justify-content:flex-end; align-items:stretch; margin-left:auto; flex:0 0 60mm; width:60mm; }
         .header-card { border:0.25mm solid #d7dee8; border-radius:5px; padding:3mm 3.5mm; background:#fff; box-sizing:border-box; }
         .seller-card { width:56mm; }
         .party-card { width:100%; max-width:108mm; }
-        .meta-card { width:60mm; min-width:60mm; max-width:60mm; min-height:100%; margin-left:auto; }
+        .meta-card { width:60mm; min-width:60mm; max-width:60mm; min-height:100%; height:100%; margin-left:auto; display:flex; flex-direction:column; }
         .identity-row { display:flex; flex-direction:column; align-items:center; gap:1.5mm; width:100%; }
         .header-logo { width:100%; min-height:14mm; display:flex; justify-content:center; align-items:flex-start; }
         .seller-name { width:100%; text-align:center; font-size:7.1pt; font-weight:700; line-height:1.22; letter-spacing:0.01em; }
