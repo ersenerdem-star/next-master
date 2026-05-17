@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import { fetchDashboardLatestQuotes, fetchDashboardSnapshot, type DashboardSnapshot, type RevenueSource } from "../../infrastructure/api/dashboardApi";
+import {
+  fetchDashboardLatestQuotes,
+  fetchDashboardSnapshot,
+  type DashboardSalesOrderSummary,
+  type DashboardSnapshot,
+  type RevenueSource,
+} from "../../infrastructure/api/dashboardApi";
 import { Button } from "../components/common/Button";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { Input } from "../components/common/Input";
@@ -7,18 +13,17 @@ import { Select } from "../components/common/Select";
 import { SectionCard } from "../components/common/SectionCard";
 import { StatCard } from "../components/common/StatCard";
 import { deleteSupplierBrandSummaryRow, fetchCloudSupplierBrandSummary, fetchCloudSupplierBrandSummaryAll, fetchCloudSuppliers } from "../../infrastructure/api/suppliersApi";
-import type { QuoteSummary } from "../../types/quotes";
 import type { SupplierBrandSummaryRow, SupplierSummary } from "../../types/suppliers";
 import { downloadCsv, toCsv } from "../../shared/csv";
 
 type DashboardPageProps = {
-  onOpenQuote?: (quoteId: string) => void;
+  onOpenSalesOrder?: (salesOrderId: string) => void;
 };
 
-export function DashboardPage({ onOpenQuote }: DashboardPageProps) {
+export function DashboardPage({ onOpenSalesOrder }: DashboardPageProps) {
   const actionFeedback = useActionFeedback();
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
-  const [latestQuotes, setLatestQuotes] = useState<QuoteSummary[]>([]);
+  const [latestQuotes, setLatestQuotes] = useState<DashboardSalesOrderSummary[]>([]);
   const [loadingLatestQuotes, setLoadingLatestQuotes] = useState(false);
   const [brandSummary, setBrandSummary] = useState<SupplierBrandSummaryRow[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
@@ -174,6 +179,7 @@ export function DashboardPage({ onOpenQuote }: DashboardPageProps) {
   const brandCount = snapshot?.brandCount ?? 0;
   const supplierCount = snapshot?.supplierCount ?? 0;
   const quoteCount = snapshot?.quoteCount ?? 0;
+  const newPortalOrders = snapshot?.newPortalOrders ?? 0;
   const revenue = snapshot?.revenue;
   const issues = snapshot?.issues ?? {};
 
@@ -225,16 +231,30 @@ export function DashboardPage({ onOpenQuote }: DashboardPageProps) {
         <StatCard label="Quotes" value={quoteCount.toLocaleString("en-US")} subtext="Recent cloud sales orders" tone="neutral" />
       </div>
 
+      {newPortalOrders > 0 ? (
+        <SectionCard title="New Order Came">
+          <div className="dashboard-alert dashboard-alert--warning">
+            <strong>{newPortalOrders.toLocaleString("en-US")} new portal order</strong>
+            <span>Customer confirmed order is waiting in Sales Orders.</span>
+          </div>
+        </SectionCard>
+      ) : null}
+
       <div className="dashboard-grid">
         <SectionCard title="Latest Sales Orders">
           {latestQuotesError ? <div className="error-text">{latestQuotesError}</div> : null}
           <div className="list-stack">
             {latestQuotes.map((quote) => (
-              <div key={quote.quote_id} className="list-row">
-                <strong>{quote.quote_no}</strong>
+              <div key={quote.id} className="list-row">
+                <strong>{quote.sales_order_no || quote.id}</strong>
                 <span>{quote.customer_name || "-"}</span>
-                <span>{quote.status || "-"}</span>
-                <Button variant="secondary" onClick={() => onOpenQuote?.(quote.quote_id)}>
+                <span className="dashboard-order-meta">
+                  {quote.source_channel === "portal" && quote.portal_submitted_at && !quote.portal_seen_at ? (
+                    <span className="mark-badge mark-badge--accent">New Order</span>
+                  ) : null}
+                  <span>{quote.status || "-"}</span>
+                </span>
+                <Button variant="secondary" onClick={() => onOpenSalesOrder?.(quote.id)}>
                   Open Sales Order
                 </Button>
               </div>

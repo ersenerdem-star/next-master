@@ -18,12 +18,20 @@ import { useActionFeedback } from "../components/common/ActionFeedback";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 
 type SalesPageProps = {
+  selectedSalesOrderId?: string;
+  onSelectedSalesOrderChange?: (salesOrderId: string) => void;
   selectedQuoteId?: string;
   onSelectedQuoteChange?: (quoteId: string) => void;
   selectedInvoiceId?: string;
 };
 
-export function SalesPage({ selectedQuoteId = "", onSelectedQuoteChange, selectedInvoiceId: externalSelectedInvoiceId = "" }: SalesPageProps) {
+export function SalesPage({
+  selectedSalesOrderId = "",
+  onSelectedSalesOrderChange,
+  selectedQuoteId = "",
+  onSelectedQuoteChange,
+  selectedInvoiceId: externalSelectedInvoiceId = "",
+}: SalesPageProps) {
   const actionFeedback = useActionFeedback();
   const [activeTab, setActiveTab] = useState<
     "Customers" | "Sales Orders" | "Invoices" | "Sales Receipts" | "Payments Received" | "Sales Returns" | "Credit Notes" | "Price Lists"
@@ -459,7 +467,14 @@ export function SalesPage({ selectedQuoteId = "", onSelectedQuoteChange, selecte
         ))}
       </div>
 
-      {activeTab === "Sales Orders" ? <QuotesPage selectedQuoteId={selectedQuoteId} onSelectedQuoteChange={onSelectedQuoteChange} /> : null}
+      {activeTab === "Sales Orders" ? (
+        <QuotesPage
+          selectedSalesOrderId={selectedSalesOrderId}
+          onSelectedSalesOrderChange={onSelectedSalesOrderChange}
+          selectedQuoteId={selectedQuoteId}
+          onSelectedQuoteChange={onSelectedQuoteChange}
+        />
+      ) : null}
       {activeTab === "Price Lists" ? <PriceListsPage /> : null}
       {activeTab === "Customers" ? <CustomersPage /> : null}
       {activeTab === "Invoices" ? (

@@ -42,6 +42,7 @@ type PortalPartyProfile = {
   payment_terms?: string;
   contract_nr?: string;
   price_list_type?: string;
+  price_list_margin_percent?: number | null;
   remarks?: string;
 };
 
@@ -72,6 +73,9 @@ type PortalOrderRow = {
   sales_total?: number;
   total_amount?: number;
   line_count?: number;
+  source_channel?: string;
+  portal_submitted_at?: string | null;
+  portal_seen_at?: string | null;
   delivery_term?: string;
   payment_terms?: string;
   packing_details?: string;
@@ -165,6 +169,7 @@ export type PortalSnapshot = {
   companyProfile: PortalCompanyProfile | null;
   customer: PortalPartyProfile | null;
   vendor: PortalPartyProfile | null;
+  availableBrands: string[];
   salesOrders: PortalOrderRow[];
   purchaseOrders: PortalOrderRow[];
   invoices: PortalInvoiceRow[];
@@ -183,6 +188,13 @@ export type PortalSnapshot = {
     openAmount: number;
     paymentCount: number;
   };
+  pricingProfile: {
+    price_list_type: string;
+    margin_percent: number | null;
+    currency: string;
+    payment_terms?: string;
+    contract_nr?: string;
+  } | null;
   accountRows: PortalAccountRow[];
 };
 

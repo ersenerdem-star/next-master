@@ -34,6 +34,10 @@ const SALES_ORDER_COLUMNS = [
   "sales_total",
   "profit_total",
   "margin_percent",
+  "source_channel",
+  "portal_invite_id",
+  "portal_submitted_at",
+  "portal_seen_at",
   "created_at",
   "updated_at",
   "confirmed_at",
@@ -174,6 +178,10 @@ function mapSalesOrderRow(row: Record<string, unknown>): LocalSalesOrder {
     sales_total: toNumber(row.sales_total),
     profit_total: toNumber(row.profit_total),
     margin_percent: toNumber(row.margin_percent),
+    source_channel: String(row.source_channel || "internal") as LocalSalesOrder["source_channel"],
+    portal_invite_id: row.portal_invite_id ? String(row.portal_invite_id) : null,
+    portal_submitted_at: row.portal_submitted_at ? String(row.portal_submitted_at) : null,
+    portal_seen_at: row.portal_seen_at ? String(row.portal_seen_at) : null,
     created_at: String(row.created_at || ""),
     updated_at: String(row.updated_at || ""),
     confirmed_at: row.confirmed_at ? String(row.confirmed_at) : null,
@@ -316,6 +324,10 @@ function mapSalesOrderPayload(order: LocalSalesOrder, organizationId: string) {
     sales_total: order.sales_total,
     profit_total: order.profit_total,
     margin_percent: order.margin_percent,
+    source_channel: order.source_channel || "internal",
+    portal_invite_id: order.portal_invite_id || null,
+    portal_submitted_at: order.portal_submitted_at || null,
+    portal_seen_at: order.portal_seen_at || null,
     confirmed_at: order.confirmed_at || null,
     lines: order.lines,
     created_at: order.created_at || nowIso(),
@@ -588,6 +600,25 @@ export async function upsertSalesOrder(order: LocalSalesOrder): Promise<LocalSal
     .single();
 
   if (error) throw new Error(error.message || "Sales order save failed");
+  return mapSalesOrderRow(data as unknown as Record<string, unknown>);
+}
+
+export async function markSalesOrderPortalSeen(orderId: string): Promise<LocalSalesOrder | null> {
+  const organizationId = await getCurrentOrgId();
+  const { data, error } = await supabaseClient
+    .from("sales_orders")
+    .update({
+      portal_seen_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("organization_id", organizationId)
+    .eq("id", orderId)
+    .is("portal_seen_at", null)
+    .select(SALES_ORDER_COLUMNS)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message || "Sales order seen update failed");
+  if (!data) return null;
   return mapSalesOrderRow(data as unknown as Record<string, unknown>);
 }
 

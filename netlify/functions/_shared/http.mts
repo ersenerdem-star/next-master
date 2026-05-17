@@ -17,6 +17,15 @@ export async function getJson<T>(url: string, init: RequestInit) {
   return data as T;
 }
 
+export async function sendJson<T>(url: string, init: RequestInit) {
+  const response = await fetch(url, init);
+  const data = await readJson<T & { message?: string; error?: string; msg?: string }>(response);
+  if (!response.ok) {
+    throw new Error(data?.msg || data?.message || data?.error || `Request failed: ${response.status}`);
+  }
+  return data as T;
+}
+
 export function buildRestUrl(supabaseUrl: string, table: string, params: Record<string, string>) {
   const url = new URL(`/rest/v1/${table}`, supabaseUrl);
   for (const [key, value] of Object.entries(params)) {

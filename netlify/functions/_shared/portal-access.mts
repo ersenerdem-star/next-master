@@ -1,6 +1,6 @@
 import { buildRestUrl, getJson, serviceRoleHeaders } from "./http.mts";
 
-type PortalInviteRow = {
+export type PortalInviteRow = {
   id: string;
   organization_id: string;
   party_type: "customer" | "vendor";
@@ -158,13 +158,13 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     const customer =
       (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
         select:
-          "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,price_list_type,remarks",
+          "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,price_list_type,price_list_margin_percent,remarks",
         organization_id: `eq.${invite.organization_id}`,
         display_name: `eq.${invite.party_name}`,
       })) ||
       (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
         select:
-          "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,price_list_type,remarks",
+          "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,price_list_type,price_list_margin_percent,remarks",
         organization_id: `eq.${invite.organization_id}`,
         company_name: `eq.${invite.party_name}`,
       }));
@@ -172,7 +172,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     const salesOrders = invite.access_can_view_orders
       ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
           select:
-            "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,purchase_total,profit_total,margin_percent,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
+            "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,purchase_total,profit_total,margin_percent,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
           organization_id: `eq.${invite.organization_id}`,
           customer_name: `eq.${invite.party_name}`,
           order: "updated_at.desc",
@@ -205,6 +205,18 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
           customer_name: `eq.${invite.party_name}`,
           order: "updated_at.desc",
         })
+      : [];
+
+    const availableBrands = invite.access_can_view_orders
+      ? (
+          await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "brands", {
+            select: "name",
+            organization_id: `eq.${invite.organization_id}`,
+            order: "name.asc",
+          })
+        )
+          .map((row) => String(row.name || "").trim())
+          .filter(Boolean)
       : [];
 
     const accountRows = [
@@ -270,8 +282,12 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       },
       companyProfile,
       customer,
+      availableBrands,
       salesOrders: salesOrders.map((row) => ({
         ...row,
+        source_channel: String(row.source_channel || "internal"),
+        portal_submitted_at: row.portal_submitted_at ? String(row.portal_submitted_at) : null,
+        portal_seen_at: row.portal_seen_at ? String(row.portal_seen_at) : null,
         sales_total: toNumber(row.sales_total),
         purchase_total: toNumber(row.purchase_total),
         profit_total: toNumber(row.profit_total),
@@ -310,6 +326,15 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         openAmount: accountRows.filter((row) => !["void"].includes(row.status.toLowerCase())).reduce((sum, row) => sum + row.amount, 0),
         paymentCount: paymentsReceived.length,
       },
+      pricingProfile: customer
+        ? {
+            price_list_type: String(customer.price_list_type || ""),
+            margin_percent: customer.price_list_margin_percent == null ? null : toNumber(customer.price_list_margin_percent),
+            currency: String(customer.currency || invoices[0]?.currency || "EUR"),
+            payment_terms: String(customer.payment_terms || ""),
+            contract_nr: String(customer.contract_nr || ""),
+          }
+        : null,
       accountRows,
     };
   }
@@ -427,6 +452,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     companyProfile,
     customer: null,
     vendor,
+    availableBrands: [],
     salesOrders: [],
     invoices: [],
     creditNotes: [],
@@ -460,6 +486,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       openAmount: accountRows.filter((row) => !["void"].includes(row.status.toLowerCase())).reduce((sum, row) => sum + row.amount, 0),
       paymentCount: paymentsMade.length,
     },
+    pricingProfile: null,
     accountRows,
   };
 }

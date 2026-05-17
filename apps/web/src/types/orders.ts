@@ -30,6 +30,10 @@ export type LocalSalesOrder = {
   sales_total: number;
   profit_total: number;
   margin_percent: number;
+  source_channel?: "internal" | "portal";
+  portal_invite_id?: string | null;
+  portal_submitted_at?: string | null;
+  portal_seen_at?: string | null;
   created_at: string;
   updated_at: string;
   confirmed_at?: string | null;

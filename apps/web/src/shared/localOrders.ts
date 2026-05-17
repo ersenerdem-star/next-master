@@ -107,6 +107,10 @@ export function buildLocalSalesOrder(input: {
   packing_details: string;
   notes: string;
   status: "draft" | "confirmed";
+  source_channel?: "internal" | "portal";
+  portal_invite_id?: string | null;
+  portal_submitted_at?: string | null;
+  portal_seen_at?: string | null;
   lines: QuoteBuilderLine[];
 }) {
   const previous = input.id ? loadLocalSalesOrders().find((item) => item.id === input.id) : null;
@@ -139,6 +143,10 @@ export function buildLocalSalesOrder(input: {
     sales_total: salesTotal,
     profit_total: profitTotal,
     margin_percent: marginPercent,
+    source_channel: input.source_channel || previous?.source_channel || "internal",
+    portal_invite_id: input.portal_invite_id ?? previous?.portal_invite_id ?? null,
+    portal_submitted_at: input.portal_submitted_at ?? previous?.portal_submitted_at ?? null,
+    portal_seen_at: input.portal_seen_at ?? previous?.portal_seen_at ?? null,
     created_at: previous?.created_at || nowIso(),
     updated_at: nowIso(),
     confirmed_at: input.status === "confirmed" ? nowIso() : previous?.confirmed_at || null,

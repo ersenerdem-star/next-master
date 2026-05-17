@@ -1,5 +1,4 @@
 import { supabaseClient } from "./supabaseClient";
-import type { QuoteSummary } from "../../types/quotes";
 
 export type RevenueSource = "quotes" | "bills";
 
@@ -21,8 +20,22 @@ export type DashboardSnapshot = {
   brandCount: number;
   supplierCount: number;
   quoteCount: number;
+  newPortalOrders: number;
   revenue: RevenueSnapshot;
   issues: Partial<Record<"catalog" | "brands" | "suppliers" | "quotes" | "revenue", string>>;
+};
+
+export type DashboardSalesOrderSummary = {
+  id: string;
+  sales_order_no: string;
+  customer_name: string | null;
+  status: string | null;
+  quote_date: string | null;
+  currency: string | null;
+  sales_total: number | null;
+  source_channel: "internal" | "portal";
+  portal_submitted_at: string | null;
+  portal_seen_at: string | null;
 };
 
 function buildEmptyRevenue(source: RevenueSource, available: boolean): RevenueSnapshot {
@@ -48,8 +61,8 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
 
   while (true) {
     const { data, error } = await supabaseClient
-      .from("quotes")
-      .select("id,quote_date")
+      .from("sales_orders")
+      .select("id,quote_date,sales_total")
       .gte("quote_date", startDate)
       .order("quote_date", { ascending: false })
       .range(from, from + pageSize - 1);
@@ -58,9 +71,9 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
       throw new Error(error.message || "Revenue analytics load failed");
     }
 
-    const batch = (data || []) as Array<{ id: string; quote_date: string | null }>;
+    const batch = (data || []) as Array<{ id: string; quote_date: string | null; sales_total: number | null }>;
     for (const row of batch) {
-      if (row.id && row.quote_date) quoteMap.set(row.id, row.quote_date);
+      if (row.id && row.quote_date) quoteMap.set(row.id, JSON.stringify({ quote_date: row.quote_date, sales_total: Number(row.sales_total || 0) }));
     }
     if (batch.length < pageSize) break;
     from += pageSize;
@@ -69,44 +82,33 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
   const quoteIds = [...quoteMap.keys()];
   if (!quoteIds.length) return snapshot;
 
-  for (let index = 0; index < quoteIds.length; index += pageSize) {
-    const chunk = quoteIds.slice(index, index + pageSize);
-    const { data, error } = await supabaseClient
-      .from("quote_totals")
-      .select("quote_id,sales_total")
-      .in("quote_id", chunk);
+  for (const quoteId of quoteIds) {
+    const raw = quoteMap.get(quoteId);
+    if (!raw) continue;
+    const record = JSON.parse(raw) as { quote_date: string; sales_total: number };
+    const date = new Date(record.quote_date);
+    if (Number.isNaN(date.getTime())) continue;
+    const total = Number(record.sales_total || 0);
+    const year = date.getFullYear();
+    const month = date.getMonth();
 
-    if (error) {
-      throw new Error(error.message || "Revenue totals load failed");
-    }
-
-    for (const row of (data || []) as Array<{ quote_id: string; sales_total: number | null }>) {
-      const quoteDate = quoteMap.get(row.quote_id);
-      if (!quoteDate) continue;
-      const date = new Date(quoteDate);
-      if (Number.isNaN(date.getTime())) continue;
-      const total = Number(row.sales_total || 0);
-      const year = date.getFullYear();
-      const month = date.getMonth();
-
-      if (year === currentYear) {
-        snapshot.currentYear.total += total;
-        snapshot.currentYear.count += 1;
-        if (month === currentMonth) {
-          snapshot.currentMonth.total += total;
-          snapshot.currentMonth.count += 1;
-        }
-      } else if (year === previousYear) {
-        snapshot.previousYear.total += total;
-        snapshot.previousYear.count += 1;
+    if (year === currentYear) {
+      snapshot.currentYear.total += total;
+      snapshot.currentYear.count += 1;
+      if (month === currentMonth) {
+        snapshot.currentMonth.total += total;
+        snapshot.currentMonth.count += 1;
       }
+    } else if (year === previousYear) {
+      snapshot.previousYear.total += total;
+      snapshot.previousYear.count += 1;
     }
   }
 
   return snapshot;
 }
 
-async function fetchTableCount(table: "catalog_products" | "brands" | "suppliers" | "quotes") {
+async function fetchTableCount(table: "catalog_products" | "brands" | "suppliers" | "sales_orders") {
   const { count, error } = await supabaseClient.from(table).select("id", { count: "exact", head: true });
   if (error) {
     throw new Error(error.message || `Failed to load ${table} count`);
@@ -114,11 +116,11 @@ async function fetchTableCount(table: "catalog_products" | "brands" | "suppliers
   return count ?? 0;
 }
 
-export async function fetchDashboardLatestQuotes(): Promise<QuoteSummary[]> {
+export async function fetchDashboardLatestQuotes(): Promise<DashboardSalesOrderSummary[]> {
   const { data, error } = await supabaseClient
-    .from("quotes")
-    .select("id,quote_no,revision_no,quote_date,customer_name,status")
-    .order("quote_date", { ascending: false })
+    .from("sales_orders")
+    .select("id,sales_order_no,quote_date,customer_name,status,currency,sales_total,source_channel,portal_submitted_at,portal_seen_at,updated_at")
+    .order("updated_at", { ascending: false })
     .limit(5);
 
   if (error) {
@@ -126,31 +128,40 @@ export async function fetchDashboardLatestQuotes(): Promise<QuoteSummary[]> {
   }
 
   return ((data || []) as Array<Record<string, unknown>>).map((row) => ({
-    quote_id: String(row.id || ""),
-    parent_quote_id: null,
-    quote_no: String(row.quote_no || "-"),
-    revision_no: Number(row.revision_no || 0),
+    id: String(row.id || ""),
+    sales_order_no: String(row.sales_order_no || "-"),
     quote_date: (row.quote_date as string | null) || null,
     customer_name: (row.customer_name as string | null) || null,
     currency: (row.currency as string | null) || null,
     status: (row.status as string | null) || null,
-    total_quantity: null,
-    purchase_total: null,
-    sales_total: null,
-    profit_total: null,
-    general_amount: null,
-    created_by_name: null,
-    created_by_email: null,
-    updated_at: (row.updated_at as string | null) || null,
+    sales_total: row.sales_total == null ? null : Number(row.sales_total),
+    source_channel: String(row.source_channel || "internal") as DashboardSalesOrderSummary["source_channel"],
+    portal_submitted_at: (row.portal_submitted_at as string | null) || null,
+    portal_seen_at: (row.portal_seen_at as string | null) || null,
   }));
 }
 
+async function fetchNewPortalOrderCount() {
+  const { count, error } = await supabaseClient
+    .from("sales_orders")
+    .select("id", { count: "exact", head: true })
+    .eq("source_channel", "portal")
+    .not("portal_submitted_at", "is", null)
+    .is("portal_seen_at", null);
+
+  if (error) {
+    throw new Error(error.message || "Portal order count failed");
+  }
+  return count ?? 0;
+}
+
 export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
-  const [catalogResult, brandsResult, suppliersResult, quotesResult, revenueResult] = await Promise.allSettled([
+  const [catalogResult, brandsResult, suppliersResult, quotesResult, portalOrdersResult, revenueResult] = await Promise.allSettled([
     fetchTableCount("catalog_products"),
     fetchTableCount("brands"),
     fetchTableCount("suppliers"),
-    fetchTableCount("quotes"),
+    fetchTableCount("sales_orders"),
+    fetchNewPortalOrderCount(),
     fetchQuoteRevenueSnapshot(),
   ]);
 
@@ -167,6 +178,7 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
     brandCount: brandsResult.status === "fulfilled" ? brandsResult.value : 0,
     supplierCount: suppliersResult.status === "fulfilled" ? suppliersResult.value : 0,
     quoteCount: quotesResult.status === "fulfilled" ? quotesResult.value : 0,
+    newPortalOrders: portalOrdersResult.status === "fulfilled" ? portalOrdersResult.value : 0,
     revenue: revenueResult.status === "fulfilled" ? revenueResult.value : buildEmptyRevenue("quotes", false),
     issues,
   };

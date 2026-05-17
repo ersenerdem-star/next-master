@@ -2,7 +2,15 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastructure/api/companyProfilesApi";
 import { findCodeReferenceMatch } from "../../infrastructure/api/codeReferencesApi";
 import { fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
-import { fetchInvoices, fetchPurchaseOrders, fetchSalesOrders, replacePurchaseOrdersForSalesOrder, upsertInvoice, upsertSalesOrder } from "../../infrastructure/api/ordersApi";
+import {
+  fetchInvoices,
+  fetchPurchaseOrders,
+  fetchSalesOrders,
+  markSalesOrderPortalSeen,
+  replacePurchaseOrdersForSalesOrder,
+  upsertInvoice,
+  upsertSalesOrder,
+} from "../../infrastructure/api/ordersApi";
 import { batchResolveQuoteImportRows, fetchCatalogMetadataForRows } from "../../infrastructure/api/quoteImportApi";
 import { fetchCPriceMapForRows, getCPriceForRow } from "../../infrastructure/api/cPriceApi";
 import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
@@ -28,6 +36,8 @@ import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 
 type QuotesPageProps = {
+  selectedSalesOrderId?: string;
+  onSelectedSalesOrderChange?: (salesOrderId: string) => void;
   selectedQuoteId?: string;
   onSelectedQuoteChange?: (quoteId: string) => void;
 };
@@ -342,12 +352,17 @@ function buildDraftQuoteHtml(input: {
   });
 }
 
-export function QuotesPage({ selectedQuoteId: externalSelectedQuoteId = "", onSelectedQuoteChange }: QuotesPageProps) {
+export function QuotesPage({
+  selectedSalesOrderId: externalSelectedSalesOrderId = "",
+  onSelectedSalesOrderChange,
+  selectedQuoteId: externalSelectedQuoteId = "",
+  onSelectedQuoteChange,
+}: QuotesPageProps) {
   const actionFeedback = useActionFeedback();
   const importRef = useRef<HTMLInputElement | null>(null);
   const [search, setSearch] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");
-  const [salesOrdersView, setSalesOrdersView] = useState<"list" | "detail">(externalSelectedQuoteId ? "detail" : "list");
+  const [salesOrdersView, setSalesOrdersView] = useState<"list" | "detail">(externalSelectedQuoteId || externalSelectedSalesOrderId ? "detail" : "list");
   const [salesOrderFilter, setSalesOrderFilter] = useState<"all" | "draft" | "confirmed" | "purchased" | "invoiced">("all");
   const [quotes, setQuotes] = useState<QuoteSummary[]>([]);
   const [localSalesOrders, setLocalSalesOrders] = useState<LocalSalesOrder[]>([]);
@@ -568,6 +583,15 @@ export function QuotesPage({ selectedQuoteId: externalSelectedQuoteId = "", onSe
       setSalesOrdersView("detail");
     }
   }, [externalSelectedQuoteId]);
+
+  useEffect(() => {
+    if (!externalSelectedSalesOrderId) return;
+    if (selectedLocalSalesOrderId === externalSelectedSalesOrderId && salesOrdersView === "detail") return;
+    const target = localSalesOrders.find((item) => item.id === externalSelectedSalesOrderId);
+    if (!target) return;
+    setSalesOrdersView("detail");
+    void loadLocalSalesOrderIntoEditor(target);
+  }, [externalSelectedSalesOrderId, localSalesOrders, selectedLocalSalesOrderId, salesOrdersView]);
 
   useEffect(() => {
     let cancelled = false;
@@ -930,6 +954,16 @@ export function QuotesPage({ selectedQuoteId: externalSelectedQuoteId = "", onSe
         return await hydrateStoredBuilderLine(patched, order.customer_type);
       }),
     );
+    if (order.source_channel === "portal" && order.portal_submitted_at && !order.portal_seen_at) {
+      try {
+        const seenOrder = await markSalesOrderPortalSeen(order.id);
+        if (seenOrder) {
+          setLocalSalesOrders((current) => current.map((item) => (item.id === seenOrder.id ? seenOrder : item)));
+        }
+      } catch {
+        // opening order should continue even if seen state update fails
+      }
+    }
     setQuoteBuilderLines(hydratedLines);
     setBuilderStatus(`Loaded ${order.sales_order_no} (${order.status}).`);
     actionFeedback.succeed(`${order.sales_order_no} loaded.`);
@@ -1462,6 +1496,7 @@ export function QuotesPage({ selectedQuoteId: externalSelectedQuoteId = "", onSe
   function startNewSalesOrder() {
     setSalesOrdersView("detail");
     setWorkbenchMode("new");
+    onSelectedSalesOrderChange?.("");
     setSelectedQuoteId("");
     onSelectedQuoteChange?.("");
     setSelectedLocalSalesOrderId("");
@@ -1490,6 +1525,7 @@ export function QuotesPage({ selectedQuoteId: externalSelectedQuoteId = "", onSe
   }
 
   function closeSalesOrderEditor() {
+    onSelectedSalesOrderChange?.("");
     setSalesOrdersView("list");
     setPdfView(false);
     setBuilderStatus("");
@@ -1700,6 +1736,9 @@ export function QuotesPage({ selectedQuoteId: externalSelectedQuoteId = "", onSe
                     </div>
                     <div className="document-marks">
                       <span className={`mark-badge ${order.status === "confirmed" ? "mark-badge--success" : ""}`}>{order.status.toUpperCase()}</span>
+                      {order.source_channel === "portal" && order.portal_submitted_at && !order.portal_seen_at ? (
+                        <span className="mark-badge mark-badge--accent">New Order</span>
+                      ) : null}
                       {poCount > 0 ? <span className="mark-badge mark-badge--info">{poCount} PO</span> : null}
                       {invoiceCount > 0 ? <span className="mark-badge mark-badge--accent">{invoiceCount} Invoice</span> : null}
                     </div>
@@ -1763,6 +1802,11 @@ export function QuotesPage({ selectedQuoteId: externalSelectedQuoteId = "", onSe
                 <div className={`status-badge ${currentLocalSalesOrder.status === "confirmed" ? "status-badge--success" : ""}`}>
                   {currentLocalSalesOrder.status.toUpperCase()}
                 </div>
+                {currentLocalSalesOrder.source_channel === "portal" && currentLocalSalesOrder.portal_submitted_at ? (
+                  <span className="mark-badge mark-badge--accent">
+                    {currentLocalSalesOrder.portal_seen_at ? "Portal Order" : "New Portal Order"}
+                  </span>
+                ) : null}
                 {(salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0) > 0 ? (
                   <span className="mark-badge mark-badge--info">
                     PO {(salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0).toLocaleString("en-US")} created

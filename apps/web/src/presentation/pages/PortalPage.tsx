@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchPortalSnapshot, loginPortal } from "../../infrastructure/api/portalAccessApi";
 import type { PortalCredentials, PortalSnapshot } from "../../types/portalSession";
 import { Button } from "../components/common/Button";
@@ -9,6 +9,14 @@ import { SectionCard } from "../components/common/SectionCard";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 import { openAccountStatementPrintWindow } from "../../shared/accountStatementPrint";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
+import {
+  preparePortalOrderLines as preparePortalOrderLinesApi,
+  searchPortalCatalogItems,
+  submitPortalOrder,
+  type PortalCatalogSearchItem,
+  type PortalPreparedLine,
+} from "../../infrastructure/api/portalOrderApi";
+import { parseOrderImportFile } from "../../shared/orderImport";
 
 const SESSION_KEY = "next-master-portal-session";
 
@@ -51,6 +59,23 @@ function sanitizeFileName(value: string) {
   return value.replace(/[^a-z0-9_-]+/gi, "-").replace(/-+/g, "-");
 }
 
+function mergePortalPreparedLines(current: PortalPreparedLine[], next: PortalPreparedLine[]) {
+  const merged = [...current];
+  for (const line of next) {
+    const existing = merged.find(
+      (item) =>
+        String(item.requestedCode || item.resolvedCode).toLowerCase() === String(line.requestedCode || line.resolvedCode).toLowerCase() &&
+        String(item.brand || "").toLowerCase() === String(line.brand || "").toLowerCase(),
+    );
+    if (existing) {
+      existing.qty += line.qty;
+    } else {
+      merged.push(line);
+    }
+  }
+  return merged;
+}
+
 function getPaymentStatusTone(status: string | undefined) {
   const normalized = String(status || "").trim().toLowerCase().replaceAll("_", " ");
   if (normalized === "paid") return { label: "Paid", tone: "success" as const };
@@ -85,6 +110,43 @@ type PortalSelection =
   | { kind: "bill"; id: string };
 
 type PortalLine = NonNullable<PortalSnapshot["invoices"][number]["lines"]>[number];
+type PortalSalesOrderRow = PortalSnapshot["salesOrders"][number];
+
+function mapPortalSalesOrderToPreparedLines(row: PortalSalesOrderRow): PortalPreparedLine[] {
+  return (row.lines || []).map((line, index) => {
+    const requestedCode = String(line.requested_code || line.code || "");
+    const resolvedCode = String(line.code || requestedCode || "");
+    const qty = Math.max(1, Number(line.qty || 1) || 1);
+    const buyPrice = line.buy_price == null ? null : Number(line.buy_price);
+    const sellPrice = line.sell_price == null ? null : Number(line.sell_price);
+    const codeChanged = Boolean(
+      line.old_code || (requestedCode && resolvedCode && requestedCode.trim().toLowerCase() !== resolvedCode.trim().toLowerCase()),
+    );
+    return {
+      lineId: `${row.id}-${index + 1}`,
+      requestedCode,
+      resolvedCode,
+      brand: String(line.brand || ""),
+      description: String(line.description || ""),
+      qty,
+      oem_no: String(line.oem_no || ""),
+      hs_code: String(line.hs_code || ""),
+      origin: String(line.origin || ""),
+      weight_kg: line.weight_kg == null ? null : Number(line.weight_kg),
+      supplier_name: String(line.supplier_name || ""),
+      buy_price: buyPrice,
+      sell_price: sellPrice,
+      c_sell_price: null,
+      price_date: String(line.price_date || ""),
+      notes: String(line.notes || ""),
+      found: true,
+      codeChanged,
+      codeChangeWarning: codeChanged ? `Old Code ${requestedCode} => New Code ${resolvedCode}` : "",
+      supplierOptions: [],
+      selectedSupplierKey: "",
+    };
+  });
+}
 
 function matchesSearch(value: string, row: { id: string; sales_order_no?: string; lines?: PortalLine[] }) {
   if (!value) return true;
@@ -128,6 +190,7 @@ function writeStoredCredentials(credentials: PortalCredentials | null) {
 
 export function PortalPage() {
   const search = new URLSearchParams(window.location.search);
+  const portalImportRef = useRef<HTMLInputElement | null>(null);
   const [credentials, setCredentials] = useState<PortalCredentials>(() => {
     const stored = typeof window !== "undefined" ? readStoredCredentials() : null;
     return {
@@ -145,6 +208,22 @@ export function PortalPage() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderSearchBrand, setOrderSearchBrand] = useState("");
+  const [catalogResults, setCatalogResults] = useState<PortalCatalogSearchItem[]>([]);
+  const [portalDraftLines, setPortalDraftLines] = useState<PortalPreparedLine[]>([]);
+  const [portalOrderId, setPortalOrderId] = useState("");
+  const [portalSalesOrderNo, setPortalSalesOrderNo] = useState("");
+  const [portalDeliveryTerm, setPortalDeliveryTerm] = useState("");
+  const [portalPaymentTerms, setPortalPaymentTerms] = useState("");
+  const [portalPackingDetails, setPortalPackingDetails] = useState("");
+  const [portalOrderNotes, setPortalOrderNotes] = useState("");
+  const [portalOrderStatus, setPortalOrderStatus] = useState("");
+  const [searchingCatalog, setSearchingCatalog] = useState(false);
+  const [preparingPortalOrder, setPreparingPortalOrder] = useState(false);
+  const [savingPortalOrder, setSavingPortalOrder] = useState(false);
+  const [confirmingPortalOrder, setConfirmingPortalOrder] = useState(false);
+  const portalPricingCurrency = snapshot?.pricingProfile?.currency || snapshot?.accountSummary.currency || "EUR";
 
   useEffect(() => {
     const token = search.get("token");
@@ -183,9 +262,27 @@ export function PortalPage() {
 
   const salesOrderColumns = useMemo(
     () => [
-      { key: "no", header: "Sales Order", render: (row: PortalSnapshot["salesOrders"][number]) => row.sales_order_no || row.id },
+      {
+        key: "no",
+        header: "Sales Order",
+        render: (row: PortalSnapshot["salesOrders"][number]) => (
+          <div>
+            <strong>{row.sales_order_no || row.id}</strong>
+            {row.source_channel === "portal" && row.portal_submitted_at ? (
+              <div className="status-lamp status-lamp--info">
+                <span className="status-lamp__dot" />
+                Submitted
+              </div>
+            ) : null}
+          </div>
+        ),
+      },
       { key: "date", header: "Date", render: (row: PortalSnapshot["salesOrders"][number]) => row.quote_date || "-" },
-      { key: "status", header: "Status", render: (row: PortalSnapshot["salesOrders"][number]) => row.status || "-" },
+      {
+        key: "status",
+        header: "Status",
+        render: (row: PortalSnapshot["salesOrders"][number]) => (row.portal_submitted_at ? "Submitted" : row.status || "-"),
+      },
       { key: "amount", header: "Amount", render: (row: PortalSnapshot["salesOrders"][number]) => formatMoney(Number(row.sales_total || 0), row.currency) },
     ],
     [],
@@ -241,6 +338,67 @@ export function PortalPage() {
       { key: "amount", header: "Amount", render: (row: PortalSnapshot["paymentsReceived"][number] | PortalSnapshot["paymentsMade"][number]) => formatMoney(row.amount, row.currency) },
     ],
     [],
+  );
+
+  const portalCatalogColumns = useMemo(
+    () => [
+      { key: "code", header: "Code", render: (row: PortalCatalogSearchItem) => row.code },
+      { key: "brand", header: "Brand", render: (row: PortalCatalogSearchItem) => row.brand || "-" },
+      { key: "description", header: "Description", render: (row: PortalCatalogSearchItem) => row.description || "-" },
+      { key: "oem", header: "OEM", render: (row: PortalCatalogSearchItem) => row.oem_no || "-" },
+      { key: "tariff", header: "Tariff", render: (row: PortalCatalogSearchItem) => row.tariff || "-" },
+      {
+        key: "actions",
+        header: "Actions",
+        render: (row: PortalCatalogSearchItem) => (
+          <Button variant="secondary" className="button--compact" onClick={() => void handleAddPortalCatalogItem(row)}>
+            Add
+          </Button>
+        ),
+      },
+    ],
+    [credentials.email, credentials.token],
+  );
+
+  const portalDraftColumns = useMemo(
+    () => [
+      { key: "code", header: "Code", render: (row: PortalPreparedLine) => row.resolvedCode || row.requestedCode || "-" },
+      { key: "brand", header: "Brand", render: (row: PortalPreparedLine) => row.brand || "-" },
+      { key: "description", header: "Description", render: (row: PortalPreparedLine) => row.description || "-" },
+      {
+        key: "qty",
+        header: "Qty",
+        render: (row: PortalPreparedLine) => (
+          <input
+            className="inline-edit-input inline-edit-input--qty"
+            type="number"
+            min={1}
+            step={1}
+            value={row.qty}
+            onChange={(event) => {
+              const nextQty = Math.max(1, Number(event.target.value || 1) || 1);
+              setPortalDraftLines((current) => current.map((item) => (item.lineId === row.lineId ? { ...item, qty: nextQty } : item)));
+            }}
+          />
+        ),
+      },
+      { key: "sell", header: `Price ${portalPricingCurrency}`, render: (row: PortalPreparedLine) => formatMoney(Number(row.sell_price || 0), portalPricingCurrency) },
+      { key: "amount", header: `Amount ${portalPricingCurrency}`, render: (row: PortalPreparedLine) => formatMoney(Number(row.sell_price || 0) * Number(row.qty || 0), portalPricingCurrency) },
+      {
+        key: "actions",
+        header: "Actions",
+        render: (row: PortalPreparedLine) => (
+          <Button
+            variant="secondary"
+            className="button--compact danger-button"
+            onClick={() => setPortalDraftLines((current) => current.filter((item) => item.lineId !== row.lineId))}
+          >
+            Remove
+          </Button>
+        ),
+      },
+    ],
+    [portalPricingCurrency],
   );
 
   const creditColumns = useMemo(
@@ -306,6 +464,38 @@ export function PortalPage() {
     setError("");
     writeStoredCredentials(null);
   }
+
+  useEffect(() => {
+    if (!snapshot || snapshot.invite.party_type !== "customer" || !snapshot.invite.access.can_view_orders) {
+      setPortalOrderId("");
+      setPortalSalesOrderNo("");
+      setPortalDraftLines([]);
+      setPortalDeliveryTerm("");
+      setPortalPaymentTerms("");
+      setPortalPackingDetails("");
+      setPortalOrderNotes("");
+      setPortalOrderStatus("");
+      setCatalogResults([]);
+      return;
+    }
+
+    const latestPortalDraft = snapshot.salesOrders.find((row) => row.source_channel === "portal" && !row.portal_submitted_at);
+    setPortalOrderId(latestPortalDraft?.id || "");
+    setPortalSalesOrderNo(latestPortalDraft?.sales_order_no || "");
+    setPortalDraftLines(latestPortalDraft ? mapPortalSalesOrderToPreparedLines(latestPortalDraft) : []);
+    setPortalDeliveryTerm(latestPortalDraft?.delivery_term || "");
+    setPortalPaymentTerms(latestPortalDraft?.payment_terms || snapshot.pricingProfile?.payment_terms || "");
+    setPortalPackingDetails(latestPortalDraft?.packing_details || "");
+    setPortalOrderNotes(latestPortalDraft?.notes || "");
+    setPortalOrderStatus(
+      latestPortalDraft
+        ? latestPortalDraft.portal_submitted_at
+          ? `Portal order ${latestPortalDraft.sales_order_no || latestPortalDraft.id} already submitted.`
+          : `Draft ${latestPortalDraft.sales_order_no || latestPortalDraft.id} loaded.`
+        : "",
+    );
+    setOrderSearchBrand((current) => current || snapshot.availableBrands[0] || "");
+  }, [snapshot]);
 
   if (!snapshot) {
     return (
@@ -377,6 +567,104 @@ export function PortalPage() {
       ? activeSnapshot.paymentsReceived.filter((row) => (!statementDateFrom && !statementDateTo ? true : isWithinDateRange(row.received_date, statementDateFrom, statementDateTo)))
       : activeSnapshot.paymentsMade.filter((row) => (!statementDateFrom && !statementDateTo ? true : isWithinDateRange(row.payment_date, statementDateFrom, statementDateTo)));
   const statementPeriodLabel = buildDateRangeLabel(statementDateFrom, statementDateTo);
+  const portalCanOrder = activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_orders;
+  const portalBrandOptions = [{ value: "", label: "All Brands" }, ...activeSnapshot.availableBrands.map((brand) => ({ value: brand, label: brand }))];
+  const portalOrderTotals = {
+    subtotal: portalDraftLines.reduce((sum, line) => sum + Number(line.sell_price || 0) * Number(line.qty || 0), 0),
+    purchaseTotal: portalDraftLines.reduce((sum, line) => sum + Number(line.buy_price || 0) * Number(line.qty || 0), 0),
+  };
+  const portalOrderCurrency = activeSnapshot.pricingProfile?.currency || activeSnapshot.accountSummary.currency || "EUR";
+
+  async function handlePortalCatalogSearch() {
+    try {
+      setSearchingCatalog(true);
+      setError("");
+      const items = await searchPortalCatalogItems(credentials, orderSearch, orderSearchBrand);
+      setCatalogResults(items);
+      setPortalOrderStatus(`${items.length.toLocaleString("en-US")} item found for portal order.`);
+    } catch (caught) {
+      setCatalogResults([]);
+      setError(caught instanceof Error ? caught.message : "Portal item search failed");
+    } finally {
+      setSearchingCatalog(false);
+    }
+  }
+
+  async function appendPortalRows(rows: Array<{ code: string; brand: string; qty: number }>, statusText: string) {
+    if (!rows.length) return;
+    try {
+      setPreparingPortalOrder(true);
+      setError("");
+      const prepared = await preparePortalOrderLinesApi(credentials, rows);
+      setPortalDraftLines((current) => mergePortalPreparedLines(current, prepared.lines));
+      if (!portalPaymentTerms && prepared.pricingProfile?.payment_terms) {
+        setPortalPaymentTerms(prepared.pricingProfile.payment_terms);
+      }
+      setPortalOrderStatus(statusText.replace("{count}", prepared.lines.length.toLocaleString("en-US")));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Portal order pricing failed");
+    } finally {
+      setPreparingPortalOrder(false);
+    }
+  }
+
+  async function handleAddPortalCatalogItem(item: PortalCatalogSearchItem) {
+    await appendPortalRows([{ code: item.code, brand: item.brand, qty: 1 }], "{count} item added to portal draft.");
+  }
+
+  async function handleImportPortalOrderFile(file: File) {
+    try {
+      const importedRows = await parseOrderImportFile(file, orderSearchBrand);
+      if (!importedRows.length) {
+        throw new Error("No part rows found in upload.");
+      }
+      await appendPortalRows(importedRows, "{count} imported line priced for portal draft.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Portal import failed");
+    } finally {
+      if (portalImportRef.current) portalImportRef.current.value = "";
+    }
+  }
+
+  async function handleSubmitPortalOrder(mode: "draft" | "confirm") {
+    if (!portalDraftLines.length) {
+      setError("Add at least one line before saving portal order.");
+      return;
+    }
+    try {
+      if (mode === "confirm") setConfirmingPortalOrder(true);
+      else setSavingPortalOrder(true);
+      setError("");
+      const result = await submitPortalOrder(credentials, {
+        orderId: portalOrderId || undefined,
+        salesOrderNo: portalSalesOrderNo || undefined,
+        mode,
+        deliveryTerm: portalDeliveryTerm,
+        paymentTerms: portalPaymentTerms,
+        packingDetails: portalPackingDetails,
+        notes: portalOrderNotes,
+        rows: portalDraftLines.map((line) => ({
+          code: line.requestedCode || line.resolvedCode,
+          brand: line.brand,
+          qty: Number(line.qty || 0),
+        })),
+      });
+      setSnapshot(result.snapshot);
+      setSelection({ kind: "sales-order", id: result.orderId });
+      setStatus(
+        mode === "confirm"
+          ? `Sales order ${result.orderId} submitted. Internal team can process it now.`
+          : `Sales order ${result.orderId} saved as portal draft.`,
+      );
+      setPortalOrderStatus("");
+      setCatalogResults([]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Portal sales order save failed");
+    } finally {
+      setSavingPortalOrder(false);
+      setConfirmingPortalOrder(false);
+    }
+  }
   const selectedDocument = (() => {
     if (!selection) return null;
     if (selection.kind === "sales-order") {
@@ -729,6 +1017,86 @@ export function PortalPage() {
         </div>
       </SectionCard>
 
+      {portalCanOrder ? (
+        <SectionCard
+          title="Create Sales Order"
+          actions={
+            <div className="portal-statement-actions">
+              <input
+                ref={portalImportRef}
+                type="file"
+                hidden
+                accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void handleImportPortalOrderFile(file);
+                }}
+              />
+              <Button variant="secondary" onClick={() => portalImportRef.current?.click()}>
+                Import Excel
+              </Button>
+              <Button variant="secondary" busy={savingPortalOrder} busyLabel="Saving..." onClick={() => void handleSubmitPortalOrder("draft")}>
+                Save Draft
+              </Button>
+              <Button busy={confirmingPortalOrder} busyLabel="Confirming..." onClick={() => void handleSubmitPortalOrder("confirm")}>
+                Confirm Order
+              </Button>
+            </div>
+          }
+        >
+          <div className="portal-order-builder">
+            <div className="portal-order-builder__meta">
+              <div className="dashboard-stat">
+                <span>Price List</span>
+                <strong>{activeSnapshot.pricingProfile?.price_list_type || "-"}</strong>
+              </div>
+              <div className="dashboard-stat">
+                <span>Margin %</span>
+                <strong>{activeSnapshot.pricingProfile?.margin_percent == null ? "-" : `${activeSnapshot.pricingProfile.margin_percent}%`}</strong>
+              </div>
+              <div className="dashboard-stat">
+                <span>Currency</span>
+                <strong>{portalOrderCurrency}</strong>
+              </div>
+              <div className="dashboard-stat">
+                <span>Draft Total</span>
+                <strong>{formatMoney(portalOrderTotals.subtotal, portalOrderCurrency)}</strong>
+              </div>
+            </div>
+
+            <div className="portal-filter-grid">
+              <Input label="Item Search" value={orderSearch} placeholder="Code, description, OEM" onChange={setOrderSearch} />
+              <Select label="Brand" value={orderSearchBrand} options={portalBrandOptions} onChange={setOrderSearchBrand} />
+              <div className="portal-builder-actions">
+                <Button variant="secondary" busy={searchingCatalog} busyLabel="Searching..." onClick={() => void handlePortalCatalogSearch()}>
+                  Search Items
+                </Button>
+              </div>
+            </div>
+
+            <div className="portal-filter-grid">
+              <Input label="Delivery Term" value={portalDeliveryTerm} placeholder="EXW / FCA / DAP" onChange={setPortalDeliveryTerm} />
+              <Input label="Payment Terms" value={portalPaymentTerms} placeholder="Cash in advance" onChange={setPortalPaymentTerms} />
+              <Input label="Packing" value={portalPackingDetails} placeholder="Pallet / package info" onChange={setPortalPackingDetails} />
+            </div>
+
+            <Input label="Notes" value={portalOrderNotes} placeholder="Order note for internal team" onChange={setPortalOrderNotes} />
+
+            {portalOrderStatus ? <div className="success-text">{portalOrderStatus}</div> : null}
+
+            <div className="portal-order-builder__tables">
+              <SectionCard title="Catalog Search Results">
+                <DataTable rows={catalogResults} columns={portalCatalogColumns} emptyText={searchingCatalog ? "Searching items..." : "Search items or choose a brand to load catalog."} />
+              </SectionCard>
+
+              <SectionCard title="Portal Draft Lines">
+                <DataTable rows={portalDraftLines} columns={portalDraftColumns} emptyText={preparingPortalOrder ? "Preparing prices..." : "Import Excel or add items from catalog search."} />
+              </SectionCard>
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
+
       {activeSnapshot.invite.access.can_view_account ? (
         <SectionCard
           title="Account Statement"
@@ -924,16 +1292,6 @@ export function PortalPage() {
               </div>
             </div>
           </div>
-        </SectionCard>
-      ) : null}
-
-      {activeSnapshot.invite.access.can_view_payments ? (
-        <SectionCard title="Payments">
-          <DataTable
-            rows={activeSnapshot.invite.party_type === "customer" ? activeSnapshot.paymentsReceived : activeSnapshot.paymentsMade}
-            columns={paymentColumns}
-            emptyText="No payments available."
-          />
         </SectionCard>
       ) : null}
     </div>

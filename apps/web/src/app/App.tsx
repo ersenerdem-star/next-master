@@ -19,6 +19,7 @@ export function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [activePage, setActivePage] = useState("Home");
   const [recoveryMode, setRecoveryMode] = useState(false);
+  const [selectedSalesOrderId, setSelectedSalesOrderId] = useState("");
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
   const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState("");
@@ -65,8 +66,9 @@ export function App() {
     return <div className="loading-screen">{message}</div>;
   }
 
-  function openQuote(quoteId: string) {
-    setSelectedQuoteId(quoteId);
+  function openSalesOrder(salesOrderId: string) {
+    setSelectedSalesOrderId(salesOrderId);
+    setSelectedQuoteId("");
     setSelectedInvoiceId("");
     setSelectedPurchaseOrderId("");
     setSelectedBillId("");
@@ -80,12 +82,14 @@ export function App() {
       return;
     }
     if (relatedType === "purchase_order") {
+      setSelectedSalesOrderId("");
       setSelectedPurchaseOrderId(relatedId);
       setSelectedBillId("");
       setActivePage("Purchases");
       return;
     }
     if (relatedType === "bill") {
+      setSelectedSalesOrderId("");
       setSelectedBillId(relatedId);
       setSelectedPurchaseOrderId("");
       setActivePage("Purchases");
@@ -93,12 +97,13 @@ export function App() {
     }
     if (relatedType === "invoice") {
       setSelectedInvoiceId(relatedId);
+      setSelectedSalesOrderId("");
       setSelectedQuoteId("");
       setActivePage("Sales");
       return;
     }
     if (relatedType === "sales_order") {
-      openQuote(relatedId);
+      openSalesOrder(relatedId);
     }
   }
 
@@ -138,7 +143,13 @@ export function App() {
     ) : activePage === "Inventory" ? (
       <InventoryPage />
     ) : activePage === "Sales" ? (
-      <SalesPage selectedQuoteId={selectedQuoteId} onSelectedQuoteChange={setSelectedQuoteId} selectedInvoiceId={selectedInvoiceId} />
+      <SalesPage
+        selectedSalesOrderId={selectedSalesOrderId}
+        onSelectedSalesOrderChange={setSelectedSalesOrderId}
+        selectedQuoteId={selectedQuoteId}
+        onSelectedQuoteChange={setSelectedQuoteId}
+        selectedInvoiceId={selectedInvoiceId}
+      />
     ) : activePage === "Purchases" ? (
       <PurchasesPage selectedPurchaseOrderId={selectedPurchaseOrderId} selectedBillId={selectedBillId} />
     ) : activePage === "Reports" ? (
@@ -146,7 +157,7 @@ export function App() {
     ) : activePage === "Settings" ? (
       <SettingsPage initialTab={settingsTab} onLogout={handleLogout} onOpenRelatedRecord={openRelatedRecord} />
     ) : (
-      <DashboardPage onOpenQuote={openQuote} />
+      <DashboardPage onOpenSalesOrder={openSalesOrder} />
     );
 
   return (
