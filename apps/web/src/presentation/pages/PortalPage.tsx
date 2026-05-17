@@ -613,12 +613,12 @@ export function PortalPage() {
   const portalSections: Array<{ key: PortalSection; label: string }> = [
     { key: "details", label: "Account Details" },
     { key: "statement", label: "Account Statement" },
-    { key: "orders", label: activeSnapshot.invite.party_type === "customer" ? "Orders & Search" : "Documents" },
+    ...(portalCanOrder ? [{ key: "orders" as PortalSection, label: "Orders & Search" }] : []),
   ];
 
   function openPortalDocument(selection: PortalSelection) {
     setSelection(selection);
-    setActiveSection("orders");
+    setActiveSection("statement");
   }
 
   async function handlePortalCatalogSearch() {
@@ -701,7 +701,7 @@ export function PortalPage() {
       });
       setSnapshot(result.snapshot);
       setSelection({ kind: "sales-order", id: result.orderId });
-      setActiveSection("orders");
+      setActiveSection("statement");
       setStatus(
         mode === "confirm"
           ? `Sales order ${result.orderId} submitted. Internal team can process it now.`
@@ -1079,6 +1079,14 @@ export function PortalPage() {
 
       {activeSection === "statement" ? (
         <div className="portal-section-stack">
+          <SectionCard title="Document Filters">
+            <div className="portal-filter-grid">
+              <Input label="Search" value={documentSearch} placeholder="Document no, code, description" onChange={setDocumentSearch} />
+              <Select label="Brand" value={brandFilter} options={brandOptions} onChange={setBrandFilter} />
+              <Select label={activeSnapshot.invite.party_type === "customer" ? "Invoice Status" : "Bill Status"} value={paymentStatusFilter} options={paymentStatusOptions} onChange={setPaymentStatusFilter} />
+            </div>
+          </SectionCard>
+
           {activeSnapshot.invite.access.can_view_account ? (
             <SectionCard
               title="Account Statement"
@@ -1116,19 +1124,59 @@ export function PortalPage() {
               <DataTable rows={visiblePayments} columns={paymentColumns} emptyText="No payments available." />
             </SectionCard>
           ) : null}
+
+          {activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_orders ? (
+            <SectionCard title="Sales Orders">
+              <DataTable
+                rows={filteredSalesOrders}
+                columns={salesOrderColumns}
+                emptyText="No sales orders available."
+                onRowClick={(row) => openPortalDocument({ kind: "sales-order", id: row.id })}
+                rowClassName={(row) => (selection?.kind === "sales-order" && selection.id === row.id ? "data-table__row--active" : "")}
+              />
+            </SectionCard>
+          ) : null}
+
+          {activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_invoices ? (
+            <SectionCard title="Invoices">
+              <DataTable
+                rows={filteredInvoices}
+                columns={invoiceColumns}
+                emptyText="No invoices available."
+                onRowClick={(row) => openPortalDocument({ kind: "invoice", id: row.id })}
+                rowClassName={(row) => (selection?.kind === "invoice" && selection.id === row.id ? "data-table__row--active" : "")}
+              />
+            </SectionCard>
+          ) : null}
+
+          {activeSnapshot.invite.party_type === "vendor" && activeSnapshot.invite.access.can_view_orders ? (
+            <SectionCard title="Purchase Orders">
+              <DataTable
+                rows={filteredPurchaseOrders}
+                columns={purchaseOrderColumns}
+                emptyText="No purchase orders available."
+                onRowClick={(row) => openPortalDocument({ kind: "purchase-order", id: row.id })}
+                rowClassName={(row) => (selection?.kind === "purchase-order" && selection.id === row.id ? "data-table__row--active" : "")}
+              />
+            </SectionCard>
+          ) : null}
+
+          {activeSnapshot.invite.party_type === "vendor" && activeSnapshot.invite.access.can_view_invoices ? (
+            <SectionCard title="Bills">
+              <DataTable
+                rows={filteredBills}
+                columns={billColumns}
+                emptyText="No bills available."
+                onRowClick={(row) => openPortalDocument({ kind: "bill", id: row.id })}
+                rowClassName={(row) => (selection?.kind === "bill" && selection.id === row.id ? "data-table__row--active" : "")}
+              />
+            </SectionCard>
+          ) : null}
         </div>
       ) : null}
 
       {activeSection === "orders" ? (
         <div className="portal-section-stack">
-          <SectionCard title="Document Filters">
-            <div className="portal-filter-grid">
-              <Input label="Search" value={documentSearch} placeholder="Document no, code, description" onChange={setDocumentSearch} />
-              <Select label="Brand" value={brandFilter} options={brandOptions} onChange={setBrandFilter} />
-              <Select label={activeSnapshot.invite.party_type === "customer" ? "Invoice Status" : "Bill Status"} value={paymentStatusFilter} options={paymentStatusOptions} onChange={setPaymentStatusFilter} />
-            </div>
-          </SectionCard>
-
           {portalCanOrder ? (
             <SectionCard
               title="Create Sales Order"
@@ -1202,57 +1250,10 @@ export function PortalPage() {
             </SectionCard>
           ) : null}
 
-          {activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_orders ? (
-            <SectionCard title="Sales Orders">
-              <DataTable
-                rows={filteredSalesOrders}
-                columns={salesOrderColumns}
-                emptyText="No sales orders available."
-                onRowClick={(row) => openPortalDocument({ kind: "sales-order", id: row.id })}
-                rowClassName={(row) => (selection?.kind === "sales-order" && selection.id === row.id ? "data-table__row--active" : "")}
-              />
-            </SectionCard>
-          ) : null}
-
-          {activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_invoices ? (
-            <SectionCard title="Invoices">
-              <DataTable
-                rows={filteredInvoices}
-                columns={invoiceColumns}
-                emptyText="No invoices available."
-                onRowClick={(row) => openPortalDocument({ kind: "invoice", id: row.id })}
-                rowClassName={(row) => (selection?.kind === "invoice" && selection.id === row.id ? "data-table__row--active" : "")}
-              />
-            </SectionCard>
-          ) : null}
-
-          {activeSnapshot.invite.party_type === "vendor" && activeSnapshot.invite.access.can_view_orders ? (
-            <SectionCard title="Purchase Orders">
-              <DataTable
-                rows={filteredPurchaseOrders}
-                columns={purchaseOrderColumns}
-                emptyText="No purchase orders available."
-                onRowClick={(row) => openPortalDocument({ kind: "purchase-order", id: row.id })}
-                rowClassName={(row) => (selection?.kind === "purchase-order" && selection.id === row.id ? "data-table__row--active" : "")}
-              />
-            </SectionCard>
-          ) : null}
-
-          {activeSnapshot.invite.party_type === "vendor" && activeSnapshot.invite.access.can_view_invoices ? (
-            <SectionCard title="Bills">
-              <DataTable
-                rows={filteredBills}
-                columns={billColumns}
-                emptyText="No bills available."
-                onRowClick={(row) => openPortalDocument({ kind: "bill", id: row.id })}
-                rowClassName={(row) => (selection?.kind === "bill" && selection.id === row.id ? "data-table__row--active" : "")}
-              />
-            </SectionCard>
-          ) : null}
         </div>
       ) : null}
 
-      {activeSection === "orders" && selectedDocument ? (
+      {activeSection === "statement" && selectedDocument ? (
         <SectionCard
           title={detailTitle}
           actions={
