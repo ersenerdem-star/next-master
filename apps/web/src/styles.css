@@ -1940,6 +1940,12 @@ select {
   gap: 18px;
 }
 
+.portal-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(220px, 0.7fr);
+  gap: 14px;
+}
+
 .portal-document-detail {
   display: flex;
   flex-direction: column;
@@ -2039,6 +2045,7 @@ select {
   .quote-line-toolbar,
   .quote-form-grid,
   .portal-summary-grid,
+  .portal-filter-grid,
   .portal-detail-grid,
   .portal-detail-totals {
     grid-template-columns: 1fr;

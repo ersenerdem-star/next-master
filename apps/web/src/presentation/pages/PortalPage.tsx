@@ -4,7 +4,9 @@ import type { PortalCredentials, PortalSnapshot } from "../../types/portalSessio
 import { Button } from "../components/common/Button";
 import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
+import { Select } from "../components/common/Select";
 import { SectionCard } from "../components/common/SectionCard";
+import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 
 const SESSION_KEY = "next-master-portal-session";
 
@@ -28,6 +30,26 @@ type PortalSelection =
   | { kind: "bill"; id: string };
 
 type PortalLine = NonNullable<PortalSnapshot["invoices"][number]["lines"]>[number];
+
+function matchesSearch(value: string, row: { id: string; sales_order_no?: string; lines?: PortalLine[] }) {
+  if (!value) return true;
+  const needle = value.trim().toLowerCase();
+  if (!needle) return true;
+  const headerText = [row.id, row.sales_order_no || ""].join(" ").toLowerCase();
+  if (headerText.includes(needle)) return true;
+  return (row.lines || []).some((line) =>
+    [line.code, line.requested_code, line.old_code, line.brand, line.description, line.oem_no]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(needle),
+  );
+}
+
+function matchesBrand(value: string, row: { lines?: PortalLine[] }) {
+  if (!value) return true;
+  return (row.lines || []).some((line) => String(line.brand || "").toLowerCase() === value.toLowerCase());
+}
 
 function readStoredCredentials(): PortalCredentials | null {
   const raw = window.sessionStorage.getItem(SESSION_KEY);
@@ -60,6 +82,8 @@ export function PortalPage() {
   });
   const [snapshot, setSnapshot] = useState<PortalSnapshot | null>(null);
   const [selection, setSelection] = useState<PortalSelection | null>(null);
+  const [documentSearch, setDocumentSearch] = useState("");
+  const [brandFilter, setBrandFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -74,6 +98,8 @@ export function PortalPage() {
       .then((next) => {
         setSnapshot(next);
         setSelection(null);
+        setDocumentSearch("");
+        setBrandFilter("");
         setStatus("Portal session active.");
         writeStoredCredentials({ email, token });
       })
@@ -160,6 +186,8 @@ export function PortalPage() {
       const next = await loginPortal(credentials);
       setSnapshot(next);
       setSelection(null);
+      setDocumentSearch("");
+      setBrandFilter("");
       setStatus("Portal session active.");
       writeStoredCredentials(credentials);
     } catch (caught) {
@@ -214,22 +242,59 @@ export function PortalPage() {
     );
   }
 
-  const partyProfile = snapshot.customer || snapshot.vendor;
+  const activeSnapshot = snapshot;
+  const partyProfile = activeSnapshot.customer || activeSnapshot.vendor;
+  const visibleDocumentRows = useMemo(
+    () =>
+      activeSnapshot.invite.party_type === "customer"
+        ? [...activeSnapshot.salesOrders, ...activeSnapshot.invoices]
+        : [...activeSnapshot.purchaseOrders, ...activeSnapshot.bills],
+    [activeSnapshot],
+  );
+
+  const brandOptions = useMemo(() => {
+    const brands = new Set<string>();
+    visibleDocumentRows.forEach((row) => {
+      (row.lines || []).forEach((line) => {
+        const brand = String(line.brand || "").trim();
+        if (brand) brands.add(brand);
+      });
+    });
+    return [{ value: "", label: "All Brands" }, ...Array.from(brands).sort((a, b) => a.localeCompare(b)).map((brand) => ({ value: brand, label: brand }))];
+  }, [visibleDocumentRows]);
+
+  const filteredSalesOrders = useMemo(
+    () => activeSnapshot.salesOrders.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row)),
+    [activeSnapshot.salesOrders, documentSearch, brandFilter],
+  );
+  const filteredInvoices = useMemo(
+    () => activeSnapshot.invoices.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row)),
+    [activeSnapshot.invoices, documentSearch, brandFilter],
+  );
+  const filteredPurchaseOrders = useMemo(
+    () => activeSnapshot.purchaseOrders.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row)),
+    [activeSnapshot.purchaseOrders, documentSearch, brandFilter],
+  );
+  const filteredBills = useMemo(
+    () => activeSnapshot.bills.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row)),
+    [activeSnapshot.bills, documentSearch, brandFilter],
+  );
+
   const selectedDocument = (() => {
     if (!selection) return null;
     if (selection.kind === "sales-order") {
-      const row = snapshot.salesOrders.find((entry) => entry.id === selection.id);
+      const row = activeSnapshot.salesOrders.find((entry) => entry.id === selection.id);
       return row ? { kind: selection.kind, row } : null;
     }
     if (selection.kind === "invoice") {
-      const row = snapshot.invoices.find((entry) => entry.id === selection.id);
+      const row = activeSnapshot.invoices.find((entry) => entry.id === selection.id);
       return row ? { kind: selection.kind, row } : null;
     }
     if (selection.kind === "purchase-order") {
-      const row = snapshot.purchaseOrders.find((entry) => entry.id === selection.id);
+      const row = activeSnapshot.purchaseOrders.find((entry) => entry.id === selection.id);
       return row ? { kind: selection.kind, row } : null;
     }
-    const row = snapshot.bills.find((entry) => entry.id === selection.id);
+    const row = activeSnapshot.bills.find((entry) => entry.id === selection.id);
     return row ? { kind: selection.kind, row } : null;
   })();
 
@@ -270,15 +335,110 @@ export function PortalPage() {
           : `Bill Detail · ${selectedDocument.row.id}`
     : "";
 
+  function handlePortalPrint() {
+    if (!selectedDocument) return;
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      setError("Popup blocked while opening PDF view.");
+      return;
+    }
+
+    const isCustomerDoc = selectedDocument.kind === "sales-order" || selectedDocument.kind === "invoice";
+    const currency = selectedDocument.row.currency || activeSnapshot.accountSummary.currency || "EUR";
+    const lines = (selectedDocument.row.lines || []).map((line) => ({
+      code: line.code || line.requested_code || line.old_code || "-",
+      description: line.description || "-",
+      origin: line.origin || "",
+      brand: line.brand || "",
+      orderNo:
+        selectedDocument.kind === "sales-order"
+          ? selectedDocument.row.sales_order_no || selectedDocument.row.id
+          : selectedDocument.kind === "invoice"
+            ? selectedDocument.row.sales_order_no || ""
+            : selectedDocument.kind === "purchase-order"
+              ? selectedDocument.row.id
+              : selectedDocument.row.purchase_order_no || selectedDocument.row.id,
+      weight: line.weight_kg == null ? "" : formatWeight(line.weight_kg),
+      gtip: line.hs_code || "",
+      qty: Number(line.qty || 0),
+      unitPrice: Number(isCustomerDoc ? line.sell_price || 0 : line.buy_price || 0),
+      amount: Number(isCustomerDoc ? line.line_total || line.sales_total || 0 : line.line_total || 0),
+    }));
+
+    const html = buildBusinessDocumentHtml({
+      docType:
+        selectedDocument.kind === "sales-order"
+          ? "Sales Order"
+          : selectedDocument.kind === "invoice"
+            ? "Invoice"
+            : selectedDocument.kind === "purchase-order"
+              ? "Purchase Order"
+              : "Bill",
+      docNo:
+        selectedDocument.kind === "sales-order"
+          ? selectedDocument.row.sales_order_no || selectedDocument.row.id
+          : selectedDocument.kind === "invoice"
+            ? selectedDocument.row.id
+            : selectedDocument.kind === "purchase-order"
+              ? selectedDocument.row.id
+              : selectedDocument.row.id,
+      company: {
+        companyName: activeSnapshot.companyProfile?.company_name || "Next Master",
+        address: activeSnapshot.companyProfile?.address || "",
+        bankDetails: activeSnapshot.companyProfile?.bank_details || "",
+        taxNumber: activeSnapshot.companyProfile?.tax_number || "",
+        logoDataUrl: activeSnapshot.companyProfile?.logo_data_url || "",
+      },
+      party: {
+        title: isCustomerDoc ? "Bill To" : "Vendor",
+        details: isCustomerDoc ? partyProfile?.billing_address || activeSnapshot.invite.party_name : partyProfile?.billing_address || activeSnapshot.invite.party_name,
+        shippingTitle: "Shipping Address",
+        shippingDetails: isCustomerDoc ? partyProfile?.shipping_address || "" : "",
+      },
+      meta: [
+        {
+          label: selectedDocument.kind === "bill" ? "Bill Date" : selectedDocument.kind === "purchase-order" ? "PO Date" : "Date",
+          value:
+            selectedDocument.kind === "bill"
+              ? selectedDocument.row.bill_date || "-"
+              : "quote_date" in selectedDocument.row
+                ? selectedDocument.row.quote_date || "-"
+                : "-",
+        },
+        ...(selectedDocument.row.payment_terms ? [{ label: "Terms", value: selectedDocument.row.payment_terms }] : []),
+        ...("due_date" in selectedDocument.row && selectedDocument.row.due_date ? [{ label: "Due Date", value: selectedDocument.row.due_date }] : []),
+        ...("delivery_term" in selectedDocument.row && selectedDocument.row.delivery_term ? [{ label: "Delivery Term", value: selectedDocument.row.delivery_term }] : []),
+        ...("contract_nr" in selectedDocument.row && selectedDocument.row.contract_nr ? [{ label: "Contract Nr", value: selectedDocument.row.contract_nr }] : []),
+        ...(selectedDocument.kind === "invoice" && selectedDocument.row.sales_order_no ? [{ label: "Sales Order", value: selectedDocument.row.sales_order_no }] : []),
+        ...(selectedDocument.kind === "bill" && selectedDocument.row.purchase_order_no ? [{ label: "Purchase Order", value: selectedDocument.row.purchase_order_no }] : []),
+      ],
+      lines,
+      totals: {
+        currency,
+        subtotal: "subtotal" in selectedDocument.row ? Number(selectedDocument.row.subtotal || 0) : undefined,
+        discount: "discount_amount" in selectedDocument.row ? Number(selectedDocument.row.discount_amount || 0) : undefined,
+        shipping: "shipping_cost" in selectedDocument.row ? Number(selectedDocument.row.shipping_cost || 0) : undefined,
+        total: Number(("sales_total" in selectedDocument.row ? selectedDocument.row.sales_total : selectedDocument.row.total_amount) || 0),
+      },
+      notes: selectedDocument.row.notes || "",
+      totalQty: lines.reduce((sum, line) => sum + Number(line.qty || 0), 0),
+      totalWeight: (selectedDocument.row.lines || []).reduce((sum, line) => sum + Number(line.weight_kg || 0), 0),
+    });
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  }
+
   return (
     <div className="portal-shell">
       <div className="portal-header">
         <div className="portal-brand">
-          {snapshot.companyProfile?.logo_data_url ? <img src={snapshot.companyProfile.logo_data_url} alt="Portal logo" className="portal-brand__logo" /> : null}
+          {activeSnapshot.companyProfile?.logo_data_url ? <img src={activeSnapshot.companyProfile.logo_data_url} alt="Portal logo" className="portal-brand__logo" /> : null}
           <div>
-            <h1>{snapshot.companyProfile?.company_name || "Next Master Portal"}</h1>
+            <h1>{activeSnapshot.companyProfile?.company_name || "Next Master Portal"}</h1>
             <p>
-              {snapshot.invite.party_type === "customer" ? "Customer Portal" : "Vendor Portal"} for {snapshot.invite.party_name}
+              {activeSnapshot.invite.party_type === "customer" ? "Customer Portal" : "Vendor Portal"} for {activeSnapshot.invite.party_name}
             </p>
           </div>
         </div>
@@ -300,11 +460,11 @@ export function PortalPage() {
           <div className="settings-grid settings-grid--compact">
             <div className="settings-item">
               <span className="settings-label">Party</span>
-              <strong>{snapshot.invite.party_name}</strong>
+              <strong>{activeSnapshot.invite.party_name}</strong>
             </div>
             <div className="settings-item">
               <span className="settings-label">Email</span>
-              <strong>{snapshot.invite.email}</strong>
+              <strong>{activeSnapshot.invite.email}</strong>
             </div>
             <div className="settings-item">
               <span className="settings-label">Billing Address</span>
@@ -324,30 +484,37 @@ export function PortalPage() {
             </div>
             <div className="dashboard-stat">
               <span>Total Amount</span>
-              <strong>{formatMoney(snapshot.accountSummary.totalAmount, snapshot.accountSummary.currency)}</strong>
+              <strong>{formatMoney(activeSnapshot.accountSummary.totalAmount, activeSnapshot.accountSummary.currency)}</strong>
             </div>
             <div className="dashboard-stat">
               <span>Open Balance</span>
-              <strong>{formatMoney(snapshot.accountSummary.openAmount, snapshot.accountSummary.currency)}</strong>
+              <strong>{formatMoney(activeSnapshot.accountSummary.openAmount, activeSnapshot.accountSummary.currency)}</strong>
             </div>
             <div className="dashboard-stat">
               <span>Payments</span>
-              <strong>{snapshot.accountSummary.paymentCount}</strong>
+              <strong>{activeSnapshot.accountSummary.paymentCount}</strong>
             </div>
           </div>
         </SectionCard>
       </div>
 
-      {snapshot.invite.access.can_view_account ? (
+      <SectionCard title="Document Filters">
+        <div className="portal-filter-grid">
+          <Input label="Search" value={documentSearch} placeholder="Document no, code, description" onChange={setDocumentSearch} />
+          <Select label="Brand" value={brandFilter} options={brandOptions} onChange={setBrandFilter} />
+        </div>
+      </SectionCard>
+
+      {activeSnapshot.invite.access.can_view_account ? (
         <SectionCard title="Account Statement">
-          <DataTable rows={snapshot.accountRows} columns={accountColumns} emptyText="No statement rows available." />
+          <DataTable rows={activeSnapshot.accountRows} columns={accountColumns} emptyText="No statement rows available." />
         </SectionCard>
       ) : null}
 
-      {snapshot.invite.party_type === "customer" && snapshot.invite.access.can_view_orders ? (
+      {activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_orders ? (
         <SectionCard title="Sales Orders">
           <DataTable
-            rows={snapshot.salesOrders}
+            rows={filteredSalesOrders}
             columns={salesOrderColumns}
             emptyText="No sales orders available."
             onRowClick={(row) => setSelection({ kind: "sales-order", id: row.id })}
@@ -356,10 +523,10 @@ export function PortalPage() {
         </SectionCard>
       ) : null}
 
-      {snapshot.invite.party_type === "customer" && snapshot.invite.access.can_view_invoices ? (
+      {activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_invoices ? (
         <SectionCard title="Invoices">
           <DataTable
-            rows={snapshot.invoices}
+            rows={filteredInvoices}
             columns={invoiceColumns}
             emptyText="No invoices available."
             onRowClick={(row) => setSelection({ kind: "invoice", id: row.id })}
@@ -368,10 +535,10 @@ export function PortalPage() {
         </SectionCard>
       ) : null}
 
-      {snapshot.invite.party_type === "vendor" && snapshot.invite.access.can_view_orders ? (
+      {activeSnapshot.invite.party_type === "vendor" && activeSnapshot.invite.access.can_view_orders ? (
         <SectionCard title="Purchase Orders">
           <DataTable
-            rows={snapshot.purchaseOrders}
+            rows={filteredPurchaseOrders}
             columns={purchaseOrderColumns}
             emptyText="No purchase orders available."
             onRowClick={(row) => setSelection({ kind: "purchase-order", id: row.id })}
@@ -380,10 +547,10 @@ export function PortalPage() {
         </SectionCard>
       ) : null}
 
-      {snapshot.invite.party_type === "vendor" && snapshot.invite.access.can_view_invoices ? (
+      {activeSnapshot.invite.party_type === "vendor" && activeSnapshot.invite.access.can_view_invoices ? (
         <SectionCard title="Bills">
           <DataTable
-            rows={snapshot.bills}
+            rows={filteredBills}
             columns={billColumns}
             emptyText="No bills available."
             onRowClick={(row) => setSelection({ kind: "bill", id: row.id })}
@@ -397,6 +564,9 @@ export function PortalPage() {
           title={detailTitle}
           actions={
             <div className="inline-actions">
+              <Button variant="secondary" onClick={handlePortalPrint}>
+                PDF / Print
+              </Button>
               <Button variant="secondary" onClick={() => setSelection(null)}>
                 Close
               </Button>
@@ -498,10 +668,10 @@ export function PortalPage() {
         </SectionCard>
       ) : null}
 
-      {snapshot.invite.access.can_view_payments ? (
+      {activeSnapshot.invite.access.can_view_payments ? (
         <SectionCard title="Payments">
           <DataTable
-            rows={snapshot.invite.party_type === "customer" ? snapshot.paymentsReceived : snapshot.paymentsMade}
+            rows={activeSnapshot.invite.party_type === "customer" ? activeSnapshot.paymentsReceived : activeSnapshot.paymentsMade}
             columns={paymentColumns}
             emptyText="No payments available."
           />
