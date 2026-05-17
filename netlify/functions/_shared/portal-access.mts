@@ -150,15 +150,6 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
     invite = null;
   }
 
-  if (!invite) {
-    invite = await fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
-      select:
-        "id,organization_id,party_type,party_name,email,contact_name,status,last_sent_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders",
-      email: `eq.${email}`,
-      invite_token: `eq.${token}`,
-    });
-  }
-
   if (!invite || invite.status === "disabled") {
     throw new Error("Portal invite not found or disabled");
   }

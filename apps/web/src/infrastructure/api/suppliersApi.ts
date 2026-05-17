@@ -25,12 +25,10 @@ export async function fetchCloudSupplierBrandSummary(inputSupplierId: string | n
 
 export async function fetchCloudSupplierBrandSummaryAll(inputSuppliers?: SupplierSummary[]): Promise<SupplierBrandSummaryRow[]> {
   const suppliers = inputSuppliers?.length ? inputSuppliers : await fetchCloudSuppliers();
-  const rows: SupplierBrandSummaryRow[] = [];
-
-  for (const supplier of suppliers) {
-    const batch = await fetchCloudSupplierBrandSummary(supplier.supplier_id);
-    rows.push(...batch);
-  }
+  const batches = await Promise.allSettled(
+    suppliers.map((supplier) => fetchCloudSupplierBrandSummary(supplier.supplier_id)),
+  );
+  const rows = batches.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
 
   return rows.sort((a, b) => a.supplier_name.localeCompare(b.supplier_name) || b.part_count - a.part_count || a.brand.localeCompare(b.brand));
 }

@@ -33,11 +33,9 @@ export function SalesPage({
   selectedInvoiceId: externalSelectedInvoiceId = "",
 }: SalesPageProps) {
   const actionFeedback = useActionFeedback();
-  const [activeTab, setActiveTab] = useState<
-    "Customers" | "Sales Orders" | "Invoices" | "Sales Receipts" | "Payments Received" | "Sales Returns" | "Credit Notes" | "Price Lists"
-  >("Sales Orders");
+  const [activeTab, setActiveTab] = useState<"Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists">("Sales Orders");
 
-  const tabs = ["Customers", "Sales Orders", "Invoices", "Sales Receipts", "Payments Received", "Sales Returns", "Credit Notes", "Price Lists"] as const;
+  const tabs = ["Customers", "Sales Orders", "Invoices", "Payments Received", "Price Lists"] as const;
   const [invoices, setInvoices] = useState<LocalInvoice[]>([]);
   const [salesOrders, setSalesOrders] = useState<LocalSalesOrder[]>([]);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
@@ -722,11 +720,6 @@ export function SalesPage({
           ) : null}
         </SectionCard>
       ) : null}
-      {activeTab === "Sales Receipts" ? (
-        <SectionCard title="Sales Receipts">
-          <div className="empty-state">Coming soon: direct receipts, receipt export, and posted receipt history.</div>
-        </SectionCard>
-      ) : null}
       {activeTab === "Payments Received" ? (
         <SectionCard title="Payments Received">
           <div className="meta-row">
@@ -821,16 +814,6 @@ export function SalesPage({
               </div>
             </div>
           ) : null}
-        </SectionCard>
-      ) : null}
-      {activeTab === "Sales Returns" ? (
-        <SectionCard title="Sales Returns">
-          <div className="empty-state">Coming soon: return intake, return approval, and reverse quantity/amount handling.</div>
-        </SectionCard>
-      ) : null}
-      {activeTab === "Credit Notes" ? (
-        <SectionCard title="Credit Notes">
-          <div className="empty-state">Coming soon: credit note issue, reference invoice link, and customer balance adjustments.</div>
         </SectionCard>
       ) : null}
     </div>

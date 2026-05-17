@@ -210,6 +210,14 @@ function writeStoredCredentials(credentials: PortalCredentials | null) {
   window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(credentials));
 }
 
+function clearPortalQueryParams() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("email") && !url.searchParams.has("token")) return;
+  url.searchParams.delete("email");
+  url.searchParams.delete("token");
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 export function PortalPage() {
   const search = new URLSearchParams(window.location.search);
   const portalImportRef = useRef<HTMLInputElement | null>(null);
@@ -265,6 +273,7 @@ export function PortalPage() {
         setPaymentStatusFilter("");
         setStatus("Portal session active.");
         writeStoredCredentials({ email, token });
+        clearPortalQueryParams();
       })
       .catch((caught) => {
         setSnapshot(null);
@@ -479,6 +488,7 @@ export function PortalPage() {
       setPaymentStatusFilter("");
       setStatus("Portal session active.");
       writeStoredCredentials(credentials);
+      clearPortalQueryParams();
     } catch (caught) {
       setSnapshot(null);
       setError(caught instanceof Error ? caught.message : "Portal login failed");
@@ -509,6 +519,7 @@ export function PortalPage() {
     setStatus("");
     setError("");
     writeStoredCredentials(null);
+    clearPortalQueryParams();
   }
 
   useEffect(() => {

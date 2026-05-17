@@ -4,7 +4,6 @@ import {
   fetchDashboardSnapshot,
   type DashboardSalesOrderSummary,
   type DashboardSnapshot,
-  type RevenueSource,
 } from "../../infrastructure/api/dashboardApi";
 import { Button } from "../components/common/Button";
 import { useActionFeedback } from "../components/common/ActionFeedback";
@@ -42,7 +41,6 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
     stockValue: 0,
   });
   const [inventoryPulseError, setInventoryPulseError] = useState("");
-  const [revenueSource, setRevenueSource] = useState<RevenueSource>("quotes");
   const [brandSummarySearch, setBrandSummarySearch] = useState("");
   const [brandSummarySupplier, setBrandSummarySupplier] = useState("");
 
@@ -313,22 +311,9 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
         </SectionCard>
         <SectionCard title="Revenue Analysis">
           <div className="toolbar toolbar--wrap">
-            <button
-              className={`module-tab${revenueSource === "quotes" ? " active" : ""}`}
-              onClick={() => setRevenueSource("quotes")}
-            >
-              Quotes
-            </button>
-            <button
-              className={`module-tab${revenueSource === "bills" ? " active" : ""}`}
-              onClick={() => setRevenueSource("bills")}
-            >
-              Bills
-            </button>
+            <span className="mark-badge mark-badge--success">Quotes</span>
           </div>
-          {revenueSource === "bills" ? (
-            <div className="empty-state">Coming soon: bill-based turnover analysis will appear here after billing module goes live.</div>
-          ) : revenue ? (
+          {revenue ? (
             <div className="stats-grid stats-grid--compact">
               <StatCard
                 label="This Month"

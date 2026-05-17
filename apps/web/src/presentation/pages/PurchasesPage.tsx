@@ -90,9 +90,7 @@ export function PurchasesPage({
   selectedBillId: externalSelectedBillId = "",
 }: PurchasesPageProps) {
   const actionFeedback = useActionFeedback();
-  const [activeTab, setActiveTab] = useState<
-    "Vendors" | "Purchase Orders" | "Purchase Receives" | "Bills" | "Payments Made" | "Vendor Credits"
-  >("Vendors");
+  const [activeTab, setActiveTab] = useState<"Vendors" | "Purchase Orders" | "Bills" | "Payments Made">("Vendors");
   const [purchaseOrders, setPurchaseOrders] = useState<LocalPurchaseOrder[]>([]);
   const [bills, setBills] = useState<LocalBill[]>([]);
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState("");
@@ -126,7 +124,7 @@ export function PurchasesPage({
 
     async function run() {
       try {
-        if (activeTab === "Purchase Orders" || activeTab === "Purchase Receives") {
+        if (activeTab === "Purchase Orders") {
           const purchaseOrderRows = await fetchPurchaseOrders();
           if (cancelled) return;
           setPurchaseOrders(purchaseOrderRows);
@@ -148,7 +146,7 @@ export function PurchasesPage({
         }
       } catch {
         if (!cancelled) {
-          if (activeTab === "Purchase Orders" || activeTab === "Purchase Receives") setPurchaseOrders([]);
+          if (activeTab === "Purchase Orders") setPurchaseOrders([]);
           if (activeTab === "Bills") setBills([]);
           if (activeTab === "Payments Made") {
             setPaymentsMade([]);
@@ -635,7 +633,7 @@ export function PurchasesPage({
   return (
     <div className="page-stack">
       <div className="module-tabs">
-        {(["Vendors", "Purchase Orders", "Purchase Receives", "Bills", "Payments Made", "Vendor Credits"] as const).map((item) => (
+        {(["Vendors", "Purchase Orders", "Bills", "Payments Made"] as const).map((item) => (
           <button key={item} className={`module-tab${activeTab === item ? " active" : ""}`} onClick={() => setActiveTab(item)}>
             {item}
           </button>
@@ -803,12 +801,6 @@ export function PurchasesPage({
               </div>
             </div>
           ) : null}
-        </SectionCard>
-      ) : null}
-
-      {activeTab === "Purchase Receives" ? (
-        <SectionCard title="Purchase Receives (Put to Stock)">
-          <div className="empty-state">Coming soon: receive purchase orders, put items to stock, and track shortages or over-receipts.</div>
         </SectionCard>
       ) : null}
 
@@ -1069,11 +1061,6 @@ export function PurchasesPage({
         </SectionCard>
       ) : null}
 
-      {activeTab === "Vendor Credits" ? (
-        <SectionCard title="Vendor Credits">
-          <div className="empty-state">Coming soon: vendor credit notes, return value tracking, and payable adjustments.</div>
-        </SectionCard>
-      ) : null}
     </div>
   );
 }
