@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { normalizePartCode } from "../../domain/shared/normalize";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
+import { fetchInventoryMovements } from "../../infrastructure/api/inventoryApi";
 import { fetchBills, fetchInvoices, fetchPurchaseOrders, fetchSalesOrders } from "../../infrastructure/api/ordersApi";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
+import type { InventoryMovement } from "../../types/inventory";
 import type { LocalBill, LocalInvoice, LocalPurchaseOrder, LocalSalesOrder } from "../../types/orders";
 import { DataTable } from "../components/common/DataTable";
 import { useActionFeedback } from "../components/common/ActionFeedback";
@@ -14,7 +16,7 @@ import { Select } from "../components/common/Select";
 type ItemTransactionRow = {
   document_id: string;
   date: string;
-  document_type: "Sales Order" | "Purchase Order" | "Invoice" | "Bill";
+  document_type: "Sales Order" | "Purchase Order" | "Invoice" | "Bill" | "Purchase Receive" | "Stock Transfer";
   direction: "IN" | "OUT";
   document_no: string;
   reference_no: string;
@@ -151,6 +153,27 @@ function billRows(bills: LocalBill[]): ItemTransactionRow[] {
   );
 }
 
+function inventoryMovementRows(movements: InventoryMovement[]): ItemTransactionRow[] {
+  return movements
+    .filter((movement) => movement.movement_type === "purchase_receive" || movement.movement_type === "transfer_in" || movement.movement_type === "transfer_out")
+    .map((movement) => ({
+      document_id: movement.document_id,
+      date: movement.moved_at ? movement.moved_at.slice(0, 10) : "",
+      document_type: movement.movement_type === "purchase_receive" ? "Purchase Receive" : "Stock Transfer",
+      direction: movement.qty_in > 0 ? "IN" : "OUT",
+      document_no: movement.document_no || movement.document_id || "-",
+      reference_no: movement.document_type || "",
+      status: movement.movement_type === "purchase_receive" ? "posted" : movement.movement_type,
+      party_name: movement.related_party || movement.warehouse_name || "-",
+      brand: movement.brand || "",
+      product_code: movement.product_code || movement.old_code || "",
+      description: movement.description || "",
+      qty: movement.qty_in > 0 ? toNumber(movement.qty_in) : toNumber(movement.qty_out),
+      unit_price: toNumber(movement.unit_cost),
+      amount: roundMoney(toNumber(movement.total_cost)),
+    }));
+}
+
 type ItemTransactionsPageProps = {
   onOpenSalesOrder?: (salesOrderId: string) => void;
   onOpenPurchaseOrder?: (purchaseOrderId: string) => void;
@@ -167,7 +190,9 @@ export function ItemTransactionsPage({
   const actionFeedback = useActionFeedback();
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportingHistory, setExportingHistory] = useState(false);
   const [rows, setRows] = useState<ItemTransactionRow[]>([]);
+  const [inventoryRows, setInventoryRows] = useState<ItemTransactionRow[]>([]);
   const [brandOptions, setBrandOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [brand, setBrand] = useState("");
   const [codeSearch, setCodeSearch] = useState("");
@@ -209,11 +234,12 @@ export function ItemTransactionsPage({
       setLoading(true);
       setLoaded(true);
       actionFeedback.begin("Loading item transactions...");
-      const [salesOrders, purchaseOrders, invoices, bills] = await Promise.all([
+      const [salesOrders, purchaseOrders, invoices, bills, movements] = await Promise.all([
         fetchSalesOrders(),
         fetchPurchaseOrders(),
         fetchInvoices(),
         fetchBills(),
+        fetchInventoryMovements(),
       ]);
       setRows([
         ...salesOrderRows(salesOrders),
@@ -221,9 +247,11 @@ export function ItemTransactionsPage({
         ...invoiceRows(invoices),
         ...billRows(bills),
       ]);
+      setInventoryRows(inventoryMovementRows(movements));
       actionFeedback.succeed("Item transactions loaded.");
     } catch (caught) {
       setRows([]);
+      setInventoryRows([]);
       actionFeedback.fail(caught instanceof Error ? caught.message : "Item transactions load failed");
     } finally {
       setLoading(false);
@@ -291,12 +319,27 @@ export function ItemTransactionsPage({
   }, [filteredRows]);
 
   const historyRows = useMemo(() => {
-    return [...filteredRows].sort((left, right) => {
+    const needle = codeSearch.trim().toLowerCase();
+    const normalizedNeedle = normalizePartCode(codeSearch);
+    const filteredInventoryRows = inventoryRows.filter((row) => {
+      if (brand && row.brand.trim().toLowerCase() !== brand.trim().toLowerCase()) return false;
+      if (codeSearch.trim()) {
+        const haystack = `${row.product_code} ${row.description}`.toLowerCase();
+        const normalizedCode = normalizePartCode(row.product_code);
+        if (!haystack.includes(needle) && (!normalizedNeedle || !normalizedCode.includes(normalizedNeedle))) return false;
+      }
+      if (partySearch.trim() && !row.party_name.toLowerCase().includes(partySearch.trim().toLowerCase())) return false;
+      if (dateFrom && row.date && row.date < dateFrom) return false;
+      if (dateTo && row.date && row.date > dateTo) return false;
+      return true;
+    });
+
+    return [...filteredRows, ...filteredInventoryRows].sort((left, right) => {
       if (left.date !== right.date) return right.date.localeCompare(left.date);
       if (left.document_type !== right.document_type) return left.document_type.localeCompare(right.document_type);
       return left.document_no.localeCompare(right.document_no);
     });
-  }, [filteredRows]);
+  }, [filteredRows, inventoryRows, brand, codeSearch, partySearch, dateFrom, dateTo]);
 
   const inboundAmount = useMemo(() => roundMoney(summaryRows.reduce((sum, row) => sum + row.inbound_amount, 0)), [summaryRows]);
   const outboundAmount = useMemo(() => roundMoney(summaryRows.reduce((sum, row) => sum + row.outbound_amount, 0)), [summaryRows]);
@@ -355,6 +398,7 @@ export function ItemTransactionsPage({
               if (row.document_type === "Invoice") onOpenInvoice?.(row.document_id);
               if (row.document_type === "Bill") onOpenBill?.(row.document_id);
             }}
+            disabled={row.document_type === "Purchase Receive" || row.document_type === "Stock Transfer"}
           >
             Open Document
           </Button>
@@ -395,6 +439,39 @@ export function ItemTransactionsPage({
     }
   }
 
+  async function handleExportHistoryExcel() {
+    try {
+      setExportingHistory(true);
+      actionFeedback.begin("Preparing item transaction history export...");
+      const sheetRows: Array<Array<string | number>> = [
+        ["Date", "Document", "No", "Status", "Flow", "Party", "Brand", "Code", "Description", "Qty_In", "Qty_Out", "Unit_Price_EUR", "Amount_EUR"],
+        ...historyRows.map((row) => [
+          row.date,
+          row.document_type,
+          row.document_no,
+          row.status,
+          row.direction === "IN" ? "Bought" : "Sold",
+          row.party_name,
+          row.brand,
+          row.product_code,
+          row.description,
+          row.direction === "IN" ? row.qty : 0,
+          row.direction === "OUT" ? row.qty : 0,
+          row.unit_price,
+          row.amount,
+        ]),
+      ];
+      const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+      const blob = buildXlsxBlob("Item Transaction History", sheetRows, [9, 10, 11, 12]);
+      downloadBlob(`item-transaction-history-${brand || "all"}-${stamp}.xlsx`, blob);
+      actionFeedback.succeed("Item transaction history exported.");
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Item transaction history export failed");
+    } finally {
+      setExportingHistory(false);
+    }
+  }
+
   return (
     <SectionCard title="Item Transactions">
       <div className="toolbar toolbar--wrap">
@@ -421,8 +498,13 @@ export function ItemTransactionsPage({
           <DataTable rows={summaryRows} columns={columns} emptyText="No item transactions found for the selected filters." />
           <div className="section-card quote-workbench-card">
             <div className="section-card__header">
-              <h2>Item Transaction History</h2>
-              <p>Shows who supplied the item and which customer or customers it was sold to.</p>
+              <div>
+                <h2>Item Transaction History</h2>
+                <p>Shows who supplied the item, which customer or customers it was sold to, and related stock postings.</p>
+              </div>
+              <Button onClick={() => void handleExportHistoryExcel()} busy={exportingHistory} busyLabel="Exporting..." disabled={!historyRows.length}>
+                Export History Excel
+              </Button>
             </div>
             <div className="section-card__body">
               <div className="meta-row">
