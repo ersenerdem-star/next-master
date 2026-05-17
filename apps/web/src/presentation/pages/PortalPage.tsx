@@ -364,7 +364,16 @@ export function PortalPage() {
     () => [
       { key: "code", header: "Code", render: (row: PortalPreparedLine) => row.resolvedCode || row.requestedCode || "-" },
       { key: "brand", header: "Brand", render: (row: PortalPreparedLine) => row.brand || "-" },
-      { key: "description", header: "Description", render: (row: PortalPreparedLine) => row.description || "-" },
+      {
+        key: "description",
+        header: "Description",
+        render: (row: PortalPreparedLine) => (
+          <div>
+            <div>{row.description || "-"}</div>
+            {row.sell_price == null ? <div className="warning-text">No live price found for this item.</div> : null}
+          </div>
+        ),
+      },
       {
         key: "qty",
         header: "Qty",
@@ -382,8 +391,17 @@ export function PortalPage() {
           />
         ),
       },
-      { key: "sell", header: `Price ${portalPricingCurrency}`, render: (row: PortalPreparedLine) => formatMoney(Number(row.sell_price || 0), portalPricingCurrency) },
-      { key: "amount", header: `Amount ${portalPricingCurrency}`, render: (row: PortalPreparedLine) => formatMoney(Number(row.sell_price || 0) * Number(row.qty || 0), portalPricingCurrency) },
+      {
+        key: "sell",
+        header: `Price ${portalPricingCurrency}`,
+        render: (row: PortalPreparedLine) => (row.sell_price == null ? "-" : formatMoney(Number(row.sell_price || 0), portalPricingCurrency)),
+      },
+      {
+        key: "amount",
+        header: `Amount ${portalPricingCurrency}`,
+        render: (row: PortalPreparedLine) =>
+          row.sell_price == null ? "-" : formatMoney(Number(row.sell_price || 0) * Number(row.qty || 0), portalPricingCurrency),
+      },
       {
         key: "actions",
         header: "Actions",
@@ -574,6 +592,7 @@ export function PortalPage() {
     purchaseTotal: portalDraftLines.reduce((sum, line) => sum + Number(line.buy_price || 0) * Number(line.qty || 0), 0),
   };
   const portalOrderCurrency = activeSnapshot.pricingProfile?.currency || activeSnapshot.accountSummary.currency || "EUR";
+  const portalDraftHasMissingPrices = portalDraftLines.some((line) => line.sell_price == null);
 
   async function handlePortalCatalogSearch() {
     try {
@@ -629,6 +648,10 @@ export function PortalPage() {
   async function handleSubmitPortalOrder(mode: "draft" | "confirm") {
     if (!portalDraftLines.length) {
       setError("Add at least one line before saving portal order.");
+      return;
+    }
+    if (mode === "confirm" && portalDraftHasMissingPrices) {
+      setError("Some lines do not have a live price yet. Remove them or complete pricing before confirming.");
       return;
     }
     try {
@@ -1038,7 +1061,7 @@ export function PortalPage() {
               <Button variant="secondary" busy={savingPortalOrder} busyLabel="Saving..." onClick={() => void handleSubmitPortalOrder("draft")}>
                 Save Draft
               </Button>
-              <Button busy={confirmingPortalOrder} busyLabel="Confirming..." onClick={() => void handleSubmitPortalOrder("confirm")}>
+              <Button busy={confirmingPortalOrder} busyLabel="Confirming..." disabled={portalDraftHasMissingPrices} onClick={() => void handleSubmitPortalOrder("confirm")}>
                 Confirm Order
               </Button>
             </div>
@@ -1083,6 +1106,7 @@ export function PortalPage() {
             <Input label="Notes" value={portalOrderNotes} placeholder="Order note for internal team" onChange={setPortalOrderNotes} />
 
             {portalOrderStatus ? <div className="success-text">{portalOrderStatus}</div> : null}
+            {portalDraftHasMissingPrices ? <div className="warning-text">Items without live price can be saved as draft but cannot be confirmed.</div> : null}
 
             <div className="portal-order-builder__tables">
               <SectionCard title="Catalog Search Results">

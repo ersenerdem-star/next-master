@@ -8,5 +8,8 @@
     "dev": "npm --workspace apps/web run dev",
     "build": "npm --workspace apps/web run build",
     "preview": "npm --workspace apps/web run preview"
+  },
+  "devDependencies": {
+    "yaml": "^2.9.0"
   }
 }
