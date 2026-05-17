@@ -79,6 +79,7 @@ type PreparedPortalLine = {
 };
 
 type CustomerPricingContext = {
+  organizationId: string;
   customer: CustomerRow;
   sellerCompany: string;
   currency: string;
@@ -94,6 +95,26 @@ function normalizePartCode(value: string) {
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function normalizePortalCustomerType(value: string): CustomerPricingContext["customerType"] {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "a" || normalized === "a price list") return "A";
+  if (normalized === "b" || normalized === "b price list") return "B";
+  if (normalized === "c" || normalized === "c price list") return "C";
+  if (normalized === "other" || normalized === "other margin") return "Other";
+  return "A";
+}
+
+function computeSellFromBuy(buyPrice: number | null, context: CustomerPricingContext) {
+  if (buyPrice == null) return null;
+  if (context.customerType === "C") return null;
+  const marginPercent = context.customerType === "B" ? context.effectiveMarginB : context.effectiveMarginA;
+  return roundMoney(Number(buyPrice) * (1 + marginPercent / 100));
+}
+
+function hasUsablePrice(value: unknown) {
+  return value != null && Number(value) > 0;
 }
 
 function nowIso() {
@@ -177,17 +198,18 @@ async function resolvePortalCustomer(
 
   const defaultMarginA = byType.get("A")?.margin_percent == null ? 10 : Number(byType.get("A")?.margin_percent || 10);
   const defaultMarginB = byType.get("B")?.margin_percent == null ? 15 : Number(byType.get("B")?.margin_percent || 15);
-  const priceListType = String(customer.price_list_type || "A") as CustomerPricingContext["customerType"];
+  const priceListType = normalizePortalCustomerType(String(customer.price_list_type || "A"));
   const marginOverride = customer.price_list_margin_percent == null ? null : Number(customer.price_list_margin_percent);
   const effectiveMarginA = (priceListType === "A" || priceListType === "Other") && marginOverride != null ? marginOverride : defaultMarginA;
   const effectiveMarginB = priceListType === "B" && marginOverride != null ? marginOverride : defaultMarginB;
   const cPriceListId = String(byType.get("C")?.id || "");
 
   return {
+    organizationId: invite.organization_id,
     customer,
     sellerCompany: String(companyProfile?.company_name || ""),
     currency: String(customer.currency || "EUR"),
-    customerType: ["A", "B", "C", "Other"].includes(priceListType) ? priceListType : "A",
+    customerType: priceListType,
     effectiveMarginA,
     effectiveMarginB,
     cPriceListId,
@@ -298,7 +320,39 @@ async function fetchCPriceMap(
   return map;
 }
 
-async function fetchBestSupplierOption(
+async function findPortalCodeReferenceMatch(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  brand: string,
+  code: string,
+) {
+  const normalizedCode = normalizePartCode(code);
+  if (!brand.trim() || !normalizedCode) return null;
+
+  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, organizationId);
+  const brandId = brandMap.byName.get(brand.trim().toLowerCase());
+  if (!brandId) return null;
+
+  const row = await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "item_code_references", {
+    select: "id,old_code,new_code,reason,original_number",
+    organization_id: `eq.${organizationId}`,
+    brand_id: `eq.${brandId}`,
+    is_active: "eq.true",
+    normalized_old_code: `eq.${normalizedCode}`,
+  });
+
+  if (!row?.id) return null;
+  return {
+    id: String(row.id || ""),
+    old_code: String(row.old_code || ""),
+    new_code: String(row.new_code || ""),
+    reason: String(row.reason || ""),
+    original_number: String(row.original_number || ""),
+  };
+}
+
+async function fetchSupplierOptions(
   supabaseUrl: string,
   serviceRoleKey: string,
   row: PortalOrderInputRow,
@@ -313,7 +367,28 @@ async function fetchBestSupplierOption(
     input_margin_b: context.effectiveMarginB / 100,
   });
 
-  const first = (options || [])[0];
+  return (options || []).map((option) => {
+    const buyPrice = option.buy_price == null ? null : Number(option.buy_price);
+    const sellPrice =
+      option.sell_price == null ? computeSellFromBuy(buyPrice, context) : Number(option.sell_price);
+    return {
+      supplier_id: option.supplier_id == null ? null : String(option.supplier_id),
+      supplier_name: String(option.supplier_name || ""),
+      buy_price: buyPrice,
+      sell_price: sellPrice,
+      price_date: String(option.price_date || ""),
+      notes: String(option.notes || ""),
+    };
+  });
+}
+
+async function fetchBestSupplierOption(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  row: PortalOrderInputRow,
+  context: CustomerPricingContext,
+) {
+  const first = (await fetchSupplierOptions(supabaseUrl, serviceRoleKey, row, context))[0];
   if (!first) return null;
   return {
     supplier_name: String(first.supplier_name || ""),
@@ -330,9 +405,17 @@ async function resolvePreparedLine(
   row: PortalOrderInputRow,
   context: CustomerPricingContext,
 ): Promise<PreparedPortalLine> {
+  const referenceMatch = await findPortalCodeReferenceMatch(
+    supabaseUrl,
+    serviceRoleKey,
+    context.organizationId,
+    row.brand,
+    row.code,
+  );
+  const codeToResolve = referenceMatch?.new_code || row.code;
   const rpcCustomerType = context.customerType === "Other" || context.customerType === "C" ? "A" : context.customerType;
   const resolvedRows = await callRpc<Array<Record<string, unknown>>>(supabaseUrl, serviceRoleKey, "cloud_resolve_quote_line", {
-    input_code: row.code.trim(),
+    input_code: codeToResolve.trim(),
     input_brand: row.brand.trim(),
     input_customer_type: rpcCustomerType,
     input_margin_a: context.effectiveMarginA / 100,
@@ -340,13 +423,27 @@ async function resolvePreparedLine(
   });
 
   const resolved = (resolvedRows || [])[0] || {};
-  const fallbackSupplier = !resolved.buy_price && !resolved.supplier_name ? await fetchBestSupplierOption(supabaseUrl, serviceRoleKey, row, context) : null;
-  const resolvedCode = String(resolved.product_code || row.code || "");
-  const codeChanged = normalizePartCode(resolvedCode) !== normalizePartCode(row.code);
+  const supplierOptions =
+    !hasUsablePrice(resolved.buy_price) || !hasUsablePrice(resolved.sell_price)
+      ? await fetchSupplierOptions(
+          supabaseUrl,
+          serviceRoleKey,
+          { ...row, code: codeToResolve },
+          context,
+        )
+      : [];
+  const fallbackSupplier =
+    supplierOptions[0] || (await fetchBestSupplierOption(supabaseUrl, serviceRoleKey, { ...row, code: codeToResolve }, context));
+  const resolvedCode = String(resolved.product_code || codeToResolve || row.code || "");
+  const codeChanged = Boolean(referenceMatch) || normalizePartCode(resolvedCode) !== normalizePartCode(row.code);
   const buyPrice =
-    resolved.buy_price == null ? (fallbackSupplier?.buy_price ?? null) : Number(resolved.buy_price);
+    hasUsablePrice(resolved.buy_price) ? Number(resolved.buy_price) : (fallbackSupplier?.buy_price ?? null);
   const computedSell =
-    resolved.sell_price == null ? (fallbackSupplier?.sell_price ?? null) : Number(resolved.sell_price);
+    hasUsablePrice(resolved.sell_price)
+      ? Number(resolved.sell_price)
+      : (
+          fallbackSupplier?.sell_price ?? computeSellFromBuy(buyPrice, context)
+        );
 
   return {
     lineId: makeId("portal-line"),
@@ -365,11 +462,15 @@ async function resolvePreparedLine(
     c_sell_price: null,
     price_date: String(resolved.price_date || fallbackSupplier?.price_date || ""),
     notes: String(resolved.notes || fallbackSupplier?.notes || ""),
-    found: Boolean(resolved.found),
+    found: Boolean(resolved.found) || Boolean(fallbackSupplier?.supplier_name) || buyPrice != null || computedSell != null,
     codeChanged,
-    codeChangeWarning: codeChanged ? `Old Code ${row.code} => New Code ${resolvedCode}` : "",
-    supplierOptions: [],
-    selectedSupplierKey: "",
+    codeChangeWarning: referenceMatch
+      ? `Old Code ${referenceMatch.old_code} => New Code ${referenceMatch.new_code}.${referenceMatch.reason ? ` ${referenceMatch.reason}` : ""}`
+      : codeChanged
+        ? `Old Code ${row.code} => New Code ${resolvedCode}`
+        : "",
+    supplierOptions,
+    selectedSupplierKey: supplierOptions[0] ? `${supplierOptions[0].supplier_name}-0` : "",
   };
 }
 
