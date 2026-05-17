@@ -538,16 +538,22 @@ export function PortalPage() {
         <div className="portal-login-card">
           <h1>Portal Login</h1>
           <p>Enter invite email and token to access customer or vendor self-service.</p>
-          <div className="portal-login-form">
+          <form
+            className="portal-login-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleLogin();
+            }}
+          >
             <Input label="Email" value={credentials.email} placeholder="name@company.com" onChange={(value) => setCredentials((current) => ({ ...current, email: value }))} />
             <Input label="Invite Token" value={credentials.token} placeholder="Portal invite token" onChange={(value) => setCredentials((current) => ({ ...current, token: value }))} />
             <div className="inline-actions">
-              <Button busy={loading} busyLabel="Signing in..." onClick={() => void handleLogin()}>
+              <Button type="submit" busy={loading} busyLabel="Signing in..." onClick={() => void handleLogin()}>
                 Sign In
               </Button>
             </div>
             {error ? <div className="warning-text">{error}</div> : null}
-          </div>
+          </form>
         </div>
       </div>
     );
@@ -1223,15 +1229,21 @@ export function PortalPage() {
                   </div>
                 </div>
 
-                <div className="portal-filter-grid">
+                <form
+                  className="portal-filter-grid"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handlePortalCatalogSearch();
+                  }}
+                >
                   <Input label="Item Search" value={orderSearch} placeholder="Code, description, OEM" onChange={setOrderSearch} />
                   <Select label="Brand" value={orderSearchBrand} options={portalBrandOptions} onChange={setOrderSearchBrand} />
                   <div className="portal-builder-actions">
-                    <Button variant="secondary" busy={searchingCatalog} busyLabel="Searching..." onClick={() => void handlePortalCatalogSearch()}>
+                    <Button type="submit" variant="secondary" busy={searchingCatalog} busyLabel="Searching..." onClick={() => void handlePortalCatalogSearch()}>
                       Search Items
                     </Button>
                   </div>
-                </div>
+                </form>
 
                 <div className="portal-filter-grid">
                   <Input label="Delivery Term" value={portalDeliveryTerm} placeholder="EXW / FCA / DAP" onChange={setPortalDeliveryTerm} />
