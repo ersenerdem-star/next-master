@@ -229,10 +229,15 @@ export function PortalPage() {
   const paymentColumns = useMemo(
     () => [
       { key: "no", header: "Payment", render: (row: PortalSnapshot["paymentsReceived"][number] | PortalSnapshot["paymentsMade"][number]) => row.id },
+      {
+        key: "applied",
+        header: "Applied To",
+        render: (row: PortalSnapshot["paymentsReceived"][number] | PortalSnapshot["paymentsMade"][number]) => row.invoice_no || row.bill_no || "-",
+      },
       { key: "ref", header: "Reference", render: (row: PortalSnapshot["paymentsReceived"][number] | PortalSnapshot["paymentsMade"][number]) => row.reference_no || "-" },
       { key: "method", header: "Method", render: (row: PortalSnapshot["paymentsReceived"][number] | PortalSnapshot["paymentsMade"][number]) => row.method || "-" },
       { key: "date", header: "Date", render: (row: PortalSnapshot["paymentsReceived"][number] | PortalSnapshot["paymentsMade"][number]) => row.received_date || row.payment_date || "-" },
-      { key: "status", header: "Status", render: (row: PortalSnapshot["paymentsReceived"][number] | PortalSnapshot["paymentsMade"][number]) => row.status || "-" },
+      { key: "status", header: "Status", render: (row: PortalSnapshot["paymentsReceived"][number] | PortalSnapshot["paymentsMade"][number]) => renderStatusLamp(row.status) },
       { key: "amount", header: "Amount", render: (row: PortalSnapshot["paymentsReceived"][number] | PortalSnapshot["paymentsMade"][number]) => formatMoney(row.amount, row.currency) },
     ],
     [],
@@ -734,7 +739,7 @@ export function PortalPage() {
       ) : null}
 
       {activeSnapshot.invite.access.can_view_payments ? (
-        <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Payments Received" : "Payments Made"}>
+        <SectionCard title="Payment History">
           <DataTable rows={visiblePayments} columns={paymentColumns} emptyText="No payments available." />
         </SectionCard>
       ) : null}
