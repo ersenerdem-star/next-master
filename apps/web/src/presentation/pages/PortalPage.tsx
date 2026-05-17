@@ -334,7 +334,6 @@ export function PortalPage() {
       : activeSnapshot.paymentsMade.filter((row) => (!statementDateFrom && !statementDateTo ? true : isWithinDateRange(row.payment_date, statementDateFrom, statementDateTo)));
   const statementCurrency = activeSnapshot.accountSummary.currency || "EUR";
   const statementPeriodLabel = buildDateRangeLabel(statementDateFrom, statementDateTo);
-  const filteredStatementTotal = filteredAccountRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
 
   const selectedDocument = (() => {
     if (!selection) return null;
@@ -651,10 +650,6 @@ export function PortalPage() {
             <div className="dashboard-stat">
               <span>Balance</span>
               <strong>{formatMoney(activeSnapshot.accountSummary.openAmount, activeSnapshot.accountSummary.currency)}</strong>
-            </div>
-            <div className="dashboard-stat">
-              <span>Statement Total</span>
-              <strong>{formatMoney(filteredStatementTotal, statementCurrency)}</strong>
             </div>
             <div className="dashboard-stat">
               <span>Payments</span>
