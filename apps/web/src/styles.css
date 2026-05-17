@@ -556,8 +556,9 @@ select {
 }
 
 .stats-grid--compact .stat-card__value {
-  font-size: clamp(20px, 1.9vw, 34px);
-  line-height: 1.05;
+  font-size: clamp(16px, 1.45vw, 24px);
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .stats-grid--compact .stat-card__subtext {
@@ -2089,7 +2090,7 @@ select {
   }
 
   .stats-grid--compact .stat-card__value {
-    font-size: clamp(18px, 1.8vw, 28px);
+    font-size: clamp(15px, 1.25vw, 20px);
   }
 
   .quote-totals-strip {
