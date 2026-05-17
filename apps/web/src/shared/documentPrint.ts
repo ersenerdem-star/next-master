@@ -146,11 +146,11 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
         .page { padding: 0; }
         .header-shell { display:grid; grid-template-columns: 118mm 60mm; gap:8mm; align-items:start; margin-bottom:4mm; }
         .header-left { display:flex; flex-direction:column; gap:3mm; align-items:flex-start; }
-        .header-right { display:flex; justify-content:flex-start; }
+        .header-right { display:flex; justify-content:flex-end; }
         .header-card { border:0.25mm solid #d7dee8; border-radius:5px; padding:3mm 3.5mm; background:#fff; box-sizing:border-box; }
         .seller-card { width:56mm; }
         .party-card { width:118mm; }
-        .meta-card { width:60mm; min-width:60mm; max-width:60mm; min-height:100%; }
+        .meta-card { width:60mm; min-width:60mm; max-width:60mm; min-height:100%; margin-left:auto; }
         .identity-row { display:flex; flex-direction:column; align-items:center; gap:1.5mm; width:100%; }
         .header-logo { width:100%; min-height:14mm; display:flex; justify-content:center; align-items:flex-start; }
         .seller-name { width:100%; text-align:center; font-size:7.1pt; font-weight:700; line-height:1.22; letter-spacing:0.01em; }
