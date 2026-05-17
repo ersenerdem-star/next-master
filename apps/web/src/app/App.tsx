@@ -78,6 +78,33 @@ export function App() {
     setActivePage("Sales");
   }
 
+  function openPurchaseOrder(purchaseOrderId: string) {
+    setSelectedPurchaseOrderId(purchaseOrderId);
+    setSelectedBillId("");
+    setSelectedSalesOrderId("");
+    setSelectedQuoteId("");
+    setSelectedInvoiceId("");
+    setActivePage("Purchases");
+  }
+
+  function openInvoice(invoiceId: string) {
+    setSelectedInvoiceId(invoiceId);
+    setSelectedSalesOrderId("");
+    setSelectedQuoteId("");
+    setSelectedPurchaseOrderId("");
+    setSelectedBillId("");
+    setActivePage("Sales");
+  }
+
+  function openBill(billId: string) {
+    setSelectedBillId(billId);
+    setSelectedPurchaseOrderId("");
+    setSelectedSalesOrderId("");
+    setSelectedQuoteId("");
+    setSelectedInvoiceId("");
+    setActivePage("Purchases");
+  }
+
   function openInventoryWarehouse(warehouseId: string) {
     setInventoryInitialTab("On Hand");
     setInventorySelectedWarehouseId(warehouseId);
@@ -106,24 +133,15 @@ export function App() {
       return;
     }
     if (relatedType === "purchase_order") {
-      setSelectedSalesOrderId("");
-      setSelectedPurchaseOrderId(relatedId);
-      setSelectedBillId("");
-      setActivePage("Purchases");
+      openPurchaseOrder(relatedId);
       return;
     }
     if (relatedType === "bill") {
-      setSelectedSalesOrderId("");
-      setSelectedBillId(relatedId);
-      setSelectedPurchaseOrderId("");
-      setActivePage("Purchases");
+      openBill(relatedId);
       return;
     }
     if (relatedType === "invoice") {
-      setSelectedInvoiceId(relatedId);
-      setSelectedSalesOrderId("");
-      setSelectedQuoteId("");
-      setActivePage("Sales");
+      openInvoice(relatedId);
       return;
     }
     if (relatedType === "sales_order") {
@@ -177,7 +195,14 @@ export function App() {
     ) : activePage === "Purchases" ? (
       <PurchasesPage selectedPurchaseOrderId={selectedPurchaseOrderId} selectedBillId={selectedBillId} />
     ) : activePage === "Reports" ? (
-      <ReportsPage onOpenSalesOrder={openSalesOrder} onOpenInventoryWarehouse={openInventoryWarehouse} onOpenInventoryItem={openInventoryItem} />
+      <ReportsPage
+        onOpenSalesOrder={openSalesOrder}
+        onOpenPurchaseOrder={openPurchaseOrder}
+        onOpenInvoice={openInvoice}
+        onOpenBill={openBill}
+        onOpenInventoryWarehouse={openInventoryWarehouse}
+        onOpenInventoryItem={openInventoryItem}
+      />
     ) : activePage === "Settings" ? (
       <SettingsPage initialTab={settingsTab} onLogout={handleLogout} onOpenRelatedRecord={openRelatedRecord} />
     ) : (

@@ -12,6 +12,7 @@ import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
 
 type ItemTransactionRow = {
+  document_id: string;
   date: string;
   document_type: "Sales Order" | "Purchase Order" | "Invoice" | "Bill";
   direction: "IN" | "OUT";
@@ -69,6 +70,7 @@ function itemTransactionKey(brand: string, productCode: string) {
 function salesOrderRows(orders: LocalSalesOrder[]): ItemTransactionRow[] {
   return orders.flatMap((order) =>
     order.lines.map((line) => ({
+      document_id: order.id,
       date: order.quote_date || order.updated_at.slice(0, 10),
       document_type: "Sales Order",
       direction: "OUT",
@@ -89,6 +91,7 @@ function salesOrderRows(orders: LocalSalesOrder[]): ItemTransactionRow[] {
 function purchaseOrderRows(orders: LocalPurchaseOrder[]): ItemTransactionRow[] {
   return orders.flatMap((order) =>
     order.lines.map((line) => ({
+      document_id: order.id,
       date: String(order.created_at || "").slice(0, 10),
       document_type: "Purchase Order",
       direction: "IN",
@@ -109,6 +112,7 @@ function purchaseOrderRows(orders: LocalPurchaseOrder[]): ItemTransactionRow[] {
 function invoiceRows(invoices: LocalInvoice[]): ItemTransactionRow[] {
   return invoices.flatMap((invoice) =>
     invoice.lines.map((line) => ({
+      document_id: invoice.id,
       date: invoice.quote_date || invoice.updated_at.slice(0, 10),
       document_type: "Invoice",
       direction: "OUT",
@@ -129,6 +133,7 @@ function invoiceRows(invoices: LocalInvoice[]): ItemTransactionRow[] {
 function billRows(bills: LocalBill[]): ItemTransactionRow[] {
   return bills.flatMap((bill) =>
     bill.lines.map((line) => ({
+      document_id: bill.id,
       date: bill.bill_date || bill.updated_at.slice(0, 10),
       document_type: "Bill",
       direction: "IN",
@@ -146,7 +151,19 @@ function billRows(bills: LocalBill[]): ItemTransactionRow[] {
   );
 }
 
-export function ItemTransactionsPage() {
+type ItemTransactionsPageProps = {
+  onOpenSalesOrder?: (salesOrderId: string) => void;
+  onOpenPurchaseOrder?: (purchaseOrderId: string) => void;
+  onOpenInvoice?: (invoiceId: string) => void;
+  onOpenBill?: (billId: string) => void;
+};
+
+export function ItemTransactionsPage({
+  onOpenSalesOrder,
+  onOpenPurchaseOrder,
+  onOpenInvoice,
+  onOpenBill,
+}: ItemTransactionsPageProps) {
   const actionFeedback = useActionFeedback();
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -325,8 +342,26 @@ export function ItemTransactionsPage() {
       { key: "qtyout", header: "Qty Out", render: (row: ItemTransactionRow) => (row.direction === "OUT" ? formatQty(row.qty) : "-") },
       { key: "price", header: "Unit Price", render: (row: ItemTransactionRow) => formatMoney(row.unit_price) },
       { key: "amount", header: "Amount", render: (row: ItemTransactionRow) => formatMoney(row.amount) },
+      {
+        key: "actions",
+        header: "Action",
+        render: (row: ItemTransactionRow) => (
+          <Button
+            variant="secondary"
+            className="button--compact"
+            onClick={() => {
+              if (row.document_type === "Sales Order") onOpenSalesOrder?.(row.document_id);
+              if (row.document_type === "Purchase Order") onOpenPurchaseOrder?.(row.document_id);
+              if (row.document_type === "Invoice") onOpenInvoice?.(row.document_id);
+              if (row.document_type === "Bill") onOpenBill?.(row.document_id);
+            }}
+          >
+            Open Document
+          </Button>
+        ),
+      },
     ],
-    [],
+    [onOpenBill, onOpenInvoice, onOpenPurchaseOrder, onOpenSalesOrder],
   );
 
   async function handleExportExcel() {

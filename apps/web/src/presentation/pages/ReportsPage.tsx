@@ -5,11 +5,21 @@ import { MasterPage } from "./MasterPage";
 
 type ReportsPageProps = {
   onOpenSalesOrder?: (salesOrderId: string) => void;
+  onOpenPurchaseOrder?: (purchaseOrderId: string) => void;
+  onOpenInvoice?: (invoiceId: string) => void;
+  onOpenBill?: (billId: string) => void;
   onOpenInventoryWarehouse?: (warehouseId: string) => void;
   onOpenInventoryItem?: (codeSearch: string, warehouseId?: string) => void;
 };
 
-export function ReportsPage({ onOpenSalesOrder, onOpenInventoryWarehouse, onOpenInventoryItem }: ReportsPageProps) {
+export function ReportsPage({
+  onOpenSalesOrder,
+  onOpenPurchaseOrder,
+  onOpenInvoice,
+  onOpenBill,
+  onOpenInventoryWarehouse,
+  onOpenInventoryItem,
+}: ReportsPageProps) {
   const [activeTab, setActiveTab] = useState("Master");
 
   return (
@@ -26,7 +36,14 @@ export function ReportsPage({ onOpenSalesOrder, onOpenInventoryWarehouse, onOpen
         </button>
       </div>
       {activeTab === "Master" ? <MasterPage /> : null}
-      {activeTab === "Item Transactions" ? <ItemTransactionsPage /> : null}
+      {activeTab === "Item Transactions" ? (
+        <ItemTransactionsPage
+          onOpenSalesOrder={onOpenSalesOrder}
+          onOpenPurchaseOrder={onOpenPurchaseOrder}
+          onOpenInvoice={onOpenInvoice}
+          onOpenBill={onOpenBill}
+        />
+      ) : null}
       {activeTab === "Inventory Analytics" ? (
         <InventoryAnalyticsPage onOpenSalesOrder={onOpenSalesOrder} onOpenInventoryWarehouse={onOpenInventoryWarehouse} onOpenInventoryItem={onOpenInventoryItem} />
       ) : null}
