@@ -2005,6 +2005,19 @@ select {
   color: #0f172a;
 }
 
+.dashboard-stat--alert {
+  border-color: #fecaca;
+  background: linear-gradient(180deg, #fff7f7, #fff1f2);
+}
+
+.dashboard-stat--alert span {
+  color: #b91c1c;
+}
+
+.dashboard-stat--alert strong {
+  color: #b91c1c;
+}
+
 @media (max-width: 1440px) {
   .quote-totals-strip {
     grid-template-columns: repeat(4, minmax(0, 1fr));

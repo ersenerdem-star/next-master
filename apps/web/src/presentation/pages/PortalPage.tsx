@@ -332,8 +332,17 @@ export function PortalPage() {
     activeSnapshot.invite.party_type === "customer"
       ? activeSnapshot.paymentsReceived.filter((row) => (!statementDateFrom && !statementDateTo ? true : isWithinDateRange(row.received_date, statementDateFrom, statementDateTo)))
       : activeSnapshot.paymentsMade.filter((row) => (!statementDateFrom && !statementDateTo ? true : isWithinDateRange(row.payment_date, statementDateFrom, statementDateTo)));
-  const statementCurrency = activeSnapshot.accountSummary.currency || "EUR";
   const statementPeriodLabel = buildDateRangeLabel(statementDateFrom, statementDateTo);
+  const unpaidDocumentCount =
+    activeSnapshot.invite.party_type === "customer"
+      ? activeSnapshot.invoices.filter((row) => {
+          const status = String(row.status || "").toLowerCase();
+          return status !== "paid" && status !== "void";
+        }).length
+      : activeSnapshot.bills.filter((row) => {
+          const status = String(row.status || "").toLowerCase();
+          return status !== "paid" && status !== "void";
+        }).length;
 
   const selectedDocument = (() => {
     if (!selection) return null;
@@ -650,6 +659,10 @@ export function PortalPage() {
             <div className="dashboard-stat">
               <span>Balance</span>
               <strong>{formatMoney(activeSnapshot.accountSummary.openAmount, activeSnapshot.accountSummary.currency)}</strong>
+            </div>
+            <div className="dashboard-stat dashboard-stat--alert">
+              <span>{activeSnapshot.invite.party_type === "customer" ? "Unpaid Invoices" : "Unpaid Bills"}</span>
+              <strong>{unpaidDocumentCount}</strong>
             </div>
             <div className="dashboard-stat">
               <span>Payments</span>
