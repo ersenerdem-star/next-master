@@ -798,6 +798,22 @@ export function PortalPage() {
     setActiveSection("orders");
   }
 
+  function handleClearPortalBuilder() {
+    setPortalOrderId("");
+    setPortalSalesOrderNo("");
+    setPortalDraftLines([]);
+    setPortalDeliveryTerm("");
+    setPortalPaymentTerms(activeSnapshot.pricingProfile?.payment_terms || "");
+    setPortalPackingDetails("");
+    setPortalOrderNotes("");
+    setPortalOrderStatus("Order screen cleared. Start a new order or resume a saved draft.");
+    setCatalogResults([]);
+    setOrderSearch("");
+    setSelection(null);
+    setError("");
+    setActiveSection("orders");
+  }
+
   async function handleDeletePortalDraft(row: PortalSalesOrderRow) {
     if (!window.confirm(`Delete draft ${row.sales_order_no || row.id}?`)) return;
     try {
@@ -1365,6 +1381,9 @@ export function PortalPage() {
                   />
                   <Button variant="secondary" busy={savingPortalOrder} busyLabel="Saving..." onClick={() => void handleSubmitPortalOrder("draft")}>
                     Save Draft
+                  </Button>
+                  <Button variant="secondary" onClick={handleClearPortalBuilder}>
+                    Clear
                   </Button>
                   <Button busy={confirmingPortalOrder} busyLabel="Confirming..." disabled={portalDraftHasMissingPrices} onClick={() => void handleSubmitPortalOrder("confirm")}>
                     Confirm Order
