@@ -68,6 +68,16 @@ type PortalOrderRow = {
   sales_total?: number;
   total_amount?: number;
   line_count?: number;
+  delivery_term?: string;
+  payment_terms?: string;
+  packing_details?: string;
+  notes?: string;
+  discount_amount?: number;
+  shipping_cost?: number;
+  purchase_total?: number;
+  profit_total?: number;
+  margin_percent?: number;
+  lines?: PortalDocumentLine[];
 };
 
 type PortalInvoiceRow = {
@@ -81,8 +91,40 @@ type PortalInvoiceRow = {
   bill_date?: string;
   due_date?: string;
   payment_terms?: string;
+  delivery_term?: string;
+  contract_nr?: string;
+  packing_details?: string;
+  notes?: string;
+  subtotal?: number;
+  discount_amount?: number;
+  shipping_cost?: number;
+  purchase_total?: number;
+  profit_total?: number;
+  margin_percent?: number;
   total_amount: number;
   currency: string;
+  lines?: PortalDocumentLine[];
+};
+
+type PortalDocumentLine = {
+  code?: string;
+  requested_code?: string;
+  old_code?: string;
+  brand?: string;
+  description?: string;
+  qty: number;
+  oem_no?: string;
+  hs_code?: string;
+  origin?: string;
+  weight_kg?: number | null;
+  supplier_name?: string;
+  buy_price?: number | null;
+  sell_price?: number | null;
+  purchase_total?: number | null;
+  sales_total?: number | null;
+  line_total?: number | null;
+  price_date?: string;
+  notes?: string;
 };
 
 type PortalPaymentRow = {

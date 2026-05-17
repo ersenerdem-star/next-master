@@ -33,6 +33,81 @@ function toNumber(value: unknown) {
   return Number(value ?? 0) || 0;
 }
 
+function mapSalesOrderLines(lines: unknown) {
+  if (!Array.isArray(lines)) return [];
+  return lines.map((line) => {
+    const row = (line || {}) as Record<string, unknown>;
+    const qty = toNumber(row.qty);
+    const sellPrice = row.sell_price == null ? null : toNumber(row.sell_price);
+    const purchaseTotal = row.buy_price == null ? null : toNumber(row.buy_price) * qty;
+    const salesTotal = sellPrice == null ? null : sellPrice * qty;
+    return {
+      code: String(row.resolvedCode || row.requestedCode || ""),
+      requested_code: String(row.requestedCode || ""),
+      brand: String(row.brand || ""),
+      description: String(row.description || ""),
+      qty,
+      oem_no: String(row.oem_no || ""),
+      hs_code: String(row.hs_code || ""),
+      origin: String(row.origin || ""),
+      weight_kg: row.weight_kg == null ? null : toNumber(row.weight_kg),
+      supplier_name: String(row.supplier_name || ""),
+      buy_price: row.buy_price == null ? null : toNumber(row.buy_price),
+      sell_price: sellPrice,
+      purchase_total: purchaseTotal,
+      sales_total: salesTotal,
+      line_total: salesTotal,
+      price_date: String(row.price_date || ""),
+      notes: String(row.notes || ""),
+    };
+  });
+}
+
+function mapInvoiceLines(lines: unknown) {
+  if (!Array.isArray(lines)) return [];
+  return lines.map((line) => {
+    const row = (line || {}) as Record<string, unknown>;
+    return {
+      code: String(row.product_code || ""),
+      old_code: String(row.old_code || ""),
+      brand: String(row.brand || ""),
+      description: String(row.description || ""),
+      qty: toNumber(row.qty),
+      oem_no: String(row.oem_no || ""),
+      hs_code: String(row.hs_code || ""),
+      origin: String(row.origin || ""),
+      weight_kg: row.weight_kg == null ? null : toNumber(row.weight_kg),
+      supplier_name: String(row.supplier_name || ""),
+      buy_price: row.buy_price == null ? null : toNumber(row.buy_price),
+      sell_price: row.sell_price == null ? null : toNumber(row.sell_price),
+      purchase_total: row.purchase_total == null ? null : toNumber(row.purchase_total),
+      sales_total: row.sales_total == null ? null : toNumber(row.sales_total),
+      line_total: row.sales_total == null ? null : toNumber(row.sales_total),
+      notes: String(row.notes || ""),
+    };
+  });
+}
+
+function mapPurchaseOrderLines(lines: unknown) {
+  if (!Array.isArray(lines)) return [];
+  return lines.map((line) => {
+    const row = (line || {}) as Record<string, unknown>;
+    return {
+      code: String(row.product_code || ""),
+      old_code: String(row.old_code || ""),
+      brand: String(row.brand || ""),
+      description: String(row.description || ""),
+      qty: toNumber(row.qty),
+      oem_no: String(row.oem_no || ""),
+      origin: String(row.origin || ""),
+      supplier_name: String(row.supplier_name || ""),
+      buy_price: row.buy_price == null ? null : toNumber(row.buy_price),
+      line_total: row.line_total == null ? null : toNumber(row.line_total),
+      notes: String(row.notes || ""),
+    };
+  });
+}
+
 export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: string, email: string, token: string) {
   const invite = await fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
     select:
@@ -85,7 +160,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     const salesOrders = invite.access_can_view_orders
       ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
           select:
-            "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,purchase_total,profit_total,margin_percent,updated_at",
+            "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,purchase_total,profit_total,margin_percent,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
           organization_id: `eq.${invite.organization_id}`,
           customer_name: `eq.${invite.party_name}`,
           order: "updated_at.desc",
@@ -94,7 +169,8 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
 
     const invoices = invite.access_can_view_invoices
       ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "invoices", {
-          select: "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,updated_at",
+          select:
+            "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,purchase_total,profit_total,margin_percent,updated_at,lines",
           organization_id: `eq.${invite.organization_id}`,
           customer_name: `eq.${invite.party_name}`,
           order: "updated_at.desc",
@@ -148,8 +224,27 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       },
       companyProfile,
       customer,
-      salesOrders,
-      invoices,
+      salesOrders: salesOrders.map((row) => ({
+        ...row,
+        sales_total: toNumber(row.sales_total),
+        purchase_total: toNumber(row.purchase_total),
+        profit_total: toNumber(row.profit_total),
+        margin_percent: toNumber(row.margin_percent),
+        discount_amount: toNumber(row.discount_amount),
+        shipping_cost: toNumber(row.shipping_cost),
+        lines: mapSalesOrderLines(row.lines),
+      })),
+      invoices: invoices.map((row) => ({
+        ...row,
+        total_amount: toNumber(row.total_amount),
+        subtotal: toNumber(row.subtotal),
+        discount_amount: toNumber(row.discount_amount),
+        shipping_cost: toNumber(row.shipping_cost),
+        purchase_total: toNumber(row.purchase_total),
+        profit_total: toNumber(row.profit_total),
+        margin_percent: toNumber(row.margin_percent),
+        lines: mapInvoiceLines(row.lines),
+      })),
       purchaseOrders: [],
       bills: [],
       paymentsReceived,
@@ -179,7 +274,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
 
   const purchaseOrders = invite.access_can_view_orders
     ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "purchase_orders", {
-        select: "id,sales_order_no,supplier_name,customer_name,status,currency,total_amount,line_count,updated_at",
+        select: "id,sales_order_no,supplier_name,customer_name,status,currency,total_amount,line_count,notes,updated_at,lines",
         organization_id: `eq.${invite.organization_id}`,
         supplier_name: `eq.${invite.party_name}`,
         order: "updated_at.desc",
@@ -188,7 +283,8 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
 
   const bills = invite.access_can_view_invoices
     ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "bills", {
-        select: "id,purchase_order_no,supplier_name,status,currency,total_amount,bill_date,due_date,payment_terms,updated_at",
+        select:
+          "id,purchase_order_no,supplier_name,status,currency,total_amount,bill_date,due_date,payment_terms,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
         organization_id: `eq.${invite.organization_id}`,
         supplier_name: `eq.${invite.party_name}`,
         order: "updated_at.desc",
@@ -245,8 +341,20 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     vendor,
     salesOrders: [],
     invoices: [],
-    purchaseOrders,
-    bills,
+    purchaseOrders: purchaseOrders.map((row) => ({
+      ...row,
+      total_amount: toNumber(row.total_amount),
+      line_count: Number(row.line_count ?? 0) || 0,
+      lines: mapPurchaseOrderLines(row.lines),
+    })),
+    bills: bills.map((row) => ({
+      ...row,
+      total_amount: toNumber(row.total_amount),
+      subtotal: toNumber(row.subtotal),
+      discount_amount: toNumber(row.discount_amount),
+      shipping_cost: toNumber(row.shipping_cost),
+      lines: mapPurchaseOrderLines(row.lines),
+    })),
     paymentsReceived: [],
     paymentsMade,
     accountSummary: {

@@ -12,6 +12,23 @@ function formatMoney(value: number, currency = "EUR") {
   return `${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
 
+function formatWeight(value: number | null | undefined) {
+  if (value == null || Number.isNaN(Number(value))) return "-";
+  return Number(value).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+}
+
+function formatDate(value?: string) {
+  return value || "-";
+}
+
+type PortalSelection =
+  | { kind: "sales-order"; id: string }
+  | { kind: "invoice"; id: string }
+  | { kind: "purchase-order"; id: string }
+  | { kind: "bill"; id: string };
+
+type PortalLine = NonNullable<PortalSnapshot["invoices"][number]["lines"]>[number];
+
 function readStoredCredentials(): PortalCredentials | null {
   const raw = window.sessionStorage.getItem(SESSION_KEY);
   if (!raw) return null;
@@ -42,6 +59,7 @@ export function PortalPage() {
     };
   });
   const [snapshot, setSnapshot] = useState<PortalSnapshot | null>(null);
+  const [selection, setSelection] = useState<PortalSelection | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -55,6 +73,7 @@ export function PortalPage() {
     loginPortal({ email, token })
       .then((next) => {
         setSnapshot(next);
+        setSelection(null);
         setStatus("Portal session active.");
         writeStoredCredentials({ email, token });
       })
@@ -140,6 +159,7 @@ export function PortalPage() {
       setError("");
       const next = await loginPortal(credentials);
       setSnapshot(next);
+      setSelection(null);
       setStatus("Portal session active.");
       writeStoredCredentials(credentials);
     } catch (caught) {
@@ -156,6 +176,7 @@ export function PortalPage() {
       setError("");
       const next = await fetchPortalSnapshot(credentials);
       setSnapshot(next);
+      setSelection(null);
       setStatus("Portal data refreshed.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal refresh failed");
@@ -166,6 +187,7 @@ export function PortalPage() {
 
   function handleLogout() {
     setSnapshot(null);
+    setSelection(null);
     setStatus("");
     setError("");
     writeStoredCredentials(null);
@@ -193,6 +215,60 @@ export function PortalPage() {
   }
 
   const partyProfile = snapshot.customer || snapshot.vendor;
+  const selectedDocument = (() => {
+    if (!selection) return null;
+    if (selection.kind === "sales-order") {
+      const row = snapshot.salesOrders.find((entry) => entry.id === selection.id);
+      return row ? { kind: selection.kind, row } : null;
+    }
+    if (selection.kind === "invoice") {
+      const row = snapshot.invoices.find((entry) => entry.id === selection.id);
+      return row ? { kind: selection.kind, row } : null;
+    }
+    if (selection.kind === "purchase-order") {
+      const row = snapshot.purchaseOrders.find((entry) => entry.id === selection.id);
+      return row ? { kind: selection.kind, row } : null;
+    }
+    const row = snapshot.bills.find((entry) => entry.id === selection.id);
+    return row ? { kind: selection.kind, row } : null;
+  })();
+
+  const detailColumns = (() => {
+    if (!selectedDocument) return [];
+    if (selectedDocument.kind === "sales-order" || selectedDocument.kind === "invoice") {
+      return [
+        { key: "code", header: "Code", render: (row: PortalLine) => row.code || row.requested_code || "-" },
+        { key: "brand", header: "Brand", render: (row: PortalLine) => row.brand || "-" },
+        { key: "description", header: "Description", render: (row: PortalLine) => row.description || "-" },
+        { key: "qty", header: "Qty", render: (row: PortalLine) => row.qty || 0 },
+        { key: "oem", header: "OEM", render: (row: PortalLine) => row.oem_no || "-" },
+        { key: "origin", header: "Origin", render: (row: PortalLine) => row.origin || "-" },
+        { key: "weight", header: "Weight", render: (row: PortalLine) => formatWeight(row.weight_kg) },
+        { key: "unit", header: "Unit Price", render: (row: PortalLine) => formatMoney(Number(row.sell_price || 0), selectedDocument.row.currency) },
+        { key: "amount", header: "Line Total", render: (row: PortalLine) => formatMoney(Number(row.line_total || row.sales_total || 0), selectedDocument.row.currency) },
+      ];
+    }
+    return [
+      { key: "code", header: "Code", render: (row: PortalLine) => row.code || "-" },
+      { key: "brand", header: "Brand", render: (row: PortalLine) => row.brand || "-" },
+      { key: "description", header: "Description", render: (row: PortalLine) => row.description || "-" },
+      { key: "qty", header: "Qty", render: (row: PortalLine) => row.qty || 0 },
+      { key: "oem", header: "OEM", render: (row: PortalLine) => row.oem_no || "-" },
+      { key: "origin", header: "Origin", render: (row: PortalLine) => row.origin || "-" },
+      { key: "unit", header: "Unit Price", render: (row: PortalLine) => formatMoney(Number(row.buy_price || 0), selectedDocument.row.currency) },
+      { key: "amount", header: "Line Total", render: (row: PortalLine) => formatMoney(Number(row.line_total || 0), selectedDocument.row.currency) },
+    ];
+  })();
+
+  const detailTitle = selectedDocument
+    ? selectedDocument.kind === "sales-order"
+      ? `Sales Order Detail · ${selectedDocument.row.sales_order_no || selectedDocument.row.id}`
+      : selectedDocument.kind === "invoice"
+        ? `Invoice Detail · ${selectedDocument.row.id}`
+        : selectedDocument.kind === "purchase-order"
+          ? `Purchase Order Detail · ${selectedDocument.row.id}`
+          : `Bill Detail · ${selectedDocument.row.id}`
+    : "";
 
   return (
     <div className="portal-shell">
@@ -270,25 +346,155 @@ export function PortalPage() {
 
       {snapshot.invite.party_type === "customer" && snapshot.invite.access.can_view_orders ? (
         <SectionCard title="Sales Orders">
-          <DataTable rows={snapshot.salesOrders} columns={salesOrderColumns} emptyText="No sales orders available." />
+          <DataTable
+            rows={snapshot.salesOrders}
+            columns={salesOrderColumns}
+            emptyText="No sales orders available."
+            onRowClick={(row) => setSelection({ kind: "sales-order", id: row.id })}
+            rowClassName={(row) => (selection?.kind === "sales-order" && selection.id === row.id ? "data-table__row--active" : "")}
+          />
         </SectionCard>
       ) : null}
 
       {snapshot.invite.party_type === "customer" && snapshot.invite.access.can_view_invoices ? (
         <SectionCard title="Invoices">
-          <DataTable rows={snapshot.invoices} columns={invoiceColumns} emptyText="No invoices available." />
+          <DataTable
+            rows={snapshot.invoices}
+            columns={invoiceColumns}
+            emptyText="No invoices available."
+            onRowClick={(row) => setSelection({ kind: "invoice", id: row.id })}
+            rowClassName={(row) => (selection?.kind === "invoice" && selection.id === row.id ? "data-table__row--active" : "")}
+          />
         </SectionCard>
       ) : null}
 
       {snapshot.invite.party_type === "vendor" && snapshot.invite.access.can_view_orders ? (
         <SectionCard title="Purchase Orders">
-          <DataTable rows={snapshot.purchaseOrders} columns={purchaseOrderColumns} emptyText="No purchase orders available." />
+          <DataTable
+            rows={snapshot.purchaseOrders}
+            columns={purchaseOrderColumns}
+            emptyText="No purchase orders available."
+            onRowClick={(row) => setSelection({ kind: "purchase-order", id: row.id })}
+            rowClassName={(row) => (selection?.kind === "purchase-order" && selection.id === row.id ? "data-table__row--active" : "")}
+          />
         </SectionCard>
       ) : null}
 
       {snapshot.invite.party_type === "vendor" && snapshot.invite.access.can_view_invoices ? (
         <SectionCard title="Bills">
-          <DataTable rows={snapshot.bills} columns={billColumns} emptyText="No bills available." />
+          <DataTable
+            rows={snapshot.bills}
+            columns={billColumns}
+            emptyText="No bills available."
+            onRowClick={(row) => setSelection({ kind: "bill", id: row.id })}
+            rowClassName={(row) => (selection?.kind === "bill" && selection.id === row.id ? "data-table__row--active" : "")}
+          />
+        </SectionCard>
+      ) : null}
+
+      {selectedDocument ? (
+        <SectionCard
+          title={detailTitle}
+          actions={
+            <div className="inline-actions">
+              <Button variant="secondary" onClick={() => setSelection(null)}>
+                Close
+              </Button>
+            </div>
+          }
+        >
+          <div className="portal-document-detail">
+            <div className="portal-detail-grid">
+              <div className="settings-item">
+                <span className="settings-label">Status</span>
+                <strong>{selectedDocument.row.status || "-"}</strong>
+              </div>
+              <div className="settings-item">
+                <span className="settings-label">Currency</span>
+                <strong>{selectedDocument.row.currency || "-"}</strong>
+              </div>
+              <div className="settings-item">
+                <span className="settings-label">Date</span>
+                <strong>
+                  {formatDate(
+                    selectedDocument.kind === "bill"
+                      ? selectedDocument.row.bill_date
+                      : "quote_date" in selectedDocument.row
+                        ? selectedDocument.row.quote_date
+                        : undefined,
+                  )}
+                </strong>
+              </div>
+              <div className="settings-item">
+                <span className="settings-label">Due Date</span>
+                <strong>{formatDate("due_date" in selectedDocument.row ? selectedDocument.row.due_date : undefined)}</strong>
+              </div>
+              {"delivery_term" in selectedDocument.row ? (
+                <div className="settings-item">
+                  <span className="settings-label">Delivery Term</span>
+                  <strong>{selectedDocument.row.delivery_term || "-"}</strong>
+                </div>
+              ) : null}
+              {"payment_terms" in selectedDocument.row ? (
+                <div className="settings-item">
+                  <span className="settings-label">Payment Terms</span>
+                  <strong>{selectedDocument.row.payment_terms || "-"}</strong>
+                </div>
+              ) : null}
+              {"contract_nr" in selectedDocument.row ? (
+                <div className="settings-item">
+                  <span className="settings-label">Contract Nr</span>
+                  <strong>{selectedDocument.row.contract_nr || "-"}</strong>
+                </div>
+              ) : null}
+              {"packing_details" in selectedDocument.row ? (
+                <div className="settings-item">
+                  <span className="settings-label">Packing</span>
+                  <strong>{selectedDocument.row.packing_details || "-"}</strong>
+                </div>
+              ) : null}
+            </div>
+
+            {selectedDocument.row.notes ? (
+              <div className="portal-detail-notes">
+                <span className="settings-label">Notes</span>
+                <strong>{selectedDocument.row.notes}</strong>
+              </div>
+            ) : null}
+
+            <DataTable rows={selectedDocument.row.lines || []} columns={detailColumns} emptyText="No line details available." />
+
+            <div className="portal-detail-totals">
+              {"subtotal" in selectedDocument.row ? (
+                <div className="settings-item">
+                  <span className="settings-label">Sub Total</span>
+                  <strong>{formatMoney(Number(selectedDocument.row.subtotal || 0), selectedDocument.row.currency)}</strong>
+                </div>
+              ) : null}
+              {"discount_amount" in selectedDocument.row ? (
+                <div className="settings-item">
+                  <span className="settings-label">Discount</span>
+                  <strong>{formatMoney(Number(selectedDocument.row.discount_amount || 0), selectedDocument.row.currency)}</strong>
+                </div>
+              ) : null}
+              {"shipping_cost" in selectedDocument.row ? (
+                <div className="settings-item">
+                  <span className="settings-label">Shipping</span>
+                  <strong>{formatMoney(Number(selectedDocument.row.shipping_cost || 0), selectedDocument.row.currency)}</strong>
+                </div>
+              ) : null}
+              {"purchase_total" in selectedDocument.row && selectedDocument.kind !== "sales-order" && selectedDocument.kind !== "invoice" ? (
+                <div className="settings-item">
+                  <span className="settings-label">Purchase Total</span>
+                  <strong>{formatMoney(Number(selectedDocument.row.purchase_total || 0), selectedDocument.row.currency)}</strong>
+                </div>
+              ) : null}
+              <div className="settings-item">
+                <span className="settings-label">Total Amount</span>
+                <strong>{formatMoney(Number(("sales_total" in selectedDocument.row ? selectedDocument.row.sales_total : selectedDocument.row.total_amount) || 0), selectedDocument.row.currency)}</strong>
+              </div>
+            </div>
+          </div>
         </SectionCard>
       ) : null}
 

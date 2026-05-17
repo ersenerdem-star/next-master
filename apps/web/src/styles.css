@@ -1940,6 +1940,34 @@ select {
   gap: 18px;
 }
 
+.portal-document-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.portal-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.portal-detail-notes {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.portal-detail-totals {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .settings-grid--compact {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -2010,7 +2038,9 @@ select {
   .quote-cloud-summary,
   .quote-line-toolbar,
   .quote-form-grid,
-  .portal-summary-grid {
+  .portal-summary-grid,
+  .portal-detail-grid,
+  .portal-detail-totals {
     grid-template-columns: 1fr;
   }
 
