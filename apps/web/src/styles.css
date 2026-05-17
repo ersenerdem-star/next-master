@@ -2018,6 +2018,46 @@ select {
   color: #b91c1c;
 }
 
+.status-lamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.status-lamp__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.16);
+}
+
+.status-lamp--success {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.status-lamp--warning {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.status-lamp--danger {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.status-lamp--neutral {
+  color: #475569;
+  background: #e2e8f0;
+}
+
 @media (max-width: 1440px) {
   .quote-totals-strip {
     grid-template-columns: repeat(4, minmax(0, 1fr));

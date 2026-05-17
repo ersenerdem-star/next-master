@@ -51,6 +51,24 @@ function sanitizeFileName(value: string) {
   return value.replace(/[^a-z0-9_-]+/gi, "-").replace(/-+/g, "-");
 }
 
+function getPaymentStatusTone(status: string | undefined) {
+  const normalized = String(status || "").trim().toLowerCase().replaceAll("_", " ");
+  if (normalized === "paid") return { label: "Paid", tone: "success" as const };
+  if (normalized === "partial paid" || normalized === "partially paid") return { label: "Partial Paid", tone: "warning" as const };
+  if (normalized === "unpaid" || normalized === "open" || normalized === "overdue") return { label: normalized === "overdue" ? "Overdue" : "Unpaid", tone: "danger" as const };
+  return { label: status || "-", tone: "neutral" as const };
+}
+
+function renderStatusLamp(status: string | undefined) {
+  const state = getPaymentStatusTone(status);
+  return (
+    <span className={`status-lamp status-lamp--${state.tone}`}>
+      <span className="status-lamp__dot" />
+      {state.label}
+    </span>
+  );
+}
+
 type PortalSelection =
   | { kind: "sales-order"; id: string }
   | { kind: "invoice"; id: string }
@@ -168,7 +186,7 @@ export function PortalPage() {
       { key: "sales", header: "Sales Order", render: (row: PortalSnapshot["invoices"][number]) => row.sales_order_no || "-" },
       { key: "date", header: "Date", render: (row: PortalSnapshot["invoices"][number]) => row.quote_date || "-" },
       { key: "due", header: "Due Date", render: (row: PortalSnapshot["invoices"][number]) => row.due_date || "-" },
-      { key: "status", header: "Status", render: (row: PortalSnapshot["invoices"][number]) => row.status || "-" },
+      { key: "status", header: "Status", render: (row: PortalSnapshot["invoices"][number]) => renderStatusLamp(row.status) },
       { key: "amount", header: "Amount", render: (row: PortalSnapshot["invoices"][number]) => formatMoney(row.total_amount, row.currency) },
     ],
     [],
@@ -191,7 +209,7 @@ export function PortalPage() {
       { key: "po", header: "Purchase Order", render: (row: PortalSnapshot["bills"][number]) => row.purchase_order_no || "-" },
       { key: "date", header: "Date", render: (row: PortalSnapshot["bills"][number]) => row.bill_date || "-" },
       { key: "due", header: "Due Date", render: (row: PortalSnapshot["bills"][number]) => row.due_date || "-" },
-      { key: "status", header: "Status", render: (row: PortalSnapshot["bills"][number]) => row.status || "-" },
+      { key: "status", header: "Status", render: (row: PortalSnapshot["bills"][number]) => renderStatusLamp(row.status) },
       { key: "amount", header: "Amount", render: (row: PortalSnapshot["bills"][number]) => formatMoney(row.total_amount, row.currency) },
     ],
     [],
@@ -316,14 +334,6 @@ export function PortalPage() {
   const filteredInvoices = activeSnapshot.invoices.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
   const filteredPurchaseOrders = activeSnapshot.purchaseOrders.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
   const filteredBills = activeSnapshot.bills.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
-  const filteredUnpaidInvoices = filteredInvoices.filter((row) => {
-    const status = String(row.status || "").toLowerCase();
-    return status !== "paid" && status !== "void";
-  });
-  const filteredUnpaidBills = filteredBills.filter((row) => {
-    const status = String(row.status || "").toLowerCase();
-    return status !== "paid" && status !== "void";
-  });
   const filteredAccountRows = activeSnapshot.accountRows.filter((row) => {
     if (!statementDateFrom && !statementDateTo) return true;
     return isWithinDateRange(row.document_date, statementDateFrom, statementDateTo);
@@ -705,32 +715,8 @@ export function PortalPage() {
       ) : null}
 
       {activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_invoices ? (
-        <SectionCard title="Unpaid Invoices">
-          <DataTable
-            rows={filteredUnpaidInvoices}
-            columns={invoiceColumns}
-            emptyText="No unpaid invoices available."
-            onRowClick={(row) => setSelection({ kind: "invoice", id: row.id })}
-            rowClassName={(row) => (selection?.kind === "invoice" && selection.id === row.id ? "data-table__row--active" : "")}
-          />
-        </SectionCard>
-      ) : null}
-
-      {activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_invoices ? (
         <SectionCard title="Credit Notes">
           <DataTable rows={filteredCreditNotes} columns={creditColumns} emptyText="No credit notes available." />
-        </SectionCard>
-      ) : null}
-
-      {activeSnapshot.invite.party_type === "vendor" && activeSnapshot.invite.access.can_view_invoices ? (
-        <SectionCard title="Unpaid Bills">
-          <DataTable
-            rows={filteredUnpaidBills}
-            columns={billColumns}
-            emptyText="No unpaid bills available."
-            onRowClick={(row) => setSelection({ kind: "bill", id: row.id })}
-            rowClassName={(row) => (selection?.kind === "bill" && selection.id === row.id ? "data-table__row--active" : "")}
-          />
         </SectionCard>
       ) : null}
 
