@@ -717,10 +717,6 @@ export function PortalPage() {
               <span>Balance</span>
               <strong>{formatMoney(activeSnapshot.accountSummary.openAmount, activeSnapshot.accountSummary.currency)}</strong>
             </div>
-            <div className="dashboard-stat">
-              <span>Payments</span>
-              <strong>{activeSnapshot.accountSummary.paymentCount}</strong>
-            </div>
           </div>
         </SectionCard>
       </div>
