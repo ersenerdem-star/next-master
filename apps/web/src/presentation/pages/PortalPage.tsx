@@ -9,6 +9,7 @@ import { SectionCard } from "../components/common/SectionCard";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 import { openAccountStatementPrintWindow } from "../../shared/accountStatementPrint";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
+import { normalizePartCode } from "../../domain/shared/normalize";
 import {
   preparePortalOrderLines as preparePortalOrderLinesApi,
   searchPortalCatalogItems,
@@ -62,9 +63,10 @@ function sanitizeFileName(value: string) {
 function mergePortalPreparedLines(current: PortalPreparedLine[], next: PortalPreparedLine[]) {
   const merged = [...current];
   for (const line of next) {
+    const lineCode = normalizePartCode(String(line.requestedCode || line.resolvedCode || ""));
     const existing = merged.find(
       (item) =>
-        String(item.requestedCode || item.resolvedCode).toLowerCase() === String(line.requestedCode || line.resolvedCode).toLowerCase() &&
+        normalizePartCode(String(item.requestedCode || item.resolvedCode || "")) === lineCode &&
         String(item.brand || "").toLowerCase() === String(line.brand || "").toLowerCase(),
     );
     if (existing) {
@@ -152,16 +154,25 @@ function mapPortalSalesOrderToPreparedLines(row: PortalSalesOrderRow): PortalPre
 function matchesSearch(value: string, row: { id: string; sales_order_no?: string; lines?: PortalLine[] }) {
   if (!value) return true;
   const needle = value.trim().toLowerCase();
+  const normalizedNeedle = normalizePartCode(value);
   if (!needle) return true;
   const headerText = [row.id, row.sales_order_no || ""].join(" ").toLowerCase();
   if (headerText.includes(needle)) return true;
-  return (row.lines || []).some((line) =>
-    [line.code, line.requested_code, line.old_code, line.brand, line.description, line.oem_no]
+  if (normalizedNeedle) {
+    const normalizedHeader = normalizePartCode([row.id, row.sales_order_no || ""].join(" "));
+    if (normalizedHeader.includes(normalizedNeedle)) return true;
+  }
+  return (row.lines || []).some((line) => {
+    const rawMatch = [line.code, line.requested_code, line.old_code, line.brand, line.description, line.oem_no]
       .filter(Boolean)
       .join(" ")
       .toLowerCase()
-      .includes(needle),
-  );
+      .includes(needle);
+    if (rawMatch) return true;
+    if (!normalizedNeedle) return false;
+    return [line.code, line.requested_code, line.old_code, line.oem_no]
+      .some((part) => normalizePartCode(String(part || "")).includes(normalizedNeedle));
+  });
 }
 
 function matchesBrand(value: string, row: { lines?: PortalLine[] }) {

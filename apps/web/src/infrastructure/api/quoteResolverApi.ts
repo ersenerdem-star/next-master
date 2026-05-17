@@ -10,7 +10,7 @@ export async function resolveQuoteLine(input: {
   marginB: number;
   includeSupplierOptions?: boolean;
 }): Promise<{ resolved: QuoteResolveResult; supplierOptions: QuoteSupplierOption[] }> {
-  const code = input.code.trim();
+  const code = normalizePartCode(input.code) || input.code.trim();
   const brand = (input.brand || "").trim();
   const rpcCustomerType = input.customerType === "Other" ? "A" : input.customerType;
   const supplierRpcCustomerType = input.customerType === "B" ? "B" : "A";
