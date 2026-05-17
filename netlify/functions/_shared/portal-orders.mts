@@ -320,6 +320,103 @@ async function fetchCPriceMap(
   return map;
 }
 
+async function resolvePortalCatalogSupplierData(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  context: CustomerPricingContext,
+  row: PortalOrderInputRow,
+  codeToResolve: string,
+) {
+  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, context.organizationId);
+  const brandId = brandMap.byName.get(row.brand.trim().toLowerCase()) || "";
+  const normalizedCode = normalizePartCode(codeToResolve);
+  if (!brandId || !normalizedCode) {
+    return {
+      catalogMatch: null as Record<string, unknown> | null,
+      supplierOptions: [] as Array<{
+        supplier_id?: string | null;
+        supplier_name: string;
+        buy_price: number | null;
+        price_date: string | null;
+        sell_price: number | null;
+        notes: string | null;
+      }>,
+    };
+  }
+
+  const [catalogExact, catalogOem, supplierExact, supplierOem] = await Promise.all([
+    fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+      select: "product_code,description,oem_no,hs_code,origin,weight_kg,brand_id,normalized_code,normalized_oem",
+      organization_id: `eq.${context.organizationId}`,
+      brand_id: `eq.${brandId}`,
+      normalized_code: `eq.${normalizedCode}`,
+    }),
+    fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+      select: "product_code,description,oem_no,hs_code,origin,weight_kg,brand_id,normalized_code,normalized_oem",
+      organization_id: `eq.${context.organizationId}`,
+      brand_id: `eq.${brandId}`,
+      normalized_oem: `eq.${normalizedCode}`,
+    }),
+    fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "supplier_prices", {
+      select: "supplier_id,brand_id,product_code,normalized_code,normalized_oem,description,oem_no,buy_price,valid_from,notes,suppliers(name)",
+      organization_id: `eq.${context.organizationId}`,
+      brand_id: `eq.${brandId}`,
+      is_active: "eq.true",
+      normalized_code: `eq.${normalizedCode}`,
+      order: "buy_price.asc",
+      limit: "50",
+    }),
+    fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "supplier_prices", {
+      select: "supplier_id,brand_id,product_code,normalized_code,normalized_oem,description,oem_no,buy_price,valid_from,notes,suppliers(name)",
+      organization_id: `eq.${context.organizationId}`,
+      brand_id: `eq.${brandId}`,
+      is_active: "eq.true",
+      normalized_oem: `eq.${normalizedCode}`,
+      order: "buy_price.asc",
+      limit: "50",
+    }),
+  ]);
+
+  const supplierMatchesRaw = [...(supplierExact || []), ...(supplierOem || [])].filter((item) => item.buy_price != null);
+  const supplierMap = new Map<
+    string,
+    {
+      supplier_id?: string | null;
+      supplier_name: string;
+      buy_price: number | null;
+      price_date: string | null;
+      sell_price: number | null;
+      notes: string | null;
+    }
+  >();
+
+  for (const item of supplierMatchesRaw) {
+    const supplierId = item.supplier_id == null ? null : String(item.supplier_id);
+    const supplierName = String(item.suppliers?.name || "");
+    if (!supplierName) continue;
+    const buyPrice = item.buy_price == null ? null : Number(item.buy_price);
+    const key = `${supplierId || ""}::${supplierName}`;
+    const current = supplierMap.get(key);
+    if (!current || Number(buyPrice ?? Number.MAX_SAFE_INTEGER) < Number(current.buy_price ?? Number.MAX_SAFE_INTEGER)) {
+      supplierMap.set(key, {
+        supplier_id: supplierId,
+        supplier_name: supplierName,
+        buy_price: buyPrice,
+        sell_price: computeSellFromBuy(buyPrice, context),
+        price_date: item.valid_from == null ? null : String(item.valid_from),
+        notes: item.notes == null ? null : String(item.notes),
+      });
+    }
+  }
+
+  return {
+    catalogMatch: catalogExact || catalogOem || null,
+    supplierOptions: [...supplierMap.values()].sort(
+      (a, b) => Number(a.buy_price ?? Number.MAX_SAFE_INTEGER) - Number(b.buy_price ?? Number.MAX_SAFE_INTEGER),
+    ),
+  };
+}
+
 async function findPortalCodeReferenceMatch(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -413,56 +510,40 @@ async function resolvePreparedLine(
     row.code,
   );
   const codeToResolve = referenceMatch?.new_code || row.code;
-  const rpcCustomerType = context.customerType === "Other" || context.customerType === "C" ? "A" : context.customerType;
-  const resolvedRows = await callRpc<Array<Record<string, unknown>>>(supabaseUrl, serviceRoleKey, "cloud_resolve_quote_line", {
-    input_code: codeToResolve.trim(),
-    input_brand: row.brand.trim(),
-    input_customer_type: rpcCustomerType,
-    input_margin_a: context.effectiveMarginA / 100,
-    input_margin_b: context.effectiveMarginB / 100,
-  });
-
-  const resolved = (resolvedRows || [])[0] || {};
-  const supplierOptions =
-    !hasUsablePrice(resolved.buy_price) || !hasUsablePrice(resolved.sell_price)
-      ? await fetchSupplierOptions(
-          supabaseUrl,
-          serviceRoleKey,
-          { ...row, code: codeToResolve },
-          context,
-        )
-      : [];
-  const fallbackSupplier =
-    supplierOptions[0] || (await fetchBestSupplierOption(supabaseUrl, serviceRoleKey, { ...row, code: codeToResolve }, context));
-  const resolvedCode = String(resolved.product_code || codeToResolve || row.code || "");
+  const { catalogMatch, supplierOptions } = await resolvePortalCatalogSupplierData(
+    supabaseUrl,
+    serviceRoleKey,
+    context,
+    row,
+    codeToResolve,
+  );
+  const fallbackSupplier = supplierOptions[0] || null;
+  const resolvedCode = String(catalogMatch?.product_code || codeToResolve || row.code || "");
   const codeChanged = Boolean(referenceMatch) || normalizePartCode(resolvedCode) !== normalizePartCode(row.code);
-  const buyPrice =
-    hasUsablePrice(resolved.buy_price) ? Number(resolved.buy_price) : (fallbackSupplier?.buy_price ?? null);
+  const buyPrice = fallbackSupplier?.buy_price ?? null;
   const computedSell =
-    hasUsablePrice(resolved.sell_price)
-      ? Number(resolved.sell_price)
-      : (
-          fallbackSupplier?.sell_price ?? computeSellFromBuy(buyPrice, context)
-        );
+    context.customerType === "C"
+      ? null
+      : fallbackSupplier?.sell_price ?? computeSellFromBuy(buyPrice, context);
 
   return {
     lineId: makeId("portal-line"),
     requestedCode: row.code,
     resolvedCode,
-    brand: String(resolved.brand || row.brand || ""),
-    description: String(resolved.description || ""),
+    brand: row.brand || "",
+    description: String(catalogMatch?.description || ""),
     qty: row.qty,
-    oem_no: String(resolved.oem_no || ""),
-    hs_code: String(resolved.hs_code || ""),
-    origin: String(resolved.origin || ""),
-    weight_kg: resolved.weight_kg == null ? null : Number(resolved.weight_kg),
-    supplier_name: String(resolved.supplier_name || fallbackSupplier?.supplier_name || ""),
+    oem_no: String(catalogMatch?.oem_no || ""),
+    hs_code: String(catalogMatch?.hs_code || ""),
+    origin: String(catalogMatch?.origin || ""),
+    weight_kg: catalogMatch?.weight_kg == null ? null : Number(catalogMatch.weight_kg),
+    supplier_name: String(fallbackSupplier?.supplier_name || ""),
     buy_price: buyPrice,
     sell_price: computedSell,
     c_sell_price: null,
-    price_date: String(resolved.price_date || fallbackSupplier?.price_date || ""),
-    notes: String(resolved.notes || fallbackSupplier?.notes || ""),
-    found: Boolean(resolved.found) || Boolean(fallbackSupplier?.supplier_name) || buyPrice != null || computedSell != null,
+    price_date: String(fallbackSupplier?.price_date || ""),
+    notes: String(fallbackSupplier?.notes || ""),
+    found: Boolean(catalogMatch || fallbackSupplier?.supplier_name || buyPrice != null || computedSell != null),
     codeChanged,
     codeChangeWarning: referenceMatch
       ? `Old Code ${referenceMatch.old_code} => New Code ${referenceMatch.new_code}.${referenceMatch.reason ? ` ${referenceMatch.reason}` : ""}`
