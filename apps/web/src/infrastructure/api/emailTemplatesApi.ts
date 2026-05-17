@@ -2,7 +2,7 @@ import type { LocalPurchaseOrder } from "../../types/orders";
 import type { PortalInvite } from "../../types/portal";
 import type { EmailTemplate, EmailTemplateKey, OutboundEmail } from "../../types/emailTemplates";
 import { getCurrentOrgId } from "./organizationApi";
-import { fetchPortalInvites } from "./portalInvitesApi";
+import { fetchPortalInvites, issuePortalInviteToken } from "./portalInvitesApi";
 import { supabaseClient } from "./supabaseClient";
 
 const EMAIL_TEMPLATE_COLUMNS = [
@@ -255,18 +255,18 @@ export async function deliverQueuedEmails(emailIds: string[] = []) {
   };
 }
 
-export async function queuePortalInviteEmail(portalInvite: PortalInvite, companyName: string, portalBaseUrl: string) {
+export async function queuePortalInviteEmail(portalInvite: PortalInvite, companyName: string, portalBaseUrl: string, inviteToken: string) {
   const templates = await fetchEmailTemplates();
   const templateKey: EmailTemplateKey = portalInvite.party_type === "vendor" ? "vendor_portal_invite" : "customer_portal_invite";
   const template = templates.find((item) => item.template_key === templateKey);
   if (!template) throw new Error(`Email template not found: ${templateKey}`);
 
-  const portalLink = `${portalBaseUrl.replace(/\/$/, "")}/portal?token=${encodeURIComponent(portalInvite.invite_token)}&email=${encodeURIComponent(portalInvite.email)}`;
+  const portalLink = `${portalBaseUrl.replace(/\/$/, "")}/portal?email=${encodeURIComponent(portalInvite.email)}`;
   const variables = {
     party_name: portalInvite.party_name,
     contact_name: portalInvite.contact_name || portalInvite.party_name,
     portal_link: portalLink,
-    invite_token: portalInvite.invite_token,
+    invite_token: inviteToken,
     company_name: companyName,
   };
 
@@ -295,7 +295,8 @@ export async function queueVendorPurchaseOrderEmail(purchaseOrder: LocalPurchase
   const template = templates.find((item) => item.template_key === "vendor_purchase_order_confirmed");
   if (!template) throw new Error("Vendor purchase order email template not found.");
 
-  const portalLink = `${portalBaseUrl.replace(/\/$/, "")}/portal?token=${encodeURIComponent(vendorInvite.invite_token)}&email=${encodeURIComponent(vendorInvite.email)}`;
+  const issued = await issuePortalInviteToken(vendorInvite.id);
+  const portalLink = `${portalBaseUrl.replace(/\/$/, "")}/portal?email=${encodeURIComponent(vendorInvite.email)}`;
   const variables = {
     vendor_name: purchaseOrder.supplier_name,
     purchase_order_no: purchaseOrder.id,
@@ -304,7 +305,7 @@ export async function queueVendorPurchaseOrderEmail(purchaseOrder: LocalPurchase
     currency: purchaseOrder.currency || "EUR",
     total_amount: Number(purchaseOrder.total_amount || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     portal_link: portalLink,
-    invite_token: vendorInvite.invite_token,
+    invite_token: issued.token,
     company_name: companyName,
   };
 

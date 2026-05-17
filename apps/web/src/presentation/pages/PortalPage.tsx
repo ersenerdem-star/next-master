@@ -12,6 +12,7 @@ import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { normalizePartCode } from "../../domain/shared/normalize";
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import {
+  deletePortalDraftOrder,
   preparePortalOrderLines as preparePortalOrderLinesApi,
   searchPortalCatalogItems,
   submitPortalOrder,
@@ -796,6 +797,29 @@ export function PortalPage() {
     setSelection({ kind: "sales-order", id: row.id });
     setActiveSection("orders");
   }
+
+  async function handleDeletePortalDraft(row: PortalSalesOrderRow) {
+    if (!window.confirm(`Delete draft ${row.sales_order_no || row.id}?`)) return;
+    try {
+      setSavingPortalOrder(true);
+      setError("");
+      setPortalOverlay({
+        title: "Deleting Sales Order Draft",
+        message: `Removing draft ${row.sales_order_no || row.id} from your portal workspace.`,
+      });
+      const result = await deletePortalDraftOrder(credentials, row.id);
+      setSnapshot(result.snapshot);
+      if (selection?.kind === "sales-order" && selection.id === row.id) {
+        setSelection(null);
+      }
+      setStatus(`Sales order draft ${row.sales_order_no || row.id} deleted.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Portal draft delete failed");
+    } finally {
+      setSavingPortalOrder(false);
+      setPortalOverlay(null);
+    }
+  }
   const selectedDocument = (() => {
     if (!selection) return null;
     if (selection.kind === "sales-order") {
@@ -1286,6 +1310,45 @@ export function PortalPage() {
       {activeSection === "orders" ? (
         <div className="portal-section-stack">
           {portalCanOrder ? (
+            <SectionCard title="My Draft Orders">
+              <DataTable
+                rows={portalDraftOrders}
+                columns={[
+                  { key: "no", header: "Draft No", render: (row: PortalSalesOrderRow) => row.sales_order_no || row.id },
+                  { key: "date", header: "Date", render: (row: PortalSalesOrderRow) => row.quote_date || "-" },
+                  { key: "lines", header: "Lines", render: (row: PortalSalesOrderRow) => row.line_count || row.lines?.length || 0 },
+                  { key: "amount", header: "Amount", render: (row: PortalSalesOrderRow) => formatMoney(Number(row.sales_total || 0), row.currency || portalOrderCurrency) },
+                  {
+                    key: "actions",
+                    header: "Actions",
+                    render: (row: PortalSalesOrderRow) => (
+                      <div className="inline-actions">
+                        <Button variant="secondary" className="button--compact" onClick={() => handleResumePortalDraft(row)}>
+                          Resume
+                        </Button>
+                        <Button variant="secondary" className="button--compact" onClick={() => openPortalDocumentPrint("sales-order", row.id)}>
+                          PDF / Print
+                        </Button>
+                        <Button variant="secondary" className="button--compact" onClick={() => handlePortalExportExcelRow("sales-order", row.id)}>
+                          Export Excel
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          className="button--compact danger-button"
+                          onClick={() => void handleDeletePortalDraft(row)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    ),
+                  },
+                ]}
+                emptyText="No portal drafts saved yet."
+              />
+            </SectionCard>
+          ) : null}
+
+          {portalCanOrder ? (
             <SectionCard
               title="Create Sales Order"
               actions={
@@ -1358,46 +1421,6 @@ export function PortalPage() {
                   </SectionCard>
                 </div>
               </div>
-            </SectionCard>
-          ) : null}
-
-          {portalCanOrder ? (
-            <SectionCard title="My Draft Orders">
-              <DataTable
-                rows={portalDraftOrders}
-                columns={[
-                  { key: "no", header: "Draft No", render: (row: PortalSalesOrderRow) => row.sales_order_no || row.id },
-                  { key: "date", header: "Date", render: (row: PortalSalesOrderRow) => row.quote_date || "-" },
-                  { key: "lines", header: "Lines", render: (row: PortalSalesOrderRow) => row.line_count || row.lines?.length || 0 },
-                  { key: "amount", header: "Amount", render: (row: PortalSalesOrderRow) => formatMoney(Number(row.sales_total || 0), row.currency || portalOrderCurrency) },
-                  {
-                    key: "actions",
-                    header: "Actions",
-                    render: (row: PortalSalesOrderRow) => (
-                      <div className="inline-actions">
-                        <Button variant="secondary" className="button--compact" onClick={() => handleResumePortalDraft(row)}>
-                          Resume
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          className="button--compact"
-                          onClick={() => openPortalDocumentPrint("sales-order", row.id)}
-                        >
-                          PDF / Print
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          className="button--compact"
-                          onClick={() => handlePortalExportExcelRow("sales-order", row.id)}
-                        >
-                          Export Excel
-                        </Button>
-                      </div>
-                    ),
-                  },
-                ]}
-                emptyText="No portal drafts saved yet."
-              />
             </SectionCard>
           ) : null}
 

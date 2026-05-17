@@ -1,15 +1,20 @@
 import { buildRestUrl, getJson, serviceRoleHeaders } from "./http.mts";
+import { hashPortalToken, isPortalInviteExpired } from "./portal-security.mts";
 
 export type PortalInviteRow = {
   id: string;
   organization_id: string;
   party_type: "customer" | "vendor";
   party_name: string;
+  customer_id: string | null;
+  vendor_id: string | null;
   email: string;
   contact_name: string;
   status: "draft" | "invited" | "active" | "disabled";
-  invite_token: string;
+  invite_token_hash: string | null;
   last_sent_at: string | null;
+  expires_at: string | null;
+  last_used_at: string | null;
   access_can_view_account: boolean;
   access_can_view_invoices: boolean;
   access_can_view_payments: boolean;
@@ -39,6 +44,16 @@ async function fetchAllOptional<T>(supabaseUrl: string, serviceRoleKey: string, 
     }
     throw error;
   }
+}
+
+function dedupeById<T extends { id?: string | null }>(rows: T[]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const id = String(row.id || "");
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
 }
 
 function toNumber(value: unknown) {
@@ -121,27 +136,45 @@ function mapPurchaseOrderLines(lines: unknown) {
 }
 
 export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: string, email: string, token: string) {
-  const invite = await fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
-    select:
-      "id,organization_id,party_type,party_name,email,contact_name,status,invite_token,last_sent_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders",
-    email: `eq.${email}`,
-    invite_token: `eq.${token}`,
-  });
+  const tokenHash = await hashPortalToken(token);
+  let invite: PortalInviteRow | null = null;
+
+  try {
+    invite = await fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
+      select:
+        "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders",
+      email: `eq.${email}`,
+      invite_token_hash: `eq.${tokenHash}`,
+    });
+  } catch {
+    invite = null;
+  }
+
+  if (!invite) {
+    invite = await fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
+      select:
+        "id,organization_id,party_type,party_name,email,contact_name,status,last_sent_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders",
+      email: `eq.${email}`,
+      invite_token: `eq.${token}`,
+    });
+  }
 
   if (!invite || invite.status === "disabled") {
     throw new Error("Portal invite not found or disabled");
   }
-
-  if (invite.status !== "active") {
-    await fetch(buildRestUrl(supabaseUrl, "portal_invites", { id: `eq.${invite.id}` }), {
-      method: "PATCH",
-      headers: serviceRoleHeaders(serviceRoleKey),
-      body: JSON.stringify({
-        status: "active",
-        updated_at: new Date().toISOString(),
-      }),
-    });
+  if (isPortalInviteExpired(invite.expires_at)) {
+    throw new Error("Portal invite expired. Request a new invite.");
   }
+
+  await fetch(buildRestUrl(supabaseUrl, "portal_invites", { id: `eq.${invite.id}` }), {
+    method: "PATCH",
+    headers: serviceRoleHeaders(serviceRoleKey),
+    body: JSON.stringify({
+      status: "active",
+      last_used_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }),
+  });
 
   return invite;
 }
@@ -156,6 +189,14 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
 
   if (invite.party_type === "customer") {
     const customer =
+      (invite.customer_id
+        ? await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
+            select:
+              "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks",
+            organization_id: `eq.${invite.organization_id}`,
+            id: `eq.${invite.customer_id}`,
+          })
+        : null) ||
       (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
         select:
           "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks",
@@ -169,40 +210,81 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         company_name: `eq.${invite.party_name}`,
       }));
 
+    const customerName = String(customer?.display_name || customer?.company_name || invite.party_name);
+    const customerId = String(customer?.id || invite.customer_id || "");
+
     const salesOrders = invite.access_can_view_orders
-      ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
-          select:
-            "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
-          organization_id: `eq.${invite.organization_id}`,
-          customer_name: `eq.${invite.party_name}`,
-          order: "updated_at.desc",
-        })
+      ? dedupeById([
+          ...(customerId
+            ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
+                select:
+                  "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
+                organization_id: `eq.${invite.organization_id}`,
+                customer_id: `eq.${customerId}`,
+                order: "updated_at.desc",
+              }).catch(() => [])
+            : []),
+          ...((!customerId || customerName)
+            ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
+                select:
+                  "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
+                organization_id: `eq.${invite.organization_id}`,
+                customer_name: `eq.${customerName}`,
+                order: "updated_at.desc",
+              })
+            : []),
+        ])
       : [];
 
     const invoices = invite.access_can_view_invoices
-      ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "invoices", {
-          select:
-            "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
-          organization_id: `eq.${invite.organization_id}`,
-          customer_name: `eq.${invite.party_name}`,
-          order: "updated_at.desc",
-        })
+      ? dedupeById([
+          ...(customerId
+            ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "invoices", {
+                select:
+                  "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
+                organization_id: `eq.${invite.organization_id}`,
+                customer_id: `eq.${customerId}`,
+                order: "updated_at.desc",
+              }).catch(() => [])
+            : []),
+          ...((!customerId || customerName)
+            ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "invoices", {
+                select:
+                  "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
+                organization_id: `eq.${invite.organization_id}`,
+                customer_name: `eq.${customerName}`,
+                order: "updated_at.desc",
+              })
+            : []),
+        ])
       : [];
 
     const paymentsReceived = invite.access_can_view_payments
-      ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_received", {
-          select: "id,invoice_no,customer_name,status,received_date,method,reference_no,amount,currency,updated_at",
-          organization_id: `eq.${invite.organization_id}`,
-          customer_name: `eq.${invite.party_name}`,
-          order: "updated_at.desc",
-        })
+      ? dedupeById([
+          ...(customerId
+            ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_received", {
+                select: "id,invoice_no,customer_name,status,received_date,method,reference_no,amount,currency,updated_at",
+                organization_id: `eq.${invite.organization_id}`,
+                customer_id: `eq.${customerId}`,
+                order: "updated_at.desc",
+              }).catch(() => [])
+            : []),
+          ...((!customerId || customerName)
+            ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_received", {
+                select: "id,invoice_no,customer_name,status,received_date,method,reference_no,amount,currency,updated_at",
+                organization_id: `eq.${invite.organization_id}`,
+                customer_name: `eq.${customerName}`,
+                order: "updated_at.desc",
+              })
+            : []),
+        ])
       : [];
 
     const creditNotes = invite.access_can_view_invoices
       ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "credit_notes", {
           select: "id,credit_note_no,customer_name,status,credit_date,due_date,notes,total_amount,currency,updated_at",
           organization_id: `eq.${invite.organization_id}`,
-          customer_name: `eq.${invite.party_name}`,
+          customer_name: `eq.${customerName}`,
           order: "updated_at.desc",
         })
       : [];
@@ -332,6 +414,13 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
   }
 
   const vendor =
+    (invite.vendor_id
+      ? await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "vendors", {
+          select: "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,remarks",
+          organization_id: `eq.${invite.organization_id}`,
+          id: `eq.${invite.vendor_id}`,
+        })
+      : null) ||
     (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "vendors", {
       select: "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,remarks",
       organization_id: `eq.${invite.organization_id}`,
@@ -343,39 +432,79 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       company_name: `eq.${invite.party_name}`,
     }));
 
+  const vendorName = String(vendor?.display_name || vendor?.company_name || invite.party_name);
+  const vendorId = String(vendor?.id || invite.vendor_id || "");
+
   const purchaseOrders = invite.access_can_view_orders
-    ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "purchase_orders", {
-        select: "id,sales_order_no,supplier_name,customer_name,status,currency,total_amount,line_count,notes,updated_at,lines",
-        organization_id: `eq.${invite.organization_id}`,
-        supplier_name: `eq.${invite.party_name}`,
-        order: "updated_at.desc",
-      })
+    ? dedupeById([
+        ...(vendorId
+          ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "purchase_orders", {
+              select: "id,sales_order_no,supplier_name,customer_name,status,currency,total_amount,line_count,notes,updated_at,lines",
+              organization_id: `eq.${invite.organization_id}`,
+              vendor_id: `eq.${vendorId}`,
+              order: "updated_at.desc",
+            }).catch(() => [])
+          : []),
+        ...((!vendorId || vendorName)
+          ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "purchase_orders", {
+              select: "id,sales_order_no,supplier_name,customer_name,status,currency,total_amount,line_count,notes,updated_at,lines",
+              organization_id: `eq.${invite.organization_id}`,
+              supplier_name: `eq.${vendorName}`,
+              order: "updated_at.desc",
+            })
+          : []),
+      ])
     : [];
 
   const bills = invite.access_can_view_invoices
-    ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "bills", {
-        select:
-          "id,purchase_order_no,supplier_name,status,currency,total_amount,bill_date,due_date,payment_terms,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
-        organization_id: `eq.${invite.organization_id}`,
-        supplier_name: `eq.${invite.party_name}`,
-        order: "updated_at.desc",
-      })
+    ? dedupeById([
+        ...(vendorId
+          ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "bills", {
+              select:
+                "id,purchase_order_no,supplier_name,status,currency,total_amount,bill_date,due_date,payment_terms,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
+              organization_id: `eq.${invite.organization_id}`,
+              vendor_id: `eq.${vendorId}`,
+              order: "updated_at.desc",
+            }).catch(() => [])
+          : []),
+        ...((!vendorId || vendorName)
+          ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "bills", {
+              select:
+                "id,purchase_order_no,supplier_name,status,currency,total_amount,bill_date,due_date,payment_terms,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
+              organization_id: `eq.${invite.organization_id}`,
+              supplier_name: `eq.${vendorName}`,
+              order: "updated_at.desc",
+            })
+          : []),
+      ])
     : [];
 
   const paymentsMade = invite.access_can_view_payments
-    ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_made", {
-        select: "id,bill_no,supplier_name,status,payment_date,method,reference_no,amount,currency,updated_at",
-        organization_id: `eq.${invite.organization_id}`,
-        supplier_name: `eq.${invite.party_name}`,
-        order: "updated_at.desc",
-      })
+    ? dedupeById([
+        ...(vendorId
+          ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_made", {
+              select: "id,bill_no,supplier_name,status,payment_date,method,reference_no,amount,currency,updated_at",
+              organization_id: `eq.${invite.organization_id}`,
+              vendor_id: `eq.${vendorId}`,
+              order: "updated_at.desc",
+            }).catch(() => [])
+          : []),
+        ...((!vendorId || vendorName)
+          ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_made", {
+              select: "id,bill_no,supplier_name,status,payment_date,method,reference_no,amount,currency,updated_at",
+              organization_id: `eq.${invite.organization_id}`,
+              supplier_name: `eq.${vendorName}`,
+              order: "updated_at.desc",
+            })
+          : []),
+      ])
     : [];
 
   const vendorCredits = invite.access_can_view_invoices
     ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "vendor_credits", {
         select: "id,vendor_credit_no,supplier_name,status,credit_date,due_date,notes,total_amount,currency,updated_at",
         organization_id: `eq.${invite.organization_id}`,
-        supplier_name: `eq.${invite.party_name}`,
+        supplier_name: `eq.${vendorName}`,
         order: "updated_at.desc",
       })
     : [];

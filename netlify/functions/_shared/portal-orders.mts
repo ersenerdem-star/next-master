@@ -6,10 +6,12 @@ type PortalInviteRow = {
   organization_id: string;
   party_type: "customer" | "vendor";
   party_name: string;
+  customer_id: string | null;
+  vendor_id: string | null;
   email: string;
   contact_name: string;
   status: "draft" | "invited" | "active" | "disabled";
-  invite_token: string;
+  invite_token_hash?: string | null;
   access_can_view_account: boolean;
   access_can_view_invoices: boolean;
   access_can_view_payments: boolean;
@@ -160,6 +162,13 @@ async function resolvePortalCustomer(
   }
 
   const customer =
+    (invite.customer_id
+      ? await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
+          select: "id,display_name,company_name,currency,payment_terms,contract_nr,price_list_type,price_list_margin_percent",
+          organization_id: `eq.${invite.organization_id}`,
+          id: `eq.${invite.customer_id}`,
+        })
+      : null) ||
     (await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
       select: "id,display_name,company_name,currency,payment_terms,contract_nr,price_list_type,price_list_margin_percent",
       organization_id: `eq.${invite.organization_id}`,
@@ -628,7 +637,7 @@ export async function submitPortalSalesOrder(
           select: "id,sales_order_no,status,created_at,portal_submitted_at,portal_seen_at",
           organization_id: `eq.${invite.organization_id}`,
           id: `eq.${input.orderId}`,
-          customer_name: `eq.${invite.party_name}`,
+          portal_invite_id: `eq.${invite.id}`,
         })
       : null;
 
@@ -650,7 +659,8 @@ export async function submitPortalSalesOrder(
     id: String(existing?.id || input.orderId || makeId("so")),
     organization_id: invite.organization_id,
     sales_order_no: salesOrderNo,
-    customer_name: invite.party_name,
+    customer_id: context.customer.id,
+    customer_name: context.customer.display_name || context.customer.company_name || invite.party_name,
     seller_company: context.sellerCompany,
     purchase_company: "",
     quote_date: today,
@@ -681,19 +691,68 @@ export async function submitPortalSalesOrder(
     updated_at: nowIso(),
   };
 
-  const rows = await sendJson<Array<Record<string, unknown>>>(
-    `${buildRestUrl(supabaseUrl, "sales_orders", { on_conflict: "id", select: "id" })}`,
-    {
-      method: "POST",
-      headers: {
-        ...serviceRoleHeaders(serviceRoleKey),
-        Prefer: "resolution=merge-duplicates,return=representation",
+  let rows: Array<Record<string, unknown>>;
+  try {
+    rows = await sendJson<Array<Record<string, unknown>>>(
+      `${buildRestUrl(supabaseUrl, "sales_orders", { on_conflict: "id", select: "id" })}`,
+      {
+        method: "POST",
+        headers: {
+          ...serviceRoleHeaders(serviceRoleKey),
+          Prefer: "resolution=merge-duplicates,return=representation",
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    },
-  );
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.toLowerCase().includes("customer_id")) {
+      throw error;
+    }
+    const { customer_id: _ignoredCustomerId, ...legacyPayload } = payload;
+    rows = await sendJson<Array<Record<string, unknown>>>(
+      `${buildRestUrl(supabaseUrl, "sales_orders", { on_conflict: "id", select: "id" })}`,
+      {
+        method: "POST",
+        headers: {
+          ...serviceRoleHeaders(serviceRoleKey),
+          Prefer: "resolution=merge-duplicates,return=representation",
+        },
+        body: JSON.stringify(legacyPayload),
+      },
+    );
+  }
 
   const savedId = String(rows[0]?.id || payload.id);
   const snapshot = await buildPortalSnapshot(supabaseUrl, serviceRoleKey, invite);
   return { orderId: savedId, snapshot };
+}
+
+export async function deletePortalSalesOrder(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  invite: PortalInviteRow,
+  orderId: string,
+) {
+  const existing = await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
+    select: "id,status,portal_submitted_at,portal_invite_id",
+    organization_id: `eq.${invite.organization_id}`,
+    id: `eq.${orderId}`,
+    portal_invite_id: `eq.${invite.id}`,
+  });
+
+  if (!existing?.id) {
+    throw new Error("Portal draft order not found");
+  }
+  if (String(existing.status || "").toLowerCase() !== "draft" || existing.portal_submitted_at) {
+    throw new Error("Only unsubmitted draft portal orders can be deleted");
+  }
+
+  await sendJson<unknown>(buildRestUrl(supabaseUrl, "sales_orders", { id: `eq.${orderId}`, organization_id: `eq.${invite.organization_id}` }), {
+    method: "DELETE",
+    headers: serviceRoleHeaders(serviceRoleKey),
+  });
+
+  const snapshot = await buildPortalSnapshot(supabaseUrl, serviceRoleKey, invite);
+  return { orderId, snapshot };
 }

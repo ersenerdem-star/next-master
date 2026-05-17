@@ -111,3 +111,15 @@ export async function submitPortalOrder(
     orderId: data.orderId || "",
   };
 }
+
+export async function deletePortalDraftOrder(credentials: PortalCredentials, orderId: string) {
+  const data = await postPortalOrderJson("/api/portal-order-delete", {
+    ...credentials,
+    orderId,
+  });
+  if (!data.snapshot) throw new Error("Portal draft delete did not return refreshed portal snapshot");
+  return {
+    snapshot: data.snapshot,
+    orderId: data.orderId || orderId,
+  };
+}

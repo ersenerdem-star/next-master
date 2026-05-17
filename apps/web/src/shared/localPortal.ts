@@ -25,10 +25,6 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function makeToken() {
-  return Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-}
-
 export function loadPortalInvites() {
   return readJson<PortalInvite[]>(PORTAL_INVITES_KEY, []);
 }
@@ -42,11 +38,14 @@ export function createEmptyPortalInvite(): PortalInvite {
     id: makeId("portal"),
     party_type: "customer",
     party_name: "",
+    customer_id: "",
+    vendor_id: "",
     email: "",
     contact_name: "",
     status: "draft",
-    invite_token: makeToken(),
+    invite_token: "",
     last_sent_at: "",
+    expires_at: "",
     created_at: nowIso(),
     updated_at: nowIso(),
     access: {
@@ -63,7 +62,7 @@ export function upsertPortalInvite(input: PortalInvite) {
   const previous = current.find((item) => item.id === input.id);
   const nextInvite: PortalInvite = {
     ...input,
-    invite_token: input.invite_token || previous?.invite_token || makeToken(),
+    invite_token: input.invite_token || previous?.invite_token || "",
     created_at: previous?.created_at || input.created_at || nowIso(),
     updated_at: nowIso(),
   };

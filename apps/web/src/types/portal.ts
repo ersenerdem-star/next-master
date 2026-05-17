@@ -12,11 +12,14 @@ export type PortalInvite = {
   id: string;
   party_type: PortalPartyType;
   party_name: string;
+  customer_id: string;
+  vendor_id: string;
   email: string;
   contact_name: string;
   status: PortalInviteStatus;
   invite_token: string;
   last_sent_at: string;
+  expires_at: string;
   created_at: string;
   updated_at: string;
   access: PortalAccess;

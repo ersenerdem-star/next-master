@@ -3,7 +3,7 @@ import { fetchAdminDiagnostics, isPasswordResetAvailable, resetOrgUserPassword, 
 import { createEmptyCloudCompanyProfile, deleteCompanyProfileById, fetchCompanyProfiles, upsertCompanyProfile } from "../../infrastructure/api/companyProfilesApi";
 import { fetchCustomers } from "../../infrastructure/api/customersApi";
 import { deliverQueuedEmails, fetchEmailTemplates, fetchOutboundEmails, queuePortalInviteEmail, setOutboundEmailStatus, upsertEmailTemplate } from "../../infrastructure/api/emailTemplatesApi";
-import { createEmptyCloudPortalInvite, deletePortalInvite, fetchPortalInvites, markPortalInviteSent, setPortalInviteStatus, upsertPortalInvite } from "../../infrastructure/api/portalInvitesApi";
+import { createEmptyCloudPortalInvite, deletePortalInvite, fetchPortalInvites, issuePortalInviteToken, markPortalInviteSent, setPortalInviteStatus, upsertPortalInvite } from "../../infrastructure/api/portalInvitesApi";
 import { supabaseClient } from "../../infrastructure/api/supabaseClient";
 import { fetchOrgUsers, getPresenceStatus } from "../../infrastructure/api/usersApi";
 import { fetchVendors } from "../../infrastructure/api/vendorsApi";
@@ -298,11 +298,11 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   }
 
   const customerOptions = customers.map((item) => ({
-    value: item.display_name || item.company_name,
+    value: item.id,
     label: item.display_name || item.company_name,
   }));
   const vendorOptions = vendors.map((item) => ({
-    value: item.display_name || item.company_name,
+    value: item.id,
     label: item.display_name || item.company_name,
   }));
 
@@ -417,14 +417,15 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               try {
                 setSendingPortalInviteId(row.id);
                 const companyName = companyProfile.companyName || companyProfiles[0]?.companyName || "Next Master";
-                const queued = await queuePortalInviteEmail(row, companyName, window.location.origin);
+                const issued = await issuePortalInviteToken(row.id);
+                const queued = await queuePortalInviteEmail(issued.invite, companyName, window.location.origin, issued.token);
                 const delivery = await deliverQueuedEmails([queued.id]);
                 const sent = delivery.sentCount > 0 ? await markPortalInviteSent(row.id) : null;
                 setPortalInvites(await fetchPortalInvites());
                 setOutboundEmails(await fetchOutboundEmails());
                 setPortalStatus(
                   sent
-                    ? `Invitation sent to ${row.email}. Token: ${sent.invite_token}`
+                    ? `Invitation sent to ${row.email}.`
                     : `Invitation queued for ${row.email}, but delivery did not complete on this runtime.`,
                 );
               } catch (caught) {
@@ -719,16 +720,26 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           {portalDraft.party_type === "customer" ? (
             <Select
               label="Customer"
-              value={portalDraft.party_name}
+              value={portalDraft.customer_id}
               options={[{ value: "", label: "Select customer" }, ...customerOptions]}
-              onChange={(value) => updatePortalField("party_name", value)}
+              onChange={(value) => {
+                const selected = customers.find((item) => item.id === value);
+                updatePortalField("customer_id", value);
+                updatePortalField("vendor_id", "");
+                updatePortalField("party_name", selected?.display_name || selected?.company_name || "");
+              }}
             />
           ) : (
             <Select
               label="Vendor"
-              value={portalDraft.party_name}
+              value={portalDraft.vendor_id}
               options={[{ value: "", label: "Select vendor" }, ...vendorOptions]}
-              onChange={(value) => updatePortalField("party_name", value)}
+              onChange={(value) => {
+                const selected = vendors.find((item) => item.id === value);
+                updatePortalField("vendor_id", value);
+                updatePortalField("customer_id", "");
+                updatePortalField("party_name", selected?.display_name || selected?.company_name || "");
+              }}
             />
           )}
           <Input label="Portal Email" value={portalDraft.email} onChange={(value) => updatePortalField("email", value)} />
@@ -755,7 +766,9 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
         <div className="toolbar toolbar--wrap">
           <Button
             onClick={async () => {
-              if (!portalDraft.party_name.trim()) {
+              const missingPartyBinding =
+                portalDraft.party_type === "customer" ? !portalDraft.customer_id.trim() : !portalDraft.vendor_id.trim();
+              if (!portalDraft.party_name.trim() || missingPartyBinding) {
                 setPortalStatus("Select customer or enter vendor name.");
                 return;
               }
@@ -782,7 +795,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
         {portalStatus ? <div className="success-text">{portalStatus}</div> : null}
         <div className="meta-row">
           <span>{portalInvites.length.toLocaleString("en-US")} portal records</span>
-          <span>Invites store token, party type, and permissions. Send Invite uses template, queues mail, then tries delivery.</span>
+          <span>Portal access is bound to the selected party record. Send Invite rotates a short-lived token, queues mail, then tries delivery.</span>
         </div>
         <DataTable rows={portalInvites} columns={portalColumns} emptyText="No customer or vendor portal invite prepared yet." />
       </SectionCard> : null}
