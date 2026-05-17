@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { normalizePartCode } from "../../domain/shared/normalize";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchBills, fetchInvoices, fetchPurchaseOrders, fetchSalesOrders } from "../../infrastructure/api/ordersApi";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
@@ -48,6 +49,10 @@ function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function formatQty(value: number) {
+  return Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
 function formatMoney(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -55,6 +60,10 @@ function formatMoney(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
+}
+
+function itemTransactionKey(brand: string, productCode: string) {
+  return `${String(brand || "").trim().toLowerCase()}::${normalizePartCode(productCode)}`;
 }
 
 function salesOrderRows(orders: LocalSalesOrder[]): ItemTransactionRow[] {
@@ -208,9 +217,11 @@ export function ItemTransactionsPage() {
     return rows.filter((row) => {
       if (brand && row.brand.trim().toLowerCase() !== brand.trim().toLowerCase()) return false;
       if (codeSearch.trim()) {
-        const needle = codeSearch.trim().toLowerCase();
+        const rawNeedle = codeSearch.trim().toLowerCase();
+        const normalizedNeedle = normalizePartCode(codeSearch);
         const haystack = `${row.product_code} ${row.description}`.toLowerCase();
-        if (!haystack.includes(needle)) return false;
+        const normalizedCode = normalizePartCode(row.product_code);
+        if (!haystack.includes(rawNeedle) && (!normalizedNeedle || !normalizedCode.includes(normalizedNeedle))) return false;
       }
       if (partySearch.trim() && !row.party_name.toLowerCase().includes(partySearch.trim().toLowerCase())) return false;
       if (dateFrom && row.date && row.date < dateFrom) return false;
@@ -222,7 +233,7 @@ export function ItemTransactionsPage() {
   const summaryRows = useMemo<ItemTransactionSummaryRow[]>(() => {
     const map = new Map<string, ItemTransactionSummaryRow>();
     filteredRows.forEach((row) => {
-      const key = `${row.brand.trim().toLowerCase()}::${row.product_code.trim().toLowerCase()}`;
+      const key = itemTransactionKey(row.brand, row.product_code);
       const existing = map.get(key) || {
         brand: row.brand || "",
         product_code: row.product_code || "",
@@ -262,6 +273,14 @@ export function ItemTransactionsPage() {
       .sort((a, b) => a.brand.localeCompare(b.brand) || a.product_code.localeCompare(b.product_code));
   }, [filteredRows]);
 
+  const historyRows = useMemo(() => {
+    return [...filteredRows].sort((left, right) => {
+      if (left.date !== right.date) return right.date.localeCompare(left.date);
+      if (left.document_type !== right.document_type) return left.document_type.localeCompare(right.document_type);
+      return left.document_no.localeCompare(right.document_no);
+    });
+  }, [filteredRows]);
+
   const inboundAmount = useMemo(() => roundMoney(summaryRows.reduce((sum, row) => sum + row.inbound_amount, 0)), [summaryRows]);
   const outboundAmount = useMemo(() => roundMoney(summaryRows.reduce((sum, row) => sum + row.outbound_amount, 0)), [summaryRows]);
   const netQty = useMemo(() => summaryRows.reduce((sum, row) => sum + row.net_qty, 0), [summaryRows]);
@@ -279,6 +298,33 @@ export function ItemTransactionsPage() {
       { key: "netamount", header: "Net Amount", render: (row: ItemTransactionSummaryRow) => formatMoney(row.net_amount) },
       { key: "moves", header: "Moves", render: (row: ItemTransactionSummaryRow) => row.movement_count.toLocaleString("en-US") },
       { key: "last", header: "Last Movement", render: (row: ItemTransactionSummaryRow) => row.last_movement_date || "-" },
+    ],
+    [],
+  );
+
+  const historyColumns = useMemo(
+    () => [
+      { key: "date", header: "Date", render: (row: ItemTransactionRow) => row.date || "-" },
+      { key: "type", header: "Document", render: (row: ItemTransactionRow) => row.document_type || "-" },
+      { key: "docno", header: "No", render: (row: ItemTransactionRow) => row.document_no || "-" },
+      { key: "status", header: "Status", render: (row: ItemTransactionRow) => row.status || "-" },
+      {
+        key: "direction",
+        header: "Flow",
+        render: (row: ItemTransactionRow) => (row.direction === "IN" ? "Bought" : "Sold"),
+      },
+      {
+        key: "party",
+        header: "Party",
+        render: (row: ItemTransactionRow) => row.party_name || "-",
+      },
+      { key: "brand", header: "Brand", render: (row: ItemTransactionRow) => row.brand || "-" },
+      { key: "code", header: "Code", render: (row: ItemTransactionRow) => row.product_code || "-" },
+      { key: "description", header: "Description", render: (row: ItemTransactionRow) => row.description || "-" },
+      { key: "qtyin", header: "Qty In", render: (row: ItemTransactionRow) => (row.direction === "IN" ? formatQty(row.qty) : "-") },
+      { key: "qtyout", header: "Qty Out", render: (row: ItemTransactionRow) => (row.direction === "OUT" ? formatQty(row.qty) : "-") },
+      { key: "price", header: "Unit Price", render: (row: ItemTransactionRow) => formatMoney(row.unit_price) },
+      { key: "amount", header: "Amount", render: (row: ItemTransactionRow) => formatMoney(row.amount) },
     ],
     [],
   );
@@ -336,7 +382,22 @@ export function ItemTransactionsPage() {
       {loading ? (
         <div className="empty-state">Loading item transactions...</div>
       ) : loaded ? (
-        <DataTable rows={summaryRows} columns={columns} emptyText="No item transactions found for the selected filters." />
+        <>
+          <DataTable rows={summaryRows} columns={columns} emptyText="No item transactions found for the selected filters." />
+          <div className="section-card quote-workbench-card">
+            <div className="section-card__header">
+              <h2>Item Transaction History</h2>
+              <p>Shows who supplied the item and which customer or customers it was sold to.</p>
+            </div>
+            <div className="section-card__body">
+              <div className="meta-row">
+                <span>{historyRows.length.toLocaleString("en-US")} movements</span>
+                <span>Use code and party filters to narrow item-level history.</span>
+              </div>
+              <DataTable rows={historyRows} columns={historyColumns} emptyText="No transaction history found for the selected filters." />
+            </div>
+          </div>
+        </>
       ) : (
         <div className="empty-state">Select a brand or enter a code, then load the report.</div>
       )}
