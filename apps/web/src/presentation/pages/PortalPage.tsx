@@ -244,15 +244,12 @@ export function PortalPage() {
 
   const activeSnapshot = snapshot;
   const partyProfile = activeSnapshot.customer || activeSnapshot.vendor;
-  const visibleDocumentRows = useMemo(
-    () =>
-      activeSnapshot.invite.party_type === "customer"
-        ? [...activeSnapshot.salesOrders, ...activeSnapshot.invoices]
-        : [...activeSnapshot.purchaseOrders, ...activeSnapshot.bills],
-    [activeSnapshot],
-  );
+  const visibleDocumentRows =
+    activeSnapshot.invite.party_type === "customer"
+      ? [...activeSnapshot.salesOrders, ...activeSnapshot.invoices]
+      : [...activeSnapshot.purchaseOrders, ...activeSnapshot.bills];
 
-  const brandOptions = useMemo(() => {
+  const brandOptions = (() => {
     const brands = new Set<string>();
     visibleDocumentRows.forEach((row) => {
       (row.lines || []).forEach((line) => {
@@ -261,24 +258,12 @@ export function PortalPage() {
       });
     });
     return [{ value: "", label: "All Brands" }, ...Array.from(brands).sort((a, b) => a.localeCompare(b)).map((brand) => ({ value: brand, label: brand }))];
-  }, [visibleDocumentRows]);
+  })();
 
-  const filteredSalesOrders = useMemo(
-    () => activeSnapshot.salesOrders.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row)),
-    [activeSnapshot.salesOrders, documentSearch, brandFilter],
-  );
-  const filteredInvoices = useMemo(
-    () => activeSnapshot.invoices.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row)),
-    [activeSnapshot.invoices, documentSearch, brandFilter],
-  );
-  const filteredPurchaseOrders = useMemo(
-    () => activeSnapshot.purchaseOrders.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row)),
-    [activeSnapshot.purchaseOrders, documentSearch, brandFilter],
-  );
-  const filteredBills = useMemo(
-    () => activeSnapshot.bills.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row)),
-    [activeSnapshot.bills, documentSearch, brandFilter],
-  );
+  const filteredSalesOrders = activeSnapshot.salesOrders.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
+  const filteredInvoices = activeSnapshot.invoices.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
+  const filteredPurchaseOrders = activeSnapshot.purchaseOrders.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
+  const filteredBills = activeSnapshot.bills.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
 
   const selectedDocument = (() => {
     if (!selection) return null;
@@ -480,7 +465,7 @@ export function PortalPage() {
           <div className="dashboard-grid">
             <div className="dashboard-stat">
               <span>Total Documents</span>
-              <strong>{snapshot.accountSummary.totalDocuments}</strong>
+              <strong>{activeSnapshot.accountSummary.totalDocuments}</strong>
             </div>
             <div className="dashboard-stat">
               <span>Total Amount</span>
