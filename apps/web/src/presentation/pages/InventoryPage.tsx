@@ -1,15 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   buildPurchaseReceiveDraft,
+  createStockTransferDraft,
   fetchInventoryMovements,
   fetchPurchaseReceives,
+  fetchStockTransfers,
   fetchWarehouseOnHand,
+  fetchWarehouseStockItems,
   postPurchaseReceive,
+  postStockTransfer,
   type PurchaseReceiveDraft,
+  type StockTransferDraft,
+  type StockTransferDraftLine,
 } from "../../infrastructure/api/inventoryApi";
 import { fetchPurchaseOrders } from "../../infrastructure/api/ordersApi";
 import { createEmptyWarehouse, fetchWarehouses, upsertWarehouse } from "../../infrastructure/api/warehousesApi";
-import type { InventoryMovement, PurchaseReceive, WarehouseOnHandRow } from "../../types/inventory";
+import type { InventoryMovement, PurchaseReceive, StockTransfer, WarehouseOnHandRow, WarehouseStockItem } from "../../types/inventory";
 import type { LocalPurchaseOrder } from "../../types/orders";
 import type { Warehouse } from "../../types/warehouses";
 import { useActionFeedback } from "../components/common/ActionFeedback";
@@ -47,6 +53,21 @@ function cloneDraft(draft: PurchaseReceiveDraft): PurchaseReceiveDraft {
   };
 }
 
+function cloneTransferDraft(draft: StockTransferDraft): StockTransferDraft {
+  return {
+    ...draft,
+    lines: draft.lines.map((line) => ({ ...line })),
+  };
+}
+
+function transferLineKey(line: {
+  brand?: string;
+  product_code?: string;
+  old_code?: string;
+}) {
+  return `${String(line.brand || "").trim().toLowerCase()}::${String(line.product_code || "").trim().toLowerCase()}::${String(line.old_code || "").trim().toLowerCase()}`;
+}
+
 export function InventoryPage() {
   const actionFeedback = useActionFeedback();
   const [activeTab, setActiveTab] = useState<InventoryTab>("Warehouses");
@@ -55,6 +76,8 @@ export function InventoryPage() {
   const [purchaseReceives, setPurchaseReceives] = useState<PurchaseReceive[]>([]);
   const [movementRows, setMovementRows] = useState<InventoryMovement[]>([]);
   const [onHandRows, setOnHandRows] = useState<WarehouseOnHandRow[]>([]);
+  const [sourceStockRows, setSourceStockRows] = useState<WarehouseStockItem[]>([]);
+  const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("");
   const [selectedReceiveId, setSelectedReceiveId] = useState("");
   const [draft, setDraft] = useState<Warehouse | null>(null);
@@ -64,13 +87,18 @@ export function InventoryPage() {
   const [onHandWarehouseId, setOnHandWarehouseId] = useState("");
   const [transferSourceId, setTransferSourceId] = useState("");
   const [transferTargetId, setTransferTargetId] = useState("");
+  const [transferSearch, setTransferSearch] = useState("");
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [loadingReceives, setLoadingReceives] = useState(false);
   const [loadingMovements, setLoadingMovements] = useState(false);
   const [loadingOnHand, setLoadingOnHand] = useState(false);
+  const [loadingTransferStock, setLoadingTransferStock] = useState(false);
+  const [loadingTransfers, setLoadingTransfers] = useState(false);
   const [postingReceive, setPostingReceive] = useState(false);
+  const [postingTransfer, setPostingTransfer] = useState(false);
   const [showWarehouseEditor, setShowWarehouseEditor] = useState(false);
   const [receiveDraft, setReceiveDraft] = useState<PurchaseReceiveDraft | null>(null);
+  const [transferDraft, setTransferDraft] = useState<StockTransferDraft | null>(null);
 
   async function reloadWarehouses() {
     const warehouseRows = await fetchWarehouses();
@@ -119,6 +147,28 @@ export function InventoryPage() {
       return rows;
     } finally {
       setLoadingMovements(false);
+    }
+  }
+
+  async function reloadTransferStock(warehouseId?: string) {
+    setLoadingTransferStock(true);
+    try {
+      const rows = await fetchWarehouseStockItems(warehouseId);
+      setSourceStockRows(rows);
+      return rows;
+    } finally {
+      setLoadingTransferStock(false);
+    }
+  }
+
+  async function reloadTransfers() {
+    setLoadingTransfers(true);
+    try {
+      const rows = await fetchStockTransfers();
+      setStockTransfers(rows);
+      return rows;
+    } finally {
+      setLoadingTransfers(false);
     }
   }
 
@@ -267,6 +317,16 @@ export function InventoryPage() {
     [receiveWarehouseId, warehouses],
   );
 
+  const selectedTransferSourceWarehouse = useMemo(
+    () => warehouses.find((row) => row.id === transferSourceId) || null,
+    [transferSourceId, warehouses],
+  );
+
+  const selectedTransferTargetWarehouse = useMemo(
+    () => warehouses.find((row) => row.id === transferTargetId) || null,
+    [transferTargetId, warehouses],
+  );
+
   const receiveCandidates = useMemo(
     () =>
       purchaseOrders.filter((row) => {
@@ -305,6 +365,47 @@ export function InventoryPage() {
     setReceiveDraft(buildPurchaseReceiveDraft(selectedReceive, selectedReceiveWarehouse, purchaseReceives));
   }, [purchaseReceives, selectedReceive, selectedReceiveWarehouse]);
 
+  useEffect(() => {
+    setTransferDraft((current) => {
+      const base = current || createStockTransferDraft(selectedTransferSourceWarehouse, selectedTransferTargetWarehouse);
+      return {
+        ...base,
+        source_warehouse_id: selectedTransferSourceWarehouse?.id || "",
+        source_warehouse_code: selectedTransferSourceWarehouse?.warehouse_code || "",
+        source_warehouse_name: selectedTransferSourceWarehouse?.warehouse_name || "",
+        target_warehouse_id: selectedTransferTargetWarehouse?.id || "",
+        target_warehouse_code: selectedTransferTargetWarehouse?.warehouse_code || "",
+        target_warehouse_name: selectedTransferTargetWarehouse?.warehouse_name || "",
+      };
+    });
+  }, [selectedTransferSourceWarehouse, selectedTransferTargetWarehouse]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (activeTab !== "Transfers") return;
+      try {
+        const [stockRows, transferRows] = await Promise.all([
+          reloadTransferStock(transferSourceId || undefined),
+          reloadTransfers(),
+        ]);
+        if (cancelled) return;
+        setSourceStockRows(stockRows);
+        setStockTransfers(transferRows);
+      } catch (caught) {
+        if (!cancelled) {
+          actionFeedback.fail(caught instanceof Error ? caught.message : "Transfer inventory load failed");
+        }
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [actionFeedback, activeTab, transferSourceId]);
+
   const movementColumns = useMemo(
     () => [
       { key: "date", header: "Date", render: (row: InventoryMovement) => formatDate(row.moved_at) },
@@ -340,6 +441,31 @@ export function InventoryPage() {
     [onHandRows, onHandWarehouseId],
   );
 
+  const filteredTransferStockRows = useMemo(() => {
+    const normalized = transferSearch.trim().toLowerCase();
+    const rows = transferSourceId ? sourceStockRows.filter((row) => row.warehouse_id === transferSourceId) : sourceStockRows;
+    if (!normalized) return rows;
+    return rows.filter((row) =>
+      [row.brand, row.product_code, row.old_code, row.description, row.origin]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalized),
+    );
+  }, [sourceStockRows, transferSearch, transferSourceId]);
+
+  const transferHistoryColumns = useMemo(
+    () => [
+      { key: "date", header: "Date", render: (row: StockTransfer) => formatDate(row.transfer_date) },
+      { key: "transfer", header: "Transfer No", render: (row: StockTransfer) => row.transfer_no || row.id },
+      { key: "source", header: "Source", render: (row: StockTransfer) => row.source_warehouse_name || row.source_warehouse_code || "-" },
+      { key: "target", header: "Target", render: (row: StockTransfer) => row.target_warehouse_name || row.target_warehouse_code || "-" },
+      { key: "qty", header: "Qty", render: (row: StockTransfer) => row.total_qty.toLocaleString("en-US") },
+      { key: "amount", header: "Value", render: (row: StockTransfer) => formatMoney(row.total_amount) },
+      { key: "status", header: "Status", render: (row: StockTransfer) => row.status.toUpperCase() },
+    ],
+    [],
+  );
+
   const receiveDraftTotals = useMemo(() => {
     const lines = receiveDraft?.lines || [];
     return {
@@ -347,6 +473,14 @@ export function InventoryPage() {
       amount: lines.reduce((sum, line) => sum + line.line_total, 0),
     };
   }, [receiveDraft]);
+
+  const transferDraftTotals = useMemo(() => {
+    const lines = transferDraft?.lines || [];
+    return {
+      qty: lines.reduce((sum, line) => sum + line.qty_transferred, 0),
+      amount: lines.reduce((sum, line) => sum + line.line_total, 0),
+    };
+  }, [transferDraft]);
 
   function selectWarehouse(row: Warehouse) {
     setSelectedWarehouseId(row.id);
@@ -438,6 +572,87 @@ export function InventoryPage() {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase receive post failed");
     } finally {
       setPostingReceive(false);
+    }
+  }
+
+  function handleAddTransferItem(item: WarehouseStockItem) {
+    setTransferDraft((current) => {
+      const base = current || createStockTransferDraft(selectedTransferSourceWarehouse, selectedTransferTargetWarehouse);
+      const key = transferLineKey(item);
+      if (base.lines.some((line) => line.key === key)) return base;
+      const next = cloneTransferDraft(base);
+      next.lines.push({
+        key,
+        product_code: item.product_code,
+        old_code: item.old_code,
+        brand: item.brand,
+        description: item.description,
+        qty_transferred: item.on_hand_qty > 0 ? 1 : 0,
+        available_qty: item.available_qty,
+        unit_cost: item.average_cost,
+        line_total: item.average_cost,
+        origin: item.origin,
+        notes: "",
+      });
+      return next;
+    });
+  }
+
+  function handleTransferDraftLineChange(lineKey: string, field: "qty_transferred" | "notes", value: string) {
+    setTransferDraft((current) => {
+      if (!current) return current;
+      const next = cloneTransferDraft(current);
+      next.lines = next.lines.map((line) => {
+        if (line.key !== lineKey) return line;
+        if (field === "notes") return { ...line, notes: value };
+        const capped = Math.max(0, Math.min(line.available_qty, parseNumberInput(value)));
+        return {
+          ...line,
+          qty_transferred: capped,
+          line_total: capped * line.unit_cost,
+        };
+      });
+      return next;
+    });
+  }
+
+  function handleRemoveTransferLine(lineKey: string) {
+    setTransferDraft((current) => {
+      if (!current) return current;
+      const next = cloneTransferDraft(current);
+      next.lines = next.lines.filter((line) => line.key !== lineKey);
+      return next;
+    });
+  }
+
+  function handleClearTransferDraft() {
+    setTransferDraft(createStockTransferDraft(selectedTransferSourceWarehouse, selectedTransferTargetWarehouse));
+    setTransferSearch("");
+  }
+
+  async function handlePostTransfer() {
+    if (!transferDraft) return;
+    try {
+      setPostingTransfer(true);
+      actionFeedback.begin(`Posting stock transfer ${transferDraft.transfer_no}...`);
+      await postStockTransfer(transferDraft);
+      const warehouseRows = warehouses.length ? warehouses : await reloadWarehouses();
+      const [stockRows, transferRows, movementRows, onHand] = await Promise.all([
+        reloadTransferStock(transferSourceId || undefined),
+        reloadTransfers(),
+        reloadMovements(movementWarehouseId || undefined),
+        reloadOnHand(warehouseRows),
+      ]);
+      setSourceStockRows(stockRows);
+      setStockTransfers(transferRows);
+      setMovementRows(movementRows);
+      setOnHandRows(onHand);
+      setTransferDraft(createStockTransferDraft(selectedTransferSourceWarehouse, selectedTransferTargetWarehouse));
+      actionFeedback.succeed(`Stock transfer ${transferDraft.transfer_no} posted.`);
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Stock transfer post failed");
+    } finally {
+      setPostingTransfer(false);
     }
   }
 
@@ -737,11 +952,155 @@ export function InventoryPage() {
       {activeTab === "Transfers" ? (
         <div className="page-stack">
           <SectionCard title="Transfers">
-            <div className="settings-grid">
-              <Select label="Source Warehouse" value={transferSourceId} options={warehouseOptions} onChange={setTransferSourceId} />
-              <Select label="Target Warehouse" value={transferTargetId} options={warehouseOptions} onChange={setTransferTargetId} />
+            <div className="page-stack">
+              <div className="settings-grid">
+                <Select label="Source Warehouse" value={transferSourceId} options={warehouseOptions} onChange={setTransferSourceId} />
+                <Select label="Target Warehouse" value={transferTargetId} options={warehouseOptions} onChange={setTransferTargetId} />
+              </div>
+
+              <div className="toolbar toolbar--wrap">
+                <Input label="Search Source Stock" value={transferSearch} onChange={setTransferSearch} placeholder="Code, description, brand" />
+                <Button variant="secondary" onClick={handleClearTransferDraft}>
+                  Clear Draft
+                </Button>
+                <Button onClick={() => void handlePostTransfer()} busy={postingTransfer} busyLabel="Posting...">
+                  Post Transfer
+                </Button>
+              </div>
+
+              <div className="settings-grid settings-stats-grid">
+                <div className="settings-item">
+                  <span className="settings-label">Transfer No</span>
+                  <strong>{transferDraft?.transfer_no || "-"}</strong>
+                </div>
+                <div className="settings-item">
+                  <span className="settings-label">Draft Lines</span>
+                  <strong>{transferDraft?.lines.length.toLocaleString("en-US") || "0"}</strong>
+                </div>
+                <div className="settings-item">
+                  <span className="settings-label">Transfer Qty</span>
+                  <strong>{transferDraftTotals.qty.toLocaleString("en-US")}</strong>
+                </div>
+                <div className="settings-item">
+                  <span className="settings-label">Transfer Value</span>
+                  <strong>{formatMoney(transferDraftTotals.amount)}</strong>
+                </div>
+              </div>
+
+              <SectionCard title="Source Stock">
+                <div className="meta-row">
+                  <span>{filteredTransferStockRows.length.toLocaleString("en-US")} source stock rows</span>
+                  <span>{loadingTransferStock ? "Refreshing source warehouse stock..." : "Select a source row to add it into the transfer draft."}</span>
+                </div>
+                <DataTable
+                  rows={filteredTransferStockRows}
+                  columns={[
+                    { key: "brand", header: "Brand", render: (row: WarehouseStockItem) => row.brand || "-" },
+                    { key: "code", header: "Code", render: (row: WarehouseStockItem) => row.product_code || row.old_code || "-" },
+                    { key: "description", header: "Description", render: (row: WarehouseStockItem) => row.description || "-" },
+                    { key: "origin", header: "Origin", render: (row: WarehouseStockItem) => row.origin || "-" },
+                    { key: "qty", header: "Available Qty", render: (row: WarehouseStockItem) => row.available_qty.toLocaleString("en-US") },
+                    { key: "cost", header: "Avg Cost", render: (row: WarehouseStockItem) => formatMoney(row.average_cost) },
+                    {
+                      key: "action",
+                      header: "Action",
+                      render: (row: WarehouseStockItem) => (
+                        <Button className="button--compact" variant="secondary" onClick={() => handleAddTransferItem(row)}>
+                          Add
+                        </Button>
+                      ),
+                    },
+                  ]}
+                  emptyText="No available stock in the selected source warehouse."
+                />
+              </SectionCard>
+
+              <SectionCard title="Transfer Draft">
+                {transferDraft?.lines.length ? (
+                  <div className="table-wrap">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Code</th>
+                          <th>Brand</th>
+                          <th>Description</th>
+                          <th>Available</th>
+                          <th>Transfer Qty</th>
+                          <th>Unit Cost</th>
+                          <th>Line Total</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {transferDraft.lines.map((line) => (
+                          <tr key={line.key}>
+                            <td>{line.product_code || line.old_code || "-"}</td>
+                            <td>{line.brand || "-"}</td>
+                            <td>{line.description || "-"}</td>
+                            <td>{line.available_qty.toLocaleString("en-US")}</td>
+                            <td>
+                              <label className="field">
+                                <input
+                                  className="field__input inventory-number-input"
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  max={line.available_qty}
+                                  value={String(line.qty_transferred)}
+                                  onChange={(event) => handleTransferDraftLineChange(line.key, "qty_transferred", event.target.value)}
+                                />
+                              </label>
+                            </td>
+                            <td>{formatMoney(line.unit_cost)}</td>
+                            <td>{formatMoney(line.line_total)}</td>
+                            <td>
+                              <Button className="button--compact" variant="secondary" onClick={() => handleRemoveTransferLine(line.key)}>
+                                Remove
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="empty-state">No transfer lines yet.</div>
+                )}
+              </SectionCard>
+
+              <SectionCard title="Transfer Posting">
+                <div className="customers-form-row">
+                  <div className="customers-form-row__label">Transfer Date</div>
+                  <div className="customers-field-wrap customers-field-wrap--medium">
+                    <Input
+                      type="date"
+                      value={transferDraft?.transfer_date || ""}
+                      onChange={(value) => setTransferDraft((current) => (current ? { ...current, transfer_date: value } : current))}
+                    />
+                  </div>
+                </div>
+                <div className="customers-form-row customers-form-row--top">
+                  <div className="customers-form-row__label">Notes</div>
+                  <div className="customers-field-wrap customers-field-wrap--full">
+                    <label className="field customer-field">
+                      <textarea
+                        className="field__input field__input--textarea"
+                        value={transferDraft?.notes || ""}
+                        onChange={(event) => setTransferDraft((current) => (current ? { ...current, notes: event.target.value } : current))}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Transfer History">
+                <div className="meta-row">
+                  <span>{stockTransfers.length.toLocaleString("en-US")} transfer records</span>
+                  <span>{loadingTransfers ? "Refreshing transfer history..." : "Posted transfers create paired outbound and inbound warehouse movements."}</span>
+                </div>
+                <DataTable rows={stockTransfers} columns={transferHistoryColumns} emptyText="No stock transfers posted yet." />
+              </SectionCard>
             </div>
-            <div className="empty-state">Transfer workflow shell is ready. Next phase will allow item-level warehouse transfers and create outbound/inbound movement pairs automatically.</div>
           </SectionCard>
         </div>
       ) : null}

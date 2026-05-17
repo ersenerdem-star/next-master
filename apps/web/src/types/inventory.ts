@@ -67,3 +67,52 @@ export type WarehouseOnHandRow = {
   reserved_qty: number;
   available_qty: number;
 };
+
+export type WarehouseStockItem = {
+  warehouse_id: string;
+  warehouse_code: string;
+  warehouse_name: string;
+  brand: string;
+  product_code: string;
+  old_code: string;
+  description: string;
+  origin: string;
+  on_hand_qty: number;
+  available_qty: number;
+  average_cost: number;
+  stock_value: number;
+  last_moved_at: string;
+};
+
+export type StockTransferStatus = "draft" | "posted" | "void";
+
+export type StockTransferLine = {
+  product_code: string;
+  old_code: string;
+  brand: string;
+  description: string;
+  qty_transferred: number;
+  unit_cost: number;
+  line_total: number;
+  origin: string;
+  notes: string;
+};
+
+export type StockTransfer = {
+  id: string;
+  transfer_no: string;
+  source_warehouse_id: string;
+  source_warehouse_code: string;
+  source_warehouse_name: string;
+  target_warehouse_id: string;
+  target_warehouse_code: string;
+  target_warehouse_name: string;
+  status: StockTransferStatus;
+  transfer_date: string;
+  notes: string;
+  total_qty: number;
+  total_amount: number;
+  created_at: string;
+  updated_at: string;
+  lines: StockTransferLine[];
+};
