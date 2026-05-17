@@ -7,6 +7,13 @@ type ImportedOrderRow = {
   qty: number;
 };
 
+function normalizeOrderCode(value: unknown) {
+  return String(value ?? "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .trim();
+}
+
 function normalizeHeader(value: string) {
   return String(value || "")
     .trim()
@@ -23,14 +30,14 @@ function mapRows(rawRows: Array<Record<string, unknown>>, fallbackBrand = "") {
   return rawRows
     .map((row) => {
       const normalized = Object.fromEntries(Object.entries(row).map(([key, value]) => [normalizeHeader(key), value]));
-      const code = String(
+      const code = normalizeOrderCode(
         normalized.part_no ||
           normalized.part_number ||
           normalized.product_code ||
           normalized.code ||
           normalized.item_code ||
           "",
-      ).trim();
+      );
       const brand = String(normalized.brand || fallbackBrand || "").trim();
       const qty = normalizeQty(normalized.qty || normalized.quantity || normalized.amount || 1);
       return { code, brand, qty };

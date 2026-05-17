@@ -244,6 +244,7 @@ export async function searchPortalCatalog(
   const customerContext = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
   const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
   const search = String(query || "").trim();
+  const normalizedSearch = normalizePartCode(search);
   const selectedBrandId = brand ? brandMap.byName.get(brand.trim().toLowerCase()) || "" : "";
   const params: Record<string, string> = {
     select: "product_code,description,oem_no,hs_code,origin,weight_kg,brand_id",
@@ -254,8 +255,10 @@ export async function searchPortalCatalog(
 
   if (selectedBrandId) params.brand_id = `eq.${selectedBrandId}`;
   if (search) {
-    const escaped = search.replaceAll(",", " ").replaceAll("(", "").replaceAll(")", "");
-    params.or = `(product_code.ilike.*${escaped}*,description.ilike.*${escaped}*,oem_no.ilike.*${escaped}*)`;
+    const escaped = search.replace(/[%*(),]/g, " ").trim();
+    params.or = normalizedSearch
+      ? `(normalized_code.eq.${normalizedSearch},normalized_oem.eq.${normalizedSearch},product_code.ilike.*${escaped}*,description.ilike.*${escaped}*,oem_no.ilike.*${escaped}*)`
+      : `(product_code.ilike.*${escaped}*,description.ilike.*${escaped}*,oem_no.ilike.*${escaped}*)`;
   }
 
   const rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", params);

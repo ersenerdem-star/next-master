@@ -1966,6 +1966,36 @@ select {
   gap: 18px;
 }
 
+.portal-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.portal-subnav__button {
+  border: 1px solid #d7e4ef;
+  background: #ffffff;
+  color: #475569;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.portal-subnav__button--active {
+  border-color: #f59e0b;
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.portal-section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 .portal-filter-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.7fr) minmax(220px, 0.7fr);
