@@ -262,7 +262,7 @@ export function DashboardPage({ onOpenQuote }: DashboardPageProps) {
           {revenueSource === "bills" ? (
             <div className="empty-state">Coming soon: bill-based turnover analysis will appear here after billing module goes live.</div>
           ) : revenue ? (
-            <div className="stats-grid">
+            <div className="stats-grid stats-grid--compact">
               <StatCard
                 label="This Month"
                 value={formatMoney(revenue.currentMonth.total)}
