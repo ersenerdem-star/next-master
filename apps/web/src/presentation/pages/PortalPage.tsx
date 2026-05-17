@@ -613,8 +613,14 @@ export function PortalPage() {
   const portalSections: Array<{ key: PortalSection; label: string }> = [
     { key: "details", label: "Account Details" },
     { key: "statement", label: "Account Statement" },
-    ...(portalCanOrder ? [{ key: "orders" as PortalSection, label: "Orders & Search" }] : []),
+    ...(portalCanOrder ? [{ key: "orders" as PortalSection, label: "Price Search & New Order" }] : []),
   ];
+  const activeSectionHelpText =
+    activeSection === "orders"
+      ? "Search items, import part numbers, review live prices, and submit a new sales order."
+      : activeSection === "statement"
+        ? "Review invoices, sales orders, payments, credits, and your account statement in one place."
+        : "Review your account identity, addresses, and current balance summary.";
 
   function openPortalDocument(selection: PortalSelection) {
     setSelection(selection);
@@ -1025,6 +1031,7 @@ export function PortalPage() {
           </button>
         ))}
       </div>
+      <div className="portal-subnav__hint">{activeSectionHelpText}</div>
 
       {activeSection === "details" ? (
         <div className="portal-section-stack">

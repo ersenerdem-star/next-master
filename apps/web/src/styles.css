@@ -1972,6 +1972,13 @@ select {
   gap: 10px;
 }
 
+.portal-subnav__hint {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .portal-subnav__button {
   border: 1px solid #d7e4ef;
   background: #ffffff;
