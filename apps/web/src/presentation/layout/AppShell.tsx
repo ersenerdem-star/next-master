@@ -26,8 +26,29 @@ const pageMeta = {
   Settings: { code: "07", eyebrow: "Controls", description: "Application and company-level settings" },
 } as const;
 
+const buildMeta = __APP_BUILD_META__;
+
+const contextMeta = {
+  production: { label: "Production", className: "is-production" },
+  "deploy-preview": { label: "Preview", className: "is-preview" },
+  "branch-deploy": { label: "Branch", className: "is-branch" },
+  local: { label: "Local", className: "is-local" },
+} as const;
+
 export function AppShell({ children, activePage = "Home", onNavigate }: AppShellProps) {
   const meta = pageMeta[activePage as keyof typeof pageMeta] || pageMeta.Home;
+  const context = contextMeta[buildMeta.context as keyof typeof contextMeta] || {
+    label: buildMeta.context || "Build",
+    className: "is-local",
+  };
+  const commitShort = buildMeta.commit.slice(0, 8);
+  const builtAtLabel = new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(buildMeta.builtAt));
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -57,6 +78,18 @@ export function AppShell({ children, activePage = "Home", onNavigate }: AppShell
               <div className="topbar-panel__eyebrow">{meta.eyebrow}</div>
               <h1>{activePage}</h1>
               <p>{meta.description}</p>
+            </div>
+          </div>
+          <div className="topbar-build">
+            <div className="topbar-build__eyebrow">Build Context</div>
+            <div className="topbar-build__chips">
+              <span className={`topbar-chip ${context.className}`}>{context.label}</span>
+              <span className="topbar-chip">{buildMeta.branch}</span>
+              <span className="topbar-chip">{commitShort}</span>
+            </div>
+            <div className="topbar-build__meta">
+              <span>Built {builtAtLabel}</span>
+              {buildMeta.deployUrl ? <span>Deploy ready</span> : null}
             </div>
           </div>
         </header>
