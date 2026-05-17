@@ -1946,6 +1946,13 @@ select {
   gap: 14px;
 }
 
+.portal-statement-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(150px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+}
+
 .portal-document-detail {
   display: flex;
   flex-direction: column;
@@ -2046,6 +2053,7 @@ select {
   .quote-form-grid,
   .portal-summary-grid,
   .portal-filter-grid,
+  .portal-statement-actions,
   .portal-detail-grid,
   .portal-detail-totals {
     grid-template-columns: 1fr;

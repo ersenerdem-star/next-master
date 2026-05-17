@@ -29,6 +29,18 @@ async function fetchAll<T>(supabaseUrl: string, serviceRoleKey: string, table: s
   });
 }
 
+async function fetchAllOptional<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
+  try {
+    return await fetchAll<T>(supabaseUrl, serviceRoleKey, table, params);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("Could not find the table") || message.includes("relation") || message.includes("does not exist")) {
+      return [];
+    }
+    throw error;
+  }
+}
+
 function toNumber(value: unknown) {
   return Number(value ?? 0) || 0;
 }
@@ -186,15 +198,41 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         })
       : [];
 
+    const creditNotes = invite.access_can_view_invoices
+      ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "credit_notes", {
+          select: "id,credit_note_no,customer_name,status,credit_date,due_date,notes,total_amount,currency,updated_at",
+          organization_id: `eq.${invite.organization_id}`,
+          customer_name: `eq.${invite.party_name}`,
+          order: "updated_at.desc",
+        })
+      : [];
+
     const accountRows = [
       ...invoices.map((row) => ({
-      document_no: String(row.id || row.sales_order_no || ""),
-      document_type: "Invoice",
-      document_date: String(row.quote_date || ""),
-      due_date: String(row.due_date || ""),
-      status: String(row.status || ""),
-      amount: toNumber(row.total_amount),
-      currency: String(row.currency || customer?.currency || "EUR"),
+        document_no: String(row.id || row.sales_order_no || ""),
+        document_type: "Invoice",
+        document_date: String(row.quote_date || ""),
+        due_date: String(row.due_date || ""),
+        status: String(row.status || ""),
+        amount: toNumber(row.total_amount),
+        currency: String(row.currency || customer?.currency || "EUR"),
+        subtotal: toNumber(row.total_amount),
+        discount: 0,
+        shipping: 0,
+        total: toNumber(row.total_amount),
+      })),
+      ...creditNotes.map((row) => ({
+        document_no: String(row.credit_note_no || row.id || ""),
+        document_type: "Credit Note",
+        document_date: String(row.credit_date || ""),
+        due_date: String(row.due_date || ""),
+        status: String(row.status || ""),
+        amount: -Math.abs(toNumber(row.total_amount)),
+        currency: String(row.currency || customer?.currency || "EUR"),
+        subtotal: -Math.abs(toNumber(row.total_amount)),
+        discount: 0,
+        shipping: 0,
+        total: -Math.abs(toNumber(row.total_amount)),
       })),
       ...paymentsReceived.map((row) => ({
         document_no: String(row.id || row.invoice_no || ""),
@@ -204,8 +242,16 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         status: String(row.status || ""),
         amount: -Math.abs(toNumber(row.amount)),
         currency: String(row.currency || customer?.currency || "EUR"),
+        subtotal: -Math.abs(toNumber(row.amount)),
+        discount: 0,
+        shipping: 0,
+        total: -Math.abs(toNumber(row.amount)),
       })),
     ];
+
+    const invoiceAmount = invoices.reduce((sum, row) => sum + toNumber(row.total_amount), 0);
+    const creditAmount = creditNotes.reduce((sum, row) => sum + toNumber(row.total_amount), 0);
+    const paymentAmount = paymentsReceived.reduce((sum, row) => sum + toNumber(row.amount), 0);
 
     return {
       invite: {
@@ -245,14 +291,22 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         margin_percent: toNumber(row.margin_percent),
         lines: mapInvoiceLines(row.lines),
       })),
+      creditNotes: creditNotes.map((row) => ({
+        ...row,
+        total_amount: toNumber(row.total_amount),
+      })),
       purchaseOrders: [],
       bills: [],
+      vendorCredits: [],
       paymentsReceived,
       paymentsMade: [],
       accountSummary: {
         currency: String(customer?.currency || invoices[0]?.currency || "EUR"),
         totalDocuments: accountRows.length,
         totalAmount: accountRows.reduce((sum, row) => sum + row.amount, 0),
+        documentAmount: invoiceAmount,
+        creditAmount,
+        paymentAmount,
         openAmount: accountRows.filter((row) => !["void"].includes(row.status.toLowerCase())).reduce((sum, row) => sum + row.amount, 0),
         paymentCount: paymentsReceived.length,
       },
@@ -300,15 +354,41 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       })
     : [];
 
+  const vendorCredits = invite.access_can_view_invoices
+    ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "vendor_credits", {
+        select: "id,vendor_credit_no,supplier_name,status,credit_date,due_date,notes,total_amount,currency,updated_at",
+        organization_id: `eq.${invite.organization_id}`,
+        supplier_name: `eq.${invite.party_name}`,
+        order: "updated_at.desc",
+      })
+    : [];
+
   const accountRows = [
     ...bills.map((row) => ({
-    document_no: String(row.id || row.purchase_order_no || ""),
-    document_type: "Bill",
-    document_date: String(row.bill_date || ""),
-    due_date: String(row.due_date || ""),
-    status: String(row.status || ""),
-    amount: toNumber(row.total_amount),
-    currency: String(row.currency || vendor?.currency || "EUR"),
+      document_no: String(row.id || row.purchase_order_no || ""),
+      document_type: "Bill",
+      document_date: String(row.bill_date || ""),
+      due_date: String(row.due_date || ""),
+      status: String(row.status || ""),
+      amount: toNumber(row.total_amount),
+      currency: String(row.currency || vendor?.currency || "EUR"),
+      subtotal: toNumber(row.subtotal ?? row.total_amount),
+      discount: toNumber(row.discount_amount),
+      shipping: toNumber(row.shipping_cost),
+      total: toNumber(row.total_amount),
+    })),
+    ...vendorCredits.map((row) => ({
+      document_no: String(row.vendor_credit_no || row.id || ""),
+      document_type: "Vendor Credit",
+      document_date: String(row.credit_date || ""),
+      due_date: String(row.due_date || ""),
+      status: String(row.status || ""),
+      amount: -Math.abs(toNumber(row.total_amount)),
+      currency: String(row.currency || vendor?.currency || "EUR"),
+      subtotal: -Math.abs(toNumber(row.total_amount)),
+      discount: 0,
+      shipping: 0,
+      total: -Math.abs(toNumber(row.total_amount)),
     })),
     ...paymentsMade.map((row) => ({
       document_no: String(row.id || row.bill_no || ""),
@@ -318,8 +398,16 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       status: String(row.status || ""),
       amount: -Math.abs(toNumber(row.amount)),
       currency: String(row.currency || vendor?.currency || "EUR"),
+      subtotal: -Math.abs(toNumber(row.amount)),
+      discount: 0,
+      shipping: 0,
+      total: -Math.abs(toNumber(row.amount)),
     })),
   ];
+
+  const billAmount = bills.reduce((sum, row) => sum + toNumber(row.total_amount), 0);
+  const vendorCreditAmount = vendorCredits.reduce((sum, row) => sum + toNumber(row.total_amount), 0);
+  const paymentAmount = paymentsMade.reduce((sum, row) => sum + toNumber(row.amount), 0);
 
   return {
     invite: {
@@ -341,6 +429,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     vendor,
     salesOrders: [],
     invoices: [],
+    creditNotes: [],
     purchaseOrders: purchaseOrders.map((row) => ({
       ...row,
       total_amount: toNumber(row.total_amount),
@@ -351,9 +440,13 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       ...row,
       total_amount: toNumber(row.total_amount),
       subtotal: toNumber(row.subtotal),
-      discount_amount: toNumber(row.discount_amount),
-      shipping_cost: toNumber(row.shipping_cost),
-      lines: mapPurchaseOrderLines(row.lines),
+        discount_amount: toNumber(row.discount_amount),
+        shipping_cost: toNumber(row.shipping_cost),
+        lines: mapPurchaseOrderLines(row.lines),
+      })),
+    vendorCredits: vendorCredits.map((row) => ({
+      ...row,
+      total_amount: toNumber(row.total_amount),
     })),
     paymentsReceived: [],
     paymentsMade,
@@ -361,6 +454,9 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       currency: String(vendor?.currency || bills[0]?.currency || "EUR"),
       totalDocuments: accountRows.length,
       totalAmount: accountRows.reduce((sum, row) => sum + row.amount, 0),
+      documentAmount: billAmount,
+      creditAmount: vendorCreditAmount,
+      paymentAmount,
       openAmount: accountRows.filter((row) => !["void"].includes(row.status.toLowerCase())).reduce((sum, row) => sum + row.amount, 0),
       paymentCount: paymentsMade.length,
     },

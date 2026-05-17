@@ -7,6 +7,7 @@ import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { SectionCard } from "../components/common/SectionCard";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
+import { openAccountStatementPrintWindow } from "../../shared/accountStatementPrint";
 
 const SESSION_KEY = "next-master-portal-session";
 
@@ -21,6 +22,28 @@ function formatWeight(value: number | null | undefined) {
 
 function formatDate(value?: string) {
   return value || "-";
+}
+
+function isWithinDateRange(value: string | undefined, dateFrom: string, dateTo: string) {
+  if (!value) return false;
+  const target = new Date(value);
+  if (Number.isNaN(target.getTime())) return false;
+  if (dateFrom) {
+    const from = new Date(`${dateFrom}T00:00:00`);
+    if (!Number.isNaN(from.getTime()) && target < from) return false;
+  }
+  if (dateTo) {
+    const to = new Date(`${dateTo}T23:59:59`);
+    if (!Number.isNaN(to.getTime()) && target > to) return false;
+  }
+  return true;
+}
+
+function buildDateRangeLabel(dateFrom: string, dateTo: string) {
+  if (dateFrom && dateTo) return `${dateFrom} - ${dateTo}`;
+  if (dateFrom) return `From ${dateFrom}`;
+  if (dateTo) return `Until ${dateTo}`;
+  return "All Dates";
 }
 
 type PortalSelection =
@@ -84,6 +107,8 @@ export function PortalPage() {
   const [selection, setSelection] = useState<PortalSelection | null>(null);
   const [documentSearch, setDocumentSearch] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
+  const [statementDateFrom, setStatementDateFrom] = useState("");
+  const [statementDateTo, setStatementDateTo] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -179,6 +204,28 @@ export function PortalPage() {
     [],
   );
 
+  const creditColumns = useMemo(
+    () => [
+      { key: "no", header: "Credit Note", render: (row: PortalSnapshot["creditNotes"][number]) => row.credit_note_no || row.id },
+      { key: "date", header: "Date", render: (row: PortalSnapshot["creditNotes"][number]) => row.credit_date || "-" },
+      { key: "due", header: "Due Date", render: (row: PortalSnapshot["creditNotes"][number]) => row.due_date || "-" },
+      { key: "status", header: "Status", render: (row: PortalSnapshot["creditNotes"][number]) => row.status || "-" },
+      { key: "amount", header: "Amount", render: (row: PortalSnapshot["creditNotes"][number]) => formatMoney(row.total_amount, row.currency) },
+    ],
+    [],
+  );
+
+  const vendorCreditColumns = useMemo(
+    () => [
+      { key: "no", header: "Vendor Credit", render: (row: PortalSnapshot["vendorCredits"][number]) => row.vendor_credit_no || row.id },
+      { key: "date", header: "Date", render: (row: PortalSnapshot["vendorCredits"][number]) => row.credit_date || "-" },
+      { key: "due", header: "Due Date", render: (row: PortalSnapshot["vendorCredits"][number]) => row.due_date || "-" },
+      { key: "status", header: "Status", render: (row: PortalSnapshot["vendorCredits"][number]) => row.status || "-" },
+      { key: "amount", header: "Amount", render: (row: PortalSnapshot["vendorCredits"][number]) => formatMoney(row.total_amount, row.currency) },
+    ],
+    [],
+  );
+
   async function handleLogin() {
     try {
       setLoading(true);
@@ -264,6 +311,25 @@ export function PortalPage() {
   const filteredInvoices = activeSnapshot.invoices.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
   const filteredPurchaseOrders = activeSnapshot.purchaseOrders.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
   const filteredBills = activeSnapshot.bills.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
+  const filteredAccountRows = activeSnapshot.accountRows.filter((row) => {
+    if (!statementDateFrom && !statementDateTo) return true;
+    return isWithinDateRange(row.document_date, statementDateFrom, statementDateTo);
+  });
+  const filteredCreditNotes = activeSnapshot.creditNotes.filter((row) => {
+    if (!statementDateFrom && !statementDateTo) return true;
+    return isWithinDateRange(row.credit_date, statementDateFrom, statementDateTo);
+  });
+  const filteredVendorCredits = activeSnapshot.vendorCredits.filter((row) => {
+    if (!statementDateFrom && !statementDateTo) return true;
+    return isWithinDateRange(row.credit_date, statementDateFrom, statementDateTo);
+  });
+  const visiblePayments =
+    activeSnapshot.invite.party_type === "customer"
+      ? activeSnapshot.paymentsReceived.filter((row) => (!statementDateFrom && !statementDateTo ? true : isWithinDateRange(row.received_date, statementDateFrom, statementDateTo)))
+      : activeSnapshot.paymentsMade.filter((row) => (!statementDateFrom && !statementDateTo ? true : isWithinDateRange(row.payment_date, statementDateFrom, statementDateTo)));
+  const statementCurrency = activeSnapshot.accountSummary.currency || "EUR";
+  const statementPeriodLabel = buildDateRangeLabel(statementDateFrom, statementDateTo);
+  const filteredStatementTotal = filteredAccountRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
 
   const selectedDocument = (() => {
     if (!selection) return null;
@@ -319,6 +385,44 @@ export function PortalPage() {
           ? `Purchase Order Detail · ${selectedDocument.row.id}`
           : `Bill Detail · ${selectedDocument.row.id}`
     : "";
+
+  function handleStatementPrint() {
+    const company = activeSnapshot.companyProfile
+      ? {
+          id: activeSnapshot.companyProfile.id || "portal-company",
+          companyName: activeSnapshot.companyProfile.company_name || "Next Master",
+          email: activeSnapshot.companyProfile.email || "",
+          phone: activeSnapshot.companyProfile.phone || "",
+          website: activeSnapshot.companyProfile.website || "",
+          address: activeSnapshot.companyProfile.address || "",
+          bankDetails: activeSnapshot.companyProfile.bank_details || "",
+          taxOffice: activeSnapshot.companyProfile.tax_office || "",
+          taxNumber: activeSnapshot.companyProfile.tax_number || "",
+          footerNote: activeSnapshot.companyProfile.footer_note || "",
+          logoDataUrl: activeSnapshot.companyProfile.logo_data_url || "",
+        }
+      : null;
+    openAccountStatementPrintWindow({
+      title: activeSnapshot.invite.party_type === "customer" ? "Customer Account Statement" : "Vendor Account Statement",
+      company,
+      partyName: activeSnapshot.invite.party_name,
+      billingAddress: partyProfile?.billing_address || activeSnapshot.invite.party_name,
+      shippingAddress: activeSnapshot.invite.party_type === "customer" ? partyProfile?.shipping_address || "" : "",
+      periodLabel: statementPeriodLabel,
+      rows: filteredAccountRows.map((row) => ({
+        document_type: row.document_type,
+        date: row.document_date,
+        document_no: row.document_no,
+        due_date: row.due_date,
+        status: row.status,
+        currency: row.currency,
+        subtotal: Number(row.subtotal ?? row.amount ?? 0),
+        discount: Number(row.discount ?? 0),
+        shipping: Number(row.shipping ?? 0),
+        total: Number(row.total ?? row.amount ?? 0),
+      })),
+    });
+  }
 
   function handlePortalPrint() {
     if (!selectedDocument) return;
@@ -468,12 +572,24 @@ export function PortalPage() {
               <strong>{activeSnapshot.accountSummary.totalDocuments}</strong>
             </div>
             <div className="dashboard-stat">
-              <span>Total Amount</span>
-              <strong>{formatMoney(activeSnapshot.accountSummary.totalAmount, activeSnapshot.accountSummary.currency)}</strong>
+              <span>{activeSnapshot.invite.party_type === "customer" ? "Invoice Amount" : "Bill Amount"}</span>
+              <strong>{formatMoney(activeSnapshot.accountSummary.documentAmount, activeSnapshot.accountSummary.currency)}</strong>
             </div>
             <div className="dashboard-stat">
-              <span>Open Balance</span>
+              <span>{activeSnapshot.invite.party_type === "customer" ? "Credit Notes" : "Vendor Credits"}</span>
+              <strong>{formatMoney(activeSnapshot.accountSummary.creditAmount, activeSnapshot.accountSummary.currency)}</strong>
+            </div>
+            <div className="dashboard-stat">
+              <span>Payment Amount</span>
+              <strong>{formatMoney(activeSnapshot.accountSummary.paymentAmount, activeSnapshot.accountSummary.currency)}</strong>
+            </div>
+            <div className="dashboard-stat">
+              <span>Balance</span>
               <strong>{formatMoney(activeSnapshot.accountSummary.openAmount, activeSnapshot.accountSummary.currency)}</strong>
+            </div>
+            <div className="dashboard-stat">
+              <span>Statement Total</span>
+              <strong>{formatMoney(filteredStatementTotal, statementCurrency)}</strong>
             </div>
             <div className="dashboard-stat">
               <span>Payments</span>
@@ -491,8 +607,37 @@ export function PortalPage() {
       </SectionCard>
 
       {activeSnapshot.invite.access.can_view_account ? (
-        <SectionCard title="Account Statement">
-          <DataTable rows={activeSnapshot.accountRows} columns={accountColumns} emptyText="No statement rows available." />
+        <SectionCard
+          title="Account Statement"
+          actions={
+            <div className="portal-statement-actions">
+              <Input label="Date From" type="date" value={statementDateFrom} onChange={setStatementDateFrom} />
+              <Input label="Date To" type="date" value={statementDateTo} onChange={setStatementDateTo} />
+              <Button variant="secondary" onClick={handleStatementPrint}>
+                PDF / Print
+              </Button>
+            </div>
+          }
+        >
+          <DataTable rows={filteredAccountRows} columns={accountColumns} emptyText="No statement rows available." />
+        </SectionCard>
+      ) : null}
+
+      {activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_invoices ? (
+        <SectionCard title="Credit Notes">
+          <DataTable rows={filteredCreditNotes} columns={creditColumns} emptyText="No credit notes available." />
+        </SectionCard>
+      ) : null}
+
+      {activeSnapshot.invite.party_type === "vendor" && activeSnapshot.invite.access.can_view_invoices ? (
+        <SectionCard title="Vendor Credits">
+          <DataTable rows={filteredVendorCredits} columns={vendorCreditColumns} emptyText="No vendor credits available." />
+        </SectionCard>
+      ) : null}
+
+      {activeSnapshot.invite.access.can_view_payments ? (
+        <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Payments Received" : "Payments Made"}>
+          <DataTable rows={visiblePayments} columns={paymentColumns} emptyText="No payments available." />
         </SectionCard>
       ) : null}
 

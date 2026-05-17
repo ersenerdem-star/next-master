@@ -53,6 +53,10 @@ type PortalAccountRow = {
   status: string;
   amount: number;
   currency: string;
+  subtotal?: number;
+  discount?: number;
+  shipping?: number;
+  total?: number;
 };
 
 type PortalOrderRow = {
@@ -106,6 +110,20 @@ type PortalInvoiceRow = {
   lines?: PortalDocumentLine[];
 };
 
+type PortalCreditRow = {
+  id: string;
+  credit_note_no?: string;
+  vendor_credit_no?: string;
+  customer_name?: string;
+  supplier_name?: string;
+  status: string;
+  credit_date?: string;
+  due_date?: string;
+  notes?: string;
+  total_amount: number;
+  currency: string;
+};
+
 type PortalDocumentLine = {
   code?: string;
   requested_code?: string;
@@ -151,12 +169,17 @@ export type PortalSnapshot = {
   purchaseOrders: PortalOrderRow[];
   invoices: PortalInvoiceRow[];
   bills: PortalInvoiceRow[];
+  creditNotes: PortalCreditRow[];
+  vendorCredits: PortalCreditRow[];
   paymentsReceived: PortalPaymentRow[];
   paymentsMade: PortalPaymentRow[];
   accountSummary: {
     currency: string;
     totalDocuments: number;
     totalAmount: number;
+    documentAmount: number;
+    creditAmount: number;
+    paymentAmount: number;
     openAmount: number;
     paymentCount: number;
   };
