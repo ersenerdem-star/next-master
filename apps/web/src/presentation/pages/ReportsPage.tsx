@@ -6,9 +6,10 @@ import { MasterPage } from "./MasterPage";
 type ReportsPageProps = {
   onOpenSalesOrder?: (salesOrderId: string) => void;
   onOpenInventoryWarehouse?: (warehouseId: string) => void;
+  onOpenInventoryItem?: (codeSearch: string, warehouseId?: string) => void;
 };
 
-export function ReportsPage({ onOpenSalesOrder, onOpenInventoryWarehouse }: ReportsPageProps) {
+export function ReportsPage({ onOpenSalesOrder, onOpenInventoryWarehouse, onOpenInventoryItem }: ReportsPageProps) {
   const [activeTab, setActiveTab] = useState("Master");
 
   return (
@@ -27,7 +28,7 @@ export function ReportsPage({ onOpenSalesOrder, onOpenInventoryWarehouse }: Repo
       {activeTab === "Master" ? <MasterPage /> : null}
       {activeTab === "Item Transactions" ? <ItemTransactionsPage /> : null}
       {activeTab === "Inventory Analytics" ? (
-        <InventoryAnalyticsPage onOpenSalesOrder={onOpenSalesOrder} onOpenInventoryWarehouse={onOpenInventoryWarehouse} />
+        <InventoryAnalyticsPage onOpenSalesOrder={onOpenSalesOrder} onOpenInventoryWarehouse={onOpenInventoryWarehouse} onOpenInventoryItem={onOpenInventoryItem} />
       ) : null}
     </div>
   );

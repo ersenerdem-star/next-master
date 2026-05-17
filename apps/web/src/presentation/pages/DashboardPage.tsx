@@ -15,6 +15,8 @@ import { StatCard } from "../components/common/StatCard";
 import { deleteSupplierBrandSummaryRow, fetchCloudSupplierBrandSummary, fetchCloudSupplierBrandSummaryAll, fetchCloudSuppliers } from "../../infrastructure/api/suppliersApi";
 import type { SupplierBrandSummaryRow, SupplierSummary } from "../../types/suppliers";
 import { downloadCsv, toCsv } from "../../shared/csv";
+import { fetchWarehouseStockItems } from "../../infrastructure/api/inventoryApi";
+import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
 
 type DashboardPageProps = {
   onOpenSalesOrder?: (salesOrderId: string) => void;
@@ -32,6 +34,13 @@ export function DashboardPage({ onOpenSalesOrder }: DashboardPageProps) {
   const [snapshotError, setSnapshotError] = useState("");
   const [latestQuotesError, setLatestQuotesError] = useState("");
   const [brandSummaryError, setBrandSummaryError] = useState("");
+  const [inventoryPulse, setInventoryPulse] = useState({
+    warehouses: 0,
+    stockedItems: 0,
+    onHandQty: 0,
+    stockValue: 0,
+  });
+  const [inventoryPulseError, setInventoryPulseError] = useState("");
   const [revenueSource, setRevenueSource] = useState<RevenueSource>("quotes");
   const [brandSummarySearch, setBrandSummarySearch] = useState("");
   const [brandSummarySupplier, setBrandSummarySupplier] = useState("");
@@ -52,6 +61,33 @@ export function DashboardPage({ onOpenSalesOrder }: DashboardPageProps) {
     }
 
     run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      setInventoryPulseError("");
+      try {
+        const [warehouseRows, stockRows] = await Promise.all([fetchWarehouses(), fetchWarehouseStockItems()]);
+        if (cancelled) return;
+        setInventoryPulse({
+          warehouses: warehouseRows.filter((row) => row.is_active).length,
+          stockedItems: stockRows.length,
+          onHandQty: Math.round(stockRows.reduce((sum, row) => sum + Number(row.on_hand_qty || 0), 0) * 100) / 100,
+          stockValue: Math.round(stockRows.reduce((sum, row) => sum + Number(row.stock_value || 0), 0) * 100) / 100,
+        });
+      } catch (caught) {
+        if (!cancelled) {
+          setInventoryPulseError(caught instanceof Error ? caught.message : "Inventory pulse load failed");
+        }
+      }
+    }
+
+    void run();
     return () => {
       cancelled = true;
     };
@@ -230,6 +266,16 @@ export function DashboardPage({ onOpenSalesOrder }: DashboardPageProps) {
         <StatCard label="Suppliers" value={supplierCount.toLocaleString("en-US")} subtext="Live supplier accounts" tone="success" />
         <StatCard label="Quotes" value={quoteCount.toLocaleString("en-US")} subtext="Recent cloud sales orders" tone="neutral" />
       </div>
+
+      <SectionCard title="Inventory Pulse">
+        {inventoryPulseError ? <div className="error-text">{inventoryPulseError}</div> : null}
+        <div className="stats-grid stats-grid--compact">
+          <StatCard label="Active Warehouses" value={inventoryPulse.warehouses.toLocaleString("en-US")} subtext="Warehouses currently open" tone="success" />
+          <StatCard label="Stocked Items" value={inventoryPulse.stockedItems.toLocaleString("en-US")} subtext="SKU rows with live stock" tone="neutral" />
+          <StatCard label="On Hand Qty" value={inventoryPulse.onHandQty.toLocaleString("en-US")} subtext="Current quantity across warehouses" tone="success" />
+          <StatCard label="Stock Value" value={formatMoney(inventoryPulse.stockValue)} subtext="Approximate warehouse inventory value" tone="warning" />
+        </div>
+      </SectionCard>
 
       {newPortalOrders > 0 ? (
         <SectionCard title="New Order Came">

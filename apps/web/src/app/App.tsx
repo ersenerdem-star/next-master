@@ -26,6 +26,7 @@ export function App() {
   const [selectedBillId, setSelectedBillId] = useState("");
   const [inventoryInitialTab, setInventoryInitialTab] = useState<"Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers">("Warehouses");
   const [inventorySelectedWarehouseId, setInventorySelectedWarehouseId] = useState("");
+  const [inventoryStockSearch, setInventoryStockSearch] = useState("");
   const [settingsTab, setSettingsTab] = useState<"session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics">("session");
 
   useEffect(() => {
@@ -80,6 +81,14 @@ export function App() {
   function openInventoryWarehouse(warehouseId: string) {
     setInventoryInitialTab("On Hand");
     setInventorySelectedWarehouseId(warehouseId);
+    setInventoryStockSearch("");
+    setActivePage("Inventory");
+  }
+
+  function openInventoryItem(codeSearch: string, warehouseId?: string) {
+    setInventoryInitialTab("On Hand");
+    setInventorySelectedWarehouseId(warehouseId || "");
+    setInventoryStockSearch(codeSearch);
     setActivePage("Inventory");
   }
 
@@ -149,7 +158,7 @@ export function App() {
     activePage === "Items" ? (
       <ItemsPage />
     ) : activePage === "Inventory" ? (
-      <InventoryPage initialTab={inventoryInitialTab} selectedWarehouseId={inventorySelectedWarehouseId} />
+      <InventoryPage initialTab={inventoryInitialTab} selectedWarehouseId={inventorySelectedWarehouseId} stockSearch={inventoryStockSearch} />
     ) : activePage === "Sales" ? (
       <SalesPage
         selectedSalesOrderId={selectedSalesOrderId}
@@ -161,7 +170,7 @@ export function App() {
     ) : activePage === "Purchases" ? (
       <PurchasesPage selectedPurchaseOrderId={selectedPurchaseOrderId} selectedBillId={selectedBillId} />
     ) : activePage === "Reports" ? (
-      <ReportsPage onOpenSalesOrder={openSalesOrder} onOpenInventoryWarehouse={openInventoryWarehouse} />
+      <ReportsPage onOpenSalesOrder={openSalesOrder} onOpenInventoryWarehouse={openInventoryWarehouse} onOpenInventoryItem={openInventoryItem} />
     ) : activePage === "Settings" ? (
       <SettingsPage initialTab={settingsTab} onLogout={handleLogout} onOpenRelatedRecord={openRelatedRecord} />
     ) : (

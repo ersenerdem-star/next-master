@@ -30,6 +30,7 @@ type InventoryTab = "Warehouses" | "Purchase Receives" | "Stock Movements" | "On
 type InventoryPageProps = {
   initialTab?: InventoryTab;
   selectedWarehouseId?: string;
+  stockSearch?: string;
 };
 
 function formatMoney(value: number) {
@@ -73,7 +74,7 @@ function transferLineKey(line: {
   return `${String(line.brand || "").trim().toLowerCase()}::${String(line.product_code || "").trim().toLowerCase()}::${String(line.old_code || "").trim().toLowerCase()}`;
 }
 
-export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: selectedWarehouseIdProp = "" }: InventoryPageProps) {
+export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: selectedWarehouseIdProp = "", stockSearch: stockSearchProp = "" }: InventoryPageProps) {
   const actionFeedback = useActionFeedback();
   const [activeTab, setActiveTab] = useState<InventoryTab>(initialTab);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -82,6 +83,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
   const [movementRows, setMovementRows] = useState<InventoryMovement[]>([]);
   const [onHandRows, setOnHandRows] = useState<WarehouseOnHandRow[]>([]);
   const [onHandStockRows, setOnHandStockRows] = useState<WarehouseStockItem[]>([]);
+  const [onHandStockSearch, setOnHandStockSearch] = useState("");
   const [sourceStockRows, setSourceStockRows] = useState<WarehouseStockItem[]>([]);
   const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("");
@@ -239,6 +241,11 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     setMovementWarehouseId(selectedWarehouseIdProp);
     setActiveTab("On Hand");
   }, [selectedWarehouseIdProp]);
+
+  useEffect(() => {
+    setOnHandStockSearch(stockSearchProp);
+    if (stockSearchProp) setActiveTab("On Hand");
+  }, [stockSearchProp]);
 
   useEffect(() => {
     let cancelled = false;
@@ -496,8 +503,15 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
   );
 
   const visibleOnHandStockRows = useMemo(
-    () => (onHandWarehouseId ? onHandStockRows.filter((row) => row.warehouse_id === onHandWarehouseId) : onHandStockRows),
-    [onHandStockRows, onHandWarehouseId],
+    () => {
+      const scopedRows = onHandWarehouseId ? onHandStockRows.filter((row) => row.warehouse_id === onHandWarehouseId) : onHandStockRows;
+      const needle = onHandStockSearch.trim().toLowerCase();
+      if (!needle) return scopedRows;
+      return scopedRows.filter((row) =>
+        `${row.brand} ${row.product_code} ${row.old_code} ${row.description} ${row.origin}`.toLowerCase().includes(needle),
+      );
+    },
+    [onHandStockRows, onHandWarehouseId, onHandStockSearch],
   );
 
   const filteredTransferStockRows = useMemo(() => {
@@ -1023,6 +1037,9 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
             <DataTable rows={visibleOnHandRows} columns={onHandColumns} emptyText="No warehouse inventory snapshot yet." />
           </SectionCard>
           <SectionCard title="Warehouse Stock Detail">
+            <div className="toolbar toolbar--wrap">
+              <Input value={onHandStockSearch} onChange={setOnHandStockSearch} placeholder="Search code, description, brand" />
+            </div>
             <div className="meta-row">
               <span>{visibleOnHandStockRows.length.toLocaleString("en-US")} stock rows</span>
               <span>

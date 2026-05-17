@@ -80,6 +80,7 @@ type AnalyticsFilters = {
 type InventoryAnalyticsPageProps = {
   onOpenSalesOrder?: (salesOrderId: string) => void;
   onOpenInventoryWarehouse?: (warehouseId: string) => void;
+  onOpenInventoryItem?: (codeSearch: string, warehouseId?: string) => void;
 };
 
 function toNumber(value: unknown) {
@@ -145,7 +146,7 @@ function buildPurchaseCoverageMap(purchaseOrders: LocalPurchaseOrder[]) {
   return coverage;
 }
 
-export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWarehouse }: InventoryAnalyticsPageProps) {
+export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWarehouse, onOpenInventoryItem }: InventoryAnalyticsPageProps) {
   const actionFeedback = useActionFeedback();
   const [activeTab, setActiveTab] = useState<AnalyticsTab>("Turnover");
   const [loading, setLoading] = useState(false);
@@ -442,8 +443,17 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
       { key: "soldamount", header: "Sold Amount", render: (row: TurnoverRow) => formatMoney(row.sold_amount) },
       { key: "turnover", header: "Turnover x", render: (row: TurnoverRow) => row.turnover_ratio.toFixed(2) },
       { key: "cover", header: "Days Cover", render: (row: TurnoverRow) => (row.days_cover === null ? "-" : row.days_cover.toFixed(1)) },
+      {
+        key: "action",
+        header: "Action",
+        render: (row: TurnoverRow) => (
+          <Button className="button--compact" variant="secondary" onClick={() => onOpenInventoryItem?.(row.product_code, filters.warehouseId || undefined)}>
+            Open Stock
+          </Button>
+        ),
+      },
     ],
-    [],
+    [filters.warehouseId, onOpenInventoryItem],
   );
 
   const agingColumns = useMemo(
@@ -499,8 +509,17 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
           </span>
         ),
       },
+      {
+        key: "action",
+        header: "Action",
+        render: (row: ForecastRow) => (
+          <Button className="button--compact" variant="secondary" onClick={() => onOpenInventoryItem?.(row.product_code, filters.warehouseId || undefined)}>
+            Open Stock
+          </Button>
+        ),
+      },
     ],
-    [],
+    [filters.warehouseId, onOpenInventoryItem],
   );
 
   const pendingColumns = useMemo(
