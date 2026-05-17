@@ -746,6 +746,10 @@ select {
   padding: 22px;
 }
 
+.modal-card--compact {
+  width: min(520px, 100%);
+}
+
 .modal-card__header h3 {
   margin: 0 0 8px;
   font-size: 24px;

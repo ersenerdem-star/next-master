@@ -58,7 +58,12 @@ async function postPortalOrderJson(path: string, payload: Record<string, unknown
   });
   const data = (await response.json().catch(() => ({}))) as PortalOrderResponse;
   if (!response.ok) {
-    throw new Error(data.error || `Portal request failed: ${response.status}`);
+    throw new Error(
+      data.error ||
+        (response.status === 502
+          ? "Portal request timed out while pricing items. Retry the action. Large imports are processed in smaller batches."
+          : `Portal request failed: ${response.status}`),
+    );
   }
   return data;
 }

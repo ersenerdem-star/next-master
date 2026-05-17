@@ -10,6 +10,7 @@ import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 import { openAccountStatementPrintWindow } from "../../shared/accountStatementPrint";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { normalizePartCode } from "../../domain/shared/normalize";
+import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import {
   preparePortalOrderLines as preparePortalOrderLinesApi,
   searchPortalCatalogItems,
@@ -58,6 +59,14 @@ function buildDateRangeLabel(dateFrom: string, dateTo: string) {
 
 function sanitizeFileName(value: string) {
   return value.replace(/[^a-z0-9_-]+/gi, "-").replace(/-+/g, "-");
+}
+
+function chunkRows<T>(rows: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < rows.length; index += size) {
+    chunks.push(rows.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function mergePortalPreparedLines(current: PortalPreparedLine[], next: PortalPreparedLine[]) {
@@ -236,6 +245,7 @@ export function PortalPage() {
   const [preparingPortalOrder, setPreparingPortalOrder] = useState(false);
   const [savingPortalOrder, setSavingPortalOrder] = useState(false);
   const [confirmingPortalOrder, setConfirmingPortalOrder] = useState(false);
+  const [portalOverlay, setPortalOverlay] = useState<{ title: string; message: string } | null>(null);
   const portalPricingCurrency = snapshot?.pricingProfile?.currency || snapshot?.accountSummary.currency || "EUR";
 
   useEffect(() => {
@@ -653,16 +663,39 @@ export function PortalPage() {
     try {
       setPreparingPortalOrder(true);
       setError("");
-      const prepared = await preparePortalOrderLinesApi(credentials, rows);
-      setPortalDraftLines((current) => mergePortalPreparedLines(current, prepared.lines));
-      if (!portalPaymentTerms && prepared.pricingProfile?.payment_terms) {
-        setPortalPaymentTerms(prepared.pricingProfile.payment_terms);
+      const chunks = chunkRows(rows, 40);
+      let preparedLines: PortalPreparedLine[] = [];
+      let latestPricingProfile: PortalSnapshot["pricingProfile"] | null = null;
+      let processed = 0;
+
+      for (const chunk of chunks) {
+        setPortalOverlay({
+          title: rows.length > 1 ? "Importing Sales Order Lines" : "Preparing Item Price",
+          message:
+            rows.length > 1
+              ? `Uploading and pricing lines ${processed + 1}-${processed + chunk.length} of ${rows.length}.`
+              : "Fetching live price and item details.",
+        });
+        const prepared = await preparePortalOrderLinesApi(credentials, chunk);
+        preparedLines = mergePortalPreparedLines(preparedLines, prepared.lines);
+        latestPricingProfile = prepared.pricingProfile || latestPricingProfile;
+        processed += chunk.length;
       }
-      setPortalOrderStatus(statusText.replace("{count}", prepared.lines.length.toLocaleString("en-US")));
+
+      setPortalDraftLines((current) => mergePortalPreparedLines(current, preparedLines));
+      if (!portalPaymentTerms && latestPricingProfile?.payment_terms) {
+        setPortalPaymentTerms(latestPricingProfile.payment_terms);
+      }
+      const missingPriceCount = preparedLines.filter((line) => line.sell_price == null).length;
+      const pricedCount = preparedLines.length - missingPriceCount;
+      setPortalOrderStatus(
+        `${statusText.replace("{count}", preparedLines.length.toLocaleString("en-US"))} ${pricedCount > 0 ? `${pricedCount.toLocaleString("en-US")} priced.` : ""}${missingPriceCount > 0 ? ` ${missingPriceCount.toLocaleString("en-US")} need live pricing.` : ""}`.trim(),
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal order pricing failed");
     } finally {
       setPreparingPortalOrder(false);
+      setPortalOverlay(null);
     }
   }
 
@@ -697,6 +730,10 @@ export function PortalPage() {
       if (mode === "confirm") setConfirmingPortalOrder(true);
       else setSavingPortalOrder(true);
       setError("");
+      setPortalOverlay({
+        title: mode === "confirm" ? "Submitting Sales Order" : "Saving Sales Order Draft",
+        message: mode === "confirm" ? "Confirming the order and sending it to the internal team." : "Saving current draft lines and order details.",
+      });
       const result = await submitPortalOrder(credentials, {
         orderId: portalOrderId || undefined,
         salesOrderNo: portalSalesOrderNo || undefined,
@@ -726,6 +763,7 @@ export function PortalPage() {
     } finally {
       setSavingPortalOrder(false);
       setConfirmingPortalOrder(false);
+      setPortalOverlay(null);
     }
   }
   const selectedDocument = (() => {
@@ -1208,6 +1246,9 @@ export function PortalPage() {
                   <Button variant="secondary" onClick={() => portalImportRef.current?.click()}>
                     Import Excel
                   </Button>
+                  <Button variant="secondary" onClick={downloadQuoteTemplate}>
+                    Import Template
+                  </Button>
                   <Button variant="secondary" busy={savingPortalOrder} busyLabel="Saving..." onClick={() => void handleSubmitPortalOrder("draft")}>
                     Save Draft
                   </Button>
@@ -1382,6 +1423,17 @@ export function PortalPage() {
             </div>
           </div>
         </SectionCard>
+      ) : null}
+
+      {portalOverlay ? (
+        <div className="modal-backdrop">
+          <div className="modal-card modal-card--compact">
+            <div className="modal-card__header">
+              <h3>{portalOverlay.title}</h3>
+              <p>{portalOverlay.message}</p>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );
