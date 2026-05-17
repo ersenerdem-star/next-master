@@ -2,6 +2,27 @@
   command = "npm run build"
   publish = "apps/web/dist"
 
+[context.production]
+  command = "npm run build"
+  publish = "apps/web/dist"
+
+  [context.production.environment]
+    VITE_DEPLOY_CONTEXT = "production"
+
+[context.branch-deploy]
+  command = "npm run build"
+  publish = "apps/web/dist"
+
+  [context.branch-deploy.environment]
+    VITE_DEPLOY_CONTEXT = "branch-deploy"
+
+[context.deploy-preview]
+  command = "npm run build"
+  publish = "apps/web/dist"
+
+  [context.deploy-preview.environment]
+    VITE_DEPLOY_CONTEXT = "deploy-preview"
+
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
