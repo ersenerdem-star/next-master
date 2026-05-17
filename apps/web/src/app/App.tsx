@@ -24,6 +24,8 @@ export function App() {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState("");
   const [selectedBillId, setSelectedBillId] = useState("");
+  const [inventoryInitialTab, setInventoryInitialTab] = useState<"Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers">("Warehouses");
+  const [inventorySelectedWarehouseId, setInventorySelectedWarehouseId] = useState("");
   const [settingsTab, setSettingsTab] = useState<"session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics">("session");
 
   useEffect(() => {
@@ -73,6 +75,12 @@ export function App() {
     setSelectedPurchaseOrderId("");
     setSelectedBillId("");
     setActivePage("Sales");
+  }
+
+  function openInventoryWarehouse(warehouseId: string) {
+    setInventoryInitialTab("On Hand");
+    setInventorySelectedWarehouseId(warehouseId);
+    setActivePage("Inventory");
   }
 
   function openRelatedRecord(relatedType: string, relatedId: string) {
@@ -141,7 +149,7 @@ export function App() {
     activePage === "Items" ? (
       <ItemsPage />
     ) : activePage === "Inventory" ? (
-      <InventoryPage />
+      <InventoryPage initialTab={inventoryInitialTab} selectedWarehouseId={inventorySelectedWarehouseId} />
     ) : activePage === "Sales" ? (
       <SalesPage
         selectedSalesOrderId={selectedSalesOrderId}
@@ -153,7 +161,7 @@ export function App() {
     ) : activePage === "Purchases" ? (
       <PurchasesPage selectedPurchaseOrderId={selectedPurchaseOrderId} selectedBillId={selectedBillId} />
     ) : activePage === "Reports" ? (
-      <ReportsPage />
+      <ReportsPage onOpenSalesOrder={openSalesOrder} onOpenInventoryWarehouse={openInventoryWarehouse} />
     ) : activePage === "Settings" ? (
       <SettingsPage initialTab={settingsTab} onLogout={handleLogout} onOpenRelatedRecord={openRelatedRecord} />
     ) : (

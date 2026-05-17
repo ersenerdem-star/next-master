@@ -27,6 +27,11 @@ import { Select } from "../components/common/Select";
 
 type InventoryTab = "Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers";
 
+type InventoryPageProps = {
+  initialTab?: InventoryTab;
+  selectedWarehouseId?: string;
+};
+
 function formatMoney(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -68,14 +73,15 @@ function transferLineKey(line: {
   return `${String(line.brand || "").trim().toLowerCase()}::${String(line.product_code || "").trim().toLowerCase()}::${String(line.old_code || "").trim().toLowerCase()}`;
 }
 
-export function InventoryPage() {
+export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: selectedWarehouseIdProp = "" }: InventoryPageProps) {
   const actionFeedback = useActionFeedback();
-  const [activeTab, setActiveTab] = useState<InventoryTab>("Warehouses");
+  const [activeTab, setActiveTab] = useState<InventoryTab>(initialTab);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<LocalPurchaseOrder[]>([]);
   const [purchaseReceives, setPurchaseReceives] = useState<PurchaseReceive[]>([]);
   const [movementRows, setMovementRows] = useState<InventoryMovement[]>([]);
   const [onHandRows, setOnHandRows] = useState<WarehouseOnHandRow[]>([]);
+  const [onHandStockRows, setOnHandStockRows] = useState<WarehouseStockItem[]>([]);
   const [sourceStockRows, setSourceStockRows] = useState<WarehouseStockItem[]>([]);
   const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("");
@@ -92,6 +98,7 @@ export function InventoryPage() {
   const [loadingReceives, setLoadingReceives] = useState(false);
   const [loadingMovements, setLoadingMovements] = useState(false);
   const [loadingOnHand, setLoadingOnHand] = useState(false);
+  const [loadingOnHandStock, setLoadingOnHandStock] = useState(false);
   const [loadingTransferStock, setLoadingTransferStock] = useState(false);
   const [loadingTransfers, setLoadingTransfers] = useState(false);
   const [postingReceive, setPostingReceive] = useState(false);
@@ -114,6 +121,17 @@ export function InventoryPage() {
       return rows;
     } finally {
       setLoadingOnHand(false);
+    }
+  }
+
+  async function reloadOnHandStock(warehouseId?: string) {
+    setLoadingOnHandStock(true);
+    try {
+      const rows = await fetchWarehouseStockItems(warehouseId);
+      setOnHandStockRows(rows);
+      return rows;
+    } finally {
+      setLoadingOnHandStock(false);
     }
   }
 
@@ -211,6 +229,18 @@ export function InventoryPage() {
   }, [actionFeedback]);
 
   useEffect(() => {
+    if (initialTab) setActiveTab(initialTab);
+  }, [initialTab]);
+
+  useEffect(() => {
+    if (!selectedWarehouseIdProp) return;
+    setSelectedWarehouseId(selectedWarehouseIdProp);
+    setOnHandWarehouseId(selectedWarehouseIdProp);
+    setMovementWarehouseId(selectedWarehouseIdProp);
+    setActiveTab("On Hand");
+  }, [selectedWarehouseIdProp]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function run() {
@@ -291,6 +321,30 @@ export function InventoryPage() {
       cancelled = true;
     };
   }, [actionFeedback, activeTab, warehouses]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (activeTab !== "On Hand") return;
+      try {
+        const rows = await fetchWarehouseStockItems(onHandWarehouseId || undefined);
+        if (!cancelled) setOnHandStockRows(rows);
+      } catch (caught) {
+        if (!cancelled) {
+          actionFeedback.fail(caught instanceof Error ? caught.message : "On hand stock detail load failed");
+        }
+      } finally {
+        if (!cancelled) setLoadingOnHandStock(false);
+      }
+    }
+
+    setLoadingOnHandStock(true);
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [actionFeedback, activeTab, onHandWarehouseId]);
 
   const warehouseColumns = useMemo(
     () => [
@@ -441,6 +495,11 @@ export function InventoryPage() {
     [onHandRows, onHandWarehouseId],
   );
 
+  const visibleOnHandStockRows = useMemo(
+    () => (onHandWarehouseId ? onHandStockRows.filter((row) => row.warehouse_id === onHandWarehouseId) : onHandStockRows),
+    [onHandStockRows, onHandWarehouseId],
+  );
+
   const filteredTransferStockRows = useMemo(() => {
     const normalized = transferSearch.trim().toLowerCase();
     const rows = transferSourceId ? sourceStockRows.filter((row) => row.warehouse_id === transferSourceId) : sourceStockRows;
@@ -481,6 +540,21 @@ export function InventoryPage() {
       amount: lines.reduce((sum, line) => sum + line.line_total, 0),
     };
   }, [transferDraft]);
+
+  const onHandStockColumns = useMemo(
+    () => [
+      { key: "brand", header: "Brand", render: (row: WarehouseStockItem) => row.brand || "-" },
+      { key: "code", header: "Code", render: (row: WarehouseStockItem) => row.product_code || row.old_code || "-" },
+      { key: "description", header: "Description", render: (row: WarehouseStockItem) => row.description || "-" },
+      { key: "origin", header: "Origin", render: (row: WarehouseStockItem) => row.origin || "-" },
+      { key: "onhand", header: "On Hand", render: (row: WarehouseStockItem) => row.on_hand_qty.toLocaleString("en-US") },
+      { key: "available", header: "Available", render: (row: WarehouseStockItem) => row.available_qty.toLocaleString("en-US") },
+      { key: "avgcost", header: "Avg Cost", render: (row: WarehouseStockItem) => formatMoney(row.average_cost) },
+      { key: "value", header: "Stock Value", render: (row: WarehouseStockItem) => formatMoney(row.stock_value) },
+      { key: "last", header: "Last Move", render: (row: WarehouseStockItem) => formatDate(row.last_moved_at) },
+    ],
+    [],
+  );
 
   function selectWarehouse(row: Warehouse) {
     setSelectedWarehouseId(row.id);
@@ -561,7 +635,7 @@ export function InventoryPage() {
         reloadMovements(movementWarehouseId || undefined),
       ]);
       const warehouseRows = warehouses.length ? warehouses : await reloadWarehouses();
-      await reloadOnHand(warehouseRows);
+      await Promise.all([reloadOnHand(warehouseRows), reloadOnHandStock(onHandWarehouseId || undefined)]);
       if (!orders.some((row) => row.id === selectedReceive.id)) {
         setSelectedReceiveId(orders[0]?.id || "");
       }
@@ -643,10 +717,12 @@ export function InventoryPage() {
         reloadMovements(movementWarehouseId || undefined),
         reloadOnHand(warehouseRows),
       ]);
+      const onHandStock = await reloadOnHandStock(onHandWarehouseId || undefined);
       setSourceStockRows(stockRows);
       setStockTransfers(transferRows);
       setMovementRows(movementRows);
       setOnHandRows(onHand);
+      setOnHandStockRows(onHandStock);
       setTransferDraft(createStockTransferDraft(selectedTransferSourceWarehouse, selectedTransferTargetWarehouse));
       actionFeedback.succeed(`Stock transfer ${transferDraft.transfer_no} posted.`);
     } catch (caught) {
@@ -945,6 +1021,19 @@ export function InventoryPage() {
               <span>{loadingOnHand ? "Rebuilding on hand quantities..." : "Current on hand is computed from posted warehouse movements."}</span>
             </div>
             <DataTable rows={visibleOnHandRows} columns={onHandColumns} emptyText="No warehouse inventory snapshot yet." />
+          </SectionCard>
+          <SectionCard title="Warehouse Stock Detail">
+            <div className="meta-row">
+              <span>{visibleOnHandStockRows.length.toLocaleString("en-US")} stock rows</span>
+              <span>
+                {loadingOnHandStock
+                  ? "Refreshing item-level stock detail..."
+                  : onHandWarehouseId
+                    ? "Item-level stock detail for the selected warehouse."
+                    : "Select a warehouse above to narrow the stock detail."}
+              </span>
+            </div>
+            <DataTable rows={visibleOnHandStockRows} columns={onHandStockColumns} emptyText="No item-level stock detail for the current selection." />
           </SectionCard>
         </div>
       ) : null}

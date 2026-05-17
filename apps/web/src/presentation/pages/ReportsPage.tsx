@@ -3,7 +3,12 @@ import { InventoryAnalyticsPage } from "./InventoryAnalyticsPage";
 import { ItemTransactionsPage } from "./ItemTransactionsPage";
 import { MasterPage } from "./MasterPage";
 
-export function ReportsPage() {
+type ReportsPageProps = {
+  onOpenSalesOrder?: (salesOrderId: string) => void;
+  onOpenInventoryWarehouse?: (warehouseId: string) => void;
+};
+
+export function ReportsPage({ onOpenSalesOrder, onOpenInventoryWarehouse }: ReportsPageProps) {
   const [activeTab, setActiveTab] = useState("Master");
 
   return (
@@ -21,7 +26,9 @@ export function ReportsPage() {
       </div>
       {activeTab === "Master" ? <MasterPage /> : null}
       {activeTab === "Item Transactions" ? <ItemTransactionsPage /> : null}
-      {activeTab === "Inventory Analytics" ? <InventoryAnalyticsPage /> : null}
+      {activeTab === "Inventory Analytics" ? (
+        <InventoryAnalyticsPage onOpenSalesOrder={onOpenSalesOrder} onOpenInventoryWarehouse={onOpenInventoryWarehouse} />
+      ) : null}
     </div>
   );
 }

@@ -29,6 +29,7 @@ type TurnoverRow = {
 };
 
 type AgingRow = {
+  warehouse_id: string;
   warehouse_name: string;
   brand: string;
   product_code: string;
@@ -53,6 +54,7 @@ type ForecastRow = {
 };
 
 type PendingProcurementRow = {
+  sales_order_id: string;
   sales_order_no: string;
   customer_name: string;
   order_date: string;
@@ -73,6 +75,11 @@ type AnalyticsFilters = {
   dateFrom: string;
   dateTo: string;
   forecastMonths: string;
+};
+
+type InventoryAnalyticsPageProps = {
+  onOpenSalesOrder?: (salesOrderId: string) => void;
+  onOpenInventoryWarehouse?: (warehouseId: string) => void;
 };
 
 function toNumber(value: unknown) {
@@ -138,7 +145,7 @@ function buildPurchaseCoverageMap(purchaseOrders: LocalPurchaseOrder[]) {
   return coverage;
 }
 
-export function InventoryAnalyticsPage() {
+export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWarehouse }: InventoryAnalyticsPageProps) {
   const actionFeedback = useActionFeedback();
   const [activeTab, setActiveTab] = useState<AnalyticsTab>("Turnover");
   const [loading, setLoading] = useState(false);
@@ -308,6 +315,7 @@ export function InventoryAnalyticsPage() {
       .map((item) => {
         const daysIdle = item.last_moved_at ? dayDiff(item.last_moved_at, todayIso) : 9999;
         return {
+          warehouse_id: item.warehouse_id,
           warehouse_name: item.warehouse_name || item.warehouse_code,
           brand: item.brand,
           product_code: item.product_code || item.old_code,
@@ -394,6 +402,7 @@ export function InventoryAnalyticsPage() {
           const orderedQty = round(toNumber(line.qty));
           const pendingQty = Math.max(0, round(orderedQty - purchasedQty));
           return {
+            sales_order_id: order.id,
             sales_order_no: order.sales_order_no,
             customer_name: order.customer_name,
             order_date: order.quote_date || order.updated_at.slice(0, 10),
@@ -448,8 +457,17 @@ export function InventoryAnalyticsPage() {
       { key: "days", header: "Days Idle", render: (row: AgingRow) => row.days_idle.toLocaleString("en-US") },
       { key: "bucket", header: "Bucket", render: (row: AgingRow) => row.age_bucket },
       { key: "last", header: "Last Move", render: (row: AgingRow) => formatDate(row.last_moved_at) },
+      {
+        key: "action",
+        header: "Action",
+        render: (row: AgingRow) => (
+          <Button className="button--compact" variant="secondary" onClick={() => onOpenInventoryWarehouse?.(row.warehouse_id)}>
+            Open Warehouse
+          </Button>
+        ),
+      },
     ],
-    [],
+    [onOpenInventoryWarehouse],
   );
 
   const forecastColumns = useMemo(
@@ -497,8 +515,17 @@ export function InventoryAnalyticsPage() {
       { key: "ordered", header: "Ordered", render: (row: PendingProcurementRow) => row.qty_ordered.toLocaleString("en-US") },
       { key: "purchased", header: "Purchased", render: (row: PendingProcurementRow) => row.qty_purchased.toLocaleString("en-US") },
       { key: "pending", header: "Pending", render: (row: PendingProcurementRow) => row.qty_pending.toLocaleString("en-US") },
+      {
+        key: "action",
+        header: "Action",
+        render: (row: PendingProcurementRow) => (
+          <Button className="button--compact" variant="secondary" onClick={() => onOpenSalesOrder?.(row.sales_order_id)}>
+            Open Sales Order
+          </Button>
+        ),
+      },
     ],
-    [],
+    [onOpenSalesOrder],
   );
 
   const activeRows = useMemo(() => {
