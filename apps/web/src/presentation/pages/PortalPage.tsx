@@ -1343,12 +1343,6 @@ export function PortalPage() {
                   </div>
                 </form>
 
-                <div className="portal-filter-grid">
-                  <Input label="Delivery Term" value={portalDeliveryTerm} placeholder="EXW / FCA / DAP" onChange={setPortalDeliveryTerm} />
-                  <Input label="Payment Terms" value={portalPaymentTerms} placeholder="Cash in advance" onChange={setPortalPaymentTerms} />
-                  <Input label="Packing" value={portalPackingDetails} placeholder="Pallet / package info" onChange={setPortalPackingDetails} />
-                </div>
-
                 <Input label="Notes" value={portalOrderNotes} placeholder="Order note for internal team" onChange={setPortalOrderNotes} />
 
                 {portalOrderStatus ? <div className="success-text">{portalOrderStatus}</div> : null}
