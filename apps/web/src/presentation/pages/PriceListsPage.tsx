@@ -1,0 +1,377 @@
+import { useEffect, useState } from "react";
+import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
+import { fetchCatalogExportRows } from "../../infrastructure/api/catalogApi";
+import { fetchCPriceMapForRows, getCPriceForRow } from "../../infrastructure/api/cPriceApi";
+import { fetchPriceListSettings, importCPriceList, updateMarginPriceList } from "../../infrastructure/api/priceListsApi";
+import { fetchOldCodesByNewCodeForBrand } from "../../infrastructure/api/codeReferencesApi";
+import { parseCsv, normalizeNumber, normalizeText } from "../../shared/csv";
+import type { BrandOption } from "../../types/brand";
+import { fetchAllCloudMaster } from "../../infrastructure/api/masterApi";
+import { Button } from "../components/common/Button";
+import { useActionFeedback } from "../components/common/ActionFeedback";
+import { Input } from "../components/common/Input";
+import { SectionCard } from "../components/common/SectionCard";
+import { Select } from "../components/common/Select";
+import { downloadCPriceListTemplate } from "../../shared/importTemplates";
+import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
+
+export function PriceListsPage() {
+  const actionFeedback = useActionFeedback();
+  const [brands, setBrands] = useState<BrandOption[]>([]);
+  const [status, setStatus] = useState("");
+  const [marginA, setMarginA] = useState("10");
+  const [marginB, setMarginB] = useState("15");
+  const [showCImportDialog, setShowCImportDialog] = useState(false);
+  const [cImportBrand, setCImportBrand] = useState("");
+  const [cImportBrandName, setCImportBrandName] = useState("");
+  const [cImportMode, setCImportMode] = useState("replace");
+  const [cImportFile, setCImportFile] = useState<File | null>(null);
+  const [savingMargins, setSavingMargins] = useState(false);
+  const [importingC, setImportingC] = useState(false);
+  const [downloadBrand, setDownloadBrand] = useState("");
+  const [downloadListType, setDownloadListType] = useState<"A" | "B" | "C">("A");
+  const [downloadingPriceList, setDownloadingPriceList] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      try {
+        const [settings, brandRows] = await Promise.all([fetchPriceListSettings(), fetchCloudBrands()]);
+        if (cancelled) return;
+        const a = settings.find((item) => item.listType === "A");
+        const b = settings.find((item) => item.listType === "B");
+        setMarginA(typeof a?.marginPercent === "number" ? String(a.marginPercent) : "10");
+        setMarginB(typeof b?.marginPercent === "number" ? String(b.marginPercent) : "15");
+        setBrands(brandRows);
+      } catch (caught) {
+        if (!cancelled) {
+          setBrands([]);
+          setStatus(caught instanceof Error ? caught.message : "Price list settings load failed");
+        }
+      }
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const cBrandOptions = [
+    ...brands.map((item) => ({ value: item.name, label: item.name })),
+    { value: "__new__", label: "New brand..." },
+  ];
+
+  const cImportModeOptions = [
+    { value: "replace", label: "Replace selected brand in C list" },
+    { value: "merge", label: "Merge into selected brand in C list" },
+  ];
+  const downloadListOptions = [
+    { value: "A", label: "A Price List" },
+    { value: "B", label: "B Price List" },
+    { value: "C", label: "C Price List" },
+  ];
+
+  async function handleSaveMargins() {
+    const nextA = Number(marginA);
+    const nextB = Number(marginB);
+    if (!Number.isFinite(nextA) || !Number.isFinite(nextB)) {
+      setStatus("A and B margins must be numeric.");
+      return;
+    }
+
+    try {
+      setStatus("");
+      setSavingMargins(true);
+      actionFeedback.begin("Saving A and B margin settings...");
+      await Promise.all([updateMarginPriceList("A", nextA), updateMarginPriceList("B", nextB)]);
+      setStatus("A and B margins updated.");
+      actionFeedback.succeed("A and B margins updated.");
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Margin update failed";
+      setStatus(message);
+      actionFeedback.fail(message);
+    } finally {
+      setSavingMargins(false);
+    }
+  }
+
+  async function handleImportCPriceList() {
+    const activeBrand = cImportBrand === "__new__" ? cImportBrandName.trim() : cImportBrand;
+    if (!activeBrand || !cImportFile) {
+      setStatus("Brand and file are required for C price import.");
+      return;
+    }
+
+    try {
+      setStatus("");
+      setImportingC(true);
+      actionFeedback.begin(`Importing C price list for ${activeBrand}...`);
+      const text = await cImportFile.text();
+      const parsedRows = parseCsv(text);
+      const [header = [], ...dataRows] = parsedRows;
+      const lowerHeader = header.map((cell) => cell.trim().toLowerCase());
+      const indexOf = (aliases: string[], fallback: number) => {
+        const found = lowerHeader.findIndex((cell) => aliases.includes(cell));
+        return found >= 0 ? found : fallback;
+      };
+
+      const codeIndex = indexOf(["product_code", "product code", "part", "code"], 0);
+      const priceIndex = indexOf(
+        [
+          "c_sales_eur",
+          "c sales eur",
+          "customer c price",
+          "customer c sales",
+          "customer c",
+          "special c price",
+          "c price",
+          "c sales",
+          "sales c",
+          "price c",
+          "net price",
+          "sales eur",
+          "sales",
+          "price",
+        ],
+        1,
+      );
+
+      const rows = dataRows
+        .map((row) => ({
+          product_code: normalizeText(row[codeIndex]) || "",
+          sell_price: normalizeNumber(row[priceIndex]) ?? NaN,
+        }))
+        .filter((row) => row.product_code && Number.isFinite(row.sell_price));
+
+      await importCPriceList({
+        brandName: activeBrand,
+        mode: cImportMode as "replace" | "merge",
+        rows,
+      });
+
+      const refreshedBrands = await fetchCloudBrands();
+      setBrands(refreshedBrands);
+      const matchedBrand = refreshedBrands.find((item) => item.name.trim().toLowerCase() === activeBrand.trim().toLowerCase());
+      if (matchedBrand) {
+        setCImportBrand(matchedBrand.name);
+        setCImportBrandName(matchedBrand.name);
+      }
+      setCImportFile(null);
+      setShowCImportDialog(false);
+      setStatus(`C price list imported for ${activeBrand}.`);
+      actionFeedback.succeed(`C price list imported for ${activeBrand}.`);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "C price import failed";
+      setStatus(message);
+      actionFeedback.fail(message);
+    } finally {
+      setImportingC(false);
+    }
+  }
+
+  async function handleDownloadPriceList() {
+    if (!downloadBrand) {
+      setStatus("Select a brand before downloading a price list.");
+      return;
+    }
+
+    try {
+      setStatus("");
+      setDownloadingPriceList(true);
+      actionFeedback.begin(`Preparing ${downloadListType} price list for ${downloadBrand}...`);
+      const sheetRows: Array<Array<string | number | null>> = [["New_Code", "Old_Codes", "Brand", "Product_Name", "OEM_No", "HS_Code", "Origin", "Weight_kg", "Price_List_Type", "Sales_Price_EUR", "Notes"]];
+
+      if (downloadListType === "C") {
+        const catalogRows = await fetchCatalogExportRows({ brandName: downloadBrand });
+        const cPriceMap = await fetchCPriceMapForRows(
+          catalogRows.map((row) => ({
+            brand: row.brand,
+            product_code: row.product_code,
+          })),
+        );
+        const oldCodesByNewCode = await fetchOldCodesByNewCodeForBrand({
+          brand: downloadBrand,
+          newCodes: catalogRows.map((row) => row.product_code),
+        });
+
+        sheetRows.push(
+          ...catalogRows.map((row) => [
+            row.product_code,
+            (oldCodesByNewCode[row.product_code.replace(/[^A-Za-z0-9]/g, "").toUpperCase()] || []).join(" | "),
+            row.brand,
+            row.description || "",
+            row.oem_no || "",
+            row.hs_code || "",
+            row.origin || "",
+            row.weight_kg ?? "",
+            `${downloadListType} Price List`,
+            getCPriceForRow(cPriceMap, { brand: row.brand, product_code: row.product_code }) ?? "",
+            "",
+          ]),
+        );
+      } else {
+        const rows = await fetchAllCloudMaster({
+          search: "",
+          brand: downloadBrand,
+          scope: "catalog",
+          marginA: Number(marginA) / 100,
+          marginB: Number(marginB) / 100,
+        });
+        const oldCodesByNewCode = await fetchOldCodesByNewCodeForBrand({
+          brand: downloadBrand,
+          newCodes: rows.map((row) => row.product_code),
+        });
+        const salesSelector =
+          downloadListType === "A"
+            ? (row: (typeof rows)[number]) => row.sales_a
+            : (row: (typeof rows)[number]) => row.sales_b;
+
+        sheetRows.push(
+          ...rows.map((row) => [
+            row.product_code,
+            (oldCodesByNewCode[row.product_code.replace(/[^A-Za-z0-9]/g, "").toUpperCase()] || []).join(" | "),
+            row.brand,
+            row.description || "",
+            row.oem_no || "",
+            row.hs_code || "",
+            row.origin || "",
+            row.weight_kg ?? "",
+            `${downloadListType} Price List`,
+            salesSelector(row) ?? "",
+            row.notes || "",
+          ]),
+        );
+      }
+
+      const blob = buildXlsxBlob(`${downloadBrand} ${downloadListType}`, sheetRows, [8, 10, 13]);
+      downloadBlob(`price-list-${downloadBrand.toLowerCase().replace(/\s+/g, "-")}-${downloadListType.toLowerCase()}.xlsx`, blob);
+      setStatus(`${downloadListType} price list downloaded for ${downloadBrand}.`);
+      actionFeedback.succeed(`${downloadListType} price list downloaded for ${downloadBrand}.`);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Price list download failed";
+      setStatus(message);
+      actionFeedback.fail(message);
+    } finally {
+      setDownloadingPriceList(false);
+    }
+  }
+
+  return (
+    <SectionCard title="Price Lists">
+      <div className="settings-grid">
+        <div className="settings-item">
+          <span className="settings-label">A Margin %</span>
+          <Input value={marginA} onChange={setMarginA} />
+        </div>
+        <div className="settings-item">
+          <span className="settings-label">B Margin %</span>
+          <Input value={marginB} onChange={setMarginB} />
+        </div>
+      </div>
+      <div className="toolbar toolbar--wrap">
+        <Button onClick={() => void handleSaveMargins()} busy={savingMargins} busyLabel="Saving...">
+          Save A/B Margins
+        </Button>
+        <Button variant="secondary" onClick={() => setShowCImportDialog(true)}>
+          Upload C Price List
+        </Button>
+      </div>
+      <div className="settings-grid">
+        <div className="settings-item">
+          <span className="settings-label">Download Brand</span>
+          <Select value={downloadBrand} options={brands.map((item) => ({ value: item.name, label: item.name }))} onChange={setDownloadBrand} />
+        </div>
+        <div className="settings-item">
+          <span className="settings-label">Price List Type</span>
+          <Select value={downloadListType} options={downloadListOptions} onChange={(value) => setDownloadListType(value as "A" | "B" | "C")} />
+        </div>
+      </div>
+      <div className="toolbar toolbar--wrap">
+        <Button variant="secondary" onClick={() => void handleDownloadPriceList()} disabled={!downloadBrand} busy={downloadingPriceList} busyLabel="Preparing...">
+          Download Price List
+        </Button>
+      </div>
+      {status ? <div className={status.includes("updated") || status.includes("imported") ? "success-text" : "error-text"}>{status}</div> : null}
+
+      {showCImportDialog ? (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <div className="modal-card__header">
+              <div>
+                <h3>C Price List Import</h3>
+                <p>Manual special prices. These values override formula-based pricing for customer C.</p>
+              </div>
+            </div>
+            <div className="modal-form-grid">
+              <Select
+                label="Brand"
+                value={cImportBrand}
+                options={cBrandOptions}
+                onChange={(value) => {
+                  setCImportBrand(value);
+                  if (value !== "__new__") {
+                    setCImportBrandName(value);
+                  } else {
+                    setCImportBrandName("");
+                  }
+                }}
+              />
+              <Input
+                label="Brand Name"
+                value={cImportBrandName}
+                onChange={setCImportBrandName}
+                disabled={cImportBrand !== "__new__"}
+              />
+              <Select label="Import Mode" value={cImportMode} options={cImportModeOptions} onChange={setCImportMode} />
+              <Input label="Target" value="Customer C manual price list" onChange={() => undefined} disabled />
+              <label className="field">
+                <span className="field__label">File</span>
+                <input
+                  className="field__input"
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(event) => setCImportFile(event.target.files?.[0] ?? null)}
+                />
+              </label>
+              <Input label="Selected file" value={cImportFile?.name ?? ""} onChange={() => undefined} disabled />
+            </div>
+            <div className="modal-hint">Brand, import mode, target, and file are required. C list is fully manual and not formula-based.</div>
+            <div className="toolbar">
+              <Button
+                variant="secondary"
+                className="button--compact"
+                onClick={() => {
+                  downloadCPriceListTemplate();
+                  actionFeedback.succeed("C price list sample template downloaded.");
+                }}
+              >
+                Download Sample Template
+              </Button>
+            </div>
+            <div className="modal-actions">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowCImportDialog(false);
+                  setCImportFile(null);
+                }}
+              >
+                Cancel Import
+              </Button>
+              <Button
+                onClick={() => void handleImportCPriceList()}
+                disabled={!cImportBrand || !(cImportBrand === "__new__" ? cImportBrandName.trim() : true) || !cImportMode || !cImportFile}
+                busy={importingC}
+                busyLabel="Importing..."
+              >
+                Import
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </SectionCard>
+  );
+}

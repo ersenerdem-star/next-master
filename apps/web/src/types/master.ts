@@ -1,0 +1,21 @@
+export type MasterRow = {
+  total_count: number;
+  product_id: string | null;
+  product_code: string;
+  brand: string;
+  description: string | null;
+  oem_no: string | null;
+  hs_code: string | null;
+  origin: string | null;
+  weight_kg: number | null;
+  cheapest_supplier: string | null;
+  cheapest_price: number | null;
+  price_date: string | null;
+  sales_a: number | null;
+  sales_b: number | null;
+  sales_c?: number | null;
+  supplier_count: number | null;
+  catalog_status: string | null;
+  notes: string | null;
+  has_notes: boolean | null;
+};

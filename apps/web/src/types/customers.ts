@@ -1,0 +1,32 @@
+export type CustomerKind = "Business" | "Individual";
+export type CustomerPriceList = "" | "A" | "B" | "C" | "Other";
+
+export type LocalCustomer = {
+  id: string;
+  customer_type: CustomerKind;
+  salutation: string;
+  first_name: string;
+  last_name: string;
+  company_name: string;
+  display_name: string;
+  email: string;
+  customer_number: string;
+  work_phone: string;
+  mobile_phone: string;
+  language: string;
+  tax_rate: string;
+  company_id: string;
+  currency: string;
+  payment_terms: string;
+  contract_nr: string;
+  price_list_type: CustomerPriceList;
+  price_list_margin_percent: number | null;
+  billing_address: string;
+  shipping_address: string;
+  contact_persons: string;
+  custom_fields: string;
+  reporting_tags: string;
+  remarks: string;
+  created_at: string;
+  updated_at: string;
+};
