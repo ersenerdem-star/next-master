@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { deliverQueuedEmails, queueVendorPurchaseOrderEmail } from "../../infrastructure/api/emailTemplatesApi";
+import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, inventoryAvailabilityLookupKey, type InventoryAvailabilitySummary } from "../../infrastructure/api/inventoryApi";
 import {
   buildAndUpsertBillFromPurchaseOrder,
   fetchBills,
@@ -14,6 +15,7 @@ import { SectionCard } from "../components/common/SectionCard";
 import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastructure/api/companyProfilesApi";
 import { fetchVendors } from "../../infrastructure/api/vendorsApi";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
+import { normalizePartCode } from "../../domain/shared/normalize";
 import type { CompanyProfile } from "../../types/company";
 import type { LocalBill, LocalPaymentMade, LocalPurchaseOrder } from "../../types/orders";
 import type { LocalVendor } from "../../types/vendors";
@@ -25,6 +27,57 @@ import { useActionFeedback } from "../components/common/ActionFeedback";
 
 function formatMoney(value: number, currency = "EUR") {
   return `${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+}
+
+function formatAvailabilityQty(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+function findInventoryAvailability(
+  lookup: Map<string, InventoryAvailabilitySummary>,
+  brand: string,
+  ...codes: Array<string | null | undefined>
+) {
+  for (const code of codes) {
+    const normalized = normalizePartCode(code || "");
+    if (!normalized) continue;
+    const match = lookup.get(inventoryAvailabilityLookupKey(brand, normalized));
+    if (match) return match;
+  }
+  return null;
+}
+
+function renderInventoryAvailabilityBadge(
+  lookup: Map<string, InventoryAvailabilitySummary>,
+  input: {
+    brand: string;
+    qty: number;
+    productCode?: string | null;
+    oldCode?: string | null;
+  },
+) {
+  const availability = findInventoryAvailability(lookup, input.brand, input.productCode, input.oldCode);
+  if (!availability || availability.available_qty <= 0) {
+    return <span className="mark-badge mark-badge--danger">No Stock</span>;
+  }
+  if (availability.available_qty >= input.qty) {
+    return (
+      <span
+        className="mark-badge mark-badge--success"
+        title={`${formatAvailabilityQty(availability.available_qty)} available across ${availability.warehouse_count} warehouse(s)`}
+      >
+        Avail {formatAvailabilityQty(availability.available_qty)}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="mark-badge mark-badge--accent"
+      title={`${formatAvailabilityQty(availability.available_qty)} available across ${availability.warehouse_count} warehouse(s)`}
+    >
+      Short {formatAvailabilityQty(Math.max(0, input.qty - availability.available_qty))}
+    </span>
+  );
 }
 
 type PurchasesPageProps = {
@@ -53,6 +106,8 @@ export function PurchasesPage({
   const [vendors, setVendors] = useState<LocalVendor[]>([]);
   const [printingPurchaseOrder, setPrintingPurchaseOrder] = useState(false);
   const [printingBill, setPrintingBill] = useState(false);
+  const [inventoryAvailabilityRows, setInventoryAvailabilityRows] = useState<InventoryAvailabilitySummary[]>([]);
+  const inventoryAvailabilityLookup = useMemo(() => buildInventoryAvailabilityLookup(inventoryAvailabilityRows), [inventoryAvailabilityRows]);
 
   useEffect(() => {
     if (!externalSelectedPurchaseOrderId) return;
@@ -100,6 +155,25 @@ export function PurchasesPage({
             setBills([]);
           }
         }
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "Purchase Orders" && activeTab !== "Bills") return;
+    let cancelled = false;
+
+    async function run() {
+      try {
+        const rows = await fetchInventoryAvailabilitySummary();
+        if (!cancelled) setInventoryAvailabilityRows(rows);
+      } catch {
+        if (!cancelled) setInventoryAvailabilityRows([]);
       }
     }
 
@@ -634,6 +708,7 @@ export function PurchasesPage({
                       <th>Code</th>
                       <th>Description</th>
                       <th>Qty</th>
+                      <th>Stock</th>
                       <th>Buy Price</th>
                       <th>Line Total</th>
                       <th>Notes</th>
@@ -664,6 +739,14 @@ export function PurchasesPage({
                               )
                             }
                           />
+                        </td>
+                        <td>
+                          {renderInventoryAvailabilityBadge(inventoryAvailabilityLookup, {
+                            brand: line.brand,
+                            qty: Number(line.qty || 0) || 0,
+                            productCode: line.product_code,
+                            oldCode: line.old_code,
+                          })}
                         </td>
                         <td>
                           <input
@@ -786,6 +869,7 @@ export function PurchasesPage({
                       <th>Code</th>
                       <th>Description</th>
                       <th>Qty</th>
+                      <th>Stock</th>
                       <th>Buy Price</th>
                       <th>Line Total</th>
                       <th>Notes</th>
@@ -816,6 +900,14 @@ export function PurchasesPage({
                               )
                             }
                           />
+                        </td>
+                        <td>
+                          {renderInventoryAvailabilityBadge(inventoryAvailabilityLookup, {
+                            brand: line.brand,
+                            qty: Number(line.qty || 0) || 0,
+                            productCode: line.product_code,
+                            oldCode: line.old_code,
+                          })}
                         </td>
                         <td>
                           <input

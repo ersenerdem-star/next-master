@@ -17,6 +17,7 @@ import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
 import { resolveQuoteLine } from "../../infrastructure/api/quoteResolverApi";
 import { fetchCloudQuoteDetail, fetchCloudQuotes } from "../../infrastructure/api/quotesApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
+import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, inventoryAvailabilityLookupKey, type InventoryAvailabilitySummary } from "../../infrastructure/api/inventoryApi";
 import { normalizePartCode } from "../../domain/shared/normalize";
 import { parseCsv } from "../../shared/csv";
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
@@ -214,6 +215,57 @@ function applyCatalogMetadata(line: QuoteBuilderLine, metadataMap: Map<string, {
   };
 }
 
+function formatAvailabilityQty(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+function findInventoryAvailability(
+  lookup: Map<string, InventoryAvailabilitySummary>,
+  brand: string,
+  ...codes: Array<string | null | undefined>
+) {
+  for (const code of codes) {
+    const normalized = normalizePartCode(code || "");
+    if (!normalized) continue;
+    const match = lookup.get(inventoryAvailabilityLookupKey(brand, normalized));
+    if (match) return match;
+  }
+  return null;
+}
+
+function renderInventoryAvailabilityBadge(
+  lookup: Map<string, InventoryAvailabilitySummary>,
+  input: {
+    brand: string;
+    qty: number;
+    resolvedCode?: string | null;
+    requestedCode?: string | null;
+  },
+) {
+  const availability = findInventoryAvailability(lookup, input.brand, input.resolvedCode, input.requestedCode);
+  if (!availability || availability.available_qty <= 0) {
+    return <span className="mark-badge mark-badge--danger">No Stock</span>;
+  }
+  if (availability.available_qty >= input.qty) {
+    return (
+      <span
+        className="mark-badge mark-badge--success"
+        title={`${formatAvailabilityQty(availability.available_qty)} available across ${availability.warehouse_count} warehouse(s)`}
+      >
+        Avail {formatAvailabilityQty(availability.available_qty)}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="mark-badge mark-badge--accent"
+      title={`${formatAvailabilityQty(availability.available_qty)} available across ${availability.warehouse_count} warehouse(s)`}
+    >
+      Short {formatAvailabilityQty(Math.max(0, input.qty - availability.available_qty))}
+    </span>
+  );
+}
+
 function mapDetailLineToBuilderLine(
   line: QuoteDetail["lines"][number],
   currencyType: "A" | "B" | "C" | "Other",
@@ -399,6 +451,7 @@ export function QuotesPage({
   const [invoicePromptOpen, setInvoicePromptOpen] = useState(false);
   const [pendingConfirmedOrder, setPendingConfirmedOrder] = useState<LocalSalesOrder | null>(null);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
+  const [inventoryAvailabilityRows, setInventoryAvailabilityRows] = useState<InventoryAvailabilitySummary[]>([]);
 
   const [quoteNo, setQuoteNo] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -429,6 +482,7 @@ export function QuotesPage({
     (customerType === "A" || customerType === "Other") && customerMarginOverride != null ? customerMarginOverride : marginA;
   const effectiveMarginB = customerType === "B" && customerMarginOverride != null ? customerMarginOverride : marginB;
   const otherMarginActive = customerType === "Other" && customerMarginOverride != null;
+  const inventoryAvailabilityLookup = useMemo(() => buildInventoryAvailabilityLookup(inventoryAvailabilityRows), [inventoryAvailabilityRows]);
 
   useEffect(() => {
     let cancelled = false;
@@ -447,6 +501,24 @@ export function QuotesPage({
           setSavedPurchaseOrders([]);
           setSavedInvoices([]);
         }
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      try {
+        const rows = await fetchInventoryAvailabilitySummary();
+        if (!cancelled) setInventoryAvailabilityRows(rows);
+      } catch {
+        if (!cancelled) setInventoryAvailabilityRows([]);
       }
     }
 
@@ -1037,6 +1109,17 @@ export function QuotesPage({
 
     if (!pdfView) {
       columns.push({
+        key: "stock",
+        header: "Stock",
+        render: (row: QuoteBuilderLine) =>
+          renderInventoryAvailabilityBadge(inventoryAvailabilityLookup, {
+            brand: row.brand,
+            qty: row.qty,
+            resolvedCode: row.resolvedCode,
+            requestedCode: row.requestedCode,
+          }),
+      });
+      columns.push({
         key: "supplierOption",
         header: "Purchase Option",
         render: (row: QuoteBuilderLine) => (
@@ -1118,7 +1201,7 @@ export function QuotesPage({
     });
 
     return columns;
-  }, [currency, customerType, pdfView]);
+  }, [currency, customerType, pdfView, effectiveMarginA, effectiveMarginB, inventoryAvailabilityLookup]);
 
   const detailColumns = useMemo(() => {
     const columns = [

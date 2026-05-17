@@ -1164,6 +1164,12 @@ select {
   color: #b45309;
 }
 
+.mark-badge--danger {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 .module-tabs {
   display: flex;
   flex-wrap: wrap;

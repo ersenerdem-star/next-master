@@ -1,6 +1,7 @@
 import type { LocalPurchaseOrder } from "../../types/orders";
 import type { InventoryMovement, PurchaseReceive, PurchaseReceiveLine, StockTransfer, StockTransferLine, WarehouseOnHandRow, WarehouseStockItem } from "../../types/inventory";
 import type { Warehouse } from "../../types/warehouses";
+import { normalizePartCode } from "../../domain/shared/normalize";
 import { supabaseClient } from "./supabaseClient";
 import { getCurrentOrgId } from "./organizationApi";
 import { upsertPurchaseOrder } from "./ordersApi";
@@ -67,6 +68,28 @@ const STOCK_TRANSFER_COLUMNS = [
   "lines",
 ].join(",");
 
+const INVENTORY_AVAILABILITY_CACHE_TTL_MS = 60_000;
+
+export type InventoryAvailabilitySummary = {
+  brand: string;
+  product_code: string;
+  old_code: string;
+  description: string;
+  on_hand_qty: number;
+  available_qty: number;
+  warehouse_count: number;
+  last_moved_at: string;
+};
+
+let inventoryAvailabilityCache:
+  | {
+      organizationId: string;
+      expiresAt: number;
+      data: InventoryAvailabilitySummary[];
+      pending: Promise<InventoryAvailabilitySummary[]> | null;
+    }
+  | null = null;
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -81,6 +104,10 @@ function roundQty(value: number) {
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function clearInventoryAvailabilityCache() {
+  inventoryAvailabilityCache = null;
 }
 
 function receiveLineKey(line: {
@@ -287,6 +314,108 @@ export async function fetchWarehouseStockItems(warehouseId?: string): Promise<Wa
     });
 }
 
+export function inventoryAvailabilityLookupKey(brand: string, code: string) {
+  return `${String(brand || "").trim().toLowerCase()}::${normalizePartCode(code)}`;
+}
+
+export function buildInventoryAvailabilityLookup(rows: InventoryAvailabilitySummary[]) {
+  const map = new Map<string, InventoryAvailabilitySummary>();
+  rows.forEach((row) => {
+    [row.product_code, row.old_code].forEach((code) => {
+      const normalized = normalizePartCode(code);
+      if (!normalized) return;
+      map.set(inventoryAvailabilityLookupKey(row.brand, normalized), row);
+    });
+  });
+  return map;
+}
+
+export async function fetchInventoryAvailabilitySummary(): Promise<InventoryAvailabilitySummary[]> {
+  const organizationId = await getCurrentOrgId();
+  const now = Date.now();
+  if (
+    inventoryAvailabilityCache &&
+    inventoryAvailabilityCache.organizationId === organizationId &&
+    inventoryAvailabilityCache.expiresAt > now &&
+    inventoryAvailabilityCache.data.length
+  ) {
+    return inventoryAvailabilityCache.data;
+  }
+  if (inventoryAvailabilityCache?.organizationId === organizationId && inventoryAvailabilityCache.pending) {
+    return inventoryAvailabilityCache.pending;
+  }
+
+  const pending = (async () => {
+    const stockItems = await fetchWarehouseStockItems();
+    const bySku = new Map<
+      string,
+      {
+        row: InventoryAvailabilitySummary;
+        warehouses: Set<string>;
+      }
+    >();
+
+    stockItems.forEach((item) => {
+      const normalizedCode = normalizePartCode(item.product_code || item.old_code);
+      if (!normalizedCode) return;
+      const key = inventoryAvailabilityLookupKey(item.brand, normalizedCode);
+      const current = bySku.get(key) || {
+        row: {
+          brand: item.brand,
+          product_code: item.product_code,
+          old_code: item.old_code,
+          description: item.description,
+          on_hand_qty: 0,
+          available_qty: 0,
+          warehouse_count: 0,
+          last_moved_at: item.last_moved_at,
+        },
+        warehouses: new Set<string>(),
+      };
+      current.row.product_code = current.row.product_code || item.product_code;
+      current.row.old_code = current.row.old_code || item.old_code;
+      current.row.description = current.row.description || item.description;
+      current.row.on_hand_qty = roundQty(current.row.on_hand_qty + toNumber(item.on_hand_qty));
+      current.row.available_qty = roundQty(current.row.available_qty + toNumber(item.available_qty));
+      current.row.last_moved_at = current.row.last_moved_at > item.last_moved_at ? current.row.last_moved_at : item.last_moved_at;
+      current.warehouses.add(item.warehouse_id);
+      bySku.set(key, current);
+    });
+
+    const rows = Array.from(bySku.values())
+      .map((entry) => ({
+        ...entry.row,
+        warehouse_count: entry.warehouses.size,
+      }))
+      .sort((left, right) => {
+        if (left.brand !== right.brand) return left.brand.localeCompare(right.brand);
+        return (left.product_code || left.old_code).localeCompare(right.product_code || right.old_code);
+      });
+
+    inventoryAvailabilityCache = {
+      organizationId,
+      expiresAt: Date.now() + INVENTORY_AVAILABILITY_CACHE_TTL_MS,
+      data: rows,
+      pending: null,
+    };
+    return rows;
+  })();
+
+  inventoryAvailabilityCache = {
+    organizationId,
+    expiresAt: now + INVENTORY_AVAILABILITY_CACHE_TTL_MS,
+    data: inventoryAvailabilityCache?.organizationId === organizationId ? inventoryAvailabilityCache.data : [],
+    pending,
+  };
+
+  try {
+    return await pending;
+  } catch (error) {
+    clearInventoryAvailabilityCache();
+    throw error;
+  }
+}
+
 export async function fetchWarehouseOnHand(warehouses: Warehouse[]): Promise<WarehouseOnHandRow[]> {
   const stockItems = await fetchWarehouseStockItems();
   const byWarehouse = new Map<string, { sku: Set<string>; onHand: number }>();
@@ -429,6 +558,7 @@ export async function postPurchaseReceive(input: PurchaseReceiveDraft, order: Lo
 
   const { error: movementError } = await supabaseClient.from("inventory_movements").insert(movementPayload);
   if (movementError) throw new Error(movementError.message || "Inventory movement post failed");
+  clearInventoryAvailabilityCache();
 
   const receives = await fetchPurchaseReceives();
   const finalDraft = buildPurchaseReceiveDraft(order, { id: input.warehouse_id, warehouse_code: input.warehouse_code, warehouse_name: input.warehouse_name, region: "", address: "", is_active: true, created_at: "", updated_at: "" }, receives);
@@ -591,6 +721,7 @@ export async function postStockTransfer(input: StockTransferDraft): Promise<Stoc
 
   const { error: movementError } = await supabaseClient.from("inventory_movements").insert(movementPayload);
   if (movementError) throw new Error(movementError.message || "Stock transfer movement post failed");
+  clearInventoryAvailabilityCache();
 
   return mapStockTransferRow(postedTransferRow);
 }
