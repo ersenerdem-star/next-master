@@ -85,6 +85,13 @@ export function App() {
     setActivePage("Inventory");
   }
 
+  function openInventoryTab(tab: "Warehouses" | "On Hand") {
+    setInventoryInitialTab(tab);
+    setInventorySelectedWarehouseId("");
+    setInventoryStockSearch("");
+    setActivePage("Inventory");
+  }
+
   function openInventoryItem(codeSearch: string, warehouseId?: string) {
     setInventoryInitialTab("On Hand");
     setInventorySelectedWarehouseId(warehouseId || "");
@@ -174,7 +181,7 @@ export function App() {
     ) : activePage === "Settings" ? (
       <SettingsPage initialTab={settingsTab} onLogout={handleLogout} onOpenRelatedRecord={openRelatedRecord} />
     ) : (
-      <DashboardPage onOpenSalesOrder={openSalesOrder} />
+      <DashboardPage onOpenSalesOrder={openSalesOrder} onOpenInventoryTab={openInventoryTab} />
     );
 
   return (

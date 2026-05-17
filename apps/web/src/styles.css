@@ -505,6 +505,21 @@ select {
   min-width: 0;
 }
 
+.stat-card--clickable {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.14s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.stat-card--clickable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 22px rgba(15, 23, 42, 0.07);
+}
+
 .stat-card--success {
   border-bottom: 3px solid #22c55e;
 }

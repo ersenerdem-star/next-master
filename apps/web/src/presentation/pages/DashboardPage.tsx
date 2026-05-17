@@ -20,9 +20,10 @@ import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
 
 type DashboardPageProps = {
   onOpenSalesOrder?: (salesOrderId: string) => void;
+  onOpenInventoryTab?: (tab: "Warehouses" | "On Hand") => void;
 };
 
-export function DashboardPage({ onOpenSalesOrder }: DashboardPageProps) {
+export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: DashboardPageProps) {
   const actionFeedback = useActionFeedback();
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [latestQuotes, setLatestQuotes] = useState<DashboardSalesOrderSummary[]>([]);
@@ -270,10 +271,10 @@ export function DashboardPage({ onOpenSalesOrder }: DashboardPageProps) {
       <SectionCard title="Inventory Pulse">
         {inventoryPulseError ? <div className="error-text">{inventoryPulseError}</div> : null}
         <div className="stats-grid stats-grid--compact">
-          <StatCard label="Active Warehouses" value={inventoryPulse.warehouses.toLocaleString("en-US")} subtext="Warehouses currently open" tone="success" />
-          <StatCard label="Stocked Items" value={inventoryPulse.stockedItems.toLocaleString("en-US")} subtext="SKU rows with live stock" tone="neutral" />
-          <StatCard label="On Hand Qty" value={inventoryPulse.onHandQty.toLocaleString("en-US")} subtext="Current quantity across warehouses" tone="success" />
-          <StatCard label="Stock Value" value={formatMoney(inventoryPulse.stockValue)} subtext="Approximate warehouse inventory value" tone="warning" />
+          <StatCard label="Active Warehouses" value={inventoryPulse.warehouses.toLocaleString("en-US")} subtext="Warehouses currently open" tone="success" onClick={() => onOpenInventoryTab?.("Warehouses")} />
+          <StatCard label="Stocked Items" value={inventoryPulse.stockedItems.toLocaleString("en-US")} subtext="SKU rows with live stock" tone="neutral" onClick={() => onOpenInventoryTab?.("On Hand")} />
+          <StatCard label="On Hand Qty" value={inventoryPulse.onHandQty.toLocaleString("en-US")} subtext="Current quantity across warehouses" tone="success" onClick={() => onOpenInventoryTab?.("On Hand")} />
+          <StatCard label="Stock Value" value={formatMoney(inventoryPulse.stockValue)} subtext="Approximate warehouse inventory value" tone="warning" onClick={() => onOpenInventoryTab?.("On Hand")} />
         </div>
       </SectionCard>
 

@@ -255,6 +255,46 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
     });
   }, [invoices, filters.brand, filters.dateFrom, filters.dateTo, filters.codeSearch]);
 
+  const filteredMovementRows = useMemo(() => {
+    const needle = filters.codeSearch.trim().toLowerCase();
+    return movements.filter((row) => {
+      if (filters.brand && row.brand.trim().toLowerCase() !== filters.brand.trim().toLowerCase()) return false;
+      if (filters.warehouseId && row.warehouse_id !== filters.warehouseId) return false;
+      if (filters.dateFrom && row.moved_at && row.moved_at.slice(0, 10) < filters.dateFrom) return false;
+      if (filters.dateTo && row.moved_at && row.moved_at.slice(0, 10) > filters.dateTo) return false;
+      if (needle) {
+        const haystack = `${row.product_code} ${row.old_code} ${row.description} ${row.document_no}`.toLowerCase();
+        if (!haystack.includes(needle)) return false;
+      }
+      return true;
+    });
+  }, [movements, filters.brand, filters.warehouseId, filters.dateFrom, filters.dateTo, filters.codeSearch]);
+
+  const analyticsPulse = useMemo(() => {
+    const receiveDocumentIds = new Set<string>();
+    const transferDocumentIds = new Set<string>();
+    let receiveValue = 0;
+    let transferValue = 0;
+
+    filteredMovementRows.forEach((row) => {
+      if (row.movement_type === "purchase_receive") {
+        if (row.document_id) receiveDocumentIds.add(row.document_id);
+        receiveValue += toNumber(row.total_cost);
+      }
+      if (row.movement_type === "transfer_out") {
+        if (row.document_id) transferDocumentIds.add(row.document_id);
+        transferValue += toNumber(row.total_cost);
+      }
+    });
+
+    return {
+      receiveCount: receiveDocumentIds.size,
+      receiveValue: round(receiveValue),
+      transferCount: transferDocumentIds.size,
+      transferValue: round(transferValue),
+    };
+  }, [filteredMovementRows]);
+
   const turnoverRows = useMemo<TurnoverRow[]>(() => {
     const stockMap = new Map<string, TurnoverRow>();
     filteredStockItems.forEach((item) => {
@@ -619,6 +659,27 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
         <span>{loaded ? `${activeRows.length.toLocaleString("en-US")} rows ready` : "Select a filter and load analytics."}</span>
         <span>{loaded ? `Period basis: ${periodDays.toLocaleString("en-US")} days` : "Reports only run when you explicitly load them."}</span>
       </div>
+
+      {loaded ? (
+        <div className="settings-grid settings-stats-grid">
+          <div className="settings-item">
+            <span className="settings-label">Posted Receives</span>
+            <strong>{analyticsPulse.receiveCount.toLocaleString("en-US")}</strong>
+          </div>
+          <div className="settings-item">
+            <span className="settings-label">Receive Value</span>
+            <strong>{formatMoney(analyticsPulse.receiveValue)}</strong>
+          </div>
+          <div className="settings-item">
+            <span className="settings-label">Transfers</span>
+            <strong>{analyticsPulse.transferCount.toLocaleString("en-US")}</strong>
+          </div>
+          <div className="settings-item">
+            <span className="settings-label">Transfer Value</span>
+            <strong>{formatMoney(analyticsPulse.transferValue)}</strong>
+          </div>
+        </div>
+      ) : null}
 
       <div className="module-tabs">
         {(["Turnover", "Aging", "Forecast", "Pending Procurement"] as AnalyticsTab[]).map((tab) => (
