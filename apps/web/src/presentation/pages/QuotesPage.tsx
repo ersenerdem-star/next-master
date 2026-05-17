@@ -1777,7 +1777,16 @@ export function QuotesPage({
             ))}
           </div>
           <div className="toolbar toolbar--wrap">
-            <Input value={search} onChange={setSearch} placeholder="Search sales orders" />
+            <Input
+              value={search}
+              onChange={setSearch}
+              placeholder="Search sales orders"
+              onEnter={() => {
+                setSearchingQuotes(true);
+                actionFeedback.begin(`Searching sales orders for ${search.trim() || "all sales orders"}...`);
+                setSubmittedSearch(search);
+              }}
+            />
             <Button
               onClick={() => {
                 setSearchingQuotes(true);

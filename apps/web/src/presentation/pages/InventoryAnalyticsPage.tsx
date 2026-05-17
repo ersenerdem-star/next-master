@@ -643,7 +643,13 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
       <div className="toolbar toolbar--wrap">
         <Select label="Brand" value={filters.brand} options={brands} onChange={(value) => setFilters((current) => ({ ...current, brand: value }))} />
         <Select label="Warehouse" value={filters.warehouseId} options={warehouses} onChange={(value) => setFilters((current) => ({ ...current, warehouseId: value }))} />
-        <Input label="Code / Description" value={filters.codeSearch} onChange={(value) => setFilters((current) => ({ ...current, codeSearch: value }))} placeholder="Enter code or description" />
+        <Input
+          label="Code / Description"
+          value={filters.codeSearch}
+          onChange={(value) => setFilters((current) => ({ ...current, codeSearch: value }))}
+          placeholder="Enter code or description"
+          onEnter={() => void handleLoad()}
+        />
         <Input label="Date From" type="date" value={filters.dateFrom} onChange={(value) => setFilters((current) => ({ ...current, dateFrom: value }))} />
         <Input label="Date To" type="date" value={filters.dateTo} onChange={(value) => setFilters((current) => ({ ...current, dateTo: value }))} />
         <Input label="Forecast Months" type="number" value={filters.forecastMonths} onChange={(value) => setFilters((current) => ({ ...current, forecastMonths: value }))} />

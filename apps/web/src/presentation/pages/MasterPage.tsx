@@ -259,7 +259,17 @@ export function MasterPage() {
           </div>
           <div className="toolbar toolbar--wrap">
             <Select label="Brand" value={brand} options={brandOptions} onChange={setBrand} />
-            <Input label="Search" value={search} onChange={setSearch} placeholder="Code, OEM, name" />
+            <Input
+              label="Search"
+              value={search}
+              onChange={setSearch}
+              placeholder="Code, OEM, name"
+              onEnter={() => {
+                setSearching(true);
+                actionFeedback.begin(`Searching master for ${search.trim() || brand || "all items"}...`);
+                setSubmittedSearch(search);
+              }}
+            />
             <Select label="Scope" value={scope} options={scopeOptions} onChange={setScope} />
             <Button
               onClick={() => {

@@ -194,9 +194,9 @@ function readStoredCredentials(): PortalCredentials | null {
   const raw = window.sessionStorage.getItem(SESSION_KEY);
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as PortalCredentials;
-    if (!parsed.email || !parsed.token) return null;
-    return parsed;
+    const parsed = JSON.parse(raw) as Partial<PortalCredentials>;
+    if (!parsed.email) return null;
+    return { email: parsed.email, token: "" };
   } catch {
     return null;
   }
@@ -207,7 +207,12 @@ function writeStoredCredentials(credentials: PortalCredentials | null) {
     window.sessionStorage.removeItem(SESSION_KEY);
     return;
   }
-  window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(credentials));
+  window.sessionStorage.setItem(
+    SESSION_KEY,
+    JSON.stringify({
+      email: credentials.email,
+    }),
+  );
 }
 
 function clearPortalQueryParams() {

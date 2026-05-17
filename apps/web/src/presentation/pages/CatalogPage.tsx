@@ -669,7 +669,7 @@ export function CatalogPage() {
                 }
               }}
             />
-            <Input value={search} onChange={setSearch} placeholder="Search catalog" />
+            <Input value={search} onChange={setSearch} placeholder="Search catalog" onEnter={() => applyCatalogFilters(search, catalogBrand)} />
             <Button
               onClick={() => {
                 applyCatalogFilters(search, catalogBrand);

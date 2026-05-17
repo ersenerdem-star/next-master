@@ -410,7 +410,7 @@ export function CodeReferencesPage() {
             <p>Manage old code to new code supersessions by brand. Quotes will warn only from these approved references.</p>
           </div>
           <div className="toolbar">
-            <Input value={search} onChange={setSearch} placeholder="Search code references" />
+            <Input value={search} onChange={setSearch} placeholder="Search code references" onEnter={() => setSubmittedSearch(search)} />
             <Button onClick={() => setSubmittedSearch(search)}>Search</Button>
             <Button variant="secondary" onClick={() => setShowImportDialog(true)}>
               Import CSV

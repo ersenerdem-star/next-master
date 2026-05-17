@@ -323,7 +323,17 @@ export function SuppliersPage() {
               options={supplierOptions}
               onChange={setSelectedSupplierId}
             />
-            <Input label="Search" value={search} onChange={setSearch} placeholder="Product code, OEM, name" />
+            <Input
+              label="Search"
+              value={search}
+              onChange={setSearch}
+              placeholder="Product code, OEM, name"
+              onEnter={() => {
+                setSearchingSuppliers(true);
+                actionFeedback.begin(`Searching supplier rows for ${search.trim() || "all items"}...`);
+                setSubmittedSearch(search);
+              }}
+            />
             <Select label="Freshness" value={freshness} options={freshnessOptions} onChange={setFreshness} />
             <Button
               onClick={() => {

@@ -476,8 +476,8 @@ export function ItemTransactionsPage({
     <SectionCard title="Item Transactions">
       <div className="toolbar toolbar--wrap">
         <Select label="Brand" value={brand} options={brandOptions.length ? brandOptions : [{ value: "", label: "All Brands" }]} onChange={setBrand} />
-        <Input label="Code / Description" value={codeSearch} onChange={setCodeSearch} />
-        <Input label="Customer / Vendor" value={partySearch} onChange={setPartySearch} />
+        <Input label="Code / Description" value={codeSearch} onChange={setCodeSearch} onEnter={() => void handleLoad()} />
+        <Input label="Customer / Vendor" value={partySearch} onChange={setPartySearch} onEnter={() => void handleLoad()} />
         <Input label="Date From" type="date" value={dateFrom} onChange={setDateFrom} />
         <Input label="Date To" type="date" value={dateTo} onChange={setDateTo} />
         <Button onClick={() => void handleLoad()} busy={loading} busyLabel="Loading...">
