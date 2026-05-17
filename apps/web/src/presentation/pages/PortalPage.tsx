@@ -1300,12 +1300,6 @@ export function PortalPage() {
                       if (file) void handleImportPortalOrderFile(file);
                     }}
                   />
-                  <Button variant="secondary" onClick={() => portalImportRef.current?.click()}>
-                    Import Excel
-                  </Button>
-                  <Button variant="secondary" onClick={downloadQuoteTemplate}>
-                    Import Template
-                  </Button>
                   <Button variant="secondary" busy={savingPortalOrder} busyLabel="Saving..." onClick={() => void handleSubmitPortalOrder("draft")}>
                     Save Draft
                   </Button>
@@ -1337,6 +1331,12 @@ export function PortalPage() {
                   <Input label="Item Search" value={orderSearch} placeholder="Code, description, OEM" onChange={setOrderSearch} />
                   <Select label="Brand" value={orderSearchBrand} options={portalBrandOptions} onChange={setOrderSearchBrand} />
                   <div className="portal-builder-actions">
+                    <Button variant="secondary" onClick={() => portalImportRef.current?.click()}>
+                      Import Excel
+                    </Button>
+                    <Button variant="secondary" onClick={downloadQuoteTemplate}>
+                      Import Template
+                    </Button>
                     <Button type="submit" variant="secondary" busy={searchingCatalog} busyLabel="Searching..." onClick={() => void handlePortalCatalogSearch()}>
                       Search Items
                     </Button>
