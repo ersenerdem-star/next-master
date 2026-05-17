@@ -316,6 +316,14 @@ export function PortalPage() {
   const filteredInvoices = activeSnapshot.invoices.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
   const filteredPurchaseOrders = activeSnapshot.purchaseOrders.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
   const filteredBills = activeSnapshot.bills.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
+  const filteredUnpaidInvoices = filteredInvoices.filter((row) => {
+    const status = String(row.status || "").toLowerCase();
+    return status !== "paid" && status !== "void";
+  });
+  const filteredUnpaidBills = filteredBills.filter((row) => {
+    const status = String(row.status || "").toLowerCase();
+    return status !== "paid" && status !== "void";
+  });
   const filteredAccountRows = activeSnapshot.accountRows.filter((row) => {
     if (!statementDateFrom && !statementDateTo) return true;
     return isWithinDateRange(row.document_date, statementDateFrom, statementDateTo);
@@ -697,8 +705,32 @@ export function PortalPage() {
       ) : null}
 
       {activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_invoices ? (
+        <SectionCard title="Unpaid Invoices">
+          <DataTable
+            rows={filteredUnpaidInvoices}
+            columns={invoiceColumns}
+            emptyText="No unpaid invoices available."
+            onRowClick={(row) => setSelection({ kind: "invoice", id: row.id })}
+            rowClassName={(row) => (selection?.kind === "invoice" && selection.id === row.id ? "data-table__row--active" : "")}
+          />
+        </SectionCard>
+      ) : null}
+
+      {activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_invoices ? (
         <SectionCard title="Credit Notes">
           <DataTable rows={filteredCreditNotes} columns={creditColumns} emptyText="No credit notes available." />
+        </SectionCard>
+      ) : null}
+
+      {activeSnapshot.invite.party_type === "vendor" && activeSnapshot.invite.access.can_view_invoices ? (
+        <SectionCard title="Unpaid Bills">
+          <DataTable
+            rows={filteredUnpaidBills}
+            columns={billColumns}
+            emptyText="No unpaid bills available."
+            onRowClick={(row) => setSelection({ kind: "bill", id: row.id })}
+            rowClassName={(row) => (selection?.kind === "bill" && selection.id === row.id ? "data-table__row--active" : "")}
+          />
         </SectionCard>
       ) : null}
 
