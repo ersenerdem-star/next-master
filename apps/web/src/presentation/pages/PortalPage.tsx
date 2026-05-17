@@ -594,6 +594,9 @@ export function PortalPage() {
   ];
 
   const filteredSalesOrders = activeSnapshot.salesOrders.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
+  const portalDraftOrders = activeSnapshot.salesOrders.filter(
+    (row) => row.source_channel === "portal" && !row.portal_submitted_at && String(row.status || "").toLowerCase() === "draft",
+  );
   const filteredInvoices = activeSnapshot.invoices.filter(
     (row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row) && matchesPaymentStatusFilter(row.status, paymentStatusFilter),
   );
@@ -667,30 +670,43 @@ export function PortalPage() {
       let preparedLines: PortalPreparedLine[] = [];
       let latestPricingProfile: PortalSnapshot["pricingProfile"] | null = null;
       let processed = 0;
+      let failedChunkMessage = "";
 
       for (const chunk of chunks) {
-        setPortalOverlay({
-          title: rows.length > 1 ? "Importing Sales Order Lines" : "Preparing Item Price",
-          message:
-            rows.length > 1
-              ? `Uploading and pricing lines ${processed + 1}-${processed + chunk.length} of ${rows.length}.`
-              : "Fetching live price and item details.",
-        });
-        const prepared = await preparePortalOrderLinesApi(credentials, chunk);
-        preparedLines = mergePortalPreparedLines(preparedLines, prepared.lines);
-        latestPricingProfile = prepared.pricingProfile || latestPricingProfile;
-        processed += chunk.length;
+        try {
+          setPortalOverlay({
+            title: rows.length > 1 ? "Importing Sales Order Lines" : "Preparing Item Price",
+            message:
+              rows.length > 1
+                ? `Uploading and pricing lines ${processed + 1}-${processed + chunk.length} of ${rows.length}.`
+                : "Fetching live price and item details.",
+          });
+          const prepared = await preparePortalOrderLinesApi(credentials, chunk);
+          preparedLines = mergePortalPreparedLines(preparedLines, prepared.lines);
+          setPortalDraftLines((current) => mergePortalPreparedLines(current, prepared.lines));
+          latestPricingProfile = prepared.pricingProfile || latestPricingProfile;
+          processed += chunk.length;
+        } catch (caught) {
+          failedChunkMessage = caught instanceof Error ? caught.message : "Portal order pricing failed";
+          break;
+        }
       }
 
-      setPortalDraftLines((current) => mergePortalPreparedLines(current, preparedLines));
+      if (!preparedLines.length && failedChunkMessage) {
+        throw new Error(failedChunkMessage);
+      }
+
       if (!portalPaymentTerms && latestPricingProfile?.payment_terms) {
         setPortalPaymentTerms(latestPricingProfile.payment_terms);
       }
       const missingPriceCount = preparedLines.filter((line) => line.sell_price == null).length;
       const pricedCount = preparedLines.length - missingPriceCount;
       setPortalOrderStatus(
-        `${statusText.replace("{count}", preparedLines.length.toLocaleString("en-US"))} ${pricedCount > 0 ? `${pricedCount.toLocaleString("en-US")} priced.` : ""}${missingPriceCount > 0 ? ` ${missingPriceCount.toLocaleString("en-US")} need live pricing.` : ""}`.trim(),
+        `${statusText.replace("{count}", preparedLines.length.toLocaleString("en-US"))} ${pricedCount > 0 ? `${pricedCount.toLocaleString("en-US")} priced.` : ""}${missingPriceCount > 0 ? ` ${missingPriceCount.toLocaleString("en-US")} need live pricing.` : ""}${failedChunkMessage ? " Some lines could not be processed; save draft and continue later." : ""}`.trim(),
       );
+      if (failedChunkMessage) {
+        setError(failedChunkMessage);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal order pricing failed");
     } finally {
@@ -750,7 +766,7 @@ export function PortalPage() {
       });
       setSnapshot(result.snapshot);
       setSelection({ kind: "sales-order", id: result.orderId });
-      setActiveSection("statement");
+      setActiveSection(mode === "confirm" ? "statement" : "orders");
       setStatus(
         mode === "confirm"
           ? `Sales order ${result.orderId} submitted. Internal team can process it now.`
@@ -765,6 +781,20 @@ export function PortalPage() {
       setConfirmingPortalOrder(false);
       setPortalOverlay(null);
     }
+  }
+
+  function handleResumePortalDraft(row: PortalSalesOrderRow) {
+    setPortalOrderId(row.id || "");
+    setPortalSalesOrderNo(row.sales_order_no || "");
+    setPortalDraftLines(mapPortalSalesOrderToPreparedLines(row));
+    setPortalDeliveryTerm(row.delivery_term || "");
+    setPortalPaymentTerms(row.payment_terms || activeSnapshot.pricingProfile?.payment_terms || "");
+    setPortalPackingDetails(row.packing_details || "");
+    setPortalOrderNotes(row.notes || "");
+    setPortalOrderStatus(`Draft ${row.sales_order_no || row.id} loaded.`);
+    setCatalogResults([]);
+    setSelection({ kind: "sales-order", id: row.id });
+    setActiveSection("orders");
   }
   const selectedDocument = (() => {
     if (!selection) return null;
@@ -820,6 +850,23 @@ export function PortalPage() {
           ? `Purchase Order Detail · ${selectedDocument.row.id}`
           : `Bill Detail · ${selectedDocument.row.id}`
     : "";
+
+  function getPortalDocumentSelection(kind: PortalSelection["kind"], id: string) {
+    if (kind === "sales-order") {
+      const row = activeSnapshot.salesOrders.find((entry) => entry.id === id);
+      return row ? { kind, row } : null;
+    }
+    if (kind === "invoice") {
+      const row = activeSnapshot.invoices.find((entry) => entry.id === id);
+      return row ? { kind, row } : null;
+    }
+    if (kind === "purchase-order") {
+      const row = activeSnapshot.purchaseOrders.find((entry) => entry.id === id);
+      return row ? { kind, row } : null;
+    }
+    const row = activeSnapshot.bills.find((entry) => entry.id === id);
+    return row ? { kind, row } : null;
+  }
 
   function handleStatementPrint() {
     const company = activeSnapshot.companyProfile
@@ -883,29 +930,30 @@ export function PortalPage() {
     downloadBlob(`${sanitizeFileName(`${activeSnapshot.invite.party_name}-account-statement`)}.xlsx`, blob);
   }
 
-  function handlePortalPrint() {
-    if (!selectedDocument) return;
+  function openPortalDocumentPrint(kind?: PortalSelection["kind"], id?: string) {
+    const documentToPrint = kind && id ? getPortalDocumentSelection(kind, id) : selectedDocument;
+    if (!documentToPrint) return;
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
       setError("Popup blocked while opening PDF view.");
       return;
     }
 
-    const isCustomerDoc = selectedDocument.kind === "sales-order" || selectedDocument.kind === "invoice";
-    const currency = selectedDocument.row.currency || activeSnapshot.accountSummary.currency || "EUR";
-    const lines = (selectedDocument.row.lines || []).map((line) => ({
+    const isCustomerDoc = documentToPrint.kind === "sales-order" || documentToPrint.kind === "invoice";
+    const currency = documentToPrint.row.currency || activeSnapshot.accountSummary.currency || "EUR";
+    const lines = (documentToPrint.row.lines || []).map((line) => ({
       code: line.code || line.requested_code || line.old_code || "-",
       description: line.description || "-",
       origin: line.origin || "",
       brand: line.brand || "",
       orderNo:
-        selectedDocument.kind === "sales-order"
-          ? selectedDocument.row.sales_order_no || selectedDocument.row.id
-          : selectedDocument.kind === "invoice"
-            ? selectedDocument.row.sales_order_no || ""
-            : selectedDocument.kind === "purchase-order"
-              ? selectedDocument.row.id
-              : selectedDocument.row.purchase_order_no || selectedDocument.row.id,
+        documentToPrint.kind === "sales-order"
+          ? documentToPrint.row.sales_order_no || documentToPrint.row.id
+          : documentToPrint.kind === "invoice"
+            ? documentToPrint.row.sales_order_no || ""
+            : documentToPrint.kind === "purchase-order"
+              ? documentToPrint.row.id
+              : documentToPrint.row.purchase_order_no || documentToPrint.row.id,
       weight: line.weight_kg == null ? "" : formatWeight(line.weight_kg),
       gtip: line.hs_code || "",
       qty: Number(line.qty || 0),
@@ -915,21 +963,21 @@ export function PortalPage() {
 
     const html = buildBusinessDocumentHtml({
       docType:
-        selectedDocument.kind === "sales-order"
+        documentToPrint.kind === "sales-order"
           ? "Sales Order"
-          : selectedDocument.kind === "invoice"
+          : documentToPrint.kind === "invoice"
             ? "Invoice"
-            : selectedDocument.kind === "purchase-order"
+            : documentToPrint.kind === "purchase-order"
               ? "Purchase Order"
               : "Bill",
       docNo:
-        selectedDocument.kind === "sales-order"
-          ? selectedDocument.row.sales_order_no || selectedDocument.row.id
-          : selectedDocument.kind === "invoice"
-            ? selectedDocument.row.id
-            : selectedDocument.kind === "purchase-order"
-              ? selectedDocument.row.id
-              : selectedDocument.row.id,
+        documentToPrint.kind === "sales-order"
+          ? documentToPrint.row.sales_order_no || documentToPrint.row.id
+          : documentToPrint.kind === "invoice"
+            ? documentToPrint.row.id
+            : documentToPrint.kind === "purchase-order"
+              ? documentToPrint.row.id
+              : documentToPrint.row.id,
       company: {
         companyName: activeSnapshot.companyProfile?.company_name || "Next Master",
         address: activeSnapshot.companyProfile?.address || "",
@@ -945,32 +993,32 @@ export function PortalPage() {
       },
       meta: [
         {
-          label: selectedDocument.kind === "bill" ? "Bill Date" : selectedDocument.kind === "purchase-order" ? "PO Date" : "Date",
+          label: documentToPrint.kind === "bill" ? "Bill Date" : documentToPrint.kind === "purchase-order" ? "PO Date" : "Date",
           value:
-            selectedDocument.kind === "bill"
-              ? selectedDocument.row.bill_date || "-"
-              : "quote_date" in selectedDocument.row
-                ? selectedDocument.row.quote_date || "-"
+            documentToPrint.kind === "bill"
+              ? documentToPrint.row.bill_date || "-"
+              : "quote_date" in documentToPrint.row
+                ? documentToPrint.row.quote_date || "-"
                 : "-",
         },
-        ...(selectedDocument.row.payment_terms ? [{ label: "Terms", value: selectedDocument.row.payment_terms }] : []),
-        ...("due_date" in selectedDocument.row && selectedDocument.row.due_date ? [{ label: "Due Date", value: selectedDocument.row.due_date }] : []),
-        ...("delivery_term" in selectedDocument.row && selectedDocument.row.delivery_term ? [{ label: "Delivery Term", value: selectedDocument.row.delivery_term }] : []),
-        ...("contract_nr" in selectedDocument.row && selectedDocument.row.contract_nr ? [{ label: "Contract Nr", value: selectedDocument.row.contract_nr }] : []),
-        ...(selectedDocument.kind === "invoice" && selectedDocument.row.sales_order_no ? [{ label: "Sales Order", value: selectedDocument.row.sales_order_no }] : []),
-        ...(selectedDocument.kind === "bill" && selectedDocument.row.purchase_order_no ? [{ label: "Purchase Order", value: selectedDocument.row.purchase_order_no }] : []),
+        ...(documentToPrint.row.payment_terms ? [{ label: "Terms", value: documentToPrint.row.payment_terms }] : []),
+        ...("due_date" in documentToPrint.row && documentToPrint.row.due_date ? [{ label: "Due Date", value: documentToPrint.row.due_date }] : []),
+        ...("delivery_term" in documentToPrint.row && documentToPrint.row.delivery_term ? [{ label: "Delivery Term", value: documentToPrint.row.delivery_term }] : []),
+        ...("contract_nr" in documentToPrint.row && documentToPrint.row.contract_nr ? [{ label: "Contract Nr", value: documentToPrint.row.contract_nr }] : []),
+        ...(documentToPrint.kind === "invoice" && documentToPrint.row.sales_order_no ? [{ label: "Sales Order", value: documentToPrint.row.sales_order_no }] : []),
+        ...(documentToPrint.kind === "bill" && documentToPrint.row.purchase_order_no ? [{ label: "Purchase Order", value: documentToPrint.row.purchase_order_no }] : []),
       ],
       lines,
       totals: {
         currency,
-        subtotal: "subtotal" in selectedDocument.row ? Number(selectedDocument.row.subtotal || 0) : undefined,
-        discount: "discount_amount" in selectedDocument.row ? Number(selectedDocument.row.discount_amount || 0) : undefined,
-        shipping: "shipping_cost" in selectedDocument.row ? Number(selectedDocument.row.shipping_cost || 0) : undefined,
-        total: Number(("sales_total" in selectedDocument.row ? selectedDocument.row.sales_total : selectedDocument.row.total_amount) || 0),
+        subtotal: "subtotal" in documentToPrint.row ? Number(documentToPrint.row.subtotal || 0) : undefined,
+        discount: "discount_amount" in documentToPrint.row ? Number(documentToPrint.row.discount_amount || 0) : undefined,
+        shipping: "shipping_cost" in documentToPrint.row ? Number(documentToPrint.row.shipping_cost || 0) : undefined,
+        total: Number(("sales_total" in documentToPrint.row ? documentToPrint.row.sales_total : documentToPrint.row.total_amount) || 0),
       },
-      notes: selectedDocument.row.notes || "",
+      notes: documentToPrint.row.notes || "",
       totalQty: lines.reduce((sum, line) => sum + Number(line.qty || 0), 0),
-      totalWeight: (selectedDocument.row.lines || []).reduce((sum, line) => sum + Number(line.weight_kg || 0), 0),
+      totalWeight: (documentToPrint.row.lines || []).reduce((sum, line) => sum + Number(line.weight_kg || 0), 0),
     });
 
     printWindow.document.open();
@@ -978,31 +1026,36 @@ export function PortalPage() {
     printWindow.document.close();
   }
 
-  function handlePortalExportExcel() {
-    if (!selectedDocument) return;
-    const isCustomerDoc = selectedDocument.kind === "sales-order" || selectedDocument.kind === "invoice";
-    const currency = selectedDocument.row.currency || activeSnapshot.accountSummary.currency || "EUR";
+  function handlePortalPrint() {
+    openPortalDocumentPrint();
+  }
+
+  function handlePortalExportExcelRow(kind?: PortalSelection["kind"], id?: string) {
+    const documentToExport = kind && id ? getPortalDocumentSelection(kind, id) : selectedDocument;
+    if (!documentToExport) return;
+    const isCustomerDoc = documentToExport.kind === "sales-order" || documentToExport.kind === "invoice";
+    const currency = documentToExport.row.currency || activeSnapshot.accountSummary.currency || "EUR";
     const docNo =
-      selectedDocument.kind === "sales-order"
-        ? selectedDocument.row.sales_order_no || selectedDocument.row.id
-        : selectedDocument.kind === "invoice"
-          ? selectedDocument.row.id
-          : selectedDocument.kind === "purchase-order"
-            ? selectedDocument.row.id
-            : selectedDocument.row.id;
+      documentToExport.kind === "sales-order"
+        ? documentToExport.row.sales_order_no || documentToExport.row.id
+        : documentToExport.kind === "invoice"
+          ? documentToExport.row.id
+          : documentToExport.kind === "purchase-order"
+            ? documentToExport.row.id
+            : documentToExport.row.id;
     const rows: Array<Array<string | number | null | undefined>> = [
-      [selectedDocument.kind === "sales-order" ? "Sales Order" : selectedDocument.kind === "invoice" ? "Invoice" : selectedDocument.kind === "purchase-order" ? "Purchase Order" : "Bill", docNo],
+      [documentToExport.kind === "sales-order" ? "Sales Order" : documentToExport.kind === "invoice" ? "Invoice" : documentToExport.kind === "purchase-order" ? "Purchase Order" : "Bill", docNo],
       ["Party", activeSnapshot.invite.party_name],
       ["Currency", currency],
       [
         "Date",
-        selectedDocument.kind === "bill"
-          ? selectedDocument.row.bill_date || ""
-          : "quote_date" in selectedDocument.row
-            ? selectedDocument.row.quote_date || ""
+        documentToExport.kind === "bill"
+          ? documentToExport.row.bill_date || ""
+          : "quote_date" in documentToExport.row
+            ? documentToExport.row.quote_date || ""
             : "",
       ],
-      ["Status", selectedDocument.row.status || ""],
+      ["Status", documentToExport.row.status || ""],
       [],
       [
         "Code",
@@ -1016,7 +1069,7 @@ export function PortalPage() {
         `Line Total ${currency}`,
         "Notes",
       ],
-      ...(selectedDocument.row.lines || []).map((line) => [
+      ...(documentToExport.row.lines || []).map((line) => [
         line.code || line.requested_code || line.old_code || "-",
         line.brand || "",
         line.description || "",
@@ -1029,13 +1082,17 @@ export function PortalPage() {
         line.notes || "",
       ]),
       [],
-      ["Subtotal", "", "", "", "", "", "", "", Number(("subtotal" in selectedDocument.row ? selectedDocument.row.subtotal : selectedDocument.row.total_amount) || 0)],
-      ["Discount", "", "", "", "", "", "", "", Number(("discount_amount" in selectedDocument.row ? selectedDocument.row.discount_amount : 0) || 0)],
-      ["Shipping", "", "", "", "", "", "", "", Number(("shipping_cost" in selectedDocument.row ? selectedDocument.row.shipping_cost : 0) || 0)],
-      ["Total Amount", "", "", "", "", "", "", "", Number(("sales_total" in selectedDocument.row ? selectedDocument.row.sales_total : selectedDocument.row.total_amount) || 0)],
+      ["Subtotal", "", "", "", "", "", "", "", Number(("subtotal" in documentToExport.row ? documentToExport.row.subtotal : documentToExport.row.total_amount) || 0)],
+      ["Discount", "", "", "", "", "", "", "", Number(("discount_amount" in documentToExport.row ? documentToExport.row.discount_amount : 0) || 0)],
+      ["Shipping", "", "", "", "", "", "", "", Number(("shipping_cost" in documentToExport.row ? documentToExport.row.shipping_cost : 0) || 0)],
+      ["Total Amount", "", "", "", "", "", "", "", Number(("sales_total" in documentToExport.row ? documentToExport.row.sales_total : documentToExport.row.total_amount) || 0)],
     ];
     const blob = buildXlsxBlob(docNo.slice(0, 31) || "Document", rows, [3, 6, 7, 8]);
-    downloadBlob(`${sanitizeFileName(docNo || selectedDocument.kind)}.xlsx`, blob);
+    downloadBlob(`${sanitizeFileName(docNo || documentToExport.kind)}.xlsx`, blob);
+  }
+
+  function handlePortalExportExcel() {
+    handlePortalExportExcelRow();
   }
 
   return (
@@ -1307,6 +1364,46 @@ export function PortalPage() {
                   </SectionCard>
                 </div>
               </div>
+            </SectionCard>
+          ) : null}
+
+          {portalCanOrder ? (
+            <SectionCard title="My Draft Orders">
+              <DataTable
+                rows={portalDraftOrders}
+                columns={[
+                  { key: "no", header: "Draft No", render: (row: PortalSalesOrderRow) => row.sales_order_no || row.id },
+                  { key: "date", header: "Date", render: (row: PortalSalesOrderRow) => row.quote_date || "-" },
+                  { key: "lines", header: "Lines", render: (row: PortalSalesOrderRow) => row.line_count || row.lines?.length || 0 },
+                  { key: "amount", header: "Amount", render: (row: PortalSalesOrderRow) => formatMoney(Number(row.sales_total || 0), row.currency || portalOrderCurrency) },
+                  {
+                    key: "actions",
+                    header: "Actions",
+                    render: (row: PortalSalesOrderRow) => (
+                      <div className="inline-actions">
+                        <Button variant="secondary" className="button--compact" onClick={() => handleResumePortalDraft(row)}>
+                          Resume
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          className="button--compact"
+                          onClick={() => openPortalDocumentPrint("sales-order", row.id)}
+                        >
+                          PDF / Print
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          className="button--compact"
+                          onClick={() => handlePortalExportExcelRow("sales-order", row.id)}
+                        >
+                          Export Excel
+                        </Button>
+                      </div>
+                    ),
+                  },
+                ]}
+                emptyText="No portal drafts saved yet."
+              />
             </SectionCard>
           ) : null}
 
