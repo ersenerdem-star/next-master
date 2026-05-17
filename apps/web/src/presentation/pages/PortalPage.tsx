@@ -470,6 +470,30 @@ export function PortalPage() {
     });
   }
 
+  function handleStatementExportExcel() {
+    const title = activeSnapshot.invite.party_type === "customer" ? "Customer Account Statement" : "Vendor Account Statement";
+    const rows: Array<Array<string | number | null | undefined>> = [
+      [title, activeSnapshot.invite.party_name],
+      ["Period", statementPeriodLabel],
+      ["Currency", activeSnapshot.accountSummary.currency || "EUR"],
+      [],
+      ["Document", "No", "Date", "Due Date", "Status", "Subtotal", "Discount", "Shipping", "Total"],
+      ...filteredAccountRows.map((row) => [
+        row.document_type,
+        row.document_no,
+        row.document_date,
+        row.due_date,
+        row.status,
+        Number(row.subtotal ?? row.amount ?? 0),
+        Number(row.discount ?? 0),
+        Number(row.shipping ?? 0),
+        Number(row.total ?? row.amount ?? 0),
+      ]),
+    ];
+    const blob = buildXlsxBlob(title.slice(0, 31), rows, [5, 6, 7, 8]);
+    downloadBlob(`${sanitizeFileName(`${activeSnapshot.invite.party_name}-account-statement`)}.xlsx`, blob);
+  }
+
   function handlePortalPrint() {
     if (!selectedDocument) return;
     const printWindow = window.open("", "_blank");
@@ -716,6 +740,9 @@ export function PortalPage() {
             <div className="portal-statement-actions">
               <Input label="Date From" type="date" value={statementDateFrom} onChange={setStatementDateFrom} />
               <Input label="Date To" type="date" value={statementDateTo} onChange={setStatementDateTo} />
+              <Button variant="secondary" onClick={handleStatementExportExcel}>
+                Export Excel
+              </Button>
               <Button variant="secondary" onClick={handleStatementPrint}>
                 PDF / Print
               </Button>
