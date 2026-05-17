@@ -8,6 +8,7 @@ import { Select } from "../components/common/Select";
 import { SectionCard } from "../components/common/SectionCard";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 import { openAccountStatementPrintWindow } from "../../shared/accountStatementPrint";
+import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 
 const SESSION_KEY = "next-master-portal-session";
 
@@ -44,6 +45,10 @@ function buildDateRangeLabel(dateFrom: string, dateTo: string) {
   if (dateFrom) return `From ${dateFrom}`;
   if (dateTo) return `Until ${dateTo}`;
   return "All Dates";
+}
+
+function sanitizeFileName(value: string) {
+  return value.replace(/[^a-z0-9_-]+/gi, "-").replace(/-+/g, "-");
 }
 
 type PortalSelection =
@@ -519,6 +524,66 @@ export function PortalPage() {
     printWindow.document.close();
   }
 
+  function handlePortalExportExcel() {
+    if (!selectedDocument) return;
+    const isCustomerDoc = selectedDocument.kind === "sales-order" || selectedDocument.kind === "invoice";
+    const currency = selectedDocument.row.currency || activeSnapshot.accountSummary.currency || "EUR";
+    const docNo =
+      selectedDocument.kind === "sales-order"
+        ? selectedDocument.row.sales_order_no || selectedDocument.row.id
+        : selectedDocument.kind === "invoice"
+          ? selectedDocument.row.id
+          : selectedDocument.kind === "purchase-order"
+            ? selectedDocument.row.id
+            : selectedDocument.row.id;
+    const rows: Array<Array<string | number | null | undefined>> = [
+      [selectedDocument.kind === "sales-order" ? "Sales Order" : selectedDocument.kind === "invoice" ? "Invoice" : selectedDocument.kind === "purchase-order" ? "Purchase Order" : "Bill", docNo],
+      ["Party", activeSnapshot.invite.party_name],
+      ["Currency", currency],
+      [
+        "Date",
+        selectedDocument.kind === "bill"
+          ? selectedDocument.row.bill_date || ""
+          : "quote_date" in selectedDocument.row
+            ? selectedDocument.row.quote_date || ""
+            : "",
+      ],
+      ["Status", selectedDocument.row.status || ""],
+      [],
+      [
+        "Code",
+        "Brand",
+        "Description",
+        "Qty",
+        "OEM",
+        "Origin",
+        "Weight",
+        isCustomerDoc ? `Unit Price ${currency}` : `Buy Price ${currency}`,
+        `Line Total ${currency}`,
+        "Notes",
+      ],
+      ...(selectedDocument.row.lines || []).map((line) => [
+        line.code || line.requested_code || line.old_code || "-",
+        line.brand || "",
+        line.description || "",
+        Number(line.qty || 0),
+        line.oem_no || "",
+        line.origin || "",
+        line.weight_kg == null ? "" : Number(line.weight_kg),
+        Number(isCustomerDoc ? line.sell_price || 0 : line.buy_price || 0),
+        Number(isCustomerDoc ? line.line_total || line.sales_total || 0 : line.line_total || 0),
+        line.notes || "",
+      ]),
+      [],
+      ["Subtotal", "", "", "", "", "", "", "", Number(("subtotal" in selectedDocument.row ? selectedDocument.row.subtotal : selectedDocument.row.total_amount) || 0)],
+      ["Discount", "", "", "", "", "", "", "", Number(("discount_amount" in selectedDocument.row ? selectedDocument.row.discount_amount : 0) || 0)],
+      ["Shipping", "", "", "", "", "", "", "", Number(("shipping_cost" in selectedDocument.row ? selectedDocument.row.shipping_cost : 0) || 0)],
+      ["Total Amount", "", "", "", "", "", "", "", Number(("sales_total" in selectedDocument.row ? selectedDocument.row.sales_total : selectedDocument.row.total_amount) || 0)],
+    ];
+    const blob = buildXlsxBlob(docNo.slice(0, 31) || "Document", rows, [3, 6, 7, 8]);
+    downloadBlob(`${sanitizeFileName(docNo || selectedDocument.kind)}.xlsx`, blob);
+  }
+
   return (
     <div className="portal-shell">
       <div className="portal-header">
@@ -696,6 +761,9 @@ export function PortalPage() {
             <div className="inline-actions">
               <Button variant="secondary" onClick={handlePortalPrint}>
                 PDF / Print
+              </Button>
+              <Button variant="secondary" onClick={handlePortalExportExcel}>
+                Export Excel
               </Button>
               <Button variant="secondary" onClick={() => setSelection(null)}>
                 Close
