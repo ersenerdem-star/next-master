@@ -69,6 +69,15 @@ function renderStatusLamp(status: string | undefined) {
   );
 }
 
+function matchesPaymentStatusFilter(status: string | undefined, filter: string) {
+  if (!filter) return true;
+  const normalized = String(status || "").trim().toLowerCase().replaceAll("_", " ");
+  if (filter === "paid") return normalized === "paid";
+  if (filter === "partial") return normalized === "partial paid" || normalized === "partially paid";
+  if (filter === "unpaid") return normalized === "unpaid" || normalized === "open" || normalized === "overdue";
+  return true;
+}
+
 type PortalSelection =
   | { kind: "sales-order"; id: string }
   | { kind: "invoice"; id: string }
@@ -130,6 +139,7 @@ export function PortalPage() {
   const [selection, setSelection] = useState<PortalSelection | null>(null);
   const [documentSearch, setDocumentSearch] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState("");
   const [statementDateFrom, setStatementDateFrom] = useState("");
   const [statementDateTo, setStatementDateTo] = useState("");
   const [loading, setLoading] = useState(false);
@@ -148,6 +158,7 @@ export function PortalPage() {
         setSelection(null);
         setDocumentSearch("");
         setBrandFilter("");
+        setPaymentStatusFilter("");
         setStatus("Portal session active.");
         writeStoredCredentials({ email, token });
       })
@@ -329,11 +340,21 @@ export function PortalPage() {
     });
     return [{ value: "", label: "All Brands" }, ...Array.from(brands).sort((a, b) => a.localeCompare(b)).map((brand) => ({ value: brand, label: brand }))];
   })();
+  const paymentStatusOptions = [
+    { value: "", label: "All Statuses" },
+    { value: "paid", label: "Paid" },
+    { value: "partial", label: "Partial Paid" },
+    { value: "unpaid", label: "Unpaid" },
+  ];
 
   const filteredSalesOrders = activeSnapshot.salesOrders.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
-  const filteredInvoices = activeSnapshot.invoices.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
+  const filteredInvoices = activeSnapshot.invoices.filter(
+    (row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row) && matchesPaymentStatusFilter(row.status, paymentStatusFilter),
+  );
   const filteredPurchaseOrders = activeSnapshot.purchaseOrders.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
-  const filteredBills = activeSnapshot.bills.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
+  const filteredBills = activeSnapshot.bills.filter(
+    (row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row) && matchesPaymentStatusFilter(row.status, paymentStatusFilter),
+  );
   const filteredAccountRows = activeSnapshot.accountRows.filter((row) => {
     if (!statementDateFrom && !statementDateTo) return true;
     return isWithinDateRange(row.document_date, statementDateFrom, statementDateTo);
@@ -351,17 +372,6 @@ export function PortalPage() {
       ? activeSnapshot.paymentsReceived.filter((row) => (!statementDateFrom && !statementDateTo ? true : isWithinDateRange(row.received_date, statementDateFrom, statementDateTo)))
       : activeSnapshot.paymentsMade.filter((row) => (!statementDateFrom && !statementDateTo ? true : isWithinDateRange(row.payment_date, statementDateFrom, statementDateTo)));
   const statementPeriodLabel = buildDateRangeLabel(statementDateFrom, statementDateTo);
-  const unpaidDocumentCount =
-    activeSnapshot.invite.party_type === "customer"
-      ? activeSnapshot.invoices.filter((row) => {
-          const status = String(row.status || "").toLowerCase();
-          return status !== "paid" && status !== "void";
-        }).length
-      : activeSnapshot.bills.filter((row) => {
-          const status = String(row.status || "").toLowerCase();
-          return status !== "paid" && status !== "void";
-        }).length;
-
   const selectedDocument = (() => {
     if (!selection) return null;
     if (selection.kind === "sales-order") {
@@ -678,10 +688,6 @@ export function PortalPage() {
               <span>Balance</span>
               <strong>{formatMoney(activeSnapshot.accountSummary.openAmount, activeSnapshot.accountSummary.currency)}</strong>
             </div>
-            <div className="dashboard-stat dashboard-stat--alert">
-              <span>{activeSnapshot.invite.party_type === "customer" ? "Unpaid Invoices" : "Unpaid Bills"}</span>
-              <strong>{unpaidDocumentCount}</strong>
-            </div>
             <div className="dashboard-stat">
               <span>Payments</span>
               <strong>{activeSnapshot.accountSummary.paymentCount}</strong>
@@ -694,6 +700,7 @@ export function PortalPage() {
         <div className="portal-filter-grid">
           <Input label="Search" value={documentSearch} placeholder="Document no, code, description" onChange={setDocumentSearch} />
           <Select label="Brand" value={brandFilter} options={brandOptions} onChange={setBrandFilter} />
+          <Select label={activeSnapshot.invite.party_type === "customer" ? "Invoice Status" : "Bill Status"} value={paymentStatusFilter} options={paymentStatusOptions} onChange={setPaymentStatusFilter} />
         </div>
       </SectionCard>
 

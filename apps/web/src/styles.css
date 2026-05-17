@@ -1942,7 +1942,7 @@ select {
 
 .portal-filter-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(220px, 0.7fr);
+  grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.7fr) minmax(220px, 0.7fr);
   gap: 14px;
 }
 
