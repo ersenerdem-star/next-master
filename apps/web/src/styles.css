@@ -722,6 +722,10 @@ select {
   grid-column: 1 / -1;
 }
 
+.field--actions {
+  justify-content: flex-end;
+}
+
 .field__input:disabled {
   background: #f8fafc;
   color: #64748b;

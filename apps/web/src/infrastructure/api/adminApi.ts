@@ -1,6 +1,8 @@
 import { supabaseClient } from "./supabaseClient";
 
 const resetPasswordUrl = import.meta.env.VITE_ADMIN_RESET_PASSWORD_URL || "/api/admin-reset-password";
+const createUserUrl = import.meta.env.VITE_ADMIN_CREATE_USER_URL || "/api/admin-create-user";
+const deleteUserUrl = import.meta.env.VITE_ADMIN_DELETE_USER_URL || "/api/admin-delete-user";
 const diagnosticsUrl = import.meta.env.VITE_ADMIN_DIAGNOSTICS_URL || "/api/admin-diagnostics";
 const testEmailUrl = import.meta.env.VITE_ADMIN_TEST_EMAIL_URL || "/api/admin-test-email";
 
@@ -53,7 +55,7 @@ export async function resetOrgUserPassword(userId: string, password: string) {
   }
 }
 
-export async function fetchAdminDiagnostics(): Promise<AdminDiagnostics> {
+async function getCallerAccessToken() {
   const {
     data: { session },
   } = await supabaseClient.auth.getSession();
@@ -61,12 +63,59 @@ export async function fetchAdminDiagnostics(): Promise<AdminDiagnostics> {
   if (!session?.access_token) {
     throw new Error("No active session found");
   }
+  return session.access_token;
+}
+
+export async function createOrgUser(input: {
+  email: string;
+  password: string;
+  fullName: string;
+  role: "admin" | "sales" | "viewer";
+  isActive: boolean;
+}) {
+  const accessToken = await getCallerAccessToken();
+  const response = await fetch(createUserUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(input),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || "User create failed");
+  }
+  return payload as { ok: boolean; userId: string; email: string; role: string; isActive: boolean };
+}
+
+export async function deleteOrgUser(userId: string) {
+  const accessToken = await getCallerAccessToken();
+  const response = await fetch(deleteUserUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ userId }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || "User delete failed");
+  }
+  return payload as { ok: boolean; userId: string; email: string };
+}
+
+export async function fetchAdminDiagnostics(): Promise<AdminDiagnostics> {
+  const accessToken = await getCallerAccessToken();
 
   const response = await fetch(diagnosticsUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${session.access_token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({}),
   });
@@ -79,19 +128,13 @@ export async function fetchAdminDiagnostics(): Promise<AdminDiagnostics> {
 }
 
 export async function sendAdminTestEmail(email: string) {
-  const {
-    data: { session },
-  } = await supabaseClient.auth.getSession();
-
-  if (!session?.access_token) {
-    throw new Error("No active session found");
-  }
+  const accessToken = await getCallerAccessToken();
 
   const response = await fetch(testEmailUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${session.access_token}`,
+      Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({ email }),
   });

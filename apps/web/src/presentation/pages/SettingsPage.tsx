@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { fetchAdminDiagnostics, isPasswordResetAvailable, resetOrgUserPassword, sendAdminTestEmail, type AdminDiagnostics } from "../../infrastructure/api/adminApi";
+import {
+  createOrgUser,
+  deleteOrgUser,
+  fetchAdminDiagnostics,
+  isPasswordResetAvailable,
+  resetOrgUserPassword,
+  sendAdminTestEmail,
+  type AdminDiagnostics,
+} from "../../infrastructure/api/adminApi";
 import { createEmptyCloudCompanyProfile, deleteCompanyProfileById, fetchCompanyProfiles, upsertCompanyProfile } from "../../infrastructure/api/companyProfilesApi";
 import { fetchCustomers } from "../../infrastructure/api/customersApi";
 import { deliverQueuedEmails, fetchEmailTemplates, fetchOutboundEmails, queuePortalInviteEmail, setOutboundEmailStatus, upsertEmailTemplate } from "../../infrastructure/api/emailTemplatesApi";
@@ -28,6 +36,14 @@ type SettingsState = {
   role: string;
 };
 
+type NewUserDraft = {
+  email: string;
+  fullName: string;
+  role: "admin" | "sales" | "viewer";
+  password: string;
+  isActive: boolean;
+};
+
 type SettingsPageProps = {
   onLogout?: () => void | Promise<void>;
   initialTab?: "session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics";
@@ -43,6 +59,14 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [passwordDrafts, setPasswordDrafts] = useState<Record<string, string>>({});
   const [passwordStatus, setPasswordStatus] = useState("");
+  const [userActionStatus, setUserActionStatus] = useState("");
+  const [newUserDraft, setNewUserDraft] = useState<NewUserDraft>({
+    email: "",
+    fullName: "",
+    role: "sales",
+    password: "",
+    isActive: true,
+  });
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(emptyCompanyProfile);
   const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
   const [portalInvites, setPortalInvites] = useState<PortalInvite[]>([]);
@@ -60,6 +84,8 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const [loggingOut, setLoggingOut] = useState(false);
   const [savingCompanyProfile, setSavingCompanyProfile] = useState(false);
   const [passwordBusyUserId, setPasswordBusyUserId] = useState("");
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState("");
   const [sendingPortalInviteId, setSendingPortalInviteId] = useState("");
   const [sendingQueuedEmails, setSendingQueuedEmails] = useState(false);
   const [changingPortalStatusId, setChangingPortalStatusId] = useState("");
@@ -211,6 +237,12 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                 [row.user_id]: event.target.value,
               }))
             }
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                event.currentTarget.parentElement?.querySelector("button")?.click();
+              }
+            }}
           />
           <Button
             variant="secondary"
@@ -246,6 +278,49 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
             }}
           >
             Update
+          </Button>
+        </div>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      render: (row: OrgUser) => (
+        <div className="inline-actions">
+          <Button
+            variant="secondary"
+            className="button--compact danger-button"
+            busy={deletingUserId === row.user_id}
+            busyLabel="Deleting..."
+            disabled={row.user_id === state.userId}
+            onClick={async () => {
+              if (row.user_id === state.userId) {
+                setUserActionStatus("You cannot delete your own account.");
+                return;
+              }
+              if (!window.confirm(`Delete user ${row.email}?`)) {
+                return;
+              }
+
+              try {
+                setDeletingUserId(row.user_id);
+                setUserActionStatus("");
+                actionFeedback.begin(`Deleting ${row.email}...`);
+                await deleteOrgUser(row.user_id);
+                const nextUsers = await fetchOrgUsers();
+                setUsers(nextUsers);
+                setUserActionStatus(`User deleted: ${row.email}`);
+                actionFeedback.succeed(`User deleted: ${row.email}`);
+              } catch (caught) {
+                const message = caught instanceof Error ? caught.message : "User delete failed";
+                setUserActionStatus(message);
+                actionFeedback.fail(message);
+              } finally {
+                setDeletingUserId("");
+              }
+            }}
+          >
+            Delete
           </Button>
         </div>
       ),
@@ -551,11 +626,106 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
       </SectionCard> : null}
       {activeTab === "users" && !passwordResetAvailable ? (
         <SectionCard title="User Password Reset">
-          <div className="warning-text">Password reset is disabled in plain localhost mode. Use deployed app or Netlify dev for this action.</div>
+          <div className="warning-text">User admin actions depend on serverless admin endpoints. Use deployed app or Netlify dev instead of plain localhost.</div>
         </SectionCard>
       ) : null}
       {activeTab === "users" ? (
         <SectionCard title="Users">
+          <div className="settings-grid">
+            <Input
+              label="Email"
+              value={newUserDraft.email}
+              placeholder="user@company.com"
+              onChange={(value) => setNewUserDraft((current) => ({ ...current, email: value }))}
+            />
+            <Input
+              label="Full Name"
+              value={newUserDraft.fullName}
+              placeholder="Full name"
+              onChange={(value) => setNewUserDraft((current) => ({ ...current, fullName: value }))}
+            />
+            <Select
+              label="Role"
+              value={newUserDraft.role}
+              options={[
+                { value: "admin", label: "Admin" },
+                { value: "sales", label: "Sales" },
+                { value: "viewer", label: "Viewer" },
+              ]}
+              onChange={(value) => setNewUserDraft((current) => ({ ...current, role: value as NewUserDraft["role"] }))}
+            />
+            <Input
+              label="Temporary Password"
+              type="password"
+              value={newUserDraft.password}
+              placeholder="Minimum 8 characters"
+              onChange={(value) => setNewUserDraft((current) => ({ ...current, password: value }))}
+              onEnter={() => {
+                const button = document.getElementById("settings-add-user-button");
+                if (button instanceof HTMLButtonElement) button.click();
+              }}
+            />
+            <label className="field checkbox-field">
+              <input
+                type="checkbox"
+                checked={newUserDraft.isActive}
+                onChange={(event) => setNewUserDraft((current) => ({ ...current, isActive: event.target.checked }))}
+              />
+              <span className="field__label">Active user</span>
+            </label>
+            <div className="field field--actions">
+              <span className="field__label">Create User</span>
+              <Button
+                id="settings-add-user-button"
+                busy={creatingUser}
+                busyLabel="Creating..."
+                onClick={async () => {
+                  const email = newUserDraft.email.trim().toLowerCase();
+                  const password = newUserDraft.password.trim();
+                  if (!email) {
+                    setUserActionStatus("Email is required.");
+                    return;
+                  }
+                  if (password.length < 8) {
+                    setUserActionStatus("Password must be at least 8 characters.");
+                    return;
+                  }
+
+                  try {
+                    setCreatingUser(true);
+                    setUserActionStatus("");
+                    actionFeedback.begin(`Creating user ${email}...`);
+                    await createOrgUser({
+                      email,
+                      password,
+                      fullName: newUserDraft.fullName.trim(),
+                      role: newUserDraft.role,
+                      isActive: newUserDraft.isActive,
+                    });
+                    const nextUsers = await fetchOrgUsers();
+                    setUsers(nextUsers);
+                    setNewUserDraft({
+                      email: "",
+                      fullName: "",
+                      role: "sales",
+                      password: "",
+                      isActive: true,
+                    });
+                    setUserActionStatus(`User created: ${email}`);
+                    actionFeedback.succeed(`User created: ${email}`);
+                  } catch (caught) {
+                    const message = caught instanceof Error ? caught.message : "User create failed";
+                    setUserActionStatus(message);
+                    actionFeedback.fail(message);
+                  } finally {
+                    setCreatingUser(false);
+                  }
+                }}
+              >
+                Add User
+              </Button>
+            </div>
+          </div>
           <div className="settings-grid settings-stats-grid">
             <div className="settings-item">
               <span className="settings-label">Online Now</span>
@@ -572,7 +742,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           </div>
           <div className="meta-row">
             <span>{users.length.toLocaleString("en-US")} users loaded</span>
-            <span>{loadingUsers ? "Loading users..." : usersError || passwordStatus || "Admin can update user passwords here."}</span>
+            <span>{loadingUsers ? "Loading users..." : usersError || userActionStatus || passwordStatus || "Admin can add, delete, and update user passwords here."}</span>
           </div>
           <DataTable rows={users} columns={userColumns} emptyText={loadingUsers ? "Loading users..." : "No organization users found."} />
         </SectionCard>
