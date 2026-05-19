@@ -11,6 +11,13 @@ export async function fetchOrgUsers(): Promise<OrgUser[]> {
   return (data || []) as OrgUser[];
 }
 
+export async function touchCurrentUserPresence() {
+  const { error } = await supabaseClient.rpc("touch_user_presence");
+  if (error) {
+    throw new Error(error.message || "Failed to update presence");
+  }
+}
+
 export function getPresenceStatus(lastSeenAt: string | null) {
   if (!lastSeenAt) return { tone: "offline", label: "Offline" };
 

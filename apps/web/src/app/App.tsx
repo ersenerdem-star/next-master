@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { supabaseClient } from "../infrastructure/api/supabaseClient";
+import { touchCurrentUserPresence } from "../infrastructure/api/usersApi";
 import { ActionFeedbackProvider } from "../presentation/components/common/ActionFeedback";
 import { AppShell } from "../presentation/layout/AppShell";
 
@@ -60,6 +61,46 @@ export function App() {
       data.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!loggedIn || isPortalRoute) return;
+
+    let disposed = false;
+
+    const touch = async () => {
+      if (disposed) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      try {
+        await touchCurrentUserPresence();
+      } catch {
+        // Presence heartbeat is best-effort; it should not block the app.
+      }
+    };
+
+    void touch();
+    const intervalId = window.setInterval(() => {
+      void touch();
+    }, 5 * 60 * 1000);
+
+    const handleFocus = () => {
+      void touch();
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void touch();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [loggedIn, isPortalRoute]);
 
   async function handleLogout() {
     await supabaseClient.auth.signOut();

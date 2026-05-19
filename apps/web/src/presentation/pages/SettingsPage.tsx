@@ -189,11 +189,23 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
       }
     }
 
-    run();
+    if (activeTab !== "users") return () => void 0;
+
+    void run();
+    const intervalId = window.setInterval(() => {
+      void run();
+    }, 60 * 1000);
+    const handleFocus = () => {
+      void run();
+    };
+    window.addEventListener("focus", handleFocus);
+
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
     };
-  }, [state.role]);
+  }, [state.role, activeTab]);
 
   useEffect(() => {
     if (state.email && !testEmail) {
