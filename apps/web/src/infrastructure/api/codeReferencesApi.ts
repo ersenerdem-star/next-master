@@ -202,7 +202,7 @@ export async function importCodeReferences(
     brandMap.set(brandName.toLowerCase(), row.id);
   }
 
-  const payload = rows
+  const preparedRows = rows
     .filter((row) => row.brand.trim() && row.old_code.trim() && row.new_code.trim())
     .map((row) => ({
       organization_id: organizationId,
@@ -215,6 +215,20 @@ export async function importCodeReferences(
       updated_at: new Date().toISOString(),
     }))
     .filter((row) => row.brand_id);
+
+  const dedupedPayload = new Map<string, (typeof preparedRows)[number]>();
+  for (const row of preparedRows) {
+    const key = `${row.organization_id}:${row.brand_id}:${normalizePartCode(row.old_code)}`;
+    const current = dedupedPayload.get(key);
+    dedupedPayload.set(key, {
+      ...(current || row),
+      ...row,
+      original_number: row.original_number ?? current?.original_number ?? null,
+      reason: row.reason ?? current?.reason ?? null,
+    });
+  }
+
+  const payload = Array.from(dedupedPayload.values());
 
   if (!payload.length) {
     throw new Error("No valid code reference rows found in CSV");
