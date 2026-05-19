@@ -1465,7 +1465,7 @@ export function QuotesPage({
       rows.push(["Total Amount", draftTotals.totalAmount]);
       rows.push(["Profit", draftTotals.profit]);
       rows.push(["Margin %", draftTotals.margin]);
-      const blob = buildXlsxBlob("Sales Order Draft", rows, [8, 9, 12, 13, 14, 15, 16, 17, 1]);
+      const blob = buildXlsxBlob("Sales Order Draft", rows, [8, 9, 12, 13, 14, 15, 16, 17]);
       downloadBlob(`${(quoteNo || "sales-order-draft").replace(/[^a-z0-9_-]+/gi, "-")}.xlsx`, blob);
       actionFeedback.succeed("Sales order Excel downloaded.");
     } catch (caught) {
