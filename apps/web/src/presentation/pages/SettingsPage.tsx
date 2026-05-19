@@ -40,7 +40,6 @@ type NewUserDraft = {
   email: string;
   fullName: string;
   role: "admin" | "sales" | "viewer";
-  password: string;
   isActive: boolean;
 };
 
@@ -64,7 +63,6 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     email: "",
     fullName: "",
     role: "sales",
-    password: "",
     isActive: true,
   });
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(emptyCompanyProfile);
@@ -100,12 +98,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const [emailDateTo, setEmailDateTo] = useState("");
   const passwordResetAvailable = isPasswordResetAvailable();
   const newUserEmail = newUserDraft.email.trim().toLowerCase();
-  const newUserPassword = newUserDraft.password.trim();
-  const newUserValidationMessage = !newUserEmail
-    ? "Email is required."
-    : newUserPassword.length < 8
-      ? "Temporary password must be at least 8 characters."
-      : "";
+  const newUserValidationMessage = !newUserEmail ? "Email is required." : "";
   const canCreateUser = !creatingUser && !newUserValidationMessage;
 
   useEffect(() => {
@@ -422,6 +415,8 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                   setActiveTab("portals");
                   const selected = portalInvites.find((item) => item.id === row.related_id);
                   if (selected) setPortalDraft(selected);
+                } else if (row.related_type === "user") {
+                  setActiveTab("users");
                 } else {
                   onOpenRelatedRecord?.(row.related_type, row.related_id);
                 }
@@ -657,12 +652,20 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               value={newUserDraft.email}
               placeholder="user@company.com"
               onChange={(value) => setNewUserDraft((current) => ({ ...current, email: value }))}
+              onEnter={() => {
+                const button = document.getElementById("settings-add-user-button");
+                if (button instanceof HTMLButtonElement) button.click();
+              }}
             />
             <Input
               label="Full Name"
               value={newUserDraft.fullName}
               placeholder="Full name"
               onChange={(value) => setNewUserDraft((current) => ({ ...current, fullName: value }))}
+              onEnter={() => {
+                const button = document.getElementById("settings-add-user-button");
+                if (button instanceof HTMLButtonElement) button.click();
+              }}
             />
             <Select
               label="Role"
@@ -673,17 +676,6 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                 { value: "viewer", label: "Viewer" },
               ]}
               onChange={(value) => setNewUserDraft((current) => ({ ...current, role: value as NewUserDraft["role"] }))}
-            />
-            <Input
-              label="Temporary Password"
-              type="password"
-              value={newUserDraft.password}
-              placeholder="Minimum 8 characters"
-              onChange={(value) => setNewUserDraft((current) => ({ ...current, password: value }))}
-              onEnter={() => {
-                const button = document.getElementById("settings-add-user-button");
-                if (button instanceof HTMLButtonElement) button.click();
-              }}
             />
             <label className="field checkbox-field">
               <input
@@ -710,24 +702,30 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                     setCreatingUser(true);
                     setUserActionStatus("");
                     actionFeedback.begin(`Creating user ${newUserEmail}...`);
-                    await createOrgUser({
+                    const created = await createOrgUser({
                       email: newUserEmail,
-                      password: newUserPassword,
                       fullName: newUserDraft.fullName.trim(),
                       role: newUserDraft.role,
                       isActive: newUserDraft.isActive,
                     });
+                    if (created.welcomeEmailId) {
+                      await deliverQueuedEmails([created.welcomeEmailId]);
+                    }
                     const nextUsers = await fetchOrgUsers();
                     setUsers(nextUsers);
+                    setOutboundEmails(await fetchOutboundEmails());
                     setNewUserDraft({
                       email: "",
                       fullName: "",
                       role: "sales",
-                      password: "",
                       isActive: true,
                     });
-                    setUserActionStatus(`User created: ${newUserEmail}`);
-                    actionFeedback.succeed(`User created: ${newUserEmail}`);
+                    const message =
+                      created.welcomeEmailError
+                        ? `User created: ${newUserEmail}. Welcome email queued but delivery failed: ${created.welcomeEmailError}`
+                        : `User created: ${newUserEmail}. Set password email sent.`;
+                    setUserActionStatus(message);
+                    actionFeedback.succeed(message);
                   } catch (caught) {
                     const message = caught instanceof Error ? caught.message : "User create failed";
                     setUserActionStatus(message);
@@ -740,6 +738,10 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                 Add User
               </Button>
             </div>
+          </div>
+          <div className="meta-row">
+            <span>System generates a random temporary password.</span>
+            <span>User receives a set password email and defines their own password on first access.</span>
           </div>
           {newUserValidationMessage ? <div className="error-text">{newUserValidationMessage}</div> : null}
           <div className="settings-grid settings-stats-grid">
@@ -1018,7 +1020,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
         </div>
         <div className="meta-row">
           <span>Available tokens depend on template type.</span>
-          <span>Examples: {`{{party_name}} {{portal_link}} {{invite_token}} {{purchase_order_no}} {{company_name}}`}</span>
+          <span>Examples: {`{{party_name}} {{portal_link}} {{invite_token}} {{purchase_order_no}} {{company_name}} {{full_name}} {{user_email}} {{login_link}} {{set_password_link}}`}</span>
         </div>
         <div className="toolbar toolbar--wrap">
           <Button

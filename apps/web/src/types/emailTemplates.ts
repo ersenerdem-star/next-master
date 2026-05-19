@@ -1,4 +1,4 @@
-export type EmailTemplateKey = "customer_portal_invite" | "vendor_portal_invite" | "vendor_purchase_order_confirmed";
+export type EmailTemplateKey = "customer_portal_invite" | "vendor_portal_invite" | "vendor_purchase_order_confirmed" | "internal_user_welcome";
 
 export type OutboundEmailStatus = "draft" | "queued" | "sent" | "failed";
 

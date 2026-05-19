@@ -68,7 +68,6 @@ async function getCallerAccessToken() {
 
 export async function createOrgUser(input: {
   email: string;
-  password: string;
   fullName: string;
   role: "admin" | "sales" | "viewer";
   isActive: boolean;
@@ -87,7 +86,16 @@ export async function createOrgUser(input: {
   if (!response.ok) {
     throw new Error(payload?.error || "User create failed");
   }
-  return payload as { ok: boolean; userId: string; email: string; role: string; isActive: boolean };
+  return payload as {
+    ok: boolean;
+    userId: string;
+    email: string;
+    role: string;
+    isActive: boolean;
+    welcomeEmailId?: string;
+    welcomeEmailQueued?: boolean;
+    welcomeEmailError?: string;
+  };
 }
 
 export async function deleteOrgUser(userId: string) {

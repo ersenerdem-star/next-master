@@ -51,6 +51,12 @@ const DEFAULT_TEMPLATES: Record<EmailTemplateKey, Pick<EmailTemplate, "template_
     body:
       "Hello {{vendor_name}},\n\nPurchase order {{purchase_order_no}} is confirmed.\nCustomer: {{customer_name}}\nPurchase company: {{purchase_company}}\nCurrency: {{currency}}\nTotal amount: {{total_amount}}\n\nPortal link: {{portal_link}}\nInvite token: {{invite_token}}\n\nPlease review and proceed.\n\nRegards,\n{{company_name}}",
   },
+  internal_user_welcome: {
+    template_name: "Internal User Welcome",
+    subject: "Set your password for {{company_name}}",
+    body:
+      "Hello {{full_name}},\n\nYour user account is ready.\n\nUser email: {{user_email}}\nLogin link: {{login_link}}\nSet password link: {{set_password_link}}\n\nOpen the set password link first and define your own password. After that, use the login link to sign in.\n\nRegards,\n{{company_name}}",
+  },
 };
 
 function mapEmailTemplateRow(row: Record<string, unknown>): EmailTemplate {
