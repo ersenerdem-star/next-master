@@ -109,10 +109,10 @@ function parseQuoteImportRows(text: string) {
   const normalizeHeader = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
   const firstRow = rows[0].map(normalizeHeader);
   const hasStandardQuoteHeader =
-    firstRow.includes("part_no") &&
+    (firstRow.includes("part_no") || firstRow.includes("part_code")) &&
     firstRow.includes("brand") &&
     (firstRow.includes("qty") || firstRow.includes("quantity"));
-  const hasHeader = firstRow.some((value) => ["part_no", "product_code", "code", "qty", "brand"].includes(value));
+  const hasHeader = firstRow.some((value) => ["part_no", "part_code", "product_code", "code", "item_code", "qty", "quantity", "brand"].includes(value));
   const body = hasHeader ? rows.slice(1) : rows;
 
   return body
@@ -123,7 +123,9 @@ function parseQuoteImportRows(text: string) {
         return index >= 0 ? String(row[index] ?? "").trim() : "";
       };
 
-      const code = hasHeader ? byHeader(hasStandardQuoteHeader ? ["part_no"] : ["part_no", "product_code", "code", "partno"]) : String(row[0] ?? "").trim();
+      const code = hasHeader
+        ? byHeader(hasStandardQuoteHeader ? ["part_no", "part_code"] : ["part_no", "part_code", "product_code", "item_code", "code", "partno"])
+        : String(row[0] ?? "").trim();
       const brand = hasHeader ? byHeader(["brand"]) : String(row[1] ?? "").trim();
       const qtyText = hasHeader ? byHeader(hasStandardQuoteHeader ? ["qty", "quantity"] : ["qty", "quantity"]) : String(row[2] ?? "1").trim();
       const qty = Math.max(1, Number(String(qtyText).replace(",", ".")) || 1);
