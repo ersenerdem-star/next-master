@@ -186,6 +186,7 @@ export function CodeReferencesPage() {
 
   async function parseImportRows(file: File) {
     const extension = file.name.split(".").pop()?.toLowerCase() || "";
+    const defaultReason = `Imported from ${file.name}`;
     let parsed: string[][] = [];
 
     if (["csv", "tsv", "txt"].includes(extension)) {
@@ -231,7 +232,10 @@ export function CodeReferencesPage() {
         old_code: String(row[oldCodeIndex] || "").trim(),
         new_code: String(row[newCodeIndex] || "").trim(),
         original_number: originalIndex >= 0 ? String(row[originalIndex] || "").trim() || null : null,
-        reason: reasonIndex >= 0 ? String(row[reasonIndex] || "").trim() || null : null,
+        reason:
+          reasonIndex >= 0
+            ? String(row[reasonIndex] || "").trim() || defaultReason
+            : defaultReason,
         is_active: activeIndex >= 0 ? String(row[activeIndex] || "true").trim().toLowerCase() !== "false" : true,
       }))
       .filter((row) => row.brand && row.old_code && row.new_code);
