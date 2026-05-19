@@ -10,6 +10,17 @@ export function downloadCatalogTemplate() {
   );
 }
 
+export function downloadCatalogLifecycleTemplate() {
+  downloadCsv(
+    "catalog-lifecycle-import-template.csv",
+    toCsv([
+      ["Product_Code", "Brand", "Lifecycle_Status", "Lifecycle_Note"],
+      ["0986332404", "Bosch", "discontinued", "Production ended"],
+      ["0433175575", "Bosch", "discontinued", "Use replacement code if available"],
+    ]),
+  );
+}
+
 export function downloadSupplierTemplate() {
   downloadCsv(
     "supplier-import-template.csv",

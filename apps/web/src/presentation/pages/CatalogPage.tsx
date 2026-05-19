@@ -14,7 +14,7 @@ import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { downloadCsv, normalizeNumber, normalizeText, parseCsv, toCsv } from "../../shared/csv";
-import { downloadCatalogTemplate } from "../../shared/importTemplates";
+import { downloadCatalogLifecycleTemplate, downloadCatalogTemplate } from "../../shared/importTemplates";
 
 type CatalogRowDraft = Omit<CatalogRow, "weight_kg"> & {
   weight_kg: number | string | null;
@@ -809,7 +809,7 @@ export function CatalogPage() {
               </label>
               <Input label="Selected file" value={importFile?.name ?? ""} onChange={() => undefined} disabled />
             </div>
-            <div className="modal-hint">Brand, target, and file are required for every catalog CSV import.</div>
+            <div className="modal-hint">Brand, target, and file are required for every catalog CSV import. For discontinued/EOL updates, use the lifecycle template instead of full export.</div>
             <div className="toolbar">
               <Button
                 variant="secondary"
@@ -820,6 +820,16 @@ export function CatalogPage() {
                 }}
               >
                 Download Sample Template
+              </Button>
+              <Button
+                variant="secondary"
+                className="button--compact"
+                onClick={() => {
+                  downloadCatalogLifecycleTemplate();
+                  actionFeedback.succeed("Catalog lifecycle template downloaded.");
+                }}
+              >
+                Download Lifecycle Template
               </Button>
             </div>
             <div className="modal-actions">
