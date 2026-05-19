@@ -23,7 +23,9 @@ end $$;
 create index if not exists idx_catalog_products_org_lifecycle_status
   on public.catalog_products (organization_id, lifecycle_status);
 
-create or replace function public.cloud_catalog_page(
+drop function if exists public.cloud_catalog_page(text, integer, integer);
+
+create function public.cloud_catalog_page(
   input_search text default '',
   input_page integer default 1,
   input_page_size integer default 250
@@ -135,6 +137,8 @@ as $$
     lifecycle_note
   from paged;
 $$;
+
+grant execute on function public.cloud_catalog_page(text, integer, integer) to authenticated;
 
 create or replace function public.bulk_import_catalog(payload jsonb)
 returns jsonb
