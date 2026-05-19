@@ -241,6 +241,9 @@ export function buildInvoiceFromSalesOrder(order: LocalSalesOrder) {
       margin_percent: marginPercent,
       origin: line.origin,
       notes: line.notes,
+      lifecycle_status: line.lifecycle_status ?? "active",
+      lifecycle_note: line.lifecycle_note ?? null,
+      lifecycle_warning: line.lifecycle_warning ?? null,
     };
   });
 

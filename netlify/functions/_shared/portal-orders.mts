@@ -69,6 +69,9 @@ type PreparedPortalLine = {
   found: boolean;
   codeChanged: boolean;
   codeChangeWarning: string;
+  lifecycle_status?: "active" | "discontinued" | null;
+  lifecycle_note?: string | null;
+  lifecycle_warning?: string | null;
   supplierOptions: Array<{
     supplier_id?: string | null;
     supplier_name: string;
@@ -93,6 +96,17 @@ type CustomerPricingContext = {
 
 function normalizePartCode(value: string) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function normalizeLifecycleStatus(value: unknown): "active" | "discontinued" {
+  return String(value || "").trim().toLowerCase() === "discontinued" ? "discontinued" : "active";
+}
+
+function buildDiscontinuedWarning(resolvedCode: string, note?: string | null) {
+  const code = String(resolvedCode || "").trim();
+  const base = code ? `Production ended for ${code}.` : "Production ended for this item.";
+  const detail = String(note || "").trim();
+  return detail ? `${base} ${detail}` : base;
 }
 
 function roundMoney(value: number) {
@@ -358,13 +372,13 @@ async function resolvePortalCatalogSupplierData(
 
   const [catalogExact, catalogOem, supplierExact, supplierOem] = await Promise.all([
     fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
-      select: "product_code,description,oem_no,hs_code,origin,weight_kg,brand_id,normalized_code,normalized_oem",
+      select: "product_code,description,oem_no,hs_code,origin,weight_kg,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
       organization_id: `eq.${context.organizationId}`,
       brand_id: `eq.${brandId}`,
       normalized_code: `eq.${normalizedCode}`,
     }),
     fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
-      select: "product_code,description,oem_no,hs_code,origin,weight_kg,brand_id,normalized_code,normalized_oem",
+      select: "product_code,description,oem_no,hs_code,origin,weight_kg,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
       organization_id: `eq.${context.organizationId}`,
       brand_id: `eq.${brandId}`,
       normalized_oem: `eq.${normalizedCode}`,
@@ -537,6 +551,8 @@ async function resolvePreparedLine(
     context.customerType === "C"
       ? null
       : fallbackSupplier?.sell_price ?? computeSellFromBuy(buyPrice, context);
+  const lifecycleStatus = normalizeLifecycleStatus(catalogMatch?.lifecycle_status);
+  const lifecycleNote = String(catalogMatch?.lifecycle_note || "").trim() || null;
 
   return {
     lineId: makeId("portal-line"),
@@ -562,6 +578,9 @@ async function resolvePreparedLine(
       : codeChanged
         ? `Old Code ${row.code} => New Code ${resolvedCode}`
         : "",
+    lifecycle_status: lifecycleStatus,
+    lifecycle_note: lifecycleNote,
+    lifecycle_warning: lifecycleStatus === "discontinued" ? buildDiscontinuedWarning(resolvedCode, lifecycleNote) : null,
     supplierOptions,
     selectedSupplierKey: supplierOptions[0] ? `${supplierOptions[0].supplier_name}-0` : "",
   };

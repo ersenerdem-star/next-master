@@ -36,6 +36,9 @@ export type PortalPreparedLine = {
   found: boolean;
   codeChanged: boolean;
   codeChangeWarning: string;
+  lifecycle_status?: "active" | "discontinued" | null;
+  lifecycle_note?: string | null;
+  lifecycle_warning?: string | null;
 };
 
 type PortalOrderResponse = {

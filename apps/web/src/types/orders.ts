@@ -130,6 +130,9 @@ export type LocalInvoiceLine = {
   margin_percent: number;
   origin: string;
   notes: string;
+  lifecycle_status?: "active" | "discontinued" | null;
+  lifecycle_note?: string | null;
+  lifecycle_warning?: string | null;
 };
 
 export type LocalInvoice = {

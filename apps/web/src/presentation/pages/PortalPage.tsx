@@ -106,6 +106,16 @@ function renderStatusLamp(status: string | undefined) {
   );
 }
 
+function renderDiscontinuedBadge(row: { lifecycle_status?: string | null; lifecycle_warning?: string | null }) {
+  if (String(row.lifecycle_status || "").trim().toLowerCase() !== "discontinued") return null;
+  return (
+    <div>
+      <span className="mark-badge mark-badge--danger">Discontinued</span>
+      {row.lifecycle_warning ? <div className="warning-text">{row.lifecycle_warning}</div> : null}
+    </div>
+  );
+}
+
 function matchesPaymentStatusFilter(status: string | undefined, filter: string) {
   if (!filter) return true;
   const normalized = String(status || "").trim().toLowerCase().replaceAll("_", " ");
@@ -155,6 +165,9 @@ function mapPortalSalesOrderToPreparedLines(row: PortalSalesOrderRow): PortalPre
       found: true,
       codeChanged,
       codeChangeWarning: codeChanged ? `Old Code ${requestedCode} => New Code ${resolvedCode}` : "",
+      lifecycle_status: line.lifecycle_status ?? "active",
+      lifecycle_note: line.lifecycle_note ?? null,
+      lifecycle_warning: line.lifecycle_warning ?? null,
       supplierOptions: [],
       selectedSupplierKey: "",
     };
@@ -410,6 +423,7 @@ export function PortalPage() {
           <div>
             <div>{row.description || "-"}</div>
             {row.sell_price == null ? <div className="warning-text">No live price found for this item.</div> : null}
+            {renderDiscontinuedBadge(row)}
           </div>
         ),
       },
@@ -646,6 +660,7 @@ export function PortalPage() {
   };
   const portalOrderCurrency = activeSnapshot.pricingProfile?.currency || activeSnapshot.accountSummary.currency || "EUR";
   const portalDraftHasMissingPrices = portalDraftLines.some((line) => line.sell_price == null);
+  const portalDraftDiscontinuedCount = portalDraftLines.filter((line) => line.lifecycle_status === "discontinued").length;
   const portalSections: Array<{ key: PortalSection; label: string }> = [
     { key: "details", label: "Account Details" },
     { key: "statement", label: "Account Statement" },
@@ -717,9 +732,10 @@ export function PortalPage() {
         setPortalPaymentTerms(latestPricingProfile.payment_terms);
       }
       const missingPriceCount = preparedLines.filter((line) => line.sell_price == null).length;
+      const discontinuedCount = preparedLines.filter((line) => line.lifecycle_status === "discontinued").length;
       const pricedCount = preparedLines.length - missingPriceCount;
       setPortalOrderStatus(
-        `${statusText.replace("{count}", preparedLines.length.toLocaleString("en-US"))} ${pricedCount > 0 ? `${pricedCount.toLocaleString("en-US")} priced.` : ""}${missingPriceCount > 0 ? ` ${missingPriceCount.toLocaleString("en-US")} need live pricing.` : ""}${failedChunkMessage ? " Some lines could not be processed; save draft and continue later." : ""}`.trim(),
+        `${statusText.replace("{count}", preparedLines.length.toLocaleString("en-US"))} ${pricedCount > 0 ? `${pricedCount.toLocaleString("en-US")} priced.` : ""}${missingPriceCount > 0 ? ` ${missingPriceCount.toLocaleString("en-US")} need live pricing.` : ""}${discontinuedCount > 0 ? ` ${discontinuedCount.toLocaleString("en-US")} discontinued item(s) detected.` : ""}${failedChunkMessage ? " Some lines could not be processed; save draft and continue later." : ""}`.trim(),
       );
       if (failedChunkMessage) {
         setError(failedChunkMessage);
@@ -757,6 +773,15 @@ export function PortalPage() {
     }
     if (mode === "confirm" && portalDraftHasMissingPrices) {
       setError("Some lines do not have a live price yet. Remove them or complete pricing before confirming.");
+      return;
+    }
+    if (
+      mode === "confirm" &&
+      portalDraftDiscontinuedCount > 0 &&
+      !window.confirm(
+        `${portalDraftDiscontinuedCount.toLocaleString("en-US")} discontinued item(s) are still in this portal order. Continue and confirm anyway?`,
+      )
+    ) {
       return;
     }
     try {
@@ -876,7 +901,16 @@ export function PortalPage() {
       return [
         { key: "code", header: "Code", render: (row: PortalLine) => row.code || row.requested_code || "-" },
         { key: "brand", header: "Brand", render: (row: PortalLine) => row.brand || "-" },
-        { key: "description", header: "Description", render: (row: PortalLine) => row.description || "-" },
+        {
+          key: "description",
+          header: "Description",
+          render: (row: PortalLine) => (
+            <div>
+              <div>{row.description || "-"}</div>
+              {renderDiscontinuedBadge(row)}
+            </div>
+          ),
+        },
         { key: "qty", header: "Qty", render: (row: PortalLine) => row.qty || 0 },
         { key: "oem", header: "OEM", render: (row: PortalLine) => row.oem_no || "-" },
         { key: "origin", header: "Origin", render: (row: PortalLine) => row.origin || "-" },
@@ -888,7 +922,16 @@ export function PortalPage() {
     return [
       { key: "code", header: "Code", render: (row: PortalLine) => row.code || "-" },
       { key: "brand", header: "Brand", render: (row: PortalLine) => row.brand || "-" },
-      { key: "description", header: "Description", render: (row: PortalLine) => row.description || "-" },
+      {
+        key: "description",
+        header: "Description",
+        render: (row: PortalLine) => (
+          <div>
+            <div>{row.description || "-"}</div>
+            {renderDiscontinuedBadge(row)}
+          </div>
+        ),
+      },
       { key: "qty", header: "Qty", render: (row: PortalLine) => row.qty || 0 },
       { key: "oem", header: "OEM", render: (row: PortalLine) => row.oem_no || "-" },
       { key: "origin", header: "Origin", render: (row: PortalLine) => row.origin || "-" },
@@ -1445,6 +1488,11 @@ export function PortalPage() {
 
                 {portalOrderStatus ? <div className="success-text">{portalOrderStatus}</div> : null}
                 {portalDraftHasMissingPrices ? <div className="warning-text">Items without live price can be saved as draft but cannot be confirmed.</div> : null}
+                {portalDraftDiscontinuedCount > 0 ? (
+                  <div className="warning-text">
+                    {portalDraftDiscontinuedCount.toLocaleString("en-US")} discontinued item(s) detected in this portal order. Review before confirmation.
+                  </div>
+                ) : null}
 
                 <div className="portal-order-builder__tables">
                   <SectionCard title="Catalog Search Results">

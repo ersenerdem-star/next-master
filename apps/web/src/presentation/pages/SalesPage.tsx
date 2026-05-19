@@ -47,6 +47,16 @@ export function SalesPage({
   const [customers, setCustomers] = useState<LocalCustomer[]>([]);
   const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
 
+  function renderInvoiceLifecycleBadge(row: { lifecycle_status?: string | null; lifecycle_warning?: string | null }) {
+    if (String(row.lifecycle_status || "").trim().toLowerCase() !== "discontinued") return null;
+    return (
+      <div>
+        <span className="mark-badge mark-badge--danger">Discontinued</span>
+        {row.lifecycle_warning ? <div className="warning-text">{row.lifecycle_warning}</div> : null}
+      </div>
+    );
+  }
+
   function cloneInvoice(input: LocalInvoice): LocalInvoice {
     return {
       ...input,
@@ -330,6 +340,10 @@ export function SalesPage({
   }
 
   const selectedInvoice = useMemo(() => invoices.find((item) => item.id === selectedInvoiceId) || null, [invoices, selectedInvoiceId]);
+  const invoiceDiscontinuedLineCount = useMemo(
+    () => invoiceDraft?.lines.filter((line) => line.lifecycle_status === "discontinued").length || 0,
+    [invoiceDraft],
+  );
 
   function updateInvoiceDraft<K extends keyof LocalInvoice>(key: K, value: LocalInvoice[K]) {
     setInvoiceDraft((current) => (current ? { ...current, [key]: value } : current));
@@ -575,7 +589,10 @@ export function SalesPage({
                     {invoiceDraft.lines.map((line, index) => (
                       <tr key={`${line.product_code}-${index}`}>
                         <td>{line.product_code}</td>
-                        <td>{line.description || "-"}</td>
+                        <td>
+                          <div>{line.description || "-"}</div>
+                          {renderInvoiceLifecycleBadge(line)}
+                        </td>
                         <td>
                           <input
                             className="inline-edit-input inline-edit-input--qty"
@@ -662,6 +679,11 @@ export function SalesPage({
                     ))}
                   </tbody>
                 </table>
+                {invoiceDiscontinuedLineCount > 0 ? (
+                  <div className="warning-text">
+                    {invoiceDiscontinuedLineCount.toLocaleString("en-US")} discontinued item(s) detected in this invoice. Review before confirmation or sending.
+                  </div>
+                ) : null}
                 <div className="quote-summary-card">
                   <div className="quote-summary-row">
                     <span>Sub Total</span>

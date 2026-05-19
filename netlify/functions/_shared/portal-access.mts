@@ -60,6 +60,17 @@ function toNumber(value: unknown) {
   return Number(value ?? 0) || 0;
 }
 
+function normalizeLifecycleStatus(value: unknown): "active" | "discontinued" {
+  return String(value || "").trim().toLowerCase() === "discontinued" ? "discontinued" : "active";
+}
+
+function buildDiscontinuedWarning(resolvedCode: string, note?: string | null) {
+  const code = String(resolvedCode || "").trim();
+  const base = code ? `Production ended for ${code}.` : "Production ended for this item.";
+  const detail = String(note || "").trim();
+  return detail ? `${base} ${detail}` : base;
+}
+
 function mapSalesOrderLines(lines: unknown) {
   if (!Array.isArray(lines)) return [];
   return lines.map((line) => {
@@ -68,8 +79,11 @@ function mapSalesOrderLines(lines: unknown) {
     const sellPrice = row.sell_price == null ? null : toNumber(row.sell_price);
     const purchaseTotal = row.buy_price == null ? null : toNumber(row.buy_price) * qty;
     const salesTotal = sellPrice == null ? null : sellPrice * qty;
+    const lifecycleStatus = normalizeLifecycleStatus(row.lifecycle_status);
+    const lifecycleNote = String(row.lifecycle_note || "").trim() || null;
+    const resolvedCode = String(row.resolvedCode || row.requestedCode || "");
     return {
-      code: String(row.resolvedCode || row.requestedCode || ""),
+      code: resolvedCode,
       requested_code: String(row.requestedCode || ""),
       brand: String(row.brand || ""),
       description: String(row.description || ""),
@@ -86,6 +100,12 @@ function mapSalesOrderLines(lines: unknown) {
       line_total: salesTotal,
       price_date: String(row.price_date || ""),
       notes: String(row.notes || ""),
+      lifecycle_status: lifecycleStatus,
+      lifecycle_note: lifecycleNote,
+      lifecycle_warning:
+        lifecycleStatus === "discontinued"
+          ? String(row.lifecycle_warning || "").trim() || buildDiscontinuedWarning(resolvedCode, lifecycleNote)
+          : null,
     };
   });
 }
@@ -94,8 +114,11 @@ function mapInvoiceLines(lines: unknown) {
   if (!Array.isArray(lines)) return [];
   return lines.map((line) => {
     const row = (line || {}) as Record<string, unknown>;
+    const lifecycleStatus = normalizeLifecycleStatus(row.lifecycle_status);
+    const lifecycleNote = String(row.lifecycle_note || "").trim() || null;
+    const resolvedCode = String(row.product_code || "");
     return {
-      code: String(row.product_code || ""),
+      code: resolvedCode,
       old_code: String(row.old_code || ""),
       brand: String(row.brand || ""),
       description: String(row.description || ""),
@@ -111,6 +134,12 @@ function mapInvoiceLines(lines: unknown) {
       sales_total: row.sales_total == null ? null : toNumber(row.sales_total),
       line_total: row.sales_total == null ? null : toNumber(row.sales_total),
       notes: String(row.notes || ""),
+      lifecycle_status: lifecycleStatus,
+      lifecycle_note: lifecycleNote,
+      lifecycle_warning:
+        lifecycleStatus === "discontinued"
+          ? String(row.lifecycle_warning || "").trim() || buildDiscontinuedWarning(resolvedCode, lifecycleNote)
+          : null,
     };
   });
 }

@@ -145,6 +145,9 @@ type PortalDocumentLine = {
   line_total?: number | null;
   price_date?: string;
   notes?: string;
+  lifecycle_status?: "active" | "discontinued" | null;
+  lifecycle_note?: string | null;
+  lifecycle_warning?: string | null;
 };
 
 type PortalPaymentRow = {
