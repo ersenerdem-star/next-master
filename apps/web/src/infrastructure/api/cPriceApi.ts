@@ -38,31 +38,39 @@ async function getCurrentOrgId() {
   return organizationId;
 }
 
-async function fetchActiveCPriceListId() {
-  const organizationId = await getCurrentOrgId();
+async function fetchActiveCPriceLists(organizationId: string) {
   const { data, error } = await supabaseClient
     .from("customer_price_lists")
-    .select("id,name")
+    .select("id,updated_at")
     .eq("organization_id", organizationId)
     .eq("list_type", "C")
     .eq("is_active", true)
     .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
 
   if (error) {
-    throw new Error(error.message || "Failed to load active C price list");
+    throw new Error(error.message || "Failed to load active C price lists");
   }
 
-  return (data?.id as string | undefined) || "";
+  return (data || [])
+    .map((row) => ({
+      id: String(row.id || ""),
+      updatedAt: String(row.updated_at || ""),
+    }))
+    .filter((row) => row.id);
 }
 
 export async function fetchCPriceMapForRows(rows: RowLike[]) {
-  const activeListId = await fetchActiveCPriceListId();
   const organizationId = await getCurrentOrgId();
-  if (!activeListId || !rows.length) {
+  const activeLists = await fetchActiveCPriceLists(organizationId);
+  if (!activeLists.length || !rows.length) {
     return new Map<string, number>();
   }
+  const activeListIds = activeLists.map((item) => item.id);
+  const listPriority = new Map<string, number>();
+  activeLists.forEach((item, index) => {
+    listPriority.set(item.id, index);
+  });
 
   const brandNames = Array.from(
     new Set(
@@ -106,15 +114,16 @@ export async function fetchCPriceMapForRows(rows: RowLike[]) {
   }
 
   const result = new Map<string, number>();
+  const resultPriority = new Map<string, number>();
   const chunkSize = 500;
 
   for (let index = 0; index < normalizedCodes.length; index += chunkSize) {
     const codeChunk = normalizedCodes.slice(index, index + chunkSize);
     const { data, error } = await supabaseClient
       .from("customer_price_list_items")
-      .select("brand_id,normalized_code,sell_price")
+      .select("price_list_id,brand_id,normalized_code,sell_price")
       .eq("organization_id", organizationId)
-      .eq("price_list_id", activeListId)
+      .in("price_list_id", activeListIds)
       .in("brand_id", brandIds)
       .in("normalized_code", codeChunk);
 
@@ -127,7 +136,12 @@ export async function fetchCPriceMapForRows(rows: RowLike[]) {
       const normalizedCode = String(row.normalized_code || "");
       const sellPrice = Number(row.sell_price || 0);
       if (!brandName || !normalizedCode || !Number.isFinite(sellPrice)) return;
-      result.set(rowKey(brandName, normalizedCode), sellPrice);
+      const key = rowKey(brandName, normalizedCode);
+      const priority = listPriority.get(String(row.price_list_id || "")) ?? Number.MAX_SAFE_INTEGER;
+      const currentPriority = resultPriority.get(key);
+      if (currentPriority != null && currentPriority <= priority) return;
+      result.set(key, sellPrice);
+      resultPriority.set(key, priority);
     });
   }
 

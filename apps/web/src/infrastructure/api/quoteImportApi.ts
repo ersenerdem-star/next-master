@@ -186,19 +186,27 @@ export async function batchResolveQuoteImportRows(input: {
     }
   }
 
+  const resolvedCatalogRows = preparedRows.map((row) => {
+    const key = codeKey(row.brandId, row.normalizedTargetCode);
+    const catalogMatch = catalogExact.get(key) || catalogOem.get(key) || null;
+    return {
+      row,
+      key,
+      catalogMatch,
+    };
+  });
+
   const cPriceMap =
     input.customerType === "C"
       ? await fetchCPriceMapForRows(
-          preparedRows.map((row) => ({
+          resolvedCatalogRows.map(({ row, catalogMatch }) => ({
             brand: row.brand,
-            product_code: row.targetCode,
+            product_code: String(catalogMatch?.product_code || row.targetCode || row.code),
           })),
         )
       : null;
 
-  return preparedRows.map((row) => {
-    const key = codeKey(row.brandId, row.normalizedTargetCode);
-    const catalogMatch = catalogExact.get(key) || catalogOem.get(key) || null;
+  return resolvedCatalogRows.map(({ row, key, catalogMatch }) => {
     const supplierMatchesRaw = [...(supplierExact.get(key) || []), ...(supplierOem.get(key) || [])];
     const uniqueSupplierMatches = new Map<string, any>();
     supplierMatchesRaw.forEach((item) => {
