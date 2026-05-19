@@ -186,7 +186,7 @@ export function CodeReferencesPage() {
 
   async function parseImportRows(file: File) {
     const extension = file.name.split(".").pop()?.toLowerCase() || "";
-    const defaultReason = `Imported from ${file.name}`;
+    const defaultReason = "Automatic replacement";
     let parsed: string[][] = [];
 
     if (["csv", "tsv", "txt"].includes(extension)) {
