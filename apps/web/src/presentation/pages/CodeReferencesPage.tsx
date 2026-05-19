@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { read, utils } from "xlsx";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { createCodeReference, deleteCodeReference, fetchCodeReferences, importCodeReferences, inspectCodeReferenceUsage, updateCodeReference } from "../../infrastructure/api/codeReferencesApi";
 import { parseCsv } from "../../shared/csv";
@@ -24,6 +25,7 @@ export function CodeReferencesPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [importBrand, setImportBrand] = useState("");
   const [savingCreate, setSavingCreate] = useState(false);
   const [createError, setCreateError] = useState("");
   const [createBrandName, setCreateBrandName] = useState("");
@@ -180,6 +182,59 @@ export function CodeReferencesPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function parseImportRows(file: File) {
+    const extension = file.name.split(".").pop()?.toLowerCase() || "";
+    let parsed: string[][] = [];
+
+    if (["csv", "tsv", "txt"].includes(extension)) {
+      parsed = parseCsv(await file.text());
+    } else if (["xlsx", "xlsm", "xls"].includes(extension)) {
+      const workbook = read(await file.arrayBuffer(), { type: "array" });
+      const firstSheetName = workbook.SheetNames[0];
+      if (!firstSheetName) return [];
+      const sheet = workbook.Sheets[firstSheetName];
+      parsed = utils.sheet_to_json<string[]>(sheet, { header: 1, defval: "", raw: false });
+    } else {
+      throw new Error("Upload CSV, TSV, TXT, XLSX or XLS files.");
+    }
+
+    const [header = [], ...dataRows] = parsed;
+    const normalizedHeader = header.map((cell) =>
+      String(cell || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_"),
+    );
+
+    const findIndex = (aliases: string[]) => normalizedHeader.findIndex((cell) => aliases.includes(cell));
+    const brandIndex = findIndex(["brand"]);
+    const oldCodeIndex = findIndex(["old_code", "old_part_nr", "old_part_number"]);
+    const newCodeIndex = findIndex(["new_code", "new_part_nr", "new_part_number"]);
+    const originalIndex = findIndex(["original_number", "original_part_number", "oem", "oem_no"]);
+    const reasonIndex = findIndex(["reason", "note", "notes"]);
+    const activeIndex = findIndex(["active", "is_active"]);
+
+    if (oldCodeIndex < 0 || newCodeIndex < 0) {
+      throw new Error("Required columns not found. Use Old Code / New Code or Old Part Nr / New Part Nr headers.");
+    }
+
+    const fallbackBrand = importBrand.trim();
+    if (brandIndex < 0 && !fallbackBrand) {
+      throw new Error("Select a default brand for files that do not include a Brand column.");
+    }
+
+    return dataRows
+      .map((row) => ({
+        brand: String(brandIndex >= 0 ? row[brandIndex] || "" : fallbackBrand).trim(),
+        old_code: String(row[oldCodeIndex] || "").trim(),
+        new_code: String(row[newCodeIndex] || "").trim(),
+        original_number: originalIndex >= 0 ? String(row[originalIndex] || "").trim() || null : null,
+        reason: reasonIndex >= 0 ? String(row[reasonIndex] || "").trim() || null : null,
+        is_active: activeIndex >= 0 ? String(row[activeIndex] || "true").trim().toLowerCase() !== "false" : true,
+      }))
+      .filter((row) => row.brand && row.old_code && row.new_code);
   }
 
   async function handleCreateReference() {
@@ -545,11 +600,17 @@ export function CodeReferencesPage() {
             <div className="modal-form-grid">
               <label className="field field--full">
                 <span className="field__label">File</span>
-                <input className="field__input" type="file" accept=".csv,text/csv" onChange={(event) => setImportFile(event.target.files?.[0] ?? null)} />
+                <input className="field__input" type="file" accept=".csv,text/csv,.tsv,.txt,.xlsx,.xls,.xlsm" onChange={(event) => setImportFile(event.target.files?.[0] ?? null)} />
               </label>
               <Input label="Selected file" value={importFile?.name ?? ""} onChange={() => undefined} disabled />
+              <Select
+                label="Default Brand"
+                value={importBrand}
+                options={[{ value: "", label: "Pick brand if file has no Brand column" }, ...brands.map((item) => ({ value: item.name, label: item.name }))]}
+                onChange={setImportBrand}
+              />
             </div>
-            <div className="modal-hint">Duplicate control is automatic. Same brand + old code will update the existing reference instead of creating a duplicate row.</div>
+            <div className="modal-hint">Duplicate control is automatic. Same brand + old code will update the existing reference instead of creating a duplicate row. Flattened replacement files can contain only Old/New columns if you choose a default brand here.</div>
             <div className="toolbar">
               <Button
                 variant="secondary"
@@ -574,33 +635,10 @@ export function CodeReferencesPage() {
                     setStatus("");
                     setImporting(true);
                     actionFeedback.begin("Importing code references...");
-                    const text = await importFile.text();
-                    const parsed = parseCsv(text);
-                    const [header = [], ...dataRows] = parsed;
-                    const lowerHeader = header.map((cell) => cell.trim().toLowerCase());
-                    const indexOf = (aliases: string[], fallback: number) => {
-                      const found = lowerHeader.findIndex((cell) => aliases.includes(cell));
-                      return found >= 0 ? found : fallback;
-                    };
-
-                    const brandIndex = indexOf(["brand"], 0);
-                    const oldCodeIndex = indexOf(["old_code", "old code"], 1);
-                    const newCodeIndex = indexOf(["new_code", "new code"], 2);
-                    const originalIndex = indexOf(["original_number", "original number", "oem", "oem_no"], 3);
-                    const reasonIndex = indexOf(["reason", "note", "notes"], 4);
-                    const activeIndex = indexOf(["active", "is_active"], 5);
-
-                    const rowsToImport = dataRows.map((row) => ({
-                      brand: String(row[brandIndex] || "").trim(),
-                      old_code: String(row[oldCodeIndex] || "").trim(),
-                      new_code: String(row[newCodeIndex] || "").trim(),
-                      original_number: String(row[originalIndex] || "").trim() || null,
-                      reason: String(row[reasonIndex] || "").trim() || null,
-                      is_active: String(row[activeIndex] || "true").trim().toLowerCase() !== "false",
-                    }));
-
+                    const rowsToImport = await parseImportRows(importFile);
                     await importCodeReferences(rowsToImport);
                     setImportFile(null);
+                    setImportBrand("");
                     setShowImportDialog(false);
                     await reload(submittedSearch);
                     setStatus("Code references imported successfully.");
