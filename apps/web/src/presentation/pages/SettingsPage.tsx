@@ -99,6 +99,14 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const [emailDateFrom, setEmailDateFrom] = useState("");
   const [emailDateTo, setEmailDateTo] = useState("");
   const passwordResetAvailable = isPasswordResetAvailable();
+  const newUserEmail = newUserDraft.email.trim().toLowerCase();
+  const newUserPassword = newUserDraft.password.trim();
+  const newUserValidationMessage = !newUserEmail
+    ? "Email is required."
+    : newUserPassword.length < 8
+      ? "Temporary password must be at least 8 characters."
+      : "";
+  const canCreateUser = !creatingUser && !newUserValidationMessage;
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -689,27 +697,22 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               <span className="field__label">Create User</span>
               <Button
                 id="settings-add-user-button"
+                disabled={!canCreateUser}
                 busy={creatingUser}
                 busyLabel="Creating..."
                 onClick={async () => {
-                  const email = newUserDraft.email.trim().toLowerCase();
-                  const password = newUserDraft.password.trim();
-                  if (!email) {
-                    setUserActionStatus("Email is required.");
-                    return;
-                  }
-                  if (password.length < 8) {
-                    setUserActionStatus("Password must be at least 8 characters.");
+                  if (newUserValidationMessage) {
+                    setUserActionStatus(newUserValidationMessage);
                     return;
                   }
 
                   try {
                     setCreatingUser(true);
                     setUserActionStatus("");
-                    actionFeedback.begin(`Creating user ${email}...`);
+                    actionFeedback.begin(`Creating user ${newUserEmail}...`);
                     await createOrgUser({
-                      email,
-                      password,
+                      email: newUserEmail,
+                      password: newUserPassword,
                       fullName: newUserDraft.fullName.trim(),
                       role: newUserDraft.role,
                       isActive: newUserDraft.isActive,
@@ -723,8 +726,8 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                       password: "",
                       isActive: true,
                     });
-                    setUserActionStatus(`User created: ${email}`);
-                    actionFeedback.succeed(`User created: ${email}`);
+                    setUserActionStatus(`User created: ${newUserEmail}`);
+                    actionFeedback.succeed(`User created: ${newUserEmail}`);
                   } catch (caught) {
                     const message = caught instanceof Error ? caught.message : "User create failed";
                     setUserActionStatus(message);
@@ -738,6 +741,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               </Button>
             </div>
           </div>
+          {newUserValidationMessage ? <div className="error-text">{newUserValidationMessage}</div> : null}
           <div className="settings-grid settings-stats-grid">
             <div className="settings-item">
               <span className="settings-label">Online Now</span>
