@@ -1,3 +1,5 @@
+import type { CatalogLifecycleStatus } from "../domain/shared/lifecycle";
+
 export type QuoteSupplierOption = {
   supplier_id?: string | null;
   supplier_name: string;
@@ -5,6 +7,9 @@ export type QuoteSupplierOption = {
   price_date: string | null;
   sell_price: number | null;
   notes: string | null;
+  lifecycle_status?: CatalogLifecycleStatus | null;
+  lifecycle_note?: string | null;
+  lifecycle_warning?: string | null;
 };
 
 export type QuoteResolveResult = {
@@ -23,6 +28,9 @@ export type QuoteResolveResult = {
   price_date: string | null;
   sell_price: number | null;
   notes: string | null;
+  lifecycle_status?: CatalogLifecycleStatus | null;
+  lifecycle_note?: string | null;
+  lifecycle_warning?: string | null;
 };
 
 export type QuoteBuilderLine = {
@@ -45,6 +53,9 @@ export type QuoteBuilderLine = {
   found: boolean;
   codeChanged: boolean;
   codeChangeWarning: string;
+  lifecycle_status?: CatalogLifecycleStatus | null;
+  lifecycle_note?: string | null;
+  lifecycle_warning?: string | null;
   supplierOptions: QuoteSupplierOption[];
   selectedSupplierKey: string;
 };

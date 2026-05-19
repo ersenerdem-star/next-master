@@ -1,6 +1,66 @@
+import { buildDiscontinuedWarning, normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { normalizePartCode } from "../../domain/shared/normalize";
 import type { QuoteResolveResult, QuoteSupplierOption } from "../../types/quoteBuilder";
 import { supabaseClient } from "./supabaseClient";
+
+async function enrichLifecycle(resolved: QuoteResolveResult): Promise<QuoteResolveResult> {
+  if (!resolved.product_id) {
+    const lifecycleStatus = normalizeCatalogLifecycleStatus(resolved.lifecycle_status);
+    return {
+      ...resolved,
+      lifecycle_status: lifecycleStatus,
+      lifecycle_note: resolved.lifecycle_note || null,
+      lifecycle_warning:
+        lifecycleStatus === "discontinued"
+          ? buildDiscontinuedWarning({
+              resolvedCode: resolved.product_code,
+              note: resolved.lifecycle_note,
+            })
+          : null,
+    };
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from("catalog_products")
+      .select("lifecycle_status,lifecycle_note")
+      .eq("id", resolved.product_id)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    const lifecycleStatus = normalizeCatalogLifecycleStatus(String(data?.lifecycle_status || resolved.lifecycle_status || ""));
+    const lifecycleNote = String(data?.lifecycle_note || resolved.lifecycle_note || "").trim() || null;
+
+    return {
+      ...resolved,
+      lifecycle_status: lifecycleStatus,
+      lifecycle_note: lifecycleNote,
+      lifecycle_warning:
+        lifecycleStatus === "discontinued"
+          ? buildDiscontinuedWarning({
+              resolvedCode: resolved.product_code,
+              note: lifecycleNote,
+            })
+          : null,
+    };
+  } catch {
+    const lifecycleStatus = normalizeCatalogLifecycleStatus(resolved.lifecycle_status);
+    return {
+      ...resolved,
+      lifecycle_status: lifecycleStatus,
+      lifecycle_note: resolved.lifecycle_note || null,
+      lifecycle_warning:
+        lifecycleStatus === "discontinued"
+          ? buildDiscontinuedWarning({
+              resolvedCode: resolved.product_code,
+              note: resolved.lifecycle_note,
+            })
+          : null,
+    };
+  }
+}
 
 export async function resolveQuoteLine(input: {
   code: string;
@@ -27,10 +87,10 @@ export async function resolveQuoteLine(input: {
     throw new Error(error.message || "Quote resolve failed");
   }
 
-  const resolved = ((data || [])[0] || {
+  const resolved = await enrichLifecycle(((data || [])[0] || {
     found: false,
     product_code: code,
-  }) as QuoteResolveResult;
+  }) as QuoteResolveResult);
 
   let supplierOptions: QuoteSupplierOption[] = [];
   const includeSupplierOptions = input.includeSupplierOptions !== false;

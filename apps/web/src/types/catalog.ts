@@ -1,3 +1,5 @@
+import type { CatalogLifecycleStatus } from "../domain/shared/lifecycle";
+
 export type CatalogRow = {
   total_count: number;
   product_id: string;
@@ -8,4 +10,6 @@ export type CatalogRow = {
   hs_code: string;
   origin: string;
   weight_kg: number | null;
+  lifecycle_status: CatalogLifecycleStatus | null;
+  lifecycle_note: string;
 };

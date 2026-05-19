@@ -1,3 +1,4 @@
+import { buildDiscontinuedWarning, normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { normalizePartCode } from "../../domain/shared/normalize";
 import type { CodeReferenceMatch } from "../../types/codeReferences";
 import type { QuoteBuilderLine, QuoteSupplierOption } from "../../types/quoteBuilder";
@@ -18,6 +19,8 @@ type CatalogMetadataRow = {
   hs_code: string;
   origin: string;
   weight_kg: number | null;
+  lifecycle_status?: "active" | "discontinued" | null;
+  lifecycle_note?: string | null;
 };
 
 function roundMoney(value: number) {
@@ -130,13 +133,13 @@ export async function batchResolveQuoteImportRows(input: {
     const [catalogExactResult, catalogOemResult, supplierExactResult, supplierOemResult] = await Promise.all([
       supabaseClient
         .from("catalog_products")
-        .select("id,product_code,normalized_code,normalized_oem,description,oem_no,hs_code,origin,weight_kg,brand_id")
+        .select("id,product_code,normalized_code,normalized_oem,description,oem_no,hs_code,origin,weight_kg,brand_id,lifecycle_status,lifecycle_note")
         .eq("organization_id", organizationId)
         .in("brand_id", brandIds)
         .in("normalized_code", codeChunk),
       supabaseClient
         .from("catalog_products")
-        .select("id,product_code,normalized_code,normalized_oem,description,oem_no,hs_code,origin,weight_kg,brand_id")
+        .select("id,product_code,normalized_code,normalized_oem,description,oem_no,hs_code,origin,weight_kg,brand_id,lifecycle_status,lifecycle_note")
         .eq("organization_id", organizationId)
         .in("brand_id", brandIds)
         .in("normalized_oem", codeChunk),
@@ -231,6 +234,8 @@ export async function batchResolveQuoteImportRows(input: {
             product_code: String(catalogMatch?.product_code || row.targetCode || row.code),
           })
         : selected?.sell_price ?? null;
+    const lifecycleStatus = normalizeCatalogLifecycleStatus(String(catalogMatch?.lifecycle_status || ""));
+    const lifecycleNote = String(catalogMatch?.lifecycle_note || "").trim() || null;
 
     return {
       lineId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -254,6 +259,15 @@ export async function batchResolveQuoteImportRows(input: {
       codeChangeWarning: row.referenceMatch
         ? `Old Code ${row.referenceMatch.old_code} => New Code ${row.referenceMatch.new_code}.${row.referenceMatch.reason ? ` ${row.referenceMatch.reason}` : ""}`
         : "",
+      lifecycle_status: lifecycleStatus,
+      lifecycle_note: lifecycleNote,
+      lifecycle_warning:
+        lifecycleStatus === "discontinued"
+          ? buildDiscontinuedWarning({
+              resolvedCode: String(catalogMatch?.product_code || row.targetCode || row.code),
+              note: lifecycleNote,
+            })
+          : null,
       supplierOptions: supplierMatches as QuoteSupplierOption[],
       selectedSupplierKey: selected ? `${selected.supplier_name}-0` : "",
     } satisfies QuoteBuilderLine;
@@ -308,7 +322,7 @@ export async function fetchCatalogMetadataForRows(
   for (const codeChunk of chunk(normalizedCodes, 200)) {
     const { data, error } = await supabaseClient
       .from("catalog_products")
-      .select("brand_id,product_code,normalized_code,description,oem_no,hs_code,origin,weight_kg")
+      .select("brand_id,product_code,normalized_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note")
       .eq("organization_id", organizationId)
       .in("brand_id", brandIds)
       .in("normalized_code", codeChunk);
@@ -327,6 +341,8 @@ export async function fetchCatalogMetadataForRows(
         hs_code: String(row.hs_code || ""),
         origin: String(row.origin || ""),
         weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
+        lifecycle_status: normalizeCatalogLifecycleStatus(String(row.lifecycle_status || "")),
+        lifecycle_note: String(row.lifecycle_note || "").trim() || null,
       });
     }
   }

@@ -1,4 +1,5 @@
 import type { CatalogRow } from "../../types/catalog";
+import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { supabaseClient } from "./supabaseClient";
 
 async function getCurrentOrgId() {
@@ -74,7 +75,7 @@ export async function fetchCloudCatalog(input: {
 
     let query = supabaseClient
       .from("catalog_products")
-      .select("id,product_code,description,oem_no,hs_code,origin,weight_kg", { count: "exact" })
+      .select("id,product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note", { count: "exact" })
       .eq("brand_id", brandId)
       .order("product_code", { ascending: true })
       .range(from, to);
@@ -95,6 +96,8 @@ export async function fetchCloudCatalog(input: {
       hs_code: string | null;
       origin: string | null;
       weight_kg: number | null;
+      lifecycle_status: string | null;
+      lifecycle_note: string | null;
     }>).map((row) => ({
       total_count: count ?? 0,
       product_id: row.id,
@@ -105,6 +108,8 @@ export async function fetchCloudCatalog(input: {
       hs_code: row.hs_code ?? "",
       origin: row.origin ?? "",
       weight_kg: row.weight_kg,
+      lifecycle_status: normalizeCatalogLifecycleStatus(row.lifecycle_status),
+      lifecycle_note: row.lifecycle_note ?? "",
     }));
   }
 
@@ -115,7 +120,19 @@ export async function fetchCloudCatalog(input: {
   });
 
   if (error) throw error;
-  return (data ?? []) as CatalogRow[];
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    total_count: Number(row.total_count ?? 0),
+    product_id: String(row.product_id || ""),
+    product_code: String(row.product_code || ""),
+    brand: String(row.brand || ""),
+    description: String(row.description || ""),
+    oem_no: String(row.oem_no || ""),
+    hs_code: String(row.hs_code || ""),
+    origin: String(row.origin || ""),
+    weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
+    lifecycle_status: normalizeCatalogLifecycleStatus(String(row.lifecycle_status || "")),
+    lifecycle_note: String(row.lifecycle_note || ""),
+  }));
 }
 
 export async function updateCloudCatalogRow(
@@ -128,6 +145,8 @@ export async function updateCloudCatalogRow(
     hs_code: string | null;
     origin: string | null;
     weight_kg: number | null;
+    lifecycle_status: string | null;
+    lifecycle_note: string | null;
   },
 ) {
   const brandId = await resolveBrandId(updates.brand);
@@ -142,6 +161,8 @@ export async function updateCloudCatalogRow(
       hs_code: updates.hs_code,
       origin: updates.origin,
       weight_kg: updates.weight_kg,
+      lifecycle_status: normalizeCatalogLifecycleStatus(updates.lifecycle_status),
+      lifecycle_note: updates.lifecycle_note?.trim() || null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", productId);
@@ -157,6 +178,8 @@ export async function createCloudCatalogRow(input: {
   hs_code: string | null;
   origin: string | null;
   weight_kg: number | null;
+  lifecycle_status?: string | null;
+  lifecycle_note?: string | null;
 }) {
   const organizationId = await getCurrentOrgId();
   const brandId = await resolveOrCreateBrandId(input.brand);
@@ -170,6 +193,8 @@ export async function createCloudCatalogRow(input: {
     hs_code: input.hs_code,
     origin: input.origin,
     weight_kg: input.weight_kg,
+    lifecycle_status: normalizeCatalogLifecycleStatus(input.lifecycle_status),
+    lifecycle_note: input.lifecycle_note?.trim() || null,
   });
 
   if (error) throw new Error(error.message || "Catalog create failed");
@@ -209,6 +234,8 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     hs_code: string | null;
     origin: string | null;
     weight_kg: number | null;
+    lifecycle_status: string | null;
+    lifecycle_note: string | null;
   }> = [];
 
   let from = 0;
@@ -217,7 +244,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
   while (true) {
     let query = supabaseClient
       .from("catalog_products")
-      .select("product_code,description,oem_no,hs_code,origin,weight_kg")
+      .select("product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note")
       .eq("brand_id", brandRow.id)
       .order("product_code", { ascending: true })
       .range(from, from + pageSize - 1);
@@ -246,6 +273,8 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     hs_code: row.hs_code || "",
     origin: row.origin || "",
     weight_kg: row.weight_kg,
+    lifecycle_status: normalizeCatalogLifecycleStatus(row.lifecycle_status),
+    lifecycle_note: row.lifecycle_note || "",
   }));
 }
 
@@ -289,7 +318,7 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
     const codeChunk = normalizedCodes.slice(index, index + chunkSize);
     const { data, error } = await supabaseClient
       .from("catalog_products")
-      .select("id,product_code,description,oem_no,hs_code,origin,weight_kg")
+      .select("id,product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note")
       .eq("organization_id", organizationId)
       .eq("brand_id", brandRow.id)
       .in("product_code", codeChunk)
@@ -308,6 +337,8 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
         hs_code: string | null;
         origin: string | null;
         weight_kg: number | null;
+        lifecycle_status: string | null;
+        lifecycle_note: string | null;
       }>).map((row) => ({
         total_count: normalizedCodes.length,
         product_id: row.id,
@@ -318,6 +349,8 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
         hs_code: row.hs_code ?? "",
         origin: row.origin ?? "",
         weight_kg: row.weight_kg,
+        lifecycle_status: normalizeCatalogLifecycleStatus(row.lifecycle_status),
+        lifecycle_note: row.lifecycle_note ?? "",
       })),
     );
   }

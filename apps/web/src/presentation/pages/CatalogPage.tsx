@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { createCloudCatalogRow, deleteCloudCatalogRow, fetchCatalogExportRows, fetchCatalogRowsByCodes, fetchCloudCatalog, updateCloudCatalogRow } from "../../infrastructure/api/catalogApi";
 import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenceUsage } from "../../infrastructure/api/codeReferencesApi";
@@ -66,6 +67,8 @@ export function CatalogPage() {
     hs_code: "",
     origin: "",
     weight_kg: "",
+    lifecycle_status: "active",
+    lifecycle_note: "",
   });
   const [referenceDraft, setReferenceDraft] = useState({
     brand: "",
@@ -74,6 +77,10 @@ export function CatalogPage() {
     original_number: "",
     reason: "",
   });
+  const lifecycleOptions = [
+    { value: "active", label: "Active" },
+    { value: "discontinued", label: "Discontinued" },
+  ];
 
   useEffect(() => {
     let cancelled = false;
@@ -370,6 +377,47 @@ export function CatalogPage() {
         ),
       },
       {
+        key: "lifecycle",
+        header: "Lifecycle",
+        render: (row: CatalogRow) => (
+          <select
+            className="inline-edit-input"
+            value={drafts[row.product_id]?.lifecycle_status ?? row.lifecycle_status ?? "active"}
+            onChange={(event) =>
+              setDrafts((current) => ({
+                ...current,
+                [row.product_id]: {
+                  ...(current[row.product_id] || row),
+                  lifecycle_status: normalizeCatalogLifecycleStatus(event.target.value),
+                },
+              }))
+            }
+          >
+            {lifecycleOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        ),
+      },
+      {
+        key: "lifecycleNote",
+        header: "Lifecycle Note",
+        render: (row: CatalogRow) => (
+          <input
+            className="inline-edit-input"
+            value={drafts[row.product_id]?.lifecycle_note ?? row.lifecycle_note ?? ""}
+            onChange={(event) =>
+              setDrafts((current) => ({
+                ...current,
+                [row.product_id]: { ...(current[row.product_id] || row), lifecycle_note: event.target.value },
+              }))
+            }
+          />
+        ),
+      },
+      {
         key: "ref",
         header: "Ref",
         render: (row: CatalogRow) => {
@@ -401,6 +449,8 @@ export function CatalogPage() {
                     hs_code: draft.hs_code || null,
                     origin: draft.origin || null,
                     weight_kg: parseWeightInput(draft.weight_kg),
+                    lifecycle_status: draft.lifecycle_status || "active",
+                    lifecycle_note: draft.lifecycle_note || null,
                   });
                   await reloadCatalog(submittedSearch, submittedCatalogBrand);
                   setStatus(`Catalog row ${draft.product_code} saved.`);
@@ -518,6 +568,8 @@ export function CatalogPage() {
       const hsIndex = indexOfAny("HS_Code", "HS", "GTIP");
       const originIndex = indexOfAny("Origin", "Country_Of_Origin");
       const weightIndex = indexOfAny("Weight_kg", "Weight", "Net_Weight");
+      const lifecycleStatusIndex = indexOfAny("Lifecycle_Status", "Lifecycle");
+      const lifecycleNoteIndex = indexOfAny("Lifecycle_Note", "Lifecycle Note", "Discontinued_Note", "Discontinued Note");
       const selectedImportBrand = importBrand === "__new__" ? importBrandName.trim() : importBrand.trim();
       const rowBrands = dataRows.map((row) => normalizeText(row[brandIndex]) ?? "");
       const detectedBrands = Array.from(
@@ -548,6 +600,8 @@ export function CatalogPage() {
           hs_code: normalizeText(row[hsIndex]),
           origin: normalizeText(row[originIndex]),
           weight_kg: normalizeNumber(row[weightIndex]),
+          lifecycle_status: normalizeCatalogLifecycleStatus(normalizeText(row[lifecycleStatusIndex])),
+          lifecycle_note: normalizeText(row[lifecycleNoteIndex]),
         }))
         .filter((row) => row.product_code);
 
@@ -618,7 +672,7 @@ export function CatalogPage() {
     try {
       const exportData = await fetchCatalogExportRows({ brandName: exportBrand });
       const exportRows = [
-        ["Product_Code", "Brand", "Product_Name", "OEM_No", "HS_Code", "Origin", "Weight_kg"],
+        ["Product_Code", "Brand", "Product_Name", "OEM_No", "HS_Code", "Origin", "Weight_kg", "Lifecycle_Status", "Lifecycle_Note"],
         ...exportData.map((row) => [
           row.product_code,
           row.brand,
@@ -627,6 +681,8 @@ export function CatalogPage() {
           row.hs_code || "",
           row.origin || "",
           row.weight_kg ?? "",
+          row.lifecycle_status || "active",
+          row.lifecycle_note || "",
         ]),
       ];
       downloadCsv(`catalog-${exportBrand.toLowerCase().replace(/\s+/g, "-")}.csv`, toCsv(exportRows));
@@ -859,6 +915,13 @@ export function CatalogPage() {
               <Input label="HS Code" value={createDraft.hs_code} onChange={(value) => setCreateDraft((current) => ({ ...current, hs_code: value }))} />
               <Input label="Origin" value={createDraft.origin} onChange={(value) => setCreateDraft((current) => ({ ...current, origin: value }))} />
               <Input label="Weight" value={createDraft.weight_kg} onChange={(value) => setCreateDraft((current) => ({ ...current, weight_kg: value }))} />
+              <Select
+                label="Lifecycle"
+                value={createDraft.lifecycle_status}
+                options={lifecycleOptions}
+                onChange={(value) => setCreateDraft((current) => ({ ...current, lifecycle_status: value }))}
+              />
+              <Input label="Lifecycle Note" value={createDraft.lifecycle_note} onChange={(value) => setCreateDraft((current) => ({ ...current, lifecycle_note: value }))} />
             </div>
             <div className="modal-hint">Product code and brand are required. The item will be created directly in cloud catalog.</div>
             <div className="modal-actions">
@@ -881,6 +944,8 @@ export function CatalogPage() {
                       hs_code: createDraft.hs_code.trim() || null,
                       origin: createDraft.origin.trim() || null,
                       weight_kg: parseWeightInput(createDraft.weight_kg),
+                      lifecycle_status: createDraft.lifecycle_status,
+                      lifecycle_note: createDraft.lifecycle_note.trim() || null,
                     });
                     setCreateDraft({
                       product_code: "",
@@ -891,6 +956,8 @@ export function CatalogPage() {
                       hs_code: "",
                       origin: "",
                       weight_kg: "",
+                      lifecycle_status: "active",
+                      lifecycle_note: "",
                     });
                     const refreshedBrands = await fetchCloudBrands();
                     setBrands(refreshedBrands);

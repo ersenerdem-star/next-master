@@ -201,6 +201,8 @@ function applyCatalogMetadata(line: QuoteBuilderLine, metadataMap: Map<string, {
   hs_code: string;
   origin: string;
   weight_kg: number | null;
+  lifecycle_status?: "active" | "discontinued" | null;
+  lifecycle_note?: string | null;
 }>) {
   const metadata = metadataMap.get(lineMetadataKey(line.brand || "", line.resolvedCode || line.requestedCode));
   if (!metadata) return line;
@@ -212,11 +214,27 @@ function applyCatalogMetadata(line: QuoteBuilderLine, metadataMap: Map<string, {
     hs_code: metadata.hs_code || line.hs_code,
     origin: metadata.origin || line.origin,
     weight_kg: metadata.weight_kg ?? line.weight_kg,
+    lifecycle_status: metadata.lifecycle_status ?? line.lifecycle_status ?? "active",
+    lifecycle_note: metadata.lifecycle_note ?? line.lifecycle_note ?? null,
+    lifecycle_warning:
+      metadata.lifecycle_status === "discontinued"
+        ? `Production ended for ${metadata.product_code || line.resolvedCode || line.requestedCode}.${metadata.lifecycle_note ? ` ${metadata.lifecycle_note}` : ""}`
+        : line.lifecycle_warning ?? null,
   };
 }
 
 function formatAvailabilityQty(value: number) {
   return Number.isInteger(value) ? String(value) : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+function renderLifecycleBadge(row: Pick<QuoteBuilderLine, "lifecycle_status" | "lifecycle_warning">) {
+  if (row.lifecycle_status !== "discontinued") return null;
+  return (
+    <div>
+      <span className="mark-badge mark-badge--danger">Discontinued</span>
+      {row.lifecycle_warning ? <div className="warning-text">{row.lifecycle_warning}</div> : null}
+    </div>
+  );
 }
 
 function findInventoryAvailability(
@@ -775,6 +793,10 @@ export function QuotesPage({
     const margin = totalAmount > 0 ? roundMoney((profit / totalAmount) * 100) : 0;
     return { purchase, subtotal, shipping, discount, totalAmount, profit, margin };
   }, [quoteBuilderLines, shippingCost, discountAmount]);
+  const discontinuedLineCount = useMemo(
+    () => quoteBuilderLines.filter((line) => line.lifecycle_status === "discontinued").length,
+    [quoteBuilderLines],
+  );
 
   useEffect(() => {
     setQuoteBuilderLines((current) =>
@@ -906,6 +928,9 @@ export function QuotesPage({
           sell_price: orderCustomerType === "C" ? line.c_sell_price ?? sellBase : sellBase,
           price_date: line.price_date || selectedFromOptions?.price_date || "",
           notes: line.notes || selectedFromOptions?.notes || "",
+          lifecycle_status: resolved.lifecycle_status ?? line.lifecycle_status ?? "active",
+          lifecycle_note: resolved.lifecycle_note ?? line.lifecycle_note ?? null,
+          lifecycle_warning: resolved.lifecycle_warning ?? line.lifecycle_warning ?? null,
         };
       } catch {
         const buyPrice = hasVisiblePrices ? line.buy_price : selectedFromOptions?.buy_price ?? null;
@@ -917,6 +942,9 @@ export function QuotesPage({
           sell_price: orderCustomerType === "C" ? line.c_sell_price ?? sellBase : sellBase,
           price_date: line.price_date || selectedFromOptions?.price_date || "",
           notes: line.notes || selectedFromOptions?.notes || "",
+          lifecycle_status: line.lifecycle_status ?? "active",
+          lifecycle_note: line.lifecycle_note ?? null,
+          lifecycle_warning: line.lifecycle_warning ?? null,
         };
       }
     }
@@ -961,6 +989,9 @@ export function QuotesPage({
         c_sell_price: cSellPrice ?? line.c_sell_price,
         price_date: resolved.price_date || supplierOptions[0]?.price_date || line.price_date,
         notes: resolved.notes || supplierOptions[0]?.notes || line.notes,
+        lifecycle_status: resolved.lifecycle_status ?? line.lifecycle_status ?? "active",
+        lifecycle_note: resolved.lifecycle_note ?? line.lifecycle_note ?? null,
+        lifecycle_warning: resolved.lifecycle_warning ?? line.lifecycle_warning ?? null,
         supplierOptions: supplierOptions.length ? supplierOptions : line.supplierOptions,
         selectedSupplierKey: selectedKey,
       };
@@ -1076,6 +1107,7 @@ export function QuotesPage({
           <div>
             <div>{row.resolvedCode}</div>
             {row.codeChanged ? <div className="warning-text">{row.codeChangeWarning}</div> : null}
+            {renderLifecycleBadge(row)}
           </div>
         ),
       },
@@ -1301,6 +1333,9 @@ export function QuotesPage({
       codeChangeWarning: referenceMatch
         ? `Old Code ${referenceMatch.old_code} => New Code ${referenceMatch.new_code}.${referenceMatch.reason ? ` ${referenceMatch.reason}` : ""}`
         : "",
+      lifecycle_status: resolved.lifecycle_status ?? "active",
+      lifecycle_note: resolved.lifecycle_note ?? null,
+      lifecycle_warning: resolved.lifecycle_warning ?? null,
       supplierOptions: effectiveSupplierOptions,
       selectedSupplierKey: selectedKey,
     } satisfies QuoteBuilderLine;
@@ -1353,7 +1388,13 @@ export function QuotesPage({
       actionFeedback.begin(`Resolving quote line for ${code}...`);
       const line = await buildBuilderLine({ code, brand, qty });
       setQuoteBuilderLines((current) => [line, ...current]);
-      setBuilderStatus(line.found ? `Resolved ${code} successfully.` : `No system match for ${code}.`);
+      setBuilderStatus(
+        line.found
+          ? line.lifecycle_status === "discontinued"
+            ? `Resolved ${code}. Warning: ${line.resolvedCode} is discontinued.`
+            : `Resolved ${code} successfully.`
+          : `No system match for ${code}.`,
+      );
       line.found ? actionFeedback.succeed(`Resolved ${code} successfully.`) : actionFeedback.fail(`No system match for ${code}.`);
       setQuoteCode("");
       setQuoteBrand("");
@@ -1392,7 +1433,12 @@ export function QuotesPage({
       setBuilderStatus(`Importing and pricing ${normalizedRows.length.toLocaleString("en-US")} lines...`);
       const hydratedLines = await buildImportLines(normalizedRows);
       setQuoteBuilderLines((current) => [...hydratedLines, ...current]);
-      setBuilderStatus(`Pricing ready for ${hydratedLines.length.toLocaleString("en-US")} imported lines.`);
+      const importedDiscontinuedCount = hydratedLines.filter((line) => line.lifecycle_status === "discontinued").length;
+      setBuilderStatus(
+        importedDiscontinuedCount
+          ? `Pricing ready for ${hydratedLines.length.toLocaleString("en-US")} imported lines. ${importedDiscontinuedCount.toLocaleString("en-US")} item(s) are discontinued.`
+          : `Pricing ready for ${hydratedLines.length.toLocaleString("en-US")} imported lines.`,
+      );
       actionFeedback.succeed(`${hydratedLines.length.toLocaleString("en-US")} quote lines imported with pricing.`);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Sales order import failed";
@@ -1704,6 +1750,14 @@ export function QuotesPage({
   async function handleMarkConfirmed() {
     if (!quoteBuilderLines.length) {
       actionFeedback.fail("Add sales order lines before confirming.");
+      return;
+    }
+    if (
+      discontinuedLineCount > 0 &&
+      !window.confirm(
+        `${discontinuedLineCount.toLocaleString("en-US")} discontinued item(s) are still in this sales order. Continue and confirm anyway?`,
+      )
+    ) {
       return;
     }
     try {
@@ -2160,6 +2214,11 @@ export function QuotesPage({
               <span>{quoteBuilderLines.length.toLocaleString("en-US")} sales order draft lines</span>
               {builderStatus ? <span className={builderStatus.includes("No system") || builderStatus.includes("failed") ? "error-text" : "success-text"}>{builderStatus}</span> : null}
             </div>
+            {discontinuedLineCount > 0 ? (
+              <div className="warning-text">
+                {discontinuedLineCount.toLocaleString("en-US")} discontinued item(s) detected in this sales order. Review before confirmation.
+              </div>
+            ) : null}
             <DataTable rows={quoteBuilderLines} columns={builderColumns} emptyText="No sales order lines yet. Add a product code or import a sales order file." />
           </div>
         </div>
