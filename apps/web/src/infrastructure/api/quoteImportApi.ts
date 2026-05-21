@@ -67,26 +67,32 @@ export async function batchResolveQuoteImportRows(input: {
   const organizationId = await getCurrentOrgId();
 
   const referenceMatches = await fetchCodeReferenceMatchesForRows(rows);
-  const normalizedBrands = [...new Set(rows.map((row) => row.brand.trim()))];
+  const normalizedBrands = [...new Set(rows.map((row) => row.brand.trim().toLowerCase()).filter(Boolean))];
   const { data: brandRows, error: brandError } = await supabaseClient
     .from("brands")
     .select("id,name")
-    .eq("organization_id", organizationId)
-    .in("name", normalizedBrands);
+    .eq("organization_id", organizationId);
   if (brandError) throw new Error(brandError.message || "Brand lookup failed");
 
   const brandIdByName = new Map<string, string>();
+  const canonicalBrandByName = new Map<string, string>();
   for (const row of (brandRows || []) as Array<{ id: string; name: string }>) {
-    brandIdByName.set(String(row.name || "").trim().toLowerCase(), String(row.id));
+    const normalizedName = String(row.name || "").trim().toLowerCase();
+    if (!normalizedBrands.includes(normalizedName)) continue;
+    brandIdByName.set(normalizedName, String(row.id));
+    canonicalBrandByName.set(normalizedName, String(row.name || "").trim());
   }
 
   const preparedRows = rows.map((row) => {
+    const normalizedBrandName = row.brand.trim().toLowerCase();
     const referenceMatch = referenceMatches.get(buildReferenceKey(row.brand, row.code)) || null;
     const targetCode = referenceMatch?.new_code || row.code;
     const normalizedTargetCode = normalizePartCode(targetCode);
-    const brandId = brandIdByName.get(row.brand.trim().toLowerCase()) || "";
+    const brandId = brandIdByName.get(normalizedBrandName) || "";
+    const canonicalBrand = canonicalBrandByName.get(normalizedBrandName) || row.brand.trim();
     return {
       ...row,
+      brand: canonicalBrand,
       referenceMatch,
       targetCode,
       normalizedTargetCode,
