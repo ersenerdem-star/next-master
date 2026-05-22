@@ -480,8 +480,6 @@ export function PurchasesPage({
         ["Purchase Order", row.id],
         ["Vendor", row.supplier_name],
         ["Purchase Company", row.purchase_company || ""],
-        ["Sales Order", row.sales_order_no || ""],
-        ["Customer", row.customer_name || ""],
         ["Status", row.status || ""],
         ["Currency", row.currency || "EUR"],
         ["Created", row.created_at?.slice(0, 10) || ""],
