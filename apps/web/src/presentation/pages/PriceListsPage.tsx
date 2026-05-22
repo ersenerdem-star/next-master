@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
+import { read, utils } from "xlsx";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCatalogExportRows } from "../../infrastructure/api/catalogApi";
 import { fetchCPriceMapForRows, getCPriceForRow } from "../../infrastructure/api/cPriceApi";
 import { fetchPriceListSettings, importCPriceList, updateMarginPriceList } from "../../infrastructure/api/priceListsApi";
 import { fetchOldCodesByNewCodeForBrand } from "../../infrastructure/api/codeReferencesApi";
-import { parseCsv, normalizeNumber, normalizeText } from "../../shared/csv";
+import { parseCsv, normalizeText } from "../../shared/csv";
 import type { BrandOption } from "../../types/brand";
 import { fetchAllCloudMaster } from "../../infrastructure/api/masterApi";
 import { Button } from "../components/common/Button";
@@ -14,6 +15,87 @@ import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
 import { downloadCPriceListTemplate } from "../../shared/importTemplates";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
+
+function normalizeImportHeader(value: string) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_");
+}
+
+function normalizeLoosePrice(value: string | null | undefined) {
+  const text = String(value || "")
+    .replace(/\u00a0/g, " ")
+    .trim();
+  if (!text) return null;
+
+  const match = text.match(/-?\d[\d\s.,]*/);
+  if (!match) return null;
+  const numeric = match[0].replace(/\s+/g, "").replace(",", ".");
+  const parsed = Number(numeric);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function parseCPriceImportFile(file: File) {
+  const extension = file.name.split(".").pop()?.toLowerCase() || "";
+  let parsedRows: string[][] = [];
+
+  if (["csv", "tsv", "txt"].includes(extension)) {
+    parsedRows = parseCsv(await file.text());
+  } else if (["xlsx", "xlsm", "xls"].includes(extension)) {
+    const workbook = read(await file.arrayBuffer(), { type: "array" });
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) return [];
+    const sheet = workbook.Sheets[firstSheetName];
+    parsedRows = utils.sheet_to_json<string[]>(sheet, {
+      header: 1,
+      defval: "",
+      raw: false,
+    });
+  } else {
+    throw new Error("Upload CSV, TSV, TXT, XLSX or XLS files.");
+  }
+
+  const [header = [], ...dataRows] = parsedRows;
+  const normalizedHeader = header.map((cell) => normalizeImportHeader(cell));
+  const findIndex = (aliases: string[], fallback: number) => {
+    const found = normalizedHeader.findIndex((cell) => aliases.includes(cell));
+    return found >= 0 ? found : fallback;
+  };
+
+  const codeIndex = findIndex(
+    ["product_code", "part", "code", "part_no", "part_number", "part_code", "new_code"],
+    0,
+  );
+  const priceIndex = findIndex(
+    [
+      "c_sales_eur",
+      "c_sales_price",
+      "customer_c_price",
+      "customer_c_sales",
+      "customer_c",
+      "special_c_price",
+      "c_price",
+      "c_sales",
+      "sales_c",
+      "price_c",
+      "net_price",
+      "sales_eur",
+      "sales",
+      "price",
+      "sell_price",
+      "sales_price_eur",
+    ],
+    1,
+  );
+
+  return dataRows
+    .map((row) => ({
+      product_code: normalizeText(row[codeIndex]) || "",
+      sell_price: normalizeLoosePrice(row[priceIndex]) ?? NaN,
+    }))
+    .filter((row) => row.product_code && Number.isFinite(row.sell_price));
+}
 
 export function PriceListsPage() {
   const actionFeedback = useActionFeedback();
@@ -108,44 +190,11 @@ export function PriceListsPage() {
       setStatus("");
       setImportingC(true);
       actionFeedback.begin(`Importing C price list for ${activeBrand}...`);
-      const text = await cImportFile.text();
-      const parsedRows = parseCsv(text);
-      const [header = [], ...dataRows] = parsedRows;
-      const lowerHeader = header.map((cell) => cell.trim().toLowerCase());
-      const indexOf = (aliases: string[], fallback: number) => {
-        const found = lowerHeader.findIndex((cell) => aliases.includes(cell));
-        return found >= 0 ? found : fallback;
-      };
-
-      const codeIndex = indexOf(["product_code", "product code", "part", "code"], 0);
-      const priceIndex = indexOf(
-        [
-          "c_sales_eur",
-          "c sales eur",
-          "customer c price",
-          "customer c sales",
-          "customer c",
-          "special c price",
-          "c price",
-          "c sales",
-          "sales c",
-          "price c",
-          "net price",
-          "sales eur",
-          "sales",
-          "price",
-        ],
-        1,
-      );
-
-      const rows = dataRows
-        .map((row) => ({
-          product_code: normalizeText(row[codeIndex]) || "",
-          sell_price: normalizeNumber(row[priceIndex]) ?? NaN,
-        }))
-        .filter((row) => row.product_code && Number.isFinite(row.sell_price));
-
-      await importCPriceList({
+      const rows = await parseCPriceImportFile(cImportFile);
+      if (!rows.length) {
+        throw new Error("No valid C price rows found in file.");
+      }
+      const result = await importCPriceList({
         brandName: activeBrand,
         mode: cImportMode as "replace" | "merge",
         rows,
@@ -160,8 +209,9 @@ export function PriceListsPage() {
       }
       setCImportFile(null);
       setShowCImportDialog(false);
-      setStatus(`C price list imported for ${activeBrand}.`);
-      actionFeedback.succeed(`C price list imported for ${activeBrand}.`);
+      const duplicateNote = result.duplicateCount ? ` ${result.duplicateCount} duplicate code row collapsed.` : "";
+      setStatus(`C price list imported for ${result.brandName}. ${result.uniqueCount} unique rows loaded.${duplicateNote}`);
+      actionFeedback.succeed(`C price list imported for ${result.brandName}.`);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "C price import failed";
       setStatus(message);
@@ -331,7 +381,7 @@ export function PriceListsPage() {
                 <input
                   className="field__input"
                   type="file"
-                  accept=".csv,text/csv"
+                  accept=".csv,text/csv,.tsv,.txt,.xlsx,.xls,.xlsm"
                   onChange={(event) => setCImportFile(event.target.files?.[0] ?? null)}
                 />
               </label>

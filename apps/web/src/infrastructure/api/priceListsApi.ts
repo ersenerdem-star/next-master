@@ -168,16 +168,34 @@ export async function importCPriceList(input: {
     }
   }
 
-  const normalized = input.rows
-    .map((row) => ({
+  const dedupedByCode = new Map<
+    string,
+    {
+      organization_id: string;
+      price_list_id: string;
+      brand_id: string;
+      product_code: string;
+      sell_price: number;
+      currency: string;
+    }
+  >();
+
+  input.rows.forEach((row) => {
+    const productCode = String(row.product_code || "").trim();
+    const normalizedCode = normalizePartCode(productCode);
+    const sellPrice = Number(row.sell_price);
+    if (!normalizedCode || !Number.isFinite(sellPrice)) return;
+    dedupedByCode.set(normalizedCode, {
       organization_id: orgId,
       price_list_id: listId,
       brand_id: brand.id,
-      product_code: row.product_code,
-      sell_price: row.sell_price,
+      product_code: productCode,
+      sell_price: sellPrice,
       currency: "EUR",
-    }))
-    .filter((row) => normalizePartCode(row.product_code) && Number.isFinite(row.sell_price));
+    });
+  });
+
+  const normalized = [...dedupedByCode.values()];
 
   if (!normalized.length) {
     throw new Error("No valid C price rows found");
@@ -197,4 +215,11 @@ export async function importCPriceList(input: {
       throw new Error(error.message || "Failed to import C price rows");
     }
   }
+
+  return {
+    importedCount: input.rows.length,
+    uniqueCount: normalized.length,
+    duplicateCount: Math.max(0, input.rows.length - normalized.length),
+    brandName: brand.name,
+  };
 }
