@@ -3,6 +3,7 @@ import { deliverQueuedEmails, queueVendorPurchaseOrderEmail } from "../../infras
 import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, inventoryAvailabilityLookupKey, type InventoryAvailabilitySummary } from "../../infrastructure/api/inventoryApi";
 import {
   buildAndUpsertBillFromPurchaseOrder,
+  deletePurchaseOrder,
   fetchBills,
   fetchPaymentsMade,
   fetchPurchaseOrders,
@@ -611,6 +612,31 @@ export function PurchasesPage({
     }
   }
 
+  async function handleDeletePurchaseOrder() {
+    if (!purchaseOrderDraft) return;
+    const poId = purchaseOrderDraft.id;
+    const relatedBillCount = billCountByPurchaseOrderId.get(poId) || 0;
+
+    if (relatedBillCount > 0) {
+      actionFeedback.fail(`Purchase order ${poId} cannot be deleted because ${relatedBillCount.toLocaleString("en-US")} bill record exists.`);
+      return;
+    }
+
+    if (!window.confirm(`Delete purchase order ${poId}? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      actionFeedback.begin(`Deleting purchase order ${poId}...`);
+      await deletePurchaseOrder(poId);
+      const refreshed = await fetchPurchaseOrders();
+      setPurchaseOrders(refreshed);
+      actionFeedback.succeed(`Purchase order ${poId} deleted.`);
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase order delete failed");
+    }
+  }
+
   async function convertPurchaseOrderToBill() {
     if (!purchaseOrderDraft) return;
     try {
@@ -841,6 +867,9 @@ export function PurchasesPage({
                   <Button onClick={savePurchaseOrderDraft}>Save Purchase Order</Button>
                   <Button variant="secondary" onClick={convertPurchaseOrderToBill}>
                     Convert to Bill
+                  </Button>
+                  <Button variant="secondary" onClick={handleDeletePurchaseOrder}>
+                    Delete Purchase Order
                   </Button>
                 </div>
               </div>

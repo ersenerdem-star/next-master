@@ -721,6 +721,17 @@ export async function upsertPurchaseOrder(order: LocalPurchaseOrder): Promise<Lo
   return mapPurchaseOrderRow(data as unknown as Record<string, unknown>);
 }
 
+export async function deletePurchaseOrder(purchaseOrderId: string): Promise<void> {
+  const organizationId = await getCurrentOrgId();
+  const { error } = await supabaseClient
+    .from("purchase_orders")
+    .delete()
+    .eq("organization_id", organizationId)
+    .eq("id", purchaseOrderId);
+
+  if (error) throw new Error(error.message || "Purchase order delete failed");
+}
+
 export async function fetchBills(): Promise<LocalBill[]> {
   await bootstrapOrdersFromLocalIfNeeded();
   const organizationId = await getCurrentOrgId();
