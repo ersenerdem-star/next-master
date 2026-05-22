@@ -833,6 +833,46 @@ export function QuotesPage({
     );
   }, [customerType, effectiveMarginA, effectiveMarginB]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (customerType !== "C" || !quoteBuilderLines.length) return;
+
+      const cPriceMap = await fetchCPriceMapForRows(
+        quoteBuilderLines.map((line) => ({
+          brand: line.brand,
+          product_code: line.resolvedCode || line.requestedCode,
+        })),
+      );
+
+      if (cancelled) return;
+
+      setQuoteBuilderLines((current) =>
+        current.map((line) => {
+          const cSellPrice = getCPriceForRow(cPriceMap, {
+            brand: line.brand,
+            product_code: line.resolvedCode || line.requestedCode,
+          });
+          return {
+            ...line,
+            c_sell_price: cSellPrice,
+            sell_price: cSellPrice ?? line.sell_price,
+          };
+        }),
+      );
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    customerType,
+    quoteBuilderLines.length,
+    quoteBuilderLines.map((line) => `${line.brand}|${line.resolvedCode || line.requestedCode}`).join("||"),
+  ]);
+
   const currentLocalSalesOrder = useMemo(
     () => localSalesOrders.find((item) => item.id === selectedLocalSalesOrderId) || null,
     [localSalesOrders, selectedLocalSalesOrderId],
