@@ -24,6 +24,7 @@ import { Button } from "../components/common/Button";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { useActionFeedback } from "../components/common/ActionFeedback";
+import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 
 function formatMoney(value: number, currency = "EUR") {
   return `${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
@@ -31,6 +32,14 @@ function formatMoney(value: number, currency = "EUR") {
 
 function formatAvailabilityQty(value: number) {
   return Number.isInteger(value) ? String(value) : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+function sanitizeFileName(value: string) {
+  return String(value || "document")
+    .trim()
+    .replace(/[^a-z0-9_-]+/gi, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 function findInventoryAvailability(
@@ -465,6 +474,41 @@ export function PurchasesPage({
     }
   }
 
+  function handleExportPurchaseOrderExcel(row: LocalPurchaseOrder) {
+    try {
+      const rows: Array<Array<string | number | null | undefined>> = [
+        ["Purchase Order", row.id],
+        ["Vendor", row.supplier_name],
+        ["Purchase Company", row.purchase_company || ""],
+        ["Sales Order", row.sales_order_no || ""],
+        ["Customer", row.customer_name || ""],
+        ["Status", row.status || ""],
+        ["Currency", row.currency || "EUR"],
+        ["Created", row.created_at?.slice(0, 10) || ""],
+        [],
+        ["Code", "Brand", "Description", "Qty", "OEM", "Origin", `Buy Price ${row.currency || "EUR"}`, `Line Total ${row.currency || "EUR"}`, "Notes"],
+        ...row.lines.map((line) => [
+          line.product_code || line.old_code || "",
+          line.brand || "",
+          line.description || "",
+          Number(line.qty || 0),
+          line.oem_no || "",
+          line.origin || "",
+          Number(line.buy_price || 0),
+          Number(line.line_total || 0),
+          line.notes || "",
+        ]),
+        [],
+        ["Total Amount", "", "", "", "", "", "", Number(row.total_amount || 0)],
+      ];
+      const blob = buildXlsxBlob((row.id || "purchase-order").slice(0, 31), rows, [3, 6, 7]);
+      downloadBlob(`${sanitizeFileName(row.id || "purchase-order")}.xlsx`, blob);
+      actionFeedback.succeed(`Excel exported for ${row.id}.`);
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase order Excel export failed");
+    }
+  }
+
   function handlePrintBill(row: LocalBill) {
     const win = window.open("about:blank", "_blank");
     if (!win) {
@@ -792,6 +836,9 @@ export function PurchasesPage({
                 <div className="toolbar toolbar--wrap">
                   <Button variant="secondary" onClick={() => handlePrintPurchaseOrder(purchaseOrderDraft)} busy={printingPurchaseOrder} busyLabel="Opening PDF...">
                     PDF / Print
+                  </Button>
+                  <Button variant="secondary" onClick={() => handleExportPurchaseOrderExcel(purchaseOrderDraft)}>
+                    Export Excel
                   </Button>
                   <Button onClick={savePurchaseOrderDraft}>Save Purchase Order</Button>
                   <Button variant="secondary" onClick={convertPurchaseOrderToBill}>
