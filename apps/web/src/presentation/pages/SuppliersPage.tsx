@@ -327,7 +327,13 @@ export function SuppliersPage() {
         throw new Error("CSV did not contain any valid supplier price rows");
       }
 
-      await bulkImportSupplierPrices(payload);
+      const importResult = await bulkImportSupplierPrices(payload, {
+        onProgress: ({ processedChunks, totalChunks, processedRows, totalRows }) => {
+          setStatus(
+            `Supplier import running for ${activeSupplierName} / ${activeImportBrand}: ${processedRows}/${totalRows} rows (${processedChunks}/${totalChunks} batches).`,
+          );
+        },
+      });
       const refreshedSuppliers = await fetchCloudSuppliers();
       const refreshedBrands = await fetchCloudBrands();
       setSuppliers(refreshedSuppliers);
@@ -348,7 +354,9 @@ export function SuppliersPage() {
       await reloadSupplierRows(submittedSearch, freshness, matchedSupplier?.supplier_id || selectedSupplierId);
       setShowImportDialog(false);
       setImportFile(null);
-      setStatus(`Supplier import completed for ${activeSupplierName} / ${activeImportBrand}.`);
+      setStatus(
+        `Supplier import completed for ${activeSupplierName} / ${activeImportBrand}. ${importResult.processed} rows processed in ${importResult.totalChunks} batches.`,
+      );
       actionFeedback.succeed(`Supplier import completed for ${activeSupplierName} / ${activeImportBrand}.`);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Supplier import failed";
