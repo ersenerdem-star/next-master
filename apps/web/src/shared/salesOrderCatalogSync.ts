@@ -2,7 +2,9 @@ import { fetchCPriceMapForRows, getCPriceForRow } from "../infrastructure/api/cP
 import { normalizePartCode } from "../domain/shared/normalize";
 import { fetchCatalogMetadataForRows } from "../infrastructure/api/quoteImportApi";
 import { resolveQuoteLine } from "../infrastructure/api/quoteResolverApi";
+import { supabaseClient } from "../infrastructure/api/supabaseClient";
 import type { QuoteBuilderLine } from "../types/quoteBuilder";
+import type { LocalInvoiceLine, LocalPurchaseOrderLine } from "../types/orders";
 
 export type SalesOrderCatalogSyncOptions = {
   customerType: "A" | "B" | "C" | "Other";
@@ -11,6 +13,19 @@ export type SalesOrderCatalogSyncOptions = {
   onlyFillBlanks?: boolean;
   keepPrices?: boolean;
   hydrateMissingPricesIfKeepingPrices?: boolean;
+};
+
+export type InvoiceCatalogSyncOptions = {
+  customerType: "A" | "B" | "C" | "Other";
+  marginA: number;
+  marginB: number;
+  onlyFillBlanks?: boolean;
+  keepPrices?: boolean;
+};
+
+export type PurchaseOrderCatalogSyncOptions = {
+  onlyFillBlanks?: boolean;
+  keepPrices?: boolean;
 };
 
 function roundMoney(value: number) {
@@ -33,6 +48,14 @@ function fillText(current: string, next: string, onlyFillBlanks: boolean) {
 function fillNumber(current: number | null, next: number | null, onlyFillBlanks: boolean) {
   if (!onlyFillBlanks) return next ?? current;
   return isBlankNumber(current) ? next ?? current : current;
+}
+
+function chunk<T>(items: T[], size: number) {
+  const batches: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    batches.push(items.slice(index, index + size));
+  }
+  return batches;
 }
 
 function mergeCatalogMetadata(
@@ -80,6 +103,98 @@ function getSelectedSupplierName(line: QuoteBuilderLine) {
 
 function lineHasVisiblePrices(line: QuoteBuilderLine) {
   return Number(line.buy_price ?? 0) > 0 || Number(line.sell_price ?? 0) > 0;
+}
+
+type SupplierPriceMapRow = {
+  brand: string;
+  product_code: string;
+  supplier_name: string;
+};
+
+function supplierPriceKey(brand: string, productCode: string, supplierName: string) {
+  return `${brand.trim().toLowerCase()}::${normalizePartCode(productCode)}::${supplierName.trim().toLowerCase()}`;
+}
+
+let currentOrgIdPromise: Promise<string> | null = null;
+
+async function getCurrentOrgId() {
+  if (!currentOrgIdPromise) {
+    currentOrgIdPromise = (async () => {
+      const { data: authData, error: authError } = await supabaseClient.auth.getUser();
+      if (authError) throw new Error(authError.message || "Failed to read current user");
+      const userId = authData.user?.id;
+      if (!userId) throw new Error("No authenticated user found");
+      const { data, error } = await supabaseClient
+        .from("profiles")
+        .select("organization_id")
+        .eq("id", userId)
+        .maybeSingle();
+      if (error) throw new Error(error.message || "Organization lookup failed");
+      const organizationId = String(data?.organization_id || "");
+      if (!organizationId) throw new Error("No organization found for current user");
+      return organizationId;
+    })();
+  }
+  return await currentOrgIdPromise;
+}
+
+async function fetchSupplierPriceMap(rows: SupplierPriceMapRow[]) {
+  const organizationId = await getCurrentOrgId();
+  const brandNames = [...new Set(rows.map((row) => row.brand.trim()).filter(Boolean))];
+  const normalizedCodes = [...new Set(rows.map((row) => normalizePartCode(row.product_code)).filter(Boolean))];
+  const supplierNames = [...new Set(rows.map((row) => row.supplier_name.trim().toLowerCase()).filter(Boolean))];
+  if (!brandNames.length || !normalizedCodes.length || !supplierNames.length) return new Map<string, { buy_price: number | null; price_date: string | null; notes: string | null }>();
+
+  const { data: brandRows, error: brandError } = await supabaseClient
+    .from("brands")
+    .select("id,name")
+    .eq("organization_id", organizationId);
+
+  if (brandError) throw new Error(brandError.message || "Brand lookup failed");
+
+  const brandIdToName = new Map<string, string>();
+  const brandIds = (brandRows || [])
+    .filter((row) => brandNames.map((item) => item.toLowerCase()).includes(String(row.name || "").trim().toLowerCase()))
+    .map((row) => {
+      const id = String(row.id || "");
+      const name = String(row.name || "").trim();
+      brandIdToName.set(id, name);
+      return id;
+    });
+
+  const result = new Map<string, { buy_price: number | null; price_date: string | null; notes: string | null }>();
+  if (!brandIds.length) return result;
+
+  for (const codeChunk of chunk(normalizedCodes, 200)) {
+    const { data, error } = await supabaseClient
+      .from("supplier_prices")
+      .select("brand_id,product_code,normalized_code,buy_price,valid_from,notes,suppliers(name)")
+      .eq("organization_id", organizationId)
+      .eq("is_active", true)
+      .in("brand_id", brandIds)
+      .in("normalized_code", codeChunk);
+
+    if (error) throw new Error(error.message || "Supplier price lookup failed");
+
+    for (const row of (data || []) as Array<any>) {
+      const supplierName = String(row.suppliers?.name || "").trim();
+      const brandName = brandIdToName.get(String(row.brand_id || "")) || "";
+      const productCode = String(row.product_code || "");
+      if (!supplierName || !brandName || !productCode) continue;
+      const key = supplierPriceKey(brandName, productCode, supplierName);
+      const current = result.get(key);
+      const nextBuyPrice = row.buy_price == null ? null : Number(row.buy_price);
+      if (!current || Number(nextBuyPrice ?? Number.MAX_SAFE_INTEGER) < Number(current.buy_price ?? Number.MAX_SAFE_INTEGER)) {
+        result.set(key, {
+          buy_price: nextBuyPrice,
+          price_date: String(row.valid_from || "").trim() || null,
+          notes: String(row.notes || "").trim() || null,
+        });
+      }
+    }
+  }
+
+  return result;
 }
 
 export async function resyncSalesOrderLinesFromCatalog(
@@ -191,4 +306,120 @@ async function refreshLinePricesFromCatalog(
   } catch {
     return line;
   }
+}
+
+export async function resyncInvoiceLinesFromCatalog(
+  lines: LocalInvoiceLine[],
+  options: InvoiceCatalogSyncOptions,
+): Promise<LocalInvoiceLine[]> {
+  const onlyFillBlanks = options.onlyFillBlanks !== false;
+  const keepPrices = options.keepPrices !== false;
+  const metadataMap = await fetchCatalogMetadataForRows(
+    lines.map((line) => ({
+      brand: line.brand || "",
+      product_code: line.product_code || line.old_code,
+    })),
+  );
+
+  const supplierPriceMap = keepPrices
+    ? new Map<string, { buy_price: number | null; price_date: string | null; notes: string | null }>()
+    : await fetchSupplierPriceMap(
+        lines.map((line) => ({
+          brand: line.brand || "",
+          product_code: line.product_code || line.old_code,
+          supplier_name: line.supplier_name || "",
+        })),
+      );
+
+  const cPriceMap =
+    !keepPrices && options.customerType === "C"
+      ? await fetchCPriceMapForRows(lines.map((line) => ({ brand: line.brand || "", product_code: line.product_code || line.old_code })))
+      : null;
+
+  return lines.map((line) => {
+    const metadata = metadataMap.get(`${line.brand.trim().toLowerCase()}::${normalizePartCode(line.product_code || line.old_code)}`);
+    const supplierPrice = keepPrices
+      ? null
+      : supplierPriceMap.get(supplierPriceKey(line.brand || "", metadata?.product_code || line.product_code || line.old_code, line.supplier_name || ""));
+    const nextBuyPrice = keepPrices ? line.buy_price : supplierPrice?.buy_price ?? line.buy_price;
+    const nextBuyPriceValue = Number(nextBuyPrice ?? 0) || 0;
+    const nextSellPriceRaw = keepPrices
+      ? line.sell_price
+      : options.customerType === "C"
+        ? getCPriceForRow(cPriceMap || new Map<string, number>(), { brand: line.brand || "", product_code: metadata?.product_code || line.product_code || line.old_code })
+        : nextBuyPrice != null
+          ? roundMoney(Number(nextBuyPrice) * (1 + ((options.customerType === "B" ? options.marginB : options.marginA) / 100)))
+          : line.sell_price;
+    const nextSellPrice = Number(nextSellPriceRaw ?? 0) || 0;
+    const qty = Math.max(1, Number(line.qty || 1) || 1);
+    const purchaseTotal = roundMoney(nextBuyPriceValue * qty);
+    const salesTotal = roundMoney(nextSellPrice * qty);
+    const profitTotal = roundMoney(salesTotal - purchaseTotal);
+    const marginPercent = salesTotal > 0 ? roundMoney((profitTotal / salesTotal) * 100) : 0;
+
+    return {
+      ...line,
+      product_code: onlyFillBlanks ? line.product_code || metadata?.product_code || "" : metadata?.product_code || line.product_code,
+      description: fillText(line.description, metadata?.description || "", onlyFillBlanks),
+      oem_no: fillText(line.oem_no, metadata?.oem_no || "", onlyFillBlanks),
+      hs_code: fillText(line.hs_code, metadata?.hs_code || "", onlyFillBlanks),
+      origin: fillText(line.origin, metadata?.origin || "", onlyFillBlanks),
+      weight_kg: fillNumber(line.weight_kg ?? null, metadata?.weight_kg ?? null, onlyFillBlanks),
+      lifecycle_status: metadata?.lifecycle_status ?? line.lifecycle_status ?? "active",
+      lifecycle_note: metadata?.lifecycle_note ?? line.lifecycle_note ?? null,
+      lifecycle_warning:
+        metadata?.lifecycle_status === "discontinued"
+          ? `Production ended for ${metadata.product_code || line.product_code}.${metadata.lifecycle_note ? ` ${metadata.lifecycle_note}` : ""}`
+          : line.lifecycle_warning ?? null,
+      buy_price: nextBuyPriceValue,
+      sell_price: nextSellPrice,
+      purchase_total: purchaseTotal,
+      sales_total: salesTotal,
+      profit_total: profitTotal,
+      margin_percent: marginPercent,
+      notes: keepPrices ? line.notes : supplierPrice?.notes || line.notes,
+    } satisfies LocalInvoiceLine;
+  });
+}
+
+export async function resyncPurchaseOrderLinesFromCatalog(
+  lines: LocalPurchaseOrderLine[],
+  options: PurchaseOrderCatalogSyncOptions,
+): Promise<LocalPurchaseOrderLine[]> {
+  const onlyFillBlanks = options.onlyFillBlanks !== false;
+  const keepPrices = options.keepPrices !== false;
+  const metadataMap = await fetchCatalogMetadataForRows(
+    lines.map((line) => ({
+      brand: line.brand || "",
+      product_code: line.product_code || line.old_code,
+    })),
+  );
+
+  const supplierPriceMap = keepPrices
+    ? new Map<string, { buy_price: number | null; price_date: string | null; notes: string | null }>()
+    : await fetchSupplierPriceMap(
+        lines.map((line) => ({
+          brand: line.brand || "",
+          product_code: line.product_code || line.old_code,
+          supplier_name: line.supplier_name || "",
+        })),
+      );
+
+  return lines.map((line) => {
+    const metadata = metadataMap.get(`${line.brand.trim().toLowerCase()}::${normalizePartCode(line.product_code || line.old_code)}`);
+    const supplierPrice = keepPrices
+      ? null
+      : supplierPriceMap.get(supplierPriceKey(line.brand || "", metadata?.product_code || line.product_code || line.old_code, line.supplier_name || ""));
+    const nextBuyPrice = keepPrices ? line.buy_price : supplierPrice?.buy_price ?? line.buy_price;
+    const nextBuyPriceValue = Number(nextBuyPrice ?? 0) || 0;
+    return {
+      ...line,
+      product_code: onlyFillBlanks ? line.product_code || metadata?.product_code || "" : metadata?.product_code || line.product_code,
+      description: fillText(line.description, metadata?.description || "", onlyFillBlanks),
+      oem_no: fillText(line.oem_no, metadata?.oem_no || "", onlyFillBlanks),
+      origin: fillText(line.origin, metadata?.origin || "", onlyFillBlanks),
+      buy_price: nextBuyPriceValue,
+      notes: keepPrices ? line.notes : supplierPrice?.notes || line.notes,
+    } satisfies LocalPurchaseOrderLine;
+  });
 }

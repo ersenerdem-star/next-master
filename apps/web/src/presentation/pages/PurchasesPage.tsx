@@ -17,6 +17,7 @@ import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastruc
 import { fetchVendors } from "../../infrastructure/api/vendorsApi";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 import { normalizePartCode } from "../../domain/shared/normalize";
+import { resyncPurchaseOrderLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
 import type { CompanyProfile } from "../../types/company";
 import type { LocalBill, LocalPaymentMade, LocalPurchaseOrder } from "../../types/orders";
 import type { LocalVendor } from "../../types/vendors";
@@ -114,6 +115,9 @@ export function PurchasesPage({
   const [vendors, setVendors] = useState<LocalVendor[]>([]);
   const [printingPurchaseOrder, setPrintingPurchaseOrder] = useState(false);
   const [printingBill, setPrintingBill] = useState(false);
+  const [purchaseOrderResyncOnlyFillBlanks, setPurchaseOrderResyncOnlyFillBlanks] = useState(true);
+  const [purchaseOrderResyncKeepPrices, setPurchaseOrderResyncKeepPrices] = useState(true);
+  const [resyncingPurchaseOrder, setResyncingPurchaseOrder] = useState(false);
   const [inventoryAvailabilityRows, setInventoryAvailabilityRows] = useState<InventoryAvailabilitySummary[]>([]);
   const inventoryAvailabilityLookup = useMemo(() => buildInventoryAvailabilityLookup(inventoryAvailabilityRows), [inventoryAvailabilityRows]);
 
@@ -327,6 +331,32 @@ export function PurchasesPage({
   function findVendorByName(name: string) {
     const key = name.trim().toLowerCase();
     return vendors.find((item) => item.display_name.trim().toLowerCase() === key || item.company_name.trim().toLowerCase() === key) || null;
+  }
+
+  async function handleResyncPurchaseOrderFromCatalog() {
+    if (!purchaseOrderDraft) return;
+    try {
+      setResyncingPurchaseOrder(true);
+      actionFeedback.begin(`Re-syncing purchase order ${purchaseOrderDraft.id} from catalog...`);
+      const nextLines = await resyncPurchaseOrderLinesFromCatalog(purchaseOrderDraft.lines, {
+        onlyFillBlanks: purchaseOrderResyncOnlyFillBlanks,
+        keepPrices: purchaseOrderResyncKeepPrices,
+      });
+      const nextDraft = recomputePurchaseOrderTotals({
+        ...purchaseOrderDraft,
+        lines: nextLines,
+      });
+      const saved = await upsertPurchaseOrder(nextDraft);
+      const refreshed = await fetchPurchaseOrders();
+      setPurchaseOrders(refreshed);
+      setSelectedPurchaseOrderId(saved.id);
+      setPurchaseOrderDraft({ ...saved, lines: saved.lines.map((line) => ({ ...line })) });
+      actionFeedback.succeed("Purchase order re-synced from catalog.");
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase order catalog re-sync failed");
+    } finally {
+      setResyncingPurchaseOrder(false);
+    }
   }
 
   function buildVendorAddressBlock(vendorName: string) {
@@ -858,6 +888,17 @@ export function PurchasesPage({
                 </table>
 
                 <div className="toolbar toolbar--wrap">
+                  <label className="checkbox-field quote-toolbar-checkbox">
+                    <input type="checkbox" checked={purchaseOrderResyncOnlyFillBlanks} onChange={(event) => setPurchaseOrderResyncOnlyFillBlanks(event.target.checked)} />
+                    <span className="field__label">Only Fill Blanks</span>
+                  </label>
+                  <label className="checkbox-field quote-toolbar-checkbox">
+                    <input type="checkbox" checked={purchaseOrderResyncKeepPrices} onChange={(event) => setPurchaseOrderResyncKeepPrices(event.target.checked)} />
+                    <span className="field__label">Keep Prices</span>
+                  </label>
+                  <Button variant="secondary" onClick={() => void handleResyncPurchaseOrderFromCatalog()} busy={resyncingPurchaseOrder} busyLabel="Re-syncing...">
+                    Re-sync from Catalog
+                  </Button>
                   <Button variant="secondary" onClick={() => handlePrintPurchaseOrder(purchaseOrderDraft)} busy={printingPurchaseOrder} busyLabel="Opening PDF...">
                     PDF / Print
                   </Button>

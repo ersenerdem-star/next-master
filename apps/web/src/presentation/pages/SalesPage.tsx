@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastructure/api/companyProfilesApi";
 import { fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
 import { fetchInvoices, fetchPaymentsReceived, fetchSalesOrders, upsertInvoice, upsertPaymentReceived } from "../../infrastructure/api/ordersApi";
+import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
 import { QuotesPage } from "./QuotesPage";
 import { PriceListsPage } from "./PriceListsPage";
 import { SectionCard } from "../components/common/SectionCard";
 import { buildInvoiceFromSalesOrder } from "../../shared/localOrders";
+import { resyncInvoiceLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
 import { DataTable } from "../components/common/DataTable";
 import type { CompanyProfile } from "../../types/company";
 import type { LocalCustomer } from "../../types/customers";
@@ -46,6 +48,11 @@ export function SalesPage({
   const [selectedSalesOrderIds, setSelectedSalesOrderIds] = useState<string[]>([]);
   const [customers, setCustomers] = useState<LocalCustomer[]>([]);
   const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
+  const [marginA, setMarginA] = useState(10);
+  const [marginB, setMarginB] = useState(15);
+  const [invoiceResyncOnlyFillBlanks, setInvoiceResyncOnlyFillBlanks] = useState(true);
+  const [invoiceResyncKeepPrices, setInvoiceResyncKeepPrices] = useState(true);
+  const [resyncingInvoice, setResyncingInvoice] = useState(false);
 
   function renderInvoiceLifecycleBadge(row: { lifecycle_status?: string | null; lifecycle_warning?: string | null }) {
     if (String(row.lifecycle_status || "").trim().toLowerCase() !== "discontinued") return null;
@@ -163,6 +170,28 @@ export function SalesPage({
           setCustomers([]);
           setCompanyProfiles([]);
         }
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      try {
+        const settings = await fetchPriceListSettings();
+        if (cancelled) return;
+        const nextA = settings.find((item) => item.listType === "A")?.marginPercent;
+        const nextB = settings.find((item) => item.listType === "B")?.marginPercent;
+        if (typeof nextA === "number") setMarginA(nextA);
+        if (typeof nextB === "number") setMarginB(nextB);
+      } catch {
+        // defaults remain
       }
     }
 
@@ -347,6 +376,36 @@ export function SalesPage({
 
   function updateInvoiceDraft<K extends keyof LocalInvoice>(key: K, value: LocalInvoice[K]) {
     setInvoiceDraft((current) => (current ? { ...current, [key]: value } : current));
+  }
+
+  async function handleResyncInvoiceFromCatalog() {
+    if (!invoiceDraft) return;
+    try {
+      setResyncingInvoice(true);
+      actionFeedback.begin(`Re-syncing invoice ${invoiceDraft.id} from catalog...`);
+      const salesOrderCustomerType = salesOrders.find((row) => row.id === invoiceDraft.sales_order_id)?.customer_type || "A";
+      const nextLines = await resyncInvoiceLinesFromCatalog(invoiceDraft.lines, {
+        customerType: salesOrderCustomerType,
+        marginA,
+        marginB,
+        onlyFillBlanks: invoiceResyncOnlyFillBlanks,
+        keepPrices: invoiceResyncKeepPrices,
+      });
+      const nextDraft = recomputeInvoiceTotals({
+        ...invoiceDraft,
+        lines: nextLines,
+      });
+      const saved = await upsertInvoice(nextDraft, selectedInvoiceId);
+      const refreshed = await fetchInvoices();
+      setInvoices(refreshed);
+      setSelectedInvoiceId(saved.id);
+      setInvoiceDraft(cloneInvoice(saved));
+      actionFeedback.succeed("Invoice re-synced from catalog.");
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Invoice catalog re-sync failed");
+    } finally {
+      setResyncingInvoice(false);
+    }
   }
 
   async function saveInvoiceDraft() {
@@ -721,6 +780,17 @@ export function SalesPage({
                   <textarea className="field__input field__input--textarea" value={invoiceDraft.notes} onChange={(event) => updateInvoiceDraft("notes", event.target.value)} />
                 </div>
                 <div className="toolbar toolbar--wrap">
+                  <label className="checkbox-field quote-toolbar-checkbox">
+                    <input type="checkbox" checked={invoiceResyncOnlyFillBlanks} onChange={(event) => setInvoiceResyncOnlyFillBlanks(event.target.checked)} />
+                    <span className="field__label">Only Fill Blanks</span>
+                  </label>
+                  <label className="checkbox-field quote-toolbar-checkbox">
+                    <input type="checkbox" checked={invoiceResyncKeepPrices} onChange={(event) => setInvoiceResyncKeepPrices(event.target.checked)} />
+                    <span className="field__label">Keep Prices</span>
+                  </label>
+                  <Button variant="secondary" onClick={() => void handleResyncInvoiceFromCatalog()} busy={resyncingInvoice} busyLabel="Re-syncing...">
+                    Re-sync from Catalog
+                  </Button>
                   <Button onClick={saveInvoiceDraft}>Save Invoice</Button>
                   <Button
                     variant="secondary"
