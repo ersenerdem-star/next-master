@@ -4,7 +4,7 @@ import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { createCloudCatalogRow, deleteCloudCatalogRow, fetchCatalogExportRows, fetchCatalogRowsByCodes, fetchCloudCatalog, updateCloudCatalogRow } from "../../infrastructure/api/catalogApi";
 import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenceUsage } from "../../infrastructure/api/codeReferencesApi";
 import { bulkImportCatalog } from "../../infrastructure/api/importApi";
-import { normalizePartCode } from "../../domain/shared/normalize";
+import { matchesOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import type { BrandOption } from "../../types/brand";
 import type { CatalogRow } from "../../types/catalog";
 import type { CodeReferenceUsage } from "../../types/codeReferences";
@@ -216,6 +216,17 @@ export function CatalogPage() {
   }, [showReferenceDialog, referenceDraft.brand, referenceDraft.old_code]);
 
   const total = rows[0]?.total_count ?? 0;
+  const originalNumberBrandMatches = useMemo(() => {
+    if (!submittedSearch.trim() || !rows.length) return [];
+    return Array.from(
+      new Set(
+        rows
+          .filter((row) => matchesOriginalNumberSearch(row.oem_no || "", submittedSearch))
+          .map((row) => String(row.brand || "").trim())
+          .filter(Boolean),
+      ),
+    ).sort((left, right) => left.localeCompare(right));
+  }, [rows, submittedSearch]);
   const brandOptions = [
     ...brands.map((item) => ({ value: item.name, label: item.name })),
     { value: "__new__", label: "New brand..." },
@@ -781,6 +792,11 @@ export function CatalogPage() {
                   ? "Select a brand or search to load catalog."
                   : `${total.toLocaleString("en-US")} catalog rows`}
             </span>
+            {originalNumberBrandMatches.length ? (
+              <span>
+                Original No Brands: <strong>{originalNumberBrandMatches.join(", ")}</strong>
+              </span>
+            ) : null}
             {status ? <span className="success-text">{status}</span> : null}
             {error ? <span className="error-text">{error}</span> : null}
           </div>

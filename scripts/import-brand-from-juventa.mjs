@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { canonicalizeBrandName } from "./_shared/brand-standardization.mjs";
 
 const repoRoot = "/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp";
 const outputDir = path.join(repoRoot, "docs", "juventa-brand-imports");
@@ -33,7 +34,7 @@ for (let index = 2; index < process.argv.length; index += 1) {
 }
 
 const brandId = Number.parseInt(args.get("brand-id") || "", 10);
-const requestedBrandName = String(args.get("brand-name") || "").trim();
+const requestedBrandName = canonicalizeBrandName(String(args.get("brand-name") || "").trim());
 const importMode = args.has("import");
 const sleepMs = Number.parseInt(args.get("sleep-ms") || "90", 10) || 90;
 const batchSize = Number.parseInt(args.get("batch-size") || "300", 10) || 300;

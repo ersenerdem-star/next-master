@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { canonicalizeBrandName, resolveSparetoBrandQuery } from "./_shared/brand-standardization.mjs";
 
 const repoRoot = "/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp";
 const outputDir = path.join(repoRoot, "docs", "spareto-brand-imports");
@@ -31,8 +32,9 @@ for (let index = 2; index < process.argv.length; index += 1) {
   }
 }
 
-const requestedBrandName = String(args.get("brand-name") || "").trim();
-const sparetoBrandQuery = String(args.get("brand-query") || requestedBrandName).trim();
+const inputBrandName = String(args.get("brand-name") || "").trim();
+const requestedBrandName = canonicalizeBrandName(inputBrandName);
+const sparetoBrandQuery = String(args.get("brand-query") || resolveSparetoBrandQuery(inputBrandName || requestedBrandName)).trim();
 const importMode = args.has("import");
 const refreshExisting = args.has("refresh-existing");
 const sleepMs = Number.parseInt(args.get("sleep-ms") || "20", 10) || 20;

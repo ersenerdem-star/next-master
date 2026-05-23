@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
+import { canonicalizeBrandName, resolveSparetoBrandSlug } from "./_shared/brand-standardization.mjs";
 
 const repoRoot = "/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp";
 const outputDir = path.join(repoRoot, "docs", "spareto-replacements");
@@ -32,8 +33,9 @@ for (let index = 2; index < process.argv.length; index += 1) {
   }
 }
 
-const brandName = String(args.get("brand-name") || "").trim();
-const brandSlug = String(args.get("brand-slug") || brandName).trim().toLowerCase();
+const inputBrandName = String(args.get("brand-name") || "").trim();
+const brandName = canonicalizeBrandName(inputBrandName);
+const brandSlug = String(args.get("brand-slug") || resolveSparetoBrandSlug(inputBrandName || brandName)).trim().toLowerCase();
 const importCsvPath = String(args.get("import-csv") || "").trim();
 const sourceMode = String(args.get("source") || "").trim().toLowerCase();
 const seedUrls = String(args.get("seed-urls") || "")
@@ -124,7 +126,7 @@ async function main() {
           old_code: detail.product_code,
           new_code: detail.replacement_code,
           original_number: null,
-          reason: "Automatic replacement from Spareto. Production stopped by manufacturer.",
+          reason: "Automatic replacement. Production stopped by manufacturer.",
           is_active: true,
           source_url: detail.source_url,
         });
@@ -437,9 +439,9 @@ function extractCurrentLifecycle(html, targetBrandSlug) {
   let note = "";
   if (replacement_code) {
     if (replacement_same_brand) {
-      note = `Replacement code: ${replacement_code}. Source: Spareto.`;
+      note = `Replacement code: ${replacement_code}.`;
     } else {
-      note = `Replacement shown by Spareto: ${replacement_code}.`;
+      note = `Replacement code: ${replacement_code}.`;
     }
   }
 

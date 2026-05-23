@@ -31,3 +31,29 @@ export function normalizeOrigin(value: string): string {
   const raw = String(value || "").trim().toUpperCase();
   return raw;
 }
+
+export function splitOriginalNumberCandidates(value: string): string[] {
+  const raw = String(value || "").replace(/\r/g, "\n").trim();
+  if (!raw) return [];
+  const pieces = raw
+    .split(/[,;\n|]+/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return pieces.length ? pieces : [raw];
+}
+
+export function matchesOriginalNumberSearch(haystack: string, needle: string): boolean {
+  const normalizedNeedle = normalizePartCode(needle);
+  if (!normalizedNeedle) return false;
+  const candidates = splitOriginalNumberCandidates(haystack);
+  if (
+    candidates.some((candidate) => {
+      const normalizedCandidate = normalizePartCode(candidate);
+      if (!normalizedCandidate) return false;
+      return normalizedCandidate === normalizedNeedle || normalizedCandidate.includes(normalizedNeedle);
+    })
+  ) {
+    return true;
+  }
+  return normalizePartCode(haystack).includes(normalizedNeedle);
+}

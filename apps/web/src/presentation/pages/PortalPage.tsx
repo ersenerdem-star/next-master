@@ -9,7 +9,7 @@ import { SectionCard } from "../components/common/SectionCard";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 import { openAccountStatementPrintWindow } from "../../shared/accountStatementPrint";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
-import { normalizePartCode } from "../../domain/shared/normalize";
+import { matchesOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import {
   deletePortalDraftOrder,
@@ -661,6 +661,14 @@ export function PortalPage() {
   const portalOrderCurrency = activeSnapshot.pricingProfile?.currency || activeSnapshot.accountSummary.currency || "EUR";
   const portalDraftHasMissingPrices = portalDraftLines.some((line) => line.sell_price == null);
   const portalDraftDiscontinuedCount = portalDraftLines.filter((line) => line.lifecycle_status === "discontinued").length;
+  const portalOriginalNumberBrandMatches = Array.from(
+    new Set(
+      catalogResults
+        .filter((row) => matchesOriginalNumberSearch(row.oem_no || "", orderSearch))
+        .map((row) => String(row.brand || "").trim())
+        .filter(Boolean),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
   const portalSections: Array<{ key: PortalSection; label: string }> = [
     { key: "details", label: "Account Details" },
     { key: "statement", label: "Account Statement" },
@@ -1487,6 +1495,11 @@ export function PortalPage() {
                 <Input label="Notes" value={portalOrderNotes} placeholder="Order note for internal team" onChange={setPortalOrderNotes} />
 
                 {portalOrderStatus ? <div className="success-text">{portalOrderStatus}</div> : null}
+                {portalOriginalNumberBrandMatches.length ? (
+                  <div className="success-text">
+                    Original No Brands: <strong>{portalOriginalNumberBrandMatches.join(", ")}</strong>
+                  </div>
+                ) : null}
                 {portalDraftHasMissingPrices ? <div className="warning-text">Items without live price can be saved as draft but cannot be confirmed.</div> : null}
                 {portalDraftDiscontinuedCount > 0 ? (
                   <div className="warning-text">
