@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import zlib from "node:zlib";
 
 const repoRoot = "/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp";
 const outputDir = path.join(repoRoot, "docs", "spareto-replacements");
@@ -34,6 +35,7 @@ for (let index = 2; index < process.argv.length; index += 1) {
 const brandName = String(args.get("brand-name") || "").trim();
 const brandSlug = String(args.get("brand-slug") || brandName).trim().toLowerCase();
 const importCsvPath = String(args.get("import-csv") || "").trim();
+const sourceMode = String(args.get("source") || "").trim().toLowerCase();
 const seedUrls = String(args.get("seed-urls") || "")
   .split(",")
   .map((value) => value.trim())
@@ -80,14 +82,18 @@ async function main() {
 
   const sourceRows = loadSourceRows(importCsvPath);
   const sourceByUrl = new Map(sourceRows.map((row) => [row.source_url, row]));
+  const sitemapUrls = sourceMode === "sitemap" || (!seedUrls.length && !sourceRows.length)
+    ? await fetchBrandUrlsFromSitemaps(brandSlug)
+    : [];
   const urls = dedupeUrls([
     ...seedUrls,
     ...sourceRows.map((row) => row.source_url),
+    ...sitemapUrls,
   ]);
   const selectedUrls = limit == null ? urls : urls.slice(0, limit);
 
   if (!selectedUrls.length) {
-    throw new Error("No source URLs found. Pass --seed-urls and/or --import-csv");
+    throw new Error("No source URLs found. Pass --seed-urls, --import-csv, or --source sitemap");
   }
 
   const replacementRows = [];
@@ -152,7 +158,7 @@ async function main() {
       });
     }
 
-    if ((index + 1) % 25 === 0 || index + 1 === selectedUrls.length) {
+    if ((index + 1) % 500 === 0 || index + 1 === selectedUrls.length) {
       console.error(`${brandName} replacement progress: ${index + 1}/${selectedUrls.length}`);
     }
     if (sleepMs > 0) {
@@ -249,6 +255,7 @@ async function main() {
     target_brand_name: target.name,
     organization_id: target.organization_id,
     source_urls: selectedUrls.length,
+    sitemap_urls: sitemapUrls.length,
     catalog_rows_prepared: dedupedCatalogRows.length,
     replacement_rows_prepared: dedupedReplacementRows.length,
     discontinued_rows: dedupedCatalogRows.filter((row) => row.lifecycle_status === "discontinued").length,
@@ -586,6 +593,62 @@ async function fetchText(url) {
     throw new Error(`HTTP ${response.status} for ${url}`);
   }
   return response.text();
+}
+
+async function fetchBinary(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: requestHeaders,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error && typeof error === "object" && error.name === "AbortError") {
+      throw new Error(`Request timeout after ${requestTimeoutMs}ms for ${url}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} for ${url}`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+async function fetchBrandUrlsFromSitemaps(targetBrandSlug) {
+  const robots = await fetchText("https://spareto.com/robots.txt");
+  const sitemapIndexUrl = capture(robots, /Sitemap:\s*(https:\/\/spareto\.com\/sitemaps\/spareto\.com\/products\/sitemap\.xml\.gz)/i);
+  if (!sitemapIndexUrl) {
+    throw new Error("Products sitemap index not found in robots.txt");
+  }
+
+  const sitemapIndexXml = gunzipToString(await fetchBinary(sitemapIndexUrl));
+  const sitemapUrls = Array.from(sitemapIndexXml.matchAll(/<loc>(https:\/\/spareto\.com\/sitemaps\/spareto\.com\/products\/sitemap\d+\.xml\.gz)<\/loc>/g)).map((match) => match[1]);
+  const targetPattern = new RegExp(`<loc>(https://spareto\\.com/products/${escapeRegExp(targetBrandSlug)}-[^<]+)</loc>`, "ig");
+  const urls = [];
+
+  for (const [index, sitemapUrl] of sitemapUrls.entries()) {
+    const xml = gunzipToString(await fetchBinary(sitemapUrl));
+    for (const match of xml.matchAll(targetPattern)) {
+      urls.push(match[1]);
+    }
+    if ((index + 1) % 10 === 0 || index + 1 === sitemapUrls.length) {
+      console.error(`${brandName} sitemap progress: ${index + 1}/${sitemapUrls.length}`);
+    }
+    if (sleepMs > 0) {
+      await sleep(sleepMs);
+    }
+  }
+
+  return dedupeUrls(urls);
+}
+
+function gunzipToString(buffer) {
+  return zlib.gunzipSync(buffer).toString("utf8");
 }
 
 async function runPool(items, concurrencyLimit, worker) {
