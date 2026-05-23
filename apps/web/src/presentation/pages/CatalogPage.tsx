@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
+import { syncBrandCatalogFromSpareto } from "../../infrastructure/api/adminApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { createCloudCatalogRow, deleteCloudCatalogRow, fetchCatalogExportRows, fetchCatalogRowsByCodes, fetchCloudCatalog, updateCloudCatalogRow } from "../../infrastructure/api/catalogApi";
 import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenceUsage } from "../../infrastructure/api/codeReferencesApi";
@@ -55,6 +56,7 @@ export function CatalogPage() {
   const [exportingCatalog, setExportingCatalog] = useState(false);
   const [rowActionKey, setRowActionKey] = useState("");
   const [importingCatalog, setImportingCatalog] = useState(false);
+  const [syncingBrandCatalog, setSyncingBrandCatalog] = useState(false);
   const [creatingItem, setCreatingItem] = useState(false);
   const [savingReference, setSavingReference] = useState(false);
   const [referenceOldCodeUsage, setReferenceOldCodeUsage] = useState<CodeReferenceUsage | null>(null);
@@ -735,6 +737,35 @@ export function CatalogPage() {
     }
   }
 
+  async function handleSyncSelectedBrandFromSpareto() {
+    if (!catalogBrand.trim()) {
+      const message = "Select a brand first.";
+      setError(message);
+      actionFeedback.fail(message);
+      return;
+    }
+
+    setSyncingBrandCatalog(true);
+    setError("");
+    setStatus("");
+    actionFeedback.begin(`Syncing ${catalogBrand} from Spareto...`);
+
+    try {
+      const result = await syncBrandCatalogFromSpareto(catalogBrand, true);
+      setStatus(
+        `${result.targetBrandName}: ${result.resolvedRows.toLocaleString("en-US")} synced, ${result.newRowsInListing.toLocaleString("en-US")} new, ${result.errorRows.toLocaleString("en-US")} errors.`,
+      );
+      actionFeedback.succeed(`${result.targetBrandName}: ${result.resolvedRows.toLocaleString("en-US")} catalog rows synced.`);
+      applyCatalogFilters(search, catalogBrand, false);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Brand catalog sync failed";
+      setError(message);
+      actionFeedback.fail(message);
+    } finally {
+      setSyncingBrandCatalog(false);
+    }
+  }
+
   return (
     <div className="page-stack">
       <section className="section-card">
@@ -781,6 +812,11 @@ export function CatalogPage() {
             <Button variant="secondary" onClick={() => setShowImportDialog(true)}>
               Import CSV
             </Button>
+            {catalogBrand ? (
+              <Button variant="secondary" onClick={() => void handleSyncSelectedBrandFromSpareto()} busy={syncingBrandCatalog} busyLabel="Syncing...">
+                Re-sync from Spareto
+              </Button>
+            ) : null}
           </div>
         </div>
         <div className="section-card__body">

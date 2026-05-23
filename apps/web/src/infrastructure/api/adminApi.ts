@@ -5,6 +5,7 @@ const createUserUrl = import.meta.env.VITE_ADMIN_CREATE_USER_URL || "/api/admin-
 const deleteUserUrl = import.meta.env.VITE_ADMIN_DELETE_USER_URL || "/api/admin-delete-user";
 const diagnosticsUrl = import.meta.env.VITE_ADMIN_DIAGNOSTICS_URL || "/api/admin-diagnostics";
 const testEmailUrl = import.meta.env.VITE_ADMIN_TEST_EMAIL_URL || "/api/admin-test-email";
+const syncBrandCatalogUrl = import.meta.env.VITE_ADMIN_SYNC_BRAND_CATALOG_URL || "/api/admin-sync-brand-catalog";
 
 export type AdminDiagnostics = {
   runtime: {
@@ -152,4 +153,32 @@ export async function sendAdminTestEmail(email: string) {
     throw new Error(payload?.error || "Test email send failed");
   }
   return payload as { ok: boolean; messageId?: string; email?: string };
+}
+
+export async function syncBrandCatalogFromSpareto(brandName: string, refreshExisting = true) {
+  const accessToken = await getCallerAccessToken();
+
+  const response = await fetch(syncBrandCatalogUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ brandName, refreshExisting }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || "Brand catalog sync failed");
+  }
+  return payload as {
+    ok: boolean;
+    targetBrandName: string;
+    listingUniqueRows: number;
+    newRowsInListing: number;
+    incompleteExistingRows: number;
+    candidateRows: number;
+    resolvedRows: number;
+    errorRows: number;
+  };
 }
