@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { normalizePartCode } from "../../domain/shared/normalize";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
+import { fetchCloudCatalog } from "../../infrastructure/api/catalogApi";
 import { bulkImportSupplierPrices } from "../../infrastructure/api/importApi";
 import { fetchCloudSupplierPrices, fetchCloudSuppliers } from "../../infrastructure/api/suppliersApi";
 import type { BrandOption } from "../../types/brand";
+import type { CatalogRow } from "../../types/catalog";
 import type { SupplierPriceRow, SupplierSummary } from "../../types/suppliers";
 import { Button } from "../components/common/Button";
 import { useActionFeedback } from "../components/common/ActionFeedback";
@@ -43,8 +46,10 @@ export function SuppliersPage() {
   const [status, setStatus] = useState("");
   const [importingSupplier, setImportingSupplier] = useState(false);
   const [savingManualPrice, setSavingManualPrice] = useState(false);
+  const [resolvingCatalogMatch, setResolvingCatalogMatch] = useState(false);
   const [searchingSuppliers, setSearchingSuppliers] = useState(false);
   const [exportingSuppliers, setExportingSuppliers] = useState(false);
+  const [catalogMatch, setCatalogMatch] = useState<CatalogRow | null>(null);
   const [manualPriceDraft, setManualPriceDraft] = useState({
     supplier_id: "",
     brand: "",
@@ -187,6 +192,57 @@ export function SuppliersPage() {
     ],
     [],
   );
+
+  useEffect(() => {
+    if (!showManualPriceDialog) return;
+
+    const brand = manualPriceDraft.brand.trim();
+    const productCode = manualPriceDraft.product_code.trim();
+    const normalizedCode = normalizePartCode(productCode);
+
+    if (!brand || normalizedCode.length < 3) {
+      setCatalogMatch(null);
+      setResolvingCatalogMatch(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        setResolvingCatalogMatch(true);
+        const rows = await fetchCloudCatalog({
+          brandName: brand,
+          search: productCode,
+          page: 1,
+          pageSize: 20,
+        });
+        if (cancelled) return;
+        const match =
+          rows.find((row) => normalizePartCode(row.product_code) === normalizedCode) || null;
+        setCatalogMatch(match);
+        if (match) {
+          setManualPriceDraft((current) => ({
+            ...current,
+            description: match.description || current.description,
+            oem_no: match.oem_no || current.oem_no,
+          }));
+        }
+      } catch {
+        if (!cancelled) {
+          setCatalogMatch(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setResolvingCatalogMatch(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [showManualPriceDialog, manualPriceDraft.brand, manualPriceDraft.product_code]);
 
   async function reloadSupplierRows(nextSearch = submittedSearch, nextFreshness = freshness, supplierId = selectedSupplierId) {
     if (!supplierId) {
@@ -659,6 +715,15 @@ export function SuppliersPage() {
                 onChange={(value) => setManualPriceDraft((current) => ({ ...current, notes: value }))}
               />
             </div>
+            {manualPriceDraft.brand.trim() && manualPriceDraft.product_code.trim() ? (
+              <div className="modal-hint">
+                {resolvingCatalogMatch
+                  ? "Checking catalog match..."
+                  : catalogMatch
+                    ? `Catalog match found: ${catalogMatch.description || "-"} | OEM: ${catalogMatch.oem_no || "-"} | HS: ${catalogMatch.hs_code || "-"} | Origin: ${catalogMatch.origin || "-"} | Weight: ${catalogMatch.weight_kg ?? "-"}`
+                    : "No catalog match found for this brand / part number."}
+              </div>
+            ) : null}
             <div className="modal-hint">This uses the same supplier import pipeline, but only for one part number.</div>
             <div className="modal-actions">
               <Button
