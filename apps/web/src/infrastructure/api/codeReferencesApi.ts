@@ -1,4 +1,4 @@
-import { normalizePartCode } from "../../domain/shared/normalize";
+import { includesLooseText, normalizePartCode } from "../../domain/shared/normalize";
 import type { CodeReferenceMatch, CodeReferenceRow, CodeReferenceUsage } from "../../types/codeReferences";
 import { supabaseClient } from "./supabaseClient";
 
@@ -95,11 +95,11 @@ export async function fetchCodeReferences(search = ""): Promise<CodeReferenceRow
     const normalized = normalizePartCode(searchTerm);
     rows = rows.filter((row) => {
       return (
-        row.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        includesLooseText(row.brand, searchTerm) ||
         normalizePartCode(row.old_code).includes(normalized) ||
         normalizePartCode(row.new_code).includes(normalized) ||
         normalizePartCode(row.original_number || "").includes(normalized) ||
-        (row.reason || "").toLowerCase().includes(searchTerm.toLowerCase())
+        includesLooseText(row.reason || "", searchTerm)
       );
     });
   }

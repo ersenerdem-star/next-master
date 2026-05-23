@@ -29,6 +29,7 @@ import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
+import { includesLooseText } from "../../domain/shared/normalize";
 
 type SettingsState = {
   email: string;
@@ -477,7 +478,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
       .join(" ")
       .toLowerCase();
 
-    if (emailSearch.trim() && !haystack.includes(emailSearch.trim().toLowerCase())) return false;
+    if (emailSearch.trim() && !includesLooseText(haystack, emailSearch)) return false;
 
     const compareDate = (item.updated_at || item.created_at || "").slice(0, 10);
     if (emailDateFrom && compareDate && compareDate < emailDateFrom) return false;

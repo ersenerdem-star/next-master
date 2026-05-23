@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { normalizePartCode } from "../../domain/shared/normalize";
+import { includesLooseText, normalizePartCode } from "../../domain/shared/normalize";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchInventoryMovements } from "../../infrastructure/api/inventoryApi";
 import { fetchBills, fetchInvoices, fetchPurchaseOrders, fetchSalesOrders } from "../../infrastructure/api/ordersApi";
@@ -264,11 +264,11 @@ export function ItemTransactionsPage({
       if (codeSearch.trim()) {
         const rawNeedle = codeSearch.trim().toLowerCase();
         const normalizedNeedle = normalizePartCode(codeSearch);
-        const haystack = `${row.product_code} ${row.description}`.toLowerCase();
+        const haystack = `${row.product_code} ${row.description}`;
         const normalizedCode = normalizePartCode(row.product_code);
-        if (!haystack.includes(rawNeedle) && (!normalizedNeedle || !normalizedCode.includes(normalizedNeedle))) return false;
+        if (!includesLooseText(haystack, rawNeedle) && (!normalizedNeedle || !normalizedCode.includes(normalizedNeedle))) return false;
       }
-      if (partySearch.trim() && !row.party_name.toLowerCase().includes(partySearch.trim().toLowerCase())) return false;
+      if (partySearch.trim() && !includesLooseText(row.party_name, partySearch)) return false;
       if (dateFrom && row.date && row.date < dateFrom) return false;
       if (dateTo && row.date && row.date > dateTo) return false;
       return true;
@@ -324,11 +324,11 @@ export function ItemTransactionsPage({
     const filteredInventoryRows = inventoryRows.filter((row) => {
       if (brand && row.brand.trim().toLowerCase() !== brand.trim().toLowerCase()) return false;
       if (codeSearch.trim()) {
-        const haystack = `${row.product_code} ${row.description}`.toLowerCase();
+        const haystack = `${row.product_code} ${row.description}`;
         const normalizedCode = normalizePartCode(row.product_code);
-        if (!haystack.includes(needle) && (!normalizedNeedle || !normalizedCode.includes(normalizedNeedle))) return false;
+        if (!includesLooseText(haystack, needle) && (!normalizedNeedle || !normalizedCode.includes(normalizedNeedle))) return false;
       }
-      if (partySearch.trim() && !row.party_name.toLowerCase().includes(partySearch.trim().toLowerCase())) return false;
+      if (partySearch.trim() && !includesLooseText(row.party_name, partySearch)) return false;
       if (dateFrom && row.date && row.date < dateFrom) return false;
       if (dateTo && row.date && row.date > dateTo) return false;
       return true;

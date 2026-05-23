@@ -16,6 +16,7 @@ import type { SupplierBrandSummaryRow, SupplierSummary } from "../../types/suppl
 import { downloadCsv, toCsv } from "../../shared/csv";
 import { fetchWarehouseStockItems } from "../../infrastructure/api/inventoryApi";
 import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
+import { includesLooseText } from "../../domain/shared/normalize";
 
 type DashboardPageProps = {
   onOpenSalesOrder?: (salesOrderId: string) => void;
@@ -228,8 +229,8 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
     const search = brandSummarySearch.trim().toLowerCase();
     const matchesSearch =
       !search ||
-      row.brand.toLowerCase().includes(search) ||
-      row.supplier_name.toLowerCase().includes(search);
+      includesLooseText(row.brand, search) ||
+      includesLooseText(row.supplier_name, search);
     return matchesSearch;
   });
 

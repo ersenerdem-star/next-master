@@ -24,6 +24,7 @@ import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
+import { includesLooseText } from "../../domain/shared/normalize";
 
 type InventoryTab = "Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers";
 
@@ -507,9 +508,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
       const scopedRows = onHandWarehouseId ? onHandStockRows.filter((row) => row.warehouse_id === onHandWarehouseId) : onHandStockRows;
       const needle = onHandStockSearch.trim().toLowerCase();
       if (!needle) return scopedRows;
-      return scopedRows.filter((row) =>
-        `${row.brand} ${row.product_code} ${row.old_code} ${row.description} ${row.origin}`.toLowerCase().includes(needle),
-      );
+      return scopedRows.filter((row) => includesLooseText(`${row.brand} ${row.product_code} ${row.old_code} ${row.description} ${row.origin}`, needle));
     },
     [onHandStockRows, onHandWarehouseId, onHandStockSearch],
   );
@@ -518,12 +517,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     const normalized = transferSearch.trim().toLowerCase();
     const rows = transferSourceId ? sourceStockRows.filter((row) => row.warehouse_id === transferSourceId) : sourceStockRows;
     if (!normalized) return rows;
-    return rows.filter((row) =>
-      [row.brand, row.product_code, row.old_code, row.description, row.origin]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalized),
-    );
+    return rows.filter((row) => includesLooseText([row.brand, row.product_code, row.old_code, row.description, row.origin].join(" "), normalized));
   }, [sourceStockRows, transferSearch, transferSourceId]);
 
   const transferHistoryColumns = useMemo(

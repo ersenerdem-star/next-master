@@ -4,6 +4,7 @@ import { fetchInventoryMovements, fetchWarehouseStockItems } from "../../infrast
 import { fetchSalesOrders, fetchPurchaseOrders, fetchInvoices } from "../../infrastructure/api/ordersApi";
 import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
+import { includesLooseText } from "../../domain/shared/normalize";
 import type { InventoryMovement, WarehouseStockItem } from "../../types/inventory";
 import type { LocalInvoice, LocalPurchaseOrder, LocalSalesOrder } from "../../types/orders";
 import type { Warehouse } from "../../types/warehouses";
@@ -234,8 +235,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
       if (filters.brand && row.brand.trim().toLowerCase() !== filters.brand.trim().toLowerCase()) return false;
       if (filters.warehouseId && row.warehouse_id !== filters.warehouseId) return false;
       if (needle) {
-        const haystack = `${row.product_code} ${row.old_code} ${row.description}`.toLowerCase();
-        if (!haystack.includes(needle)) return false;
+        if (!includesLooseText(`${row.product_code} ${row.old_code} ${row.description}`, needle)) return false;
       }
       return true;
     });
@@ -248,8 +248,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
       if (filters.dateFrom && row.date && row.date < filters.dateFrom) return false;
       if (filters.dateTo && row.date && row.date > filters.dateTo) return false;
       if (needle) {
-        const haystack = `${row.product_code} ${row.description}`.toLowerCase();
-        if (!haystack.includes(needle)) return false;
+        if (!includesLooseText(`${row.product_code} ${row.description}`, needle)) return false;
       }
       return true;
     });
@@ -263,8 +262,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
       if (filters.dateFrom && row.moved_at && row.moved_at.slice(0, 10) < filters.dateFrom) return false;
       if (filters.dateTo && row.moved_at && row.moved_at.slice(0, 10) > filters.dateTo) return false;
       if (needle) {
-        const haystack = `${row.product_code} ${row.old_code} ${row.description} ${row.document_no}`.toLowerCase();
-        if (!haystack.includes(needle)) return false;
+        if (!includesLooseText(`${row.product_code} ${row.old_code} ${row.description} ${row.document_no}`, needle)) return false;
       }
       return true;
     });
@@ -464,8 +462,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
         if (filters.dateFrom && row.order_date && row.order_date < filters.dateFrom) return false;
         if (filters.dateTo && row.order_date && row.order_date > filters.dateTo) return false;
         if (needle) {
-          const haystack = `${row.sales_order_no} ${row.customer_name} ${row.product_code} ${row.description}`.toLowerCase();
-          if (!haystack.includes(needle)) return false;
+          if (!includesLooseText(`${row.sales_order_no} ${row.customer_name} ${row.product_code} ${row.description}`, needle)) return false;
         }
         return true;
       })

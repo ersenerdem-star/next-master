@@ -1,5 +1,6 @@
 import { supabaseClient } from "./supabaseClient";
 import type { SupplierBrandSummaryRow, SupplierPriceRow, SupplierSummary } from "../../types/suppliers";
+import { isCodeLikeSearch, normalizePartCode } from "../../domain/shared/normalize";
 
 export async function fetchCloudSuppliers(): Promise<SupplierSummary[]> {
   const { data, error } = await supabaseClient.rpc("list_cloud_suppliers");
@@ -106,6 +107,9 @@ export async function fetchSupplierExportRows(input: { supplierId: string; brand
   const pageSize = 1000;
 
   while (true) {
+    const search = input.search?.trim();
+    const normalizedSearch = normalizePartCode(search || "");
+    const searchIsCode = isCodeLikeSearch(search || "") && normalizedSearch.length >= 3;
     let query = supabaseClient
       .from("supplier_prices")
       .select("id,product_code,description,oem_no,buy_price,currency,valid_from,moq,lead_time_days,notes")
@@ -115,9 +119,12 @@ export async function fetchSupplierExportRows(input: { supplierId: string; brand
       .order("product_code", { ascending: true })
       .range(from, from + pageSize - 1);
 
-    const search = input.search?.trim();
     if (search) {
-      query = query.or(`product_code.ilike.%${search}%,description.ilike.%${search}%,oem_no.ilike.%${search}%`);
+      query = searchIsCode
+        ? query.or(
+            `normalized_code.eq.${normalizedSearch},normalized_oem.eq.${normalizedSearch},normalized_code.like.%${normalizedSearch}%,normalized_oem.like.%${normalizedSearch}%`,
+          )
+        : query.or(`product_code.ilike.%${search}%,description.ilike.%${search}%,oem_no.ilike.%${search}%`);
     }
 
     const { data, error } = await query;

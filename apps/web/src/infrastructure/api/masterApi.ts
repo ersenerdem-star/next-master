@@ -1,5 +1,5 @@
 import { supabaseClient } from "./supabaseClient";
-import { normalizePartCode } from "../../domain/shared/normalize";
+import { isCodeLikeSearch, normalizePartCode } from "../../domain/shared/normalize";
 import type { MasterRow } from "../../types/master";
 
 type MasterParams = {
@@ -103,7 +103,7 @@ async function fetchCatalogMasterBaseRows(input: {
   const to = from + pageSize - 1;
   const rawSearch = input.search.trim();
   const normalizedSearch = normalizePartCode(rawSearch);
-  const searchIsCode = normalizedSearch.length >= 5;
+  const searchIsCode = isCodeLikeSearch(rawSearch) && normalizedSearch.length >= 3;
 
   let query = supabaseClient
     .from("catalog_products")
@@ -116,7 +116,7 @@ async function fetchCatalogMasterBaseRows(input: {
   if (rawSearch) {
     query = searchIsCode
       ? query.or(
-          `normalized_code.eq.${normalizedSearch},normalized_oem.eq.${normalizedSearch},normalized_code.like.${normalizedSearch}%,normalized_oem.like.${normalizedSearch}%`,
+          `normalized_code.eq.${normalizedSearch},normalized_oem.eq.${normalizedSearch},normalized_code.like.%${normalizedSearch}%,normalized_oem.like.%${normalizedSearch}%`,
         )
       : query.or(`product_code.ilike.%${rawSearch}%,description.ilike.%${rawSearch}%,oem_no.ilike.%${rawSearch}%`);
   }
