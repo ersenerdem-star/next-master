@@ -1824,6 +1824,12 @@ select {
   height: 18px;
 }
 
+.quote-toolbar-checkbox {
+  min-height: 40px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
 .quote-line-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 120px 140px;

@@ -11,7 +11,7 @@ import {
   upsertInvoice,
   upsertSalesOrder,
 } from "../../infrastructure/api/ordersApi";
-import { batchResolveQuoteImportRows, fetchCatalogMetadataForRows } from "../../infrastructure/api/quoteImportApi";
+import { batchResolveQuoteImportRows } from "../../infrastructure/api/quoteImportApi";
 import { fetchCPriceMapForRows, getCPriceForRow } from "../../infrastructure/api/cPriceApi";
 import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
 import { resolveQuoteLine } from "../../infrastructure/api/quoteResolverApi";
@@ -22,6 +22,7 @@ import { normalizePartCode } from "../../domain/shared/normalize";
 import { parseCsv } from "../../shared/csv";
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import { buildInvoiceFromSalesOrder, buildLocalSalesOrder, buildPurchaseOrdersFromSalesOrder } from "../../shared/localOrders";
+import { resyncSalesOrderLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 import { Select } from "../components/common/Select";
@@ -468,6 +469,9 @@ export function QuotesPage({
   const [printingDraft, setPrintingDraft] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [confirmingOrder, setConfirmingOrder] = useState(false);
+  const [resyncingCatalog, setResyncingCatalog] = useState(false);
+  const [resyncOnlyFillBlanks, setResyncOnlyFillBlanks] = useState(true);
+  const [resyncKeepPrices, setResyncKeepPrices] = useState(true);
   const [invoicePromptOpen, setInvoicePromptOpen] = useState(false);
   const [pendingConfirmedOrder, setPendingConfirmedOrder] = useState<LocalSalesOrder | null>(null);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
@@ -1069,36 +1073,14 @@ export function QuotesPage({
     setPackingDetails(order.packing_details || "");
     setQuoteNotes(order.notes || "");
     actionFeedback.begin(`Loading ${order.sales_order_no}...`);
-    const metadataMap = await fetchCatalogMetadataForRows(
-      (order.lines || []).map((line) => ({
-        brand: line.brand || "",
-        product_code: line.resolvedCode || line.requestedCode,
-      })),
-    );
-    const hydratedLines = await Promise.all(
-      (order.lines || []).map(async (line) => {
-        const patched = applyCatalogMetadata(line, metadataMap);
-        const selectedFromOptions =
-          patched.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === patched.selectedSupplierKey) ||
-          patched.supplierOptions[0] ||
-          null;
-        const hasVisiblePrices = Number(patched.buy_price ?? 0) > 0 || Number(patched.sell_price ?? 0) > 0;
-        const optionHasPrices = selectedFromOptions ? Number(selectedFromOptions.buy_price ?? 0) > 0 || Number(selectedFromOptions.sell_price ?? 0) > 0 : false;
-        if (hasVisiblePrices || optionHasPrices) {
-          const buyPrice = hasVisiblePrices ? patched.buy_price : selectedFromOptions?.buy_price ?? null;
-          const sellBase = hasVisiblePrices ? patched.sell_price : selectedFromOptions?.sell_price ?? null;
-          return {
-            ...patched,
-            supplier_name: patched.supplier_name || selectedFromOptions?.supplier_name || "",
-            buy_price: buyPrice,
-            sell_price: order.customer_type === "C" ? patched.c_sell_price ?? sellBase : sellBase,
-            price_date: patched.price_date || selectedFromOptions?.price_date || "",
-            notes: patched.notes || selectedFromOptions?.notes || "",
-          };
-        }
-        return await hydrateStoredBuilderLine(patched, order.customer_type);
-      }),
-    );
+    const hydratedLines = await resyncSalesOrderLinesFromCatalog(order.lines || [], {
+      customerType: order.customer_type,
+      marginA: effectiveMarginA,
+      marginB: effectiveMarginB,
+      onlyFillBlanks: false,
+      keepPrices: true,
+      hydrateMissingPricesIfKeepingPrices: true,
+    });
     if (order.source_channel === "portal" && order.portal_submitted_at && !order.portal_seen_at) {
       try {
         const seenOrder = await markSalesOrderPortalSeen(order.id);
@@ -1112,6 +1094,67 @@ export function QuotesPage({
     setQuoteBuilderLines(hydratedLines);
     setBuilderStatus(`Loaded ${order.sales_order_no} (${order.status}).`);
     actionFeedback.succeed(`${order.sales_order_no} loaded.`);
+  }
+
+  async function handleResyncFromCatalog() {
+    if (!quoteBuilderLines.length) {
+      actionFeedback.fail("No sales order lines to re-sync.");
+      return;
+    }
+    try {
+      setResyncingCatalog(true);
+      actionFeedback.begin(`Re-syncing ${quoteNo || "sales order"} from catalog...`);
+      const syncedLines = await resyncSalesOrderLinesFromCatalog(quoteBuilderLines, {
+        customerType,
+        marginA: effectiveMarginA,
+        marginB: effectiveMarginB,
+        onlyFillBlanks: resyncOnlyFillBlanks,
+        keepPrices: resyncKeepPrices,
+      });
+      setQuoteBuilderLines(syncedLines);
+
+      if (selectedLocalSalesOrderId) {
+        const order = buildLocalSalesOrder({
+          id: selectedLocalSalesOrderId,
+          sales_order_no: quoteNo.trim() || currentLocalSalesOrder?.sales_order_no || "",
+          customer_name: customerSelection === "__manual__" ? manualCustomerName.trim() : customerName.trim(),
+          seller_company: sellerCompany.trim(),
+          purchase_company: buyerInfo.trim(),
+          quote_date: quoteDate,
+          currency,
+          customer_type: customerType,
+          shipping_cost: Number(String(shippingCost || "0").replace(",", ".")) || 0,
+          discount_amount: Number(String(discountAmount || "0").replace(",", ".")) || 0,
+          supplier_mode: supplierMode,
+          preferred_supplier: "",
+          seller_info: sellerInfo.trim(),
+          buyer_info: buyerInfo.trim(),
+          delivery_term: deliveryTerm.trim(),
+          payment_terms: paymentTerms.trim(),
+          packing_details: packingDetails.trim(),
+          notes: quoteNotes.trim(),
+          status: currentLocalSalesOrder?.status || "draft",
+          source_channel: currentLocalSalesOrder?.source_channel || "internal",
+          portal_invite_id: currentLocalSalesOrder?.portal_invite_id ?? null,
+          portal_submitted_at: currentLocalSalesOrder?.portal_submitted_at ?? null,
+          portal_seen_at: currentLocalSalesOrder?.portal_seen_at ?? null,
+          lines: syncedLines,
+        });
+        const saved = await upsertSalesOrder(order);
+        await refreshLocalSalesOrders(saved.id);
+      }
+
+      setBuilderStatus(
+        resyncOnlyFillBlanks
+          ? "Catalog re-sync complete. Only blank catalog fields were updated."
+          : "Catalog re-sync complete.",
+      );
+      actionFeedback.succeed("Sales order re-synced from catalog.");
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Catalog re-sync failed");
+    } finally {
+      setResyncingCatalog(false);
+    }
   }
 
   function buildSalesOrderPayload(status: "draft" | "confirmed") {
@@ -2050,6 +2093,21 @@ export function QuotesPage({
             <Button variant="secondary" onClick={handlePrintDraftPdf} busy={printingDraft} busyLabel="Opening PDF...">
               PDF / Print
             </Button>
+            {quoteBuilderLines.length ? (
+              <>
+                <label className="checkbox-field quote-toolbar-checkbox">
+                  <input type="checkbox" checked={resyncOnlyFillBlanks} onChange={(event) => setResyncOnlyFillBlanks(event.target.checked)} />
+                  <span className="field__label">Only Fill Blanks</span>
+                </label>
+                <label className="checkbox-field quote-toolbar-checkbox">
+                  <input type="checkbox" checked={resyncKeepPrices} onChange={(event) => setResyncKeepPrices(event.target.checked)} />
+                  <span className="field__label">Keep Prices</span>
+                </label>
+                <Button variant="secondary" onClick={() => void handleResyncFromCatalog()} busy={resyncingCatalog} busyLabel="Re-syncing...">
+                  Re-sync from Catalog
+                </Button>
+              </>
+            ) : null}
             <Button variant="secondary" onClick={() => void handleSaveDraft()} busy={savingDraft} busyLabel="Saving Draft...">
               Save Draft
             </Button>
