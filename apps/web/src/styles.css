@@ -1070,6 +1070,16 @@ select {
   padding-right: 8px;
 }
 
+.catalog-thumb {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  border: 1px solid #dbe3f0;
+  border-radius: 10px;
+  background: #fff;
+  display: block;
+}
+
 .inline-actions {
   display: flex;
   gap: 8px;

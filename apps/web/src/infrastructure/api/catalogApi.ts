@@ -2,6 +2,17 @@ import type { CatalogRow } from "../../types/catalog";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { supabaseClient } from "./supabaseClient";
 
+const CATALOG_SELECT_WITH_IMAGE =
+  "id,product_code,image_url,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note";
+const CATALOG_SELECT_NO_IMAGE =
+  "id,product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note";
+
+function isMissingCatalogImageError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const normalized = message.toLowerCase();
+  return normalized.includes("image_url") && normalized.includes("does not exist");
+}
+
 async function getCurrentOrgId() {
   const { data: authData, error: authError } = await supabaseClient.auth.getUser();
   if (authError) throw new Error(authError.message || "Failed to read current user");
@@ -73,24 +84,32 @@ export async function fetchCloudCatalog(input: {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    let query = supabaseClient
-      .from("catalog_products")
-      .select("id,product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note", { count: "exact" })
-      .eq("brand_id", brandId)
-      .order("product_code", { ascending: true })
-      .range(from, to);
-
     const search = input.search.trim();
-    if (search) {
-      query = query.or(`product_code.ilike.%${search}%,description.ilike.%${search}%,oem_no.ilike.%${search}%`);
-    }
+    const buildQuery = (selectClause: string) => {
+      let query = supabaseClient
+        .from("catalog_products")
+        .select(selectClause, { count: "exact" })
+        .eq("brand_id", brandId)
+        .order("product_code", { ascending: true })
+        .range(from, to);
 
-    const { data, error, count } = await query;
+      if (search) {
+        query = query.or(`product_code.ilike.%${search}%,description.ilike.%${search}%,oem_no.ilike.%${search}%`);
+      }
+
+      return query;
+    };
+
+    let { data, error, count } = await buildQuery(CATALOG_SELECT_WITH_IMAGE);
+    if (error && isMissingCatalogImageError(error)) {
+      ({ data, error, count } = await buildQuery(CATALOG_SELECT_NO_IMAGE));
+    }
     if (error) throw error;
 
-    return ((data ?? []) as Array<{
+    return ((data ?? []) as unknown as Array<{
       id: string;
       product_code: string;
+      image_url?: string | null;
       description: string | null;
       oem_no: string | null;
       hs_code: string | null;
@@ -103,6 +122,7 @@ export async function fetchCloudCatalog(input: {
       product_id: row.id,
       product_code: row.product_code,
       brand: brandName,
+      image_url: row.image_url ?? "",
       description: row.description ?? "",
       oem_no: row.oem_no ?? "",
       hs_code: row.hs_code ?? "",
@@ -125,6 +145,7 @@ export async function fetchCloudCatalog(input: {
     product_id: String(row.product_id || ""),
     product_code: String(row.product_code || ""),
     brand: String(row.brand || ""),
+    image_url: String(row.image_url || ""),
     description: String(row.description || ""),
     oem_no: String(row.oem_no || ""),
     hs_code: String(row.hs_code || ""),
@@ -229,6 +250,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
 
   const allRows: Array<{
     product_code: string;
+    image_url?: string | null;
     description: string | null;
     oem_no: string | null;
     hs_code: string | null;
@@ -242,24 +264,35 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
   const pageSize = 1000;
 
   while (true) {
-    let query = supabaseClient
-      .from("catalog_products")
-      .select("product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note")
-      .eq("brand_id", brandRow.id)
-      .order("product_code", { ascending: true })
-      .range(from, from + pageSize - 1);
-
     const search = input.search?.trim();
-    if (search) {
-      query = query.or(`product_code.ilike.%${search}%,description.ilike.%${search}%,oem_no.ilike.%${search}%`);
-    }
+    const buildQuery = (selectClause: string) => {
+      let query = supabaseClient
+        .from("catalog_products")
+        .select(selectClause)
+        .eq("brand_id", brandRow.id)
+        .order("product_code", { ascending: true })
+        .range(from, from + pageSize - 1);
 
-    const { data, error } = await query;
+      if (search) {
+        query = query.or(`product_code.ilike.%${search}%,description.ilike.%${search}%,oem_no.ilike.%${search}%`);
+      }
+
+      return query;
+    };
+
+    let { data, error } = await buildQuery(
+      "product_code,image_url,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+    );
+    if (error && isMissingCatalogImageError(error)) {
+      ({ data, error } = await buildQuery(
+        "product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+      ));
+    }
     if (error) {
       throw new Error(error.message || "Catalog export load failed");
     }
 
-    const batch = (data || []) as typeof allRows;
+    const batch = (data || []) as unknown as typeof allRows;
     allRows.push(...batch);
     if (batch.length < pageSize) break;
     from += pageSize;
@@ -268,6 +301,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
   return allRows.map((row) => ({
     product_code: row.product_code,
     brand: brandRow.name as string,
+    image_url: row.image_url || "",
     description: row.description || "",
     oem_no: row.oem_no || "",
     hs_code: row.hs_code || "",
@@ -316,22 +350,29 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
 
   for (let index = 0; index < normalizedCodes.length; index += chunkSize) {
     const codeChunk = normalizedCodes.slice(index, index + chunkSize);
-    const { data, error } = await supabaseClient
-      .from("catalog_products")
-      .select("id,product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note")
-      .eq("organization_id", organizationId)
-      .eq("brand_id", brandRow.id)
-      .in("product_code", codeChunk)
-      .order("product_code", { ascending: true });
+    const buildQuery = (selectClause: string) =>
+      supabaseClient
+        .from("catalog_products")
+        .select(selectClause)
+        .eq("organization_id", organizationId)
+        .eq("brand_id", brandRow.id)
+        .in("product_code", codeChunk)
+        .order("product_code", { ascending: true });
+
+    let { data, error } = await buildQuery(CATALOG_SELECT_WITH_IMAGE);
+    if (error && isMissingCatalogImageError(error)) {
+      ({ data, error } = await buildQuery(CATALOG_SELECT_NO_IMAGE));
+    }
 
     if (error) {
       throw new Error(error.message || "Imported catalog rows load failed");
     }
 
     result.push(
-      ...((data ?? []) as Array<{
+      ...((data ?? []) as unknown as Array<{
         id: string;
         product_code: string;
+        image_url?: string | null;
         description: string | null;
         oem_no: string | null;
         hs_code: string | null;
@@ -344,6 +385,7 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
         product_id: row.id,
         product_code: row.product_code,
         brand: brandRow.name as string,
+        image_url: row.image_url ?? "",
         description: row.description ?? "",
         oem_no: row.oem_no ?? "",
         hs_code: row.hs_code ?? "",

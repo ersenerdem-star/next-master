@@ -5,6 +5,7 @@ export type CatalogRow = {
   product_id: string;
   product_code: string;
   brand: string;
+  image_url?: string;
   description: string;
   oem_no: string;
   hs_code: string;

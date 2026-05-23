@@ -259,6 +259,12 @@ export function CatalogPage() {
   const columns = useMemo(
     () => [
       {
+        key: "image",
+        header: "Image",
+        render: (row: CatalogRow) =>
+          row.image_url ? <img src={row.image_url} alt={row.product_code} className="catalog-thumb" loading="lazy" /> : <span>-</span>,
+      },
+      {
         key: "code",
         header: "Code",
         render: (row: CatalogRow) => (
@@ -568,6 +574,7 @@ export function CatalogPage() {
       const hsIndex = indexOfAny("HS_Code", "HS", "GTIP");
       const originIndex = indexOfAny("Origin", "Country_Of_Origin");
       const weightIndex = indexOfAny("Weight_kg", "Weight", "Net_Weight");
+      const imageUrlIndex = indexOfAny("Image_URL", "Image Url", "Image");
       const lifecycleStatusIndex = indexOfAny("Lifecycle_Status", "Lifecycle");
       const lifecycleNoteIndex = indexOfAny("Lifecycle_Note", "Lifecycle Note", "Discontinued_Note", "Discontinued Note");
       const selectedImportBrand = importBrand === "__new__" ? importBrandName.trim() : importBrand.trim();
@@ -600,6 +607,7 @@ export function CatalogPage() {
           hs_code: normalizeText(row[hsIndex]),
           origin: normalizeText(row[originIndex]),
           weight_kg: normalizeNumber(row[weightIndex]),
+          image_url: normalizeText(row[imageUrlIndex]),
           lifecycle_status: normalizeCatalogLifecycleStatus(normalizeText(row[lifecycleStatusIndex])),
           lifecycle_note: normalizeText(row[lifecycleNoteIndex]),
         }))
@@ -672,7 +680,7 @@ export function CatalogPage() {
     try {
       const exportData = await fetchCatalogExportRows({ brandName: exportBrand });
       const exportRows = [
-        ["Product_Code", "Brand", "Product_Name", "OEM_No", "HS_Code", "Origin", "Weight_kg", "Lifecycle_Status", "Lifecycle_Note"],
+        ["Product_Code", "Brand", "Product_Name", "OEM_No", "HS_Code", "Origin", "Weight_kg", "Image_URL", "Lifecycle_Status", "Lifecycle_Note"],
         ...exportData.map((row) => [
           row.product_code,
           row.brand,
@@ -681,6 +689,7 @@ export function CatalogPage() {
           row.hs_code || "",
           row.origin || "",
           row.weight_kg ?? "",
+          row.image_url || "",
           row.lifecycle_status || "active",
           row.lifecycle_note || "",
         ]),
