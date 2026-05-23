@@ -1080,6 +1080,35 @@ select {
   display: block;
 }
 
+.catalog-thumb-button {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.modal-card--image-preview {
+  width: min(960px, 92vw);
+}
+
+.image-preview-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 420px;
+  padding: 12px 0 4px;
+}
+
+.image-preview {
+  max-width: 100%;
+  max-height: 72vh;
+  object-fit: contain;
+  border-radius: 16px;
+  border: 1px solid #dbe3f0;
+  background: #fff;
+}
+
 .inline-actions {
   display: flex;
   gap: 8px;

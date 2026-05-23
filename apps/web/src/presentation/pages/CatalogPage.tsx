@@ -58,6 +58,7 @@ export function CatalogPage() {
   const [creatingItem, setCreatingItem] = useState(false);
   const [savingReference, setSavingReference] = useState(false);
   const [referenceOldCodeUsage, setReferenceOldCodeUsage] = useState<CodeReferenceUsage | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ src: string; code: string; name: string } | null>(null);
   const [createDraft, setCreateDraft] = useState({
     product_code: "",
     brand: "",
@@ -262,7 +263,23 @@ export function CatalogPage() {
         key: "image",
         header: "Image",
         render: (row: CatalogRow) =>
-          row.image_url ? <img src={row.image_url} alt={row.product_code} className="catalog-thumb" loading="lazy" /> : <span>-</span>,
+          row.image_url ? (
+            <button
+              type="button"
+              className="catalog-thumb-button"
+              onClick={() =>
+                setPreviewImage({
+                  src: row.image_url || "",
+                  code: row.product_code,
+                  name: row.description || "",
+                })
+              }
+            >
+              <img src={row.image_url} alt={row.product_code} className="catalog-thumb" loading="lazy" />
+            </button>
+          ) : (
+            <span>-</span>
+          ),
       },
       {
         key: "code",
@@ -1085,6 +1102,27 @@ export function CatalogPage() {
                 busyLabel="Saving..."
               >
                 Save Reference
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {previewImage ? (
+        <div className="modal-backdrop" onClick={() => setPreviewImage(null)}>
+          <div className="modal-card modal-card--image-preview" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-card__header">
+              <div>
+                <h3>{previewImage.code}</h3>
+                <p>{previewImage.name || "Catalog image preview"}</p>
+              </div>
+            </div>
+            <div className="image-preview-wrap">
+              <img src={previewImage.src} alt={previewImage.code} className="image-preview" />
+            </div>
+            <div className="modal-actions">
+              <Button variant="secondary" onClick={() => setPreviewImage(null)}>
+                Close
               </Button>
             </div>
           </div>

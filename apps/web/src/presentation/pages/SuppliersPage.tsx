@@ -26,6 +26,7 @@ export function SuppliersPage() {
   const [importBrand, setImportBrand] = useState("");
   const [importBrandName, setImportBrandName] = useState("");
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showManualPriceDialog, setShowManualPriceDialog] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importMode, setImportMode] = useState("replace");
   const [importSupplierId, setImportSupplierId] = useState("");
@@ -41,8 +42,21 @@ export function SuppliersPage() {
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [importingSupplier, setImportingSupplier] = useState(false);
+  const [savingManualPrice, setSavingManualPrice] = useState(false);
   const [searchingSuppliers, setSearchingSuppliers] = useState(false);
   const [exportingSuppliers, setExportingSuppliers] = useState(false);
+  const [manualPriceDraft, setManualPriceDraft] = useState({
+    supplier_id: "",
+    brand: "",
+    product_code: "",
+    description: "",
+    oem_no: "",
+    buy_price: "",
+    price_date: "",
+    moq: "",
+    lead_time_days: "",
+    notes: "",
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -155,6 +169,10 @@ export function SuppliersPage() {
     { value: "replace", label: "Replace selected supplier list" },
     { value: "merge", label: "Merge into selected supplier list" },
   ];
+  const selectableSupplierOptions = suppliers.map((supplier) => ({
+    value: supplier.supplier_id,
+    label: `${supplier.name} (${supplier.line_count.toLocaleString("en-US")})`,
+  }));
 
   const columns = useMemo(
     () => [
@@ -286,6 +304,82 @@ export function SuppliersPage() {
     }
   }
 
+  async function handleManualPriceSave() {
+    const supplierId = manualPriceDraft.supplier_id || selectedSupplierId;
+    const supplier = suppliers.find((item) => item.supplier_id === supplierId);
+    const activeBrand = manualPriceDraft.brand.trim();
+    const productCode = normalizeText(manualPriceDraft.product_code);
+    const buyPrice = normalizeNumber(manualPriceDraft.buy_price);
+
+    if (!supplier?.name) {
+      setError("Supplier is required");
+      return;
+    }
+    if (!activeBrand) {
+      setError("Brand is required");
+      return;
+    }
+    if (!productCode) {
+      setError("Product code is required");
+      return;
+    }
+    if (buyPrice === null) {
+      setError("Buy price is required");
+      return;
+    }
+
+    try {
+      setSavingManualPrice(true);
+      setError("");
+      setStatus("");
+      actionFeedback.begin(`Saving supplier price for ${productCode}...`);
+      await bulkImportSupplierPrices([
+        {
+          supplier_name: supplier.name,
+          brand: activeBrand,
+          product_code: productCode,
+          description: normalizeText(manualPriceDraft.description),
+          oem_no: normalizeText(manualPriceDraft.oem_no),
+          buy_price: buyPrice,
+          currency: "EUR",
+          moq: normalizeNumber(manualPriceDraft.moq),
+          lead_time_days: normalizeNumber(manualPriceDraft.lead_time_days),
+          notes: normalizeText(manualPriceDraft.notes),
+          valid_from: normalizeText(manualPriceDraft.price_date),
+          is_active: true,
+        },
+      ]);
+
+      const refreshedSuppliers = await fetchCloudSuppliers();
+      setSuppliers(refreshedSuppliers);
+      setSelectedSupplierId(supplierId);
+      await reloadSupplierRows(productCode, freshness, supplierId);
+      setSearch(productCode);
+      setSubmittedSearch(productCode);
+      setShowManualPriceDialog(false);
+      setManualPriceDraft({
+        supplier_id: supplierId,
+        brand: activeBrand,
+        product_code: "",
+        description: "",
+        oem_no: "",
+        buy_price: "",
+        price_date: "",
+        moq: "",
+        lead_time_days: "",
+        notes: "",
+      });
+      setStatus(`Supplier price saved for ${productCode}.`);
+      actionFeedback.succeed(`Supplier price saved for ${productCode}.`);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Manual supplier price save failed";
+      setError(message);
+      actionFeedback.fail(message);
+    } finally {
+      setSavingManualPrice(false);
+    }
+  }
+
   function handleSupplierExport() {
     setExportingSuppliers(true);
     actionFeedback.begin("Preparing supplier CSV export...");
@@ -348,6 +442,20 @@ export function SuppliersPage() {
             </Button>
             <Button variant="secondary" onClick={handleSupplierExport} disabled={!rows.length} busy={exportingSuppliers} busyLabel="Preparing...">
               Export CSV
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setManualPriceDraft((current) => ({
+                  ...current,
+                  supplier_id: selectedSupplierId || current.supplier_id || suppliers[0]?.supplier_id || "",
+                  brand: current.brand || rows[0]?.brand || "",
+                  product_code: search.trim() || current.product_code,
+                }));
+                setShowManualPriceDialog(true);
+              }}
+            >
+              Add Manual Price
             </Button>
             <Button variant="secondary" onClick={() => setShowImportDialog(true)}>
               Import CSV
@@ -480,6 +588,94 @@ export function SuppliersPage() {
                 busyLabel="Importing..."
               >
                 Import
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showManualPriceDialog ? (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <div className="modal-card__header">
+              <div>
+                <h3>Manual Supplier Price</h3>
+                <p>Add or update one supplier price row for a specific part number.</p>
+              </div>
+            </div>
+            <div className="modal-form-grid">
+              <Select
+                label="Supplier"
+                value={manualPriceDraft.supplier_id}
+                options={selectableSupplierOptions}
+                onChange={(value) => setManualPriceDraft((current) => ({ ...current, supplier_id: value }))}
+              />
+              <Select
+                label="Brand"
+                value={manualPriceDraft.brand}
+                options={brands.map((item) => ({ value: item.name, label: item.name }))}
+                onChange={(value) => setManualPriceDraft((current) => ({ ...current, brand: value }))}
+              />
+              <Input
+                label="Product Code"
+                value={manualPriceDraft.product_code}
+                onChange={(value) => setManualPriceDraft((current) => ({ ...current, product_code: value }))}
+              />
+              <Input
+                label="Buy Price EUR"
+                value={manualPriceDraft.buy_price}
+                onChange={(value) => setManualPriceDraft((current) => ({ ...current, buy_price: value }))}
+                onEnter={() => void handleManualPriceSave()}
+              />
+              <Input
+                label="Description"
+                value={manualPriceDraft.description}
+                onChange={(value) => setManualPriceDraft((current) => ({ ...current, description: value }))}
+              />
+              <Input
+                label="OEM No"
+                value={manualPriceDraft.oem_no}
+                onChange={(value) => setManualPriceDraft((current) => ({ ...current, oem_no: value }))}
+              />
+              <Input
+                label="Price Date"
+                type="date"
+                value={manualPriceDraft.price_date}
+                onChange={(value) => setManualPriceDraft((current) => ({ ...current, price_date: value }))}
+              />
+              <Input
+                label="MOQ"
+                value={manualPriceDraft.moq}
+                onChange={(value) => setManualPriceDraft((current) => ({ ...current, moq: value }))}
+              />
+              <Input
+                label="Lead Time Days"
+                value={manualPriceDraft.lead_time_days}
+                onChange={(value) => setManualPriceDraft((current) => ({ ...current, lead_time_days: value }))}
+              />
+              <Input
+                label="Notes"
+                value={manualPriceDraft.notes}
+                onChange={(value) => setManualPriceDraft((current) => ({ ...current, notes: value }))}
+              />
+            </div>
+            <div className="modal-hint">This uses the same supplier import pipeline, but only for one part number.</div>
+            <div className="modal-actions">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setShowManualPriceDialog(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => void handleManualPriceSave()}
+                disabled={!manualPriceDraft.supplier_id || !manualPriceDraft.brand.trim() || !manualPriceDraft.product_code.trim() || !manualPriceDraft.buy_price.trim()}
+                busy={savingManualPrice}
+                busyLabel="Saving..."
+              >
+                Save Price
               </Button>
             </div>
           </div>
