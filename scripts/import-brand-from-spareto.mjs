@@ -34,6 +34,7 @@ for (let index = 2; index < process.argv.length; index += 1) {
 const requestedBrandName = String(args.get("brand-name") || "").trim();
 const sparetoBrandQuery = String(args.get("brand-query") || requestedBrandName).trim();
 const importMode = args.has("import");
+const refreshExisting = args.has("refresh-existing");
 const sleepMs = Number.parseInt(args.get("sleep-ms") || "20", 10) || 20;
 const batchSize = Number.parseInt(args.get("batch-size") || "300", 10) || 300;
 const requestTimeoutMs = Number.parseInt(args.get("request-timeout-ms") || "20000", 10) || 20000;
@@ -86,6 +87,7 @@ async function main() {
   const candidates = listing.rows.filter((row) => {
     const existing = existingByCode.get(row.normalized_code);
     if (!existing) return true;
+    if (refreshExisting) return true;
     return isIncomplete(existing);
   });
   const selectedCandidates = detailLimit == null ? candidates : candidates.slice(0, detailLimit);
@@ -192,6 +194,7 @@ async function main() {
       const existing = existingByCode.get(row.normalized_code);
       return existing ? isIncomplete(existing) : false;
     }).length,
+    refresh_existing: refreshExisting,
     candidate_rows: selectedCandidates.length,
     resolved_rows: mergedRows.length,
     error_rows: errorRows.length,
@@ -440,7 +443,7 @@ function extractReferenceNumbers(html, heading) {
     const value = cleanText(match[1]);
     if (value) numbers.push(value);
   }
-  return Array.from(new Set(numbers)).join(", ");
+  return compactReferenceNumbers(numbers);
 }
 
 function captureTableValue(html, label) {
@@ -527,6 +530,25 @@ function decodeHtml(value) {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&#x2F;/g, "/");
+}
+
+function compactReferenceNumbers(values, maxLength = 1000) {
+  const unique = Array.from(
+    new Set(
+      values
+        .map((value) => String(value || "").trim())
+        .filter(Boolean),
+    ),
+  );
+  const kept = [];
+  let totalLength = 0;
+  for (const value of unique) {
+    const nextLength = kept.length === 0 ? value.length : totalLength + 2 + value.length;
+    if (nextLength > maxLength) break;
+    kept.push(value);
+    totalLength = nextLength;
+  }
+  return kept.join(", ");
 }
 
 async function fetchText(url) {
