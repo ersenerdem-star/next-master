@@ -49,6 +49,12 @@ const BRAND_STANDARDS = [
     sparetoQuery: "NRF",
     sparetoSlug: "nrf",
   },
+  {
+    keys: ["SKF"],
+    canonical: "SKF",
+    sparetoQuery: "SKF",
+    sparetoSlug: "skf",
+  },
 ];
 
 function buildFallbackSlug(value) {
