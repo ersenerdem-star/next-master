@@ -3,6 +3,7 @@ import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastruc
 import { findCodeReferenceMatch } from "../../infrastructure/api/codeReferencesApi";
 import { fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
 import {
+  deleteSalesOrder,
   fetchInvoices,
   fetchPurchaseOrders,
   fetchSalesOrders,
@@ -288,6 +289,31 @@ function renderInventoryAvailabilityBadge(
   );
 }
 
+function buildOrderBrandSummary(lines: QuoteBuilderLine[]) {
+  const brands = Array.from(
+    new Set(
+      lines
+        .map((line) => canonicalizeBrandName(line.brand || ""))
+        .map((brand) => brand.trim())
+        .filter(Boolean),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
+  return {
+    labels: brands.slice(0, 4),
+    extraCount: Math.max(0, brands.length - 4),
+  };
+}
+
+function getQuoteBuilderLineIssues(line: QuoteBuilderLine) {
+  const issues: string[] = [];
+  if (line.codeChanged) issues.push("Replacement");
+  if (line.lifecycle_status === "discontinued") issues.push("Discontinued");
+  if (!line.found) issues.push("Not matched");
+  if (!line.description?.trim()) issues.push("Missing description");
+  if ((line.sell_price ?? 0) <= 0) issues.push("Missing sell price");
+  return issues;
+}
+
 function mapDetailLineToBuilderLine(
   line: QuoteDetail["lines"][number],
   currencyType: "A" | "B" | "C" | "Other",
@@ -443,6 +469,8 @@ export function QuotesPage({
   const [savedPurchaseOrders, setSavedPurchaseOrders] = useState<LocalPurchaseOrder[]>([]);
   const [savedInvoices, setSavedInvoices] = useState<LocalInvoice[]>([]);
   const [selectedLocalSalesOrderId, setSelectedLocalSalesOrderId] = useState("");
+  const [selectedLocalSalesOrderIds, setSelectedLocalSalesOrderIds] = useState<string[]>([]);
+  const [salesOrderActionsOpen, setSalesOrderActionsOpen] = useState(false);
   const [workbenchMode, setWorkbenchMode] = useState<"existing" | "new">("existing");
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
   const [detail, setDetail] = useState<QuoteDetail>({ quote: null, lines: [] });
@@ -689,6 +717,10 @@ export function QuotesPage({
     setSalesOrdersView("detail");
     void loadLocalSalesOrderIntoEditor(target);
   }, [externalSelectedSalesOrderId, localSalesOrders, selectedLocalSalesOrderId, salesOrdersView]);
+
+  useEffect(() => {
+    setSelectedLocalSalesOrderIds((current) => current.filter((orderId) => localSalesOrders.some((order) => order.id === orderId)));
+  }, [localSalesOrders]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1340,6 +1372,39 @@ export function QuotesPage({
     return columns;
   }, [currency, detail.quote, pdfView]);
 
+  const attentionColumns = useMemo(
+    () => [
+      { key: "code", header: "Code", render: (row: QuoteBuilderLine) => row.resolvedCode || row.requestedCode || "-" },
+      { key: "brand", header: "Brand", render: (row: QuoteBuilderLine) => row.brand || "-" },
+      { key: "description", header: "Description", render: (row: QuoteBuilderLine) => row.description || "-" },
+      { key: "qty", header: "Qty", render: (row: QuoteBuilderLine) => row.qty },
+      {
+        key: "issues",
+        header: "Issue",
+        render: (row: QuoteBuilderLine) => (
+          <div className="document-marks document-marks--compact">
+            {getQuoteBuilderLineIssues(row).map((issue) => (
+              <span
+                key={`${row.lineId}-${issue}`}
+                className={`mark-badge ${
+                  issue === "Discontinued"
+                    ? "mark-badge--danger"
+                    : issue === "Replacement"
+                      ? "mark-badge--accent"
+                      : "mark-badge--info"
+                }`}
+              >
+                {issue}
+              </span>
+            ))}
+          </div>
+        ),
+      },
+      { key: "sell", header: "Sell", render: (row: QuoteBuilderLine) => formatMoney(row.sell_price, currency) },
+    ],
+    [currency],
+  );
+
   async function buildBuilderLine(
     input: { code: string; brand: string; qty: number },
     options?: {
@@ -1756,6 +1821,80 @@ export function QuotesPage({
     }
   }
 
+  function toggleLocalSalesOrderSelection(orderId: string, forceChecked?: boolean) {
+    setSelectedLocalSalesOrderIds((current) => {
+      const hasOrder = current.includes(orderId);
+      const shouldSelect = typeof forceChecked === "boolean" ? forceChecked : !hasOrder;
+      if (shouldSelect) {
+        return hasOrder ? current : [...current, orderId];
+      }
+      return current.filter((item) => item !== orderId);
+    });
+  }
+
+  async function handleDeleteSalesOrders(orderIds: string[]) {
+    const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)));
+    if (!uniqueIds.length) {
+      actionFeedback.fail("No sales orders selected.");
+      return;
+    }
+
+    const blocked = uniqueIds.filter((orderId) => {
+      const poCount = salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(orderId) || 0;
+      const invoiceCount = salesOrderDocumentState.invoiceCountBySalesOrderId.get(orderId) || 0;
+      return poCount > 0 || invoiceCount > 0;
+    });
+
+    if (blocked.length) {
+      actionFeedback.fail(`Delete blocked. ${blocked.length.toLocaleString("en-US")} selected sales order(s) already have purchase orders or invoices.`);
+      return;
+    }
+
+    if (!window.confirm(`Delete ${uniqueIds.length.toLocaleString("en-US")} sales order(s)? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      actionFeedback.begin(`Deleting ${uniqueIds.length.toLocaleString("en-US")} sales order(s)...`);
+      await Promise.all(uniqueIds.map((orderId) => deleteSalesOrder(orderId)));
+      await refreshLocalSalesOrders();
+      setSelectedLocalSalesOrderIds((current) => current.filter((orderId) => !uniqueIds.includes(orderId)));
+      if (uniqueIds.includes(selectedLocalSalesOrderId)) {
+        setSelectedLocalSalesOrderId("");
+        closeSalesOrderEditor();
+      }
+      actionFeedback.succeed(`${uniqueIds.length.toLocaleString("en-US")} sales order(s) deleted.`);
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Sales order delete failed");
+    }
+  }
+
+  async function handleConvertSalesOrdersToInvoices(orderIds: string[]) {
+    const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)));
+    if (!uniqueIds.length) {
+      actionFeedback.fail("No sales orders selected.");
+      return;
+    }
+
+    const selectedOrders = localSalesOrders.filter((order) => uniqueIds.includes(order.id));
+    const invoiceReadyOrders = selectedOrders.filter((order) => order.status === "confirmed");
+    if (!invoiceReadyOrders.length) {
+      actionFeedback.fail("Only confirmed sales orders can be converted to invoices.");
+      return;
+    }
+
+    try {
+      actionFeedback.begin(`Converting ${invoiceReadyOrders.length.toLocaleString("en-US")} sales order(s) to invoices...`);
+      await Promise.all(invoiceReadyOrders.map((order) => upsertInvoice(buildInvoiceFromSalesOrder(order))));
+      await refreshLocalSalesOrders();
+      actionFeedback.succeed(
+        `${invoiceReadyOrders.length.toLocaleString("en-US")} invoice(s) created.${invoiceReadyOrders.length !== selectedOrders.length ? ` ${selectedOrders.length - invoiceReadyOrders.length} non-confirmed order(s) skipped.` : ""}`,
+      );
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Bulk invoice conversion failed");
+    }
+  }
+
   const salesOrderDocumentState = useMemo(() => {
     const purchaseOrderCountBySalesOrderId = new Map<string, number>();
     const invoiceCountBySalesOrderId = new Map<string, number>();
@@ -1794,6 +1933,20 @@ export function QuotesPage({
       }
     });
   }, [localSalesOrders, salesOrderDocumentState, salesOrderFilter]);
+
+  const selectedLocalSalesOrders = useMemo(
+    () => localSalesOrders.filter((order) => selectedLocalSalesOrderIds.includes(order.id)),
+    [localSalesOrders, selectedLocalSalesOrderIds],
+  );
+
+  const attentionLines = useMemo(
+    () =>
+      quoteBuilderLines.filter((line) => {
+        const issues = getQuoteBuilderLineIssues(line);
+        return issues.length > 0;
+      }),
+    [quoteBuilderLines],
+  );
 
   const filteredCloudQuotes = useMemo(() => {
     return quotes.filter((quote) => {
@@ -1944,22 +2097,100 @@ export function QuotesPage({
         <div className="quote-list-panel__body">
           {!!filteredLocalSalesOrders.length ? (
             <div className="quote-list-section">
-              <div className="quote-list-section__title">Saved Sales Orders</div>
+              <div className="quote-list-section__header">
+                <div className="quote-list-section__title">Saved Sales Orders</div>
+                <div className="toolbar toolbar--wrap">
+                  <Button variant="secondary" className="button--compact" onClick={() => setSalesOrderActionsOpen((current) => !current)}>
+                    {salesOrderActionsOpen ? "Hide Actions" : "Actions"}
+                  </Button>
+                </div>
+              </div>
+              {salesOrderActionsOpen ? (
+                <div className="action-menu-card">
+                  <div className="meta-row">
+                    <span>{selectedLocalSalesOrderIds.length.toLocaleString("en-US")} selected</span>
+                    <span>Sales uses invoice conversion. Delete is blocked when PO or invoice already exists.</span>
+                  </div>
+                  <div className="toolbar toolbar--wrap">
+                    <Button
+                      variant="secondary"
+                      className="button--compact"
+                      onClick={() =>
+                        setSelectedLocalSalesOrderIds((current) =>
+                          current.length === filteredLocalSalesOrders.length ? [] : filteredLocalSalesOrders.map((order) => order.id),
+                        )
+                      }
+                    >
+                      {selectedLocalSalesOrderIds.length === filteredLocalSalesOrders.length ? "Clear Selection" : "Select Filtered"}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="button--compact danger-button"
+                      onClick={() => void handleDeleteSalesOrders(selectedLocalSalesOrderIds)}
+                    >
+                      Bulk Delete
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="button--compact"
+                      onClick={() => void handleConvertSalesOrdersToInvoices(selectedLocalSalesOrderIds)}
+                    >
+                      Bulk Convert Invoice
+                    </Button>
+                    {currentLocalSalesOrder ? (
+                      <>
+                        <Button
+                          variant="secondary"
+                          className="button--compact danger-button"
+                          onClick={() => void handleDeleteSalesOrders([currentLocalSalesOrder.id])}
+                        >
+                          Delete Current
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          className="button--compact"
+                          onClick={() => void handleConvertSalesOrdersToInvoices([currentLocalSalesOrder.id])}
+                        >
+                          Convert Current Invoice
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
               <div className="quote-records">
                 {filteredLocalSalesOrders.map((order) => {
                   const poCount = salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(order.id) || 0;
                   const invoiceCount = salesOrderDocumentState.invoiceCountBySalesOrderId.get(order.id) || 0;
+                  const brandSummary = buildOrderBrandSummary(order.lines);
                   return (
-                  <button
+                  <article
                     key={order.id}
                     className={`quote-record${order.id === selectedLocalSalesOrderId ? " active" : ""}`}
                     onClick={() => {
                       setSalesOrdersView("detail");
                       void loadLocalSalesOrderIntoEditor(order);
                     }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSalesOrdersView("detail");
+                        void loadLocalSalesOrderIntoEditor(order);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
                   >
                     <div className="quote-record__top">
-                      <strong>{order.customer_name || "Unnamed customer"}</strong>
+                      <div className="quote-record__selection">
+                        <input
+                          type="checkbox"
+                          checked={selectedLocalSalesOrderIds.includes(order.id)}
+                          onClick={(event) => event.stopPropagation()}
+                          onChange={(event) => toggleLocalSalesOrderSelection(order.id, event.target.checked)}
+                        />
+                        <strong>{order.customer_name || "Unnamed customer"}</strong>
+                      </div>
                       <span>{formatMoney(order.sales_total, order.currency || "EUR")}</span>
                     </div>
                     <div className="quote-record__mid">
@@ -1974,8 +2205,20 @@ export function QuotesPage({
                       {poCount > 0 ? <span className="mark-badge mark-badge--info">{poCount} PO</span> : null}
                       {invoiceCount > 0 ? <span className="mark-badge mark-badge--accent">{invoiceCount} Invoice</span> : null}
                     </div>
-                    <div className="quote-record__bottom">{order.lines.length} lines</div>
-                  </button>
+                    <div className="quote-record__bottom">
+                      <span>{order.lines.length} lines</span>
+                      {brandSummary.labels.length ? (
+                        <span className="document-marks document-marks--compact">
+                          {brandSummary.labels.map((brand) => (
+                            <span key={`${order.id}-${brand}`} className="mark-badge">
+                              {brand}
+                            </span>
+                          ))}
+                          {brandSummary.extraCount > 0 ? <span className="mark-badge mark-badge--info">+{brandSummary.extraCount}</span> : null}
+                        </span>
+                      ) : null}
+                    </div>
+                  </article>
                   );
                 })}
               </div>
@@ -2318,6 +2561,19 @@ export function QuotesPage({
             {discontinuedLineCount > 0 ? (
               <div className="warning-text">
                 {discontinuedLineCount.toLocaleString("en-US")} discontinued item(s) detected in this sales order. Review before confirmation.
+              </div>
+            ) : null}
+            {attentionLines.length ? (
+              <div className="attention-panel">
+                <div className="attention-panel__header">
+                  <div>
+                    <strong>Warning Items</strong>
+                    <div className="info-text">
+                      {attentionLines.length.toLocaleString("en-US")} line(s) need review. This panel isolates discontinued, replacement, unmatched, and no-price rows.
+                    </div>
+                  </div>
+                </div>
+                <DataTable rows={attentionLines} columns={attentionColumns} emptyText="No warning items." />
               </div>
             ) : null}
             <DataTable rows={quoteBuilderLines} columns={builderColumns} emptyText="No sales order lines yet. Add a product code or import a sales order file." />

@@ -603,6 +603,17 @@ export async function upsertSalesOrder(order: LocalSalesOrder): Promise<LocalSal
   return mapSalesOrderRow(data as unknown as Record<string, unknown>);
 }
 
+export async function deleteSalesOrder(salesOrderId: string): Promise<void> {
+  const organizationId = await getCurrentOrgId();
+  const { error } = await supabaseClient
+    .from("sales_orders")
+    .delete()
+    .eq("organization_id", organizationId)
+    .eq("id", salesOrderId);
+
+  if (error) throw new Error(error.message || "Sales order delete failed");
+}
+
 export async function markSalesOrderPortalSeen(orderId: string): Promise<LocalSalesOrder | null> {
   const organizationId = await getCurrentOrgId();
   const { data, error } = await supabaseClient
@@ -782,6 +793,17 @@ export async function upsertBill(bill: LocalBill, previousId?: string): Promise<
 
 export async function buildAndUpsertBillFromPurchaseOrder(order: LocalPurchaseOrder): Promise<LocalBill> {
   return await upsertBill(buildBillFromPurchaseOrder(order));
+}
+
+export async function deleteBill(billId: string): Promise<void> {
+  const organizationId = await getCurrentOrgId();
+  const { error } = await supabaseClient
+    .from("bills")
+    .delete()
+    .eq("organization_id", organizationId)
+    .eq("id", billId);
+
+  if (error) throw new Error(error.message || "Bill delete failed");
 }
 
 export async function fetchPaymentsReceived(): Promise<LocalPaymentReceived[]> {

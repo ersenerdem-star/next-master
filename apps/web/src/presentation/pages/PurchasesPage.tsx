@@ -105,6 +105,8 @@ export function PurchasesPage({
   const [purchaseOrders, setPurchaseOrders] = useState<LocalPurchaseOrder[]>([]);
   const [bills, setBills] = useState<LocalBill[]>([]);
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState("");
+  const [selectedPurchaseOrderIds, setSelectedPurchaseOrderIds] = useState<string[]>([]);
+  const [purchaseOrderActionsOpen, setPurchaseOrderActionsOpen] = useState(false);
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<LocalPurchaseOrder | null>(null);
   const [selectedBillId, setSelectedBillId] = useState("");
   const [billDraft, setBillDraft] = useState<LocalBill | null>(null);
@@ -232,6 +234,10 @@ export function PurchasesPage({
   }, [purchaseOrders, selectedPurchaseOrderId]);
 
   useEffect(() => {
+    setSelectedPurchaseOrderIds((current) => current.filter((purchaseOrderId) => purchaseOrders.some((order) => order.id === purchaseOrderId)));
+  }, [purchaseOrders]);
+
+  useEffect(() => {
     if (!bills.length) {
       setSelectedBillId("");
       setBillDraft(null);
@@ -308,24 +314,43 @@ export function PurchasesPage({
 
   const purchaseOrderColumnsWithMarks = useMemo(
     () =>
-      purchaseOrderColumns.map((column) =>
-        column.key !== "status"
-          ? column
-          : {
-              ...column,
-              render: (row: LocalPurchaseOrder) => (
-                <div className="document-marks">
-                  <span className={`mark-badge ${row.status === "confirmed" || row.status === "closed" ? "mark-badge--success" : ""}`}>
-                    {row.status.toUpperCase()}
-                  </span>
-                  {(billCountByPurchaseOrderId.get(row.id) || 0) > 0 ? (
-                    <span className="mark-badge mark-badge--accent">Bill {billCountByPurchaseOrderId.get(row.id)}</span>
-                  ) : null}
-                </div>
-              ),
-            },
-      ),
-    [purchaseOrderColumns, billCountByPurchaseOrderId],
+      [
+        {
+          key: "select",
+          header: "",
+          render: (row: LocalPurchaseOrder) => (
+            <input
+              type="checkbox"
+              checked={selectedPurchaseOrderIds.includes(row.id)}
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                setSelectedPurchaseOrderIds((current) =>
+                  checked ? (current.includes(row.id) ? current : [...current, row.id]) : current.filter((item) => item !== row.id),
+                );
+              }}
+            />
+          ),
+        },
+        ...purchaseOrderColumns.map((column) =>
+          column.key !== "status"
+            ? column
+            : {
+                ...column,
+                render: (row: LocalPurchaseOrder) => (
+                  <div className="document-marks">
+                    <span className={`mark-badge ${row.status === "confirmed" || row.status === "closed" ? "mark-badge--success" : ""}`}>
+                      {row.status.toUpperCase()}
+                    </span>
+                    {(billCountByPurchaseOrderId.get(row.id) || 0) > 0 ? (
+                      <span className="mark-badge mark-badge--accent">Bill {billCountByPurchaseOrderId.get(row.id)}</span>
+                    ) : null}
+                  </div>
+                ),
+              },
+        ),
+      ],
+    [purchaseOrderColumns, billCountByPurchaseOrderId, selectedPurchaseOrderIds],
   );
 
   function findVendorByName(name: string) {
@@ -667,6 +692,39 @@ export function PurchasesPage({
     }
   }
 
+  async function handleBulkDeletePurchaseOrders(orderIds: string[]) {
+    const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)));
+    if (!uniqueIds.length) {
+      actionFeedback.fail("No purchase orders selected.");
+      return;
+    }
+
+    const blocked = uniqueIds.filter((purchaseOrderId) => (billCountByPurchaseOrderId.get(purchaseOrderId) || 0) > 0);
+    if (blocked.length) {
+      actionFeedback.fail(`Delete blocked. ${blocked.length.toLocaleString("en-US")} selected purchase order(s) already have bills.`);
+      return;
+    }
+
+    if (!window.confirm(`Delete ${uniqueIds.length.toLocaleString("en-US")} purchase order(s)? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      actionFeedback.begin(`Deleting ${uniqueIds.length.toLocaleString("en-US")} purchase order(s)...`);
+      await Promise.all(uniqueIds.map((purchaseOrderId) => deletePurchaseOrder(purchaseOrderId)));
+      const refreshed = await fetchPurchaseOrders();
+      setPurchaseOrders(refreshed);
+      setSelectedPurchaseOrderIds((current) => current.filter((purchaseOrderId) => !uniqueIds.includes(purchaseOrderId)));
+      if (purchaseOrderDraft && uniqueIds.includes(purchaseOrderDraft.id)) {
+        setPurchaseOrderDraft(null);
+        setSelectedPurchaseOrderId("");
+      }
+      actionFeedback.succeed(`${uniqueIds.length.toLocaleString("en-US")} purchase order(s) deleted.`);
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Bulk purchase order delete failed");
+    }
+  }
+
   async function convertPurchaseOrderToBill() {
     if (!purchaseOrderDraft) return;
     try {
@@ -680,6 +738,31 @@ export function PurchasesPage({
       actionFeedback.succeed(`Bill ${saved.id} created from ${purchaseOrderDraft.id}.`);
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Convert to bill failed");
+    }
+  }
+
+  async function handleBulkConvertPurchaseOrdersToBills(orderIds: string[]) {
+    const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)));
+    if (!uniqueIds.length) {
+      actionFeedback.fail("No purchase orders selected.");
+      return;
+    }
+
+    const orders = purchaseOrders.filter((order) => uniqueIds.includes(order.id));
+    if (!orders.length) {
+      actionFeedback.fail("Selected purchase orders are no longer available.");
+      return;
+    }
+
+    try {
+      actionFeedback.begin(`Converting ${orders.length.toLocaleString("en-US")} purchase order(s) to bills...`);
+      await Promise.all(orders.map((order) => buildAndUpsertBillFromPurchaseOrder(recomputePurchaseOrderTotals(order))));
+      const [refreshedPurchaseOrders, refreshedBills] = await Promise.all([fetchPurchaseOrders(), fetchBills()]);
+      setPurchaseOrders(refreshedPurchaseOrders);
+      setBills(refreshedBills);
+      actionFeedback.succeed(`${orders.length.toLocaleString("en-US")} bill(s) created or updated.`);
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Bulk convert to bill failed");
     }
   }
 
@@ -746,6 +829,64 @@ export function PurchasesPage({
             <span>{purchaseOrders.length.toLocaleString("en-US")} purchase orders loaded</span>
             <span>Confirmed sales orders are split by vendor. Edit before converting to bill.</span>
           </div>
+          <div className="toolbar toolbar--wrap">
+            <Button variant="secondary" className="button--compact" onClick={() => setPurchaseOrderActionsOpen((current) => !current)}>
+              {purchaseOrderActionsOpen ? "Hide Actions" : "Actions"}
+            </Button>
+          </div>
+          {purchaseOrderActionsOpen ? (
+            <div className="action-menu-card">
+              <div className="meta-row">
+                <span>{selectedPurchaseOrderIds.length.toLocaleString("en-US")} selected</span>
+                <span>Delete is blocked when bills already exist. Convert creates or updates bills from selected purchase orders.</span>
+              </div>
+              <div className="toolbar toolbar--wrap">
+                <Button
+                  variant="secondary"
+                  className="button--compact"
+                  onClick={() =>
+                    setSelectedPurchaseOrderIds((current) =>
+                      current.length === purchaseOrders.length ? [] : purchaseOrders.map((order) => order.id),
+                    )
+                  }
+                >
+                  {selectedPurchaseOrderIds.length === purchaseOrders.length ? "Clear Selection" : "Select All"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="button--compact danger-button"
+                  onClick={() => void handleBulkDeletePurchaseOrders(selectedPurchaseOrderIds)}
+                >
+                  Bulk Delete
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="button--compact"
+                  onClick={() => void handleBulkConvertPurchaseOrdersToBills(selectedPurchaseOrderIds)}
+                >
+                  Bulk Convert Bill
+                </Button>
+                {purchaseOrderDraft ? (
+                  <>
+                    <Button
+                      variant="secondary"
+                      className="button--compact danger-button"
+                      onClick={() => void handleBulkDeletePurchaseOrders([purchaseOrderDraft.id])}
+                    >
+                      Delete Current
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="button--compact"
+                      onClick={() => void handleBulkConvertPurchaseOrdersToBills([purchaseOrderDraft.id])}
+                    >
+                      Convert Current Bill
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <DataTable
             rows={purchaseOrders}
             columns={purchaseOrderColumnsWithMarks}

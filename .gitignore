@@ -5,3 +5,4 @@ apps/web/node_modules
 apps/web/dist
 apps/web/.env.local
 *.tsbuildinfo
+backups/

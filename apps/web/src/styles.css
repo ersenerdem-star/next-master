@@ -35,7 +35,10 @@ select {
     radial-gradient(circle at top right, rgba(249, 115, 22, 0.12), transparent 32%),
     linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
   padding: 16px 12px;
-  position: relative;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .sidebar::after {
@@ -207,6 +210,7 @@ select {
 
 .main {
   padding: 22px;
+  min-width: 0;
 }
 
 .topbar {
@@ -1174,6 +1178,10 @@ select {
   margin-top: 10px;
 }
 
+.document-marks--compact {
+  margin-top: 0;
+}
+
 .mark-badge {
   display: inline-flex;
   align-items: center;
@@ -1281,6 +1289,14 @@ select {
   margin: 0 16px 16px;
 }
 
+.quote-list-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
 .sales-order-filter-bar {
   display: flex;
   flex-wrap: wrap;
@@ -1318,6 +1334,7 @@ select {
   padding: 14px;
   text-align: left;
   color: #0f172a;
+  cursor: pointer;
 }
 
 .quote-record.active {
@@ -1332,11 +1349,42 @@ select {
   gap: 10px;
 }
 
+.quote-record__selection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .quote-record__mid,
 .quote-record__bottom {
   margin-top: 8px;
   color: #64748b;
   font-size: 13px;
+}
+
+.quote-record__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.action-menu-card,
+.attention-panel {
+  margin-bottom: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 12px 14px;
+}
+
+.attention-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
 }
 
 .quote-workbench-card {
@@ -2282,6 +2330,10 @@ select {
   .sidebar {
     border-right: 0;
     border-bottom: 1px solid #e2e8f0;
+    position: relative;
+    top: auto;
+    height: auto;
+    overflow: visible;
   }
 
   .stats-grid,
