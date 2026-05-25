@@ -1,7 +1,7 @@
 import type { LocalPurchaseOrder } from "../../types/orders";
 import type { InventoryMovement, PurchaseReceive, PurchaseReceiveLine, StockTransfer, StockTransferLine, WarehouseOnHandRow, WarehouseStockItem } from "../../types/inventory";
 import type { Warehouse } from "../../types/warehouses";
-import { normalizePartCode } from "../../domain/shared/normalize";
+import { normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
 import { supabaseClient } from "./supabaseClient";
 import { getCurrentOrgId } from "./organizationApi";
 import { upsertPurchaseOrder } from "./ordersApi";
@@ -315,7 +315,7 @@ export async function fetchWarehouseStockItems(warehouseId?: string): Promise<Wa
 }
 
 export function inventoryAvailabilityLookupKey(brand: string, code: string) {
-  return `${String(brand || "").trim().toLowerCase()}::${normalizePartCode(code)}`;
+  return `${normalizeBrandKey(brand)}::${normalizePartCode(code)}`;
 }
 
 export function buildInventoryAvailabilityLookup(rows: InventoryAvailabilitySummary[]) {

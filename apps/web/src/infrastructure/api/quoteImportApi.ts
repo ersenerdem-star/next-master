@@ -1,5 +1,5 @@
 import { buildDiscontinuedWarning, normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
-import { normalizePartCode } from "../../domain/shared/normalize";
+import { canonicalizeBrandName, normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
 import type { CodeReferenceMatch } from "../../types/codeReferences";
 import type { QuoteBuilderLine, QuoteSupplierOption } from "../../types/quoteBuilder";
 import { fetchCPriceMapForRows, getCPriceForRow } from "./cPriceApi";
@@ -32,7 +32,7 @@ function codeKey(brandId: string, normalizedCode: string) {
 }
 
 function buildReferenceKey(brand: string, code: string) {
-  return `${brand.trim().toLowerCase()}::${normalizePartCode(code)}`;
+  return `${normalizeBrandKey(brand)}::${normalizePartCode(code)}`;
 }
 
 function chunk<T>(items: T[], size: number) {
@@ -67,7 +67,7 @@ export async function batchResolveQuoteImportRows(input: {
   const organizationId = await getCurrentOrgId();
 
   const referenceMatches = await fetchCodeReferenceMatchesForRows(rows);
-  const normalizedBrands = [...new Set(rows.map((row) => row.brand.trim().toLowerCase()).filter(Boolean))];
+  const normalizedBrands = [...new Set(rows.map((row) => normalizeBrandKey(row.brand)).filter(Boolean))];
   const { data: brandRows, error: brandError } = await supabaseClient
     .from("brands")
     .select("id,name")
@@ -77,19 +77,19 @@ export async function batchResolveQuoteImportRows(input: {
   const brandIdByName = new Map<string, string>();
   const canonicalBrandByName = new Map<string, string>();
   for (const row of (brandRows || []) as Array<{ id: string; name: string }>) {
-    const normalizedName = String(row.name || "").trim().toLowerCase();
+    const normalizedName = normalizeBrandKey(String(row.name || ""));
     if (!normalizedBrands.includes(normalizedName)) continue;
     brandIdByName.set(normalizedName, String(row.id));
     canonicalBrandByName.set(normalizedName, String(row.name || "").trim());
   }
 
   const preparedRows = rows.map((row) => {
-    const normalizedBrandName = row.brand.trim().toLowerCase();
+    const normalizedBrandName = normalizeBrandKey(row.brand);
     const referenceMatch = referenceMatches.get(buildReferenceKey(row.brand, row.code)) || null;
     const targetCode = referenceMatch?.new_code || row.code;
     const normalizedTargetCode = normalizePartCode(targetCode);
     const brandId = brandIdByName.get(normalizedBrandName) || "";
-    const canonicalBrand = canonicalBrandByName.get(normalizedBrandName) || row.brand.trim();
+    const canonicalBrand = canonicalBrandByName.get(normalizedBrandName) || canonicalizeBrandName(row.brand);
     return {
       ...row,
       brand: canonicalBrand,
@@ -293,7 +293,7 @@ export async function fetchCatalogMetadataForRows(
 ): Promise<Map<string, CatalogMetadataRow>> {
   const candidates = rows
     .map((row) => ({
-      brand: row.brand.trim(),
+      brand: canonicalizeBrandName(row.brand),
       normalizedCode: normalizePartCode(row.product_code),
     }))
     .filter((row) => row.brand && row.normalizedCode);
@@ -301,12 +301,11 @@ export async function fetchCatalogMetadataForRows(
   if (!candidates.length) return new Map<string, CatalogMetadataRow>();
 
   const organizationId = await getCurrentOrgId();
-  const brandNames = [...new Set(candidates.map((row) => row.brand))];
+  const requestedBrandKeys = new Set(candidates.map((row) => normalizeBrandKey(row.brand)));
   const { data: brandRows, error: brandError } = await supabaseClient
     .from("brands")
     .select("id,name")
-    .eq("organization_id", organizationId)
-    .in("name", brandNames);
+    .eq("organization_id", organizationId);
 
   if (brandError) throw new Error(brandError.message || "Brand lookup failed");
 
@@ -316,13 +315,14 @@ export async function fetchCatalogMetadataForRows(
     const id = String(row.id || "");
     const name = String(row.name || "").trim();
     if (!id || !name) continue;
+    if (!requestedBrandKeys.has(normalizeBrandKey(name))) continue;
     brandIdToName.set(id, name);
-    brandIdByName.set(name.toLowerCase(), id);
+    brandIdByName.set(normalizeBrandKey(name), id);
   }
 
   const prepared = candidates
     .map((row) => ({
-      brandId: brandIdByName.get(row.brand.toLowerCase()) || "",
+      brandId: brandIdByName.get(normalizeBrandKey(row.brand)) || "",
       normalizedCode: row.normalizedCode,
     }))
     .filter((row) => row.brandId && row.normalizedCode);
@@ -345,7 +345,7 @@ export async function fetchCatalogMetadataForRows(
 
     for (const row of (data || []) as Array<any>) {
       const brandId = String(row.brand_id || "");
-      const brandName = (brandIdToName.get(brandId) || "").trim().toLowerCase();
+      const brandName = normalizeBrandKey(brandIdToName.get(brandId) || "");
       const normalizedCode = String(row.normalized_code || normalizePartCode(String(row.product_code || "")));
       if (!brandName || !normalizedCode) continue;
       result.set(`${brandName}::${normalizedCode}`, {

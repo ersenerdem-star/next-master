@@ -1,4 +1,4 @@
-import { normalizePartCode } from "../../domain/shared/normalize";
+import { canonicalizeBrandName, normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
 import { supabaseClient } from "./supabaseClient";
 
 type RowLike = {
@@ -7,7 +7,7 @@ type RowLike = {
 };
 
 function rowKey(brand: string, normalizedCode: string) {
-  return `${brand.trim().toLowerCase()}|${normalizedCode}`;
+  return `${normalizeBrandKey(brand)}|${normalizedCode}`;
 }
 
 async function getCurrentOrgId() {
@@ -75,7 +75,7 @@ export async function fetchCPriceMapForRows(rows: RowLike[]) {
   const brandNames = Array.from(
     new Set(
       rows
-        .map((row) => String(row.brand || "").trim())
+        .map((row) => canonicalizeBrandName(String(row.brand || "")))
         .filter(Boolean),
     ),
   );
@@ -100,10 +100,10 @@ export async function fetchCPriceMapForRows(rows: RowLike[]) {
     throw new Error(brandError.message || "Failed to load brands for C prices");
   }
 
-  const requestedBrands = new Set(brandNames.map((item) => item.trim().toLowerCase()));
+  const requestedBrands = new Set(brandNames.map((item) => normalizeBrandKey(item)));
   const brandIdToName = new Map<string, string>();
   const brandIds = (brandRows || [])
-    .filter((row) => requestedBrands.has(String(row.name || "").trim().toLowerCase()))
+    .filter((row) => requestedBrands.has(normalizeBrandKey(String(row.name || ""))))
     .map((row) => {
       brandIdToName.set(String(row.id), String(row.name));
       return String(row.id);
@@ -149,7 +149,7 @@ export async function fetchCPriceMapForRows(rows: RowLike[]) {
 }
 
 export function getCPriceForRow(priceMap: Map<string, number>, row: RowLike) {
-  const brand = String(row.brand || "").trim();
+  const brand = canonicalizeBrandName(String(row.brand || ""));
   const normalizedCode = normalizePartCode(String(row.product_code || ""));
   if (!brand || !normalizedCode) return null;
   const value = priceMap.get(rowKey(brand, normalizedCode));

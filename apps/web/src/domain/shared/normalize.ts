@@ -10,6 +10,29 @@ export function normalizeSearchText(value: string): string {
     .replace(/[^a-z0-9]+/g, "");
 }
 
+const BRAND_ALIAS_MAP: Record<string, string> = {
+  bosch: "Bosch",
+  donaldson: "Donaldson",
+  lemforder: "Lemforder",
+  lmi: "Lemforder",
+  mann: "Mann",
+  mannfilter: "Mann",
+  nrf: "NRF",
+  sachs: "Sachs",
+  trw: "TRW",
+  wabco: "WABCO",
+};
+
+export function normalizeBrandKey(value: string): string {
+  return normalizeSearchText(value);
+}
+
+export function canonicalizeBrandName(value: string): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return BRAND_ALIAS_MAP[normalizeBrandKey(raw)] || raw;
+}
+
 export function isCodeLikeSearch(value: string): boolean {
   const raw = String(value || "").trim();
   if (!raw) return false;

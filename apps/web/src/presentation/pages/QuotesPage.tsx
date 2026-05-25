@@ -18,7 +18,7 @@ import { resolveQuoteLine } from "../../infrastructure/api/quoteResolverApi";
 import { fetchCloudQuoteDetail, fetchCloudQuotes } from "../../infrastructure/api/quotesApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, inventoryAvailabilityLookupKey, type InventoryAvailabilitySummary } from "../../infrastructure/api/inventoryApi";
-import { normalizePartCode } from "../../domain/shared/normalize";
+import { canonicalizeBrandName, normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
 import { parseCsv } from "../../shared/csv";
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import { buildInvoiceFromSalesOrder, buildLocalSalesOrder, buildPurchaseOrdersFromSalesOrder } from "../../shared/localOrders";
@@ -194,7 +194,7 @@ function buildPendingImportLine(row: QuoteImportRow): QuoteBuilderLine {
 }
 
 function lineMetadataKey(brand: string, productCode: string) {
-  return `${brand.trim().toLowerCase()}::${normalizePartCode(productCode)}`;
+  return `${normalizeBrandKey(brand)}::${normalizePartCode(productCode)}`;
 }
 
 function applyCatalogMetadata(line: QuoteBuilderLine, metadataMap: Map<string, {
@@ -211,6 +211,7 @@ function applyCatalogMetadata(line: QuoteBuilderLine, metadataMap: Map<string, {
   if (!metadata) return line;
   return {
     ...line,
+    brand: canonicalizeBrandName(line.brand || "") || line.brand,
     resolvedCode: metadata.product_code || line.resolvedCode,
     description: metadata.description || line.description,
     oem_no: metadata.oem_no || line.oem_no,

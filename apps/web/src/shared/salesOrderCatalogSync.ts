@@ -1,5 +1,5 @@
 import { fetchCPriceMapForRows, getCPriceForRow } from "../infrastructure/api/cPriceApi";
-import { normalizePartCode } from "../domain/shared/normalize";
+import { canonicalizeBrandName, normalizeBrandKey, normalizePartCode } from "../domain/shared/normalize";
 import { fetchCatalogMetadataForRows } from "../infrastructure/api/quoteImportApi";
 import { resolveQuoteLine } from "../infrastructure/api/quoteResolverApi";
 import { supabaseClient } from "../infrastructure/api/supabaseClient";
@@ -112,7 +112,7 @@ type SupplierPriceMapRow = {
 };
 
 function supplierPriceKey(brand: string, productCode: string, supplierName: string) {
-  return `${brand.trim().toLowerCase()}::${normalizePartCode(productCode)}::${supplierName.trim().toLowerCase()}`;
+  return `${normalizeBrandKey(brand)}::${normalizePartCode(productCode)}::${supplierName.trim().toLowerCase()}`;
 }
 
 let currentOrgIdPromise: Promise<string> | null = null;
@@ -140,10 +140,10 @@ async function getCurrentOrgId() {
 
 async function fetchSupplierPriceMap(rows: SupplierPriceMapRow[]) {
   const organizationId = await getCurrentOrgId();
-  const brandNames = [...new Set(rows.map((row) => row.brand.trim()).filter(Boolean))];
+  const requestedBrandKeys = new Set(rows.map((row) => normalizeBrandKey(row.brand)).filter(Boolean));
   const normalizedCodes = [...new Set(rows.map((row) => normalizePartCode(row.product_code)).filter(Boolean))];
   const supplierNames = [...new Set(rows.map((row) => row.supplier_name.trim().toLowerCase()).filter(Boolean))];
-  if (!brandNames.length || !normalizedCodes.length || !supplierNames.length) return new Map<string, { buy_price: number | null; price_date: string | null; notes: string | null }>();
+  if (!requestedBrandKeys.size || !normalizedCodes.length || !supplierNames.length) return new Map<string, { buy_price: number | null; price_date: string | null; notes: string | null }>();
 
   const { data: brandRows, error: brandError } = await supabaseClient
     .from("brands")
@@ -154,7 +154,7 @@ async function fetchSupplierPriceMap(rows: SupplierPriceMapRow[]) {
 
   const brandIdToName = new Map<string, string>();
   const brandIds = (brandRows || [])
-    .filter((row) => brandNames.map((item) => item.toLowerCase()).includes(String(row.name || "").trim().toLowerCase()))
+    .filter((row) => requestedBrandKeys.has(normalizeBrandKey(String(row.name || ""))))
     .map((row) => {
       const id = String(row.id || "");
       const name = String(row.name || "").trim();
@@ -206,14 +206,21 @@ export async function resyncSalesOrderLinesFromCatalog(
 
   const metadataMap = await fetchCatalogMetadataForRows(
     lines.map((line) => ({
-      brand: line.brand || "",
+      brand: canonicalizeBrandName(line.brand || ""),
       product_code: line.resolvedCode || line.requestedCode,
     })),
   );
 
   const patchedLines = lines.map((line) => {
-    const metadata = metadataMap.get(`${line.brand.trim().toLowerCase()}::${normalizePartCode(line.resolvedCode || line.requestedCode)}`);
-    return mergeCatalogMetadata(line, metadata, onlyFillBlanks);
+    const metadata = metadataMap.get(`${normalizeBrandKey(line.brand || "")}::${normalizePartCode(line.resolvedCode || line.requestedCode)}`);
+    return mergeCatalogMetadata(
+      {
+        ...line,
+        brand: canonicalizeBrandName(line.brand || "") || line.brand,
+      },
+      metadata,
+      onlyFillBlanks,
+    );
   });
 
   if (keepPrices) {
@@ -244,7 +251,7 @@ async function refreshLinePricesFromCatalog(
   try {
     const { resolved, supplierOptions } = await resolveQuoteLine({
       code: line.resolvedCode || line.requestedCode,
-      brand: line.brand || "",
+      brand: canonicalizeBrandName(line.brand || ""),
       customerType: options.customerType,
       marginA: options.marginA,
       marginB: options.marginB,
@@ -255,7 +262,7 @@ async function refreshLinePricesFromCatalog(
       options.customerType === "C"
         ? await fetchCPriceMapForRows([
             {
-              brand: resolved.brand || line.brand || "",
+              brand: canonicalizeBrandName(resolved.brand || line.brand || ""),
               product_code: resolved.product_code || line.resolvedCode || line.requestedCode,
             },
           ])
@@ -295,6 +302,7 @@ async function refreshLinePricesFromCatalog(
 
     return {
       ...refreshed,
+      brand: canonicalizeBrandName(resolved.brand || refreshed.brand || line.brand || "") || refreshed.brand || line.brand,
       supplier_name: selected?.supplier_name || resolved.supplier_name || line.supplier_name,
       buy_price: selected?.buy_price ?? resolved.buy_price ?? line.buy_price,
       sell_price: nextSellPrice,
@@ -316,7 +324,7 @@ export async function resyncInvoiceLinesFromCatalog(
   const keepPrices = options.keepPrices !== false;
   const metadataMap = await fetchCatalogMetadataForRows(
     lines.map((line) => ({
-      brand: line.brand || "",
+      brand: canonicalizeBrandName(line.brand || ""),
       product_code: line.product_code || line.old_code,
     })),
   );
@@ -333,20 +341,21 @@ export async function resyncInvoiceLinesFromCatalog(
 
   const cPriceMap =
     !keepPrices && options.customerType === "C"
-      ? await fetchCPriceMapForRows(lines.map((line) => ({ brand: line.brand || "", product_code: line.product_code || line.old_code })))
+      ? await fetchCPriceMapForRows(lines.map((line) => ({ brand: canonicalizeBrandName(line.brand || ""), product_code: line.product_code || line.old_code })))
       : null;
 
   return lines.map((line) => {
-    const metadata = metadataMap.get(`${line.brand.trim().toLowerCase()}::${normalizePartCode(line.product_code || line.old_code)}`);
+    const metadata = metadataMap.get(`${normalizeBrandKey(line.brand || "")}::${normalizePartCode(line.product_code || line.old_code)}`);
+    const canonicalBrand = canonicalizeBrandName(line.brand || "") || line.brand;
     const supplierPrice = keepPrices
       ? null
-      : supplierPriceMap.get(supplierPriceKey(line.brand || "", metadata?.product_code || line.product_code || line.old_code, line.supplier_name || ""));
+      : supplierPriceMap.get(supplierPriceKey(canonicalBrand, metadata?.product_code || line.product_code || line.old_code, line.supplier_name || ""));
     const nextBuyPrice = keepPrices ? line.buy_price : supplierPrice?.buy_price ?? line.buy_price;
     const nextBuyPriceValue = Number(nextBuyPrice ?? 0) || 0;
     const nextSellPriceRaw = keepPrices
       ? line.sell_price
       : options.customerType === "C"
-        ? getCPriceForRow(cPriceMap || new Map<string, number>(), { brand: line.brand || "", product_code: metadata?.product_code || line.product_code || line.old_code })
+        ? getCPriceForRow(cPriceMap || new Map<string, number>(), { brand: canonicalBrand, product_code: metadata?.product_code || line.product_code || line.old_code })
         : nextBuyPrice != null
           ? roundMoney(Number(nextBuyPrice) * (1 + ((options.customerType === "B" ? options.marginB : options.marginA) / 100)))
           : line.sell_price;
@@ -359,6 +368,7 @@ export async function resyncInvoiceLinesFromCatalog(
 
     return {
       ...line,
+      brand: canonicalBrand,
       product_code: onlyFillBlanks ? line.product_code || metadata?.product_code || "" : metadata?.product_code || line.product_code,
       description: fillText(line.description, metadata?.description || "", onlyFillBlanks),
       oem_no: fillText(line.oem_no, metadata?.oem_no || "", onlyFillBlanks),
@@ -390,7 +400,7 @@ export async function resyncPurchaseOrderLinesFromCatalog(
   const keepPrices = options.keepPrices !== false;
   const metadataMap = await fetchCatalogMetadataForRows(
     lines.map((line) => ({
-      brand: line.brand || "",
+      brand: canonicalizeBrandName(line.brand || ""),
       product_code: line.product_code || line.old_code,
     })),
   );
@@ -399,21 +409,23 @@ export async function resyncPurchaseOrderLinesFromCatalog(
     ? new Map<string, { buy_price: number | null; price_date: string | null; notes: string | null }>()
     : await fetchSupplierPriceMap(
         lines.map((line) => ({
-          brand: line.brand || "",
+          brand: canonicalizeBrandName(line.brand || ""),
           product_code: line.product_code || line.old_code,
           supplier_name: line.supplier_name || "",
         })),
       );
 
   return lines.map((line) => {
-    const metadata = metadataMap.get(`${line.brand.trim().toLowerCase()}::${normalizePartCode(line.product_code || line.old_code)}`);
+    const metadata = metadataMap.get(`${normalizeBrandKey(line.brand || "")}::${normalizePartCode(line.product_code || line.old_code)}`);
+    const canonicalBrand = canonicalizeBrandName(line.brand || "") || line.brand;
     const supplierPrice = keepPrices
       ? null
-      : supplierPriceMap.get(supplierPriceKey(line.brand || "", metadata?.product_code || line.product_code || line.old_code, line.supplier_name || ""));
+      : supplierPriceMap.get(supplierPriceKey(canonicalBrand, metadata?.product_code || line.product_code || line.old_code, line.supplier_name || ""));
     const nextBuyPrice = keepPrices ? line.buy_price : supplierPrice?.buy_price ?? line.buy_price;
     const nextBuyPriceValue = Number(nextBuyPrice ?? 0) || 0;
     return {
       ...line,
+      brand: canonicalBrand,
       product_code: onlyFillBlanks ? line.product_code || metadata?.product_code || "" : metadata?.product_code || line.product_code,
       description: fillText(line.description, metadata?.description || "", onlyFillBlanks),
       oem_no: fillText(line.oem_no, metadata?.oem_no || "", onlyFillBlanks),
