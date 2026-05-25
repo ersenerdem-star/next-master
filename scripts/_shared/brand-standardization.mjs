@@ -37,6 +37,12 @@ const BRAND_STANDARDS = [
     sparetoQuery: "MANN-FILTER",
     sparetoSlug: "mann-filter",
   },
+  {
+    keys: ["SACHS"],
+    canonical: "Sachs",
+    sparetoQuery: "SACHS",
+    sparetoSlug: "sachs",
+  },
 ];
 
 function buildFallbackSlug(value) {
