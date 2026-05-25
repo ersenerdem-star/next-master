@@ -61,6 +61,12 @@ const BRAND_STANDARDS = [
     sparetoQuery: "Knorr-Bremse",
     sparetoSlug: "knorr-bremse",
   },
+  {
+    keys: ["FAG"],
+    canonical: "FAG",
+    sparetoQuery: "FAG",
+    sparetoSlug: "fag",
+  },
 ];
 
 function buildFallbackSlug(value) {
