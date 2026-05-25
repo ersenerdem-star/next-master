@@ -25,6 +25,7 @@ export function canonicalizeInternalBrandName(input: string) {
   if (lower === "trw") return "TRW";
   if (lower === "bosch") return "Bosch";
   if (lower === "mann" || lower === "mann-filter") return "Mann";
+  if (lower === "sachs") return "Sachs";
   return value;
 }
 
@@ -41,8 +42,36 @@ export function resolveSparetoBrandQuery(input: string) {
       return "WABCO";
     case "Mann":
       return "MANN-FILTER";
+    case "Sachs":
+      return "SACHS";
     default:
       return value.toUpperCase();
+  }
+}
+
+function resolveSparetoBrandSlug(input: string) {
+  const value = canonicalizeInternalBrandName(input);
+  switch (value) {
+    case "Lemforder":
+      return "lemforder";
+    case "Bosch":
+      return "bosch";
+    case "WABCO":
+      return "wabco";
+    case "TRW":
+      return "trw";
+    case "Mann":
+      return "mann-filter";
+    case "Sachs":
+      return "sachs";
+    default:
+      return value
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
   }
 }
 
@@ -57,6 +86,7 @@ export async function syncBrandCatalogFromSpareto(input: {
 }) {
   const brandName = canonicalizeInternalBrandName(input.brandName);
   const brandQuery = resolveSparetoBrandQuery(brandName);
+  const brandSlug = resolveSparetoBrandSlug(brandName);
   const refreshExisting = input.refreshExisting !== false;
   const concurrency = Math.max(1, input.concurrency ?? 8);
   const pageSize = Math.max(12, input.pageSize ?? 48);
@@ -82,12 +112,36 @@ export async function syncBrandCatalogFromSpareto(input: {
 
   const resolvedRows: Array<Record<string, unknown>> = [];
   const errorRows: Array<{ product_code: string; normalized_code: string; source_url: string; error: string }> = [];
+  const replacementRows: Array<Record<string, unknown>> = [];
+  const replacementFetchQueue = new Map<string, { product_code: string; normalized_code: string; source_url: string; image_url: string }>();
 
   await runPool(candidates, concurrency, async (candidate) => {
     try {
-      const detail = await fetchSparetoDetail(candidate, requestTimeoutMs);
+      const detail = await fetchSparetoDetail(candidate, requestTimeoutMs, brandSlug);
       const existing = existingByCode.get(candidate.normalized_code) || null;
       resolvedRows.push(buildCatalogRow(target, candidate, detail, existing));
+
+      if (detail.replacement_code && detail.replacement_same_brand) {
+        replacementRows.push({
+          organization_id: target.organizationId,
+          brand_id: target.brandId,
+          old_code: detail.product_code,
+          normalized_old_code: normalizeCode(detail.product_code),
+          new_code: detail.replacement_code,
+          original_number: null,
+          reason: "Automatic replacement. Production stopped by manufacturer.",
+          is_active: true,
+        });
+        const replacementNormalizedCode = normalizeCode(detail.replacement_code);
+        if (!existingByCode.has(replacementNormalizedCode) && detail.replacement_url) {
+          replacementFetchQueue.set(replacementNormalizedCode, {
+            product_code: detail.replacement_code,
+            normalized_code: replacementNormalizedCode,
+            source_url: detail.replacement_url,
+            image_url: "",
+          });
+        }
+      }
     } catch (error) {
       errorRows.push({
         product_code: candidate.product_code,
@@ -97,6 +151,23 @@ export async function syncBrandCatalogFromSpareto(input: {
       });
     }
   });
+
+  if (replacementFetchQueue.size) {
+    await runPool([...replacementFetchQueue.values()], concurrency, async (candidate) => {
+      try {
+        const detail = await fetchSparetoDetail(candidate, requestTimeoutMs, brandSlug);
+        const existing = existingByCode.get(candidate.normalized_code) || null;
+        resolvedRows.push(buildCatalogRow(target, candidate, detail, existing));
+      } catch (error) {
+        errorRows.push({
+          product_code: candidate.product_code,
+          normalized_code: candidate.normalized_code,
+          source_url: candidate.source_url,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    });
+  }
 
   const mergedRows = dedupeBy(resolvedRows, (row) => String(row.normalized_code || ""));
   const payload = mergedRows.map((row) => ({
@@ -108,6 +179,8 @@ export async function syncBrandCatalogFromSpareto(input: {
     hs_code: emptyToNull(row.hs_code),
     origin: emptyToNull(row.origin),
     weight_kg: row.weight_kg == null || Number.isNaN(Number(row.weight_kg)) ? null : Number(row.weight_kg),
+    lifecycle_status: emptyToNull(row.lifecycle_status) || "active",
+    lifecycle_note: emptyToNull(row.lifecycle_note),
     ...(supportsImageColumn ? { image_url: emptyToNull(row.image_url) } : {}),
     updated_at: new Date().toISOString(),
   }));
@@ -134,6 +207,39 @@ export async function syncBrandCatalogFromSpareto(input: {
     processedBatches.push({ batch: index / batchSize + 1, rows: batch.length, status: response.status });
   }
 
+  const replacementPayload = dedupeBy(replacementRows, (row) => String(row.normalized_old_code || ""));
+  const processedReplacementBatches = [];
+  for (let index = 0; index < replacementPayload.length; index += batchSize) {
+    const batch = replacementPayload.slice(index, index + batchSize).map((row) => ({
+      organization_id: row.organization_id,
+      brand_id: row.brand_id,
+      old_code: row.old_code,
+      new_code: row.new_code,
+      original_number: row.original_number,
+      reason: row.reason,
+      is_active: row.is_active,
+      updated_at: new Date().toISOString(),
+    }));
+    const response = await fetch(
+      `${input.supabaseUrl}/rest/v1/item_code_references?on_conflict=organization_id,brand_id,normalized_old_code`,
+      {
+        method: "POST",
+        headers: {
+          ...headers,
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify(batch),
+      },
+    );
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`item_code_references upsert failed: ${response.status} ${text}`);
+    }
+    processedReplacementBatches.push({ batch: index / batchSize + 1, rows: batch.length, status: response.status });
+  }
+
+  const discontinuedRows = mergedRows.filter((row) => String(row.lifecycle_status || "").trim().toLowerCase() === "discontinued").length;
+
   return {
     targetBrandId: target.brandId,
     targetBrandName: target.name,
@@ -150,8 +256,12 @@ export async function syncBrandCatalogFromSpareto(input: {
     candidateRows: candidates.length,
     resolvedRows: mergedRows.length,
     errorRows: errorRows.length,
+    discontinuedRows,
+    replacementRows: replacementPayload.length,
+    replacementFetchRows: replacementFetchQueue.size,
     supportsImageColumn,
     processedBatches,
+    processedReplacementBatches,
   };
 }
 
@@ -223,7 +333,7 @@ async function fetchExistingCatalogRows(supabaseUrl: string, headers: Record<str
   let offset = 0;
   while (true) {
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/catalog_products?select=product_code,normalized_code,description,oem_no,hs_code,origin,weight_kg,image_url&brand_id=eq.${encodeURIComponent(brandId)}&limit=${restPageLimit}&offset=${offset}`,
+      `${supabaseUrl}/rest/v1/catalog_products?select=product_code,normalized_code,description,oem_no,hs_code,origin,weight_kg,image_url,lifecycle_status,lifecycle_note&brand_id=eq.${encodeURIComponent(brandId)}&limit=${restPageLimit}&offset=${offset}`,
       { headers },
     );
     const text = await response.text();
@@ -242,6 +352,8 @@ async function fetchExistingCatalogRows(supabaseUrl: string, headers: Record<str
         origin: String(row.origin || "").trim(),
         weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
         image_url: String(row.image_url || "").trim(),
+        lifecycle_status: String(row.lifecycle_status || "active").trim().toLowerCase(),
+        lifecycle_note: String(row.lifecycle_note || "").trim(),
       })),
     );
     if (rows.length < restPageLimit) break;
@@ -333,9 +445,10 @@ function extractLastPage(html: string, fallback: number) {
   return maxPage;
 }
 
-async function fetchSparetoDetail(card: any, requestTimeoutMs: number) {
+async function fetchSparetoDetail(card: any, requestTimeoutMs: number, targetBrandSlug: string) {
   const html = await fetchText(card.source_url, requestTimeoutMs);
   const detail = extractDetailProperties(html);
+  const lifecycle = extractCurrentLifecycle(html, targetBrandSlug);
   return {
     product_code: card.product_code,
     normalized_code: card.normalized_code,
@@ -346,6 +459,11 @@ async function fetchSparetoDetail(card: any, requestTimeoutMs: number) {
     weight_kg: detail.weight_kg,
     image_url: sanitizeImageUrl(detail.image_url || card.image_url),
     source_url: card.source_url,
+    lifecycle_status: lifecycle.discontinued ? "discontinued" : "active",
+    lifecycle_note: lifecycle.note,
+    replacement_code: lifecycle.replacement_code,
+    replacement_url: lifecycle.replacement_url,
+    replacement_same_brand: lifecycle.replacement_same_brand,
   };
 }
 
@@ -387,6 +505,34 @@ function captureTableValue(html: string, label: string) {
   return capture(html, new RegExp(`<td>${escaped}<\\/td>\\s*<td>([\\s\\S]*?)<\\/td>`, "i"));
 }
 
+function extractCurrentLifecycle(html: string, targetBrandSlug: string) {
+  const preAlternatives = html.split("<section class='mb-5' id='nav-alternatives'")[0] || html;
+  const discontinued = /No longer deliverable by the manufacturer/i.test(preAlternatives);
+  const replacementIndex = preAlternatives.search(/Product has been replaced by:/i);
+  let replacement_code = "";
+  let replacement_url = "";
+  let replacement_same_brand = false;
+
+  if (replacementIndex >= 0) {
+    const snippet = preAlternatives.slice(replacementIndex, replacementIndex + 1000);
+    const match = snippet.match(/<a[^>]+href=['"]([^'"]+)['"][^>]*>([\s\S]*?)<\/a>/i);
+    if (match) {
+      replacement_url = new URL(match[1], "https://spareto.com").toString();
+      replacement_code = cleanText(match[2]).toUpperCase();
+      replacement_same_brand = new RegExp(`/products/${escapeRegExp(targetBrandSlug)}-`, "i").test(match[1]);
+    }
+  }
+
+  const note = replacement_code ? `Replacement code: ${replacement_code}.` : "";
+  return {
+    discontinued,
+    replacement_code,
+    replacement_url,
+    replacement_same_brand,
+    note,
+  };
+}
+
 function buildCatalogRow(target: SyncBrandTarget, candidate: any, detail: any, existing: any) {
   const nextDescription = preferCatalogValue(existing?.description, detail.description, candidate.description);
   const nextOemNo = preferCatalogValue(existing?.oem_no, detail.oem_no);
@@ -394,6 +540,8 @@ function buildCatalogRow(target: SyncBrandTarget, candidate: any, detail: any, e
   const nextOrigin = preferOrigin(existing?.origin, detail.origin);
   const nextWeight = existing?.weight_kg ?? detail.weight_kg ?? null;
   const nextImage = preferCatalogValue(existing?.image_url, detail.image_url, candidate.image_url);
+  const nextLifecycleStatus = detail.lifecycle_status === "discontinued" ? "discontinued" : String(existing?.lifecycle_status || "active").trim().toLowerCase() || "active";
+  const nextLifecycleNote = preferCatalogValue(detail.lifecycle_note, existing?.lifecycle_note);
 
   return {
     organization_id: target.organizationId,
@@ -406,6 +554,8 @@ function buildCatalogRow(target: SyncBrandTarget, candidate: any, detail: any, e
     origin: nextOrigin,
     weight_kg: nextWeight,
     image_url: nextImage,
+    lifecycle_status: nextLifecycleStatus,
+    lifecycle_note: nextLifecycleNote,
     source_url: detail.source_url || candidate.source_url,
   };
 }

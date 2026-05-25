@@ -753,9 +753,11 @@ export function CatalogPage() {
     try {
       const result = await syncBrandCatalogFromSpareto(catalogBrand, true);
       setStatus(
-        `${result.targetBrandName}: ${result.resolvedRows.toLocaleString("en-US")} synced, ${result.newRowsInListing.toLocaleString("en-US")} new, ${result.errorRows.toLocaleString("en-US")} errors.`,
+        `${result.targetBrandName}: ${result.resolvedRows.toLocaleString("en-US")} synced, ${result.newRowsInListing.toLocaleString("en-US")} new, ${result.discontinuedRows.toLocaleString("en-US")} discontinued, ${result.replacementRows.toLocaleString("en-US")} replacements, ${result.errorRows.toLocaleString("en-US")} errors.`,
       );
-      actionFeedback.succeed(`${result.targetBrandName}: ${result.resolvedRows.toLocaleString("en-US")} catalog rows synced.`);
+      actionFeedback.succeed(
+        `${result.targetBrandName}: ${result.resolvedRows.toLocaleString("en-US")} catalog rows synced, ${result.replacementRows.toLocaleString("en-US")} replacement links processed.`,
+      );
       applyCatalogFilters(search, catalogBrand, false);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Brand catalog sync failed";

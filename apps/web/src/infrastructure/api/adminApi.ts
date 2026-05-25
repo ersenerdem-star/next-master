@@ -180,5 +180,8 @@ export async function syncBrandCatalogFromSpareto(brandName: string, refreshExis
     candidateRows: number;
     resolvedRows: number;
     errorRows: number;
+    discontinuedRows: number;
+    replacementRows: number;
+    replacementFetchRows: number;
   };
 }
