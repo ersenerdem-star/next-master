@@ -43,6 +43,12 @@ const BRAND_STANDARDS = [
     sparetoQuery: "SACHS",
     sparetoSlug: "sachs",
   },
+  {
+    keys: ["NRF"],
+    canonical: "NRF",
+    sparetoQuery: "NRF",
+    sparetoSlug: "nrf",
+  },
 ];
 
 function buildFallbackSlug(value) {

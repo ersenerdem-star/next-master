@@ -26,6 +26,7 @@ export function canonicalizeInternalBrandName(input: string) {
   if (lower === "bosch") return "Bosch";
   if (lower === "mann" || lower === "mann-filter") return "Mann";
   if (lower === "sachs") return "Sachs";
+  if (lower === "nrf") return "NRF";
   return value;
 }
 
@@ -44,6 +45,8 @@ export function resolveSparetoBrandQuery(input: string) {
       return "MANN-FILTER";
     case "Sachs":
       return "SACHS";
+    case "NRF":
+      return "NRF";
     default:
       return value.toUpperCase();
   }
@@ -64,6 +67,8 @@ function resolveSparetoBrandSlug(input: string) {
       return "mann-filter";
     case "Sachs":
       return "sachs";
+    case "NRF":
+      return "nrf";
     default:
       return value
         .normalize("NFKD")
