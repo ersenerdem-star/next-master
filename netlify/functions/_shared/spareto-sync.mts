@@ -28,6 +28,7 @@ export function canonicalizeInternalBrandName(input: string) {
   if (lower === "sachs") return "Sachs";
   if (lower === "nrf") return "NRF";
   if (lower === "skf") return "SKF";
+  if (lower === "knorrbremse" || lower === "knorr-bremse") return "Knorr-Bremse";
   return value;
 }
 
@@ -50,6 +51,8 @@ export function resolveSparetoBrandQuery(input: string) {
       return "NRF";
     case "SKF":
       return "SKF";
+    case "Knorr-Bremse":
+      return "Knorr-Bremse";
     default:
       return value.toUpperCase();
   }
@@ -74,6 +77,8 @@ function resolveSparetoBrandSlug(input: string) {
       return "nrf";
     case "SKF":
       return "skf";
+    case "Knorr-Bremse":
+      return "knorr-bremse";
     default:
       return value
         .normalize("NFKD")
