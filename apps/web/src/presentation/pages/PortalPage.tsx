@@ -1568,7 +1568,7 @@ export function PortalPage() {
 
       {status ? <div className="success-text">{status}</div> : null}
       {error ? <div className="warning-text">{error}</div> : null}
-      {activeSection !== "desk" ? (
+      {activeSection === "statement" ? (
         <div className="portal-kpi-strip">
           {portalQuickStats.map((item) => (
             <div key={item.label} className="portal-kpi-card">
