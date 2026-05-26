@@ -131,7 +131,7 @@ type PortalSelection =
   | { kind: "invoice"; id: string }
   | { kind: "purchase-order"; id: string }
   | { kind: "bill"; id: string };
-type PortalSection = "details" | "statement" | "orders";
+type PortalSection = "desk" | "orders" | "billing" | "statement" | "account";
 
 type PortalLine = NonNullable<PortalSnapshot["invoices"][number]["lines"]>[number];
 type PortalSalesOrderRow = PortalSnapshot["salesOrders"][number];
@@ -237,6 +237,13 @@ function clearPortalQueryParams() {
   window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+function getDefaultPortalSection(snapshot: PortalSnapshot) {
+  if (snapshot.invite.party_type === "customer" && snapshot.invite.access.can_view_orders) return "desk" as const;
+  if (snapshot.invite.access.can_view_orders) return "orders" as const;
+  if (snapshot.invite.access.can_view_invoices) return "billing" as const;
+  return "statement" as const;
+}
+
 export function PortalPage() {
   const search = new URLSearchParams(window.location.search);
   const portalImportRef = useRef<HTMLInputElement | null>(null);
@@ -249,7 +256,7 @@ export function PortalPage() {
   });
   const [snapshot, setSnapshot] = useState<PortalSnapshot | null>(null);
   const [selection, setSelection] = useState<PortalSelection | null>(null);
-  const [activeSection, setActiveSection] = useState<PortalSection>("details");
+  const [activeSection, setActiveSection] = useState<PortalSection>("desk");
   const [documentSearch, setDocumentSearch] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("");
@@ -274,6 +281,9 @@ export function PortalPage() {
   const [savingPortalOrder, setSavingPortalOrder] = useState(false);
   const [confirmingPortalOrder, setConfirmingPortalOrder] = useState(false);
   const [portalOverlay, setPortalOverlay] = useState<{ title: string; message: string } | null>(null);
+  const [orderDeskView, setOrderDeskView] = useState<"simple" | "advanced">("simple");
+  const [selectedCatalogCode, setSelectedCatalogCode] = useState("");
+  const [selectedDraftLineId, setSelectedDraftLineId] = useState("");
   const portalPricingCurrency = snapshot?.pricingProfile?.currency || snapshot?.accountSummary.currency || "EUR";
 
   useEffect(() => {
@@ -286,7 +296,7 @@ export function PortalPage() {
       .then((next) => {
         setSnapshot(next);
         setSelection(null);
-        setActiveSection("details");
+        setActiveSection(getDefaultPortalSection(next));
         setDocumentSearch("");
         setBrandFilter("");
         setPaymentStatusFilter("");
@@ -394,13 +404,21 @@ export function PortalPage() {
   );
 
   const portalCatalogColumns = useMemo(
-    () => [
-      { key: "code", header: "Code", render: (row: PortalCatalogSearchItem) => row.code },
-      { key: "brand", header: "Brand", render: (row: PortalCatalogSearchItem) => <BrandPill brand={row.brand} compact /> },
-      { key: "description", header: "Description", render: (row: PortalCatalogSearchItem) => row.description || "-" },
-      { key: "oem", header: "OEM", render: (row: PortalCatalogSearchItem) => row.oem_no || "-" },
-      { key: "tariff", header: "Tariff", render: (row: PortalCatalogSearchItem) => row.tariff || "-" },
-      {
+    () => {
+      const columns = [
+        { key: "code", header: "Code", render: (row: PortalCatalogSearchItem) => row.code },
+        { key: "brand", header: "Brand", render: (row: PortalCatalogSearchItem) => <BrandPill brand={row.brand} compact /> },
+        { key: "description", header: "Description", render: (row: PortalCatalogSearchItem) => row.description || "-" },
+      ];
+      if (orderDeskView === "advanced") {
+        columns.push(
+          { key: "oem", header: "OEM", render: (row: PortalCatalogSearchItem) => row.oem_no || "-" },
+          { key: "tariff", header: "Tariff", render: (row: PortalCatalogSearchItem) => row.tariff || "-" },
+          { key: "origin", header: "Origin", render: (row: PortalCatalogSearchItem) => row.origin || "-" },
+          { key: "weight", header: "Weight", render: (row: PortalCatalogSearchItem) => formatWeight(row.weight_kg) },
+        );
+      }
+      columns.push({
         key: "actions",
         header: "Actions",
         render: (row: PortalCatalogSearchItem) => (
@@ -408,69 +426,82 @@ export function PortalPage() {
             Add
           </Button>
         ),
-      },
-    ],
-    [credentials.email, credentials.token],
+      });
+      return columns;
+    },
+    [orderDeskView],
   );
 
   const portalDraftColumns = useMemo(
-    () => [
-      { key: "code", header: "Code", render: (row: PortalPreparedLine) => row.resolvedCode || row.requestedCode || "-" },
-      { key: "brand", header: "Brand", render: (row: PortalPreparedLine) => <BrandPill brand={row.brand} compact /> },
-      {
-        key: "description",
-        header: "Description",
-        render: (row: PortalPreparedLine) => (
-          <div>
-            <div>{row.description || "-"}</div>
-            {row.sell_price == null ? <div className="warning-text">No live price found for this item.</div> : null}
-            {renderDiscontinuedBadge(row)}
-          </div>
-        ),
-      },
-      {
-        key: "qty",
-        header: "Qty",
-        render: (row: PortalPreparedLine) => (
-          <input
-            className="inline-edit-input inline-edit-input--qty"
-            type="number"
-            min={1}
-            step={1}
-            value={row.qty}
-            onChange={(event) => {
-              const nextQty = Math.max(1, Number(event.target.value || 1) || 1);
-              setPortalDraftLines((current) => current.map((item) => (item.lineId === row.lineId ? { ...item, qty: nextQty } : item)));
-            }}
-          />
-        ),
-      },
-      {
-        key: "sell",
-        header: `Price ${portalPricingCurrency}`,
-        render: (row: PortalPreparedLine) => (row.sell_price == null ? "-" : formatMoney(Number(row.sell_price || 0), portalPricingCurrency)),
-      },
-      {
-        key: "amount",
-        header: `Amount ${portalPricingCurrency}`,
-        render: (row: PortalPreparedLine) =>
-          row.sell_price == null ? "-" : formatMoney(Number(row.sell_price || 0) * Number(row.qty || 0), portalPricingCurrency),
-      },
-      {
-        key: "actions",
-        header: "Actions",
-        render: (row: PortalPreparedLine) => (
-          <Button
-            variant="secondary"
-            className="button--compact danger-button"
-            onClick={() => setPortalDraftLines((current) => current.filter((item) => item.lineId !== row.lineId))}
-          >
-            Remove
-          </Button>
-        ),
-      },
-    ],
-    [portalPricingCurrency],
+    () => {
+      const columns = [
+        { key: "code", header: "Code", render: (row: PortalPreparedLine) => row.resolvedCode || row.requestedCode || "-" },
+        { key: "brand", header: "Brand", render: (row: PortalPreparedLine) => <BrandPill brand={row.brand} compact /> },
+        {
+          key: "description",
+          header: "Description",
+          render: (row: PortalPreparedLine) => (
+            <div>
+              <div>{row.description || "-"}</div>
+              {row.sell_price == null ? <div className="warning-text">No live price found for this item.</div> : null}
+              {renderDiscontinuedBadge(row)}
+            </div>
+          ),
+        },
+      ];
+      if (orderDeskView === "advanced") {
+        columns.push(
+          { key: "oem", header: "OEM", render: (row: PortalPreparedLine) => row.oem_no || "-" },
+          { key: "origin", header: "Origin", render: (row: PortalPreparedLine) => row.origin || "-" },
+          { key: "weight", header: "Weight", render: (row: PortalPreparedLine) => formatWeight(row.weight_kg) },
+        );
+      }
+      columns.push(
+        {
+          key: "qty",
+          header: "Qty",
+          render: (row: PortalPreparedLine) => (
+            <input
+              className="inline-edit-input inline-edit-input--qty"
+              type="number"
+              min={1}
+              step={1}
+              value={row.qty}
+              onChange={(event) => {
+                const nextQty = Math.max(1, Number(event.target.value || 1) || 1);
+                setPortalDraftLines((current) => current.map((item) => (item.lineId === row.lineId ? { ...item, qty: nextQty } : item)));
+              }}
+            />
+          ),
+        },
+        {
+          key: "sell",
+          header: `Price ${portalPricingCurrency}`,
+          render: (row: PortalPreparedLine) => (row.sell_price == null ? "-" : formatMoney(Number(row.sell_price || 0), portalPricingCurrency)),
+        },
+        {
+          key: "amount",
+          header: `Amount ${portalPricingCurrency}`,
+          render: (row: PortalPreparedLine) =>
+            row.sell_price == null ? "-" : formatMoney(Number(row.sell_price || 0) * Number(row.qty || 0), portalPricingCurrency),
+        },
+        {
+          key: "actions",
+          header: "Actions",
+          render: (row: PortalPreparedLine) => (
+            <Button
+              variant="secondary"
+              className="button--compact danger-button"
+              onClick={() => setPortalDraftLines((current) => current.filter((item) => item.lineId !== row.lineId))}
+            >
+              Remove
+            </Button>
+          ),
+        },
+      );
+      return columns;
+    },
+    [orderDeskView, portalPricingCurrency],
   );
 
   const creditColumns = useMemo(
@@ -502,7 +533,7 @@ export function PortalPage() {
       const next = await loginPortal(credentials);
       setSnapshot(next);
       setSelection(null);
-      setActiveSection("details");
+      setActiveSection(getDefaultPortalSection(next));
       setDocumentSearch("");
       setBrandFilter("");
       setPaymentStatusFilter("");
@@ -535,7 +566,7 @@ export function PortalPage() {
   function handleLogout() {
     setSnapshot(null);
     setSelection(null);
-    setActiveSection("details");
+    setActiveSection("desk");
     setStatus("");
     setError("");
     writeStoredCredentials(null);
@@ -573,6 +604,26 @@ export function PortalPage() {
     );
     setOrderSearchBrand((current) => current || snapshot.availableBrands[0] || "");
   }, [snapshot]);
+
+  useEffect(() => {
+    if (!catalogResults.length) {
+      setSelectedCatalogCode("");
+      return;
+    }
+    if (!catalogResults.some((row) => row.code === selectedCatalogCode)) {
+      setSelectedCatalogCode(catalogResults[0]?.code || "");
+    }
+  }, [catalogResults, selectedCatalogCode]);
+
+  useEffect(() => {
+    if (!portalDraftLines.length) {
+      setSelectedDraftLineId("");
+      return;
+    }
+    if (!portalDraftLines.some((line) => line.lineId === selectedDraftLineId)) {
+      setSelectedDraftLineId(portalDraftLines[0]?.lineId || "");
+    }
+  }, [portalDraftLines, selectedDraftLineId]);
 
   if (!snapshot) {
     return (
@@ -654,6 +705,8 @@ export function PortalPage() {
       : activeSnapshot.paymentsMade.filter((row) => (!statementDateFrom && !statementDateTo ? true : isWithinDateRange(row.payment_date, statementDateFrom, statementDateTo)));
   const statementPeriodLabel = buildDateRangeLabel(statementDateFrom, statementDateTo);
   const portalCanOrder = activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_orders;
+  const selectedCatalogItem = catalogResults.find((row) => row.code === selectedCatalogCode) || null;
+  const selectedDraftLine = portalDraftLines.find((line) => line.lineId === selectedDraftLineId) || null;
   const portalBrandOptions = [{ value: "", label: "All Brands" }, ...activeSnapshot.availableBrands.map((brand) => ({ value: brand, label: brand }))];
   const portalDraftSelectionOptions = [
     { value: "", label: "New Draft" },
@@ -669,6 +722,9 @@ export function PortalPage() {
   const portalOrderCurrency = activeSnapshot.pricingProfile?.currency || activeSnapshot.accountSummary.currency || "EUR";
   const portalDraftHasMissingPrices = portalDraftLines.some((line) => line.sell_price == null);
   const portalDraftDiscontinuedCount = portalDraftLines.filter((line) => line.lifecycle_status === "discontinued").length;
+  const portalDraftWarningLines = portalDraftLines.filter(
+    (line) => line.sell_price == null || line.lifecycle_status === "discontinued" || line.codeChanged,
+  );
   const portalOriginalNumberBrandMatches = Array.from(
     new Set(
       catalogResults
@@ -677,21 +733,56 @@ export function PortalPage() {
         .filter(Boolean),
     ),
   ).sort((left, right) => left.localeCompare(right));
+  const portalOrderHistoryRows =
+    activeSnapshot.invite.party_type === "customer"
+      ? filteredSalesOrders.filter((row) => !(row.source_channel === "portal" && !row.portal_submitted_at && String(row.status || "").toLowerCase() === "draft"))
+      : filteredPurchaseOrders;
+  const portalBillingRows = activeSnapshot.invite.party_type === "customer" ? filteredInvoices : filteredBills;
+  const portalQuickStats = [
+    {
+      label: portalCanOrder ? "Open Drafts" : "Orders",
+      value: portalCanOrder ? portalDraftOrders.length.toLocaleString("en-US") : portalOrderHistoryRows.length.toLocaleString("en-US"),
+      note: portalCanOrder ? "Saved work waiting for confirmation" : "Visible order records",
+    },
+    {
+      label: activeSnapshot.invite.party_type === "customer" ? "Invoices" : "Bills",
+      value: portalBillingRows.length.toLocaleString("en-US"),
+      note: "Document history available online",
+    },
+    {
+      label: "Balance",
+      value: formatMoney(activeSnapshot.accountSummary.openAmount, activeSnapshot.accountSummary.currency),
+      note: "Current open account position",
+    },
+    {
+      label: "Payments",
+      value: formatMoney(activeSnapshot.accountSummary.paymentAmount, activeSnapshot.accountSummary.currency),
+      note: "Total payment movement",
+    },
+  ];
   const portalSections: Array<{ key: PortalSection; label: string }> = [
-    { key: "details", label: "Account Details" },
-    { key: "statement", label: "Account Statement" },
-    ...(portalCanOrder ? [{ key: "orders" as PortalSection, label: "Price Search & New Order" }] : []),
+    ...(portalCanOrder ? [{ key: "desk" as PortalSection, label: "Order Desk" }] : []),
+    ...(activeSnapshot.invite.access.can_view_orders ? [{ key: "orders" as PortalSection, label: "Orders" }] : []),
+    ...(activeSnapshot.invite.access.can_view_invoices
+      ? [{ key: "billing" as PortalSection, label: activeSnapshot.invite.party_type === "customer" ? "Invoices" : "Bills" }]
+      : []),
+    ...(activeSnapshot.invite.access.can_view_account || activeSnapshot.invite.access.can_view_payments ? [{ key: "statement" as PortalSection, label: "Statement" }] : []),
+    { key: "account", label: "Account" },
   ];
   const activeSectionHelpText =
-    activeSection === "orders"
-      ? "Search items, import part numbers, review live prices, and submit a new sales order."
-      : activeSection === "statement"
-        ? "Review invoices, sales orders, payments, credits, and your account statement in one place."
-        : "Review your account identity, addresses, and current balance summary.";
+    activeSection === "desk"
+      ? "Search parts, build the draft, review warnings, and confirm the order from one workbench."
+      : activeSection === "orders"
+        ? "Track submitted orders and inspect the full line detail when needed."
+        : activeSection === "billing"
+          ? "Review invoices or bills with payment status and line-level detail."
+          : activeSection === "statement"
+            ? "Use this area for statement, payments, and credits only."
+            : "Review your account identity, addresses, and financial profile.";
 
   function openPortalDocument(selection: PortalSelection) {
     setSelection(selection);
-    setActiveSection("statement");
+    setActiveSection(selection.kind === "sales-order" || selection.kind === "purchase-order" ? "orders" : "billing");
   }
 
   async function handlePortalCatalogSearch() {
@@ -765,6 +856,7 @@ export function PortalPage() {
   }
 
   async function handleAddPortalCatalogItem(item: PortalCatalogSearchItem) {
+    setSelectedCatalogCode(item.code);
     await appendPortalRows([{ code: item.code, brand: item.brand, qty: 1 }], "{count} item added to portal draft.");
   }
 
@@ -832,6 +924,8 @@ export function PortalPage() {
       );
       setPortalOrderStatus("");
       setCatalogResults([]);
+      setSelectedDraftLineId("");
+      setSelectedCatalogCode("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal sales order save failed");
     } finally {
@@ -852,7 +946,7 @@ export function PortalPage() {
     setPortalOrderStatus(`Draft ${row.sales_order_no || row.id} loaded.`);
     setCatalogResults([]);
     setSelection({ kind: "sales-order", id: row.id });
-    setActiveSection("orders");
+    setActiveSection("desk");
   }
 
   function handleClearPortalBuilder() {
@@ -868,7 +962,9 @@ export function PortalPage() {
     setOrderSearch("");
     setSelection(null);
     setError("");
-    setActiveSection("orders");
+    setSelectedDraftLineId("");
+    setSelectedCatalogCode("");
+    setActiveSection("desk");
   }
 
   async function handleDeletePortalDraft(row: PortalSalesOrderRow) {
@@ -965,6 +1061,11 @@ export function PortalPage() {
           ? `Purchase Order Detail · ${selectedDocument.row.id}`
           : `Bill Detail · ${selectedDocument.row.id}`
     : "";
+  const orderDeskFocusTitle = selectedDraftLine
+    ? `${selectedDraftLine.resolvedCode || selectedDraftLine.requestedCode || "-"} · Draft Line`
+    : selectedCatalogItem
+      ? `${selectedCatalogItem.code} · Catalog Result`
+      : portalSalesOrderNo || "Order Desk";
 
   function getPortalDocumentSelection(kind: PortalSelection["kind"], id: string) {
     if (kind === "sales-order") {
@@ -1210,6 +1311,118 @@ export function PortalPage() {
     handlePortalExportExcelRow();
   }
 
+  const documentDetailSection = selectedDocument ? (
+    <SectionCard
+      title={detailTitle}
+      actions={
+        <div className="inline-actions">
+          <Button variant="secondary" onClick={handlePortalPrint}>
+            PDF / Print
+          </Button>
+          <Button variant="secondary" onClick={handlePortalExportExcel}>
+            Export Excel
+          </Button>
+          <Button variant="secondary" onClick={() => setSelection(null)}>
+            Close
+          </Button>
+        </div>
+      }
+    >
+      <div className="portal-document-detail">
+        <div className="portal-detail-grid">
+          <div className="settings-item">
+            <span className="settings-label">Status</span>
+            <strong>{selectedDocument.row.status || "-"}</strong>
+          </div>
+          <div className="settings-item">
+            <span className="settings-label">Currency</span>
+            <strong>{selectedDocument.row.currency || "-"}</strong>
+          </div>
+          <div className="settings-item">
+            <span className="settings-label">Date</span>
+            <strong>
+              {formatDate(
+                selectedDocument.kind === "bill"
+                  ? selectedDocument.row.bill_date
+                  : "quote_date" in selectedDocument.row
+                    ? selectedDocument.row.quote_date
+                    : undefined,
+              )}
+            </strong>
+          </div>
+          <div className="settings-item">
+            <span className="settings-label">Due Date</span>
+            <strong>{formatDate("due_date" in selectedDocument.row ? selectedDocument.row.due_date : undefined)}</strong>
+          </div>
+          {"delivery_term" in selectedDocument.row ? (
+            <div className="settings-item">
+              <span className="settings-label">Delivery Term</span>
+              <strong>{selectedDocument.row.delivery_term || "-"}</strong>
+            </div>
+          ) : null}
+          {"payment_terms" in selectedDocument.row ? (
+            <div className="settings-item">
+              <span className="settings-label">Payment Terms</span>
+              <strong>{selectedDocument.row.payment_terms || "-"}</strong>
+            </div>
+          ) : null}
+          {"contract_nr" in selectedDocument.row ? (
+            <div className="settings-item">
+              <span className="settings-label">Contract Nr</span>
+              <strong>{selectedDocument.row.contract_nr || "-"}</strong>
+            </div>
+          ) : null}
+          {"packing_details" in selectedDocument.row ? (
+            <div className="settings-item">
+              <span className="settings-label">Packing</span>
+              <strong>{selectedDocument.row.packing_details || "-"}</strong>
+            </div>
+          ) : null}
+        </div>
+
+        {selectedDocument.row.notes ? (
+          <div className="portal-detail-notes">
+            <span className="settings-label">Notes</span>
+            <strong>{selectedDocument.row.notes}</strong>
+          </div>
+        ) : null}
+
+        <DataTable rows={selectedDocument.row.lines || []} columns={detailColumns} emptyText="No line details available." />
+
+        <div className="portal-detail-totals">
+          {"subtotal" in selectedDocument.row ? (
+            <div className="settings-item">
+              <span className="settings-label">Sub Total</span>
+              <strong>{formatMoney(Number(selectedDocument.row.subtotal || 0), selectedDocument.row.currency)}</strong>
+            </div>
+          ) : null}
+          {"discount_amount" in selectedDocument.row ? (
+            <div className="settings-item">
+              <span className="settings-label">Discount</span>
+              <strong>{formatMoney(Number(selectedDocument.row.discount_amount || 0), selectedDocument.row.currency)}</strong>
+            </div>
+          ) : null}
+          {"shipping_cost" in selectedDocument.row ? (
+            <div className="settings-item">
+              <span className="settings-label">Shipping</span>
+              <strong>{formatMoney(Number(selectedDocument.row.shipping_cost || 0), selectedDocument.row.currency)}</strong>
+            </div>
+          ) : null}
+          {"purchase_total" in selectedDocument.row && selectedDocument.kind !== "sales-order" && selectedDocument.kind !== "invoice" ? (
+            <div className="settings-item">
+              <span className="settings-label">Purchase Total</span>
+              <strong>{formatMoney(Number(selectedDocument.row.purchase_total || 0), selectedDocument.row.currency)}</strong>
+            </div>
+          ) : null}
+          <div className="settings-item">
+            <span className="settings-label">Total Amount</span>
+            <strong>{formatMoney(Number(("sales_total" in selectedDocument.row ? selectedDocument.row.sales_total : selectedDocument.row.total_amount) || 0), selectedDocument.row.currency)}</strong>
+          </div>
+        </div>
+      </div>
+    </SectionCard>
+  ) : null;
+
   return (
     <div className="portal-shell">
       <div className="portal-header">
@@ -1234,6 +1447,15 @@ export function PortalPage() {
 
       {status ? <div className="success-text">{status}</div> : null}
       {error ? <div className="warning-text">{error}</div> : null}
+      <div className="portal-kpi-strip">
+        {portalQuickStats.map((item) => (
+          <div key={item.label} className="portal-kpi-card">
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+            <small>{item.note}</small>
+          </div>
+        ))}
+      </div>
 
       <div className="portal-subnav">
         {portalSections.map((section) => (
@@ -1249,10 +1471,10 @@ export function PortalPage() {
       </div>
       <div className="portal-subnav__hint">{activeSectionHelpText}</div>
 
-      {activeSection === "details" ? (
+      {activeSection === "account" ? (
         <div className="portal-section-stack">
           <div className="portal-summary-grid">
-            <SectionCard title="Account">
+            <SectionCard title="Account Profile">
               <div className="settings-grid settings-grid--compact">
                 <div className="settings-item">
                   <span className="settings-label">Party</span>
@@ -1272,7 +1494,7 @@ export function PortalPage() {
                 </div>
               </div>
             </SectionCard>
-            <SectionCard title="Summary">
+            <SectionCard title="Financial Summary">
               <div className="dashboard-grid">
                 <div className="dashboard-stat">
                   <span>Total Documents</span>
@@ -1302,17 +1524,9 @@ export function PortalPage() {
 
       {activeSection === "statement" ? (
         <div className="portal-section-stack">
-          <SectionCard title="Document Filters">
-            <div className="portal-filter-grid">
-              <Input label="Search" value={documentSearch} placeholder="Document no, code, description" onChange={setDocumentSearch} />
-              <Select label="Brand" value={brandFilter} options={brandOptions} onChange={setBrandFilter} />
-              <Select label={activeSnapshot.invite.party_type === "customer" ? "Invoice Status" : "Bill Status"} value={paymentStatusFilter} options={paymentStatusOptions} onChange={setPaymentStatusFilter} />
-            </div>
-          </SectionCard>
-
           {activeSnapshot.invite.access.can_view_account ? (
             <SectionCard
-              title="Account Statement"
+              title="Statement"
               actions={
                 <div className="portal-statement-actions">
                   <Input label="Date From" type="date" value={statementDateFrom} onChange={setStatementDateFrom} />
@@ -1326,7 +1540,32 @@ export function PortalPage() {
                 </div>
               }
             >
+              <div className="portal-summary-list">
+                <div className="dashboard-stat">
+                  <span>Period</span>
+                  <strong>{statementPeriodLabel}</strong>
+                </div>
+                <div className="dashboard-stat">
+                  <span>Open Balance</span>
+                  <strong>{formatMoney(activeSnapshot.accountSummary.openAmount, activeSnapshot.accountSummary.currency)}</strong>
+                </div>
+                <div className="dashboard-stat">
+                  <span>Payment Amount</span>
+                  <strong>{formatMoney(activeSnapshot.accountSummary.paymentAmount, activeSnapshot.accountSummary.currency)}</strong>
+                </div>
+              </div>
+            </SectionCard>
+          ) : null}
+
+          {activeSnapshot.invite.access.can_view_account ? (
+            <SectionCard title="Account Statement">
               <DataTable rows={filteredAccountRows} columns={accountColumns} emptyText="No statement rows available." />
+            </SectionCard>
+          ) : null}
+
+          {activeSnapshot.invite.access.can_view_payments ? (
+            <SectionCard title="Payment History">
+              <DataTable rows={visiblePayments} columns={paymentColumns} emptyText="No payments available." />
             </SectionCard>
           ) : null}
 
@@ -1341,109 +1580,185 @@ export function PortalPage() {
               <DataTable rows={filteredVendorCredits} columns={vendorCreditColumns} emptyText="No vendor credits available." />
             </SectionCard>
           ) : null}
-
-          {activeSnapshot.invite.access.can_view_payments ? (
-            <SectionCard title="Payment History">
-              <DataTable rows={visiblePayments} columns={paymentColumns} emptyText="No payments available." />
-            </SectionCard>
-          ) : null}
-
-          {activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_orders ? (
-            <SectionCard title="Sales Orders">
-              <DataTable
-                rows={filteredSalesOrders}
-                columns={salesOrderColumns}
-                emptyText="No sales orders available."
-                onRowClick={(row) => openPortalDocument({ kind: "sales-order", id: row.id })}
-                rowClassName={(row) => (selection?.kind === "sales-order" && selection.id === row.id ? "data-table__row--active" : "")}
-              />
-            </SectionCard>
-          ) : null}
-
-          {activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_invoices ? (
-            <SectionCard title="Invoices">
-              <DataTable
-                rows={filteredInvoices}
-                columns={invoiceColumns}
-                emptyText="No invoices available."
-                onRowClick={(row) => openPortalDocument({ kind: "invoice", id: row.id })}
-                rowClassName={(row) => (selection?.kind === "invoice" && selection.id === row.id ? "data-table__row--active" : "")}
-              />
-            </SectionCard>
-          ) : null}
-
-          {activeSnapshot.invite.party_type === "vendor" && activeSnapshot.invite.access.can_view_orders ? (
-            <SectionCard title="Purchase Orders">
-              <DataTable
-                rows={filteredPurchaseOrders}
-                columns={purchaseOrderColumns}
-                emptyText="No purchase orders available."
-                onRowClick={(row) => openPortalDocument({ kind: "purchase-order", id: row.id })}
-                rowClassName={(row) => (selection?.kind === "purchase-order" && selection.id === row.id ? "data-table__row--active" : "")}
-              />
-            </SectionCard>
-          ) : null}
-
-          {activeSnapshot.invite.party_type === "vendor" && activeSnapshot.invite.access.can_view_invoices ? (
-            <SectionCard title="Bills">
-              <DataTable
-                rows={filteredBills}
-                columns={billColumns}
-                emptyText="No bills available."
-                onRowClick={(row) => openPortalDocument({ kind: "bill", id: row.id })}
-                rowClassName={(row) => (selection?.kind === "bill" && selection.id === row.id ? "data-table__row--active" : "")}
-              />
-            </SectionCard>
-          ) : null}
         </div>
       ) : null}
 
       {activeSection === "orders" ? (
         <div className="portal-section-stack">
-          {portalCanOrder ? (
-            <SectionCard title="My Draft Orders">
-              <DataTable
-                rows={portalDraftOrders}
-                columns={[
-                  { key: "no", header: "Draft No", render: (row: PortalSalesOrderRow) => row.sales_order_no || row.id },
-                  { key: "date", header: "Date", render: (row: PortalSalesOrderRow) => row.quote_date || "-" },
-                  { key: "lines", header: "Lines", render: (row: PortalSalesOrderRow) => row.line_count || row.lines?.length || 0 },
-                  { key: "amount", header: "Amount", render: (row: PortalSalesOrderRow) => formatMoney(Number(row.sales_total || 0), row.currency || portalOrderCurrency) },
-                  {
-                    key: "actions",
-                    header: "Actions",
-                    render: (row: PortalSalesOrderRow) => (
-                      <div className="inline-actions">
-                        <Button variant="secondary" className="button--compact" onClick={() => handleResumePortalDraft(row)}>
-                          Resume
-                        </Button>
-                        <Button variant="secondary" className="button--compact" onClick={() => openPortalDocumentPrint("sales-order", row.id)}>
-                          PDF / Print
-                        </Button>
-                        <Button variant="secondary" className="button--compact" onClick={() => handlePortalExportExcelRow("sales-order", row.id)}>
-                          Export Excel
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          className="button--compact danger-button"
-                          onClick={() => void handleDeletePortalDraft(row)}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    ),
-                  },
-                ]}
-                emptyText="No portal drafts saved yet."
-              />
-            </SectionCard>
-          ) : null}
+          <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Order Filters" : "Purchase Order Filters"}>
+            <div className="portal-filter-grid">
+              <Input label="Search" value={documentSearch} placeholder="Order no, code, description" onChange={setDocumentSearch} />
+              <Select label="Brand" value={brandFilter} options={brandOptions} onChange={setBrandFilter} />
+              <div className="portal-filter-stat">
+                <span>Records</span>
+                <strong>{portalOrderHistoryRows.length.toLocaleString("en-US")}</strong>
+              </div>
+            </div>
+          </SectionCard>
 
-          {portalCanOrder ? (
-            <SectionCard
-              title="Create Sales Order"
-              actions={
-                <div className="portal-statement-actions">
+          <div className={`portal-record-layout ${selectedDocument && (selectedDocument.kind === "sales-order" || selectedDocument.kind === "purchase-order") ? "" : "portal-record-layout--single"}`}>
+            <div className="portal-record-layout__main">
+              <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Order History" : "Purchase Orders"}>
+                <DataTable
+                  rows={portalOrderHistoryRows}
+                  columns={activeSnapshot.invite.party_type === "customer" ? salesOrderColumns : purchaseOrderColumns}
+                  emptyText={activeSnapshot.invite.party_type === "customer" ? "No orders available." : "No purchase orders available."}
+                  onRowClick={(row) => openPortalDocument({ kind: activeSnapshot.invite.party_type === "customer" ? "sales-order" : "purchase-order", id: row.id })}
+                  rowClassName={(row) =>
+                    selection &&
+                    ((selection.kind === "sales-order" && activeSnapshot.invite.party_type === "customer") ||
+                      (selection.kind === "purchase-order" && activeSnapshot.invite.party_type === "vendor")) &&
+                    selection.id === row.id
+                      ? "data-table__row--active"
+                      : ""
+                  }
+                />
+              </SectionCard>
+            </div>
+            {selectedDocument && (selectedDocument.kind === "sales-order" || selectedDocument.kind === "purchase-order") ? (
+              <div className="portal-record-layout__detail">{documentDetailSection}</div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {activeSection === "billing" ? (
+        <div className="portal-section-stack">
+          <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Invoice Filters" : "Bill Filters"}>
+            <div className="portal-filter-grid">
+              <Input label="Search" value={documentSearch} placeholder="Document no, code, description" onChange={setDocumentSearch} />
+              <Select label="Brand" value={brandFilter} options={brandOptions} onChange={setBrandFilter} />
+              <Select label={activeSnapshot.invite.party_type === "customer" ? "Invoice Status" : "Bill Status"} value={paymentStatusFilter} options={paymentStatusOptions} onChange={setPaymentStatusFilter} />
+            </div>
+          </SectionCard>
+
+          <div className={`portal-record-layout ${selectedDocument && (selectedDocument.kind === "invoice" || selectedDocument.kind === "bill") ? "" : "portal-record-layout--single"}`}>
+            <div className="portal-record-layout__main">
+              <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Invoices" : "Bills"}>
+                <DataTable
+                  rows={portalBillingRows}
+                  columns={activeSnapshot.invite.party_type === "customer" ? invoiceColumns : billColumns}
+                  emptyText={activeSnapshot.invite.party_type === "customer" ? "No invoices available." : "No bills available."}
+                  onRowClick={(row) => openPortalDocument({ kind: activeSnapshot.invite.party_type === "customer" ? "invoice" : "bill", id: row.id })}
+                  rowClassName={(row) =>
+                    selection &&
+                    ((selection.kind === "invoice" && activeSnapshot.invite.party_type === "customer") ||
+                      (selection.kind === "bill" && activeSnapshot.invite.party_type === "vendor")) &&
+                    selection.id === row.id
+                      ? "data-table__row--active"
+                      : ""
+                  }
+                />
+              </SectionCard>
+            </div>
+            {selectedDocument && (selectedDocument.kind === "invoice" || selectedDocument.kind === "bill") ? (
+              <div className="portal-record-layout__detail">{documentDetailSection}</div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {activeSection === "desk" && portalCanOrder ? (
+        <div className="portal-section-stack">
+          <SectionCard title="Draft Queue">
+            <DataTable
+              rows={portalDraftOrders}
+              columns={[
+                { key: "no", header: "Draft No", render: (row: PortalSalesOrderRow) => row.sales_order_no || row.id },
+                { key: "date", header: "Date", render: (row: PortalSalesOrderRow) => row.quote_date || "-" },
+                { key: "amount", header: "Amount", render: (row: PortalSalesOrderRow) => formatMoney(Number(row.sales_total || 0), row.currency || portalOrderCurrency) },
+                {
+                  key: "actions",
+                  header: "Actions",
+                  render: (row: PortalSalesOrderRow) => (
+                    <div className="inline-actions">
+                      <Button variant="secondary" className="button--compact" onClick={() => handleResumePortalDraft(row)}>
+                        Resume
+                      </Button>
+                      <Button variant="secondary" className="button--compact" onClick={() => openPortalDocumentPrint("sales-order", row.id)}>
+                        PDF
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="button--compact danger-button"
+                        onClick={() => void handleDeletePortalDraft(row)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+              emptyText="No drafts available yet."
+            />
+          </SectionCard>
+
+          <SectionCard
+            title="Order Desk"
+            actions={
+              <div className="workbench-controls workbench-controls--compact">
+                <div className="segmented-control">
+                  <button
+                    type="button"
+                    className={`segmented-control__item ${orderDeskView === "simple" ? "active" : ""}`}
+                    onClick={() => setOrderDeskView("simple")}
+                  >
+                    Simple View
+                  </button>
+                  <button
+                    type="button"
+                    className={`segmented-control__item ${orderDeskView === "advanced" ? "active" : ""}`}
+                    onClick={() => setOrderDeskView("advanced")}
+                  >
+                    Advanced View
+                  </button>
+                </div>
+              </div>
+            }
+          >
+            <div className="portal-order-builder">
+              <div className="portal-order-builder__meta">
+                <div className="dashboard-stat">
+                  <span>Working Draft</span>
+                  <strong>{portalSalesOrderNo || "New Draft"}</strong>
+                </div>
+                <div className="dashboard-stat">
+                  <span>Currency</span>
+                  <strong>{portalOrderCurrency}</strong>
+                </div>
+                <div className="dashboard-stat">
+                  <span>Draft Total</span>
+                  <strong>{formatMoney(portalOrderTotals.subtotal, portalOrderCurrency)}</strong>
+                </div>
+                <div className="dashboard-stat">
+                  <span>Warning Items</span>
+                  <strong>{portalDraftWarningLines.length.toLocaleString("en-US")}</strong>
+                </div>
+              </div>
+
+              <form
+                className="portal-filter-grid portal-filter-grid--desk"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handlePortalCatalogSearch();
+                }}
+              >
+                <Select
+                  label="Target Draft"
+                  value={portalOrderId}
+                  options={portalDraftSelectionOptions}
+                  onChange={(value) => {
+                    if (!value) {
+                      handleClearPortalBuilder();
+                      return;
+                    }
+                    const target = portalDraftOrders.find((row) => row.id === value);
+                    if (target) handleResumePortalDraft(target);
+                  }}
+                />
+                <Input label="Part Search" value={orderSearch} placeholder="Code, description, OEM" onChange={setOrderSearch} />
+                <Select label="Brand" value={orderSearchBrand} options={portalBrandOptions} onChange={setOrderSearchBrand} />
+                <div className="portal-builder-actions">
                   <input
                     ref={portalImportRef}
                     type="file"
@@ -1454,210 +1769,130 @@ export function PortalPage() {
                       if (file) void handleImportPortalOrderFile(file);
                     }}
                   />
-                  <Button variant="secondary" busy={savingPortalOrder} busyLabel="Saving..." onClick={() => void handleSubmitPortalOrder("draft")}>
-                    Save Draft
+                  <Button type="button" variant="secondary" onClick={() => portalImportRef.current?.click()}>
+                    Import Excel
                   </Button>
-                  <Button variant="secondary" onClick={handleClearPortalBuilder}>
-                    Clear
+                  <Button type="button" variant="secondary" onClick={downloadQuoteTemplate}>
+                    Template
                   </Button>
-                  <Button busy={confirmingPortalOrder} busyLabel="Confirming..." disabled={portalDraftHasMissingPrices} onClick={() => void handleSubmitPortalOrder("confirm")}>
-                    Confirm Order
+                  <Button type="submit" variant="secondary" busy={searchingCatalog} busyLabel="Searching..." onClick={() => void handlePortalCatalogSearch()}>
+                    Search
                   </Button>
                 </div>
-              }
-            >
-                <div className="portal-order-builder">
-                  <div className="portal-order-builder__meta">
-                    <div className="dashboard-stat">
-                      <span>Working Draft</span>
-                      <strong>{portalSalesOrderNo || "New Draft"}</strong>
-                    </div>
-                    <div className="dashboard-stat">
-                      <span>Currency</span>
-                      <strong>{portalOrderCurrency}</strong>
-                  </div>
-                  <div className="dashboard-stat">
-                    <span>Draft Total</span>
-                    <strong>{formatMoney(portalOrderTotals.subtotal, portalOrderCurrency)}</strong>
-                  </div>
+              </form>
+
+              <Input label="Notes" value={portalOrderNotes} placeholder="Order note for your internal buying team" onChange={setPortalOrderNotes} />
+
+              {portalOrderStatus ? <div className="success-text">{portalOrderStatus}</div> : null}
+              {portalDraftHasMissingPrices ? <div className="warning-text">Items without live price can be saved as draft but cannot be confirmed.</div> : null}
+              {portalDraftDiscontinuedCount > 0 ? (
+                <div className="warning-text">
+                  {portalDraftDiscontinuedCount.toLocaleString("en-US")} discontinued item(s) detected in this draft. Review before confirmation.
                 </div>
+              ) : null}
 
-                <form
-                  className="portal-filter-grid"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void handlePortalCatalogSearch();
-                  }}
-                >
-                  <Select
-                    label="Target Draft"
-                    value={portalOrderId}
-                    options={portalDraftSelectionOptions}
-                    onChange={(value) => {
-                      if (!value) {
-                        handleClearPortalBuilder();
-                        return;
-                      }
-                      const target = portalDraftOrders.find((row) => row.id === value);
-                      if (target) handleResumePortalDraft(target);
-                    }}
-                  />
-                  <Input label="Item Search" value={orderSearch} placeholder="Code, description, OEM" onChange={setOrderSearch} />
-                  <Select label="Brand" value={orderSearchBrand} options={portalBrandOptions} onChange={setOrderSearchBrand} />
-                  <div className="portal-builder-actions">
-                    <Button type="button" variant="secondary" onClick={() => portalImportRef.current?.click()}>
-                      Import Excel
-                    </Button>
-                    <Button type="button" variant="secondary" onClick={downloadQuoteTemplate}>
-                      Import Template
-                    </Button>
-                    <Button type="submit" variant="secondary" busy={searchingCatalog} busyLabel="Searching..." onClick={() => void handlePortalCatalogSearch()}>
-                      Search Items
-                    </Button>
-                  </div>
-                </form>
-
-                <Input label="Notes" value={portalOrderNotes} placeholder="Order note for internal team" onChange={setPortalOrderNotes} />
-
-                {portalOrderStatus ? <div className="success-text">{portalOrderStatus}</div> : null}
-                {portalOriginalNumberBrandMatches.length ? (
-                  <div className="success-text">
-                    Original No Brands: <strong>{portalOriginalNumberBrandMatches.join(", ")}</strong>
-                  </div>
-                ) : null}
-                {portalDraftHasMissingPrices ? <div className="warning-text">Items without live price can be saved as draft but cannot be confirmed.</div> : null}
-                {portalDraftDiscontinuedCount > 0 ? (
-                  <div className="warning-text">
-                    {portalDraftDiscontinuedCount.toLocaleString("en-US")} discontinued item(s) detected in this portal order. Review before confirmation.
-                  </div>
-                ) : null}
-
-                <div className="portal-order-builder__tables">
-                  <SectionCard title="Catalog Search Results">
-                    <DataTable rows={catalogResults} columns={portalCatalogColumns} emptyText={searchingCatalog ? "Searching items..." : "Search items or choose a brand to load catalog."} />
+              <div className="portal-workbench">
+                <div className="portal-workbench__tables">
+                  <SectionCard title="Catalog Results">
+                    <DataTable
+                      rows={catalogResults}
+                      columns={portalCatalogColumns}
+                      emptyText={searchingCatalog ? "Searching items..." : "Search by part number, original number, or description."}
+                      onRowClick={(row) => setSelectedCatalogCode(row.code)}
+                      rowClassName={(row) => (selectedCatalogCode === row.code ? "data-table__row--active" : "")}
+                    />
                   </SectionCard>
 
-                  <SectionCard title="Portal Draft Lines">
-                    <DataTable rows={portalDraftLines} columns={portalDraftColumns} emptyText={preparingPortalOrder ? "Preparing prices..." : "Import Excel or add items from catalog search."} />
+                  <SectionCard title="Draft Lines">
+                    <DataTable
+                      rows={portalDraftLines}
+                      columns={portalDraftColumns}
+                      emptyText={preparingPortalOrder ? "Preparing prices..." : "Import a file or add items from catalog results."}
+                      onRowClick={(row) => setSelectedDraftLineId(row.lineId)}
+                      rowClassName={(row) => (selectedDraftLineId === row.lineId ? "data-table__row--active" : "")}
+                    />
                   </SectionCard>
                 </div>
+
+                <aside className="portal-workbench__side">
+                  <div className="workbench-detail-panel workbench-detail-panel--catalog">
+                    <div className="workbench-detail-panel__eyebrow">Order Focus</div>
+                    <div className="workbench-detail-panel__title">{orderDeskFocusTitle}</div>
+                    {selectedDraftLine ? (
+                      <div className="workbench-detail-list">
+                        <div><span>Requested Code</span><strong>{selectedDraftLine.requestedCode || "-"}</strong></div>
+                        <div><span>Resolved Code</span><strong>{selectedDraftLine.resolvedCode || "-"}</strong></div>
+                        <div><span>Brand</span><strong>{selectedDraftLine.brand || "-"}</strong></div>
+                        <div><span>Description</span><strong>{selectedDraftLine.description || "-"}</strong></div>
+                        <div><span>OEM</span><strong>{selectedDraftLine.oem_no || "-"}</strong></div>
+                        <div><span>Tariff</span><strong>{selectedDraftLine.hs_code || "-"}</strong></div>
+                        <div><span>Origin</span><strong>{selectedDraftLine.origin || "-"}</strong></div>
+                        <div><span>Weight</span><strong>{formatWeight(selectedDraftLine.weight_kg)}</strong></div>
+                        <div><span>Unit Price</span><strong>{selectedDraftLine.sell_price == null ? "-" : formatMoney(selectedDraftLine.sell_price, portalOrderCurrency)}</strong></div>
+                        {selectedDraftLine.codeChangeWarning ? <div><span>Replacement</span><strong>{selectedDraftLine.codeChangeWarning}</strong></div> : null}
+                        {selectedDraftLine.lifecycle_warning ? <div><span>Lifecycle</span><strong>{selectedDraftLine.lifecycle_warning}</strong></div> : null}
+                      </div>
+                    ) : selectedCatalogItem ? (
+                      <div className="workbench-detail-list">
+                        <div><span>Code</span><strong>{selectedCatalogItem.code || "-"}</strong></div>
+                        <div><span>Brand</span><strong>{selectedCatalogItem.brand || "-"}</strong></div>
+                        <div><span>Description</span><strong>{selectedCatalogItem.description || "-"}</strong></div>
+                        <div><span>OEM</span><strong>{selectedCatalogItem.oem_no || "-"}</strong></div>
+                        <div><span>Tariff</span><strong>{selectedCatalogItem.tariff || "-"}</strong></div>
+                        <div><span>Origin</span><strong>{selectedCatalogItem.origin || "-"}</strong></div>
+                        <div><span>Weight</span><strong>{formatWeight(selectedCatalogItem.weight_kg)}</strong></div>
+                      </div>
+                    ) : (
+                      <div className="chart-placeholder">Select a result or a draft line to inspect full detail.</div>
+                    )}
+
+                    {portalOriginalNumberBrandMatches.length ? (
+                      <div className="portal-inline-note">
+                        <span>Original No Match</span>
+                        <strong>{portalOriginalNumberBrandMatches.join(", ")}</strong>
+                      </div>
+                    ) : null}
+
+                    {portalDraftWarningLines.length ? (
+                      <div className="portal-warning-list">
+                        <h3>Warning Items</h3>
+                        {portalDraftWarningLines.slice(0, 6).map((line) => (
+                          <button
+                            key={line.lineId}
+                            type="button"
+                            className="portal-warning-list__item"
+                            onClick={() => setSelectedDraftLineId(line.lineId)}
+                          >
+                            <strong>{line.resolvedCode || line.requestedCode || "-"}</strong>
+                            <span>
+                              {line.sell_price == null
+                                ? "Missing live price"
+                                : line.lifecycle_status === "discontinued"
+                                  ? "Discontinued"
+                                  : line.codeChangeWarning || "Review line"}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </aside>
               </div>
-            </SectionCard>
-          ) : null}
 
+              <div className="portal-action-bar">
+                <Button variant="secondary" busy={savingPortalOrder} busyLabel="Saving..." onClick={() => void handleSubmitPortalOrder("draft")}>
+                  Save Draft
+                </Button>
+                <Button variant="secondary" onClick={handleClearPortalBuilder}>
+                  Clear
+                </Button>
+                <Button busy={confirmingPortalOrder} busyLabel="Confirming..." disabled={portalDraftHasMissingPrices} onClick={() => void handleSubmitPortalOrder("confirm")}>
+                  Confirm Order
+                </Button>
+              </div>
+            </div>
+          </SectionCard>
         </div>
-      ) : null}
-
-      {activeSection === "statement" && selectedDocument ? (
-        <SectionCard
-          title={detailTitle}
-          actions={
-            <div className="inline-actions">
-              <Button variant="secondary" onClick={handlePortalPrint}>
-                PDF / Print
-              </Button>
-              <Button variant="secondary" onClick={handlePortalExportExcel}>
-                Export Excel
-              </Button>
-              <Button variant="secondary" onClick={() => setSelection(null)}>
-                Close
-              </Button>
-            </div>
-          }
-        >
-          <div className="portal-document-detail">
-            <div className="portal-detail-grid">
-              <div className="settings-item">
-                <span className="settings-label">Status</span>
-                <strong>{selectedDocument.row.status || "-"}</strong>
-              </div>
-              <div className="settings-item">
-                <span className="settings-label">Currency</span>
-                <strong>{selectedDocument.row.currency || "-"}</strong>
-              </div>
-              <div className="settings-item">
-                <span className="settings-label">Date</span>
-                <strong>
-                  {formatDate(
-                    selectedDocument.kind === "bill"
-                      ? selectedDocument.row.bill_date
-                      : "quote_date" in selectedDocument.row
-                        ? selectedDocument.row.quote_date
-                        : undefined,
-                  )}
-                </strong>
-              </div>
-              <div className="settings-item">
-                <span className="settings-label">Due Date</span>
-                <strong>{formatDate("due_date" in selectedDocument.row ? selectedDocument.row.due_date : undefined)}</strong>
-              </div>
-              {"delivery_term" in selectedDocument.row ? (
-                <div className="settings-item">
-                  <span className="settings-label">Delivery Term</span>
-                  <strong>{selectedDocument.row.delivery_term || "-"}</strong>
-                </div>
-              ) : null}
-              {"payment_terms" in selectedDocument.row ? (
-                <div className="settings-item">
-                  <span className="settings-label">Payment Terms</span>
-                  <strong>{selectedDocument.row.payment_terms || "-"}</strong>
-                </div>
-              ) : null}
-              {"contract_nr" in selectedDocument.row ? (
-                <div className="settings-item">
-                  <span className="settings-label">Contract Nr</span>
-                  <strong>{selectedDocument.row.contract_nr || "-"}</strong>
-                </div>
-              ) : null}
-              {"packing_details" in selectedDocument.row ? (
-                <div className="settings-item">
-                  <span className="settings-label">Packing</span>
-                  <strong>{selectedDocument.row.packing_details || "-"}</strong>
-                </div>
-              ) : null}
-            </div>
-
-            {selectedDocument.row.notes ? (
-              <div className="portal-detail-notes">
-                <span className="settings-label">Notes</span>
-                <strong>{selectedDocument.row.notes}</strong>
-              </div>
-            ) : null}
-
-            <DataTable rows={selectedDocument.row.lines || []} columns={detailColumns} emptyText="No line details available." />
-
-            <div className="portal-detail-totals">
-              {"subtotal" in selectedDocument.row ? (
-                <div className="settings-item">
-                  <span className="settings-label">Sub Total</span>
-                  <strong>{formatMoney(Number(selectedDocument.row.subtotal || 0), selectedDocument.row.currency)}</strong>
-                </div>
-              ) : null}
-              {"discount_amount" in selectedDocument.row ? (
-                <div className="settings-item">
-                  <span className="settings-label">Discount</span>
-                  <strong>{formatMoney(Number(selectedDocument.row.discount_amount || 0), selectedDocument.row.currency)}</strong>
-                </div>
-              ) : null}
-              {"shipping_cost" in selectedDocument.row ? (
-                <div className="settings-item">
-                  <span className="settings-label">Shipping</span>
-                  <strong>{formatMoney(Number(selectedDocument.row.shipping_cost || 0), selectedDocument.row.currency)}</strong>
-                </div>
-              ) : null}
-              {"purchase_total" in selectedDocument.row && selectedDocument.kind !== "sales-order" && selectedDocument.kind !== "invoice" ? (
-                <div className="settings-item">
-                  <span className="settings-label">Purchase Total</span>
-                  <strong>{formatMoney(Number(selectedDocument.row.purchase_total || 0), selectedDocument.row.currency)}</strong>
-                </div>
-              ) : null}
-              <div className="settings-item">
-                <span className="settings-label">Total Amount</span>
-                <strong>{formatMoney(Number(("sales_total" in selectedDocument.row ? selectedDocument.row.sales_total : selectedDocument.row.total_amount) || 0), selectedDocument.row.currency)}</strong>
-              </div>
-            </div>
-          </div>
-        </SectionCard>
       ) : null}
 
       {portalOverlay ? (
