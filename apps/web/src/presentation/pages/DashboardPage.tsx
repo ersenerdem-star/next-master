@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   fetchDashboardLatestQuotes,
   fetchDashboardSnapshot,
+  type RevenuePeriodKey,
   type DashboardSalesOrderSummary,
   type DashboardSnapshot,
 } from "../../infrastructure/api/dashboardApi";
@@ -44,6 +45,42 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
   const [inventoryPulseError, setInventoryPulseError] = useState("");
   const [brandSummarySearch, setBrandSummarySearch] = useState("");
   const [brandSummarySupplier, setBrandSummarySupplier] = useState("");
+  const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriodKey>("thisMonth");
+
+  function buildEntityAlias(value: string | null | undefined) {
+    const source = String(value || "").trim();
+    if (!source) return "-";
+
+    const rawTokens = source.split(/\s+/).filter(Boolean);
+    const stopWords = new Set([
+      "sanayi",
+      "ticaret",
+      "limited",
+      "ltd",
+      "ltd.",
+      "sti",
+      "şti",
+      "sirketi",
+      "şirketi",
+      "otomotiv",
+      "ve",
+      "co",
+      "co.",
+      "company",
+      "gmbh",
+      "sro",
+      "s.r.o.",
+      "llc",
+      "inc",
+      "corp",
+      "bv",
+      "ag",
+    ]);
+
+    const significantTokens = rawTokens.filter((token) => !stopWords.has(token.toLowerCase()));
+    const aliasTokens = (significantTokens.length >= 2 ? significantTokens : rawTokens).slice(0, 2);
+    return aliasTokens.join(" ");
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -218,6 +255,7 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
   const newPortalOrders = snapshot?.newPortalOrders ?? 0;
   const revenue = snapshot?.revenue;
   const issues = snapshot?.issues ?? {};
+  const selectedRevenue = revenue?.periods?.[revenuePeriod] ?? null;
 
   const supplierOptions = suppliers.map((supplier) => ({
     value: supplier.supplier_id,
@@ -258,6 +296,13 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
     }).format(value || 0);
   }
 
+  const revenuePeriodOptions = [
+    { value: "thisMonth", label: "This Month" },
+    { value: "thisQuarter", label: "Quarter" },
+    { value: "thisYear", label: "This Year" },
+    { value: "previousYear", label: "Previous Year" },
+  ] satisfies Array<{ value: RevenuePeriodKey; label: string }>;
+
   return (
     <div className="dashboard">
       <div className="stats-grid">
@@ -293,7 +338,10 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
             {latestQuotes.map((quote) => (
               <div key={quote.id} className="list-row">
                 <strong>{quote.sales_order_no || quote.id}</strong>
-                <span>{quote.customer_name || "-"}</span>
+                <span className="dashboard-order-meta">
+                  <span title={quote.customer_name || "-"}>{buildEntityAlias(quote.customer_name)}</span>
+                  <span title={quote.seller_company || "-"}>{buildEntityAlias(quote.seller_company)}</span>
+                </span>
                 <span className="dashboard-order-meta">
                   {quote.source_channel === "portal" && quote.portal_submitted_at && !quote.portal_seen_at ? (
                     <span className="mark-badge mark-badge--accent">New Order</span>
@@ -312,29 +360,85 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
         </SectionCard>
         <SectionCard title="Revenue Analysis">
           <div className="toolbar toolbar--wrap">
-            <span className="mark-badge mark-badge--success">Quotes</span>
+            <Select value={revenuePeriod} options={revenuePeriodOptions} onChange={(value) => setRevenuePeriod(value as RevenuePeriodKey)} />
           </div>
-          {revenue ? (
+          {selectedRevenue ? (
+            <>
             <div className="stats-grid stats-grid--compact">
               <StatCard
-                label="This Month"
-                value={formatMoney(revenue.currentMonth.total)}
-                subtext={`${revenue.currentMonth.count.toLocaleString("en-US")} sales orders`}
+                label="Sales Amount"
+                value={formatMoney(selectedRevenue.sales.total)}
+                subtext={`${selectedRevenue.sales.count.toLocaleString("en-US")} sales orders`}
                 tone="success"
               />
               <StatCard
-                label="This Year"
-                value={formatMoney(revenue.currentYear.total)}
-                subtext={`${revenue.currentYear.count.toLocaleString("en-US")} sales orders`}
+                label="Purchase Amount"
+                value={formatMoney(selectedRevenue.purchases.total)}
+                subtext={`${selectedRevenue.purchases.count.toLocaleString("en-US")} purchase orders`}
                 tone="neutral"
               />
               <StatCard
-                label="Previous Year"
-                value={formatMoney(revenue.previousYear.total)}
-                subtext={`${revenue.previousYear.count.toLocaleString("en-US")} sales orders`}
+                label="Net Spread"
+                value={formatMoney(selectedRevenue.sales.total - selectedRevenue.purchases.total)}
+                subtext="Sales less purchase amount"
                 tone="warning"
               />
             </div>
+            <div className="dashboard-grid dashboard-grid--compact">
+              <SectionCard title="By Seller">
+                {selectedRevenue.sellerTotals.length ? (
+                  <div className="table-wrap">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Seller</th>
+                          <th>Orders</th>
+                          <th>Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedRevenue.sellerTotals.slice(0, 6).map((row) => (
+                          <tr key={row.name}>
+                            <td title={row.name}>{buildEntityAlias(row.name)}</td>
+                            <td>{row.count.toLocaleString("en-US")}</td>
+                            <td>{formatMoney(row.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="chart-placeholder">No seller turnover in this period</div>
+                )}
+              </SectionCard>
+              <SectionCard title="By Purchase Company">
+                {selectedRevenue.purchaseCompanyTotals.length ? (
+                  <div className="table-wrap">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Purchase Company</th>
+                          <th>Orders</th>
+                          <th>Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedRevenue.purchaseCompanyTotals.slice(0, 6).map((row) => (
+                          <tr key={row.name}>
+                            <td title={row.name}>{buildEntityAlias(row.name)}</td>
+                            <td>{row.count.toLocaleString("en-US")}</td>
+                            <td>{formatMoney(row.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="chart-placeholder">No purchase turnover in this period</div>
+                )}
+              </SectionCard>
+            </div>
+            </>
           ) : !snapshotError && !issues.revenue ? (
             <div className="chart-placeholder">Loading revenue analysis...</div>
           ) : issues.revenue ? (

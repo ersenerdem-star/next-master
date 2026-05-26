@@ -1,18 +1,28 @@
 import { supabaseClient } from "./supabaseClient";
 
-export type RevenueSource = "quotes" | "bills";
-
 export type RevenuePeriodSummary = {
   total: number;
   count: number;
 };
 
+export type RevenueBreakdownRow = {
+  name: string;
+  total: number;
+  count: number;
+};
+
+export type RevenuePeriodKey = "thisMonth" | "thisQuarter" | "thisYear" | "previousYear";
+
+export type RevenuePeriodSnapshot = {
+  sales: RevenuePeriodSummary;
+  purchases: RevenuePeriodSummary;
+  sellerTotals: RevenueBreakdownRow[];
+  purchaseCompanyTotals: RevenueBreakdownRow[];
+};
+
 export type RevenueSnapshot = {
-  source: RevenueSource;
-  currentMonth: RevenuePeriodSummary;
-  currentYear: RevenuePeriodSummary;
-  previousYear: RevenuePeriodSummary;
   available: boolean;
+  periods: Record<RevenuePeriodKey, RevenuePeriodSnapshot>;
 };
 
 export type DashboardSnapshot = {
@@ -29,6 +39,7 @@ export type DashboardSalesOrderSummary = {
   id: string;
   sales_order_no: string;
   customer_name: string | null;
+  seller_company: string | null;
   status: string | null;
   quote_date: string | null;
   currency: string | null;
@@ -38,72 +49,173 @@ export type DashboardSalesOrderSummary = {
   portal_seen_at: string | null;
 };
 
-function buildEmptyRevenue(source: RevenueSource, available: boolean): RevenueSnapshot {
+function buildEmptyPeriodSnapshot(): RevenuePeriodSnapshot {
   return {
-    source,
-    available,
-    currentMonth: { total: 0, count: 0 },
-    currentYear: { total: 0, count: 0 },
-    previousYear: { total: 0, count: 0 },
+    sales: { total: 0, count: 0 },
+    purchases: { total: 0, count: 0 },
+    sellerTotals: [],
+    purchaseCompanyTotals: [],
   };
+}
+
+function buildEmptyRevenue(available: boolean): RevenueSnapshot {
+  return {
+    available,
+    periods: {
+      thisMonth: buildEmptyPeriodSnapshot(),
+      thisQuarter: buildEmptyPeriodSnapshot(),
+      thisYear: buildEmptyPeriodSnapshot(),
+      previousYear: buildEmptyPeriodSnapshot(),
+    },
+  };
+}
+
+function ensureBreakdownRow(map: Map<string, RevenueBreakdownRow>, name: string) {
+  const key = String(name || "Unassigned").trim() || "Unassigned";
+  const existing = map.get(key);
+  if (existing) return existing;
+  const row = { name: key, total: 0, count: 0 };
+  map.set(key, row);
+  return row;
 }
 
 async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
+  const currentQuarter = Math.floor(currentMonth / 3);
   const previousYear = currentYear - 1;
   const startDate = `${previousYear}-01-01`;
-  const snapshot = buildEmptyRevenue("quotes", true);
-  const quoteMap = new Map<string, string>();
-  let from = 0;
-  const pageSize = 1000;
+  const snapshot = buildEmptyRevenue(true);
+  const sellerMaps = {
+    thisMonth: new Map<string, RevenueBreakdownRow>(),
+    thisQuarter: new Map<string, RevenueBreakdownRow>(),
+    thisYear: new Map<string, RevenueBreakdownRow>(),
+    previousYear: new Map<string, RevenueBreakdownRow>(),
+  } satisfies Record<RevenuePeriodKey, Map<string, RevenueBreakdownRow>>;
+  const purchaseCompanyMaps = {
+    thisMonth: new Map<string, RevenueBreakdownRow>(),
+    thisQuarter: new Map<string, RevenueBreakdownRow>(),
+    thisYear: new Map<string, RevenueBreakdownRow>(),
+    previousYear: new Map<string, RevenueBreakdownRow>(),
+  } satisfies Record<RevenuePeriodKey, Map<string, RevenueBreakdownRow>>;
 
-  while (true) {
-    const { data, error } = await supabaseClient
-      .from("sales_orders")
-      .select("id,quote_date,sales_total")
-      .gte("quote_date", startDate)
-      .order("quote_date", { ascending: false })
-      .range(from, from + pageSize - 1);
+  async function accumulateSalesOrders() {
+    let from = 0;
+    const pageSize = 1000;
 
-    if (error) {
-      throw new Error(error.message || "Revenue analytics load failed");
-    }
+    while (true) {
+      const { data, error } = await supabaseClient
+        .from("sales_orders")
+        .select("quote_date,sales_total,seller_company")
+        .gte("quote_date", startDate)
+        .order("quote_date", { ascending: false })
+        .range(from, from + pageSize - 1);
 
-    const batch = (data || []) as Array<{ id: string; quote_date: string | null; sales_total: number | null }>;
-    for (const row of batch) {
-      if (row.id && row.quote_date) quoteMap.set(row.id, JSON.stringify({ quote_date: row.quote_date, sales_total: Number(row.sales_total || 0) }));
-    }
-    if (batch.length < pageSize) break;
-    from += pageSize;
-  }
-
-  const quoteIds = [...quoteMap.keys()];
-  if (!quoteIds.length) return snapshot;
-
-  for (const quoteId of quoteIds) {
-    const raw = quoteMap.get(quoteId);
-    if (!raw) continue;
-    const record = JSON.parse(raw) as { quote_date: string; sales_total: number };
-    const date = new Date(record.quote_date);
-    if (Number.isNaN(date.getTime())) continue;
-    const total = Number(record.sales_total || 0);
-    const year = date.getFullYear();
-    const month = date.getMonth();
-
-    if (year === currentYear) {
-      snapshot.currentYear.total += total;
-      snapshot.currentYear.count += 1;
-      if (month === currentMonth) {
-        snapshot.currentMonth.total += total;
-        snapshot.currentMonth.count += 1;
+      if (error) {
+        throw new Error(error.message || "Revenue analytics load failed");
       }
-    } else if (year === previousYear) {
-      snapshot.previousYear.total += total;
-      snapshot.previousYear.count += 1;
+
+      const batch = (data || []) as Array<{
+        quote_date: string | null;
+        sales_total: number | null;
+        seller_company: string | null;
+      }>;
+
+      batch.forEach((row) => {
+        if (!row.quote_date) return;
+        const date = new Date(row.quote_date);
+        if (Number.isNaN(date.getTime())) return;
+        const total = Number(row.sales_total || 0);
+        const sellerName = row.seller_company || "Unassigned";
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const quarter = Math.floor(month / 3);
+
+        function apply(period: RevenuePeriodKey) {
+          snapshot.periods[period].sales.total += total;
+          snapshot.periods[period].sales.count += 1;
+          const bucket = ensureBreakdownRow(sellerMaps[period], sellerName);
+          bucket.total += total;
+          bucket.count += 1;
+        }
+
+        if (year === currentYear) {
+          apply("thisYear");
+          if (quarter === currentQuarter) apply("thisQuarter");
+          if (month === currentMonth) apply("thisMonth");
+        } else if (year === previousYear) {
+          apply("previousYear");
+        }
+      });
+
+      if (batch.length < pageSize) break;
+      from += pageSize;
     }
   }
+
+  async function accumulatePurchaseOrders() {
+    let from = 0;
+    const pageSize = 1000;
+
+    while (true) {
+      const { data, error } = await supabaseClient
+        .from("purchase_orders")
+        .select("created_at,total_amount,purchase_company")
+        .gte("created_at", `${startDate}T00:00:00`)
+        .order("created_at", { ascending: false })
+        .range(from, from + pageSize - 1);
+
+      if (error) {
+        throw new Error(error.message || "Purchase analytics load failed");
+      }
+
+      const batch = (data || []) as Array<{
+        created_at: string | null;
+        total_amount: number | null;
+        purchase_company: string | null;
+      }>;
+
+      batch.forEach((row) => {
+        if (!row.created_at) return;
+        const date = new Date(row.created_at);
+        if (Number.isNaN(date.getTime())) return;
+        const total = Number(row.total_amount || 0);
+        const purchaseCompany = row.purchase_company || "Unassigned";
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const quarter = Math.floor(month / 3);
+
+        function apply(period: RevenuePeriodKey) {
+          snapshot.periods[period].purchases.total += total;
+          snapshot.periods[period].purchases.count += 1;
+          const bucket = ensureBreakdownRow(purchaseCompanyMaps[period], purchaseCompany);
+          bucket.total += total;
+          bucket.count += 1;
+        }
+
+        if (year === currentYear) {
+          apply("thisYear");
+          if (quarter === currentQuarter) apply("thisQuarter");
+          if (month === currentMonth) apply("thisMonth");
+        } else if (year === previousYear) {
+          apply("previousYear");
+        }
+      });
+
+      if (batch.length < pageSize) break;
+      from += pageSize;
+    }
+  }
+
+  await Promise.all([accumulateSalesOrders(), accumulatePurchaseOrders()]);
+
+  (Object.keys(snapshot.periods) as RevenuePeriodKey[]).forEach((period) => {
+    snapshot.periods[period].sales.total = Number(snapshot.periods[period].sales.total.toFixed(2));
+    snapshot.periods[period].purchases.total = Number(snapshot.periods[period].purchases.total.toFixed(2));
+    snapshot.periods[period].sellerTotals = [...sellerMaps[period].values()].sort((a, b) => b.total - a.total);
+    snapshot.periods[period].purchaseCompanyTotals = [...purchaseCompanyMaps[period].values()].sort((a, b) => b.total - a.total);
+  });
 
   return snapshot;
 }
@@ -119,7 +231,7 @@ async function fetchTableCount(table: "catalog_products" | "brands" | "suppliers
 export async function fetchDashboardLatestQuotes(): Promise<DashboardSalesOrderSummary[]> {
   const { data, error } = await supabaseClient
     .from("sales_orders")
-    .select("id,sales_order_no,quote_date,customer_name,status,currency,sales_total,source_channel,portal_submitted_at,portal_seen_at,updated_at")
+    .select("id,sales_order_no,quote_date,customer_name,seller_company,status,currency,sales_total,source_channel,portal_submitted_at,portal_seen_at,updated_at")
     .order("updated_at", { ascending: false })
     .limit(5);
 
@@ -132,6 +244,7 @@ export async function fetchDashboardLatestQuotes(): Promise<DashboardSalesOrderS
     sales_order_no: String(row.sales_order_no || "-"),
     quote_date: (row.quote_date as string | null) || null,
     customer_name: (row.customer_name as string | null) || null,
+    seller_company: (row.seller_company as string | null) || null,
     currency: (row.currency as string | null) || null,
     status: (row.status as string | null) || null,
     sales_total: row.sales_total == null ? null : Number(row.sales_total),
@@ -179,7 +292,7 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
     supplierCount: suppliersResult.status === "fulfilled" ? suppliersResult.value : 0,
     quoteCount: quotesResult.status === "fulfilled" ? quotesResult.value : 0,
     newPortalOrders: portalOrdersResult.status === "fulfilled" ? portalOrdersResult.value : 0,
-    revenue: revenueResult.status === "fulfilled" ? revenueResult.value : buildEmptyRevenue("quotes", false),
+    revenue: revenueResult.status === "fulfilled" ? revenueResult.value : buildEmptyRevenue(false),
     issues,
   };
 }
