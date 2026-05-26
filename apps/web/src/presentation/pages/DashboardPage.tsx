@@ -348,8 +348,8 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
                   ) : null}
                   <span>{quote.status || "-"}</span>
                 </span>
-                <Button variant="secondary" onClick={() => onOpenSalesOrder?.(quote.id)}>
-                  Open Sales Order
+                <Button variant="secondary" className="button--compact" onClick={() => onOpenSalesOrder?.(quote.id)}>
+                  Open
                 </Button>
               </div>
             ))}
