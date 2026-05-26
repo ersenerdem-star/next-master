@@ -73,6 +73,12 @@ const BRAND_STANDARDS = [
     sparetoQuery: "NISSENS",
     sparetoSlug: "nissens",
   },
+  {
+    keys: ["INA"],
+    canonical: "INA",
+    sparetoQuery: "INA",
+    sparetoSlug: "ina",
+  },
 ];
 
 function buildFallbackSlug(value) {

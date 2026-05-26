@@ -31,6 +31,7 @@ export function canonicalizeInternalBrandName(input: string) {
   if (lower === "knorrbremse" || lower === "knorr-bremse") return "Knorr-Bremse";
   if (lower === "fag") return "FAG";
   if (lower === "nissens") return "Nissens";
+  if (lower === "ina") return "INA";
   return value;
 }
 
@@ -59,6 +60,8 @@ export function resolveSparetoBrandQuery(input: string) {
       return "FAG";
     case "Nissens":
       return "NISSENS";
+    case "INA":
+      return "INA";
     default:
       return value.toUpperCase();
   }
@@ -89,6 +92,8 @@ function resolveSparetoBrandSlug(input: string) {
       return "fag";
     case "Nissens":
       return "nissens";
+    case "INA":
+      return "ina";
     default:
       return value
         .normalize("NFKD")
