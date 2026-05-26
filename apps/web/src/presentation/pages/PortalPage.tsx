@@ -645,7 +645,7 @@ export function PortalPage() {
           : `Basket ${latestPortalDraft.sales_order_no || latestPortalDraft.id} loaded.`
         : "",
     );
-    setOrderSearchBrand((current) => current || snapshot.availableBrands[0] || "");
+    setOrderSearchBrand((current) => (current && snapshot.availableBrands.includes(current) ? current : ""));
   }, [snapshot]);
 
   useEffect(() => {
