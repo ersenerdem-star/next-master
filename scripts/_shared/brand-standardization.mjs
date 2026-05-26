@@ -91,6 +91,12 @@ const BRAND_STANDARDS = [
     sparetoQuery: "VALEO",
     sparetoSlug: "valeo",
   },
+  {
+    keys: ["HEPU"],
+    canonical: "HEPU",
+    sparetoQuery: "HEPU",
+    sparetoSlug: "hepu",
+  },
 ];
 
 function buildFallbackSlug(value) {

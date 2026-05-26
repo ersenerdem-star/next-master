@@ -34,6 +34,7 @@ export function canonicalizeInternalBrandName(input: string) {
   if (lower === "ina") return "INA";
   if (lower === "donaldson") return "Donaldson";
   if (lower === "valeo") return "Valeo";
+  if (lower === "hepu") return "HEPU";
   return value;
 }
 
@@ -68,6 +69,8 @@ export function resolveSparetoBrandQuery(input: string) {
       return "DONALDSON";
     case "Valeo":
       return "VALEO";
+    case "HEPU":
+      return "HEPU";
     default:
       return value.toUpperCase();
   }
@@ -104,6 +107,8 @@ function resolveSparetoBrandSlug(input: string) {
       return "donaldson";
     case "Valeo":
       return "valeo";
+    case "HEPU":
+      return "hepu";
     default:
       return value
         .normalize("NFKD")
