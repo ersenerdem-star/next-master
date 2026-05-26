@@ -19,6 +19,7 @@ import { downloadCsv, toCsv } from "../../shared/csv";
 import { fetchWarehouseStockItems } from "../../infrastructure/api/inventoryApi";
 import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
 import { includesLooseText } from "../../domain/shared/normalize";
+import { buildEntityAlias } from "../../shared/entityAlias";
 
 type DashboardPageProps = {
   onOpenSalesOrder?: (salesOrderId: string) => void;
@@ -47,41 +48,6 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
   const [brandSummarySearch, setBrandSummarySearch] = useState("");
   const [brandSummarySupplier, setBrandSummarySupplier] = useState("");
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriodKey>("thisMonth");
-
-  function buildEntityAlias(value: string | null | undefined) {
-    const source = String(value || "").trim();
-    if (!source) return "-";
-
-    const rawTokens = source.split(/\s+/).filter(Boolean);
-    const stopWords = new Set([
-      "sanayi",
-      "ticaret",
-      "limited",
-      "ltd",
-      "ltd.",
-      "sti",
-      "şti",
-      "sirketi",
-      "şirketi",
-      "otomotiv",
-      "ve",
-      "co",
-      "co.",
-      "company",
-      "gmbh",
-      "sro",
-      "s.r.o.",
-      "llc",
-      "inc",
-      "corp",
-      "bv",
-      "ag",
-    ]);
-
-    const significantTokens = rawTokens.filter((token) => !stopWords.has(token.toLowerCase()));
-    const aliasTokens = (significantTokens.length >= 2 ? significantTokens : rawTokens).slice(0, 2);
-    return aliasTokens.join(" ");
-  }
 
   useEffect(() => {
     let cancelled = false;
@@ -337,11 +303,15 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
           {latestQuotesError ? <div className="error-text">{latestQuotesError}</div> : null}
           <div className="list-stack">
             {latestQuotes.map((quote) => (
-              <div key={quote.id} className="list-row">
+              <div key={quote.id} className="list-row list-row--dashboard">
                 <strong>{quote.sales_order_no || quote.id}</strong>
-                <span className="dashboard-order-meta">
-                  <span title={quote.customer_name || "-"}>{buildEntityAlias(quote.customer_name)}</span>
-                  <span title={quote.seller_company || "-"}>{buildEntityAlias(quote.seller_company)}</span>
+                <span className="dashboard-order-party">
+                  <span className="dashboard-order-party__item" title={quote.customer_name || "-"}>
+                    {buildEntityAlias(quote.customer_name)}
+                  </span>
+                  <span className="dashboard-order-party__item" title={quote.seller_company || "-"}>
+                    {buildEntityAlias(quote.seller_company)}
+                  </span>
                 </span>
                 <span className="dashboard-order-meta">
                   {quote.source_channel === "portal" && quote.portal_submitted_at && !quote.portal_seen_at ? (

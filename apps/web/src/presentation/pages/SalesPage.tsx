@@ -19,6 +19,7 @@ import { Select } from "../components/common/Select";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 import { BrandPill } from "../components/common/BrandPill";
+import { buildEntityAlias } from "../../shared/entityAlias";
 
 type SalesPageProps = {
   selectedSalesOrderId?: string;
@@ -108,45 +109,6 @@ export function SalesPage({
       profit_total: profitTotal,
       margin_percent: marginPercent,
     };
-  }
-
-  function buildEntityAlias(value: string) {
-    const normalized = String(value || "").trim();
-    if (!normalized) return "-";
-
-    const rawTokens = normalized.split(/\s+/).filter(Boolean);
-    if (rawTokens.length <= 2) return normalized;
-
-    const stopWords = new Set([
-      "ltd",
-      "ltd.",
-      "limited",
-      "sti",
-      "şti",
-      "sti.",
-      "şti.",
-      "sanayi",
-      "ticaret",
-      "otomotiv",
-      "dis",
-      "dış",
-      "ve",
-      "co",
-      "co.",
-      "company",
-      "gmbh",
-      "sro",
-      "s.r.o.",
-      "llc",
-      "inc",
-      "corp",
-      "bv",
-      "ag",
-    ]);
-
-    const significantTokens = rawTokens.filter((token) => !stopWords.has(token.toLowerCase()));
-    const aliasTokens = (significantTokens.length >= 2 ? significantTokens : rawTokens).slice(0, 2);
-    return aliasTokens.join(" ");
   }
 
   function buildInvoiceBrandSummary(lines: LocalInvoice["lines"]) {
