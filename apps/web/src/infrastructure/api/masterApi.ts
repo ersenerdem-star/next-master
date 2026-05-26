@@ -1,5 +1,5 @@
 import { supabaseClient } from "./supabaseClient";
-import { isCodeLikeSearch, normalizePartCode } from "../../domain/shared/normalize";
+import { normalizePartCode } from "../../domain/shared/normalize";
 import type { MasterRow } from "../../types/master";
 
 type MasterParams = {
@@ -38,6 +38,23 @@ type SupplierPriceLookupRow = {
   notes: string | null;
   suppliers?: { name?: string | null } | null;
 };
+
+function buildMasterSearchOr(rawSearch: string, normalizedSearch: string) {
+  const clauses = [
+    `product_code.ilike.%${rawSearch}%`,
+    `description.ilike.%${rawSearch}%`,
+    `oem_no.ilike.%${rawSearch}%`,
+  ];
+  if (normalizedSearch.length >= 3) {
+    clauses.push(
+      `normalized_code.eq.${normalizedSearch}`,
+      `normalized_oem.eq.${normalizedSearch}`,
+      `normalized_code.like.%${normalizedSearch}%`,
+      `normalized_oem.like.%${normalizedSearch}%`,
+    );
+  }
+  return clauses.join(",");
+}
 
 async function getCurrentOrgId() {
   const { data: authData, error: authError } = await supabaseClient.auth.getUser();
@@ -103,7 +120,6 @@ async function fetchCatalogMasterBaseRows(input: {
   const to = from + pageSize - 1;
   const rawSearch = input.search.trim();
   const normalizedSearch = normalizePartCode(rawSearch);
-  const searchIsCode = isCodeLikeSearch(rawSearch) && normalizedSearch.length >= 3;
 
   let query = supabaseClient
     .from("catalog_products")
@@ -114,11 +130,7 @@ async function fetchCatalogMasterBaseRows(input: {
     .range(from, to);
 
   if (rawSearch) {
-    query = searchIsCode
-      ? query.or(
-          `normalized_code.eq.${normalizedSearch},normalized_oem.eq.${normalizedSearch},normalized_code.like.%${normalizedSearch}%,normalized_oem.like.%${normalizedSearch}%`,
-        )
-      : query.or(`product_code.ilike.%${rawSearch}%,description.ilike.%${rawSearch}%,oem_no.ilike.%${rawSearch}%`);
+    query = query.or(buildMasterSearchOr(rawSearch, normalizedSearch));
   }
 
   const { data, error, count } = await query;

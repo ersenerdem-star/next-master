@@ -1,12 +1,29 @@
 import type { CatalogRow } from "../../types/catalog";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
-import { isCodeLikeSearch, normalizePartCode } from "../../domain/shared/normalize";
+import { normalizePartCode } from "../../domain/shared/normalize";
 import { supabaseClient } from "./supabaseClient";
 
 const CATALOG_SELECT_WITH_IMAGE =
   "id,product_code,image_url,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note";
 const CATALOG_SELECT_NO_IMAGE =
   "id,product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note";
+
+function buildCatalogSearchOr(search: string, normalizedSearch: string) {
+  const clauses = [
+    `product_code.ilike.%${search}%`,
+    `description.ilike.%${search}%`,
+    `oem_no.ilike.%${search}%`,
+  ];
+  if (normalizedSearch.length >= 3) {
+    clauses.push(
+      `normalized_code.eq.${normalizedSearch}`,
+      `normalized_oem.eq.${normalizedSearch}`,
+      `normalized_code.like.%${normalizedSearch}%`,
+      `normalized_oem.like.%${normalizedSearch}%`,
+    );
+  }
+  return clauses.join(",");
+}
 
 function isMissingCatalogImageError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
@@ -87,7 +104,6 @@ export async function fetchCloudCatalog(input: {
 
     const search = input.search.trim();
     const normalizedSearch = normalizePartCode(search);
-    const searchIsCode = isCodeLikeSearch(search) && normalizedSearch.length >= 3;
     const buildQuery = (selectClause: string) => {
       let query = supabaseClient
         .from("catalog_products")
@@ -97,11 +113,7 @@ export async function fetchCloudCatalog(input: {
         .range(from, to);
 
       if (search) {
-        query = searchIsCode
-          ? query.or(
-              `normalized_code.eq.${normalizedSearch},normalized_oem.eq.${normalizedSearch},normalized_code.like.%${normalizedSearch}%,normalized_oem.like.%${normalizedSearch}%`,
-            )
-          : query.or(`product_code.ilike.%${search}%,description.ilike.%${search}%,oem_no.ilike.%${search}%`);
+        query = query.or(buildCatalogSearchOr(search, normalizedSearch));
       }
 
       return query;
@@ -273,7 +285,6 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
   while (true) {
     const search = input.search?.trim();
     const normalizedSearch = normalizePartCode(search || "");
-    const searchIsCode = isCodeLikeSearch(search || "") && normalizedSearch.length >= 3;
     const buildQuery = (selectClause: string) => {
       let query = supabaseClient
         .from("catalog_products")
@@ -283,11 +294,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
         .range(from, from + pageSize - 1);
 
       if (search) {
-        query = searchIsCode
-          ? query.or(
-              `normalized_code.eq.${normalizedSearch},normalized_oem.eq.${normalizedSearch},normalized_code.like.%${normalizedSearch}%,normalized_oem.like.%${normalizedSearch}%`,
-            )
-          : query.or(`product_code.ilike.%${search}%,description.ilike.%${search}%,oem_no.ilike.%${search}%`);
+        query = query.or(buildCatalogSearchOr(search, normalizedSearch));
       }
 
       return query;

@@ -98,6 +98,24 @@ function normalizePartCode(value: string) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+function buildPortalCatalogSearchOr(search: string, normalizedSearch: string) {
+  const escaped = search.replace(/[%*(),]/g, " ").trim();
+  const clauses = [
+    `product_code.ilike.*${escaped}*`,
+    `description.ilike.*${escaped}*`,
+    `oem_no.ilike.*${escaped}*`,
+  ];
+  if (normalizedSearch.length >= 3) {
+    clauses.push(
+      `normalized_code.eq.${normalizedSearch}`,
+      `normalized_oem.eq.${normalizedSearch}`,
+      `normalized_code.like.*${normalizedSearch}*`,
+      `normalized_oem.like.*${normalizedSearch}*`,
+    );
+  }
+  return `(${clauses.join(",")})`;
+}
+
 function normalizeLifecycleStatus(value: unknown): "active" | "discontinued" {
   return String(value || "").trim().toLowerCase() === "discontinued" ? "discontinued" : "active";
 }
@@ -278,10 +296,7 @@ export async function searchPortalCatalog(
 
   if (selectedBrandId) params.brand_id = `eq.${selectedBrandId}`;
   if (search) {
-    const escaped = search.replace(/[%*(),]/g, " ").trim();
-    params.or = normalizedSearch
-      ? `(normalized_code.eq.${normalizedSearch},normalized_oem.eq.${normalizedSearch},product_code.ilike.*${escaped}*,description.ilike.*${escaped}*,oem_no.ilike.*${escaped}*)`
-      : `(product_code.ilike.*${escaped}*,description.ilike.*${escaped}*,oem_no.ilike.*${escaped}*)`;
+    params.or = buildPortalCatalogSearchOr(search, normalizedSearch);
   }
 
   const rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", params);
