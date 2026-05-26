@@ -29,6 +29,16 @@ import { Select } from "../components/common/Select";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 
+type PurchaseWorkbenchViewMode = "simple" | "advanced";
+
+const PURCHASE_ORDER_WORKBENCH_VIEW_KEY = "purchase-order-workbench-view-mode";
+const BILL_WORKBENCH_VIEW_KEY = "bill-workbench-view-mode";
+
+function readStoredPurchaseWorkbenchViewMode(key: string): PurchaseWorkbenchViewMode {
+  if (typeof window === "undefined") return "simple";
+  return window.localStorage.getItem(key) === "advanced" ? "advanced" : "simple";
+}
+
 function formatMoney(value: number, currency = "EUR") {
   return `${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
@@ -118,6 +128,10 @@ export function PurchasesPage({
   const [vendors, setVendors] = useState<LocalVendor[]>([]);
   const [printingPurchaseOrder, setPrintingPurchaseOrder] = useState(false);
   const [printingBill, setPrintingBill] = useState(false);
+  const [purchaseWorkbenchViewMode, setPurchaseWorkbenchViewMode] = useState<PurchaseWorkbenchViewMode>(() => readStoredPurchaseWorkbenchViewMode(PURCHASE_ORDER_WORKBENCH_VIEW_KEY));
+  const [billWorkbenchViewMode, setBillWorkbenchViewMode] = useState<PurchaseWorkbenchViewMode>(() => readStoredPurchaseWorkbenchViewMode(BILL_WORKBENCH_VIEW_KEY));
+  const [selectedPurchaseLineIndex, setSelectedPurchaseLineIndex] = useState(0);
+  const [selectedBillLineIndex, setSelectedBillLineIndex] = useState(0);
   const [purchaseOrderResyncOnlyFillBlanks, setPurchaseOrderResyncOnlyFillBlanks] = useState(true);
   const [purchaseOrderResyncKeepPrices, setPurchaseOrderResyncKeepPrices] = useState(true);
   const [resyncingPurchaseOrder, setResyncingPurchaseOrder] = useState(false);
@@ -261,6 +275,36 @@ export function PurchasesPage({
     setPaymentMadeDraft({ ...current });
   }, [paymentsMade, selectedPaymentMadeId]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(PURCHASE_ORDER_WORKBENCH_VIEW_KEY, purchaseWorkbenchViewMode);
+  }, [purchaseWorkbenchViewMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(BILL_WORKBENCH_VIEW_KEY, billWorkbenchViewMode);
+  }, [billWorkbenchViewMode]);
+
+  useEffect(() => {
+    if (!purchaseOrderDraft?.lines.length) {
+      setSelectedPurchaseLineIndex(0);
+      return;
+    }
+    if (selectedPurchaseLineIndex >= purchaseOrderDraft.lines.length) {
+      setSelectedPurchaseLineIndex(0);
+    }
+  }, [purchaseOrderDraft, selectedPurchaseLineIndex]);
+
+  useEffect(() => {
+    if (!billDraft?.lines.length) {
+      setSelectedBillLineIndex(0);
+      return;
+    }
+    if (selectedBillLineIndex >= billDraft.lines.length) {
+      setSelectedBillLineIndex(0);
+    }
+  }, [billDraft, selectedBillLineIndex]);
+
   const purchaseOrderColumns = useMemo(
     () => [
       { key: "po", header: "PO No", render: (row: LocalPurchaseOrder) => row.id },
@@ -303,6 +347,9 @@ export function PurchasesPage({
     ],
     [],
   );
+
+  const selectedPurchaseLine = purchaseOrderDraft?.lines[selectedPurchaseLineIndex] || null;
+  const selectedBillLine = billDraft?.lines[selectedBillLineIndex] || null;
 
   const billCountByPurchaseOrderId = useMemo(() => {
     const map = new Map<string, number>();
@@ -1004,94 +1051,149 @@ export function PurchasesPage({
                   />
                 </div>
 
-                <table className="simple-edit-table">
-                  <thead>
-                    <tr>
-                      <th>Code</th>
-                      <th>Description</th>
-                      <th>Qty</th>
-                      <th>Stock</th>
-                      <th>Buy Price</th>
-                      <th>Line Total</th>
-                      <th>Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {purchaseOrderDraft.lines.map((line, index) => (
-                      <tr key={`${line.product_code}-${index}`}>
-                        <td>{line.product_code}</td>
-                        <td>{line.description || "-"}</td>
-                        <td>
-                          <input
-                            className="inline-edit-input inline-edit-input--qty"
-                            type="number"
-                            min={1}
-                            step={1}
-                            value={line.qty}
-                            onChange={(event) =>
-                              setPurchaseOrderDraft((current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      lines: current.lines.map((item, itemIndex) =>
-                                        itemIndex === index ? { ...item, qty: Math.max(1, Number(event.target.value || 1) || 1) } : item,
-                                      ),
-                                    }
-                                  : current,
-                              )
-                            }
-                          />
-                        </td>
-                        <td>
-                          {renderInventoryAvailabilityBadge(inventoryAvailabilityLookup, {
-                            brand: line.brand,
-                            qty: Number(line.qty || 0) || 0,
-                            productCode: line.product_code,
-                            oldCode: line.old_code,
-                          })}
-                        </td>
-                        <td>
-                          <input
-                            className="inline-edit-input inline-edit-input--money"
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={line.buy_price}
-                            onChange={(event) =>
-                              setPurchaseOrderDraft((current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      lines: current.lines.map((item, itemIndex) =>
-                                        itemIndex === index ? { ...item, buy_price: Number(event.target.value || 0) } : item,
-                                      ),
-                                    }
-                                  : current,
-                              )
-                            }
-                          />
-                        </td>
-                        <td>{formatMoney((Number(line.buy_price || 0) || 0) * (Number(line.qty || 0) || 0), purchaseOrderDraft.currency)}</td>
-                        <td>
-                          <input
-                            className="inline-edit-input"
-                            value={line.notes}
-                            onChange={(event) =>
-                              setPurchaseOrderDraft((current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      lines: current.lines.map((item, itemIndex) => (itemIndex === index ? { ...item, notes: event.target.value } : item)),
-                                    }
-                                  : current,
-                              )
-                            }
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="workbench-controls workbench-controls--compact">
+                  <div className="segmented-control">
+                    <button
+                      type="button"
+                      className={`segmented-control__item${purchaseWorkbenchViewMode === "simple" ? " active" : ""}`}
+                      onClick={() => setPurchaseWorkbenchViewMode("simple")}
+                    >
+                      Simple View
+                    </button>
+                    <button
+                      type="button"
+                      className={`segmented-control__item${purchaseWorkbenchViewMode === "advanced" ? " active" : ""}`}
+                      onClick={() => setPurchaseWorkbenchViewMode("advanced")}
+                    >
+                      Advanced View
+                    </button>
+                  </div>
+                </div>
+
+                <div className="workbench-main-layout">
+                  <div className="workbench-main-layout__table">
+                    <table className="simple-edit-table">
+                      <thead>
+                        <tr>
+                          <th>Code</th>
+                          <th>Description</th>
+                          <th>Qty</th>
+                          <th>Stock</th>
+                          <th>Buy Price</th>
+                          <th>Line Total</th>
+                          <th>Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {purchaseOrderDraft.lines.map((line, index) => (
+                          <tr
+                            key={`${line.product_code}-${index}`}
+                            className={index === selectedPurchaseLineIndex ? "data-table__row--active" : ""}
+                            onClick={() => setSelectedPurchaseLineIndex(index)}
+                          >
+                            <td>{line.product_code}</td>
+                            <td>{line.description || "-"}</td>
+                            <td>
+                              <input
+                                className="inline-edit-input inline-edit-input--qty"
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={line.qty}
+                                onChange={(event) =>
+                                  setPurchaseOrderDraft((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          lines: current.lines.map((item, itemIndex) =>
+                                            itemIndex === index ? { ...item, qty: Math.max(1, Number(event.target.value || 1) || 1) } : item,
+                                          ),
+                                        }
+                                      : current,
+                                  )
+                                }
+                              />
+                            </td>
+                            <td>
+                              {renderInventoryAvailabilityBadge(inventoryAvailabilityLookup, {
+                                brand: line.brand,
+                                qty: Number(line.qty || 0) || 0,
+                                productCode: line.product_code,
+                                oldCode: line.old_code,
+                              })}
+                            </td>
+                            <td>
+                              <input
+                                className="inline-edit-input inline-edit-input--money"
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                value={line.buy_price}
+                                onChange={(event) =>
+                                  setPurchaseOrderDraft((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          lines: current.lines.map((item, itemIndex) =>
+                                            itemIndex === index ? { ...item, buy_price: Number(event.target.value || 0) } : item,
+                                          ),
+                                        }
+                                      : current,
+                                  )
+                                }
+                              />
+                            </td>
+                            <td>{formatMoney((Number(line.buy_price || 0) || 0) * (Number(line.qty || 0) || 0), purchaseOrderDraft.currency)}</td>
+                            <td>
+                              <input
+                                className="inline-edit-input"
+                                value={line.notes}
+                                onChange={(event) =>
+                                  setPurchaseOrderDraft((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          lines: current.lines.map((item, itemIndex) => (itemIndex === index ? { ...item, notes: event.target.value } : item)),
+                                        }
+                                      : current,
+                                  )
+                                }
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <aside className="workbench-detail-panel">
+                    <div className="workbench-detail-panel__eyebrow">Selected PO Line</div>
+                    {selectedPurchaseLine ? (
+                      <>
+                        <div className="workbench-detail-panel__title">{selectedPurchaseLine.product_code || "-"}</div>
+                        <div className="document-marks document-marks--compact">
+                          <span className="mark-badge">{selectedPurchaseLine.brand || "No brand"}</span>
+                        </div>
+                        <div className="workbench-detail-list">
+                          <div><span>Description</span><strong>{selectedPurchaseLine.description || "-"}</strong></div>
+                          <div><span>Quantity</span><strong>{selectedPurchaseLine.qty}</strong></div>
+                          <div><span>Supplier</span><strong>{selectedPurchaseLine.supplier_name || "-"}</strong></div>
+                          <div><span>Buy</span><strong>{formatMoney(selectedPurchaseLine.buy_price, purchaseOrderDraft.currency)}</strong></div>
+                          <div><span>Line Total</span><strong>{formatMoney(selectedPurchaseLine.line_total, purchaseOrderDraft.currency)}</strong></div>
+                          {purchaseWorkbenchViewMode === "advanced" ? (
+                            <>
+                              <div><span>Old Code</span><strong>{selectedPurchaseLine.old_code || "-"}</strong></div>
+                              <div><span>Origin</span><strong>{selectedPurchaseLine.origin || "-"}</strong></div>
+                              <div><span>Sales Order</span><strong>{selectedPurchaseLine.sales_order_no || "-"}</strong></div>
+                            </>
+                          ) : null}
+                        </div>
+                        {selectedPurchaseLine.notes ? <div className="info-text">{selectedPurchaseLine.notes}</div> : null}
+                      </>
+                    ) : (
+                      <div className="empty-state">Select a line to inspect details.</div>
+                    )}
+                  </aside>
+                </div>
 
                 <div className="toolbar toolbar--wrap">
                   <label className="checkbox-field quote-toolbar-checkbox">
@@ -1176,94 +1278,149 @@ export function PurchasesPage({
                   />
                 </div>
 
-                <table className="simple-edit-table">
-                  <thead>
-                    <tr>
-                      <th>Code</th>
-                      <th>Description</th>
-                      <th>Qty</th>
-                      <th>Stock</th>
-                      <th>Buy Price</th>
-                      <th>Line Total</th>
-                      <th>Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {billDraft.lines.map((line, index) => (
-                      <tr key={`${line.product_code}-${index}`}>
-                        <td>{line.product_code}</td>
-                        <td>{line.description || "-"}</td>
-                        <td>
-                          <input
-                            className="inline-edit-input inline-edit-input--qty"
-                            type="number"
-                            min={1}
-                            step={1}
-                            value={line.qty}
-                            onChange={(event) =>
-                              setBillDraft((current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      lines: current.lines.map((item, itemIndex) =>
-                                        itemIndex === index ? { ...item, qty: Math.max(1, Number(event.target.value || 1) || 1) } : item,
-                                      ),
-                                    }
-                                  : current,
-                              )
-                            }
-                          />
-                        </td>
-                        <td>
-                          {renderInventoryAvailabilityBadge(inventoryAvailabilityLookup, {
-                            brand: line.brand,
-                            qty: Number(line.qty || 0) || 0,
-                            productCode: line.product_code,
-                            oldCode: line.old_code,
-                          })}
-                        </td>
-                        <td>
-                          <input
-                            className="inline-edit-input inline-edit-input--money"
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            value={line.buy_price}
-                            onChange={(event) =>
-                              setBillDraft((current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      lines: current.lines.map((item, itemIndex) =>
-                                        itemIndex === index ? { ...item, buy_price: Number(event.target.value || 0) } : item,
-                                      ),
-                                    }
-                                  : current,
-                              )
-                            }
-                          />
-                        </td>
-                        <td>{formatMoney((Number(line.buy_price || 0) || 0) * (Number(line.qty || 0) || 0), billDraft.currency)}</td>
-                        <td>
-                          <input
-                            className="inline-edit-input"
-                            value={line.notes}
-                            onChange={(event) =>
-                              setBillDraft((current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      lines: current.lines.map((item, itemIndex) => (itemIndex === index ? { ...item, notes: event.target.value } : item)),
-                                    }
-                                  : current,
-                              )
-                            }
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="workbench-controls workbench-controls--compact">
+                  <div className="segmented-control">
+                    <button
+                      type="button"
+                      className={`segmented-control__item${billWorkbenchViewMode === "simple" ? " active" : ""}`}
+                      onClick={() => setBillWorkbenchViewMode("simple")}
+                    >
+                      Simple View
+                    </button>
+                    <button
+                      type="button"
+                      className={`segmented-control__item${billWorkbenchViewMode === "advanced" ? " active" : ""}`}
+                      onClick={() => setBillWorkbenchViewMode("advanced")}
+                    >
+                      Advanced View
+                    </button>
+                  </div>
+                </div>
+
+                <div className="workbench-main-layout">
+                  <div className="workbench-main-layout__table">
+                    <table className="simple-edit-table">
+                      <thead>
+                        <tr>
+                          <th>Code</th>
+                          <th>Description</th>
+                          <th>Qty</th>
+                          <th>Stock</th>
+                          <th>Buy Price</th>
+                          <th>Line Total</th>
+                          <th>Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {billDraft.lines.map((line, index) => (
+                          <tr
+                            key={`${line.product_code}-${index}`}
+                            className={index === selectedBillLineIndex ? "data-table__row--active" : ""}
+                            onClick={() => setSelectedBillLineIndex(index)}
+                          >
+                            <td>{line.product_code}</td>
+                            <td>{line.description || "-"}</td>
+                            <td>
+                              <input
+                                className="inline-edit-input inline-edit-input--qty"
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={line.qty}
+                                onChange={(event) =>
+                                  setBillDraft((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          lines: current.lines.map((item, itemIndex) =>
+                                            itemIndex === index ? { ...item, qty: Math.max(1, Number(event.target.value || 1) || 1) } : item,
+                                          ),
+                                        }
+                                      : current,
+                                  )
+                                }
+                              />
+                            </td>
+                            <td>
+                              {renderInventoryAvailabilityBadge(inventoryAvailabilityLookup, {
+                                brand: line.brand,
+                                qty: Number(line.qty || 0) || 0,
+                                productCode: line.product_code,
+                                oldCode: line.old_code,
+                              })}
+                            </td>
+                            <td>
+                              <input
+                                className="inline-edit-input inline-edit-input--money"
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                value={line.buy_price}
+                                onChange={(event) =>
+                                  setBillDraft((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          lines: current.lines.map((item, itemIndex) =>
+                                            itemIndex === index ? { ...item, buy_price: Number(event.target.value || 0) } : item,
+                                          ),
+                                        }
+                                      : current,
+                                  )
+                                }
+                              />
+                            </td>
+                            <td>{formatMoney((Number(line.buy_price || 0) || 0) * (Number(line.qty || 0) || 0), billDraft.currency)}</td>
+                            <td>
+                              <input
+                                className="inline-edit-input"
+                                value={line.notes}
+                                onChange={(event) =>
+                                  setBillDraft((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          lines: current.lines.map((item, itemIndex) => (itemIndex === index ? { ...item, notes: event.target.value } : item)),
+                                        }
+                                      : current,
+                                  )
+                                }
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <aside className="workbench-detail-panel">
+                    <div className="workbench-detail-panel__eyebrow">Selected Bill Line</div>
+                    {selectedBillLine ? (
+                      <>
+                        <div className="workbench-detail-panel__title">{selectedBillLine.product_code || "-"}</div>
+                        <div className="document-marks document-marks--compact">
+                          <span className="mark-badge">{selectedBillLine.brand || "No brand"}</span>
+                        </div>
+                        <div className="workbench-detail-list">
+                          <div><span>Description</span><strong>{selectedBillLine.description || "-"}</strong></div>
+                          <div><span>Quantity</span><strong>{selectedBillLine.qty}</strong></div>
+                          <div><span>Supplier</span><strong>{selectedBillLine.supplier_name || "-"}</strong></div>
+                          <div><span>Buy</span><strong>{formatMoney(selectedBillLine.buy_price, billDraft.currency)}</strong></div>
+                          <div><span>Line Total</span><strong>{formatMoney(selectedBillLine.line_total, billDraft.currency)}</strong></div>
+                          {billWorkbenchViewMode === "advanced" ? (
+                            <>
+                              <div><span>Old Code</span><strong>{selectedBillLine.old_code || "-"}</strong></div>
+                              <div><span>Origin</span><strong>{selectedBillLine.origin || "-"}</strong></div>
+                              <div><span>PO Source</span><strong>{selectedBillLine.purchase_order_no || "-"}</strong></div>
+                            </>
+                          ) : null}
+                        </div>
+                        {selectedBillLine.notes ? <div className="info-text">{selectedBillLine.notes}</div> : null}
+                      </>
+                    ) : (
+                      <div className="empty-state">Select a line to inspect details.</div>
+                    )}
+                  </aside>
+                </div>
 
                 <div className="toolbar toolbar--wrap">
                   <div className="meta-row">

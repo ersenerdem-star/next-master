@@ -71,6 +71,44 @@ const PAYMENT_TERM_OPTIONS = [
   "Net 60",
 ] as const;
 
+type WorkbenchViewMode = "simple" | "advanced";
+type OptionalWorkbenchColumnKey = "origin" | "stock" | "supplierOption" | "supplier" | "buy" | "buyTotal" | "profit" | "margin" | "date";
+
+const QUOTE_WORKBENCH_VIEW_KEY = "quote-workbench-view-mode";
+const QUOTE_WORKBENCH_COLUMNS_KEY = "quote-workbench-columns";
+const DEFAULT_QUOTE_WORKBENCH_COLUMNS: Record<OptionalWorkbenchColumnKey, boolean> = {
+  origin: false,
+  stock: true,
+  supplierOption: false,
+  supplier: false,
+  buy: false,
+  buyTotal: false,
+  profit: false,
+  margin: false,
+  date: false,
+};
+
+function readStoredWorkbenchViewMode(): WorkbenchViewMode {
+  if (typeof window === "undefined") return "simple";
+  const value = window.localStorage.getItem(QUOTE_WORKBENCH_VIEW_KEY);
+  return value === "advanced" ? "advanced" : "simple";
+}
+
+function readStoredWorkbenchColumns() {
+  if (typeof window === "undefined") return DEFAULT_QUOTE_WORKBENCH_COLUMNS;
+  try {
+    const raw = window.localStorage.getItem(QUOTE_WORKBENCH_COLUMNS_KEY);
+    if (!raw) return DEFAULT_QUOTE_WORKBENCH_COLUMNS;
+    const parsed = JSON.parse(raw) as Partial<Record<OptionalWorkbenchColumnKey, boolean>>;
+    return {
+      ...DEFAULT_QUOTE_WORKBENCH_COLUMNS,
+      ...parsed,
+    };
+  } catch {
+    return DEFAULT_QUOTE_WORKBENCH_COLUMNS;
+  }
+}
+
 function toTermSelection(value: string, options: readonly string[]) {
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -479,6 +517,10 @@ export function QuotesPage({
   const [error, setError] = useState("");
   const [searchingQuotes, setSearchingQuotes] = useState(false);
   const [pdfView, setPdfView] = useState(false);
+  const [workbenchViewMode, setWorkbenchViewMode] = useState<WorkbenchViewMode>(() => readStoredWorkbenchViewMode());
+  const [workbenchColumnsOpen, setWorkbenchColumnsOpen] = useState(false);
+  const [workbenchColumnVisibility, setWorkbenchColumnVisibility] = useState<Record<OptionalWorkbenchColumnKey, boolean>>(() => readStoredWorkbenchColumns());
+  const [selectedWorkbenchLineId, setSelectedWorkbenchLineId] = useState("");
 
   const [quoteCode, setQuoteCode] = useState("");
   const [quoteBrand, setQuoteBrand] = useState("");
@@ -723,6 +765,26 @@ export function QuotesPage({
   }, [localSalesOrders]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(QUOTE_WORKBENCH_VIEW_KEY, workbenchViewMode);
+  }, [workbenchViewMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(QUOTE_WORKBENCH_COLUMNS_KEY, JSON.stringify(workbenchColumnVisibility));
+  }, [workbenchColumnVisibility]);
+
+  useEffect(() => {
+    if (!quoteBuilderLines.length) {
+      setSelectedWorkbenchLineId("");
+      return;
+    }
+    if (!quoteBuilderLines.some((line) => line.lineId === selectedWorkbenchLineId)) {
+      setSelectedWorkbenchLineId(quoteBuilderLines[0].lineId);
+    }
+  }, [quoteBuilderLines, selectedWorkbenchLineId]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function run() {
@@ -835,6 +897,24 @@ export function QuotesPage({
   const discontinuedLineCount = useMemo(
     () => quoteBuilderLines.filter((line) => line.lifecycle_status === "discontinued").length,
     [quoteBuilderLines],
+  );
+  const effectiveWorkbenchColumnVisibility = useMemo(
+    () => ({
+      origin: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.origin,
+      stock: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.stock,
+      supplierOption: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.supplierOption,
+      supplier: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.supplier,
+      buy: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.buy,
+      buyTotal: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.buyTotal,
+      profit: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.profit,
+      margin: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.margin,
+      date: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.date,
+    }),
+    [workbenchColumnVisibility, workbenchViewMode],
+  );
+  const selectedWorkbenchLine = useMemo(
+    () => quoteBuilderLines.find((line) => line.lineId === selectedWorkbenchLineId) || null,
+    [quoteBuilderLines, selectedWorkbenchLineId],
   );
 
   useEffect(() => {
@@ -1231,7 +1311,9 @@ export function QuotesPage({
       },
       { key: "brand", header: "Brand", render: (row: QuoteBuilderLine) => row.brand || "-" },
       { key: "name", header: "Description", render: (row: QuoteBuilderLine) => row.description || "-" },
-      { key: "origin", header: "Origin", render: (row: QuoteBuilderLine) => row.origin || "-" },
+      ...(effectiveWorkbenchColumnVisibility.origin
+        ? [{ key: "origin", header: "Origin", render: (row: QuoteBuilderLine) => row.origin || "-" }]
+        : []),
       {
         key: "qty",
         header: "Qty",
@@ -1256,7 +1338,7 @@ export function QuotesPage({
       },
     ] as Array<{ key: string; header: string; render: (row: QuoteBuilderLine) => ReactNode }>;
 
-    if (!pdfView) {
+    if (!pdfView && effectiveWorkbenchColumnVisibility.stock) {
       columns.push({
         key: "stock",
         header: "Stock",
@@ -1268,63 +1350,73 @@ export function QuotesPage({
             requestedCode: row.requestedCode,
           }),
       });
-      columns.push({
-        key: "supplierOption",
-        header: "Purchase Option",
-        render: (row: QuoteBuilderLine) => (
-          <select
-            className="inline-edit-input"
-            value={row.selectedSupplierKey}
-            onChange={(event) => {
-              const nextKey = event.target.value;
-              setQuoteBuilderLines((current) =>
-                current.map((item) => {
-                  if (item.lineId !== row.lineId) return item;
-                  const selected = item.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === nextKey);
-                  if (!selected) return { ...item, selectedSupplierKey: nextKey };
-                  return {
-                    ...item,
-                    selectedSupplierKey: nextKey,
-                    supplier_name: selected.supplier_name || "",
-                    buy_price: selected.buy_price ?? null,
-                    sell_price:
-                      customerType === "C"
-                        ? item.c_sell_price ?? item.sell_price
-                        : selected.buy_price != null
-                          ? roundMoney(Number(selected.buy_price) * (1 + (customerType === "B" ? effectiveMarginB : effectiveMarginA) / 100))
-                          : selected.sell_price ?? null,
-                    price_date: selected.price_date || "",
-                    notes: selected.notes || "",
-                  };
-                }),
-              );
-            }}
-          >
-            {row.supplierOptions.map((option, index) => {
-              const optionKey = `${option.supplier_name}-${index}`;
-              return (
-                <option key={optionKey} value={optionKey}>
-                  {option.supplier_name} | Buy {option.buy_price ?? "-"} | Sell {option.sell_price ?? "-"}
-                </option>
-              );
-            })}
-          </select>
-        ),
-      });
-      columns.push({ key: "supplier", header: "Supplier", render: (row: QuoteBuilderLine) => row.supplier_name || "-" });
-      columns.push({ key: "buy", header: "Buy", render: (row: QuoteBuilderLine) => formatMoney(row.buy_price, currency) });
-      columns.push({ key: "buyTotal", header: "Buy Total", render: (row: QuoteBuilderLine) => formatMoney(roundMoney(toNumber(row.buy_price) * row.qty), currency) });
+      if (effectiveWorkbenchColumnVisibility.supplierOption) {
+        columns.push({
+          key: "supplierOption",
+          header: "Purchase Option",
+          render: (row: QuoteBuilderLine) => (
+            <select
+              className="inline-edit-input"
+              value={row.selectedSupplierKey}
+              onChange={(event) => {
+                const nextKey = event.target.value;
+                setQuoteBuilderLines((current) =>
+                  current.map((item) => {
+                    if (item.lineId !== row.lineId) return item;
+                    const selected = item.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === nextKey);
+                    if (!selected) return { ...item, selectedSupplierKey: nextKey };
+                    return {
+                      ...item,
+                      selectedSupplierKey: nextKey,
+                      supplier_name: selected.supplier_name || "",
+                      buy_price: selected.buy_price ?? null,
+                      sell_price:
+                        customerType === "C"
+                          ? item.c_sell_price ?? item.sell_price
+                          : selected.buy_price != null
+                            ? roundMoney(Number(selected.buy_price) * (1 + (customerType === "B" ? effectiveMarginB : effectiveMarginA) / 100))
+                            : selected.sell_price ?? null,
+                      price_date: selected.price_date || "",
+                      notes: selected.notes || "",
+                    };
+                  }),
+                );
+              }}
+            >
+              {row.supplierOptions.map((option, index) => {
+                const optionKey = `${option.supplier_name}-${index}`;
+                return (
+                  <option key={optionKey} value={optionKey}>
+                    {option.supplier_name} | Buy {option.buy_price ?? "-"} | Sell {option.sell_price ?? "-"}
+                  </option>
+                );
+              })}
+            </select>
+          ),
+        });
+      }
+      if (effectiveWorkbenchColumnVisibility.supplier) {
+        columns.push({ key: "supplier", header: "Supplier", render: (row: QuoteBuilderLine) => row.supplier_name || "-" });
+      }
+      if (effectiveWorkbenchColumnVisibility.buy) {
+        columns.push({ key: "buy", header: "Buy", render: (row: QuoteBuilderLine) => formatMoney(row.buy_price, currency) });
+      }
+      if (effectiveWorkbenchColumnVisibility.buyTotal) {
+        columns.push({ key: "buyTotal", header: "Buy Total", render: (row: QuoteBuilderLine) => formatMoney(roundMoney(toNumber(row.buy_price) * row.qty), currency) });
+      }
     }
 
     columns.push({ key: "sell", header: pdfView ? "Unit Price" : "Sell", render: (row: QuoteBuilderLine) => formatMoney(row.sell_price, currency) });
     columns.push({ key: "sellTotal", header: "Line Total", render: (row: QuoteBuilderLine) => formatMoney(roundMoney(toNumber(row.sell_price) * row.qty), currency) });
 
-    if (!pdfView) {
+    if (!pdfView && effectiveWorkbenchColumnVisibility.profit) {
       columns.push({
         key: "profit",
         header: "Profit",
         render: (row: QuoteBuilderLine) => formatMoney(roundMoney((toNumber(row.sell_price) - toNumber(row.buy_price)) * row.qty), currency),
       });
+    }
+    if (!pdfView && effectiveWorkbenchColumnVisibility.margin) {
       columns.push({
         key: "margin",
         header: "Margin %",
@@ -1334,6 +1426,8 @@ export function QuotesPage({
           return sellTotal > 0 ? `${roundMoney((profit / sellTotal) * 100)}%` : "-";
         },
       });
+    }
+    if (!pdfView && effectiveWorkbenchColumnVisibility.date) {
       columns.push({ key: "date", header: "Price Date", render: (row: QuoteBuilderLine) => formatDate(row.price_date) });
     }
 
@@ -1350,7 +1444,7 @@ export function QuotesPage({
     });
 
     return columns;
-  }, [currency, customerType, pdfView, effectiveMarginA, effectiveMarginB, inventoryAvailabilityLookup]);
+  }, [currency, customerType, pdfView, effectiveMarginA, effectiveMarginB, inventoryAvailabilityLookup, effectiveWorkbenchColumnVisibility]);
 
   const detailColumns = useMemo(() => {
     const columns = [
@@ -2372,10 +2466,73 @@ export function QuotesPage({
               <h2>Sales Order Workbench</h2>
               <p>Purchase options stay visible internally. Switch on PDF View to preview the customer-facing version.</p>
             </div>
-            <label className="quote-pdf-toggle">
-              <span>Show PDF View</span>
-              <input type="checkbox" checked={pdfView} onChange={(event) => setPdfView(event.target.checked)} />
-            </label>
+            <div className="workbench-controls">
+              <div className="segmented-control">
+                <button
+                  type="button"
+                  className={`segmented-control__item${workbenchViewMode === "simple" ? " active" : ""}`}
+                  onClick={() => setWorkbenchViewMode("simple")}
+                >
+                  Simple View
+                </button>
+                <button
+                  type="button"
+                  className={`segmented-control__item${workbenchViewMode === "advanced" ? " active" : ""}`}
+                  onClick={() => setWorkbenchViewMode("advanced")}
+                >
+                  Advanced View
+                </button>
+              </div>
+              {!pdfView ? (
+                <div className="inline-menu-wrap">
+                  <Button variant="secondary" className="button--compact" onClick={() => setWorkbenchColumnsOpen((current) => !current)}>
+                    {workbenchColumnsOpen ? "Hide Columns" : "Columns"}
+                  </Button>
+                  {workbenchColumnsOpen ? (
+                    <div className="inline-menu-card">
+                      {(
+                        [
+                          ["origin", "Origin"],
+                          ["stock", "Stock"],
+                          ["supplierOption", "Purchase Option"],
+                          ["supplier", "Supplier"],
+                          ["buy", "Buy"],
+                          ["buyTotal", "Buy Total"],
+                          ["profit", "Profit"],
+                          ["margin", "Margin %"],
+                          ["date", "Price Date"],
+                        ] as Array<[OptionalWorkbenchColumnKey, string]>
+                      ).map(([key, label]) => (
+                        <label key={key} className="checkbox-field">
+                          <input
+                            type="checkbox"
+                            checked={workbenchColumnVisibility[key]}
+                            onChange={(event) =>
+                              setWorkbenchColumnVisibility((current) => ({
+                                ...current,
+                                [key]: event.target.checked,
+                              }))
+                            }
+                          />
+                          <span className="field__label">{label}</span>
+                        </label>
+                      ))}
+                      <Button
+                        variant="secondary"
+                        className="button--compact"
+                        onClick={() => setWorkbenchColumnVisibility(DEFAULT_QUOTE_WORKBENCH_COLUMNS)}
+                      >
+                        Reset Columns
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <label className="quote-pdf-toggle">
+                <span>Show PDF View</span>
+                <input type="checkbox" checked={pdfView} onChange={(event) => setPdfView(event.target.checked)} />
+              </label>
+            </div>
           </div>
           <div className="section-card__body">
             <div className="quote-layout-grid">
@@ -2575,7 +2732,57 @@ export function QuotesPage({
                 <DataTable rows={attentionLines} columns={attentionColumns} emptyText="No warning items." />
               </div>
             ) : null}
-            <DataTable rows={quoteBuilderLines} columns={builderColumns} emptyText="No sales order lines yet. Add a product code or import a sales order file." />
+            <div className="workbench-main-layout">
+              <div className="workbench-main-layout__table">
+                <DataTable
+                  rows={quoteBuilderLines}
+                  columns={builderColumns}
+                  emptyText="No sales order lines yet. Add a product code or import a sales order file."
+                  onRowClick={(row) => setSelectedWorkbenchLineId(row.lineId)}
+                  rowClassName={(row) => (row.lineId === selectedWorkbenchLineId ? "data-table__row--active" : "")}
+                />
+              </div>
+              <aside className="workbench-detail-panel">
+                <div className="workbench-detail-panel__eyebrow">Selected Line</div>
+                {selectedWorkbenchLine ? (
+                  <>
+                    <div className="workbench-detail-panel__title">{selectedWorkbenchLine.resolvedCode || selectedWorkbenchLine.requestedCode}</div>
+                    <div className="document-marks document-marks--compact">
+                      <span className="mark-badge">{selectedWorkbenchLine.brand || "No brand"}</span>
+                      {getQuoteBuilderLineIssues(selectedWorkbenchLine).map((issue) => (
+                        <span
+                          key={`${selectedWorkbenchLine.lineId}-${issue}`}
+                          className={`mark-badge ${
+                            issue === "Discontinued"
+                              ? "mark-badge--danger"
+                              : issue === "Replacement"
+                                ? "mark-badge--accent"
+                                : "mark-badge--info"
+                          }`}
+                        >
+                          {issue}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="workbench-detail-list">
+                      <div><span>Description</span><strong>{selectedWorkbenchLine.description || "-"}</strong></div>
+                      <div><span>Requested Code</span><strong>{selectedWorkbenchLine.requestedCode || "-"}</strong></div>
+                      <div><span>Quantity</span><strong>{selectedWorkbenchLine.qty}</strong></div>
+                      <div><span>Origin</span><strong>{selectedWorkbenchLine.origin || "-"}</strong></div>
+                      <div><span>Weight</span><strong>{selectedWorkbenchLine.weight_kg ?? "-"}</strong></div>
+                      <div><span>Supplier</span><strong>{selectedWorkbenchLine.supplier_name || "-"}</strong></div>
+                      <div><span>Buy</span><strong>{formatMoney(selectedWorkbenchLine.buy_price, currency)}</strong></div>
+                      <div><span>Sell</span><strong>{formatMoney(selectedWorkbenchLine.sell_price, currency)}</strong></div>
+                      <div><span>Price Date</span><strong>{formatDate(selectedWorkbenchLine.price_date)}</strong></div>
+                    </div>
+                    {selectedWorkbenchLine.codeChanged ? <div className="warning-text">{selectedWorkbenchLine.codeChangeWarning}</div> : null}
+                    {selectedWorkbenchLine.notes ? <div className="info-text">{selectedWorkbenchLine.notes}</div> : null}
+                  </>
+                ) : (
+                  <div className="empty-state">Select a line to inspect details.</div>
+                )}
+              </aside>
+            </div>
           </div>
         </div>
 
