@@ -349,7 +349,7 @@ export async function searchPortalCatalog(
   const normalizedSearch = normalizePartCode(search);
   const selectedBrandId = brand ? brandMap.byName.get(brand.trim().toLowerCase()) || "" : "";
   const params: Record<string, string> = {
-    select: "product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,lifecycle_status,lifecycle_note",
+    select: "product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
     organization_id: `eq.${invite.organization_id}`,
     order: "product_code.asc",
     limit: "24",
@@ -370,6 +370,8 @@ export async function searchPortalCatalog(
   const baseItems = rows.map((row) => ({
     code: String(row.product_code || ""),
     brand: brandMap.byId.get(String(row.brand_id || "")) || "",
+    brand_id: String(row.brand_id || ""),
+    normalized_code: String(row.normalized_code || normalizePartCode(String(row.product_code || ""))),
     description: String(row.description || ""),
     oem_no: String(row.oem_no || ""),
     tariff: String(row.hs_code || ""),
@@ -382,50 +384,78 @@ export async function searchPortalCatalog(
   if (!baseItems.length) return [];
 
   const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
-  const prepared: PreparedPortalLine[] = [];
-  const previewRows = baseItems.map((item) => ({ code: item.code, brand: item.brand, qty: 1 }));
-  for (let index = 0; index < previewRows.length; index += 8) {
-    const chunk = previewRows.slice(index, index + 8);
-    const resolvedChunk = await Promise.all(chunk.map((row) => resolvePreparedLine(supabaseUrl, serviceRoleKey, row, context)));
-    prepared.push(...resolvedChunk);
-  }
-  if (context.customerType === "C" && prepared.length) {
+  const previewByCode = new Map<
+    string,
+    {
+      sell_price: number | null;
+      supplier_name: string;
+    }
+  >();
+
+  if (context.customerType === "C") {
     const cPriceMap = await fetchCPriceMap(
       supabaseUrl,
       serviceRoleKey,
       invite.organization_id,
       context.cPriceListId,
-      prepared.map((row) => ({
-        brand: row.brand,
-        product_code: row.resolvedCode,
+      baseItems.map((item) => ({
+        brand: item.brand,
+        product_code: item.code,
       })),
     );
-    prepared.forEach((line) => {
-      const value = cPriceMap.get(`${line.brand.trim().toLowerCase()}::${normalizePartCode(line.resolvedCode)}`);
-      line.c_sell_price = value == null ? null : Number(value);
-      line.sell_price = value == null ? line.sell_price : Number(value);
-    });
+    for (const item of baseItems) {
+      const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
+      previewByCode.set(key, {
+        sell_price: cPriceMap.get(key) ?? null,
+        supplier_name: "",
+      });
+    }
+  } else {
+    const itemsByBrand = new Map<string, { brand: string; brandId: string; codes: string[] }>();
+    for (const item of baseItems) {
+      if (!item.brand_id || !item.normalized_code) continue;
+      const current = itemsByBrand.get(item.brand_id) || { brand: item.brand, brandId: item.brand_id, codes: [] };
+      current.codes.push(item.normalized_code);
+      itemsByBrand.set(item.brand_id, current);
+    }
+    await Promise.all(
+      [...itemsByBrand.values()].map(async (group) => {
+        const bestOptionMap = await fetchPortalBestSupplierOptionMap(
+          supabaseUrl,
+          serviceRoleKey,
+          invite.organization_id,
+          group.brandId,
+          [...new Set(group.codes)],
+        );
+        for (const [normalizedCode, bestOption] of bestOptionMap.entries()) {
+          const marginPercent = context.customerType === "B" ? context.effectiveMarginB : context.effectiveMarginA;
+          previewByCode.set(`${group.brand.trim().toLowerCase()}::${normalizedCode}`, {
+            sell_price:
+              bestOption.buy_price == null ? null : roundMoney(Number(bestOption.buy_price) * (1 + marginPercent / 100)),
+            supplier_name: bestOption.supplier_name || "",
+          });
+        }
+      }),
+    );
   }
-  const previewByCode = new Map(prepared.map((line) => [`${line.brand.trim().toLowerCase()}::${normalizePartCode(line.requestedCode || line.resolvedCode)}`, line]));
+
   return baseItems.map((item) => {
-    const preview = previewByCode.get(`${item.brand.trim().toLowerCase()}::${normalizePartCode(item.code)}`);
+    const preview = previewByCode.get(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`);
     return {
       code: item.code,
       brand: item.brand,
-      description: preview?.description || item.description,
-      oem_no: preview?.oem_no || item.oem_no,
-      tariff: preview?.hs_code || item.tariff,
-      origin: preview?.origin || item.origin,
-      weight_kg: preview?.weight_kg ?? item.weight_kg,
-      image_url: preview?.image_url || item.image_url,
+      description: item.description,
+      oem_no: item.oem_no,
+      tariff: item.tariff,
+      origin: item.origin,
+      weight_kg: item.weight_kg,
+      image_url: item.image_url,
       sell_price: preview?.sell_price ?? null,
       currency: context.currency,
       supplier_name: preview?.supplier_name || "",
-      lifecycle_status: preview?.lifecycle_status || item.lifecycle_status,
-      lifecycle_note: preview?.lifecycle_note || item.lifecycle_note,
-      lifecycle_warning:
-        preview?.lifecycle_warning ||
-        (item.lifecycle_status === "discontinued" ? buildDiscontinuedWarning(item.code, item.lifecycle_note) : null),
+      lifecycle_status: item.lifecycle_status,
+      lifecycle_note: item.lifecycle_note,
+      lifecycle_warning: item.lifecycle_status === "discontinued" ? buildDiscontinuedWarning(item.code, item.lifecycle_note) : null,
     };
   });
 }
@@ -561,6 +591,50 @@ async function fetchPortalBestSupplierPriceMap(
       if (current == null || buyPrice < current) {
         bestByCode.set(normalizedCode, buyPrice);
       }
+    }
+  }
+  return bestByCode;
+}
+
+async function fetchPortalBestSupplierOptionMap(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  brandId: string,
+  normalizedCodes: string[],
+) {
+  const bestByCode = new Map<
+    string,
+    {
+      buy_price: number | null;
+      supplier_name: string;
+      price_date: string | null;
+      notes: string | null;
+    }
+  >();
+  for (const chunk of chunkValues(normalizedCodes, 200)) {
+    const supplierRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "supplier_prices", {
+      select: "normalized_code,buy_price,valid_from,notes,suppliers(name)",
+      organization_id: `eq.${organizationId}`,
+      brand_id: `eq.${brandId}`,
+      is_active: "eq.true",
+      buy_price: "not.is.null",
+      normalized_code: `in.(${chunk.join(",")})`,
+      order: "buy_price.asc",
+      limit: "5000",
+    });
+    for (const row of supplierRows) {
+      const normalizedCode = String(row.normalized_code || "");
+      const buyPrice = row.buy_price == null ? null : Number(row.buy_price);
+      if (!normalizedCode || buyPrice == null || !Number.isFinite(buyPrice)) continue;
+      const current = bestByCode.get(normalizedCode);
+      if (current && Number(current.buy_price ?? Number.MAX_SAFE_INTEGER) <= buyPrice) continue;
+      bestByCode.set(normalizedCode, {
+        buy_price: buyPrice,
+        supplier_name: String(row.suppliers?.name || ""),
+        price_date: row.valid_from == null ? null : String(row.valid_from),
+        notes: row.notes == null ? null : String(row.notes),
+      });
     }
   }
   return bestByCode;
