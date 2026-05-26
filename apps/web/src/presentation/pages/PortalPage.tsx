@@ -493,7 +493,6 @@ export function PortalPage() {
       ];
       if (orderDeskView === "advanced") {
         columns.push(
-          { key: "oem", header: "OEM", render: (row: PortalPreparedLine) => row.oem_no || "-" },
           { key: "origin", header: "Origin", render: (row: PortalPreparedLine) => row.origin || "-" },
           { key: "weight", header: "Weight", render: (row: PortalPreparedLine) => formatWeight(row.weight_kg) },
         );
@@ -1140,7 +1139,6 @@ export function PortalPage() {
           ),
         },
         { key: "qty", header: "Qty", render: (row: PortalLine) => row.qty || 0 },
-        { key: "oem", header: "OEM", render: (row: PortalLine) => row.oem_no || "-" },
         { key: "origin", header: "Origin", render: (row: PortalLine) => row.origin || "-" },
         { key: "weight", header: "Weight", render: (row: PortalLine) => formatWeight(row.weight_kg) },
         { key: "unit", header: "Unit Price", render: (row: PortalLine) => formatMoney(Number(row.sell_price || 0), selectedDocument.row.currency) },
@@ -1161,7 +1159,6 @@ export function PortalPage() {
         ),
       },
       { key: "qty", header: "Qty", render: (row: PortalLine) => row.qty || 0 },
-      { key: "oem", header: "OEM", render: (row: PortalLine) => row.oem_no || "-" },
       { key: "origin", header: "Origin", render: (row: PortalLine) => row.origin || "-" },
       { key: "unit", header: "Unit Price", render: (row: PortalLine) => formatMoney(Number(row.buy_price || 0), selectedDocument.row.currency) },
       { key: "amount", header: "Line Total", render: (row: PortalLine) => formatMoney(Number(row.line_total || 0), selectedDocument.row.currency) },
@@ -1470,31 +1467,39 @@ export function PortalPage() {
             <span className="settings-label">Due Date</span>
             <strong>{formatDate("due_date" in selectedDocument.row ? selectedDocument.row.due_date : undefined)}</strong>
           </div>
-          {"delivery_term" in selectedDocument.row ? (
-            <div className="settings-item">
-              <span className="settings-label">Delivery Term</span>
-              <strong>{selectedDocument.row.delivery_term || "-"}</strong>
-            </div>
-          ) : null}
-          {"payment_terms" in selectedDocument.row ? (
-            <div className="settings-item">
-              <span className="settings-label">Payment Terms</span>
-              <strong>{selectedDocument.row.payment_terms || "-"}</strong>
-            </div>
-          ) : null}
-          {"contract_nr" in selectedDocument.row ? (
-            <div className="settings-item">
-              <span className="settings-label">Contract Nr</span>
-              <strong>{selectedDocument.row.contract_nr || "-"}</strong>
-            </div>
-          ) : null}
-          {"packing_details" in selectedDocument.row ? (
-            <div className="settings-item">
-              <span className="settings-label">Packing</span>
-              <strong>{selectedDocument.row.packing_details || "-"}</strong>
-            </div>
-          ) : null}
         </div>
+
+        {("delivery_term" in selectedDocument.row && selectedDocument.row.delivery_term) ||
+        ("payment_terms" in selectedDocument.row && selectedDocument.row.payment_terms) ||
+        ("contract_nr" in selectedDocument.row && selectedDocument.row.contract_nr) ||
+        ("packing_details" in selectedDocument.row && selectedDocument.row.packing_details) ? (
+          <div className="portal-detail-grid">
+            {"delivery_term" in selectedDocument.row && selectedDocument.row.delivery_term ? (
+              <div className="settings-item">
+                <span className="settings-label">Delivery Term</span>
+                <strong>{selectedDocument.row.delivery_term || "-"}</strong>
+              </div>
+            ) : null}
+            {"payment_terms" in selectedDocument.row && selectedDocument.row.payment_terms ? (
+              <div className="settings-item">
+                <span className="settings-label">Payment Terms</span>
+                <strong>{selectedDocument.row.payment_terms || "-"}</strong>
+              </div>
+            ) : null}
+            {"contract_nr" in selectedDocument.row && selectedDocument.row.contract_nr ? (
+              <div className="settings-item">
+                <span className="settings-label">Contract Nr</span>
+                <strong>{selectedDocument.row.contract_nr || "-"}</strong>
+              </div>
+            ) : null}
+            {"packing_details" in selectedDocument.row && selectedDocument.row.packing_details ? (
+              <div className="settings-item">
+                <span className="settings-label">Packing</span>
+                <strong>{selectedDocument.row.packing_details || "-"}</strong>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {selectedDocument.row.notes ? (
           <div className="portal-detail-notes">
@@ -1512,13 +1517,13 @@ export function PortalPage() {
               <strong>{formatMoney(Number(selectedDocument.row.subtotal || 0), selectedDocument.row.currency)}</strong>
             </div>
           ) : null}
-          {"discount_amount" in selectedDocument.row ? (
+          {"discount_amount" in selectedDocument.row && Number(selectedDocument.row.discount_amount || 0) > 0 ? (
             <div className="settings-item">
               <span className="settings-label">Discount</span>
               <strong>{formatMoney(Number(selectedDocument.row.discount_amount || 0), selectedDocument.row.currency)}</strong>
             </div>
           ) : null}
-          {"shipping_cost" in selectedDocument.row ? (
+          {"shipping_cost" in selectedDocument.row && Number(selectedDocument.row.shipping_cost || 0) > 0 ? (
             <div className="settings-item">
               <span className="settings-label">Shipping</span>
               <strong>{formatMoney(Number(selectedDocument.row.shipping_cost || 0), selectedDocument.row.currency)}</strong>
@@ -2040,7 +2045,6 @@ export function PortalPage() {
                           <div><span>Resolved Code</span><strong>{selectedDraftLine.resolvedCode || "-"}</strong></div>
                           <div><span>Brand</span><strong>{selectedDraftLine.brand || "-"}</strong></div>
                           <div><span>Description</span><strong>{selectedDraftLine.description || "-"}</strong></div>
-                          <div><span>OEM</span><strong>{selectedDraftLine.oem_no || "-"}</strong></div>
                           <div><span>Tariff</span><strong>{selectedDraftLine.hs_code || "-"}</strong></div>
                           <div><span>Origin</span><strong>{selectedDraftLine.origin || "-"}</strong></div>
                           <div><span>Weight</span><strong>{formatWeight(selectedDraftLine.weight_kg)}</strong></div>
