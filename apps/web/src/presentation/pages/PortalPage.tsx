@@ -991,7 +991,7 @@ export function PortalPage() {
       });
       setSnapshot(result.snapshot);
       setSelection({ kind: "sales-order", id: result.orderId });
-      setActiveSection(mode === "confirm" ? "statement" : "desk");
+      setActiveSection(mode === "confirm" ? "orders" : "desk");
       setStatus(
         mode === "confirm"
           ? `Basket ${result.orderId} submitted. Internal team can prepare proforma and next documents.`
