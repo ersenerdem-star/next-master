@@ -2058,6 +2058,116 @@ export function QuotesPage({
     });
   }, [quotes, salesOrderFilter]);
 
+  const savedSalesOrderColumns = useMemo(
+    () => [
+      {
+        key: "select",
+        header: "",
+        render: (row: LocalSalesOrder) => (
+          <input
+            type="checkbox"
+            checked={selectedLocalSalesOrderIds.includes(row.id)}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => toggleLocalSalesOrderSelection(row.id, event.target.checked)}
+          />
+        ),
+      },
+      {
+        key: "customer",
+        header: "Customer",
+        render: (row: LocalSalesOrder) => <strong>{row.customer_name || "Unnamed customer"}</strong>,
+      },
+      {
+        key: "salesOrderNo",
+        header: "Sales Order",
+        render: (row: LocalSalesOrder) => row.sales_order_no,
+      },
+      {
+        key: "brands",
+        header: "Brands",
+        render: (row: LocalSalesOrder) => {
+          const brandSummary = buildOrderBrandSummary(row.lines);
+          if (!brandSummary.labels.length) return "-";
+          return (
+            <span className="document-marks document-marks--compact">
+              {brandSummary.labels.map((brand) => (
+                <span key={`${row.id}-${brand}`} className="mark-badge">
+                  {brand}
+                </span>
+              ))}
+              {brandSummary.extraCount > 0 ? <span className="mark-badge mark-badge--info">+{brandSummary.extraCount}</span> : null}
+            </span>
+          );
+        },
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (row: LocalSalesOrder) => {
+          const poCount = salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(row.id) || 0;
+          const invoiceCount = salesOrderDocumentState.invoiceCountBySalesOrderId.get(row.id) || 0;
+          return (
+            <span className="document-marks document-marks--compact">
+              <span className={`mark-badge ${row.status === "confirmed" ? "mark-badge--success" : ""}`}>{row.status.toUpperCase()}</span>
+              {row.source_channel === "portal" && row.portal_submitted_at && !row.portal_seen_at ? (
+                <span className="mark-badge mark-badge--accent">New Order</span>
+              ) : null}
+              {poCount > 0 ? <span className="mark-badge mark-badge--info">{poCount} PO</span> : null}
+              {invoiceCount > 0 ? <span className="mark-badge mark-badge--accent">{invoiceCount} Invoice</span> : null}
+            </span>
+          );
+        },
+      },
+      {
+        key: "lines",
+        header: "Lines",
+        render: (row: LocalSalesOrder) => row.lines.length.toLocaleString("en-US"),
+      },
+      {
+        key: "date",
+        header: "Date",
+        render: (row: LocalSalesOrder) => formatDate(row.quote_date),
+      },
+      {
+        key: "amount",
+        header: "Amount",
+        render: (row: LocalSalesOrder) => formatMoney(row.sales_total, row.currency || "EUR"),
+      },
+    ],
+    [selectedLocalSalesOrderIds, salesOrderDocumentState],
+  );
+
+  const cloudSalesOrderColumns = useMemo(
+    () => [
+      {
+        key: "customer",
+        header: "Customer",
+        render: (row: QuoteSummary) => <strong>{row.customer_name || "Unnamed customer"}</strong>,
+      },
+      {
+        key: "salesOrderNo",
+        header: "Sales Order",
+        render: (row: QuoteSummary) => row.quote_no,
+      },
+      {
+        key: "date",
+        header: "Date",
+        render: (row: QuoteSummary) => formatDate(row.quote_date),
+      },
+      {
+        key: "qty",
+        header: "Qty",
+        render: (row: QuoteSummary) => (row.total_quantity ?? 0).toLocaleString("en-US"),
+      },
+      {
+        key: "amount",
+        header: "Amount",
+        render: (row: QuoteSummary) => formatMoney(row.sales_total, String(row.currency || "EUR")),
+      },
+    ],
+    [],
+  );
+
   async function handleSaveDraft() {
     if (!quoteBuilderLines.length) {
       actionFeedback.fail("Add sales order lines before saving draft.");
@@ -2251,70 +2361,16 @@ export function QuotesPage({
                   </div>
                 </div>
               ) : null}
-              <div className="quote-records">
-                {filteredLocalSalesOrders.map((order) => {
-                  const poCount = salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(order.id) || 0;
-                  const invoiceCount = salesOrderDocumentState.invoiceCountBySalesOrderId.get(order.id) || 0;
-                  const brandSummary = buildOrderBrandSummary(order.lines);
-                  return (
-                  <article
-                    key={order.id}
-                    className={`quote-record${order.id === selectedLocalSalesOrderId ? " active" : ""}`}
-                    onClick={() => {
-                      setSalesOrdersView("detail");
-                      void loadLocalSalesOrderIntoEditor(order);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setSalesOrdersView("detail");
-                        void loadLocalSalesOrderIntoEditor(order);
-                      }
-                    }}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    <div className="quote-record__top">
-                      <div className="quote-record__selection">
-                        <input
-                          type="checkbox"
-                          checked={selectedLocalSalesOrderIds.includes(order.id)}
-                          onClick={(event) => event.stopPropagation()}
-                          onChange={(event) => toggleLocalSalesOrderSelection(order.id, event.target.checked)}
-                        />
-                        <strong>{order.customer_name || "Unnamed customer"}</strong>
-                      </div>
-                      <span>{formatMoney(order.sales_total, order.currency || "EUR")}</span>
-                    </div>
-                    <div className="quote-record__mid">
-                      <span>{order.sales_order_no}</span>
-                      <span>{formatDate(order.quote_date)}</span>
-                    </div>
-                    <div className="document-marks">
-                      <span className={`mark-badge ${order.status === "confirmed" ? "mark-badge--success" : ""}`}>{order.status.toUpperCase()}</span>
-                      {order.source_channel === "portal" && order.portal_submitted_at && !order.portal_seen_at ? (
-                        <span className="mark-badge mark-badge--accent">New Order</span>
-                      ) : null}
-                      {poCount > 0 ? <span className="mark-badge mark-badge--info">{poCount} PO</span> : null}
-                      {invoiceCount > 0 ? <span className="mark-badge mark-badge--accent">{invoiceCount} Invoice</span> : null}
-                    </div>
-                    <div className="quote-record__bottom">
-                      <span>{order.lines.length} lines</span>
-                      {brandSummary.labels.length ? (
-                        <span className="document-marks document-marks--compact">
-                          {brandSummary.labels.map((brand) => (
-                            <span key={`${order.id}-${brand}`} className="mark-badge">
-                              {brand}
-                            </span>
-                          ))}
-                          {brandSummary.extraCount > 0 ? <span className="mark-badge mark-badge--info">+{brandSummary.extraCount}</span> : null}
-                        </span>
-                      ) : null}
-                    </div>
-                  </article>
-                  );
-                })}
-              </div>
+              <DataTable
+                rows={filteredLocalSalesOrders}
+                columns={savedSalesOrderColumns}
+                emptyText="No saved sales orders found."
+                onRowClick={(row) => {
+                  setSalesOrdersView("detail");
+                  void loadLocalSalesOrderIntoEditor(row);
+                }}
+                rowClassName={(row) => (row.id === selectedLocalSalesOrderId ? "data-table__row--active" : "")}
+              />
             </div>
           ) : null}
 
@@ -2324,31 +2380,18 @@ export function QuotesPage({
           {!loadingQuotes && error ? <div className="empty-state error-text">{error}</div> : null}
           {!loadingQuotes && !error && !filteredCloudQuotes.length ? <div className="empty-state">No sales orders found.</div> : null}
           {!loadingQuotes && !error && filteredCloudQuotes.length ? (
-            <div className="quote-records">
-              {filteredCloudQuotes.map((quote) => (
-                <button
-                  key={quote.quote_id}
-                  className={`quote-record${quote.quote_id === selectedQuoteId ? " active" : ""}`}
-                  onClick={() => {
-                    setSalesOrdersView("detail");
-                    setWorkbenchMode("existing");
-                    setSelectedLocalSalesOrderId("");
-                    setSelectedQuoteId(quote.quote_id);
-                    onSelectedQuoteChange?.(quote.quote_id);
-                  }}
-                >
-                  <div className="quote-record__top">
-                    <strong>{quote.customer_name || "Unnamed customer"}</strong>
-                    <span>{formatMoney(quote.sales_total, String(quote.currency || "EUR"))}</span>
-                  </div>
-                  <div className="quote-record__mid">
-                    <span>{quote.quote_no}</span>
-                    <span>{formatDate(quote.quote_date)}</span>
-                  </div>
-                  <div className="quote-record__bottom">{quote.total_quantity ?? 0} pcs</div>
-                </button>
-              ))}
-            </div>
+            <DataTable
+              rows={filteredCloudQuotes}
+              columns={cloudSalesOrderColumns}
+              onRowClick={(quote) => {
+                setSalesOrdersView("detail");
+                setWorkbenchMode("existing");
+                setSelectedLocalSalesOrderId("");
+                setSelectedQuoteId(quote.quote_id);
+                onSelectedQuoteChange?.(quote.quote_id);
+              }}
+              rowClassName={(quote) => (quote.quote_id === selectedQuoteId ? "data-table__row--active" : "")}
+            />
           ) : null}
           </div>
         </div>
