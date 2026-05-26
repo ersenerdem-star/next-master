@@ -247,6 +247,7 @@ function getDefaultPortalSection(snapshot: PortalSnapshot) {
 export function PortalPage() {
   const search = new URLSearchParams(window.location.search);
   const portalImportRef = useRef<HTMLInputElement | null>(null);
+  const portalDraftLinesRef = useRef<HTMLDivElement | null>(null);
   const [credentials, setCredentials] = useState<PortalCredentials>(() => {
     const stored = typeof window !== "undefined" ? readStoredCredentials() : null;
     return {
@@ -785,6 +786,14 @@ export function PortalPage() {
     setActiveSection(selection.kind === "sales-order" || selection.kind === "purchase-order" ? "orders" : "billing");
   }
 
+  function focusPortalDraftLines(lineId?: string) {
+    setActiveSection("desk");
+    if (lineId) setSelectedDraftLineId(lineId);
+    window.requestAnimationFrame(() => {
+      portalDraftLinesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   async function handlePortalCatalogSearch() {
     try {
       setSearchingCatalog(true);
@@ -801,7 +810,7 @@ export function PortalPage() {
   }
 
   async function appendPortalRows(rows: Array<{ code: string; brand: string; qty: number }>, statusText: string) {
-    if (!rows.length) return;
+    if (!rows.length) return [] as PortalPreparedLine[];
     try {
       setPreparingPortalOrder(true);
       setError("");
@@ -847,8 +856,10 @@ export function PortalPage() {
       if (failedChunkMessage) {
         setError(failedChunkMessage);
       }
+      return preparedLines;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal order pricing failed");
+      return [] as PortalPreparedLine[];
     } finally {
       setPreparingPortalOrder(false);
       setPortalOverlay(null);
@@ -857,7 +868,11 @@ export function PortalPage() {
 
   async function handleAddPortalCatalogItem(item: PortalCatalogSearchItem) {
     setSelectedCatalogCode(item.code);
-    await appendPortalRows([{ code: item.code, brand: item.brand, qty: 1 }], "{count} item added to portal draft.");
+    const prepared = await appendPortalRows(
+      [{ code: item.code, brand: item.brand, qty: 1 }],
+      `{count} item added to ${portalSalesOrderNo || "New Draft"} in Draft Lines.`,
+    );
+    if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
   }
 
   async function handleImportPortalOrderFile(file: File) {
@@ -866,7 +881,11 @@ export function PortalPage() {
       if (!importedRows.length) {
         throw new Error("No part rows found in upload.");
       }
-      await appendPortalRows(importedRows, "{count} imported line priced for portal draft.");
+      const prepared = await appendPortalRows(
+        importedRows,
+        `{count} imported line priced for ${portalSalesOrderNo || "New Draft"} in Draft Lines.`,
+      );
+      if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal import failed");
     } finally {
@@ -1803,15 +1822,17 @@ export function PortalPage() {
                     />
                   </SectionCard>
 
-                  <SectionCard title="Draft Lines">
-                    <DataTable
-                      rows={portalDraftLines}
-                      columns={portalDraftColumns}
-                      emptyText={preparingPortalOrder ? "Preparing prices..." : "Import a file or add items from catalog results."}
-                      onRowClick={(row) => setSelectedDraftLineId(row.lineId)}
-                      rowClassName={(row) => (selectedDraftLineId === row.lineId ? "data-table__row--active" : "")}
-                    />
-                  </SectionCard>
+                  <div ref={portalDraftLinesRef}>
+                    <SectionCard title={`Draft Lines (${portalDraftLines.length.toLocaleString("en-US")})`}>
+                      <DataTable
+                        rows={portalDraftLines}
+                        columns={portalDraftColumns}
+                        emptyText={preparingPortalOrder ? "Preparing prices..." : "Import a file or add items from catalog results."}
+                        onRowClick={(row) => setSelectedDraftLineId(row.lineId)}
+                        rowClassName={(row) => (selectedDraftLineId === row.lineId ? "data-table__row--active" : "")}
+                      />
+                    </SectionCard>
+                  </div>
                 </div>
 
                 <aside className="portal-workbench__side">
