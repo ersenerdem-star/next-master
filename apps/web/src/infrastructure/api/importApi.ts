@@ -1,7 +1,13 @@
+import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "../../domain/shared/catalogFormatting";
 import { supabaseClient } from "./supabaseClient";
 
 export async function bulkImportCatalog(payload: Array<Record<string, unknown>>) {
-  const { error } = await supabaseClient.rpc("bulk_import_catalog", { payload });
+  const normalizedPayload = payload.map((row) => ({
+    ...row,
+    product_code: normalizeCatalogDisplayCode(String(row.product_code || "")),
+    description: row.description == null ? null : normalizeCatalogDescription(String(row.description || "")),
+  }));
+  const { error } = await supabaseClient.rpc("bulk_import_catalog", { payload: normalizedPayload });
   if (error) throw new Error(error.message || "Catalog import failed");
 }
 

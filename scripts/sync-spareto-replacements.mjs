@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { canonicalizeBrandName, resolveSparetoBrandSlug } from "./_shared/brand-standardization.mjs";
+import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "./_shared/catalog-standardization.mjs";
 
 const repoRoot = "/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp";
 const outputDir = path.join(repoRoot, "docs", "spareto-replacements");
@@ -377,10 +378,10 @@ async function fetchSparetoDetailPage(input) {
   const html = await fetchText(input.source_url);
   const detail = extractDetailProperties(html);
   const lifecycle = extractCurrentLifecycle(html, input.brand_slug);
-  const productCode = normalizeDisplayCode(input.product_code || detail.product_code || deriveProductCodeFromUrl(input.source_url));
+  const productCode = normalizeCatalogDisplayCode(input.product_code || detail.product_code || deriveProductCodeFromUrl(input.source_url));
   return {
     product_code: productCode,
-    description: detail.product_name || "",
+    description: normalizeCatalogDescription(detail.product_name || ""),
     oem_no: detail.oe_numbers || "",
     hs_code: detail.customs_code || "",
     origin: formatOrigin(detail.country_of_origin),
@@ -477,8 +478,8 @@ function buildCatalogRow(target, existing, detail) {
   return {
     organization_id: target.organization_id,
     brand_id: target.brand_id,
-    product_code: normalizeDisplayCode(detail.product_code || existing?.product_code),
-    description: preferCatalogValue(existing?.description, detail.description),
+    product_code: normalizeCatalogDisplayCode(detail.product_code || existing?.product_code),
+    description: normalizeCatalogDescription(preferCatalogValue(detail.description, existing?.description)),
     oem_no: preferCatalogValue(existing?.oem_no, detail.oem_no),
     hs_code: preferCatalogValue(existing?.hs_code, detail.hs_code),
     origin: preferOrigin(existing?.origin, detail.origin),
@@ -546,7 +547,7 @@ function deriveProductCodeFromUrl(url) {
 }
 
 function normalizeDisplayCode(value) {
-  return String(value || "").trim().toUpperCase();
+  return normalizeCatalogDisplayCode(value);
 }
 
 async function fetchAll(initialPath) {

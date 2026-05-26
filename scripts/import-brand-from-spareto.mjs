@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { canonicalizeBrandName, resolveSparetoBrandQuery } from "./_shared/brand-standardization.mjs";
+import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "./_shared/catalog-standardization.mjs";
 
 const repoRoot = "/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp";
 const outputDir = path.join(repoRoot, "docs", "spareto-brand-imports");
@@ -359,13 +360,13 @@ function extractListingCards(html, brandQuery) {
     const imageUrl = match[3];
     try {
       const data = JSON.parse(gtmValue);
-      const productCode = String(data.item_id || "").trim();
+      const productCode = normalizeCatalogDisplayCode(String(data.item_id || "").trim());
       const cardBrand = String(data.item_brand || "").trim();
       if (!productCode || normalizeBrand(cardBrand) !== targetBrand) continue;
       cards.push({
         product_code: productCode,
         normalized_code: normalizeCode(productCode),
-        description: String(data.item_name || "").trim(),
+        description: normalizeCatalogDescription(String(data.item_name || "").trim()),
         brand: cardBrand,
         source_url: new URL(href, "https://spareto.com").toString(),
         image_url: sanitizeImageUrl(imageUrl),
@@ -403,9 +404,9 @@ async function fetchSparetoDetail(card) {
   const html = await fetchText(card.source_url);
   const detail = extractDetailProperties(html);
   return {
-    product_code: card.product_code,
+    product_code: normalizeCatalogDisplayCode(card.product_code),
     normalized_code: card.normalized_code,
-    description: detail.product_name || card.description || "",
+    description: normalizeCatalogDescription(detail.product_name || card.description || ""),
     oem_no: detail.oe_numbers || "",
     hs_code: detail.customs_code || "",
     origin: formatOrigin(detail.country_of_origin),
@@ -454,7 +455,7 @@ function captureTableValue(html, label) {
 }
 
 function buildCatalogRow(target, candidate, detail, existing) {
-  const nextDescription = preferCatalogValue(existing?.description, detail.description, candidate.description);
+  const nextDescription = normalizeCatalogDescription(preferCatalogValue(detail.description, candidate.description, existing?.description));
   const nextOemNo = preferCatalogValue(existing?.oem_no, detail.oem_no);
   const nextHsCode = preferCatalogValue(existing?.hs_code, detail.hs_code);
   const nextOrigin = preferOrigin(existing?.origin, detail.origin);
@@ -464,7 +465,7 @@ function buildCatalogRow(target, candidate, detail, existing) {
   return {
     organization_id: target.organization_id,
     brand_id: target.brand_id,
-    product_code: preferCatalogValue(existing?.product_code, detail.product_code, candidate.product_code),
+    product_code: normalizeCatalogDisplayCode(preferCatalogValue(detail.product_code, candidate.product_code, existing?.product_code)),
     normalized_code: candidate.normalized_code,
     description: nextDescription,
     oem_no: nextOemNo,

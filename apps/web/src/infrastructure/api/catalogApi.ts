@@ -1,4 +1,5 @@
 import type { CatalogRow } from "../../types/catalog";
+import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "../../domain/shared/catalogFormatting";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { normalizePartCode } from "../../domain/shared/normalize";
 import { supabaseClient } from "./supabaseClient";
@@ -194,9 +195,9 @@ export async function updateCloudCatalogRow(
   const { error } = await supabaseClient
     .from("catalog_products")
     .update({
-      product_code: updates.product_code,
+      product_code: normalizeCatalogDisplayCode(updates.product_code),
       brand_id: brandId,
-      description: updates.description,
+      description: updates.description ? normalizeCatalogDescription(updates.description) : null,
       oem_no: updates.oem_no,
       hs_code: updates.hs_code,
       origin: updates.origin,
@@ -227,8 +228,8 @@ export async function createCloudCatalogRow(input: {
   const { error } = await supabaseClient.from("catalog_products").insert({
     organization_id: organizationId,
     brand_id: brandId,
-    product_code: input.product_code,
-    description: input.description,
+    product_code: normalizeCatalogDisplayCode(input.product_code),
+    description: input.description ? normalizeCatalogDescription(input.description) : null,
     oem_no: input.oem_no,
     hs_code: input.hs_code,
     origin: input.origin,
