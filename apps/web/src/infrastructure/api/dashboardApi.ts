@@ -16,6 +16,7 @@ export type RevenuePeriodKey = "thisMonth" | "thisQuarter" | "thisYear" | "previ
 export type RevenuePeriodSnapshot = {
   sales: RevenuePeriodSummary;
   purchases: RevenuePeriodSummary;
+  brandTotals: RevenueBreakdownRow[];
   sellerTotals: RevenueBreakdownRow[];
   purchaseCompanyTotals: RevenueBreakdownRow[];
 };
@@ -53,6 +54,7 @@ function buildEmptyPeriodSnapshot(): RevenuePeriodSnapshot {
   return {
     sales: { total: 0, count: 0 },
     purchases: { total: 0, count: 0 },
+    brandTotals: [],
     sellerTotals: [],
     purchaseCompanyTotals: [],
   };
@@ -87,6 +89,12 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
   const previousYear = currentYear - 1;
   const startDate = `${previousYear}-01-01`;
   const snapshot = buildEmptyRevenue(true);
+  const brandMaps = {
+    thisMonth: new Map<string, RevenueBreakdownRow>(),
+    thisQuarter: new Map<string, RevenueBreakdownRow>(),
+    thisYear: new Map<string, RevenueBreakdownRow>(),
+    previousYear: new Map<string, RevenueBreakdownRow>(),
+  } satisfies Record<RevenuePeriodKey, Map<string, RevenueBreakdownRow>>;
   const sellerMaps = {
     thisMonth: new Map<string, RevenueBreakdownRow>(),
     thisQuarter: new Map<string, RevenueBreakdownRow>(),
@@ -107,7 +115,7 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
     while (true) {
       const { data, error } = await supabaseClient
         .from("sales_orders")
-        .select("quote_date,sales_total,seller_company")
+        .select("quote_date,sales_total,seller_company,lines")
         .gte("quote_date", startDate)
         .order("quote_date", { ascending: false })
         .range(from, from + pageSize - 1);
@@ -120,6 +128,7 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
         quote_date: string | null;
         sales_total: number | null;
         seller_company: string | null;
+        lines?: Array<Record<string, unknown>> | null;
       }>;
 
       batch.forEach((row) => {
@@ -131,10 +140,31 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
         const year = date.getFullYear();
         const month = date.getMonth();
         const quarter = Math.floor(month / 3);
+        const lineBrandTotals = new Map<string, { total: number; count: number }>();
+
+        for (const line of row.lines || []) {
+          const brandName = String(line.brand || "Unassigned").trim() || "Unassigned";
+          const lineAmount = Number(
+            line.sales_total ??
+              line.line_total ??
+              ((Number(line.sell_price || 0) || 0) * (Number(line.qty || 0) || 0)),
+          );
+          if (!lineAmount) continue;
+          const current = lineBrandTotals.get(brandName) || { total: 0, count: 0 };
+          lineBrandTotals.set(brandName, {
+            total: Number((current.total + lineAmount).toFixed(2)),
+            count: current.count + 1,
+          });
+        }
 
         function apply(period: RevenuePeriodKey) {
           snapshot.periods[period].sales.total += total;
           snapshot.periods[period].sales.count += 1;
+          lineBrandTotals.forEach((brandMeta, brandName) => {
+            const brandBucket = ensureBreakdownRow(brandMaps[period], brandName);
+            brandBucket.total += brandMeta.total;
+            brandBucket.count += brandMeta.count;
+          });
           const bucket = ensureBreakdownRow(sellerMaps[period], sellerName);
           bucket.total += total;
           bucket.count += 1;
@@ -213,6 +243,7 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
   (Object.keys(snapshot.periods) as RevenuePeriodKey[]).forEach((period) => {
     snapshot.periods[period].sales.total = Number(snapshot.periods[period].sales.total.toFixed(2));
     snapshot.periods[period].purchases.total = Number(snapshot.periods[period].purchases.total.toFixed(2));
+    snapshot.periods[period].brandTotals = [...brandMaps[period].values()].sort((a, b) => b.total - a.total);
     snapshot.periods[period].sellerTotals = [...sellerMaps[period].values()].sort((a, b) => b.total - a.total);
     snapshot.periods[period].purchaseCompanyTotals = [...purchaseCompanyMaps[period].values()].sort((a, b) => b.total - a.total);
   });

@@ -465,6 +465,39 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
             <div className="error-text">{brandSummaryError}</div>
           )}
         </SectionCard>
+        <SectionCard title="Sales by Brand">
+          <div className="toolbar toolbar--wrap dashboard-toolbar">
+            <Select value={revenuePeriod} options={revenuePeriodOptions} onChange={(value) => setRevenuePeriod(value as RevenuePeriodKey)} />
+          </div>
+          {selectedRevenue?.brandTotals.length ? (
+            <div className="table-wrap table-wrap--tall">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Brand</th>
+                    <th>Sales Lines</th>
+                    <th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedRevenue.brandTotals.slice(0, 24).map((row) => (
+                    <tr key={row.name}>
+                      <td><BrandPill brand={row.name} compact /></td>
+                      <td>{row.count.toLocaleString("en-US")}</td>
+                      <td>{formatMoney(row.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : !snapshotError && !issues.revenue ? (
+            <div className="chart-placeholder">No brand sales in this period</div>
+          ) : issues.revenue ? (
+            <div className="error-text">{issues.revenue}</div>
+          ) : snapshotError ? (
+            <div className="error-text">{snapshotError}</div>
+          ) : null}
+        </SectionCard>
       </div>
     </div>
   );
