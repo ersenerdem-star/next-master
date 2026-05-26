@@ -14,6 +14,7 @@ import { matchesOriginalNumberSearch, normalizePartCode } from "../../domain/sha
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import {
   deletePortalDraftOrder,
+  downloadPortalPriceList,
   preparePortalOrderLines as preparePortalOrderLinesApi,
   searchPortalCatalogItems,
   submitPortalOrder,
@@ -131,7 +132,7 @@ type PortalSelection =
   | { kind: "invoice"; id: string }
   | { kind: "purchase-order"; id: string }
   | { kind: "bill"; id: string };
-type PortalSection = "desk" | "orders" | "billing" | "statement" | "account";
+type PortalSection = "desk" | "pricelist" | "orders" | "billing" | "statement" | "account";
 
 type PortalLine = NonNullable<PortalSnapshot["invoices"][number]["lines"]>[number];
 type PortalSalesOrderRow = PortalSnapshot["salesOrders"][number];
@@ -278,10 +279,12 @@ export function PortalPage() {
   const [portalPackingDetails, setPortalPackingDetails] = useState("");
   const [portalOrderNotes, setPortalOrderNotes] = useState("");
   const [portalOrderStatus, setPortalOrderStatus] = useState("");
+  const [portalPriceListBrand, setPortalPriceListBrand] = useState("");
   const [searchingCatalog, setSearchingCatalog] = useState(false);
   const [preparingPortalOrder, setPreparingPortalOrder] = useState(false);
   const [savingPortalOrder, setSavingPortalOrder] = useState(false);
   const [confirmingPortalOrder, setConfirmingPortalOrder] = useState(false);
+  const [downloadingPortalPriceList, setDownloadingPortalPriceList] = useState(false);
   const [portalOverlay, setPortalOverlay] = useState<{ title: string; message: string } | null>(null);
   const [orderDeskView, setOrderDeskView] = useState<"simple" | "advanced">("simple");
   const [selectedCatalogCode, setSelectedCatalogCode] = useState("");
@@ -634,6 +637,7 @@ export function PortalPage() {
     setPortalPaymentTerms(latestPortalDraft?.payment_terms || snapshot.pricingProfile?.payment_terms || "");
     setPortalPackingDetails(latestPortalDraft?.packing_details || "");
     setPortalOrderNotes(latestPortalDraft?.notes || "");
+    setPortalPriceListBrand((current) => current || snapshot.availableBrands[0] || "");
     setPortalOrderStatus(
       latestPortalDraft
         ? latestPortalDraft.portal_submitted_at
@@ -747,6 +751,7 @@ export function PortalPage() {
   const selectedCatalogItem = catalogResults.find((row) => row.code === selectedCatalogCode) || null;
   const selectedDraftLine = portalDraftLines.find((line) => line.lineId === selectedDraftLineId) || null;
   const portalBrandOptions = [{ value: "", label: "All Brands" }, ...activeSnapshot.availableBrands.map((brand) => ({ value: brand, label: brand }))];
+  const portalBrandValueOptions = activeSnapshot.availableBrands.map((brand) => ({ value: brand, label: brand }));
   const portalDraftSelectionOptions = [
     { value: "", label: "New Basket" },
     ...portalDraftOrders.map((row) => ({
@@ -802,6 +807,7 @@ export function PortalPage() {
   ];
   const portalSections: Array<{ key: PortalSection; label: string }> = [
     ...(portalCanOrder ? [{ key: "desk" as PortalSection, label: "Part Search" }] : []),
+    ...(portalCanOrder ? [{ key: "pricelist" as PortalSection, label: "Download Price List" }] : []),
     ...(activeSnapshot.invite.access.can_view_orders ? [{ key: "orders" as PortalSection, label: "Orders" }] : []),
     ...(activeSnapshot.invite.access.can_view_invoices
       ? [{ key: "billing" as PortalSection, label: activeSnapshot.invite.party_type === "customer" ? "Invoices" : "Bills" }]
@@ -812,6 +818,8 @@ export function PortalPage() {
   const activeSectionHelpText =
     activeSection === "desk"
       ? "Search by part number or original number, compare alternatives, then move selected items into the basket."
+      : activeSection === "pricelist"
+        ? "Select a brand and download the customer-specific price list using the assigned account pricing."
       : activeSection === "orders"
         ? "Track submitted orders and inspect the full line detail when needed."
         : activeSection === "billing"
@@ -1045,6 +1053,46 @@ export function PortalPage() {
       setError(caught instanceof Error ? caught.message : "Portal basket delete failed");
     } finally {
       setSavingPortalOrder(false);
+      setPortalOverlay(null);
+    }
+  }
+
+  async function handleDownloadPortalPriceList() {
+    if (!portalPriceListBrand) {
+      setError("Select a brand before downloading the price list.");
+      return;
+    }
+    try {
+      setDownloadingPortalPriceList(true);
+      setError("");
+      setPortalOverlay({
+        title: "Preparing Price List",
+        message: `Building ${portalPriceListBrand} price list for this customer account.`,
+      });
+      const result = await downloadPortalPriceList(credentials, portalPriceListBrand);
+      const rows: Array<Array<string | number | null>> = [
+        ["Product_Code", "Brand", "Product_Name", "OEM_No", "HS_Code", "Origin", "Weight_kg", "Price_List_Type", `Sales_Price_${result.currency}`, "Lifecycle", "Lifecycle_Note"],
+        ...result.rows.map((row) => [
+          row.product_code,
+          row.brand,
+          row.description || "",
+          row.oem_no || "",
+          row.hs_code || "",
+          row.origin || "",
+          row.weight_kg ?? "",
+          `${row.price_list_type} Price List`,
+          row.sales_price ?? "",
+          row.lifecycle_status,
+          row.lifecycle_note || "",
+        ]),
+      ];
+      const blob = buildXlsxBlob(`${portalPriceListBrand} Price List`, rows, [6, 8]);
+      downloadBlob(`${sanitizeFileName(`portal-price-list-${portalPriceListBrand}-${result.priceListType}`)}.xlsx`, blob);
+      setStatus(`${portalPriceListBrand} ${result.priceListType} price list downloaded.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Portal price list download failed");
+    } finally {
+      setDownloadingPortalPriceList(false);
       setPortalOverlay(null);
     }
   }
@@ -1641,6 +1689,45 @@ export function PortalPage() {
               <DataTable rows={filteredVendorCredits} columns={vendorCreditColumns} emptyText="No vendor credits available." />
             </SectionCard>
           ) : null}
+        </div>
+      ) : null}
+
+      {activeSection === "pricelist" && portalCanOrder ? (
+        <div className="portal-section-stack">
+          <SectionCard title="Download Price List">
+            <div className="portal-filter-grid">
+              <Select
+                label="Brand"
+                value={portalPriceListBrand}
+                options={portalBrandValueOptions}
+                onChange={setPortalPriceListBrand}
+              />
+              <div className="portal-filter-stat">
+                <span>Customer Pricing</span>
+                <strong>{activeSnapshot.pricingProfile ? "Customer Account Pricing" : "Default Pricing"}</strong>
+              </div>
+              <div className="portal-builder-actions">
+                <Button
+                  variant="secondary"
+                  busy={downloadingPortalPriceList}
+                  busyLabel="Preparing..."
+                  onClick={() => void handleDownloadPortalPriceList()}
+                >
+                  Download Excel
+                </Button>
+              </div>
+            </div>
+          </SectionCard>
+          <SectionCard title="How This Download Works">
+            <div className="portal-inline-note portal-inline-note--soft">
+              <span>Pricing Rule</span>
+              <strong>The file is built using the price list assigned on this customer account for the selected brand.</strong>
+            </div>
+            <div className="portal-inline-note portal-inline-note--soft">
+              <span>Fields</span>
+              <strong>Product code, description, OEM, tariff, origin, weight, lifecycle, and customer sales price are included.</strong>
+            </div>
+          </SectionCard>
         </div>
       ) : null}
 

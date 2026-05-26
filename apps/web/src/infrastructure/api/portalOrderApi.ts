@@ -57,6 +57,21 @@ type PortalOrderResponse = {
   pricingProfile?: PortalSnapshot["pricingProfile"];
   snapshot?: PortalSnapshot;
   orderId?: string;
+  priceListType?: "A" | "B" | "C" | "Other";
+  currency?: string;
+  rows?: Array<{
+    product_code: string;
+    brand: string;
+    description: string;
+    oem_no: string;
+    hs_code: string;
+    origin: string;
+    weight_kg: number | null;
+    price_list_type: "A" | "B" | "C" | "Other";
+    sales_price: number | null;
+    lifecycle_status: "active" | "discontinued";
+    lifecycle_note: string | null;
+  }>;
 };
 
 async function postPortalOrderJson(path: string, payload: Record<string, unknown>) {
@@ -132,5 +147,17 @@ export async function deletePortalDraftOrder(credentials: PortalCredentials, ord
   return {
     snapshot: data.snapshot,
     orderId: data.orderId || orderId,
+  };
+}
+
+export async function downloadPortalPriceList(credentials: PortalCredentials, brand: string) {
+  const data = await postPortalOrderJson("/api/portal-price-list", {
+    ...credentials,
+    brand,
+  });
+  return {
+    priceListType: data.priceListType || "A",
+    currency: data.currency || "EUR",
+    rows: data.rows || [],
   };
 }

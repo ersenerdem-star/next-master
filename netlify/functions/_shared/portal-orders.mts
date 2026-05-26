@@ -50,6 +50,20 @@ type PortalCatalogSearchItem = {
   lifecycle_warning?: string | null;
 };
 
+type PortalPriceListRow = {
+  product_code: string;
+  brand: string;
+  description: string;
+  oem_no: string;
+  hs_code: string;
+  origin: string;
+  weight_kg: number | null;
+  price_list_type: "A" | "B" | "C" | "Other";
+  sales_price: number | null;
+  lifecycle_status: "active" | "discontinued";
+  lifecycle_note: string | null;
+};
+
 type PortalOrderInputRow = {
   code: string;
   brand: string;
@@ -194,6 +208,14 @@ function nowIso() {
 
 function makeId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function chunkValues<T>(rows: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < rows.length; index += size) {
+    chunks.push(rows.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function rpcUrl(supabaseUrl: string, fn: string) {
@@ -456,6 +478,157 @@ async function fetchCPriceMap(
   }
 
   return map;
+}
+
+async function fetchPortalCatalogBrandRows(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  brandId: string,
+  brandName: string,
+) {
+  const rows: Array<{
+    product_code: string;
+    description: string | null;
+    oem_no: string | null;
+    hs_code: string | null;
+    origin: string | null;
+    weight_kg: number | null;
+    lifecycle_status: "active" | "discontinued";
+    lifecycle_note: string | null;
+  }> = [];
+  const pageSize = 1000;
+  let offset = 0;
+
+  while (true) {
+    const page = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+      select: "product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+      organization_id: `eq.${organizationId}`,
+      brand_id: `eq.${brandId}`,
+      order: "product_code.asc",
+      limit: String(pageSize),
+      offset: String(offset),
+    });
+    rows.push(
+      ...page.map((row) => ({
+        product_code: String(row.product_code || ""),
+        description: row.description == null ? null : String(row.description),
+        oem_no: row.oem_no == null ? null : String(row.oem_no),
+        hs_code: row.hs_code == null ? null : String(row.hs_code),
+        origin: row.origin == null ? null : String(row.origin),
+        weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
+        lifecycle_status: normalizeLifecycleStatus(row.lifecycle_status),
+        lifecycle_note: String(row.lifecycle_note || "").trim() || null,
+      })),
+    );
+    if (page.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  return rows
+    .filter((row) => row.product_code)
+    .map((row) => ({
+      ...row,
+      brand: brandName,
+      normalized_code: normalizePartCode(row.product_code),
+    }));
+}
+
+async function fetchPortalBestSupplierPriceMap(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  brandId: string,
+  normalizedCodes: string[],
+) {
+  const bestByCode = new Map<string, number>();
+  for (const chunk of chunkValues(normalizedCodes, 200)) {
+    const supplierRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "supplier_prices", {
+      select: "normalized_code,buy_price",
+      organization_id: `eq.${organizationId}`,
+      brand_id: `eq.${brandId}`,
+      is_active: "eq.true",
+      buy_price: "not.is.null",
+      normalized_code: `in.(${chunk.join(",")})`,
+      order: "buy_price.asc",
+      limit: "5000",
+    });
+    for (const row of supplierRows) {
+      const normalizedCode = String(row.normalized_code || "");
+      const buyPrice = row.buy_price == null ? null : Number(row.buy_price);
+      if (!normalizedCode || buyPrice == null || !Number.isFinite(buyPrice)) continue;
+      const current = bestByCode.get(normalizedCode);
+      if (current == null || buyPrice < current) {
+        bestByCode.set(normalizedCode, buyPrice);
+      }
+    }
+  }
+  return bestByCode;
+}
+
+export async function buildPortalPriceListRows(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  invite: PortalInviteRow,
+  brand: string,
+): Promise<{ priceListType: CustomerPricingContext["customerType"]; currency: string; rows: PortalPriceListRow[] }> {
+  const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
+  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
+  const brandId = brandMap.byName.get(String(brand || "").trim().toLowerCase()) || "";
+  const brandName = brandMap.byId.get(brandId) || "";
+  if (!brandId || !brandName) {
+    throw new Error("Brand not found for portal price list");
+  }
+
+  const catalogRows = await fetchPortalCatalogBrandRows(supabaseUrl, serviceRoleKey, invite.organization_id, brandId, brandName);
+  if (!catalogRows.length) {
+    return {
+      priceListType: context.customerType,
+      currency: context.currency,
+      rows: [],
+    };
+  }
+
+  let salesPriceByCode = new Map<string, number>();
+  if (context.customerType === "C") {
+    salesPriceByCode = await fetchCPriceMap(
+      supabaseUrl,
+      serviceRoleKey,
+      invite.organization_id,
+      context.cPriceListId,
+      catalogRows.map((row) => ({ brand: row.brand, product_code: row.product_code })),
+    );
+  } else {
+    const bestBuyMap = await fetchPortalBestSupplierPriceMap(
+      supabaseUrl,
+      serviceRoleKey,
+      invite.organization_id,
+      brandId,
+      [...new Set(catalogRows.map((row) => row.normalized_code).filter(Boolean))],
+    );
+    const marginPercent = context.customerType === "B" ? context.effectiveMarginB : context.effectiveMarginA;
+    for (const [normalizedCode, buyPrice] of bestBuyMap.entries()) {
+      salesPriceByCode.set(normalizedCode, roundMoney(Number(buyPrice) * (1 + marginPercent / 100)));
+    }
+  }
+
+  return {
+    priceListType: context.customerType,
+    currency: context.currency,
+    rows: catalogRows.map((row) => ({
+      product_code: row.product_code,
+      brand: row.brand,
+      description: row.description || "",
+      oem_no: row.oem_no || "",
+      hs_code: row.hs_code || "",
+      origin: row.origin || "",
+      weight_kg: row.weight_kg,
+      price_list_type: context.customerType,
+      sales_price: salesPriceByCode.get(row.normalized_code) ?? null,
+      lifecycle_status: row.lifecycle_status,
+      lifecycle_note: row.lifecycle_note,
+    })),
+  };
 }
 
 async function resolvePortalCatalogSupplierData(
