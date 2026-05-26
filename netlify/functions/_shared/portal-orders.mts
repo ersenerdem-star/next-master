@@ -41,6 +41,13 @@ type PortalCatalogSearchItem = {
   tariff: string;
   origin: string;
   weight_kg: number | null;
+  image_url: string;
+  sell_price: number | null;
+  currency: string;
+  supplier_name: string;
+  lifecycle_status?: "active" | "discontinued" | null;
+  lifecycle_note?: string | null;
+  lifecycle_warning?: string | null;
 };
 
 type PortalOrderInputRow = {
@@ -60,6 +67,7 @@ type PreparedPortalLine = {
   hs_code: string;
   origin: string;
   weight_kg: number | null;
+  image_url: string;
   supplier_name: string;
   buy_price: number | null;
   sell_price: number | null;
@@ -319,10 +327,10 @@ export async function searchPortalCatalog(
   const normalizedSearch = normalizePartCode(search);
   const selectedBrandId = brand ? brandMap.byName.get(brand.trim().toLowerCase()) || "" : "";
   const params: Record<string, string> = {
-    select: "product_code,description,oem_no,hs_code,origin,weight_kg,brand_id",
+    select: "product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,lifecycle_status,lifecycle_note",
     organization_id: `eq.${invite.organization_id}`,
     order: "product_code.asc",
-    limit: "50",
+    limit: "24",
   };
 
   if (selectedBrandId) params.brand_id = `eq.${selectedBrandId}`;
@@ -337,7 +345,7 @@ export async function searchPortalCatalog(
       or: buildPortalCatalogSearchOr(search, normalizedSearch, "loose"),
     });
   }
-  return rows.map((row) => ({
+  const baseItems = rows.map((row) => ({
     code: String(row.product_code || ""),
     brand: brandMap.byId.get(String(row.brand_id || "")) || "",
     description: String(row.description || ""),
@@ -345,7 +353,59 @@ export async function searchPortalCatalog(
     tariff: String(row.hs_code || ""),
     origin: String(row.origin || ""),
     weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
+    image_url: String(row.image_url || ""),
+    lifecycle_status: normalizeLifecycleStatus(row.lifecycle_status),
+    lifecycle_note: String(row.lifecycle_note || "").trim() || null,
   }));
+  if (!baseItems.length) return [];
+
+  const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
+  const prepared: PreparedPortalLine[] = [];
+  const previewRows = baseItems.map((item) => ({ code: item.code, brand: item.brand, qty: 1 }));
+  for (let index = 0; index < previewRows.length; index += 8) {
+    const chunk = previewRows.slice(index, index + 8);
+    const resolvedChunk = await Promise.all(chunk.map((row) => resolvePreparedLine(supabaseUrl, serviceRoleKey, row, context)));
+    prepared.push(...resolvedChunk);
+  }
+  if (context.customerType === "C" && prepared.length) {
+    const cPriceMap = await fetchCPriceMap(
+      supabaseUrl,
+      serviceRoleKey,
+      invite.organization_id,
+      context.cPriceListId,
+      prepared.map((row) => ({
+        brand: row.brand,
+        product_code: row.resolvedCode,
+      })),
+    );
+    prepared.forEach((line) => {
+      const value = cPriceMap.get(`${line.brand.trim().toLowerCase()}::${normalizePartCode(line.resolvedCode)}`);
+      line.c_sell_price = value == null ? null : Number(value);
+      line.sell_price = value == null ? line.sell_price : Number(value);
+    });
+  }
+  const previewByCode = new Map(prepared.map((line) => [`${line.brand.trim().toLowerCase()}::${normalizePartCode(line.requestedCode || line.resolvedCode)}`, line]));
+  return baseItems.map((item) => {
+    const preview = previewByCode.get(`${item.brand.trim().toLowerCase()}::${normalizePartCode(item.code)}`);
+    return {
+      code: item.code,
+      brand: item.brand,
+      description: preview?.description || item.description,
+      oem_no: preview?.oem_no || item.oem_no,
+      tariff: preview?.hs_code || item.tariff,
+      origin: preview?.origin || item.origin,
+      weight_kg: preview?.weight_kg ?? item.weight_kg,
+      image_url: preview?.image_url || item.image_url,
+      sell_price: preview?.sell_price ?? null,
+      currency: context.currency,
+      supplier_name: preview?.supplier_name || "",
+      lifecycle_status: preview?.lifecycle_status || item.lifecycle_status,
+      lifecycle_note: preview?.lifecycle_note || item.lifecycle_note,
+      lifecycle_warning:
+        preview?.lifecycle_warning ||
+        (item.lifecycle_status === "discontinued" ? buildDiscontinuedWarning(item.code, item.lifecycle_note) : null),
+    };
+  });
 }
 
 function mergeInputRows(rows: PortalOrderInputRow[]) {
@@ -424,13 +484,13 @@ async function resolvePortalCatalogSupplierData(
 
   const [catalogExact, catalogOem, supplierExact, supplierOem] = await Promise.all([
     fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
-      select: "product_code,description,oem_no,hs_code,origin,weight_kg,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
+      select: "product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
       organization_id: `eq.${context.organizationId}`,
       brand_id: `eq.${brandId}`,
       normalized_code: `eq.${normalizedCode}`,
     }),
     fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
-      select: "product_code,description,oem_no,hs_code,origin,weight_kg,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
+      select: "product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
       organization_id: `eq.${context.organizationId}`,
       brand_id: `eq.${brandId}`,
       normalized_oem: `eq.${normalizedCode}`,
@@ -617,6 +677,7 @@ async function resolvePreparedLine(
     hs_code: String(catalogMatch?.hs_code || ""),
     origin: String(catalogMatch?.origin || ""),
     weight_kg: catalogMatch?.weight_kg == null ? null : Number(catalogMatch.weight_kg),
+    image_url: String(catalogMatch?.image_url || ""),
     supplier_name: String(fallbackSupplier?.supplier_name || ""),
     buy_price: buyPrice,
     sell_price: computedSell,

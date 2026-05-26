@@ -157,6 +157,7 @@ function mapPortalSalesOrderToPreparedLines(row: PortalSalesOrderRow): PortalPre
       hs_code: String(line.hs_code || ""),
       origin: String(line.origin || ""),
       weight_kg: line.weight_kg == null ? null : Number(line.weight_kg),
+      image_url: "",
       supplier_name: String(line.supplier_name || ""),
       buy_price: buyPrice,
       sell_price: sellPrice,
@@ -285,6 +286,7 @@ export function PortalPage() {
   const [orderDeskView, setOrderDeskView] = useState<"simple" | "advanced">("simple");
   const [selectedCatalogCode, setSelectedCatalogCode] = useState("");
   const [selectedDraftLineId, setSelectedDraftLineId] = useState("");
+  const [previewImage, setPreviewImage] = useState<{ src: string; code: string; name: string } | null>(null);
   const portalPricingCurrency = snapshot?.pricingProfile?.currency || snapshot?.accountSummary.currency || "EUR";
 
   useEffect(() => {
@@ -407,9 +409,45 @@ export function PortalPage() {
   const portalCatalogColumns = useMemo(
     () => {
       const columns = [
+        {
+          key: "image",
+          header: "Photo",
+          render: (row: PortalCatalogSearchItem) =>
+            row.image_url ? (
+              <button
+                type="button"
+                className="catalog-thumb-button"
+                onClick={() =>
+                  setPreviewImage({
+                    src: row.image_url || "",
+                    code: row.code,
+                    name: row.description || "",
+                  })
+                }
+              >
+                <img src={row.image_url} alt={row.code} className="catalog-thumb" loading="lazy" />
+              </button>
+            ) : (
+              <span>-</span>
+            ),
+        },
         { key: "code", header: "Code", render: (row: PortalCatalogSearchItem) => row.code },
         { key: "brand", header: "Brand", render: (row: PortalCatalogSearchItem) => <BrandPill brand={row.brand} compact /> },
-        { key: "description", header: "Description", render: (row: PortalCatalogSearchItem) => row.description || "-" },
+        {
+          key: "description",
+          header: "Description",
+          render: (row: PortalCatalogSearchItem) => (
+            <div>
+              <div>{row.description || "-"}</div>
+              {renderDiscontinuedBadge(row)}
+            </div>
+          ),
+        },
+        {
+          key: "price",
+          header: `Price ${portalPricingCurrency}`,
+          render: (row: PortalCatalogSearchItem) => (row.sell_price == null ? "-" : formatMoney(Number(row.sell_price || 0), row.currency || portalPricingCurrency)),
+        },
       ];
       if (orderDeskView === "advanced") {
         columns.push(
@@ -424,13 +462,13 @@ export function PortalPage() {
         header: "Actions",
         render: (row: PortalCatalogSearchItem) => (
           <Button variant="secondary" className="button--compact" onClick={() => void handleAddPortalCatalogItem(row)}>
-            Add
+            Add to Desk
           </Button>
         ),
       });
       return columns;
     },
-    [orderDeskView],
+    [orderDeskView, portalPricingCurrency],
   );
 
   const portalDraftColumns = useMemo(
@@ -762,7 +800,7 @@ export function PortalPage() {
     },
   ];
   const portalSections: Array<{ key: PortalSection; label: string }> = [
-    ...(portalCanOrder ? [{ key: "desk" as PortalSection, label: "Order Desk" }] : []),
+    ...(portalCanOrder ? [{ key: "desk" as PortalSection, label: "Part Search" }] : []),
     ...(activeSnapshot.invite.access.can_view_orders ? [{ key: "orders" as PortalSection, label: "Orders" }] : []),
     ...(activeSnapshot.invite.access.can_view_invoices
       ? [{ key: "billing" as PortalSection, label: activeSnapshot.invite.party_type === "customer" ? "Invoices" : "Bills" }]
@@ -772,7 +810,7 @@ export function PortalPage() {
   ];
   const activeSectionHelpText =
     activeSection === "desk"
-      ? "Search parts, build the draft, review warnings, and confirm the order from one workbench."
+      ? "Search by part number or original number, compare alternatives, then move selected items into the draft."
       : activeSection === "orders"
         ? "Track submitted orders and inspect the full line detail when needed."
         : activeSection === "billing"
@@ -800,7 +838,8 @@ export function PortalPage() {
       setError("");
       const items = await searchPortalCatalogItems(credentials, orderSearch, orderSearchBrand);
       setCatalogResults(items);
-      setPortalOrderStatus(`${items.length.toLocaleString("en-US")} item found for portal order.`);
+      if (items[0]) setSelectedCatalogCode(items[0].code);
+      setPortalOrderStatus(`${items.length.toLocaleString("en-US")} matching product and alternative result(s) found.`);
     } catch (caught) {
       setCatalogResults([]);
       setError(caught instanceof Error ? caught.message : "Portal item search failed");
@@ -870,7 +909,7 @@ export function PortalPage() {
     setSelectedCatalogCode(item.code);
     const prepared = await appendPortalRows(
       [{ code: item.code, brand: item.brand, qty: 1 }],
-      `{count} item added to ${portalSalesOrderNo || "New Draft"} in Draft Lines.`,
+      `{count} item added to ${portalSalesOrderNo || "New Draft"} in Order Desk / Selected Items.`,
     );
     if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
   }
@@ -883,7 +922,7 @@ export function PortalPage() {
       }
       const prepared = await appendPortalRows(
         importedRows,
-        `{count} imported line priced for ${portalSalesOrderNo || "New Draft"} in Draft Lines.`,
+        `{count} imported line priced for ${portalSalesOrderNo || "New Draft"} in Order Desk / Selected Items.`,
       );
       if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
     } catch (caught) {
@@ -1083,8 +1122,8 @@ export function PortalPage() {
   const orderDeskFocusTitle = selectedDraftLine
     ? `${selectedDraftLine.resolvedCode || selectedDraftLine.requestedCode || "-"} · Draft Line`
     : selectedCatalogItem
-      ? `${selectedCatalogItem.code} · Catalog Result`
-      : portalSalesOrderNo || "Order Desk";
+      ? `${selectedCatalogItem.code} · Search Result`
+      : portalSalesOrderNo || "Part Search";
 
   function getPortalDocumentSelection(kind: PortalSelection["kind"], id: string) {
     if (kind === "sales-order") {
@@ -1679,7 +1718,7 @@ export function PortalPage() {
 
       {activeSection === "desk" && portalCanOrder ? (
         <div className="portal-section-stack">
-          <SectionCard title="Draft Queue">
+          <SectionCard title="Saved Drafts">
             <DataTable
               rows={portalDraftOrders}
               columns={[
@@ -1713,7 +1752,7 @@ export function PortalPage() {
           </SectionCard>
 
           <SectionCard
-            title="Order Desk"
+            title="Part Search"
             actions={
               <div className="workbench-controls workbench-controls--compact">
                 <div className="segmented-control">
@@ -1738,7 +1777,7 @@ export function PortalPage() {
             <div className="portal-order-builder">
               <div className="portal-order-builder__meta">
                 <div className="dashboard-stat">
-                  <span>Working Draft</span>
+                  <span>Order Desk Draft</span>
                   <strong>{portalSalesOrderNo || "New Draft"}</strong>
                 </div>
                 <div className="dashboard-stat">
@@ -1746,7 +1785,7 @@ export function PortalPage() {
                   <strong>{portalOrderCurrency}</strong>
                 </div>
                 <div className="dashboard-stat">
-                  <span>Draft Total</span>
+                  <span>Selected Total</span>
                   <strong>{formatMoney(portalOrderTotals.subtotal, portalOrderCurrency)}</strong>
                 </div>
                 <div className="dashboard-stat">
@@ -1775,7 +1814,7 @@ export function PortalPage() {
                     if (target) handleResumePortalDraft(target);
                   }}
                 />
-                <Input label="Part Search" value={orderSearch} placeholder="Code, description, OEM" onChange={setOrderSearch} />
+                <Input label="Part Search" value={orderSearch} placeholder="Part no, original no, description" onChange={setOrderSearch} />
                 <Select label="Brand" value={orderSearchBrand} options={portalBrandOptions} onChange={setOrderSearchBrand} />
                 <div className="portal-builder-actions">
                   <input
@@ -1800,6 +1839,11 @@ export function PortalPage() {
                 </div>
               </form>
 
+              <div className="portal-inline-note portal-inline-note--soft">
+                <span>Search Logic</span>
+                <strong>Original number search returns matching alternatives. Added items always appear in Selected Items below.</strong>
+              </div>
+
               <Input label="Notes" value={portalOrderNotes} placeholder="Order note for your internal buying team" onChange={setPortalOrderNotes} />
 
               {portalOrderStatus ? <div className="success-text">{portalOrderStatus}</div> : null}
@@ -1812,22 +1856,22 @@ export function PortalPage() {
 
               <div className="portal-workbench">
                 <div className="portal-workbench__tables">
-                  <SectionCard title="Catalog Results">
+                  <SectionCard title={`Matching Products & Alternatives (${catalogResults.length.toLocaleString("en-US")})`}>
                     <DataTable
                       rows={catalogResults}
                       columns={portalCatalogColumns}
-                      emptyText={searchingCatalog ? "Searching items..." : "Search by part number, original number, or description."}
+                      emptyText={searchingCatalog ? "Searching items..." : "Search by part number, original number, or description to load matching products and alternatives."}
                       onRowClick={(row) => setSelectedCatalogCode(row.code)}
                       rowClassName={(row) => (selectedCatalogCode === row.code ? "data-table__row--active" : "")}
                     />
                   </SectionCard>
 
                   <div ref={portalDraftLinesRef}>
-                    <SectionCard title={`Draft Lines (${portalDraftLines.length.toLocaleString("en-US")})`}>
+                    <SectionCard title={`Order Desk · Selected Items (${portalDraftLines.length.toLocaleString("en-US")})`}>
                       <DataTable
                         rows={portalDraftLines}
                         columns={portalDraftColumns}
-                        emptyText={preparingPortalOrder ? "Preparing prices..." : "Import a file or add items from catalog results."}
+                        emptyText={preparingPortalOrder ? "Preparing prices..." : "Use Add on a search result or import a file to build the order draft here."}
                         onRowClick={(row) => setSelectedDraftLineId(row.lineId)}
                         rowClassName={(row) => (selectedDraftLineId === row.lineId ? "data-table__row--active" : "")}
                       />
@@ -1837,34 +1881,83 @@ export function PortalPage() {
 
                 <aside className="portal-workbench__side">
                   <div className="workbench-detail-panel workbench-detail-panel--catalog">
-                    <div className="workbench-detail-panel__eyebrow">Order Focus</div>
+                    <div className="workbench-detail-panel__eyebrow">Part Search Focus</div>
                     <div className="workbench-detail-panel__title">{orderDeskFocusTitle}</div>
                     {selectedDraftLine ? (
-                      <div className="workbench-detail-list">
-                        <div><span>Requested Code</span><strong>{selectedDraftLine.requestedCode || "-"}</strong></div>
-                        <div><span>Resolved Code</span><strong>{selectedDraftLine.resolvedCode || "-"}</strong></div>
-                        <div><span>Brand</span><strong>{selectedDraftLine.brand || "-"}</strong></div>
-                        <div><span>Description</span><strong>{selectedDraftLine.description || "-"}</strong></div>
-                        <div><span>OEM</span><strong>{selectedDraftLine.oem_no || "-"}</strong></div>
-                        <div><span>Tariff</span><strong>{selectedDraftLine.hs_code || "-"}</strong></div>
-                        <div><span>Origin</span><strong>{selectedDraftLine.origin || "-"}</strong></div>
-                        <div><span>Weight</span><strong>{formatWeight(selectedDraftLine.weight_kg)}</strong></div>
-                        <div><span>Unit Price</span><strong>{selectedDraftLine.sell_price == null ? "-" : formatMoney(selectedDraftLine.sell_price, portalOrderCurrency)}</strong></div>
-                        {selectedDraftLine.codeChangeWarning ? <div><span>Replacement</span><strong>{selectedDraftLine.codeChangeWarning}</strong></div> : null}
-                        {selectedDraftLine.lifecycle_warning ? <div><span>Lifecycle</span><strong>{selectedDraftLine.lifecycle_warning}</strong></div> : null}
-                      </div>
+                      <>
+                        <div className="workbench-detail-panel__media">
+                          {selectedDraftLine.image_url ? (
+                            <button
+                              type="button"
+                              className="catalog-thumb-button catalog-thumb-button--detail"
+                              onClick={() =>
+                                setPreviewImage({
+                                  src: selectedDraftLine.image_url || "",
+                                  code: selectedDraftLine.resolvedCode || selectedDraftLine.requestedCode || "",
+                                  name: selectedDraftLine.description || "",
+                                })
+                              }
+                            >
+                              <img
+                                src={selectedDraftLine.image_url}
+                                alt={selectedDraftLine.resolvedCode || selectedDraftLine.requestedCode || ""}
+                                className="catalog-thumb catalog-thumb--detail"
+                                loading="lazy"
+                              />
+                            </button>
+                          ) : (
+                            <div className="empty-state">No photo</div>
+                          )}
+                        </div>
+                        <div className="workbench-detail-list">
+                          <div><span>Requested Code</span><strong>{selectedDraftLine.requestedCode || "-"}</strong></div>
+                          <div><span>Resolved Code</span><strong>{selectedDraftLine.resolvedCode || "-"}</strong></div>
+                          <div><span>Brand</span><strong>{selectedDraftLine.brand || "-"}</strong></div>
+                          <div><span>Description</span><strong>{selectedDraftLine.description || "-"}</strong></div>
+                          <div><span>OEM</span><strong>{selectedDraftLine.oem_no || "-"}</strong></div>
+                          <div><span>Tariff</span><strong>{selectedDraftLine.hs_code || "-"}</strong></div>
+                          <div><span>Origin</span><strong>{selectedDraftLine.origin || "-"}</strong></div>
+                          <div><span>Weight</span><strong>{formatWeight(selectedDraftLine.weight_kg)}</strong></div>
+                          <div><span>Unit Price</span><strong>{selectedDraftLine.sell_price == null ? "-" : formatMoney(selectedDraftLine.sell_price, portalOrderCurrency)}</strong></div>
+                          {selectedDraftLine.codeChangeWarning ? <div><span>Replacement</span><strong>{selectedDraftLine.codeChangeWarning}</strong></div> : null}
+                          {selectedDraftLine.lifecycle_warning ? <div><span>Lifecycle</span><strong>{selectedDraftLine.lifecycle_warning}</strong></div> : null}
+                        </div>
+                      </>
                     ) : selectedCatalogItem ? (
-                      <div className="workbench-detail-list">
-                        <div><span>Code</span><strong>{selectedCatalogItem.code || "-"}</strong></div>
-                        <div><span>Brand</span><strong>{selectedCatalogItem.brand || "-"}</strong></div>
-                        <div><span>Description</span><strong>{selectedCatalogItem.description || "-"}</strong></div>
-                        <div><span>OEM</span><strong>{selectedCatalogItem.oem_no || "-"}</strong></div>
-                        <div><span>Tariff</span><strong>{selectedCatalogItem.tariff || "-"}</strong></div>
-                        <div><span>Origin</span><strong>{selectedCatalogItem.origin || "-"}</strong></div>
-                        <div><span>Weight</span><strong>{formatWeight(selectedCatalogItem.weight_kg)}</strong></div>
-                      </div>
+                      <>
+                        <div className="workbench-detail-panel__media">
+                          {selectedCatalogItem.image_url ? (
+                            <button
+                              type="button"
+                              className="catalog-thumb-button catalog-thumb-button--detail"
+                              onClick={() =>
+                                setPreviewImage({
+                                  src: selectedCatalogItem.image_url || "",
+                                  code: selectedCatalogItem.code || "",
+                                  name: selectedCatalogItem.description || "",
+                                })
+                              }
+                            >
+                              <img src={selectedCatalogItem.image_url} alt={selectedCatalogItem.code || ""} className="catalog-thumb catalog-thumb--detail" loading="lazy" />
+                            </button>
+                          ) : (
+                            <div className="empty-state">No photo</div>
+                          )}
+                        </div>
+                        <div className="workbench-detail-list">
+                          <div><span>Code</span><strong>{selectedCatalogItem.code || "-"}</strong></div>
+                          <div><span>Brand</span><strong>{selectedCatalogItem.brand || "-"}</strong></div>
+                          <div><span>Description</span><strong>{selectedCatalogItem.description || "-"}</strong></div>
+                          <div><span>OEM</span><strong>{selectedCatalogItem.oem_no || "-"}</strong></div>
+                          <div><span>Tariff</span><strong>{selectedCatalogItem.tariff || "-"}</strong></div>
+                          <div><span>Origin</span><strong>{selectedCatalogItem.origin || "-"}</strong></div>
+                          <div><span>Weight</span><strong>{formatWeight(selectedCatalogItem.weight_kg)}</strong></div>
+                          <div><span>Unit Price</span><strong>{selectedCatalogItem.sell_price == null ? "-" : formatMoney(selectedCatalogItem.sell_price, selectedCatalogItem.currency || portalOrderCurrency)}</strong></div>
+                          {selectedCatalogItem.lifecycle_warning ? <div><span>Lifecycle</span><strong>{selectedCatalogItem.lifecycle_warning}</strong></div> : null}
+                        </div>
+                      </>
                     ) : (
-                      <div className="chart-placeholder">Select a result or a draft line to inspect full detail.</div>
+                      <div className="chart-placeholder">Search a part number or original number, then select a result or selected item to inspect full detail.</div>
                     )}
 
                     {portalOriginalNumberBrandMatches.length ? (
@@ -1922,6 +2015,27 @@ export function PortalPage() {
             <div className="modal-card__header">
               <h3>{portalOverlay.title}</h3>
               <p>{portalOverlay.message}</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {previewImage ? (
+        <div className="modal-backdrop" onClick={() => setPreviewImage(null)}>
+          <div className="modal-card modal-card--image-preview" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-card__header">
+              <div>
+                <h3>{previewImage.code}</h3>
+                <p>{previewImage.name || "Portal image preview"}</p>
+              </div>
+            </div>
+            <div className="image-preview-wrap">
+              <img src={previewImage.src} alt={previewImage.code} className="image-preview" />
+            </div>
+            <div className="modal-actions">
+              <Button variant="secondary" onClick={() => setPreviewImage(null)}>
+                Close
+              </Button>
             </div>
           </div>
         </div>

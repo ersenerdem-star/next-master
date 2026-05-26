@@ -8,6 +8,13 @@ export type PortalCatalogSearchItem = {
   tariff: string;
   origin: string;
   weight_kg: number | null;
+  image_url: string;
+  sell_price: number | null;
+  currency: string;
+  supplier_name: string;
+  lifecycle_status?: "active" | "discontinued" | null;
+  lifecycle_note?: string | null;
+  lifecycle_warning?: string | null;
 };
 
 export type PortalOrderInputRow = {
@@ -27,6 +34,7 @@ export type PortalPreparedLine = {
   hs_code: string;
   origin: string;
   weight_kg: number | null;
+  image_url: string;
   supplier_name: string;
   buy_price: number | null;
   sell_price: number | null;
