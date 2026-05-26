@@ -2119,9 +2119,9 @@ export function QuotesPage({
         },
       },
       {
-        key: "lines",
-        header: "Lines",
-        render: (row: LocalSalesOrder) => row.lines.length.toLocaleString("en-US"),
+        key: "sellerCompany",
+        header: "Seller Company",
+        render: (row: LocalSalesOrder) => row.seller_company || "-",
       },
       {
         key: "date",
