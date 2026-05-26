@@ -991,11 +991,11 @@ export function PortalPage() {
       });
       setSnapshot(result.snapshot);
       setSelection({ kind: "sales-order", id: result.orderId });
-      setActiveSection(mode === "confirm" ? "statement" : "orders");
+      setActiveSection(mode === "confirm" ? "statement" : "desk");
       setStatus(
         mode === "confirm"
           ? `Basket ${result.orderId} submitted. Internal team can prepare proforma and next documents.`
-          : `Basket ${result.orderId} saved for later continuation.`,
+          : `Basket ${result.orderId} saved. Use Confirm Basket to send it.`,
       );
       setPortalOrderStatus("");
       setCatalogResults([]);
@@ -1923,7 +1923,7 @@ export function PortalPage() {
               <Input label="Notes" value={portalOrderNotes} placeholder="Order note for your internal buying team" onChange={setPortalOrderNotes} />
 
               {portalOrderStatus ? <div className="success-text">{portalOrderStatus}</div> : null}
-              {portalDraftHasMissingPrices ? <div className="warning-text">Items without live price can be saved in the basket but cannot be submitted.</div> : null}
+              {portalDraftHasMissingPrices ? <div className="warning-text">Items without live price can be saved in the basket but cannot be confirmed.</div> : null}
               {portalDraftDiscontinuedCount > 0 ? (
                 <div className="warning-text">
                   {portalDraftDiscontinuedCount.toLocaleString("en-US")} discontinued item(s) detected in this basket. Review before submission.
@@ -2130,8 +2130,8 @@ export function PortalPage() {
                 <Button variant="secondary" onClick={handleClearPortalBuilder}>
                   Clear
                 </Button>
-                <Button busy={confirmingPortalOrder} busyLabel="Submitting..." disabled={portalDraftHasMissingPrices} onClick={() => void handleSubmitPortalOrder("confirm")}>
-                  Submit Basket
+                <Button busy={confirmingPortalOrder} busyLabel="Confirming..." disabled={portalDraftHasMissingPrices} onClick={() => void handleSubmitPortalOrder("confirm")}>
+                  Confirm Basket
                 </Button>
               </div>
             </div>
