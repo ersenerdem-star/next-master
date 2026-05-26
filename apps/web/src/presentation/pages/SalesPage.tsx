@@ -109,6 +109,64 @@ export function SalesPage({
     };
   }
 
+  function buildEntityAlias(value: string) {
+    const normalized = String(value || "").trim();
+    if (!normalized) return "-";
+
+    const rawTokens = normalized.split(/\s+/).filter(Boolean);
+    if (rawTokens.length <= 2) return normalized;
+
+    const stopWords = new Set([
+      "ltd",
+      "ltd.",
+      "limited",
+      "sti",
+      "şti",
+      "sti.",
+      "şti.",
+      "sanayi",
+      "ticaret",
+      "otomotiv",
+      "dis",
+      "dış",
+      "ve",
+      "co",
+      "co.",
+      "company",
+      "gmbh",
+      "sro",
+      "s.r.o.",
+      "llc",
+      "inc",
+      "corp",
+      "bv",
+      "ag",
+    ]);
+
+    const significantTokens = rawTokens.filter((token) => !stopWords.has(token.toLowerCase()));
+    const aliasTokens = (significantTokens.length >= 2 ? significantTokens : rawTokens).slice(0, 2);
+    return aliasTokens.join(" ");
+  }
+
+  function buildInvoiceBrandSummary(lines: LocalInvoice["lines"]) {
+    const labels: string[] = [];
+    const seen = new Set<string>();
+
+    lines.forEach((line) => {
+      const brand = String(line.brand || "").trim();
+      if (!brand) return;
+      const key = brand.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      labels.push(brand);
+    });
+
+    return {
+      labels: labels.slice(0, 3),
+      extraCount: Math.max(0, labels.length - 3),
+    };
+  }
+
   useEffect(() => {
     if (!externalSelectedInvoiceId) return;
     setActiveTab("Invoices");
@@ -537,8 +595,34 @@ export function SalesPage({
   const invoiceColumns = [
     { key: "invoice", header: "Invoice No", render: (row: LocalInvoice) => row.id },
     { key: "salesOrder", header: "Sales Order", render: (row: LocalInvoice) => row.sales_order_no },
-    { key: "customer", header: "Customer", render: (row: LocalInvoice) => row.customer_name || "-" },
-    { key: "seller", header: "Seller Company", render: (row: LocalInvoice) => row.seller_company || "-" },
+    {
+      key: "brands",
+      header: "Brand",
+      render: (row: LocalInvoice) => {
+        const brandSummary = buildInvoiceBrandSummary(row.lines);
+        if (!brandSummary.labels.length) return "-";
+        return (
+          <span className="document-marks document-marks--compact">
+            {brandSummary.labels.map((brand) => (
+              <span key={`${row.id}-${brand}`} className="mark-badge">
+                {brand}
+              </span>
+            ))}
+            {brandSummary.extraCount > 0 ? <span className="mark-badge mark-badge--info">+{brandSummary.extraCount}</span> : null}
+          </span>
+        );
+      },
+    },
+    {
+      key: "customer",
+      header: "Customer",
+      render: (row: LocalInvoice) => <span title={row.customer_name || "-"}>{buildEntityAlias(row.customer_name)}</span>,
+    },
+    {
+      key: "seller",
+      header: "Seller Company",
+      render: (row: LocalInvoice) => <span title={row.seller_company || "-"}>{buildEntityAlias(row.seller_company)}</span>,
+    },
     { key: "date", header: "Date", render: (row: LocalInvoice) => row.quote_date || "-" },
     { key: "amount", header: "Total Amount", render: (row: LocalInvoice) => `${row.total_amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
     { key: "profit", header: "Profit", render: (row: LocalInvoice) => `${row.profit_total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
