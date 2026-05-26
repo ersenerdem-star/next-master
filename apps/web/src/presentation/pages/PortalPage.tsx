@@ -637,8 +637,8 @@ export function PortalPage() {
     setPortalOrderStatus(
       latestPortalDraft
         ? latestPortalDraft.portal_submitted_at
-          ? `Portal order ${latestPortalDraft.sales_order_no || latestPortalDraft.id} already submitted.`
-          : `Draft ${latestPortalDraft.sales_order_no || latestPortalDraft.id} loaded.`
+          ? `Basket ${latestPortalDraft.sales_order_no || latestPortalDraft.id} already submitted.`
+          : `Basket ${latestPortalDraft.sales_order_no || latestPortalDraft.id} loaded.`
         : "",
     );
     setOrderSearchBrand((current) => current || snapshot.availableBrands[0] || "");
@@ -748,7 +748,7 @@ export function PortalPage() {
   const selectedDraftLine = portalDraftLines.find((line) => line.lineId === selectedDraftLineId) || null;
   const portalBrandOptions = [{ value: "", label: "All Brands" }, ...activeSnapshot.availableBrands.map((brand) => ({ value: brand, label: brand }))];
   const portalDraftSelectionOptions = [
-    { value: "", label: "New Draft" },
+    { value: "", label: "New Basket" },
     ...portalDraftOrders.map((row) => ({
       value: row.id,
       label: `${row.sales_order_no || row.id} · ${(row.line_count || row.lines?.length || 0).toLocaleString("en-US")} lines`,
@@ -780,9 +780,9 @@ export function PortalPage() {
   const portalBillingRows = activeSnapshot.invite.party_type === "customer" ? filteredInvoices : filteredBills;
   const portalQuickStats = [
     {
-      label: portalCanOrder ? "Open Drafts" : "Orders",
+      label: portalCanOrder ? "Open Baskets" : "Orders",
       value: portalCanOrder ? portalDraftOrders.length.toLocaleString("en-US") : portalOrderHistoryRows.length.toLocaleString("en-US"),
-      note: portalCanOrder ? "Saved work waiting for confirmation" : "Visible order records",
+      note: portalCanOrder ? "Saved work waiting for submission" : "Visible order records",
     },
     {
       label: activeSnapshot.invite.party_type === "customer" ? "Invoices" : "Bills",
@@ -811,7 +811,7 @@ export function PortalPage() {
   ];
   const activeSectionHelpText =
     activeSection === "desk"
-      ? "Search by part number or original number, compare alternatives, then move selected items into the draft."
+      ? "Search by part number or original number, compare alternatives, then move selected items into the basket."
       : activeSection === "orders"
         ? "Track submitted orders and inspect the full line detail when needed."
         : activeSection === "billing"
@@ -840,7 +840,7 @@ export function PortalPage() {
       const items = await searchPortalCatalogItems(credentials, orderSearch, orderSearchBrand);
       setCatalogResults(items);
       if (items[0]) setSelectedCatalogCode(items[0].code);
-      setPortalOrderStatus(`${items.length.toLocaleString("en-US")} matching product and alternative result(s) found.`);
+      setPortalOrderStatus(`${items.length.toLocaleString("en-US")} matching product and alternative result(s) found for the basket flow.`);
     } catch (caught) {
       setCatalogResults([]);
       setError(caught instanceof Error ? caught.message : "Portal item search failed");
@@ -891,7 +891,7 @@ export function PortalPage() {
       const discontinuedCount = preparedLines.filter((line) => line.lifecycle_status === "discontinued").length;
       const pricedCount = preparedLines.length - missingPriceCount;
       setPortalOrderStatus(
-        `${statusText.replace("{count}", preparedLines.length.toLocaleString("en-US"))} ${pricedCount > 0 ? `${pricedCount.toLocaleString("en-US")} priced.` : ""}${missingPriceCount > 0 ? ` ${missingPriceCount.toLocaleString("en-US")} need live pricing.` : ""}${discontinuedCount > 0 ? ` ${discontinuedCount.toLocaleString("en-US")} discontinued item(s) detected.` : ""}${failedChunkMessage ? " Some lines could not be processed; save draft and continue later." : ""}`.trim(),
+        `${statusText.replace("{count}", preparedLines.length.toLocaleString("en-US"))} ${pricedCount > 0 ? `${pricedCount.toLocaleString("en-US")} priced.` : ""}${missingPriceCount > 0 ? ` ${missingPriceCount.toLocaleString("en-US")} need live pricing.` : ""}${discontinuedCount > 0 ? ` ${discontinuedCount.toLocaleString("en-US")} discontinued item(s) detected.` : ""}${failedChunkMessage ? " Some lines could not be processed; save basket and continue later." : ""}`.trim(),
       );
       if (failedChunkMessage) {
         setError(failedChunkMessage);
@@ -910,7 +910,7 @@ export function PortalPage() {
     setSelectedCatalogCode(item.code);
     const prepared = await appendPortalRows(
       [{ code: item.code, brand: item.brand, qty: 1 }],
-      `{count} item added to ${portalSalesOrderNo || "New Draft"} in Order Desk / Selected Items.`,
+      `{count} item added to ${portalSalesOrderNo || "New Basket"} in Basket.`,
     );
     if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
   }
@@ -923,7 +923,7 @@ export function PortalPage() {
       }
       const prepared = await appendPortalRows(
         importedRows,
-        `{count} imported line priced for ${portalSalesOrderNo || "New Draft"} in Order Desk / Selected Items.`,
+        `{count} imported line priced for ${portalSalesOrderNo || "New Basket"} in Basket.`,
       );
       if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
     } catch (caught) {
@@ -939,14 +939,14 @@ export function PortalPage() {
       return;
     }
     if (mode === "confirm" && portalDraftHasMissingPrices) {
-      setError("Some lines do not have a live price yet. Remove them or complete pricing before confirming.");
+      setError("Some lines do not have a live price yet. Remove them or complete pricing before submitting.");
       return;
     }
     if (
       mode === "confirm" &&
       portalDraftDiscontinuedCount > 0 &&
       !window.confirm(
-        `${portalDraftDiscontinuedCount.toLocaleString("en-US")} discontinued item(s) are still in this portal order. Continue and confirm anyway?`,
+        `${portalDraftDiscontinuedCount.toLocaleString("en-US")} discontinued item(s) are still in this basket. Continue and submit anyway?`,
       )
     ) {
       return;
@@ -956,8 +956,8 @@ export function PortalPage() {
       else setSavingPortalOrder(true);
       setError("");
       setPortalOverlay({
-        title: mode === "confirm" ? "Submitting Sales Order" : "Saving Sales Order Draft",
-        message: mode === "confirm" ? "Confirming the order and sending it to the internal team." : "Saving current draft lines and order details.",
+        title: mode === "confirm" ? "Submitting Basket" : "Saving Basket",
+        message: mode === "confirm" ? "Submitting the basket and sending it to the internal team." : "Saving current basket lines and details.",
       });
       const result = await submitPortalOrder(credentials, {
         orderId: portalOrderId || undefined,
@@ -978,8 +978,8 @@ export function PortalPage() {
       setActiveSection(mode === "confirm" ? "statement" : "orders");
       setStatus(
         mode === "confirm"
-          ? `Sales order ${result.orderId} submitted. Internal team can process it now.`
-          : `Sales order ${result.orderId} saved as portal draft.`,
+          ? `Basket ${result.orderId} submitted. Internal team can prepare proforma and next documents.`
+          : `Basket ${result.orderId} saved for later continuation.`,
       );
       setPortalOrderStatus("");
       setCatalogResults([]);
@@ -1002,7 +1002,7 @@ export function PortalPage() {
     setPortalPaymentTerms(row.payment_terms || activeSnapshot.pricingProfile?.payment_terms || "");
     setPortalPackingDetails(row.packing_details || "");
     setPortalOrderNotes(row.notes || "");
-    setPortalOrderStatus(`Draft ${row.sales_order_no || row.id} loaded.`);
+    setPortalOrderStatus(`Basket ${row.sales_order_no || row.id} loaded.`);
     setCatalogResults([]);
     setSelection({ kind: "sales-order", id: row.id });
     setActiveSection("desk");
@@ -1016,7 +1016,7 @@ export function PortalPage() {
     setPortalPaymentTerms(activeSnapshot.pricingProfile?.payment_terms || "");
     setPortalPackingDetails("");
     setPortalOrderNotes("");
-    setPortalOrderStatus("Order screen cleared. Start a new order or resume a saved draft.");
+    setPortalOrderStatus("Basket cleared. Start a new search or resume a saved basket.");
     setCatalogResults([]);
     setOrderSearch("");
     setSelection(null);
@@ -1027,22 +1027,22 @@ export function PortalPage() {
   }
 
   async function handleDeletePortalDraft(row: PortalSalesOrderRow) {
-    if (!window.confirm(`Delete draft ${row.sales_order_no || row.id}?`)) return;
+    if (!window.confirm(`Delete basket ${row.sales_order_no || row.id}?`)) return;
     try {
       setSavingPortalOrder(true);
       setError("");
       setPortalOverlay({
-        title: "Deleting Sales Order Draft",
-        message: `Removing draft ${row.sales_order_no || row.id} from your portal workspace.`,
+        title: "Deleting Basket",
+        message: `Removing basket ${row.sales_order_no || row.id} from your portal workspace.`,
       });
       const result = await deletePortalDraftOrder(credentials, row.id);
       setSnapshot(result.snapshot);
       if (selection?.kind === "sales-order" && selection.id === row.id) {
         setSelection(null);
       }
-      setStatus(`Sales order draft ${row.sales_order_no || row.id} deleted.`);
+      setStatus(`Basket ${row.sales_order_no || row.id} deleted.`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Portal draft delete failed");
+      setError(caught instanceof Error ? caught.message : "Portal basket delete failed");
     } finally {
       setSavingPortalOrder(false);
       setPortalOverlay(null);
@@ -1121,10 +1121,10 @@ export function PortalPage() {
           : `Bill Detail · ${selectedDocument.row.id}`
     : "";
   const orderDeskFocusTitle = selectedDraftLine
-    ? `${selectedDraftLine.resolvedCode || selectedDraftLine.requestedCode || "-"} · Draft Line`
+    ? `${selectedDraftLine.resolvedCode || selectedDraftLine.requestedCode || "-"} · Basket Line`
     : selectedCatalogItem
       ? `${selectedCatalogItem.code} · Search Result`
-      : portalSalesOrderNo || "Part Search";
+      : portalSalesOrderNo || "Basket";
 
   function getPortalDocumentSelection(kind: PortalSelection["kind"], id: string) {
     if (kind === "sales-order") {
@@ -1747,15 +1747,15 @@ export function PortalPage() {
             <div className="portal-order-builder">
               <div className="portal-order-builder__meta">
                 <div className="dashboard-stat">
-                  <span>Order Desk Draft</span>
-                  <strong>{portalSalesOrderNo || "New Draft"}</strong>
+                  <span>Active Basket</span>
+                  <strong>{portalSalesOrderNo || "New Basket"}</strong>
                 </div>
                 <div className="dashboard-stat">
                   <span>Currency</span>
                   <strong>{portalOrderCurrency}</strong>
                 </div>
                 <div className="dashboard-stat">
-                  <span>Selected Total</span>
+                  <span>Basket Total</span>
                   <strong>{formatMoney(portalOrderTotals.subtotal, portalOrderCurrency)}</strong>
                 </div>
                 <div className="dashboard-stat">
@@ -1772,7 +1772,7 @@ export function PortalPage() {
                 }}
               >
                 <Select
-                  label="Target Draft"
+                  label="Basket"
                   value={portalOrderId}
                   options={portalDraftSelectionOptions}
                   onChange={(value) => {
@@ -1811,16 +1811,16 @@ export function PortalPage() {
 
               <div className="portal-inline-note portal-inline-note--soft">
                 <span>Search Logic</span>
-                <strong>Original number search returns matching alternatives. Added items always appear in Selected Items below.</strong>
+                <strong>Original number search returns matching alternatives. Added items always appear in the basket below.</strong>
               </div>
 
               <Input label="Notes" value={portalOrderNotes} placeholder="Order note for your internal buying team" onChange={setPortalOrderNotes} />
 
               {portalOrderStatus ? <div className="success-text">{portalOrderStatus}</div> : null}
-              {portalDraftHasMissingPrices ? <div className="warning-text">Items without live price can be saved as draft but cannot be confirmed.</div> : null}
+              {portalDraftHasMissingPrices ? <div className="warning-text">Items without live price can be saved in the basket but cannot be submitted.</div> : null}
               {portalDraftDiscontinuedCount > 0 ? (
                 <div className="warning-text">
-                  {portalDraftDiscontinuedCount.toLocaleString("en-US")} discontinued item(s) detected in this draft. Review before confirmation.
+                  {portalDraftDiscontinuedCount.toLocaleString("en-US")} discontinued item(s) detected in this basket. Review before submission.
                 </div>
               ) : null}
 
@@ -1869,7 +1869,7 @@ export function PortalPage() {
                                   void handleAddPortalCatalogItem(row);
                                 }}
                               >
-                                Add to Desk
+                                Add to Basket
                               </Button>
                             </div>
                           </button>
@@ -1892,11 +1892,11 @@ export function PortalPage() {
                   </SectionCard>
 
                   <div ref={portalDraftLinesRef}>
-                    <SectionCard title={`Order Desk · Selected Items (${portalDraftLines.length.toLocaleString("en-US")})`}>
+                    <SectionCard title={`Basket (${portalDraftLines.length.toLocaleString("en-US")})`}>
                       <DataTable
                         rows={portalDraftLines}
                         columns={portalDraftColumns}
-                        emptyText={preparingPortalOrder ? "Preparing prices..." : "Use Add on a search result or import a file to build the order draft here."}
+                        emptyText={preparingPortalOrder ? "Preparing prices..." : "Use Add on a search result or import a file to build the basket here."}
                         onRowClick={(row) => setSelectedDraftLineId(row.lineId)}
                         rowClassName={(row) => (selectedDraftLineId === row.lineId ? "data-table__row--active" : "")}
                       />
@@ -1906,7 +1906,7 @@ export function PortalPage() {
 
                 <aside className="portal-workbench__side">
                   <div className="workbench-detail-panel workbench-detail-panel--catalog">
-                    <div className="workbench-detail-panel__eyebrow">Part Search Focus</div>
+                    <div className="workbench-detail-panel__eyebrow">{selectedDraftLine ? "Basket Focus" : "Part Search Focus"}</div>
                     <div className="workbench-detail-panel__title">{orderDeskFocusTitle}</div>
                     {selectedDraftLine ? (
                       <>
@@ -2020,13 +2020,13 @@ export function PortalPage() {
 
               <div className="portal-action-bar">
                 <Button variant="secondary" busy={savingPortalOrder} busyLabel="Saving..." onClick={() => void handleSubmitPortalOrder("draft")}>
-                  Save Draft
+                  Save Basket
                 </Button>
                 <Button variant="secondary" onClick={handleClearPortalBuilder}>
                   Clear
                 </Button>
-                <Button busy={confirmingPortalOrder} busyLabel="Confirming..." disabled={portalDraftHasMissingPrices} onClick={() => void handleSubmitPortalOrder("confirm")}>
-                  Confirm Order
+                <Button busy={confirmingPortalOrder} busyLabel="Submitting..." disabled={portalDraftHasMissingPrices} onClick={() => void handleSubmitPortalOrder("confirm")}>
+                  Submit Basket
                 </Button>
               </div>
             </div>
