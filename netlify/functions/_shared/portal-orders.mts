@@ -133,6 +133,14 @@ function buildLooseOriginalNumberPattern(value: string, wildcard = "*") {
   return normalized.split("").join(wildcard);
 }
 
+function buildSeparatorInsensitivePattern(value: string, wildcard = "*") {
+  const tokens = String(value || "")
+    .toUpperCase()
+    .match(/[A-Z0-9]+/g);
+  if (!tokens?.length) return "";
+  return tokens.join(wildcard);
+}
+
 type PortalSearchMode = "strict" | "loose";
 
 function shouldRunLooseOriginalNumberSearch(search: string) {
@@ -143,11 +151,18 @@ function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mo
   const escaped = search.replace(/[%*(),]/g, " ").trim();
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
   const looseOriginalPattern = buildLooseOriginalNumberPattern(search);
+  const separatorInsensitivePattern = buildSeparatorInsensitivePattern(search);
   const clauses = [
     `product_code.ilike.*${escaped}*`,
     `description.ilike.*${escaped}*`,
     `oem_no.ilike.*${escaped}*`,
   ];
+  if (separatorInsensitivePattern && separatorInsensitivePattern !== escaped.toUpperCase()) {
+    clauses.push(
+      `product_code.ilike.*${separatorInsensitivePattern}*`,
+      `oem_no.ilike.*${separatorInsensitivePattern}*`,
+    );
+  }
   if (normalizedSearch.length >= 3) {
     clauses.push(
       `normalized_code.eq.${normalizedSearch}`,
