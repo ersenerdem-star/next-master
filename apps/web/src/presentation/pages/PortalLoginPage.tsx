@@ -55,6 +55,15 @@ export function PortalLoginPage({ onSuccess }: PortalLoginPageProps) {
   return (
     <div className="login-screen portal-screen">
       <div className="login-card portal-card">
+        <div className="portal-login-brand">
+          <div className="portal-login-brand__logo" aria-hidden="true">
+            NM
+          </div>
+          <div className="portal-login-brand__copy">
+            <span>Drive Console</span>
+            <strong>Next Master</strong>
+          </div>
+        </div>
         <h1>Portal Access</h1>
         <p>Sign in with your invited portal email and token.</p>
         <Input label="Portal Email" value={email} onChange={setEmail} placeholder="vendor@company.com" />

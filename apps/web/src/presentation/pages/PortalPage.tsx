@@ -672,6 +672,15 @@ export function PortalPage() {
     return (
       <div className="portal-shell">
         <div className="portal-login-card">
+          <div className="portal-login-brand">
+            <div className="portal-login-brand__logo" aria-hidden="true">
+              NM
+            </div>
+            <div className="portal-login-brand__copy">
+              <span>Drive Console</span>
+              <strong>Next Master</strong>
+            </div>
+          </div>
           <h1>Portal Login</h1>
           <p>Enter invite email and token to access customer or vendor self-service.</p>
           <form

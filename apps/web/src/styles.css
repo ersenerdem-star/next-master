@@ -2238,6 +2238,51 @@ select {
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
 }
 
+.portal-login-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.portal-login-brand__logo {
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  box-shadow: 0 12px 26px rgba(217, 119, 6, 0.24);
+}
+
+.portal-login-brand__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.portal-login-brand__copy span {
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.portal-login-brand__copy strong {
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
 .portal-login-card h1 {
   font-size: 28px;
   margin-bottom: 8px;
