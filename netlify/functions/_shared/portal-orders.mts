@@ -162,6 +162,8 @@ function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mo
   }
   if (normalizedSearch.length >= 3) {
     clauses.push(
+      `product_code.ilike.*${normalizedSearch}*`,
+      `oem_no.ilike.*${normalizedSearch}*`,
       `normalized_code.eq.${normalizedSearch}`,
       `normalized_oem.eq.${normalizedSearch}`,
       `normalized_code.like.${normalizedSearch}*`,
