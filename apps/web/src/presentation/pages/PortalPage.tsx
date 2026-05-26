@@ -772,6 +772,7 @@ export function PortalPage() {
         .filter(Boolean),
     ),
   ).sort((left, right) => left.localeCompare(right));
+  const portalSearchCards = catalogResults.slice(0, orderDeskView === "advanced" ? 12 : 8);
   const portalOrderHistoryRows =
     activeSnapshot.invite.party_type === "customer"
       ? filteredSalesOrders.filter((row) => !(row.source_channel === "portal" && !row.portal_submitted_at && String(row.status || "").toLowerCase() === "draft"))
@@ -1857,13 +1858,68 @@ export function PortalPage() {
               <div className="portal-workbench">
                 <div className="portal-workbench__tables">
                   <SectionCard title={`Matching Products & Alternatives (${catalogResults.length.toLocaleString("en-US")})`}>
-                    <DataTable
-                      rows={catalogResults}
-                      columns={portalCatalogColumns}
-                      emptyText={searchingCatalog ? "Searching items..." : "Search by part number, original number, or description to load matching products and alternatives."}
-                      onRowClick={(row) => setSelectedCatalogCode(row.code)}
-                      rowClassName={(row) => (selectedCatalogCode === row.code ? "data-table__row--active" : "")}
-                    />
+                    {catalogResults.length ? (
+                      <div className="portal-search-card-grid">
+                        {portalSearchCards.map((row) => (
+                          <button
+                            key={`${row.brand}-${row.code}`}
+                            type="button"
+                            className={`portal-search-card ${selectedCatalogCode === row.code ? "portal-search-card--active" : ""}`}
+                            onClick={() => setSelectedCatalogCode(row.code)}
+                          >
+                            <div className="portal-search-card__top">
+                              <div className="portal-search-card__media">
+                                {row.image_url ? <img src={row.image_url} alt={row.code} className="catalog-thumb catalog-thumb--detail" loading="lazy" /> : <div className="empty-state">No photo</div>}
+                              </div>
+                              <div className="portal-search-card__meta">
+                                <div className="portal-search-card__code">{row.code || "-"}</div>
+                                <BrandPill brand={row.brand} compact />
+                                <div className="portal-search-card__price">
+                                  {row.sell_price == null ? "Price on request" : formatMoney(row.sell_price, row.currency || portalPricingCurrency)}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="portal-search-card__body">
+                              <strong>{row.description || "-"}</strong>
+                              <span>{row.oem_no || "No OEM listed"}</span>
+                              <div className="portal-search-card__specs">
+                                <span>{row.tariff || "No tariff"}</span>
+                                <span>{row.origin || "No origin"}</span>
+                                <span>{formatWeight(row.weight_kg)}</span>
+                              </div>
+                              {row.lifecycle_status === "discontinued" ? (
+                                <div className="portal-search-card__warning">Discontinued</div>
+                              ) : null}
+                            </div>
+                            <div className="portal-search-card__actions">
+                              <Button
+                                variant="secondary"
+                                className="button--compact"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleAddPortalCatalogItem(row);
+                                }}
+                              >
+                                Add to Desk
+                              </Button>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                    {orderDeskView === "advanced" ? (
+                      <DataTable
+                        rows={catalogResults}
+                        columns={portalCatalogColumns}
+                        emptyText={searchingCatalog ? "Searching items..." : "Search by part number, original number, or description to load matching products and alternatives."}
+                        onRowClick={(row) => setSelectedCatalogCode(row.code)}
+                        rowClassName={(row) => (selectedCatalogCode === row.code ? "data-table__row--active" : "")}
+                      />
+                    ) : !catalogResults.length ? (
+                      <div className="empty-state">
+                        {searchingCatalog ? "Searching items..." : "Search by part number, original number, or description to load matching products and alternatives."}
+                      </div>
+                    ) : null}
                   </SectionCard>
 
                   <div ref={portalDraftLinesRef}>

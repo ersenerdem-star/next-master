@@ -2439,6 +2439,119 @@ select {
   gap: 16px;
 }
 
+.portal-search-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.portal-search-card {
+  border: 1px solid #dbe5ef;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff, #f8fbfd);
+  padding: 14px;
+  text-align: left;
+  color: #0f172a;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.portal-search-card--active {
+  border-color: #f59e0b;
+  box-shadow: 0 16px 32px rgba(245, 158, 11, 0.14);
+  background: linear-gradient(180deg, #fffaf0, #ffffff);
+}
+
+.portal-search-card__top {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.portal-search-card__media {
+  min-height: 88px;
+  border: 1px dashed #dbe5ea;
+  border-radius: 14px;
+  background: #f8fafc;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.portal-search-card__media .catalog-thumb--detail {
+  width: 88px;
+  height: 88px;
+  border-radius: 10px;
+  border: 0;
+}
+
+.portal-search-card__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.portal-search-card__code {
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.portal-search-card__price {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.portal-search-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.portal-search-card__body strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.portal-search-card__body span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.portal-search-card__specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.portal-search-card__specs span {
+  border: 1px solid #dbe5ef;
+  border-radius: 999px;
+  background: #fff;
+  padding: 4px 8px;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.portal-search-card__warning {
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.portal-search-card__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .portal-workbench__side {
   min-width: 0;
 }
@@ -2740,6 +2853,7 @@ select {
   .portal-summary-list,
   .portal-record-layout,
   .portal-workbench,
+  .portal-search-card-grid,
   .portal-order-builder__meta,
   .portal-statement-actions,
   .portal-detail-grid,
