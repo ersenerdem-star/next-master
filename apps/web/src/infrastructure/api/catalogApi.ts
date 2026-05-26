@@ -13,7 +13,14 @@ const CATALOG_GLOBAL_SELECT_WITH_IMAGE =
 const CATALOG_GLOBAL_SELECT_NO_IMAGE =
   "id,product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
 
-function buildCatalogSearchOr(search: string, normalizedSearch: string) {
+type CatalogSearchMode = "strict" | "loose";
+
+function shouldRunLooseOriginalNumberSearch(search: string) {
+  const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
+  return normalizedOriginalSearch.length >= 6;
+}
+
+function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: CatalogSearchMode) {
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
   const looseOriginalPattern = buildLooseOriginalNumberPattern(search);
   const clauses = [
@@ -21,20 +28,19 @@ function buildCatalogSearchOr(search: string, normalizedSearch: string) {
     `description.ilike.%${search}%`,
     `oem_no.ilike.%${search}%`,
   ];
-  if (looseOriginalPattern.length >= 6) {
-    clauses.push(`oem_no.ilike.%${looseOriginalPattern}%`);
-  }
   if (normalizedSearch.length >= 3) {
     clauses.push(
       `normalized_code.eq.${normalizedSearch}`,
       `normalized_oem.eq.${normalizedSearch}`,
-      `normalized_code.like.%${normalizedSearch}%`,
-      `normalized_oem.like.%${normalizedSearch}%`,
+      `normalized_code.like.${normalizedSearch}%`,
+      `normalized_oem.like.${normalizedSearch}%`,
     );
   }
-  if (normalizedOriginalSearch.length >= 3 && normalizedOriginalSearch !== normalizedSearch) {
+  if (mode === "loose" && looseOriginalPattern.length >= 6) {
+    clauses.push(`oem_no.ilike.%${looseOriginalPattern}%`);
+  }
+  if (mode === "loose" && normalizedOriginalSearch.length >= 6) {
     clauses.push(
-      `normalized_oem.eq.${normalizedOriginalSearch}`,
       `normalized_oem.like.%${normalizedOriginalSearch}%`,
     );
   }
@@ -120,24 +126,30 @@ export async function fetchCloudCatalog(input: {
 
     const search = input.search.trim();
     const normalizedSearch = normalizePartCode(search);
-    const buildQuery = (selectClause: string) => {
+    const buildQuery = (selectClause: string, mode: CatalogSearchMode) => {
       let query = supabaseClient
         .from("catalog_products")
-        .select(selectClause, { count: "exact" })
+        .select(selectClause, { count: "planned" })
         .eq("brand_id", brandId)
         .order("product_code", { ascending: true })
         .range(from, to);
 
       if (search) {
-        query = query.or(buildCatalogSearchOr(search, normalizedSearch));
+        query = query.or(buildCatalogSearchOr(search, normalizedSearch, mode));
       }
 
       return query;
     };
 
-    let { data, error, count } = await buildQuery(CATALOG_SELECT_WITH_IMAGE);
+    let { data, error, count } = await buildQuery(CATALOG_SELECT_WITH_IMAGE, "strict");
     if (error && isMissingCatalogImageError(error)) {
-      ({ data, error, count } = await buildQuery(CATALOG_SELECT_NO_IMAGE));
+      ({ data, error, count } = await buildQuery(CATALOG_SELECT_NO_IMAGE, "strict"));
+    }
+    if (!error && search && shouldRunLooseOriginalNumberSearch(search) && !(data || []).length) {
+      ({ data, error, count } = await buildQuery(CATALOG_SELECT_WITH_IMAGE, "loose"));
+      if (error && isMissingCatalogImageError(error)) {
+        ({ data, error, count } = await buildQuery(CATALOG_SELECT_NO_IMAGE, "loose"));
+      }
     }
     if (error) throw error;
 
@@ -177,19 +189,25 @@ export async function fetchCloudCatalog(input: {
     const search = input.search.trim();
     const normalizedSearch = normalizePartCode(search);
 
-    const buildGlobalQuery = (selectClause: string) => {
+    const buildGlobalQuery = (selectClause: string, mode: CatalogSearchMode) => {
       return supabaseClient
         .from("catalog_products")
-        .select(selectClause, { count: "exact" })
+        .select(selectClause, { count: "planned" })
         .eq("organization_id", organizationId)
         .order("product_code", { ascending: true })
         .range(from, to)
-        .or(buildCatalogSearchOr(search, normalizedSearch));
+        .or(buildCatalogSearchOr(search, normalizedSearch, mode));
     };
 
-    let { data, error, count } = await buildGlobalQuery(CATALOG_GLOBAL_SELECT_WITH_IMAGE);
+    let { data, error, count } = await buildGlobalQuery(CATALOG_GLOBAL_SELECT_WITH_IMAGE, "strict");
     if (error && isMissingCatalogImageError(error)) {
-      ({ data, error, count } = await buildGlobalQuery(CATALOG_GLOBAL_SELECT_NO_IMAGE));
+      ({ data, error, count } = await buildGlobalQuery(CATALOG_GLOBAL_SELECT_NO_IMAGE, "strict"));
+    }
+    if (!error && shouldRunLooseOriginalNumberSearch(search) && !(data || []).length) {
+      ({ data, error, count } = await buildGlobalQuery(CATALOG_GLOBAL_SELECT_WITH_IMAGE, "loose"));
+      if (error && isMissingCatalogImageError(error)) {
+        ({ data, error, count } = await buildGlobalQuery(CATALOG_GLOBAL_SELECT_NO_IMAGE, "loose"));
+      }
     }
     if (error) throw error;
 
@@ -354,7 +372,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
   while (true) {
     const search = input.search?.trim();
     const normalizedSearch = normalizePartCode(search || "");
-    const buildQuery = (selectClause: string) => {
+    const buildQuery = (selectClause: string, mode: CatalogSearchMode) => {
       let query = supabaseClient
         .from("catalog_products")
         .select(selectClause)
@@ -363,7 +381,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
         .range(from, from + pageSize - 1);
 
       if (search) {
-        query = query.or(buildCatalogSearchOr(search, normalizedSearch));
+        query = query.or(buildCatalogSearchOr(search, normalizedSearch, mode));
       }
 
       return query;
@@ -371,11 +389,25 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
 
     let { data, error } = await buildQuery(
       "product_code,image_url,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+      "strict",
     );
     if (error && isMissingCatalogImageError(error)) {
       ({ data, error } = await buildQuery(
         "product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+        "strict",
       ));
+    }
+    if (!error && search && shouldRunLooseOriginalNumberSearch(search) && !(data || []).length) {
+      ({ data, error } = await buildQuery(
+        "product_code,image_url,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+        "loose",
+      ));
+      if (error && isMissingCatalogImageError(error)) {
+        ({ data, error } = await buildQuery(
+          "product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+          "loose",
+        ));
+      }
     }
     if (error) {
       throw new Error(error.message || "Catalog export load failed");

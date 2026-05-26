@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { deliverQueuedEmails, queueVendorPurchaseOrderEmail } from "../../infrastructure/api/emailTemplatesApi";
 import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, inventoryAvailabilityLookupKey, type InventoryAvailabilitySummary } from "../../infrastructure/api/inventoryApi";
 import {
@@ -17,10 +17,11 @@ import { SectionCard } from "../components/common/SectionCard";
 import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastructure/api/companyProfilesApi";
 import { fetchVendors } from "../../infrastructure/api/vendorsApi";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
+import { consumeCatalogTransfer, PENDING_CATALOG_PURCHASE_ITEM_KEY } from "../../shared/catalogTransfer";
 import { normalizePartCode } from "../../domain/shared/normalize";
 import { resyncPurchaseOrderLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
 import type { CompanyProfile } from "../../types/company";
-import type { LocalBill, LocalPaymentMade, LocalPurchaseOrder } from "../../types/orders";
+import type { LocalBill, LocalPaymentMade, LocalPurchaseOrder, LocalPurchaseOrderLine } from "../../types/orders";
 import type { LocalVendor } from "../../types/vendors";
 import { DataTable } from "../components/common/DataTable";
 import { Button } from "../components/common/Button";
@@ -63,6 +64,51 @@ function buildPurchaseOrderBrandSummary(lines: LocalPurchaseOrder["lines"]) {
   return {
     labels: labels.slice(0, 3),
     extraCount: Math.max(0, labels.length - 3),
+  };
+}
+
+function createCatalogPurchaseOrderDraft(
+  payload: {
+    product_code: string;
+    brand: string;
+    description: string;
+    oem_no: string;
+    origin: string;
+  },
+  purchaseCompany: string,
+): LocalPurchaseOrder {
+  const now = new Date().toISOString();
+  const line: LocalPurchaseOrderLine = {
+    sales_order_id: "",
+    sales_order_no: "",
+    product_code: payload.product_code,
+    old_code: "",
+    brand: payload.brand,
+    description: payload.description,
+    qty: 1,
+    oem_no: payload.oem_no,
+    supplier_name: "",
+    buy_price: 0,
+    line_total: 0,
+    origin: payload.origin,
+    notes: "",
+  };
+
+  return {
+    id: `PO-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Date.now().toString().slice(-4)}`,
+    supplier_name: "",
+    supplier_key: "",
+    purchase_company: purchaseCompany,
+    sales_order_id: "",
+    sales_order_no: "",
+    customer_name: "",
+    status: "draft",
+    currency: "EUR",
+    created_at: now,
+    updated_at: now,
+    total_amount: 0,
+    line_count: 1,
+    lines: [line],
   };
 }
 
@@ -194,6 +240,7 @@ export function PurchasesPage({
   const [purchaseOrderResyncKeepPrices, setPurchaseOrderResyncKeepPrices] = useState(true);
   const [resyncingPurchaseOrder, setResyncingPurchaseOrder] = useState(false);
   const [inventoryAvailabilityRows, setInventoryAvailabilityRows] = useState<InventoryAvailabilitySummary[]>([]);
+  const pendingCatalogPurchaseHandledRef = useRef(false);
   const inventoryAvailabilityLookup = useMemo(() => buildInventoryAvailabilityLookup(inventoryAvailabilityRows), [inventoryAvailabilityRows]);
 
   useEffect(() => {
@@ -294,6 +341,30 @@ export function PurchasesPage({
       cancelled = true;
     };
   }, [activeTab]);
+
+  useEffect(() => {
+    if (pendingCatalogPurchaseHandledRef.current) return;
+    const pending = consumeCatalogTransfer(PENDING_CATALOG_PURCHASE_ITEM_KEY);
+    if (!pending) return;
+    pendingCatalogPurchaseHandledRef.current = true;
+
+    setActiveTab("Purchase Orders");
+    const draft = recomputePurchaseOrderTotals(
+      createCatalogPurchaseOrderDraft(
+        {
+          product_code: pending.product_code,
+          brand: pending.brand,
+          description: pending.description || "",
+          oem_no: pending.oem_no || "",
+          origin: pending.origin || "",
+        },
+        companyProfiles[0]?.companyName || "",
+      ),
+    );
+    setSelectedPurchaseOrderId(draft.id);
+    setPurchaseOrderDraft(draft);
+    actionFeedback.succeed(`${pending.product_code} added to Purchase Order draft.`);
+  }, [actionFeedback, companyProfiles]);
 
   useEffect(() => {
     if (!purchaseOrders.length) {

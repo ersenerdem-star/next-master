@@ -111,7 +111,13 @@ function buildLooseOriginalNumberPattern(value: string, wildcard = "*") {
   return normalized.split("").join(wildcard);
 }
 
-function buildPortalCatalogSearchOr(search: string, normalizedSearch: string) {
+type PortalSearchMode = "strict" | "loose";
+
+function shouldRunLooseOriginalNumberSearch(search: string) {
+  return normalizeOriginalNumberSearch(search).length >= 6;
+}
+
+function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mode: PortalSearchMode) {
   const escaped = search.replace(/[%*(),]/g, " ").trim();
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
   const looseOriginalPattern = buildLooseOriginalNumberPattern(search);
@@ -120,20 +126,19 @@ function buildPortalCatalogSearchOr(search: string, normalizedSearch: string) {
     `description.ilike.*${escaped}*`,
     `oem_no.ilike.*${escaped}*`,
   ];
-  if (looseOriginalPattern.length >= 6) {
-    clauses.push(`oem_no.ilike.*${looseOriginalPattern}*`);
-  }
   if (normalizedSearch.length >= 3) {
     clauses.push(
       `normalized_code.eq.${normalizedSearch}`,
       `normalized_oem.eq.${normalizedSearch}`,
-      `normalized_code.like.*${normalizedSearch}*`,
-      `normalized_oem.like.*${normalizedSearch}*`,
+      `normalized_code.like.${normalizedSearch}*`,
+      `normalized_oem.like.${normalizedSearch}*`,
     );
   }
-  if (normalizedOriginalSearch.length >= 3 && normalizedOriginalSearch !== normalizedSearch) {
+  if (mode === "loose" && looseOriginalPattern.length >= 6) {
+    clauses.push(`oem_no.ilike.*${looseOriginalPattern}*`);
+  }
+  if (mode === "loose" && normalizedOriginalSearch.length >= 6) {
     clauses.push(
-      `normalized_oem.eq.${normalizedOriginalSearch}`,
       `normalized_oem.like.*${normalizedOriginalSearch}*`,
     );
   }
@@ -306,7 +311,9 @@ export async function searchPortalCatalog(
   query: string,
   brand: string,
 ): Promise<PortalCatalogSearchItem[]> {
-  const customerContext = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
+  if (invite.party_type !== "customer" || !invite.access_can_view_orders) {
+    throw new Error("This portal cannot search items");
+  }
   const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
   const search = String(query || "").trim();
   const normalizedSearch = normalizePartCode(search);
@@ -320,10 +327,16 @@ export async function searchPortalCatalog(
 
   if (selectedBrandId) params.brand_id = `eq.${selectedBrandId}`;
   if (search) {
-    params.or = buildPortalCatalogSearchOr(search, normalizedSearch);
+    params.or = buildPortalCatalogSearchOr(search, normalizedSearch, "strict");
   }
 
-  const rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", params);
+  let rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", params);
+  if (!rows.length && search && shouldRunLooseOriginalNumberSearch(search)) {
+    rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+      ...params,
+      or: buildPortalCatalogSearchOr(search, normalizedSearch, "loose"),
+    });
+  }
   return rows.map((row) => ({
     code: String(row.product_code || ""),
     brand: brandMap.byId.get(String(row.brand_id || "")) || "",

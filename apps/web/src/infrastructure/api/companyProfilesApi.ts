@@ -66,7 +66,7 @@ async function bootstrapCompanyProfilesFromLocalIfNeeded() {
 
   const { count, error: countError } = await supabaseClient
     .from("company_profiles")
-    .select("id", { count: "exact", head: true })
+    .select("id", { count: "planned", head: true })
     .eq("organization_id", organizationId);
 
   if (countError) throw new Error(countError.message || "Company profile bootstrap check failed");

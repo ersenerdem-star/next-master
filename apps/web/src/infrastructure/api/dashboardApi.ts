@@ -109,7 +109,7 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
 }
 
 async function fetchTableCount(table: "catalog_products" | "brands" | "suppliers" | "sales_orders") {
-  const { count, error } = await supabaseClient.from(table).select("id", { count: "exact", head: true });
+  const { count, error } = await supabaseClient.from(table).select("id", { count: "planned", head: true });
   if (error) {
     throw new Error(error.message || `Failed to load ${table} count`);
   }
@@ -144,7 +144,7 @@ export async function fetchDashboardLatestQuotes(): Promise<DashboardSalesOrderS
 async function fetchNewPortalOrderCount() {
   const { count, error } = await supabaseClient
     .from("sales_orders")
-    .select("id", { count: "exact", head: true })
+    .select("id", { count: "planned", head: true })
     .eq("source_channel", "portal")
     .not("portal_submitted_at", "is", null)
     .is("portal_seen_at", null);

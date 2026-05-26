@@ -39,7 +39,13 @@ type SupplierPriceLookupRow = {
   suppliers?: { name?: string | null } | null;
 };
 
-function buildMasterSearchOr(rawSearch: string, normalizedSearch: string) {
+type MasterSearchMode = "strict" | "loose";
+
+function shouldRunLooseOriginalNumberSearch(search: string) {
+  return normalizeOriginalNumberSearch(search).length >= 6;
+}
+
+function buildMasterSearchOr(rawSearch: string, normalizedSearch: string, mode: MasterSearchMode) {
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(rawSearch);
   const looseOriginalPattern = buildLooseOriginalNumberPattern(rawSearch);
   const clauses = [
@@ -47,20 +53,19 @@ function buildMasterSearchOr(rawSearch: string, normalizedSearch: string) {
     `description.ilike.%${rawSearch}%`,
     `oem_no.ilike.%${rawSearch}%`,
   ];
-  if (looseOriginalPattern.length >= 6) {
-    clauses.push(`oem_no.ilike.%${looseOriginalPattern}%`);
-  }
   if (normalizedSearch.length >= 3) {
     clauses.push(
       `normalized_code.eq.${normalizedSearch}`,
       `normalized_oem.eq.${normalizedSearch}`,
-      `normalized_code.like.%${normalizedSearch}%`,
-      `normalized_oem.like.%${normalizedSearch}%`,
+      `normalized_code.like.${normalizedSearch}%`,
+      `normalized_oem.like.${normalizedSearch}%`,
     );
   }
-  if (normalizedOriginalSearch.length >= 3 && normalizedOriginalSearch !== normalizedSearch) {
+  if (mode === "loose" && looseOriginalPattern.length >= 6) {
+    clauses.push(`oem_no.ilike.%${looseOriginalPattern}%`);
+  }
+  if (mode === "loose" && normalizedOriginalSearch.length >= 6) {
     clauses.push(
-      `normalized_oem.eq.${normalizedOriginalSearch}`,
       `normalized_oem.like.%${normalizedOriginalSearch}%`,
     );
   }
@@ -134,17 +139,28 @@ async function fetchCatalogMasterBaseRows(input: {
 
   let query = supabaseClient
     .from("catalog_products")
-    .select("id,product_code,normalized_code,normalized_oem,description,oem_no,hs_code,origin,weight_kg", { count: "exact" })
+    .select("id,product_code,normalized_code,normalized_oem,description,oem_no,hs_code,origin,weight_kg", { count: "planned" })
     .eq("organization_id", input.organizationId)
     .eq("brand_id", input.brandId)
     .order("product_code", { ascending: true })
     .range(from, to);
 
   if (rawSearch) {
-    query = query.or(buildMasterSearchOr(rawSearch, normalizedSearch));
+    query = query.or(buildMasterSearchOr(rawSearch, normalizedSearch, "strict"));
   }
 
-  const { data, error, count } = await query;
+  let { data, error, count } = await query;
+  if (!error && rawSearch && shouldRunLooseOriginalNumberSearch(rawSearch) && !(data || []).length) {
+    let looseQuery = supabaseClient
+      .from("catalog_products")
+      .select("id,product_code,normalized_code,normalized_oem,description,oem_no,hs_code,origin,weight_kg", { count: "planned" })
+      .eq("organization_id", input.organizationId)
+      .eq("brand_id", input.brandId)
+      .order("product_code", { ascending: true })
+      .range(from, to)
+      .or(buildMasterSearchOr(rawSearch, normalizedSearch, "loose"));
+    ({ data, error, count } = await looseQuery);
+  }
   if (error) throw new Error(error.message || "Catalog master lookup failed");
   return {
     rows: ((data || []) as CatalogMasterBaseRow[]).map((row) => ({

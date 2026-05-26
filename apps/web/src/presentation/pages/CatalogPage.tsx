@@ -16,6 +16,7 @@ import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { downloadCsv, normalizeNumber, normalizeText, parseCsv, toCsv } from "../../shared/csv";
 import { downloadCatalogLifecycleTemplate, downloadCatalogTemplate } from "../../shared/importTemplates";
+import { dispatchAppNavigation, PENDING_CATALOG_PURCHASE_ITEM_KEY, PENDING_CATALOG_SALES_ITEM_KEY, storeCatalogTransfer } from "../../shared/catalogTransfer";
 
 type CatalogRowDraft = Omit<CatalogRow, "weight_kg"> & {
   weight_kg: number | string | null;
@@ -263,6 +264,40 @@ export function CatalogPage() {
     }
     setSubmittedSearch(nextSearch);
     setSubmittedCatalogBrand(nextBrand);
+  }
+
+  function queueCatalogItemForSalesOrder() {
+    if (!selectedCatalogDraft) return;
+    storeCatalogTransfer(PENDING_CATALOG_SALES_ITEM_KEY, {
+      product_code: selectedCatalogDraft.product_code,
+      brand: selectedCatalogDraft.brand,
+      description: selectedCatalogDraft.description || "",
+      oem_no: selectedCatalogDraft.oem_no || "",
+      hs_code: selectedCatalogDraft.hs_code || "",
+      origin: selectedCatalogDraft.origin || "",
+      weight_kg: parseWeightInput(selectedCatalogDraft.weight_kg),
+      lifecycle_status: selectedCatalogDraft.lifecycle_status || "active",
+      lifecycle_note: selectedCatalogDraft.lifecycle_note || "",
+    });
+    dispatchAppNavigation({ page: "Sales" });
+    actionFeedback.succeed(`${selectedCatalogDraft.product_code} sent to Sales Order Workbench.`);
+  }
+
+  function queueCatalogItemForPurchaseOrder() {
+    if (!selectedCatalogDraft) return;
+    storeCatalogTransfer(PENDING_CATALOG_PURCHASE_ITEM_KEY, {
+      product_code: selectedCatalogDraft.product_code,
+      brand: selectedCatalogDraft.brand,
+      description: selectedCatalogDraft.description || "",
+      oem_no: selectedCatalogDraft.oem_no || "",
+      hs_code: selectedCatalogDraft.hs_code || "",
+      origin: selectedCatalogDraft.origin || "",
+      weight_kg: parseWeightInput(selectedCatalogDraft.weight_kg),
+      lifecycle_status: selectedCatalogDraft.lifecycle_status || "active",
+      lifecycle_note: selectedCatalogDraft.lifecycle_note || "",
+    });
+    dispatchAppNavigation({ page: "Purchases" });
+    actionFeedback.succeed(`${selectedCatalogDraft.product_code} sent to Purchase Order draft.`);
   }
 
   function renderReferenceOldCodeHint(usage: CodeReferenceUsage | null) {
@@ -901,6 +936,14 @@ export function CatalogPage() {
                     <div><span>Origin</span><strong>{selectedCatalogDraft.origin || "-"}</strong></div>
                     <div><span>Weight</span><strong>{selectedCatalogDraft.weight_kg ?? "-"}</strong></div>
                     <div><span>Reference Links</span><strong>{referenceCoverage[`${selectedCatalogRow.brand.trim().toLowerCase()}::${normalizePartCode(selectedCatalogRow.product_code)}`] || 0}</strong></div>
+                  </div>
+                  <div className="toolbar toolbar--wrap">
+                    <Button variant="secondary" onClick={queueCatalogItemForSalesOrder}>
+                      Add to Sales Order
+                    </Button>
+                    <Button variant="secondary" onClick={queueCatalogItemForPurchaseOrder}>
+                      Add to Purchase Draft
+                    </Button>
                   </div>
                   {selectedCatalogDraft.lifecycle_note ? <div className="info-text">{selectedCatalogDraft.lifecycle_note}</div> : null}
                 </>

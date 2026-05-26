@@ -538,10 +538,10 @@ async function bootstrapOrdersFromLocalIfNeeded() {
       { count: billCount, error: billCountError },
     ] =
       await Promise.all([
-        supabaseClient.from("sales_orders").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
-        supabaseClient.from("purchase_orders").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
-        supabaseClient.from("invoices").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
-        supabaseClient.from("bills").select("id", { count: "exact", head: true }).eq("organization_id", organizationId),
+        supabaseClient.from("sales_orders").select("id", { count: "planned", head: true }).eq("organization_id", organizationId),
+        supabaseClient.from("purchase_orders").select("id", { count: "planned", head: true }).eq("organization_id", organizationId),
+        supabaseClient.from("invoices").select("id", { count: "planned", head: true }).eq("organization_id", organizationId),
+        supabaseClient.from("bills").select("id", { count: "planned", head: true }).eq("organization_id", organizationId),
       ]);
 
     if (salesCountError) throw new Error(salesCountError.message || "Sales order bootstrap check failed");

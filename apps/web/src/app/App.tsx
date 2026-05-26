@@ -3,6 +3,7 @@ import { supabaseClient } from "../infrastructure/api/supabaseClient";
 import { touchCurrentUserPresence } from "../infrastructure/api/usersApi";
 import { ActionFeedbackProvider } from "../presentation/components/common/ActionFeedback";
 import { AppShell } from "../presentation/layout/AppShell";
+import { APP_NAVIGATION_EVENT, type AppNavigationDetail } from "../shared/catalogTransfer";
 
 const DashboardPage = lazy(() => import("../presentation/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const InventoryPage = lazy(() => import("../presentation/pages/InventoryPage").then((module) => ({ default: module.InventoryPage })));
@@ -101,6 +102,34 @@ export function App() {
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [loggedIn, isPortalRoute]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleNavigation = (event: Event) => {
+      const detail = (event as CustomEvent<AppNavigationDetail>).detail;
+      if (!detail?.page) return;
+
+      setSelectedSalesOrderId("");
+      setSelectedQuoteId("");
+      setSelectedInvoiceId("");
+      setSelectedPurchaseOrderId("");
+      setSelectedBillId("");
+
+      if (detail.page === "Sales") {
+        setActivePage("Sales");
+        return;
+      }
+      if (detail.page === "Purchases") {
+        setActivePage("Purchases");
+      }
+    };
+
+    window.addEventListener(APP_NAVIGATION_EVENT, handleNavigation as EventListener);
+    return () => {
+      window.removeEventListener(APP_NAVIGATION_EVENT, handleNavigation as EventListener);
+    };
+  }, []);
 
   async function handleLogout() {
     await supabaseClient.auth.signOut();

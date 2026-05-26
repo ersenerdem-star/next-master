@@ -102,7 +102,7 @@ async function bootstrapVendorsIfNeeded() {
   const organizationId = await getCurrentOrgId();
   const { count, error: countError } = await supabaseClient
     .from("vendors")
-    .select("id", { count: "exact", head: true })
+    .select("id", { count: "planned", head: true })
     .eq("organization_id", organizationId);
 
   if (countError) throw new Error(countError.message || "Vendor bootstrap check failed");

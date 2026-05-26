@@ -22,6 +22,7 @@ import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, in
 import { canonicalizeBrandName, normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
 import { parseCsv } from "../../shared/csv";
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
+import { consumeCatalogTransfer, PENDING_CATALOG_SALES_ITEM_KEY } from "../../shared/catalogTransfer";
 import { buildInvoiceFromSalesOrder, buildLocalSalesOrder, buildPurchaseOrdersFromSalesOrder } from "../../shared/localOrders";
 import { resyncSalesOrderLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
@@ -547,6 +548,7 @@ export function QuotesPage({
   const [pendingConfirmedOrder, setPendingConfirmedOrder] = useState<LocalSalesOrder | null>(null);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
   const [inventoryAvailabilityRows, setInventoryAvailabilityRows] = useState<InventoryAvailabilitySummary[]>([]);
+  const pendingCatalogSalesHandledRef = useRef(false);
 
   const [quoteNo, setQuoteNo] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -654,6 +656,55 @@ export function QuotesPage({
       setSellerCompany(companyProfiles[0].companyName);
     }
   }, [companyProfiles, sellerCompany]);
+
+  useEffect(() => {
+    if (pendingCatalogSalesHandledRef.current) return;
+    const pending = consumeCatalogTransfer(PENDING_CATALOG_SALES_ITEM_KEY);
+    if (!pending) return;
+    pendingCatalogSalesHandledRef.current = true;
+    const pendingItem = pending;
+
+    let cancelled = false;
+
+    async function run() {
+      startNewSalesOrder();
+      setBuilderStatus(`Adding ${pendingItem.product_code} from catalog...`);
+      try {
+        const line = await buildBuilderLine(
+          {
+            code: pendingItem.product_code,
+            brand: pendingItem.brand,
+            qty: 1,
+          },
+          { includeSupplierOptions: true },
+        );
+        if (cancelled) return;
+        const enrichedLine: QuoteBuilderLine = {
+          ...line,
+          description: pendingItem.description || line.description,
+          oem_no: pendingItem.oem_no || line.oem_no,
+          hs_code: pendingItem.hs_code || line.hs_code,
+          origin: pendingItem.origin || line.origin,
+          weight_kg: pendingItem.weight_kg ?? line.weight_kg,
+          lifecycle_status: (pendingItem.lifecycle_status as QuoteBuilderLine["lifecycle_status"]) ?? line.lifecycle_status,
+          lifecycle_note: pendingItem.lifecycle_note ?? line.lifecycle_note,
+        };
+        setQuoteBuilderLines([enrichedLine]);
+        setSelectedWorkbenchLineId(enrichedLine.lineId);
+        setBuilderStatus(`${pendingItem.product_code} added from catalog.`);
+        actionFeedback.succeed(`${pendingItem.product_code} added to Sales Order Workbench.`);
+      } catch (caught) {
+        if (cancelled) return;
+        setBuilderStatus(`Failed to add ${pendingItem.product_code} from catalog.`);
+        actionFeedback.fail(caught instanceof Error ? caught.message : "Catalog item add failed");
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [actionFeedback, companyProfiles]);
 
   useEffect(() => {
     let cancelled = false;

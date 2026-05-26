@@ -2,7 +2,13 @@ import { supabaseClient } from "./supabaseClient";
 import type { SupplierBrandSummaryRow, SupplierPriceRow, SupplierSummary } from "../../types/suppliers";
 import { buildLooseOriginalNumberPattern, normalizeOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 
-function buildSupplierSearchOr(search: string, normalizedSearch: string) {
+type SupplierSearchMode = "strict" | "loose";
+
+function shouldRunLooseOriginalNumberSearch(search: string) {
+  return normalizeOriginalNumberSearch(search).length >= 6;
+}
+
+function buildSupplierSearchOr(search: string, normalizedSearch: string, mode: SupplierSearchMode) {
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
   const looseOriginalPattern = buildLooseOriginalNumberPattern(search);
   const clauses = [
@@ -10,20 +16,19 @@ function buildSupplierSearchOr(search: string, normalizedSearch: string) {
     `description.ilike.%${search}%`,
     `oem_no.ilike.%${search}%`,
   ];
-  if (looseOriginalPattern.length >= 6) {
-    clauses.push(`oem_no.ilike.%${looseOriginalPattern}%`);
-  }
   if (normalizedSearch.length >= 3) {
     clauses.push(
       `normalized_code.eq.${normalizedSearch}`,
       `normalized_oem.eq.${normalizedSearch}`,
-      `normalized_code.like.%${normalizedSearch}%`,
-      `normalized_oem.like.%${normalizedSearch}%`,
+      `normalized_code.like.${normalizedSearch}%`,
+      `normalized_oem.like.${normalizedSearch}%`,
     );
   }
-  if (normalizedOriginalSearch.length >= 3 && normalizedOriginalSearch !== normalizedSearch) {
+  if (mode === "loose" && looseOriginalPattern.length >= 6) {
+    clauses.push(`oem_no.ilike.%${looseOriginalPattern}%`);
+  }
+  if (mode === "loose" && normalizedOriginalSearch.length >= 6) {
     clauses.push(
-      `normalized_oem.eq.${normalizedOriginalSearch}`,
       `normalized_oem.like.%${normalizedOriginalSearch}%`,
     );
   }
@@ -137,20 +142,27 @@ export async function fetchSupplierExportRows(input: { supplierId: string; brand
   while (true) {
     const search = input.search?.trim();
     const normalizedSearch = normalizePartCode(search || "");
-    let query = supabaseClient
-      .from("supplier_prices")
-      .select("id,product_code,description,oem_no,buy_price,currency,valid_from,moq,lead_time_days,notes")
-      .eq("supplier_id", input.supplierId)
-      .eq("brand_id", brandRow.id)
-      .eq("is_active", true)
-      .order("product_code", { ascending: true })
-      .range(from, from + pageSize - 1);
+    const buildQuery = (mode: SupplierSearchMode) => {
+      let query = supabaseClient
+        .from("supplier_prices")
+        .select("id,product_code,description,oem_no,buy_price,currency,valid_from,moq,lead_time_days,notes")
+        .eq("supplier_id", input.supplierId)
+        .eq("brand_id", brandRow.id)
+        .eq("is_active", true)
+        .order("product_code", { ascending: true })
+        .range(from, from + pageSize - 1);
 
-    if (search) {
-      query = query.or(buildSupplierSearchOr(search, normalizedSearch));
+      if (search) {
+        query = query.or(buildSupplierSearchOr(search, normalizedSearch, mode));
+      }
+
+      return query;
+    };
+
+    let { data, error } = await buildQuery("strict");
+    if (!error && search && shouldRunLooseOriginalNumberSearch(search) && !(data || []).length) {
+      ({ data, error } = await buildQuery("loose"));
     }
-
-    const { data, error } = await query;
     if (error) {
       throw new Error(error.message || "Supplier export load failed");
     }
