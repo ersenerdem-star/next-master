@@ -1079,22 +1079,16 @@ export function PortalPage() {
       });
       const result = await downloadPortalPriceList(credentials, portalPriceListBrand);
       const rows: Array<Array<string | number | null>> = [
-        ["Product_Code", "Brand", "Product_Name", "OEM_No", "HS_Code", "Origin", "Weight_kg", "Price_List_Type", `Sales_Price_${result.currency}`, "Lifecycle", "Lifecycle_Note"],
+        ["Part_No", "Description", `Price_${result.currency}`, "Price_Date", "Lifecycle"],
         ...result.rows.map((row) => [
           row.product_code,
-          row.brand,
           row.description || "",
-          row.oem_no || "",
-          row.hs_code || "",
-          row.origin || "",
-          row.weight_kg ?? "",
-          `${row.price_list_type} Price List`,
           row.sales_price ?? "",
-          row.lifecycle_status,
-          row.lifecycle_note || "",
+          row.price_date || "",
+          row.lifecycle_status === "discontinued" ? row.lifecycle_note || "Discontinued" : "Active",
         ]),
       ];
-      const blob = buildXlsxBlob(`${portalPriceListBrand} Price List`, rows, [6, 8]);
+      const blob = buildXlsxBlob(`${portalPriceListBrand} Price List`, rows, [2]);
       downloadBlob(`${sanitizeFileName(`portal-price-list-${portalPriceListBrand}-${result.priceListType}`)}.xlsx`, blob);
       setStatus(`${portalPriceListBrand} ${result.priceListType} price list downloaded.`);
     } catch (caught) {
@@ -1739,7 +1733,7 @@ export function PortalPage() {
             </div>
             <div className="portal-inline-note portal-inline-note--soft">
               <span>Fields</span>
-              <strong>Product code, description, OEM, tariff, origin, weight, lifecycle, and customer sales price are included.</strong>
+              <strong>Part no, description, customer price, price date, and lifecycle are included.</strong>
             </div>
           </SectionCard>
         </div>

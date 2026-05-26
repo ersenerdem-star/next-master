@@ -63,12 +63,9 @@ type PortalOrderResponse = {
     product_code: string;
     brand: string;
     description: string;
-    oem_no: string;
-    hs_code: string;
-    origin: string;
-    weight_kg: number | null;
     price_list_type: "A" | "B" | "C" | "Other";
     sales_price: number | null;
+    price_date: string | null;
     lifecycle_status: "active" | "discontinued";
     lifecycle_note: string | null;
   }>;

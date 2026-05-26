@@ -54,12 +54,9 @@ type PortalPriceListRow = {
   product_code: string;
   brand: string;
   description: string;
-  oem_no: string;
-  hs_code: string;
-  origin: string;
-  weight_kg: number | null;
   price_list_type: "A" | "B" | "C" | "Other";
   sales_price: number | null;
+  price_date: string | null;
   lifecycle_status: "active" | "discontinued";
   lifecycle_note: string | null;
 };
@@ -525,6 +522,42 @@ async function fetchCPriceMap(
   return map;
 }
 
+async function fetchCPriceEntryMap(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  cPriceListId: string,
+  rows: Array<{ brand: string; product_code: string }>,
+) {
+  const map = new Map<string, { sell_price: number; price_date: string | null }>();
+  if (!cPriceListId || !rows.length) return map;
+  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, organizationId);
+  const brandIds = [...new Set(rows.map((row) => brandMap.byName.get(row.brand.trim().toLowerCase()) || "").filter(Boolean))];
+  const normalizedCodes = [...new Set(rows.map((row) => normalizePartCode(row.product_code)).filter(Boolean))];
+  if (!brandIds.length || !normalizedCodes.length) return map;
+
+  const items = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customer_price_list_items", {
+    select: "brand_id,normalized_code,sell_price,updated_at",
+    organization_id: `eq.${organizationId}`,
+    price_list_id: `eq.${cPriceListId}`,
+    brand_id: `in.(${brandIds.join(",")})`,
+    normalized_code: `in.(${normalizedCodes.join(",")})`,
+    order: "updated_at.desc",
+  });
+
+  for (const row of items) {
+    const brandName = brandMap.byId.get(String(row.brand_id || ""));
+    const normalizedCode = String(row.normalized_code || "");
+    if (!brandName || !normalizedCode || map.has(`${brandName.toLowerCase()}::${normalizedCode}`)) continue;
+    map.set(`${brandName.toLowerCase()}::${normalizedCode}`, {
+      sell_price: Number(row.sell_price || 0),
+      price_date: row.updated_at == null ? null : String(row.updated_at).slice(0, 10),
+    });
+  }
+
+  return map;
+}
+
 async function fetchPortalCatalogBrandRows(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -679,16 +712,21 @@ export async function buildPortalPriceListRows(
   }
 
   let salesPriceByCode = new Map<string, number>();
+  let priceDateByCode = new Map<string, string | null>();
   if (context.customerType === "C") {
-    salesPriceByCode = await fetchCPriceMap(
+    const cPriceEntryMap = await fetchCPriceEntryMap(
       supabaseUrl,
       serviceRoleKey,
       invite.organization_id,
       context.cPriceListId,
       catalogRows.map((row) => ({ brand: row.brand, product_code: row.product_code })),
     );
+    for (const [key, value] of cPriceEntryMap.entries()) {
+      salesPriceByCode.set(key, value.sell_price);
+      priceDateByCode.set(key, value.price_date);
+    }
   } else {
-    const bestBuyMap = await fetchPortalBestSupplierPriceMap(
+    const bestOptionMap = await fetchPortalBestSupplierOptionMap(
       supabaseUrl,
       serviceRoleKey,
       invite.organization_id,
@@ -696,8 +734,10 @@ export async function buildPortalPriceListRows(
       [...new Set(catalogRows.map((row) => row.normalized_code).filter(Boolean))],
     );
     const marginPercent = context.customerType === "B" ? context.effectiveMarginB : context.effectiveMarginA;
-    for (const [normalizedCode, buyPrice] of bestBuyMap.entries()) {
-      salesPriceByCode.set(normalizedCode, roundMoney(Number(buyPrice) * (1 + marginPercent / 100)));
+    for (const [normalizedCode, bestOption] of bestOptionMap.entries()) {
+      if (bestOption.buy_price == null) continue;
+      salesPriceByCode.set(normalizedCode, roundMoney(Number(bestOption.buy_price) * (1 + marginPercent / 100)));
+      priceDateByCode.set(normalizedCode, bestOption.price_date || null);
     }
   }
 
@@ -708,12 +748,9 @@ export async function buildPortalPriceListRows(
       product_code: row.product_code,
       brand: row.brand,
       description: row.description || "",
-      oem_no: row.oem_no || "",
-      hs_code: row.hs_code || "",
-      origin: row.origin || "",
-      weight_kg: row.weight_kg,
       price_list_type: context.customerType,
       sales_price: salesPriceByCode.get(row.normalized_code) ?? null,
+      price_date: priceDateByCode.get(row.normalized_code) ?? null,
       lifecycle_status: row.lifecycle_status,
       lifecycle_note: row.lifecycle_note,
     })),
