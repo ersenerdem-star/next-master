@@ -1,4 +1,4 @@
-import { buildBillFromPurchaseOrder, loadLocalBills, loadLocalInvoices, loadLocalPurchaseOrders, loadLocalSalesOrders } from "../../shared/localOrders";
+import { buildBillFromPurchaseOrder, buildMergedBillFromPurchaseOrders, loadLocalBills, loadLocalInvoices, loadLocalPurchaseOrders, loadLocalSalesOrders } from "../../shared/localOrders";
 import type {
   LocalBill,
   LocalInvoice,
@@ -793,6 +793,10 @@ export async function upsertBill(bill: LocalBill, previousId?: string): Promise<
 
 export async function buildAndUpsertBillFromPurchaseOrder(order: LocalPurchaseOrder): Promise<LocalBill> {
   return await upsertBill(buildBillFromPurchaseOrder(order));
+}
+
+export async function buildAndUpsertMergedBillFromPurchaseOrders(orders: LocalPurchaseOrder[]): Promise<LocalBill> {
+  return await upsertBill(buildMergedBillFromPurchaseOrders(orders));
 }
 
 export async function deleteBill(billId: string): Promise<void> {

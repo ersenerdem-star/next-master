@@ -398,3 +398,54 @@ export function buildBillFromPurchaseOrder(order: LocalPurchaseOrder) {
   };
   return bill;
 }
+
+export function buildMergedBillFromPurchaseOrders(orders: LocalPurchaseOrder[]) {
+  if (!orders.length) {
+    throw new Error("At least one purchase order is required");
+  }
+
+  const first = orders[0];
+  const lines: LocalBillLine[] = orders.flatMap((order) =>
+    order.lines.map((line) => ({
+      purchase_order_id: order.id,
+      purchase_order_no: order.id,
+      product_code: line.product_code,
+      old_code: line.old_code,
+      brand: line.brand,
+      description: line.description,
+      qty: line.qty,
+      oem_no: line.oem_no,
+      supplier_name: line.supplier_name,
+      buy_price: roundMoney(line.buy_price),
+      line_total: roundMoney(line.line_total),
+      origin: line.origin,
+      notes: line.notes,
+    })),
+  );
+
+  const subtotal = roundMoney(lines.reduce((sum, line) => sum + Number(line.line_total || 0), 0));
+
+  return {
+    id: makeId("bill"),
+    purchase_order_id: first.id,
+    purchase_order_no: orders.map((order) => order.id).join(", "),
+    supplier_name: first.supplier_name,
+    purchase_company: first.purchase_company,
+    currency: first.currency,
+    status: "draft",
+    bill_date: nowIso().slice(0, 10),
+    due_date: nowIso().slice(0, 10),
+    payment_terms: "Cash in Advance",
+    notes: orders
+      .map((order) => `${order.id}: ${order.sales_order_no || order.customer_name || ""}`.trim())
+      .filter(Boolean)
+      .join("\n"),
+    subtotal,
+    shipping_cost: 0,
+    discount_amount: 0,
+    total_amount: subtotal,
+    created_at: nowIso(),
+    updated_at: nowIso(),
+    lines,
+  } satisfies LocalBill;
+}

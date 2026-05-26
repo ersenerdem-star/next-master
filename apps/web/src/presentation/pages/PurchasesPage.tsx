@@ -3,6 +3,7 @@ import { deliverQueuedEmails, queueVendorPurchaseOrderEmail } from "../../infras
 import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, inventoryAvailabilityLookupKey, type InventoryAvailabilitySummary } from "../../infrastructure/api/inventoryApi";
 import {
   buildAndUpsertBillFromPurchaseOrder,
+  buildAndUpsertMergedBillFromPurchaseOrders,
   deletePurchaseOrder,
   fetchBills,
   fetchPaymentsMade,
@@ -306,8 +307,18 @@ export function PurchasesPage({
   const billCountByPurchaseOrderId = useMemo(() => {
     const map = new Map<string, number>();
     bills.forEach((bill) => {
-      if (!bill.purchase_order_id) return;
-      map.set(bill.purchase_order_id, (map.get(bill.purchase_order_id) || 0) + 1);
+      const purchaseOrderIds = new Set<string>();
+      if (bill.purchase_order_id) {
+        purchaseOrderIds.add(bill.purchase_order_id);
+      }
+      bill.lines.forEach((line) => {
+        if (line.purchase_order_id) {
+          purchaseOrderIds.add(line.purchase_order_id);
+        }
+      });
+      purchaseOrderIds.forEach((purchaseOrderId) => {
+        map.set(purchaseOrderId, (map.get(purchaseOrderId) || 0) + 1);
+      });
     });
     return map;
   }, [bills]);
@@ -766,6 +777,53 @@ export function PurchasesPage({
     }
   }
 
+  async function handleMergePurchaseOrdersToBill(orderIds: string[]) {
+    const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)));
+    if (!uniqueIds.length) {
+      actionFeedback.fail("No purchase orders selected.");
+      return;
+    }
+
+    const orders = purchaseOrders.filter((order) => uniqueIds.includes(order.id));
+    if (!orders.length) {
+      actionFeedback.fail("Selected purchase orders are no longer available.");
+      return;
+    }
+
+    const first = orders[0];
+    const incompatible = orders.find(
+      (order) =>
+        order.supplier_name !== first.supplier_name ||
+        order.currency !== first.currency ||
+        order.purchase_company !== first.purchase_company,
+    );
+    if (incompatible) {
+      actionFeedback.fail("Merged bill requires same vendor, same currency, and same purchase company.");
+      return;
+    }
+
+    const blocked = orders.filter((order) => (billCountByPurchaseOrderId.get(order.id) || 0) > 0);
+    if (blocked.length) {
+      actionFeedback.fail(`Merge blocked. ${blocked.length.toLocaleString("en-US")} selected purchase order(s) already have bills.`);
+      return;
+    }
+
+    try {
+      actionFeedback.begin(`Merging ${orders.length.toLocaleString("en-US")} purchase order(s) into one bill...`);
+      const merged = await buildAndUpsertMergedBillFromPurchaseOrders(orders.map((order) => recomputePurchaseOrderTotals(order)));
+      const [refreshedPurchaseOrders, refreshedBills] = await Promise.all([fetchPurchaseOrders(), fetchBills()]);
+      setPurchaseOrders(refreshedPurchaseOrders);
+      setBills(refreshedBills);
+      setSelectedPurchaseOrderIds([]);
+      setSelectedBillId(merged.id);
+      setBillDraft({ ...merged, lines: merged.lines.map((line) => ({ ...line })) });
+      setActiveTab("Bills");
+      actionFeedback.succeed(`Merged bill ${merged.id} created from ${orders.length.toLocaleString("en-US")} purchase order(s).`);
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Merged bill create failed");
+    }
+  }
+
   async function saveBillDraft() {
     if (!billDraft) return;
     try {
@@ -865,6 +923,13 @@ export function PurchasesPage({
                   onClick={() => void handleBulkConvertPurchaseOrdersToBills(selectedPurchaseOrderIds)}
                 >
                   Bulk Convert Bill
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="button--compact"
+                  onClick={() => void handleMergePurchaseOrdersToBill(selectedPurchaseOrderIds)}
+                >
+                  Merge Into One Bill
                 </Button>
                 {purchaseOrderDraft ? (
                   <>

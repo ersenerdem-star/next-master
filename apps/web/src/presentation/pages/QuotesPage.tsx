@@ -1231,7 +1231,6 @@ export function QuotesPage({
       },
       { key: "brand", header: "Brand", render: (row: QuoteBuilderLine) => row.brand || "-" },
       { key: "name", header: "Description", render: (row: QuoteBuilderLine) => row.description || "-" },
-      { key: "oem", header: "OEM", render: (row: QuoteBuilderLine) => row.oem_no || "-" },
       { key: "origin", header: "Origin", render: (row: QuoteBuilderLine) => row.origin || "-" },
       {
         key: "qty",
