@@ -1906,6 +1906,11 @@ export function PortalPage() {
               </form>
 
               <div className="portal-inline-note portal-inline-note--soft">
+                <span>Import Format</span>
+                <strong>Upload Excel or CSV with Brand, Part Code, and Qty columns. Part No and Product Code headers are also accepted.</strong>
+              </div>
+
+              <div className="portal-inline-note portal-inline-note--soft">
                 <span>Search Logic</span>
                 <strong>Original number search returns matching alternatives. Added items always appear in the basket below.</strong>
               </div>
