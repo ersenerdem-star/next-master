@@ -1480,10 +1480,10 @@ export function PortalPage() {
                   <Input label="Item Search" value={orderSearch} placeholder="Code, description, OEM" onChange={setOrderSearch} />
                   <Select label="Brand" value={orderSearchBrand} options={portalBrandOptions} onChange={setOrderSearchBrand} />
                   <div className="portal-builder-actions">
-                    <Button variant="secondary" onClick={() => portalImportRef.current?.click()}>
+                    <Button type="button" variant="secondary" onClick={() => portalImportRef.current?.click()}>
                       Import Excel
                     </Button>
-                    <Button variant="secondary" onClick={downloadQuoteTemplate}>
+                    <Button type="button" variant="secondary" onClick={downloadQuoteTemplate}>
                       Import Template
                     </Button>
                     <Button type="submit" variant="secondary" busy={searchingCatalog} busyLabel="Searching..." onClick={() => void handlePortalCatalogSearch()}>
