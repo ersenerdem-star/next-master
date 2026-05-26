@@ -98,19 +98,43 @@ function normalizePartCode(value: string) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+function normalizeOriginalNumberSearch(value: string) {
+  const normalized = normalizePartCode(value);
+  if (!normalized) return "";
+  const stripped = normalized.replace(/^[A-Z]{1,3}(?=\d{6,}$)/, "");
+  return stripped || normalized;
+}
+
+function buildLooseOriginalNumberPattern(value: string, wildcard = "*") {
+  const normalized = normalizeOriginalNumberSearch(value);
+  if (!normalized) return "";
+  return normalized.split("").join(wildcard);
+}
+
 function buildPortalCatalogSearchOr(search: string, normalizedSearch: string) {
   const escaped = search.replace(/[%*(),]/g, " ").trim();
+  const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
+  const looseOriginalPattern = buildLooseOriginalNumberPattern(search);
   const clauses = [
     `product_code.ilike.*${escaped}*`,
     `description.ilike.*${escaped}*`,
     `oem_no.ilike.*${escaped}*`,
   ];
+  if (looseOriginalPattern.length >= 6) {
+    clauses.push(`oem_no.ilike.*${looseOriginalPattern}*`);
+  }
   if (normalizedSearch.length >= 3) {
     clauses.push(
       `normalized_code.eq.${normalizedSearch}`,
       `normalized_oem.eq.${normalizedSearch}`,
       `normalized_code.like.*${normalizedSearch}*`,
       `normalized_oem.like.*${normalizedSearch}*`,
+    );
+  }
+  if (normalizedOriginalSearch.length >= 3 && normalizedOriginalSearch !== normalizedSearch) {
+    clauses.push(
+      `normalized_oem.eq.${normalizedOriginalSearch}`,
+      `normalized_oem.like.*${normalizedOriginalSearch}*`,
     );
   }
   return `(${clauses.join(",")})`;

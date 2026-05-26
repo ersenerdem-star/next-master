@@ -1,5 +1,5 @@
 import { supabaseClient } from "./supabaseClient";
-import { normalizePartCode } from "../../domain/shared/normalize";
+import { buildLooseOriginalNumberPattern, normalizeOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import type { MasterRow } from "../../types/master";
 
 type MasterParams = {
@@ -40,17 +40,28 @@ type SupplierPriceLookupRow = {
 };
 
 function buildMasterSearchOr(rawSearch: string, normalizedSearch: string) {
+  const normalizedOriginalSearch = normalizeOriginalNumberSearch(rawSearch);
+  const looseOriginalPattern = buildLooseOriginalNumberPattern(rawSearch);
   const clauses = [
     `product_code.ilike.%${rawSearch}%`,
     `description.ilike.%${rawSearch}%`,
     `oem_no.ilike.%${rawSearch}%`,
   ];
+  if (looseOriginalPattern.length >= 6) {
+    clauses.push(`oem_no.ilike.%${looseOriginalPattern}%`);
+  }
   if (normalizedSearch.length >= 3) {
     clauses.push(
       `normalized_code.eq.${normalizedSearch}`,
       `normalized_oem.eq.${normalizedSearch}`,
       `normalized_code.like.%${normalizedSearch}%`,
       `normalized_oem.like.%${normalizedSearch}%`,
+    );
+  }
+  if (normalizedOriginalSearch.length >= 3 && normalizedOriginalSearch !== normalizedSearch) {
+    clauses.push(
+      `normalized_oem.eq.${normalizedOriginalSearch}`,
+      `normalized_oem.like.%${normalizedOriginalSearch}%`,
     );
   }
   return clauses.join(",");

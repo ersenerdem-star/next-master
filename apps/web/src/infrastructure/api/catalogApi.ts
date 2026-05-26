@@ -1,26 +1,41 @@
 import type { CatalogRow } from "../../types/catalog";
 import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "../../domain/shared/catalogFormatting";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
-import { normalizePartCode } from "../../domain/shared/normalize";
+import { buildLooseOriginalNumberPattern, normalizeOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import { supabaseClient } from "./supabaseClient";
 
 const CATALOG_SELECT_WITH_IMAGE =
   "id,product_code,image_url,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note";
 const CATALOG_SELECT_NO_IMAGE =
   "id,product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note";
+const CATALOG_GLOBAL_SELECT_WITH_IMAGE =
+  "id,product_code,image_url,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
+const CATALOG_GLOBAL_SELECT_NO_IMAGE =
+  "id,product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
 
 function buildCatalogSearchOr(search: string, normalizedSearch: string) {
+  const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
+  const looseOriginalPattern = buildLooseOriginalNumberPattern(search);
   const clauses = [
     `product_code.ilike.%${search}%`,
     `description.ilike.%${search}%`,
     `oem_no.ilike.%${search}%`,
   ];
+  if (looseOriginalPattern.length >= 6) {
+    clauses.push(`oem_no.ilike.%${looseOriginalPattern}%`);
+  }
   if (normalizedSearch.length >= 3) {
     clauses.push(
       `normalized_code.eq.${normalizedSearch}`,
       `normalized_oem.eq.${normalizedSearch}`,
       `normalized_code.like.%${normalizedSearch}%`,
       `normalized_oem.like.%${normalizedSearch}%`,
+    );
+  }
+  if (normalizedOriginalSearch.length >= 3 && normalizedOriginalSearch !== normalizedSearch) {
+    clauses.push(
+      `normalized_oem.eq.${normalizedOriginalSearch}`,
+      `normalized_oem.like.%${normalizedOriginalSearch}%`,
     );
   }
   return clauses.join(",");
@@ -150,6 +165,59 @@ export async function fetchCloudCatalog(input: {
       weight_kg: row.weight_kg,
       lifecycle_status: normalizeCatalogLifecycleStatus(row.lifecycle_status),
       lifecycle_note: row.lifecycle_note ?? "",
+    }));
+  }
+
+  if (input.search.trim()) {
+    const organizationId = await getCurrentOrgId();
+    const page = input.page ?? 1;
+    const pageSize = input.pageSize ?? 50;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const search = input.search.trim();
+    const normalizedSearch = normalizePartCode(search);
+
+    const buildGlobalQuery = (selectClause: string) => {
+      return supabaseClient
+        .from("catalog_products")
+        .select(selectClause, { count: "exact" })
+        .eq("organization_id", organizationId)
+        .order("product_code", { ascending: true })
+        .range(from, to)
+        .or(buildCatalogSearchOr(search, normalizedSearch));
+    };
+
+    let { data, error, count } = await buildGlobalQuery(CATALOG_GLOBAL_SELECT_WITH_IMAGE);
+    if (error && isMissingCatalogImageError(error)) {
+      ({ data, error, count } = await buildGlobalQuery(CATALOG_GLOBAL_SELECT_NO_IMAGE));
+    }
+    if (error) throw error;
+
+    return ((data ?? []) as unknown as Array<{
+      id: string;
+      product_code: string;
+      image_url?: string | null;
+      description: string | null;
+      oem_no: string | null;
+      hs_code: string | null;
+      origin: string | null;
+      weight_kg: number | null;
+      lifecycle_status: string | null;
+      lifecycle_note: string | null;
+      brands?: { name?: string | null } | null;
+    }>).map((row) => ({
+      total_count: count ?? 0,
+      product_id: String(row.id || ""),
+      product_code: String(row.product_code || ""),
+      brand: String(row.brands?.name || ""),
+      image_url: String(row.image_url || ""),
+      description: String(row.description || ""),
+      oem_no: String(row.oem_no || ""),
+      hs_code: String(row.hs_code || ""),
+      origin: String(row.origin || ""),
+      weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
+      lifecycle_status: normalizeCatalogLifecycleStatus(String(row.lifecycle_status || "")),
+      lifecycle_note: String(row.lifecycle_note || ""),
     }));
   }
 

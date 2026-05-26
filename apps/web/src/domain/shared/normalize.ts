@@ -2,6 +2,19 @@ export function normalizePartCode(value: string): string {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+export function normalizeOriginalNumberSearch(value: string): string {
+  const normalized = normalizePartCode(value);
+  if (!normalized) return "";
+  const stripped = normalized.replace(/^[A-Z]{1,3}(?=\d{6,}$)/, "");
+  return stripped || normalized;
+}
+
+export function buildLooseOriginalNumberPattern(value: string, wildcard = "%"): string {
+  const normalized = normalizeOriginalNumberSearch(value);
+  if (!normalized) return "";
+  return normalized.split("").join(wildcard);
+}
+
 export function normalizeSearchText(value: string): string {
   return String(value || "")
     .normalize("NFD")
@@ -65,18 +78,42 @@ export function splitOriginalNumberCandidates(value: string): string[] {
   return pieces.length ? pieces : [raw];
 }
 
+function buildOriginalNumberVariants(value: string): string[] {
+  const variants = new Set<string>();
+  const normalized = normalizePartCode(value);
+  if (normalized) variants.add(normalized);
+  const normalizedOriginal = normalizeOriginalNumberSearch(value);
+  if (normalizedOriginal) variants.add(normalizedOriginal);
+  return [...variants];
+}
+
 export function matchesOriginalNumberSearch(haystack: string, needle: string): boolean {
-  const normalizedNeedle = normalizePartCode(needle);
-  if (!normalizedNeedle) return false;
+  const needleVariants = buildOriginalNumberVariants(needle);
+  if (!needleVariants.length) return false;
   const candidates = splitOriginalNumberCandidates(haystack);
   if (
     candidates.some((candidate) => {
-      const normalizedCandidate = normalizePartCode(candidate);
-      if (!normalizedCandidate) return false;
-      return normalizedCandidate === normalizedNeedle || normalizedCandidate.includes(normalizedNeedle);
+      const candidateVariants = buildOriginalNumberVariants(candidate);
+      if (!candidateVariants.length) return false;
+      return candidateVariants.some((candidateVariant) =>
+        needleVariants.some(
+          (needleVariant) =>
+            candidateVariant === needleVariant ||
+            candidateVariant.includes(needleVariant) ||
+            needleVariant.includes(candidateVariant),
+        ),
+      );
     })
   ) {
     return true;
   }
-  return normalizePartCode(haystack).includes(normalizedNeedle);
+  const haystackVariants = buildOriginalNumberVariants(haystack);
+  return haystackVariants.some((haystackVariant) =>
+    needleVariants.some(
+      (needleVariant) =>
+        haystackVariant === needleVariant ||
+        haystackVariant.includes(needleVariant) ||
+        needleVariant.includes(haystackVariant),
+    ),
+  );
 }
