@@ -116,7 +116,7 @@ async function bootstrapPortalInvitesFromLocalIfNeeded() {
 
   const { count, error: countError } = await supabaseClient
     .from("portal_invites")
-    .select("id", { count: "exact", head: true })
+    .select("id", { count: "planned", head: true })
     .eq("organization_id", organizationId);
 
   if (countError) throw new Error(countError.message || "Portal invite bootstrap check failed");

@@ -654,6 +654,13 @@ export function PortalPage() {
   const statementPeriodLabel = buildDateRangeLabel(statementDateFrom, statementDateTo);
   const portalCanOrder = activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_orders;
   const portalBrandOptions = [{ value: "", label: "All Brands" }, ...activeSnapshot.availableBrands.map((brand) => ({ value: brand, label: brand }))];
+  const portalDraftSelectionOptions = [
+    { value: "", label: "New Draft" },
+    ...portalDraftOrders.map((row) => ({
+      value: row.id,
+      label: `${row.sales_order_no || row.id} · ${(row.line_count || row.lines?.length || 0).toLocaleString("en-US")} lines`,
+    })),
+  ];
   const portalOrderTotals = {
     subtotal: portalDraftLines.reduce((sum, line) => sum + Number(line.sell_price || 0) * Number(line.qty || 0), 0),
     purchaseTotal: portalDraftLines.reduce((sum, line) => sum + Number(line.buy_price || 0) * Number(line.qty || 0), 0),
@@ -1458,11 +1465,15 @@ export function PortalPage() {
                 </div>
               }
             >
-              <div className="portal-order-builder">
-                <div className="portal-order-builder__meta">
-                  <div className="dashboard-stat">
-                    <span>Currency</span>
-                    <strong>{portalOrderCurrency}</strong>
+                <div className="portal-order-builder">
+                  <div className="portal-order-builder__meta">
+                    <div className="dashboard-stat">
+                      <span>Working Draft</span>
+                      <strong>{portalSalesOrderNo || "New Draft"}</strong>
+                    </div>
+                    <div className="dashboard-stat">
+                      <span>Currency</span>
+                      <strong>{portalOrderCurrency}</strong>
                   </div>
                   <div className="dashboard-stat">
                     <span>Draft Total</span>
@@ -1477,6 +1488,19 @@ export function PortalPage() {
                     void handlePortalCatalogSearch();
                   }}
                 >
+                  <Select
+                    label="Target Draft"
+                    value={portalOrderId}
+                    options={portalDraftSelectionOptions}
+                    onChange={(value) => {
+                      if (!value) {
+                        handleClearPortalBuilder();
+                        return;
+                      }
+                      const target = portalDraftOrders.find((row) => row.id === value);
+                      if (target) handleResumePortalDraft(target);
+                    }}
+                  />
                   <Input label="Item Search" value={orderSearch} placeholder="Code, description, OEM" onChange={setOrderSearch} />
                   <Select label="Brand" value={orderSearchBrand} options={portalBrandOptions} onChange={setOrderSearchBrand} />
                   <div className="portal-builder-actions">

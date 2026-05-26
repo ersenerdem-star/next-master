@@ -73,10 +73,12 @@ const PAYMENT_TERM_OPTIONS = [
 ] as const;
 
 type WorkbenchViewMode = "simple" | "advanced";
+type WorkbenchPresetKey = "simple" | "pricing" | "sourcing" | "margin" | "advanced" | "custom";
 type OptionalWorkbenchColumnKey = "origin" | "stock" | "supplierOption" | "supplier" | "buy" | "buyTotal" | "profit" | "margin" | "date";
 
 const QUOTE_WORKBENCH_VIEW_KEY = "quote-workbench-view-mode";
 const QUOTE_WORKBENCH_COLUMNS_KEY = "quote-workbench-columns";
+const QUOTE_WORKBENCH_PRESET_KEY = "quote-workbench-preset";
 const DEFAULT_QUOTE_WORKBENCH_COLUMNS: Record<OptionalWorkbenchColumnKey, boolean> = {
   origin: false,
   stock: true,
@@ -87,6 +89,55 @@ const DEFAULT_QUOTE_WORKBENCH_COLUMNS: Record<OptionalWorkbenchColumnKey, boolea
   profit: false,
   margin: false,
   date: false,
+};
+
+const WORKBENCH_PRESETS: Record<Exclude<WorkbenchPresetKey, "custom">, { label: string; viewMode: WorkbenchViewMode; columns: Record<OptionalWorkbenchColumnKey, boolean> }> = {
+  simple: {
+    label: "Simple",
+    viewMode: "simple",
+    columns: { ...DEFAULT_QUOTE_WORKBENCH_COLUMNS },
+  },
+  pricing: {
+    label: "Pricing",
+    viewMode: "simple",
+    columns: {
+      ...DEFAULT_QUOTE_WORKBENCH_COLUMNS,
+      supplier: true,
+      buy: true,
+      buyTotal: true,
+      date: true,
+    },
+  },
+  sourcing: {
+    label: "Sourcing",
+    viewMode: "simple",
+    columns: {
+      ...DEFAULT_QUOTE_WORKBENCH_COLUMNS,
+      origin: true,
+      supplierOption: true,
+      supplier: true,
+      buy: true,
+      buyTotal: true,
+      date: true,
+    },
+  },
+  margin: {
+    label: "Margin",
+    viewMode: "simple",
+    columns: {
+      ...DEFAULT_QUOTE_WORKBENCH_COLUMNS,
+      supplier: true,
+      buy: true,
+      buyTotal: true,
+      profit: true,
+      margin: true,
+    },
+  },
+  advanced: {
+    label: "Advanced",
+    viewMode: "advanced",
+    columns: { ...DEFAULT_QUOTE_WORKBENCH_COLUMNS },
+  },
 };
 
 function readStoredWorkbenchViewMode(): WorkbenchViewMode {
@@ -108,6 +159,30 @@ function readStoredWorkbenchColumns() {
   } catch {
     return DEFAULT_QUOTE_WORKBENCH_COLUMNS;
   }
+}
+
+function readStoredWorkbenchPreset(): WorkbenchPresetKey {
+  if (typeof window === "undefined") return "simple";
+  const value = window.localStorage.getItem(QUOTE_WORKBENCH_PRESET_KEY);
+  return value && value in WORKBENCH_PRESETS ? (value as WorkbenchPresetKey) : "simple";
+}
+
+function columnsMatch(left: Record<OptionalWorkbenchColumnKey, boolean>, right: Record<OptionalWorkbenchColumnKey, boolean>) {
+  return (Object.keys(DEFAULT_QUOTE_WORKBENCH_COLUMNS) as OptionalWorkbenchColumnKey[]).every((key) => left[key] === right[key]);
+}
+
+function detectWorkbenchPreset(
+  viewMode: WorkbenchViewMode,
+  columns: Record<OptionalWorkbenchColumnKey, boolean>,
+): WorkbenchPresetKey {
+  for (const [key, preset] of Object.entries(WORKBENCH_PRESETS) as Array<
+    [Exclude<WorkbenchPresetKey, "custom">, (typeof WORKBENCH_PRESETS)[Exclude<WorkbenchPresetKey, "custom">]]
+  >) {
+    if (preset.viewMode === viewMode && columnsMatch(columns, preset.columns)) {
+      return key;
+    }
+  }
+  return "custom";
 }
 
 function toTermSelection(value: string, options: readonly string[]) {
@@ -521,6 +596,7 @@ export function QuotesPage({
   const [workbenchViewMode, setWorkbenchViewMode] = useState<WorkbenchViewMode>(() => readStoredWorkbenchViewMode());
   const [workbenchColumnsOpen, setWorkbenchColumnsOpen] = useState(false);
   const [workbenchColumnVisibility, setWorkbenchColumnVisibility] = useState<Record<OptionalWorkbenchColumnKey, boolean>>(() => readStoredWorkbenchColumns());
+  const [workbenchPreset, setWorkbenchPreset] = useState<WorkbenchPresetKey>(() => readStoredWorkbenchPreset());
   const [selectedWorkbenchLineId, setSelectedWorkbenchLineId] = useState("");
 
   const [quoteCode, setQuoteCode] = useState("");
@@ -824,6 +900,18 @@ export function QuotesPage({
     if (typeof window === "undefined") return;
     window.localStorage.setItem(QUOTE_WORKBENCH_COLUMNS_KEY, JSON.stringify(workbenchColumnVisibility));
   }, [workbenchColumnVisibility]);
+
+  useEffect(() => {
+    const detected = detectWorkbenchPreset(workbenchViewMode, workbenchColumnVisibility);
+    if (detected !== workbenchPreset) {
+      setWorkbenchPreset(detected);
+    }
+  }, [workbenchColumnVisibility, workbenchPreset, workbenchViewMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(QUOTE_WORKBENCH_PRESET_KEY, workbenchPreset);
+  }, [workbenchPreset]);
 
   useEffect(() => {
     if (!quoteBuilderLines.length) {
@@ -1344,6 +1432,14 @@ export function QuotesPage({
       status,
       lines: quoteBuilderLines,
     });
+  }
+
+  function applyWorkbenchPreset(nextPreset: WorkbenchPresetKey) {
+    if (nextPreset === "custom") return;
+    const preset = WORKBENCH_PRESETS[nextPreset];
+    setWorkbenchPreset(nextPreset);
+    setWorkbenchViewMode(preset.viewMode);
+    setWorkbenchColumnVisibility({ ...preset.columns });
   }
 
   const builderColumns = useMemo(() => {
@@ -2561,6 +2657,24 @@ export function QuotesPage({
               <p>Purchase options stay visible internally. Switch on PDF View to preview the customer-facing version.</p>
             </div>
             <div className="workbench-controls">
+              <Select
+                value={workbenchPreset}
+                options={[
+                  { value: "simple", label: "Preset · Simple" },
+                  { value: "pricing", label: "Preset · Pricing" },
+                  { value: "sourcing", label: "Preset · Sourcing" },
+                  { value: "margin", label: "Preset · Margin" },
+                  { value: "advanced", label: "Preset · Advanced" },
+                  { value: "custom", label: "Preset · Custom" },
+                ]}
+                onChange={(value) => {
+                  if (value === "custom") {
+                    setWorkbenchPreset("custom");
+                    return;
+                  }
+                  applyWorkbenchPreset(value as WorkbenchPresetKey);
+                }}
+              />
               <div className="segmented-control">
                 <button
                   type="button"
