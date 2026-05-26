@@ -1506,15 +1506,17 @@ export function PortalPage() {
 
       {status ? <div className="success-text">{status}</div> : null}
       {error ? <div className="warning-text">{error}</div> : null}
-      <div className="portal-kpi-strip">
-        {portalQuickStats.map((item) => (
-          <div key={item.label} className="portal-kpi-card">
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-            <small>{item.note}</small>
-          </div>
-        ))}
-      </div>
+      {activeSection !== "desk" ? (
+        <div className="portal-kpi-strip">
+          {portalQuickStats.map((item) => (
+            <div key={item.label} className="portal-kpi-card">
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <small>{item.note}</small>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="portal-subnav">
         {portalSections.map((section) => (
@@ -1719,39 +1721,6 @@ export function PortalPage() {
 
       {activeSection === "desk" && portalCanOrder ? (
         <div className="portal-section-stack">
-          <SectionCard title="Saved Drafts">
-            <DataTable
-              rows={portalDraftOrders}
-              columns={[
-                { key: "no", header: "Draft No", render: (row: PortalSalesOrderRow) => row.sales_order_no || row.id },
-                { key: "date", header: "Date", render: (row: PortalSalesOrderRow) => row.quote_date || "-" },
-                { key: "amount", header: "Amount", render: (row: PortalSalesOrderRow) => formatMoney(Number(row.sales_total || 0), row.currency || portalOrderCurrency) },
-                {
-                  key: "actions",
-                  header: "Actions",
-                  render: (row: PortalSalesOrderRow) => (
-                    <div className="inline-actions">
-                      <Button variant="secondary" className="button--compact" onClick={() => handleResumePortalDraft(row)}>
-                        Resume
-                      </Button>
-                      <Button variant="secondary" className="button--compact" onClick={() => openPortalDocumentPrint("sales-order", row.id)}>
-                        PDF
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="button--compact danger-button"
-                        onClick={() => void handleDeletePortalDraft(row)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  ),
-                },
-              ]}
-              emptyText="No drafts available yet."
-            />
-          </SectionCard>
-
           <SectionCard
             title="Part Search"
             actions={
