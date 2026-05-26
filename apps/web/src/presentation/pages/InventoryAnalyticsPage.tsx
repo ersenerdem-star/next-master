@@ -14,6 +14,7 @@ import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
+import { BrandPill } from "../components/common/BrandPill";
 
 type AnalyticsTab = "Turnover" | "Aging" | "Forecast" | "Pending Procurement";
 
@@ -471,7 +472,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
 
   const turnoverColumns = useMemo(
     () => [
-      { key: "brand", header: "Brand", render: (row: TurnoverRow) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: TurnoverRow) => <BrandPill brand={row.brand} compact /> },
       { key: "code", header: "Code", render: (row: TurnoverRow) => row.product_code || "-" },
       { key: "description", header: "Description", render: (row: TurnoverRow) => row.description || "-" },
       { key: "stock", header: "On Hand", render: (row: TurnoverRow) => row.on_hand_qty.toLocaleString("en-US") },
@@ -496,7 +497,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
   const agingColumns = useMemo(
     () => [
       { key: "warehouse", header: "Warehouse", render: (row: AgingRow) => row.warehouse_name || "-" },
-      { key: "brand", header: "Brand", render: (row: AgingRow) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: AgingRow) => <BrandPill brand={row.brand} compact /> },
       { key: "code", header: "Code", render: (row: AgingRow) => row.product_code || "-" },
       { key: "description", header: "Description", render: (row: AgingRow) => row.description || "-" },
       { key: "stock", header: "On Hand", render: (row: AgingRow) => row.on_hand_qty.toLocaleString("en-US") },
@@ -519,7 +520,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
 
   const forecastColumns = useMemo(
     () => [
-      { key: "brand", header: "Brand", render: (row: ForecastRow) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: ForecastRow) => <BrandPill brand={row.brand} compact /> },
       { key: "code", header: "Code", render: (row: ForecastRow) => row.product_code || "-" },
       { key: "description", header: "Description", render: (row: ForecastRow) => row.description || "-" },
       { key: "stock", header: "On Hand", render: (row: ForecastRow) => row.on_hand_qty.toLocaleString("en-US") },
@@ -565,7 +566,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
       { key: "customer", header: "Customer", render: (row: PendingProcurementRow) => row.customer_name || "-" },
       { key: "date", header: "Date", render: (row: PendingProcurementRow) => row.order_date || "-" },
       { key: "source", header: "Source", render: (row: PendingProcurementRow) => row.source_channel || "-" },
-      { key: "brand", header: "Brand", render: (row: PendingProcurementRow) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: PendingProcurementRow) => <BrandPill brand={row.brand} compact /> },
       { key: "code", header: "Code", render: (row: PendingProcurementRow) => row.product_code || "-" },
       { key: "description", header: "Description", render: (row: PendingProcurementRow) => row.description || "-" },
       { key: "ordered", header: "Ordered", render: (row: PendingProcurementRow) => row.qty_ordered.toLocaleString("en-US") },

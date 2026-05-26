@@ -27,6 +27,7 @@ import { DataTable } from "../components/common/DataTable";
 import { Button } from "../components/common/Button";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
+import { BrandPill } from "../components/common/BrandPill";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 
@@ -468,9 +469,7 @@ export function PurchasesPage({
           return (
             <span className="document-marks document-marks--compact">
               {brandSummary.labels.map((brand) => (
-                <span key={`${row.id}-${brand}`} className="mark-badge">
-                  {brand}
-                </span>
+                <BrandPill key={`${row.id}-${brand}`} brand={brand} compact />
               ))}
               {brandSummary.extraCount > 0 ? <span className="mark-badge mark-badge--info">+{brandSummary.extraCount}</span> : null}
             </span>

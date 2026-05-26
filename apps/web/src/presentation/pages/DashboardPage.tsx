@@ -12,6 +12,7 @@ import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { SectionCard } from "../components/common/SectionCard";
 import { StatCard } from "../components/common/StatCard";
+import { BrandPill } from "../components/common/BrandPill";
 import { deleteSupplierBrandSummaryRow, fetchCloudSupplierBrandSummary, fetchCloudSupplierBrandSummaryAll, fetchCloudSuppliers } from "../../infrastructure/api/suppliersApi";
 import type { SupplierBrandSummaryRow, SupplierSummary } from "../../types/suppliers";
 import { downloadCsv, toCsv } from "../../shared/csv";
@@ -471,7 +472,7 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
                 <tbody>
                   {filteredBrandSummary.map((row) => (
                     <tr key={`${row.supplier_id}-${row.brand}`}>
-                      <td>{row.brand}</td>
+                      <td><BrandPill brand={row.brand} compact /></td>
                       <td>{row.supplier_name}</td>
                       <td>{row.part_count.toLocaleString("en-US")}</td>
                       <td>{row.line_count.toLocaleString("en-US")}</td>

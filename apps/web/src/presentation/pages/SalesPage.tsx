@@ -18,6 +18,7 @@ import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
+import { BrandPill } from "../components/common/BrandPill";
 
 type SalesPageProps = {
   selectedSalesOrderId?: string;
@@ -604,9 +605,7 @@ export function SalesPage({
         return (
           <span className="document-marks document-marks--compact">
             {brandSummary.labels.map((brand) => (
-              <span key={`${row.id}-${brand}`} className="mark-badge">
-                {brand}
-              </span>
+              <BrandPill key={`${row.id}-${brand}`} brand={brand} compact />
             ))}
             {brandSummary.extraCount > 0 ? <span className="mark-badge mark-badge--info">+{brandSummary.extraCount}</span> : null}
           </span>

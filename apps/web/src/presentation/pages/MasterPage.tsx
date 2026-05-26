@@ -10,6 +10,7 @@ import { Button } from "../components/common/Button";
 import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
+import { BrandPill } from "../components/common/BrandPill";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 
 const scopeOptions = [
@@ -151,7 +152,7 @@ export function MasterPage() {
   const columns = useMemo(
     () => [
       { key: "code", header: "Code", render: (row: MasterRow) => row.product_code },
-      { key: "brand", header: "Brand", render: (row: MasterRow) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: MasterRow) => <BrandPill brand={row.brand} compact /> },
       { key: "name", header: "Name", render: (row: MasterRow) => row.description || "-" },
       { key: "hs", header: "HS", render: (row: MasterRow) => row.hs_code || "-" },
       { key: "origin", header: "Origin", render: (row: MasterRow) => row.origin || "-" },

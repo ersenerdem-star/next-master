@@ -24,6 +24,7 @@ import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
+import { BrandPill } from "../components/common/BrandPill";
 import { includesLooseText } from "../../domain/shared/normalize";
 
 type InventoryTab = "Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers";
@@ -475,7 +476,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
       { key: "type", header: "Type", render: (row: InventoryMovement) => row.movement_type },
       { key: "document", header: "Document", render: (row: InventoryMovement) => row.document_no || row.document_type || "-" },
       { key: "party", header: "Related Party", render: (row: InventoryMovement) => row.related_party || "-" },
-      { key: "brand", header: "Brand", render: (row: InventoryMovement) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: InventoryMovement) => <BrandPill brand={row.brand} compact /> },
       { key: "code", header: "Code", render: (row: InventoryMovement) => row.product_code || row.old_code || "-" },
       { key: "description", header: "Description", render: (row: InventoryMovement) => row.description || "-" },
       { key: "qtyin", header: "Qty In", render: (row: InventoryMovement) => row.qty_in.toLocaleString("en-US") },
@@ -551,7 +552,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
 
   const onHandStockColumns = useMemo(
     () => [
-      { key: "brand", header: "Brand", render: (row: WarehouseStockItem) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: WarehouseStockItem) => <BrandPill brand={row.brand} compact /> },
       { key: "code", header: "Code", render: (row: WarehouseStockItem) => row.product_code || row.old_code || "-" },
       { key: "description", header: "Description", render: (row: WarehouseStockItem) => row.description || "-" },
       { key: "origin", header: "Origin", render: (row: WarehouseStockItem) => row.origin || "-" },
@@ -1095,7 +1096,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                 <DataTable
                   rows={filteredTransferStockRows}
                   columns={[
-                    { key: "brand", header: "Brand", render: (row: WarehouseStockItem) => row.brand || "-" },
+                    { key: "brand", header: "Brand", render: (row: WarehouseStockItem) => <BrandPill brand={row.brand} compact /> },
                     { key: "code", header: "Code", render: (row: WarehouseStockItem) => row.product_code || row.old_code || "-" },
                     { key: "description", header: "Description", render: (row: WarehouseStockItem) => row.description || "-" },
                     { key: "origin", header: "Origin", render: (row: WarehouseStockItem) => row.origin || "-" },

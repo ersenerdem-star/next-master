@@ -1232,6 +1232,34 @@ select {
   color: #b91c1c;
 }
 
+.brand-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0.18rem 0.68rem;
+  border-radius: 999px;
+  border: 1px solid #fdba74;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.8), transparent 55%),
+    linear-gradient(135deg, #fff7ed 0%, #ffedd5 45%, #fde68a 100%);
+  color: #9a3412;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 6px 14px rgba(245, 158, 11, 0.16);
+  white-space: nowrap;
+}
+
+.brand-pill--compact {
+  min-height: 22px;
+  padding: 0.1rem 0.48rem;
+  font-size: 0.68rem;
+}
+
 .module-tabs {
   display: flex;
   flex-wrap: wrap;

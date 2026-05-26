@@ -12,6 +12,7 @@ import { Button } from "../components/common/Button";
 import { Input } from "../components/common/Input";
 import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
+import { BrandPill } from "../components/common/BrandPill";
 
 type ItemTransactionRow = {
   document_id: string;
@@ -347,7 +348,7 @@ export function ItemTransactionsPage({
 
   const columns = useMemo(
     () => [
-      { key: "brand", header: "Brand", render: (row: ItemTransactionSummaryRow) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: ItemTransactionSummaryRow) => <BrandPill brand={row.brand} compact /> },
       { key: "code", header: "Code", render: (row: ItemTransactionSummaryRow) => row.product_code || "-" },
       { key: "description", header: "Description", render: (row: ItemTransactionSummaryRow) => row.description || "-" },
       { key: "inqty", header: "In Qty", render: (row: ItemTransactionSummaryRow) => row.inbound_qty.toLocaleString("en-US") },
@@ -378,7 +379,7 @@ export function ItemTransactionsPage({
         header: "Party",
         render: (row: ItemTransactionRow) => row.party_name || "-",
       },
-      { key: "brand", header: "Brand", render: (row: ItemTransactionRow) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: ItemTransactionRow) => <BrandPill brand={row.brand} compact /> },
       { key: "code", header: "Code", render: (row: ItemTransactionRow) => row.product_code || "-" },
       { key: "description", header: "Description", render: (row: ItemTransactionRow) => row.description || "-" },
       { key: "qtyin", header: "Qty In", render: (row: ItemTransactionRow) => (row.direction === "IN" ? formatQty(row.qty) : "-") },

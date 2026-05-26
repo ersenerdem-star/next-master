@@ -12,6 +12,7 @@ import { useActionFeedback } from "../components/common/ActionFeedback";
 import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
+import { BrandPill } from "../components/common/BrandPill";
 import { downloadCsv, normalizeNumber, normalizeText, parseCsv, toCsv } from "../../shared/csv";
 import { downloadSupplierTemplate } from "../../shared/importTemplates";
 
@@ -182,7 +183,7 @@ export function SuppliersPage() {
   const columns = useMemo(
     () => [
       { key: "code", header: "Code", render: (row: SupplierPriceRow) => row.product_code },
-      { key: "brand", header: "Brand", render: (row: SupplierPriceRow) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: SupplierPriceRow) => <BrandPill brand={row.brand} compact /> },
       { key: "name", header: "Name", render: (row: SupplierPriceRow) => row.description || "-" },
       { key: "oem", header: "OEM", render: (row: SupplierPriceRow) => row.oem_no || "-" },
       { key: "price", header: "Buy", render: (row: SupplierPriceRow) => row.buy_price ?? "-" },

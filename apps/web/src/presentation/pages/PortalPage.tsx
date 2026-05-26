@@ -6,6 +6,7 @@ import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { SectionCard } from "../components/common/SectionCard";
+import { BrandPill } from "../components/common/BrandPill";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 import { openAccountStatementPrintWindow } from "../../shared/accountStatementPrint";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
@@ -395,7 +396,7 @@ export function PortalPage() {
   const portalCatalogColumns = useMemo(
     () => [
       { key: "code", header: "Code", render: (row: PortalCatalogSearchItem) => row.code },
-      { key: "brand", header: "Brand", render: (row: PortalCatalogSearchItem) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: PortalCatalogSearchItem) => <BrandPill brand={row.brand} compact /> },
       { key: "description", header: "Description", render: (row: PortalCatalogSearchItem) => row.description || "-" },
       { key: "oem", header: "OEM", render: (row: PortalCatalogSearchItem) => row.oem_no || "-" },
       { key: "tariff", header: "Tariff", render: (row: PortalCatalogSearchItem) => row.tariff || "-" },
@@ -415,7 +416,7 @@ export function PortalPage() {
   const portalDraftColumns = useMemo(
     () => [
       { key: "code", header: "Code", render: (row: PortalPreparedLine) => row.resolvedCode || row.requestedCode || "-" },
-      { key: "brand", header: "Brand", render: (row: PortalPreparedLine) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: PortalPreparedLine) => <BrandPill brand={row.brand} compact /> },
       {
         key: "description",
         header: "Description",
@@ -915,7 +916,7 @@ export function PortalPage() {
     if (selectedDocument.kind === "sales-order" || selectedDocument.kind === "invoice") {
       return [
         { key: "code", header: "Code", render: (row: PortalLine) => row.code || row.requested_code || "-" },
-        { key: "brand", header: "Brand", render: (row: PortalLine) => row.brand || "-" },
+        { key: "brand", header: "Brand", render: (row: PortalLine) => <BrandPill brand={row.brand} compact /> },
         {
           key: "description",
           header: "Description",
@@ -936,7 +937,7 @@ export function PortalPage() {
     }
     return [
       { key: "code", header: "Code", render: (row: PortalLine) => row.code || "-" },
-      { key: "brand", header: "Brand", render: (row: PortalLine) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: PortalLine) => <BrandPill brand={row.brand} compact /> },
       {
         key: "description",
         header: "Description",

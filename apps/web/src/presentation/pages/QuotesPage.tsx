@@ -38,6 +38,7 @@ import { Button } from "../components/common/Button";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
+import { BrandPill } from "../components/common/BrandPill";
 
 type QuotesPageProps = {
   selectedSalesOrderId?: string;
@@ -1456,7 +1457,7 @@ export function QuotesPage({
           </div>
         ),
       },
-      { key: "brand", header: "Brand", render: (row: QuoteBuilderLine) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: QuoteBuilderLine) => <BrandPill brand={row.brand} compact /> },
       { key: "name", header: "Description", render: (row: QuoteBuilderLine) => row.description || "-" },
       ...(effectiveWorkbenchColumnVisibility.origin
         ? [{ key: "origin", header: "Origin", render: (row: QuoteBuilderLine) => row.origin || "-" }]
@@ -1596,7 +1597,7 @@ export function QuotesPage({
   const detailColumns = useMemo(() => {
     const columns = [
       { key: "code", header: "Code", render: (row: QuoteDetail["lines"][number]) => row.product_code || "-" },
-      { key: "brand", header: "Brand", render: (row: QuoteDetail["lines"][number]) => row.brand_text || "-" },
+      { key: "brand", header: "Brand", render: (row: QuoteDetail["lines"][number]) => <BrandPill brand={row.brand_text} compact /> },
       { key: "name", header: "Description", render: (row: QuoteDetail["lines"][number]) => row.description || "-" },
       { key: "qty", header: "Qty", render: (row: QuoteDetail["lines"][number]) => row.qty ?? "-" },
       { key: "sell", header: pdfView ? "Unit Price" : "Sell", render: (row: QuoteDetail["lines"][number]) => formatMoney(row.sell_price, String(detail.quote?.currency || currency)) },
@@ -1615,7 +1616,7 @@ export function QuotesPage({
   const attentionColumns = useMemo(
     () => [
       { key: "code", header: "Code", render: (row: QuoteBuilderLine) => row.resolvedCode || row.requestedCode || "-" },
-      { key: "brand", header: "Brand", render: (row: QuoteBuilderLine) => row.brand || "-" },
+      { key: "brand", header: "Brand", render: (row: QuoteBuilderLine) => <BrandPill brand={row.brand} compact /> },
       { key: "description", header: "Description", render: (row: QuoteBuilderLine) => row.description || "-" },
       { key: "qty", header: "Qty", render: (row: QuoteBuilderLine) => row.qty },
       {
