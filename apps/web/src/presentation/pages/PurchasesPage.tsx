@@ -66,6 +66,45 @@ function buildPurchaseOrderBrandSummary(lines: LocalPurchaseOrder["lines"]) {
   };
 }
 
+function buildEntityAlias(value: string) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "-";
+
+  const rawTokens = normalized.split(/\s+/).filter(Boolean);
+  if (rawTokens.length <= 2) return normalized;
+
+  const stopWords = new Set([
+    "ltd",
+    "ltd.",
+    "limited",
+    "sti",
+    "şti",
+    "sti.",
+    "şti.",
+    "sanayi",
+    "ticaret",
+    "otomotiv",
+    "dis",
+    "dış",
+    "ve",
+    "co",
+    "co.",
+    "company",
+    "gmbh",
+    "sro",
+    "s.r.o.",
+    "llc",
+    "inc",
+    "corp",
+    "bv",
+    "ag",
+  ]);
+
+  const significantTokens = rawTokens.filter((token) => !stopWords.has(token.toLowerCase()));
+  const aliasTokens = (significantTokens.length >= 2 ? significantTokens : rawTokens).slice(0, 2);
+  return aliasTokens.join(" ");
+}
+
 function sanitizeFileName(value: string) {
   return String(value || "document")
     .trim()
@@ -327,10 +366,28 @@ export function PurchasesPage({
   const purchaseOrderColumns = useMemo(
     () => [
       { key: "po", header: "PO No", render: (row: LocalPurchaseOrder) => row.id },
-      { key: "supplier", header: "Vendor", render: (row: LocalPurchaseOrder) => row.supplier_name },
-      { key: "company", header: "Purchase Company", render: (row: LocalPurchaseOrder) => row.purchase_company || "-" },
+      {
+        key: "supplier",
+        header: "Vendor",
+        render: (row: LocalPurchaseOrder) => (
+          <span title={row.supplier_name || "-"}>{buildEntityAlias(row.supplier_name)}</span>
+        ),
+      },
+      {
+        key: "company",
+        header: "Purchase Company",
+        render: (row: LocalPurchaseOrder) => (
+          <span title={row.purchase_company || "-"}>{buildEntityAlias(row.purchase_company)}</span>
+        ),
+      },
       { key: "sales", header: "Sales Order", render: (row: LocalPurchaseOrder) => row.sales_order_no },
-      { key: "customer", header: "Customer", render: (row: LocalPurchaseOrder) => row.customer_name || "-" },
+      {
+        key: "customer",
+        header: "Customer",
+        render: (row: LocalPurchaseOrder) => (
+          <span title={row.customer_name || "-"}>{buildEntityAlias(row.customer_name)}</span>
+        ),
+      },
       {
         key: "brands",
         header: "Brand",
