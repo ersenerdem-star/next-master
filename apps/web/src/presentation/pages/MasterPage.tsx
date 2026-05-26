@@ -153,7 +153,6 @@ export function MasterPage() {
       { key: "code", header: "Code", render: (row: MasterRow) => row.product_code },
       { key: "brand", header: "Brand", render: (row: MasterRow) => row.brand || "-" },
       { key: "name", header: "Name", render: (row: MasterRow) => row.description || "-" },
-      { key: "oem", header: "OEM", render: (row: MasterRow) => row.oem_no || "-" },
       { key: "hs", header: "HS", render: (row: MasterRow) => row.hs_code || "-" },
       { key: "origin", header: "Origin", render: (row: MasterRow) => row.origin || "-" },
       { key: "weight", header: "Weight", render: (row: MasterRow) => row.weight_kg ?? "-" },
