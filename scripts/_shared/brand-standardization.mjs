@@ -85,6 +85,12 @@ const BRAND_STANDARDS = [
     sparetoQuery: "DONALDSON",
     sparetoSlug: "donaldson",
   },
+  {
+    keys: ["VALEO"],
+    canonical: "Valeo",
+    sparetoQuery: "VALEO",
+    sparetoSlug: "valeo",
+  },
 ];
 
 function buildFallbackSlug(value) {
