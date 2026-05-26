@@ -764,7 +764,7 @@ export function CatalogPage() {
     setSyncingBrandCatalog(true);
     setError("");
     setStatus("");
-    actionFeedback.begin(`Syncing ${catalogBrand} from Spareto...`);
+    actionFeedback.begin(`Re-Synching ${catalogBrand}...`);
 
     try {
       const result = await syncBrandCatalogFromSpareto(catalogBrand, true);
@@ -831,8 +831,8 @@ export function CatalogPage() {
               Import CSV
             </Button>
             {catalogBrand ? (
-              <Button variant="secondary" onClick={() => void handleSyncSelectedBrandFromSpareto()} busy={syncingBrandCatalog} busyLabel="Syncing...">
-                Re-sync from Spareto
+              <Button variant="secondary" onClick={() => void handleSyncSelectedBrandFromSpareto()} busy={syncingBrandCatalog} busyLabel="Re-Synching...">
+                Re-Synch
               </Button>
             ) : null}
           </div>
