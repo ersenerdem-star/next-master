@@ -449,8 +449,8 @@ export function PurchasesPage({
     () => [
       { key: "bill", header: "Bill No", render: (row: LocalBill) => row.id },
       { key: "po", header: "Purchase Order", render: (row: LocalBill) => row.purchase_order_no },
-      { key: "supplier", header: "Vendor", render: (row: LocalBill) => row.supplier_name },
-      { key: "company", header: "Purchase Company", render: (row: LocalBill) => row.purchase_company || "-" },
+      { key: "supplier", header: "Vendor", render: (row: LocalBill) => <span title={row.supplier_name || "-"}>{buildEntityAlias(row.supplier_name)}</span> },
+      { key: "company", header: "Purchase Company", render: (row: LocalBill) => <span title={row.purchase_company || "-"}>{buildEntityAlias(row.purchase_company)}</span> },
       { key: "date", header: "Bill Date", render: (row: LocalBill) => row.bill_date || "-" },
       { key: "due", header: "Due Date", render: (row: LocalBill) => row.due_date || "-" },
       { key: "amount", header: "Total Amount", render: (row: LocalBill) => formatMoney(row.total_amount, row.currency) },
@@ -463,7 +463,7 @@ export function PurchasesPage({
     () => [
       { key: "payment", header: "Payment No", render: (row: LocalPaymentMade) => row.id },
       { key: "bill", header: "Bill", render: (row: LocalPaymentMade) => row.bill_no || "-" },
-      { key: "vendor", header: "Vendor", render: (row: LocalPaymentMade) => row.supplier_name || "-" },
+      { key: "vendor", header: "Vendor", render: (row: LocalPaymentMade) => <span title={row.supplier_name || "-"}>{buildEntityAlias(row.supplier_name)}</span> },
       { key: "date", header: "Date", render: (row: LocalPaymentMade) => row.payment_date || "-" },
       { key: "method", header: "Method", render: (row: LocalPaymentMade) => row.method || "-" },
       { key: "reference", header: "Reference", render: (row: LocalPaymentMade) => row.reference_no || "-" },

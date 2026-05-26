@@ -27,6 +27,7 @@ import { buildInvoiceFromSalesOrder, buildLocalSalesOrder, buildPurchaseOrdersFr
 import { resyncSalesOrderLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
+import { buildEntityAlias } from "../../shared/entityAlias";
 import { Select } from "../components/common/Select";
 import type { CompanyProfile } from "../../types/company";
 import type { LocalCustomer } from "../../types/customers";
@@ -2223,7 +2224,7 @@ export function QuotesPage({
       {
         key: "customer",
         header: "Customer",
-        render: (row: LocalSalesOrder) => <strong>{row.customer_name || "Unnamed customer"}</strong>,
+        render: (row: LocalSalesOrder) => <strong title={row.customer_name || "Unnamed customer"}>{buildEntityAlias(row.customer_name)}</strong>,
       },
       {
         key: "salesOrderNo",
@@ -2269,7 +2270,7 @@ export function QuotesPage({
       {
         key: "sellerCompany",
         header: "Seller Company",
-        render: (row: LocalSalesOrder) => row.seller_company || "-",
+        render: (row: LocalSalesOrder) => <span title={row.seller_company || "-"}>{buildEntityAlias(row.seller_company)}</span>,
       },
       {
         key: "date",
@@ -2290,7 +2291,7 @@ export function QuotesPage({
       {
         key: "customer",
         header: "Customer",
-        render: (row: QuoteSummary) => <strong>{row.customer_name || "Unnamed customer"}</strong>,
+        render: (row: QuoteSummary) => <strong title={row.customer_name || "Unnamed customer"}>{buildEntityAlias(row.customer_name)}</strong>,
       },
       {
         key: "salesOrderNo",

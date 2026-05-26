@@ -3,6 +3,7 @@ import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchInventoryMovements, fetchWarehouseStockItems } from "../../infrastructure/api/inventoryApi";
 import { fetchSalesOrders, fetchPurchaseOrders, fetchInvoices } from "../../infrastructure/api/ordersApi";
 import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
+import { buildEntityAlias } from "../../shared/entityAlias";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { includesLooseText } from "../../domain/shared/normalize";
 import type { InventoryMovement, WarehouseStockItem } from "../../types/inventory";
@@ -563,7 +564,11 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
   const pendingColumns = useMemo(
     () => [
       { key: "order", header: "Sales Order", render: (row: PendingProcurementRow) => row.sales_order_no || "-" },
-      { key: "customer", header: "Customer", render: (row: PendingProcurementRow) => row.customer_name || "-" },
+      {
+        key: "customer",
+        header: "Customer",
+        render: (row: PendingProcurementRow) => <span title={row.customer_name || "-"}>{buildEntityAlias(row.customer_name)}</span>,
+      },
       { key: "date", header: "Date", render: (row: PendingProcurementRow) => row.order_date || "-" },
       { key: "source", header: "Source", render: (row: PendingProcurementRow) => row.source_channel || "-" },
       { key: "brand", header: "Brand", render: (row: PendingProcurementRow) => <BrandPill brand={row.brand} compact /> },

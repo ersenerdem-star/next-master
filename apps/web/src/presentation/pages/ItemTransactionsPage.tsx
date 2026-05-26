@@ -3,6 +3,7 @@ import { includesLooseText, normalizePartCode } from "../../domain/shared/normal
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchInventoryMovements } from "../../infrastructure/api/inventoryApi";
 import { fetchBills, fetchInvoices, fetchPurchaseOrders, fetchSalesOrders } from "../../infrastructure/api/ordersApi";
+import { buildEntityAlias } from "../../shared/entityAlias";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import type { InventoryMovement } from "../../types/inventory";
 import type { LocalBill, LocalInvoice, LocalPurchaseOrder, LocalSalesOrder } from "../../types/orders";
@@ -377,7 +378,7 @@ export function ItemTransactionsPage({
       {
         key: "party",
         header: "Party",
-        render: (row: ItemTransactionRow) => row.party_name || "-",
+        render: (row: ItemTransactionRow) => <span title={row.party_name || "-"}>{buildEntityAlias(row.party_name)}</span>,
       },
       { key: "brand", header: "Brand", render: (row: ItemTransactionRow) => <BrandPill brand={row.brand} compact /> },
       { key: "code", header: "Code", render: (row: ItemTransactionRow) => row.product_code || "-" },
