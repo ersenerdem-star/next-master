@@ -138,6 +138,7 @@ export type LocalInvoiceLine = {
 export type LocalInvoice = {
   id: string;
   sales_order_id: string;
+  sales_order_ids?: string[];
   sales_order_no: string;
   customer_name: string;
   seller_company: string;

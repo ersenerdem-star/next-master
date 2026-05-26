@@ -6,7 +6,7 @@ import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
 import { QuotesPage } from "./QuotesPage";
 import { PriceListsPage } from "./PriceListsPage";
 import { SectionCard } from "../components/common/SectionCard";
-import { buildInvoiceFromSalesOrder } from "../../shared/localOrders";
+import { buildInvoiceFromSalesOrder, buildMergedInvoiceFromSalesOrders } from "../../shared/localOrders";
 import { resyncInvoiceLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
 import { DataTable } from "../components/common/DataTable";
 import type { CompanyProfile } from "../../types/company";
@@ -466,7 +466,7 @@ export function SalesPage({
     () =>
       salesOrders.filter((order) => {
         if (order.status !== "confirmed") return false;
-        return !invoices.some((invoice) => invoice.sales_order_id === order.id);
+        return !invoices.some((invoice) => invoice.sales_order_id === order.id || invoice.sales_order_ids?.includes(order.id));
       }),
     [salesOrders, invoices],
   );
@@ -493,6 +493,44 @@ export function SalesPage({
       actionFeedback.succeed(`${created.length.toLocaleString("en-US")} invoice(s) created.`);
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Invoice create failed");
+    }
+  }
+
+  async function handleMergeInvoicesFromSelection() {
+    if (!selectedSalesOrderIds.length) {
+      actionFeedback.fail("Select confirmed sales orders first.");
+      return;
+    }
+
+    const selectedOrders = salesOrders.filter((order) => selectedSalesOrderIds.includes(order.id));
+    if (!selectedOrders.length) {
+      actionFeedback.fail("Selected sales orders could not be resolved.");
+      return;
+    }
+
+    const first = selectedOrders[0];
+    const incompatible = selectedOrders.find(
+      (order) =>
+        order.customer_name !== first.customer_name ||
+        order.currency !== first.currency ||
+        order.seller_company !== first.seller_company,
+    );
+    if (incompatible) {
+      actionFeedback.fail("Merged invoice requires same customer, same currency, and same seller company.");
+      return;
+    }
+
+    try {
+      actionFeedback.begin(`Merging ${selectedOrders.length.toLocaleString("en-US")} sales order(s) into one invoice...`);
+      const merged = await upsertInvoice(buildMergedInvoiceFromSalesOrders(selectedOrders));
+      const refreshed = await fetchInvoices();
+      setInvoices(refreshed);
+      setSelectedSalesOrderIds([]);
+      setSelectedInvoiceId(merged.id);
+      setInvoiceDraft(cloneInvoice(merged));
+      actionFeedback.succeed(`Merged invoice ${merged.id} created from ${selectedOrders.length.toLocaleString("en-US")} sales order(s).`);
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Merged invoice create failed");
     }
   }
 
@@ -571,6 +609,9 @@ export function SalesPage({
               </div>
               <div className="toolbar toolbar--wrap">
                 <Button onClick={handleCreateInvoicesFromSelection}>Create Invoice(s)</Button>
+                <Button variant="secondary" onClick={handleMergeInvoicesFromSelection}>
+                  Merge Into One Invoice
+                </Button>
                 <Button variant="secondary" onClick={() => handleAddPaymentReceived()}>
                   + Add Payment Received
                 </Button>

@@ -252,6 +252,7 @@ export function buildInvoiceFromSalesOrder(order: LocalSalesOrder) {
   const invoice: LocalInvoice = {
     id: previous?.id || makeId("inv"),
     sales_order_id: order.id,
+    sales_order_ids: [order.id],
     sales_order_no: order.sales_order_no,
     customer_name: order.customer_name,
     seller_company: order.seller_company,
@@ -277,6 +278,83 @@ export function buildInvoiceFromSalesOrder(order: LocalSalesOrder) {
     lines,
   };
   return invoice;
+}
+
+export function buildMergedInvoiceFromSalesOrders(orders: LocalSalesOrder[]) {
+  if (!orders.length) {
+    throw new Error("At least one sales order is required");
+  }
+
+  const first = orders[0];
+  const lines: LocalInvoiceLine[] = orders.flatMap((order) =>
+    order.lines.map((line) => {
+      const purchaseTotal = roundMoney((Number(line.buy_price ?? 0) || 0) * line.qty);
+      const salesTotal = roundMoney((Number(line.sell_price ?? 0) || 0) * line.qty);
+      const profitTotal = roundMoney(salesTotal - purchaseTotal);
+      const marginPercent = salesTotal > 0 ? roundMoney((profitTotal / salesTotal) * 100) : 0;
+      return {
+        sales_order_id: order.id,
+        sales_order_no: order.sales_order_no,
+        product_code: line.resolvedCode,
+        old_code: line.codeChanged ? line.requestedCode : "",
+        brand: line.brand,
+        description: line.description,
+        qty: line.qty,
+        oem_no: line.oem_no,
+        hs_code: line.hs_code,
+        weight_kg: line.weight_kg ?? null,
+        supplier_name: line.supplier_name,
+        buy_price: roundMoney(Number(line.buy_price ?? 0) || 0),
+        sell_price: roundMoney(Number(line.sell_price ?? 0) || 0),
+        purchase_total: purchaseTotal,
+        sales_total: salesTotal,
+        profit_total: profitTotal,
+        margin_percent: marginPercent,
+        origin: line.origin,
+        notes: line.notes,
+        lifecycle_status: line.lifecycle_status ?? "active",
+        lifecycle_note: line.lifecycle_note ?? null,
+        lifecycle_warning: line.lifecycle_warning ?? null,
+      };
+    }),
+  );
+
+  const discountAmount = roundMoney(orders.reduce((sum, order) => sum + Number(order.discount_amount || 0), 0));
+  const shippingCost = roundMoney(orders.reduce((sum, order) => sum + Number(order.shipping_cost || 0), 0));
+  const subtotal = roundMoney(lines.reduce((sum, line) => sum + Number(line.sales_total || 0), 0));
+  const purchaseTotal = roundMoney(lines.reduce((sum, line) => sum + Number(line.purchase_total || 0), 0));
+  const totalAmount = roundMoney(subtotal - discountAmount + shippingCost);
+  const profitTotal = roundMoney(totalAmount - purchaseTotal);
+  const marginPercent = totalAmount > 0 ? roundMoney((profitTotal / totalAmount) * 100) : 0;
+
+  return {
+    id: makeId("inv"),
+    sales_order_id: first.id,
+    sales_order_ids: orders.map((order) => order.id),
+    sales_order_no: orders.map((order) => order.sales_order_no).join(", "),
+    customer_name: first.customer_name,
+    seller_company: first.seller_company,
+    purchase_company: first.purchase_company,
+    currency: first.currency,
+    status: "draft",
+    quote_date: nowIso().slice(0, 10),
+    delivery_term: first.delivery_term,
+    payment_terms: first.payment_terms,
+    due_date: nowIso().slice(0, 10),
+    contract_nr: first.seller_info,
+    packing_details: first.packing_details,
+    notes: orders.map((order) => `${order.sales_order_no}: ${order.notes}`.trim()).filter(Boolean).join("\n"),
+    subtotal,
+    discount_amount: discountAmount,
+    shipping_cost: shippingCost,
+    total_amount: totalAmount,
+    purchase_total: purchaseTotal,
+    profit_total: profitTotal,
+    margin_percent: marginPercent,
+    created_at: nowIso(),
+    updated_at: nowIso(),
+    lines,
+  } satisfies LocalInvoice;
 }
 
 export function buildBillFromPurchaseOrder(order: LocalPurchaseOrder) {
