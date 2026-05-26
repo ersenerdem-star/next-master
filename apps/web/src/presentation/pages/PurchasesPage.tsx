@@ -47,6 +47,25 @@ function formatAvailabilityQty(value: number) {
   return Number.isInteger(value) ? String(value) : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
+function buildPurchaseOrderBrandSummary(lines: LocalPurchaseOrder["lines"]) {
+  const labels: string[] = [];
+  const seen = new Set<string>();
+
+  lines.forEach((line) => {
+    const brand = String(line.brand || "").trim();
+    if (!brand) return;
+    const key = brand.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    labels.push(brand);
+  });
+
+  return {
+    labels: labels.slice(0, 3),
+    extraCount: Math.max(0, labels.length - 3),
+  };
+}
+
 function sanitizeFileName(value: string) {
   return String(value || "document")
     .trim()
@@ -312,7 +331,24 @@ export function PurchasesPage({
       { key: "company", header: "Purchase Company", render: (row: LocalPurchaseOrder) => row.purchase_company || "-" },
       { key: "sales", header: "Sales Order", render: (row: LocalPurchaseOrder) => row.sales_order_no },
       { key: "customer", header: "Customer", render: (row: LocalPurchaseOrder) => row.customer_name || "-" },
-      { key: "lines", header: "Lines", render: (row: LocalPurchaseOrder) => row.line_count },
+      {
+        key: "brands",
+        header: "Brand",
+        render: (row: LocalPurchaseOrder) => {
+          const brandSummary = buildPurchaseOrderBrandSummary(row.lines);
+          if (!brandSummary.labels.length) return "-";
+          return (
+            <span className="document-marks document-marks--compact">
+              {brandSummary.labels.map((brand) => (
+                <span key={`${row.id}-${brand}`} className="mark-badge">
+                  {brand}
+                </span>
+              ))}
+              {brandSummary.extraCount > 0 ? <span className="mark-badge mark-badge--info">+{brandSummary.extraCount}</span> : null}
+            </span>
+          );
+        },
+      },
       { key: "amount", header: "Purchase Total", render: (row: LocalPurchaseOrder) => formatMoney(row.total_amount, row.currency) },
       { key: "status", header: "Status", render: (row: LocalPurchaseOrder) => row.status },
       { key: "created", header: "Created", render: (row: LocalPurchaseOrder) => row.created_at.slice(0, 10) },
