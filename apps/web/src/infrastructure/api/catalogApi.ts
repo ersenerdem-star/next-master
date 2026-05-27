@@ -281,7 +281,7 @@ export async function updateCloudCatalogRow(
   const { error } = await supabaseClient
     .from("catalog_products")
     .update({
-      product_code: normalizeCatalogDisplayCode(updates.product_code),
+      product_code: normalizeCatalogDisplayCode(updates.product_code, updates.brand),
       brand_id: brandId,
       description: updates.description ? normalizeCatalogDescription(updates.description) : null,
       oem_no: updates.oem_no,
@@ -314,7 +314,7 @@ export async function createCloudCatalogRow(input: {
   const { error } = await supabaseClient.from("catalog_products").insert({
     organization_id: organizationId,
     brand_id: brandId,
-    product_code: normalizeCatalogDisplayCode(input.product_code),
+    product_code: normalizeCatalogDisplayCode(input.product_code, input.brand),
     description: input.description ? normalizeCatalogDescription(input.description) : null,
     oem_no: input.oem_no,
     hs_code: input.hs_code,

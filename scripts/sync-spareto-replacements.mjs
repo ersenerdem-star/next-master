@@ -378,7 +378,10 @@ async function fetchSparetoDetailPage(input) {
   const html = await fetchText(input.source_url);
   const detail = extractDetailProperties(html);
   const lifecycle = extractCurrentLifecycle(html, input.brand_slug);
-  const productCode = normalizeCatalogDisplayCode(input.product_code || detail.product_code || deriveProductCodeFromUrl(input.source_url));
+  const productCode = normalizeCatalogDisplayCode(
+    input.product_code || detail.product_code || deriveProductCodeFromUrl(input.source_url),
+    input.brand_name || "",
+  );
   return {
     product_code: productCode,
     description: normalizeCatalogDescription(detail.product_name || ""),
@@ -478,7 +481,7 @@ function buildCatalogRow(target, existing, detail) {
   return {
     organization_id: target.organization_id,
     brand_id: target.brand_id,
-    product_code: normalizeCatalogDisplayCode(detail.product_code || existing?.product_code),
+    product_code: normalizeCatalogDisplayCode(detail.product_code || existing?.product_code, target.name),
     description: normalizeCatalogDescription(preferCatalogValue(detail.description, existing?.description)),
     oem_no: preferCatalogValue(existing?.oem_no, detail.oem_no),
     hs_code: preferCatalogValue(existing?.hs_code, detail.hs_code),

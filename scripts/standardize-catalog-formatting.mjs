@@ -71,6 +71,7 @@ const inputBrands = String(args.get("brands") || "")
   .map((value) => canonicalizeBrandName(value))
   .filter(Boolean);
 const brands = inputBrands.length ? inputBrands : defaultBrands;
+const skipListing = args.has("skip-listing");
 const pageSize = Math.max(12, Number.parseInt(args.get("page-size") || "48", 10) || 48);
 const requestTimeoutMs = Math.max(5000, Number.parseInt(args.get("request-timeout-ms") || "20000", 10) || 20000);
 const apply = args.has("apply");
@@ -101,12 +102,12 @@ async function main() {
       continue;
     }
 
-    const existingRows = await fetchCatalogRows(String(brandRow.id));
-    const listingMap = await fetchSparetoListingMap(resolveSparetoBrandQuery(targetBrand));
+    const existingRows = await fetchCatalogRows(String(brandRow.id), targetBrand);
+    const listingMap = skipListing ? new Map() : await fetchSparetoListingMap(resolveSparetoBrandQuery(targetBrand));
     let changedRows = 0;
 
     for (const row of existingRows) {
-      const nextProductCode = listingMap.get(row.normalized_code) || normalizeCatalogDisplayCode(row.product_code);
+      const nextProductCode = listingMap.get(row.normalized_code) || normalizeCatalogDisplayCode(row.product_code, targetBrand);
       const nextDescription = row.description ? normalizeCatalogDescription(row.description) : "";
       if (nextProductCode === row.product_code && nextDescription === row.description) continue;
 
@@ -132,6 +133,7 @@ async function main() {
       rows: existingRows.length,
       listingRows: listingMap.size,
       changedRows,
+      skipListing,
     });
     console.error(`${targetBrand}: ${changedRows} row(s) queued for standardization.`);
   }
@@ -170,6 +172,7 @@ async function main() {
 
   const summary = {
     mode: apply ? "apply" : "plan",
+    skipListing,
     brandCount: brands.length,
     changedRows: changeRows.length,
     brands: brandSummaries,
@@ -180,14 +183,14 @@ async function main() {
   console.log(JSON.stringify(summary, null, 2));
 }
 
-async function fetchCatalogRows(brandId) {
+async function fetchCatalogRows(brandId, brandName) {
   const rows = await fetchAll(
     `/rest/v1/catalog_products?select=organization_id,brand_id,product_code,normalized_code,description&brand_id=eq.${encodeURIComponent(brandId)}&order=product_code.asc`,
   );
   return rows.map((row) => ({
     organization_id: String(row.organization_id || "").trim(),
     brand_id: String(row.brand_id || "").trim(),
-    product_code: normalizeCatalogDisplayCode(String(row.product_code || "").trim()),
+    product_code: String(row.product_code || "").trim(),
     normalized_code: normalizeCode(row.normalized_code || row.product_code || ""),
     description: String(row.description || "").replace(/\s+/g, " ").trim(),
   }));
@@ -226,7 +229,7 @@ function extractListingCards(html, brandQuery) {
     const gtmValue = decodeHtml(match[1]);
     try {
       const data = JSON.parse(gtmValue);
-      const productCode = normalizeCatalogDisplayCode(String(data.item_id || "").trim());
+      const productCode = normalizeCatalogDisplayCode(String(data.item_id || "").trim(), brandQuery);
       const cardBrand = String(data.item_brand || "").trim();
       if (!productCode || normalizeBrand(cardBrand) !== targetBrand) continue;
       cards.push({

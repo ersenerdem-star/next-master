@@ -4,7 +4,10 @@ import { supabaseClient } from "./supabaseClient";
 export async function bulkImportCatalog(payload: Array<Record<string, unknown>>) {
   const normalizedPayload = payload.map((row) => ({
     ...row,
-    product_code: normalizeCatalogDisplayCode(String(row.product_code || "")),
+    product_code: normalizeCatalogDisplayCode(
+      String(row.product_code || ""),
+      String(row.brand || row.Brand || row.brand_name || ""),
+    ),
     description: row.description == null ? null : normalizeCatalogDescription(String(row.description || "")),
   }));
   const { error } = await supabaseClient.rpc("bulk_import_catalog", { payload: normalizedPayload });

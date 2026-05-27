@@ -360,7 +360,7 @@ function extractListingCards(html, brandQuery) {
     const imageUrl = match[3];
     try {
       const data = JSON.parse(gtmValue);
-      const productCode = normalizeCatalogDisplayCode(String(data.item_id || "").trim());
+      const productCode = normalizeCatalogDisplayCode(String(data.item_id || "").trim(), brandQuery);
       const cardBrand = String(data.item_brand || "").trim();
       if (!productCode || normalizeBrand(cardBrand) !== targetBrand) continue;
       cards.push({
@@ -404,7 +404,7 @@ async function fetchSparetoDetail(card) {
   const html = await fetchText(card.source_url);
   const detail = extractDetailProperties(html);
   return {
-    product_code: normalizeCatalogDisplayCode(card.product_code),
+    product_code: normalizeCatalogDisplayCode(card.product_code, target.name || ""),
     normalized_code: card.normalized_code,
     description: normalizeCatalogDescription(detail.product_name || card.description || ""),
     oem_no: detail.oe_numbers || "",
@@ -465,7 +465,10 @@ function buildCatalogRow(target, candidate, detail, existing) {
   return {
     organization_id: target.organization_id,
     brand_id: target.brand_id,
-    product_code: normalizeCatalogDisplayCode(preferCatalogValue(detail.product_code, candidate.product_code, existing?.product_code)),
+    product_code: normalizeCatalogDisplayCode(
+      preferCatalogValue(detail.product_code, candidate.product_code, existing?.product_code),
+      target.name,
+    ),
     normalized_code: candidate.normalized_code,
     description: nextDescription,
     oem_no: nextOemNo,
