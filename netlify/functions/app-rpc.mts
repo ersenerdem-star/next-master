@@ -1,5 +1,5 @@
 import type { Config, Context } from "@netlify/functions";
-import { json, sendJson } from "./_shared/http.mts";
+import { buildRestUrl, json, readJson, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
 import { resolveCaller } from "./_shared/app-auth.mts";
 import { canAccessCustomerOps, isSuperadminRole } from "./_shared/roles.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
@@ -41,6 +41,286 @@ const CUSTOMER_STAFF_RPCS = new Set([
   "touch_user_presence",
 ]);
 
+type CatalogSourceRow = {
+  id?: string | null;
+  product_code?: string | null;
+  description?: string | null;
+  oem_no?: string | null;
+  hs_code?: string | null;
+  origin?: string | null;
+  weight_kg?: number | string | null;
+  image_url?: string | null;
+  brand_id?: string | null;
+  normalized_code?: string | null;
+  normalized_oem?: string | null;
+  lifecycle_status?: string | null;
+  lifecycle_note?: string | null;
+};
+
+function normalizePartCode(value: string) {
+  return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function normalizeOriginalNumberSearch(value: string) {
+  const normalized = normalizePartCode(value);
+  if (!normalized) return "";
+  const stripped = normalized.replace(/^[A-Z]{1,3}(?=\d{6,}$)/, "");
+  return stripped || normalized;
+}
+
+function buildLooseOriginalNumberPattern(value: string, wildcard = "*") {
+  const normalized = normalizeOriginalNumberSearch(value);
+  if (!normalized) return "";
+  return normalized.split("").join(wildcard);
+}
+
+function buildSeparatorInsensitivePattern(value: string, wildcard = "*") {
+  const tokens = String(value || "")
+    .toUpperCase()
+    .match(/[A-Z0-9]+/g);
+  if (!tokens?.length) return "";
+  return tokens.join(wildcard);
+}
+
+function buildOriginalNumberVariants(value: string) {
+  const variants = new Set<string>();
+  const normalized = normalizePartCode(value);
+  if (normalized) variants.add(normalized);
+  const normalizedOriginal = normalizeOriginalNumberSearch(value);
+  if (normalizedOriginal) variants.add(normalizedOriginal);
+  return [...variants];
+}
+
+function splitOriginalNumberCandidates(value: string) {
+  const raw = String(value || "").replace(/\r/g, "\n").trim();
+  if (!raw) return [];
+  const pieces = raw
+    .split(/[,;\n|]+/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return pieces.length ? pieces : [raw];
+}
+
+function matchesOriginalNumberSearch(haystack: string, needle: string) {
+  const needleVariants = buildOriginalNumberVariants(needle);
+  if (!needleVariants.length) return false;
+  const candidates = splitOriginalNumberCandidates(haystack);
+  if (
+    candidates.some((candidate) => {
+      const candidateVariants = buildOriginalNumberVariants(candidate);
+      if (!candidateVariants.length) return false;
+      return candidateVariants.some((candidateVariant) =>
+        needleVariants.some(
+          (needleVariant) =>
+            candidateVariant === needleVariant ||
+            candidateVariant.includes(needleVariant) ||
+            needleVariant.includes(candidateVariant),
+        ),
+      );
+    })
+  ) {
+    return true;
+  }
+  const haystackVariants = buildOriginalNumberVariants(haystack);
+  return haystackVariants.some((haystackVariant) =>
+    needleVariants.some(
+      (needleVariant) =>
+        haystackVariant === needleVariant ||
+        haystackVariant.includes(needleVariant) ||
+        needleVariant.includes(haystackVariant),
+    ),
+  );
+}
+
+function shouldRunLooseOriginalNumberSearch(search: string) {
+  return normalizeOriginalNumberSearch(search).length >= 6;
+}
+
+function isLikelyCatalogCodeSearch(search: string) {
+  const value = String(search || "").trim();
+  if (!value) return false;
+  return /\d/.test(value) || /[-/+.()]/.test(value);
+}
+
+function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "strict" | "loose") {
+  const escaped = search.replace(/[%*(),]/g, " ").trim();
+  const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
+  const looseOriginalPattern = buildLooseOriginalNumberPattern(search);
+  const separatorInsensitivePattern = buildSeparatorInsensitivePattern(search);
+  const clauses = [`product_code.ilike.*${escaped}*`, `oem_no.ilike.*${escaped}*`];
+  if (!isLikelyCatalogCodeSearch(search)) {
+    clauses.push(`description.ilike.*${escaped}*`);
+  }
+  if (separatorInsensitivePattern && separatorInsensitivePattern !== escaped.toUpperCase()) {
+    clauses.push(
+      `product_code.ilike.*${separatorInsensitivePattern}*`,
+      `oem_no.ilike.*${separatorInsensitivePattern}*`,
+    );
+  }
+  if (normalizedSearch.length >= 3) {
+    clauses.push(
+      `product_code.ilike.*${normalizedSearch}*`,
+      `oem_no.ilike.*${normalizedSearch}*`,
+      `normalized_code.eq.${normalizedSearch}`,
+      `normalized_oem.eq.${normalizedSearch}`,
+      `normalized_code.like.${normalizedSearch}*`,
+      `normalized_oem.like.${normalizedSearch}*`,
+    );
+  }
+  if (mode === "loose" && looseOriginalPattern.length >= 6) {
+    clauses.push(`oem_no.ilike.*${looseOriginalPattern}*`);
+  }
+  if (mode === "loose" && normalizedOriginalSearch.length >= 6) {
+    clauses.push(`normalized_oem.like.*${normalizedOriginalSearch}*`);
+  }
+  return `(${clauses.join(",")})`;
+}
+
+function dedupeCatalogRows(rows: CatalogSourceRow[]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const id = String(row.id || row.product_code || "");
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function parseContentRangeTotal(value: string | null, fallback: number) {
+  if (!value) return fallback;
+  const match = value.match(/\/(\d+|\*)$/);
+  if (!match || match[1] === "*") return fallback;
+  const total = Number(match[1]);
+  return Number.isFinite(total) ? total : fallback;
+}
+
+async function fetchRestRowsWithCount<T>(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  table: string,
+  params: Record<string, string>,
+) {
+  const response = await fetch(buildRestUrl(supabaseUrl, table, params), {
+    headers: {
+      ...serviceRoleHeaders(serviceRoleKey),
+      Prefer: "count=planned",
+    },
+  });
+  const data = await readJson<Array<T> & { message?: string; error?: string; msg?: string }>(response);
+  if (!response.ok) {
+    throw new Error(sanitizeUserFacingError(data?.msg || data?.message || data?.error || "Catalog request failed"));
+  }
+  return {
+    rows: (data ?? []) as T[],
+    totalCount: parseContentRangeTotal(response.headers.get("content-range"), Array.isArray(data) ? data.length : 0),
+  };
+}
+
+async function fetchBrandMaps(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
+  const { rows } = await fetchRestRowsWithCount<{ id?: string | null; name?: string | null }>(
+    supabaseUrl,
+    serviceRoleKey,
+    "brands",
+    {
+      select: "id,name",
+      organization_id: `eq.${organizationId}`,
+      order: "name.asc",
+      limit: "1000",
+    },
+  );
+  const byId = new Map<string, string>();
+  const byName = new Map<string, string>();
+  for (const row of rows) {
+    const id = String(row.id || "").trim();
+    const name = String(row.name || "").trim();
+    if (!id || !name) continue;
+    byId.set(id, name);
+    byName.set(normalizePartCode(name), id);
+  }
+  return { byId, byName };
+}
+
+async function fetchCloudCatalogPageViaRest(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  caller: { organizationId: string },
+  args: Record<string, unknown>,
+) {
+  const search = String(args.input_search || "").trim();
+  const brand = String(args.input_brand || "").trim();
+  const page = Math.max(1, Number(args.input_page || 1) || 1);
+  const pageSize = Math.min(250, Math.max(1, Number(args.input_page_size || 50) || 50));
+  const offset = (page - 1) * pageSize;
+  const normalizedSearch = normalizePartCode(search);
+  const brandMaps = await fetchBrandMaps(supabaseUrl, serviceRoleKey, caller.organizationId);
+  const selectedBrandId = brand ? brandMaps.byName.get(normalizePartCode(brand)) || "" : "";
+  const select =
+    "id,product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note";
+  const baseParams: Record<string, string> = {
+    select,
+    organization_id: `eq.${caller.organizationId}`,
+    order: "product_code.asc",
+    limit: String(pageSize),
+    offset: String(offset),
+  };
+  if (selectedBrandId) baseParams.brand_id = `eq.${selectedBrandId}`;
+  if (search) {
+    baseParams.or = buildCatalogSearchOr(search, normalizedSearch, "strict");
+  }
+
+  let { rows, totalCount } = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", baseParams);
+  if (!rows.length && search && shouldRunLooseOriginalNumberSearch(search)) {
+    ({ rows, totalCount } = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
+      ...baseParams,
+      or: buildCatalogSearchOr(search, normalizedSearch, "loose"),
+    }));
+  }
+
+  if (!rows.length && search && shouldRunLooseOriginalNumberSearch(search)) {
+    const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
+    const fallbackBase: Record<string, string> = {
+      select,
+      organization_id: `eq.${caller.organizationId}`,
+      order: "product_code.asc",
+      limit: "200",
+    };
+    if (selectedBrandId) fallbackBase.brand_id = `eq.${selectedBrandId}`;
+    const [fallbackByOem, fallbackByNormalized] = await Promise.all([
+      fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
+        ...fallbackBase,
+        oem_no: `ilike.*${normalizedOriginalSearch}*`,
+      }).catch(() => ({ rows: [] as CatalogSourceRow[], totalCount: 0 })),
+      fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
+        ...fallbackBase,
+        normalized_oem: `like.*${normalizedOriginalSearch}*`,
+      }).catch(() => ({ rows: [] as CatalogSourceRow[], totalCount: 0 })),
+    ]);
+
+    const filtered = dedupeCatalogRows([...fallbackByOem.rows, ...fallbackByNormalized.rows]).filter(
+      (row) =>
+        matchesOriginalNumberSearch(String(row.oem_no || ""), search) ||
+        normalizePartCode(String(row.product_code || "")).includes(normalizedSearch),
+    );
+    totalCount = filtered.length;
+    rows = filtered.slice(offset, offset + pageSize);
+  }
+
+  return rows.map((row) => ({
+    total_count: totalCount,
+    product_id: String(row.id || ""),
+    product_code: String(row.product_code || ""),
+    brand: brandMaps.byId.get(String(row.brand_id || "")) || "",
+    image_url: String(row.image_url || ""),
+    description: String(row.description || ""),
+    oem_no: String(row.oem_no || ""),
+    hs_code: String(row.hs_code || ""),
+    origin: String(row.origin || ""),
+    weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
+    lifecycle_status: String(row.lifecycle_status || ""),
+    lifecycle_note: String(row.lifecycle_note || ""),
+  }));
+}
+
 export default async (req: Request, _context: Context) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
@@ -67,6 +347,11 @@ export default async (req: Request, _context: Context) => {
 
     if (CUSTOMER_STAFF_RPCS.has(name) && !canAccessCustomerOps(caller.role)) {
       return json({ error: "Staff access required" }, 403);
+    }
+
+    if (name === "cloud_catalog_page") {
+      const data = await fetchCloudCatalogPageViaRest(supabaseUrl, serviceRoleKey, caller, args);
+      return json({ ok: true, data });
     }
 
     const data = await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/${name}`, {
