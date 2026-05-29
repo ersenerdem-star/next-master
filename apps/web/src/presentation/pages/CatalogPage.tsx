@@ -18,8 +18,21 @@ import { downloadCsv, normalizeNumber, normalizeText, parseCsv, toCsv } from "..
 import { downloadCatalogLifecycleTemplate, downloadCatalogTemplate } from "../../shared/importTemplates";
 import { dispatchAppNavigation, PENDING_CATALOG_PURCHASE_ITEM_KEY, PENDING_CATALOG_SALES_ITEM_KEY, storeCatalogTransfer } from "../../shared/catalogTransfer";
 
+const CATALOG_CACHE_KEY = "next-master-catalog-cache";
+
 type CatalogRowDraft = Omit<CatalogRow, "weight_kg"> & {
   weight_kg: number | string | null;
+};
+
+type CatalogOfflineCache = {
+  brands: BrandOption[];
+  rows: CatalogRow[];
+  search: string;
+  submittedSearch: string;
+  catalogBrand: string;
+  submittedCatalogBrand: string;
+  selectedCatalogProductId: string;
+  updatedAt: string;
 };
 
 function parseWeightInput(value: number | string | null | undefined) {
@@ -31,8 +44,50 @@ function parseWeightInput(value: number | string | null | undefined) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function readCatalogCache() {
+  if (typeof window === "undefined") return null as CatalogOfflineCache | null;
+  try {
+    const raw = window.localStorage.getItem(CATALOG_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as CatalogOfflineCache) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCatalogCache(cache: CatalogOfflineCache | null) {
+  if (typeof window === "undefined") return;
+  if (!cache) {
+    window.localStorage.removeItem(CATALOG_CACHE_KEY);
+    return;
+  }
+  window.localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify(cache));
+}
+
+function filterCachedCatalogRows(rows: CatalogRow[], search: string, brand: string) {
+  const trimmedSearch = search.trim();
+  const normalizedSearch = normalizePartCode(trimmedSearch);
+  const filtered = rows.filter((row) => {
+    if (brand && String(row.brand || "").toLowerCase() !== brand.toLowerCase()) return false;
+    if (!trimmedSearch) return true;
+    const rawMatch = [row.product_code, row.brand, row.description, row.oem_no, row.hs_code, row.origin]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(trimmedSearch.toLowerCase());
+    if (rawMatch) return true;
+    if (normalizedSearch) {
+      const normalizedFields = [row.product_code, row.oem_no].map((value) => normalizePartCode(String(value || "")));
+      if (normalizedFields.some((value) => value.includes(normalizedSearch))) return true;
+    }
+    return matchesOriginalNumberSearch(row.oem_no || "", trimmedSearch);
+  });
+  const total = filtered.length;
+  return filtered.map((row) => ({ ...row, total_count: total }));
+}
+
 export function CatalogPage() {
   const actionFeedback = useActionFeedback();
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [importBrand, setImportBrand] = useState("");
   const [importBrandName, setImportBrandName] = useState("");
@@ -88,20 +143,14 @@ export function CatalogPage() {
   ];
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function run() {
-      try {
-        const result = await fetchCloudBrands();
-        if (!cancelled) setBrands(result);
-      } catch {
-        if (!cancelled) setBrands([]);
-      }
-    }
-
-    run();
+    if (typeof window === "undefined") return;
+    const syncOnlineState = () => setIsOnline(window.navigator.onLine);
+    syncOnlineState();
+    window.addEventListener("online", syncOnlineState);
+    window.addEventListener("offline", syncOnlineState);
     return () => {
-      cancelled = true;
+      window.removeEventListener("online", syncOnlineState);
+      window.removeEventListener("offline", syncOnlineState);
     };
   }, []);
 
@@ -109,6 +158,71 @@ export function CatalogPage() {
     let cancelled = false;
 
     async function run() {
+      if (!isOnline) {
+        const cached = readCatalogCache();
+        if (!cancelled) setBrands(cached?.brands || []);
+        return;
+      }
+      try {
+        const result = await fetchCloudBrands();
+        if (!cancelled) setBrands(result);
+      } catch {
+        if (!cancelled) {
+          const cached = readCatalogCache();
+          setBrands(cached?.brands || []);
+        }
+      }
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOnline]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const cached = readCatalogCache();
+    if (!cached) return;
+    if (!brands.length && cached.brands.length) setBrands(cached.brands);
+    if (!rows.length && cached.rows.length) setRows(cached.rows);
+    if (!search && cached.search) setSearch(cached.search);
+    if (!submittedSearch && cached.submittedSearch) setSubmittedSearch(cached.submittedSearch);
+    if (!catalogBrand && cached.catalogBrand) setCatalogBrand(cached.catalogBrand);
+    if (!submittedCatalogBrand && cached.submittedCatalogBrand) setSubmittedCatalogBrand(cached.submittedCatalogBrand);
+    if (!selectedCatalogProductId && cached.selectedCatalogProductId) setSelectedCatalogProductId(cached.selectedCatalogProductId);
+    if (!isOnline) {
+      setStatus("Offline mode active. Showing cached catalog data.");
+      setError("");
+    }
+  }, [brands.length, rows.length, search, submittedSearch, catalogBrand, submittedCatalogBrand, selectedCatalogProductId, isOnline]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (!isOnline) {
+        const cached = readCatalogCache();
+        const cachedRows = cached?.rows || [];
+        const offlineRows =
+          !submittedSearch.trim() && !submittedCatalogBrand
+            ? cachedRows
+            : filterCachedCatalogRows(cachedRows, submittedSearch, submittedCatalogBrand);
+        if (!cancelled) {
+          setRows(offlineRows);
+          setLoading(false);
+          setError("");
+          if (submittedSearch.trim() || submittedCatalogBrand) {
+            setStatus(
+              offlineRows.length
+                ? `Offline mode active. Showing ${offlineRows.length.toLocaleString("en-US")} cached catalog row(s).`
+                : "Offline mode active. No cached catalog rows match this filter.",
+            );
+          }
+        }
+        return;
+      }
+
       if (!submittedSearch.trim() && !submittedCatalogBrand) {
         if (!cancelled) {
           setRows([]);
@@ -152,7 +266,7 @@ export function CatalogPage() {
     return () => {
       cancelled = true;
     };
-  }, [submittedSearch, submittedCatalogBrand, previewSelection]);
+  }, [isOnline, submittedSearch, submittedCatalogBrand, previewSelection]);
 
   useEffect(() => {
     if (!searchingCatalog || loading) return;
@@ -229,6 +343,20 @@ export function CatalogPage() {
     }
   }, [rows, selectedCatalogProductId]);
 
+  useEffect(() => {
+    const existing = readCatalogCache();
+    writeCatalogCache({
+      brands: brands.length ? brands : existing?.brands || [],
+      rows: rows.length ? rows : existing?.rows || [],
+      search,
+      submittedSearch: submittedSearch || existing?.submittedSearch || "",
+      catalogBrand,
+      submittedCatalogBrand: submittedCatalogBrand || existing?.submittedCatalogBrand || "",
+      selectedCatalogProductId: selectedCatalogProductId || existing?.selectedCatalogProductId || "",
+      updatedAt: new Date().toISOString(),
+    });
+  }, [brands, rows, search, submittedSearch, catalogBrand, submittedCatalogBrand, selectedCatalogProductId]);
+
   const total = rows[0]?.total_count ?? 0;
   const originalNumberBrandMatches = useMemo(() => {
     if (!submittedSearch.trim() || !rows.length) return [];
@@ -260,7 +388,9 @@ export function CatalogPage() {
     setSearchingCatalog(true);
     setPreviewSelection(null);
     if (announce) {
-      actionFeedback.begin(`Searching catalog for ${nextBrand || "all brands"} / ${nextSearch.trim() || "all items"}...`);
+      actionFeedback.begin(
+        `${isOnline ? "Searching" : "Filtering cached"} catalog for ${nextBrand || "all brands"} / ${nextSearch.trim() || "all items"}...`,
+      );
     }
     setSubmittedSearch(nextSearch);
     setSubmittedCatalogBrand(nextBrand);
@@ -522,6 +652,10 @@ export function CatalogPage() {
               variant="secondary"
               className="button--compact"
               onClick={async () => {
+                if (!isOnline) {
+                  setError("Connect to the internet to save catalog changes.");
+                  return;
+                }
                 const draft = drafts[row.product_id] || row;
                 try {
                   setError("");
@@ -550,6 +684,7 @@ export function CatalogPage() {
                   setRowActionKey("");
                 }
               }}
+              disabled={!isOnline}
               busy={rowActionKey === `save:${row.product_id}`}
               busyLabel="Saving..."
             >
@@ -559,6 +694,10 @@ export function CatalogPage() {
               variant="secondary"
               className="button--compact danger-button"
               onClick={async () => {
+                if (!isOnline) {
+                  setError("Connect to the internet to delete catalog rows.");
+                  return;
+                }
                 if (!confirm(`Delete ${row.product_code} from catalog?`)) return;
                 try {
                   setError("");
@@ -577,6 +716,7 @@ export function CatalogPage() {
                   setRowActionKey("");
                 }
               }}
+              disabled={!isOnline}
               busy={rowActionKey === `delete:${row.product_id}`}
               busyLabel="Deleting..."
             >
@@ -586,6 +726,10 @@ export function CatalogPage() {
               variant="secondary"
               className="button--compact"
               onClick={() => {
+                if (!isOnline) {
+                  setError("Connect to the internet to create or edit code references.");
+                  return;
+                }
                 const coverageKey = `${row.brand.trim().toLowerCase()}::${normalizePartCode(row.product_code)}`;
                 const hasReference = (referenceCoverage[coverageKey] || 0) > 0;
                 const draft = drafts[row.product_id] || row;
@@ -600,6 +744,7 @@ export function CatalogPage() {
                 setStatus("");
                 setShowReferenceDialog(true);
               }}
+              disabled={!isOnline}
             >
               {(() => {
                 const coverageKey = `${row.brand.trim().toLowerCase()}::${normalizePartCode(row.product_code)}`;
@@ -614,6 +759,14 @@ export function CatalogPage() {
   );
 
   async function reloadCatalog(nextSearch = submittedSearch, nextBrand = submittedCatalogBrand) {
+    if (!isOnline) {
+      const cached = readCatalogCache();
+      const cachedRows = cached?.rows || [];
+      setRows(filterCachedCatalogRows(cachedRows, nextSearch, nextBrand));
+      setError("");
+      setStatus("Offline mode active. Showing cached catalog data.");
+      return;
+    }
     setLoading(true);
     setError("");
     setStatus("");
@@ -634,6 +787,10 @@ export function CatalogPage() {
   }
 
   async function handleCatalogImport(file: File) {
+    if (!isOnline) {
+      setError("Connect to the internet to import catalog data.");
+      return;
+    }
     setLoading(true);
     setError("");
     setStatus("");
@@ -748,6 +905,10 @@ export function CatalogPage() {
   }
 
   async function handleCatalogExport() {
+    if (!isOnline) {
+      setError("Connect to the internet to export catalog data.");
+      return;
+    }
     if (!exportBrand) {
       setError("Catalog export requires a brand selection");
       return;
@@ -789,6 +950,12 @@ export function CatalogPage() {
   }
 
   async function handleSyncSelectedBrandFromSpareto() {
+    if (!isOnline) {
+      const message = "Connect to the internet to re-synch brand catalog data.";
+      setError(message);
+      actionFeedback.fail(message);
+      return;
+    }
     if (!catalogBrand.trim()) {
       const message = "Select a brand first.";
       setError(message);
@@ -852,21 +1019,21 @@ export function CatalogPage() {
                 applyCatalogFilters(search, catalogBrand);
               }}
               busy={searchingCatalog}
-              busyLabel="Searching..."
+              busyLabel={isOnline ? "Searching..." : "Filtering..."}
             >
               Search
             </Button>
-            <Button variant="secondary" onClick={() => setShowExportDialog(true)} disabled={!brands.length} busy={exportingCatalog} busyLabel="Preparing...">
+            <Button variant="secondary" onClick={() => setShowExportDialog(true)} disabled={!brands.length || !isOnline} busy={exportingCatalog} busyLabel="Preparing...">
               Export CSV
             </Button>
-            <Button variant="secondary" onClick={() => setShowCreateDialog(true)}>
+            <Button variant="secondary" onClick={() => setShowCreateDialog(true)} disabled={!isOnline}>
               Add New Item
             </Button>
-            <Button variant="secondary" onClick={() => setShowImportDialog(true)}>
+            <Button variant="secondary" onClick={() => setShowImportDialog(true)} disabled={!isOnline}>
               Import CSV
             </Button>
             {catalogBrand ? (
-              <Button variant="secondary" onClick={() => void handleSyncSelectedBrandFromSpareto()} busy={syncingBrandCatalog} busyLabel="Re-Synching...">
+              <Button variant="secondary" onClick={() => void handleSyncSelectedBrandFromSpareto()} disabled={!isOnline} busy={syncingBrandCatalog} busyLabel="Re-Synching...">
                 Re-Synch
               </Button>
             ) : null}
@@ -889,6 +1056,7 @@ export function CatalogPage() {
             {status ? <span className="success-text">{status}</span> : null}
             {error ? <span className="error-text">{error}</span> : null}
           </div>
+          {!isOnline ? <div className="warning-text">Offline mode active. Search works only on cached catalog data. Save, import, export, delete, and re-synch require internet.</div> : null}
           <div className="workbench-main-layout">
             <div className="workbench-main-layout__table">
               <DataTable
@@ -1133,6 +1301,10 @@ export function CatalogPage() {
               </Button>
               <Button
                 onClick={async () => {
+                  if (!isOnline) {
+                    setError("Connect to the internet to create catalog items.");
+                    return;
+                  }
                   try {
                     setError("");
                     setStatus("");
@@ -1177,6 +1349,7 @@ export function CatalogPage() {
                   }
                 }}
                 disabled={
+                  !isOnline ||
                   !createDraft.product_code.trim() ||
                   !createDraft.brand ||
                   (createDraft.brand === "__new__" && !createDraft.brand_name.trim())
@@ -1228,6 +1401,10 @@ export function CatalogPage() {
               </Button>
               <Button
                 onClick={async () => {
+                  if (!isOnline) {
+                    setError("Connect to the internet to save code references.");
+                    return;
+                  }
                   try {
                     setError("");
                     setStatus("");
@@ -1264,7 +1441,7 @@ export function CatalogPage() {
                     setSavingReference(false);
                   }
                 }}
-                disabled={!referenceDraft.brand || !referenceDraft.old_code.trim() || !referenceDraft.new_code.trim()}
+                disabled={!isOnline || !referenceDraft.brand || !referenceDraft.old_code.trim() || !referenceDraft.new_code.trim()}
                 busy={savingReference}
                 busyLabel="Saving..."
               >
