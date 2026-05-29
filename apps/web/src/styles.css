@@ -2401,6 +2401,36 @@ select {
   padding: 8px;
 }
 
+.portal-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.portal-sidebar {
+  position: sticky;
+  top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.portal-sidebar__panel {
+  margin-bottom: 0;
+}
+
+.portal-sidebar-nav {
+  gap: 12px;
+}
+
+.portal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
 .portal-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2955,6 +2985,7 @@ select {
   .quote-form-grid,
   .portal-summary-grid,
   .portal-kpi-strip,
+  .portal-layout,
   .portal-filter-grid,
   .portal-filter-grid--desk,
   .portal-summary-list,
@@ -2966,6 +2997,10 @@ select {
   .portal-detail-grid,
   .portal-detail-totals {
     grid-template-columns: 1fr;
+  }
+
+  .portal-sidebar {
+    position: static;
   }
 
   .invoice-edit-topbar,

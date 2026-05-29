@@ -133,6 +133,7 @@ type PortalSelection =
   | { kind: "purchase-order"; id: string }
   | { kind: "bill"; id: string };
 type PortalSection = "desk" | "pricelist" | "orders" | "billing" | "statement" | "account";
+type PortalNavGroupKey = "search" | "documents" | "finance" | "account";
 
 type PortalLine = NonNullable<PortalSnapshot["invoices"][number]["lines"]>[number];
 type PortalSalesOrderRow = PortalSnapshot["salesOrders"][number];
@@ -822,6 +823,44 @@ export function PortalPage() {
     ...(activeSnapshot.invite.access.can_view_account || activeSnapshot.invite.access.can_view_payments ? [{ key: "statement" as PortalSection, label: "Statement" }] : []),
     { key: "account", label: "Account" },
   ];
+  const portalNavGroups: Array<{
+    key: PortalNavGroupKey;
+    code: string;
+    title: string;
+    caption: string;
+    items: Array<{ key: PortalSection; label: string }>;
+  }> = [
+    {
+      key: "search" as const,
+      code: "01",
+      title: "Search",
+      caption: "Parts & Pricing",
+      items: portalSections.filter((section) => section.key === "desk" || section.key === "pricelist"),
+    },
+    {
+      key: "documents" as const,
+      code: "02",
+      title: "Documents",
+      caption: activeSnapshot.invite.party_type === "customer" ? "Orders & Invoices" : "PO & Bills",
+      items: portalSections.filter((section) => section.key === "orders" || section.key === "billing"),
+    },
+    {
+      key: "finance" as const,
+      code: "03",
+      title: "Finance",
+      caption: "Statement & Payments",
+      items: portalSections.filter((section) => section.key === "statement"),
+    },
+    {
+      key: "account" as const,
+      code: "04",
+      title: "Account",
+      caption: "Profile",
+      items: portalSections.filter((section) => section.key === "account"),
+    },
+  ].filter((group) => group.items.length > 0);
+  const activePortalGroup =
+    portalNavGroups.find((group) => group.items.some((item) => item.key === activeSection))?.key || portalNavGroups[0]?.key || "search";
   const activeSectionHelpText =
     activeSection === "desk"
       ? "Search by part number or original number, compare alternatives, then move selected items into the basket."
@@ -834,6 +873,12 @@ export function PortalPage() {
           : activeSection === "statement"
             ? "Use this area for statement, payments, and credits only."
             : "Review your account identity, addresses, and financial profile.";
+
+  function handlePortalGroupNavigate(groupKey: PortalNavGroupKey) {
+    const targetGroup = portalNavGroups.find((group) => group.key === groupKey);
+    const defaultSection = targetGroup?.items[0]?.key;
+    if (defaultSection) setActiveSection(defaultSection);
+  }
 
   function openPortalDocument(selection: PortalSelection) {
     setSelection(selection);
@@ -1556,35 +1601,64 @@ export function PortalPage() {
         </div>
       </div>
 
-      {status ? <div className="success-text">{status}</div> : null}
-      {error ? <div className="warning-text">{error}</div> : null}
-      {activeSection === "statement" ? (
-        <div className="portal-kpi-strip">
-          {portalQuickStats.map((item) => (
-            <div key={item.label} className="portal-kpi-card">
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-              <small>{item.note}</small>
+      <div className="portal-layout">
+        <aside className="portal-sidebar">
+          <div className="brand-panel portal-sidebar__panel">
+            <div className="brand-panel__eyebrow">Portal Navigation</div>
+            <div className="brand">{activeSnapshot.invite.party_type === "customer" ? "Customer" : "Vendor"}</div>
+            <div className="brand-panel__sub">{activeSnapshot.invite.party_name}</div>
+          </div>
+          <nav className="sidebar-nav portal-sidebar-nav">
+            {portalNavGroups.map((group) => (
+              <div key={group.key} className={`nav-group${activePortalGroup === group.key ? " active" : ""}`}>
+                <button className={`nav-item${activePortalGroup === group.key ? " active" : ""}`} onClick={() => handlePortalGroupNavigate(group.key)}>
+                  <span className="nav-item__code">{group.code}</span>
+                  <span className="nav-item__body">
+                    <span className="nav-item__title">{group.title}</span>
+                    <span className="nav-item__caption">{group.caption}</span>
+                  </span>
+                  <span className="nav-item__indicator" />
+                </button>
+                {activePortalGroup === group.key ? (
+                  <div className="nav-submenu" role="menu" aria-label={`${group.title} sections`}>
+                    {group.items.map((item) => (
+                      <button
+                        key={item.key}
+                        className={`nav-submenu__item${activeSection === item.key ? " active" : ""}`}
+                        onClick={() => setActiveSection(item.key)}
+                      >
+                        <span className="nav-submenu__dot" />
+                        <span>{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </nav>
+        </aside>
+
+        <div className="portal-content">
+          {status ? <div className="success-text">{status}</div> : null}
+          {error ? <div className="warning-text">{error}</div> : null}
+          <div className="portal-inline-note portal-inline-note--soft">
+            <span>Current View</span>
+            <strong>{activeSectionHelpText}</strong>
+          </div>
+
+          {activeSection === "statement" ? (
+            <div className="portal-kpi-strip">
+              {portalQuickStats.map((item) => (
+                <div key={item.label} className="portal-kpi-card">
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                  <small>{item.note}</small>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      ) : null}
+          ) : null}
 
-      <div className="portal-subnav">
-        {portalSections.map((section) => (
-          <button
-            key={section.key}
-            type="button"
-            className={`portal-subnav__button ${activeSection === section.key ? "portal-subnav__button--active" : ""}`}
-            onClick={() => setActiveSection(section.key)}
-          >
-            {section.label}
-          </button>
-        ))}
-      </div>
-      <div className="portal-subnav__hint">{activeSectionHelpText}</div>
-
-      {activeSection === "account" ? (
+          {activeSection === "account" ? (
         <div className="portal-section-stack">
           <div className="portal-summary-grid">
             <SectionCard title="Account Profile">
@@ -1633,9 +1707,9 @@ export function PortalPage() {
             </SectionCard>
           </div>
         </div>
-      ) : null}
+          ) : null}
 
-      {activeSection === "statement" ? (
+          {activeSection === "statement" ? (
         <div className="portal-section-stack">
           {activeSnapshot.invite.access.can_view_account ? (
             <SectionCard
@@ -1694,9 +1768,9 @@ export function PortalPage() {
             </SectionCard>
           ) : null}
         </div>
-      ) : null}
+          ) : null}
 
-      {activeSection === "pricelist" && portalCanOrder ? (
+          {activeSection === "pricelist" && portalCanOrder ? (
         <div className="portal-section-stack">
           <SectionCard title="Download Price List">
             <div className="portal-filter-grid">
@@ -1733,9 +1807,9 @@ export function PortalPage() {
             </div>
           </SectionCard>
         </div>
-      ) : null}
+          ) : null}
 
-      {activeSection === "orders" ? (
+          {activeSection === "orders" ? (
         <div className="portal-section-stack">
           <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Order Filters" : "Purchase Order Filters"}>
             <div className="portal-filter-grid">
@@ -1768,9 +1842,9 @@ export function PortalPage() {
             </SectionCard>
           )}
         </div>
-      ) : null}
+          ) : null}
 
-      {activeSection === "billing" ? (
+          {activeSection === "billing" ? (
         <div className="portal-section-stack">
           <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Invoice Filters" : "Bill Filters"}>
             <div className="portal-filter-grid">
@@ -1800,9 +1874,9 @@ export function PortalPage() {
             </SectionCard>
           )}
         </div>
-      ) : null}
+          ) : null}
 
-      {activeSection === "desk" && portalCanOrder ? (
+          {activeSection === "desk" && portalCanOrder ? (
         <div className="portal-section-stack">
           <SectionCard title="Part Search">
             <div className="portal-order-builder">
@@ -2028,7 +2102,9 @@ export function PortalPage() {
             </div>
           </SectionCard>
         </div>
-      ) : null}
+          ) : null}
+        </div>
+      </div>
 
       {portalOverlay ? (
         <div className="modal-backdrop">
