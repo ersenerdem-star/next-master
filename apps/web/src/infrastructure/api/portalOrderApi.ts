@@ -59,6 +59,7 @@ type PortalOrderResponse = {
   snapshot?: PortalSnapshot;
   orderId?: string;
   priceListType?: "A" | "B" | "C" | "Other";
+  pricingMode?: "standard" | "prefer_c_when_available";
   currency?: string;
   rows?: Array<{
     product_code: string;
@@ -155,6 +156,7 @@ export async function downloadPortalPriceList(credentials: PortalCredentials, br
   });
   return {
     priceListType: data.priceListType || "A",
+    pricingMode: data.pricingMode || "standard",
     currency: data.currency || "EUR",
     rows: data.rows || [],
   };

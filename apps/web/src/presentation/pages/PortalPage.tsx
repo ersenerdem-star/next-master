@@ -708,6 +708,24 @@ export function PortalPage() {
 
   const activeSnapshot = snapshot;
   const partyProfile = activeSnapshot.customer || activeSnapshot.vendor;
+  const portalBasePriceListType = activeSnapshot.pricingProfile?.price_list_type || "";
+  const portalCPriceMode = activeSnapshot.pricingProfile?.portal_c_price_mode || "standard";
+  const portalPricingLabel =
+    !activeSnapshot.pricingProfile
+      ? "Default Pricing"
+      : portalCPriceMode === "prefer_c_when_available"
+        ? "C Where Available"
+        : portalBasePriceListType
+          ? `${portalBasePriceListType} Price List`
+          : "Customer Account Pricing";
+  const portalPricingRuleDescription =
+    !activeSnapshot.pricingProfile
+      ? "The file is built using the default account pricing for this portal."
+      : portalCPriceMode === "prefer_c_when_available" && portalBasePriceListType && portalBasePriceListType !== "C"
+        ? `Uses C price list where available, then ${portalBasePriceListType} price list for the remaining items.`
+        : portalBasePriceListType === "C"
+          ? "Uses the C price list assigned on this customer account."
+          : `Uses the ${portalBasePriceListType || "assigned"} price list assigned on this customer account.`;
   const portalSellerDetails = [
     activeSnapshot.companyProfile?.email,
     activeSnapshot.companyProfile?.phone,
@@ -882,9 +900,9 @@ export function PortalPage() {
     activeSection === "desk"
       ? "Search by part number or original number, compare alternatives, then move selected items into the basket."
       : activeSection === "pricelist"
-        ? "Select a brand and download the customer-specific price list using the assigned account pricing."
-      : activeSection === "orders"
-        ? "Track submitted orders and inspect the full line detail when needed."
+        ? "Select a brand and download the customer-specific price list using the account pricing rule shown below."
+        : activeSection === "orders"
+          ? "Track submitted orders and inspect the full line detail when needed."
         : activeSection === "billing"
           ? "Review invoices or bills with payment status and line-level detail."
           : activeSection === "statement"
@@ -1150,8 +1168,16 @@ export function PortalPage() {
         ]),
       ];
       const blob = buildXlsxBlob(`${portalPriceListBrand} Price List`, rows, [2]);
-      downloadBlob(`${sanitizeFileName(`portal-price-list-${portalPriceListBrand}-${result.priceListType}`)}.xlsx`, blob);
-      setStatus(`${portalPriceListBrand} ${result.priceListType} price list downloaded.`);
+      const fileSuffix =
+        result.pricingMode === "prefer_c_when_available" && result.priceListType !== "C"
+          ? "c-where-available"
+          : result.priceListType;
+      downloadBlob(`${sanitizeFileName(`portal-price-list-${portalPriceListBrand}-${fileSuffix}`)}.xlsx`, blob);
+      setStatus(
+        result.pricingMode === "prefer_c_when_available" && result.priceListType !== "C"
+          ? `${portalPriceListBrand} price list downloaded using C where available and ${result.priceListType} fallback.`
+          : `${portalPriceListBrand} ${result.priceListType} price list downloaded.`,
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal price list download failed");
     } finally {
@@ -1825,7 +1851,7 @@ export function PortalPage() {
               />
               <div className="portal-filter-stat">
                 <span>Customer Pricing</span>
-                <strong>{activeSnapshot.pricingProfile ? "Customer Account Pricing" : "Default Pricing"}</strong>
+                <strong>{portalPricingLabel}</strong>
               </div>
               <div className="portal-builder-actions">
                 <Button
@@ -1842,7 +1868,7 @@ export function PortalPage() {
           <SectionCard title="How This Download Works">
             <div className="portal-inline-note portal-inline-note--soft">
               <span>Pricing Rule</span>
-              <strong>The file is built using the price list assigned on this customer account for the selected brand.</strong>
+              <strong>{portalPricingRuleDescription}</strong>
             </div>
             <div className="portal-inline-note portal-inline-note--soft">
               <span>Fields</span>

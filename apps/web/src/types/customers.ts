@@ -1,5 +1,6 @@
 export type CustomerKind = "Business" | "Individual";
 export type CustomerPriceList = "" | "A" | "B" | "C" | "Other";
+export type CustomerPortalCPriceMode = "standard" | "prefer_c_when_available";
 
 export type LocalCustomer = {
   id: string;
@@ -21,6 +22,7 @@ export type LocalCustomer = {
   contract_nr: string;
   seller_company_profile_id: string;
   price_list_type: CustomerPriceList;
+  portal_c_price_mode: CustomerPortalCPriceMode;
   price_list_margin_percent: number | null;
   billing_address: string;
   shipping_address: string;

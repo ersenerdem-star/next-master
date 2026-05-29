@@ -27,6 +27,7 @@ type CustomerRow = {
   contract_nr: string;
   seller_company_profile_id: string | null;
   price_list_type: string;
+  portal_c_price_mode: "standard" | "prefer_c_when_available" | null;
   price_list_margin_percent: number | null;
 };
 
@@ -110,6 +111,7 @@ type CustomerPricingContext = {
   sellerCompany: string;
   currency: string;
   customerType: "A" | "B" | "C" | "Other";
+  portalCPriceMode: "standard" | "prefer_c_when_available";
   effectiveMarginA: number;
   effectiveMarginB: number;
   cPriceListId: string;
@@ -214,6 +216,14 @@ function computeSellFromBuy(buyPrice: number | null, context: CustomerPricingCon
   return roundMoney(Number(buyPrice) * (1 + marginPercent / 100));
 }
 
+function prefersCPriceWhereAvailable(context: CustomerPricingContext) {
+  return context.customerType !== "C" && context.portalCPriceMode === "prefer_c_when_available" && Boolean(context.cPriceListId);
+}
+
+function portalFallbackPriceType(context: CustomerPricingContext) {
+  return context.customerType === "C" ? "C" : context.customerType;
+}
+
 function hasUsablePrice(value: unknown) {
   return value != null && Number(value) > 0;
 }
@@ -271,18 +281,18 @@ async function resolvePortalCustomer(
   const customer =
     (invite.customer_id
       ? await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
-          select: "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,price_list_margin_percent",
+          select: "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,portal_c_price_mode,price_list_margin_percent",
           organization_id: `eq.${invite.organization_id}`,
           id: `eq.${invite.customer_id}`,
         })
       : null) ||
     (await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
-      select: "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,price_list_margin_percent",
+      select: "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,portal_c_price_mode,price_list_margin_percent",
       organization_id: `eq.${invite.organization_id}`,
       display_name: `eq.${invite.party_name}`,
     })) ||
     (await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
-      select: "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,price_list_margin_percent",
+      select: "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,portal_c_price_mode,price_list_margin_percent",
       organization_id: `eq.${invite.organization_id}`,
       company_name: `eq.${invite.party_name}`,
     }));
@@ -323,6 +333,10 @@ async function resolvePortalCustomer(
   const defaultMarginA = byType.get("A")?.margin_percent == null ? 10 : Number(byType.get("A")?.margin_percent || 10);
   const defaultMarginB = byType.get("B")?.margin_percent == null ? 15 : Number(byType.get("B")?.margin_percent || 15);
   const priceListType = normalizePortalCustomerType(String(customer.price_list_type || "A"));
+  const portalCPriceMode =
+    String(customer.portal_c_price_mode || "standard").trim().toLowerCase() === "prefer_c_when_available"
+      ? "prefer_c_when_available"
+      : "standard";
   const marginOverride = customer.price_list_margin_percent == null ? null : Number(customer.price_list_margin_percent);
   const effectiveMarginA = (priceListType === "A" || priceListType === "Other") && marginOverride != null ? marginOverride : defaultMarginA;
   const effectiveMarginB = priceListType === "B" && marginOverride != null ? marginOverride : defaultMarginB;
@@ -334,6 +348,7 @@ async function resolvePortalCustomer(
     sellerCompany: String(companyProfile?.company_name || ""),
     currency: String(customer.currency || "EUR"),
     customerType: priceListType,
+    portalCPriceMode,
     effectiveMarginA,
     effectiveMarginB,
     cPriceListId,
@@ -461,6 +476,28 @@ export async function searchPortalCatalog(
         }
       }),
     );
+    if (prefersCPriceWhereAvailable(context)) {
+      const cPriceMap = await fetchCPriceMap(
+        supabaseUrl,
+        serviceRoleKey,
+        invite.organization_id,
+        context.cPriceListId,
+        baseItems.map((item) => ({
+          brand: item.brand,
+          product_code: item.code,
+        })),
+      );
+      for (const item of baseItems) {
+        const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
+        const existing = previewByCode.get(key);
+        const cPrice = cPriceMap.get(key);
+        if (cPrice == null) continue;
+        previewByCode.set(key, {
+          sell_price: cPrice,
+          supplier_name: existing?.supplier_name || "",
+        });
+      }
+    }
   }
 
   return baseItems.map((item) => {
@@ -705,7 +742,12 @@ export async function buildPortalPriceListRows(
   serviceRoleKey: string,
   invite: PortalInviteRow,
   brand: string,
-): Promise<{ priceListType: CustomerPricingContext["customerType"]; currency: string; rows: PortalPriceListRow[] }> {
+): Promise<{
+  priceListType: CustomerPricingContext["customerType"];
+  pricingMode: CustomerPricingContext["portalCPriceMode"];
+  currency: string;
+  rows: PortalPriceListRow[];
+}> {
   const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
   const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
   const brandId = brandMap.byName.get(String(brand || "").trim().toLowerCase()) || "";
@@ -718,6 +760,7 @@ export async function buildPortalPriceListRows(
   if (!catalogRows.length) {
     return {
       priceListType: context.customerType,
+      pricingMode: context.portalCPriceMode,
       currency: context.currency,
       rows: [],
     };
@@ -725,6 +768,7 @@ export async function buildPortalPriceListRows(
 
   let salesPriceByCode = new Map<string, number>();
   let priceDateByCode = new Map<string, string | null>();
+  const priceTypeByCode = new Map<string, PortalPriceListRow["price_list_type"]>();
   if (context.customerType === "C") {
     const cPriceEntryMap = await fetchCPriceEntryMap(
       supabaseUrl,
@@ -736,6 +780,7 @@ export async function buildPortalPriceListRows(
     for (const [key, value] of cPriceEntryMap.entries()) {
       salesPriceByCode.set(key, value.sell_price);
       priceDateByCode.set(key, value.price_date);
+      priceTypeByCode.set(key, "C");
     }
   } else {
     const bestOptionMap = await fetchPortalBestSupplierOptionMap(
@@ -750,17 +795,33 @@ export async function buildPortalPriceListRows(
       if (bestOption.buy_price == null) continue;
       salesPriceByCode.set(normalizedCode, roundMoney(Number(bestOption.buy_price) * (1 + marginPercent / 100)));
       priceDateByCode.set(normalizedCode, bestOption.price_date || null);
+      priceTypeByCode.set(normalizedCode, portalFallbackPriceType(context));
+    }
+    if (prefersCPriceWhereAvailable(context)) {
+      const cPriceEntryMap = await fetchCPriceEntryMap(
+        supabaseUrl,
+        serviceRoleKey,
+        invite.organization_id,
+        context.cPriceListId,
+        catalogRows.map((row) => ({ brand: row.brand, product_code: row.product_code })),
+      );
+      for (const [key, value] of cPriceEntryMap.entries()) {
+        salesPriceByCode.set(key, value.sell_price);
+        priceDateByCode.set(key, value.price_date);
+        priceTypeByCode.set(key, "C");
+      }
     }
   }
 
   return {
     priceListType: context.customerType,
+    pricingMode: context.portalCPriceMode,
     currency: context.currency,
     rows: catalogRows.map((row) => ({
       product_code: row.product_code,
       brand: row.brand,
       description: row.description || "",
-      price_list_type: context.customerType,
+      price_list_type: priceTypeByCode.get(row.normalized_code) ?? portalFallbackPriceType(context),
       sales_price: salesPriceByCode.get(row.normalized_code) ?? null,
       price_date: priceDateByCode.get(row.normalized_code) ?? null,
       lifecycle_status: row.lifecycle_status,
@@ -1026,7 +1087,7 @@ export async function preparePortalOrderLines(
     prepared.push(...resolvedChunk);
   }
 
-  if (context.customerType === "C" && prepared.length) {
+  if ((context.customerType === "C" || prefersCPriceWhereAvailable(context)) && prepared.length) {
     const cPriceMap = await fetchCPriceMap(
       supabaseUrl,
       serviceRoleKey,
@@ -1040,7 +1101,11 @@ export async function preparePortalOrderLines(
     prepared.forEach((line) => {
       const value = cPriceMap.get(`${line.brand.trim().toLowerCase()}::${normalizePartCode(line.resolvedCode)}`);
       line.c_sell_price = value == null ? null : Number(value);
-      line.sell_price = value == null ? line.sell_price : Number(value);
+      if (value != null) {
+        line.sell_price = Number(value);
+      } else if (context.customerType === "C") {
+        line.sell_price = null;
+      }
     });
   }
 
@@ -1050,6 +1115,8 @@ export async function preparePortalOrderLines(
       currency: context.currency,
       payment_terms: context.customer.payment_terms || "",
       contract_nr: context.customer.contract_nr || "",
+      price_list_type: context.customerType,
+      portal_c_price_mode: context.portalCPriceMode,
     },
   };
 }

@@ -471,7 +471,17 @@ export function CustomersPage() {
                     <div className="customers-form-row__label">Price List</div>
                     <div className="customers-field-wrap customers-field-wrap--wide">
                       <label className="field customer-field">
-                        <select className="field__input" value={draft.price_list_type} onChange={(event) => updateDraft({ price_list_type: event.target.value as LocalCustomer["price_list_type"] })}>
+                        <select
+                          className="field__input"
+                          value={draft.price_list_type}
+                          onChange={(event) => {
+                            const nextType = event.target.value as LocalCustomer["price_list_type"];
+                            updateDraft({
+                              price_list_type: nextType,
+                              portal_c_price_mode: nextType === "C" ? "standard" : draft.portal_c_price_mode,
+                            });
+                          }}
+                        >
                           <option value="">Select price list</option>
                           <option value="A">A Price List</option>
                           <option value="B">B Price List</option>
@@ -481,6 +491,23 @@ export function CustomersPage() {
                       </label>
                     </div>
                   </div>
+                  {draft.price_list_type && draft.price_list_type !== "C" ? (
+                    <div className="customers-form-row">
+                      <div className="customers-form-row__label">C Price Rule</div>
+                      <div className="customers-field-wrap customers-field-wrap--wide">
+                        <label className="field customer-field">
+                          <select
+                            className="field__input"
+                            value={draft.portal_c_price_mode}
+                            onChange={(event) => updateDraft({ portal_c_price_mode: event.target.value as LocalCustomer["portal_c_price_mode"] })}
+                          >
+                            <option value="standard">Use selected account price list only</option>
+                            <option value="prefer_c_when_available">Use C prices where available</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                  ) : null}
                   {draft.price_list_type === "Other" ? (
                     <div className="customers-form-row">
                       <div className="customers-form-row__label customers-form-row__label--required">Price List Margin %</div>

@@ -257,20 +257,20 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       (invite.customer_id
         ? await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
             select:
-              "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,seller_company_profile_id",
+              "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,seller_company_profile_id,price_list_type,portal_c_price_mode",
             organization_id: `eq.${invite.organization_id}`,
             id: `eq.${invite.customer_id}`,
           })
         : null) ||
       (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
         select:
-          "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,seller_company_profile_id",
+          "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,seller_company_profile_id,price_list_type,portal_c_price_mode",
         organization_id: `eq.${invite.organization_id}`,
         display_name: `eq.${invite.party_name}`,
       })) ||
       (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
         select:
-          "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,seller_company_profile_id",
+          "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,seller_company_profile_id,price_list_type,portal_c_price_mode",
         organization_id: `eq.${invite.organization_id}`,
         company_name: `eq.${invite.party_name}`,
       }));
@@ -488,6 +488,11 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
             currency: String(customer.currency || invoices[0]?.currency || "EUR"),
             payment_terms: String(customer.payment_terms || ""),
             contract_nr: String(customer.contract_nr || ""),
+            price_list_type: String(customer.price_list_type || "A") as "" | "A" | "B" | "C" | "Other",
+            portal_c_price_mode:
+              String(customer.portal_c_price_mode || "standard").trim().toLowerCase() === "prefer_c_when_available"
+                ? "prefer_c_when_available"
+                : "standard",
           }
         : null,
       accountRows,

@@ -60,6 +60,7 @@ export function createEmptyCustomer(): LocalCustomer {
     contract_nr: "",
     seller_company_profile_id: "",
     price_list_type: "",
+    portal_c_price_mode: "standard",
     price_list_margin_percent: null,
     billing_address: "",
     shipping_address: "",
