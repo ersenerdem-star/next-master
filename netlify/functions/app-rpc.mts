@@ -1,6 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { json, sendJson } from "./_shared/http.mts";
 import { resolveCaller } from "./_shared/app-auth.mts";
+import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 const ALLOWED_RPCS = new Set([
   "admin_list_org_users",
@@ -26,7 +27,7 @@ export default async (req: Request, _context: Context) => {
   const supabaseAnonKey = Netlify.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Netlify.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
-    return json({ error: "Missing Netlify environment variables for app RPC" }, 500);
+    return json({ error: "System configuration is incomplete." }, 500);
   }
 
   try {
@@ -55,7 +56,7 @@ export default async (req: Request, _context: Context) => {
 
     return json({ ok: true, data });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "App RPC request failed" }, 400);
+    return json({ error: sanitizeUserFacingError(error, "The request could not be completed right now.") }, 400);
   }
 };
 

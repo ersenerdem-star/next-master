@@ -1,6 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { buildRestUrl, getJson, json, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
 import { resolveCaller } from "./_shared/app-auth.mts";
+import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 const CUSTOMER_COLUMNS = [
   "id",
@@ -173,7 +174,7 @@ function isUuid(value: string) {
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message || fallback : fallback;
+  return sanitizeUserFacingError(error, fallback);
 }
 
 function parseEmbeddedCustomerMeta(raw: unknown) {
@@ -524,7 +525,7 @@ export default async (req: Request, _context: Context) => {
   const supabaseAnonKey = Netlify.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Netlify.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
-    return json({ error: "Missing Netlify environment variables for app admin records" }, 500);
+    return json({ error: "System configuration is incomplete." }, 500);
   }
 
   try {

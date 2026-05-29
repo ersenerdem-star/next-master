@@ -2,6 +2,7 @@ import { canonicalizeBrandName, includesLooseText, normalizeBrandKey, normalizeP
 import type { CodeReferenceMatch, CodeReferenceRow, CodeReferenceUsage } from "../../types/codeReferences";
 import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
+import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 
 async function withTimeout<T>(promiseLike: PromiseLike<T> | T, label: string, timeoutMs = 12000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -20,7 +21,7 @@ function mapCodeReferenceError(message: string) {
   if (message.includes("item_code_references_organization_id_brand_id_normalized_ol_key")) {
     return "This old customer code already has a mapping for this brand. Edit the existing reference instead of creating a duplicate.";
   }
-  return message;
+  return sanitizeUserFacingMessage(message, "Code reference request failed");
 }
 
 async function resolveBrandRow(brandName: string) {
@@ -31,7 +32,7 @@ async function resolveBrandRow(brandName: string) {
     .select("id,name")
     .eq("organization_id", organizationId);
 
-  if (error) throw new Error(error.message || "Brand lookup failed");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Brand lookup failed"));
   const match = ((data || []) as Array<{ id: string; name: string }>).find((row) => normalizeBrandKey(String(row.name || "")) === requestedBrandKey);
   if (!match?.id) throw new Error(`Brand not found: ${brandName}`);
   return { id: match.id as string, name: match.name as string };
@@ -54,7 +55,7 @@ async function resolveOrCreateBrandRow(brandName: string) {
     .select("id,name")
     .single();
 
-  if (error) throw new Error(error.message || `Failed to create brand: ${trimmed}`);
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, `Failed to create brand: ${trimmed}`));
   if (!data?.id) throw new Error(`Brand could not be created: ${trimmed}`);
   return { id: data.id as string, name: (data.name as string) || trimmed };
 }
@@ -70,7 +71,7 @@ export async function fetchCodeReferences(search = ""): Promise<CodeReferenceRow
     "Code references load",
   );
 
-  if (error) throw new Error(error.message || "Code references load failed");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Code references load failed"));
 
   let rows = (data || []).map((row) => ({
     id: row.id as string,
@@ -174,7 +175,7 @@ export async function updateCodeReference(
 
 export async function deleteCodeReference(id: string) {
   const { error } = await withTimeout(supabaseClient.from("item_code_references").delete().eq("id", id), "Code reference delete");
-  if (error) throw new Error(error.message || "Code reference delete failed");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Code reference delete failed"));
 }
 
 export async function importCodeReferences(
@@ -255,7 +256,7 @@ export async function findCodeReferenceMatch(input: { code: string; brand?: stri
   }
 
   const { data, error } = await withTimeout(query, "Code reference lookup");
-  if (error) throw new Error(error.message || "Code reference lookup failed");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Code reference lookup failed"));
   const rows = (data || []) as Array<{
     id: string;
     brand_id: string;
@@ -306,7 +307,7 @@ export async function fetchCodeReferenceMatchesForRows(
     "Code reference brand batch lookup",
   );
 
-  if (brandError) throw new Error(brandError.message || "Code reference brand batch lookup failed");
+  if (brandError) throw new Error(sanitizeUserFacingMessage(brandError.message, "Code reference brand batch lookup failed"));
 
   const brandIdToName = new Map<string, string>();
   const brandIds = (brandRows || [])
@@ -330,7 +331,7 @@ export async function fetchCodeReferenceMatchesForRows(
     "Code reference batch lookup",
   );
 
-  if (error) throw new Error(error.message || "Code reference batch lookup failed");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Code reference batch lookup failed"));
 
   const result = new Map<string, CodeReferenceMatch>();
   for (const row of (data || []) as Array<{
@@ -391,7 +392,7 @@ export async function fetchCatalogReferenceCoverage(
     "Code reference coverage load",
   );
 
-  if (error) throw new Error(error.message || "Code reference coverage load failed");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Code reference coverage load failed"));
 
   const reverseBrandMap = new Map<string, string>();
   for (const [name, id] of brandIdByName.entries()) reverseBrandMap.set(id, name);
@@ -424,7 +425,7 @@ export async function inspectCodeReferenceUsage(input: { brand: string; code: st
     "Code reference usage check",
   );
 
-  if (error) throw new Error(error.message || "Code reference usage check failed");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Code reference usage check failed"));
   const rows = (data || []) as Array<{ id: string; old_code: string; new_code: string }>;
   if (!rows.length) return null;
 
@@ -454,7 +455,7 @@ export async function fetchOldCodesByNewCodeForBrand(input: {
     "Old code coverage load",
   );
 
-  if (error) throw new Error(error.message || "Old code coverage load failed");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Old code coverage load failed"));
 
   const output: Record<string, string[]> = {};
   for (const row of (data || []) as Array<{ old_code: string; new_code: string }>) {

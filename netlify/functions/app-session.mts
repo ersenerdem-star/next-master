@@ -1,6 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { json } from "./_shared/http.mts";
 import { resolveCaller } from "./_shared/app-auth.mts";
+import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 export default async (req: Request, _context: Context) => {
   if (req.method !== "GET") return json({ error: "Method not allowed" }, 405);
@@ -9,7 +10,7 @@ export default async (req: Request, _context: Context) => {
   const supabaseAnonKey = Netlify.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Netlify.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
-    return json({ error: "Missing Netlify environment variables for app session" }, 500);
+    return json({ error: "System configuration is incomplete." }, 500);
   }
 
   try {
@@ -26,7 +27,7 @@ export default async (req: Request, _context: Context) => {
       },
     });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "App session lookup failed" }, 401);
+    return json({ error: sanitizeUserFacingError(error, "Session details could not be loaded right now.") }, 401);
   }
 };
 

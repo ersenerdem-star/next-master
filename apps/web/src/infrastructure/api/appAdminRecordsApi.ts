@@ -1,4 +1,5 @@
 import { supabaseClient } from "./supabaseClient";
+import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 
 type AppAdminRecordsResponse<T> = {
   ok?: boolean;
@@ -8,9 +9,9 @@ type AppAdminRecordsResponse<T> = {
 
 async function getAccessToken() {
   const { data, error } = await supabaseClient.auth.getSession();
-  if (error) throw new Error(error.message || "Failed to read current session");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Your session has expired. Sign in again."));
   const token = String(data.session?.access_token || "");
-  if (!token) throw new Error("No authenticated session found");
+  if (!token) throw new Error("Your session has expired. Sign in again.");
   return token;
 }
 
@@ -26,7 +27,7 @@ export async function callAppAdminRecords<T>(payload: Record<string, unknown>) {
   });
   const data = (await response.json().catch(() => ({}))) as AppAdminRecordsResponse<T>;
   if (!response.ok) {
-    throw new Error(data.error || `App admin records request failed: ${response.status}`);
+    throw new Error(sanitizeUserFacingMessage(data.error || `App admin records request failed: ${response.status}`, "The request could not be completed right now."));
   }
   return data.data as T;
 }

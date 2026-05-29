@@ -1,3 +1,5 @@
+import { sanitizeUserFacingMessage } from "./user-message.mts";
+
 export const json = (body: unknown, status = 200, extraHeaders: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
     status,
@@ -12,7 +14,7 @@ export async function getJson<T>(url: string, init: RequestInit) {
   const response = await fetch(url, init);
   const data = await readJson<T & { message?: string; error?: string; msg?: string }>(response);
   if (!response.ok) {
-    throw new Error(data?.msg || data?.message || data?.error || `Request failed: ${response.status}`);
+    throw new Error(sanitizeUserFacingMessage(data?.msg || data?.message || data?.error || `Request failed: ${response.status}`));
   }
   return data as T;
 }
@@ -21,7 +23,7 @@ export async function sendJson<T>(url: string, init: RequestInit) {
   const response = await fetch(url, init);
   const data = await readJson<T & { message?: string; error?: string; msg?: string }>(response);
   if (!response.ok) {
-    throw new Error(data?.msg || data?.message || data?.error || `Request failed: ${response.status}`);
+    throw new Error(sanitizeUserFacingMessage(data?.msg || data?.message || data?.error || `Request failed: ${response.status}`));
   }
   return data as T;
 }

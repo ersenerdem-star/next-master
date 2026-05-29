@@ -1,4 +1,5 @@
 import { supabaseClient } from "./supabaseClient";
+import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 
 type AppSessionResponse = {
   ok?: boolean;
@@ -24,9 +25,9 @@ let cachedSession: AppSessionSnapshot | null = null;
 
 async function getAccessToken() {
   const { data, error } = await supabaseClient.auth.getSession();
-  if (error) throw new Error(error.message || "Failed to read current session");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Your session has expired. Sign in again."));
   const token = String(data.session?.access_token || "");
-  if (!token) throw new Error("No authenticated session found");
+  if (!token) throw new Error("Your session has expired. Sign in again.");
   return token;
 }
 
@@ -42,7 +43,7 @@ export async function fetchAppSession(forceRefresh = false): Promise<AppSessionS
   });
   const data = (await response.json().catch(() => ({}))) as AppSessionResponse;
   if (!response.ok) {
-    throw new Error(data.error || `App session request failed: ${response.status}`);
+    throw new Error(sanitizeUserFacingMessage(data.error || `App session request failed: ${response.status}`, "Session details could not be loaded right now."));
   }
 
   const next = {
@@ -52,7 +53,7 @@ export async function fetchAppSession(forceRefresh = false): Promise<AppSessionS
     role: String(data.profile?.role || ""),
   };
   if (!next.userId || !next.organizationId) {
-    throw new Error("App session did not return required identity data");
+    throw new Error("Session details could not be loaded right now.");
   }
 
   cachedSession = next;

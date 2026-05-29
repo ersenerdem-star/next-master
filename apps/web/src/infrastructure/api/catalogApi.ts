@@ -10,6 +10,7 @@ import {
 import { callAppRpc } from "./appRpcApi";
 import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
+import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 
 const CATALOG_SELECT_WITH_IMAGE =
   "id,product_code,image_url,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note";
@@ -149,7 +150,7 @@ async function resolveBrandId(brandName: string) {
     .limit(1)
     .maybeSingle();
 
-  if (brandError) throw new Error(brandError.message || "Brand lookup failed");
+  if (brandError) throw new Error(sanitizeUserFacingMessage(brandError.message, "Brand lookup failed"));
   if (!brandRow?.id) throw new Error(`Brand not found: ${normalizedBrand}`);
   return brandRow.id as string;
 }
@@ -173,7 +174,7 @@ async function resolveOrCreateBrandId(brandName: string) {
     .select("id")
     .single();
 
-  if (error) throw new Error(error.message || "Brand create failed");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Brand create failed"));
   if (!data?.id) throw new Error(`Brand could not be created: ${normalizedBrand}`);
   return data.id as string;
 }
@@ -401,7 +402,7 @@ export async function updateCloudCatalogRow(
     })
     .eq("id", productId);
 
-  if (error) throw new Error(error.message || "Catalog update failed");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Catalog update failed"));
 }
 
 export async function createCloudCatalogRow(input: {
@@ -431,12 +432,12 @@ export async function createCloudCatalogRow(input: {
     lifecycle_note: input.lifecycle_note?.trim() || null,
   });
 
-  if (error) throw new Error(error.message || "Catalog create failed");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Catalog create failed"));
 }
 
 export async function deleteCloudCatalogRow(productId: string) {
   const { error } = await supabaseClient.from("catalog_products").delete().eq("id", productId);
-  if (error) throw new Error(error.message || "Catalog delete failed");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Catalog delete failed"));
 }
 
 export async function fetchCatalogExportRows(input: { brandName: string; search?: string }) {
@@ -455,7 +456,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     .maybeSingle();
 
   if (brandError) {
-    throw new Error(brandError.message || "Brand lookup failed");
+    throw new Error(sanitizeUserFacingMessage(brandError.message, "Brand lookup failed"));
   }
   if (!brandRow?.id) {
     throw new Error(`Brand not found: ${brandName}`);
@@ -517,7 +518,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
       }
     }
     if (error) {
-      throw new Error(error.message || "Catalog export load failed");
+      throw new Error(sanitizeUserFacingMessage(error.message, "Catalog export load failed"));
     }
 
     const batch = (data || []) as unknown as typeof allRows;
@@ -567,7 +568,7 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
     .maybeSingle();
 
   if (brandError) {
-    throw new Error(brandError.message || "Brand lookup failed");
+    throw new Error(sanitizeUserFacingMessage(brandError.message, "Brand lookup failed"));
   }
   if (!brandRow?.id) {
     throw new Error(`Brand not found: ${brandName}`);
@@ -593,7 +594,7 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
     }
 
     if (error) {
-      throw new Error(error.message || "Imported catalog rows load failed");
+      throw new Error(sanitizeUserFacingMessage(error.message, "Imported catalog rows load failed"));
     }
 
     result.push(

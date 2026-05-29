@@ -1,5 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 
+import { sanitizeUserFacingError, sanitizeUserFacingMessage } from "./_shared/user-message.mts";
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -10,7 +12,7 @@ async function getJson<T>(url: string, init: RequestInit) {
   const response = await fetch(url, init);
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.msg || data?.message || `Request failed: ${response.status}`);
+    throw new Error(sanitizeUserFacingMessage(data?.msg || data?.message || `Request failed: ${response.status}`));
   }
   return data as T;
 }
@@ -22,7 +24,7 @@ export default async (req: Request, _context: Context) => {
   const supabaseAnonKey = Netlify.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Netlify.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
-    return json({ error: "Missing Netlify environment variables for Supabase" }, 500);
+    return json({ error: "System configuration is incomplete." }, 500);
   }
 
   const authHeader = req.headers.get("authorization") || "";
@@ -86,7 +88,7 @@ export default async (req: Request, _context: Context) => {
 
     return json({ ok: true, userId: targetUserId, email: targetProfile.email });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Password reset failed" }, 500);
+    return json({ error: sanitizeUserFacingError(error, "Password reset failed") }, 500);
   }
 };
 

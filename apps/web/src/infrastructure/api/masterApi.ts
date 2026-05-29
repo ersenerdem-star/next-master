@@ -3,6 +3,7 @@ import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
 import { buildLooseOriginalNumberPattern, normalizeOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import type { MasterRow } from "../../types/master";
+import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 
 type MasterParams = {
   search: string;
@@ -88,7 +89,7 @@ async function resolveBrand(organizationId: string, brandName: string): Promise<
     .limit(1)
     .maybeSingle();
 
-  if (error) throw new Error(error.message || "Brand lookup failed");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Brand lookup failed"));
   if (!data?.id) throw new Error(`Brand not found: ${normalizedBrand}`);
   return {
     id: String(data.id),
@@ -150,7 +151,7 @@ async function fetchCatalogMasterBaseRows(input: {
       .or(buildMasterSearchOr(rawSearch, normalizedSearch, "loose"));
     ({ data, error, count } = await looseQuery);
   }
-  if (error) throw new Error(error.message || "Catalog master lookup failed");
+  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Catalog search failed"));
   return {
     rows: ((data || []) as CatalogMasterBaseRow[]).map((row) => ({
       ...row,
@@ -188,7 +189,7 @@ async function enrichCatalogMasterRows(input: {
       .in("normalized_code", chunk);
 
     if (error) {
-      throw new Error(error.message || "Supplier enrichment failed");
+      throw new Error(sanitizeUserFacingMessage(error.message, "Supplier pricing could not be loaded"));
     }
     supplierRows.push(...((data || []) as SupplierPriceLookupRow[]));
   }

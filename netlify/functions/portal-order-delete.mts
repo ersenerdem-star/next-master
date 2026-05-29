@@ -3,6 +3,7 @@ import { json } from "./_shared/http.mts";
 import { resolvePortalInvite } from "./_shared/portal-access.mts";
 import { deletePortalSalesOrder } from "./_shared/portal-orders.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
+import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 export default async (req: Request, _context: Context) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -11,7 +12,7 @@ export default async (req: Request, _context: Context) => {
   const serviceRoleKey = Netlify.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const sessionSecret = Netlify.env.get("PORTAL_SESSION_SECRET") || serviceRoleKey;
   if (!supabaseUrl || !serviceRoleKey) {
-    return json({ error: "Missing Netlify environment variables for portal access" }, 500);
+    return json({ error: "System configuration is incomplete." }, 500);
   }
 
   try {
@@ -38,7 +39,7 @@ export default async (req: Request, _context: Context) => {
     const result = await deletePortalSalesOrder(supabaseUrl, serviceRoleKey, invite, orderId);
     return json({ ok: true, ...result, sessionToken: nextSessionToken });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Portal draft delete failed" }, 400);
+    return json({ error: sanitizeUserFacingError(error, "Portal draft delete failed") }, 400);
   }
 };
 
