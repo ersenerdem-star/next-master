@@ -25,6 +25,8 @@ const CUSTOMER_PORTAL_SELECT =
   "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,custom_fields,seller_company_profile_id,price_list_type,portal_c_price_mode";
 const CUSTOMER_PORTAL_SELECT_LEGACY =
   "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,custom_fields,price_list_type";
+const CUSTOMER_PORTAL_SELECT_BASE =
+  "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,custom_fields";
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 
 async function fetchFirst<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
@@ -45,8 +47,32 @@ async function fetchAllOptional<T>(supabaseUrl: string, serviceRoleKey: string, 
     return await fetchAll<T>(supabaseUrl, serviceRoleKey, table, params);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("Could not find the table") || message.includes("relation") || message.includes("does not exist")) {
+    if (
+      message.includes("Could not find the table") ||
+      message.includes("relation") && message.includes("does not exist") ||
+      message.includes("column") && message.includes("does not exist") ||
+      message.includes("schema cache") ||
+      message.includes("failed to parse")
+    ) {
       return [];
+    }
+    throw error;
+  }
+}
+
+async function fetchFirstOptional<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
+  try {
+    return await fetchFirst<T>(supabaseUrl, serviceRoleKey, table, params);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      message.includes("Could not find the table") ||
+      message.includes("relation") && message.includes("does not exist") ||
+      message.includes("column") && message.includes("does not exist") ||
+      message.includes("schema cache") ||
+      message.includes("failed to parse")
+    ) {
+      return null;
     }
     throw error;
   }
@@ -83,9 +109,14 @@ async function fetchPortalCustomerRecord(
     try {
       return await trySelect(CUSTOMER_PORTAL_SELECT_LEGACY);
     } catch (legacyError) {
-      const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError || "");
-      const legacyMessage = legacyError instanceof Error ? legacyError.message : String(legacyError || "");
-      throw new Error(legacyMessage || primaryMessage || "Customer portal record lookup failed");
+      try {
+        return await trySelect(CUSTOMER_PORTAL_SELECT_BASE);
+      } catch (baseError) {
+        const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError || "");
+        const legacyMessage = legacyError instanceof Error ? legacyError.message : String(legacyError || "");
+        const baseMessage = baseError instanceof Error ? baseError.message : String(baseError || "");
+        throw new Error(baseMessage || legacyMessage || primaryMessage || "Customer portal record lookup failed");
+      }
     }
   }
 }
@@ -326,14 +357,14 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
 
     const companyProfile =
       (sellerCompanyProfileId
-        ? await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
+        ? await fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
             select: "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url",
             organization_id: `eq.${invite.organization_id}`,
             id: `eq.${sellerCompanyProfileId}`,
             limit: "1",
-          }).catch(() => null)
+          })
         : null) ||
-      (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
+      (await fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
         select: "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url",
         organization_id: `eq.${invite.organization_id}`,
         order: "updated_at.desc",
@@ -346,16 +377,16 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     const salesOrders = invite.access_can_view_orders
       ? dedupeById([
           ...(customerId
-            ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
+            ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
                 select:
                   "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
                 organization_id: `eq.${invite.organization_id}`,
                 customer_id: `eq.${customerId}`,
                 order: "updated_at.desc",
-              }).catch(() => [])
+              })
             : []),
           ...((!customerId || customerName)
-            ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
+            ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
                 select:
                   "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
                 organization_id: `eq.${invite.organization_id}`,
@@ -369,16 +400,16 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     const invoices = invite.access_can_view_invoices
       ? dedupeById([
           ...(customerId
-            ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "invoices", {
+            ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "invoices", {
                 select:
                   "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
                 organization_id: `eq.${invite.organization_id}`,
                 customer_id: `eq.${customerId}`,
                 order: "updated_at.desc",
-              }).catch(() => [])
+              })
             : []),
           ...((!customerId || customerName)
-            ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "invoices", {
+            ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "invoices", {
                 select:
                   "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
                 organization_id: `eq.${invite.organization_id}`,
@@ -392,15 +423,15 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     const paymentsReceived = invite.access_can_view_payments
       ? dedupeById([
           ...(customerId
-            ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_received", {
+            ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_received", {
                 select: "id,invoice_no,customer_name,status,received_date,method,reference_no,amount,currency,updated_at",
                 organization_id: `eq.${invite.organization_id}`,
                 customer_id: `eq.${customerId}`,
                 order: "updated_at.desc",
-              }).catch(() => [])
+              })
             : []),
           ...((!customerId || customerName)
-            ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_received", {
+            ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_received", {
                 select: "id,invoice_no,customer_name,status,received_date,method,reference_no,amount,currency,updated_at",
                 organization_id: `eq.${invite.organization_id}`,
                 customer_name: `eq.${customerName}`,
@@ -421,7 +452,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
 
     const availableBrands = invite.access_can_view_orders
       ? (
-          await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "brands", {
+        await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "brands", {
             select: "name",
             organization_id: `eq.${invite.organization_id}`,
             order: "name.asc",
@@ -564,7 +595,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       company_name: `eq.${invite.party_name}`,
     }));
 
-  const companyProfile = await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
+  const companyProfile = await fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
     select: "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url",
     organization_id: `eq.${invite.organization_id}`,
     order: "updated_at.desc",
@@ -577,15 +608,15 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
   const purchaseOrders = invite.access_can_view_orders
     ? dedupeById([
         ...(vendorId
-          ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "purchase_orders", {
+          ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "purchase_orders", {
               select: "id,sales_order_no,supplier_name,customer_name,status,currency,total_amount,line_count,notes,updated_at,lines",
               organization_id: `eq.${invite.organization_id}`,
               vendor_id: `eq.${vendorId}`,
               order: "updated_at.desc",
-            }).catch(() => [])
+            })
           : []),
         ...((!vendorId || vendorName)
-          ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "purchase_orders", {
+          ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "purchase_orders", {
               select: "id,sales_order_no,supplier_name,customer_name,status,currency,total_amount,line_count,notes,updated_at,lines",
               organization_id: `eq.${invite.organization_id}`,
               supplier_name: `eq.${vendorName}`,
@@ -598,16 +629,16 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
   const bills = invite.access_can_view_invoices
     ? dedupeById([
         ...(vendorId
-          ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "bills", {
+          ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "bills", {
               select:
                 "id,purchase_order_no,supplier_name,status,currency,total_amount,bill_date,due_date,payment_terms,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
               organization_id: `eq.${invite.organization_id}`,
               vendor_id: `eq.${vendorId}`,
               order: "updated_at.desc",
-            }).catch(() => [])
+            })
           : []),
         ...((!vendorId || vendorName)
-          ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "bills", {
+          ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "bills", {
               select:
                 "id,purchase_order_no,supplier_name,status,currency,total_amount,bill_date,due_date,payment_terms,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
               organization_id: `eq.${invite.organization_id}`,
@@ -621,15 +652,15 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
   const paymentsMade = invite.access_can_view_payments
     ? dedupeById([
         ...(vendorId
-          ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_made", {
+          ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_made", {
               select: "id,bill_no,supplier_name,status,payment_date,method,reference_no,amount,currency,updated_at",
               organization_id: `eq.${invite.organization_id}`,
               vendor_id: `eq.${vendorId}`,
               order: "updated_at.desc",
-            }).catch(() => [])
+            })
           : []),
         ...((!vendorId || vendorName)
-          ? await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_made", {
+          ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_made", {
               select: "id,bill_no,supplier_name,status,payment_date,method,reference_no,amount,currency,updated_at",
               organization_id: `eq.${invite.organization_id}`,
               supplier_name: `eq.${vendorName}`,
