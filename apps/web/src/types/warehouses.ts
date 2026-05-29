@@ -5,6 +5,7 @@ export type Warehouse = {
   region: string;
   address: string;
   warehouse_kind: "internal" | "outsourced";
+  fulfillment_model: "stocked" | "dropship";
   outsource_partner_name: string;
   external_sync_enabled: boolean;
   external_api_provider: string;

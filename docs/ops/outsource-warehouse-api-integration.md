@@ -1,6 +1,7 @@
 ## Outsourced Warehouse API Integration
 
 This project now supports a warehouse type of `outsourced`.
+It also supports a fulfillment model of `dropship`.
 
 ### What the integration does
 
@@ -16,6 +17,7 @@ This project now supports a warehouse type of `outsourced`.
 Run:
 
 - `/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp/supabase/migrations/20260530_35_outsourced_warehouse_api_sync.sql`
+- `/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp/supabase/migrations/20260530_36_warehouse_dropship_fulfillment.sql`
 
 ### Supported warehouse settings
 
@@ -26,6 +28,9 @@ Run:
 - `API Provider`
 - `API URL`
 - `Location Code`
+- `Fulfillment Model`
+  - `Stocked Fulfillment`
+  - `Dropship Fulfillment`
 - `Auth Type`
   - `No Auth`
   - `Bearer Token from Env`
@@ -108,6 +113,17 @@ The value itself is not stored in the database. Only the env var name is stored.
 - Differences are written as `adjustment` movements with:
   - `document_type = warehouse_api_sync`
 - Missing items in the external snapshot are zeroed out through negative adjustments
+
+### Dropship behavior
+
+When a warehouse is set to `Dropship Fulfillment`:
+
+- it is treated as a non-stocking warehouse
+- `Purchase Receive` into that warehouse is blocked
+- `Stock Transfer` in or out of that warehouse is blocked
+- `Sync API Stock` is disabled
+
+Use this when the outsource partner ships directly to the customer and you do not want inventory reflected in your on-hand stock.
 
 ### Current scope
 

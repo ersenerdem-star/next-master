@@ -362,6 +362,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
       { key: "code", header: "Code", render: (row: Warehouse) => row.warehouse_code || "-" },
       { key: "name", header: "Warehouse", render: (row: Warehouse) => row.warehouse_name || "-" },
       { key: "type", header: "Type", render: (row: Warehouse) => (row.warehouse_kind === "outsourced" ? "Outsourced" : "Internal") },
+      { key: "fulfillment", header: "Fulfillment", render: (row: Warehouse) => (row.fulfillment_model === "dropship" ? "Dropship" : "Stocked") },
       { key: "region", header: "Region", render: (row: Warehouse) => row.region || "-" },
       { key: "status", header: "Status", render: (row: Warehouse) => (row.is_active ? "Active" : "Closed") },
     ],
@@ -384,8 +385,21 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     [],
   );
 
+  const fulfillmentModelOptions = useMemo(
+    () => [
+      { value: "stocked", label: "Stocked Fulfillment" },
+      { value: "dropship", label: "Dropship Fulfillment" },
+    ],
+    [],
+  );
+
   const warehouseOptions = useMemo(
     () => [{ value: "", label: "Select warehouse" }, ...warehouses.map((row) => ({ value: row.id, label: `${row.warehouse_code} · ${row.warehouse_name}` }))],
+    [warehouses],
+  );
+
+  const stockedWarehouseOptions = useMemo(
+    () => [{ value: "", label: "Select warehouse" }, ...warehouses.filter((row) => row.fulfillment_model !== "dropship").map((row) => ({ value: row.id, label: `${row.warehouse_code} · ${row.warehouse_name}` }))],
     [warehouses],
   );
 
@@ -828,6 +842,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                     <div className="warehouse-card__meta">
                       <span>{warehouse.region || "-"}</span>
                       <span>{(warehouses.find((item) => item.id === warehouse.warehouse_id)?.warehouse_kind || "internal") === "outsourced" ? "OUTSOURCED" : "INTERNAL"}</span>
+                      <span>{(warehouses.find((item) => item.id === warehouse.warehouse_id)?.fulfillment_model || "stocked") === "dropship" ? "DROPSHIP" : "STOCKED"}</span>
                     </div>
                     <div className="warehouse-card__stats">
                       <span>{warehouse.sku_count.toLocaleString("en-US")} items</span>
@@ -847,7 +862,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                 <Button variant="secondary" onClick={handleCloseWarehouseEditor}>
                   Exit
                 </Button>
-                {draft.warehouse_kind === "outsourced" ? (
+                {draft.warehouse_kind === "outsourced" && draft.fulfillment_model !== "dropship" ? (
                   <Button variant="secondary" onClick={() => void handleSyncWarehouse()} busy={syncingWarehouse} busyLabel="Syncing...">
                     Sync API Stock
                   </Button>
@@ -896,6 +911,27 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                     />
                   </div>
                 </div>
+                <div className="customers-form-row">
+                  <div className="customers-form-row__label">Fulfillment Model</div>
+                  <div className="customers-field-wrap customers-field-wrap--medium">
+                    <Select
+                      value={draft.fulfillment_model}
+                      options={fulfillmentModelOptions}
+                      onChange={(value) =>
+                        setDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                fulfillment_model: value === "dropship" ? "dropship" : "stocked",
+                                external_sync_enabled:
+                                  value === "dropship" ? false : current.external_sync_enabled,
+                              }
+                            : current,
+                        )
+                      }
+                    />
+                  </div>
+                </div>
                 <div className="customers-form-row customers-form-row--top">
                   <div className="customers-form-row__label">Address</div>
                   <div className="customers-field-wrap customers-field-wrap--full">
@@ -915,6 +951,11 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                     </label>
                   </div>
                 </div>
+                {draft.fulfillment_model === "dropship" ? (
+                  <div className="warning-text">
+                    Dropship warehouses do not keep stock. Purchase receives, stock transfers, and API stock sync are disabled for this warehouse.
+                  </div>
+                ) : null}
                 {draft.warehouse_kind === "outsourced" ? (
                   <>
                     <div className="customers-form-row">
@@ -974,27 +1015,29 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                         </div>
                       </div>
                     ) : null}
-                    <div className="customers-form-row">
-                      <div className="customers-form-row__label">Sync Mode</div>
-                      <div className="customers-field-wrap customers-field-wrap--medium">
-                        <label className="field customer-field">
-                          <select
-                            className="field__input"
-                            value={draft.external_sync_enabled ? "enabled" : "disabled"}
-                            onChange={(event) =>
-                              setDraft((current) =>
-                                current
-                                  ? { ...current, external_sync_enabled: event.target.value === "enabled" }
-                                  : current,
-                              )
-                            }
-                          >
-                            <option value="enabled">Manual API Sync Enabled</option>
-                            <option value="disabled">Disabled</option>
-                          </select>
-                        </label>
+                    {draft.fulfillment_model !== "dropship" ? (
+                      <div className="customers-form-row">
+                        <div className="customers-form-row__label">Sync Mode</div>
+                        <div className="customers-field-wrap customers-field-wrap--medium">
+                          <label className="field customer-field">
+                            <select
+                              className="field__input"
+                              value={draft.external_sync_enabled ? "enabled" : "disabled"}
+                              onChange={(event) =>
+                                setDraft((current) =>
+                                  current
+                                    ? { ...current, external_sync_enabled: event.target.value === "enabled" }
+                                    : current,
+                                )
+                              }
+                            >
+                              <option value="enabled">Manual API Sync Enabled</option>
+                              <option value="disabled">Disabled</option>
+                            </select>
+                          </label>
+                        </div>
                       </div>
-                    </div>
+                    ) : null}
                     <div className="settings-grid settings-stats-grid">
                       <div className="settings-item">
                         <span className="settings-label">Last Sync</span>
@@ -1054,7 +1097,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
             <div className="customers-editor__header">
               <h2>Receive Into Warehouse</h2>
               <div className="toolbar">
-                <Select value={receiveWarehouseId} options={warehouseOptions} onChange={setReceiveWarehouseId} />
+                <Select value={receiveWarehouseId} options={stockedWarehouseOptions} onChange={setReceiveWarehouseId} />
                 <Button onClick={() => void handlePostReceive()} busy={postingReceive} busyLabel="Posting...">
                   Put to Stock
                 </Button>
@@ -1226,8 +1269,8 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
           <SectionCard title="Transfers">
             <div className="page-stack">
               <div className="settings-grid">
-                <Select label="Source Warehouse" value={transferSourceId} options={warehouseOptions} onChange={setTransferSourceId} />
-                <Select label="Target Warehouse" value={transferTargetId} options={warehouseOptions} onChange={setTransferTargetId} />
+                <Select label="Source Warehouse" value={transferSourceId} options={stockedWarehouseOptions} onChange={setTransferSourceId} />
+                <Select label="Target Warehouse" value={transferTargetId} options={stockedWarehouseOptions} onChange={setTransferTargetId} />
               </div>
 
               <div className="toolbar toolbar--wrap">

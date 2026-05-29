@@ -10,6 +10,7 @@ type WarehouseRow = {
   warehouse_code?: string | null;
   warehouse_name?: string | null;
   warehouse_kind?: string | null;
+  fulfillment_model?: string | null;
   outsource_partner_name?: string | null;
   external_sync_enabled?: boolean | null;
   external_api_provider?: string | null;
@@ -67,6 +68,7 @@ const WAREHOUSE_SELECT = [
   "warehouse_code",
   "warehouse_name",
   "warehouse_kind",
+  "fulfillment_model",
   "outsource_partner_name",
   "external_sync_enabled",
   "external_api_provider",
@@ -465,6 +467,9 @@ export default async (req: Request, _context: Context) => {
     }
     if (normalizeText(warehouse.warehouse_kind) !== "outsourced") {
       return json({ error: "This warehouse is not configured as outsourced." }, 400);
+    }
+    if (normalizeText(warehouse.fulfillment_model) === "dropship") {
+      return json({ error: "Dropship warehouses do not keep stock snapshots. API stock sync is disabled for this warehouse." }, 400);
     }
     if (!warehouse.external_sync_enabled) {
       return json({ error: "External sync is not enabled for this warehouse." }, 400);

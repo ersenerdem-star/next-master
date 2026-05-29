@@ -5,6 +5,7 @@ import { normalizeBrandKey, normalizePartCode } from "../../domain/shared/normal
 import { supabaseClient } from "./supabaseClient";
 import { getCurrentOrgId } from "./organizationApi";
 import { upsertPurchaseOrder } from "./ordersApi";
+import { fetchWarehouses } from "./warehousesApi";
 
 const PURCHASE_RECEIVE_COLUMNS = [
   "id",
@@ -492,6 +493,8 @@ export function buildPurchaseReceiveDraft(
 
 export async function postPurchaseReceive(input: PurchaseReceiveDraft, order: LocalPurchaseOrder): Promise<PurchaseReceive> {
   const organizationId = await getCurrentOrgId();
+  const warehouseRows = await fetchWarehouses();
+  const selectedWarehouse = warehouseRows.find((row) => row.id === input.warehouse_id) || null;
   const postedLines = input.lines
     .map((line) => ({
       ...line,
@@ -501,6 +504,9 @@ export async function postPurchaseReceive(input: PurchaseReceiveDraft, order: Lo
     .filter((line) => line.qty_received > 0);
 
   if (!input.warehouse_id) throw new Error("Select a warehouse first.");
+  if (selectedWarehouse?.fulfillment_model === "dropship") {
+    throw new Error("Dropship warehouses do not accept stock receives. Use a stocked warehouse.");
+  }
   if (!postedLines.length) throw new Error("Enter at least one received quantity.");
 
   const payload = {
@@ -570,6 +576,7 @@ export async function postPurchaseReceive(input: PurchaseReceiveDraft, order: Lo
       region: "",
       address: "",
       warehouse_kind: "internal",
+      fulfillment_model: "stocked",
       outsource_partner_name: "",
       external_sync_enabled: false,
       external_api_provider: "",
@@ -634,9 +641,15 @@ export function createStockTransferDraft(sourceWarehouse: Warehouse | null, targ
 
 export async function postStockTransfer(input: StockTransferDraft): Promise<StockTransfer> {
   const organizationId = await getCurrentOrgId();
+  const warehouseRows = await fetchWarehouses();
+  const sourceWarehouse = warehouseRows.find((row) => row.id === input.source_warehouse_id) || null;
+  const targetWarehouse = warehouseRows.find((row) => row.id === input.target_warehouse_id) || null;
   if (!input.source_warehouse_id) throw new Error("Select a source warehouse first.");
   if (!input.target_warehouse_id) throw new Error("Select a target warehouse first.");
   if (input.source_warehouse_id === input.target_warehouse_id) throw new Error("Source and target warehouse must be different.");
+  if (sourceWarehouse?.fulfillment_model === "dropship" || targetWarehouse?.fulfillment_model === "dropship") {
+    throw new Error("Dropship warehouses cannot be used in stock transfers.");
+  }
 
   const postedLines = input.lines
     .map((line) => ({
