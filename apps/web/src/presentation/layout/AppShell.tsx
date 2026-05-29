@@ -15,6 +15,8 @@ type AppShellProps = {
   children: ReactNode;
   activePage?: string;
   activeSubPage?: string;
+  notice?: string;
+  onDismissNotice?: () => void;
   navItems?: readonly NavItem[];
   subNavItems?: readonly SubNavItem[];
   onNavigate?: (page: string) => void;
@@ -44,6 +46,8 @@ export function AppShell({
   children,
   activePage = "Home",
   activeSubPage = "",
+  notice = "",
+  onDismissNotice,
   navItems = [],
   subNavItems = [],
   onNavigate,
@@ -133,6 +137,14 @@ export function AppShell({
                 {subItem.label}
               </button>
             ))}
+          </div>
+        ) : null}
+        {notice ? (
+          <div className="app-shell-notice" role="alert">
+            <span>{notice}</span>
+            <button type="button" className="app-shell-notice__dismiss" onClick={onDismissNotice}>
+              Close
+            </button>
           </div>
         ) : null}
         {children}

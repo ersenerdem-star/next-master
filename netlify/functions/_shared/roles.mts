@@ -25,3 +25,7 @@ export function isCustomerStaffRole(role: string | null | undefined) {
 export function canAccessCustomerOps(role: string | null | undefined) {
   return isCustomerStaffRole(role);
 }
+
+export function canAccessOperationsModules(role: string | null | undefined) {
+  return isAdminLikeRole(role);
+}

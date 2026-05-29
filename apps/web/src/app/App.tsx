@@ -5,7 +5,18 @@ import { touchCurrentUserPresence } from "../infrastructure/api/usersApi";
 import { ActionFeedbackProvider } from "../presentation/components/common/ActionFeedback";
 import { AppShell } from "../presentation/layout/AppShell";
 import { APP_NAVIGATION_EVENT, type AppNavigationDetail } from "../shared/catalogTransfer";
-import { canAccessCustomerOps, canAccessSystemModules, isSuperadminRole, normalizeAppRole, type AppRole } from "../shared/roles";
+import {
+  canAccessCustomerOps,
+  canAccessInventoryModules,
+  canAccessOperationsModules,
+  canAccessPurchasingModules,
+  canAccessReportModules,
+  canAccessSalesModules,
+  canAccessSystemModules,
+  isSuperadminRole,
+  normalizeAppRole,
+  type AppRole,
+} from "../shared/roles";
 
 const DashboardPage = lazy(() => import("../presentation/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const InventoryPage = lazy(() => import("../presentation/pages/InventoryPage").then((module) => ({ default: module.InventoryPage })));
@@ -73,27 +84,46 @@ const allNavItems = [
 
 function getAllowedNavItems(role: AppRole) {
   if (isSuperadminRole(role)) return allNavItems;
-  if (canAccessCustomerOps(role)) {
+  if (canAccessOperationsModules(role)) {
+    return allNavItems.filter((item) => item.key === "Home" || item.key === "Inventory" || item.key === "Sales" || item.key === "Purchases" || item.key === "Reports" || item.key === "Settings");
+  }
+  if (canAccessSalesModules(role)) {
     return allNavItems.filter((item) => item.key === "Home" || item.key === "Sales" || item.key === "Settings");
   }
   return allNavItems.filter((item) => item.key === "Home" || item.key === "Settings");
 }
 
 function getSalesSubNav(role: AppRole) {
-  if (!canAccessCustomerOps(role)) return [] as const;
+  if (!canAccessSalesModules(role)) return [] as const;
   return salesSubNav.filter((item) => item.key !== "Price Lists" || isSuperadminRole(role));
+}
+
+function getInventorySubNav(role: AppRole) {
+  if (!canAccessInventoryModules(role)) return [] as const;
+  return inventorySubNav;
+}
+
+function getPurchasesSubNav(role: AppRole) {
+  if (!canAccessPurchasingModules(role)) return [] as const;
+  return purchasesSubNav;
+}
+
+function getReportsSubNav(role: AppRole) {
+  if (!canAccessReportModules(role)) return [] as const;
+  if (isSuperadminRole(role)) return reportsSubNav;
+  return reportsSubNav.filter((item) => item.key !== "Master");
 }
 
 function getSettingsSubNav(role: AppRole) {
   if (isSuperadminRole(role)) return settingsSubNav;
-  if (canAccessCustomerOps(role)) {
+  if (canAccessSalesModules(role)) {
     return settingsSubNav.filter((item) => item.key === "session" || item.key === "portals");
   }
   return settingsSubNav.filter((item) => item.key === "session");
 }
 
 function getDefaultPage(role: AppRole) {
-  return canAccessCustomerOps(role) ? "Sales" : "Home";
+  return canAccessSalesModules(role) ? "Sales" : "Home";
 }
 
 export function App() {
@@ -103,6 +133,7 @@ export function App() {
   const [appRole, setAppRole] = useState<AppRole>("");
   const [appRoleReady, setAppRoleReady] = useState(false);
   const [activePage, setActivePage] = useState("Home");
+  const [accessNotice, setAccessNotice] = useState("");
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [selectedSalesOrderId, setSelectedSalesOrderId] = useState("");
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
@@ -265,7 +296,15 @@ export function App() {
     return <div className="loading-screen">{message}</div>;
   }
 
+  function showAccessNotice(message: string) {
+    setAccessNotice(message);
+  }
+
   function openSalesOrder(salesOrderId: string) {
+    if (!canAccessSalesModules(appRole)) {
+      showAccessNotice("Sales access is not enabled for this user. Ask superadmin to open the sales workflow.");
+      return;
+    }
     setSelectedSalesOrderId(salesOrderId);
     setSelectedQuoteId("");
     setSelectedInvoiceId("");
@@ -276,6 +315,10 @@ export function App() {
   }
 
   function openPurchaseOrder(purchaseOrderId: string) {
+    if (!canAccessPurchasingModules(appRole)) {
+      showAccessNotice("Purchase access is not enabled for this user. Ask superadmin to open purchase permissions.");
+      return;
+    }
     setSelectedPurchaseOrderId(purchaseOrderId);
     setSelectedBillId("");
     setSelectedSalesOrderId("");
@@ -286,6 +329,10 @@ export function App() {
   }
 
   function openInvoice(invoiceId: string) {
+    if (!canAccessSalesModules(appRole)) {
+      showAccessNotice("Invoice access is not enabled for this user. Ask superadmin to open the sales workflow.");
+      return;
+    }
     setSelectedInvoiceId(invoiceId);
     setSelectedSalesOrderId("");
     setSelectedQuoteId("");
@@ -296,6 +343,10 @@ export function App() {
   }
 
   function openBill(billId: string) {
+    if (!canAccessPurchasingModules(appRole)) {
+      showAccessNotice("Bill access is not enabled for this user. Ask superadmin to open purchase permissions.");
+      return;
+    }
     setSelectedBillId(billId);
     setSelectedPurchaseOrderId("");
     setSelectedSalesOrderId("");
@@ -306,6 +357,10 @@ export function App() {
   }
 
   function openInventoryWarehouse(warehouseId: string) {
+    if (!canAccessInventoryModules(appRole)) {
+      showAccessNotice("Warehouse access is not enabled for this user. Ask superadmin to open warehouse permissions.");
+      return;
+    }
     setInventoryInitialTab("On Hand");
     setInventorySelectedWarehouseId(warehouseId);
     setInventoryStockSearch("");
@@ -313,6 +368,10 @@ export function App() {
   }
 
   function openInventoryTab(tab: "Warehouses" | "On Hand") {
+    if (!canAccessInventoryModules(appRole)) {
+      showAccessNotice("Warehouse access is not enabled for this user. Ask superadmin to open warehouse permissions.");
+      return;
+    }
     setInventoryInitialTab(tab);
     setInventorySelectedWarehouseId("");
     setInventoryStockSearch("");
@@ -320,6 +379,10 @@ export function App() {
   }
 
   function openInventoryItem(codeSearch: string, warehouseId?: string) {
+    if (!canAccessInventoryModules(appRole)) {
+      showAccessNotice("Warehouse access is not enabled for this user. Ask superadmin to open warehouse permissions.");
+      return;
+    }
     setInventoryInitialTab("On Hand");
     setInventorySelectedWarehouseId(warehouseId || "");
     setInventoryStockSearch(codeSearch);
@@ -350,7 +413,17 @@ export function App() {
   }
 
   function handleMainNavigate(nextPage: string) {
-    if (!allowedNavItems.some((item) => item.key === nextPage)) return;
+    if (!allowedNavItems.some((item) => item.key === nextPage)) {
+      if (nextPage === "Items") {
+        showAccessNotice("Catalog and supplier master data are enabled only for superadmin.");
+      } else if (nextPage === "Purchases" || nextPage === "Inventory" || nextPage === "Reports") {
+        showAccessNotice("This operation area is not enabled for your user. Ask superadmin to open purchase or warehouse permissions.");
+      } else {
+        showAccessNotice("This area is not enabled for your user. Ask superadmin to open the required permission.");
+      }
+      return;
+    }
+    setAccessNotice("");
     setActivePage(nextPage);
   }
 
@@ -360,6 +433,10 @@ export function App() {
       return;
     }
     if (activePage === "Inventory" && inventorySubNav.some((item) => item.key === nextSubPage)) {
+      if (!inventorySubNavItems.some((item) => item.key === nextSubPage)) {
+        showAccessNotice("This inventory detail is not enabled for your user. Ask superadmin to open warehouse permissions.");
+        return;
+      }
       setInventoryInitialTab(nextSubPage as "Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers");
       return;
     }
@@ -377,19 +454,33 @@ export function App() {
       return;
     }
     if (activePage === "Purchases" && purchasesSubNav.some((item) => item.key === nextSubPage)) {
+      if (!purchasesSubNavItems.some((item) => item.key === nextSubPage)) {
+        showAccessNotice("This purchase detail is not enabled for your user. Ask superadmin to open purchase permissions.");
+        return;
+      }
       setPurchasesTab(nextSubPage as "Vendors" | "Purchase Orders" | "Bills" | "Payments Made");
       return;
     }
     if (activePage === "Reports" && reportsSubNav.some((item) => item.key === nextSubPage)) {
+      if (!reportsSubNavItems.some((item) => item.key === nextSubPage)) {
+        showAccessNotice("This report is not enabled for your user. Ask superadmin to open this permission.");
+        return;
+      }
       setReportsTab(nextSubPage as "Master" | "Item Transactions" | "Inventory Analytics");
       return;
     }
     if (activePage === "Settings" && settingsSubNavItems.some((item) => item.key === nextSubPage)) {
       setSettingsTab(nextSubPage as "session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics");
+      setAccessNotice("");
+      return;
     }
+    showAccessNotice("This detail is not enabled for your user. Ask superadmin to open the required permission.");
   }
 
   const salesSubNavItems = useMemo(() => getSalesSubNav(appRole), [appRole]);
+  const inventorySubNavItems = useMemo(() => getInventorySubNav(appRole), [appRole]);
+  const purchasesSubNavItems = useMemo(() => getPurchasesSubNav(appRole), [appRole]);
+  const reportsSubNavItems = useMemo(() => getReportsSubNav(appRole), [appRole]);
   const settingsSubNavItems = useMemo(() => getSettingsSubNav(appRole), [appRole]);
   const allowedNavItems = useMemo(() => getAllowedNavItems(appRole), [appRole]);
 
@@ -402,27 +493,60 @@ export function App() {
 
   useEffect(() => {
     if (salesSubNavItems.length && !salesSubNavItems.some((item) => item.key === salesTab)) {
-      setSalesTab(salesSubNavItems[0].key as "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists");
+      const firstItem = salesSubNavItems[0];
+      if (firstItem) {
+        setSalesTab(firstItem.key as "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists");
+      }
     }
   }, [salesSubNavItems, salesTab]);
 
   useEffect(() => {
+    if (inventorySubNavItems.length && !inventorySubNavItems.some((item) => item.key === inventoryInitialTab)) {
+      const firstItem = inventorySubNavItems[0];
+      if (firstItem) {
+        setInventoryInitialTab(firstItem.key as "Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers");
+      }
+    }
+  }, [inventoryInitialTab, inventorySubNavItems]);
+
+  useEffect(() => {
+    if (purchasesSubNavItems.length && !purchasesSubNavItems.some((item) => item.key === purchasesTab)) {
+      const firstItem = purchasesSubNavItems[0];
+      if (firstItem) {
+        setPurchasesTab(firstItem.key as "Vendors" | "Purchase Orders" | "Bills" | "Payments Made");
+      }
+    }
+  }, [purchasesSubNavItems, purchasesTab]);
+
+  useEffect(() => {
+    if (reportsSubNavItems.length && !reportsSubNavItems.some((item) => item.key === reportsTab)) {
+      const firstItem = reportsSubNavItems[0];
+      if (firstItem) {
+        setReportsTab(firstItem.key as "Master" | "Item Transactions" | "Inventory Analytics");
+      }
+    }
+  }, [reportsSubNavItems, reportsTab]);
+
+  useEffect(() => {
     if (settingsSubNavItems.length && !settingsSubNavItems.some((item) => item.key === settingsTab)) {
-      setSettingsTab(settingsSubNavItems[0].key as "session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics");
+      const firstItem = settingsSubNavItems[0];
+      if (firstItem) {
+        setSettingsTab(firstItem.key as "session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics");
+      }
     }
   }, [settingsSubNavItems, settingsTab]);
 
   const subNavItems =
     activePage === "Items" && canAccessSystemModules(appRole)
       ? itemSubNav
-      : activePage === "Inventory" && canAccessSystemModules(appRole)
-        ? inventorySubNav
+      : activePage === "Inventory" && canAccessInventoryModules(appRole)
+        ? inventorySubNavItems
       : activePage === "Sales"
           ? salesSubNavItems
-          : activePage === "Purchases" && canAccessSystemModules(appRole)
-            ? purchasesSubNav
-            : activePage === "Reports" && canAccessSystemModules(appRole)
-              ? reportsSubNav
+          : activePage === "Purchases" && canAccessPurchasingModules(appRole)
+            ? purchasesSubNavItems
+            : activePage === "Reports" && canAccessReportModules(appRole)
+              ? reportsSubNavItems
               : activePage === "Settings"
                 ? settingsSubNavItems
                 : [];
@@ -479,9 +603,9 @@ export function App() {
   const pageContent =
     activePage === "Items" && canAccessSystemModules(appRole) ? (
       <ItemsPage activeTab={itemsTab} />
-    ) : activePage === "Inventory" && canAccessSystemModules(appRole) ? (
+    ) : activePage === "Inventory" && canAccessInventoryModules(appRole) ? (
       <InventoryPage initialTab={inventoryInitialTab} selectedWarehouseId={inventorySelectedWarehouseId} stockSearch={inventoryStockSearch} />
-    ) : activePage === "Sales" && canAccessCustomerOps(appRole) ? (
+    ) : activePage === "Sales" && canAccessSalesModules(appRole) ? (
       <SalesPage
         activeTab={salesTab}
         salesOrdersNavTick={salesOrdersNavTick}
@@ -493,9 +617,9 @@ export function App() {
         selectedInvoiceId={selectedInvoiceId}
         onSelectedInvoiceChange={setSelectedInvoiceId}
       />
-    ) : activePage === "Purchases" && canAccessSystemModules(appRole) ? (
+    ) : activePage === "Purchases" && canAccessPurchasingModules(appRole) ? (
       <PurchasesPage activeTab={purchasesTab} selectedPurchaseOrderId={selectedPurchaseOrderId} selectedBillId={selectedBillId} />
-    ) : activePage === "Reports" && canAccessSystemModules(appRole) ? (
+    ) : activePage === "Reports" && canAccessReportModules(appRole) ? (
       <ReportsPage
         activeTab={reportsTab}
         onOpenSalesOrder={openSalesOrder}
@@ -516,6 +640,8 @@ export function App() {
       <AppShell
         activePage={activePage}
         activeSubPage={activeSubPage}
+        notice={accessNotice}
+        onDismissNotice={() => setAccessNotice("")}
         navItems={allowedNavItems}
         subNavItems={subNavItems}
         onNavigate={handleMainNavigate}

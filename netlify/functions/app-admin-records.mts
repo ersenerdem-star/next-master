@@ -1,7 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { buildRestUrl, getJson, json, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
 import { resolveCaller } from "./_shared/app-auth.mts";
-import { canAccessCustomerOps, isSuperadminRole } from "./_shared/roles.mts";
+import { canAccessCustomerOps, canAccessOperationsModules, isSuperadminRole } from "./_shared/roles.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 const CUSTOMER_COLUMNS = [
@@ -538,6 +538,7 @@ export default async (req: Request, _context: Context) => {
     const payload = isObject(body?.payload) ? body.payload : {};
     const id = String(body?.id || "").trim();
     const canUseCustomerRecords = canAccessCustomerOps(caller.role);
+    const canUseOperationsModules = canAccessOperationsModules(caller.role);
     const isSuperadmin = isSuperadminRole(caller.role);
 
     if (resource === "customers") {
@@ -569,7 +570,7 @@ export default async (req: Request, _context: Context) => {
     }
 
     if (resource === "vendors") {
-      if (!isSuperadmin) return json({ error: "Superadmin access required" }, 403);
+      if (!canUseOperationsModules) return json({ error: "Operations access required" }, 403);
       if (action === "list") {
         const data = await listRows<Record<string, unknown>>({
           supabaseUrl,
@@ -606,6 +607,7 @@ export default async (req: Request, _context: Context) => {
         return json({ ok: true, data });
       }
       if (action === "delete") {
+        if (!canUseOperationsModules) return json({ error: "Operations access required" }, 403);
         await deleteSingleRow({ supabaseUrl, serviceRoleKey, table: "vendors", organizationId: caller.organizationId, id });
         return json({ ok: true, data: true });
       }

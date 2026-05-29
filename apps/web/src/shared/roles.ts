@@ -29,3 +29,23 @@ export function canAccessSystemModules(role: string | null | undefined) {
 export function canAccessCustomerOps(role: string | null | undefined) {
   return isCustomerStaffRole(role);
 }
+
+export function canAccessSalesModules(role: string | null | undefined) {
+  return isCustomerStaffRole(role);
+}
+
+export function canAccessOperationsModules(role: string | null | undefined) {
+  return isAdminLikeRole(role);
+}
+
+export function canAccessPurchasingModules(role: string | null | undefined) {
+  return canAccessOperationsModules(role);
+}
+
+export function canAccessInventoryModules(role: string | null | undefined) {
+  return canAccessOperationsModules(role);
+}
+
+export function canAccessReportModules(role: string | null | undefined) {
+  return canAccessOperationsModules(role);
+}

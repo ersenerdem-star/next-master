@@ -7,6 +7,18 @@ export function sanitizeUserFacingMessage(message: unknown, fallback = "The requ
     return "You do not have permission for this action.";
   }
 
+  if (normalized.includes("superadmin access required")) {
+    return "This system area is enabled only for superadmin. Ask superadmin to open this permission if needed.";
+  }
+
+  if (normalized.includes("operations access required")) {
+    return "This operation area is not enabled for your user. Ask superadmin to open purchase or warehouse permissions if needed.";
+  }
+
+  if (normalized.includes("staff access required")) {
+    return "This area is not enabled for your user. Ask superadmin to open the required permission.";
+  }
+
   if (
     normalized.includes("jwt") ||
     normalized.includes("token") ||
