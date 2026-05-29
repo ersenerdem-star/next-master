@@ -60,6 +60,8 @@ These files were copied into this project because the app actively depends on th
    - removes current and future `anon` grants from `public` schema objects
 23. `20260529_28_supabase_public_function_execute_hardening.sql`
    - removes current and future `public` execute privileges on `public` schema functions while preserving explicit app-role access
+24. `20260529_29_supabase_anon_default_acl_cleanup.sql`
+   - removes remaining `anon` default ACL residues on `public` tables, sequences, and functions
 
 ### Run order in Supabase SQL Editor
 
@@ -88,6 +90,7 @@ Use this order when the target project is missing or outdated:
 21. `20260529_26_supabase_api_explicit_grants_hardening.sql`
 22. `20260529_27_supabase_anon_grants_hardening.sql`
 23. `20260529_28_supabase_public_function_execute_hardening.sql`
+24. `20260529_29_supabase_anon_default_acl_cleanup.sql`
 
 ### Public table standard
 
@@ -115,6 +118,8 @@ Current project-wide safety net:
 - `20260529_28_supabase_public_function_execute_hardening.sql`
   - revokes inherited `PUBLIC` execute on current and future `public` schema functions
   - re-grants explicit execute to `authenticated` and `service_role`
+- `20260529_29_supabase_anon_default_acl_cleanup.sql`
+  - revokes leftover `anon` default ACL privileges such as table `TRUNCATE/REFERENCES/TRIGGER/MAINTAIN` and sequence `UPDATE`
 
 Still required per table:
 - RLS enablement
