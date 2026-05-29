@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchPortalSnapshot, loginPortal } from "../../infrastructure/api/portalAccessApi";
-import type { PortalCredentials, PortalSnapshot } from "../../types/portalSession";
+import { fetchPortalBranding, fetchPortalSnapshot, loginPortal } from "../../infrastructure/api/portalAccessApi";
+import type { PortalBranding, PortalCredentials, PortalSnapshot } from "../../types/portalSession";
 import { Button } from "../components/common/Button";
 import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
@@ -107,6 +107,19 @@ function buildDateRangeLabel(dateFrom: string, dateTo: string) {
 
 function sanitizeFileName(value: string) {
   return value.replace(/[^a-z0-9_-]+/gi, "-").replace(/-+/g, "-");
+}
+
+function buildPortalLoginInitials(value: string) {
+  const tokens = String(value || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!tokens.length) return "PT";
+  return tokens
+    .slice(0, 2)
+    .map((token) => token[0]?.toUpperCase() || "")
+    .join("")
+    .slice(0, 2);
 }
 
 function chunkRows<T>(rows: T[], size: number) {
@@ -390,19 +403,24 @@ function getDefaultPortalSection(snapshot: PortalSnapshot) {
 
 export function PortalPage() {
   const search = new URLSearchParams(window.location.search);
-  const hasPortalLinkCredentials = Boolean(search.get("token") && search.get("email"));
+  const portalLinkEmail = search.get("email") || "";
+  const portalLinkToken = search.get("token") || "";
+  const hasPortalLinkCredentials = Boolean(portalLinkToken && portalLinkEmail);
   const portalImportRef = useRef<HTMLInputElement | null>(null);
   const portalDraftLinesRef = useRef<HTMLDivElement | null>(null);
   const portalCachedDraftRef = useRef<PortalOfflineCache["draft"] | null>(null);
   const portalAutoRefreshKeyRef = useRef("");
+  const portalBrandingKeyRef = useRef("");
   const [credentials, setCredentials] = useState<PortalCredentials>(() => {
     const stored = typeof window !== "undefined" ? readStoredCredentials() : null;
     return {
-      email: search.get("email") || stored?.email || "",
-      token: search.get("token") || stored?.token || "",
+      email: portalLinkEmail || stored?.email || "",
+      token: portalLinkToken || stored?.token || "",
+      sessionToken: stored?.sessionToken || "",
     };
   });
   const [snapshot, setSnapshot] = useState<PortalSnapshot | null>(null);
+  const [loginBranding, setLoginBranding] = useState<PortalBranding | null>(null);
   const [selection, setSelection] = useState<PortalSelection | null>(null);
   const [activeSection, setActiveSection] = useState<PortalSection>("desk");
   const [documentSearch, setDocumentSearch] = useState("");
@@ -465,6 +483,50 @@ export function PortalPage() {
   }, []);
 
   useEffect(() => {
+    if (snapshot) {
+      setLoginBranding({
+        companyProfile: snapshot.companyProfile,
+        portalLabel: snapshot.invite.party_type === "customer" ? "Customer Portal" : "Vendor Portal",
+        partyName: snapshot.invite.party_name || "",
+      });
+      return;
+    }
+    if (!isOnline) return;
+
+    const previewCredentials = hasPortalLinkCredentials
+      ? { email: portalLinkEmail, token: portalLinkToken, sessionToken: credentials.sessionToken || "" }
+      : credentials.email && credentials.sessionToken
+        ? { email: credentials.email, token: "", sessionToken: credentials.sessionToken }
+        : null;
+
+    if (!previewCredentials) {
+      portalBrandingKeyRef.current = "";
+      setLoginBranding(null);
+      return;
+    }
+
+    const previewKey = `${previewCredentials.email}::${previewCredentials.token || previewCredentials.sessionToken}`;
+    if (portalBrandingKeyRef.current === previewKey) return;
+    portalBrandingKeyRef.current = previewKey;
+
+    let cancelled = false;
+    fetchPortalBranding(previewCredentials)
+      .then(({ branding }) => {
+        if (cancelled) return;
+        setLoginBranding(branding);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        portalBrandingKeyRef.current = "";
+        setLoginBranding(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [credentials.email, credentials.sessionToken, hasPortalLinkCredentials, isOnline, portalLinkEmail, portalLinkToken, snapshot]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     if ((hasPortalLinkCredentials && isOnline) || snapshot || !credentials.email) return;
     const cached = readPortalCache(credentials.email);
@@ -515,8 +577,8 @@ export function PortalPage() {
   }, [credentials, hasPortalLinkCredentials, isOnline, snapshot]);
 
   useEffect(() => {
-    const token = search.get("token");
-    const email = search.get("email");
+    const token = portalLinkToken;
+    const email = portalLinkEmail;
     if (!token || !email) return;
     if (!isOnline) {
       const cached = readPortalCache(email);
@@ -557,7 +619,7 @@ export function PortalPage() {
         setError(caught instanceof Error ? caught.message : "Portal login failed");
       })
       .finally(() => setLoading(false));
-  }, [isOnline]);
+  }, [isOnline, portalLinkEmail, portalLinkToken]);
 
   const accountColumns = useMemo(
     () => [
@@ -984,16 +1046,20 @@ export function PortalPage() {
   }, [portalDraftLines, selectedDraftLineId]);
 
   if (!snapshot) {
+    const loginBrandLogo = loginBranding?.companyProfile?.logo_data_url || "";
+    const loginBrandName = loginBranding?.companyProfile?.company_name || loginBranding?.partyName || "Portal Workspace";
+    const loginBrandLabel = loginBranding?.portalLabel || "Self-Service Access";
+    const loginBrandInitials = buildPortalLoginInitials(loginBrandName);
     return (
       <div className="portal-shell">
         <div className="portal-login-card">
           <div className="portal-login-brand">
-            <div className="portal-login-brand__logo" aria-hidden="true">
-              NM
+            <div className={`portal-login-brand__logo${loginBrandLogo ? " portal-login-brand__logo--image" : ""}`} aria-hidden="true">
+              {loginBrandLogo ? <img src={loginBrandLogo} alt="" className="portal-login-brand__logo-image" /> : loginBrandInitials}
             </div>
             <div className="portal-login-brand__copy">
-              <span>Drive Console</span>
-              <strong>Next Master</strong>
+              <span>{loginBrandLabel}</span>
+              <strong>{loginBrandName}</strong>
             </div>
           </div>
           <h1>Portal Login</h1>

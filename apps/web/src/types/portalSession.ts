@@ -29,6 +29,12 @@ type PortalCompanyProfile = {
   logo_data_url?: string;
 };
 
+export type PortalBranding = {
+  companyProfile: PortalCompanyProfile | null;
+  portalLabel: string;
+  partyName: string;
+};
+
 type PortalPartyProfile = {
   id?: string;
   display_name?: string;

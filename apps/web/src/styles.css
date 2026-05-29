@@ -2458,6 +2458,21 @@ select {
   box-shadow: 0 12px 26px rgba(217, 119, 6, 0.24);
 }
 
+.portal-login-brand__logo--image {
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.12);
+}
+
+.portal-login-brand__logo-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
 .portal-login-brand__copy {
   display: flex;
   flex-direction: column;

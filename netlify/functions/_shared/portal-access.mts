@@ -28,6 +28,7 @@ const CUSTOMER_PORTAL_SELECT_LEGACY =
 const CUSTOMER_PORTAL_SELECT_BASE =
   "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,custom_fields";
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
+const COMPANY_PROFILE_SELECT = "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url";
 
 async function fetchFirst<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
   const rows = await getJson<Array<T>>(buildRestUrl(supabaseUrl, table, params), {
@@ -174,6 +175,45 @@ function getEmbeddedCustomerPriceListType(meta: Record<string, unknown>) {
   const value = String(meta.price_list_type || "").trim();
   if (value === "A" || value === "B" || value === "C" || value === "Other") return value;
   return "";
+}
+
+function readCustomerPortalMetadata(customer: Record<string, unknown> | null) {
+  const customerMeta = parseEmbeddedCustomerMeta(customer?.custom_fields);
+  const sellerCompanyProfileId = String(customer?.seller_company_profile_id || customerMeta.seller_company_profile_id || "").trim();
+  const portalCPriceMode =
+    String(customer?.portal_c_price_mode || customerMeta.portal_c_price_mode || "standard").trim().toLowerCase() ===
+    "prefer_c_when_available"
+      ? "prefer_c_when_available"
+      : "standard";
+  return {
+    customerMeta,
+    sellerCompanyProfileId,
+    portalCPriceMode,
+  } as const;
+}
+
+async function fetchPortalCompanyProfile(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  sellerCompanyProfileId = "",
+) {
+  return (
+    (sellerCompanyProfileId
+      ? await fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
+          select: COMPANY_PROFILE_SELECT,
+          organization_id: `eq.${organizationId}`,
+          id: `eq.${sellerCompanyProfileId}`,
+          limit: "1",
+        })
+      : null) ||
+    (await fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
+      select: COMPANY_PROFILE_SELECT,
+      organization_id: `eq.${organizationId}`,
+      order: "updated_at.desc",
+      limit: "1",
+    }))
+  );
 }
 
 function mapSalesOrderLines(lines: unknown) {
@@ -347,29 +387,8 @@ export async function resolvePortalInvite(
 export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {
   if (invite.party_type === "customer") {
     const customer = await fetchPortalCustomerRecord(supabaseUrl, serviceRoleKey, invite.organization_id, invite);
-  const customerMeta = parseEmbeddedCustomerMeta(customer?.custom_fields);
-  const sellerCompanyProfileId = String(customer?.seller_company_profile_id || customerMeta.seller_company_profile_id || "").trim();
-  const portalCPriceMode =
-      String(customer?.portal_c_price_mode || customerMeta.portal_c_price_mode || "standard").trim().toLowerCase() ===
-      "prefer_c_when_available"
-        ? "prefer_c_when_available"
-        : "standard";
-
-    const companyProfile =
-      (sellerCompanyProfileId
-        ? await fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
-            select: "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url",
-            organization_id: `eq.${invite.organization_id}`,
-            id: `eq.${sellerCompanyProfileId}`,
-            limit: "1",
-          })
-        : null) ||
-      (await fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
-        select: "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url",
-        organization_id: `eq.${invite.organization_id}`,
-        order: "updated_at.desc",
-        limit: "1",
-      }));
+    const { customerMeta, sellerCompanyProfileId, portalCPriceMode } = readCustomerPortalMetadata(customer);
+    const companyProfile = await fetchPortalCompanyProfile(supabaseUrl, serviceRoleKey, invite.organization_id, sellerCompanyProfileId);
 
     const customerName = String(customer?.display_name || customer?.company_name || invite.party_name);
     const customerId = String(customer?.id || invite.customer_id || "");
@@ -595,12 +614,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       company_name: `eq.${invite.party_name}`,
     }));
 
-  const companyProfile = await fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
-    select: "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url",
-    organization_id: `eq.${invite.organization_id}`,
-    order: "updated_at.desc",
-    limit: "1",
-  });
+  const companyProfile = await fetchPortalCompanyProfile(supabaseUrl, serviceRoleKey, invite.organization_id);
 
   const vendorName = String(vendor?.display_name || vendor?.company_name || invite.party_name);
   const vendorId = String(vendor?.id || invite.vendor_id || "");
@@ -779,5 +793,25 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     },
     pricingProfile: null,
     accountRows,
+  };
+}
+
+export async function buildPortalBranding(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {
+  if (invite.party_type === "customer") {
+    const customer = await fetchPortalCustomerRecord(supabaseUrl, serviceRoleKey, invite.organization_id, invite);
+    const { sellerCompanyProfileId } = readCustomerPortalMetadata(customer);
+    const companyProfile = await fetchPortalCompanyProfile(supabaseUrl, serviceRoleKey, invite.organization_id, sellerCompanyProfileId);
+    return {
+      companyProfile,
+      portalLabel: "Customer Portal",
+      partyName: String(customer?.display_name || customer?.company_name || invite.party_name || ""),
+    };
+  }
+
+  const companyProfile = await fetchPortalCompanyProfile(supabaseUrl, serviceRoleKey, invite.organization_id);
+  return {
+    companyProfile,
+    portalLabel: "Vendor Portal",
+    partyName: String(invite.party_name || ""),
   };
 }

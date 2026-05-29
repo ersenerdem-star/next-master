@@ -15,6 +15,7 @@ type PortalRateLimitConfig = {
 
 const PORTAL_RATE_LIMITS: Record<string, PortalRateLimitConfig> = {
   login: { limit: 12, windowSeconds: 600, blockSeconds: 1800 },
+  branding: { limit: 30, windowSeconds: 600, blockSeconds: 900 },
   data: { limit: 60, windowSeconds: 600, blockSeconds: 900 },
   search: { limit: 90, windowSeconds: 300, blockSeconds: 900 },
   prepare: { limit: 45, windowSeconds: 600, blockSeconds: 900 },
