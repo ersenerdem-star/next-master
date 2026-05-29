@@ -224,6 +224,11 @@ function dedupeCatalogRows(rows: Array<Record<string, unknown>>) {
   });
 }
 
+function supplementalSearchVariants(search: string) {
+  const normalized = normalizePartCode(search);
+  return buildOriginalNumberVariants(search).filter((variant) => variant.length >= 6 && variant !== normalized);
+}
+
 type PortalSearchMode = "strict" | "loose";
 
 function shouldRunLooseOriginalNumberSearch(search: string) {
@@ -580,6 +585,32 @@ export async function searchPortalCatalog(
   }
 
   let rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", params);
+  if (search && isLikelyPortalCodeSearch(search)) {
+    const variants = supplementalSearchVariants(search);
+    if (variants.length) {
+      const supplementalRows = (
+        await Promise.all(
+          variants.map((variant) =>
+            fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+              select: "id,product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
+              organization_id: `eq.${invite.organization_id}`,
+              ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+              normalized_oem: `like.*${variant}*`,
+              order: "product_code.asc",
+              limit: "120",
+            }).catch(() => []),
+          ),
+        )
+      ).flat();
+      if (supplementalRows.length) {
+        rows = dedupeCatalogRows([...rows, ...supplementalRows]).filter(
+          (row) =>
+            matchesOriginalNumberSearch(String(row.oem_no || ""), search) ||
+            variants.some((variant) => normalizePartCode(String(row.product_code || "")).includes(variant)),
+        );
+      }
+    }
+  }
   if (!rows.length && search && shouldRunLooseOriginalNumberSearch(search)) {
     rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
       ...params,

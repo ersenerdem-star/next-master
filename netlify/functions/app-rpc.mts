@@ -238,6 +238,11 @@ function dedupeCatalogRows(rows: CatalogSourceRow[]) {
   });
 }
 
+function supplementalSearchVariants(search: string) {
+  const normalized = normalizePartCode(search);
+  return buildOriginalNumberVariants(search).filter((variant) => variant.length >= 6 && variant !== normalized);
+}
+
 function parseContentRangeTotal(value: string | null, fallback: number) {
   if (!value) return fallback;
   const match = value.match(/\/(\d+|\*)$/);
@@ -330,6 +335,37 @@ async function fetchCloudCatalogPageViaRest(
   }
 
   let { rows, totalCount } = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", baseParams);
+  if (search && isLikelyCatalogCodeSearch(search)) {
+    const supplementalVariants = supplementalSearchVariants(search);
+    if (supplementalVariants.length) {
+      const fallbackBase: Record<string, string> = {
+        select,
+        organization_id: `eq.${caller.organizationId}`,
+        order: "product_code.asc",
+        limit: "120",
+      };
+      if (selectedBrandId) fallbackBase.brand_id = `eq.${selectedBrandId}`;
+      const supplementalRows = (
+        await Promise.all(
+          supplementalVariants.map((variant) =>
+            fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
+              ...fallbackBase,
+              normalized_oem: `like.*${variant}*`,
+            }).catch(() => ({ rows: [] as CatalogSourceRow[], totalCount: 0 })),
+          ),
+        )
+      ).flatMap((result) => result.rows);
+      if (supplementalRows.length) {
+        const merged = dedupeCatalogRows([...rows, ...supplementalRows]).filter(
+          (row) =>
+            matchesOriginalNumberSearch(String(row.oem_no || ""), search) ||
+            supplementalVariants.some((variant) => normalizePartCode(String(row.product_code || "")).includes(variant)),
+        );
+        totalCount = merged.length;
+        rows = merged.slice(offset, offset + pageSize);
+      }
+    }
+  }
   if (!rows.length && search && shouldRunLooseOriginalNumberSearch(search)) {
     ({ rows, totalCount } = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
       ...baseParams,
