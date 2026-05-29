@@ -57,16 +57,20 @@ begin
       and table_name = 'profiles'
       and column_name = 'updated_at'
   ) then
-    update public.profiles
-    set role = 'superadmin',
-        updated_at = now()
-    where lower(trim(coalesce(email, ''))) = 'ersenerdem@hotmail.com'
-      and role is distinct from 'superadmin';
+    execute $sql$
+      update public.profiles
+      set role = 'superadmin',
+          updated_at = now()
+      where lower(trim(coalesce(email, ''))) = 'ersenerdem@hotmail.com'
+        and role is distinct from 'superadmin'
+    $sql$;
   else
-    update public.profiles
-    set role = 'superadmin'
-    where lower(trim(coalesce(email, ''))) = 'ersenerdem@hotmail.com'
-      and role is distinct from 'superadmin';
+    execute $sql$
+      update public.profiles
+      set role = 'superadmin'
+      where lower(trim(coalesce(email, ''))) = 'ersenerdem@hotmail.com'
+        and role is distinct from 'superadmin'
+    $sql$;
   end if;
 end $$;
 
