@@ -1914,6 +1914,42 @@ select {
   font-weight: 600;
 }
 
+.warehouse-api-editor {
+  margin-top: 16px;
+}
+
+.warehouse-api-checkboxes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 14px;
+}
+
+.warehouse-api-checkbox {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+}
+
+.warehouse-api-token {
+  margin-top: 8px;
+  border: 1px solid rgba(249, 115, 22, 0.28);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff7ed, #ffffff);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.warehouse-api-token__value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #9a3412;
+  word-break: break-all;
+}
+
 .inventory-number-input {
   min-width: 84px;
   width: 84px;

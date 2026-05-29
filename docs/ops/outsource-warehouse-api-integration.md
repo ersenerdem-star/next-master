@@ -18,6 +18,13 @@ Run:
 
 - `/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp/supabase/migrations/20260530_35_outsourced_warehouse_api_sync.sql`
 - `/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp/supabase/migrations/20260530_36_warehouse_dropship_fulfillment.sql`
+- `/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp/supabase/migrations/20260530_37_outbound_warehouse_stock_api.sql`
+
+### Related outbound API
+
+If other firms need to read stock from your warehouses, use:
+
+- `/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp/docs/ops/warehouse-stock-sharing-api.md`
 
 ### Supported warehouse settings
 

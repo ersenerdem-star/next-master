@@ -1,8 +1,9 @@
-import type { Warehouse } from "../../types/warehouses";
+import type { Warehouse, WarehouseApiClient, WarehouseApiClientSecret } from "../../types/warehouses";
 import { supabaseClient } from "./supabaseClient";
 import { getCurrentOrgId, isUuid } from "./organizationApi";
 
 const syncWarehouseStockUrl = import.meta.env.VITE_ADMIN_SYNC_WAREHOUSE_STOCK_URL || "/api/admin-sync-warehouse-stock";
+const warehouseApiClientsUrl = import.meta.env.VITE_ADMIN_WAREHOUSE_API_CLIENTS_URL || "/api/admin-warehouse-stock-clients";
 
 const WAREHOUSE_BASE_COLUMNS = [
   "id",
@@ -114,6 +115,26 @@ async function getAccessToken() {
   const token = String(data.session?.access_token || "");
   if (!token) throw new Error("Your session has expired. Sign in again.");
   return token;
+}
+
+function mapWarehouseApiClientRow(row: Record<string, unknown>): WarehouseApiClient {
+  return {
+    id: String(row.id || ""),
+    client_name: String(row.client_name || ""),
+    partner_name: String(row.partner_name || ""),
+    status: String(row.status || "active").trim().toLowerCase() === "disabled" ? "disabled" : "active",
+    include_zero_stock: Boolean(row.include_zero_stock),
+    expose_unit_cost: Boolean(row.expose_unit_cost),
+    notes: String(row.notes || ""),
+    expires_at: String(row.expires_at || ""),
+    api_key_prefix: String(row.api_key_prefix || ""),
+    last_used_at: String(row.last_used_at || ""),
+    last_used_ip: String(row.last_used_ip || ""),
+    warehouse_ids: Array.isArray(row.warehouse_ids) ? row.warehouse_ids.map((value) => String(value || "")) : [],
+    warehouse_labels: Array.isArray(row.warehouse_labels) ? row.warehouse_labels.map((value) => String(value || "")) : [],
+    created_at: String(row.created_at || ""),
+    updated_at: String(row.updated_at || ""),
+  };
 }
 
 export function createEmptyWarehouse(existingRows: Warehouse[] = []): Warehouse {
@@ -270,4 +291,124 @@ export async function syncWarehouseExternalStock(warehouseId: string) {
       invalidItemCount: Number(payload.summary?.invalidItemCount || 0),
     },
   };
+}
+
+export async function fetchWarehouseApiClients() {
+  const accessToken = await getAccessToken();
+  const response = await fetch(warehouseApiClientsUrl, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    clients?: Array<Record<string, unknown>>;
+    apiBaseUrl?: string;
+    headerName?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Warehouse API clients load failed");
+  }
+
+  return {
+    clients: Array.isArray(payload.clients) ? payload.clients.map(mapWarehouseApiClientRow) : [],
+    apiBaseUrl: String(payload.apiBaseUrl || ""),
+    headerName: String(payload.headerName || "x-api-key"),
+  };
+}
+
+export async function upsertWarehouseApiClient(input: {
+  id?: string;
+  client_name: string;
+  partner_name: string;
+  status: "active" | "disabled";
+  include_zero_stock: boolean;
+  expose_unit_cost: boolean;
+  notes: string;
+  expires_at: string;
+  warehouse_ids: string[];
+}) {
+  const accessToken = await getAccessToken();
+  const response = await fetch(warehouseApiClientsUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      action: "save",
+      ...input,
+    }),
+  });
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    client?: Record<string, unknown>;
+    secret?: WarehouseApiClientSecret;
+  };
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Warehouse API client save failed");
+  }
+
+  return {
+    client: payload.client ? mapWarehouseApiClientRow(payload.client) : null,
+    secret: payload.secret || null,
+  };
+}
+
+export async function rotateWarehouseApiClientToken(clientId: string) {
+  const accessToken = await getAccessToken();
+  const response = await fetch(warehouseApiClientsUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      action: "rotate",
+      id: clientId,
+    }),
+  });
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    client?: Record<string, unknown>;
+    secret?: WarehouseApiClientSecret;
+  };
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Warehouse API key rotation failed");
+  }
+
+  return {
+    client: payload.client ? mapWarehouseApiClientRow(payload.client) : null,
+    secret: payload.secret || null,
+  };
+}
+
+export async function deleteWarehouseApiClient(clientId: string) {
+  const accessToken = await getAccessToken();
+  const response = await fetch(warehouseApiClientsUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      action: "delete",
+      id: clientId,
+    }),
+  });
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Warehouse API client delete failed");
+  }
 }

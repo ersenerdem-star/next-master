@@ -14,10 +14,19 @@ import {
   type StockTransferDraftLine,
 } from "../../infrastructure/api/inventoryApi";
 import { fetchPurchaseOrders } from "../../infrastructure/api/ordersApi";
-import { createEmptyWarehouse, fetchWarehouses, syncWarehouseExternalStock, upsertWarehouse } from "../../infrastructure/api/warehousesApi";
+import {
+  createEmptyWarehouse,
+  deleteWarehouseApiClient,
+  fetchWarehouseApiClients,
+  fetchWarehouses,
+  rotateWarehouseApiClientToken,
+  syncWarehouseExternalStock,
+  upsertWarehouse,
+  upsertWarehouseApiClient,
+} from "../../infrastructure/api/warehousesApi";
 import type { InventoryMovement, PurchaseReceive, StockTransfer, WarehouseOnHandRow, WarehouseStockItem } from "../../types/inventory";
 import type { LocalPurchaseOrder } from "../../types/orders";
-import type { Warehouse } from "../../types/warehouses";
+import type { Warehouse, WarehouseApiClient, WarehouseApiClientSecret } from "../../types/warehouses";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { Button } from "../components/common/Button";
 import { DataTable } from "../components/common/DataTable";
@@ -69,6 +78,27 @@ function cloneTransferDraft(draft: StockTransferDraft): StockTransferDraft {
   };
 }
 
+function createEmptyWarehouseApiClient(warehouses: Warehouse[]): WarehouseApiClient {
+  const defaultWarehouseId = warehouses.find((row) => row.is_active && row.fulfillment_model !== "dropship")?.id || "";
+  return {
+    id: "",
+    client_name: "",
+    partner_name: "",
+    status: "active",
+    include_zero_stock: false,
+    expose_unit_cost: false,
+    notes: "",
+    expires_at: "",
+    api_key_prefix: "",
+    last_used_at: "",
+    last_used_ip: "",
+    warehouse_ids: defaultWarehouseId ? [defaultWarehouseId] : [],
+    warehouse_labels: [],
+    created_at: "",
+    updated_at: "",
+  };
+}
+
 function transferLineKey(line: {
   brand?: string;
   product_code?: string;
@@ -112,11 +142,27 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
   const [showWarehouseEditor, setShowWarehouseEditor] = useState(false);
   const [receiveDraft, setReceiveDraft] = useState<PurchaseReceiveDraft | null>(null);
   const [transferDraft, setTransferDraft] = useState<StockTransferDraft | null>(null);
+  const [warehouseApiClients, setWarehouseApiClients] = useState<WarehouseApiClient[]>([]);
+  const [warehouseApiBaseUrl, setWarehouseApiBaseUrl] = useState("");
+  const [warehouseApiHeaderName, setWarehouseApiHeaderName] = useState("x-api-key");
+  const [warehouseApiDraft, setWarehouseApiDraft] = useState<WarehouseApiClient | null>(null);
+  const [showWarehouseApiEditor, setShowWarehouseApiEditor] = useState(false);
+  const [savingWarehouseApiClient, setSavingWarehouseApiClient] = useState(false);
+  const [rotatingWarehouseApiClient, setRotatingWarehouseApiClient] = useState(false);
+  const [latestWarehouseApiSecret, setLatestWarehouseApiSecret] = useState<WarehouseApiClientSecret | null>(null);
 
   async function reloadWarehouses() {
     const warehouseRows = await fetchWarehouses();
     setWarehouses(warehouseRows);
     return warehouseRows;
+  }
+
+  async function reloadWarehouseApiClients() {
+    const payload = await fetchWarehouseApiClients();
+    setWarehouseApiClients(payload.clients);
+    setWarehouseApiBaseUrl(payload.apiBaseUrl);
+    setWarehouseApiHeaderName(payload.headerName);
+    return payload.clients;
   }
 
   async function reloadOnHand(currentWarehouses: Warehouse[]) {
@@ -201,9 +247,15 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
 
     async function run() {
       try {
-        const warehouseRows = await fetchWarehouses();
+        const [warehouseRows, warehouseApiPayload] = await Promise.all([
+          fetchWarehouses(),
+          fetchWarehouseApiClients().catch(() => ({ clients: [], apiBaseUrl: "", headerName: "x-api-key" })),
+        ]);
         if (cancelled) return;
         setWarehouses(warehouseRows);
+        setWarehouseApiClients(warehouseApiPayload.clients);
+        setWarehouseApiBaseUrl(warehouseApiPayload.apiBaseUrl);
+        setWarehouseApiHeaderName(warehouseApiPayload.headerName);
 
         const firstWarehouse = warehouseRows[0] || createEmptyWarehouse();
         setSelectedWarehouseId(firstWarehouse.id);
@@ -406,6 +458,23 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
   const warehouseFilterOptions = useMemo(
     () => [{ value: "", label: "All Warehouses" }, ...warehouses.map((row) => ({ value: row.id, label: `${row.warehouse_code} · ${row.warehouse_name}` }))],
     [warehouses],
+  );
+
+  const shareableWarehouses = useMemo(
+    () => warehouses.filter((row) => row.is_active && row.fulfillment_model !== "dropship"),
+    [warehouses],
+  );
+
+  const warehouseApiClientColumns = useMemo(
+    () => [
+      { key: "client", header: "Client", render: (row: WarehouseApiClient) => row.client_name || "-" },
+      { key: "partner", header: "Partner", render: (row: WarehouseApiClient) => row.partner_name || "-" },
+      { key: "warehouses", header: "Warehouses", render: (row: WarehouseApiClient) => row.warehouse_labels.length || 0 },
+      { key: "status", header: "Status", render: (row: WarehouseApiClient) => (row.status === "disabled" ? "Disabled" : "Active") },
+      { key: "key", header: "Key Prefix", render: (row: WarehouseApiClient) => row.api_key_prefix || "-" },
+      { key: "last", header: "Last Used", render: (row: WarehouseApiClient) => formatDate(row.last_used_at) },
+    ],
+    [],
   );
 
   const selectedReceiveWarehouse = useMemo(
@@ -673,6 +742,115 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     if (selectedWarehouseId) {
       const current = warehouses.find((item) => item.id === selectedWarehouseId);
       if (current) setDraft(current);
+    }
+  }
+
+  function handleNewWarehouseApiClient() {
+    setWarehouseApiDraft(createEmptyWarehouseApiClient(shareableWarehouses));
+    setLatestWarehouseApiSecret(null);
+    setShowWarehouseApiEditor(true);
+  }
+
+  function handleSelectWarehouseApiClient(row: WarehouseApiClient) {
+    setWarehouseApiDraft(row);
+    setLatestWarehouseApiSecret(null);
+    setShowWarehouseApiEditor(true);
+  }
+
+  function handleCloseWarehouseApiEditor() {
+    setShowWarehouseApiEditor(false);
+    setLatestWarehouseApiSecret(null);
+  }
+
+  function toggleWarehouseApiDraftWarehouse(warehouseId: string, checked: boolean) {
+    setWarehouseApiDraft((current) => {
+      if (!current) return current;
+      const currentIds = new Set(current.warehouse_ids);
+      if (checked) currentIds.add(warehouseId);
+      else currentIds.delete(warehouseId);
+      return {
+        ...current,
+        warehouse_ids: [...currentIds],
+      };
+    });
+  }
+
+  async function handleSaveWarehouseApiClient() {
+    if (!warehouseApiDraft) return;
+    if (!warehouseApiDraft.client_name.trim() || !warehouseApiDraft.partner_name.trim()) {
+      actionFeedback.fail("Client name and partner name are required.");
+      return;
+    }
+    if (!warehouseApiDraft.warehouse_ids.length) {
+      actionFeedback.fail("Select at least one stocked warehouse.");
+      return;
+    }
+    try {
+      setSavingWarehouseApiClient(true);
+      actionFeedback.begin(`Saving API client ${warehouseApiDraft.client_name || warehouseApiDraft.partner_name}...`);
+      const result = await upsertWarehouseApiClient({
+        id: warehouseApiDraft.id || undefined,
+        client_name: warehouseApiDraft.client_name,
+        partner_name: warehouseApiDraft.partner_name,
+        status: warehouseApiDraft.status,
+        include_zero_stock: warehouseApiDraft.include_zero_stock,
+        expose_unit_cost: warehouseApiDraft.expose_unit_cost,
+        notes: warehouseApiDraft.notes,
+        expires_at: warehouseApiDraft.expires_at,
+        warehouse_ids: warehouseApiDraft.warehouse_ids,
+      });
+      const clients = await reloadWarehouseApiClients();
+      const saved = result.client || clients.find((row) => row.id === warehouseApiDraft.id) || null;
+      if (saved) setWarehouseApiDraft(saved);
+      setLatestWarehouseApiSecret(result.secret);
+      actionFeedback.succeed(`Warehouse API client ${saved?.client_name || warehouseApiDraft.client_name} saved.`);
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Warehouse API client save failed");
+    } finally {
+      setSavingWarehouseApiClient(false);
+    }
+  }
+
+  async function handleRotateWarehouseApiClient() {
+    if (!warehouseApiDraft?.id || !isUuid(warehouseApiDraft.id)) {
+      actionFeedback.fail("Save the API client first before rotating its key.");
+      return;
+    }
+    try {
+      setRotatingWarehouseApiClient(true);
+      actionFeedback.begin(`Rotating API key for ${warehouseApiDraft.client_name || warehouseApiDraft.partner_name}...`);
+      const result = await rotateWarehouseApiClientToken(warehouseApiDraft.id);
+      const clients = await reloadWarehouseApiClients();
+      const saved = result.client || clients.find((row) => row.id === warehouseApiDraft.id) || null;
+      if (saved) setWarehouseApiDraft(saved);
+      setLatestWarehouseApiSecret(result.secret);
+      actionFeedback.succeed("Warehouse API key rotated.");
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Warehouse API key rotation failed");
+    } finally {
+      setRotatingWarehouseApiClient(false);
+    }
+  }
+
+  async function handleDeleteWarehouseApiClient() {
+    if (!warehouseApiDraft?.id || !isUuid(warehouseApiDraft.id)) {
+      handleCloseWarehouseApiEditor();
+      return;
+    }
+    if (!window.confirm(`Delete API client ${warehouseApiDraft.client_name || warehouseApiDraft.partner_name}?`)) return;
+    try {
+      setSavingWarehouseApiClient(true);
+      actionFeedback.begin(`Deleting API client ${warehouseApiDraft.client_name || warehouseApiDraft.partner_name}...`);
+      await deleteWarehouseApiClient(warehouseApiDraft.id);
+      await reloadWarehouseApiClients();
+      setWarehouseApiDraft(null);
+      setLatestWarehouseApiSecret(null);
+      setShowWarehouseApiEditor(false);
+      actionFeedback.succeed("Warehouse API client deleted.");
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Warehouse API client delete failed");
+    } finally {
+      setSavingWarehouseApiClient(false);
     }
   }
 
@@ -1061,6 +1239,150 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
               </div>
             </SectionCard>
           ) : null}
+
+          <SectionCard title="Partner API Clients">
+            <div className="toolbar">
+              <Button className="button--compact" onClick={handleNewWarehouseApiClient}>
+                + Add API Client
+              </Button>
+            </div>
+            <div className="meta-row">
+              <span>{warehouseApiClients.length.toLocaleString("en-US")} API client(s)</span>
+              <span>{warehouseApiBaseUrl || "Save a client to generate stock feed credentials."}</span>
+            </div>
+            <DataTable rows={warehouseApiClients} columns={warehouseApiClientColumns} emptyText="No partner API clients yet." onRowClick={handleSelectWarehouseApiClient} />
+
+            {showWarehouseApiEditor && warehouseApiDraft ? (
+              <div className="customers-edit-card customers-edit-card--narrow warehouse-api-editor">
+                <div className="toolbar">
+                  <Button variant="secondary" onClick={handleCloseWarehouseApiEditor}>
+                    Exit
+                  </Button>
+                  {warehouseApiDraft.id ? (
+                    <Button variant="secondary" onClick={() => void handleRotateWarehouseApiClient()} busy={rotatingWarehouseApiClient} busyLabel="Rotating...">
+                      Rotate API Key
+                    </Button>
+                  ) : null}
+                  {warehouseApiDraft.id ? (
+                    <Button variant="secondary" onClick={() => void handleDeleteWarehouseApiClient()} busy={savingWarehouseApiClient} busyLabel="Deleting...">
+                      Delete
+                    </Button>
+                  ) : null}
+                  <Button onClick={() => void handleSaveWarehouseApiClient()} busy={savingWarehouseApiClient} busyLabel="Saving...">
+                    Save
+                  </Button>
+                </div>
+
+                <div className="customers-form-row">
+                  <div className="customers-form-row__label">Client Name</div>
+                  <div className="customers-field-wrap customers-field-wrap--wide">
+                    <Input value={warehouseApiDraft.client_name} onChange={(value) => setWarehouseApiDraft((current) => (current ? { ...current, client_name: value } : current))} />
+                  </div>
+                </div>
+                <div className="customers-form-row">
+                  <div className="customers-form-row__label">Partner Name</div>
+                  <div className="customers-field-wrap customers-field-wrap--wide">
+                    <Input value={warehouseApiDraft.partner_name} onChange={(value) => setWarehouseApiDraft((current) => (current ? { ...current, partner_name: value } : current))} />
+                  </div>
+                </div>
+                <div className="customers-form-row">
+                  <div className="customers-form-row__label">Status</div>
+                  <div className="customers-field-wrap customers-field-wrap--medium">
+                    <Select
+                      value={warehouseApiDraft.status}
+                      options={[
+                        { value: "active", label: "Active" },
+                        { value: "disabled", label: "Disabled" },
+                      ]}
+                      onChange={(value) => setWarehouseApiDraft((current) => (current ? { ...current, status: value === "disabled" ? "disabled" : "active" } : current))}
+                    />
+                  </div>
+                </div>
+                <div className="customers-form-row">
+                  <div className="customers-form-row__label">Expires At</div>
+                  <div className="customers-field-wrap customers-field-wrap--medium">
+                    <Input type="date" value={warehouseApiDraft.expires_at ? warehouseApiDraft.expires_at.slice(0, 10) : ""} onChange={(value) => setWarehouseApiDraft((current) => (current ? { ...current, expires_at: value ? `${value}T23:59:59.000Z` : "" } : current))} />
+                  </div>
+                </div>
+
+                <div className="customers-form-row customers-form-row--top">
+                  <div className="customers-form-row__label">Allowed Warehouses</div>
+                  <div className="customers-field-wrap customers-field-wrap--full">
+                    <div className="warehouse-api-checkboxes">
+                      {shareableWarehouses.map((warehouse) => (
+                        <label key={warehouse.id} className="checkbox-field warehouse-api-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={warehouseApiDraft.warehouse_ids.includes(warehouse.id)}
+                            onChange={(event) => toggleWarehouseApiDraftWarehouse(warehouse.id, event.target.checked)}
+                          />
+                          <span>{warehouse.warehouse_code} · {warehouse.warehouse_name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="warehouse-api-checkboxes">
+                  <label className="checkbox-field warehouse-api-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={warehouseApiDraft.include_zero_stock}
+                      onChange={(event) => setWarehouseApiDraft((current) => (current ? { ...current, include_zero_stock: event.target.checked } : current))}
+                    />
+                    <span>Include zero-stock rows in API response</span>
+                  </label>
+                  <label className="checkbox-field warehouse-api-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={warehouseApiDraft.expose_unit_cost}
+                      onChange={(event) => setWarehouseApiDraft((current) => (current ? { ...current, expose_unit_cost: event.target.checked } : current))}
+                    />
+                    <span>Expose unit cost and stock value</span>
+                  </label>
+                </div>
+
+                <div className="customers-form-row customers-form-row--top">
+                  <div className="customers-form-row__label">Notes</div>
+                  <div className="customers-field-wrap customers-field-wrap--full">
+                    <label className="field customer-field">
+                      <textarea className="field__input field__input--textarea" value={warehouseApiDraft.notes} onChange={(event) => setWarehouseApiDraft((current) => (current ? { ...current, notes: event.target.value } : current))} />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="settings-grid settings-stats-grid">
+                  <div className="settings-item">
+                    <span className="settings-label">Feed URL</span>
+                    <strong>{warehouseApiBaseUrl || "-"}</strong>
+                  </div>
+                  <div className="settings-item">
+                    <span className="settings-label">Auth Header</span>
+                    <strong>{warehouseApiHeaderName}</strong>
+                  </div>
+                  <div className="settings-item">
+                    <span className="settings-label">Key Prefix</span>
+                    <strong>{warehouseApiDraft.api_key_prefix || "Generated on first save"}</strong>
+                  </div>
+                  <div className="settings-item">
+                    <span className="settings-label">Last Used</span>
+                    <strong>{warehouseApiDraft.last_used_at ? formatDate(warehouseApiDraft.last_used_at) : "-"}</strong>
+                  </div>
+                </div>
+
+                {latestWarehouseApiSecret ? (
+                  <div className="warehouse-api-token">
+                    <strong>Copy this API key now.</strong>
+                    <div className="warehouse-api-token__value">{latestWarehouseApiSecret.api_key}</div>
+                    <div className="meta-row">
+                      <span>Header: {latestWarehouseApiSecret.header_name}</span>
+                      <span>Example: {latestWarehouseApiSecret.sample_url}</span>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </SectionCard>
         </div>
       ) : null}
 

@@ -20,3 +20,28 @@ export type Warehouse = {
   created_at: string;
   updated_at: string;
 };
+
+export type WarehouseApiClient = {
+  id: string;
+  client_name: string;
+  partner_name: string;
+  status: "active" | "disabled";
+  include_zero_stock: boolean;
+  expose_unit_cost: boolean;
+  notes: string;
+  expires_at: string;
+  api_key_prefix: string;
+  last_used_at: string;
+  last_used_ip: string;
+  warehouse_ids: string[];
+  warehouse_labels: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type WarehouseApiClientSecret = {
+  api_key: string;
+  api_base_url: string;
+  header_name: string;
+  sample_url: string;
+};
