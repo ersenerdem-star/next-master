@@ -4,6 +4,7 @@ import type { CodeReferenceMatch } from "../../types/codeReferences";
 import type { QuoteBuilderLine, QuoteSupplierOption } from "../../types/quoteBuilder";
 import { fetchCPriceMapForRows, getCPriceForRow } from "./cPriceApi";
 import { fetchCodeReferenceMatchesForRows } from "./codeReferencesApi";
+import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
 
 type QuoteImportRow = {
@@ -41,19 +42,6 @@ function chunk<T>(items: T[], size: number) {
     batches.push(items.slice(index, index + size));
   }
   return batches;
-}
-
-async function getCurrentOrgId() {
-  const { data, error } = await supabaseClient
-    .from("profiles")
-    .select("organization_id")
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message || "Organization lookup failed");
-  const organizationId = String(data?.organization_id || "");
-  if (!organizationId) throw new Error("No organization found for current user");
-  return organizationId;
 }
 
 export async function batchResolveQuoteImportRows(input: {

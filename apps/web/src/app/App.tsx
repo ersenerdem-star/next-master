@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from "react";
+import { clearCachedAppSession } from "../infrastructure/api/appSessionApi";
 import { supabaseClient } from "../infrastructure/api/supabaseClient";
 import { touchCurrentUserPresence } from "../infrastructure/api/usersApi";
 import { ActionFeedbackProvider } from "../presentation/components/common/ActionFeedback";
@@ -44,6 +45,7 @@ export function App() {
     });
 
     const { data } = supabaseClient.auth.onAuthStateChange((event, session) => {
+      clearCachedAppSession();
       if (event === "PASSWORD_RECOVERY") {
         setRecoveryMode(true);
         setLoggedIn(false);

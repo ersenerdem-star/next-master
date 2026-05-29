@@ -12,7 +12,7 @@ import { createEmptyCloudCompanyProfile, deleteCompanyProfileById, fetchCompanyP
 import { fetchCustomers } from "../../infrastructure/api/customersApi";
 import { deliverQueuedEmails, fetchEmailTemplates, fetchOutboundEmails, queuePortalInviteEmail, setOutboundEmailStatus, upsertEmailTemplate } from "../../infrastructure/api/emailTemplatesApi";
 import { createEmptyCloudPortalInvite, deletePortalInvite, fetchPortalInvites, issuePortalInviteToken, markPortalInviteSent, setPortalInviteStatus, upsertPortalInvite } from "../../infrastructure/api/portalInvitesApi";
-import { supabaseClient } from "../../infrastructure/api/supabaseClient";
+import { fetchAppSession } from "../../infrastructure/api/appSessionApi";
 import { fetchOrgUsers, getPresenceStatus } from "../../infrastructure/api/usersApi";
 import { fetchVendors } from "../../infrastructure/api/vendorsApi";
 import { emptyCompanyProfile } from "../../shared/companyProfile";
@@ -153,15 +153,12 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     let cancelled = false;
 
     async function run() {
-      const [{ data: authData }, { data: profileData }] = await Promise.all([
-        supabaseClient.auth.getUser(),
-        supabaseClient.from("profiles").select("role").limit(1).maybeSingle(),
-      ]);
+      const session = await fetchAppSession();
       if (cancelled) return;
       setState({
-        email: authData.user?.email || "",
-        userId: authData.user?.id || "",
-        role: (profileData?.role as string) || "",
+        email: session.email || "",
+        userId: session.userId || "",
+        role: session.role || "",
       });
     }
 

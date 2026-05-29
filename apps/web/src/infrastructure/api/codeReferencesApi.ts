@@ -1,5 +1,6 @@
 import { canonicalizeBrandName, includesLooseText, normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
 import type { CodeReferenceMatch, CodeReferenceRow, CodeReferenceUsage } from "../../types/codeReferences";
+import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
 
 async function withTimeout<T>(promiseLike: PromiseLike<T> | T, label: string, timeoutMs = 12000): Promise<T> {
@@ -20,14 +21,6 @@ function mapCodeReferenceError(message: string) {
     return "This old customer code already has a mapping for this brand. Edit the existing reference instead of creating a duplicate.";
   }
   return message;
-}
-
-async function getCurrentOrgId() {
-  const { data, error } = await supabaseClient.from("profiles").select("organization_id").limit(1).maybeSingle();
-  if (error) throw new Error(error.message || "Failed to resolve organization");
-  const organizationId = data?.organization_id as string | undefined;
-  if (!organizationId) throw new Error("No organization found for current user");
-  return organizationId;
 }
 
 async function resolveBrandRow(brandName: string) {

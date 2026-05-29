@@ -1,3 +1,4 @@
+import { callAppRpc } from "./appRpcApi";
 import { supabaseClient } from "./supabaseClient";
 import type { SupplierBrandSummaryRow, SupplierPriceRow, SupplierSummary } from "../../types/suppliers";
 import { buildLooseOriginalNumberPattern, normalizeOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
@@ -36,23 +37,14 @@ function buildSupplierSearchOr(search: string, normalizedSearch: string, mode: S
 }
 
 export async function fetchCloudSuppliers(): Promise<SupplierSummary[]> {
-  const { data, error } = await supabaseClient.rpc("list_cloud_suppliers");
-
-  if (error) {
-    throw new Error(error.message || "Failed to load suppliers");
-  }
-
+  const data = await callAppRpc<SupplierSummary[]>("list_cloud_suppliers");
   return (data || []) as SupplierSummary[];
 }
 
 export async function fetchCloudSupplierBrandSummary(inputSupplierId: string | null): Promise<SupplierBrandSummaryRow[]> {
-  const { data, error } = await supabaseClient.rpc("cloud_supplier_brand_summary", {
+  const data = await callAppRpc<SupplierBrandSummaryRow[]>("cloud_supplier_brand_summary", {
     input_supplier_id: inputSupplierId,
   });
-
-  if (error) {
-    throw new Error(error.message || "Failed to load supplier brand summary");
-  }
 
   return (data || []) as SupplierBrandSummaryRow[];
 }
@@ -82,7 +74,7 @@ export async function fetchCloudSupplierPrices({
   page = 1,
   pageSize = 50,
 }: SupplierPriceParams): Promise<SupplierPriceRow[]> {
-  const { data, error } = await supabaseClient.rpc("cloud_supplier_price_page", {
+  const data = await callAppRpc<SupplierPriceRow[]>("cloud_supplier_price_page", {
     input_supplier_id: supplierId,
     input_search: search,
     input_page: page,
@@ -90,24 +82,16 @@ export async function fetchCloudSupplierPrices({
     input_freshness: freshness,
   });
 
-  if (error) {
-    throw new Error(error.message || "Failed to load supplier prices");
-  }
-
   return (data || []) as SupplierPriceRow[];
 }
 
 export async function deleteSupplierBrandSummaryRow(input: { supplierId: string; brand: string }) {
-  const { data, error } = await supabaseClient.rpc("deactivate_supplier_prices_by_filter", {
+  const data = await callAppRpc<number>("deactivate_supplier_prices_by_filter", {
     input_supplier_id: input.supplierId,
     input_brand: input.brand,
     input_price_date: null,
     input_search: "",
   });
-
-  if (error) {
-    throw new Error(error.message || "Supplier brand delete failed");
-  }
 
   return Number(data || 0);
 }

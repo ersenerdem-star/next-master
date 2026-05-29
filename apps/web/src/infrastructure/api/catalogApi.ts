@@ -2,6 +2,8 @@ import type { CatalogRow } from "../../types/catalog";
 import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "../../domain/shared/catalogFormatting";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { buildLooseOriginalNumberPattern, normalizeOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
+import { callAppRpc } from "./appRpcApi";
+import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
 
 const CATALOG_SELECT_WITH_IMAGE =
@@ -51,19 +53,6 @@ function isMissingCatalogImageError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
   const normalized = message.toLowerCase();
   return normalized.includes("image_url") && normalized.includes("does not exist");
-}
-
-async function getCurrentOrgId() {
-  const { data: authData, error: authError } = await supabaseClient.auth.getUser();
-  if (authError) throw new Error(authError.message || "Failed to read current user");
-  const userId = authData.user?.id;
-  if (!userId) throw new Error("No authenticated user found");
-
-  const { data, error } = await supabaseClient.from("profiles").select("organization_id").eq("id", userId).maybeSingle();
-  if (error) throw new Error(error.message || "Failed to resolve organization");
-  const orgId = data?.organization_id as string | undefined;
-  if (!orgId) throw new Error("No organization found for current user");
-  return orgId;
 }
 
 async function resolveBrandId(brandName: string) {
@@ -239,13 +228,11 @@ export async function fetchCloudCatalog(input: {
     }));
   }
 
-  const { data, error } = await supabaseClient.rpc("cloud_catalog_page", {
+  const data = await callAppRpc<Array<Record<string, unknown>>>("cloud_catalog_page", {
     input_search: input.search,
     input_page: input.page ?? 1,
     input_page_size: input.pageSize ?? 50,
   });
-
-  if (error) throw error;
   return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
     total_count: Number(row.total_count ?? 0),
     product_id: String(row.product_id || ""),

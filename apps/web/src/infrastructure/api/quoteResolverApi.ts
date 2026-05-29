@@ -1,6 +1,7 @@
 import { buildDiscontinuedWarning, normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { canonicalizeBrandName, normalizePartCode } from "../../domain/shared/normalize";
 import type { QuoteResolveResult, QuoteSupplierOption } from "../../types/quoteBuilder";
+import { callAppRpc } from "./appRpcApi";
 import { supabaseClient } from "./supabaseClient";
 
 async function enrichLifecycle(resolved: QuoteResolveResult): Promise<QuoteResolveResult> {
@@ -75,17 +76,13 @@ export async function resolveQuoteLine(input: {
   const rpcCustomerType = input.customerType === "Other" ? "A" : input.customerType;
   const supplierRpcCustomerType = input.customerType === "B" ? "B" : "A";
 
-  const { data, error } = await supabaseClient.rpc("cloud_resolve_quote_line", {
+  const data = await callAppRpc<QuoteResolveResult[]>("cloud_resolve_quote_line", {
     input_code: code,
     input_brand: brand,
     input_customer_type: rpcCustomerType,
     input_margin_a: input.marginA / 100,
     input_margin_b: input.marginB / 100,
   });
-
-  if (error) {
-    throw new Error(error.message || "Quote resolve failed");
-  }
 
   const resolved = await enrichLifecycle(((data || [])[0] || {
     found: false,
@@ -96,19 +93,14 @@ export async function resolveQuoteLine(input: {
   const includeSupplierOptions = input.includeSupplierOptions !== false;
 
   if (resolved.found && includeSupplierOptions) {
-    const optionsResult = await supabaseClient.rpc("cloud_quote_supplier_options", {
+    const optionRows = await callAppRpc<QuoteSupplierOption[]>("cloud_quote_supplier_options", {
       input_code: code,
       input_brand: brand || resolved.brand || "",
       input_customer_type: supplierRpcCustomerType,
       input_margin_a: input.marginA / 100,
       input_margin_b: input.marginB / 100,
     });
-
-    if (optionsResult.error) {
-      throw new Error(optionsResult.error.message || "Supplier options load failed");
-    }
-
-    supplierOptions = ((optionsResult.data || []) as QuoteSupplierOption[]).map((option) => ({
+    supplierOptions = (optionRows || []).map((option) => ({
       supplier_id: option.supplier_id || null,
       supplier_name: option.supplier_name || "",
       buy_price: option.buy_price ?? null,

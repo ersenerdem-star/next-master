@@ -1,3 +1,5 @@
+import { callAppRpc } from "./appRpcApi";
+import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
 import { buildLooseOriginalNumberPattern, normalizeOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import type { MasterRow } from "../../types/master";
@@ -70,19 +72,6 @@ function buildMasterSearchOr(rawSearch: string, normalizedSearch: string, mode: 
     );
   }
   return clauses.join(",");
-}
-
-async function getCurrentOrgId() {
-  const { data: authData, error: authError } = await supabaseClient.auth.getUser();
-  if (authError) throw new Error(authError.message || "Failed to read current user");
-  const userId = authData.user?.id;
-  if (!userId) throw new Error("No authenticated user found");
-
-  const { data, error } = await supabaseClient.from("profiles").select("organization_id").eq("id", userId).maybeSingle();
-  if (error) throw new Error(error.message || "Failed to resolve organization");
-  const orgId = data?.organization_id as string | undefined;
-  if (!orgId) throw new Error("No organization found for current user");
-  return orgId;
 }
 
 async function resolveBrand(organizationId: string, brandName: string): Promise<BrandLookup> {
@@ -304,7 +293,7 @@ export async function fetchCloudMaster({
     });
   }
 
-  const { data, error } = await supabaseClient.rpc("cloud_master_page", {
+  const data = await callAppRpc<MasterRow[]>("cloud_master_page", {
     input_search: search,
     input_brand: brand,
     input_page: page,
@@ -313,10 +302,6 @@ export async function fetchCloudMaster({
     input_margin_b: marginB,
     input_scope: scope,
   });
-
-  if (error) {
-    throw new Error(error.message || "Failed to load master rows");
-  }
 
   return (data || []) as MasterRow[];
 }

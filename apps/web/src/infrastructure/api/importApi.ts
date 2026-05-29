@@ -1,5 +1,5 @@
 import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "../../domain/shared/catalogFormatting";
-import { supabaseClient } from "./supabaseClient";
+import { callAppRpc } from "./appRpcApi";
 
 export async function bulkImportCatalog(payload: Array<Record<string, unknown>>) {
   const normalizedPayload = payload.map((row) => ({
@@ -10,8 +10,7 @@ export async function bulkImportCatalog(payload: Array<Record<string, unknown>>)
     ),
     description: row.description == null ? null : normalizeCatalogDescription(String(row.description || "")),
   }));
-  const { error } = await supabaseClient.rpc("bulk_import_catalog", { payload: normalizedPayload });
-  if (error) throw new Error(error.message || "Catalog import failed");
+  await callAppRpc("bulk_import_catalog", { payload: normalizedPayload });
 }
 
 const SUPPLIER_IMPORT_CHUNK_SIZE = 250;
@@ -30,8 +29,7 @@ export async function bulkImportSupplierPrices(
   for (let index = 0; index < totalRows; index += SUPPLIER_IMPORT_CHUNK_SIZE) {
     const chunk = payload.slice(index, index + SUPPLIER_IMPORT_CHUNK_SIZE);
     const chunkNumber = Math.floor(index / SUPPLIER_IMPORT_CHUNK_SIZE) + 1;
-    const { data, error } = await supabaseClient.rpc("bulk_import_supplier_prices", { payload: chunk });
-    if (error) throw new Error(error.message || "Supplier import failed");
+    const data = await callAppRpc<{ processed?: number; catalog_synced?: number }>("bulk_import_supplier_prices", { payload: chunk });
 
     processed += Number((data as { processed?: number } | null)?.processed || chunk.length);
     catalogSynced += Number((data as { catalog_synced?: number } | null)?.catalog_synced || 0);

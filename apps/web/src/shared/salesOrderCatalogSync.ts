@@ -1,5 +1,6 @@
 import { fetchCPriceMapForRows, getCPriceForRow } from "../infrastructure/api/cPriceApi";
 import { canonicalizeBrandName, normalizeBrandKey, normalizePartCode } from "../domain/shared/normalize";
+import { getCurrentOrgId } from "../infrastructure/api/organizationApi";
 import { fetchCatalogMetadataForRows } from "../infrastructure/api/quoteImportApi";
 import { resolveQuoteLine } from "../infrastructure/api/quoteResolverApi";
 import { supabaseClient } from "../infrastructure/api/supabaseClient";
@@ -113,29 +114,6 @@ type SupplierPriceMapRow = {
 
 function supplierPriceKey(brand: string, productCode: string, supplierName: string) {
   return `${normalizeBrandKey(brand)}::${normalizePartCode(productCode)}::${supplierName.trim().toLowerCase()}`;
-}
-
-let currentOrgIdPromise: Promise<string> | null = null;
-
-async function getCurrentOrgId() {
-  if (!currentOrgIdPromise) {
-    currentOrgIdPromise = (async () => {
-      const { data: authData, error: authError } = await supabaseClient.auth.getUser();
-      if (authError) throw new Error(authError.message || "Failed to read current user");
-      const userId = authData.user?.id;
-      if (!userId) throw new Error("No authenticated user found");
-      const { data, error } = await supabaseClient
-        .from("profiles")
-        .select("organization_id")
-        .eq("id", userId)
-        .maybeSingle();
-      if (error) throw new Error(error.message || "Organization lookup failed");
-      const organizationId = String(data?.organization_id || "");
-      if (!organizationId) throw new Error("No organization found for current user");
-      return organizationId;
-    })();
-  }
-  return await currentOrgIdPromise;
 }
 
 async function fetchSupplierPriceMap(rows: SupplierPriceMapRow[]) {

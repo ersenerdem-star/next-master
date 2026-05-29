@@ -1,21 +1,13 @@
-import { supabaseClient } from "./supabaseClient";
+import { callAppRpc } from "./appRpcApi";
 import type { OrgUser } from "../../types/users";
 
 export async function fetchOrgUsers(): Promise<OrgUser[]> {
-  const { data, error } = await supabaseClient.rpc("admin_list_org_users");
-
-  if (error) {
-    throw new Error(error.message || "Failed to load users");
-  }
-
+  const data = await callAppRpc<OrgUser[]>("admin_list_org_users");
   return (data || []) as OrgUser[];
 }
 
 export async function touchCurrentUserPresence() {
-  const { error } = await supabaseClient.rpc("touch_user_presence");
-  if (error) {
-    throw new Error(error.message || "Failed to update presence");
-  }
+  await callAppRpc("touch_user_presence");
 }
 
 export function getPresenceStatus(lastSeenAt: string | null) {

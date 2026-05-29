@@ -1,4 +1,5 @@
 import { normalizePartCode } from "../../domain/shared/normalize";
+import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
 
 export type PriceListSetting = {
@@ -8,32 +9,6 @@ export type PriceListSetting = {
   marginPercent: number | null;
   isManual: boolean;
 };
-
-async function getCurrentOrgId() {
-  const { data: authData, error: authError } = await supabaseClient.auth.getUser();
-  if (authError) {
-    throw new Error(authError.message || "Failed to read current user");
-  }
-  const userId = authData.user?.id;
-  if (!userId) {
-    throw new Error("No authenticated user found");
-  }
-
-  const { data, error } = await supabaseClient
-    .from("profiles")
-    .select("organization_id")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message || "Failed to load current workspace");
-  }
-  const orgId = data?.organization_id as string | undefined;
-  if (!orgId) {
-    throw new Error("This user is not assigned to a workspace");
-  }
-  return orgId;
-}
 
 export async function fetchPriceListSettings(): Promise<PriceListSetting[]> {
   const orgId = await getCurrentOrgId();

@@ -1,4 +1,5 @@
 import { canonicalizeBrandName, normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
+import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
 
 type RowLike = {
@@ -8,34 +9,6 @@ type RowLike = {
 
 function rowKey(brand: string, normalizedCode: string) {
   return `${normalizeBrandKey(brand)}|${normalizedCode}`;
-}
-
-async function getCurrentOrgId() {
-  const { data: authData, error: authError } = await supabaseClient.auth.getUser();
-  if (authError) {
-    throw new Error(authError.message || "Failed to read current user");
-  }
-  const userId = authData.user?.id;
-  if (!userId) {
-    throw new Error("No authenticated user found");
-  }
-
-  const { data, error } = await supabaseClient
-    .from("profiles")
-    .select("organization_id")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message || "Organization lookup failed");
-  }
-
-  const organizationId = String(data?.organization_id || "");
-  if (!organizationId) {
-    throw new Error("No organization found for current user");
-  }
-
-  return organizationId;
 }
 
 async function fetchActiveCPriceLists(organizationId: string) {

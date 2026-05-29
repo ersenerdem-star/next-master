@@ -1,17 +1,9 @@
-import { supabaseClient } from "./supabaseClient";
-
-let cachedOrgId = "";
+import { fetchAppSession } from "./appSessionApi";
 
 export async function getCurrentOrgId(forceRefresh = false) {
-  if (cachedOrgId && !forceRefresh) return cachedOrgId;
-
-  const { data, error } = await supabaseClient.from("profiles").select("organization_id").limit(1).maybeSingle();
-  if (error) throw new Error(error.message || "Failed to resolve organization");
-
-  const organizationId = String(data?.organization_id || "");
+  const session = await fetchAppSession(forceRefresh);
+  const organizationId = String(session.organizationId || "");
   if (!organizationId) throw new Error("No organization found for current user");
-
-  cachedOrgId = organizationId;
   return organizationId;
 }
 
