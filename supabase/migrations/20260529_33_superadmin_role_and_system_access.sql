@@ -48,11 +48,27 @@ grant execute on function public.raw_profile_role(uuid) to service_role;
 grant execute on function public.current_profile_role() to service_role;
 grant execute on function public.is_superadmin() to service_role;
 
-update public.profiles
-set role = 'superadmin',
-    updated_at = now()
-where lower(trim(coalesce(email, ''))) = 'ersenerdem@hotmail.com'
-  and role is distinct from 'superadmin';
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'profiles'
+      and column_name = 'updated_at'
+  ) then
+    update public.profiles
+    set role = 'superadmin',
+        updated_at = now()
+    where lower(trim(coalesce(email, ''))) = 'ersenerdem@hotmail.com'
+      and role is distinct from 'superadmin';
+  else
+    update public.profiles
+    set role = 'superadmin'
+    where lower(trim(coalesce(email, ''))) = 'ersenerdem@hotmail.com'
+      and role is distinct from 'superadmin';
+  end if;
+end $$;
 
 drop policy if exists company_profiles_write_admin on public.company_profiles;
 create policy company_profiles_write_admin on public.company_profiles
