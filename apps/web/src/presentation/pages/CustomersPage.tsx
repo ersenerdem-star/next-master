@@ -449,6 +449,25 @@ export function CustomersPage() {
                     </div>
                   </div>
                   <div className="customers-form-row">
+                    <div className="customers-form-row__label">Main Seller</div>
+                    <div className="customers-field-wrap customers-field-wrap--wide">
+                      <label className="field customer-field">
+                        <select
+                          className="field__input"
+                          value={draft.seller_company_profile_id}
+                          onChange={(event) => updateDraft({ seller_company_profile_id: event.target.value })}
+                        >
+                          <option value="">Default company profile</option>
+                          {companyProfiles.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.companyName}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+                  <div className="customers-form-row">
                     <div className="customers-form-row__label">Price List</div>
                     <div className="customers-field-wrap customers-field-wrap--wide">
                       <label className="field customer-field">

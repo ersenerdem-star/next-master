@@ -19,6 +19,7 @@ export type LocalCustomer = {
   currency: string;
   payment_terms: string;
   contract_nr: string;
+  seller_company_profile_id: string;
   price_list_type: CustomerPriceList;
   price_list_margin_percent: number | null;
   billing_address: string;

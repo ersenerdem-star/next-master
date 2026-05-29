@@ -58,6 +58,7 @@ export function createEmptyCustomer(): LocalCustomer {
     currency: "EUR",
     payment_terms: "Cash in Advance",
     contract_nr: "",
+    seller_company_profile_id: "",
     price_list_type: "",
     price_list_margin_percent: null,
     billing_address: "",

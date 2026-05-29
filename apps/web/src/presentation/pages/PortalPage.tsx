@@ -708,6 +708,14 @@ export function PortalPage() {
 
   const activeSnapshot = snapshot;
   const partyProfile = activeSnapshot.customer || activeSnapshot.vendor;
+  const portalSellerDetails = [
+    activeSnapshot.companyProfile?.email,
+    activeSnapshot.companyProfile?.phone,
+    activeSnapshot.companyProfile?.website,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join("  •  ");
   const visibleDocumentRows =
     activeSnapshot.invite.party_type === "customer"
       ? [...activeSnapshot.salesOrders, ...activeSnapshot.invoices]
@@ -1598,6 +1606,7 @@ export function PortalPage() {
             <p>
               {activeSnapshot.invite.party_type === "customer" ? "Customer Portal" : "Vendor Portal"} for {activeSnapshot.invite.party_name}
             </p>
+            {portalSellerDetails ? <div className="portal-brand__meta">{portalSellerDetails}</div> : null}
           </div>
         </div>
         <div className="inline-actions">
@@ -1688,6 +1697,30 @@ export function PortalPage() {
                 <div className="settings-item">
                   <span className="settings-label">Shipping Address</span>
                   <strong>{partyProfile?.shipping_address || "-"}</strong>
+                </div>
+              </div>
+            </SectionCard>
+            <SectionCard title="Primary Seller">
+              <div className="settings-grid settings-grid--compact">
+                <div className="settings-item">
+                  <span className="settings-label">Seller</span>
+                  <strong>{activeSnapshot.companyProfile?.company_name || "-"}</strong>
+                </div>
+                <div className="settings-item">
+                  <span className="settings-label">Email</span>
+                  <strong>{activeSnapshot.companyProfile?.email || "-"}</strong>
+                </div>
+                <div className="settings-item">
+                  <span className="settings-label">Phone</span>
+                  <strong>{activeSnapshot.companyProfile?.phone || "-"}</strong>
+                </div>
+                <div className="settings-item">
+                  <span className="settings-label">Website</span>
+                  <strong>{activeSnapshot.companyProfile?.website || "-"}</strong>
+                </div>
+                <div className="settings-item">
+                  <span className="settings-label">Address</span>
+                  <strong>{activeSnapshot.companyProfile?.address || "-"}</strong>
                 </div>
               </div>
             </SectionCard>

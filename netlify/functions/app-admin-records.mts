@@ -20,6 +20,7 @@ const CUSTOMER_COLUMNS = [
   "currency",
   "payment_terms",
   "contract_nr",
+  "seller_company_profile_id",
   "price_list_type",
   "price_list_margin_percent",
   "billing_address",

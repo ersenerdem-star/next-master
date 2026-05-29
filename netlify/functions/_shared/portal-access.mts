@@ -252,34 +252,43 @@ export async function resolvePortalInvite(
 }
 
 export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {
-  const companyProfile = await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
-    select: "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url",
-    organization_id: `eq.${invite.organization_id}`,
-    order: "updated_at.desc",
-    limit: "1",
-  });
-
   if (invite.party_type === "customer") {
     const customer =
       (invite.customer_id
         ? await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
             select:
-              "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks",
+              "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,seller_company_profile_id",
             organization_id: `eq.${invite.organization_id}`,
             id: `eq.${invite.customer_id}`,
           })
         : null) ||
       (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
         select:
-          "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks",
+          "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,seller_company_profile_id",
         organization_id: `eq.${invite.organization_id}`,
         display_name: `eq.${invite.party_name}`,
       })) ||
       (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
         select:
-          "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks",
+          "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,seller_company_profile_id",
         organization_id: `eq.${invite.organization_id}`,
         company_name: `eq.${invite.party_name}`,
+      }));
+
+    const companyProfile =
+      (customer?.seller_company_profile_id
+        ? await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
+            select: "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url",
+            organization_id: `eq.${invite.organization_id}`,
+            id: `eq.${customer.seller_company_profile_id}`,
+            limit: "1",
+          }).catch(() => null)
+        : null) ||
+      (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
+        select: "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url",
+        organization_id: `eq.${invite.organization_id}`,
+        order: "updated_at.desc",
+        limit: "1",
       }));
 
     const customerName = String(customer?.display_name || customer?.company_name || invite.party_name);
@@ -503,6 +512,13 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       organization_id: `eq.${invite.organization_id}`,
       company_name: `eq.${invite.party_name}`,
     }));
+
+  const companyProfile = await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
+    select: "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url",
+    organization_id: `eq.${invite.organization_id}`,
+    order: "updated_at.desc",
+    limit: "1",
+  });
 
   const vendorName = String(vendor?.display_name || vendor?.company_name || invite.party_name);
   const vendorId = String(vendor?.id || invite.vendor_id || "");

@@ -25,11 +25,13 @@ type CustomerRow = {
   currency: string;
   payment_terms: string;
   contract_nr: string;
+  seller_company_profile_id: string | null;
   price_list_type: string;
   price_list_margin_percent: number | null;
 };
 
 type CompanyProfileRow = {
+  id?: string;
   company_name: string;
 };
 
@@ -269,18 +271,18 @@ async function resolvePortalCustomer(
   const customer =
     (invite.customer_id
       ? await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
-          select: "id,display_name,company_name,currency,payment_terms,contract_nr,price_list_type,price_list_margin_percent",
+          select: "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,price_list_margin_percent",
           organization_id: `eq.${invite.organization_id}`,
           id: `eq.${invite.customer_id}`,
         })
       : null) ||
     (await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
-      select: "id,display_name,company_name,currency,payment_terms,contract_nr,price_list_type,price_list_margin_percent",
+      select: "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,price_list_margin_percent",
       organization_id: `eq.${invite.organization_id}`,
       display_name: `eq.${invite.party_name}`,
     })) ||
     (await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
-      select: "id,display_name,company_name,currency,payment_terms,contract_nr,price_list_type,price_list_margin_percent",
+      select: "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,price_list_margin_percent",
       organization_id: `eq.${invite.organization_id}`,
       company_name: `eq.${invite.party_name}`,
     }));
@@ -290,11 +292,19 @@ async function resolvePortalCustomer(
   }
 
   const companyProfile =
+    (customer.seller_company_profile_id
+      ? await fetchFirst<CompanyProfileRow>(supabaseUrl, serviceRoleKey, "company_profiles", {
+          select: "id,company_name",
+          organization_id: `eq.${invite.organization_id}`,
+          id: `eq.${customer.seller_company_profile_id}`,
+        }).catch(() => null)
+      : null) ||
     (await fetchFirst<CompanyProfileRow>(supabaseUrl, serviceRoleKey, "company_profiles", {
-      select: "company_name",
+      select: "id,company_name",
       organization_id: `eq.${invite.organization_id}`,
       order: "updated_at.desc",
-    })) || null;
+    })) ||
+    null;
 
   const priceLists = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customer_price_lists", {
     select: "id,list_type,margin_percent,is_active",
