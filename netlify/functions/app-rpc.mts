@@ -60,6 +60,15 @@ type CatalogSourceRow = {
   lifecycle_note?: string | null;
 };
 
+type BrandMapCacheEntry = {
+  byId: Map<string, string>;
+  byName: Map<string, string>;
+  expiresAt: number;
+};
+
+const BRAND_MAP_CACHE_TTL_MS = 2 * 60 * 1000;
+const brandMapCache = new Map<string, BrandMapCacheEntry>();
+
 function normalizePartCode(value: string) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -150,33 +159,37 @@ function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "s
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
   const looseOriginalPattern = buildLooseOriginalNumberPattern(search);
   const separatorInsensitivePattern = buildSeparatorInsensitivePattern(search);
-  const clauses = [`product_code.ilike.*${escaped}*`, `oem_no.ilike.*${escaped}*`];
-  if (!isLikelyCatalogCodeSearch(search)) {
-    clauses.push(`description.ilike.*${escaped}*`);
+  const clauses = new Set<string>();
+  const isCodeSearch = isLikelyCatalogCodeSearch(search);
+
+  if (escaped) {
+    clauses.add(`product_code.ilike.*${escaped}*`);
+    clauses.add(`oem_no.ilike.*${escaped}*`);
+  }
+  if (!isCodeSearch && escaped) {
+    clauses.add(`description.ilike.*${escaped}*`);
   }
   if (separatorInsensitivePattern && separatorInsensitivePattern !== escaped.toUpperCase()) {
-    clauses.push(
-      `product_code.ilike.*${separatorInsensitivePattern}*`,
-      `oem_no.ilike.*${separatorInsensitivePattern}*`,
-    );
+    clauses.add(`product_code.ilike.*${separatorInsensitivePattern}*`);
+    clauses.add(`oem_no.ilike.*${separatorInsensitivePattern}*`);
   }
   if (normalizedSearch.length >= 3) {
-    clauses.push(
-      `product_code.ilike.*${normalizedSearch}*`,
-      `oem_no.ilike.*${normalizedSearch}*`,
-      `normalized_code.eq.${normalizedSearch}`,
-      `normalized_oem.eq.${normalizedSearch}`,
-      `normalized_code.like.${normalizedSearch}*`,
-      `normalized_oem.like.${normalizedSearch}*`,
-    );
+    clauses.add(`normalized_code.eq.${normalizedSearch}`);
+    clauses.add(`normalized_oem.eq.${normalizedSearch}`);
+    clauses.add(`normalized_code.like.${normalizedSearch}*`);
+    clauses.add(`normalized_oem.like.${normalizedSearch}*`);
+    if (!isCodeSearch || normalizedSearch.length <= 8) {
+      clauses.add(`product_code.ilike.*${normalizedSearch}*`);
+      clauses.add(`oem_no.ilike.*${normalizedSearch}*`);
+    }
   }
   if (mode === "loose" && looseOriginalPattern.length >= 6) {
-    clauses.push(`oem_no.ilike.*${looseOriginalPattern}*`);
+    clauses.add(`oem_no.ilike.*${looseOriginalPattern}*`);
   }
   if (mode === "loose" && normalizedOriginalSearch.length >= 6) {
-    clauses.push(`normalized_oem.like.*${normalizedOriginalSearch}*`);
+    clauses.add(`normalized_oem.like.*${normalizedOriginalSearch}*`);
   }
-  return `(${clauses.join(",")})`;
+  return `(${[...clauses].join(",")})`;
 }
 
 function dedupeCatalogRows(rows: CatalogSourceRow[]) {
@@ -220,6 +233,10 @@ async function fetchRestRowsWithCount<T>(
 }
 
 async function fetchBrandMaps(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
+  const cached = brandMapCache.get(organizationId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { byId: cached.byId, byName: cached.byName };
+  }
   const { rows } = await fetchRestRowsWithCount<{ id?: string | null; name?: string | null }>(
     supabaseUrl,
     serviceRoleKey,
@@ -240,6 +257,11 @@ async function fetchBrandMaps(supabaseUrl: string, serviceRoleKey: string, organ
     byId.set(id, name);
     byName.set(normalizePartCode(name), id);
   }
+  brandMapCache.set(organizationId, {
+    byId,
+    byName,
+    expiresAt: Date.now() + BRAND_MAP_CACHE_TTL_MS,
+  });
   return { byId, byName };
 }
 

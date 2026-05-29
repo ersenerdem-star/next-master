@@ -44,6 +44,39 @@ const SALES_ORDER_COLUMNS = [
   "lines",
 ].join(",");
 
+const SALES_ORDER_SUMMARY_COLUMNS = [
+  "id",
+  "sales_order_no",
+  "customer_name",
+  "seller_company",
+  "purchase_company",
+  "quote_date",
+  "currency",
+  "customer_type",
+  "shipping_cost",
+  "discount_amount",
+  "supplier_mode",
+  "preferred_supplier",
+  "seller_info",
+  "buyer_info",
+  "delivery_term",
+  "payment_terms",
+  "packing_details",
+  "notes",
+  "status",
+  "purchase_total",
+  "sales_total",
+  "profit_total",
+  "margin_percent",
+  "source_channel",
+  "portal_invite_id",
+  "portal_submitted_at",
+  "portal_seen_at",
+  "created_at",
+  "updated_at",
+  "confirmed_at",
+].join(",");
+
 const PURCHASE_ORDER_COLUMNS = [
   "id",
   "supplier_name",
@@ -59,6 +92,22 @@ const PURCHASE_ORDER_COLUMNS = [
   "total_amount",
   "line_count",
   "lines",
+].join(",");
+
+const PURCHASE_ORDER_SUMMARY_COLUMNS = [
+  "id",
+  "supplier_name",
+  "supplier_key",
+  "purchase_company",
+  "sales_order_id",
+  "sales_order_no",
+  "customer_name",
+  "status",
+  "currency",
+  "created_at",
+  "updated_at",
+  "total_amount",
+  "line_count",
 ].join(",");
 
 const INVOICE_COLUMNS = [
@@ -89,6 +138,33 @@ const INVOICE_COLUMNS = [
   "lines",
 ].join(",");
 
+const INVOICE_SUMMARY_COLUMNS = [
+  "id",
+  "sales_order_id",
+  "sales_order_no",
+  "customer_name",
+  "seller_company",
+  "purchase_company",
+  "currency",
+  "status",
+  "quote_date",
+  "delivery_term",
+  "payment_terms",
+  "due_date",
+  "contract_nr",
+  "packing_details",
+  "notes",
+  "subtotal",
+  "discount_amount",
+  "shipping_cost",
+  "total_amount",
+  "purchase_total",
+  "profit_total",
+  "margin_percent",
+  "created_at",
+  "updated_at",
+].join(",");
+
 const BILL_COLUMNS = [
   "id",
   "purchase_order_id",
@@ -108,6 +184,26 @@ const BILL_COLUMNS = [
   "created_at",
   "updated_at",
   "lines",
+].join(",");
+
+const BILL_SUMMARY_COLUMNS = [
+  "id",
+  "purchase_order_id",
+  "purchase_order_no",
+  "supplier_name",
+  "purchase_company",
+  "currency",
+  "status",
+  "bill_date",
+  "due_date",
+  "payment_terms",
+  "notes",
+  "subtotal",
+  "shipping_cost",
+  "discount_amount",
+  "total_amount",
+  "created_at",
+  "updated_at",
 ].join(",");
 
 const PAYMENT_RECEIVED_COLUMNS = [
@@ -577,17 +673,52 @@ async function bootstrapOrdersFromLocalIfNeeded() {
   return bootstrapPromise;
 }
 
-export async function fetchSalesOrders(): Promise<LocalSalesOrder[]> {
+async function fetchOrderCollection<T>(
+  table: "sales_orders" | "purchase_orders" | "invoices" | "bills",
+  columns: string,
+  mapper: (row: Record<string, unknown>) => T,
+) {
   await bootstrapOrdersFromLocalIfNeeded();
   const organizationId = await getCurrentOrgId();
   const { data, error } = await supabaseClient
-    .from("sales_orders")
-    .select(SALES_ORDER_COLUMNS)
+    .from(table)
+    .select(columns)
     .eq("organization_id", organizationId)
     .order("updated_at", { ascending: false });
 
-  if (error) throw new Error(error.message || "Sales orders load failed");
-  return ((data || []) as unknown as Record<string, unknown>[]).map(mapSalesOrderRow);
+  if (error) throw new Error(error.message || `${table} load failed`);
+  return ((data || []) as unknown as Record<string, unknown>[]).map(mapper);
+}
+
+async function fetchOrderRecord<T>(
+  table: "sales_orders" | "purchase_orders" | "invoices" | "bills",
+  columns: string,
+  mapper: (row: Record<string, unknown>) => T,
+  id: string,
+) {
+  await bootstrapOrdersFromLocalIfNeeded();
+  const organizationId = await getCurrentOrgId();
+  const { data, error } = await supabaseClient
+    .from(table)
+    .select(columns)
+    .eq("organization_id", organizationId)
+    .eq("id", id)
+    .single();
+
+  if (error) throw new Error(error.message || `${table} detail load failed`);
+  return mapper(data as unknown as Record<string, unknown>);
+}
+
+export async function fetchSalesOrders(): Promise<LocalSalesOrder[]> {
+  return fetchOrderCollection("sales_orders", SALES_ORDER_COLUMNS, mapSalesOrderRow);
+}
+
+export async function fetchSalesOrderSummaries(): Promise<LocalSalesOrder[]> {
+  return fetchOrderCollection("sales_orders", SALES_ORDER_SUMMARY_COLUMNS, mapSalesOrderRow);
+}
+
+export async function fetchSalesOrderById(salesOrderId: string): Promise<LocalSalesOrder> {
+  return fetchOrderRecord("sales_orders", SALES_ORDER_COLUMNS, mapSalesOrderRow, salesOrderId);
 }
 
 export async function upsertSalesOrder(order: LocalSalesOrder): Promise<LocalSalesOrder> {
@@ -634,16 +765,15 @@ export async function markSalesOrderPortalSeen(orderId: string): Promise<LocalSa
 }
 
 export async function fetchPurchaseOrders(): Promise<LocalPurchaseOrder[]> {
-  await bootstrapOrdersFromLocalIfNeeded();
-  const organizationId = await getCurrentOrgId();
-  const { data, error } = await supabaseClient
-    .from("purchase_orders")
-    .select(PURCHASE_ORDER_COLUMNS)
-    .eq("organization_id", organizationId)
-    .order("updated_at", { ascending: false });
+  return fetchOrderCollection("purchase_orders", PURCHASE_ORDER_COLUMNS, mapPurchaseOrderRow);
+}
 
-  if (error) throw new Error(error.message || "Purchase orders load failed");
-  return ((data || []) as unknown as Record<string, unknown>[]).map(mapPurchaseOrderRow);
+export async function fetchPurchaseOrderSummaries(): Promise<LocalPurchaseOrder[]> {
+  return fetchOrderCollection("purchase_orders", PURCHASE_ORDER_SUMMARY_COLUMNS, mapPurchaseOrderRow);
+}
+
+export async function fetchPurchaseOrderById(purchaseOrderId: string): Promise<LocalPurchaseOrder> {
+  return fetchOrderRecord("purchase_orders", PURCHASE_ORDER_COLUMNS, mapPurchaseOrderRow, purchaseOrderId);
 }
 
 export async function replacePurchaseOrdersForSalesOrder(salesOrderId: string, purchaseOrders: LocalPurchaseOrder[]) {
@@ -667,16 +797,15 @@ export async function replacePurchaseOrdersForSalesOrder(salesOrderId: string, p
 }
 
 export async function fetchInvoices(): Promise<LocalInvoice[]> {
-  await bootstrapOrdersFromLocalIfNeeded();
-  const organizationId = await getCurrentOrgId();
-  const { data, error } = await supabaseClient
-    .from("invoices")
-    .select(INVOICE_COLUMNS)
-    .eq("organization_id", organizationId)
-    .order("updated_at", { ascending: false });
+  return fetchOrderCollection("invoices", INVOICE_COLUMNS, mapInvoiceRow);
+}
 
-  if (error) throw new Error(error.message || "Invoices load failed");
-  return ((data || []) as unknown as Record<string, unknown>[]).map(mapInvoiceRow);
+export async function fetchInvoiceSummaries(): Promise<LocalInvoice[]> {
+  return fetchOrderCollection("invoices", INVOICE_SUMMARY_COLUMNS, mapInvoiceRow);
+}
+
+export async function fetchInvoiceById(invoiceId: string): Promise<LocalInvoice> {
+  return fetchOrderRecord("invoices", INVOICE_COLUMNS, mapInvoiceRow, invoiceId);
 }
 
 export async function fetchInvoicesByCustomerNames(names: string[]): Promise<LocalInvoice[]> {
@@ -744,16 +873,15 @@ export async function deletePurchaseOrder(purchaseOrderId: string): Promise<void
 }
 
 export async function fetchBills(): Promise<LocalBill[]> {
-  await bootstrapOrdersFromLocalIfNeeded();
-  const organizationId = await getCurrentOrgId();
-  const { data, error } = await supabaseClient
-    .from("bills")
-    .select(BILL_COLUMNS)
-    .eq("organization_id", organizationId)
-    .order("updated_at", { ascending: false });
+  return fetchOrderCollection("bills", BILL_COLUMNS, mapBillRow);
+}
 
-  if (error) throw new Error(error.message || "Bills load failed");
-  return ((data || []) as unknown as Record<string, unknown>[]).map(mapBillRow);
+export async function fetchBillSummaries(): Promise<LocalBill[]> {
+  return fetchOrderCollection("bills", BILL_SUMMARY_COLUMNS, mapBillRow);
+}
+
+export async function fetchBillById(billId: string): Promise<LocalBill> {
+  return fetchOrderRecord("bills", BILL_COLUMNS, mapBillRow, billId);
 }
 
 export async function fetchBillsBySupplierNames(names: string[]): Promise<LocalBill[]> {

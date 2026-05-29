@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastructure/api/companyProfilesApi";
 import { fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
-import { fetchInvoices, fetchPaymentsReceived, fetchSalesOrders, upsertInvoice, upsertPaymentReceived } from "../../infrastructure/api/ordersApi";
+import {
+  fetchInvoiceById,
+  fetchInvoiceSummaries,
+  fetchPaymentsReceived,
+  fetchSalesOrderById,
+  fetchSalesOrderSummaries,
+  upsertInvoice,
+  upsertPaymentReceived,
+} from "../../infrastructure/api/ordersApi";
 import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
 import { QuotesPage } from "./QuotesPage";
 import { PriceListsPage } from "./PriceListsPage";
@@ -161,7 +169,7 @@ export function SalesPage({
     async function run() {
       try {
         if (activeTab === "Invoices") {
-          const [invoiceRows, salesOrderRows] = await Promise.all([fetchInvoices(), fetchSalesOrders()]);
+          const [invoiceRows, salesOrderRows] = await Promise.all([fetchInvoiceSummaries(), fetchSalesOrderSummaries()]);
           if (cancelled) return;
           setInvoices(invoiceRows);
           setSalesOrders(salesOrderRows);
@@ -169,7 +177,7 @@ export function SalesPage({
         }
 
         if (activeTab === "Payments Received") {
-          const [paymentRows, invoiceRows] = await Promise.all([fetchPaymentsReceived(), fetchInvoices()]);
+          const [paymentRows, invoiceRows] = await Promise.all([fetchPaymentsReceived(), fetchInvoiceSummaries()]);
           if (cancelled) return;
           setPaymentsReceived(paymentRows);
           setInvoices(invoiceRows);
@@ -249,8 +257,31 @@ export function SalesPage({
     }
     const current = invoices.find((item) => item.id === selectedInvoiceId) || invoices[0];
     setSelectedInvoiceId(current.id);
-    setInvoiceDraft(cloneInvoice(current));
   }, [invoices, selectedInvoiceId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (invoicesView !== "detail" || !selectedInvoiceId) return;
+      if (invoiceDraft?.id === selectedInvoiceId && invoiceDraft.lines.length) return;
+      try {
+        const detail = await fetchInvoiceById(selectedInvoiceId);
+        if (!cancelled) {
+          setInvoiceDraft(cloneInvoice(detail));
+        }
+      } catch {
+        if (!cancelled) {
+          setInvoiceDraft(null);
+        }
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [invoiceDraft?.id, invoiceDraft?.lines.length, invoicesView, selectedInvoiceId]);
 
   useEffect(() => {
     if (!paymentsReceived.length) {
@@ -436,7 +467,7 @@ export function SalesPage({
         lines: nextLines,
       });
       const saved = await upsertInvoice(nextDraft, selectedInvoiceId);
-      const refreshed = await fetchInvoices();
+      const refreshed = await fetchInvoiceSummaries();
       setInvoices(refreshed);
       setSelectedInvoiceId(saved.id);
       setInvoiceDraft(cloneInvoice(saved));
@@ -483,7 +514,7 @@ export function SalesPage({
     try {
       actionFeedback.begin(`Saving payment ${payload.id}...`);
       const saved = await upsertPaymentReceived(payload, previousId);
-      const [refreshedPayments, refreshedInvoices] = await Promise.all([fetchPaymentsReceived(), fetchInvoices()]);
+      const [refreshedPayments, refreshedInvoices] = await Promise.all([fetchPaymentsReceived(), fetchInvoiceSummaries()]);
       setPaymentsReceived(refreshedPayments);
       setInvoices(refreshedInvoices);
       setSelectedPaymentReceivedId(saved.id);
@@ -518,12 +549,11 @@ export function SalesPage({
     }
     try {
       actionFeedback.begin(`Creating ${selectedSalesOrderIds.length.toLocaleString("en-US")} invoice(s)...`);
-      const created = await Promise.all(
-        salesOrders
-          .filter((order) => selectedSalesOrderIds.includes(order.id))
-          .map((order) => upsertInvoice(buildInvoiceFromSalesOrder(order))),
+      const ordersToConvert = await Promise.all(
+        salesOrders.filter((order) => selectedSalesOrderIds.includes(order.id)).map((order) => fetchSalesOrderById(order.id)),
       );
-      const refreshed = await fetchInvoices();
+      const created = await Promise.all(ordersToConvert.map((order) => upsertInvoice(buildInvoiceFromSalesOrder(order))));
+      const refreshed = await fetchInvoiceSummaries();
       setInvoices(refreshed);
       setSelectedSalesOrderIds([]);
       if (created[0]) {
@@ -542,7 +572,9 @@ export function SalesPage({
       return;
     }
 
-    const selectedOrders = salesOrders.filter((order) => selectedSalesOrderIds.includes(order.id));
+    const selectedOrders = await Promise.all(
+      salesOrders.filter((order) => selectedSalesOrderIds.includes(order.id)).map((order) => fetchSalesOrderById(order.id)),
+    );
     if (!selectedOrders.length) {
       actionFeedback.fail("Selected sales orders could not be resolved.");
       return;
@@ -563,7 +595,7 @@ export function SalesPage({
     try {
       actionFeedback.begin(`Merging ${selectedOrders.length.toLocaleString("en-US")} sales order(s) into one invoice...`);
       const merged = await upsertInvoice(buildMergedInvoiceFromSalesOrders(selectedOrders));
-      const refreshed = await fetchInvoices();
+      const refreshed = await fetchInvoiceSummaries();
       setInvoices(refreshed);
       setSelectedSalesOrderIds([]);
       setSelectedInvoiceId(merged.id);
@@ -690,7 +722,7 @@ export function SalesPage({
               emptyText="No invoices yet. Confirm a sales order and convert it to invoice."
               onRowClick={(row) => {
                 setSelectedInvoiceId(row.id);
-                setInvoiceDraft(cloneInvoice(row));
+                setInvoiceDraft(null);
                 setInvoicesView("detail");
                 onSelectedInvoiceChange?.(row.id);
               }}

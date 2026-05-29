@@ -4,9 +4,10 @@ import { findCodeReferenceMatch } from "../../infrastructure/api/codeReferencesA
 import { fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
 import {
   deleteSalesOrder,
-  fetchInvoices,
-  fetchPurchaseOrders,
-  fetchSalesOrders,
+  fetchInvoiceSummaries,
+  fetchPurchaseOrderSummaries,
+  fetchSalesOrderById,
+  fetchSalesOrderSummaries,
   markSalesOrderPortalSeen,
   replacePurchaseOrdersForSalesOrder,
   upsertInvoice,
@@ -561,7 +562,11 @@ export function QuotesPage({
 
     async function run() {
       try {
-        const [salesOrderRows, purchaseOrderRows, invoiceRows] = await Promise.all([fetchSalesOrders(), fetchPurchaseOrders(), fetchInvoices()]);
+        const [salesOrderRows, purchaseOrderRows, invoiceRows] = await Promise.all([
+          fetchSalesOrderSummaries(),
+          fetchPurchaseOrderSummaries(),
+          fetchInvoiceSummaries(),
+        ]);
         if (!cancelled) {
           setLocalSalesOrders(salesOrderRows);
           setSavedPurchaseOrders(purchaseOrderRows);
@@ -1154,43 +1159,37 @@ export function QuotesPage({
   }
 
   async function loadLocalSalesOrderIntoEditor(order: LocalSalesOrder) {
+    const detailOrder = order.lines.length ? order : await fetchSalesOrderById(order.id);
     setWorkbenchMode("existing");
-    setSelectedLocalSalesOrderId(order.id);
+    setSelectedLocalSalesOrderId(detailOrder.id);
     setSelectedQuoteId("");
     onSelectedQuoteChange?.("");
-    setQuoteNo(order.sales_order_no);
-    setCustomerName(order.customer_name);
-    setCustomerSelection(order.customer_name || "");
+    setQuoteNo(detailOrder.sales_order_no);
+    setCustomerName(detailOrder.customer_name);
+    setCustomerSelection(detailOrder.customer_name || "");
     setManualCustomerName("");
-    setSellerCompany(order.seller_company || "");
-    setQuoteDate(order.quote_date);
-    setCurrency(order.currency || "EUR");
+    setSellerCompany(detailOrder.seller_company || "");
+    setQuoteDate(detailOrder.quote_date);
+    setCurrency(detailOrder.currency || "EUR");
     setQuoteBrand("");
     setQuoteBrandSelection("");
-    setCustomerType(order.customer_type);
-    setShippingCost(String(order.shipping_cost ?? 0));
-    setDiscountAmount(String(order.discount_amount ?? 0));
-    setSupplierMode(order.supplier_mode || "Best price");
-    setSellerInfo(order.seller_info || "");
-    setBuyerInfo(order.buyer_info || order.purchase_company || "");
-    setDeliveryTermSelection(toTermSelection(order.delivery_term || "", DELIVERY_TERM_OPTIONS));
-    setPaymentTermsSelection(toTermSelection(order.payment_terms || "", PAYMENT_TERM_OPTIONS));
-    setDeliveryTerm(order.delivery_term || "");
-    setPaymentTerms(order.payment_terms || "");
-    setPackingDetails(order.packing_details || "");
-    setQuoteNotes(order.notes || "");
-    actionFeedback.begin(`Loading ${order.sales_order_no}...`);
-    const hydratedLines = await resyncSalesOrderLinesFromCatalog(order.lines || [], {
-      customerType: order.customer_type,
-      marginA: effectiveMarginA,
-      marginB: effectiveMarginB,
-      onlyFillBlanks: false,
-      keepPrices: true,
-      hydrateMissingPricesIfKeepingPrices: true,
-    });
-    if (order.source_channel === "portal" && order.portal_submitted_at && !order.portal_seen_at) {
+    setCustomerType(detailOrder.customer_type);
+    setShippingCost(String(detailOrder.shipping_cost ?? 0));
+    setDiscountAmount(String(detailOrder.discount_amount ?? 0));
+    setSupplierMode(detailOrder.supplier_mode || "Best price");
+    setSellerInfo(detailOrder.seller_info || "");
+    setBuyerInfo(detailOrder.buyer_info || detailOrder.purchase_company || "");
+    setDeliveryTermSelection(toTermSelection(detailOrder.delivery_term || "", DELIVERY_TERM_OPTIONS));
+    setPaymentTermsSelection(toTermSelection(detailOrder.payment_terms || "", PAYMENT_TERM_OPTIONS));
+    setDeliveryTerm(detailOrder.delivery_term || "");
+    setPaymentTerms(detailOrder.payment_terms || "");
+    setPackingDetails(detailOrder.packing_details || "");
+    setQuoteNotes(detailOrder.notes || "");
+    actionFeedback.begin(`Loading ${detailOrder.sales_order_no}...`);
+    const clonedLines = (detailOrder.lines || []).map((line) => ({ ...line }));
+    if (detailOrder.source_channel === "portal" && detailOrder.portal_submitted_at && !detailOrder.portal_seen_at) {
       try {
-        const seenOrder = await markSalesOrderPortalSeen(order.id);
+        const seenOrder = await markSalesOrderPortalSeen(detailOrder.id);
         if (seenOrder) {
           setLocalSalesOrders((current) => current.map((item) => (item.id === seenOrder.id ? seenOrder : item)));
         }
@@ -1198,10 +1197,10 @@ export function QuotesPage({
         // opening order should continue even if seen state update fails
       }
     }
-    setQuoteBuilderLines(hydratedLines);
-    setBuilderStatus(`Loaded ${order.sales_order_no} (${order.status}).`);
-    onSelectedSalesOrderChange?.(order.id);
-    actionFeedback.succeed(`${order.sales_order_no} loaded.`);
+    setQuoteBuilderLines(clonedLines);
+    setBuilderStatus(`Loaded ${detailOrder.sales_order_no} (${detailOrder.status}).`);
+    onSelectedSalesOrderChange?.(detailOrder.id);
+    actionFeedback.succeed(`${detailOrder.sales_order_no} loaded.`);
   }
 
   useEffect(() => {
@@ -2020,7 +2019,11 @@ export function QuotesPage({
   }
 
   async function refreshLocalSalesOrders(nextSelectedId?: string) {
-    const [nextSalesOrders, nextPurchaseOrders, nextInvoices] = await Promise.all([fetchSalesOrders(), fetchPurchaseOrders(), fetchInvoices()]);
+    const [nextSalesOrders, nextPurchaseOrders, nextInvoices] = await Promise.all([
+      fetchSalesOrderSummaries(),
+      fetchPurchaseOrderSummaries(),
+      fetchInvoiceSummaries(),
+    ]);
     setLocalSalesOrders(nextSalesOrders);
     setSavedPurchaseOrders(nextPurchaseOrders);
     setSavedInvoices(nextInvoices);
@@ -2084,7 +2087,9 @@ export function QuotesPage({
       return;
     }
 
-    const selectedOrders = localSalesOrders.filter((order) => uniqueIds.includes(order.id));
+    const selectedOrders = await Promise.all(
+      localSalesOrders.filter((order) => uniqueIds.includes(order.id)).map((order) => fetchSalesOrderById(order.id)),
+    );
     const invoiceReadyOrders = selectedOrders.filter((order) => order.status === "confirmed");
     if (!invoiceReadyOrders.length) {
       actionFeedback.fail("Only confirmed sales orders can be converted to invoices.");

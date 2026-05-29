@@ -5,9 +5,11 @@ import {
   buildAndUpsertBillFromPurchaseOrder,
   buildAndUpsertMergedBillFromPurchaseOrders,
   deletePurchaseOrder,
-  fetchBills,
+  fetchBillById,
+  fetchBillSummaries,
   fetchPaymentsMade,
-  fetchPurchaseOrders,
+  fetchPurchaseOrderById,
+  fetchPurchaseOrderSummaries,
   upsertBill,
   upsertPaymentMade,
   upsertPurchaseOrder,
@@ -180,8 +182,10 @@ export function PurchasesPage({
   const [selectedPurchaseOrderIds, setSelectedPurchaseOrderIds] = useState<string[]>([]);
   const [purchaseOrderActionsOpen, setPurchaseOrderActionsOpen] = useState(false);
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<LocalPurchaseOrder | null>(null);
+  const [purchaseOrderSourceSnapshot, setPurchaseOrderSourceSnapshot] = useState("");
   const [selectedBillId, setSelectedBillId] = useState("");
   const [billDraft, setBillDraft] = useState<LocalBill | null>(null);
+  const [billSourceSnapshot, setBillSourceSnapshot] = useState("");
   const [paymentsMade, setPaymentsMade] = useState<LocalPaymentMade[]>([]);
   const [selectedPaymentMadeId, setSelectedPaymentMadeId] = useState("");
   const [paymentMadeDraft, setPaymentMadeDraft] = useState<LocalPaymentMade | null>(null);
@@ -225,21 +229,21 @@ export function PurchasesPage({
     async function run() {
       try {
         if (activeTab === "Purchase Orders") {
-          const purchaseOrderRows = await fetchPurchaseOrders();
+          const purchaseOrderRows = await fetchPurchaseOrderSummaries();
           if (cancelled) return;
           setPurchaseOrders(purchaseOrderRows);
           return;
         }
 
         if (activeTab === "Bills") {
-          const billRows = await fetchBills();
+          const billRows = await fetchBillSummaries();
           if (cancelled) return;
           setBills(billRows);
           return;
         }
 
         if (activeTab === "Payments Made") {
-          const [paymentRows, billRows] = await Promise.all([fetchPaymentsMade(), fetchBills()]);
+          const [paymentRows, billRows] = await Promise.all([fetchPaymentsMade(), fetchBillSummaries()]);
           if (cancelled) return;
           setPaymentsMade(paymentRows);
           setBills(billRows);
@@ -329,6 +333,7 @@ export function PurchasesPage({
     );
     setSelectedPurchaseOrderId(draft.id);
     setPurchaseOrderDraft(draft);
+    setPurchaseOrderSourceSnapshot("");
     setPurchaseOrdersView("detail");
     actionFeedback.succeed(`${pending.product_code} added to Purchase Order draft.`);
   }, [actionFeedback, companyProfiles]);
@@ -337,12 +342,12 @@ export function PurchasesPage({
     if (!purchaseOrders.length) {
       setSelectedPurchaseOrderId("");
       setPurchaseOrderDraft(null);
+      setPurchaseOrderSourceSnapshot("");
       setPurchaseOrdersView("list");
       return;
     }
     const current = purchaseOrders.find((item) => item.id === selectedPurchaseOrderId) || purchaseOrders[0];
     setSelectedPurchaseOrderId(current.id);
-    setPurchaseOrderDraft({ ...current, lines: current.lines.map((line) => ({ ...line })) });
   }, [purchaseOrders, selectedPurchaseOrderId]);
 
   useEffect(() => {
@@ -353,13 +358,67 @@ export function PurchasesPage({
     if (!bills.length) {
       setSelectedBillId("");
       setBillDraft(null);
+      setBillSourceSnapshot("");
       setBillsView("list");
       return;
     }
     const current = bills.find((item) => item.id === selectedBillId) || bills[0];
     setSelectedBillId(current.id);
-    setBillDraft({ ...current, lines: current.lines.map((line) => ({ ...line })) });
   }, [bills, selectedBillId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (purchaseOrdersView !== "detail" || !selectedPurchaseOrderId) return;
+      if (purchaseOrderDraft?.id === selectedPurchaseOrderId && purchaseOrderDraft.lines.length) return;
+      try {
+        const detail = await fetchPurchaseOrderById(selectedPurchaseOrderId);
+        if (!cancelled) {
+          const snapshot = serializePurchaseOrderForDirtyCheck(detail);
+          setPurchaseOrderDraft({ ...detail, lines: detail.lines.map((line) => ({ ...line })) });
+          setPurchaseOrderSourceSnapshot(snapshot);
+        }
+      } catch {
+        if (!cancelled) {
+          setPurchaseOrderDraft(null);
+          setPurchaseOrderSourceSnapshot("");
+        }
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [purchaseOrderDraft?.id, purchaseOrderDraft?.lines.length, purchaseOrdersView, selectedPurchaseOrderId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (billsView !== "detail" || !selectedBillId) return;
+      if (billDraft?.id === selectedBillId && billDraft.lines.length) return;
+      try {
+        const detail = await fetchBillById(selectedBillId);
+        if (!cancelled) {
+          const snapshot = serializeBillForDirtyCheck(detail);
+          setBillDraft({ ...detail, lines: detail.lines.map((line) => ({ ...line })) });
+          setBillSourceSnapshot(snapshot);
+        }
+      } catch {
+        if (!cancelled) {
+          setBillDraft(null);
+          setBillSourceSnapshot("");
+        }
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [billDraft?.id, billDraft?.lines.length, billsView, selectedBillId]);
 
   useEffect(() => {
     if (!paymentsMade.length) {
@@ -538,10 +597,11 @@ export function PurchasesPage({
         lines: nextLines,
       });
       const saved = await upsertPurchaseOrder(nextDraft);
-      const refreshed = await fetchPurchaseOrders();
+      const refreshed = await fetchPurchaseOrderSummaries();
       setPurchaseOrders(refreshed);
       setSelectedPurchaseOrderId(saved.id);
       setPurchaseOrderDraft({ ...saved, lines: saved.lines.map((line) => ({ ...line })) });
+      setPurchaseOrderSourceSnapshot(serializePurchaseOrderForDirtyCheck(saved));
       actionFeedback.succeed("Purchase order re-synced from catalog.");
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase order catalog re-sync failed");
@@ -794,9 +854,8 @@ export function PurchasesPage({
 
   const savedPurchaseOrderSnapshot = useMemo(() => {
     if (!purchaseOrderDraft) return "";
-    const source = purchaseOrders.find((item) => item.id === purchaseOrderDraft.id);
-    return source ? serializePurchaseOrderForDirtyCheck(source) : "";
-  }, [purchaseOrderDraft, purchaseOrders]);
+    return purchaseOrderSourceSnapshot;
+  }, [purchaseOrderDraft, purchaseOrderSourceSnapshot]);
 
   const purchaseOrderDraftSnapshot = useMemo(
     () => (purchaseOrderDraft ? serializePurchaseOrderForDirtyCheck(purchaseOrderDraft) : ""),
@@ -816,9 +875,8 @@ export function PurchasesPage({
 
   const savedBillSnapshot = useMemo(() => {
     if (!billDraft) return "";
-    const source = bills.find((item) => item.id === billDraft.id);
-    return source ? serializeBillForDirtyCheck(source) : "";
-  }, [billDraft, bills]);
+    return billSourceSnapshot;
+  }, [billDraft, billSourceSnapshot]);
 
   const billDraftSnapshot = useMemo(() => (billDraft ? serializeBillForDirtyCheck(billDraft) : ""), [billDraft]);
 
@@ -894,10 +952,11 @@ export function PurchasesPage({
           message = `${message} ${caught instanceof Error ? caught.message : "Vendor email queue failed."}`;
         }
       }
-      const refreshed = await fetchPurchaseOrders();
+      const refreshed = await fetchPurchaseOrderSummaries();
       setPurchaseOrders(refreshed);
       setSelectedPurchaseOrderId(saved.id);
       setPurchaseOrderDraft({ ...saved, lines: saved.lines.map((line) => ({ ...line })) });
+      setPurchaseOrderSourceSnapshot(serializePurchaseOrderForDirtyCheck(saved));
       actionFeedback.succeed(message);
       return saved;
     } catch (caught) {
@@ -923,8 +982,9 @@ export function PurchasesPage({
     try {
       actionFeedback.begin(`Deleting purchase order ${poId}...`);
       await deletePurchaseOrder(poId);
-      const refreshed = await fetchPurchaseOrders();
+      const refreshed = await fetchPurchaseOrderSummaries();
       setPurchaseOrders(refreshed);
+      setPurchaseOrderSourceSnapshot("");
       setPurchaseOrdersView("list");
       actionFeedback.succeed(`Purchase order ${poId} deleted.`);
     } catch (caught) {
@@ -952,11 +1012,12 @@ export function PurchasesPage({
     try {
       actionFeedback.begin(`Deleting ${uniqueIds.length.toLocaleString("en-US")} purchase order(s)...`);
       await Promise.all(uniqueIds.map((purchaseOrderId) => deletePurchaseOrder(purchaseOrderId)));
-      const refreshed = await fetchPurchaseOrders();
+      const refreshed = await fetchPurchaseOrderSummaries();
       setPurchaseOrders(refreshed);
       setSelectedPurchaseOrderIds((current) => current.filter((purchaseOrderId) => !uniqueIds.includes(purchaseOrderId)));
       if (purchaseOrderDraft && uniqueIds.includes(purchaseOrderDraft.id)) {
         setPurchaseOrderDraft(null);
+        setPurchaseOrderSourceSnapshot("");
         setSelectedPurchaseOrderId("");
         setPurchaseOrdersView("list");
       }
@@ -971,10 +1032,11 @@ export function PurchasesPage({
     try {
       actionFeedback.begin(`Converting ${purchaseOrderDraft.id} to bill...`);
       const saved = await buildAndUpsertBillFromPurchaseOrder(recomputePurchaseOrderTotals(purchaseOrderDraft));
-      const refreshed = await fetchBills();
+      const refreshed = await fetchBillSummaries();
       setBills(refreshed);
       setSelectedBillId(saved.id);
       setBillDraft({ ...saved, lines: saved.lines.map((line) => ({ ...line })) });
+      setBillSourceSnapshot(serializeBillForDirtyCheck(saved));
       setActiveTab("Bills");
       setBillsView("detail");
       actionFeedback.succeed(`Bill ${saved.id} created from ${purchaseOrderDraft.id}.`);
@@ -990,7 +1052,9 @@ export function PurchasesPage({
       return;
     }
 
-    const orders = purchaseOrders.filter((order) => uniqueIds.includes(order.id));
+    const orders = await Promise.all(
+      purchaseOrders.filter((order) => uniqueIds.includes(order.id)).map((order) => fetchPurchaseOrderById(order.id)),
+    );
     if (!orders.length) {
       actionFeedback.fail("Selected purchase orders are no longer available.");
       return;
@@ -999,7 +1063,7 @@ export function PurchasesPage({
     try {
       actionFeedback.begin(`Converting ${orders.length.toLocaleString("en-US")} purchase order(s) to bills...`);
       await Promise.all(orders.map((order) => buildAndUpsertBillFromPurchaseOrder(recomputePurchaseOrderTotals(order))));
-      const [refreshedPurchaseOrders, refreshedBills] = await Promise.all([fetchPurchaseOrders(), fetchBills()]);
+      const [refreshedPurchaseOrders, refreshedBills] = await Promise.all([fetchPurchaseOrderSummaries(), fetchBillSummaries()]);
       setPurchaseOrders(refreshedPurchaseOrders);
       setBills(refreshedBills);
       setBillsView("list");
@@ -1016,7 +1080,9 @@ export function PurchasesPage({
       return;
     }
 
-    const orders = purchaseOrders.filter((order) => uniqueIds.includes(order.id));
+    const orders = await Promise.all(
+      purchaseOrders.filter((order) => uniqueIds.includes(order.id)).map((order) => fetchPurchaseOrderById(order.id)),
+    );
     if (!orders.length) {
       actionFeedback.fail("Selected purchase orders are no longer available.");
       return;
@@ -1043,12 +1109,13 @@ export function PurchasesPage({
     try {
       actionFeedback.begin(`Merging ${orders.length.toLocaleString("en-US")} purchase order(s) into one bill...`);
       const merged = await buildAndUpsertMergedBillFromPurchaseOrders(orders.map((order) => recomputePurchaseOrderTotals(order)));
-      const [refreshedPurchaseOrders, refreshedBills] = await Promise.all([fetchPurchaseOrders(), fetchBills()]);
+      const [refreshedPurchaseOrders, refreshedBills] = await Promise.all([fetchPurchaseOrderSummaries(), fetchBillSummaries()]);
       setPurchaseOrders(refreshedPurchaseOrders);
       setBills(refreshedBills);
       setSelectedPurchaseOrderIds([]);
       setSelectedBillId(merged.id);
       setBillDraft({ ...merged, lines: merged.lines.map((line) => ({ ...line })) });
+      setBillSourceSnapshot(serializeBillForDirtyCheck(merged));
       setActiveTab("Bills");
       setBillsView("detail");
       actionFeedback.succeed(`Merged bill ${merged.id} created from ${orders.length.toLocaleString("en-US")} purchase order(s).`);
@@ -1062,10 +1129,11 @@ export function PurchasesPage({
     try {
       actionFeedback.begin(`Saving bill ${billDraft.id}...`);
       const saved = await upsertBill(recomputeBillTotals(billDraft), selectedBillId);
-      const refreshed = await fetchBills();
+      const refreshed = await fetchBillSummaries();
       setBills(refreshed);
       setSelectedBillId(saved.id);
       setBillDraft({ ...saved, lines: saved.lines.map((line) => ({ ...line })) });
+      setBillSourceSnapshot(serializeBillForDirtyCheck(saved));
       actionFeedback.succeed(`Bill ${saved.id} saved.`);
       return saved;
     } catch (caught) {
@@ -1085,7 +1153,7 @@ export function PurchasesPage({
     try {
       actionFeedback.begin(`Saving payment ${payload.id}...`);
       const saved = await upsertPaymentMade(payload, previousId);
-      const [refreshedPayments, refreshedBills] = await Promise.all([fetchPaymentsMade(), fetchBills()]);
+      const [refreshedPayments, refreshedBills] = await Promise.all([fetchPaymentsMade(), fetchBillSummaries()]);
       setPaymentsMade(refreshedPayments);
       setBills(refreshedBills);
       setSelectedPaymentMadeId(saved.id);
@@ -1170,7 +1238,8 @@ export function PurchasesPage({
                 onRowClick={(row) =>
                   void confirmPurchaseOrderNavigation(async () => {
                     setSelectedPurchaseOrderId(row.id);
-                    setPurchaseOrderDraft({ ...row, lines: row.lines.map((line) => ({ ...line })) });
+                    setPurchaseOrderDraft(null);
+                    setPurchaseOrderSourceSnapshot("");
                     setPurchaseOrdersView("detail");
                   })
                 }
@@ -1366,7 +1435,8 @@ export function PurchasesPage({
               onRowClick={(row) =>
                 void confirmBillNavigation(async () => {
                   setSelectedBillId(row.id);
-                  setBillDraft({ ...row, lines: row.lines.map((line) => ({ ...line })) });
+                  setBillDraft(null);
+                  setBillSourceSnapshot("");
                   setBillsView("detail");
                 })
               }
