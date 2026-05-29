@@ -3,6 +3,8 @@ import { createEmptyCustomer } from "../../shared/localCustomers";
 import { callAppAdminRecords } from "./appAdminRecordsApi";
 import { getCurrentOrgId, isUuid } from "./organizationApi";
 
+const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
+
 const CUSTOMER_COLUMNS = [
   "id",
   "customer_type",
@@ -44,7 +46,59 @@ function clearCustomersCache() {
   customersCachePromise = null;
 }
 
+function parseEmbeddedCustomerMeta(raw: unknown) {
+  const text = String(raw || "");
+  const markerIndex = text.lastIndexOf(CUSTOMER_META_PREFIX);
+  if (markerIndex < 0) {
+    return {
+      clean: text,
+      meta: {} as {
+        seller_company_profile_id?: string;
+        portal_c_price_mode?: LocalCustomer["portal_c_price_mode"];
+        price_list_margin_percent?: number | null;
+      },
+    };
+  }
+  const clean = text.slice(0, markerIndex).trimEnd();
+  const jsonText = text.slice(markerIndex + CUSTOMER_META_PREFIX.length).trim();
+  try {
+    const parsed = JSON.parse(jsonText) as {
+      seller_company_profile_id?: string;
+      portal_c_price_mode?: LocalCustomer["portal_c_price_mode"];
+      price_list_margin_percent?: number | null;
+    };
+    return { clean, meta: parsed || {} };
+  } catch {
+    return {
+      clean: text,
+      meta: {} as {
+        seller_company_profile_id?: string;
+        portal_c_price_mode?: LocalCustomer["portal_c_price_mode"];
+        price_list_margin_percent?: number | null;
+      },
+    };
+  }
+}
+
+function embedCustomerMeta(
+  customFields: string,
+  meta: {
+    seller_company_profile_id?: string | null;
+    portal_c_price_mode?: LocalCustomer["portal_c_price_mode"] | null;
+    price_list_margin_percent?: number | null;
+  },
+) {
+  const parsed = parseEmbeddedCustomerMeta(customFields);
+  const nextMeta: Record<string, unknown> = {};
+  if (meta.seller_company_profile_id) nextMeta.seller_company_profile_id = meta.seller_company_profile_id;
+  if (meta.portal_c_price_mode) nextMeta.portal_c_price_mode = meta.portal_c_price_mode;
+  if (meta.price_list_margin_percent != null) nextMeta.price_list_margin_percent = Number(meta.price_list_margin_percent);
+  if (!Object.keys(nextMeta).length) return parsed.clean;
+  return parsed.clean ? `${parsed.clean}\n${CUSTOMER_META_PREFIX}${JSON.stringify(nextMeta)}` : `${CUSTOMER_META_PREFIX}${JSON.stringify(nextMeta)}`;
+}
+
 function mapCustomerRow(row: Record<string, unknown>): LocalCustomer {
+  const parsedCustomFields = parseEmbeddedCustomerMeta(row.custom_fields);
   return {
     id: String(row.id || ""),
     customer_type: String(row.customer_type || "Business") as LocalCustomer["customer_type"],
@@ -63,14 +117,19 @@ function mapCustomerRow(row: Record<string, unknown>): LocalCustomer {
     currency: String(row.currency || "EUR"),
     payment_terms: String(row.payment_terms || "Cash in Advance"),
     contract_nr: String(row.contract_nr || ""),
-    seller_company_profile_id: String(row.seller_company_profile_id || ""),
+    seller_company_profile_id: String(row.seller_company_profile_id || parsedCustomFields.meta.seller_company_profile_id || ""),
     price_list_type: String(row.price_list_type || "A") as LocalCustomer["price_list_type"],
-    portal_c_price_mode: String(row.portal_c_price_mode || "standard") as LocalCustomer["portal_c_price_mode"],
-    price_list_margin_percent: row.price_list_margin_percent == null ? null : Number(row.price_list_margin_percent),
+    portal_c_price_mode: String(row.portal_c_price_mode || parsedCustomFields.meta.portal_c_price_mode || "standard") as LocalCustomer["portal_c_price_mode"],
+    price_list_margin_percent:
+      row.price_list_margin_percent == null
+        ? parsedCustomFields.meta.price_list_margin_percent == null
+          ? null
+          : Number(parsedCustomFields.meta.price_list_margin_percent)
+        : Number(row.price_list_margin_percent),
     billing_address: String(row.billing_address || ""),
     shipping_address: String(row.shipping_address || ""),
     contact_persons: String(row.contact_persons || ""),
-    custom_fields: String(row.custom_fields || ""),
+    custom_fields: parsedCustomFields.clean,
     reporting_tags: String(row.reporting_tags || ""),
     remarks: String(row.remarks || ""),
     created_at: String(row.created_at || ""),
@@ -79,6 +138,7 @@ function mapCustomerRow(row: Record<string, unknown>): LocalCustomer {
 }
 
 function mapCustomerPayload(input: LocalCustomer, organizationId: string) {
+  const sellerCompanyProfileId = isUuid(input.seller_company_profile_id) ? input.seller_company_profile_id : null;
   return {
     organization_id: organizationId,
     customer_type: input.customer_type,
@@ -97,14 +157,18 @@ function mapCustomerPayload(input: LocalCustomer, organizationId: string) {
     currency: input.currency,
     payment_terms: input.payment_terms,
     contract_nr: input.contract_nr,
-    seller_company_profile_id: isUuid(input.seller_company_profile_id) ? input.seller_company_profile_id : null,
+    seller_company_profile_id: sellerCompanyProfileId,
     price_list_type: input.price_list_type,
     portal_c_price_mode: input.portal_c_price_mode || "standard",
     price_list_margin_percent: input.price_list_margin_percent,
     billing_address: input.billing_address,
     shipping_address: input.shipping_address,
     contact_persons: input.contact_persons,
-    custom_fields: input.custom_fields,
+    custom_fields: embedCustomerMeta(input.custom_fields, {
+      seller_company_profile_id: sellerCompanyProfileId,
+      portal_c_price_mode: input.portal_c_price_mode || "standard",
+      price_list_margin_percent: input.price_list_margin_percent,
+    }),
     reporting_tags: input.reporting_tags,
     remarks: input.remarks,
     created_at: input.created_at || new Date().toISOString(),

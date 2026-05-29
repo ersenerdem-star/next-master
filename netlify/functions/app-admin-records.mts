@@ -140,6 +140,7 @@ const LEGACY_PORTAL_INVITE_COLUMNS = [
 ].join(",");
 
 const PORTAL_TOKEN_TTL_DAYS = 14;
+const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 
 function encodeHex(input: ArrayBuffer) {
   return Array.from(new Uint8Array(input))
@@ -175,6 +176,40 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message || fallback : fallback;
 }
 
+function parseEmbeddedCustomerMeta(raw: unknown) {
+  const text = String(raw || "");
+  const markerIndex = text.lastIndexOf(CUSTOMER_META_PREFIX);
+  if (markerIndex < 0) return { clean: text, meta: {} as Record<string, unknown> };
+  const clean = text.slice(0, markerIndex).trimEnd();
+  const jsonText = text.slice(markerIndex + CUSTOMER_META_PREFIX.length).trim();
+  try {
+    return { clean, meta: (JSON.parse(jsonText) as Record<string, unknown>) || {} };
+  } catch {
+    return { clean: text, meta: {} as Record<string, unknown> };
+  }
+}
+
+function embedCustomerMeta(raw: unknown, metaPatch: {
+  seller_company_profile_id?: string | null;
+  portal_c_price_mode?: string | null;
+  price_list_margin_percent?: unknown;
+}) {
+  const parsed = parseEmbeddedCustomerMeta(raw);
+  const nextMeta: Record<string, unknown> = {};
+  if (typeof metaPatch.seller_company_profile_id === "string" && metaPatch.seller_company_profile_id.trim()) {
+    nextMeta.seller_company_profile_id = metaPatch.seller_company_profile_id.trim();
+  }
+  if (typeof metaPatch.portal_c_price_mode === "string" && metaPatch.portal_c_price_mode.trim()) {
+    nextMeta.portal_c_price_mode = metaPatch.portal_c_price_mode.trim();
+  }
+  if (metaPatch.price_list_margin_percent != null && Number.isFinite(Number(metaPatch.price_list_margin_percent))) {
+    nextMeta.price_list_margin_percent = Number(metaPatch.price_list_margin_percent);
+  }
+  if (!Object.keys(nextMeta).length) return parsed.clean;
+  const encoded = `${CUSTOMER_META_PREFIX}${JSON.stringify(nextMeta)}`;
+  return parsed.clean ? `${parsed.clean}\n${encoded}` : encoded;
+}
+
 async function sanitizeCustomerPayload(input: {
   supabaseUrl: string;
   serviceRoleKey: string;
@@ -185,6 +220,11 @@ async function sanitizeCustomerPayload(input: {
   const rawProfileId = String(next.seller_company_profile_id || "").trim();
   if (!rawProfileId || !isUuid(rawProfileId)) {
     next.seller_company_profile_id = null;
+    next.custom_fields = embedCustomerMeta(next.custom_fields, {
+      seller_company_profile_id: null,
+      portal_c_price_mode: String(next.portal_c_price_mode || "standard"),
+      price_list_margin_percent: next.price_list_margin_percent,
+    });
     return next;
   }
 
@@ -201,6 +241,11 @@ async function sanitizeCustomerPayload(input: {
   ).catch(() => []);
 
   next.seller_company_profile_id = profile[0]?.id ? rawProfileId : null;
+  next.custom_fields = embedCustomerMeta(next.custom_fields, {
+    seller_company_profile_id: String(next.seller_company_profile_id || ""),
+    portal_c_price_mode: String(next.portal_c_price_mode || "standard"),
+    price_list_margin_percent: next.price_list_margin_percent,
+  });
   return next;
 }
 

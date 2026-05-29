@@ -22,9 +22,10 @@ export type PortalInviteRow = {
 };
 
 const CUSTOMER_PORTAL_SELECT =
-  "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,seller_company_profile_id,price_list_type,portal_c_price_mode";
+  "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,custom_fields,seller_company_profile_id,price_list_type,portal_c_price_mode";
 const CUSTOMER_PORTAL_SELECT_LEGACY =
-  "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,price_list_type";
+  "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,custom_fields,price_list_type";
+const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 
 async function fetchFirst<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
   const rows = await getJson<Array<T>>(buildRestUrl(supabaseUrl, table, params), {
@@ -124,6 +125,18 @@ function buildDiscontinuedWarning(resolvedCode: string, note?: string | null) {
   const base = code ? `Production ended for ${code}.` : "Production ended for this item.";
   const detail = String(note || "").trim();
   return detail ? `${base} ${detail}` : base;
+}
+
+function parseEmbeddedCustomerMeta(raw: unknown) {
+  const text = String(raw || "");
+  const markerIndex = text.lastIndexOf(CUSTOMER_META_PREFIX);
+  if (markerIndex < 0) return {} as Record<string, unknown>;
+  const jsonText = text.slice(markerIndex + CUSTOMER_META_PREFIX.length).trim();
+  try {
+    return (JSON.parse(jsonText) as Record<string, unknown>) || {};
+  } catch {
+    return {} as Record<string, unknown>;
+  }
 }
 
 function mapSalesOrderLines(lines: unknown) {
@@ -297,13 +310,20 @@ export async function resolvePortalInvite(
 export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {
   if (invite.party_type === "customer") {
     const customer = await fetchPortalCustomerRecord(supabaseUrl, serviceRoleKey, invite.organization_id, invite);
+    const customerMeta = parseEmbeddedCustomerMeta(customer?.custom_fields);
+    const sellerCompanyProfileId = String(customer?.seller_company_profile_id || customerMeta.seller_company_profile_id || "").trim();
+    const portalCPriceMode =
+      String(customer?.portal_c_price_mode || customerMeta.portal_c_price_mode || "standard").trim().toLowerCase() ===
+      "prefer_c_when_available"
+        ? "prefer_c_when_available"
+        : "standard";
 
     const companyProfile =
-      (customer?.seller_company_profile_id
+      (sellerCompanyProfileId
         ? await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "company_profiles", {
             select: "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url",
             organization_id: `eq.${invite.organization_id}`,
-            id: `eq.${customer.seller_company_profile_id}`,
+            id: `eq.${sellerCompanyProfileId}`,
             limit: "1",
           }).catch(() => null)
         : null) ||
@@ -512,10 +532,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
             payment_terms: String(customer.payment_terms || ""),
             contract_nr: String(customer.contract_nr || ""),
             price_list_type: String(customer.price_list_type || "A") as "" | "A" | "B" | "C" | "Other",
-            portal_c_price_mode:
-              String(customer.portal_c_price_mode || "standard").trim().toLowerCase() === "prefer_c_when_available"
-                ? "prefer_c_when_available"
-                : "standard",
+            portal_c_price_mode: portalCPriceMode,
           }
         : null,
       accountRows,

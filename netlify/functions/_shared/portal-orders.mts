@@ -118,10 +118,11 @@ type CustomerPricingContext = {
 };
 
 const CUSTOMER_ORDER_SELECT =
-  "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,portal_c_price_mode,price_list_margin_percent";
+  "id,display_name,company_name,currency,payment_terms,contract_nr,custom_fields,seller_company_profile_id,price_list_type,portal_c_price_mode,price_list_margin_percent";
 const CUSTOMER_ORDER_SELECT_LEGACY =
-  "id,display_name,company_name,currency,payment_terms,contract_nr,price_list_type";
+  "id,display_name,company_name,currency,payment_terms,contract_nr,custom_fields,price_list_type";
 const PORTAL_LOOKUP_CACHE_TTL_MS = 2 * 60 * 1000;
+const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 
 type PortalLookupCacheEntry<T> = {
   value: T;
@@ -217,6 +218,18 @@ function buildDiscontinuedWarning(resolvedCode: string, note?: string | null) {
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function parseEmbeddedCustomerMeta(raw: unknown) {
+  const text = String(raw || "");
+  const markerIndex = text.lastIndexOf(CUSTOMER_META_PREFIX);
+  if (markerIndex < 0) return {} as Record<string, unknown>;
+  const jsonText = text.slice(markerIndex + CUSTOMER_META_PREFIX.length).trim();
+  try {
+    return (JSON.parse(jsonText) as Record<string, unknown>) || {};
+  } catch {
+    return {} as Record<string, unknown>;
+  }
 }
 
 function normalizePortalCustomerType(value: string): CustomerPricingContext["customerType"] {
@@ -341,17 +354,27 @@ async function resolvePortalCustomer(
   }
 
   const customer = await fetchPortalCustomerForOrders(supabaseUrl, serviceRoleKey, invite);
+  const customerMeta = parseEmbeddedCustomerMeta(customer?.custom_fields);
 
   if (!customer?.id) {
     throw new Error(`Customer card not found for ${invite.party_name}`);
   }
 
+  const sellerCompanyProfileId = String(customer.seller_company_profile_id || customerMeta.seller_company_profile_id || "").trim();
+  const portalCPriceMode =
+    String(customer.portal_c_price_mode || customerMeta.portal_c_price_mode || "standard").trim().toLowerCase() ===
+    "prefer_c_when_available"
+      ? "prefer_c_when_available"
+      : "standard";
+  const marginOverrideRaw =
+    customer.price_list_margin_percent == null ? customerMeta.price_list_margin_percent : customer.price_list_margin_percent;
+
   const companyProfile =
-    (customer.seller_company_profile_id
+    (sellerCompanyProfileId
       ? await fetchFirst<CompanyProfileRow>(supabaseUrl, serviceRoleKey, "company_profiles", {
           select: "id,company_name",
           organization_id: `eq.${invite.organization_id}`,
-          id: `eq.${customer.seller_company_profile_id}`,
+          id: `eq.${sellerCompanyProfileId}`,
         }).catch(() => null)
       : null) ||
     (await fetchFirst<CompanyProfileRow>(supabaseUrl, serviceRoleKey, "company_profiles", {
@@ -378,11 +401,7 @@ async function resolvePortalCustomer(
   const defaultMarginA = byType.get("A")?.margin_percent == null ? 10 : Number(byType.get("A")?.margin_percent || 10);
   const defaultMarginB = byType.get("B")?.margin_percent == null ? 15 : Number(byType.get("B")?.margin_percent || 15);
   const priceListType = normalizePortalCustomerType(String(customer.price_list_type || "A"));
-  const portalCPriceMode =
-    String(customer.portal_c_price_mode || "standard").trim().toLowerCase() === "prefer_c_when_available"
-      ? "prefer_c_when_available"
-      : "standard";
-  const marginOverride = customer.price_list_margin_percent == null ? null : Number(customer.price_list_margin_percent);
+  const marginOverride = marginOverrideRaw == null ? null : Number(marginOverrideRaw);
   const effectiveMarginA = (priceListType === "A" || priceListType === "Other") && marginOverride != null ? marginOverride : defaultMarginA;
   const effectiveMarginB = priceListType === "B" && marginOverride != null ? marginOverride : defaultMarginB;
   const cPriceListId = String(byType.get("C")?.id || "");
