@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  fetchCustomerOpsDashboardSnapshot,
   fetchDashboardLatestQuotes,
   fetchDashboardSnapshot,
   type RevenuePeriodKey,
@@ -20,13 +21,15 @@ import { fetchWarehouseStockItems } from "../../infrastructure/api/inventoryApi"
 import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
 import { includesLooseText } from "../../domain/shared/normalize";
 import { buildEntityAlias } from "../../shared/entityAlias";
+import { canAccessSystemModules } from "../../shared/roles";
 
 type DashboardPageProps = {
+  role?: string;
   onOpenSalesOrder?: (salesOrderId: string) => void;
   onOpenInventoryTab?: (tab: "Warehouses" | "On Hand") => void;
 };
 
-export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: DashboardPageProps) {
+export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab }: DashboardPageProps) {
   const actionFeedback = useActionFeedback();
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [latestQuotes, setLatestQuotes] = useState<DashboardSalesOrderSummary[]>([]);
@@ -48,14 +51,16 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
   const [brandSummarySearch, setBrandSummarySearch] = useState("");
   const [brandSummarySupplier, setBrandSummarySupplier] = useState("");
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriodKey>("thisMonth");
+  const showSystemPanels = canAccessSystemModules(role);
 
   useEffect(() => {
+    if (!showSystemPanels) return;
     let cancelled = false;
 
     async function run() {
       setSnapshotError("");
       try {
-        const result = await fetchDashboardSnapshot();
+        const result = showSystemPanels ? await fetchDashboardSnapshot() : await fetchCustomerOpsDashboardSnapshot();
         if (!cancelled) setSnapshot(result);
       } catch (caught) {
         if (!cancelled) {
@@ -68,9 +73,10 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [showSystemPanels]);
 
   useEffect(() => {
+    if (!showSystemPanels) return;
     let cancelled = false;
 
     async function run() {
@@ -95,9 +101,10 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [showSystemPanels]);
 
   useEffect(() => {
+    if (!showSystemPanels) return;
     let cancelled = false;
 
     async function run() {
@@ -120,7 +127,7 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [showSystemPanels]);
 
   useEffect(() => {
     let cancelled = false;
@@ -179,7 +186,7 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
     return () => {
       cancelled = true;
     };
-  }, [brandSummarySupplier, suppliers]);
+  }, [brandSummarySupplier, suppliers, showSystemPanels]);
 
   async function reloadDashboard() {
     setSnapshotError("");
@@ -273,21 +280,23 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
   return (
     <div className="dashboard">
       <div className="stats-grid">
-        <StatCard label="Catalog Products" value={catalogCount.toLocaleString("en-US")} subtext="Live cloud catalog" tone="success" />
-        <StatCard label="Brands" value={brandCount.toLocaleString("en-US")} subtext="Available in workspace" tone="warning" />
-        <StatCard label="Suppliers" value={supplierCount.toLocaleString("en-US")} subtext="Live supplier accounts" tone="success" />
+        {showSystemPanels ? <StatCard label="Catalog Products" value={catalogCount.toLocaleString("en-US")} subtext="Live cloud catalog" tone="success" /> : null}
+        {showSystemPanels ? <StatCard label="Brands" value={brandCount.toLocaleString("en-US")} subtext="Available in workspace" tone="warning" /> : null}
+        {showSystemPanels ? <StatCard label="Suppliers" value={supplierCount.toLocaleString("en-US")} subtext="Live supplier accounts" tone="success" /> : null}
         <StatCard label="Quotes" value={quoteCount.toLocaleString("en-US")} subtext="Recent cloud sales orders" tone="neutral" />
       </div>
 
-      <SectionCard title="Inventory Pulse">
-        {inventoryPulseError ? <div className="error-text">{inventoryPulseError}</div> : null}
-        <div className="stats-grid stats-grid--compact">
-          <StatCard label="Active Warehouses" value={inventoryPulse.warehouses.toLocaleString("en-US")} subtext="Warehouses currently open" tone="success" onClick={() => onOpenInventoryTab?.("Warehouses")} />
-          <StatCard label="Stocked Items" value={inventoryPulse.stockedItems.toLocaleString("en-US")} subtext="SKU rows with live stock" tone="neutral" onClick={() => onOpenInventoryTab?.("On Hand")} />
-          <StatCard label="On Hand Qty" value={inventoryPulse.onHandQty.toLocaleString("en-US")} subtext="Current quantity across warehouses" tone="success" onClick={() => onOpenInventoryTab?.("On Hand")} />
-          <StatCard label="Stock Value" value={formatMoney(inventoryPulse.stockValue)} subtext="Approximate warehouse inventory value" tone="warning" onClick={() => onOpenInventoryTab?.("On Hand")} />
-        </div>
-      </SectionCard>
+      {showSystemPanels ? (
+        <SectionCard title="Inventory Pulse">
+          {inventoryPulseError ? <div className="error-text">{inventoryPulseError}</div> : null}
+          <div className="stats-grid stats-grid--compact">
+            <StatCard label="Active Warehouses" value={inventoryPulse.warehouses.toLocaleString("en-US")} subtext="Warehouses currently open" tone="success" onClick={() => onOpenInventoryTab?.("Warehouses")} />
+            <StatCard label="Stocked Items" value={inventoryPulse.stockedItems.toLocaleString("en-US")} subtext="SKU rows with live stock" tone="neutral" onClick={() => onOpenInventoryTab?.("On Hand")} />
+            <StatCard label="On Hand Qty" value={inventoryPulse.onHandQty.toLocaleString("en-US")} subtext="Current quantity across warehouses" tone="success" onClick={() => onOpenInventoryTab?.("On Hand")} />
+            <StatCard label="Stock Value" value={formatMoney(inventoryPulse.stockValue)} subtext="Approximate warehouse inventory value" tone="warning" onClick={() => onOpenInventoryTab?.("On Hand")} />
+          </div>
+        </SectionCard>
+      ) : null}
 
       {newPortalOrders > 0 ? (
         <SectionCard title="New Order Came">
@@ -418,6 +427,7 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
             <div className="error-text">{snapshotError}</div>
           ) : null}
         </SectionCard>
+        {showSystemPanels ? (
         <SectionCard title="Brand Summary">
           <div className="toolbar toolbar--wrap dashboard-toolbar">
             <Select value={brandSummarySupplier} options={brandSummarySupplierOptions} onChange={setBrandSummarySupplier} />
@@ -465,6 +475,7 @@ export function DashboardPage({ onOpenSalesOrder, onOpenInventoryTab }: Dashboar
             <div className="error-text">{brandSummaryError}</div>
           )}
         </SectionCard>
+        ) : null}
         <SectionCard title="Sales by Brand">
           <div className="toolbar toolbar--wrap dashboard-toolbar">
             <Select value={revenuePeriod} options={revenuePeriodOptions} onChange={(value) => setRevenuePeriod(value as RevenuePeriodKey)} />

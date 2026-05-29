@@ -1,6 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { buildRestUrl, getJson, json, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
 import { resolveCaller } from "./_shared/app-auth.mts";
+import { canAccessCustomerOps, isSuperadminRole } from "./_shared/roles.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 const CUSTOMER_COLUMNS = [
@@ -142,6 +143,7 @@ const LEGACY_PORTAL_INVITE_COLUMNS = [
 
 const PORTAL_TOKEN_TTL_DAYS = 14;
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
+const BRAND_COLUMNS = ["id", "name"].join(",");
 
 function encodeHex(input: ArrayBuffer) {
   return Array.from(new Uint8Array(input))
@@ -530,17 +532,16 @@ export default async (req: Request, _context: Context) => {
 
   try {
     const caller = await resolveCaller(req, supabaseUrl, supabaseAnonKey, serviceRoleKey);
-    if (caller.role !== "admin") {
-      return json({ error: "Admin access required" }, 403);
-    }
-
     const body = await req.json().catch(() => ({}));
     const resource = String(body?.resource || "").trim();
     const action = String(body?.action || "").trim();
     const payload = isObject(body?.payload) ? body.payload : {};
     const id = String(body?.id || "").trim();
+    const canUseCustomerRecords = canAccessCustomerOps(caller.role);
+    const isSuperadmin = isSuperadminRole(caller.role);
 
     if (resource === "customers") {
+      if (!canUseCustomerRecords) return json({ error: "Staff access required" }, 403);
       if (action === "list") {
         const data = await listCustomers(supabaseUrl, serviceRoleKey, caller.organizationId);
         return json({ ok: true, data });
@@ -568,6 +569,7 @@ export default async (req: Request, _context: Context) => {
     }
 
     if (resource === "vendors") {
+      if (!isSuperadmin) return json({ error: "Superadmin access required" }, 403);
       if (action === "list") {
         const data = await listRows<Record<string, unknown>>({
           supabaseUrl,
@@ -610,6 +612,7 @@ export default async (req: Request, _context: Context) => {
     }
 
     if (resource === "companyProfiles") {
+      if (!canUseCustomerRecords) return json({ error: "Staff access required" }, 403);
       if (action === "list") {
         const data = await listRows<Record<string, unknown>>({
           supabaseUrl,
@@ -622,6 +625,7 @@ export default async (req: Request, _context: Context) => {
         return json({ ok: true, data });
       }
       if (action === "upsert") {
+        if (!isSuperadmin) return json({ error: "Superadmin access required" }, 403);
         const data = id
           ? (
               await updateSingleRow<Record<string, unknown>>({
@@ -646,12 +650,14 @@ export default async (req: Request, _context: Context) => {
         return json({ ok: true, data });
       }
       if (action === "delete") {
+        if (!isSuperadmin) return json({ error: "Superadmin access required" }, 403);
         await deleteSingleRow({ supabaseUrl, serviceRoleKey, table: "company_profiles", organizationId: caller.organizationId, id });
         return json({ ok: true, data: true });
       }
     }
 
     if (resource === "portalInvites") {
+      if (!canUseCustomerRecords) return json({ error: "Staff access required" }, 403);
       if (action === "list") {
         const data = await listPortalInvites(supabaseUrl, serviceRoleKey, caller.organizationId);
         return json({ ok: true, data });
@@ -760,6 +766,21 @@ export default async (req: Request, _context: Context) => {
           return legacyRows;
         });
         return json({ ok: true, data: rows[0] || null });
+      }
+    }
+
+    if (resource === "brands") {
+      if (!canUseCustomerRecords) return json({ error: "Staff access required" }, 403);
+      if (action === "list") {
+        const data = await listRows<Record<string, unknown>>({
+          supabaseUrl,
+          serviceRoleKey,
+          table: "brands",
+          select: BRAND_COLUMNS,
+          organizationId: caller.organizationId,
+          order: "name.asc",
+        });
+        return json({ ok: true, data });
       }
     }
 

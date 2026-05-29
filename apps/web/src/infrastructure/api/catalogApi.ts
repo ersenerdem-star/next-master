@@ -8,6 +8,7 @@ import {
   normalizePartCode,
 } from "../../domain/shared/normalize";
 import { callAppRpc } from "./appRpcApi";
+import { clearCloudBrandsCache, fetchCloudBrands } from "./brandsApi";
 import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
 import { sanitizeUserFacingMessage } from "../../shared/userMessage";
@@ -136,23 +137,14 @@ async function fetchCatalogFallbackRows(input: {
 }
 
 async function resolveBrandId(brandName: string) {
-  const organizationId = await getCurrentOrgId();
   const normalizedBrand = brandName.trim();
   if (!normalizedBrand) {
     throw new Error("Brand is required");
   }
-
-  const { data: brandRow, error: brandError } = await supabaseClient
-    .from("brands")
-    .select("id,name")
-    .eq("organization_id", organizationId)
-    .ilike("name", normalizedBrand)
-    .limit(1)
-    .maybeSingle();
-
-  if (brandError) throw new Error(sanitizeUserFacingMessage(brandError.message, "Brand lookup failed"));
-  if (!brandRow?.id) throw new Error(`Brand not found: ${normalizedBrand}`);
-  return brandRow.id as string;
+  const brands = await fetchCloudBrands();
+  const match = brands.find((item) => item.name.trim().toLowerCase() === normalizedBrand.toLowerCase());
+  if (!match?.id) throw new Error(`Brand not found: ${normalizedBrand}`);
+  return match.id;
 }
 
 async function resolveOrCreateBrandId(brandName: string) {
@@ -176,6 +168,7 @@ async function resolveOrCreateBrandId(brandName: string) {
 
   if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Brand create failed"));
   if (!data?.id) throw new Error(`Brand could not be created: ${normalizedBrand}`);
+  clearCloudBrandsCache();
   return data.id as string;
 }
 
@@ -185,172 +178,9 @@ export async function fetchCloudCatalog(input: {
   page?: number;
   pageSize?: number;
 }): Promise<CatalogRow[]> {
-  const brandName = input.brandName?.trim();
-  if (brandName) {
-    const brandId = await resolveBrandId(brandName);
-    const page = input.page ?? 1;
-    const pageSize = input.pageSize ?? 50;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-
-    const search = input.search.trim();
-    const normalizedSearch = normalizePartCode(search);
-    const buildQuery = (selectClause: string, mode: CatalogSearchMode) => {
-      let query = supabaseClient
-        .from("catalog_products")
-        .select(selectClause, { count: "planned" })
-        .eq("brand_id", brandId)
-        .order("product_code", { ascending: true })
-        .range(from, to);
-
-      if (search) {
-        query = query.or(buildCatalogSearchOr(search, normalizedSearch, mode));
-      }
-
-      return query;
-    };
-
-    let { data, error, count } = await buildQuery(CATALOG_SELECT_WITH_IMAGE, "strict");
-    if (error && isMissingCatalogImageError(error)) {
-      ({ data, error, count } = await buildQuery(CATALOG_SELECT_NO_IMAGE, "strict"));
-    }
-    if (!error && search && shouldRunLooseOriginalNumberSearch(search) && !(data || []).length) {
-      ({ data, error, count } = await buildQuery(CATALOG_SELECT_WITH_IMAGE, "loose"));
-      if (error && isMissingCatalogImageError(error)) {
-        ({ data, error, count } = await buildQuery(CATALOG_SELECT_NO_IMAGE, "loose"));
-      }
-    }
-    if (!error && search && shouldRunLooseOriginalNumberSearch(search) && !(data || []).length) {
-      const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
-      const [fallbackRows, normalizedRows] = await Promise.all([
-        fetchCatalogFallbackRows({
-          selectClause: CATALOG_SELECT_WITH_IMAGE,
-          fallbackSelectClause: CATALOG_SELECT_NO_IMAGE,
-          filters: {
-            brand_id: brandId,
-            oem_no__ilike: `%${normalizedOriginalSearch}%`,
-          },
-          limit: pageSize * 2,
-        }),
-        fetchCatalogFallbackRows({
-          selectClause: CATALOG_SELECT_WITH_IMAGE,
-          fallbackSelectClause: CATALOG_SELECT_NO_IMAGE,
-          filters: {
-            brand_id: brandId,
-            normalized_oem__like: `%${normalizedOriginalSearch}%`,
-          },
-          limit: pageSize * 2,
-        }),
-      ]);
-      const filteredRows = dedupeCatalogQueryRows(
-        [...fallbackRows, ...normalizedRows].filter(
-          (row) =>
-            matchesOriginalNumberSearch(String(row.oem_no || ""), search) ||
-            normalizePartCode(String(row.product_code || "")).includes(normalizedSearch),
-        ),
-      );
-      data = filteredRows.slice(0, pageSize) as unknown as typeof data;
-      count = filteredRows.length;
-    }
-    if (error) throw error;
-
-    return ((data ?? []) as unknown as CatalogQueryRow[]).map((row) => ({
-      total_count: count ?? 0,
-      product_id: row.id,
-      product_code: row.product_code,
-      brand: brandName,
-      image_url: row.image_url ?? "",
-      description: row.description ?? "",
-      oem_no: row.oem_no ?? "",
-      hs_code: row.hs_code ?? "",
-      origin: row.origin ?? "",
-      weight_kg: row.weight_kg,
-      lifecycle_status: normalizeCatalogLifecycleStatus(row.lifecycle_status),
-      lifecycle_note: row.lifecycle_note ?? "",
-    }));
-  }
-
-  if (input.search.trim()) {
-    const organizationId = await getCurrentOrgId();
-    const page = input.page ?? 1;
-    const pageSize = input.pageSize ?? 50;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    const search = input.search.trim();
-    const normalizedSearch = normalizePartCode(search);
-
-    const buildGlobalQuery = (selectClause: string, mode: CatalogSearchMode) => {
-      return supabaseClient
-        .from("catalog_products")
-        .select(selectClause, { count: "planned" })
-        .eq("organization_id", organizationId)
-        .order("product_code", { ascending: true })
-        .range(from, to)
-        .or(buildCatalogSearchOr(search, normalizedSearch, mode));
-    };
-
-    let { data, error, count } = await buildGlobalQuery(CATALOG_GLOBAL_SELECT_WITH_IMAGE, "strict");
-    if (error && isMissingCatalogImageError(error)) {
-      ({ data, error, count } = await buildGlobalQuery(CATALOG_GLOBAL_SELECT_NO_IMAGE, "strict"));
-    }
-    if (!error && shouldRunLooseOriginalNumberSearch(search) && !(data || []).length) {
-      ({ data, error, count } = await buildGlobalQuery(CATALOG_GLOBAL_SELECT_WITH_IMAGE, "loose"));
-      if (error && isMissingCatalogImageError(error)) {
-        ({ data, error, count } = await buildGlobalQuery(CATALOG_GLOBAL_SELECT_NO_IMAGE, "loose"));
-      }
-    }
-    if (!error && shouldRunLooseOriginalNumberSearch(search) && !(data || []).length) {
-      const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
-      const [fallbackRows, normalizedRows] = await Promise.all([
-        fetchCatalogFallbackRows({
-          selectClause: CATALOG_GLOBAL_SELECT_WITH_IMAGE,
-          fallbackSelectClause: CATALOG_GLOBAL_SELECT_NO_IMAGE,
-          filters: {
-            organization_id: organizationId,
-            oem_no__ilike: `%${normalizedOriginalSearch}%`,
-          },
-          limit: pageSize * 2,
-        }),
-        fetchCatalogFallbackRows({
-          selectClause: CATALOG_GLOBAL_SELECT_WITH_IMAGE,
-          fallbackSelectClause: CATALOG_GLOBAL_SELECT_NO_IMAGE,
-          filters: {
-            organization_id: organizationId,
-            normalized_oem__like: `%${normalizedOriginalSearch}%`,
-          },
-          limit: pageSize * 2,
-        }),
-      ]);
-      const filteredRows = dedupeCatalogQueryRows(
-        [...fallbackRows, ...normalizedRows].filter(
-          (row) =>
-            matchesOriginalNumberSearch(String(row.oem_no || ""), search) ||
-            normalizePartCode(String(row.product_code || "")).includes(normalizedSearch),
-        ),
-      );
-      data = filteredRows.slice(0, pageSize) as unknown as typeof data;
-      count = filteredRows.length;
-    }
-    if (error) throw error;
-
-    return ((data ?? []) as unknown as CatalogQueryRow[]).map((row) => ({
-      total_count: count ?? 0,
-      product_id: String(row.id || ""),
-      product_code: String(row.product_code || ""),
-      brand: String(row.brands?.name || ""),
-      image_url: String(row.image_url || ""),
-      description: String(row.description || ""),
-      oem_no: String(row.oem_no || ""),
-      hs_code: String(row.hs_code || ""),
-      origin: String(row.origin || ""),
-      weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
-      lifecycle_status: normalizeCatalogLifecycleStatus(String(row.lifecycle_status || "")),
-      lifecycle_note: String(row.lifecycle_note || ""),
-    }));
-  }
-
   const data = await callAppRpc<Array<Record<string, unknown>>>("cloud_catalog_page", {
     input_search: input.search,
+    input_brand: input.brandName?.trim() || "",
     input_page: input.page ?? 1,
     input_page_size: input.pageSize ?? 50,
   });

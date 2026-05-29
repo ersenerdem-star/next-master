@@ -327,3 +327,25 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
     issues,
   };
 }
+
+export async function fetchCustomerOpsDashboardSnapshot(): Promise<DashboardSnapshot> {
+  const [quotesResult, portalOrdersResult, revenueResult] = await Promise.allSettled([
+    fetchTableCount("sales_orders"),
+    fetchNewPortalOrderCount(),
+    fetchQuoteRevenueSnapshot(),
+  ]);
+
+  const issues: DashboardSnapshot["issues"] = {};
+  if (quotesResult.status === "rejected") issues.quotes = quotesResult.reason instanceof Error ? quotesResult.reason.message : "Quote count failed";
+  if (revenueResult.status === "rejected") issues.revenue = revenueResult.reason instanceof Error ? revenueResult.reason.message : "Revenue analysis failed";
+
+  return {
+    catalogCount: 0,
+    brandCount: 0,
+    supplierCount: 0,
+    quoteCount: quotesResult.status === "fulfilled" ? quotesResult.value : 0,
+    newPortalOrders: portalOrdersResult.status === "fulfilled" ? portalOrdersResult.value : 0,
+    revenue: revenueResult.status === "fulfilled" ? revenueResult.value : buildEmptyRevenue(false),
+    issues,
+  };
+}

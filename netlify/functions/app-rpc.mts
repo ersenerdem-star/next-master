@@ -1,6 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { json, sendJson } from "./_shared/http.mts";
 import { resolveCaller } from "./_shared/app-auth.mts";
+import { canAccessCustomerOps, isSuperadminRole } from "./_shared/roles.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 const ALLOWED_RPCS = new Set([
@@ -17,6 +18,26 @@ const ALLOWED_RPCS = new Set([
   "get_cloud_quote",
   "list_cloud_quotes",
   "list_cloud_suppliers",
+  "touch_user_presence",
+]);
+
+const SUPERADMIN_RPCS = new Set([
+  "admin_list_org_users",
+  "bulk_import_catalog",
+  "bulk_import_supplier_prices",
+  "cloud_catalog_page",
+  "cloud_master_page",
+  "cloud_supplier_brand_summary",
+  "cloud_supplier_price_page",
+  "deactivate_supplier_prices_by_filter",
+  "list_cloud_suppliers",
+]);
+
+const CUSTOMER_STAFF_RPCS = new Set([
+  "cloud_quote_supplier_options",
+  "cloud_resolve_quote_line",
+  "get_cloud_quote",
+  "list_cloud_quotes",
   "touch_user_presence",
 ]);
 
@@ -40,8 +61,12 @@ export default async (req: Request, _context: Context) => {
       return json({ error: "RPC is not allowed through app gateway" }, 403);
     }
 
-    if (name === "admin_list_org_users" && caller.role !== "admin") {
-      return json({ error: "Admin access required" }, 403);
+    if (SUPERADMIN_RPCS.has(name) && !isSuperadminRole(caller.role)) {
+      return json({ error: "Superadmin access required" }, 403);
+    }
+
+    if (CUSTOMER_STAFF_RPCS.has(name) && !canAccessCustomerOps(caller.role)) {
+      return json({ error: "Staff access required" }, 403);
     }
 
     const data = await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/${name}`, {

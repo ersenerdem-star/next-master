@@ -30,6 +30,7 @@ import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { includesLooseText } from "../../domain/shared/normalize";
+import { isSuperadminRole } from "../../shared/roles";
 
 type SettingsState = {
   email: string;
@@ -172,7 +173,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     let cancelled = false;
 
     async function run() {
-      if (state.role && state.role !== "admin") return;
+      if (state.role && !isSuperadminRole(state.role)) return;
       setLoadingUsers(true);
       setUsersError("");
       try {
@@ -576,7 +577,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           </div>
           <div className="settings-item">
             <span className="settings-label">Environment</span>
-            <strong>Supabase Live</strong>
+            <strong>Live Cloud</strong>
           </div>
           <div className="settings-item">
             <span className="settings-label">Signed in as</span>
@@ -614,12 +615,12 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           </Button>
         </div>
       </SectionCard> : null}
-      {activeTab === "users" && !passwordResetAvailable ? (
+      {activeTab === "users" && isSuperadminRole(state.role) && !passwordResetAvailable ? (
         <SectionCard title="User Password Reset">
           <div className="warning-text">User admin actions depend on serverless admin endpoints. Use deployed app or Netlify dev instead of plain localhost.</div>
         </SectionCard>
       ) : null}
-      {activeTab === "users" ? (
+      {activeTab === "users" && isSuperadminRole(state.role) ? (
         <SectionCard title="Users">
           <div className="settings-grid">
             <Input

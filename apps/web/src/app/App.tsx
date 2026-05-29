@@ -1,10 +1,11 @@
-import { Suspense, lazy, useEffect, useState } from "react";
-import { clearCachedAppSession } from "../infrastructure/api/appSessionApi";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { clearCachedAppSession, fetchAppSession } from "../infrastructure/api/appSessionApi";
 import { supabaseClient } from "../infrastructure/api/supabaseClient";
 import { touchCurrentUserPresence } from "../infrastructure/api/usersApi";
 import { ActionFeedbackProvider } from "../presentation/components/common/ActionFeedback";
 import { AppShell } from "../presentation/layout/AppShell";
 import { APP_NAVIGATION_EVENT, type AppNavigationDetail } from "../shared/catalogTransfer";
+import { canAccessCustomerOps, canAccessSystemModules, isSuperadminRole, normalizeAppRole, type AppRole } from "../shared/roles";
 
 const DashboardPage = lazy(() => import("../presentation/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const InventoryPage = lazy(() => import("../presentation/pages/InventoryPage").then((module) => ({ default: module.InventoryPage })));
@@ -60,10 +61,47 @@ const settingsSubNav = [
   { key: "diagnostics", label: "Diagnostics" },
 ] as const;
 
+const allNavItems = [
+  { key: "Home", code: "01", caption: "Overview" },
+  { key: "Items", code: "02", caption: "Master Data" },
+  { key: "Inventory", code: "03", caption: "Warehouses" },
+  { key: "Sales", code: "04", caption: "Orders & AR" },
+  { key: "Purchases", code: "05", caption: "Procurement" },
+  { key: "Reports", code: "06", caption: "Analytics" },
+  { key: "Settings", code: "07", caption: "Controls" },
+] as const;
+
+function getAllowedNavItems(role: AppRole) {
+  if (isSuperadminRole(role)) return allNavItems;
+  if (canAccessCustomerOps(role)) {
+    return allNavItems.filter((item) => item.key === "Home" || item.key === "Sales" || item.key === "Settings");
+  }
+  return allNavItems.filter((item) => item.key === "Home" || item.key === "Settings");
+}
+
+function getSalesSubNav(role: AppRole) {
+  if (!canAccessCustomerOps(role)) return [] as const;
+  return salesSubNav.filter((item) => item.key !== "Price Lists" || isSuperadminRole(role));
+}
+
+function getSettingsSubNav(role: AppRole) {
+  if (isSuperadminRole(role)) return settingsSubNav;
+  if (canAccessCustomerOps(role)) {
+    return settingsSubNav.filter((item) => item.key === "session" || item.key === "portals");
+  }
+  return settingsSubNav.filter((item) => item.key === "session");
+}
+
+function getDefaultPage(role: AppRole) {
+  return canAccessCustomerOps(role) ? "Sales" : "Home";
+}
+
 export function App() {
   const isPortalRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/portal");
   const [sessionReady, setSessionReady] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [appRole, setAppRole] = useState<AppRole>("");
+  const [appRoleReady, setAppRoleReady] = useState(false);
   const [activePage, setActivePage] = useState("Home");
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [selectedSalesOrderId, setSelectedSalesOrderId] = useState("");
@@ -96,6 +134,8 @@ export function App() {
 
     const { data } = supabaseClient.auth.onAuthStateChange((event, session) => {
       clearCachedAppSession();
+      setAppRole("");
+      setAppRoleReady(false);
       if (event === "PASSWORD_RECOVERY") {
         setRecoveryMode(true);
         setLoggedIn(false);
@@ -114,6 +154,38 @@ export function App() {
       data.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!loggedIn || isPortalRoute) {
+      setAppRole("");
+      setAppRoleReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    setAppRoleReady(false);
+
+    async function run() {
+      try {
+        const session = await fetchAppSession(true);
+        if (cancelled) return;
+        setAppRole(normalizeAppRole(session.role));
+      } catch {
+        if (!cancelled) {
+          setAppRole("");
+        }
+      } finally {
+        if (!cancelled) {
+          setAppRoleReady(true);
+        }
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [loggedIn, isPortalRoute]);
 
   useEffect(() => {
     if (!loggedIn || isPortalRoute) return;
@@ -278,6 +350,7 @@ export function App() {
   }
 
   function handleMainNavigate(nextPage: string) {
+    if (!allowedNavItems.some((item) => item.key === nextPage)) return;
     setActivePage(nextPage);
   }
 
@@ -290,7 +363,7 @@ export function App() {
       setInventoryInitialTab(nextSubPage as "Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers");
       return;
     }
-    if (activePage === "Sales" && salesSubNav.some((item) => item.key === nextSubPage)) {
+    if (activePage === "Sales" && salesSubNavItems.some((item) => item.key === nextSubPage)) {
       if (nextSubPage === "Sales Orders") {
         setSelectedSalesOrderId("");
         setSelectedQuoteId("");
@@ -311,24 +384,47 @@ export function App() {
       setReportsTab(nextSubPage as "Master" | "Item Transactions" | "Inventory Analytics");
       return;
     }
-    if (activePage === "Settings" && settingsSubNav.some((item) => item.key === nextSubPage)) {
+    if (activePage === "Settings" && settingsSubNavItems.some((item) => item.key === nextSubPage)) {
       setSettingsTab(nextSubPage as "session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics");
     }
   }
 
+  const salesSubNavItems = useMemo(() => getSalesSubNav(appRole), [appRole]);
+  const settingsSubNavItems = useMemo(() => getSettingsSubNav(appRole), [appRole]);
+  const allowedNavItems = useMemo(() => getAllowedNavItems(appRole), [appRole]);
+
+  useEffect(() => {
+    if (!appRoleReady || !allowedNavItems.length) return;
+    if (!allowedNavItems.some((item) => item.key === activePage)) {
+      setActivePage(getDefaultPage(appRole));
+    }
+  }, [activePage, allowedNavItems, appRole, appRoleReady]);
+
+  useEffect(() => {
+    if (salesSubNavItems.length && !salesSubNavItems.some((item) => item.key === salesTab)) {
+      setSalesTab(salesSubNavItems[0].key as "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists");
+    }
+  }, [salesSubNavItems, salesTab]);
+
+  useEffect(() => {
+    if (settingsSubNavItems.length && !settingsSubNavItems.some((item) => item.key === settingsTab)) {
+      setSettingsTab(settingsSubNavItems[0].key as "session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics");
+    }
+  }, [settingsSubNavItems, settingsTab]);
+
   const subNavItems =
-    activePage === "Items"
+    activePage === "Items" && canAccessSystemModules(appRole)
       ? itemSubNav
-      : activePage === "Inventory"
+      : activePage === "Inventory" && canAccessSystemModules(appRole)
         ? inventorySubNav
-        : activePage === "Sales"
-          ? salesSubNav
-          : activePage === "Purchases"
+      : activePage === "Sales"
+          ? salesSubNavItems
+          : activePage === "Purchases" && canAccessSystemModules(appRole)
             ? purchasesSubNav
-            : activePage === "Reports"
+            : activePage === "Reports" && canAccessSystemModules(appRole)
               ? reportsSubNav
               : activePage === "Settings"
-                ? settingsSubNav
+                ? settingsSubNavItems
                 : [];
 
   const activeSubPage =
@@ -376,12 +472,16 @@ export function App() {
     );
   }
 
+  if (!appRoleReady) {
+    return <div className="loading-screen">Loading workspace...</div>;
+  }
+
   const pageContent =
-    activePage === "Items" ? (
+    activePage === "Items" && canAccessSystemModules(appRole) ? (
       <ItemsPage activeTab={itemsTab} />
-    ) : activePage === "Inventory" ? (
+    ) : activePage === "Inventory" && canAccessSystemModules(appRole) ? (
       <InventoryPage initialTab={inventoryInitialTab} selectedWarehouseId={inventorySelectedWarehouseId} stockSearch={inventoryStockSearch} />
-    ) : activePage === "Sales" ? (
+    ) : activePage === "Sales" && canAccessCustomerOps(appRole) ? (
       <SalesPage
         activeTab={salesTab}
         salesOrdersNavTick={salesOrdersNavTick}
@@ -393,9 +493,9 @@ export function App() {
         selectedInvoiceId={selectedInvoiceId}
         onSelectedInvoiceChange={setSelectedInvoiceId}
       />
-    ) : activePage === "Purchases" ? (
+    ) : activePage === "Purchases" && canAccessSystemModules(appRole) ? (
       <PurchasesPage activeTab={purchasesTab} selectedPurchaseOrderId={selectedPurchaseOrderId} selectedBillId={selectedBillId} />
-    ) : activePage === "Reports" ? (
+    ) : activePage === "Reports" && canAccessSystemModules(appRole) ? (
       <ReportsPage
         activeTab={reportsTab}
         onOpenSalesOrder={openSalesOrder}
@@ -408,12 +508,19 @@ export function App() {
     ) : activePage === "Settings" ? (
       <SettingsPage initialTab={settingsTab} onLogout={handleLogout} onOpenRelatedRecord={openRelatedRecord} />
     ) : (
-      <DashboardPage onOpenSalesOrder={openSalesOrder} onOpenInventoryTab={openInventoryTab} />
+      <DashboardPage role={appRole} onOpenSalesOrder={openSalesOrder} onOpenInventoryTab={openInventoryTab} />
     );
 
   return (
     <ActionFeedbackProvider>
-      <AppShell activePage={activePage} activeSubPage={activeSubPage} subNavItems={subNavItems} onNavigate={handleMainNavigate} onNavigateSub={handleSubNavigate}>
+      <AppShell
+        activePage={activePage}
+        activeSubPage={activeSubPage}
+        navItems={allowedNavItems}
+        subNavItems={subNavItems}
+        onNavigate={handleMainNavigate}
+        onNavigateSub={handleSubNavigate}
+      >
         <Suspense fallback={renderPageFallback(`Loading ${activePage}...`)}>
           {pageContent}
         </Suspense>

@@ -5,24 +5,21 @@ type SubNavItem = {
   label: string;
 };
 
+type NavItem = {
+  key: string;
+  code: string;
+  caption: string;
+};
+
 type AppShellProps = {
   children: ReactNode;
   activePage?: string;
   activeSubPage?: string;
+  navItems?: readonly NavItem[];
   subNavItems?: readonly SubNavItem[];
   onNavigate?: (page: string) => void;
   onNavigateSub?: (subPage: string) => void;
 };
-
-const navItems = [
-  { key: "Home", code: "01", caption: "Overview" },
-  { key: "Items", code: "02", caption: "Master Data" },
-  { key: "Inventory", code: "03", caption: "Warehouses" },
-  { key: "Sales", code: "04", caption: "Orders & AR" },
-  { key: "Purchases", code: "05", caption: "Procurement" },
-  { key: "Reports", code: "06", caption: "Analytics" },
-  { key: "Settings", code: "07", caption: "Controls" },
-] as const;
 
 const pageMeta = {
   Home: { code: "01", eyebrow: "Overview", description: "Operational overview and live summaries" },
@@ -43,7 +40,15 @@ const contextMeta = {
   local: { label: "Local", className: "is-local" },
 } as const;
 
-export function AppShell({ children, activePage = "Home", activeSubPage = "", subNavItems = [], onNavigate, onNavigateSub }: AppShellProps) {
+export function AppShell({
+  children,
+  activePage = "Home",
+  activeSubPage = "",
+  navItems = [],
+  subNavItems = [],
+  onNavigate,
+  onNavigateSub,
+}: AppShellProps) {
   const meta = pageMeta[activePage as keyof typeof pageMeta] || pageMeta.Home;
   const context = contextMeta[buildMeta.context as keyof typeof contextMeta] || {
     label: buildMeta.context || "Build",

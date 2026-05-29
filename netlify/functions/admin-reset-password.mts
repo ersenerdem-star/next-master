@@ -1,5 +1,6 @@
 import type { Config, Context } from "@netlify/functions";
 
+import { isSuperadminRole } from "./_shared/roles.mts";
 import { sanitizeUserFacingError, sanitizeUserFacingMessage } from "./_shared/user-message.mts";
 
 const json = (body: unknown, status = 200) =>
@@ -58,8 +59,8 @@ export default async (req: Request, _context: Context) => {
         },
       },
     );
-    if (!adminProfile?.is_active || adminProfile.role !== "admin") {
-      return json({ error: "Only admin users can reset passwords" }, 403);
+    if (!adminProfile?.is_active || !isSuperadminRole(adminProfile.role)) {
+      return json({ error: "Only superadmin users can reset passwords" }, 403);
     }
 
     const [targetProfile] = await getJson<Array<{ id: string; organization_id: string; email: string }>>(
