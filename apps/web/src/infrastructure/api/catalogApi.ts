@@ -22,16 +22,24 @@ function shouldRunLooseOriginalNumberSearch(search: string) {
   return normalizedOriginalSearch.length >= 6;
 }
 
+function isLikelyCatalogCodeSearch(search: string) {
+  const value = String(search || "").trim();
+  if (!value) return false;
+  return /\d/.test(value) || /[-/+.()]/.test(value);
+}
+
 function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: CatalogSearchMode) {
+  const escaped = search.replace(/[%(),]/g, " ").trim();
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
   const looseOriginalPattern = buildLooseOriginalNumberPattern(search);
-  const clauses = [
-    `product_code.ilike.%${search}%`,
-    `description.ilike.%${search}%`,
-    `oem_no.ilike.%${search}%`,
-  ];
+  const clauses = [`product_code.ilike.%${escaped}%`, `oem_no.ilike.%${escaped}%`];
+  if (!isLikelyCatalogCodeSearch(search)) {
+    clauses.push(`description.ilike.%${escaped}%`);
+  }
   if (normalizedSearch.length >= 3) {
     clauses.push(
+      `product_code.ilike.%${normalizedSearch}%`,
+      `oem_no.ilike.%${normalizedSearch}%`,
       `normalized_code.eq.${normalizedSearch}`,
       `normalized_oem.eq.${normalizedSearch}`,
       `normalized_code.like.${normalizedSearch}%`,

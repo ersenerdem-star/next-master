@@ -121,6 +121,15 @@ const CUSTOMER_ORDER_SELECT =
   "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,portal_c_price_mode,price_list_margin_percent";
 const CUSTOMER_ORDER_SELECT_LEGACY =
   "id,display_name,company_name,currency,payment_terms,contract_nr,price_list_type";
+const PORTAL_LOOKUP_CACHE_TTL_MS = 2 * 60 * 1000;
+
+type PortalLookupCacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+const portalBrandMapCache = new Map<string, PortalLookupCacheEntry<{ byId: Map<string, string>; byName: Map<string, string> }>>();
+const portalCustomerContextCache = new Map<string, PortalLookupCacheEntry<CustomerPricingContext>>();
 
 function normalizePartCode(value: string) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -153,16 +162,21 @@ function shouldRunLooseOriginalNumberSearch(search: string) {
   return normalizeOriginalNumberSearch(search).length >= 6;
 }
 
+function isLikelyPortalCodeSearch(search: string) {
+  const value = String(search || "").trim();
+  if (!value) return false;
+  return /\d/.test(value) || /[-/+.()]/.test(value);
+}
+
 function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mode: PortalSearchMode) {
   const escaped = search.replace(/[%*(),]/g, " ").trim();
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
   const looseOriginalPattern = buildLooseOriginalNumberPattern(search);
   const separatorInsensitivePattern = buildSeparatorInsensitivePattern(search);
-  const clauses = [
-    `product_code.ilike.*${escaped}*`,
-    `description.ilike.*${escaped}*`,
-    `oem_no.ilike.*${escaped}*`,
-  ];
+  const clauses = [`product_code.ilike.*${escaped}*`, `oem_no.ilike.*${escaped}*`];
+  if (!isLikelyPortalCodeSearch(search)) {
+    clauses.push(`description.ilike.*${escaped}*`);
+  }
   if (separatorInsensitivePattern && separatorInsensitivePattern !== escaped.toUpperCase()) {
     clauses.push(
       `product_code.ilike.*${separatorInsensitivePattern}*`,
@@ -320,6 +334,12 @@ async function resolvePortalCustomer(
     throw new Error("This portal cannot create sales orders");
   }
 
+  const cacheKey = `${invite.organization_id}::${String(invite.party_name || "").trim().toLowerCase()}`;
+  const cached = portalCustomerContextCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
   const customer = await fetchPortalCustomerForOrders(supabaseUrl, serviceRoleKey, invite);
 
   if (!customer?.id) {
@@ -367,7 +387,7 @@ async function resolvePortalCustomer(
   const effectiveMarginB = priceListType === "B" && marginOverride != null ? marginOverride : defaultMarginB;
   const cPriceListId = String(byType.get("C")?.id || "");
 
-  return {
+  const context = {
     organizationId: invite.organization_id,
     customer,
     sellerCompany: String(companyProfile?.company_name || ""),
@@ -378,9 +398,18 @@ async function resolvePortalCustomer(
     effectiveMarginB,
     cPriceListId,
   };
+  portalCustomerContextCache.set(cacheKey, {
+    value: context,
+    expiresAt: Date.now() + PORTAL_LOOKUP_CACHE_TTL_MS,
+  });
+  return context;
 }
 
 async function resolveBrandMap(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
+  const cached = portalBrandMapCache.get(organizationId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
   const brands = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "brands", {
     select: "id,name",
     organization_id: `eq.${organizationId}`,
@@ -395,7 +424,12 @@ async function resolveBrandMap(supabaseUrl: string, serviceRoleKey: string, orga
     byId.set(id, name);
     byName.set(name.toLowerCase(), id);
   }
-  return { byId, byName };
+  const value = { byId, byName };
+  portalBrandMapCache.set(organizationId, {
+    value,
+    expiresAt: Date.now() + PORTAL_LOOKUP_CACHE_TTL_MS,
+  });
+  return value;
 }
 
 export async function searchPortalCatalog(
@@ -475,32 +509,27 @@ export async function searchPortalCatalog(
       });
     }
   } else {
-    const itemsByBrand = new Map<string, { brand: string; brandId: string; codes: string[] }>();
-    for (const item of baseItems) {
-      if (!item.brand_id || !item.normalized_code) continue;
-      const current = itemsByBrand.get(item.brand_id) || { brand: item.brand, brandId: item.brand_id, codes: [] };
-      current.codes.push(item.normalized_code);
-      itemsByBrand.set(item.brand_id, current);
-    }
-    await Promise.all(
-      [...itemsByBrand.values()].map(async (group) => {
-        const bestOptionMap = await fetchPortalBestSupplierOptionMap(
-          supabaseUrl,
-          serviceRoleKey,
-          invite.organization_id,
-          group.brandId,
-          [...new Set(group.codes)],
-        );
-        for (const [normalizedCode, bestOption] of bestOptionMap.entries()) {
-          const marginPercent = context.customerType === "B" ? context.effectiveMarginB : context.effectiveMarginA;
-          previewByCode.set(`${group.brand.trim().toLowerCase()}::${normalizedCode}`, {
-            sell_price:
-              bestOption.buy_price == null ? null : roundMoney(Number(bestOption.buy_price) * (1 + marginPercent / 100)),
-            supplier_name: bestOption.supplier_name || "",
-          });
-        }
-      }),
+    const marginPercent = context.customerType === "B" ? context.effectiveMarginB : context.effectiveMarginA;
+    const bestOptionMap = await fetchPortalBestSupplierPreviewMap(
+      supabaseUrl,
+      serviceRoleKey,
+      invite.organization_id,
+      baseItems
+        .filter((item) => item.brand_id && item.normalized_code)
+        .map((item) => ({
+          brandId: item.brand_id,
+          normalizedCode: item.normalized_code,
+        })),
     );
+    for (const item of baseItems) {
+      const bestOption = bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`);
+      if (!bestOption) continue;
+      previewByCode.set(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`, {
+        sell_price:
+          bestOption.buy_price == null ? null : roundMoney(Number(bestOption.buy_price) * (1 + marginPercent / 100)),
+        supplier_name: bestOption.supplier_name || "",
+      });
+    }
     if (prefersCPriceWhereAvailable(context)) {
       const cPriceMap = await fetchCPriceMap(
         supabaseUrl,
@@ -760,6 +789,55 @@ async function fetchPortalBestSupplierOptionMap(
     }
   }
   return bestByCode;
+}
+
+async function fetchPortalBestSupplierPreviewMap(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  items: Array<{ brandId: string; normalizedCode: string }>,
+) {
+  const bestByKey = new Map<
+    string,
+    {
+      buy_price: number | null;
+      supplier_name: string;
+      price_date: string | null;
+      notes: string | null;
+    }
+  >();
+  const brandIds = [...new Set(items.map((item) => item.brandId).filter(Boolean))];
+  const normalizedCodes = [...new Set(items.map((item) => item.normalizedCode).filter(Boolean))];
+  for (const brandChunk of chunkValues(brandIds, 50)) {
+    for (const codeChunk of chunkValues(normalizedCodes, 200)) {
+      const supplierRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "supplier_prices", {
+        select: "brand_id,normalized_code,buy_price,valid_from,notes,suppliers(name)",
+        organization_id: `eq.${organizationId}`,
+        brand_id: `in.(${brandChunk.join(",")})`,
+        is_active: "eq.true",
+        buy_price: "not.is.null",
+        normalized_code: `in.(${codeChunk.join(",")})`,
+        order: "buy_price.asc",
+        limit: "5000",
+      });
+      for (const row of supplierRows) {
+        const brandId = String(row.brand_id || "");
+        const normalizedCode = String(row.normalized_code || "");
+        const buyPrice = row.buy_price == null ? null : Number(row.buy_price);
+        if (!brandId || !normalizedCode || buyPrice == null || !Number.isFinite(buyPrice)) continue;
+        const key = `${brandId}::${normalizedCode}`;
+        const current = bestByKey.get(key);
+        if (current && Number(current.buy_price ?? Number.MAX_SAFE_INTEGER) <= buyPrice) continue;
+        bestByKey.set(key, {
+          buy_price: buyPrice,
+          supplier_name: String(row.suppliers?.name || ""),
+          price_date: row.valid_from == null ? null : String(row.valid_from),
+          notes: row.notes == null ? null : String(row.notes),
+        });
+      }
+    }
+  }
+  return bestByKey;
 }
 
 export async function buildPortalPriceListRows(

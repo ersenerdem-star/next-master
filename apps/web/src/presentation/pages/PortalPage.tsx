@@ -25,27 +25,49 @@ import { parseOrderImportFile } from "../../shared/orderImport";
 
 const SESSION_KEY = "next-master-portal-session";
 const PORTAL_CACHE_PREFIX = "next-master-portal-cache";
+const PORTAL_CACHE_WRITE_DELAY_MS = 250;
+
+type PortalOfflineDraft = {
+  portalDraftLines: PortalPreparedLine[];
+  portalOrderId: string;
+  portalSalesOrderNo: string;
+  portalDeliveryTerm: string;
+  portalPaymentTerms: string;
+  portalPackingDetails: string;
+  portalOrderNotes: string;
+  portalOrderStatus: string;
+  catalogResults: PortalCatalogSearchItem[];
+  orderSearch: string;
+  orderSearchBrand: string;
+  selectedCatalogCode: string;
+  selectedDraftLineId: string;
+  activeSection: PortalSection;
+};
 
 type PortalOfflineCache = {
   snapshot: PortalSnapshot | null;
-  draft: {
-    portalDraftLines: PortalPreparedLine[];
-    portalOrderId: string;
-    portalSalesOrderNo: string;
-    portalDeliveryTerm: string;
-    portalPaymentTerms: string;
-    portalPackingDetails: string;
-    portalOrderNotes: string;
-    portalOrderStatus: string;
-    catalogResults: PortalCatalogSearchItem[];
-    orderSearch: string;
-    orderSearchBrand: string;
-    selectedCatalogCode: string;
-    selectedDraftLineId: string;
-    activeSection: PortalSection;
-  };
+  draft: PortalOfflineDraft;
   updatedAt: string;
 };
+
+function buildEmptyPortalOfflineDraft(activeSection: PortalSection = "desk"): PortalOfflineDraft {
+  return {
+    portalDraftLines: [],
+    portalOrderId: "",
+    portalSalesOrderNo: "",
+    portalDeliveryTerm: "",
+    portalPaymentTerms: "",
+    portalPackingDetails: "",
+    portalOrderNotes: "",
+    portalOrderStatus: "",
+    catalogResults: [],
+    orderSearch: "",
+    orderSearchBrand: "",
+    selectedCatalogCode: "",
+    selectedDraftLineId: "",
+    activeSection,
+  };
+}
 
 function formatMoney(value: number, currency = "EUR") {
   return `${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
@@ -297,9 +319,26 @@ function getPortalCacheKey(email: string) {
   return `${PORTAL_CACHE_PREFIX}:${String(email || "").trim().toLowerCase()}`;
 }
 
+function getPortalSnapshotCacheKey(email: string) {
+  return `${getPortalCacheKey(email)}:snapshot`;
+}
+
+function getPortalDraftCacheKey(email: string) {
+  return `${getPortalCacheKey(email)}:draft`;
+}
+
 function readPortalCache(email: string) {
   if (typeof window === "undefined" || !email) return null as PortalOfflineCache | null;
   try {
+    const snapshotRaw = window.localStorage.getItem(getPortalSnapshotCacheKey(email));
+    const draftRaw = window.localStorage.getItem(getPortalDraftCacheKey(email));
+    if (snapshotRaw || draftRaw) {
+      return {
+        snapshot: snapshotRaw ? (JSON.parse(snapshotRaw) as PortalSnapshot | null) : null,
+        draft: draftRaw ? (JSON.parse(draftRaw) as PortalOfflineDraft) : buildEmptyPortalOfflineDraft(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
     const raw = window.localStorage.getItem(getPortalCacheKey(email));
     return raw ? (JSON.parse(raw) as PortalOfflineCache) : null;
   } catch {
@@ -309,12 +348,36 @@ function readPortalCache(email: string) {
 
 function writePortalCache(email: string, cache: PortalOfflineCache | null) {
   if (typeof window === "undefined" || !email) return;
-  const key = getPortalCacheKey(email);
   if (!cache) {
+    window.localStorage.removeItem(getPortalCacheKey(email));
+    window.localStorage.removeItem(getPortalSnapshotCacheKey(email));
+    window.localStorage.removeItem(getPortalDraftCacheKey(email));
+    return;
+  }
+  window.localStorage.setItem(getPortalSnapshotCacheKey(email), JSON.stringify(cache.snapshot));
+  window.localStorage.setItem(getPortalDraftCacheKey(email), JSON.stringify(cache.draft));
+}
+
+function writePortalSnapshotCache(email: string, snapshot: PortalSnapshot | null) {
+  if (typeof window === "undefined" || !email) return;
+  const key = getPortalSnapshotCacheKey(email);
+  window.localStorage.removeItem(getPortalCacheKey(email));
+  if (!snapshot) {
     window.localStorage.removeItem(key);
     return;
   }
-  window.localStorage.setItem(key, JSON.stringify(cache));
+  window.localStorage.setItem(key, JSON.stringify(snapshot));
+}
+
+function writePortalDraftCache(email: string, draft: PortalOfflineDraft | null) {
+  if (typeof window === "undefined" || !email) return;
+  const key = getPortalDraftCacheKey(email);
+  window.localStorage.removeItem(getPortalCacheKey(email));
+  if (!draft) {
+    window.localStorage.removeItem(key);
+    return;
+  }
+  window.localStorage.setItem(key, JSON.stringify(draft));
 }
 
 function getDefaultPortalSection(snapshot: PortalSnapshot) {
@@ -806,9 +869,16 @@ export function PortalPage() {
 
   useEffect(() => {
     if (!snapshot || !credentials.email) return;
-    writePortalCache(credentials.email, {
-      snapshot,
-      draft: {
+    const handle = window.setTimeout(() => {
+      writePortalSnapshotCache(credentials.email, snapshot);
+    }, PORTAL_CACHE_WRITE_DELAY_MS);
+    return () => window.clearTimeout(handle);
+  }, [credentials.email, snapshot]);
+
+  useEffect(() => {
+    if (!snapshot || !credentials.email) return;
+    const handle = window.setTimeout(() => {
+      writePortalDraftCache(credentials.email, {
         portalDraftLines,
         portalOrderId,
         portalSalesOrderNo,
@@ -823,14 +893,13 @@ export function PortalPage() {
         selectedCatalogCode,
         selectedDraftLineId,
         activeSection,
-      },
-      updatedAt: new Date().toISOString(),
-    });
+      });
+    }, PORTAL_CACHE_WRITE_DELAY_MS);
+    return () => window.clearTimeout(handle);
   }, [
     activeSection,
     catalogResults,
     credentials.email,
-    orderSearch,
     orderSearchBrand,
     portalDeliveryTerm,
     portalDraftLines,

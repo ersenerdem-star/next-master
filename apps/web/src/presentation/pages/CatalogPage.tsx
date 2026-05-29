@@ -19,6 +19,7 @@ import { downloadCatalogLifecycleTemplate, downloadCatalogTemplate } from "../..
 import { dispatchAppNavigation, PENDING_CATALOG_PURCHASE_ITEM_KEY, PENDING_CATALOG_SALES_ITEM_KEY, storeCatalogTransfer } from "../../shared/catalogTransfer";
 
 const CATALOG_CACHE_KEY = "next-master-catalog-cache";
+const CATALOG_CACHE_WRITE_DELAY_MS = 250;
 
 type CatalogRowDraft = Omit<CatalogRow, "weight_kg"> & {
   weight_kg: number | string | null;
@@ -345,17 +346,20 @@ export function CatalogPage() {
 
   useEffect(() => {
     const existing = readCatalogCache();
-    writeCatalogCache({
-      brands: brands.length ? brands : existing?.brands || [],
-      rows: rows.length ? rows : existing?.rows || [],
-      search,
-      submittedSearch: submittedSearch || existing?.submittedSearch || "",
-      catalogBrand,
-      submittedCatalogBrand: submittedCatalogBrand || existing?.submittedCatalogBrand || "",
-      selectedCatalogProductId: selectedCatalogProductId || existing?.selectedCatalogProductId || "",
-      updatedAt: new Date().toISOString(),
-    });
-  }, [brands, rows, search, submittedSearch, catalogBrand, submittedCatalogBrand, selectedCatalogProductId]);
+    const handle = window.setTimeout(() => {
+      writeCatalogCache({
+        brands: brands.length ? brands : existing?.brands || [],
+        rows: rows.length ? rows : existing?.rows || [],
+        search: submittedSearch || existing?.search || "",
+        submittedSearch: submittedSearch || existing?.submittedSearch || "",
+        catalogBrand: submittedCatalogBrand || existing?.catalogBrand || "",
+        submittedCatalogBrand: submittedCatalogBrand || existing?.submittedCatalogBrand || "",
+        selectedCatalogProductId: selectedCatalogProductId || existing?.selectedCatalogProductId || "",
+        updatedAt: new Date().toISOString(),
+      });
+    }, CATALOG_CACHE_WRITE_DELAY_MS);
+    return () => window.clearTimeout(handle);
+  }, [brands, rows, submittedSearch, submittedCatalogBrand, selectedCatalogProductId]);
 
   const total = rows[0]?.total_count ?? 0;
   const originalNumberBrandMatches = useMemo(() => {
