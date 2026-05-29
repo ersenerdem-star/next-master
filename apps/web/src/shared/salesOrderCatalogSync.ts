@@ -5,7 +5,7 @@ import { fetchCatalogMetadataForRows } from "../infrastructure/api/quoteImportAp
 import { resolveQuoteLine } from "../infrastructure/api/quoteResolverApi";
 import { supabaseClient } from "../infrastructure/api/supabaseClient";
 import type { QuoteBuilderLine } from "../types/quoteBuilder";
-import type { LocalInvoiceLine, LocalPurchaseOrderLine } from "../types/orders";
+import type { LocalBillLine, LocalInvoiceLine, LocalPurchaseOrderLine } from "../types/orders";
 
 export type SalesOrderCatalogSyncOptions = {
   customerType: "A" | "B" | "C" | "Other";
@@ -407,9 +407,39 @@ export async function resyncPurchaseOrderLinesFromCatalog(
       product_code: onlyFillBlanks ? line.product_code || metadata?.product_code || "" : metadata?.product_code || line.product_code,
       description: fillText(line.description, metadata?.description || "", onlyFillBlanks),
       oem_no: fillText(line.oem_no, metadata?.oem_no || "", onlyFillBlanks),
+      hs_code: fillText(line.hs_code, metadata?.hs_code || "", onlyFillBlanks),
+      weight_kg: fillNumber(line.weight_kg ?? null, metadata?.weight_kg ?? null, onlyFillBlanks),
       origin: fillText(line.origin, metadata?.origin || "", onlyFillBlanks),
       buy_price: nextBuyPriceValue,
       notes: keepPrices ? line.notes : supplierPrice?.notes || line.notes,
     } satisfies LocalPurchaseOrderLine;
+  });
+}
+
+export async function resyncBillLinesFromCatalog(
+  lines: LocalBillLine[],
+  options: Pick<PurchaseOrderCatalogSyncOptions, "onlyFillBlanks"> = {},
+): Promise<LocalBillLine[]> {
+  const onlyFillBlanks = options.onlyFillBlanks !== false;
+  const metadataMap = await fetchCatalogMetadataForRows(
+    lines.map((line) => ({
+      brand: canonicalizeBrandName(line.brand || ""),
+      product_code: line.product_code || line.old_code,
+    })),
+  );
+
+  return lines.map((line) => {
+    const metadata = metadataMap.get(`${normalizeBrandKey(line.brand || "")}::${normalizePartCode(line.product_code || line.old_code)}`);
+    const canonicalBrand = canonicalizeBrandName(line.brand || "") || line.brand;
+    return {
+      ...line,
+      brand: canonicalBrand,
+      product_code: onlyFillBlanks ? line.product_code || metadata?.product_code || "" : metadata?.product_code || line.product_code,
+      description: fillText(line.description, metadata?.description || "", onlyFillBlanks),
+      oem_no: fillText(line.oem_no, metadata?.oem_no || "", onlyFillBlanks),
+      hs_code: fillText(line.hs_code, metadata?.hs_code || "", onlyFillBlanks),
+      weight_kg: fillNumber(line.weight_kg ?? null, metadata?.weight_kg ?? null, onlyFillBlanks),
+      origin: fillText(line.origin, metadata?.origin || "", onlyFillBlanks),
+    } satisfies LocalBillLine;
   });
 }

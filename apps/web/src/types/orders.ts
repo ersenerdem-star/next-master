@@ -49,6 +49,8 @@ export type LocalPurchaseOrderLine = {
   description: string;
   qty: number;
   oem_no: string;
+  hs_code: string;
+  weight_kg: number | null;
   supplier_name: string;
   buy_price: number;
   line_total: number;
@@ -82,6 +84,8 @@ export type LocalBillLine = {
   description: string;
   qty: number;
   oem_no: string;
+  hs_code: string;
+  weight_kg: number | null;
   supplier_name: string;
   buy_price: number;
   line_total: number;

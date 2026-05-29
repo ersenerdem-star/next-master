@@ -40,6 +40,11 @@ function formatMoney(value: number, currency = "EUR") {
   return `${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
 
+function formatWeight(value: number | null | undefined) {
+  if (value == null || Number.isNaN(Number(value))) return "-";
+  return `${Number(value).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 3 })} kg`;
+}
+
 function formatAvailabilityQty(value: number) {
   return Number.isInteger(value) ? String(value) : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
@@ -69,7 +74,9 @@ function createCatalogPurchaseOrderDraft(
     brand: string;
     description: string;
     oem_no: string;
+    hs_code: string;
     origin: string;
+    weight_kg: number | null;
   },
   purchaseCompany: string,
 ): LocalPurchaseOrder {
@@ -83,6 +90,8 @@ function createCatalogPurchaseOrderDraft(
     description: payload.description,
     qty: 1,
     oem_no: payload.oem_no,
+    hs_code: payload.hs_code || "",
+    weight_kg: payload.weight_kg ?? null,
     supplier_name: "",
     buy_price: 0,
     line_total: 0,
@@ -326,7 +335,9 @@ export function PurchasesPage({
           brand: pending.brand,
           description: pending.description || "",
           oem_no: pending.oem_no || "",
+          hs_code: pending.hs_code || "",
           origin: pending.origin || "",
+          weight_kg: pending.weight_kg ?? null,
         },
         companyProfiles[0]?.companyName || "",
       ),
@@ -661,8 +672,8 @@ export function PurchasesPage({
         origin: line.origin || "",
         brand: line.brand || "",
         orderNo: row.id,
-        weight: "",
-        gtip: "",
+        weight: line.weight_kg == null ? "" : formatWeight(line.weight_kg),
+        gtip: line.hs_code || "",
         qty: line.qty,
         unitPrice: Number(line.buy_price || 0) || 0,
         amount: Number(line.line_total || 0) || 0,
@@ -718,8 +729,8 @@ export function PurchasesPage({
         origin: line.origin || "",
         brand: line.brand || "",
         orderNo: row.purchase_order_no || row.id,
-        weight: "",
-        gtip: "",
+        weight: line.weight_kg == null ? "" : formatWeight(line.weight_kg),
+        gtip: line.hs_code || "",
         qty: line.qty,
         unitPrice: Number(line.buy_price || 0) || 0,
         amount: Number(line.line_total || 0) || 0,
@@ -766,22 +777,24 @@ export function PurchasesPage({
         ["Currency", row.currency || "EUR"],
         ["Created", row.created_at?.slice(0, 10) || ""],
         [],
-        ["Code", "Brand", "Description", "Qty", "OEM", "Origin", `Buy Price ${row.currency || "EUR"}`, `Line Total ${row.currency || "EUR"}`, "Notes"],
+        ["Code", "Brand", "Description", "Qty", "OEM", "Tariff", "Weight", "Origin", `Buy Price ${row.currency || "EUR"}`, `Line Total ${row.currency || "EUR"}`, "Notes"],
         ...row.lines.map((line) => [
           line.product_code || line.old_code || "",
           line.brand || "",
           line.description || "",
           Number(line.qty || 0),
           line.oem_no || "",
+          line.hs_code || "",
+          line.weight_kg == null ? "" : formatWeight(line.weight_kg),
           line.origin || "",
           Number(line.buy_price || 0),
           Number(line.line_total || 0),
           line.notes || "",
         ]),
         [],
-        ["Total Amount", "", "", "", "", "", "", Number(row.total_amount || 0)],
+        ["Total Amount", "", "", "", "", "", "", "", "", Number(row.total_amount || 0)],
       ];
-      const blob = buildXlsxBlob((row.id || "purchase-order").slice(0, 31), rows, [3, 6, 7]);
+      const blob = buildXlsxBlob((row.id || "purchase-order").slice(0, 31), rows, [3, 8, 9]);
       downloadBlob(`${sanitizeFileName(row.id || "purchase-order")}.xlsx`, blob);
       actionFeedback.succeed(`Excel exported for ${row.id}.`);
     } catch (caught) {
@@ -1737,6 +1750,8 @@ export function PurchasesPage({
               <div><span>Buy Price</span><strong>{formatMoney(billLinePreview.buy_price, billDraft?.currency || "EUR")}</strong></div>
               <div><span>Line Total</span><strong>{formatMoney(billLinePreview.line_total, billDraft?.currency || "EUR")}</strong></div>
               <div><span>Origin</span><strong>{billLinePreview.origin || "-"}</strong></div>
+              <div><span>Tariff</span><strong>{billLinePreview.hs_code || "-"}</strong></div>
+              <div><span>Weight</span><strong>{billLinePreview.weight_kg == null ? "-" : formatWeight(billLinePreview.weight_kg)}</strong></div>
               <div><span>PO Source</span><strong>{billLinePreview.purchase_order_no || "-"}</strong></div>
               {billLinePreview.notes ? <div><span>Notes</span><strong>{billLinePreview.notes}</strong></div> : null}
             </div>

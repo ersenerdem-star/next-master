@@ -1,4 +1,5 @@
 import { buildBillFromPurchaseOrder, buildMergedBillFromPurchaseOrders, loadLocalBills, loadLocalInvoices, loadLocalPurchaseOrders, loadLocalSalesOrders } from "../../shared/localOrders";
+import { resyncBillLinesFromCatalog, resyncPurchaseOrderLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
 import type {
   LocalBill,
   LocalInvoice,
@@ -881,7 +882,14 @@ export async function fetchBillSummaries(): Promise<LocalBill[]> {
 }
 
 export async function fetchBillById(billId: string): Promise<LocalBill> {
-  return fetchOrderRecord("bills", BILL_COLUMNS, mapBillRow, billId);
+  const bill = await fetchOrderRecord("bills", BILL_COLUMNS, mapBillRow, billId);
+  if (!bill.lines.some((line) => !String(line.hs_code || "").trim() || line.weight_kg == null)) {
+    return bill;
+  }
+  return {
+    ...bill,
+    lines: await resyncBillLinesFromCatalog(bill.lines, { onlyFillBlanks: true }),
+  };
 }
 
 export async function fetchBillsBySupplierNames(names: string[]): Promise<LocalBill[]> {
@@ -920,11 +928,27 @@ export async function upsertBill(bill: LocalBill, previousId?: string): Promise<
 }
 
 export async function buildAndUpsertBillFromPurchaseOrder(order: LocalPurchaseOrder): Promise<LocalBill> {
-  return await upsertBill(buildBillFromPurchaseOrder(order));
+  const enrichedOrder = {
+    ...order,
+    lines: await resyncPurchaseOrderLinesFromCatalog(order.lines, {
+      onlyFillBlanks: true,
+      keepPrices: true,
+    }),
+  };
+  return await upsertBill(buildBillFromPurchaseOrder(enrichedOrder));
 }
 
 export async function buildAndUpsertMergedBillFromPurchaseOrders(orders: LocalPurchaseOrder[]): Promise<LocalBill> {
-  return await upsertBill(buildMergedBillFromPurchaseOrders(orders));
+  const enrichedOrders = await Promise.all(
+    orders.map(async (order) => ({
+      ...order,
+      lines: await resyncPurchaseOrderLinesFromCatalog(order.lines, {
+        onlyFillBlanks: true,
+        keepPrices: true,
+      }),
+    })),
+  );
+  return await upsertBill(buildMergedBillFromPurchaseOrders(enrichedOrders));
 }
 
 export async function deleteBill(billId: string): Promise<void> {
