@@ -1,6 +1,6 @@
 import type { Config, Context } from "@netlify/functions";
 import { json } from "./_shared/http.mts";
-import { buildPortalSnapshot, resolvePortalInvite } from "./_shared/portal-access.mts";
+import { buildPortalFallbackSnapshot, buildPortalSnapshot, resolvePortalInvite } from "./_shared/portal-access.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
@@ -33,7 +33,12 @@ export default async (req: Request, _context: Context) => {
       token,
       sessionToken,
     });
-    const snapshot = await buildPortalSnapshot(supabaseUrl, serviceRoleKey, invite);
+    let snapshot;
+    try {
+      snapshot = await buildPortalSnapshot(supabaseUrl, serviceRoleKey, invite);
+    } catch {
+      snapshot = await buildPortalFallbackSnapshot(supabaseUrl, serviceRoleKey, invite);
+    }
     return json({ ok: true, snapshot, sessionToken: nextSessionToken });
   } catch (error) {
     return json({ error: sanitizeUserFacingError(error, "Portal data load failed") }, 401);

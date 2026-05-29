@@ -816,3 +816,64 @@ export async function buildPortalBranding(supabaseUrl: string, serviceRoleKey: s
     partyName: String(invite.party_name || ""),
   };
 }
+
+export async function buildPortalFallbackSnapshot(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {
+  let companyProfile: Record<string, unknown> | null = null;
+  try {
+    const branding = await buildPortalBranding(supabaseUrl, serviceRoleKey, invite);
+    companyProfile = branding.companyProfile;
+  } catch {
+    companyProfile = null;
+  }
+
+  const baseParty = {
+    display_name: invite.party_name,
+    company_name: invite.party_name,
+    email: invite.email,
+    payment_terms: "",
+    contract_nr: "",
+    remarks: "",
+    currency: "EUR",
+  };
+
+  return {
+    invite: {
+      id: invite.id,
+      party_type: invite.party_type,
+      party_name: invite.party_name,
+      email: invite.email,
+      contact_name: invite.contact_name,
+      status: "active",
+      access: {
+        can_view_account: invite.access_can_view_account,
+        can_view_invoices: invite.access_can_view_invoices,
+        can_view_payments: invite.access_can_view_payments,
+        can_view_orders: invite.access_can_view_orders,
+      },
+    },
+    companyProfile,
+    customer: invite.party_type === "customer" ? baseParty : null,
+    vendor: invite.party_type === "vendor" ? baseParty : null,
+    availableBrands: [],
+    salesOrders: [],
+    purchaseOrders: [],
+    invoices: [],
+    bills: [],
+    creditNotes: [],
+    vendorCredits: [],
+    paymentsReceived: [],
+    paymentsMade: [],
+    accountSummary: {
+      currency: "EUR",
+      totalDocuments: 0,
+      totalAmount: 0,
+      documentAmount: 0,
+      creditAmount: 0,
+      paymentAmount: 0,
+      openAmount: 0,
+      paymentCount: 0,
+    },
+    pricingProfile: null,
+    accountRows: [],
+  };
+}
