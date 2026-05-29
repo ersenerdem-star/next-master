@@ -1,7 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { buildRestUrl, json, readJson, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
 import { resolveCaller } from "./_shared/app-auth.mts";
-import { canAccessCustomerOps, isSuperadminRole } from "./_shared/roles.mts";
+import { canAccessCustomerOps, canAccessOperationsModules, isSuperadminRole } from "./_shared/roles.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 const ALLOWED_RPCS = new Set([
@@ -26,11 +26,14 @@ const SUPERADMIN_RPCS = new Set([
   "bulk_import_catalog",
   "bulk_import_supplier_prices",
   "cloud_catalog_page",
-  "cloud_master_page",
   "cloud_supplier_brand_summary",
   "cloud_supplier_price_page",
   "deactivate_supplier_prices_by_filter",
   "list_cloud_suppliers",
+]);
+
+const OPERATIONS_RPCS = new Set([
+  "cloud_master_page",
 ]);
 
 const CUSTOMER_STAFF_RPCS = new Set([
@@ -343,6 +346,10 @@ export default async (req: Request, _context: Context) => {
 
     if (SUPERADMIN_RPCS.has(name) && !isSuperadminRole(caller.role)) {
       return json({ error: "Superadmin access required" }, 403);
+    }
+
+    if (OPERATIONS_RPCS.has(name) && !canAccessOperationsModules(caller.role)) {
+      return json({ error: "This area is not enabled for your user. Ask superadmin to open the required permission." }, 403);
     }
 
     if (CUSTOMER_STAFF_RPCS.has(name) && !canAccessCustomerOps(caller.role)) {

@@ -110,8 +110,7 @@ function getPurchasesSubNav(role: AppRole) {
 
 function getReportsSubNav(role: AppRole) {
   if (!canAccessReportModules(role)) return [] as const;
-  if (isSuperadminRole(role)) return reportsSubNav;
-  return reportsSubNav.filter((item) => item.key !== "Master");
+  return reportsSubNav;
 }
 
 function getSettingsSubNav(role: AppRole) {
