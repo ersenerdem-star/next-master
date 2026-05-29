@@ -3183,7 +3183,7 @@ select {
   }
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1280px) {
   .app-shell {
     grid-template-columns: 1fr;
   }
@@ -3327,7 +3327,7 @@ select {
 @media (max-width: 768px) {
   .main,
   .portal-shell {
-    padding: 14px;
+    padding: 14px 14px 104px;
   }
 
   .sidebar {
