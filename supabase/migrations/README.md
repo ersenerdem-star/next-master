@@ -56,6 +56,8 @@ These files were copied into this project because the app actively depends on th
    - purchase receives, inventory movements, and user_presence RLS/grants hardening
 21. `20260529_26_supabase_api_explicit_grants_hardening.sql`
    - explicit Data API and RPC default grants for future `public` tables, sequences, and functions
+22. `20260529_27_supabase_anon_grants_hardening.sql`
+   - removes current and future `anon` grants from `public` schema objects
 
 ### Run order in Supabase SQL Editor
 
@@ -82,6 +84,7 @@ Use this order when the target project is missing or outdated:
 19. `20260513_18_public_schema_data_api_grants.sql`
 20. `20260513_19_inventory_phase2.sql`
 21. `20260529_26_supabase_api_explicit_grants_hardening.sql`
+22. `20260529_27_supabase_anon_grants_hardening.sql`
 
 ### Public table standard
 
@@ -103,6 +106,9 @@ Current project-wide safety net:
   - repeats the safety net with `for role postgres`
   - adds default privileges for future `public` functions
   - keeps RPC access from breaking when Supabase tightens Data API defaults
+- `20260529_27_supabase_anon_grants_hardening.sql`
+  - removes direct `anon` access to current and future `public` tables, sequences, and functions
+  - keeps `authenticated` and `service_role` access intact
 
 Still required per table:
 - RLS enablement
