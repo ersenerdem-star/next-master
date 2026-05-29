@@ -226,9 +226,50 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     }
   }, [state.email, testEmail]);
 
+  function openUserEditor(row: OrgUser) {
+    setEditUserDraft({
+      userId: row.user_id,
+      email: row.email,
+      fullName: row.full_name || "",
+      role: (row.role === "superadmin" || row.role === "admin" || row.role === "sales" || row.role === "viewer" ? row.role : "sales") as EditUserDraft["role"],
+      isActive: row.is_active,
+    });
+    setUserActionStatus(`Editing ${row.email}`);
+  }
+
   const userColumns = [
-    { key: "email", header: "Email", render: (row: OrgUser) => row.email },
-    { key: "name", header: "Name", render: (row: OrgUser) => row.full_name || "-" },
+    {
+      key: "email",
+      header: "Email",
+      render: (row: OrgUser) => (
+        <button
+          type="button"
+          className="text-button"
+          onClick={(event) => {
+            event.stopPropagation();
+            openUserEditor(row);
+          }}
+        >
+          {row.email}
+        </button>
+      ),
+    },
+    {
+      key: "name",
+      header: "Name",
+      render: (row: OrgUser) => (
+        <button
+          type="button"
+          className="text-button"
+          onClick={(event) => {
+            event.stopPropagation();
+            openUserEditor(row);
+          }}
+        >
+          {row.full_name || "-"}
+        </button>
+      ),
+    },
     {
       key: "presence",
       header: "Presence",
@@ -315,16 +356,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           <Button
             variant="secondary"
             className="button--compact danger-button"
-            onClick={() => {
-              setEditUserDraft({
-                userId: row.user_id,
-                email: row.email,
-                fullName: row.full_name || "",
-                role: (row.role === "superadmin" || row.role === "admin" || row.role === "sales" || row.role === "viewer" ? row.role : "sales") as EditUserDraft["role"],
-                isActive: row.is_active,
-              });
-              setUserActionStatus(`Editing ${row.email}`);
-            }}
+            onClick={() => openUserEditor(row)}
           >
             Edit
           </Button>
@@ -859,7 +891,12 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
             <span>{users.length.toLocaleString("en-US")} users loaded</span>
             <span>{loadingUsers ? "Loading users..." : usersError || userActionStatus || passwordStatus || "Admin can add, delete, and update user passwords here."}</span>
           </div>
-          <DataTable rows={users} columns={userColumns} emptyText={loadingUsers ? "Loading users..." : "No organization users found."} />
+          <DataTable
+            rows={users}
+            columns={userColumns}
+            emptyText={loadingUsers ? "Loading users..." : "No organization users found."}
+            onRowClick={(row) => openUserEditor(row)}
+          />
         </SectionCard>
       ) : null}
       {activeTab === "companies" ? <SectionCard title="Company Profile">
