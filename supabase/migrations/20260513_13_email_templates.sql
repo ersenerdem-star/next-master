@@ -13,6 +13,14 @@ create table if not exists email_templates (
 
 create index if not exists idx_email_templates_org_key on email_templates (organization_id, template_key);
 
+grant select, insert, update, delete
+on public.email_templates
+to authenticated;
+
+grant select, insert, update, delete
+on public.email_templates
+to service_role;
+
 alter table email_templates enable row level security;
 
 drop policy if exists email_templates_select_org on email_templates;
@@ -55,6 +63,14 @@ create table if not exists outbound_emails (
 
 create index if not exists idx_outbound_emails_org_updated on outbound_emails (organization_id, updated_at desc);
 create index if not exists idx_outbound_emails_org_status on outbound_emails (organization_id, status);
+
+grant select, insert, update, delete
+on public.outbound_emails
+to authenticated;
+
+grant select, insert, update, delete
+on public.outbound_emails
+to service_role;
 
 alter table outbound_emails enable row level security;
 

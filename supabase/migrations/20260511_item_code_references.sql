@@ -25,6 +25,14 @@ create index if not exists idx_item_code_references_brand_original_number
   on public.item_code_references (organization_id, brand_id, normalized_original_number)
   where normalized_original_number <> '';
 
+grant select, insert, update, delete
+on public.item_code_references
+to authenticated;
+
+grant select, insert, update, delete
+on public.item_code_references
+to service_role;
+
 alter table public.item_code_references enable row level security;
 
 drop policy if exists "item_code_references_select_own_org" on public.item_code_references;

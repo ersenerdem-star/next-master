@@ -30,6 +30,14 @@ create index if not exists idx_bills_org_updated_at on bills (organization_id, u
 create index if not exists idx_bills_org_purchase_order_id on bills (organization_id, purchase_order_id);
 create index if not exists idx_bills_org_supplier_name on bills (organization_id, supplier_name);
 
+grant select, insert, update, delete
+on public.bills
+to authenticated;
+
+grant select, insert, update, delete
+on public.bills
+to service_role;
+
 alter table bills enable row level security;
 
 drop policy if exists bills_select_org on bills;

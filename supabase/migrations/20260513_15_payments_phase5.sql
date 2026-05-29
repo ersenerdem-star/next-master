@@ -19,6 +19,14 @@ create index if not exists idx_payments_received_org_updated_at on payments_rece
 create index if not exists idx_payments_received_org_invoice_id on payments_received (organization_id, invoice_id);
 create index if not exists idx_payments_received_org_customer_name on payments_received (organization_id, customer_name);
 
+grant select, insert, update, delete
+on public.payments_received
+to authenticated;
+
+grant select, insert, update, delete
+on public.payments_received
+to service_role;
+
 alter table payments_received enable row level security;
 
 drop policy if exists payments_received_select_org on payments_received;
@@ -62,6 +70,14 @@ create table if not exists payments_made (
 create index if not exists idx_payments_made_org_updated_at on payments_made (organization_id, updated_at desc);
 create index if not exists idx_payments_made_org_bill_id on payments_made (organization_id, bill_id);
 create index if not exists idx_payments_made_org_supplier_name on payments_made (organization_id, supplier_name);
+
+grant select, insert, update, delete
+on public.payments_made
+to authenticated;
+
+grant select, insert, update, delete
+on public.payments_made
+to service_role;
 
 alter table payments_made enable row level security;
 

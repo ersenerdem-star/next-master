@@ -11,6 +11,36 @@ create table if not exists user_presence (
 create index if not exists idx_user_presence_org_seen
   on user_presence (organization_id, last_seen_at desc);
 
+grant select, insert, update, delete
+on public.user_presence
+to authenticated;
+
+grant select, insert, update, delete
+on public.user_presence
+to service_role;
+
+alter table user_presence enable row level security;
+
+drop policy if exists user_presence_select_admin_org on user_presence;
+create policy user_presence_select_admin_org on user_presence
+for select
+using (
+  current_profile_role() = 'admin'
+  and organization_id = current_profile_org_id()
+);
+
+drop policy if exists user_presence_write_self on user_presence;
+create policy user_presence_write_self on user_presence
+for all
+using (
+  auth.uid() = user_id
+  and organization_id = current_profile_org_id()
+)
+with check (
+  auth.uid() = user_id
+  and organization_id = current_profile_org_id()
+);
+
 create or replace function touch_user_presence()
 returns jsonb
 language plpgsql

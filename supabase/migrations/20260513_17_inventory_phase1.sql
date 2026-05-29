@@ -15,6 +15,14 @@ create table if not exists warehouses (
 create index if not exists idx_warehouses_org_name on warehouses (organization_id, warehouse_name);
 create index if not exists idx_warehouses_org_active on warehouses (organization_id, is_active);
 
+grant select, insert, update, delete
+on public.warehouses
+to authenticated;
+
+grant select, insert, update, delete
+on public.warehouses
+to service_role;
+
 alter table warehouses enable row level security;
 
 drop policy if exists warehouses_select_org on warehouses;

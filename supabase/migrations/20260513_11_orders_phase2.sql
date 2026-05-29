@@ -33,6 +33,14 @@ create index if not exists idx_sales_orders_org_updated_at on sales_orders (orga
 create index if not exists idx_sales_orders_org_sales_order_no on sales_orders (organization_id, sales_order_no);
 create index if not exists idx_sales_orders_org_status on sales_orders (organization_id, status);
 
+grant select, insert, update, delete
+on public.sales_orders
+to authenticated;
+
+grant select, insert, update, delete
+on public.sales_orders
+to service_role;
+
 alter table sales_orders enable row level security;
 
 drop policy if exists sales_orders_select_org on sales_orders;
@@ -76,6 +84,14 @@ create table if not exists purchase_orders (
 create index if not exists idx_purchase_orders_org_updated_at on purchase_orders (organization_id, updated_at desc);
 create index if not exists idx_purchase_orders_org_sales_order_id on purchase_orders (organization_id, sales_order_id);
 create index if not exists idx_purchase_orders_org_supplier_key on purchase_orders (organization_id, supplier_key);
+
+grant select, insert, update, delete
+on public.purchase_orders
+to authenticated;
+
+grant select, insert, update, delete
+on public.purchase_orders
+to service_role;
 
 alter table purchase_orders enable row level security;
 
@@ -131,6 +147,14 @@ create table if not exists invoices (
 create index if not exists idx_invoices_org_updated_at on invoices (organization_id, updated_at desc);
 create index if not exists idx_invoices_org_sales_order_id on invoices (organization_id, sales_order_id);
 create index if not exists idx_invoices_org_customer_name on invoices (organization_id, customer_name);
+
+grant select, insert, update, delete
+on public.invoices
+to authenticated;
+
+grant select, insert, update, delete
+on public.invoices
+to service_role;
 
 alter table invoices enable row level security;
 

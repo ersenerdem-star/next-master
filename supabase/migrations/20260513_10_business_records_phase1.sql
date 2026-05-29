@@ -32,6 +32,14 @@ create table if not exists customers (
 create index if not exists idx_customers_org_display_name on customers (organization_id, display_name);
 create index if not exists idx_customers_org_company_name on customers (organization_id, company_name);
 
+grant select, insert, update, delete
+on public.customers
+to authenticated;
+
+grant select, insert, update, delete
+on public.customers
+to service_role;
+
 alter table customers enable row level security;
 
 drop policy if exists customers_select_org on customers;
@@ -73,6 +81,14 @@ create table if not exists company_profiles (
 );
 
 create index if not exists idx_company_profiles_org_company_name on company_profiles (organization_id, company_name);
+
+grant select, insert, update, delete
+on public.company_profiles
+to authenticated;
+
+grant select, insert, update, delete
+on public.company_profiles
+to service_role;
 
 alter table company_profiles enable row level security;
 
@@ -116,6 +132,14 @@ create table if not exists portal_invites (
 
 create index if not exists idx_portal_invites_org_party on portal_invites (organization_id, party_type, party_name);
 create index if not exists idx_portal_invites_org_email on portal_invites (organization_id, email);
+
+grant select, insert, update, delete
+on public.portal_invites
+to authenticated;
+
+grant select, insert, update, delete
+on public.portal_invites
+to service_role;
 
 alter table portal_invites enable row level security;
 

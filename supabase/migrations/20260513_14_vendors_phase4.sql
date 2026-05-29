@@ -30,6 +30,14 @@ create table if not exists vendors (
 create index if not exists idx_vendors_org_display_name on vendors (organization_id, display_name);
 create index if not exists idx_vendors_org_company_name on vendors (organization_id, company_name);
 
+grant select, insert, update, delete
+on public.vendors
+to authenticated;
+
+grant select, insert, update, delete
+on public.vendors
+to service_role;
+
 alter table vendors enable row level security;
 
 drop policy if exists vendors_select_org on vendors;
