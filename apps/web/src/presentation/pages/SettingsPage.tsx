@@ -6,6 +6,7 @@ import {
   isPasswordResetAvailable,
   resetOrgUserPassword,
   sendAdminTestEmail,
+  updateOrgUser,
   type AdminDiagnostics,
 } from "../../infrastructure/api/adminApi";
 import { createEmptyCloudCompanyProfile, deleteCompanyProfileById, fetchCompanyProfiles, upsertCompanyProfile } from "../../infrastructure/api/companyProfilesApi";
@@ -42,6 +43,14 @@ type NewUserDraft = {
   email: string;
   fullName: string;
   role: "admin" | "sales" | "viewer";
+  isActive: boolean;
+};
+
+type EditUserDraft = {
+  userId: string;
+  email: string;
+  fullName: string;
+  role: "superadmin" | "admin" | "sales" | "viewer";
   isActive: boolean;
 };
 
@@ -85,6 +94,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const [savingCompanyProfile, setSavingCompanyProfile] = useState(false);
   const [passwordBusyUserId, setPasswordBusyUserId] = useState("");
   const [creatingUser, setCreatingUser] = useState(false);
+  const [savingUserId, setSavingUserId] = useState("");
   const [deletingUserId, setDeletingUserId] = useState("");
   const [sendingPortalInviteId, setSendingPortalInviteId] = useState("");
   const [sendingQueuedEmails, setSendingQueuedEmails] = useState(false);
@@ -98,10 +108,13 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const [emailSearch, setEmailSearch] = useState("");
   const [emailDateFrom, setEmailDateFrom] = useState("");
   const [emailDateTo, setEmailDateTo] = useState("");
+  const [editUserDraft, setEditUserDraft] = useState<EditUserDraft | null>(null);
   const passwordResetAvailable = isPasswordResetAvailable();
   const newUserEmail = newUserDraft.email.trim().toLowerCase();
   const newUserValidationMessage = !newUserEmail ? "Email is required." : "";
   const canCreateUser = !creatingUser && !newUserValidationMessage;
+  const editUserEmail = editUserDraft?.email.trim().toLowerCase() || "";
+  const editUserValidationMessage = editUserDraft && !editUserEmail ? "Email is required." : "";
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -299,6 +312,22 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
       header: "Actions",
       render: (row: OrgUser) => (
         <div className="inline-actions">
+          <Button
+            variant="secondary"
+            className="button--compact danger-button"
+            onClick={() => {
+              setEditUserDraft({
+                userId: row.user_id,
+                email: row.email,
+                fullName: row.full_name || "",
+                role: (row.role === "superadmin" || row.role === "admin" || row.role === "sales" || row.role === "viewer" ? row.role : "sales") as EditUserDraft["role"],
+                isActive: row.is_active,
+              });
+              setUserActionStatus(`Editing ${row.email}`);
+            }}
+          >
+            Edit
+          </Button>
           <Button
             variant="secondary"
             className="button--compact danger-button"
@@ -622,6 +651,97 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
       ) : null}
       {activeTab === "users" && isSuperadminRole(state.role) ? (
         <SectionCard title="Users">
+          {editUserDraft ? (
+            <div className="settings-grid settings-grid--user-edit">
+              <Input
+                label="Edit Email"
+                value={editUserDraft.email}
+                placeholder="user@company.com"
+                onChange={(value) => setEditUserDraft((current) => (current ? { ...current, email: value } : current))}
+              />
+              <Input
+                label="Edit Full Name"
+                value={editUserDraft.fullName}
+                placeholder="Full name"
+                onChange={(value) => setEditUserDraft((current) => (current ? { ...current, fullName: value } : current))}
+              />
+              <Select
+                label="Edit Role"
+                value={editUserDraft.role}
+                options={[
+                  { value: "superadmin", label: "Superadmin" },
+                  { value: "admin", label: "Admin" },
+                  { value: "sales", label: "Sales" },
+                  { value: "viewer", label: "Viewer" },
+                ]}
+                onChange={(value) =>
+                  setEditUserDraft((current) => (current ? { ...current, role: value as EditUserDraft["role"] } : current))
+                }
+              />
+              <label className="field checkbox-field">
+                <input
+                  type="checkbox"
+                  checked={editUserDraft.isActive}
+                  onChange={(event) =>
+                    setEditUserDraft((current) => (current ? { ...current, isActive: event.target.checked } : current))
+                  }
+                />
+                <span className="field__label">Active user</span>
+              </label>
+              <div className="field field--actions">
+                <span className="field__label">Edit User</span>
+                <div className="inline-actions">
+                  <Button
+                    busy={savingUserId === editUserDraft.userId}
+                    busyLabel="Saving..."
+                    disabled={Boolean(editUserValidationMessage)}
+                    onClick={async () => {
+                      if (!editUserDraft) return;
+                      if (editUserValidationMessage) {
+                        setUserActionStatus(editUserValidationMessage);
+                        return;
+                      }
+                      try {
+                        setSavingUserId(editUserDraft.userId);
+                        setUserActionStatus("");
+                        actionFeedback.begin(`Saving ${editUserEmail}...`);
+                        await updateOrgUser({
+                          userId: editUserDraft.userId,
+                          email: editUserEmail,
+                          fullName: editUserDraft.fullName.trim(),
+                          role: editUserDraft.role,
+                          isActive: editUserDraft.isActive,
+                        });
+                        const nextUsers = await fetchOrgUsers();
+                        setUsers(nextUsers);
+                        setEditUserDraft(null);
+                        const message = `User updated: ${editUserEmail}`;
+                        setUserActionStatus(message);
+                        actionFeedback.succeed(message);
+                      } catch (caught) {
+                        const message = caught instanceof Error ? caught.message : "User update failed";
+                        setUserActionStatus(message);
+                        actionFeedback.fail(message);
+                      } finally {
+                        setSavingUserId("");
+                      }
+                    }}
+                  >
+                    Save User
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setEditUserDraft(null);
+                      setUserActionStatus("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
           <div className="settings-grid">
             <Input
               label="Email"
@@ -719,6 +839,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
             <span>System generates a random temporary password.</span>
             <span>User receives a set password email and defines their own password on first access.</span>
           </div>
+          {editUserValidationMessage ? <div className="error-text">{editUserValidationMessage}</div> : null}
           {newUserValidationMessage ? <div className="error-text">{newUserValidationMessage}</div> : null}
           <div className="settings-grid settings-stats-grid">
             <div className="settings-item">

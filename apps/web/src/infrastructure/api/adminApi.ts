@@ -2,6 +2,7 @@ import { supabaseClient } from "./supabaseClient";
 
 const resetPasswordUrl = import.meta.env.VITE_ADMIN_RESET_PASSWORD_URL || "/api/admin-reset-password";
 const createUserUrl = import.meta.env.VITE_ADMIN_CREATE_USER_URL || "/api/admin-create-user";
+const updateUserUrl = import.meta.env.VITE_ADMIN_UPDATE_USER_URL || "/api/admin-update-user";
 const deleteUserUrl = import.meta.env.VITE_ADMIN_DELETE_USER_URL || "/api/admin-delete-user";
 const diagnosticsUrl = import.meta.env.VITE_ADMIN_DIAGNOSTICS_URL || "/api/admin-diagnostics";
 const testEmailUrl = import.meta.env.VITE_ADMIN_TEST_EMAIL_URL || "/api/admin-test-email";
@@ -115,6 +116,37 @@ export async function deleteOrgUser(userId: string) {
     throw new Error(payload?.error || "User delete failed");
   }
   return payload as { ok: boolean; userId: string; email: string };
+}
+
+export async function updateOrgUser(input: {
+  userId: string;
+  email: string;
+  fullName: string;
+  role: "superadmin" | "admin" | "sales" | "viewer";
+  isActive: boolean;
+}) {
+  const accessToken = await getCallerAccessToken();
+  const response = await fetch(updateUserUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(input),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || "User update failed");
+  }
+  return payload as {
+    ok: boolean;
+    userId: string;
+    email: string;
+    fullName: string;
+    role: string;
+    isActive: boolean;
+  };
 }
 
 export async function fetchAdminDiagnostics(): Promise<AdminDiagnostics> {
