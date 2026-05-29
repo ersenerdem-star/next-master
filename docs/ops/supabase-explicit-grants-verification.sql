@@ -61,6 +61,7 @@ order by object_name, grantee;
 -- Expected:
 -- - authenticated and service_role rows only
 -- - no anon rows
+-- - if anon rows still remain, they are most likely extension-owned functions where revoke was not permitted
 select
   grantee,
   routine_name,

@@ -58,6 +58,8 @@ These files were copied into this project because the app actively depends on th
    - explicit Data API and RPC default grants for future `public` tables, sequences, and functions
 22. `20260529_27_supabase_anon_grants_hardening.sql`
    - removes current and future `anon` grants from `public` schema objects
+23. `20260529_28_supabase_public_function_execute_hardening.sql`
+   - removes current and future `public` execute privileges on `public` schema functions while preserving explicit app-role access
 
 ### Run order in Supabase SQL Editor
 
@@ -85,6 +87,7 @@ Use this order when the target project is missing or outdated:
 20. `20260513_19_inventory_phase2.sql`
 21. `20260529_26_supabase_api_explicit_grants_hardening.sql`
 22. `20260529_27_supabase_anon_grants_hardening.sql`
+23. `20260529_28_supabase_public_function_execute_hardening.sql`
 
 ### Public table standard
 
@@ -109,6 +112,9 @@ Current project-wide safety net:
 - `20260529_27_supabase_anon_grants_hardening.sql`
   - removes direct `anon` access to current and future `public` tables, sequences, and functions
   - keeps `authenticated` and `service_role` access intact
+- `20260529_28_supabase_public_function_execute_hardening.sql`
+  - revokes inherited `PUBLIC` execute on current and future `public` schema functions
+  - re-grants explicit execute to `authenticated` and `service_role`
 
 Still required per table:
 - RLS enablement
