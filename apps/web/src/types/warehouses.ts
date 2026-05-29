@@ -4,6 +4,17 @@ export type Warehouse = {
   warehouse_name: string;
   region: string;
   address: string;
+  warehouse_kind: "internal" | "outsourced";
+  outsource_partner_name: string;
+  external_sync_enabled: boolean;
+  external_api_provider: string;
+  external_api_url: string;
+  external_location_code: string;
+  external_auth_type: "none" | "bearer_env";
+  external_api_token_env: string;
+  external_last_sync_at: string;
+  external_last_sync_status: string;
+  external_last_sync_message: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;

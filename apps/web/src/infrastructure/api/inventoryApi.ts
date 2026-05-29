@@ -561,7 +561,31 @@ export async function postPurchaseReceive(input: PurchaseReceiveDraft, order: Lo
   clearInventoryAvailabilityCache();
 
   const receives = await fetchPurchaseReceives();
-  const finalDraft = buildPurchaseReceiveDraft(order, { id: input.warehouse_id, warehouse_code: input.warehouse_code, warehouse_name: input.warehouse_name, region: "", address: "", is_active: true, created_at: "", updated_at: "" }, receives);
+  const finalDraft = buildPurchaseReceiveDraft(
+    order,
+    {
+      id: input.warehouse_id,
+      warehouse_code: input.warehouse_code,
+      warehouse_name: input.warehouse_name,
+      region: "",
+      address: "",
+      warehouse_kind: "internal",
+      outsource_partner_name: "",
+      external_sync_enabled: false,
+      external_api_provider: "",
+      external_api_url: "",
+      external_location_code: "",
+      external_auth_type: "none",
+      external_api_token_env: "",
+      external_last_sync_at: "",
+      external_last_sync_status: "",
+      external_last_sync_message: "",
+      is_active: true,
+      created_at: "",
+      updated_at: "",
+    },
+    receives,
+  );
   const fullyReceived = finalDraft.lines.every((line) => line.qty_remaining_before <= 0);
 
   if (fullyReceived) {

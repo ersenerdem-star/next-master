@@ -2,7 +2,9 @@ import type { Warehouse } from "../../types/warehouses";
 import { supabaseClient } from "./supabaseClient";
 import { getCurrentOrgId, isUuid } from "./organizationApi";
 
-const WAREHOUSE_COLUMNS = [
+const syncWarehouseStockUrl = import.meta.env.VITE_ADMIN_SYNC_WAREHOUSE_STOCK_URL || "/api/admin-sync-warehouse-stock";
+
+const WAREHOUSE_BASE_COLUMNS = [
   "id",
   "warehouse_code",
   "warehouse_name",
@@ -11,6 +13,21 @@ const WAREHOUSE_COLUMNS = [
   "is_active",
   "created_at",
   "updated_at",
+].join(",");
+
+const WAREHOUSE_EXTENDED_COLUMNS = [
+  WAREHOUSE_BASE_COLUMNS,
+  "warehouse_kind",
+  "outsource_partner_name",
+  "external_sync_enabled",
+  "external_api_provider",
+  "external_api_url",
+  "external_location_code",
+  "external_auth_type",
+  "external_api_token_env",
+  "external_last_sync_at",
+  "external_last_sync_status",
+  "external_last_sync_message",
 ].join(",");
 
 let warehousesCacheOrgId = "";
@@ -22,6 +39,11 @@ function clearWarehousesCache() {
   warehousesCachePromise = null;
 }
 
+function isMissingColumnError(message: string) {
+  const normalized = String(message || "").toLowerCase();
+  return normalized.includes("column") && (normalized.includes("does not exist") || normalized.includes("could not find"));
+}
+
 function mapWarehouseRow(row: Record<string, unknown>): Warehouse {
   return {
     id: String(row.id || ""),
@@ -29,6 +51,17 @@ function mapWarehouseRow(row: Record<string, unknown>): Warehouse {
     warehouse_name: String(row.warehouse_name || ""),
     region: String(row.region || ""),
     address: String(row.address || ""),
+    warehouse_kind: String(row.warehouse_kind || "internal").trim().toLowerCase() === "outsourced" ? "outsourced" : "internal",
+    outsource_partner_name: String(row.outsource_partner_name || ""),
+    external_sync_enabled: Boolean(row.external_sync_enabled),
+    external_api_provider: String(row.external_api_provider || ""),
+    external_api_url: String(row.external_api_url || ""),
+    external_location_code: String(row.external_location_code || ""),
+    external_auth_type: String(row.external_auth_type || "none").trim().toLowerCase() === "bearer_env" ? "bearer_env" : "none",
+    external_api_token_env: String(row.external_api_token_env || ""),
+    external_last_sync_at: String(row.external_last_sync_at || ""),
+    external_last_sync_status: String(row.external_last_sync_status || ""),
+    external_last_sync_message: String(row.external_last_sync_message || ""),
     is_active: Boolean(row.is_active),
     created_at: String(row.created_at || ""),
     updated_at: String(row.updated_at || ""),
@@ -42,10 +75,42 @@ function mapWarehousePayload(input: Warehouse, organizationId: string) {
     warehouse_name: input.warehouse_name.trim(),
     region: input.region.trim(),
     address: input.address.trim(),
+    warehouse_kind: input.warehouse_kind,
+    outsource_partner_name: input.outsource_partner_name.trim(),
+    external_sync_enabled: input.external_sync_enabled,
+    external_api_provider: input.external_api_provider.trim(),
+    external_api_url: input.external_api_url.trim(),
+    external_location_code: input.external_location_code.trim(),
+    external_auth_type: input.external_auth_type,
+    external_api_token_env: input.external_api_token_env.trim(),
+    external_last_sync_at: input.external_last_sync_at || null,
+    external_last_sync_status: input.external_last_sync_status.trim(),
+    external_last_sync_message: input.external_last_sync_message.trim(),
     is_active: input.is_active,
     created_at: input.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
+}
+
+function mapWarehouseLegacyPayload(input: Warehouse, organizationId: string) {
+  return {
+    organization_id: organizationId,
+    warehouse_code: input.warehouse_code.trim(),
+    warehouse_name: input.warehouse_name.trim(),
+    region: input.region.trim(),
+    address: input.address.trim(),
+    is_active: input.is_active,
+    created_at: input.created_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function getAccessToken() {
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error) throw new Error(error.message || "Your session has expired. Sign in again.");
+  const token = String(data.session?.access_token || "");
+  if (!token) throw new Error("Your session has expired. Sign in again.");
+  return token;
 }
 
 export function createEmptyWarehouse(existingRows: Warehouse[] = []): Warehouse {
@@ -55,6 +120,17 @@ export function createEmptyWarehouse(existingRows: Warehouse[] = []): Warehouse 
     warehouse_name: "",
     region: "",
     address: "",
+    warehouse_kind: "internal",
+    outsource_partner_name: "",
+    external_sync_enabled: false,
+    external_api_provider: "",
+    external_api_url: "",
+    external_location_code: "",
+    external_auth_type: "none",
+    external_api_token_env: "",
+    external_last_sync_at: "",
+    external_last_sync_status: "",
+    external_last_sync_message: "",
     is_active: true,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -68,17 +144,28 @@ export async function fetchWarehouses(): Promise<Warehouse[]> {
 
   warehousesCacheOrgId = organizationId;
   warehousesCachePromise = (async () => {
-    const { data, error } = await supabaseClient
-      .from("warehouses")
-      .select(WAREHOUSE_COLUMNS)
-      .eq("organization_id", organizationId)
-      .order("warehouse_name", { ascending: true });
+    let data: unknown[] | null = null;
+    let error: { message?: string } | null = null;
 
-      if (error) throw new Error(error.message || "Warehouses load failed");
-      const rows = ((data || []) as unknown as Record<string, unknown>[]).map(mapWarehouseRow);
-      warehousesCacheValue = rows;
-      warehousesCachePromise = null;
-      return rows;
+    ({ data, error } = await supabaseClient
+      .from("warehouses")
+      .select(WAREHOUSE_EXTENDED_COLUMNS)
+      .eq("organization_id", organizationId)
+      .order("warehouse_name", { ascending: true }));
+
+    if (error && isMissingColumnError(error.message || "")) {
+      ({ data, error } = await supabaseClient
+        .from("warehouses")
+        .select(WAREHOUSE_BASE_COLUMNS)
+        .eq("organization_id", organizationId)
+        .order("warehouse_name", { ascending: true }));
+    }
+
+    if (error) throw new Error(error.message || "Warehouses load failed");
+    const rows = ((data || []) as Record<string, unknown>[]).map(mapWarehouseRow);
+    warehousesCacheValue = rows;
+    warehousesCachePromise = null;
+    return rows;
   })().catch((error) => {
     warehousesCachePromise = null;
     throw error;
@@ -89,25 +176,94 @@ export async function fetchWarehouses(): Promise<Warehouse[]> {
 export async function upsertWarehouse(input: Warehouse): Promise<Warehouse> {
   const organizationId = await getCurrentOrgId();
   const payload = mapWarehousePayload(input, organizationId);
+  const legacyPayload = mapWarehouseLegacyPayload(input, organizationId);
+
   if (isUuid(input.id)) {
-    const { data, error } = await supabaseClient
+    let data: unknown = null;
+    let error: { message?: string } | null = null;
+
+    ({ data, error } = await supabaseClient
       .from("warehouses")
       .update(payload)
       .eq("organization_id", organizationId)
       .eq("id", input.id)
-      .select(WAREHOUSE_COLUMNS)
-      .single();
+      .select(WAREHOUSE_EXTENDED_COLUMNS)
+      .single());
+
+    if (error && isMissingColumnError(error.message || "")) {
+      ({ data, error } = await supabaseClient
+        .from("warehouses")
+        .update(legacyPayload)
+        .eq("organization_id", organizationId)
+        .eq("id", input.id)
+        .select(WAREHOUSE_BASE_COLUMNS)
+        .single());
+    }
+
     if (error) throw new Error(error.message || "Warehouse save failed");
     clearWarehousesCache();
-    return mapWarehouseRow(data as unknown as Record<string, unknown>);
+    return mapWarehouseRow(data as Record<string, unknown>);
   }
 
-  const { data, error } = await supabaseClient
+  let data: unknown = null;
+  let error: { message?: string } | null = null;
+
+  ({ data, error } = await supabaseClient
     .from("warehouses")
     .insert(payload)
-    .select(WAREHOUSE_COLUMNS)
-    .single();
+    .select(WAREHOUSE_EXTENDED_COLUMNS)
+    .single());
+
+  if (error && isMissingColumnError(error.message || "")) {
+    ({ data, error } = await supabaseClient
+      .from("warehouses")
+      .insert(legacyPayload)
+      .select(WAREHOUSE_BASE_COLUMNS)
+      .single());
+  }
+
   if (error) throw new Error(error.message || "Warehouse create failed");
   clearWarehousesCache();
-  return mapWarehouseRow(data as unknown as Record<string, unknown>);
+  return mapWarehouseRow(data as Record<string, unknown>);
+}
+
+export async function syncWarehouseExternalStock(warehouseId: string) {
+  const accessToken = await getAccessToken();
+  const response = await fetch(syncWarehouseStockUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ warehouseId }),
+  });
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    ok?: boolean;
+    warehouse?: Record<string, unknown>;
+    summary?: {
+      fetchedItemCount?: number;
+      acceptedItemCount?: number;
+      adjustmentCount?: number;
+      zeroedItemCount?: number;
+      invalidItemCount?: number;
+    };
+  };
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Warehouse API sync failed");
+  }
+
+  clearWarehousesCache();
+  return {
+    warehouse: payload.warehouse ? mapWarehouseRow(payload.warehouse) : null,
+    summary: {
+      fetchedItemCount: Number(payload.summary?.fetchedItemCount || 0),
+      acceptedItemCount: Number(payload.summary?.acceptedItemCount || 0),
+      adjustmentCount: Number(payload.summary?.adjustmentCount || 0),
+      zeroedItemCount: Number(payload.summary?.zeroedItemCount || 0),
+      invalidItemCount: Number(payload.summary?.invalidItemCount || 0),
+    },
+  };
 }

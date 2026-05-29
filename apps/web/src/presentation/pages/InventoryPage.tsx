@@ -14,7 +14,7 @@ import {
   type StockTransferDraftLine,
 } from "../../infrastructure/api/inventoryApi";
 import { fetchPurchaseOrders } from "../../infrastructure/api/ordersApi";
-import { createEmptyWarehouse, fetchWarehouses, upsertWarehouse } from "../../infrastructure/api/warehousesApi";
+import { createEmptyWarehouse, fetchWarehouses, syncWarehouseExternalStock, upsertWarehouse } from "../../infrastructure/api/warehousesApi";
 import type { InventoryMovement, PurchaseReceive, StockTransfer, WarehouseOnHandRow, WarehouseStockItem } from "../../types/inventory";
 import type { LocalPurchaseOrder } from "../../types/orders";
 import type { Warehouse } from "../../types/warehouses";
@@ -26,6 +26,7 @@ import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
 import { BrandPill } from "../components/common/BrandPill";
 import { includesLooseText } from "../../domain/shared/normalize";
+import { isUuid } from "../../infrastructure/api/organizationApi";
 
 type InventoryTab = "Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers";
 
@@ -107,6 +108,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
   const [loadingTransfers, setLoadingTransfers] = useState(false);
   const [postingReceive, setPostingReceive] = useState(false);
   const [postingTransfer, setPostingTransfer] = useState(false);
+  const [syncingWarehouse, setSyncingWarehouse] = useState(false);
   const [showWarehouseEditor, setShowWarehouseEditor] = useState(false);
   const [receiveDraft, setReceiveDraft] = useState<PurchaseReceiveDraft | null>(null);
   const [transferDraft, setTransferDraft] = useState<StockTransferDraft | null>(null);
@@ -359,8 +361,25 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     () => [
       { key: "code", header: "Code", render: (row: Warehouse) => row.warehouse_code || "-" },
       { key: "name", header: "Warehouse", render: (row: Warehouse) => row.warehouse_name || "-" },
+      { key: "type", header: "Type", render: (row: Warehouse) => (row.warehouse_kind === "outsourced" ? "Outsourced" : "Internal") },
       { key: "region", header: "Region", render: (row: Warehouse) => row.region || "-" },
       { key: "status", header: "Status", render: (row: Warehouse) => (row.is_active ? "Active" : "Closed") },
+    ],
+    [],
+  );
+
+  const warehouseKindOptions = useMemo(
+    () => [
+      { value: "internal", label: "Internal Warehouse" },
+      { value: "outsourced", label: "Outsourced Warehouse" },
+    ],
+    [],
+  );
+
+  const externalAuthTypeOptions = useMemo(
+    () => [
+      { value: "none", label: "No Auth" },
+      { value: "bearer_env", label: "Bearer Token from Env" },
     ],
     [],
   );
@@ -604,6 +623,37 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     }
   }
 
+  async function handleSyncWarehouse() {
+    if (!draft || !isUuid(draft.id)) {
+      actionFeedback.fail("Save the warehouse first before running API sync.");
+      return;
+    }
+    try {
+      setSyncingWarehouse(true);
+      actionFeedback.begin(`Syncing outsourced warehouse ${draft.warehouse_name || draft.warehouse_code}...`);
+      const result = await syncWarehouseExternalStock(draft.id);
+      const warehouseRows = await reloadWarehouses();
+      const [onHand, movementRows, onHandStockRows] = await Promise.all([
+        reloadOnHand(warehouseRows),
+        reloadMovements(movementWarehouseId || undefined),
+        reloadOnHandStock(onHandWarehouseId || undefined),
+      ]);
+      const refreshed = result.warehouse || warehouseRows.find((row) => row.id === draft.id) || draft;
+      setDraft(refreshed);
+      setWarehouses(warehouseRows);
+      setOnHandRows(onHand);
+      setMovementRows(movementRows);
+      setOnHandStockRows(onHandStockRows);
+      actionFeedback.succeed(
+        `Warehouse API sync complete. ${result.summary.adjustmentCount.toLocaleString("en-US")} adjustment movement(s) posted from ${result.summary.acceptedItemCount.toLocaleString("en-US")} accepted item(s).`,
+      );
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Warehouse API sync failed");
+    } finally {
+      setSyncingWarehouse(false);
+    }
+  }
+
   function handleCloseWarehouseEditor() {
     setShowWarehouseEditor(false);
     if (selectedWarehouseId) {
@@ -775,7 +825,10 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                         {warehouses.find((item) => item.id === warehouse.warehouse_id)?.is_active ? "ACTIVE" : "CLOSED"}
                       </span>
                     </div>
-                    <div className="warehouse-card__meta">{warehouse.region || "-"}</div>
+                    <div className="warehouse-card__meta">
+                      <span>{warehouse.region || "-"}</span>
+                      <span>{(warehouses.find((item) => item.id === warehouse.warehouse_id)?.warehouse_kind || "internal") === "outsourced" ? "OUTSOURCED" : "INTERNAL"}</span>
+                    </div>
                     <div className="warehouse-card__stats">
                       <span>{warehouse.sku_count.toLocaleString("en-US")} items</span>
                       <span>{warehouse.on_hand_qty.toLocaleString("en-US")} on hand</span>
@@ -794,6 +847,11 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                 <Button variant="secondary" onClick={handleCloseWarehouseEditor}>
                   Exit
                 </Button>
+                {draft.warehouse_kind === "outsourced" ? (
+                  <Button variant="secondary" onClick={() => void handleSyncWarehouse()} busy={syncingWarehouse} busyLabel="Syncing...">
+                    Sync API Stock
+                  </Button>
+                ) : null}
                 <Button onClick={() => void handleSave()} busy={saving} busyLabel="Saving...">
                   Save
                 </Button>
@@ -817,6 +875,27 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                     <Input value={draft.region} onChange={(value) => setDraft((current) => (current ? { ...current, region: value } : current))} />
                   </div>
                 </div>
+                <div className="customers-form-row">
+                  <div className="customers-form-row__label">Warehouse Type</div>
+                  <div className="customers-field-wrap customers-field-wrap--medium">
+                    <Select
+                      value={draft.warehouse_kind}
+                      options={warehouseKindOptions}
+                      onChange={(value) =>
+                        setDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                warehouse_kind: value === "outsourced" ? "outsourced" : "internal",
+                                external_sync_enabled:
+                                  value === "outsourced" ? current.external_sync_enabled : false,
+                              }
+                            : current,
+                        )
+                      }
+                    />
+                  </div>
+                </div>
                 <div className="customers-form-row customers-form-row--top">
                   <div className="customers-form-row__label">Address</div>
                   <div className="customers-field-wrap customers-field-wrap--full">
@@ -836,6 +915,106 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                     </label>
                   </div>
                 </div>
+                {draft.warehouse_kind === "outsourced" ? (
+                  <>
+                    <div className="customers-form-row">
+                      <div className="customers-form-row__label">Outsource Partner</div>
+                      <div className="customers-field-wrap customers-field-wrap--wide">
+                        <Input value={draft.outsource_partner_name} onChange={(value) => setDraft((current) => (current ? { ...current, outsource_partner_name: value } : current))} />
+                      </div>
+                    </div>
+                    <div className="customers-form-row">
+                      <div className="customers-form-row__label">API Provider</div>
+                      <div className="customers-field-wrap customers-field-wrap--wide">
+                        <Input value={draft.external_api_provider} placeholder="Vendor name or API label" onChange={(value) => setDraft((current) => (current ? { ...current, external_api_provider: value } : current))} />
+                      </div>
+                    </div>
+                    <div className="customers-form-row">
+                      <div className="customers-form-row__label">API URL</div>
+                      <div className="customers-field-wrap customers-field-wrap--full">
+                        <Input
+                          value={draft.external_api_url}
+                          placeholder="https://partner.example/api/stock?location={{location_code}}"
+                          onChange={(value) => setDraft((current) => (current ? { ...current, external_api_url: value } : current))}
+                        />
+                      </div>
+                    </div>
+                    <div className="customers-form-row">
+                      <div className="customers-form-row__label">Location Code</div>
+                      <div className="customers-field-wrap customers-field-wrap--medium">
+                        <Input value={draft.external_location_code} onChange={(value) => setDraft((current) => (current ? { ...current, external_location_code: value } : current))} />
+                      </div>
+                    </div>
+                    <div className="customers-form-row">
+                      <div className="customers-form-row__label">Auth Type</div>
+                      <div className="customers-field-wrap customers-field-wrap--medium">
+                        <Select
+                          value={draft.external_auth_type}
+                          options={externalAuthTypeOptions}
+                          onChange={(value) =>
+                            setDraft((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    external_auth_type: value === "bearer_env" ? "bearer_env" : "none",
+                                    external_api_token_env:
+                                      value === "bearer_env" ? current.external_api_token_env : "",
+                                  }
+                                : current,
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+                    {draft.external_auth_type === "bearer_env" ? (
+                      <div className="customers-form-row">
+                        <div className="customers-form-row__label">Token Env Name</div>
+                        <div className="customers-field-wrap customers-field-wrap--medium">
+                          <Input value={draft.external_api_token_env} placeholder="OUTSOURCE_WAREHOUSE_API_TOKEN" onChange={(value) => setDraft((current) => (current ? { ...current, external_api_token_env: value } : current))} />
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="customers-form-row">
+                      <div className="customers-form-row__label">Sync Mode</div>
+                      <div className="customers-field-wrap customers-field-wrap--medium">
+                        <label className="field customer-field">
+                          <select
+                            className="field__input"
+                            value={draft.external_sync_enabled ? "enabled" : "disabled"}
+                            onChange={(event) =>
+                              setDraft((current) =>
+                                current
+                                  ? { ...current, external_sync_enabled: event.target.value === "enabled" }
+                                  : current,
+                              )
+                            }
+                          >
+                            <option value="enabled">Manual API Sync Enabled</option>
+                            <option value="disabled">Disabled</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                    <div className="settings-grid settings-stats-grid">
+                      <div className="settings-item">
+                        <span className="settings-label">Last Sync</span>
+                        <strong>{draft.external_last_sync_at ? formatDate(draft.external_last_sync_at) : "-"}</strong>
+                      </div>
+                      <div className="settings-item">
+                        <span className="settings-label">Sync Status</span>
+                        <strong>{draft.external_last_sync_status || "Not synced"}</strong>
+                      </div>
+                      <div className="settings-item">
+                        <span className="settings-label">Sync Message</span>
+                        <strong>{draft.external_last_sync_message || "Waiting for first sync"}</strong>
+                      </div>
+                    </div>
+                    <div className="meta-row">
+                      <span>Expected API payload: array or items/data/rows/stock list.</span>
+                      <span>Fields supported: brand, product_code/code/sku, qty_on_hand/qty/stock, optional old_code, description, origin, unit_cost.</span>
+                    </div>
+                  </>
+                ) : null}
               </div>
             </SectionCard>
           ) : null}
