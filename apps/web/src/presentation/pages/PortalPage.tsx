@@ -393,6 +393,7 @@ export function PortalPage() {
   const portalImportRef = useRef<HTMLInputElement | null>(null);
   const portalDraftLinesRef = useRef<HTMLDivElement | null>(null);
   const portalCachedDraftRef = useRef<PortalOfflineCache["draft"] | null>(null);
+  const portalAutoRefreshKeyRef = useRef("");
   const [credentials, setCredentials] = useState<PortalCredentials>(() => {
     const stored = typeof window !== "undefined" ? readStoredCredentials() : null;
     return {
@@ -464,6 +465,40 @@ export function PortalPage() {
     setStatus(isOnline ? "Cached portal workspace loaded." : "Offline mode active. Showing cached portal data and local basket.");
     setError("");
   }, [credentials.email, hasPortalLinkCredentials, isOnline, snapshot]);
+
+  useEffect(() => {
+    if (!isOnline || hasPortalLinkCredentials || !credentials.email || !credentials.sessionToken) return;
+    const refreshKey = `${credentials.email}::${credentials.sessionToken}`;
+    if (portalAutoRefreshKeyRef.current === refreshKey) return;
+    portalAutoRefreshKeyRef.current = refreshKey;
+
+    let cancelled = false;
+    fetchPortalSnapshot(credentials)
+      .then(({ snapshot: next, sessionToken }) => {
+        if (cancelled) return;
+        setSnapshot(next);
+        const nextCredentials = { email: credentials.email, token: "", sessionToken };
+        setCredentials(nextCredentials);
+        writeStoredCredentials(nextCredentials);
+        setError("");
+        setStatus((current) =>
+          current && current.toLowerCase().includes("offline")
+            ? "Portal data refreshed."
+            : current || "Portal data refreshed.",
+        );
+      })
+      .catch((caught) => {
+        if (cancelled) return;
+        portalAutoRefreshKeyRef.current = "";
+        if (!snapshot) {
+          setError(caught instanceof Error ? caught.message : "Portal refresh failed");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [credentials, hasPortalLinkCredentials, isOnline, snapshot]);
 
   useEffect(() => {
     const token = search.get("token");
