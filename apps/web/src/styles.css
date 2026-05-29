@@ -2795,8 +2795,8 @@ select {
 
 .portal-search-card-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
   margin-bottom: 14px;
 }
 
@@ -3282,12 +3282,15 @@ select {
   .portal-summary-list,
   .portal-record-layout,
   .portal-workbench,
-  .portal-search-card-grid,
   .portal-order-builder__meta,
   .portal-statement-actions,
   .portal-detail-grid,
   .portal-detail-totals {
     grid-template-columns: 1fr;
+  }
+
+  .portal-search-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .portal-sidebar {
@@ -3488,6 +3491,10 @@ select {
 
   .portal-search-card {
     padding: 12px;
+  }
+
+  .portal-search-card-grid {
+    grid-template-columns: 1fr;
   }
 
   .portal-search-card__top {
