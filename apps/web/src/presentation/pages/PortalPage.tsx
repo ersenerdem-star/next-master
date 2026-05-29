@@ -1684,6 +1684,18 @@ export function PortalPage() {
         </aside>
 
         <div className="portal-content">
+          <div className="portal-mobile-subnav" role="tablist" aria-label="Portal mobile sections">
+            {(portalNavGroups.find((group) => group.key === activePortalGroup)?.items || []).map((item) => (
+              <button
+                key={item.key}
+                className={`portal-mobile-subnav__item${activeSection === item.key ? " active" : ""}`}
+                onClick={() => setActiveSection(item.key)}
+              >
+                <span>{item.label}</span>
+                {item.badge ? <span className="portal-mobile-subnav__badge">{item.badge}</span> : null}
+              </button>
+            ))}
+          </div>
           {status ? <div className="success-text">{status}</div> : null}
           {error ? <div className="warning-text">{error}</div> : null}
           <div className="portal-inline-note portal-inline-note--soft">
@@ -2193,6 +2205,18 @@ export function PortalPage() {
           ) : null}
         </div>
       </div>
+      <nav className="portal-mobile-bottom-nav" aria-label="Portal mobile navigation">
+        {portalNavGroups.map((group) => (
+          <button
+            key={group.key}
+            className={`portal-mobile-bottom-nav__item${activePortalGroup === group.key ? " active" : ""}`}
+            onClick={() => handlePortalGroupNavigate(group.key)}
+          >
+            <span className="portal-mobile-bottom-nav__title">{group.title}</span>
+            <span className="portal-mobile-bottom-nav__caption">{group.caption}</span>
+          </button>
+        ))}
+      </nav>
 
       {portalOverlay ? (
         <div className="modal-backdrop">

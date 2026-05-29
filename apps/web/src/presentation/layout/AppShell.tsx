@@ -117,8 +117,33 @@ export function AppShell({ children, activePage = "Home", activeSubPage = "", su
             </div>
           </div>
         </header>
+        {subNavItems.length ? (
+          <div className="mobile-subnav" role="tablist" aria-label={`${activePage} mobile sections`}>
+            {subNavItems.map((subItem) => (
+              <button
+                key={subItem.key}
+                className={`mobile-subnav__item${subItem.key === activeSubPage ? " active" : ""}`}
+                onClick={() => onNavigateSub?.(subItem.key)}
+              >
+                {subItem.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {children}
       </main>
+      <nav className="mobile-bottom-nav" aria-label="Primary mobile navigation">
+        {navItems.map((item) => (
+          <button
+            key={item.key}
+            className={`mobile-bottom-nav__item${item.key === activePage ? " active" : ""}`}
+            onClick={() => onNavigate?.(item.key)}
+          >
+            <span className="mobile-bottom-nav__title">{item.key}</span>
+            <span className="mobile-bottom-nav__caption">{item.caption}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
