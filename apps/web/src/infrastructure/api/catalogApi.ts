@@ -1,7 +1,12 @@
 import type { CatalogRow } from "../../types/catalog";
 import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "../../domain/shared/catalogFormatting";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
-import { buildLooseOriginalNumberPattern, normalizeOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
+import {
+  buildLooseOriginalNumberPattern,
+  matchesOriginalNumberSearch,
+  normalizeOriginalNumberSearch,
+  normalizePartCode,
+} from "../../domain/shared/normalize";
 import { callAppRpc } from "./appRpcApi";
 import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
@@ -16,6 +21,20 @@ const CATALOG_GLOBAL_SELECT_NO_IMAGE =
   "id,product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
 
 type CatalogSearchMode = "strict" | "loose";
+
+type CatalogQueryRow = {
+  id: string;
+  product_code: string;
+  image_url?: string | null;
+  description: string | null;
+  oem_no: string | null;
+  hs_code: string | null;
+  origin: string | null;
+  weight_kg: number | null;
+  lifecycle_status: string | null;
+  lifecycle_note: string | null;
+  brands?: { name?: string | null } | null;
+};
 
 function shouldRunLooseOriginalNumberSearch(search: string) {
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
@@ -61,6 +80,58 @@ function isMissingCatalogImageError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
   const normalized = message.toLowerCase();
   return normalized.includes("image_url") && normalized.includes("does not exist");
+}
+
+function dedupeCatalogQueryRows(rows: CatalogQueryRow[]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = String(row.id || "").trim() || `${String(row.product_code || "").trim()}::${String(row.oem_no || "").trim()}`;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function fetchCatalogFallbackRows(input: {
+  selectClause: string;
+  fallbackSelectClause: string;
+  filters: Record<string, string>;
+  orderBy?: string;
+  limit: number;
+}) {
+  const orderBy = input.orderBy || "product_code";
+  try {
+    const query = supabaseClient
+      .from("catalog_products")
+      .select(input.selectClause)
+      .order(orderBy, { ascending: true })
+      .limit(input.limit);
+    const filteredQuery = Object.entries(input.filters).reduce((current, [column, value]) => {
+      if (column === "oem_no__ilike") return current.ilike("oem_no", value);
+      if (column === "normalized_oem__like") return current.like("normalized_oem", value);
+      return current.eq(column, value);
+    }, query as any);
+    const { data, error } = await filteredQuery;
+    if (error && isMissingCatalogImageError(error)) {
+      const noImageQuery = supabaseClient
+        .from("catalog_products")
+        .select(input.fallbackSelectClause)
+        .order(orderBy, { ascending: true })
+        .limit(input.limit);
+      const filteredNoImageQuery = Object.entries(input.filters).reduce((current, [column, value]) => {
+        if (column === "oem_no__ilike") return current.ilike("oem_no", value);
+        if (column === "normalized_oem__like") return current.like("normalized_oem", value);
+        return current.eq(column, value);
+      }, noImageQuery as any);
+      const { data: noImageData, error: noImageError } = await filteredNoImageQuery;
+      if (noImageError) throw noImageError;
+      return (noImageData ?? []) as CatalogQueryRow[];
+    }
+    if (error) throw error;
+    return (data ?? []) as CatalogQueryRow[];
+  } catch {
+    return [] as CatalogQueryRow[];
+  }
 }
 
 async function resolveBrandId(brandName: string) {
@@ -148,20 +219,41 @@ export async function fetchCloudCatalog(input: {
         ({ data, error, count } = await buildQuery(CATALOG_SELECT_NO_IMAGE, "loose"));
       }
     }
+    if (!error && search && shouldRunLooseOriginalNumberSearch(search) && !(data || []).length) {
+      const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
+      const [fallbackRows, normalizedRows] = await Promise.all([
+        fetchCatalogFallbackRows({
+          selectClause: CATALOG_SELECT_WITH_IMAGE,
+          fallbackSelectClause: CATALOG_SELECT_NO_IMAGE,
+          filters: {
+            brand_id: brandId,
+            oem_no__ilike: `%${normalizedOriginalSearch}%`,
+          },
+          limit: pageSize * 2,
+        }),
+        fetchCatalogFallbackRows({
+          selectClause: CATALOG_SELECT_WITH_IMAGE,
+          fallbackSelectClause: CATALOG_SELECT_NO_IMAGE,
+          filters: {
+            brand_id: brandId,
+            normalized_oem__like: `%${normalizedOriginalSearch}%`,
+          },
+          limit: pageSize * 2,
+        }),
+      ]);
+      const filteredRows = dedupeCatalogQueryRows(
+        [...fallbackRows, ...normalizedRows].filter(
+          (row) =>
+            matchesOriginalNumberSearch(String(row.oem_no || ""), search) ||
+            normalizePartCode(String(row.product_code || "")).includes(normalizedSearch),
+        ),
+      );
+      data = filteredRows.slice(0, pageSize) as unknown as typeof data;
+      count = filteredRows.length;
+    }
     if (error) throw error;
 
-    return ((data ?? []) as unknown as Array<{
-      id: string;
-      product_code: string;
-      image_url?: string | null;
-      description: string | null;
-      oem_no: string | null;
-      hs_code: string | null;
-      origin: string | null;
-      weight_kg: number | null;
-      lifecycle_status: string | null;
-      lifecycle_note: string | null;
-    }>).map((row) => ({
+    return ((data ?? []) as unknown as CatalogQueryRow[]).map((row) => ({
       total_count: count ?? 0,
       product_id: row.id,
       product_code: row.product_code,
@@ -206,21 +298,41 @@ export async function fetchCloudCatalog(input: {
         ({ data, error, count } = await buildGlobalQuery(CATALOG_GLOBAL_SELECT_NO_IMAGE, "loose"));
       }
     }
+    if (!error && shouldRunLooseOriginalNumberSearch(search) && !(data || []).length) {
+      const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
+      const [fallbackRows, normalizedRows] = await Promise.all([
+        fetchCatalogFallbackRows({
+          selectClause: CATALOG_GLOBAL_SELECT_WITH_IMAGE,
+          fallbackSelectClause: CATALOG_GLOBAL_SELECT_NO_IMAGE,
+          filters: {
+            organization_id: organizationId,
+            oem_no__ilike: `%${normalizedOriginalSearch}%`,
+          },
+          limit: pageSize * 2,
+        }),
+        fetchCatalogFallbackRows({
+          selectClause: CATALOG_GLOBAL_SELECT_WITH_IMAGE,
+          fallbackSelectClause: CATALOG_GLOBAL_SELECT_NO_IMAGE,
+          filters: {
+            organization_id: organizationId,
+            normalized_oem__like: `%${normalizedOriginalSearch}%`,
+          },
+          limit: pageSize * 2,
+        }),
+      ]);
+      const filteredRows = dedupeCatalogQueryRows(
+        [...fallbackRows, ...normalizedRows].filter(
+          (row) =>
+            matchesOriginalNumberSearch(String(row.oem_no || ""), search) ||
+            normalizePartCode(String(row.product_code || "")).includes(normalizedSearch),
+        ),
+      );
+      data = filteredRows.slice(0, pageSize) as unknown as typeof data;
+      count = filteredRows.length;
+    }
     if (error) throw error;
 
-    return ((data ?? []) as unknown as Array<{
-      id: string;
-      product_code: string;
-      image_url?: string | null;
-      description: string | null;
-      oem_no: string | null;
-      hs_code: string | null;
-      origin: string | null;
-      weight_kg: number | null;
-      lifecycle_status: string | null;
-      lifecycle_note: string | null;
-      brands?: { name?: string | null } | null;
-    }>).map((row) => ({
+    return ((data ?? []) as unknown as CatalogQueryRow[]).map((row) => ({
       total_count: count ?? 0,
       product_id: String(row.id || ""),
       product_code: String(row.product_code || ""),
