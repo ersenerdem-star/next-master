@@ -828,21 +828,29 @@ export function PortalPage() {
     code: string;
     title: string;
     caption: string;
-    items: Array<{ key: PortalSection; label: string }>;
+    items: Array<{ key: PortalSection; label: string; badge?: string }>;
   }> = [
     {
       key: "search" as const,
       code: "01",
       title: "Search",
       caption: "Parts & Pricing",
-      items: portalSections.filter((section) => section.key === "desk" || section.key === "pricelist"),
+      items: portalSections.filter((section) => section.key === "desk"),
     },
     {
       key: "documents" as const,
       code: "02",
       title: "Documents",
       caption: activeSnapshot.invite.party_type === "customer" ? "Orders & Invoices" : "PO & Bills",
-      items: portalSections.filter((section) => section.key === "orders" || section.key === "billing"),
+      items: portalSections
+        .filter((section) => section.key === "orders" || section.key === "billing")
+        .map((section) => ({
+          ...section,
+          badge:
+            section.key === "orders"
+              ? portalOrderHistoryRows.length.toLocaleString("en-US")
+              : portalBillingRows.length.toLocaleString("en-US"),
+        })),
     },
     {
       key: "finance" as const,
@@ -856,7 +864,7 @@ export function PortalPage() {
       code: "04",
       title: "Account",
       caption: "Profile",
-      items: portalSections.filter((section) => section.key === "account"),
+      items: portalSections.filter((section) => section.key === "account" || section.key === "pricelist"),
     },
   ].filter((group) => group.items.length > 0);
   const activePortalGroup =
@@ -1628,7 +1636,8 @@ export function PortalPage() {
                         onClick={() => setActiveSection(item.key)}
                       >
                         <span className="nav-submenu__dot" />
-                        <span>{item.label}</span>
+                        <span className="nav-submenu__label">{item.label}</span>
+                        {item.badge ? <span className="nav-submenu__badge">{item.badge}</span> : null}
                       </button>
                     ))}
                   </div>
