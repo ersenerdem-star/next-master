@@ -495,9 +495,11 @@ export function PortalPage() {
 
     const previewCredentials = hasPortalLinkCredentials
       ? { email: portalLinkEmail, token: portalLinkToken, sessionToken: credentials.sessionToken || "" }
-      : credentials.email && credentials.sessionToken
-        ? { email: credentials.email, token: "", sessionToken: credentials.sessionToken }
-        : null;
+      : credentials.email && credentials.token
+        ? { email: credentials.email, token: credentials.token, sessionToken: "" }
+        : credentials.email && credentials.sessionToken
+          ? { email: credentials.email, token: "", sessionToken: credentials.sessionToken }
+          : null;
 
     if (!previewCredentials) {
       portalBrandingKeyRef.current = "";
@@ -524,7 +526,7 @@ export function PortalPage() {
     return () => {
       cancelled = true;
     };
-  }, [credentials.email, credentials.sessionToken, hasPortalLinkCredentials, isOnline, portalLinkEmail, portalLinkToken, snapshot]);
+  }, [credentials.email, credentials.sessionToken, credentials.token, hasPortalLinkCredentials, isOnline, portalLinkEmail, portalLinkToken, snapshot]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
