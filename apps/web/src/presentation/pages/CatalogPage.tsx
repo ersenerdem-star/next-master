@@ -992,10 +992,11 @@ export function CatalogPage() {
 
   return (
     <div className="page-stack">
-      <section className="section-card">
+      <section className="section-card search-focus-card search-focus-card--admin">
         <div className="section-card__header section-card__header--row">
           <div>
-            <h2>Catalog</h2>
+            <span className="search-focus-card__eyebrow">Admin Search</span>
+            <h2 className="search-focus-card__title">Catalog Search</h2>
             <p>Connected to live Supabase catalog data.</p>
           </div>
           <div className="toolbar">

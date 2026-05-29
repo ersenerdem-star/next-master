@@ -2299,7 +2299,7 @@ export function PortalPage() {
 
           {activeSection === "desk" && portalCanOrder ? (
         <div className="portal-section-stack">
-          <SectionCard title="Part Search">
+          <SectionCard title="Part Search" className="search-focus-card search-focus-card--portal">
             <div className="portal-order-builder">
               <div className="portal-order-builder__meta">
                 <div className="dashboard-stat">
@@ -2387,7 +2387,7 @@ export function PortalPage() {
 
               <div className="portal-workbench">
                 <div className="portal-workbench__tables">
-                  <SectionCard title={`Matching Products & Alternatives (${catalogResults.length.toLocaleString("en-US")})`}>
+                  <SectionCard title={`Search Items (${catalogResults.length.toLocaleString("en-US")})`} className="search-results-focus-card">
                     {catalogResults.length ? (
                       <div className="workbench-controls workbench-controls--compact">
                         <div className="segmented-control" aria-label="Search result view">

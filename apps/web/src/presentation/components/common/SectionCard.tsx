@@ -4,11 +4,12 @@ type SectionCardProps = {
   title: string;
   actions?: ReactNode;
   children: ReactNode;
+  className?: string;
 };
 
-export function SectionCard({ title, actions, children }: SectionCardProps) {
+export function SectionCard({ title, actions, children, className = "" }: SectionCardProps) {
   return (
-    <section className="section-card">
+    <section className={`section-card ${className}`.trim()}>
       <div className="section-card__header">
         <h2>{title}</h2>
         {actions ? <div className="section-card__actions">{actions}</div> : null}
