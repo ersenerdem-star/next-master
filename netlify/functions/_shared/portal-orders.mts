@@ -229,6 +229,20 @@ function supplementalSearchVariants(search: string) {
   return buildOriginalNumberVariants(search).filter((variant) => variant.length >= 6 && variant !== normalized);
 }
 
+function buildOriginalNumberFamilyCore(search: string) {
+  return normalizeOriginalNumberSearch(search);
+}
+
+function matchesCatalogFamilyRow(row: Record<string, unknown>, search: string) {
+  const familyCore = buildOriginalNumberFamilyCore(search);
+  if (!familyCore) return false;
+  return (
+    matchesOriginalNumberSearch(String(row.oem_no || row.normalized_oem || ""), search) ||
+    normalizePartCode(String(row.product_code || "")).includes(familyCore) ||
+    normalizePartCode(String(row.normalized_oem || row.oem_no || "")).includes(familyCore)
+  );
+}
+
 type PortalSearchMode = "strict" | "loose";
 
 function shouldRunLooseOriginalNumberSearch(search: string) {
@@ -585,6 +599,30 @@ export async function searchPortalCatalog(
   }
 
   let rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", params);
+  if (search && shouldRunLooseOriginalNumberSearch(search)) {
+    const familyCore = buildOriginalNumberFamilyCore(search);
+    if (familyCore.length >= 6) {
+      const familyPattern = buildLooseOriginalNumberPattern(familyCore);
+      const familyRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+        select: "id,product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
+        organization_id: `eq.${invite.organization_id}`,
+        ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+        or: `(${[
+          `normalized_oem.like.*${familyCore}*`,
+          `normalized_code.like.*${familyCore}*`,
+          familyPattern.length >= 6 ? `oem_no.ilike.*${familyPattern}*` : "",
+          familyPattern.length >= 6 ? `product_code.ilike.*${familyPattern}*` : "",
+        ]
+          .filter(Boolean)
+          .join(",")})`,
+        order: "product_code.asc",
+        limit: "160",
+      }).catch(() => []);
+      if (familyRows.length) {
+        rows = dedupeCatalogRows([...rows, ...familyRows]).filter((row) => matchesCatalogFamilyRow(row, search));
+      }
+    }
+  }
   if (search && isLikelyPortalCodeSearch(search)) {
     const variants = supplementalSearchVariants(search);
     if (variants.length) {
@@ -604,9 +642,7 @@ export async function searchPortalCatalog(
       ).flat();
       if (supplementalRows.length) {
         rows = dedupeCatalogRows([...rows, ...supplementalRows]).filter(
-          (row) =>
-            matchesOriginalNumberSearch(String(row.oem_no || ""), search) ||
-            variants.some((variant) => normalizePartCode(String(row.product_code || "")).includes(variant)),
+          (row) => matchesCatalogFamilyRow(row, search) || variants.some((variant) => normalizePartCode(String(row.product_code || "")).includes(variant)),
         );
       }
     }
@@ -629,9 +665,7 @@ export async function searchPortalCatalog(
     }).catch(() => []);
     rows = dedupeCatalogRows(
       normalizedRows.filter(
-        (row) =>
-          matchesOriginalNumberSearch(String(row.oem_no || ""), search) ||
-          normalizePartCode(String(row.product_code || "")).includes(normalizedSearch),
+        (row) => matchesCatalogFamilyRow(row, search) || normalizePartCode(String(row.product_code || "")).includes(normalizedSearch),
       ),
     );
   }
