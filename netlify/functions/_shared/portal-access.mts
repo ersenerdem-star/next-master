@@ -43,18 +43,26 @@ async function fetchAll<T>(supabaseUrl: string, serviceRoleKey: string, table: s
   });
 }
 
+function isPortalSoftFailure(error: unknown) {
+  const message = String(error instanceof Error ? error.message : error || "").toLowerCase();
+  return (
+    message.includes("could not find the table") ||
+    message.includes("relation") && message.includes("does not exist") ||
+    message.includes("column") && message.includes("does not exist") ||
+    message.includes("schema cache") ||
+    message.includes("failed to parse") ||
+    message.includes("statement timeout") ||
+    message.includes("canceling statement due to statement timeout") ||
+    message.includes("timed out") ||
+    message.includes("took too long")
+  );
+}
+
 async function fetchAllOptional<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
   try {
     return await fetchAll<T>(supabaseUrl, serviceRoleKey, table, params);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (
-      message.includes("Could not find the table") ||
-      message.includes("relation") && message.includes("does not exist") ||
-      message.includes("column") && message.includes("does not exist") ||
-      message.includes("schema cache") ||
-      message.includes("failed to parse")
-    ) {
+    if (isPortalSoftFailure(error)) {
       return [];
     }
     throw error;
@@ -65,14 +73,7 @@ async function fetchFirstOptional<T>(supabaseUrl: string, serviceRoleKey: string
   try {
     return await fetchFirst<T>(supabaseUrl, serviceRoleKey, table, params);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (
-      message.includes("Could not find the table") ||
-      message.includes("relation") && message.includes("does not exist") ||
-      message.includes("column") && message.includes("does not exist") ||
-      message.includes("schema cache") ||
-      message.includes("failed to parse")
-    ) {
+    if (isPortalSoftFailure(error)) {
       return null;
     }
     throw error;
