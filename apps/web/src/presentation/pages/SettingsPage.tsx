@@ -568,29 +568,6 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
 
   return (
     <div className="page-stack">
-      <div className="module-tabs">
-        <button className={`module-tab${activeTab === "session" ? " active" : ""}`} onClick={() => setActiveTab("session")}>
-          Session
-        </button>
-        <button className={`module-tab${activeTab === "users" ? " active" : ""}`} onClick={() => setActiveTab("users")}>
-          Users
-        </button>
-        <button className={`module-tab${activeTab === "companies" ? " active" : ""}`} onClick={() => setActiveTab("companies")}>
-          Company Profiles
-        </button>
-        <button className={`module-tab${activeTab === "portals" ? " active" : ""}`} onClick={() => setActiveTab("portals")}>
-          Portals
-        </button>
-        <button className={`module-tab${activeTab === "templates" ? " active" : ""}`} onClick={() => setActiveTab("templates")}>
-          Email Templates
-        </button>
-        <button className={`module-tab${activeTab === "emails" ? " active" : ""}`} onClick={() => setActiveTab("emails")}>
-          Outgoing Emails
-        </button>
-        <button className={`module-tab${activeTab === "diagnostics" ? " active" : ""}`} onClick={() => setActiveTab("diagnostics")}>
-          Diagnostics
-        </button>
-      </div>
       {activeTab === "session" ? <SectionCard title="Session Settings">
         <div className="settings-grid">
           <div className="settings-item">

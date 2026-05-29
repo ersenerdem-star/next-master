@@ -1,9 +1,17 @@
 import type { ReactNode } from "react";
 
+type SubNavItem = {
+  key: string;
+  label: string;
+};
+
 type AppShellProps = {
   children: ReactNode;
   activePage?: string;
+  activeSubPage?: string;
+  subNavItems?: readonly SubNavItem[];
   onNavigate?: (page: string) => void;
+  onNavigateSub?: (subPage: string) => void;
 };
 
 const navItems = [
@@ -35,7 +43,7 @@ const contextMeta = {
   local: { label: "Local", className: "is-local" },
 } as const;
 
-export function AppShell({ children, activePage = "Home", onNavigate }: AppShellProps) {
+export function AppShell({ children, activePage = "Home", activeSubPage = "", subNavItems = [], onNavigate, onNavigateSub }: AppShellProps) {
   const meta = pageMeta[activePage as keyof typeof pageMeta] || pageMeta.Home;
   const context = contextMeta[buildMeta.context as keyof typeof contextMeta] || {
     label: buildMeta.context || "Build",
@@ -59,14 +67,30 @@ export function AppShell({ children, activePage = "Home", onNavigate }: AppShell
         </div>
         <nav className="sidebar-nav">
           {navItems.map((item) => (
-            <button key={item.key} className={`nav-item${item.key === activePage ? " active" : ""}`} onClick={() => onNavigate?.(item.key)}>
-              <span className="nav-item__code">{item.code}</span>
-              <span className="nav-item__body">
-                <span className="nav-item__title">{item.key}</span>
-                <span className="nav-item__caption">{item.caption}</span>
-              </span>
-              <span className="nav-item__indicator" />
-            </button>
+            <div key={item.key} className={`nav-group${item.key === activePage ? " active" : ""}`}>
+              <button className={`nav-item${item.key === activePage ? " active" : ""}`} onClick={() => onNavigate?.(item.key)}>
+                <span className="nav-item__code">{item.code}</span>
+                <span className="nav-item__body">
+                  <span className="nav-item__title">{item.key}</span>
+                  <span className="nav-item__caption">{item.caption}</span>
+                </span>
+                <span className="nav-item__indicator" />
+              </button>
+              {item.key === activePage && subNavItems.length ? (
+                <div className="nav-submenu" role="menu" aria-label={`${item.key} sections`}>
+                  {subNavItems.map((subItem) => (
+                    <button
+                      key={subItem.key}
+                      className={`nav-submenu__item${subItem.key === activeSubPage ? " active" : ""}`}
+                      onClick={() => onNavigateSub?.(subItem.key)}
+                    >
+                      <span className="nav-submenu__dot" />
+                      <span>{subItem.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           ))}
         </nav>
       </aside>

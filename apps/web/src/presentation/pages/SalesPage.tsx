@@ -22,6 +22,7 @@ import { BrandPill } from "../components/common/BrandPill";
 import { buildEntityAlias } from "../../shared/entityAlias";
 
 type SalesPageProps = {
+  activeTab?: "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists";
   selectedSalesOrderId?: string;
   onSelectedSalesOrderChange?: (salesOrderId: string) => void;
   selectedQuoteId?: string;
@@ -30,6 +31,7 @@ type SalesPageProps = {
 };
 
 export function SalesPage({
+  activeTab: activeTabProp = "Sales Orders",
   selectedSalesOrderId = "",
   onSelectedSalesOrderChange,
   selectedQuoteId = "",
@@ -37,9 +39,7 @@ export function SalesPage({
   selectedInvoiceId: externalSelectedInvoiceId = "",
 }: SalesPageProps) {
   const actionFeedback = useActionFeedback();
-  const [activeTab, setActiveTab] = useState<"Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists">("Sales Orders");
-
-  const tabs = ["Customers", "Sales Orders", "Invoices", "Payments Received", "Price Lists"] as const;
+  const [activeTab, setActiveTab] = useState<"Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists">(activeTabProp);
   const [invoices, setInvoices] = useState<LocalInvoice[]>([]);
   const [salesOrders, setSalesOrders] = useState<LocalSalesOrder[]>([]);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
@@ -129,6 +129,10 @@ export function SalesPage({
       extraCount: Math.max(0, labels.length - 3),
     };
   }
+
+  useEffect(() => {
+    setActiveTab(activeTabProp);
+  }, [activeTabProp]);
 
   useEffect(() => {
     if (!externalSelectedInvoiceId) return;
@@ -617,14 +621,6 @@ export function SalesPage({
 
   return (
     <div className="page-stack">
-      <div className="module-tabs">
-        {tabs.map((item) => (
-          <button key={item} className={`module-tab${activeTab === item ? " active" : ""}`} onClick={() => setActiveTab(item)}>
-            {item}
-          </button>
-        ))}
-      </div>
-
       {activeTab === "Sales Orders" ? (
         <QuotesPage
           selectedSalesOrderId={selectedSalesOrderId}

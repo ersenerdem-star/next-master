@@ -743,14 +743,6 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
 
   return (
     <div className="page-stack">
-      <div className="module-tabs">
-        {(["Warehouses", "Purchase Receives", "Stock Movements", "On Hand", "Transfers"] as InventoryTab[]).map((tab) => (
-          <button key={tab} className={`module-tab${activeTab === tab ? " active" : ""}`} onClick={() => setActiveTab(tab)}>
-            {tab}
-          </button>
-        ))}
-      </div>
-
       {activeTab === "Warehouses" ? (
         <div className="page-stack">
           <SectionCard title="Warehouses">

@@ -162,16 +162,18 @@ function renderInventoryAvailabilityBadge(
 }
 
 type PurchasesPageProps = {
+  activeTab?: "Vendors" | "Purchase Orders" | "Bills" | "Payments Made";
   selectedPurchaseOrderId?: string;
   selectedBillId?: string;
 };
 
 export function PurchasesPage({
+  activeTab: activeTabProp = "Vendors",
   selectedPurchaseOrderId: externalSelectedPurchaseOrderId = "",
   selectedBillId: externalSelectedBillId = "",
 }: PurchasesPageProps) {
   const actionFeedback = useActionFeedback();
-  const [activeTab, setActiveTab] = useState<"Vendors" | "Purchase Orders" | "Bills" | "Payments Made">("Vendors");
+  const [activeTab, setActiveTab] = useState<"Vendors" | "Purchase Orders" | "Bills" | "Payments Made">(activeTabProp);
   const [purchaseOrders, setPurchaseOrders] = useState<LocalPurchaseOrder[]>([]);
   const [bills, setBills] = useState<LocalBill[]>([]);
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState("");
@@ -198,6 +200,10 @@ export function PurchasesPage({
   const [inventoryAvailabilityRows, setInventoryAvailabilityRows] = useState<InventoryAvailabilitySummary[]>([]);
   const pendingCatalogPurchaseHandledRef = useRef(false);
   const inventoryAvailabilityLookup = useMemo(() => buildInventoryAvailabilityLookup(inventoryAvailabilityRows), [inventoryAvailabilityRows]);
+
+  useEffect(() => {
+    setActiveTab(activeTabProp);
+  }, [activeTabProp]);
 
   useEffect(() => {
     if (!externalSelectedPurchaseOrderId) return;
@@ -1098,35 +1104,8 @@ export function PurchasesPage({
     actionFeedback.succeed("New payment draft ready.");
   }
 
-  async function handleChangeTab(nextTab: typeof activeTab) {
-    if (nextTab === activeTab) return;
-    if (activeTab === "Purchase Orders") {
-      await confirmPurchaseOrderNavigation(async () => {
-        setPurchaseOrdersView("list");
-        setActiveTab(nextTab);
-      });
-      return;
-    }
-    if (activeTab === "Bills") {
-      await confirmBillNavigation(async () => {
-        setBillsView("list");
-        setActiveTab(nextTab);
-      });
-      return;
-    }
-    setActiveTab(nextTab);
-  }
-
   return (
     <div className="page-stack">
-      <div className="module-tabs">
-        {(["Vendors", "Purchase Orders", "Bills", "Payments Made"] as const).map((item) => (
-          <button key={item} className={`module-tab${activeTab === item ? " active" : ""}`} onClick={() => void handleChangeTab(item)}>
-            {item}
-          </button>
-        ))}
-      </div>
-
       {activeTab === "Vendors" ? <VendorsPage /> : null}
 
       {activeTab === "Purchase Orders" ? (
