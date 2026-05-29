@@ -51,6 +51,7 @@ export type PortalPreparedLine = {
 
 type PortalOrderResponse = {
   ok?: boolean;
+  sessionToken?: string;
   error?: string;
   items?: PortalCatalogSearchItem[];
   lines?: PortalPreparedLine[];

@@ -1,5 +1,5 @@
 import { buildRestUrl, getJson, serviceRoleHeaders } from "./http.mts";
-import { hashPortalToken, isPortalInviteExpired } from "./portal-security.mts";
+import { createPortalSessionToken, hashPortalToken, isPortalInviteExpired, verifyPortalSessionToken } from "./portal-security.mts";
 
 export type PortalInviteRow = {
   id: string;
@@ -44,6 +44,18 @@ async function fetchAllOptional<T>(supabaseUrl: string, serviceRoleKey: string, 
     }
     throw error;
   }
+}
+
+async function touchPortalInvite(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {
+  await fetch(buildRestUrl(supabaseUrl, "portal_invites", { id: `eq.${invite.id}` }), {
+    method: "PATCH",
+    headers: serviceRoleHeaders(serviceRoleKey),
+    body: JSON.stringify({
+      status: "active",
+      last_used_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }),
+  });
 }
 
 function dedupeById<T extends { id?: string | null }>(rows: T[]) {
@@ -186,17 +198,57 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
     throw new Error("Portal invite expired. Request a new invite.");
   }
 
-  await fetch(buildRestUrl(supabaseUrl, "portal_invites", { id: `eq.${invite.id}` }), {
-    method: "PATCH",
-    headers: serviceRoleHeaders(serviceRoleKey),
-    body: JSON.stringify({
-      status: "active",
-      last_used_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }),
-  });
+  await touchPortalInvite(supabaseUrl, serviceRoleKey, invite);
 
   return invite;
+}
+
+export async function resolvePortalInvite(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  sessionSecret: string,
+  auth: {
+    email?: string | null;
+    token?: string | null;
+    sessionToken?: string | null;
+  },
+) {
+  const sessionToken = String(auth.sessionToken || "").trim();
+  const providedEmail = String(auth.email || "").trim().toLowerCase();
+
+  if (sessionToken) {
+    const session = await verifyPortalSessionToken(sessionSecret, sessionToken);
+    if (!session) {
+      throw new Error("Portal session expired. Sign in again.");
+    }
+
+    const invite = await fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
+      select:
+        "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders",
+      id: `eq.${session.invite_id}`,
+      email: `eq.${session.email}`,
+    });
+
+    if (!invite || invite.status === "disabled") {
+      throw new Error("Portal session is no longer active.");
+    }
+    if (isPortalInviteExpired(invite.expires_at)) {
+      throw new Error("Portal invite expired. Request a new invite.");
+    }
+
+    await touchPortalInvite(supabaseUrl, serviceRoleKey, invite);
+    return { invite, sessionToken };
+  }
+
+  const email = providedEmail;
+  const token = String(auth.token || "").trim();
+  if (!email || !token) {
+    throw new Error("Email and invite token are required");
+  }
+
+  const invite = await validatePortalInvite(supabaseUrl, serviceRoleKey, email, token);
+  const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email);
+  return { invite, sessionToken: nextSessionToken };
 }
 
 export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {

@@ -212,7 +212,7 @@ function readStoredCredentials(): PortalCredentials | null {
   try {
     const parsed = JSON.parse(raw) as Partial<PortalCredentials>;
     if (!parsed.email) return null;
-    return { email: parsed.email, token: "" };
+    return { email: parsed.email, token: "", sessionToken: parsed.sessionToken || "" };
   } catch {
     return null;
   }
@@ -227,6 +227,7 @@ function writeStoredCredentials(credentials: PortalCredentials | null) {
     SESSION_KEY,
     JSON.stringify({
       email: credentials.email,
+      sessionToken: credentials.sessionToken || "",
     }),
   );
 }
@@ -299,7 +300,7 @@ export function PortalPage() {
     setLoading(true);
     setError("");
     loginPortal({ email, token })
-      .then((next) => {
+      .then(({ snapshot: next, sessionToken }) => {
         setSnapshot(next);
         setSelection(null);
         setActiveSection(getDefaultPortalSection(next));
@@ -307,7 +308,9 @@ export function PortalPage() {
         setBrandFilter("");
         setPaymentStatusFilter("");
         setStatus("Portal session active.");
-        writeStoredCredentials({ email, token });
+        const nextCredentials = { email, token: "", sessionToken };
+        setCredentials(nextCredentials);
+        writeStoredCredentials(nextCredentials);
         clearPortalQueryParams();
       })
       .catch((caught) => {
@@ -571,7 +574,7 @@ export function PortalPage() {
     try {
       setLoading(true);
       setError("");
-      const next = await loginPortal(credentials);
+      const { snapshot: next, sessionToken } = await loginPortal(credentials);
       setSnapshot(next);
       setSelection(null);
       setActiveSection(getDefaultPortalSection(next));
@@ -579,7 +582,9 @@ export function PortalPage() {
       setBrandFilter("");
       setPaymentStatusFilter("");
       setStatus("Portal session active.");
-      writeStoredCredentials(credentials);
+      const nextCredentials = { email: credentials.email, token: "", sessionToken };
+      setCredentials(nextCredentials);
+      writeStoredCredentials(nextCredentials);
       clearPortalQueryParams();
     } catch (caught) {
       setSnapshot(null);
@@ -593,10 +598,13 @@ export function PortalPage() {
     try {
       setLoading(true);
       setError("");
-      const next = await fetchPortalSnapshot(credentials);
+      const { snapshot: next, sessionToken } = await fetchPortalSnapshot(credentials);
       setSnapshot(next);
       setSelection(null);
       setStatus("Portal data refreshed.");
+      const nextCredentials = { email: credentials.email, token: "", sessionToken };
+      setCredentials(nextCredentials);
+      writeStoredCredentials(nextCredentials);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal refresh failed");
     } finally {
@@ -605,6 +613,7 @@ export function PortalPage() {
   }
 
   function handleLogout() {
+    setCredentials({ email: credentials.email, token: "", sessionToken: "" });
     setSnapshot(null);
     setSelection(null);
     setActiveSection("desk");

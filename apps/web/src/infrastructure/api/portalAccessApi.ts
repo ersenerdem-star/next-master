@@ -3,10 +3,11 @@ import type { PortalCredentials, PortalSnapshot } from "../../types/portalSessio
 type PortalResponse = {
   ok?: boolean;
   snapshot?: PortalSnapshot;
+  sessionToken?: string;
   error?: string;
 };
 
-async function postPortalJson(path: string, credentials: PortalCredentials): Promise<PortalSnapshot> {
+async function postPortalJson(path: string, credentials: PortalCredentials): Promise<{ snapshot: PortalSnapshot; sessionToken: string }> {
   const response = await fetch(path, {
     method: "POST",
     headers: {
@@ -24,7 +25,10 @@ async function postPortalJson(path: string, credentials: PortalCredentials): Pro
     throw new Error(data.error || fallback);
   }
 
-  return data.snapshot;
+  return {
+    snapshot: data.snapshot,
+    sessionToken: String(data.sessionToken || credentials.sessionToken || ""),
+  };
 }
 
 export async function loginPortal(credentials: PortalCredentials) {
