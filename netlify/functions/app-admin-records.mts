@@ -34,6 +34,34 @@ const CUSTOMER_COLUMNS = [
   "updated_at",
 ].join(",");
 
+const LEGACY_CUSTOMER_COLUMNS = [
+  "id",
+  "customer_type",
+  "salutation",
+  "first_name",
+  "last_name",
+  "company_name",
+  "display_name",
+  "email",
+  "customer_number",
+  "work_phone",
+  "mobile_phone",
+  "language",
+  "tax_rate",
+  "company_id",
+  "currency",
+  "payment_terms",
+  "contract_nr",
+  "billing_address",
+  "shipping_address",
+  "contact_persons",
+  "custom_fields",
+  "reporting_tags",
+  "remarks",
+  "created_at",
+  "updated_at",
+].join(",");
+
 const VENDOR_COLUMNS = [
   "id",
   "vendor_type",
@@ -293,6 +321,91 @@ async function listPortalInvites(supabaseUrl: string, serviceRoleKey: string, or
   }
 }
 
+function stripCustomerOptionalFields(payload: Record<string, unknown>) {
+  const next = { ...payload };
+  delete next.seller_company_profile_id;
+  delete next.portal_c_price_mode;
+  delete next.price_list_margin_percent;
+  return next;
+}
+
+async function listCustomers(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
+  try {
+    return await listRows<Record<string, unknown>>({
+      supabaseUrl,
+      serviceRoleKey,
+      table: "customers",
+      select: CUSTOMER_COLUMNS,
+      organizationId,
+      order: "display_name.asc",
+    });
+  } catch (primaryError) {
+    try {
+      return await listRows<Record<string, unknown>>({
+        supabaseUrl,
+        serviceRoleKey,
+        table: "customers",
+        select: LEGACY_CUSTOMER_COLUMNS,
+        organizationId,
+        order: "display_name.asc",
+      });
+    } catch (legacyError) {
+      throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Customers load failed")));
+    }
+  }
+}
+
+async function upsertCustomerRecord(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+  payload: Record<string, unknown>;
+  id: string;
+}) {
+  const runWith = async (select: string, payload: Record<string, unknown>) => {
+    if (input.id) {
+      const rows = await updateSingleRow<Record<string, unknown>>({
+        supabaseUrl: input.supabaseUrl,
+        serviceRoleKey: input.serviceRoleKey,
+        table: "customers",
+        select,
+        organizationId: input.organizationId,
+        id: input.id,
+        payload,
+      });
+      return rows[0] || null;
+    }
+    const rows = await insertSingleRow<Record<string, unknown>>({
+      supabaseUrl: input.supabaseUrl,
+      serviceRoleKey: input.serviceRoleKey,
+      table: "customers",
+      select,
+      payload,
+    });
+    return rows[0] || null;
+  };
+
+  try {
+    return await runWith(CUSTOMER_COLUMNS, input.payload);
+  } catch (primaryError) {
+    const primaryMessage = getErrorMessage(primaryError, "Customer save failed").toLowerCase();
+    if (primaryMessage.includes("seller_company_profile_id") || primaryMessage.includes("company profile")) {
+      const retryPayload = { ...input.payload, seller_company_profile_id: null };
+      try {
+        return await runWith(CUSTOMER_COLUMNS, retryPayload);
+      } catch (retryError) {
+        throw new Error(getErrorMessage(retryError, getErrorMessage(primaryError, "Customer save failed")));
+      }
+    }
+
+    try {
+      return await runWith(LEGACY_CUSTOMER_COLUMNS, stripCustomerOptionalFields(input.payload));
+    } catch (legacyError) {
+      throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Customer save failed")));
+    }
+  }
+}
+
 async function upsertPortalInvite(input: {
   supabaseUrl: string;
   serviceRoleKey: string;
@@ -383,14 +496,7 @@ export default async (req: Request, _context: Context) => {
 
     if (resource === "customers") {
       if (action === "list") {
-        const data = await listRows<Record<string, unknown>>({
-          supabaseUrl,
-          serviceRoleKey,
-          table: "customers",
-          select: CUSTOMER_COLUMNS,
-          organizationId: caller.organizationId,
-          order: "display_name.asc",
-        });
+        const data = await listCustomers(supabaseUrl, serviceRoleKey, caller.organizationId);
         return json({ ok: true, data });
       }
       if (action === "upsert") {
@@ -400,27 +506,13 @@ export default async (req: Request, _context: Context) => {
           organizationId: caller.organizationId,
           payload,
         });
-        const data = id
-          ? (
-              await updateSingleRow<Record<string, unknown>>({
-                supabaseUrl,
-                serviceRoleKey,
-                table: "customers",
-                select: CUSTOMER_COLUMNS,
-                organizationId: caller.organizationId,
-                id,
-                payload: nextPayload,
-              })
-            )[0] || null
-          : (
-              await insertSingleRow<Record<string, unknown>>({
-                supabaseUrl,
-                serviceRoleKey,
-                table: "customers",
-                select: CUSTOMER_COLUMNS,
-                payload: nextPayload,
-              })
-            )[0] || null;
+        const data = await upsertCustomerRecord({
+          supabaseUrl,
+          serviceRoleKey,
+          organizationId: caller.organizationId,
+          payload: nextPayload,
+          id,
+        });
         return json({ ok: true, data });
       }
       if (action === "delete") {
