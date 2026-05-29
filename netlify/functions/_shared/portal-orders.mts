@@ -291,6 +291,12 @@ function parseEmbeddedCustomerMeta(raw: unknown) {
   }
 }
 
+function getEmbeddedCustomerPriceListType(meta: Record<string, unknown>) {
+  const value = String(meta.price_list_type || "").trim();
+  if (value === "A" || value === "B" || value === "C" || value === "Other") return value;
+  return "";
+}
+
 function normalizePortalCustomerType(value: string): CustomerPricingContext["customerType"] {
   const normalized = String(value || "").trim().toLowerCase();
   if (normalized === "a" || normalized === "a price list") return "A";
@@ -459,7 +465,7 @@ async function resolvePortalCustomer(
 
   const defaultMarginA = byType.get("A")?.margin_percent == null ? 10 : Number(byType.get("A")?.margin_percent || 10);
   const defaultMarginB = byType.get("B")?.margin_percent == null ? 15 : Number(byType.get("B")?.margin_percent || 15);
-  const priceListType = normalizePortalCustomerType(String(customer.price_list_type || "A"));
+  const priceListType = normalizePortalCustomerType(String(customer.price_list_type || getEmbeddedCustomerPriceListType(customerMeta) || "A"));
   const marginOverride = marginOverrideRaw == null ? null : Number(marginOverrideRaw);
   const effectiveMarginA = (priceListType === "A" || priceListType === "Other") && marginOverride != null ? marginOverride : defaultMarginA;
   const effectiveMarginB = priceListType === "B" && marginOverride != null ? marginOverride : defaultMarginB;

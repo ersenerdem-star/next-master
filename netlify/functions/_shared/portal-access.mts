@@ -139,6 +139,12 @@ function parseEmbeddedCustomerMeta(raw: unknown) {
   }
 }
 
+function getEmbeddedCustomerPriceListType(meta: Record<string, unknown>) {
+  const value = String(meta.price_list_type || "").trim();
+  if (value === "A" || value === "B" || value === "C" || value === "Other") return value;
+  return "";
+}
+
 function mapSalesOrderLines(lines: unknown) {
   if (!Array.isArray(lines)) return [];
   return lines.map((line) => {
@@ -310,9 +316,9 @@ export async function resolvePortalInvite(
 export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {
   if (invite.party_type === "customer") {
     const customer = await fetchPortalCustomerRecord(supabaseUrl, serviceRoleKey, invite.organization_id, invite);
-    const customerMeta = parseEmbeddedCustomerMeta(customer?.custom_fields);
-    const sellerCompanyProfileId = String(customer?.seller_company_profile_id || customerMeta.seller_company_profile_id || "").trim();
-    const portalCPriceMode =
+  const customerMeta = parseEmbeddedCustomerMeta(customer?.custom_fields);
+  const sellerCompanyProfileId = String(customer?.seller_company_profile_id || customerMeta.seller_company_profile_id || "").trim();
+  const portalCPriceMode =
       String(customer?.portal_c_price_mode || customerMeta.portal_c_price_mode || "standard").trim().toLowerCase() ===
       "prefer_c_when_available"
         ? "prefer_c_when_available"
@@ -531,7 +537,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
             currency: String(customer.currency || invoices[0]?.currency || "EUR"),
             payment_terms: String(customer.payment_terms || ""),
             contract_nr: String(customer.contract_nr || ""),
-            price_list_type: String(customer.price_list_type || "A") as "" | "A" | "B" | "C" | "Other",
+            price_list_type: String(customer.price_list_type || getEmbeddedCustomerPriceListType(customerMeta) || "A") as "" | "A" | "B" | "C" | "Other",
             portal_c_price_mode: portalCPriceMode,
           }
         : null,

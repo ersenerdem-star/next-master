@@ -54,6 +54,7 @@ function parseEmbeddedCustomerMeta(raw: unknown) {
       clean: text,
       meta: {} as {
         seller_company_profile_id?: string;
+        price_list_type?: LocalCustomer["price_list_type"];
         portal_c_price_mode?: LocalCustomer["portal_c_price_mode"];
         price_list_margin_percent?: number | null;
       },
@@ -64,6 +65,7 @@ function parseEmbeddedCustomerMeta(raw: unknown) {
   try {
     const parsed = JSON.parse(jsonText) as {
       seller_company_profile_id?: string;
+      price_list_type?: LocalCustomer["price_list_type"];
       portal_c_price_mode?: LocalCustomer["portal_c_price_mode"];
       price_list_margin_percent?: number | null;
     };
@@ -73,6 +75,7 @@ function parseEmbeddedCustomerMeta(raw: unknown) {
       clean: text,
       meta: {} as {
         seller_company_profile_id?: string;
+        price_list_type?: LocalCustomer["price_list_type"];
         portal_c_price_mode?: LocalCustomer["portal_c_price_mode"];
         price_list_margin_percent?: number | null;
       },
@@ -84,6 +87,7 @@ function embedCustomerMeta(
   customFields: string,
   meta: {
     seller_company_profile_id?: string | null;
+    price_list_type?: LocalCustomer["price_list_type"] | null;
     portal_c_price_mode?: LocalCustomer["portal_c_price_mode"] | null;
     price_list_margin_percent?: number | null;
   },
@@ -91,6 +95,7 @@ function embedCustomerMeta(
   const parsed = parseEmbeddedCustomerMeta(customFields);
   const nextMeta: Record<string, unknown> = {};
   if (meta.seller_company_profile_id) nextMeta.seller_company_profile_id = meta.seller_company_profile_id;
+  if (meta.price_list_type) nextMeta.price_list_type = meta.price_list_type;
   if (meta.portal_c_price_mode) nextMeta.portal_c_price_mode = meta.portal_c_price_mode;
   if (meta.price_list_margin_percent != null) nextMeta.price_list_margin_percent = Number(meta.price_list_margin_percent);
   if (!Object.keys(nextMeta).length) return parsed.clean;
@@ -118,7 +123,7 @@ function mapCustomerRow(row: Record<string, unknown>): LocalCustomer {
     payment_terms: String(row.payment_terms || "Cash in Advance"),
     contract_nr: String(row.contract_nr || ""),
     seller_company_profile_id: String(row.seller_company_profile_id || parsedCustomFields.meta.seller_company_profile_id || ""),
-    price_list_type: String(row.price_list_type || "A") as LocalCustomer["price_list_type"],
+    price_list_type: String(row.price_list_type || parsedCustomFields.meta.price_list_type || "A") as LocalCustomer["price_list_type"],
     portal_c_price_mode: String(row.portal_c_price_mode || parsedCustomFields.meta.portal_c_price_mode || "standard") as LocalCustomer["portal_c_price_mode"],
     price_list_margin_percent:
       row.price_list_margin_percent == null
@@ -166,6 +171,7 @@ function mapCustomerPayload(input: LocalCustomer, organizationId: string) {
     contact_persons: input.contact_persons,
     custom_fields: embedCustomerMeta(input.custom_fields, {
       seller_company_profile_id: sellerCompanyProfileId,
+      price_list_type: input.price_list_type,
       portal_c_price_mode: input.portal_c_price_mode || "standard",
       price_list_margin_percent: input.price_list_margin_percent,
     }),

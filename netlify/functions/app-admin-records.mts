@@ -54,6 +54,7 @@ const LEGACY_CUSTOMER_COLUMNS = [
   "currency",
   "payment_terms",
   "contract_nr",
+  "price_list_type",
   "billing_address",
   "shipping_address",
   "contact_persons",
@@ -194,6 +195,7 @@ function parseEmbeddedCustomerMeta(raw: unknown) {
 
 function embedCustomerMeta(raw: unknown, metaPatch: {
   seller_company_profile_id?: string | null;
+  price_list_type?: string | null;
   portal_c_price_mode?: string | null;
   price_list_margin_percent?: unknown;
 }) {
@@ -201,6 +203,9 @@ function embedCustomerMeta(raw: unknown, metaPatch: {
   const nextMeta: Record<string, unknown> = {};
   if (typeof metaPatch.seller_company_profile_id === "string" && metaPatch.seller_company_profile_id.trim()) {
     nextMeta.seller_company_profile_id = metaPatch.seller_company_profile_id.trim();
+  }
+  if (typeof metaPatch.price_list_type === "string" && metaPatch.price_list_type.trim()) {
+    nextMeta.price_list_type = metaPatch.price_list_type.trim();
   }
   if (typeof metaPatch.portal_c_price_mode === "string" && metaPatch.portal_c_price_mode.trim()) {
     nextMeta.portal_c_price_mode = metaPatch.portal_c_price_mode.trim();
@@ -225,6 +230,7 @@ async function sanitizeCustomerPayload(input: {
     next.seller_company_profile_id = null;
     next.custom_fields = embedCustomerMeta(next.custom_fields, {
       seller_company_profile_id: null,
+      price_list_type: String(next.price_list_type || ""),
       portal_c_price_mode: String(next.portal_c_price_mode || "standard"),
       price_list_margin_percent: next.price_list_margin_percent,
     });
@@ -246,6 +252,7 @@ async function sanitizeCustomerPayload(input: {
   next.seller_company_profile_id = profile[0]?.id ? rawProfileId : null;
   next.custom_fields = embedCustomerMeta(next.custom_fields, {
     seller_company_profile_id: String(next.seller_company_profile_id || ""),
+    price_list_type: String(next.price_list_type || ""),
     portal_c_price_mode: String(next.portal_c_price_mode || "standard"),
     price_list_margin_percent: next.price_list_margin_percent,
   });
