@@ -134,6 +134,7 @@ type PortalSelection =
   | { kind: "bill"; id: string };
 type PortalSection = "desk" | "pricelist" | "orders" | "billing" | "statement" | "account";
 type PortalNavGroupKey = "search" | "documents" | "finance" | "account";
+type PortalSearchView = "cards" | "list";
 
 type PortalLine = NonNullable<PortalSnapshot["invoices"][number]["lines"]>[number];
 type PortalSalesOrderRow = PortalSnapshot["salesOrders"][number];
@@ -273,6 +274,7 @@ export function PortalPage() {
   const [orderSearch, setOrderSearch] = useState("");
   const [orderSearchBrand, setOrderSearchBrand] = useState("");
   const [catalogResults, setCatalogResults] = useState<PortalCatalogSearchItem[]>([]);
+  const [portalSearchView, setPortalSearchView] = useState<PortalSearchView>("cards");
   const [portalDraftLines, setPortalDraftLines] = useState<PortalPreparedLine[]>([]);
   const [portalOrderId, setPortalOrderId] = useState("");
   const [portalSalesOrderNo, setPortalSalesOrderNo] = useState("");
@@ -784,7 +786,7 @@ export function PortalPage() {
         .filter(Boolean),
     ),
   ).sort((left, right) => left.localeCompare(right));
-  const portalSearchCards = catalogResults.slice(0, 12);
+  const portalSearchCards = catalogResults;
   const portalOrderHistoryRows =
     activeSnapshot.invite.party_type === "customer"
       ? filteredSalesOrders.filter((row) => !(row.source_channel === "portal" && !row.portal_submitted_at && String(row.status || "").toLowerCase() === "draft"))
@@ -1976,6 +1978,26 @@ export function PortalPage() {
                 <div className="portal-workbench__tables">
                   <SectionCard title={`Matching Products & Alternatives (${catalogResults.length.toLocaleString("en-US")})`}>
                     {catalogResults.length ? (
+                      <div className="workbench-controls workbench-controls--compact">
+                        <div className="segmented-control" aria-label="Search result view">
+                          <button
+                            type="button"
+                            className={`segmented-control__item ${portalSearchView === "cards" ? "active" : ""}`}
+                            onClick={() => setPortalSearchView("cards")}
+                          >
+                            Cards
+                          </button>
+                          <button
+                            type="button"
+                            className={`segmented-control__item ${portalSearchView === "list" ? "active" : ""}`}
+                            onClick={() => setPortalSearchView("list")}
+                          >
+                            List
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                    {catalogResults.length && portalSearchView === "cards" ? (
                       <div className="portal-search-card-grid">
                         {portalSearchCards.map((row) => (
                           <button
@@ -2026,7 +2048,7 @@ export function PortalPage() {
                         ))}
                       </div>
                     ) : null}
-                    {catalogResults.length ? (
+                    {catalogResults.length && portalSearchView === "list" ? (
                       <DataTable
                         rows={catalogResults}
                         columns={portalCatalogColumns}
