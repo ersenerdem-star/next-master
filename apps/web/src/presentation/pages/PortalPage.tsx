@@ -26,6 +26,7 @@ import { parseOrderImportFile } from "../../shared/orderImport";
 const SESSION_KEY = "next-master-portal-session";
 const PORTAL_CACHE_PREFIX = "next-master-portal-cache";
 const PORTAL_CACHE_WRITE_DELAY_MS = 250;
+const PORTAL_COMPACT_SEARCH_BREAKPOINT_PX = 1280;
 
 type PortalOfflineDraft = {
   portalDraftLines: PortalPreparedLine[];
@@ -416,6 +417,9 @@ export function PortalPage() {
   const [orderSearchBrand, setOrderSearchBrand] = useState("");
   const [catalogResults, setCatalogResults] = useState<PortalCatalogSearchItem[]>([]);
   const [portalSearchView, setPortalSearchView] = useState<PortalSearchView>("cards");
+  const [isCompactPortalSearch, setIsCompactPortalSearch] = useState(() =>
+    typeof window === "undefined" ? false : window.innerWidth < PORTAL_COMPACT_SEARCH_BREAKPOINT_PX,
+  );
   const [portalDraftLines, setPortalDraftLines] = useState<PortalPreparedLine[]>([]);
   const [portalOrderId, setPortalOrderId] = useState("");
   const [portalSalesOrderNo, setPortalSalesOrderNo] = useState("");
@@ -437,6 +441,7 @@ export function PortalPage() {
   const [previewImage, setPreviewImage] = useState<{ src: string; code: string; name: string } | null>(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const portalPricingCurrency = snapshot?.pricingProfile?.currency || snapshot?.accountSummary.currency || "EUR";
+  const effectivePortalSearchView: PortalSearchView = isCompactPortalSearch ? "list" : portalSearchView;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -448,6 +453,15 @@ export function PortalPage() {
       window.removeEventListener("online", syncOnlineState);
       window.removeEventListener("offline", syncOnlineState);
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia(`(max-width: ${PORTAL_COMPACT_SEARCH_BREAKPOINT_PX - 1}px)`);
+    const syncCompactPortalSearch = () => setIsCompactPortalSearch(mediaQuery.matches);
+    syncCompactPortalSearch();
+    mediaQuery.addEventListener("change", syncCompactPortalSearch);
+    return () => mediaQuery.removeEventListener("change", syncCompactPortalSearch);
   }, []);
 
   useEffect(() => {
@@ -2388,19 +2402,19 @@ export function PortalPage() {
               <div className="portal-workbench">
                 <div className="portal-workbench__tables">
                   <SectionCard title={`Search Items (${catalogResults.length.toLocaleString("en-US")})`} className="search-results-focus-card">
-                    {catalogResults.length ? (
+                    {catalogResults.length && !isCompactPortalSearch ? (
                       <div className="workbench-controls workbench-controls--compact">
                         <div className="segmented-control" aria-label="Search result view">
                           <button
                             type="button"
-                            className={`segmented-control__item ${portalSearchView === "cards" ? "active" : ""}`}
+                            className={`segmented-control__item ${effectivePortalSearchView === "cards" ? "active" : ""}`}
                             onClick={() => setPortalSearchView("cards")}
                           >
                             Cards
                           </button>
                           <button
                             type="button"
-                            className={`segmented-control__item ${portalSearchView === "list" ? "active" : ""}`}
+                            className={`segmented-control__item ${effectivePortalSearchView === "list" ? "active" : ""}`}
                             onClick={() => setPortalSearchView("list")}
                           >
                             List
@@ -2408,7 +2422,7 @@ export function PortalPage() {
                         </div>
                       </div>
                     ) : null}
-                    {catalogResults.length && portalSearchView === "cards" ? (
+                    {catalogResults.length && effectivePortalSearchView === "cards" ? (
                       <div className="portal-search-card-grid">
                         {portalSearchCards.map((row) => (
                           <button
@@ -2459,7 +2473,7 @@ export function PortalPage() {
                         ))}
                       </div>
                     ) : null}
-                    {catalogResults.length && portalSearchView === "list" ? (
+                    {catalogResults.length && effectivePortalSearchView === "list" ? (
                       <DataTable
                         rows={catalogResults}
                         columns={portalCatalogColumns}
