@@ -100,6 +100,13 @@ function buildOriginalNumberVariants(value: string) {
   if (normalized) variants.add(normalized);
   const normalizedOriginal = normalizeOriginalNumberSearch(value);
   if (normalizedOriginal) variants.add(normalizedOriginal);
+  const edgeStripped = normalized
+    .replace(/^[A-Z]{1,4}(?=\d{6,}[A-Z]{0,4}$)/, "")
+    .replace(/[A-Z]{1,4}$/, "");
+  if (edgeStripped) variants.add(edgeStripped);
+  for (const digitRun of normalized.match(/\d{6,}/g) || []) {
+    variants.add(digitRun);
+  }
   return [...variants];
 }
 
@@ -157,6 +164,7 @@ function isLikelyCatalogCodeSearch(search: string) {
 function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "strict" | "loose") {
   const escaped = search.replace(/[%*(),]/g, " ").trim();
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
+  const normalizedSearchVariants = buildOriginalNumberVariants(search).filter((variant) => variant.length >= 6);
   const looseOriginalPattern = buildLooseOriginalNumberPattern(search);
   const separatorInsensitivePattern = buildSeparatorInsensitivePattern(search);
   const clauses = new Set<string>();
@@ -168,6 +176,12 @@ function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "s
       clauses.add(`normalized_oem.eq.${normalizedSearch}`);
       clauses.add(`normalized_code.like.${normalizedSearch}*`);
       clauses.add(`normalized_oem.like.${normalizedSearch}*`);
+    }
+    for (const variant of normalizedSearchVariants) {
+      clauses.add(`normalized_code.eq.${variant}`);
+      clauses.add(`normalized_oem.eq.${variant}`);
+      clauses.add(`normalized_code.like.${variant}*`);
+      clauses.add(`normalized_oem.like.${variant}*`);
     }
     if (escaped && escaped.length <= 24 && /[A-Z]/i.test(escaped)) {
       clauses.add(`product_code.ilike.${escaped}*`);

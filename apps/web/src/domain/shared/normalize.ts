@@ -84,6 +84,13 @@ function buildOriginalNumberVariants(value: string): string[] {
   if (normalized) variants.add(normalized);
   const normalizedOriginal = normalizeOriginalNumberSearch(value);
   if (normalizedOriginal) variants.add(normalizedOriginal);
+  const edgeStripped = normalized
+    .replace(/^[A-Z]{1,4}(?=\d{6,}[A-Z]{0,4}$)/, "")
+    .replace(/[A-Z]{1,4}$/, "");
+  if (edgeStripped) variants.add(edgeStripped);
+  for (const digitRun of normalized.match(/\d{6,}/g) || []) {
+    variants.add(digitRun);
+  }
   return [...variants];
 }
 
