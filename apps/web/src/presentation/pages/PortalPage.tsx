@@ -287,9 +287,9 @@ export function PortalPage() {
   const [confirmingPortalOrder, setConfirmingPortalOrder] = useState(false);
   const [downloadingPortalPriceList, setDownloadingPortalPriceList] = useState(false);
   const [portalOverlay, setPortalOverlay] = useState<{ title: string; message: string } | null>(null);
-  const [orderDeskView, setOrderDeskView] = useState<"simple" | "advanced">("simple");
   const [selectedCatalogCode, setSelectedCatalogCode] = useState("");
   const [selectedDraftLineId, setSelectedDraftLineId] = useState("");
+  const [portalPreview, setPortalPreview] = useState<{ kind: "catalog"; item: PortalCatalogSearchItem } | { kind: "basket"; item: PortalPreparedLine } | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; code: string; name: string } | null>(null);
   const portalPricingCurrency = snapshot?.pricingProfile?.currency || snapshot?.accountSummary.currency || "EUR";
 
@@ -454,27 +454,23 @@ export function PortalPage() {
           header: `Price ${portalPricingCurrency}`,
           render: (row: PortalCatalogSearchItem) => (row.sell_price == null ? "-" : formatMoney(Number(row.sell_price || 0), row.currency || portalPricingCurrency)),
         },
+        { key: "oem", header: "OEM", render: (row: PortalCatalogSearchItem) => row.oem_no || "-" },
+        { key: "tariff", header: "Tariff", render: (row: PortalCatalogSearchItem) => row.tariff || "-" },
+        { key: "origin", header: "Origin", render: (row: PortalCatalogSearchItem) => row.origin || "-" },
+        { key: "weight", header: "Weight", render: (row: PortalCatalogSearchItem) => formatWeight(row.weight_kg) },
       ];
-      if (orderDeskView === "advanced") {
-        columns.push(
-          { key: "oem", header: "OEM", render: (row: PortalCatalogSearchItem) => row.oem_no || "-" },
-          { key: "tariff", header: "Tariff", render: (row: PortalCatalogSearchItem) => row.tariff || "-" },
-          { key: "origin", header: "Origin", render: (row: PortalCatalogSearchItem) => row.origin || "-" },
-          { key: "weight", header: "Weight", render: (row: PortalCatalogSearchItem) => formatWeight(row.weight_kg) },
-        );
-      }
       columns.push({
         key: "actions",
         header: "Actions",
         render: (row: PortalCatalogSearchItem) => (
           <Button variant="secondary" className="button--compact" onClick={() => void handleAddPortalCatalogItem(row)}>
-            Add to Desk
+            Add to Basket
           </Button>
         ),
       });
       return columns;
     },
-    [orderDeskView, portalPricingCurrency],
+    [portalPricingCurrency],
   );
 
   const portalDraftColumns = useMemo(
@@ -493,13 +489,9 @@ export function PortalPage() {
             </div>
           ),
         },
+        { key: "origin", header: "Origin", render: (row: PortalPreparedLine) => row.origin || "-" },
+        { key: "weight", header: "Weight", render: (row: PortalPreparedLine) => formatWeight(row.weight_kg) },
       ];
-      if (orderDeskView === "advanced") {
-        columns.push(
-          { key: "origin", header: "Origin", render: (row: PortalPreparedLine) => row.origin || "-" },
-          { key: "weight", header: "Weight", render: (row: PortalPreparedLine) => formatWeight(row.weight_kg) },
-        );
-      }
       columns.push(
         {
           key: "qty",
@@ -545,7 +537,7 @@ export function PortalPage() {
       );
       return columns;
     },
-    [orderDeskView, portalPricingCurrency],
+    [portalPricingCurrency],
   );
 
   const creditColumns = useMemo(
@@ -765,8 +757,6 @@ export function PortalPage() {
       : activeSnapshot.paymentsMade.filter((row) => (!statementDateFrom && !statementDateTo ? true : isWithinDateRange(row.payment_date, statementDateFrom, statementDateTo)));
   const statementPeriodLabel = buildDateRangeLabel(statementDateFrom, statementDateTo);
   const portalCanOrder = activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_orders;
-  const selectedCatalogItem = catalogResults.find((row) => row.code === selectedCatalogCode) || null;
-  const selectedDraftLine = portalDraftLines.find((line) => line.lineId === selectedDraftLineId) || null;
   const portalBrandOptions = [{ value: "", label: "All Brands" }, ...activeSnapshot.availableBrands.map((brand) => ({ value: brand, label: brand }))];
   const portalBrandValueOptions = activeSnapshot.availableBrands.map((brand) => ({ value: brand, label: brand }));
   const portalDraftSelectionOptions = [
@@ -794,7 +784,7 @@ export function PortalPage() {
         .filter(Boolean),
     ),
   ).sort((left, right) => left.localeCompare(right));
-  const portalSearchCards = catalogResults.slice(0, orderDeskView === "advanced" ? 12 : 8);
+  const portalSearchCards = catalogResults.slice(0, 12);
   const portalOrderHistoryRows =
     activeSnapshot.invite.party_type === "customer"
       ? filteredSalesOrders.filter((row) => !(row.source_channel === "portal" && !row.portal_submitted_at && String(row.status || "").toLowerCase() === "draft"))
@@ -1177,12 +1167,6 @@ export function PortalPage() {
           ? `Purchase Order Detail · ${selectedDocument.row.id}`
           : `Bill Detail · ${selectedDocument.row.id}`
     : "";
-  const orderDeskFocusTitle = selectedDraftLine
-    ? `${selectedDraftLine.resolvedCode || selectedDraftLine.requestedCode || "-"} · Basket Line`
-    : selectedCatalogItem
-      ? `${selectedCatalogItem.code} · Search Result`
-      : portalSalesOrderNo || "Basket";
-
   function getPortalDocumentSelection(kind: PortalSelection["kind"], id: string) {
     if (kind === "sales-order") {
       const row = activeSnapshot.salesOrders.find((entry) => entry.id === id);
@@ -1439,7 +1423,7 @@ export function PortalPage() {
             Export Excel
           </Button>
           <Button variant="secondary" onClick={() => setSelection(null)}>
-            Close
+            Back to List
           </Button>
         </div>
       }
@@ -1546,6 +1530,9 @@ export function PortalPage() {
       </div>
     </SectionCard>
   ) : null;
+
+  const orderDetailOpen = Boolean(selectedDocument && (selectedDocument.kind === "sales-order" || selectedDocument.kind === "purchase-order"));
+  const billingDetailOpen = Boolean(selectedDocument && (selectedDocument.kind === "invoice" || selectedDocument.kind === "bill"));
 
   return (
     <div className="portal-shell">
@@ -1760,30 +1747,26 @@ export function PortalPage() {
               </div>
             </div>
           </SectionCard>
-
-          <div className={`portal-record-layout ${selectedDocument && (selectedDocument.kind === "sales-order" || selectedDocument.kind === "purchase-order") ? "" : "portal-record-layout--single"}`}>
-            <div className="portal-record-layout__main">
-              <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Order History" : "Purchase Orders"}>
-                <DataTable
-                  rows={portalOrderHistoryRows}
-                  columns={activeSnapshot.invite.party_type === "customer" ? salesOrderColumns : purchaseOrderColumns}
-                  emptyText={activeSnapshot.invite.party_type === "customer" ? "No orders available." : "No purchase orders available."}
-                  onRowClick={(row) => openPortalDocument({ kind: activeSnapshot.invite.party_type === "customer" ? "sales-order" : "purchase-order", id: row.id })}
-                  rowClassName={(row) =>
-                    selection &&
-                    ((selection.kind === "sales-order" && activeSnapshot.invite.party_type === "customer") ||
-                      (selection.kind === "purchase-order" && activeSnapshot.invite.party_type === "vendor")) &&
-                    selection.id === row.id
-                      ? "data-table__row--active"
-                      : ""
-                  }
-                />
-              </SectionCard>
-            </div>
-            {selectedDocument && (selectedDocument.kind === "sales-order" || selectedDocument.kind === "purchase-order") ? (
-              <div className="portal-record-layout__detail">{documentDetailSection}</div>
-            ) : null}
-          </div>
+          {orderDetailOpen ? (
+            documentDetailSection
+          ) : (
+            <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Order History" : "Purchase Orders"}>
+              <DataTable
+                rows={portalOrderHistoryRows}
+                columns={activeSnapshot.invite.party_type === "customer" ? salesOrderColumns : purchaseOrderColumns}
+                emptyText={activeSnapshot.invite.party_type === "customer" ? "No orders available." : "No purchase orders available."}
+                onRowClick={(row) => openPortalDocument({ kind: activeSnapshot.invite.party_type === "customer" ? "sales-order" : "purchase-order", id: row.id })}
+                rowClassName={(row) =>
+                  selection &&
+                  ((selection.kind === "sales-order" && activeSnapshot.invite.party_type === "customer") ||
+                    (selection.kind === "purchase-order" && activeSnapshot.invite.party_type === "vendor")) &&
+                  selection.id === row.id
+                    ? "data-table__row--active"
+                    : ""
+                }
+              />
+            </SectionCard>
+          )}
         </div>
       ) : null}
 
@@ -1796,58 +1779,32 @@ export function PortalPage() {
               <Select label={activeSnapshot.invite.party_type === "customer" ? "Invoice Status" : "Bill Status"} value={paymentStatusFilter} options={paymentStatusOptions} onChange={setPaymentStatusFilter} />
             </div>
           </SectionCard>
-
-          <div className={`portal-record-layout ${selectedDocument && (selectedDocument.kind === "invoice" || selectedDocument.kind === "bill") ? "" : "portal-record-layout--single"}`}>
-            <div className="portal-record-layout__main">
-              <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Invoices" : "Bills"}>
-                <DataTable
-                  rows={portalBillingRows}
-                  columns={activeSnapshot.invite.party_type === "customer" ? invoiceColumns : billColumns}
-                  emptyText={activeSnapshot.invite.party_type === "customer" ? "No invoices available." : "No bills available."}
-                  onRowClick={(row) => openPortalDocument({ kind: activeSnapshot.invite.party_type === "customer" ? "invoice" : "bill", id: row.id })}
-                  rowClassName={(row) =>
-                    selection &&
-                    ((selection.kind === "invoice" && activeSnapshot.invite.party_type === "customer") ||
-                      (selection.kind === "bill" && activeSnapshot.invite.party_type === "vendor")) &&
-                    selection.id === row.id
-                      ? "data-table__row--active"
-                      : ""
-                  }
-                />
-              </SectionCard>
-            </div>
-            {selectedDocument && (selectedDocument.kind === "invoice" || selectedDocument.kind === "bill") ? (
-              <div className="portal-record-layout__detail">{documentDetailSection}</div>
-            ) : null}
-          </div>
+          {billingDetailOpen ? (
+            documentDetailSection
+          ) : (
+            <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Invoices" : "Bills"}>
+              <DataTable
+                rows={portalBillingRows}
+                columns={activeSnapshot.invite.party_type === "customer" ? invoiceColumns : billColumns}
+                emptyText={activeSnapshot.invite.party_type === "customer" ? "No invoices available." : "No bills available."}
+                onRowClick={(row) => openPortalDocument({ kind: activeSnapshot.invite.party_type === "customer" ? "invoice" : "bill", id: row.id })}
+                rowClassName={(row) =>
+                  selection &&
+                  ((selection.kind === "invoice" && activeSnapshot.invite.party_type === "customer") ||
+                    (selection.kind === "bill" && activeSnapshot.invite.party_type === "vendor")) &&
+                  selection.id === row.id
+                    ? "data-table__row--active"
+                    : ""
+                }
+              />
+            </SectionCard>
+          )}
         </div>
       ) : null}
 
       {activeSection === "desk" && portalCanOrder ? (
         <div className="portal-section-stack">
-          <SectionCard
-            title="Part Search"
-            actions={
-              <div className="workbench-controls workbench-controls--compact">
-                <div className="segmented-control">
-                  <button
-                    type="button"
-                    className={`segmented-control__item ${orderDeskView === "simple" ? "active" : ""}`}
-                    onClick={() => setOrderDeskView("simple")}
-                  >
-                    Simple View
-                  </button>
-                  <button
-                    type="button"
-                    className={`segmented-control__item ${orderDeskView === "advanced" ? "active" : ""}`}
-                    onClick={() => setOrderDeskView("advanced")}
-                  >
-                    Advanced View
-                  </button>
-                </div>
-              </div>
-            }
-          >
+          <SectionCard title="Part Search">
             <div className="portal-order-builder">
               <div className="portal-order-builder__meta">
                 <div className="dashboard-stat">
@@ -1943,7 +1900,10 @@ export function PortalPage() {
                             key={`${row.brand}-${row.code}`}
                             type="button"
                             className={`portal-search-card ${selectedCatalogCode === row.code ? "portal-search-card--active" : ""}`}
-                            onClick={() => setSelectedCatalogCode(row.code)}
+                            onClick={() => {
+                              setSelectedCatalogCode(row.code);
+                              setPortalPreview({ kind: "catalog", item: row });
+                            }}
                           >
                             <div className="portal-search-card__top">
                               <div className="portal-search-card__media">
@@ -1985,19 +1945,22 @@ export function PortalPage() {
                         ))}
                       </div>
                     ) : null}
-                    {orderDeskView === "advanced" ? (
+                    {catalogResults.length ? (
                       <DataTable
                         rows={catalogResults}
                         columns={portalCatalogColumns}
                         emptyText={searchingCatalog ? "Searching items..." : "Search by part number, original number, or description to load matching products and alternatives."}
-                        onRowClick={(row) => setSelectedCatalogCode(row.code)}
+                        onRowClick={(row) => {
+                          setSelectedCatalogCode(row.code);
+                          setPortalPreview({ kind: "catalog", item: row });
+                        }}
                         rowClassName={(row) => (selectedCatalogCode === row.code ? "data-table__row--active" : "")}
                       />
-                    ) : !catalogResults.length ? (
+                    ) : (
                       <div className="empty-state">
                         {searchingCatalog ? "Searching items..." : "Search by part number, original number, or description to load matching products and alternatives."}
                       </div>
-                    ) : null}
+                    )}
                   </SectionCard>
 
                   <div ref={portalDraftLinesRef}>
@@ -2006,125 +1969,50 @@ export function PortalPage() {
                         rows={portalDraftLines}
                         columns={portalDraftColumns}
                         emptyText={preparingPortalOrder ? "Preparing prices..." : "Use Add on a search result or import a file to build the basket here."}
-                        onRowClick={(row) => setSelectedDraftLineId(row.lineId)}
+                        onRowClick={(row) => {
+                          setSelectedDraftLineId(row.lineId);
+                          setPortalPreview({ kind: "basket", item: row });
+                        }}
                         rowClassName={(row) => (selectedDraftLineId === row.lineId ? "data-table__row--active" : "")}
                       />
                     </SectionCard>
                   </div>
                 </div>
-
-                <aside className="portal-workbench__side">
-                  <div className="workbench-detail-panel workbench-detail-panel--catalog">
-                    <div className="workbench-detail-panel__eyebrow">{selectedDraftLine ? "Basket Focus" : "Part Search Focus"}</div>
-                    <div className="workbench-detail-panel__title">{orderDeskFocusTitle}</div>
-                    {selectedDraftLine ? (
-                      <>
-                        <div className="workbench-detail-panel__media">
-                          {selectedDraftLine.image_url ? (
-                            <button
-                              type="button"
-                              className="catalog-thumb-button catalog-thumb-button--detail"
-                              onClick={() =>
-                                setPreviewImage({
-                                  src: selectedDraftLine.image_url || "",
-                                  code: selectedDraftLine.resolvedCode || selectedDraftLine.requestedCode || "",
-                                  name: selectedDraftLine.description || "",
-                                })
-                              }
-                            >
-                              <img
-                                src={selectedDraftLine.image_url}
-                                alt={selectedDraftLine.resolvedCode || selectedDraftLine.requestedCode || ""}
-                                className="catalog-thumb catalog-thumb--detail"
-                                loading="lazy"
-                              />
-                            </button>
-                          ) : (
-                            <div className="empty-state">No photo</div>
-                          )}
-                        </div>
-                        <div className="workbench-detail-list">
-                          <div><span>Requested Code</span><strong>{selectedDraftLine.requestedCode || "-"}</strong></div>
-                          <div><span>Resolved Code</span><strong>{selectedDraftLine.resolvedCode || "-"}</strong></div>
-                          <div><span>Brand</span><strong>{selectedDraftLine.brand || "-"}</strong></div>
-                          <div><span>Description</span><strong>{selectedDraftLine.description || "-"}</strong></div>
-                          <div><span>Tariff</span><strong>{selectedDraftLine.hs_code || "-"}</strong></div>
-                          <div><span>Origin</span><strong>{selectedDraftLine.origin || "-"}</strong></div>
-                          <div><span>Weight</span><strong>{formatWeight(selectedDraftLine.weight_kg)}</strong></div>
-                          <div><span>Unit Price</span><strong>{selectedDraftLine.sell_price == null ? "-" : formatMoney(selectedDraftLine.sell_price, portalOrderCurrency)}</strong></div>
-                          {selectedDraftLine.codeChangeWarning ? <div><span>Replacement</span><strong>{selectedDraftLine.codeChangeWarning}</strong></div> : null}
-                          {selectedDraftLine.lifecycle_warning ? <div><span>Lifecycle</span><strong>{selectedDraftLine.lifecycle_warning}</strong></div> : null}
-                        </div>
-                      </>
-                    ) : selectedCatalogItem ? (
-                      <>
-                        <div className="workbench-detail-panel__media">
-                          {selectedCatalogItem.image_url ? (
-                            <button
-                              type="button"
-                              className="catalog-thumb-button catalog-thumb-button--detail"
-                              onClick={() =>
-                                setPreviewImage({
-                                  src: selectedCatalogItem.image_url || "",
-                                  code: selectedCatalogItem.code || "",
-                                  name: selectedCatalogItem.description || "",
-                                })
-                              }
-                            >
-                              <img src={selectedCatalogItem.image_url} alt={selectedCatalogItem.code || ""} className="catalog-thumb catalog-thumb--detail" loading="lazy" />
-                            </button>
-                          ) : (
-                            <div className="empty-state">No photo</div>
-                          )}
-                        </div>
-                        <div className="workbench-detail-list">
-                          <div><span>Code</span><strong>{selectedCatalogItem.code || "-"}</strong></div>
-                          <div><span>Brand</span><strong>{selectedCatalogItem.brand || "-"}</strong></div>
-                          <div><span>Description</span><strong>{selectedCatalogItem.description || "-"}</strong></div>
-                          <div><span>OEM</span><strong>{selectedCatalogItem.oem_no || "-"}</strong></div>
-                          <div><span>Tariff</span><strong>{selectedCatalogItem.tariff || "-"}</strong></div>
-                          <div><span>Origin</span><strong>{selectedCatalogItem.origin || "-"}</strong></div>
-                          <div><span>Weight</span><strong>{formatWeight(selectedCatalogItem.weight_kg)}</strong></div>
-                          <div><span>Unit Price</span><strong>{selectedCatalogItem.sell_price == null ? "-" : formatMoney(selectedCatalogItem.sell_price, selectedCatalogItem.currency || portalOrderCurrency)}</strong></div>
-                          {selectedCatalogItem.lifecycle_warning ? <div><span>Lifecycle</span><strong>{selectedCatalogItem.lifecycle_warning}</strong></div> : null}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="chart-placeholder">Search a part number or original number, then select a result or selected item to inspect full detail.</div>
-                    )}
-
-                    {portalOriginalNumberBrandMatches.length ? (
-                      <div className="portal-inline-note">
-                        <span>Original No Match</span>
-                        <strong>{portalOriginalNumberBrandMatches.join(", ")}</strong>
-                      </div>
-                    ) : null}
-
-                    {portalDraftWarningLines.length ? (
-                      <div className="portal-warning-list">
-                        <h3>Warning Items</h3>
-                        {portalDraftWarningLines.slice(0, 6).map((line) => (
-                          <button
-                            key={line.lineId}
-                            type="button"
-                            className="portal-warning-list__item"
-                            onClick={() => setSelectedDraftLineId(line.lineId)}
-                          >
-                            <strong>{line.resolvedCode || line.requestedCode || "-"}</strong>
-                            <span>
-                              {line.sell_price == null
-                                ? "Missing live price"
-                                : line.lifecycle_status === "discontinued"
-                                  ? "Discontinued"
-                                  : line.codeChangeWarning || "Review line"}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                </aside>
               </div>
+
+              {portalOriginalNumberBrandMatches.length ? (
+                <div className="portal-inline-note">
+                  <span>Original No Match</span>
+                  <strong>{portalOriginalNumberBrandMatches.join(", ")}</strong>
+                </div>
+              ) : null}
+
+              {portalDraftWarningLines.length ? (
+                <SectionCard title="Warning Items">
+                  <div className="portal-warning-list">
+                    {portalDraftWarningLines.slice(0, 8).map((line) => (
+                      <button
+                        key={line.lineId}
+                        type="button"
+                        className="portal-warning-list__item"
+                        onClick={() => {
+                          setSelectedDraftLineId(line.lineId);
+                          setPortalPreview({ kind: "basket", item: line });
+                        }}
+                      >
+                        <strong>{line.resolvedCode || line.requestedCode || "-"}</strong>
+                        <span>
+                          {line.sell_price == null
+                            ? "Missing live price"
+                            : line.lifecycle_status === "discontinued"
+                              ? "Discontinued"
+                              : line.codeChangeWarning || "Review line"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </SectionCard>
+              ) : null}
 
               <div className="portal-action-bar">
                 <Button variant="secondary" busy={savingPortalOrder} busyLabel="Saving..." onClick={() => void handleSubmitPortalOrder("draft")}>
@@ -2148,6 +2036,95 @@ export function PortalPage() {
             <div className="modal-card__header">
               <h3>{portalOverlay.title}</h3>
               <p>{portalOverlay.message}</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {portalPreview ? (
+        <div className="modal-backdrop" onClick={() => setPortalPreview(null)}>
+          <div className="modal-card modal-card--compact" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-card__header">
+              <div>
+                <h3>
+                  {portalPreview.kind === "catalog"
+                    ? portalPreview.item.code || "-"
+                    : portalPreview.item.resolvedCode || portalPreview.item.requestedCode || "-"}
+                </h3>
+                <p>{portalPreview.item.brand || (portalPreview.kind === "catalog" ? "Part search result" : "Basket line")}</p>
+              </div>
+            </div>
+            <div className="workbench-detail-panel__media">
+              {portalPreview.item.image_url ? (
+                <button
+                  type="button"
+                  className="catalog-thumb-button catalog-thumb-button--detail"
+                  onClick={() =>
+                    setPreviewImage({
+                      src: portalPreview.item.image_url || "",
+                      code:
+                        portalPreview.kind === "catalog"
+                          ? portalPreview.item.code || ""
+                          : portalPreview.item.resolvedCode || portalPreview.item.requestedCode || "",
+                      name: portalPreview.item.description || "",
+                    })
+                  }
+                >
+                  <img
+                    src={portalPreview.item.image_url}
+                    alt={
+                      portalPreview.kind === "catalog"
+                        ? portalPreview.item.code || ""
+                        : portalPreview.item.resolvedCode || portalPreview.item.requestedCode || ""
+                    }
+                    className="catalog-thumb catalog-thumb--detail"
+                    loading="lazy"
+                  />
+                </button>
+              ) : (
+                <div className="empty-state">No photo</div>
+              )}
+            </div>
+            <div className="workbench-detail-list">
+              {portalPreview.kind === "basket" ? (
+                <>
+                  <div><span>Requested Code</span><strong>{portalPreview.item.requestedCode || "-"}</strong></div>
+                  <div><span>Resolved Code</span><strong>{portalPreview.item.resolvedCode || "-"}</strong></div>
+                  <div><span>Description</span><strong>{portalPreview.item.description || "-"}</strong></div>
+                  <div><span>OEM</span><strong>{portalPreview.item.oem_no || "-"}</strong></div>
+                  <div><span>Tariff</span><strong>{portalPreview.item.hs_code || "-"}</strong></div>
+                  <div><span>Origin</span><strong>{portalPreview.item.origin || "-"}</strong></div>
+                  <div><span>Weight</span><strong>{formatWeight(portalPreview.item.weight_kg)}</strong></div>
+                  <div><span>Unit Price</span><strong>{portalPreview.item.sell_price == null ? "-" : formatMoney(portalPreview.item.sell_price, portalOrderCurrency)}</strong></div>
+                  {portalPreview.item.codeChangeWarning ? <div><span>Replacement</span><strong>{portalPreview.item.codeChangeWarning}</strong></div> : null}
+                  {portalPreview.item.lifecycle_warning ? <div><span>Lifecycle</span><strong>{portalPreview.item.lifecycle_warning}</strong></div> : null}
+                </>
+              ) : (
+                <>
+                  <div><span>Code</span><strong>{portalPreview.item.code || "-"}</strong></div>
+                  <div><span>Description</span><strong>{portalPreview.item.description || "-"}</strong></div>
+                  <div><span>OEM</span><strong>{portalPreview.item.oem_no || "-"}</strong></div>
+                  <div><span>Tariff</span><strong>{portalPreview.item.tariff || "-"}</strong></div>
+                  <div><span>Origin</span><strong>{portalPreview.item.origin || "-"}</strong></div>
+                  <div><span>Weight</span><strong>{formatWeight(portalPreview.item.weight_kg)}</strong></div>
+                  <div><span>Unit Price</span><strong>{portalPreview.item.sell_price == null ? "-" : formatMoney(portalPreview.item.sell_price, portalPreview.item.currency || portalOrderCurrency)}</strong></div>
+                  {portalPreview.item.lifecycle_warning ? <div><span>Lifecycle</span><strong>{portalPreview.item.lifecycle_warning}</strong></div> : null}
+                </>
+              )}
+            </div>
+            <div className="modal-actions">
+              {portalPreview.kind === "catalog" ? (
+                <Button
+                  onClick={() => {
+                    void handleAddPortalCatalogItem(portalPreview.item);
+                  }}
+                >
+                  Add to Basket
+                </Button>
+              ) : null}
+              <Button variant="secondary" onClick={() => setPortalPreview(null)}>
+                Close
+              </Button>
             </div>
           </div>
         </div>

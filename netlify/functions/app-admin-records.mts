@@ -1,0 +1,596 @@
+import type { Config, Context } from "@netlify/functions";
+import { buildRestUrl, getJson, json, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
+import { resolveCaller } from "./_shared/app-auth.mts";
+
+const CUSTOMER_COLUMNS = [
+  "id",
+  "customer_type",
+  "salutation",
+  "first_name",
+  "last_name",
+  "company_name",
+  "display_name",
+  "email",
+  "customer_number",
+  "work_phone",
+  "mobile_phone",
+  "language",
+  "tax_rate",
+  "company_id",
+  "currency",
+  "payment_terms",
+  "contract_nr",
+  "price_list_type",
+  "price_list_margin_percent",
+  "billing_address",
+  "shipping_address",
+  "contact_persons",
+  "custom_fields",
+  "reporting_tags",
+  "remarks",
+  "created_at",
+  "updated_at",
+].join(",");
+
+const VENDOR_COLUMNS = [
+  "id",
+  "vendor_type",
+  "salutation",
+  "first_name",
+  "last_name",
+  "company_name",
+  "display_name",
+  "email",
+  "vendor_number",
+  "work_phone",
+  "mobile_phone",
+  "language",
+  "tax_rate",
+  "company_id",
+  "currency",
+  "payment_terms",
+  "billing_address",
+  "shipping_address",
+  "contact_persons",
+  "custom_fields",
+  "reporting_tags",
+  "remarks",
+  "created_at",
+  "updated_at",
+].join(",");
+
+const COMPANY_PROFILE_COLUMNS = [
+  "id",
+  "company_name",
+  "email",
+  "phone",
+  "website",
+  "address",
+  "bank_details",
+  "tax_office",
+  "tax_number",
+  "footer_note",
+  "logo_data_url",
+].join(",");
+
+const PORTAL_INVITE_COLUMNS = [
+  "id",
+  "party_type",
+  "party_name",
+  "customer_id",
+  "vendor_id",
+  "email",
+  "contact_name",
+  "status",
+  "last_sent_at",
+  "expires_at",
+  "access_can_view_account",
+  "access_can_view_invoices",
+  "access_can_view_payments",
+  "access_can_view_orders",
+  "created_at",
+  "updated_at",
+].join(",");
+
+const LEGACY_PORTAL_INVITE_COLUMNS = [
+  "id",
+  "party_type",
+  "party_name",
+  "email",
+  "contact_name",
+  "status",
+  "invite_token",
+  "last_sent_at",
+  "access_can_view_account",
+  "access_can_view_invoices",
+  "access_can_view_payments",
+  "access_can_view_orders",
+  "created_at",
+  "updated_at",
+].join(",");
+
+const PORTAL_TOKEN_TTL_DAYS = 14;
+
+function encodeHex(input: ArrayBuffer) {
+  return Array.from(new Uint8Array(input))
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function generatePortalToken() {
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function hashPortalToken(token: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return encodeHex(digest);
+}
+
+function buildExpiryIso() {
+  const value = new Date();
+  value.setDate(value.getDate() + PORTAL_TOKEN_TTL_DAYS);
+  return value.toISOString();
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message || fallback : fallback;
+}
+
+async function listRows<T>(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  table: string;
+  select: string;
+  organizationId: string;
+  order: string;
+}) {
+  return getJson<T[]>(
+    buildRestUrl(input.supabaseUrl, input.table, {
+      select: input.select,
+      organization_id: `eq.${input.organizationId}`,
+      order: input.order,
+    }),
+    {
+      headers: serviceRoleHeaders(input.serviceRoleKey),
+    },
+  );
+}
+
+async function updateSingleRow<T>(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  table: string;
+  select: string;
+  organizationId: string;
+  id: string;
+  payload: Record<string, unknown>;
+}) {
+  return sendJson<T[]>(
+    buildRestUrl(input.supabaseUrl, input.table, {
+      select: input.select,
+      id: `eq.${input.id}`,
+      organization_id: `eq.${input.organizationId}`,
+      limit: "1",
+    }),
+    {
+      method: "PATCH",
+      headers: {
+        ...serviceRoleHeaders(input.serviceRoleKey),
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify(input.payload),
+    },
+  );
+}
+
+async function insertSingleRow<T>(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  table: string;
+  select: string;
+  payload: Record<string, unknown>;
+}) {
+  return sendJson<T[]>(
+    buildRestUrl(input.supabaseUrl, input.table, {
+      select: input.select,
+    }),
+    {
+      method: "POST",
+      headers: {
+        ...serviceRoleHeaders(input.serviceRoleKey),
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify([input.payload]),
+    },
+  );
+}
+
+async function deleteSingleRow(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  table: string;
+  organizationId: string;
+  id: string;
+}) {
+  await sendJson<unknown>(
+    buildRestUrl(input.supabaseUrl, input.table, {
+      id: `eq.${input.id}`,
+      organization_id: `eq.${input.organizationId}`,
+    }),
+    {
+      method: "DELETE",
+      headers: {
+        ...serviceRoleHeaders(input.serviceRoleKey),
+        Prefer: "return=minimal",
+      },
+    },
+  );
+}
+
+async function listPortalInvites(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
+  try {
+    return await listRows<Record<string, unknown>>({
+      supabaseUrl,
+      serviceRoleKey,
+      table: "portal_invites",
+      select: PORTAL_INVITE_COLUMNS,
+      organizationId,
+      order: "updated_at.desc",
+    });
+  } catch (primaryError) {
+    try {
+      return await listRows<Record<string, unknown>>({
+        supabaseUrl,
+        serviceRoleKey,
+        table: "portal_invites",
+        select: LEGACY_PORTAL_INVITE_COLUMNS,
+        organizationId,
+        order: "updated_at.desc",
+      });
+    } catch (legacyError) {
+      throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Portal invites load failed")));
+    }
+  }
+}
+
+async function upsertPortalInvite(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+  payload: Record<string, unknown>;
+  id: string;
+}) {
+  if (input.id) {
+    try {
+      const rows = await updateSingleRow<Record<string, unknown>>({
+        supabaseUrl: input.supabaseUrl,
+        serviceRoleKey: input.serviceRoleKey,
+        table: "portal_invites",
+        select: PORTAL_INVITE_COLUMNS,
+        organizationId: input.organizationId,
+        id: input.id,
+        payload: input.payload,
+      });
+      return rows[0] || null;
+    } catch (primaryError) {
+      const legacyPayload = { ...input.payload };
+      delete legacyPayload.customer_id;
+      delete legacyPayload.vendor_id;
+      delete legacyPayload.expires_at;
+      const rows = await updateSingleRow<Record<string, unknown>>({
+        supabaseUrl: input.supabaseUrl,
+        serviceRoleKey: input.serviceRoleKey,
+        table: "portal_invites",
+        select: LEGACY_PORTAL_INVITE_COLUMNS,
+        organizationId: input.organizationId,
+        id: input.id,
+        payload: legacyPayload,
+      }).catch((legacyError) => {
+        throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Portal invite save failed")));
+      });
+      return rows[0] || null;
+    }
+  }
+
+  try {
+    const rows = await insertSingleRow<Record<string, unknown>>({
+      supabaseUrl: input.supabaseUrl,
+      serviceRoleKey: input.serviceRoleKey,
+      table: "portal_invites",
+      select: PORTAL_INVITE_COLUMNS,
+      payload: input.payload,
+    });
+    return rows[0] || null;
+  } catch (primaryError) {
+    const legacyPayload = { ...input.payload };
+    delete legacyPayload.customer_id;
+    delete legacyPayload.vendor_id;
+    delete legacyPayload.expires_at;
+    const rows = await insertSingleRow<Record<string, unknown>>({
+      supabaseUrl: input.supabaseUrl,
+      serviceRoleKey: input.serviceRoleKey,
+      table: "portal_invites",
+      select: LEGACY_PORTAL_INVITE_COLUMNS,
+      payload: legacyPayload,
+    }).catch((legacyError) => {
+      throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Portal invite create failed")));
+    });
+    return rows[0] || null;
+  }
+}
+
+export default async (req: Request, _context: Context) => {
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+
+  const supabaseUrl = Netlify.env.get("SUPABASE_URL");
+  const supabaseAnonKey = Netlify.env.get("SUPABASE_ANON_KEY");
+  const serviceRoleKey = Netlify.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
+    return json({ error: "Missing Netlify environment variables for app admin records" }, 500);
+  }
+
+  try {
+    const caller = await resolveCaller(req, supabaseUrl, supabaseAnonKey, serviceRoleKey);
+    if (caller.role !== "admin") {
+      return json({ error: "Admin access required" }, 403);
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const resource = String(body?.resource || "").trim();
+    const action = String(body?.action || "").trim();
+    const payload = isObject(body?.payload) ? body.payload : {};
+    const id = String(body?.id || "").trim();
+
+    if (resource === "customers") {
+      if (action === "list") {
+        const data = await listRows<Record<string, unknown>>({
+          supabaseUrl,
+          serviceRoleKey,
+          table: "customers",
+          select: CUSTOMER_COLUMNS,
+          organizationId: caller.organizationId,
+          order: "display_name.asc",
+        });
+        return json({ ok: true, data });
+      }
+      if (action === "upsert") {
+        const data = id
+          ? (
+              await updateSingleRow<Record<string, unknown>>({
+                supabaseUrl,
+                serviceRoleKey,
+                table: "customers",
+                select: CUSTOMER_COLUMNS,
+                organizationId: caller.organizationId,
+                id,
+                payload,
+              })
+            )[0] || null
+          : (
+              await insertSingleRow<Record<string, unknown>>({
+                supabaseUrl,
+                serviceRoleKey,
+                table: "customers",
+                select: CUSTOMER_COLUMNS,
+                payload,
+              })
+            )[0] || null;
+        return json({ ok: true, data });
+      }
+      if (action === "delete") {
+        await deleteSingleRow({ supabaseUrl, serviceRoleKey, table: "customers", organizationId: caller.organizationId, id });
+        return json({ ok: true, data: true });
+      }
+    }
+
+    if (resource === "vendors") {
+      if (action === "list") {
+        const data = await listRows<Record<string, unknown>>({
+          supabaseUrl,
+          serviceRoleKey,
+          table: "vendors",
+          select: VENDOR_COLUMNS,
+          organizationId: caller.organizationId,
+          order: "display_name.asc",
+        });
+        return json({ ok: true, data });
+      }
+      if (action === "upsert") {
+        const data = id
+          ? (
+              await updateSingleRow<Record<string, unknown>>({
+                supabaseUrl,
+                serviceRoleKey,
+                table: "vendors",
+                select: VENDOR_COLUMNS,
+                organizationId: caller.organizationId,
+                id,
+                payload,
+              })
+            )[0] || null
+          : (
+              await insertSingleRow<Record<string, unknown>>({
+                supabaseUrl,
+                serviceRoleKey,
+                table: "vendors",
+                select: VENDOR_COLUMNS,
+                payload,
+              })
+            )[0] || null;
+        return json({ ok: true, data });
+      }
+      if (action === "delete") {
+        await deleteSingleRow({ supabaseUrl, serviceRoleKey, table: "vendors", organizationId: caller.organizationId, id });
+        return json({ ok: true, data: true });
+      }
+    }
+
+    if (resource === "companyProfiles") {
+      if (action === "list") {
+        const data = await listRows<Record<string, unknown>>({
+          supabaseUrl,
+          serviceRoleKey,
+          table: "company_profiles",
+          select: COMPANY_PROFILE_COLUMNS,
+          organizationId: caller.organizationId,
+          order: "company_name.asc",
+        });
+        return json({ ok: true, data });
+      }
+      if (action === "upsert") {
+        const data = id
+          ? (
+              await updateSingleRow<Record<string, unknown>>({
+                supabaseUrl,
+                serviceRoleKey,
+                table: "company_profiles",
+                select: COMPANY_PROFILE_COLUMNS,
+                organizationId: caller.organizationId,
+                id,
+                payload,
+              })
+            )[0] || null
+          : (
+              await insertSingleRow<Record<string, unknown>>({
+                supabaseUrl,
+                serviceRoleKey,
+                table: "company_profiles",
+                select: COMPANY_PROFILE_COLUMNS,
+                payload,
+              })
+            )[0] || null;
+        return json({ ok: true, data });
+      }
+      if (action === "delete") {
+        await deleteSingleRow({ supabaseUrl, serviceRoleKey, table: "company_profiles", organizationId: caller.organizationId, id });
+        return json({ ok: true, data: true });
+      }
+    }
+
+    if (resource === "portalInvites") {
+      if (action === "list") {
+        const data = await listPortalInvites(supabaseUrl, serviceRoleKey, caller.organizationId);
+        return json({ ok: true, data });
+      }
+      if (action === "upsert") {
+        const data = await upsertPortalInvite({
+          supabaseUrl,
+          serviceRoleKey,
+          organizationId: caller.organizationId,
+          payload,
+          id,
+        });
+        return json({ ok: true, data });
+      }
+      if (action === "delete") {
+        await deleteSingleRow({ supabaseUrl, serviceRoleKey, table: "portal_invites", organizationId: caller.organizationId, id });
+        return json({ ok: true, data: true });
+      }
+      if (action === "issueToken") {
+        const token = generatePortalToken();
+        const tokenHash = await hashPortalToken(token);
+        const expiresAt = buildExpiryIso();
+        const rows = await updateSingleRow<Record<string, unknown>>({
+          supabaseUrl,
+          serviceRoleKey,
+          table: "portal_invites",
+          select: PORTAL_INVITE_COLUMNS,
+          organizationId: caller.organizationId,
+          id,
+          payload: {
+            invite_token: null,
+            invite_token_hash: tokenHash,
+            expires_at: expiresAt,
+            updated_at: new Date().toISOString(),
+          },
+        });
+        return json({
+          ok: true,
+          data: {
+            invite: rows[0] || null,
+            token,
+          },
+        });
+      }
+      if (action === "markSent") {
+        const rows = await updateSingleRow<Record<string, unknown>>({
+          supabaseUrl,
+          serviceRoleKey,
+          table: "portal_invites",
+          select: PORTAL_INVITE_COLUMNS,
+          organizationId: caller.organizationId,
+          id,
+          payload: {
+            status: "invited",
+            last_sent_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        }).catch(async (primaryError) => {
+          const legacyRows = await updateSingleRow<Record<string, unknown>>({
+            supabaseUrl,
+            serviceRoleKey,
+            table: "portal_invites",
+            select: LEGACY_PORTAL_INVITE_COLUMNS,
+            organizationId: caller.organizationId,
+            id,
+            payload: {
+              status: "invited",
+              last_sent_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          }).catch((legacyError) => {
+            throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Portal invite send failed")));
+          });
+          return legacyRows;
+        });
+        return json({ ok: true, data: rows[0] || null });
+      }
+      if (action === "setStatus") {
+        const status = String(body?.status || "").trim();
+        const rows = await updateSingleRow<Record<string, unknown>>({
+          supabaseUrl,
+          serviceRoleKey,
+          table: "portal_invites",
+          select: PORTAL_INVITE_COLUMNS,
+          organizationId: caller.organizationId,
+          id,
+          payload: {
+            status,
+            updated_at: new Date().toISOString(),
+          },
+        }).catch(async (primaryError) => {
+          const legacyRows = await updateSingleRow<Record<string, unknown>>({
+            supabaseUrl,
+            serviceRoleKey,
+            table: "portal_invites",
+            select: LEGACY_PORTAL_INVITE_COLUMNS,
+            organizationId: caller.organizationId,
+            id,
+            payload: {
+              status,
+              updated_at: new Date().toISOString(),
+            },
+          }).catch((legacyError) => {
+            throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Portal invite status update failed")));
+          });
+          return legacyRows;
+        });
+        return json({ ok: true, data: rows[0] || null });
+      }
+    }
+
+    return json({ error: "Unsupported admin records request" }, 400);
+  } catch (error) {
+    return json({ error: getErrorMessage(error, "App admin records request failed") }, 400);
+  }
+};
+
+export const config: Config = {
+  path: "/api/app-admin-records",
+  method: "POST",
+};

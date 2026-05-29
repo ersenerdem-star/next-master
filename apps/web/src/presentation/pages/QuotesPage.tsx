@@ -74,14 +74,7 @@ const PAYMENT_TERM_OPTIONS = [
   "Net 60",
 ] as const;
 
-type WorkbenchViewMode = "simple" | "advanced";
-type WorkbenchPresetKey = "simple" | "pricing" | "sourcing" | "margin" | "advanced" | "custom";
-type OptionalWorkbenchColumnKey = "origin" | "stock" | "supplierOption" | "supplier" | "buy" | "buyTotal" | "profit" | "margin" | "date";
-
-const QUOTE_WORKBENCH_VIEW_KEY = "quote-workbench-view-mode";
-const QUOTE_WORKBENCH_COLUMNS_KEY = "quote-workbench-columns";
-const QUOTE_WORKBENCH_PRESET_KEY = "quote-workbench-preset";
-const DEFAULT_QUOTE_WORKBENCH_COLUMNS: Record<OptionalWorkbenchColumnKey, boolean> = {
+const DEFAULT_QUOTE_WORKBENCH_COLUMNS = {
   origin: false,
   stock: true,
   supplierOption: false,
@@ -92,100 +85,6 @@ const DEFAULT_QUOTE_WORKBENCH_COLUMNS: Record<OptionalWorkbenchColumnKey, boolea
   margin: false,
   date: false,
 };
-
-const WORKBENCH_PRESETS: Record<Exclude<WorkbenchPresetKey, "custom">, { label: string; viewMode: WorkbenchViewMode; columns: Record<OptionalWorkbenchColumnKey, boolean> }> = {
-  simple: {
-    label: "Simple",
-    viewMode: "simple",
-    columns: { ...DEFAULT_QUOTE_WORKBENCH_COLUMNS },
-  },
-  pricing: {
-    label: "Pricing",
-    viewMode: "simple",
-    columns: {
-      ...DEFAULT_QUOTE_WORKBENCH_COLUMNS,
-      supplier: true,
-      buy: true,
-      buyTotal: true,
-      date: true,
-    },
-  },
-  sourcing: {
-    label: "Sourcing",
-    viewMode: "simple",
-    columns: {
-      ...DEFAULT_QUOTE_WORKBENCH_COLUMNS,
-      origin: true,
-      supplierOption: true,
-      supplier: true,
-      buy: true,
-      buyTotal: true,
-      date: true,
-    },
-  },
-  margin: {
-    label: "Margin",
-    viewMode: "simple",
-    columns: {
-      ...DEFAULT_QUOTE_WORKBENCH_COLUMNS,
-      supplier: true,
-      buy: true,
-      buyTotal: true,
-      profit: true,
-      margin: true,
-    },
-  },
-  advanced: {
-    label: "Advanced",
-    viewMode: "advanced",
-    columns: { ...DEFAULT_QUOTE_WORKBENCH_COLUMNS },
-  },
-};
-
-function readStoredWorkbenchViewMode(): WorkbenchViewMode {
-  if (typeof window === "undefined") return "simple";
-  const value = window.localStorage.getItem(QUOTE_WORKBENCH_VIEW_KEY);
-  return value === "advanced" ? "advanced" : "simple";
-}
-
-function readStoredWorkbenchColumns() {
-  if (typeof window === "undefined") return DEFAULT_QUOTE_WORKBENCH_COLUMNS;
-  try {
-    const raw = window.localStorage.getItem(QUOTE_WORKBENCH_COLUMNS_KEY);
-    if (!raw) return DEFAULT_QUOTE_WORKBENCH_COLUMNS;
-    const parsed = JSON.parse(raw) as Partial<Record<OptionalWorkbenchColumnKey, boolean>>;
-    return {
-      ...DEFAULT_QUOTE_WORKBENCH_COLUMNS,
-      ...parsed,
-    };
-  } catch {
-    return DEFAULT_QUOTE_WORKBENCH_COLUMNS;
-  }
-}
-
-function readStoredWorkbenchPreset(): WorkbenchPresetKey {
-  if (typeof window === "undefined") return "simple";
-  const value = window.localStorage.getItem(QUOTE_WORKBENCH_PRESET_KEY);
-  return value && value in WORKBENCH_PRESETS ? (value as WorkbenchPresetKey) : "simple";
-}
-
-function columnsMatch(left: Record<OptionalWorkbenchColumnKey, boolean>, right: Record<OptionalWorkbenchColumnKey, boolean>) {
-  return (Object.keys(DEFAULT_QUOTE_WORKBENCH_COLUMNS) as OptionalWorkbenchColumnKey[]).every((key) => left[key] === right[key]);
-}
-
-function detectWorkbenchPreset(
-  viewMode: WorkbenchViewMode,
-  columns: Record<OptionalWorkbenchColumnKey, boolean>,
-): WorkbenchPresetKey {
-  for (const [key, preset] of Object.entries(WORKBENCH_PRESETS) as Array<
-    [Exclude<WorkbenchPresetKey, "custom">, (typeof WORKBENCH_PRESETS)[Exclude<WorkbenchPresetKey, "custom">]]
-  >) {
-    if (preset.viewMode === viewMode && columnsMatch(columns, preset.columns)) {
-      return key;
-    }
-  }
-  return "custom";
-}
 
 function toTermSelection(value: string, options: readonly string[]) {
   const trimmed = value.trim();
@@ -258,7 +157,7 @@ function parseQuoteImportRows(text: string) {
 
 function buildCustomerAddressBlock(customer: LocalCustomer | null, fallbackName: string) {
   if (!customer) return fallbackName || "-";
-  const displayName = customer.display_name || customer.company_name || `${customer.first_name} ${customer.last_name}`.trim() || fallbackName || "-";
+  const displayName = customer.company_name || customer.display_name || `${customer.first_name} ${customer.last_name}`.trim() || fallbackName || "-";
   return [displayName, customer.billing_address || "", customer.company_id ? `Company ID ${customer.company_id}` : "", customer.work_phone ? `Phone: ${customer.work_phone}` : "", customer.email || ""]
     .filter(Boolean)
     .join("\n");
@@ -266,7 +165,7 @@ function buildCustomerAddressBlock(customer: LocalCustomer | null, fallbackName:
 
 function buildCustomerShippingBlock(customer: LocalCustomer | null, fallbackName: string) {
   if (!customer) return fallbackName || "-";
-  const displayName = customer.display_name || customer.company_name || `${customer.first_name} ${customer.last_name}`.trim() || fallbackName || "-";
+  const displayName = customer.company_name || customer.display_name || `${customer.first_name} ${customer.last_name}`.trim() || fallbackName || "-";
   return [displayName, customer.shipping_address || customer.billing_address || "", customer.company_id ? `Company ID ${customer.company_id}` : "", customer.mobile_phone ? `Phone: ${customer.mobile_phone}` : customer.work_phone ? `Phone: ${customer.work_phone}` : "", customer.email || ""]
     .filter(Boolean)
     .join("\n");
@@ -595,11 +494,7 @@ export function QuotesPage({
   const [error, setError] = useState("");
   const [searchingQuotes, setSearchingQuotes] = useState(false);
   const [pdfView, setPdfView] = useState(false);
-  const [workbenchViewMode, setWorkbenchViewMode] = useState<WorkbenchViewMode>(() => readStoredWorkbenchViewMode());
-  const [workbenchColumnsOpen, setWorkbenchColumnsOpen] = useState(false);
-  const [workbenchColumnVisibility, setWorkbenchColumnVisibility] = useState<Record<OptionalWorkbenchColumnKey, boolean>>(() => readStoredWorkbenchColumns());
-  const [workbenchPreset, setWorkbenchPreset] = useState<WorkbenchPresetKey>(() => readStoredWorkbenchPreset());
-  const [selectedWorkbenchLineId, setSelectedWorkbenchLineId] = useState("");
+  const [quoteLinePreview, setQuoteLinePreview] = useState<QuoteBuilderLine | null>(null);
 
   const [quoteCode, setQuoteCode] = useState("");
   const [quoteBrand, setQuoteBrand] = useState("");
@@ -768,7 +663,6 @@ export function QuotesPage({
           lifecycle_note: pendingItem.lifecycle_note ?? line.lifecycle_note,
         };
         setQuoteBuilderLines([enrichedLine]);
-        setSelectedWorkbenchLineId(enrichedLine.lineId);
         setBuilderStatus(`${pendingItem.product_code} added from catalog.`);
         actionFeedback.succeed(`${pendingItem.product_code} added to Sales Order Workbench.`);
       } catch (caught) {
@@ -894,38 +788,6 @@ export function QuotesPage({
   }, [localSalesOrders]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(QUOTE_WORKBENCH_VIEW_KEY, workbenchViewMode);
-  }, [workbenchViewMode]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(QUOTE_WORKBENCH_COLUMNS_KEY, JSON.stringify(workbenchColumnVisibility));
-  }, [workbenchColumnVisibility]);
-
-  useEffect(() => {
-    const detected = detectWorkbenchPreset(workbenchViewMode, workbenchColumnVisibility);
-    if (detected !== workbenchPreset) {
-      setWorkbenchPreset(detected);
-    }
-  }, [workbenchColumnVisibility, workbenchPreset, workbenchViewMode]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(QUOTE_WORKBENCH_PRESET_KEY, workbenchPreset);
-  }, [workbenchPreset]);
-
-  useEffect(() => {
-    if (!quoteBuilderLines.length) {
-      setSelectedWorkbenchLineId("");
-      return;
-    }
-    if (!quoteBuilderLines.some((line) => line.lineId === selectedWorkbenchLineId)) {
-      setSelectedWorkbenchLineId(quoteBuilderLines[0].lineId);
-    }
-  }, [quoteBuilderLines, selectedWorkbenchLineId]);
-
-  useEffect(() => {
     let cancelled = false;
 
     async function run() {
@@ -1039,24 +901,7 @@ export function QuotesPage({
     () => quoteBuilderLines.filter((line) => line.lifecycle_status === "discontinued").length,
     [quoteBuilderLines],
   );
-  const effectiveWorkbenchColumnVisibility = useMemo(
-    () => ({
-      origin: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.origin,
-      stock: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.stock,
-      supplierOption: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.supplierOption,
-      supplier: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.supplier,
-      buy: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.buy,
-      buyTotal: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.buyTotal,
-      profit: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.profit,
-      margin: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.margin,
-      date: workbenchViewMode === "advanced" ? true : workbenchColumnVisibility.date,
-    }),
-    [workbenchColumnVisibility, workbenchViewMode],
-  );
-  const selectedWorkbenchLine = useMemo(
-    () => quoteBuilderLines.find((line) => line.lineId === selectedWorkbenchLineId) || null,
-    [quoteBuilderLines, selectedWorkbenchLineId],
-  );
+  const effectiveWorkbenchColumnVisibility = DEFAULT_QUOTE_WORKBENCH_COLUMNS;
 
   useEffect(() => {
     setQuoteBuilderLines((current) =>
@@ -1135,6 +980,12 @@ export function QuotesPage({
     () => localSalesOrders.find((item) => item.id === selectedLocalSalesOrderId) || null,
     [localSalesOrders, selectedLocalSalesOrderId],
   );
+  const currentDraftDisplayLabel = quoteNo || currentLocalSalesOrder?.sales_order_no || "sales order";
+
+  function getAdminCustomerLabel(value: string) {
+    const customer = findCustomerByNameInList(customers, value);
+    return customer?.display_name?.trim() || customer?.company_name?.trim() || buildEntityAlias(value);
+  }
 
   const customerOptions = useMemo(() => {
     const names = new Set<string>();
@@ -1436,12 +1287,128 @@ export function QuotesPage({
     });
   }
 
-  function applyWorkbenchPreset(nextPreset: WorkbenchPresetKey) {
-    if (nextPreset === "custom") return;
-    const preset = WORKBENCH_PRESETS[nextPreset];
-    setWorkbenchPreset(nextPreset);
-    setWorkbenchViewMode(preset.viewMode);
-    setWorkbenchColumnVisibility({ ...preset.columns });
+  function serializeSalesOrderForDirtyCheck(order: LocalSalesOrder | null) {
+    if (!order) return "";
+    return JSON.stringify({
+      sales_order_no: order.sales_order_no || "",
+      customer_name: order.customer_name || "",
+      seller_company: order.seller_company || "",
+      purchase_company: order.purchase_company || "",
+      quote_date: order.quote_date || "",
+      currency: order.currency || "",
+      customer_type: order.customer_type || "",
+      shipping_cost: Number(order.shipping_cost || 0) || 0,
+      discount_amount: Number(order.discount_amount || 0) || 0,
+      supplier_mode: order.supplier_mode || "",
+      seller_info: order.seller_info || "",
+      buyer_info: order.buyer_info || "",
+      delivery_term: order.delivery_term || "",
+      payment_terms: order.payment_terms || "",
+      packing_details: order.packing_details || "",
+      notes: order.notes || "",
+      status: order.status || "",
+      lines: (order.lines || []).map((line) => ({
+        requestedCode: line.requestedCode || "",
+        resolvedCode: line.resolvedCode || "",
+        brand: line.brand || "",
+        description: line.description || "",
+        qty: Number(line.qty || 0) || 0,
+        oem_no: line.oem_no || "",
+        hs_code: line.hs_code || "",
+        origin: line.origin || "",
+        weight_kg: line.weight_kg ?? null,
+        supplier_name: line.supplier_name || "",
+        buy_price: line.buy_price ?? null,
+        sell_price: line.sell_price ?? null,
+        price_date: line.price_date || "",
+        notes: line.notes || "",
+      })),
+    });
+  }
+
+  const salesOrderDraftSnapshot = useMemo(
+    () => serializeSalesOrderForDirtyCheck(buildSalesOrderPayload(currentLocalSalesOrder?.status === "confirmed" ? "confirmed" : "draft")),
+    [
+      currentLocalSalesOrder?.status,
+      selectedLocalSalesOrderId,
+      quoteNo,
+      customerSelection,
+      manualCustomerName,
+      customerName,
+      sellerCompany,
+      buyerInfo,
+      quoteDate,
+      currency,
+      customerType,
+      shippingCost,
+      discountAmount,
+      supplierMode,
+      sellerInfo,
+      deliveryTerm,
+      paymentTerms,
+      packingDetails,
+      quoteNotes,
+      quoteBuilderLines,
+    ],
+  );
+  const savedSalesOrderSnapshot = useMemo(() => serializeSalesOrderForDirtyCheck(currentLocalSalesOrder), [currentLocalSalesOrder]);
+  const salesOrderHasUnsavedChanges = useMemo(() => {
+    if (workbenchMode === "new") {
+      return Boolean(
+        quoteBuilderLines.length ||
+          customerName.trim() ||
+          manualCustomerName.trim() ||
+          quoteNotes.trim() ||
+          discountAmount !== "0" ||
+          shippingCost !== "0",
+      );
+    }
+    return Boolean(currentLocalSalesOrder) && salesOrderDraftSnapshot !== savedSalesOrderSnapshot;
+  }, [
+    currentLocalSalesOrder,
+    customerName,
+    discountAmount,
+    manualCustomerName,
+    quoteBuilderLines.length,
+    quoteNotes,
+    salesOrderDraftSnapshot,
+    savedSalesOrderSnapshot,
+    shippingCost,
+    workbenchMode,
+  ]);
+
+  async function persistSalesOrderDraft() {
+    if (!quoteBuilderLines.length) {
+      actionFeedback.fail("Add sales order lines before saving draft.");
+      return null;
+    }
+    const saved = await upsertSalesOrder(buildSalesOrderPayload("draft"));
+    await refreshLocalSalesOrders(saved.id);
+    setQuoteNo(saved.sales_order_no);
+    setBuilderStatus(`Draft saved as ${saved.sales_order_no}.`);
+    return saved;
+  }
+
+  async function confirmSalesOrderNavigation(nextAction: () => void | Promise<void>) {
+    if (!salesOrderHasUnsavedChanges) {
+      await nextAction();
+      return;
+    }
+    if (!window.confirm(`Unsaved changes detected in ${currentDraftDisplayLabel}. Click OK to save before leaving, or Cancel to stay on this screen.`)) {
+      return;
+    }
+    try {
+      setSavingDraft(true);
+      actionFeedback.begin(`Saving draft ${currentDraftDisplayLabel} before leaving...`);
+      const saved = await persistSalesOrderDraft();
+      if (!saved) return;
+      actionFeedback.succeed(`Draft ${saved.sales_order_no} saved.`);
+      await nextAction();
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Save draft failed");
+    } finally {
+      setSavingDraft(false);
+    }
   }
 
   const builderColumns = useMemo(() => {
@@ -1594,25 +1561,6 @@ export function QuotesPage({
 
     return columns;
   }, [currency, customerType, pdfView, effectiveMarginA, effectiveMarginB, inventoryAvailabilityLookup, effectiveWorkbenchColumnVisibility]);
-
-  const detailColumns = useMemo(() => {
-    const columns = [
-      { key: "code", header: "Code", render: (row: QuoteDetail["lines"][number]) => row.product_code || "-" },
-      { key: "brand", header: "Brand", render: (row: QuoteDetail["lines"][number]) => <BrandPill brand={row.brand_text} compact /> },
-      { key: "name", header: "Description", render: (row: QuoteDetail["lines"][number]) => row.description || "-" },
-      { key: "qty", header: "Qty", render: (row: QuoteDetail["lines"][number]) => row.qty ?? "-" },
-      { key: "sell", header: pdfView ? "Unit Price" : "Sell", render: (row: QuoteDetail["lines"][number]) => formatMoney(row.sell_price, String(detail.quote?.currency || currency)) },
-      { key: "lineTotal", header: "Line Total", render: (row: QuoteDetail["lines"][number]) => formatMoney(roundMoney(toNumber(row.sell_price) * toNumber(row.qty)), String(detail.quote?.currency || currency)) },
-    ] as Array<{ key: string; header: string; render: (row: QuoteDetail["lines"][number]) => ReactNode }>;
-
-    if (!pdfView) {
-      columns.splice(4, 0,
-        { key: "supplier", header: "Supplier", render: (row: QuoteDetail["lines"][number]) => row.supplier_name || "-" },
-        { key: "buy", header: "Buy", render: (row: QuoteDetail["lines"][number]) => formatMoney(row.buy_price, String(detail.quote?.currency || currency)) },
-      );
-    }
-    return columns;
-  }, [currency, detail.quote, pdfView]);
 
   const attentionColumns = useMemo(
     () => [
@@ -2015,7 +1963,7 @@ export function QuotesPage({
     actionFeedback.succeed("Draft sales order cleared.");
   }
 
-  function startNewSalesOrder() {
+  function resetSalesOrderEditor() {
     setSalesOrdersView("detail");
     setWorkbenchMode("new");
     onSelectedSalesOrderChange?.("");
@@ -2043,14 +1991,22 @@ export function QuotesPage({
     setQuoteNotes("");
     setPdfView(false);
     setBuilderStatus("New sales order draft ready.");
-    actionFeedback.succeed("New sales order draft ready.");
+  }
+
+  function startNewSalesOrder() {
+    void confirmSalesOrderNavigation(async () => {
+      resetSalesOrderEditor();
+      actionFeedback.succeed("New sales order draft ready.");
+    });
   }
 
   function closeSalesOrderEditor() {
-    onSelectedSalesOrderChange?.("");
-    setSalesOrdersView("list");
-    setPdfView(false);
-    setBuilderStatus("");
+    void confirmSalesOrderNavigation(async () => {
+      onSelectedSalesOrderChange?.("");
+      setSalesOrdersView("list");
+      setPdfView(false);
+      setBuilderStatus("");
+    });
   }
 
   async function refreshLocalSalesOrders(nextSelectedId?: string) {
@@ -2190,23 +2146,6 @@ export function QuotesPage({
     [quoteBuilderLines],
   );
 
-  const filteredCloudQuotes = useMemo(() => {
-    return quotes.filter((quote) => {
-      const status = String(quote.status || "").toLowerCase();
-      switch (salesOrderFilter) {
-        case "draft":
-          return status === "draft";
-        case "confirmed":
-          return status === "confirmed";
-        case "purchased":
-        case "invoiced":
-          return false;
-        default:
-          return true;
-      }
-    });
-  }, [quotes, salesOrderFilter]);
-
   const savedSalesOrderColumns = useMemo(
     () => [
       {
@@ -2224,7 +2163,7 @@ export function QuotesPage({
       {
         key: "customer",
         header: "Customer",
-        render: (row: LocalSalesOrder) => <strong title={row.customer_name || "Unnamed customer"}>{buildEntityAlias(row.customer_name)}</strong>,
+        render: (row: LocalSalesOrder) => <strong title={row.customer_name || "Unnamed customer"}>{getAdminCustomerLabel(row.customer_name)}</strong>,
       },
       {
         key: "salesOrderNo",
@@ -2286,50 +2225,12 @@ export function QuotesPage({
     [selectedLocalSalesOrderIds, salesOrderDocumentState],
   );
 
-  const cloudSalesOrderColumns = useMemo(
-    () => [
-      {
-        key: "customer",
-        header: "Customer",
-        render: (row: QuoteSummary) => <strong title={row.customer_name || "Unnamed customer"}>{buildEntityAlias(row.customer_name)}</strong>,
-      },
-      {
-        key: "salesOrderNo",
-        header: "Sales Order",
-        render: (row: QuoteSummary) => row.quote_no,
-      },
-      {
-        key: "date",
-        header: "Date",
-        render: (row: QuoteSummary) => formatDate(row.quote_date),
-      },
-      {
-        key: "qty",
-        header: "Qty",
-        render: (row: QuoteSummary) => (row.total_quantity ?? 0).toLocaleString("en-US"),
-      },
-      {
-        key: "amount",
-        header: "Amount",
-        render: (row: QuoteSummary) => formatMoney(row.sales_total, String(row.currency || "EUR")),
-      },
-    ],
-    [],
-  );
-
   async function handleSaveDraft() {
-    if (!quoteBuilderLines.length) {
-      actionFeedback.fail("Add sales order lines before saving draft.");
-      return;
-    }
     try {
       setSavingDraft(true);
       actionFeedback.begin(`Saving draft ${quoteNo || "sales order"}...`);
-      const order = buildSalesOrderPayload("draft");
-      const saved = await upsertSalesOrder(order);
-      await refreshLocalSalesOrders(saved.id);
-      setQuoteNo(saved.sales_order_no);
-      setBuilderStatus(`Draft saved as ${saved.sales_order_no}.`);
+      const saved = await persistSalesOrderDraft();
+      if (!saved) return;
       actionFeedback.succeed(`Draft saved as ${saved.sales_order_no}.`);
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Save draft failed");
@@ -2396,30 +2297,27 @@ export function QuotesPage({
       <aside className={`quote-list-panel${salesOrdersView === "list" ? " quote-list-panel--full" : ""}`}>
         <div className="quote-list-panel__header">
           <div>
-            <h2>All Sales Orders</h2>
-            <p>Saved cloud sales orders and recent revisions.</p>
+            <h2>Sales Orders</h2>
+            <p>Shared sales orders and recent revisions.</p>
           </div>
           <div className="toolbar toolbar--wrap">
             <Button variant="secondary" onClick={startNewSalesOrder}>
               New Sales Order
             </Button>
           </div>
-          <div className="sales-order-filter-bar">
-            {[
-              { value: "all", label: "All" },
-              { value: "draft", label: "Draft" },
-              { value: "confirmed", label: "Confirmed" },
-              { value: "purchased", label: "Purchased" },
-              { value: "invoiced", label: "Invoiced" },
-            ].map((item) => (
-              <button
-                key={item.value}
-                className={`sales-order-filter-button${salesOrderFilter === item.value ? " active" : ""}`}
-                onClick={() => setSalesOrderFilter(item.value as "all" | "draft" | "confirmed" | "purchased" | "invoiced")}
-              >
-                {item.label}
-              </button>
-            ))}
+          <div className="toolbar toolbar--wrap">
+            <Select
+              label="Status"
+              value={salesOrderFilter}
+              options={[
+                { value: "all", label: "All" },
+                { value: "draft", label: "Draft" },
+                { value: "confirmed", label: "Confirmed" },
+                { value: "purchased", label: "Purchased" },
+                { value: "invoiced", label: "Invoiced" },
+              ]}
+              onChange={(value) => setSalesOrderFilter(value as "all" | "draft" | "confirmed" | "purchased" | "invoiced")}
+            />
           </div>
           <div className="toolbar toolbar--wrap">
             <Input
@@ -2450,7 +2348,7 @@ export function QuotesPage({
           {!!filteredLocalSalesOrders.length ? (
             <div className="quote-list-section">
               <div className="quote-list-section__header">
-                <div className="quote-list-section__title">Saved Sales Orders</div>
+                <div className="quote-list-section__title">Sales Orders</div>
                 <div className="toolbar toolbar--wrap">
                   <Button variant="secondary" className="button--compact" onClick={() => setSalesOrderActionsOpen((current) => !current)}>
                     {salesOrderActionsOpen ? "Hide Actions" : "Actions"}
@@ -2514,35 +2412,18 @@ export function QuotesPage({
                 rows={filteredLocalSalesOrders}
                 columns={savedSalesOrderColumns}
                 emptyText="No saved sales orders found."
-                onRowClick={(row) => {
-                  setSalesOrdersView("detail");
-                  void loadLocalSalesOrderIntoEditor(row);
-                }}
+                onRowClick={(row) =>
+                  void confirmSalesOrderNavigation(async () => {
+                    setSalesOrdersView("detail");
+                    await loadLocalSalesOrderIntoEditor(row);
+                  })
+                }
                 rowClassName={(row) => (row.id === selectedLocalSalesOrderId ? "data-table__row--active" : "")}
               />
             </div>
           ) : null}
-
-          <div className="quote-list-section">
-            <div className="quote-list-section__title">Cloud Sales Orders</div>
           {loadingQuotes ? <div className="empty-state">Loading sales orders...</div> : null}
           {!loadingQuotes && error ? <div className="empty-state error-text">{error}</div> : null}
-          {!loadingQuotes && !error && !filteredCloudQuotes.length ? <div className="empty-state">No sales orders found.</div> : null}
-          {!loadingQuotes && !error && filteredCloudQuotes.length ? (
-            <DataTable
-              rows={filteredCloudQuotes}
-              columns={cloudSalesOrderColumns}
-              onRowClick={(quote) => {
-                setSalesOrdersView("detail");
-                setWorkbenchMode("existing");
-                setSelectedLocalSalesOrderId("");
-                setSelectedQuoteId(quote.quote_id);
-                onSelectedQuoteChange?.(quote.quote_id);
-              }}
-              rowClassName={(quote) => (quote.quote_id === selectedQuoteId ? "data-table__row--active" : "")}
-            />
-          ) : null}
-          </div>
         </div>
       </aside>
 
@@ -2656,88 +2537,9 @@ export function QuotesPage({
           <div className="section-card__header section-card__header--row">
             <div>
               <h2>Sales Order Workbench</h2>
-              <p>Purchase options stay visible internally. Switch on PDF View to preview the customer-facing version.</p>
+              <p>Purchase options stay visible internally. Use PDF View to preview the customer-facing version.</p>
             </div>
             <div className="workbench-controls">
-              <Select
-                value={workbenchPreset}
-                options={[
-                  { value: "simple", label: "Preset · Simple" },
-                  { value: "pricing", label: "Preset · Pricing" },
-                  { value: "sourcing", label: "Preset · Sourcing" },
-                  { value: "margin", label: "Preset · Margin" },
-                  { value: "advanced", label: "Preset · Advanced" },
-                  { value: "custom", label: "Preset · Custom" },
-                ]}
-                onChange={(value) => {
-                  if (value === "custom") {
-                    setWorkbenchPreset("custom");
-                    return;
-                  }
-                  applyWorkbenchPreset(value as WorkbenchPresetKey);
-                }}
-              />
-              <div className="segmented-control">
-                <button
-                  type="button"
-                  className={`segmented-control__item${workbenchViewMode === "simple" ? " active" : ""}`}
-                  onClick={() => setWorkbenchViewMode("simple")}
-                >
-                  Simple View
-                </button>
-                <button
-                  type="button"
-                  className={`segmented-control__item${workbenchViewMode === "advanced" ? " active" : ""}`}
-                  onClick={() => setWorkbenchViewMode("advanced")}
-                >
-                  Advanced View
-                </button>
-              </div>
-              {!pdfView ? (
-                <div className="inline-menu-wrap">
-                  <Button variant="secondary" className="button--compact" onClick={() => setWorkbenchColumnsOpen((current) => !current)}>
-                    {workbenchColumnsOpen ? "Hide Columns" : "Columns"}
-                  </Button>
-                  {workbenchColumnsOpen ? (
-                    <div className="inline-menu-card">
-                      {(
-                        [
-                          ["origin", "Origin"],
-                          ["stock", "Stock"],
-                          ["supplierOption", "Purchase Option"],
-                          ["supplier", "Supplier"],
-                          ["buy", "Buy"],
-                          ["buyTotal", "Buy Total"],
-                          ["profit", "Profit"],
-                          ["margin", "Margin %"],
-                          ["date", "Price Date"],
-                        ] as Array<[OptionalWorkbenchColumnKey, string]>
-                      ).map(([key, label]) => (
-                        <label key={key} className="checkbox-field">
-                          <input
-                            type="checkbox"
-                            checked={workbenchColumnVisibility[key]}
-                            onChange={(event) =>
-                              setWorkbenchColumnVisibility((current) => ({
-                                ...current,
-                                [key]: event.target.checked,
-                              }))
-                            }
-                          />
-                          <span className="field__label">{label}</span>
-                        </label>
-                      ))}
-                      <Button
-                        variant="secondary"
-                        className="button--compact"
-                        onClick={() => setWorkbenchColumnVisibility(DEFAULT_QUOTE_WORKBENCH_COLUMNS)}
-                      >
-                        Reset Columns
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
               <label className="quote-pdf-toggle">
                 <span>Show PDF View</span>
                 <input type="checkbox" checked={pdfView} onChange={(event) => setPdfView(event.target.checked)} />
@@ -2942,88 +2744,12 @@ export function QuotesPage({
                 <DataTable rows={attentionLines} columns={attentionColumns} emptyText="No warning items." />
               </div>
             ) : null}
-            <div className="workbench-main-layout">
-              <div className="workbench-main-layout__table">
-                <DataTable
-                  rows={quoteBuilderLines}
-                  columns={builderColumns}
-                  emptyText="No sales order lines yet. Add a product code or import a sales order file."
-                  onRowClick={(row) => setSelectedWorkbenchLineId(row.lineId)}
-                  rowClassName={(row) => (row.lineId === selectedWorkbenchLineId ? "data-table__row--active" : "")}
-                />
-              </div>
-              <aside className="workbench-detail-panel">
-                <div className="workbench-detail-panel__eyebrow">Selected Line</div>
-                {selectedWorkbenchLine ? (
-                  <>
-                    <div className="workbench-detail-panel__title">{selectedWorkbenchLine.resolvedCode || selectedWorkbenchLine.requestedCode}</div>
-                    <div className="document-marks document-marks--compact">
-                      <span className="mark-badge">{selectedWorkbenchLine.brand || "No brand"}</span>
-                      {getQuoteBuilderLineIssues(selectedWorkbenchLine).map((issue) => (
-                        <span
-                          key={`${selectedWorkbenchLine.lineId}-${issue}`}
-                          className={`mark-badge ${
-                            issue === "Discontinued"
-                              ? "mark-badge--danger"
-                              : issue === "Replacement"
-                                ? "mark-badge--accent"
-                                : "mark-badge--info"
-                          }`}
-                        >
-                          {issue}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="workbench-detail-list">
-                      <div><span>Description</span><strong>{selectedWorkbenchLine.description || "-"}</strong></div>
-                      <div><span>Requested Code</span><strong>{selectedWorkbenchLine.requestedCode || "-"}</strong></div>
-                      <div><span>Quantity</span><strong>{selectedWorkbenchLine.qty}</strong></div>
-                      <div><span>Origin</span><strong>{selectedWorkbenchLine.origin || "-"}</strong></div>
-                      <div><span>Weight</span><strong>{selectedWorkbenchLine.weight_kg ?? "-"}</strong></div>
-                      <div><span>Supplier</span><strong>{selectedWorkbenchLine.supplier_name || "-"}</strong></div>
-                      <div><span>Buy</span><strong>{formatMoney(selectedWorkbenchLine.buy_price, currency)}</strong></div>
-                      <div><span>Sell</span><strong>{formatMoney(selectedWorkbenchLine.sell_price, currency)}</strong></div>
-                      <div><span>Price Date</span><strong>{formatDate(selectedWorkbenchLine.price_date)}</strong></div>
-                    </div>
-                    {selectedWorkbenchLine.codeChanged ? <div className="warning-text">{selectedWorkbenchLine.codeChangeWarning}</div> : null}
-                    {selectedWorkbenchLine.notes ? <div className="info-text">{selectedWorkbenchLine.notes}</div> : null}
-                  </>
-                ) : (
-                  <div className="empty-state">Select a line to inspect details.</div>
-                )}
-              </aside>
-            </div>
-          </div>
-        </div>
-
-        <div className="section-card">
-          <div className="section-card__header">
-            <h2>Saved Cloud Sales Order Detail</h2>
-          </div>
-          <div className="section-card__body">
-            <div className="quote-cloud-summary">
-              <div className="settings-item">
-                <span className="settings-label">Selected Sales Order</span>
-                <strong>{String(detail.quote?.quote_no || "-")}</strong>
-              </div>
-              <div className="settings-item">
-                <span className="settings-label">Customer</span>
-                <strong>{String(detail.quote?.customer_name || "-")}</strong>
-              </div>
-              <div className="settings-item">
-                <span className="settings-label">Status</span>
-                <strong>{String(detail.quote?.status || "-")}</strong>
-              </div>
-              <div className="settings-item">
-                <span className="settings-label">Currency</span>
-                <strong>{String(detail.quote?.currency || "-")}</strong>
-              </div>
-            </div>
-            <div className="meta-row">
-              <span>{loadingDetail ? "Loading quote detail..." : `${detail.lines.length.toLocaleString("en-US")} lines loaded`}</span>
-              {loadingDetail ? null : <span>{pdfView ? "PDF preview hides purchase-side columns." : "Internal view shows supplier and buy-side columns."}</span>}
-            </div>
-            <DataTable rows={detail.lines} columns={detailColumns} emptyText={loadingDetail ? "Loading..." : "No quote lines found"} />
+            <DataTable
+              rows={quoteBuilderLines}
+              columns={builderColumns}
+              emptyText="No sales order lines yet. Add a product code or import a sales order file."
+              onRowClick={(row) => setQuoteLinePreview(row)}
+            />
           </div>
         </div>
 
@@ -3143,6 +2869,48 @@ export function QuotesPage({
               </Button>
               <Button onClick={() => void handleConvertConfirmedToInvoice()} busy={creatingInvoice} busyLabel="Creating Invoice...">
                 Convert to Invoice
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {quoteLinePreview ? (
+        <div className="modal-backdrop" onClick={() => setQuoteLinePreview(null)}>
+          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-card__header">
+              <h3>{quoteLinePreview.resolvedCode || quoteLinePreview.requestedCode || "-"}</h3>
+              <p>Sales order line preview</p>
+            </div>
+            <div className="document-marks document-marks--compact">
+              <span className="mark-badge">{quoteLinePreview.brand || "No brand"}</span>
+              {getQuoteBuilderLineIssues(quoteLinePreview).map((issue) => (
+                <span
+                  key={`${quoteLinePreview.lineId}-${issue}`}
+                  className={`mark-badge ${
+                    issue === "Discontinued" ? "mark-badge--danger" : issue === "Replacement" ? "mark-badge--accent" : "mark-badge--info"
+                  }`}
+                >
+                  {issue}
+                </span>
+              ))}
+            </div>
+            <div className="workbench-detail-list">
+              <div><span>Description</span><strong>{quoteLinePreview.description || "-"}</strong></div>
+              <div><span>Requested Code</span><strong>{quoteLinePreview.requestedCode || "-"}</strong></div>
+              <div><span>Quantity</span><strong>{quoteLinePreview.qty}</strong></div>
+              <div><span>Origin</span><strong>{quoteLinePreview.origin || "-"}</strong></div>
+              <div><span>Weight</span><strong>{quoteLinePreview.weight_kg ?? "-"}</strong></div>
+              <div><span>Supplier</span><strong>{quoteLinePreview.supplier_name || "-"}</strong></div>
+              <div><span>Buy</span><strong>{formatMoney(quoteLinePreview.buy_price, currency)}</strong></div>
+              <div><span>Sell</span><strong>{formatMoney(quoteLinePreview.sell_price, currency)}</strong></div>
+              <div><span>Price Date</span><strong>{formatDate(quoteLinePreview.price_date)}</strong></div>
+            </div>
+            {quoteLinePreview.codeChanged ? <div className="warning-text">{quoteLinePreview.codeChangeWarning}</div> : null}
+            {quoteLinePreview.notes ? <div className="info-text">{quoteLinePreview.notes}</div> : null}
+            <div className="modal-actions">
+              <Button variant="secondary" onClick={() => setQuoteLinePreview(null)}>
+                Close
               </Button>
             </div>
           </div>

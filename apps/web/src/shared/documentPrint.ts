@@ -146,11 +146,11 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
         .page { padding: 0; }
         .header-shell { display:flex; justify-content:space-between; align-items:stretch; gap:10mm; margin-bottom:4mm; width:100%; }
         .header-left { display:flex; flex-direction:column; gap:3mm; align-items:flex-start; flex:0 1 92mm; max-width:92mm; min-width:0; }
-        .header-right { display:flex; justify-content:flex-end; align-items:stretch; margin-left:auto; flex:0 0 76mm; width:76mm; }
+        .header-right { display:flex; justify-content:flex-end; align-items:stretch; margin-left:auto; flex:0 0 80mm; width:80mm; }
         .header-card { border:0.25mm solid #d7dee8; border-radius:5px; padding:3mm 3.5mm; background:#fff; box-sizing:border-box; }
         .seller-card { width:56mm; }
         .party-card { width:100%; max-width:92mm; }
-        .meta-card { width:76mm; min-width:76mm; max-width:76mm; min-height:100%; height:100%; margin-left:auto; display:flex; flex-direction:column; }
+        .meta-card { width:80mm; min-width:80mm; max-width:80mm; min-height:100%; height:100%; margin-left:auto; display:flex; flex-direction:column; }
         .identity-row { display:flex; flex-direction:column; align-items:center; gap:1.5mm; width:100%; }
         .header-logo { width:100%; min-height:14mm; display:flex; justify-content:center; align-items:flex-start; }
         .seller-name { width:100%; text-align:center; font-size:7.1pt; font-weight:700; line-height:1.22; letter-spacing:0.01em; }
@@ -161,8 +161,8 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
         .doc-heading { text-align:right; width:100%; }
         .doc-eyebrow { font-size:6.8pt; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#6b7280; margin-bottom:1mm; }
         .doc-title { font-size:11pt; font-weight:700; line-height:1.1; margin:0; letter-spacing:-0.01em; word-break:break-word; }
-        .doc-meta { display:flex; flex-direction:column; gap:1.2mm; width:100%; }
-        .doc-meta-row { display:grid; grid-template-columns: 21mm 1fr; gap:2mm; align-items:start; }
+        .doc-meta { display:flex; flex-direction:column; gap:1.5mm; width:100%; }
+        .doc-meta-row { display:flex; flex-direction:column; gap:0.6mm; align-items:flex-start; }
         .doc-meta-label { font-size:6.9pt; font-weight:700; letter-spacing:0.03em; text-transform:uppercase; color:#475569; white-space:nowrap; }
         .doc-meta-value { font-size:7.4pt; font-weight:500; color:#111827; word-break:break-word; line-height:1.25; }
         table { width:100%; border-collapse:collapse; margin-top:4mm; page-break-inside:auto; table-layout:fixed; }

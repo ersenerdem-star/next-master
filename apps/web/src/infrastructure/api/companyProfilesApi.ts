@@ -1,6 +1,6 @@
 import type { CompanyProfile } from "../../types/company";
-import { emptyCompanyProfile, loadCompanyProfiles } from "../../shared/companyProfile";
-import { supabaseClient } from "./supabaseClient";
+import { emptyCompanyProfile } from "../../shared/companyProfile";
+import { callAppAdminRecords } from "./appAdminRecordsApi";
 import { getCurrentOrgId, isUuid } from "./organizationApi";
 
 const COMPANY_PROFILE_COLUMNS = [
@@ -60,28 +60,7 @@ function mapCompanyProfilePayload(input: CompanyProfile, organizationId: string)
 }
 
 async function bootstrapCompanyProfilesFromLocalIfNeeded() {
-  const organizationId = await getCurrentOrgId();
-  const localRows = loadCompanyProfiles();
-  if (!localRows.length) return;
-
-  const { count, error: countError } = await supabaseClient
-    .from("company_profiles")
-    .select("id", { count: "planned", head: true })
-    .eq("organization_id", organizationId);
-
-  if (countError) throw new Error(countError.message || "Company profile bootstrap check failed");
-  if ((count || 0) > 0) return;
-
-  const payload = localRows
-    .filter((row) => row.companyName.trim())
-    .map((row) => ({
-      ...mapCompanyProfilePayload(row, organizationId),
-      created_at: new Date().toISOString(),
-    }));
-
-  if (!payload.length) return;
-  const { error } = await supabaseClient.from("company_profiles").insert(payload);
-  if (error) throw new Error(error.message || "Company profile bootstrap failed");
+  return;
 }
 
 export async function fetchCompanyProfiles(): Promise<CompanyProfile[]> {
@@ -92,14 +71,11 @@ export async function fetchCompanyProfiles(): Promise<CompanyProfile[]> {
   companyProfilesCacheOrgId = organizationId;
   companyProfilesCachePromise = (async () => {
     await bootstrapCompanyProfilesFromLocalIfNeeded();
-    const { data, error } = await supabaseClient
-      .from("company_profiles")
-      .select(COMPANY_PROFILE_COLUMNS)
-      .eq("organization_id", organizationId)
-      .order("company_name", { ascending: true });
-
-    if (error) throw new Error(error.message || "Company profiles load failed");
-    const rows = ((data || []) as unknown as Record<string, unknown>[]).map(mapCompanyProfileRow);
+    const data = await callAppAdminRecords<Array<Record<string, unknown>>>({
+      resource: "companyProfiles",
+      action: "list",
+    });
+    const rows = data.map(mapCompanyProfileRow);
     companyProfilesCacheValue = rows;
     companyProfilesCachePromise = null;
     return rows;
@@ -122,40 +98,30 @@ export async function upsertCompanyProfile(input: CompanyProfile): Promise<Compa
   const organizationId = await getCurrentOrgId();
   const payload = mapCompanyProfilePayload(input, organizationId);
 
-  if (isUuid(input.id)) {
-    const { data, error } = await supabaseClient
-      .from("company_profiles")
-      .update(payload)
-      .eq("id", input.id)
-      .eq("organization_id", organizationId)
-      .select(COMPANY_PROFILE_COLUMNS)
-      .single();
-
-    if (error) throw new Error(error.message || "Company profile save failed");
-    clearCompanyProfilesCache();
-    return mapCompanyProfileRow(data as unknown as Record<string, unknown>);
-  }
-
-  const { data, error } = await supabaseClient
-    .from("company_profiles")
-    .insert({
-      ...payload,
-      created_at: new Date().toISOString(),
-    })
-    .select(COMPANY_PROFILE_COLUMNS)
-    .single();
-
-  if (error) throw new Error(error.message || "Company profile create failed");
+  const data = await callAppAdminRecords<Record<string, unknown>>({
+    resource: "companyProfiles",
+    action: "upsert",
+    id: isUuid(input.id) ? input.id : "",
+    payload: isUuid(input.id)
+      ? payload
+      : {
+          ...payload,
+          created_at: new Date().toISOString(),
+        },
+  });
   clearCompanyProfilesCache();
-  return mapCompanyProfileRow(data as unknown as Record<string, unknown>);
+  return mapCompanyProfileRow(data);
 }
 
 export async function deleteCompanyProfileById(profileId: string) {
   const organizationId = await getCurrentOrgId();
   if (!isUuid(profileId)) return;
 
-  const { error } = await supabaseClient.from("company_profiles").delete().eq("id", profileId).eq("organization_id", organizationId);
-  if (error) throw new Error(error.message || "Company profile delete failed");
+  await callAppAdminRecords({
+    resource: "companyProfiles",
+    action: "delete",
+    id: profileId,
+  });
   clearCompanyProfilesCache();
 }
 

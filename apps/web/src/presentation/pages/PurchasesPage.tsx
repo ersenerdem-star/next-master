@@ -16,12 +16,14 @@ import { VendorsPage } from "./VendorsPage";
 import { SectionCard } from "../components/common/SectionCard";
 import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastructure/api/companyProfilesApi";
 import { fetchVendors } from "../../infrastructure/api/vendorsApi";
+import { fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 import { consumeCatalogTransfer, PENDING_CATALOG_PURCHASE_ITEM_KEY } from "../../shared/catalogTransfer";
 import { normalizePartCode } from "../../domain/shared/normalize";
 import { resyncPurchaseOrderLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
 import type { CompanyProfile } from "../../types/company";
-import type { LocalBill, LocalPaymentMade, LocalPurchaseOrder, LocalPurchaseOrderLine } from "../../types/orders";
+import type { LocalCustomer } from "../../types/customers";
+import type { LocalBill, LocalBillLine, LocalPaymentMade, LocalPurchaseOrder, LocalPurchaseOrderLine } from "../../types/orders";
 import type { LocalVendor } from "../../types/vendors";
 import { DataTable } from "../components/common/DataTable";
 import { Button } from "../components/common/Button";
@@ -31,16 +33,6 @@ import { BrandPill } from "../components/common/BrandPill";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { buildEntityAlias } from "../../shared/entityAlias";
-
-type PurchaseWorkbenchViewMode = "simple" | "advanced";
-
-const PURCHASE_ORDER_WORKBENCH_VIEW_KEY = "purchase-order-workbench-view-mode";
-const BILL_WORKBENCH_VIEW_KEY = "bill-workbench-view-mode";
-
-function readStoredPurchaseWorkbenchViewMode(key: string): PurchaseWorkbenchViewMode {
-  if (typeof window === "undefined") return "simple";
-  return window.localStorage.getItem(key) === "advanced" ? "advanced" : "simple";
-}
 
 function formatMoney(value: number, currency = "EUR") {
   return `${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
@@ -193,12 +185,13 @@ export function PurchasesPage({
   const [paymentMadeDraft, setPaymentMadeDraft] = useState<LocalPaymentMade | null>(null);
   const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
   const [vendors, setVendors] = useState<LocalVendor[]>([]);
+  const [customers, setCustomers] = useState<LocalCustomer[]>([]);
   const [printingPurchaseOrder, setPrintingPurchaseOrder] = useState(false);
   const [printingBill, setPrintingBill] = useState(false);
-  const [purchaseWorkbenchViewMode, setPurchaseWorkbenchViewMode] = useState<PurchaseWorkbenchViewMode>(() => readStoredPurchaseWorkbenchViewMode(PURCHASE_ORDER_WORKBENCH_VIEW_KEY));
-  const [billWorkbenchViewMode, setBillWorkbenchViewMode] = useState<PurchaseWorkbenchViewMode>(() => readStoredPurchaseWorkbenchViewMode(BILL_WORKBENCH_VIEW_KEY));
-  const [selectedPurchaseLineIndex, setSelectedPurchaseLineIndex] = useState(0);
-  const [selectedBillLineIndex, setSelectedBillLineIndex] = useState(0);
+  const [purchaseOrdersView, setPurchaseOrdersView] = useState<"list" | "detail">("list");
+  const [billsView, setBillsView] = useState<"list" | "detail">("list");
+  const [purchaseLinePreview, setPurchaseLinePreview] = useState<LocalPurchaseOrderLine | null>(null);
+  const [billLinePreview, setBillLinePreview] = useState<LocalBillLine | null>(null);
   const [purchaseOrderResyncOnlyFillBlanks, setPurchaseOrderResyncOnlyFillBlanks] = useState(true);
   const [purchaseOrderResyncKeepPrices, setPurchaseOrderResyncKeepPrices] = useState(true);
   const [resyncingPurchaseOrder, setResyncingPurchaseOrder] = useState(false);
@@ -210,12 +203,14 @@ export function PurchasesPage({
     if (!externalSelectedPurchaseOrderId) return;
     setActiveTab("Purchase Orders");
     setSelectedPurchaseOrderId(externalSelectedPurchaseOrderId);
+    setPurchaseOrdersView("detail");
   }, [externalSelectedPurchaseOrderId]);
 
   useEffect(() => {
     if (!externalSelectedBillId) return;
     setActiveTab("Bills");
     setSelectedBillId(externalSelectedBillId);
+    setBillsView("detail");
   }, [externalSelectedBillId]);
 
   useEffect(() => {
@@ -287,14 +282,16 @@ export function PurchasesPage({
       const needsReferenceData = activeTab === "Purchase Orders" || activeTab === "Bills";
       if (!needsReferenceData) return;
       try {
-        const [profileRows, vendorRows] = await Promise.all([fetchCompanyProfiles(), fetchVendors()]);
+        const [profileRows, vendorRows, customerRows] = await Promise.all([fetchCompanyProfiles(), fetchVendors(), fetchCustomers()]);
         if (cancelled) return;
         setCompanyProfiles(profileRows);
         setVendors(vendorRows);
+        setCustomers(customerRows);
       } catch {
         if (!cancelled) {
           setCompanyProfiles([]);
           setVendors([]);
+          setCustomers([]);
         }
       }
     }
@@ -326,6 +323,7 @@ export function PurchasesPage({
     );
     setSelectedPurchaseOrderId(draft.id);
     setPurchaseOrderDraft(draft);
+    setPurchaseOrdersView("detail");
     actionFeedback.succeed(`${pending.product_code} added to Purchase Order draft.`);
   }, [actionFeedback, companyProfiles]);
 
@@ -333,6 +331,7 @@ export function PurchasesPage({
     if (!purchaseOrders.length) {
       setSelectedPurchaseOrderId("");
       setPurchaseOrderDraft(null);
+      setPurchaseOrdersView("list");
       return;
     }
     const current = purchaseOrders.find((item) => item.id === selectedPurchaseOrderId) || purchaseOrders[0];
@@ -348,6 +347,7 @@ export function PurchasesPage({
     if (!bills.length) {
       setSelectedBillId("");
       setBillDraft(null);
+      setBillsView("list");
       return;
     }
     const current = bills.find((item) => item.id === selectedBillId) || bills[0];
@@ -367,36 +367,6 @@ export function PurchasesPage({
     setPaymentMadeDraft({ ...current });
   }, [paymentsMade, selectedPaymentMadeId]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(PURCHASE_ORDER_WORKBENCH_VIEW_KEY, purchaseWorkbenchViewMode);
-  }, [purchaseWorkbenchViewMode]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(BILL_WORKBENCH_VIEW_KEY, billWorkbenchViewMode);
-  }, [billWorkbenchViewMode]);
-
-  useEffect(() => {
-    if (!purchaseOrderDraft?.lines.length) {
-      setSelectedPurchaseLineIndex(0);
-      return;
-    }
-    if (selectedPurchaseLineIndex >= purchaseOrderDraft.lines.length) {
-      setSelectedPurchaseLineIndex(0);
-    }
-  }, [purchaseOrderDraft, selectedPurchaseLineIndex]);
-
-  useEffect(() => {
-    if (!billDraft?.lines.length) {
-      setSelectedBillLineIndex(0);
-      return;
-    }
-    if (selectedBillLineIndex >= billDraft.lines.length) {
-      setSelectedBillLineIndex(0);
-    }
-  }, [billDraft, selectedBillLineIndex]);
-
   const purchaseOrderColumns = useMemo(
     () => [
       { key: "po", header: "PO No", render: (row: LocalPurchaseOrder) => row.id },
@@ -404,7 +374,7 @@ export function PurchasesPage({
         key: "supplier",
         header: "Vendor",
         render: (row: LocalPurchaseOrder) => (
-          <span title={row.supplier_name || "-"}>{buildEntityAlias(row.supplier_name)}</span>
+          <span title={row.supplier_name || "-"}>{getAdminVendorLabel(row.supplier_name)}</span>
         ),
       },
       {
@@ -419,7 +389,7 @@ export function PurchasesPage({
         key: "customer",
         header: "Customer",
         render: (row: LocalPurchaseOrder) => (
-          <span title={row.customer_name || "-"}>{buildEntityAlias(row.customer_name)}</span>
+          <span title={row.customer_name || "-"}>{getAdminCustomerLabel(row.customer_name)}</span>
         ),
       },
       {
@@ -449,7 +419,7 @@ export function PurchasesPage({
     () => [
       { key: "bill", header: "Bill No", render: (row: LocalBill) => row.id },
       { key: "po", header: "Purchase Order", render: (row: LocalBill) => row.purchase_order_no },
-      { key: "supplier", header: "Vendor", render: (row: LocalBill) => <span title={row.supplier_name || "-"}>{buildEntityAlias(row.supplier_name)}</span> },
+      { key: "supplier", header: "Vendor", render: (row: LocalBill) => <span title={row.supplier_name || "-"}>{getAdminVendorLabel(row.supplier_name)}</span> },
       { key: "company", header: "Purchase Company", render: (row: LocalBill) => <span title={row.purchase_company || "-"}>{buildEntityAlias(row.purchase_company)}</span> },
       { key: "date", header: "Bill Date", render: (row: LocalBill) => row.bill_date || "-" },
       { key: "due", header: "Due Date", render: (row: LocalBill) => row.due_date || "-" },
@@ -463,7 +433,7 @@ export function PurchasesPage({
     () => [
       { key: "payment", header: "Payment No", render: (row: LocalPaymentMade) => row.id },
       { key: "bill", header: "Bill", render: (row: LocalPaymentMade) => row.bill_no || "-" },
-      { key: "vendor", header: "Vendor", render: (row: LocalPaymentMade) => <span title={row.supplier_name || "-"}>{buildEntityAlias(row.supplier_name)}</span> },
+      { key: "vendor", header: "Vendor", render: (row: LocalPaymentMade) => <span title={row.supplier_name || "-"}>{getAdminVendorLabel(row.supplier_name)}</span> },
       { key: "date", header: "Date", render: (row: LocalPaymentMade) => row.payment_date || "-" },
       { key: "method", header: "Method", render: (row: LocalPaymentMade) => row.method || "-" },
       { key: "reference", header: "Reference", render: (row: LocalPaymentMade) => row.reference_no || "-" },
@@ -472,9 +442,6 @@ export function PurchasesPage({
     ],
     [],
   );
-
-  const selectedPurchaseLine = purchaseOrderDraft?.lines[selectedPurchaseLineIndex] || null;
-  const selectedBillLine = billDraft?.lines[selectedBillLineIndex] || null;
 
   const billCountByPurchaseOrderId = useMemo(() => {
     const map = new Map<string, number>();
@@ -541,6 +508,16 @@ export function PurchasesPage({
     return vendors.find((item) => item.display_name.trim().toLowerCase() === key || item.company_name.trim().toLowerCase() === key) || null;
   }
 
+  function getAdminVendorLabel(name: string) {
+    const vendor = findVendorByName(name);
+    return vendor?.display_name?.trim() || vendor?.company_name?.trim() || buildEntityAlias(name);
+  }
+
+  function getAdminCustomerLabel(name: string) {
+    const customer = findCustomerByNameInList(customers, name);
+    return customer?.display_name?.trim() || customer?.company_name?.trim() || buildEntityAlias(name);
+  }
+
   async function handleResyncPurchaseOrderFromCatalog() {
     if (!purchaseOrderDraft) return;
     try {
@@ -570,7 +547,7 @@ export function PurchasesPage({
   function buildVendorAddressBlock(vendorName: string) {
     const vendor = findVendorByName(vendorName);
     if (!vendor) return vendorName || "-";
-    const displayName = vendor.display_name || vendor.company_name || vendorName || "-";
+    const displayName = vendor.company_name || vendor.display_name || vendorName || "-";
     return [displayName, vendor.billing_address || "", vendor.company_id ? `Company ID ${vendor.company_id}` : "", vendor.work_phone ? `Phone: ${vendor.work_phone}` : "", vendor.email || ""]
       .filter(Boolean)
       .join("\n");
@@ -801,6 +778,51 @@ export function PurchasesPage({
     };
   }
 
+  function serializePurchaseOrderForDirtyCheck(input: LocalPurchaseOrder) {
+    return JSON.stringify(recomputePurchaseOrderTotals(input));
+  }
+
+  function serializeBillForDirtyCheck(input: LocalBill) {
+    return JSON.stringify(recomputeBillTotals(input));
+  }
+
+  const savedPurchaseOrderSnapshot = useMemo(() => {
+    if (!purchaseOrderDraft) return "";
+    const source = purchaseOrders.find((item) => item.id === purchaseOrderDraft.id);
+    return source ? serializePurchaseOrderForDirtyCheck(source) : "";
+  }, [purchaseOrderDraft, purchaseOrders]);
+
+  const purchaseOrderDraftSnapshot = useMemo(
+    () => (purchaseOrderDraft ? serializePurchaseOrderForDirtyCheck(purchaseOrderDraft) : ""),
+    [purchaseOrderDraft],
+  );
+
+  const purchaseOrderHasUnsavedChanges = Boolean(
+    purchaseOrderDraft &&
+      (savedPurchaseOrderSnapshot
+        ? purchaseOrderDraftSnapshot !== savedPurchaseOrderSnapshot
+        : purchaseOrderDraft.lines.length ||
+          purchaseOrderDraft.supplier_name ||
+          purchaseOrderDraft.purchase_company ||
+          purchaseOrderDraft.sales_order_no ||
+          purchaseOrderDraft.customer_name),
+  );
+
+  const savedBillSnapshot = useMemo(() => {
+    if (!billDraft) return "";
+    const source = bills.find((item) => item.id === billDraft.id);
+    return source ? serializeBillForDirtyCheck(source) : "";
+  }, [billDraft, bills]);
+
+  const billDraftSnapshot = useMemo(() => (billDraft ? serializeBillForDirtyCheck(billDraft) : ""), [billDraft]);
+
+  const billHasUnsavedChanges = Boolean(
+    billDraft &&
+      (savedBillSnapshot
+        ? billDraftSnapshot !== savedBillSnapshot
+        : billDraft.lines.length || billDraft.supplier_name || billDraft.purchase_order_no),
+  );
+
   function createEmptyPaymentMade(bill?: LocalBill | null): LocalPaymentMade {
     const now = new Date().toISOString();
     return {
@@ -821,8 +843,34 @@ export function PurchasesPage({
     };
   }
 
+  async function confirmPurchaseOrderNavigation(nextAction: () => Promise<void> | void) {
+    if (!purchaseOrderHasUnsavedChanges) {
+      await nextAction();
+      return;
+    }
+    if (!window.confirm(`Unsaved changes detected in ${purchaseOrderDraft?.id || "purchase order"}. Click OK to save before leaving, or Cancel to stay on this screen.`)) {
+      return;
+    }
+    const saved = await savePurchaseOrderDraft();
+    if (!saved) return;
+    await nextAction();
+  }
+
+  async function confirmBillNavigation(nextAction: () => Promise<void> | void) {
+    if (!billHasUnsavedChanges) {
+      await nextAction();
+      return;
+    }
+    if (!window.confirm(`Unsaved changes detected in ${billDraft?.id || "bill"}. Click OK to save before leaving, or Cancel to stay on this screen.`)) {
+      return;
+    }
+    const saved = await saveBillDraft();
+    if (!saved) return;
+    await nextAction();
+  }
+
   async function savePurchaseOrderDraft() {
-    if (!purchaseOrderDraft) return;
+    if (!purchaseOrderDraft) return null;
     const previousStatus = purchaseOrders.find((item) => item.id === purchaseOrderDraft.id)?.status || "";
     try {
       actionFeedback.begin(`Saving purchase order ${purchaseOrderDraft.id}...`);
@@ -845,8 +893,10 @@ export function PurchasesPage({
       setSelectedPurchaseOrderId(saved.id);
       setPurchaseOrderDraft({ ...saved, lines: saved.lines.map((line) => ({ ...line })) });
       actionFeedback.succeed(message);
+      return saved;
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase order save failed");
+      return null;
     }
   }
 
@@ -869,6 +919,7 @@ export function PurchasesPage({
       await deletePurchaseOrder(poId);
       const refreshed = await fetchPurchaseOrders();
       setPurchaseOrders(refreshed);
+      setPurchaseOrdersView("list");
       actionFeedback.succeed(`Purchase order ${poId} deleted.`);
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase order delete failed");
@@ -901,6 +952,7 @@ export function PurchasesPage({
       if (purchaseOrderDraft && uniqueIds.includes(purchaseOrderDraft.id)) {
         setPurchaseOrderDraft(null);
         setSelectedPurchaseOrderId("");
+        setPurchaseOrdersView("list");
       }
       actionFeedback.succeed(`${uniqueIds.length.toLocaleString("en-US")} purchase order(s) deleted.`);
     } catch (caught) {
@@ -918,6 +970,7 @@ export function PurchasesPage({
       setSelectedBillId(saved.id);
       setBillDraft({ ...saved, lines: saved.lines.map((line) => ({ ...line })) });
       setActiveTab("Bills");
+      setBillsView("detail");
       actionFeedback.succeed(`Bill ${saved.id} created from ${purchaseOrderDraft.id}.`);
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Convert to bill failed");
@@ -943,6 +996,7 @@ export function PurchasesPage({
       const [refreshedPurchaseOrders, refreshedBills] = await Promise.all([fetchPurchaseOrders(), fetchBills()]);
       setPurchaseOrders(refreshedPurchaseOrders);
       setBills(refreshedBills);
+      setBillsView("list");
       actionFeedback.succeed(`${orders.length.toLocaleString("en-US")} bill(s) created or updated.`);
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Bulk convert to bill failed");
@@ -990,6 +1044,7 @@ export function PurchasesPage({
       setSelectedBillId(merged.id);
       setBillDraft({ ...merged, lines: merged.lines.map((line) => ({ ...line })) });
       setActiveTab("Bills");
+      setBillsView("detail");
       actionFeedback.succeed(`Merged bill ${merged.id} created from ${orders.length.toLocaleString("en-US")} purchase order(s).`);
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Merged bill create failed");
@@ -997,7 +1052,7 @@ export function PurchasesPage({
   }
 
   async function saveBillDraft() {
-    if (!billDraft) return;
+    if (!billDraft) return null;
     try {
       actionFeedback.begin(`Saving bill ${billDraft.id}...`);
       const saved = await upsertBill(recomputeBillTotals(billDraft), selectedBillId);
@@ -1006,8 +1061,10 @@ export function PurchasesPage({
       setSelectedBillId(saved.id);
       setBillDraft({ ...saved, lines: saved.lines.map((line) => ({ ...line })) });
       actionFeedback.succeed(`Bill ${saved.id} saved.`);
+      return saved;
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Bill save failed");
+      return null;
     }
   }
 
@@ -1041,11 +1098,30 @@ export function PurchasesPage({
     actionFeedback.succeed("New payment draft ready.");
   }
 
+  async function handleChangeTab(nextTab: typeof activeTab) {
+    if (nextTab === activeTab) return;
+    if (activeTab === "Purchase Orders") {
+      await confirmPurchaseOrderNavigation(async () => {
+        setPurchaseOrdersView("list");
+        setActiveTab(nextTab);
+      });
+      return;
+    }
+    if (activeTab === "Bills") {
+      await confirmBillNavigation(async () => {
+        setBillsView("list");
+        setActiveTab(nextTab);
+      });
+      return;
+    }
+    setActiveTab(nextTab);
+  }
+
   return (
     <div className="page-stack">
       <div className="module-tabs">
         {(["Vendors", "Purchase Orders", "Bills", "Payments Made"] as const).map((item) => (
-          <button key={item} className={`module-tab${activeTab === item ? " active" : ""}`} onClick={() => setActiveTab(item)}>
+          <button key={item} className={`module-tab${activeTab === item ? " active" : ""}`} onClick={() => void handleChangeTab(item)}>
             {item}
           </button>
         ))}
@@ -1055,89 +1131,83 @@ export function PurchasesPage({
 
       {activeTab === "Purchase Orders" ? (
         <SectionCard title="Purchase Orders">
-          <div className="meta-row">
-            <span>{purchaseOrders.length.toLocaleString("en-US")} purchase orders loaded</span>
-            <span>Confirmed sales orders are split by vendor. Edit before converting to bill.</span>
-          </div>
-          <div className="toolbar toolbar--wrap">
-            <Button variant="secondary" className="button--compact" onClick={() => setPurchaseOrderActionsOpen((current) => !current)}>
-              {purchaseOrderActionsOpen ? "Hide Actions" : "Actions"}
-            </Button>
-          </div>
-          {purchaseOrderActionsOpen ? (
-            <div className="action-menu-card">
+          {purchaseOrdersView === "list" ? (
+            <>
               <div className="meta-row">
-                <span>{selectedPurchaseOrderIds.length.toLocaleString("en-US")} selected</span>
-                <span>Delete is blocked when bills already exist. Convert creates or updates bills from selected purchase orders.</span>
+                <span>{purchaseOrders.length.toLocaleString("en-US")} purchase orders loaded</span>
+                <span>Confirmed sales orders are split by vendor. Edit before converting to bill.</span>
               </div>
               <div className="toolbar toolbar--wrap">
-                <Button
-                  variant="secondary"
-                  className="button--compact"
-                  onClick={() =>
-                    setSelectedPurchaseOrderIds((current) =>
-                      current.length === purchaseOrders.length ? [] : purchaseOrders.map((order) => order.id),
-                    )
-                  }
-                >
-                  {selectedPurchaseOrderIds.length === purchaseOrders.length ? "Clear Selection" : "Select All"}
+                <Button variant="secondary" className="button--compact" onClick={() => setPurchaseOrderActionsOpen((current) => !current)}>
+                  {purchaseOrderActionsOpen ? "Hide Actions" : "Actions"}
                 </Button>
-                <Button
-                  variant="secondary"
-                  className="button--compact danger-button"
-                  onClick={() => void handleBulkDeletePurchaseOrders(selectedPurchaseOrderIds)}
-                >
-                  Bulk Delete
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="button--compact"
-                  onClick={() => void handleBulkConvertPurchaseOrdersToBills(selectedPurchaseOrderIds)}
-                >
-                  Bulk Convert Bill
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="button--compact"
-                  onClick={() => void handleMergePurchaseOrdersToBill(selectedPurchaseOrderIds)}
-                >
-                  Merge Into One Bill
-                </Button>
-                {purchaseOrderDraft ? (
-                  <>
+              </div>
+              {purchaseOrderActionsOpen ? (
+                <div className="action-menu-card">
+                  <div className="meta-row">
+                    <span>{selectedPurchaseOrderIds.length.toLocaleString("en-US")} selected</span>
+                    <span>Delete is blocked when bills already exist. Convert creates or updates bills from selected purchase orders.</span>
+                  </div>
+                  <div className="toolbar toolbar--wrap">
+                    <Button
+                      variant="secondary"
+                      className="button--compact"
+                      onClick={() =>
+                        setSelectedPurchaseOrderIds((current) =>
+                          current.length === purchaseOrders.length ? [] : purchaseOrders.map((order) => order.id),
+                        )
+                      }
+                    >
+                      {selectedPurchaseOrderIds.length === purchaseOrders.length ? "Clear Selection" : "Select All"}
+                    </Button>
                     <Button
                       variant="secondary"
                       className="button--compact danger-button"
-                      onClick={() => void handleBulkDeletePurchaseOrders([purchaseOrderDraft.id])}
+                      onClick={() => void handleBulkDeletePurchaseOrders(selectedPurchaseOrderIds)}
                     >
-                      Delete Current
+                      Bulk Delete
                     </Button>
                     <Button
                       variant="secondary"
                       className="button--compact"
-                      onClick={() => void handleBulkConvertPurchaseOrdersToBills([purchaseOrderDraft.id])}
+                      onClick={() => void handleBulkConvertPurchaseOrdersToBills(selectedPurchaseOrderIds)}
                     >
-                      Convert Current Bill
+                      Bulk Convert Bill
                     </Button>
-                  </>
-                ) : null}
-              </div>
-            </div>
+                    <Button
+                      variant="secondary"
+                      className="button--compact"
+                      onClick={() => void handleMergePurchaseOrdersToBill(selectedPurchaseOrderIds)}
+                    >
+                      Merge Into One Bill
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+              <DataTable
+                rows={purchaseOrders}
+                columns={purchaseOrderColumnsWithMarks}
+                emptyText="No purchase orders generated yet. Confirm a sales order first."
+                onRowClick={(row) =>
+                  void confirmPurchaseOrderNavigation(async () => {
+                    setSelectedPurchaseOrderId(row.id);
+                    setPurchaseOrderDraft({ ...row, lines: row.lines.map((line) => ({ ...line })) });
+                    setPurchaseOrdersView("detail");
+                  })
+                }
+                rowClassName={(row) => (row.id === selectedPurchaseOrderId ? "data-table__row--active" : "")}
+              />
+            </>
           ) : null}
-          <DataTable
-            rows={purchaseOrders}
-            columns={purchaseOrderColumnsWithMarks}
-            emptyText="No purchase orders generated yet. Confirm a sales order first."
-            onRowClick={(row) => {
-              setSelectedPurchaseOrderId(row.id);
-              setPurchaseOrderDraft({ ...row, lines: row.lines.map((line) => ({ ...line })) });
-            }}
-            rowClassName={(row) => (row.id === selectedPurchaseOrderId ? "data-table__row--active" : "")}
-          />
 
-          {purchaseOrderDraft ? (
+          {purchaseOrderDraft && purchaseOrdersView === "detail" ? (
             <div className="invoice-editor-block">
-              <div className="invoice-edit-shell">
+                <div className="invoice-edit-shell">
+                  <div className="toolbar toolbar--wrap">
+                    <Button variant="secondary" onClick={() => void confirmPurchaseOrderNavigation(() => setPurchaseOrdersView("list"))}>
+                      Back to List
+                    </Button>
+                  </div>
                 <div className="document-marks document-marks--header">
                   <span className={`mark-badge ${purchaseOrderDraft.status === "confirmed" || purchaseOrderDraft.status === "closed" ? "mark-badge--success" : ""}`}>
                     {purchaseOrderDraft.status.toUpperCase()}
@@ -1175,28 +1245,6 @@ export function PurchasesPage({
                     }
                   />
                 </div>
-
-                <div className="workbench-controls workbench-controls--compact">
-                  <div className="segmented-control">
-                    <button
-                      type="button"
-                      className={`segmented-control__item${purchaseWorkbenchViewMode === "simple" ? " active" : ""}`}
-                      onClick={() => setPurchaseWorkbenchViewMode("simple")}
-                    >
-                      Simple View
-                    </button>
-                    <button
-                      type="button"
-                      className={`segmented-control__item${purchaseWorkbenchViewMode === "advanced" ? " active" : ""}`}
-                      onClick={() => setPurchaseWorkbenchViewMode("advanced")}
-                    >
-                      Advanced View
-                    </button>
-                  </div>
-                </div>
-
-                <div className="workbench-main-layout">
-                  <div className="workbench-main-layout__table">
                     <table className="simple-edit-table">
                       <thead>
                         <tr>
@@ -1211,12 +1259,12 @@ export function PurchasesPage({
                       </thead>
                       <tbody>
                         {purchaseOrderDraft.lines.map((line, index) => (
-                          <tr
-                            key={`${line.product_code}-${index}`}
-                            className={index === selectedPurchaseLineIndex ? "data-table__row--active" : ""}
-                            onClick={() => setSelectedPurchaseLineIndex(index)}
-                          >
-                            <td>{line.product_code}</td>
+                          <tr key={`${line.product_code}-${index}`}>
+                            <td>
+                              <button type="button" className="button button--secondary button--compact" onClick={(event) => { event.stopPropagation(); setPurchaseLinePreview(line); }}>
+                                {line.product_code}
+                              </button>
+                            </td>
                             <td>{line.description || "-"}</td>
                             <td>
                               <input
@@ -1225,6 +1273,7 @@ export function PurchasesPage({
                                 min={1}
                                 step={1}
                                 value={line.qty}
+                                onClick={(event) => event.stopPropagation()}
                                 onChange={(event) =>
                                   setPurchaseOrderDraft((current) =>
                                     current
@@ -1254,6 +1303,7 @@ export function PurchasesPage({
                                 min={0}
                                 step="0.01"
                                 value={line.buy_price}
+                                onClick={(event) => event.stopPropagation()}
                                 onChange={(event) =>
                                   setPurchaseOrderDraft((current) =>
                                     current
@@ -1273,6 +1323,7 @@ export function PurchasesPage({
                               <input
                                 className="inline-edit-input"
                                 value={line.notes}
+                                onClick={(event) => event.stopPropagation()}
                                 onChange={(event) =>
                                   setPurchaseOrderDraft((current) =>
                                     current
@@ -1289,36 +1340,6 @@ export function PurchasesPage({
                         ))}
                       </tbody>
                     </table>
-                  </div>
-                  <aside className="workbench-detail-panel">
-                    <div className="workbench-detail-panel__eyebrow">Selected PO Line</div>
-                    {selectedPurchaseLine ? (
-                      <>
-                        <div className="workbench-detail-panel__title">{selectedPurchaseLine.product_code || "-"}</div>
-                        <div className="document-marks document-marks--compact">
-                          <span className="mark-badge">{selectedPurchaseLine.brand || "No brand"}</span>
-                        </div>
-                        <div className="workbench-detail-list">
-                          <div><span>Description</span><strong>{selectedPurchaseLine.description || "-"}</strong></div>
-                          <div><span>Quantity</span><strong>{selectedPurchaseLine.qty}</strong></div>
-                          <div><span>Supplier</span><strong>{selectedPurchaseLine.supplier_name || "-"}</strong></div>
-                          <div><span>Buy</span><strong>{formatMoney(selectedPurchaseLine.buy_price, purchaseOrderDraft.currency)}</strong></div>
-                          <div><span>Line Total</span><strong>{formatMoney(selectedPurchaseLine.line_total, purchaseOrderDraft.currency)}</strong></div>
-                          {purchaseWorkbenchViewMode === "advanced" ? (
-                            <>
-                              <div><span>Old Code</span><strong>{selectedPurchaseLine.old_code || "-"}</strong></div>
-                              <div><span>Origin</span><strong>{selectedPurchaseLine.origin || "-"}</strong></div>
-                              <div><span>Sales Order</span><strong>{selectedPurchaseLine.sales_order_no || "-"}</strong></div>
-                            </>
-                          ) : null}
-                        </div>
-                        {selectedPurchaseLine.notes ? <div className="info-text">{selectedPurchaseLine.notes}</div> : null}
-                      </>
-                    ) : (
-                      <div className="empty-state">Select a line to inspect details.</div>
-                    )}
-                  </aside>
-                </div>
 
                 <div className="toolbar toolbar--wrap">
                   <label className="checkbox-field quote-toolbar-checkbox">
@@ -1358,20 +1379,30 @@ export function PurchasesPage({
             <span>{bills.length.toLocaleString("en-US")} bills loaded</span>
             <span>Bills are generated from purchase orders and remain editable before confirmation.</span>
           </div>
-          <DataTable
-            rows={bills}
-            columns={billColumns}
-            emptyText="No bills yet. Convert a purchase order first."
-            onRowClick={(row) => {
-              setSelectedBillId(row.id);
-              setBillDraft({ ...row, lines: row.lines.map((line) => ({ ...line })) });
-            }}
-            rowClassName={(row) => (row.id === selectedBillId ? "data-table__row--active" : "")}
-          />
+          {billsView === "list" ? (
+            <DataTable
+              rows={bills}
+              columns={billColumns}
+              emptyText="No bills yet. Convert a purchase order first."
+              onRowClick={(row) =>
+                void confirmBillNavigation(async () => {
+                  setSelectedBillId(row.id);
+                  setBillDraft({ ...row, lines: row.lines.map((line) => ({ ...line })) });
+                  setBillsView("detail");
+                })
+              }
+              rowClassName={(row) => (row.id === selectedBillId ? "data-table__row--active" : "")}
+            />
+          ) : null}
 
-          {billDraft ? (
+          {billDraft && billsView === "detail" ? (
             <div className="invoice-editor-block">
               <div className="invoice-edit-shell">
+                <div className="toolbar toolbar--wrap">
+                  <Button variant="secondary" onClick={() => void confirmBillNavigation(() => setBillsView("list"))}>
+                    Back to List
+                  </Button>
+                </div>
                 <div className="invoice-meta-grid">
                   <Input label="Bill No" value={billDraft.id} onChange={(value) => setBillDraft((current) => (current ? { ...current, id: value } : current))} />
                   <Input label="Purchase Order" value={billDraft.purchase_order_no} onChange={(value) => setBillDraft((current) => (current ? { ...current, purchase_order_no: value } : current))} />
@@ -1403,47 +1434,26 @@ export function PurchasesPage({
                   />
                 </div>
 
-                <div className="workbench-controls workbench-controls--compact">
-                  <div className="segmented-control">
-                    <button
-                      type="button"
-                      className={`segmented-control__item${billWorkbenchViewMode === "simple" ? " active" : ""}`}
-                      onClick={() => setBillWorkbenchViewMode("simple")}
-                    >
-                      Simple View
-                    </button>
-                    <button
-                      type="button"
-                      className={`segmented-control__item${billWorkbenchViewMode === "advanced" ? " active" : ""}`}
-                      onClick={() => setBillWorkbenchViewMode("advanced")}
-                    >
-                      Advanced View
-                    </button>
-                  </div>
-                </div>
-
-                <div className="workbench-main-layout">
-                  <div className="workbench-main-layout__table">
-                    <table className="simple-edit-table">
-                      <thead>
-                        <tr>
-                          <th>Code</th>
-                          <th>Description</th>
-                          <th>Qty</th>
-                          <th>Stock</th>
-                          <th>Buy Price</th>
-                          <th>Line Total</th>
-                          <th>Notes</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {billDraft.lines.map((line, index) => (
-                          <tr
-                            key={`${line.product_code}-${index}`}
-                            className={index === selectedBillLineIndex ? "data-table__row--active" : ""}
-                            onClick={() => setSelectedBillLineIndex(index)}
-                          >
-                            <td>{line.product_code}</td>
+                <table className="simple-edit-table">
+                  <thead>
+                    <tr>
+                      <th>Code</th>
+                      <th>Description</th>
+                      <th>Qty</th>
+                      <th>Stock</th>
+                      <th>Buy Price</th>
+                      <th>Line Total</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {billDraft.lines.map((line, index) => (
+                      <tr key={`${line.product_code}-${index}`}>
+                        <td>
+                          <button type="button" className="button button--secondary button--compact" onClick={() => setBillLinePreview(line)}>
+                            {line.product_code}
+                          </button>
+                        </td>
                             <td>{line.description || "-"}</td>
                             <td>
                               <input
@@ -1512,40 +1522,10 @@ export function PurchasesPage({
                                 }
                               />
                             </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <aside className="workbench-detail-panel">
-                    <div className="workbench-detail-panel__eyebrow">Selected Bill Line</div>
-                    {selectedBillLine ? (
-                      <>
-                        <div className="workbench-detail-panel__title">{selectedBillLine.product_code || "-"}</div>
-                        <div className="document-marks document-marks--compact">
-                          <span className="mark-badge">{selectedBillLine.brand || "No brand"}</span>
-                        </div>
-                        <div className="workbench-detail-list">
-                          <div><span>Description</span><strong>{selectedBillLine.description || "-"}</strong></div>
-                          <div><span>Quantity</span><strong>{selectedBillLine.qty}</strong></div>
-                          <div><span>Supplier</span><strong>{selectedBillLine.supplier_name || "-"}</strong></div>
-                          <div><span>Buy</span><strong>{formatMoney(selectedBillLine.buy_price, billDraft.currency)}</strong></div>
-                          <div><span>Line Total</span><strong>{formatMoney(selectedBillLine.line_total, billDraft.currency)}</strong></div>
-                          {billWorkbenchViewMode === "advanced" ? (
-                            <>
-                              <div><span>Old Code</span><strong>{selectedBillLine.old_code || "-"}</strong></div>
-                              <div><span>Origin</span><strong>{selectedBillLine.origin || "-"}</strong></div>
-                              <div><span>PO Source</span><strong>{selectedBillLine.purchase_order_no || "-"}</strong></div>
-                            </>
-                          ) : null}
-                        </div>
-                        {selectedBillLine.notes ? <div className="info-text">{selectedBillLine.notes}</div> : null}
-                      </>
-                    ) : (
-                      <div className="empty-state">Select a line to inspect details.</div>
-                    )}
-                  </aside>
-                </div>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
 
                 <div className="toolbar toolbar--wrap">
                   <div className="meta-row">
@@ -1662,6 +1642,62 @@ export function PurchasesPage({
             </div>
           ) : null}
         </SectionCard>
+      ) : null}
+
+      {purchaseLinePreview ? (
+        <div className="modal-backdrop" onClick={() => setPurchaseLinePreview(null)}>
+          <div className="modal-card modal-card--compact" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-card__header">
+              <div>
+                <h3>{purchaseLinePreview.product_code || "-"}</h3>
+                <p>{purchaseLinePreview.brand || "Purchase order line preview"}</p>
+              </div>
+            </div>
+            <div className="workbench-detail-list">
+              <div><span>Description</span><strong>{purchaseLinePreview.description || "-"}</strong></div>
+              <div><span>Vendor</span><strong>{purchaseLinePreview.supplier_name || "-"}</strong></div>
+              <div><span>Quantity</span><strong>{purchaseLinePreview.qty}</strong></div>
+              <div><span>Buy Price</span><strong>{formatMoney(purchaseLinePreview.buy_price, purchaseOrderDraft?.currency || "EUR")}</strong></div>
+              <div><span>Line Total</span><strong>{formatMoney(purchaseLinePreview.line_total, purchaseOrderDraft?.currency || "EUR")}</strong></div>
+              <div><span>Origin</span><strong>{purchaseLinePreview.origin || "-"}</strong></div>
+              <div><span>OEM</span><strong>{purchaseLinePreview.oem_no || "-"}</strong></div>
+              {purchaseLinePreview.notes ? <div><span>Notes</span><strong>{purchaseLinePreview.notes}</strong></div> : null}
+            </div>
+            <div className="modal-actions">
+              <Button variant="secondary" onClick={() => setPurchaseLinePreview(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {billLinePreview ? (
+        <div className="modal-backdrop" onClick={() => setBillLinePreview(null)}>
+          <div className="modal-card modal-card--compact" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-card__header">
+              <div>
+                <h3>{billLinePreview.product_code || "-"}</h3>
+                <p>{billLinePreview.brand || "Bill line preview"}</p>
+              </div>
+            </div>
+            <div className="workbench-detail-list">
+              <div><span>Description</span><strong>{billLinePreview.description || "-"}</strong></div>
+              <div><span>Vendor</span><strong>{billLinePreview.supplier_name || "-"}</strong></div>
+              <div><span>Quantity</span><strong>{billLinePreview.qty}</strong></div>
+              <div><span>Buy Price</span><strong>{formatMoney(billLinePreview.buy_price, billDraft?.currency || "EUR")}</strong></div>
+              <div><span>Line Total</span><strong>{formatMoney(billLinePreview.line_total, billDraft?.currency || "EUR")}</strong></div>
+              <div><span>Origin</span><strong>{billLinePreview.origin || "-"}</strong></div>
+              <div><span>PO Source</span><strong>{billLinePreview.purchase_order_no || "-"}</strong></div>
+              {billLinePreview.notes ? <div><span>Notes</span><strong>{billLinePreview.notes}</strong></div> : null}
+            </div>
+            <div className="modal-actions">
+              <Button variant="secondary" onClick={() => setBillLinePreview(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
     </div>

@@ -1,7 +1,7 @@
 import { fetchCloudSuppliers } from "./suppliersApi";
-import { loadLocalVendors, createEmptyVendor } from "../../shared/localVendors";
+import { createEmptyVendor } from "../../shared/localVendors";
 import type { LocalVendor } from "../../types/vendors";
-import { supabaseClient } from "./supabaseClient";
+import { callAppAdminRecords } from "./appAdminRecordsApi";
 import { getCurrentOrgId, isUuid } from "./organizationApi";
 
 const VENDOR_COLUMNS = [
@@ -99,30 +99,7 @@ function mapVendorPayload(input: LocalVendor, organizationId: string) {
 }
 
 async function bootstrapVendorsIfNeeded() {
-  const organizationId = await getCurrentOrgId();
-  const { count, error: countError } = await supabaseClient
-    .from("vendors")
-    .select("id", { count: "planned", head: true })
-    .eq("organization_id", organizationId);
-
-  if (countError) throw new Error(countError.message || "Vendor bootstrap check failed");
-  if ((count || 0) > 0) return;
-
-  const localRows = loadLocalVendors();
-  const seedRows = localRows.length
-    ? localRows
-    : (await fetchCloudSuppliers()).map((supplier, index) => ({
-        ...createEmptyVendor([]),
-        company_name: supplier.name,
-        display_name: supplier.name,
-        vendor_number: `VEN-${String(index + 1).padStart(5, "0")}`,
-      }));
-
-  if (!seedRows.length) return;
-
-  const payload = seedRows.map((row) => mapVendorPayload(row, organizationId));
-  const { error } = await supabaseClient.from("vendors").insert(payload);
-  if (error) throw new Error(error.message || "Vendor bootstrap failed");
+  return;
 }
 
 export async function fetchVendors(): Promise<LocalVendor[]> {
@@ -133,14 +110,11 @@ export async function fetchVendors(): Promise<LocalVendor[]> {
   vendorsCacheOrgId = organizationId;
   vendorsCachePromise = (async () => {
     await bootstrapVendorsIfNeeded();
-    const { data, error } = await supabaseClient
-      .from("vendors")
-      .select(VENDOR_COLUMNS)
-      .eq("organization_id", organizationId)
-      .order("display_name", { ascending: true });
-
-    if (error) throw new Error(error.message || "Vendors load failed");
-    const rows = ((data || []) as unknown as Record<string, unknown>[]).map(mapVendorRow);
+    const data = await callAppAdminRecords<Array<Record<string, unknown>>>({
+      resource: "vendors",
+      action: "list",
+    });
+    const rows = data.map(mapVendorRow);
     vendorsCacheValue = rows;
     vendorsCachePromise = null;
     return rows;
@@ -162,30 +136,23 @@ export async function upsertVendor(input: LocalVendor): Promise<LocalVendor> {
   const organizationId = await getCurrentOrgId();
   const payload = mapVendorPayload(input, organizationId);
 
-  if (isUuid(input.id)) {
-    const { data, error } = await supabaseClient
-      .from("vendors")
-      .update(payload)
-      .eq("id", input.id)
-      .eq("organization_id", organizationId)
-      .select(VENDOR_COLUMNS)
-      .single();
-
-    if (error) throw new Error(error.message || "Vendor save failed");
-    clearVendorsCache();
-    return mapVendorRow(data as unknown as Record<string, unknown>);
-  }
-
-  const { data, error } = await supabaseClient.from("vendors").insert(payload).select(VENDOR_COLUMNS).single();
-  if (error) throw new Error(error.message || "Vendor create failed");
+  const data = await callAppAdminRecords<Record<string, unknown>>({
+    resource: "vendors",
+    action: "upsert",
+    id: isUuid(input.id) ? input.id : "",
+    payload,
+  });
   clearVendorsCache();
-  return mapVendorRow(data as unknown as Record<string, unknown>);
+  return mapVendorRow(data);
 }
 
 export async function deleteVendor(vendorId: string) {
   const organizationId = await getCurrentOrgId();
   if (!isUuid(vendorId)) return;
-  const { error } = await supabaseClient.from("vendors").delete().eq("id", vendorId).eq("organization_id", organizationId);
-  if (error) throw new Error(error.message || "Vendor delete failed");
+  await callAppAdminRecords({
+    resource: "vendors",
+    action: "delete",
+    id: vendorId,
+  });
   clearVendorsCache();
 }

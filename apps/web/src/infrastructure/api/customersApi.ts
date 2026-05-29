@@ -1,6 +1,6 @@
 import type { LocalCustomer } from "../../types/customers";
-import { createEmptyCustomer, loadLocalCustomers } from "../../shared/localCustomers";
-import { supabaseClient } from "./supabaseClient";
+import { createEmptyCustomer } from "../../shared/localCustomers";
+import { callAppAdminRecords } from "./appAdminRecordsApi";
 import { getCurrentOrgId, isUuid } from "./organizationApi";
 
 const CUSTOMER_COLUMNS = [
@@ -107,21 +107,7 @@ function mapCustomerPayload(input: LocalCustomer, organizationId: string) {
 }
 
 async function bootstrapCustomersFromLocalIfNeeded() {
-  const organizationId = await getCurrentOrgId();
-  const localRows = loadLocalCustomers();
-  if (!localRows.length) return;
-
-  const { count, error: countError } = await supabaseClient
-    .from("customers")
-    .select("id", { count: "planned", head: true })
-    .eq("organization_id", organizationId);
-
-  if (countError) throw new Error(countError.message || "Customer bootstrap check failed");
-  if ((count || 0) > 0) return;
-
-  const payload = localRows.map((row) => mapCustomerPayload(row, organizationId));
-  const { error } = await supabaseClient.from("customers").insert(payload);
-  if (error) throw new Error(error.message || "Customer bootstrap failed");
+  return;
 }
 
 export async function fetchCustomers(): Promise<LocalCustomer[]> {
@@ -132,14 +118,11 @@ export async function fetchCustomers(): Promise<LocalCustomer[]> {
   customersCacheOrgId = organizationId;
   customersCachePromise = (async () => {
     await bootstrapCustomersFromLocalIfNeeded();
-    const { data, error } = await supabaseClient
-      .from("customers")
-      .select(CUSTOMER_COLUMNS)
-      .eq("organization_id", organizationId)
-      .order("display_name", { ascending: true });
-
-    if (error) throw new Error(error.message || "Customers load failed");
-    const rows = ((data || []) as unknown as Record<string, unknown>[]).map(mapCustomerRow);
+    const data = await callAppAdminRecords<Array<Record<string, unknown>>>({
+      resource: "customers",
+      action: "list",
+    });
+    const rows = data.map(mapCustomerRow);
     customersCacheValue = rows;
     customersCachePromise = null;
     return rows;
@@ -163,37 +146,25 @@ export async function upsertCustomer(input: LocalCustomer): Promise<LocalCustome
   const organizationId = await getCurrentOrgId();
   const payload = mapCustomerPayload(input, organizationId);
 
-  if (isUuid(input.id)) {
-    const { data, error } = await supabaseClient
-      .from("customers")
-      .update(payload)
-      .eq("id", input.id)
-      .eq("organization_id", organizationId)
-      .select(CUSTOMER_COLUMNS)
-      .single();
-
-    if (error) throw new Error(error.message || "Customer save failed");
-    clearCustomersCache();
-    return mapCustomerRow(data as unknown as Record<string, unknown>);
-  }
-
-  const { data, error } = await supabaseClient
-    .from("customers")
-    .insert(payload)
-    .select(CUSTOMER_COLUMNS)
-    .single();
-
-  if (error) throw new Error(error.message || "Customer create failed");
+  const data = await callAppAdminRecords<Record<string, unknown>>({
+    resource: "customers",
+    action: "upsert",
+    id: isUuid(input.id) ? input.id : "",
+    payload,
+  });
   clearCustomersCache();
-  return mapCustomerRow(data as unknown as Record<string, unknown>);
+  return mapCustomerRow(data);
 }
 
 export async function deleteCustomer(customerId: string) {
   const organizationId = await getCurrentOrgId();
   if (!isUuid(customerId)) return;
 
-  const { error } = await supabaseClient.from("customers").delete().eq("id", customerId).eq("organization_id", organizationId);
-  if (error) throw new Error(error.message || "Customer delete failed");
+  await callAppAdminRecords({
+    resource: "customers",
+    action: "delete",
+    id: customerId,
+  });
   clearCustomersCache();
 }
 

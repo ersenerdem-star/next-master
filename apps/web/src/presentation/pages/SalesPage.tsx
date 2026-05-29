@@ -289,7 +289,7 @@ export function SalesPage({
   function buildCustomerAddressBlock(row: LocalInvoice) {
     const customer = findCustomerByNameInList(customers, row.customer_name);
     if (!customer) return row.customer_name || "-";
-    const displayName = customer.display_name || customer.company_name || row.customer_name || "-";
+    const displayName = customer.company_name || customer.display_name || row.customer_name || "-";
     return [displayName, customer.billing_address || "", customer.company_id ? `Company ID ${customer.company_id}` : "", customer.work_phone ? `Phone: ${customer.work_phone}` : "", customer.email || ""]
       .filter(Boolean)
       .join("\n");
@@ -298,7 +298,7 @@ export function SalesPage({
   function buildCustomerShippingBlock(row: LocalInvoice) {
     const customer = findCustomerByNameInList(customers, row.customer_name);
     if (!customer) return row.customer_name || "-";
-    const displayName = customer.display_name || customer.company_name || row.customer_name || "-";
+    const displayName = customer.company_name || customer.display_name || row.customer_name || "-";
     return [displayName, customer.shipping_address || customer.billing_address || "", customer.company_id ? `Company ID ${customer.company_id}` : "", customer.mobile_phone ? `Phone: ${customer.mobile_phone}` : customer.work_phone ? `Phone: ${customer.work_phone}` : "", customer.email || ""]
       .filter(Boolean)
       .join("\n");
@@ -577,7 +577,11 @@ export function SalesPage({
     {
       key: "customer",
       header: "Customer",
-      render: (row: LocalInvoice) => <span title={row.customer_name || "-"}>{buildEntityAlias(row.customer_name)}</span>,
+      render: (row: LocalInvoice) => (
+        <span title={row.customer_name || "-"}>
+          {findCustomerByNameInList(customers, row.customer_name)?.display_name?.trim() || buildEntityAlias(row.customer_name)}
+        </span>
+      ),
     },
     {
       key: "seller",

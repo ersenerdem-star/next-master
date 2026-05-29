@@ -1,68 +1,7 @@
 import type { PortalInvite } from "../../types/portal";
-import { createEmptyPortalInvite, loadPortalInvites } from "../../shared/localPortal";
-import { supabaseClient } from "./supabaseClient";
+import { createEmptyPortalInvite } from "../../shared/localPortal";
+import { callAppAdminRecords } from "./appAdminRecordsApi";
 import { getCurrentOrgId, isUuid } from "./organizationApi";
-
-const PORTAL_INVITE_COLUMNS = [
-  "id",
-  "party_type",
-  "party_name",
-  "customer_id",
-  "vendor_id",
-  "email",
-  "contact_name",
-  "status",
-  "last_sent_at",
-  "expires_at",
-  "access_can_view_account",
-  "access_can_view_invoices",
-  "access_can_view_payments",
-  "access_can_view_orders",
-  "created_at",
-  "updated_at",
-].join(",");
-
-const LEGACY_PORTAL_INVITE_COLUMNS = [
-  "id",
-  "party_type",
-  "party_name",
-  "email",
-  "contact_name",
-  "status",
-  "invite_token",
-  "last_sent_at",
-  "access_can_view_account",
-  "access_can_view_invoices",
-  "access_can_view_payments",
-  "access_can_view_orders",
-  "created_at",
-  "updated_at",
-].join(",");
-
-const PORTAL_TOKEN_TTL_DAYS = 14;
-
-function buildExpiryIso() {
-  const value = new Date();
-  value.setDate(value.getDate() + PORTAL_TOKEN_TTL_DAYS);
-  return value.toISOString();
-}
-
-function encodeHex(input: ArrayBuffer) {
-  return Array.from(new Uint8Array(input))
-    .map((value) => value.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-async function hashPortalToken(token: string) {
-  const digest = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
-  return encodeHex(digest);
-}
-
-function generatePortalToken() {
-  const bytes = new Uint8Array(24);
-  window.crypto.getRandomValues(bytes);
-  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
-}
 
 function mapPortalInviteRow(row: Record<string, unknown>): PortalInvite {
   return {
@@ -110,44 +49,16 @@ function mapPortalInvitePayload(input: PortalInvite, organizationId: string) {
 }
 
 async function bootstrapPortalInvitesFromLocalIfNeeded() {
-  const organizationId = await getCurrentOrgId();
-  const localRows = loadPortalInvites();
-  if (!localRows.length) return;
-
-  const { count, error: countError } = await supabaseClient
-    .from("portal_invites")
-    .select("id", { count: "planned", head: true })
-    .eq("organization_id", organizationId);
-
-  if (countError) throw new Error(countError.message || "Portal invite bootstrap check failed");
-  if ((count || 0) > 0) return;
-
-  const payload = localRows.map((row) => mapPortalInvitePayload(row, organizationId));
-  const { error } = await supabaseClient.from("portal_invites").insert(payload);
-  if (error) throw new Error(error.message || "Portal invite bootstrap failed");
+  return;
 }
 
 export async function fetchPortalInvites(): Promise<PortalInvite[]> {
   await bootstrapPortalInvitesFromLocalIfNeeded();
-  const organizationId = await getCurrentOrgId();
-  const primary = await supabaseClient
-    .from("portal_invites")
-    .select(PORTAL_INVITE_COLUMNS)
-    .eq("organization_id", organizationId)
-    .order("updated_at", { ascending: false });
-
-  if (!primary.error) {
-    return ((primary.data || []) as unknown as Record<string, unknown>[]).map(mapPortalInviteRow);
-  }
-
-  const legacy = await supabaseClient
-    .from("portal_invites")
-    .select(LEGACY_PORTAL_INVITE_COLUMNS)
-    .eq("organization_id", organizationId)
-    .order("updated_at", { ascending: false });
-
-  if (legacy.error) throw new Error(legacy.error.message || primary.error.message || "Portal invites load failed");
-  return ((legacy.data || []) as unknown as Record<string, unknown>[]).map(mapPortalInviteRow);
+  const data = await callAppAdminRecords<Array<Record<string, unknown>>>({
+    resource: "portalInvites",
+    action: "list",
+  });
+  return data.map(mapPortalInviteRow);
 }
 
 export function createEmptyCloudPortalInvite() {
@@ -155,29 +66,15 @@ export function createEmptyCloudPortalInvite() {
 }
 
 export async function issuePortalInviteToken(portalInviteId: string): Promise<{ invite: PortalInvite; token: string }> {
-  const organizationId = await getCurrentOrgId();
   if (!isUuid(portalInviteId)) throw new Error("Portal invite id is invalid");
-
-  const token = generatePortalToken();
-  const tokenHash = await hashPortalToken(token);
-  const expiresAt = buildExpiryIso();
-  const { data, error } = await supabaseClient
-    .from("portal_invites")
-    .update({
-      invite_token: null,
-      invite_token_hash: tokenHash,
-      expires_at: expiresAt,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", portalInviteId)
-    .eq("organization_id", organizationId)
-    .select(PORTAL_INVITE_COLUMNS)
-    .single();
-
-  if (error) throw new Error(error.message || "Portal invite token issue failed");
+  const data = await callAppAdminRecords<{ invite: Record<string, unknown>; token: string }>({
+    resource: "portalInvites",
+    action: "issueToken",
+    id: portalInviteId,
+  });
   return {
-    invite: mapPortalInviteRow(data as unknown as Record<string, unknown>),
-    token,
+    invite: mapPortalInviteRow((data?.invite || {}) as Record<string, unknown>),
+    token: String(data?.token || ""),
   };
 }
 
@@ -185,148 +82,41 @@ export async function upsertPortalInvite(input: PortalInvite): Promise<PortalInv
   const organizationId = await getCurrentOrgId();
   const payload = mapPortalInvitePayload(input, organizationId);
 
-  if (isUuid(input.id)) {
-    const primary = await supabaseClient
-      .from("portal_invites")
-      .update(payload)
-      .eq("id", input.id)
-      .eq("organization_id", organizationId)
-      .select(PORTAL_INVITE_COLUMNS)
-      .single();
-
-    if (!primary.error) return mapPortalInviteRow(primary.data as unknown as Record<string, unknown>);
-
-    const legacyPayload = {
-      organization_id: organizationId,
-      party_type: input.party_type,
-      party_name: input.party_name.trim(),
-      email: input.email.trim(),
-      contact_name: input.contact_name.trim(),
-      status: input.status,
-      last_sent_at: input.last_sent_at || null,
-      access_can_view_account: input.access.can_view_account,
-      access_can_view_invoices: input.access.can_view_invoices,
-      access_can_view_payments: input.access.can_view_payments,
-      access_can_view_orders: input.access.can_view_orders,
-      created_at: input.created_at || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    const legacy = await supabaseClient
-      .from("portal_invites")
-      .update(legacyPayload)
-      .eq("id", input.id)
-      .eq("organization_id", organizationId)
-      .select(LEGACY_PORTAL_INVITE_COLUMNS)
-      .single();
-
-    if (legacy.error) throw new Error(legacy.error.message || primary.error.message || "Portal access save failed");
-    return mapPortalInviteRow(legacy.data as unknown as Record<string, unknown>);
-  }
-
-  const primary = await supabaseClient
-    .from("portal_invites")
-    .insert(payload)
-    .select(PORTAL_INVITE_COLUMNS)
-    .single();
-
-  if (!primary.error) return mapPortalInviteRow(primary.data as unknown as Record<string, unknown>);
-
-  const legacyPayload = {
-    organization_id: organizationId,
-    party_type: input.party_type,
-    party_name: input.party_name.trim(),
-    email: input.email.trim(),
-    contact_name: input.contact_name.trim(),
-    status: input.status,
-    invite_token: input.invite_token || null,
-    last_sent_at: input.last_sent_at || null,
-    access_can_view_account: input.access.can_view_account,
-    access_can_view_invoices: input.access.can_view_invoices,
-    access_can_view_payments: input.access.can_view_payments,
-    access_can_view_orders: input.access.can_view_orders,
-    created_at: input.created_at || new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-  const legacy = await supabaseClient
-    .from("portal_invites")
-    .insert(legacyPayload)
-    .select(LEGACY_PORTAL_INVITE_COLUMNS)
-    .single();
-
-  if (legacy.error) throw new Error(legacy.error.message || primary.error.message || "Portal access create failed");
-  return mapPortalInviteRow(legacy.data as unknown as Record<string, unknown>);
+  const data = await callAppAdminRecords<Record<string, unknown>>({
+    resource: "portalInvites",
+    action: "upsert",
+    id: isUuid(input.id) ? input.id : "",
+    payload,
+  });
+  return mapPortalInviteRow(data);
 }
 
 export async function markPortalInviteSent(portalInviteId: string): Promise<PortalInvite | null> {
-  const organizationId = await getCurrentOrgId();
   if (!isUuid(portalInviteId)) return null;
-
-  const primary = await supabaseClient
-    .from("portal_invites")
-    .update({
-      status: "invited",
-      last_sent_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", portalInviteId)
-    .eq("organization_id", organizationId)
-    .select(PORTAL_INVITE_COLUMNS)
-      .single();
-
-  if (!primary.error) return primary.data ? mapPortalInviteRow(primary.data as unknown as Record<string, unknown>) : null;
-
-  const legacy = await supabaseClient
-    .from("portal_invites")
-    .update({
-      status: "invited",
-      last_sent_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", portalInviteId)
-    .eq("organization_id", organizationId)
-    .select(LEGACY_PORTAL_INVITE_COLUMNS)
-    .single();
-
-  if (legacy.error) throw new Error(legacy.error.message || primary.error.message || "Portal invite send failed");
-  return legacy.data ? mapPortalInviteRow(legacy.data as unknown as Record<string, unknown>) : null;
+  const data = await callAppAdminRecords<Record<string, unknown> | null>({
+    resource: "portalInvites",
+    action: "markSent",
+    id: portalInviteId,
+  });
+  return data ? mapPortalInviteRow(data) : null;
 }
 
 export async function setPortalInviteStatus(portalInviteId: string, status: PortalInvite["status"]): Promise<PortalInvite | null> {
-  const organizationId = await getCurrentOrgId();
   if (!isUuid(portalInviteId)) return null;
-
-  const primary = await supabaseClient
-    .from("portal_invites")
-    .update({
-      status,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", portalInviteId)
-    .eq("organization_id", organizationId)
-    .select(PORTAL_INVITE_COLUMNS)
-      .single();
-
-  if (!primary.error) return primary.data ? mapPortalInviteRow(primary.data as unknown as Record<string, unknown>) : null;
-
-  const legacy = await supabaseClient
-    .from("portal_invites")
-    .update({
-      status,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", portalInviteId)
-    .eq("organization_id", organizationId)
-    .select(LEGACY_PORTAL_INVITE_COLUMNS)
-    .single();
-
-  if (legacy.error) throw new Error(legacy.error.message || primary.error.message || "Portal invite status update failed");
-  return legacy.data ? mapPortalInviteRow(legacy.data as unknown as Record<string, unknown>) : null;
+  const data = await callAppAdminRecords<Record<string, unknown> | null>({
+    resource: "portalInvites",
+    action: "setStatus",
+    id: portalInviteId,
+    status,
+  });
+  return data ? mapPortalInviteRow(data) : null;
 }
 
 export async function deletePortalInvite(portalInviteId: string) {
-  const organizationId = await getCurrentOrgId();
   if (!isUuid(portalInviteId)) return;
-
-  const { error } = await supabaseClient.from("portal_invites").delete().eq("id", portalInviteId).eq("organization_id", organizationId);
-  if (error) throw new Error(error.message || "Portal invite delete failed");
+  await callAppAdminRecords({
+    resource: "portalInvites",
+    action: "delete",
+    id: portalInviteId,
+  });
 }
