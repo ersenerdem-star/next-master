@@ -2898,20 +2898,26 @@ select {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .portal-search-card__code {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 800;
-  line-height: 1.2;
-  word-break: break-word;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .portal-search-card__price {
   color: #0f172a;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 800;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .portal-search-card__body {
@@ -2955,6 +2961,26 @@ select {
 .portal-search-card__actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.portal-result-code,
+.portal-result-price {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.portal-result-code {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.portal-result-price {
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .portal-workbench__side {
@@ -3562,6 +3588,14 @@ select {
 
   .portal-search-card__specs {
     gap: 5px;
+  }
+
+  .portal-search-card__code {
+    font-size: 13px;
+  }
+
+  .portal-search-card__price {
+    font-size: 12px;
   }
 
   .portal-filter-stat {

@@ -740,7 +740,11 @@ export function PortalPage() {
               <span>-</span>
             ),
         },
-        { key: "code", header: "Code", render: (row: PortalCatalogSearchItem) => row.code },
+        {
+          key: "code",
+          header: "Code",
+          render: (row: PortalCatalogSearchItem) => <span className="portal-result-code">{row.code || "-"}</span>,
+        },
         { key: "brand", header: "Brand", render: (row: PortalCatalogSearchItem) => <BrandPill brand={row.brand} compact /> },
         {
           key: "description",
@@ -755,7 +759,11 @@ export function PortalPage() {
         {
           key: "price",
           header: `Price ${portalPricingCurrency}`,
-          render: (row: PortalCatalogSearchItem) => (row.sell_price == null ? "-" : formatMoney(Number(row.sell_price || 0), row.currency || portalPricingCurrency)),
+          render: (row: PortalCatalogSearchItem) => (
+            <span className="portal-result-price">
+              {row.sell_price == null ? "Price on request" : formatMoney(Number(row.sell_price || 0), row.currency || portalPricingCurrency)}
+            </span>
+          ),
         },
         { key: "tariff", header: "Tariff", render: (row: PortalCatalogSearchItem) => row.tariff || "-" },
         { key: "origin", header: "Origin", render: (row: PortalCatalogSearchItem) => row.origin || "-" },
