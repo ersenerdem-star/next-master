@@ -71,6 +71,8 @@ export function App() {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState("");
   const [selectedBillId, setSelectedBillId] = useState("");
+  const [salesOrdersNavTick, setSalesOrdersNavTick] = useState(0);
+  const [salesInvoicesNavTick, setSalesInvoicesNavTick] = useState(0);
   const [itemsTab, setItemsTab] = useState<"Catalog" | "Code References">("Catalog");
   const [inventoryInitialTab, setInventoryInitialTab] = useState<"Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers">("Warehouses");
   const [inventorySelectedWarehouseId, setInventorySelectedWarehouseId] = useState("");
@@ -289,6 +291,15 @@ export function App() {
       return;
     }
     if (activePage === "Sales" && salesSubNav.some((item) => item.key === nextSubPage)) {
+      if (nextSubPage === "Sales Orders") {
+        setSelectedSalesOrderId("");
+        setSelectedQuoteId("");
+        setSalesOrdersNavTick((current) => current + 1);
+      }
+      if (nextSubPage === "Invoices") {
+        setSelectedInvoiceId("");
+        setSalesInvoicesNavTick((current) => current + 1);
+      }
       setSalesTab(nextSubPage as "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists");
       return;
     }
@@ -373,11 +384,14 @@ export function App() {
     ) : activePage === "Sales" ? (
       <SalesPage
         activeTab={salesTab}
+        salesOrdersNavTick={salesOrdersNavTick}
+        invoicesNavTick={salesInvoicesNavTick}
         selectedSalesOrderId={selectedSalesOrderId}
         onSelectedSalesOrderChange={setSelectedSalesOrderId}
         selectedQuoteId={selectedQuoteId}
         onSelectedQuoteChange={setSelectedQuoteId}
         selectedInvoiceId={selectedInvoiceId}
+        onSelectedInvoiceChange={setSelectedInvoiceId}
       />
     ) : activePage === "Purchases" ? (
       <PurchasesPage activeTab={purchasesTab} selectedPurchaseOrderId={selectedPurchaseOrderId} selectedBillId={selectedBillId} />

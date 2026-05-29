@@ -23,23 +23,30 @@ import { buildEntityAlias } from "../../shared/entityAlias";
 
 type SalesPageProps = {
   activeTab?: "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists";
+  salesOrdersNavTick?: number;
+  invoicesNavTick?: number;
   selectedSalesOrderId?: string;
   onSelectedSalesOrderChange?: (salesOrderId: string) => void;
   selectedQuoteId?: string;
   onSelectedQuoteChange?: (quoteId: string) => void;
   selectedInvoiceId?: string;
+  onSelectedInvoiceChange?: (invoiceId: string) => void;
 };
 
 export function SalesPage({
   activeTab: activeTabProp = "Sales Orders",
+  salesOrdersNavTick = 0,
+  invoicesNavTick = 0,
   selectedSalesOrderId = "",
   onSelectedSalesOrderChange,
   selectedQuoteId = "",
   onSelectedQuoteChange,
   selectedInvoiceId: externalSelectedInvoiceId = "",
+  onSelectedInvoiceChange,
 }: SalesPageProps) {
   const actionFeedback = useActionFeedback();
   const [activeTab, setActiveTab] = useState<"Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists">(activeTabProp);
+  const [invoicesView, setInvoicesView] = useState<"list" | "detail">(externalSelectedInvoiceId ? "detail" : "list");
   const [invoices, setInvoices] = useState<LocalInvoice[]>([]);
   const [salesOrders, setSalesOrders] = useState<LocalSalesOrder[]>([]);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
@@ -138,7 +145,15 @@ export function SalesPage({
     if (!externalSelectedInvoiceId) return;
     setActiveTab("Invoices");
     setSelectedInvoiceId(externalSelectedInvoiceId);
+    setInvoicesView("detail");
   }, [externalSelectedInvoiceId]);
+
+  useEffect(() => {
+    if (!invoicesNavTick) return;
+    if (activeTabProp !== "Invoices") return;
+    if (externalSelectedInvoiceId) return;
+    setInvoicesView("list");
+  }, [invoicesNavTick, activeTabProp, externalSelectedInvoiceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -623,6 +638,7 @@ export function SalesPage({
     <div className="page-stack">
       {activeTab === "Sales Orders" ? (
         <QuotesPage
+          salesOrdersNavTick={salesOrdersNavTick}
           selectedSalesOrderId={selectedSalesOrderId}
           onSelectedSalesOrderChange={onSelectedSalesOrderChange}
           selectedQuoteId={selectedQuoteId}
@@ -667,19 +683,34 @@ export function SalesPage({
             <span>{invoices.length.toLocaleString("en-US")} invoices loaded</span>
             <span>Created from confirmed sales orders after purchase orders are generated.</span>
           </div>
-          <DataTable
-            rows={invoices}
-            columns={invoiceColumns}
-            emptyText="No invoices yet. Confirm a sales order and convert it to invoice."
-            onRowClick={(row) => {
-              setSelectedInvoiceId(row.id);
-              setInvoiceDraft(cloneInvoice(row));
-            }}
-            rowClassName={(row) => (row.id === selectedInvoiceId ? "data-table__row--active" : "")}
-          />
-          {selectedInvoice && invoiceDraft ? (
+          {invoicesView === "list" ? (
+            <DataTable
+              rows={invoices}
+              columns={invoiceColumns}
+              emptyText="No invoices yet. Confirm a sales order and convert it to invoice."
+              onRowClick={(row) => {
+                setSelectedInvoiceId(row.id);
+                setInvoiceDraft(cloneInvoice(row));
+                setInvoicesView("detail");
+                onSelectedInvoiceChange?.(row.id);
+              }}
+              rowClassName={(row) => (row.id === selectedInvoiceId ? "data-table__row--active" : "")}
+            />
+          ) : null}
+          {invoicesView === "detail" && selectedInvoice && invoiceDraft ? (
             <div className="invoice-editor-block">
               <div className="invoice-edit-shell">
+                <div className="toolbar toolbar--wrap">
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setInvoicesView("list");
+                      onSelectedInvoiceChange?.("");
+                    }}
+                  >
+                    Back to List
+                  </Button>
+                </div>
                 <div className="invoice-meta-grid">
                   <Input label="Invoice No" value={invoiceDraft.id} onChange={(value) => updateInvoiceDraft("id", value)} />
                   <Input label="Sales Order" value={invoiceDraft.sales_order_no} onChange={(value) => updateInvoiceDraft("sales_order_no", value)} />

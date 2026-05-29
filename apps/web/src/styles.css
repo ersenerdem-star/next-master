@@ -1380,6 +1380,10 @@ select {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.quotes-workspace--detail-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .quote-list-panel,
 .quote-editor-panel {
   border: 1px solid #e2e8f0;
@@ -1605,6 +1609,14 @@ select {
 
 .workbench-detail-panel--catalog {
   min-height: 320px;
+}
+
+.catalog-selected-popup {
+  position: fixed;
+  right: 24px;
+  top: 120px;
+  z-index: 50;
+  width: min(360px, calc(100vw - 32px));
 }
 
 .workbench-detail-panel__eyebrow {

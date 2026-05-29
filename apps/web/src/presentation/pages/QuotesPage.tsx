@@ -46,6 +46,7 @@ type QuotesPageProps = {
   onSelectedSalesOrderChange?: (salesOrderId: string) => void;
   selectedQuoteId?: string;
   onSelectedQuoteChange?: (quoteId: string) => void;
+  salesOrdersNavTick?: number;
 };
 
 type QuoteImportRow = {
@@ -472,6 +473,7 @@ export function QuotesPage({
   onSelectedSalesOrderChange,
   selectedQuoteId: externalSelectedQuoteId = "",
   onSelectedQuoteChange,
+  salesOrdersNavTick = 0,
 }: QuotesPageProps) {
   const actionFeedback = useActionFeedback();
   const importRef = useRef<HTMLInputElement | null>(null);
@@ -1198,8 +1200,16 @@ export function QuotesPage({
     }
     setQuoteBuilderLines(hydratedLines);
     setBuilderStatus(`Loaded ${order.sales_order_no} (${order.status}).`);
+    onSelectedSalesOrderChange?.(order.id);
     actionFeedback.succeed(`${order.sales_order_no} loaded.`);
   }
+
+  useEffect(() => {
+    if (!salesOrdersNavTick) return;
+    if (externalSelectedSalesOrderId || externalSelectedQuoteId) return;
+    setSalesOrdersView("list");
+    setPdfView(false);
+  }, [salesOrdersNavTick, externalSelectedSalesOrderId, externalSelectedQuoteId]);
 
   async function handleResyncFromCatalog() {
     if (!quoteBuilderLines.length) {
@@ -2293,8 +2303,9 @@ export function QuotesPage({
   }
 
   return (
-    <div className={`quotes-workspace${salesOrdersView === "list" ? " quotes-workspace--list-only" : ""}`}>
-      <aside className={`quote-list-panel${salesOrdersView === "list" ? " quote-list-panel--full" : ""}`}>
+    <div className={`quotes-workspace${salesOrdersView === "list" ? " quotes-workspace--list-only" : " quotes-workspace--detail-only"}`}>
+      {salesOrdersView === "list" ? (
+      <aside className="quote-list-panel quote-list-panel--full">
         <div className="quote-list-panel__header">
           <div>
             <h2>Sales Orders</h2>
@@ -2426,6 +2437,7 @@ export function QuotesPage({
           {!loadingQuotes && error ? <div className="empty-state error-text">{error}</div> : null}
         </div>
       </aside>
+      ) : null}
 
       {salesOrdersView === "detail" ? (
       <section className="quote-editor-panel">

@@ -895,65 +895,69 @@ export function CatalogPage() {
                 rows={rows}
                 columns={columns}
                 emptyText={loading ? "Loading..." : !submittedSearch.trim() && !submittedCatalogBrand ? "Select a brand or search to load catalog." : "No products found"}
-                onRowClick={(row) => setSelectedCatalogProductId(row.product_id)}
+                onRowClick={(row) => setSelectedCatalogProductId((current) => (current === row.product_id ? "" : row.product_id))}
                 rowClassName={(row) => (row.product_id === selectedCatalogProductId ? "data-table__row--active" : "")}
               />
             </div>
-            <aside className="workbench-detail-panel workbench-detail-panel--catalog">
-              <div className="workbench-detail-panel__eyebrow">Selected Item</div>
-              {selectedCatalogRow && selectedCatalogDraft ? (
-                <>
-                  <div className="workbench-detail-panel__media">
-                    {selectedCatalogRow.image_url ? (
-                      <button
-                        type="button"
-                        className="catalog-thumb-button catalog-thumb-button--detail"
-                        onClick={() =>
-                          setPreviewImage({
-                            src: selectedCatalogRow.image_url || "",
-                            code: selectedCatalogDraft.product_code,
-                            name: selectedCatalogDraft.description || "",
-                          })
-                        }
-                      >
-                        <img src={selectedCatalogRow.image_url} alt={selectedCatalogDraft.product_code} className="catalog-thumb catalog-thumb--detail" loading="lazy" />
-                      </button>
-                    ) : (
-                      <div className="empty-state">No image</div>
-                    )}
-                  </div>
-                  <div className="workbench-detail-panel__title">{selectedCatalogDraft.product_code}</div>
-                  <div className="document-marks document-marks--compact">
-                    <span className="mark-badge">{selectedCatalogDraft.brand || "No brand"}</span>
-                    <span className={`mark-badge ${selectedCatalogDraft.lifecycle_status === "discontinued" ? "mark-badge--danger" : "mark-badge--success"}`}>
-                      {selectedCatalogDraft.lifecycle_status || "active"}
-                    </span>
-                  </div>
-                  <div className="workbench-detail-list">
-                    <div><span>Description</span><strong>{selectedCatalogDraft.description || "-"}</strong></div>
-                    <div><span>OEM</span><strong>{selectedCatalogDraft.oem_no || "-"}</strong></div>
-                    <div><span>HS</span><strong>{selectedCatalogDraft.hs_code || "-"}</strong></div>
-                    <div><span>Origin</span><strong>{selectedCatalogDraft.origin || "-"}</strong></div>
-                    <div><span>Weight</span><strong>{selectedCatalogDraft.weight_kg ?? "-"}</strong></div>
-                    <div><span>Reference Links</span><strong>{referenceCoverage[`${selectedCatalogRow.brand.trim().toLowerCase()}::${normalizePartCode(selectedCatalogRow.product_code)}`] || 0}</strong></div>
-                  </div>
-                  <div className="toolbar toolbar--wrap">
-                    <Button variant="secondary" onClick={queueCatalogItemForSalesOrder}>
-                      Add to Sales Order
-                    </Button>
-                    <Button variant="secondary" onClick={queueCatalogItemForPurchaseOrder}>
-                      Add to Purchase Draft
-                    </Button>
-                  </div>
-                  {selectedCatalogDraft.lifecycle_note ? <div className="info-text">{selectedCatalogDraft.lifecycle_note}</div> : null}
-                </>
-              ) : (
-                <div className="empty-state">Select a catalog row to inspect details.</div>
-              )}
-            </aside>
           </div>
         </div>
       </section>
+
+      {selectedCatalogRow && selectedCatalogDraft ? (
+        <div className="catalog-selected-popup">
+          <div className="workbench-detail-panel workbench-detail-panel--catalog">
+            <div className="toolbar toolbar--wrap">
+              <span className="workbench-detail-panel__eyebrow">Selected Item</span>
+              <Button variant="secondary" className="button--compact" onClick={() => setSelectedCatalogProductId("")}>
+                Close
+              </Button>
+            </div>
+            <div className="workbench-detail-panel__media">
+              {selectedCatalogRow.image_url ? (
+                <button
+                  type="button"
+                  className="catalog-thumb-button catalog-thumb-button--detail"
+                  onClick={() =>
+                    setPreviewImage({
+                      src: selectedCatalogRow.image_url || "",
+                      code: selectedCatalogDraft.product_code,
+                      name: selectedCatalogDraft.description || "",
+                    })
+                  }
+                >
+                  <img src={selectedCatalogRow.image_url} alt={selectedCatalogDraft.product_code} className="catalog-thumb catalog-thumb--detail" loading="lazy" />
+                </button>
+              ) : (
+                <div className="empty-state">No image</div>
+              )}
+            </div>
+            <div className="workbench-detail-panel__title">{selectedCatalogDraft.product_code}</div>
+            <div className="document-marks document-marks--compact">
+              <span className="mark-badge">{selectedCatalogDraft.brand || "No brand"}</span>
+              <span className={`mark-badge ${selectedCatalogDraft.lifecycle_status === "discontinued" ? "mark-badge--danger" : "mark-badge--success"}`}>
+                {selectedCatalogDraft.lifecycle_status || "active"}
+              </span>
+            </div>
+            <div className="workbench-detail-list">
+              <div><span>Description</span><strong>{selectedCatalogDraft.description || "-"}</strong></div>
+              <div><span>OEM</span><strong>{selectedCatalogDraft.oem_no || "-"}</strong></div>
+              <div><span>HS</span><strong>{selectedCatalogDraft.hs_code || "-"}</strong></div>
+              <div><span>Origin</span><strong>{selectedCatalogDraft.origin || "-"}</strong></div>
+              <div><span>Weight</span><strong>{selectedCatalogDraft.weight_kg ?? "-"}</strong></div>
+              <div><span>Reference Links</span><strong>{referenceCoverage[`${selectedCatalogRow.brand.trim().toLowerCase()}::${normalizePartCode(selectedCatalogRow.product_code)}`] || 0}</strong></div>
+            </div>
+            <div className="toolbar toolbar--wrap">
+              <Button variant="secondary" onClick={queueCatalogItemForSalesOrder}>
+                Add to Sales Order
+              </Button>
+              <Button variant="secondary" onClick={queueCatalogItemForPurchaseOrder}>
+                Add to Purchase Draft
+              </Button>
+            </div>
+            {selectedCatalogDraft.lifecycle_note ? <div className="info-text">{selectedCatalogDraft.lifecycle_note}</div> : null}
+          </div>
+        </div>
+      ) : null}
 
       {showImportDialog ? (
         <div className="modal-backdrop">
