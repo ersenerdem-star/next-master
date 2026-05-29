@@ -816,7 +816,7 @@ export async function fetchInvoicesByCustomerNames(names: string[]): Promise<Loc
   const organizationId = await getCurrentOrgId();
   const { data, error } = await supabaseClient
     .from("invoices")
-    .select(INVOICE_COLUMNS)
+    .select(INVOICE_SUMMARY_COLUMNS)
     .eq("organization_id", organizationId)
     .in("customer_name", normalizedNames)
     .order("updated_at", { ascending: false });
