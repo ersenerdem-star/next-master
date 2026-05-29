@@ -236,11 +236,34 @@ function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mo
   const separatorInsensitivePattern = buildSeparatorInsensitivePattern(search);
   const clauses = new Set<string>();
   const isCodeSearch = isLikelyPortalCodeSearch(search);
+  if (isCodeSearch) {
+    if (normalizedSearch.length >= 3) {
+      clauses.add(`normalized_code.eq.${normalizedSearch}`);
+      clauses.add(`normalized_oem.eq.${normalizedSearch}`);
+      clauses.add(`normalized_code.like.${normalizedSearch}*`);
+      clauses.add(`normalized_oem.like.${normalizedSearch}*`);
+    }
+    if (escaped && escaped.length <= 24 && /[A-Z]/i.test(escaped)) {
+      clauses.add(`product_code.ilike.${escaped}*`);
+      clauses.add(`oem_no.ilike.${escaped}*`);
+    }
+    if (separatorInsensitivePattern && separatorInsensitivePattern !== escaped.toUpperCase() && /[A-Z]/i.test(separatorInsensitivePattern)) {
+      clauses.add(`product_code.ilike.${separatorInsensitivePattern}*`);
+      clauses.add(`oem_no.ilike.${separatorInsensitivePattern}*`);
+    }
+    if (mode === "loose" && normalizedOriginalSearch.length >= 6) {
+      clauses.add(`normalized_oem.like.*${normalizedOriginalSearch}*`);
+    }
+    if (mode === "loose" && looseOriginalPattern.length >= 6 && /[A-Z]/i.test(looseOriginalPattern)) {
+      clauses.add(`oem_no.ilike.${looseOriginalPattern}*`);
+    }
+    return `(${[...clauses].join(",")})`;
+  }
   if (escaped) {
     clauses.add(`product_code.ilike.*${escaped}*`);
     clauses.add(`oem_no.ilike.*${escaped}*`);
+    clauses.add(`description.ilike.*${escaped}*`);
   }
-  if (!isCodeSearch && escaped) clauses.add(`description.ilike.*${escaped}*`);
   if (separatorInsensitivePattern && separatorInsensitivePattern !== escaped.toUpperCase()) {
     clauses.add(`product_code.ilike.*${separatorInsensitivePattern}*`);
     clauses.add(`oem_no.ilike.*${separatorInsensitivePattern}*`);
@@ -250,7 +273,7 @@ function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mo
     clauses.add(`normalized_oem.eq.${normalizedSearch}`);
     clauses.add(`normalized_code.like.${normalizedSearch}*`);
     clauses.add(`normalized_oem.like.${normalizedSearch}*`);
-    if (!isCodeSearch || normalizedSearch.length <= 8) {
+    if (normalizedSearch.length <= 8) {
       clauses.add(`product_code.ilike.*${normalizedSearch}*`);
       clauses.add(`oem_no.ilike.*${normalizedSearch}*`);
     }
@@ -551,14 +574,6 @@ export async function searchPortalCatalog(
   }
   if (!rows.length && search && shouldRunLooseOriginalNumberSearch(search)) {
     const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
-    const fallbackRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
-      select: "id,product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
-      organization_id: `eq.${invite.organization_id}`,
-      ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
-      oem_no: `ilike.*${normalizedOriginalSearch}*`,
-      order: "product_code.asc",
-      limit: "100",
-    }).catch(() => []);
     const normalizedRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
       select: "id,product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
       organization_id: `eq.${invite.organization_id}`,
@@ -568,7 +583,7 @@ export async function searchPortalCatalog(
       limit: "100",
     }).catch(() => []);
     rows = dedupeCatalogRows(
-      [...fallbackRows, ...normalizedRows].filter(
+      normalizedRows.filter(
         (row) =>
           matchesOriginalNumberSearch(String(row.oem_no || ""), search) ||
           normalizePartCode(String(row.product_code || "")).includes(normalizedSearch),
