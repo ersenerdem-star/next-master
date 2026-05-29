@@ -157,6 +157,66 @@ function buildSeparatorInsensitivePattern(value: string, wildcard = "*") {
   return tokens.join(wildcard);
 }
 
+function buildOriginalNumberVariants(value: string) {
+  const variants = new Set<string>();
+  const normalized = normalizePartCode(value);
+  if (normalized) variants.add(normalized);
+  const normalizedOriginal = normalizeOriginalNumberSearch(value);
+  if (normalizedOriginal) variants.add(normalizedOriginal);
+  return [...variants];
+}
+
+function splitOriginalNumberCandidates(value: string) {
+  const raw = String(value || "").replace(/\r/g, "\n").trim();
+  if (!raw) return [];
+  const pieces = raw
+    .split(/[,;\n|]+/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return pieces.length ? pieces : [raw];
+}
+
+function matchesOriginalNumberSearch(haystack: string, needle: string) {
+  const needleVariants = buildOriginalNumberVariants(needle);
+  if (!needleVariants.length) return false;
+  const candidates = splitOriginalNumberCandidates(haystack);
+  if (
+    candidates.some((candidate) => {
+      const candidateVariants = buildOriginalNumberVariants(candidate);
+      if (!candidateVariants.length) return false;
+      return candidateVariants.some((candidateVariant) =>
+        needleVariants.some(
+          (needleVariant) =>
+            candidateVariant === needleVariant ||
+            candidateVariant.includes(needleVariant) ||
+            needleVariant.includes(candidateVariant),
+        ),
+      );
+    })
+  ) {
+    return true;
+  }
+  const haystackVariants = buildOriginalNumberVariants(haystack);
+  return haystackVariants.some((haystackVariant) =>
+    needleVariants.some(
+      (needleVariant) =>
+        haystackVariant === needleVariant ||
+        haystackVariant.includes(needleVariant) ||
+        needleVariant.includes(haystackVariant),
+    ),
+  );
+}
+
+function dedupeCatalogRows(rows: Array<Record<string, unknown>>) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const id = String(row.id || row.product_code || "");
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
 type PortalSearchMode = "strict" | "loose";
 
 function shouldRunLooseOriginalNumberSearch(search: string) {
@@ -483,6 +543,32 @@ export async function searchPortalCatalog(
       ...params,
       or: buildPortalCatalogSearchOr(search, normalizedSearch, "loose"),
     });
+  }
+  if (!rows.length && search && shouldRunLooseOriginalNumberSearch(search)) {
+    const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
+    const fallbackRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+      select: "id,product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
+      organization_id: `eq.${invite.organization_id}`,
+      ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+      oem_no: `ilike.*${normalizedOriginalSearch}*`,
+      order: "product_code.asc",
+      limit: "100",
+    }).catch(() => []);
+    const normalizedRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+      select: "id,product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
+      organization_id: `eq.${invite.organization_id}`,
+      ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+      normalized_oem: `like.*${normalizedOriginalSearch}*`,
+      order: "product_code.asc",
+      limit: "100",
+    }).catch(() => []);
+    rows = dedupeCatalogRows(
+      [...fallbackRows, ...normalizedRows].filter(
+        (row) =>
+          matchesOriginalNumberSearch(String(row.oem_no || ""), search) ||
+          normalizePartCode(String(row.product_code || "")).includes(normalizedSearch),
+      ),
+    );
   }
   const baseItems = rows.map((row) => ({
     code: String(row.product_code || ""),
