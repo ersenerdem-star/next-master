@@ -139,8 +139,41 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || "").trim());
+}
+
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message || fallback : fallback;
+}
+
+async function sanitizeCustomerPayload(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+  payload: Record<string, unknown>;
+}) {
+  const next = { ...input.payload };
+  const rawProfileId = String(next.seller_company_profile_id || "").trim();
+  if (!rawProfileId || !isUuid(rawProfileId)) {
+    next.seller_company_profile_id = null;
+    return next;
+  }
+
+  const profile = await getJson<Array<Record<string, unknown>>>(
+    buildRestUrl(input.supabaseUrl, "company_profiles", {
+      select: "id",
+      organization_id: `eq.${input.organizationId}`,
+      id: `eq.${rawProfileId}`,
+      limit: "1",
+    }),
+    {
+      headers: serviceRoleHeaders(input.serviceRoleKey),
+    },
+  ).catch(() => []);
+
+  next.seller_company_profile_id = profile[0]?.id ? rawProfileId : null;
+  return next;
 }
 
 async function listRows<T>(input: {
@@ -361,6 +394,12 @@ export default async (req: Request, _context: Context) => {
         return json({ ok: true, data });
       }
       if (action === "upsert") {
+        const nextPayload = await sanitizeCustomerPayload({
+          supabaseUrl,
+          serviceRoleKey,
+          organizationId: caller.organizationId,
+          payload,
+        });
         const data = id
           ? (
               await updateSingleRow<Record<string, unknown>>({
@@ -370,7 +409,7 @@ export default async (req: Request, _context: Context) => {
                 select: CUSTOMER_COLUMNS,
                 organizationId: caller.organizationId,
                 id,
-                payload,
+                payload: nextPayload,
               })
             )[0] || null
           : (
@@ -379,7 +418,7 @@ export default async (req: Request, _context: Context) => {
                 serviceRoleKey,
                 table: "customers",
                 select: CUSTOMER_COLUMNS,
-                payload,
+                payload: nextPayload,
               })
             )[0] || null;
         return json({ ok: true, data });

@@ -204,6 +204,10 @@ export function CustomersPage() {
   async function handleSave() {
     if (!draft) return;
     const displayName = draft.display_name.trim() || draft.company_name.trim() || `${draft.first_name} ${draft.last_name}`.trim();
+    const normalizedSellerProfileId =
+      draft.seller_company_profile_id && companyProfiles.some((item) => item.id === draft.seller_company_profile_id)
+        ? draft.seller_company_profile_id
+        : "";
     if (!displayName) {
       actionFeedback.fail("Display Name or Company Name is required.");
       return;
@@ -220,7 +224,11 @@ export function CustomersPage() {
     try {
       setSaving(true);
       actionFeedback.begin(`Saving customer ${displayName}...`);
-      const saved = await upsertCustomer({ ...draft, display_name: displayName });
+      const saved = await upsertCustomer({
+        ...draft,
+        display_name: displayName,
+        seller_company_profile_id: normalizedSellerProfileId,
+      });
       const rows = await fetchCustomers();
       setCustomers(rows);
       setSelectedId(saved.id);

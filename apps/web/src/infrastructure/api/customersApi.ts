@@ -97,7 +97,7 @@ function mapCustomerPayload(input: LocalCustomer, organizationId: string) {
     currency: input.currency,
     payment_terms: input.payment_terms,
     contract_nr: input.contract_nr,
-    seller_company_profile_id: input.seller_company_profile_id || null,
+    seller_company_profile_id: isUuid(input.seller_company_profile_id) ? input.seller_company_profile_id : null,
     price_list_type: input.price_list_type,
     portal_c_price_mode: input.portal_c_price_mode || "standard",
     price_list_margin_percent: input.price_list_margin_percent,
