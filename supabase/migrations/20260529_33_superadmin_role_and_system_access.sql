@@ -48,6 +48,11 @@ grant execute on function public.raw_profile_role(uuid) to service_role;
 grant execute on function public.current_profile_role() to service_role;
 grant execute on function public.is_superadmin() to service_role;
 
+alter table public.profiles drop constraint if exists profiles_role_check;
+alter table public.profiles
+add constraint profiles_role_check
+check (role in ('superadmin', 'admin', 'sales', 'viewer'));
+
 do $$
 begin
   if exists (
