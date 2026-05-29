@@ -1245,6 +1245,10 @@ export function PortalPage() {
     if (!isOnline) {
       setError("");
       if (catalogResults.length) {
+        if (catalogResults[0]) {
+          setSelectedCatalogCode(catalogResults[0].code);
+          setPortalPreview({ kind: "catalog", item: catalogResults[0] });
+        }
         setStatus("Offline mode active. Showing cached search results. Reconnect to refresh search.");
       } else {
         setStatus("Connect to the internet to search new products.");
@@ -1256,10 +1260,18 @@ export function PortalPage() {
       setError("");
       const items = await searchPortalCatalogItems(credentials, orderSearch, orderSearchBrand);
       setCatalogResults(items);
-      if (items[0]) setSelectedCatalogCode(items[0].code);
+      if (items[0]) {
+        setSelectedCatalogCode(items[0].code);
+        setPortalPreview({ kind: "catalog", item: items[0] });
+      } else {
+        setSelectedCatalogCode("");
+        setPortalPreview(null);
+      }
       setPortalOrderStatus(`${items.length.toLocaleString("en-US")} matching product and alternative result(s) found for the basket flow.`);
     } catch (caught) {
       setCatalogResults([]);
+      setSelectedCatalogCode("");
+      setPortalPreview(null);
       setError(caught instanceof Error ? caught.message : "Portal item search failed");
     } finally {
       setSearchingCatalog(false);
