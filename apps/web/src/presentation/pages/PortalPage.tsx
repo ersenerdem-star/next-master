@@ -24,6 +24,28 @@ import {
 import { parseOrderImportFile } from "../../shared/orderImport";
 
 const SESSION_KEY = "next-master-portal-session";
+const PORTAL_CACHE_PREFIX = "next-master-portal-cache";
+
+type PortalOfflineCache = {
+  snapshot: PortalSnapshot | null;
+  draft: {
+    portalDraftLines: PortalPreparedLine[];
+    portalOrderId: string;
+    portalSalesOrderNo: string;
+    portalDeliveryTerm: string;
+    portalPaymentTerms: string;
+    portalPackingDetails: string;
+    portalOrderNotes: string;
+    portalOrderStatus: string;
+    catalogResults: PortalCatalogSearchItem[];
+    orderSearch: string;
+    orderSearchBrand: string;
+    selectedCatalogCode: string;
+    selectedDraftLineId: string;
+    activeSection: PortalSection;
+  };
+  updatedAt: string;
+};
 
 function formatMoney(value: number, currency = "EUR") {
   return `${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
@@ -179,6 +201,35 @@ function mapPortalSalesOrderToPreparedLines(row: PortalSalesOrderRow): PortalPre
   });
 }
 
+function buildOfflinePreparedLineFromCatalogItem(item: PortalCatalogSearchItem): PortalPreparedLine {
+  const requestedCode = String(item.code || "").trim();
+  return {
+    lineId: `offline-${requestedCode}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    requestedCode,
+    resolvedCode: requestedCode,
+    brand: String(item.brand || ""),
+    description: String(item.description || ""),
+    qty: 1,
+    oem_no: String(item.oem_no || ""),
+    hs_code: String(item.tariff || ""),
+    origin: String(item.origin || ""),
+    weight_kg: item.weight_kg == null ? null : Number(item.weight_kg),
+    image_url: String(item.image_url || ""),
+    supplier_name: "",
+    buy_price: null,
+    sell_price: item.sell_price == null ? null : Number(item.sell_price),
+    c_sell_price: null,
+    price_date: "",
+    notes: "",
+    found: true,
+    codeChanged: false,
+    codeChangeWarning: "",
+    lifecycle_status: item.lifecycle_status ?? "active",
+    lifecycle_note: item.lifecycle_note ?? null,
+    lifecycle_warning: item.lifecycle_warning ?? null,
+  };
+}
+
 function matchesSearch(value: string, row: { id: string; sales_order_no?: string; lines?: PortalLine[] }) {
   if (!value) return true;
   const needle = value.trim().toLowerCase();
@@ -242,6 +293,30 @@ function clearPortalQueryParams() {
   window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+function getPortalCacheKey(email: string) {
+  return `${PORTAL_CACHE_PREFIX}:${String(email || "").trim().toLowerCase()}`;
+}
+
+function readPortalCache(email: string) {
+  if (typeof window === "undefined" || !email) return null as PortalOfflineCache | null;
+  try {
+    const raw = window.localStorage.getItem(getPortalCacheKey(email));
+    return raw ? (JSON.parse(raw) as PortalOfflineCache) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePortalCache(email: string, cache: PortalOfflineCache | null) {
+  if (typeof window === "undefined" || !email) return;
+  const key = getPortalCacheKey(email);
+  if (!cache) {
+    window.localStorage.removeItem(key);
+    return;
+  }
+  window.localStorage.setItem(key, JSON.stringify(cache));
+}
+
 function getDefaultPortalSection(snapshot: PortalSnapshot) {
   if (snapshot.invite.party_type === "customer" && snapshot.invite.access.can_view_orders) return "desk" as const;
   if (snapshot.invite.access.can_view_orders) return "orders" as const;
@@ -251,8 +326,10 @@ function getDefaultPortalSection(snapshot: PortalSnapshot) {
 
 export function PortalPage() {
   const search = new URLSearchParams(window.location.search);
+  const hasPortalLinkCredentials = Boolean(search.get("token") && search.get("email"));
   const portalImportRef = useRef<HTMLInputElement | null>(null);
   const portalDraftLinesRef = useRef<HTMLDivElement | null>(null);
+  const portalCachedDraftRef = useRef<PortalOfflineCache["draft"] | null>(null);
   const [credentials, setCredentials] = useState<PortalCredentials>(() => {
     const stored = typeof window !== "undefined" ? readStoredCredentials() : null;
     return {
@@ -294,12 +371,59 @@ export function PortalPage() {
   const [selectedDraftLineId, setSelectedDraftLineId] = useState("");
   const [portalPreview, setPortalPreview] = useState<{ kind: "catalog"; item: PortalCatalogSearchItem } | { kind: "basket"; item: PortalPreparedLine } | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; code: string; name: string } | null>(null);
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const portalPricingCurrency = snapshot?.pricingProfile?.currency || snapshot?.accountSummary.currency || "EUR";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const syncOnlineState = () => setIsOnline(window.navigator.onLine);
+    syncOnlineState();
+    window.addEventListener("online", syncOnlineState);
+    window.addEventListener("offline", syncOnlineState);
+    return () => {
+      window.removeEventListener("online", syncOnlineState);
+      window.removeEventListener("offline", syncOnlineState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if ((hasPortalLinkCredentials && isOnline) || snapshot || !credentials.email) return;
+    const cached = readPortalCache(credentials.email);
+    if (!cached?.snapshot) return;
+    portalCachedDraftRef.current = cached.draft;
+    setSnapshot(cached.snapshot);
+    setSelection(null);
+    setActiveSection(cached.draft.activeSection || getDefaultPortalSection(cached.snapshot));
+    setDocumentSearch("");
+    setBrandFilter("");
+    setPaymentStatusFilter("");
+    setStatus(isOnline ? "Cached portal workspace loaded." : "Offline mode active. Showing cached portal data and local basket.");
+    setError("");
+  }, [credentials.email, hasPortalLinkCredentials, isOnline, snapshot]);
 
   useEffect(() => {
     const token = search.get("token");
     const email = search.get("email");
     if (!token || !email) return;
+    if (!isOnline) {
+      const cached = readPortalCache(email);
+      if (cached?.snapshot) {
+        portalCachedDraftRef.current = cached.draft;
+        setSnapshot(cached.snapshot);
+        setSelection(null);
+        setActiveSection(cached.draft.activeSection || getDefaultPortalSection(cached.snapshot));
+        setDocumentSearch("");
+        setBrandFilter("");
+        setPaymentStatusFilter("");
+        setStatus("Offline mode active. Showing cached portal data and local basket.");
+        setError("");
+        return;
+      }
+      setSnapshot(null);
+      setError("Connect to the internet to start a new portal session.");
+      return;
+    }
     setLoading(true);
     setError("");
     loginPortal({ email, token })
@@ -321,7 +445,7 @@ export function PortalPage() {
         setError(caught instanceof Error ? caught.message : "Portal login failed");
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [isOnline]);
 
   const accountColumns = useMemo(
     () => [
@@ -589,6 +713,11 @@ export function PortalPage() {
   }
 
   async function handleRefresh() {
+    if (!isOnline) {
+      setError("");
+      setStatus("Connect to the internet to refresh portal data.");
+      return;
+    }
     try {
       setLoading(true);
       setError("");
@@ -607,6 +736,7 @@ export function PortalPage() {
   }
 
   function handleLogout() {
+    writePortalCache(credentials.email, null);
     setCredentials({ email: credentials.email, token: "", sessionToken: "" });
     setSnapshot(null);
     setSelection(null);
@@ -631,6 +761,30 @@ export function PortalPage() {
       return;
     }
 
+    if (portalCachedDraftRef.current) {
+      const cachedDraft = portalCachedDraftRef.current;
+      portalCachedDraftRef.current = null;
+      setPortalOrderId(cachedDraft.portalOrderId || "");
+      setPortalSalesOrderNo(cachedDraft.portalSalesOrderNo || "");
+      setPortalDraftLines(cachedDraft.portalDraftLines || []);
+      setPortalDeliveryTerm(cachedDraft.portalDeliveryTerm || "");
+      setPortalPaymentTerms(cachedDraft.portalPaymentTerms || snapshot.pricingProfile?.payment_terms || "");
+      setPortalPackingDetails(cachedDraft.portalPackingDetails || "");
+      setPortalOrderNotes(cachedDraft.portalOrderNotes || "");
+      setPortalOrderStatus(cachedDraft.portalOrderStatus || "");
+      setCatalogResults(cachedDraft.catalogResults || []);
+      setOrderSearch(cachedDraft.orderSearch || "");
+      setPortalPriceListBrand((current) => current || snapshot.availableBrands[0] || "");
+      setOrderSearchBrand((current) => {
+        const candidate = cachedDraft.orderSearchBrand || current;
+        return candidate && snapshot.availableBrands.includes(candidate) ? candidate : "";
+      });
+      setSelectedCatalogCode(cachedDraft.selectedCatalogCode || "");
+      setSelectedDraftLineId(cachedDraft.selectedDraftLineId || "");
+      setActiveSection(cachedDraft.activeSection || "desk");
+      return;
+    }
+
     const latestPortalDraft = snapshot.salesOrders.find((row) => row.source_channel === "portal" && !row.portal_submitted_at);
     setPortalOrderId(latestPortalDraft?.id || "");
     setPortalSalesOrderNo(latestPortalDraft?.sales_order_no || "");
@@ -649,6 +803,47 @@ export function PortalPage() {
     );
     setOrderSearchBrand((current) => (current && snapshot.availableBrands.includes(current) ? current : ""));
   }, [snapshot]);
+
+  useEffect(() => {
+    if (!snapshot || !credentials.email) return;
+    writePortalCache(credentials.email, {
+      snapshot,
+      draft: {
+        portalDraftLines,
+        portalOrderId,
+        portalSalesOrderNo,
+        portalDeliveryTerm,
+        portalPaymentTerms,
+        portalPackingDetails,
+        portalOrderNotes,
+        portalOrderStatus,
+        catalogResults,
+        orderSearch,
+        orderSearchBrand,
+        selectedCatalogCode,
+        selectedDraftLineId,
+        activeSection,
+      },
+      updatedAt: new Date().toISOString(),
+    });
+  }, [
+    activeSection,
+    catalogResults,
+    credentials.email,
+    orderSearch,
+    orderSearchBrand,
+    portalDeliveryTerm,
+    portalDraftLines,
+    portalOrderId,
+    portalOrderNotes,
+    portalOrderStatus,
+    portalPackingDetails,
+    portalPaymentTerms,
+    portalSalesOrderNo,
+    selectedCatalogCode,
+    selectedDraftLineId,
+    snapshot,
+  ]);
 
   useEffect(() => {
     if (!catalogResults.length) {
@@ -929,6 +1124,15 @@ export function PortalPage() {
   }
 
   async function handlePortalCatalogSearch() {
+    if (!isOnline) {
+      setError("");
+      if (catalogResults.length) {
+        setStatus("Offline mode active. Showing cached search results. Reconnect to refresh search.");
+      } else {
+        setStatus("Connect to the internet to search new products.");
+      }
+      return;
+    }
     try {
       setSearchingCatalog(true);
       setError("");
@@ -1003,6 +1207,13 @@ export function PortalPage() {
 
   async function handleAddPortalCatalogItem(item: PortalCatalogSearchItem) {
     setSelectedCatalogCode(item.code);
+    if (!isOnline) {
+      const offlineLine = buildOfflinePreparedLineFromCatalogItem(item);
+      setPortalDraftLines((current) => mergePortalPreparedLines(current, [offlineLine]));
+      setPortalOrderStatus(`1 item added to ${portalSalesOrderNo || "Local Basket"} in Basket. Offline changes stay on this device.`);
+      focusPortalDraftLines(offlineLine.lineId);
+      return;
+    }
     const prepared = await appendPortalRows(
       [{ code: item.code, brand: item.brand, qty: 1 }],
       `{count} item added to ${portalSalesOrderNo || "New Basket"} in Basket.`,
@@ -1011,6 +1222,11 @@ export function PortalPage() {
   }
 
   async function handleImportPortalOrderFile(file: File) {
+    if (!isOnline) {
+      setError("Connect to the internet to import and price a file.");
+      if (portalImportRef.current) portalImportRef.current.value = "";
+      return;
+    }
     try {
       const importedRows = await parseOrderImportFile(file, orderSearchBrand);
       if (!importedRows.length) {
@@ -1031,6 +1247,17 @@ export function PortalPage() {
   async function handleSubmitPortalOrder(mode: "draft" | "confirm") {
     if (!portalDraftLines.length) {
       setError("Add at least one line before saving portal order.");
+      return;
+    }
+    if (mode === "confirm" && !isOnline) {
+      setError("Connect to the internet to send this basket. Your basket stays saved on this device.");
+      return;
+    }
+    if (mode === "draft" && !isOnline) {
+      setError("");
+      setPortalSalesOrderNo((current) => current || "Local Basket");
+      setPortalOrderStatus("Basket saved on this device. Connect later to send it.");
+      setStatus("Basket saved offline on this device.");
       return;
     }
     if (mode === "confirm" && portalDraftHasMissingPrices) {
@@ -1122,6 +1349,10 @@ export function PortalPage() {
   }
 
   async function handleDeletePortalDraft(row: PortalSalesOrderRow) {
+    if (!isOnline) {
+      setError("Connect to the internet to delete saved baskets from the portal.");
+      return;
+    }
     if (!window.confirm(`Delete basket ${row.sales_order_no || row.id}?`)) return;
     try {
       setSavingPortalOrder(true);
@@ -1147,6 +1378,10 @@ export function PortalPage() {
   async function handleDownloadPortalPriceList() {
     if (!portalPriceListBrand) {
       setError("Select a brand before downloading the price list.");
+      return;
+    }
+    if (!isOnline) {
+      setError("Connect to the internet to download the price list.");
       return;
     }
     try {
@@ -1702,6 +1937,7 @@ export function PortalPage() {
             <span>Current View</span>
             <strong>{activeSectionHelpText}</strong>
           </div>
+          {!isOnline ? <div className="warning-text">Offline mode active. Basket changes stay on this device until you reconnect and confirm the basket.</div> : null}
 
           {activeSection === "statement" ? (
             <div className="portal-kpi-strip">
