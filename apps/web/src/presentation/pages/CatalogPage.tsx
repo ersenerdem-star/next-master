@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { syncBrandCatalogFromSpareto } from "../../infrastructure/api/adminApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
@@ -88,6 +88,7 @@ function filterCachedCatalogRows(rows: CatalogRow[], search: string, brand: stri
 
 export function CatalogPage() {
   const actionFeedback = useActionFeedback();
+  const selectedCatalogPopupRef = useRef<HTMLDivElement | null>(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [importBrand, setImportBrand] = useState("");
@@ -343,6 +344,32 @@ export function CatalogPage() {
       setSelectedCatalogProductId(rows[0].product_id);
     }
   }, [rows, selectedCatalogProductId]);
+
+  useEffect(() => {
+    if (!selectedCatalogProductId) return;
+
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (selectedCatalogPopupRef.current?.contains(target)) return;
+      setSelectedCatalogProductId("");
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectedCatalogProductId("");
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectedCatalogProductId]);
 
   useEffect(() => {
     const existing = readCatalogCache();
@@ -1077,7 +1104,7 @@ export function CatalogPage() {
       </section>
 
       {selectedCatalogRow && selectedCatalogDraft ? (
-        <div className="catalog-selected-popup">
+        <div className="catalog-selected-popup" ref={selectedCatalogPopupRef}>
           <div className="workbench-detail-panel workbench-detail-panel--catalog">
             <div className="toolbar toolbar--wrap">
               <span className="workbench-detail-panel__eyebrow">Selected Item</span>
