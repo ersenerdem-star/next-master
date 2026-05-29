@@ -2987,6 +2987,76 @@ select {
   }
 }
 
+@media (max-width: 1280px) {
+  .main,
+  .portal-shell {
+    padding: 18px;
+  }
+
+  .app-shell {
+    grid-template-columns: 208px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    padding: 14px 10px;
+  }
+
+  .brand-panel {
+    padding: 12px 12px 10px;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .topbar-panel {
+    width: min(100%, 100%);
+  }
+
+  .topbar-build {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+  }
+
+  .quotes-workspace {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+
+  .quote-list-panel--full {
+    max-width: none;
+  }
+
+  .workbench-main-layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+
+  .portal-layout {
+    grid-template-columns: minmax(220px, 250px) minmax(0, 1fr);
+  }
+
+  .portal-workbench {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+
+  .portal-record-layout {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+
+  .portal-search-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .catalog-selected-popup {
+    right: 18px;
+    top: 104px;
+    width: min(340px, calc(100vw - 36px));
+    max-height: calc(100vh - 128px);
+    overflow: auto;
+  }
+}
+
 @media (max-width: 1024px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -2999,6 +3069,15 @@ select {
     top: auto;
     height: auto;
     overflow: visible;
+  }
+
+  .main,
+  .portal-shell {
+    padding: 16px;
+  }
+
+  .brand {
+    font-size: 20px;
   }
 
   .stats-grid,
@@ -3038,6 +3117,21 @@ select {
 
   .portal-sidebar {
     position: static;
+  }
+
+  .workbench-detail-panel {
+    position: static;
+    top: auto;
+  }
+
+  .catalog-selected-popup {
+    left: 50%;
+    right: auto;
+    top: 96px;
+    transform: translateX(-50%);
+    width: min(560px, calc(100vw - 28px));
+    max-height: calc(100vh - 118px);
+    overflow: auto;
   }
 
   .invoice-edit-topbar,
@@ -3081,6 +3175,7 @@ select {
   .section-card__header--row,
   .topbar {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .toolbar {
@@ -3098,5 +3193,263 @@ select {
   .field__input {
     min-width: 0;
     width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .main,
+  .portal-shell {
+    padding: 14px;
+  }
+
+  .sidebar {
+    padding: 12px 10px;
+  }
+
+  .brand-panel,
+  .section-card,
+  .quote-list-panel,
+  .quote-editor-panel,
+  .portal-header,
+  .portal-login-card,
+  .modal-card {
+    border-radius: 16px;
+  }
+
+  .nav-item {
+    gap: 10px;
+    padding: 10px 11px;
+  }
+
+  .nav-submenu {
+    margin-left: 10px;
+    padding-left: 14px;
+  }
+
+  .nav-submenu__item {
+    padding: 8px 9px;
+  }
+
+  .topbar-panel {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px 14px;
+  }
+
+  .topbar-panel__code {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+
+  .topbar h1,
+  .portal-brand h1 {
+    font-size: 24px;
+  }
+
+  .topbar-build {
+    padding: 12px 14px;
+  }
+
+  .quote-list-panel__header,
+  .quote-editor-panel__header {
+    padding: 18px 18px 14px;
+  }
+
+  .quote-list-panel__body,
+  .quote-editor-panel > .section-card,
+  .quote-editor-panel > .section-card + .section-card {
+    margin: 0 12px 12px;
+  }
+
+  .quote-list-section__header,
+  .attention-panel__header,
+  .portal-header,
+  .portal-brand,
+  .portal-builder-actions,
+  .portal-action-bar,
+  .portal-search-card__actions,
+  .workbench-controls,
+  .inline-password-reset,
+  .toolbar-subactions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .quote-summary-input-wrap .quote-total-input {
+    width: 100%;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 9px 10px;
+    font-size: 11px;
+  }
+
+  .invoice-company-pill {
+    max-width: none;
+    width: 100%;
+  }
+
+  .portal-login-card {
+    margin-top: 6vh;
+    padding: 18px;
+  }
+
+  .portal-login-brand {
+    align-items: flex-start;
+  }
+
+  .portal-login-brand__copy strong {
+    font-size: 21px;
+  }
+
+  .portal-search-card {
+    padding: 12px;
+  }
+
+  .portal-search-card__top {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .portal-search-card__media,
+  .portal-search-card__media .catalog-thumb--detail {
+    min-height: 72px;
+    width: 72px;
+    height: 72px;
+  }
+
+  .portal-search-card__specs {
+    gap: 5px;
+  }
+
+  .portal-filter-stat {
+    min-height: 0;
+  }
+
+  .portal-statement-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-selected-popup {
+    top: 88px;
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 108px);
+  }
+}
+
+@media (max-width: 560px) {
+  .main,
+  .portal-shell {
+    padding: 10px;
+  }
+
+  .brand {
+    font-size: 18px;
+  }
+
+  .nav-item {
+    grid-template-columns: 30px minmax(0, 1fr) 10px;
+    gap: 8px;
+    padding: 9px 10px;
+    border-radius: 14px;
+  }
+
+  .nav-item__code {
+    width: 30px;
+    height: 30px;
+    font-size: 10px;
+  }
+
+  .nav-item__title {
+    font-size: 12px;
+  }
+
+  .nav-item__caption {
+    font-size: 9px;
+  }
+
+  .nav-submenu {
+    margin-left: 6px;
+    padding-left: 10px;
+  }
+
+  .nav-submenu__item {
+    gap: 8px;
+    padding: 7px 8px;
+    font-size: 11px;
+  }
+
+  .topbar-panel,
+  .topbar-build,
+  .portal-header,
+  .quote-list-panel__header,
+  .quote-editor-panel__header,
+  .section-card__body {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .topbar h1,
+  .portal-brand h1,
+  .portal-login-card h1 {
+    font-size: 20px;
+  }
+
+  .topbar p,
+  .portal-brand p,
+  .portal-subnav__hint {
+    font-size: 12px;
+  }
+
+  .topbar-build__meta,
+  .dashboard-order-meta {
+    gap: 6px;
+  }
+
+  .inline-menu-card {
+    left: 0;
+    right: auto;
+    min-width: 0;
+    width: min(280px, calc(100vw - 24px));
+  }
+
+  .portal-search-card__top {
+    grid-template-columns: 1fr;
+  }
+
+  .portal-search-card__media {
+    width: 100%;
+    min-height: 120px;
+  }
+
+  .portal-search-card__media .catalog-thumb--detail {
+    width: 100px;
+    height: 100px;
+  }
+
+  .portal-search-card__actions .button,
+  .portal-search-card__actions .secondary-button,
+  .portal-search-card__actions .primary-button,
+  .portal-action-bar .button,
+  .portal-action-bar .secondary-button,
+  .portal-action-bar .primary-button,
+  .toolbar .button,
+  .toolbar .secondary-button,
+  .toolbar .primary-button,
+  .workbench-controls .button,
+  .workbench-controls .secondary-button,
+  .workbench-controls .primary-button,
+  .topbar-actions .button,
+  .topbar-actions .secondary-button,
+  .topbar-actions .primary-button {
+    width: 100%;
+  }
+
+  .catalog-selected-popup {
+    top: 76px;
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 92px);
   }
 }
