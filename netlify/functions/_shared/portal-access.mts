@@ -21,6 +21,11 @@ export type PortalInviteRow = {
   access_can_view_orders: boolean;
 };
 
+const CUSTOMER_PORTAL_SELECT =
+  "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,seller_company_profile_id,price_list_type,portal_c_price_mode";
+const CUSTOMER_PORTAL_SELECT_LEGACY =
+  "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,price_list_type";
+
 async function fetchFirst<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
   const rows = await getJson<Array<T>>(buildRestUrl(supabaseUrl, table, params), {
     headers: serviceRoleHeaders(serviceRoleKey),
@@ -43,6 +48,44 @@ async function fetchAllOptional<T>(supabaseUrl: string, serviceRoleKey: string, 
       return [];
     }
     throw error;
+  }
+}
+
+async function fetchPortalCustomerRecord(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  invite: PortalInviteRow,
+) {
+  const trySelect = async (select: string) =>
+    (invite.customer_id
+      ? await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
+          select,
+          organization_id: `eq.${organizationId}`,
+          id: `eq.${invite.customer_id}`,
+        })
+      : null) ||
+    (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
+      select,
+      organization_id: `eq.${organizationId}`,
+      display_name: `eq.${invite.party_name}`,
+    })) ||
+    (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
+      select,
+      organization_id: `eq.${organizationId}`,
+      company_name: `eq.${invite.party_name}`,
+    }));
+
+  try {
+    return await trySelect(CUSTOMER_PORTAL_SELECT);
+  } catch (primaryError) {
+    try {
+      return await trySelect(CUSTOMER_PORTAL_SELECT_LEGACY);
+    } catch (legacyError) {
+      const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError || "");
+      const legacyMessage = legacyError instanceof Error ? legacyError.message : String(legacyError || "");
+      throw new Error(legacyMessage || primaryMessage || "Customer portal record lookup failed");
+    }
   }
 }
 
@@ -253,27 +296,7 @@ export async function resolvePortalInvite(
 
 export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {
   if (invite.party_type === "customer") {
-    const customer =
-      (invite.customer_id
-        ? await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
-            select:
-              "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,seller_company_profile_id,price_list_type,portal_c_price_mode",
-            organization_id: `eq.${invite.organization_id}`,
-            id: `eq.${invite.customer_id}`,
-          })
-        : null) ||
-      (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
-        select:
-          "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,seller_company_profile_id,price_list_type,portal_c_price_mode",
-        organization_id: `eq.${invite.organization_id}`,
-        display_name: `eq.${invite.party_name}`,
-      })) ||
-      (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
-        select:
-          "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,seller_company_profile_id,price_list_type,portal_c_price_mode",
-        organization_id: `eq.${invite.organization_id}`,
-        company_name: `eq.${invite.party_name}`,
-      }));
+    const customer = await fetchPortalCustomerRecord(supabaseUrl, serviceRoleKey, invite.organization_id, invite);
 
     const companyProfile =
       (customer?.seller_company_profile_id

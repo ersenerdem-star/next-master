@@ -117,6 +117,11 @@ type CustomerPricingContext = {
   cPriceListId: string;
 };
 
+const CUSTOMER_ORDER_SELECT =
+  "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,portal_c_price_mode,price_list_margin_percent";
+const CUSTOMER_ORDER_SELECT_LEGACY =
+  "id,display_name,company_name,currency,payment_terms,contract_nr,price_list_type";
+
 function normalizePartCode(value: string) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -269,6 +274,43 @@ async function callRpc<T>(supabaseUrl: string, serviceRoleKey: string, fn: strin
   });
 }
 
+async function fetchPortalCustomerForOrders(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  invite: PortalInviteRow,
+): Promise<CustomerRow | null> {
+  const trySelect = async (select: string) =>
+    (invite.customer_id
+      ? await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
+          select,
+          organization_id: `eq.${invite.organization_id}`,
+          id: `eq.${invite.customer_id}`,
+        })
+      : null) ||
+    (await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
+      select,
+      organization_id: `eq.${invite.organization_id}`,
+      display_name: `eq.${invite.party_name}`,
+    })) ||
+    (await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
+      select,
+      organization_id: `eq.${invite.organization_id}`,
+      company_name: `eq.${invite.party_name}`,
+    }));
+
+  try {
+    return await trySelect(CUSTOMER_ORDER_SELECT);
+  } catch (primaryError) {
+    try {
+      return await trySelect(CUSTOMER_ORDER_SELECT_LEGACY);
+    } catch (legacyError) {
+      const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError || "");
+      const legacyMessage = legacyError instanceof Error ? legacyError.message : String(legacyError || "");
+      throw new Error(legacyMessage || primaryMessage || `Customer card not found for ${invite.party_name}`);
+    }
+  }
+}
+
 async function resolvePortalCustomer(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -278,24 +320,7 @@ async function resolvePortalCustomer(
     throw new Error("This portal cannot create sales orders");
   }
 
-  const customer =
-    (invite.customer_id
-      ? await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
-          select: "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,portal_c_price_mode,price_list_margin_percent",
-          organization_id: `eq.${invite.organization_id}`,
-          id: `eq.${invite.customer_id}`,
-        })
-      : null) ||
-    (await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
-      select: "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,portal_c_price_mode,price_list_margin_percent",
-      organization_id: `eq.${invite.organization_id}`,
-      display_name: `eq.${invite.party_name}`,
-    })) ||
-    (await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
-      select: "id,display_name,company_name,currency,payment_terms,contract_nr,seller_company_profile_id,price_list_type,portal_c_price_mode,price_list_margin_percent",
-      organization_id: `eq.${invite.organization_id}`,
-      company_name: `eq.${invite.party_name}`,
-    }));
+  const customer = await fetchPortalCustomerForOrders(supabaseUrl, serviceRoleKey, invite);
 
   if (!customer?.id) {
     throw new Error(`Customer card not found for ${invite.party_name}`);
