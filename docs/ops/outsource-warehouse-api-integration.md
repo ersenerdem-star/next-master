@@ -19,6 +19,7 @@ Run:
 - `/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp/supabase/migrations/20260530_35_outsourced_warehouse_api_sync.sql`
 - `/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp/supabase/migrations/20260530_36_warehouse_dropship_fulfillment.sql`
 - `/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp/supabase/migrations/20260530_37_outbound_warehouse_stock_api.sql`
+- `/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp/supabase/migrations/20260530_38_warehouse_partner_security_and_snapshot.sql`
 
 ### Related outbound API
 

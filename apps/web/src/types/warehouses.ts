@@ -26,6 +26,9 @@ export type WarehouseApiClient = {
   client_name: string;
   partner_name: string;
   status: "active" | "disabled";
+  allowed_ip_list: string;
+  require_hmac: boolean;
+  allow_order_submit: boolean;
   include_zero_stock: boolean;
   expose_unit_cost: boolean;
   notes: string;

@@ -123,6 +123,9 @@ function mapWarehouseApiClientRow(row: Record<string, unknown>): WarehouseApiCli
     client_name: String(row.client_name || ""),
     partner_name: String(row.partner_name || ""),
     status: String(row.status || "active").trim().toLowerCase() === "disabled" ? "disabled" : "active",
+    allowed_ip_list: String(row.allowed_ip_list || ""),
+    require_hmac: row.require_hmac !== false,
+    allow_order_submit: Boolean(row.allow_order_submit),
     include_zero_stock: Boolean(row.include_zero_stock),
     expose_unit_cost: Boolean(row.expose_unit_cost),
     notes: String(row.notes || ""),
@@ -325,6 +328,9 @@ export async function upsertWarehouseApiClient(input: {
   client_name: string;
   partner_name: string;
   status: "active" | "disabled";
+  allowed_ip_list: string;
+  require_hmac: boolean;
+  allow_order_submit: boolean;
   include_zero_stock: boolean;
   expose_unit_cost: boolean;
   notes: string;

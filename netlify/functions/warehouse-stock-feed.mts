@@ -1,6 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { buildRestUrl, getJson, json, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
 import { hashPortalToken } from "./_shared/portal-security.mts";
+import { enforcePartnerRequestSecurity, readPartnerApiKey } from "./_shared/warehouse-partner-auth.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 type WarehouseApiClientRow = {
@@ -9,11 +10,11 @@ type WarehouseApiClientRow = {
   client_name?: string | null;
   partner_name?: string | null;
   status?: string | null;
+  allowed_ip_list?: string | null;
+  require_hmac?: boolean | null;
   include_zero_stock?: boolean | null;
   expose_unit_cost?: boolean | null;
   expires_at?: string | null;
-  last_used_at?: string | null;
-  last_used_ip?: string | null;
 };
 
 type WarehouseLinkRow = {
@@ -29,7 +30,7 @@ type WarehouseRow = {
   is_active?: boolean | null;
 };
 
-type InventoryMovementRow = {
+type SnapshotRow = {
   warehouse_id?: string | null;
   warehouse_code?: string | null;
   warehouse_name?: string | null;
@@ -38,10 +39,11 @@ type InventoryMovementRow = {
   old_code?: string | null;
   description?: string | null;
   origin?: string | null;
-  qty_in?: number | string | null;
-  qty_out?: number | string | null;
-  total_cost?: number | string | null;
-  moved_at?: string | null;
+  on_hand_qty?: number | string | null;
+  available_qty?: number | string | null;
+  stock_value?: number | string | null;
+  average_cost?: number | string | null;
+  last_moved_at?: string | null;
 };
 
 function normalizeText(value: unknown) {
@@ -83,34 +85,6 @@ function buildInFilter(ids: string[]) {
   return `in.(${ids.join(",")})`;
 }
 
-function stockKey(row: {
-  warehouse_id?: unknown;
-  brand?: unknown;
-  product_code?: unknown;
-  old_code?: unknown;
-}) {
-  return [
-    normalizeText(row.warehouse_id).toLowerCase(),
-    normalizeBrand(row.brand),
-    normalizePartCode(row.product_code),
-    normalizePartCode(row.old_code),
-  ].join("::");
-}
-
-function readApiKey(req: Request) {
-  const headerValue = normalizeText(req.headers.get("x-api-key"));
-  if (headerValue) return headerValue;
-  const authHeader = normalizeText(req.headers.get("authorization"));
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  return normalizeText(match?.[1]);
-}
-
-function readClientIp(req: Request) {
-  const forwarded = normalizeText(req.headers.get("x-forwarded-for"));
-  if (forwarded.includes(",")) return forwarded.split(",")[0].trim();
-  return forwarded || normalizeText(req.headers.get("client-ip"));
-}
-
 async function logRequest(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -136,13 +110,13 @@ export default async (req: Request, _context: Context) => {
       throw new Error("Missing Netlify environment variables for warehouse stock feed");
     }
 
-    const apiKey = readApiKey(req);
+    const apiKey = readPartnerApiKey(req);
     if (!apiKey) return json({ error: "Missing API key" }, 401);
 
     const apiKeyHash = await hashPortalToken(apiKey);
     const clients = await getJson<WarehouseApiClientRow[]>(
       buildRestUrl(supabaseUrl, "warehouse_api_clients", {
-        select: "id,organization_id,client_name,partner_name,status,include_zero_stock,expose_unit_cost,expires_at,last_used_at,last_used_ip",
+        select: "id,organization_id,client_name,partner_name,status,allowed_ip_list,require_hmac,include_zero_stock,expose_unit_cost,expires_at",
         api_key_hash: `eq.${apiKeyHash}`,
         status: "eq.active",
         limit: "1",
@@ -156,12 +130,29 @@ export default async (req: Request, _context: Context) => {
     if (!client?.id || !client.organization_id) return json({ error: "Invalid API key" }, 401);
     if (isExpired(client.expires_at)) return json({ error: "API key has expired" }, 401);
 
+    const security = await enforcePartnerRequestSecurity(req, client, apiKey, "");
     const requestUrl = new URL(req.url);
     const requestedWarehouseCode = normalizeText(requestUrl.searchParams.get("warehouse_code"));
     const requestedBrand = normalizeText(requestUrl.searchParams.get("brand"));
     const requestedCode = normalizeText(requestUrl.searchParams.get("code"));
     const includeZeroRequested = requestUrl.searchParams.get("include_zero") === "true";
-    const requestIp = readClientIp(req);
+
+    if (!security.ok) {
+      await logRequest(supabaseUrl, serviceRoleKey, {
+        organization_id: client.organization_id,
+        client_id: client.id,
+        client_name: normalizeText(client.client_name),
+        partner_name: normalizeText(client.partner_name),
+        request_kind: "stock_feed",
+        request_ip: security.clientIp,
+        warehouse_filter: requestedWarehouseCode,
+        brand_filter: requestedBrand,
+        code_filter: requestedCode,
+        status: security.error.toLowerCase().includes("ip") ? "forbidden" : "unauthorized",
+        response_item_count: 0,
+      });
+      return json({ error: security.error }, security.error.toLowerCase().includes("ip") ? 403 : 401);
+    }
 
     const links = await getJson<WarehouseLinkRow[]>(
       buildRestUrl(supabaseUrl, "warehouse_api_client_warehouses", {
@@ -181,7 +172,8 @@ export default async (req: Request, _context: Context) => {
         client_id: client.id,
         client_name: normalizeText(client.client_name),
         partner_name: normalizeText(client.partner_name),
-        request_ip: requestIp,
+        request_kind: "stock_feed",
+        request_ip: security.clientIp,
         warehouse_filter: requestedWarehouseCode,
         brand_filter: requestedBrand,
         code_filter: requestedCode,
@@ -221,92 +213,45 @@ export default async (req: Request, _context: Context) => {
       });
     }
 
-    const movements = await getJson<InventoryMovementRow[]>(
-      buildRestUrl(supabaseUrl, "inventory_movements", {
-        select: "warehouse_id,warehouse_code,warehouse_name,brand,product_code,old_code,description,origin,qty_in,qty_out,total_cost,moved_at",
+    const snapshots = await getJson<SnapshotRow[]>(
+      buildRestUrl(supabaseUrl, "warehouse_stock_snapshots", {
+        select: "warehouse_id,warehouse_code,warehouse_name,brand,product_code,old_code,description,origin,on_hand_qty,available_qty,stock_value,average_cost,last_moved_at",
         organization_id: `eq.${normalizeText(client.organization_id)}`,
         warehouse_id: buildInFilter(selectedWarehouseIds),
-        order: "moved_at.desc",
+        order: "warehouse_name.asc,brand.asc,product_code.asc",
       }),
       {
         headers: serviceRoleHeaders(serviceRoleKey),
       },
     );
 
-    const aggregated = new Map<
-      string,
-      {
-        warehouse_id: string;
-        warehouse_code: string;
-        warehouse_name: string;
-        brand: string;
-        product_code: string;
-        old_code: string;
-        description: string;
-        origin: string;
-        on_hand_qty: number;
-        stock_value: number;
-        last_moved_at: string;
-      }
-    >();
-
-    movements.forEach((movement) => {
-      const key = stockKey(movement);
-      const current = aggregated.get(key) || {
-        warehouse_id: normalizeText(movement.warehouse_id),
-        warehouse_code: normalizeText(movement.warehouse_code),
-        warehouse_name: normalizeText(movement.warehouse_name),
-        brand: normalizeText(movement.brand),
-        product_code: normalizeText(movement.product_code),
-        old_code: normalizeText(movement.old_code),
-        description: normalizeText(movement.description),
-        origin: normalizeText(movement.origin),
-        on_hand_qty: 0,
-        stock_value: 0,
-        last_moved_at: normalizeText(movement.moved_at),
-      };
-      current.on_hand_qty = roundQty(current.on_hand_qty + toNumber(movement.qty_in) - toNumber(movement.qty_out));
-      current.stock_value = roundMoney(current.stock_value + toNumber(movement.total_cost) * (toNumber(movement.qty_in) > 0 ? 1 : -1));
-      if (!current.description && movement.description) current.description = normalizeText(movement.description);
-      if (!current.origin && movement.origin) current.origin = normalizeText(movement.origin);
-      if (!current.old_code && movement.old_code) current.old_code = normalizeText(movement.old_code);
-      if (!current.product_code && movement.product_code) current.product_code = normalizeText(movement.product_code);
-      if (normalizeText(movement.moved_at) > current.last_moved_at) current.last_moved_at = normalizeText(movement.moved_at);
-      aggregated.set(key, current);
-    });
-
-    const normalizedCodeFilter = normalizePartCode(requestedCode);
     const normalizedBrandFilter = normalizeBrand(requestedBrand);
+    const normalizedCodeFilter = normalizePartCode(requestedCode);
     const includeZero = Boolean(client.include_zero_stock) || includeZeroRequested;
     const exposeUnitCost = Boolean(client.expose_unit_cost);
 
-    const items = [...aggregated.values()]
-      .filter((row) => includeZero || row.on_hand_qty > 0)
+    const items = snapshots
+      .filter((row) => includeZero || toNumber(row.on_hand_qty) > 0)
       .filter((row) => !normalizedBrandFilter || normalizeBrand(row.brand) === normalizedBrandFilter)
       .filter((row) => {
         if (!normalizedCodeFilter) return true;
         return [row.product_code, row.old_code].some((value) => normalizePartCode(value).includes(normalizedCodeFilter));
       })
       .map((row) => ({
-        warehouse_id: row.warehouse_id,
-        warehouse_code: row.warehouse_code,
-        warehouse_name: row.warehouse_name,
-        brand: row.brand,
-        product_code: row.product_code,
-        old_code: row.old_code,
-        description: row.description,
-        origin: row.origin,
-        on_hand_qty: roundQty(row.on_hand_qty),
-        available_qty: roundQty(row.on_hand_qty),
-        unit_cost: exposeUnitCost && row.on_hand_qty > 0 ? roundMoney(row.stock_value / row.on_hand_qty) : undefined,
-        stock_value: exposeUnitCost ? roundMoney(row.stock_value) : undefined,
-        last_moved_at: row.last_moved_at,
-      }))
-      .sort((left, right) => {
-        if (left.warehouse_name !== right.warehouse_name) return left.warehouse_name.localeCompare(right.warehouse_name);
-        if (left.brand !== right.brand) return left.brand.localeCompare(right.brand);
-        return (left.product_code || left.old_code).localeCompare(right.product_code || right.old_code);
-      });
+        warehouse_id: normalizeText(row.warehouse_id),
+        warehouse_code: normalizeText(row.warehouse_code),
+        warehouse_name: normalizeText(row.warehouse_name),
+        brand: normalizeText(row.brand),
+        product_code: normalizeText(row.product_code),
+        old_code: normalizeText(row.old_code),
+        description: normalizeText(row.description),
+        origin: normalizeText(row.origin),
+        on_hand_qty: roundQty(toNumber(row.on_hand_qty)),
+        available_qty: roundQty(toNumber(row.available_qty)),
+        unit_cost: exposeUnitCost ? roundMoney(toNumber(row.average_cost)) : undefined,
+        stock_value: exposeUnitCost ? roundMoney(toNumber(row.stock_value)) : undefined,
+        last_moved_at: normalizeText(row.last_moved_at),
+      }));
 
     await sendJson<unknown>(
       buildRestUrl(supabaseUrl, "warehouse_api_clients", {
@@ -321,7 +266,7 @@ export default async (req: Request, _context: Context) => {
         },
         body: JSON.stringify({
           last_used_at: new Date().toISOString(),
-          last_used_ip: requestIp,
+          last_used_ip: security.clientIp,
           updated_at: new Date().toISOString(),
         }),
       },
@@ -332,7 +277,8 @@ export default async (req: Request, _context: Context) => {
       client_id: client.id,
       client_name: normalizeText(client.client_name),
       partner_name: normalizeText(client.partner_name),
-      request_ip: requestIp,
+      request_kind: "stock_feed",
+      request_ip: security.clientIp,
       warehouse_filter: requestedWarehouseCode,
       brand_filter: requestedBrand,
       code_filter: requestedCode,

@@ -85,6 +85,9 @@ function createEmptyWarehouseApiClient(warehouses: Warehouse[]): WarehouseApiCli
     client_name: "",
     partner_name: "",
     status: "active",
+    allowed_ip_list: "",
+    require_hmac: true,
+    allow_order_submit: false,
     include_zero_stock: false,
     expose_unit_cost: false,
     notes: "",
@@ -470,6 +473,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
       { key: "client", header: "Client", render: (row: WarehouseApiClient) => row.client_name || "-" },
       { key: "partner", header: "Partner", render: (row: WarehouseApiClient) => row.partner_name || "-" },
       { key: "warehouses", header: "Warehouses", render: (row: WarehouseApiClient) => row.warehouse_labels.length || 0 },
+      { key: "order", header: "Order API", render: (row: WarehouseApiClient) => (row.allow_order_submit ? "Open" : "Closed") },
       { key: "status", header: "Status", render: (row: WarehouseApiClient) => (row.status === "disabled" ? "Disabled" : "Active") },
       { key: "key", header: "Key Prefix", render: (row: WarehouseApiClient) => row.api_key_prefix || "-" },
       { key: "last", header: "Last Used", render: (row: WarehouseApiClient) => formatDate(row.last_used_at) },
@@ -793,6 +797,9 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
         client_name: warehouseApiDraft.client_name,
         partner_name: warehouseApiDraft.partner_name,
         status: warehouseApiDraft.status,
+        allowed_ip_list: warehouseApiDraft.allowed_ip_list,
+        require_hmac: warehouseApiDraft.require_hmac,
+        allow_order_submit: warehouseApiDraft.allow_order_submit,
         include_zero_stock: warehouseApiDraft.include_zero_stock,
         expose_unit_cost: warehouseApiDraft.expose_unit_cost,
         notes: warehouseApiDraft.notes,
@@ -1306,6 +1313,20 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                 </div>
 
                 <div className="customers-form-row customers-form-row--top">
+                  <div className="customers-form-row__label">Allowlisted IPs</div>
+                  <div className="customers-field-wrap customers-field-wrap--full">
+                    <label className="field customer-field">
+                      <textarea
+                        className="field__input field__input--textarea"
+                        value={warehouseApiDraft.allowed_ip_list}
+                        onChange={(event) => setWarehouseApiDraft((current) => (current ? { ...current, allowed_ip_list: event.target.value } : current))}
+                        placeholder={"203.0.113.10\n203.0.113.0/24"}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="customers-form-row customers-form-row--top">
                   <div className="customers-form-row__label">Allowed Warehouses</div>
                   <div className="customers-field-wrap customers-field-wrap--full">
                     <div className="warehouse-api-checkboxes">
@@ -1324,6 +1345,22 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                 </div>
 
                 <div className="warehouse-api-checkboxes">
+                  <label className="checkbox-field warehouse-api-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={warehouseApiDraft.require_hmac}
+                      onChange={(event) => setWarehouseApiDraft((current) => (current ? { ...current, require_hmac: event.target.checked } : current))}
+                    />
+                    <span>Require HMAC signed requests</span>
+                  </label>
+                  <label className="checkbox-field warehouse-api-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={warehouseApiDraft.allow_order_submit}
+                      onChange={(event) => setWarehouseApiDraft((current) => (current ? { ...current, allow_order_submit: event.target.checked } : current))}
+                    />
+                    <span>Open separate order submit endpoint</span>
+                  </label>
                   <label className="checkbox-field warehouse-api-checkbox">
                     <input
                       type="checkbox"
@@ -1357,6 +1394,10 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                     <strong>{warehouseApiBaseUrl || "-"}</strong>
                   </div>
                   <div className="settings-item">
+                    <span className="settings-label">Order URL</span>
+                    <strong>{warehouseApiBaseUrl ? warehouseApiBaseUrl.replace("/warehouse-stock-feed", "/warehouse-order-submit") : "-"}</strong>
+                  </div>
+                  <div className="settings-item">
                     <span className="settings-label">Auth Header</span>
                     <strong>{warehouseApiHeaderName}</strong>
                   </div>
@@ -1377,6 +1418,10 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                     <div className="meta-row">
                       <span>Header: {latestWarehouseApiSecret.header_name}</span>
                       <span>Example: {latestWarehouseApiSecret.sample_url}</span>
+                    </div>
+                    <div className="meta-row">
+                      <span>Use this same API key as the HMAC secret for signed requests.</span>
+                      <span>Send `x-timestamp` and `x-signature` headers.</span>
                     </div>
                   </div>
                 ) : null}

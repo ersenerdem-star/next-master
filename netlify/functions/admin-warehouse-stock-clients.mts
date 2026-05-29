@@ -11,6 +11,9 @@ type WarehouseApiClientRow = {
   partner_name?: string | null;
   status?: string | null;
   api_key_prefix?: string | null;
+  allowed_ip_list?: string | null;
+  require_hmac?: boolean | null;
+  allow_order_submit?: boolean | null;
   include_zero_stock?: boolean | null;
   expose_unit_cost?: boolean | null;
   notes?: string | null;
@@ -75,6 +78,9 @@ function mapClientRow(
     client_name: normalizeText(row.client_name),
     partner_name: normalizeText(row.partner_name),
     status: normalizeStatus(row.status),
+    allowed_ip_list: normalizeText(row.allowed_ip_list),
+    require_hmac: row.require_hmac !== false,
+    allow_order_submit: Boolean(row.allow_order_submit),
     include_zero_stock: Boolean(row.include_zero_stock),
     expose_unit_cost: Boolean(row.expose_unit_cost),
     notes: normalizeText(row.notes),
@@ -120,8 +126,8 @@ async function fetchClientList(
   organizationId: string,
 ) {
   const clients = await getJson<WarehouseApiClientRow[]>(
-    buildRestUrl(supabaseUrl, "warehouse_api_clients", {
-      select: "id,organization_id,client_name,partner_name,status,api_key_prefix,include_zero_stock,expose_unit_cost,notes,expires_at,last_used_at,last_used_ip,created_at,updated_at",
+      buildRestUrl(supabaseUrl, "warehouse_api_clients", {
+          select: "id,organization_id,client_name,partner_name,status,api_key_prefix,allowed_ip_list,require_hmac,allow_order_submit,include_zero_stock,expose_unit_cost,notes,expires_at,last_used_at,last_used_ip,created_at,updated_at",
       organization_id: `eq.${organizationId}`,
       order: "partner_name.asc,client_name.asc",
     }),
@@ -298,6 +304,9 @@ export default async (req: Request, _context: Context) => {
     const warehouseIds = uniqueIds(Array.isArray(payload.warehouse_ids) ? payload.warehouse_ids : []);
     const includeZeroStock = payload.include_zero_stock === true;
     const exposeUnitCost = payload.expose_unit_cost === true;
+    const requireHmac = payload.require_hmac !== false;
+    const allowOrderSubmit = payload.allow_order_submit === true;
+    const allowedIpList = normalizeText(payload.allowed_ip_list);
 
     if (!clientName) return json({ error: "Client name is required" }, 400);
     if (!partnerName) return json({ error: "Partner name is required" }, 400);
@@ -351,6 +360,9 @@ export default async (req: Request, _context: Context) => {
             client_name: clientName,
             partner_name: partnerName,
             status,
+            allowed_ip_list: allowedIpList,
+            require_hmac: requireHmac,
+            allow_order_submit: allowOrderSubmit,
             include_zero_stock: includeZeroStock,
             expose_unit_cost: exposeUnitCost,
             notes,
@@ -375,6 +387,9 @@ export default async (req: Request, _context: Context) => {
             client_name: clientName,
             partner_name: partnerName,
             status,
+            allowed_ip_list: allowedIpList,
+            require_hmac: requireHmac,
+            allow_order_submit: allowOrderSubmit,
             api_key_hash: apiKeyHash,
             api_key_prefix: buildPrefix(apiKey),
             include_zero_stock: includeZeroStock,
