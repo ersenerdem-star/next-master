@@ -455,7 +455,6 @@ export function PortalPage() {
           header: `Price ${portalPricingCurrency}`,
           render: (row: PortalCatalogSearchItem) => (row.sell_price == null ? "-" : formatMoney(Number(row.sell_price || 0), row.currency || portalPricingCurrency)),
         },
-        { key: "oem", header: "OEM", render: (row: PortalCatalogSearchItem) => row.oem_no || "-" },
         { key: "tariff", header: "Tariff", render: (row: PortalCatalogSearchItem) => row.tariff || "-" },
         { key: "origin", header: "Origin", render: (row: PortalCatalogSearchItem) => row.origin || "-" },
         { key: "weight", header: "Weight", render: (row: PortalCatalogSearchItem) => formatWeight(row.weight_kg) },
@@ -2002,7 +2001,6 @@ export function PortalPage() {
                             </div>
                             <div className="portal-search-card__body">
                               <strong>{row.description || "-"}</strong>
-                              <span>{row.oem_no || "No OEM listed"}</span>
                               <div className="portal-search-card__specs">
                                 <span>{row.tariff || "No tariff"}</span>
                                 <span>{row.origin || "No origin"}</span>
