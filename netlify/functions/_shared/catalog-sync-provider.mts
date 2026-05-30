@@ -1,5 +1,7 @@
 import { syncBrandCatalogFromSpareto } from "./spareto-sync.mts";
 import { syncBrandCatalogFromMann } from "./mann-sync.mts";
+import { syncBrandCatalogFromDonaldson } from "./donaldson-sync.mts";
+import { syncBrandCatalogFromZfAftermarket } from "./zf-aftermarket-sync.mts";
 import { canonicalizeInternalBrandName, normalizeBrandKey } from "./brand-standardization.mts";
 
 export type CatalogSyncPreferredProvider =
@@ -112,21 +114,45 @@ export async function syncBrandCatalog(input: {
   requestTimeoutMs?: number;
 }) {
   const plan = resolveCatalogSyncPlan(input.brandName);
-  const useMannOfficial = plan.preferredProviderKey === "mann_official";
-  const result = useMannOfficial
-    ? await syncBrandCatalogFromMann({
-        ...input,
-        brandName: plan.brandName,
-      })
-    : await syncBrandCatalogFromSpareto({
-        ...input,
-        brandName: plan.brandName,
-      });
+  let result;
+  let executionProviderKey = plan.executionProviderKey;
+  let executionProviderLabel = plan.executionProviderLabel;
+  let executionSourceType = plan.executionSourceType;
+  let fallbackUsed = plan.fallbackUsed;
 
-  const executionProviderKey = useMannOfficial ? plan.preferredProviderKey : plan.executionProviderKey;
-  const executionProviderLabel = useMannOfficial ? plan.preferredProviderLabel : plan.executionProviderLabel;
-  const executionSourceType = useMannOfficial ? plan.preferredSourceType : plan.executionSourceType;
-  const fallbackUsed = useMannOfficial ? false : plan.fallbackUsed;
+  if (plan.preferredProviderKey === "mann_official") {
+    result = await syncBrandCatalogFromMann({
+      ...input,
+      brandName: plan.brandName,
+    });
+    executionProviderKey = plan.preferredProviderKey;
+    executionProviderLabel = plan.preferredProviderLabel;
+    executionSourceType = plan.preferredSourceType;
+    fallbackUsed = false;
+  } else if (plan.preferredProviderKey === "donaldson_official") {
+    result = await syncBrandCatalogFromDonaldson({
+      ...input,
+      brandName: plan.brandName,
+    });
+    executionProviderKey = plan.preferredProviderKey;
+    executionProviderLabel = plan.preferredProviderLabel;
+    executionSourceType = plan.preferredSourceType;
+    fallbackUsed = false;
+  } else if (plan.preferredProviderKey === "zf_aftermarket") {
+    result = await syncBrandCatalogFromZfAftermarket({
+      ...input,
+      brandName: plan.brandName,
+    });
+    executionProviderKey = plan.preferredProviderKey;
+    executionProviderLabel = plan.preferredProviderLabel;
+    executionSourceType = plan.preferredSourceType;
+    fallbackUsed = false;
+  } else {
+    result = await syncBrandCatalogFromSpareto({
+      ...input,
+      brandName: plan.brandName,
+    });
+  }
 
   return {
     ...result,
