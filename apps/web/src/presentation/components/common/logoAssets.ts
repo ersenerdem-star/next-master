@@ -16,6 +16,7 @@ type LogoPreset = {
 const LOGO_PRESETS: LogoPreset[] = [
   { match: /bosch/i, label: "Bosch", wordmark: "BOSCH", bgFrom: "#fff7ed", bgTo: "#ffffff", fg: "#c2410c", stroke: "#fdba74" },
   { match: /\bate\b/i, label: "ATE", wordmark: "ATE", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#93c5fd" },
+  { match: /donaldson/i, label: "Donaldson", wordmark: "DONALDSON", bgFrom: "#fef2f2", bgTo: "#ffffff", fg: "#c81e1e", stroke: "#fca5a5" },
   { match: /wabco/i, label: "WABCO", wordmark: "WABCO", bgFrom: "#ecfeff", bgTo: "#ffffff", fg: "#0f766e", stroke: "#67e8f9" },
   { match: /sachs/i, label: "Sachs", wordmark: "SACHS", bgFrom: "#f5f3ff", bgTo: "#ffffff", fg: "#6d28d9", stroke: "#c4b5fd" },
   { match: /mann/i, label: "MANN", wordmark: "MANN", bgFrom: "#fefce8", bgTo: "#ffffff", fg: "#a16207", stroke: "#fde047" },
