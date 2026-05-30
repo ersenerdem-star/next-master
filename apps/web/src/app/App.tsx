@@ -131,6 +131,7 @@ export function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [appRole, setAppRole] = useState<AppRole>("");
   const [appRoleReady, setAppRoleReady] = useState(false);
+  const [appSessionReloadTick, setAppSessionReloadTick] = useState(0);
   const [activePage, setActivePage] = useState("Home");
   const [accessNotice, setAccessNotice] = useState("");
   const [recoveryMode, setRecoveryMode] = useState(false);
@@ -163,20 +164,44 @@ export function App() {
     });
 
     const { data } = supabaseClient.auth.onAuthStateChange((event, session) => {
-      clearCachedAppSession();
-      setAppRole("");
-      setAppRoleReady(false);
       if (event === "PASSWORD_RECOVERY") {
+        clearCachedAppSession();
+        setAppRole("");
+        setAppRoleReady(true);
         setRecoveryMode(true);
         setLoggedIn(false);
         setSessionReady(true);
         return;
       }
       if (event === "SIGNED_OUT") {
+        clearCachedAppSession();
+        setAppRole("");
+        setAppRoleReady(true);
         setRecoveryMode(false);
+        setLoggedIn(false);
+        setSessionReady(true);
+        return;
       }
-      setLoggedIn(Boolean(session) && !recoveryMode);
+
+      if (!session) {
+        clearCachedAppSession();
+        setAppRole("");
+        setAppRoleReady(true);
+        setLoggedIn(false);
+        setSessionReady(true);
+        return;
+      }
+
+      setRecoveryMode(false);
+      setLoggedIn(true);
       setSessionReady(true);
+
+      if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+        clearCachedAppSession();
+        setAppRole("");
+        setAppRoleReady(false);
+        setAppSessionReloadTick((current) => current + 1);
+      }
     });
 
     return () => {
@@ -215,7 +240,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [loggedIn, isPortalRoute]);
+  }, [appSessionReloadTick, loggedIn, isPortalRoute]);
 
   useEffect(() => {
     if (!loggedIn || isPortalRoute) return;
