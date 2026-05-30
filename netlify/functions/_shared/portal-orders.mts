@@ -234,12 +234,12 @@ function buildOriginalNumberFamilyCore(search: string) {
 }
 
 function matchesCatalogFamilyRow(row: Record<string, unknown>, search: string) {
-  const familyCore = buildOriginalNumberFamilyCore(search);
-  if (!familyCore) return false;
+  const familyVariants = buildOriginalNumberVariants(search).filter((variant) => variant.length >= 6);
+  if (!familyVariants.length) return false;
+  const normalizedProductCode = normalizePartCode(String(row.product_code || ""));
   return (
     matchesOriginalNumberSearch(String(row.oem_no || row.normalized_oem || ""), search) ||
-    normalizePartCode(String(row.product_code || "")).includes(familyCore) ||
-    normalizePartCode(String(row.normalized_oem || row.oem_no || "")).includes(familyCore)
+    familyVariants.some((variant) => normalizedProductCode === variant || normalizedProductCode.includes(variant))
   );
 }
 

@@ -340,8 +340,8 @@ export function CatalogPage() {
       setSelectedCatalogProductId("");
       return;
     }
-    if (!rows.some((row) => row.product_id === selectedCatalogProductId)) {
-      setSelectedCatalogProductId(rows[0].product_id);
+    if (selectedCatalogProductId && !rows.some((row) => row.product_id === selectedCatalogProductId)) {
+      setSelectedCatalogProductId("");
     }
   }, [rows, selectedCatalogProductId]);
 
