@@ -1,0 +1,337 @@
+{
+  "mode": "apply",
+  "brand_name": "Mann",
+  "brand_id": "7622e981-9d58-4717-89da-48e63e7f7458",
+  "organization_id": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+  "selected_rows": 7294,
+  "official_discontinued_rows": 59,
+  "official_new_rows": 315,
+  "detail_rows": 7168,
+  "changed_rows": 7135,
+  "oem_rows": 5728,
+  "vehicle_rows": 6110,
+  "image_rows": 6811,
+  "hs_rows": 7090,
+  "weight_rows": 7090,
+  "discontinued_rows": 1895,
+  "replacement_rows": 424,
+  "error_rows": 126,
+  "matched_csv": "/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp/docs/mann-detail-fill/mann-detail-fill-2026-05-30T14-20-31-937Z.csv",
+  "errors_csv": "/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp/docs/mann-detail-fill/mann-detail-fill-errors-2026-05-30T14-20-31-937Z.csv",
+  "processed_batches": [
+    {
+      "type": "catalog",
+      "batch": 1,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 2,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 3,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 4,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 5,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 6,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 7,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 8,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 9,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 10,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 11,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 12,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 13,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 14,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 15,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 16,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 17,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 18,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 19,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 20,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 21,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 22,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 23,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 24,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 25,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 26,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 27,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 28,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 29,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 30,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 31,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 32,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 33,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 34,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 35,
+      "rows": 200,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "catalog",
+      "batch": 36,
+      "rows": 168,
+      "result": {
+        "status": 200
+      }
+    },
+    {
+      "type": "code_reference",
+      "batch": 1,
+      "rows": 200,
+      "result": {
+        "status": 201
+      }
+    },
+    {
+      "type": "code_reference",
+      "batch": 2,
+      "rows": 200,
+      "result": {
+        "status": 201
+      }
+    },
+    {
+      "type": "code_reference",
+      "batch": 3,
+      "rows": 24,
+      "result": {
+        "status": 201
+      }
+    }
+  ],
+  "refresh_existing": true,
+  "image_column_supported": true
+}
