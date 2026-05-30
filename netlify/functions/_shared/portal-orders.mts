@@ -847,7 +847,7 @@ async function fetchPortalCatalogRecommendations(
     })
     .filter((item) => item.__descriptionMatches > 0 && (anchorVehicleTokens.length === 0 || item.__vehicleMatches > 0 || (item.available_qty ?? 0) > 0))
     .sort((left, right) => right.__score - left.__score)
-    .slice(0, 8)
+    .slice(0, 4)
     .map(({ __score: _score, __descriptionMatches: _descriptionMatches, __vehicleMatches: _vehicleMatches, ...item }) => item);
 }
 
