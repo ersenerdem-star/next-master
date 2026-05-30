@@ -1,4 +1,5 @@
 import { syncBrandCatalogFromSpareto } from "./spareto-sync.mts";
+import { syncBrandCatalogFromBoschAftermarket } from "./bosch-aftermarket-sync.mts";
 import { syncBrandCatalogFromMann } from "./mann-sync.mts";
 import { syncBrandCatalogFromDonaldson } from "./donaldson-sync.mts";
 import { syncBrandCatalogFromZfAftermarket } from "./zf-aftermarket-sync.mts";
@@ -122,6 +123,15 @@ export async function syncBrandCatalog(input: {
 
   if (plan.preferredProviderKey === "mann_official") {
     result = await syncBrandCatalogFromMann({
+      ...input,
+      brandName: plan.brandName,
+    });
+    executionProviderKey = plan.preferredProviderKey;
+    executionProviderLabel = plan.preferredProviderLabel;
+    executionSourceType = plan.preferredSourceType;
+    fallbackUsed = false;
+  } else if (plan.preferredProviderKey === "bosch_aftermarket") {
+    result = await syncBrandCatalogFromBoschAftermarket({
       ...input,
       brandName: plan.brandName,
     });
