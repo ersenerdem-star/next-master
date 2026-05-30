@@ -40,6 +40,7 @@ type PortalOfflineDraft = {
   portalOrderNotes: string;
   portalOrderStatus: string;
   catalogResults: PortalCatalogSearchItem[];
+  catalogRecommendations: PortalCatalogSearchItem[];
   orderSearch: string;
   orderSearchBrand: string;
   selectedCatalogCode: string;
@@ -64,6 +65,7 @@ function buildEmptyPortalOfflineDraft(activeSection: PortalSection = "desk"): Po
     portalOrderNotes: "",
     portalOrderStatus: "",
     catalogResults: [],
+    catalogRecommendations: [],
     orderSearch: "",
     orderSearchBrand: "",
     selectedCatalogCode: "",
@@ -451,6 +453,7 @@ export function PortalPage() {
   const [orderSearch, setOrderSearch] = useState("");
   const [orderSearchBrand, setOrderSearchBrand] = useState("");
   const [catalogResults, setCatalogResults] = useState<PortalCatalogSearchItem[]>([]);
+  const [portalRecommendations, setPortalRecommendations] = useState<PortalCatalogSearchItem[]>([]);
   const [portalSearchView, setPortalSearchView] = useState<PortalSearchView>("cards");
   const [isCompactPortalSearch, setIsCompactPortalSearch] = useState(() =>
     typeof window === "undefined" ? false : window.innerWidth < PORTAL_COMPACT_SEARCH_BREAKPOINT_PX,
@@ -960,6 +963,7 @@ export function PortalPage() {
       setPortalOrderNotes("");
       setPortalOrderStatus("");
       setCatalogResults([]);
+      setPortalRecommendations([]);
       return;
     }
 
@@ -975,6 +979,7 @@ export function PortalPage() {
       setPortalOrderNotes(cachedDraft.portalOrderNotes || "");
       setPortalOrderStatus(cachedDraft.portalOrderStatus || "");
       setCatalogResults(cachedDraft.catalogResults || []);
+      setPortalRecommendations(cachedDraft.catalogRecommendations || []);
       setOrderSearch(cachedDraft.orderSearch || "");
       setPortalPriceListBrand((current) => current || snapshot.availableBrands[0] || "");
       setOrderSearchBrand((current) => {
@@ -1027,6 +1032,7 @@ export function PortalPage() {
         portalOrderNotes,
         portalOrderStatus,
         catalogResults,
+        catalogRecommendations: portalRecommendations,
         orderSearch,
         orderSearchBrand,
         selectedCatalogCode,
@@ -1038,6 +1044,7 @@ export function PortalPage() {
   }, [
     activeSection,
     catalogResults,
+    portalRecommendations,
     credentials.email,
     orderSearchBrand,
     portalDeliveryTerm,
@@ -1054,14 +1061,15 @@ export function PortalPage() {
   ]);
 
   useEffect(() => {
-    if (!catalogResults.length) {
+    const selectableCatalogRows = [...catalogResults, ...portalRecommendations];
+    if (!selectableCatalogRows.length) {
       setSelectedCatalogCode("");
       return;
     }
-    if (!catalogResults.some((row) => row.code === selectedCatalogCode)) {
-      setSelectedCatalogCode(catalogResults[0]?.code || "");
+    if (!selectableCatalogRows.some((row) => row.code === selectedCatalogCode)) {
+      setSelectedCatalogCode(catalogResults[0]?.code || portalRecommendations[0]?.code || "");
     }
-  }, [catalogResults, selectedCatalogCode]);
+  }, [catalogResults, portalRecommendations, selectedCatalogCode]);
 
   useEffect(() => {
     if (!portalDraftLines.length) {
@@ -1220,6 +1228,7 @@ export function PortalPage() {
     ),
   ).sort((left, right) => left.localeCompare(right));
   const portalSearchCards = catalogResults;
+  const portalRecommendationCards = portalRecommendations;
   const portalOrderHistoryRows =
     activeSnapshot.invite.party_type === "customer"
       ? filteredSalesOrders.filter((row) => !(row.source_channel === "portal" && !row.portal_submitted_at && String(row.status || "").toLowerCase() === "draft"))
@@ -1359,8 +1368,10 @@ export function PortalPage() {
     try {
       setSearchingCatalog(true);
       setError("");
-      const items = await searchPortalCatalogItems(credentials, orderSearch, orderSearchBrand);
+      const result = await searchPortalCatalogItems(credentials, orderSearch, orderSearchBrand);
+      const items = result.items;
       setCatalogResults(items);
+      setPortalRecommendations(result.recommendations);
       if (items[0]) {
         setSelectedCatalogCode(items[0].code);
         setPortalPreview({ kind: "catalog", item: items[0] });
@@ -1368,9 +1379,12 @@ export function PortalPage() {
         setSelectedCatalogCode("");
         setPortalPreview(null);
       }
-      setPortalOrderStatus(`${items.length.toLocaleString("en-US")} matching product and alternative result(s) found for the basket flow.`);
+      setPortalOrderStatus(
+        `${items.length.toLocaleString("en-US")} matching product and alternative result(s) found for the basket flow.${result.recommendations.length ? ` ${result.recommendations.length.toLocaleString("en-US")} stock-backed recommendation(s) added below.` : ""}`,
+      );
     } catch (caught) {
       setCatalogResults([]);
+      setPortalRecommendations([]);
       setSelectedCatalogCode("");
       setPortalPreview(null);
       setError(caught instanceof Error ? caught.message : "Portal item search failed");
@@ -1536,6 +1550,7 @@ export function PortalPage() {
       );
       setPortalOrderStatus("");
       setCatalogResults([]);
+      setPortalRecommendations([]);
       setSelectedDraftLineId("");
       setSelectedCatalogCode("");
     } catch (caught) {
@@ -1557,6 +1572,7 @@ export function PortalPage() {
     setPortalOrderNotes(row.notes || "");
     setPortalOrderStatus(`Basket ${row.sales_order_no || row.id} loaded.`);
     setCatalogResults([]);
+    setPortalRecommendations([]);
     setSelection({ kind: "sales-order", id: row.id });
     setActiveSection("desk");
   }
@@ -1571,6 +1587,7 @@ export function PortalPage() {
     setPortalOrderNotes("");
     setPortalOrderStatus("Basket cleared. Start a new search or resume a saved basket.");
     setCatalogResults([]);
+    setPortalRecommendations([]);
     setOrderSearch("");
     setSelection(null);
     setError("");
@@ -2608,6 +2625,69 @@ export function PortalPage() {
                     )}
                   </SectionCard>
 
+                  {portalRecommendationCards.length ? (
+                    <SectionCard title={`Recommended With This Search (${portalRecommendationCards.length.toLocaleString("en-US")})`}>
+                      <div className="portal-inline-note portal-inline-note--soft">
+                        <span>Recommendation Logic</span>
+                        <strong>These items stay outside the exact match list. They are ranked from the same product family and current stock movement.</strong>
+                      </div>
+                      <div className="portal-search-card-grid">
+                        {portalRecommendationCards.map((row) => (
+                          <button
+                            key={`recommended-${row.brand}-${row.code}`}
+                            type="button"
+                            className={`portal-search-card ${selectedCatalogCode === row.code ? "portal-search-card--active" : ""}`}
+                            onClick={() => {
+                              setSelectedCatalogCode(row.code);
+                              setPortalPreview({ kind: "catalog", item: row });
+                            }}
+                          >
+                            <div className="portal-search-card__top">
+                              <div className="portal-search-card__media">
+                                <ProductVisual imageUrl={row.image_url} brand={row.brand} alt={row.code} detail />
+                              </div>
+                              <div className="portal-search-card__meta">
+                                <div className="portal-search-card__code">{row.code || "-"}</div>
+                                <BrandPill brand={row.brand} compact />
+                                <div className="portal-search-card__price">
+                                  {row.sell_price == null ? "Price on request" : formatMoney(row.sell_price, row.currency || portalPricingCurrency)}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="portal-search-card__body">
+                              <strong>{row.description || "-"}</strong>
+                              {row.vehicle ? <VehicleBadges value={row.vehicle} compact limit={3} className="portal-search-card__vehicles" /> : null}
+                              <div className="portal-search-card__specs">
+                                <span>{row.available_qty == null ? "Stock check" : `${Number(row.available_qty).toLocaleString("en-US")} in stock`}</span>
+                                <span>{row.origin || "No origin"}</span>
+                                <span>{formatWeight(row.weight_kg)}</span>
+                              </div>
+                              {row.recommendation_reason ? <div className="portal-search-card__warning portal-search-card__warning--accent">{row.recommendation_reason}</div> : null}
+                              {row.replacement_warning ? (
+                                <div className="portal-search-card__warning portal-search-card__warning--accent">Replacement</div>
+                              ) : null}
+                              {row.lifecycle_status === "discontinued" ? (
+                                <div className="portal-search-card__warning">Discontinued</div>
+                              ) : null}
+                            </div>
+                            <div className="portal-search-card__actions">
+                              <Button
+                                variant="secondary"
+                                className="button--compact"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleAddPortalCatalogItem(row);
+                                }}
+                              >
+                                Add to Basket
+                              </Button>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </SectionCard>
+                  ) : null}
+
                   <div ref={portalDraftLinesRef}>
                     <SectionCard title={`Basket (${portalDraftLines.length.toLocaleString("en-US")})`}>
                       <DataTable
@@ -2767,6 +2847,10 @@ export function PortalPage() {
                   <div><span>Origin</span><strong>{portalPreview.item.origin || "-"}</strong></div>
                   <div><span>Weight</span><strong>{formatWeight(portalPreview.item.weight_kg)}</strong></div>
                   <div><span>Unit Price</span><strong>{portalPreview.item.sell_price == null ? "-" : formatMoney(portalPreview.item.sell_price, portalPreview.item.currency || portalOrderCurrency)}</strong></div>
+                  {portalPreview.item.available_qty != null ? (
+                    <div><span>Available Stock</span><strong>{Number(portalPreview.item.available_qty).toLocaleString("en-US")}</strong></div>
+                  ) : null}
+                  {portalPreview.item.recommendation_reason ? <div><span>Why Suggested</span><strong>{portalPreview.item.recommendation_reason}</strong></div> : null}
                   {portalPreview.item.replacement_warning ? <div><span>Replacement</span><strong>{portalPreview.item.replacement_warning}</strong></div> : null}
                   {portalPreview.item.lifecycle_warning ? <div><span>Lifecycle</span><strong>{portalPreview.item.lifecycle_warning}</strong></div> : null}
                 </>

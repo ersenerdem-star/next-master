@@ -20,6 +20,8 @@ export type PortalCatalogSearchItem = {
   replacement_code?: string | null;
   replacement_reason?: string | null;
   replacement_warning?: string | null;
+  recommendation_reason?: string | null;
+  available_qty?: number | null;
 };
 
 export type PortalOrderInputRow = {
@@ -63,6 +65,7 @@ type PortalOrderResponse = {
   sessionToken?: string;
   error?: string;
   items?: PortalCatalogSearchItem[];
+  recommendations?: PortalCatalogSearchItem[];
   lines?: PortalPreparedLine[];
   pricingProfile?: PortalSnapshot["pricingProfile"];
   snapshot?: PortalSnapshot;
@@ -108,7 +111,10 @@ export async function searchPortalCatalogItems(credentials: PortalCredentials, q
     query,
     brand,
   });
-  return data.items || [];
+  return {
+    items: data.items || [],
+    recommendations: data.recommendations || [],
+  };
 }
 
 export async function preparePortalOrderLines(credentials: PortalCredentials, rows: PortalOrderInputRow[]) {

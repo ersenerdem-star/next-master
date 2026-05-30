@@ -3,6 +3,7 @@ import { syncBrandCatalogFromBoschAftermarket } from "./bosch-aftermarket-sync.m
 import { syncBrandCatalogFromMann } from "./mann-sync.mts";
 import { syncBrandCatalogFromDonaldson } from "./donaldson-sync.mts";
 import { syncBrandCatalogFromZfAftermarket } from "./zf-aftermarket-sync.mts";
+import { syncBrandCatalogFromMasterPower } from "./masterpower-sync.mts";
 import { canonicalizeInternalBrandName, normalizeBrandKey } from "./brand-standardization.mts";
 
 export type CatalogSyncPreferredProvider =
@@ -10,7 +11,8 @@ export type CatalogSyncPreferredProvider =
   | "bosch_aftermarket"
   | "mann_official"
   | "donaldson_official"
-  | "zf_aftermarket";
+  | "zf_aftermarket"
+  | "masterpower_official";
 
 export type CatalogSyncSourceType = "marketplace" | "official";
 
@@ -62,6 +64,13 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredProviderLabel: "ZF Aftermarket official catalog",
     preferredSourceType: "official",
     preferredSourceUrl: "https://aftermarket.zf.com/en/catalog/?country=TR",
+  },
+  masterpower: {
+    aliases: ["master power", "masterpower"],
+    preferredProviderKey: "masterpower_official",
+    preferredProviderLabel: "Master Power official catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://www.masterpower.com.br/produtos",
   },
 };
 
@@ -151,6 +160,15 @@ export async function syncBrandCatalog(input: {
     fallbackUsed = false;
   } else if (plan.preferredProviderKey === "zf_aftermarket") {
     result = await syncBrandCatalogFromZfAftermarket({
+      ...input,
+      brandName: plan.brandName,
+    });
+    executionProviderKey = plan.preferredProviderKey;
+    executionProviderLabel = plan.preferredProviderLabel;
+    executionSourceType = plan.preferredSourceType;
+    fallbackUsed = false;
+  } else if (plan.preferredProviderKey === "masterpower_official") {
+    result = await syncBrandCatalogFromMasterPower({
       ...input,
       brandName: plan.brandName,
     });

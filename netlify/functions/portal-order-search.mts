@@ -37,8 +37,8 @@ export default async (req: Request, _context: Context) => {
       token,
       sessionToken,
     });
-    const items = await searchPortalCatalog(supabaseUrl, serviceRoleKey, invite, query, brand);
-    return json({ ok: true, items, sessionToken: nextSessionToken });
+    const result = await searchPortalCatalog(supabaseUrl, serviceRoleKey, invite, query, brand);
+    return json({ ok: true, items: result.items, recommendations: result.recommendations, sessionToken: nextSessionToken });
   } catch (error) {
     return json({ error: sanitizeUserFacingError(error, "Portal item search failed") }, 400);
   }

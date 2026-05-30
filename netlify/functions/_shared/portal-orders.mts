@@ -56,6 +56,36 @@ type PortalCatalogSearchItem = {
   replacement_old_code?: string | null;
   replacement_reason?: string | null;
   replacement_warning?: string | null;
+  recommendation_reason?: string | null;
+  available_qty?: number | null;
+};
+
+type SearchCatalogBaseItem = {
+  code: string;
+  brand: string;
+  brand_id: string;
+  normalized_code: string;
+  description: string;
+  oem_no: string;
+  vehicle: string;
+  tariff: string;
+  origin: string;
+  weight_kg: number | null;
+  image_url: string;
+  lifecycle_status: "active" | "discontinued" | null;
+  lifecycle_note: string | null;
+  replacement: {
+    old_code: string;
+    new_code: string;
+    reason: string | null;
+  } | null;
+  recommendation_reason?: string | null;
+  available_qty?: number | null;
+};
+
+type PortalCatalogSearchResponse = {
+  items: PortalCatalogSearchItem[];
+  recommendations: PortalCatalogSearchItem[];
 };
 
 type PortalPriceListRow = {
@@ -167,6 +197,26 @@ const DESCRIPTION_FAMILY_STOPWORDS = new Set([
   "vehicle",
   "part",
 ]);
+const VEHICLE_MAKER_PATTERNS = [
+  { label: "Mercedes-Benz", pattern: /\b(?:MERCEDES(?:-BENZ)?|MBB)\b/i },
+  { label: "MAN", pattern: /\bMAN\b/i },
+  { label: "Volvo", pattern: /\bVOLVO\b/i },
+  { label: "DAF", pattern: /\bDAF\b/i },
+  { label: "Scania", pattern: /\bSCANIA\b/i },
+  { label: "Volkswagen", pattern: /\b(?:VW|VOLKSWAGEN)\b/i },
+  { label: "Audi", pattern: /\bAUDI\b/i },
+  { label: "Iveco", pattern: /\bIVECO\b/i },
+  { label: "Renault", pattern: /\bRENAULT\b/i },
+  { label: "Ford", pattern: /\bFORD\b/i },
+  { label: "BMW", pattern: /\bBMW\b/i },
+  { label: "Toyota", pattern: /\bTOYOTA\b/i },
+  { label: "Nissan", pattern: /\bNISSAN\b/i },
+  { label: "Peugeot", pattern: /\bPEUGEOT\b/i },
+  { label: "Citroen", pattern: /\bCITROE?N\b/i },
+  { label: "Opel", pattern: /\bOPEL\b/i },
+  { label: "Skoda", pattern: /\bSKODA\b/i },
+  { label: "Chevrolet", pattern: /\bCHEVROLET\b/i },
+];
 
 function normalizePartCode(value: string) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -492,6 +542,279 @@ function buildReplacementWarning(oldCode: string, newCode: string, reason?: stri
   return detail ? `${base} ${detail}` : base;
 }
 
+function extractVehicleMakerTokens(value: string) {
+  const matches = new Set<string>();
+  const source = String(value || "");
+  for (const entry of VEHICLE_MAKER_PATTERNS) {
+    if (entry.pattern.test(source)) matches.add(entry.label);
+  }
+  return [...matches];
+}
+
+function countSharedTokens(left: string[], right: string[]) {
+  if (!left.length || !right.length) return 0;
+  const rightSet = new Set(right);
+  let count = 0;
+  for (const token of left) {
+    if (rightSet.has(token)) count += 1;
+  }
+  return count;
+}
+
+function mapCatalogRowsToBaseItems(
+  rows: Array<Record<string, unknown>>,
+  brandMap: { byId: Map<string, string>; byName: Map<string, string> },
+  replacementRowsByKey: Map<string, { old_code: string; new_code: string; reason: string | null }> = new Map(),
+): SearchCatalogBaseItem[] {
+  return rows
+    .map((row) => ({
+      code: String(row.product_code || ""),
+      brand: brandMap.byId.get(String(row.brand_id || "")) || "",
+      brand_id: String(row.brand_id || ""),
+      normalized_code: String(row.normalized_code || normalizePartCode(String(row.product_code || ""))),
+      description: String(row.description || ""),
+      oem_no: String(row.oem_no || ""),
+      vehicle: String(row.vehicle || ""),
+      tariff: String(row.hs_code || ""),
+      origin: String(row.origin || ""),
+      weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
+      image_url: String(row.image_url || ""),
+      lifecycle_status: normalizeLifecycleStatus(row.lifecycle_status),
+      lifecycle_note: String(row.lifecycle_note || "").trim() || null,
+      replacement:
+        replacementRowsByKey.get(
+          `${String(row.brand_id || "")}::${String(row.normalized_code || normalizePartCode(String(row.product_code || "")))}`
+        ) || null,
+      recommendation_reason: null,
+      available_qty: null,
+    }))
+    .filter((item) => item.code && item.brand && item.normalized_code);
+}
+
+async function fetchPortalSearchStockMap(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  items: Array<{ brand: string; normalized_code: string }>,
+) {
+  const map = new Map<
+    string,
+    {
+      available_qty: number;
+      on_hand_qty: number;
+      last_moved_at: string | null;
+    }
+  >();
+  const codeKeys = [...new Set(items.map((item) => item.normalized_code).filter(Boolean))];
+  if (!codeKeys.length) return map;
+
+  const snapshotRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "warehouse_stock_snapshots", {
+    select: "brand,product_code,product_code_key,available_qty,on_hand_qty,last_moved_at",
+    organization_id: `eq.${organizationId}`,
+    product_code_key: `in.(${codeKeys.join(",")})`,
+    limit: String(Math.max(240, codeKeys.length * 12)),
+  }).catch(() => []);
+
+  for (const row of snapshotRows) {
+    const brand = String(row.brand || "").trim().toLowerCase();
+    const normalizedCode = normalizePartCode(String(row.product_code || row.product_code_key || ""));
+    if (!brand || !normalizedCode) continue;
+    const key = `${brand}::${normalizedCode}`;
+    const current = map.get(key);
+    const availableQty = Number(row.available_qty || 0) || 0;
+    const onHandQty = Number(row.on_hand_qty || 0) || 0;
+    const lastMovedAt = row.last_moved_at == null ? null : String(row.last_moved_at);
+    if (!current) {
+      map.set(key, {
+        available_qty: availableQty,
+        on_hand_qty: onHandQty,
+        last_moved_at: lastMovedAt,
+      });
+      continue;
+    }
+    current.available_qty += availableQty;
+    current.on_hand_qty += onHandQty;
+    if (!current.last_moved_at || (lastMovedAt && lastMovedAt > current.last_moved_at)) {
+      current.last_moved_at = lastMovedAt;
+    }
+  }
+
+  return map;
+}
+
+async function hydratePortalCatalogItems(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  invite: PortalInviteRow,
+  context: CustomerPricingContext,
+  baseItems: SearchCatalogBaseItem[],
+) {
+  const previewByCode = new Map<
+    string,
+    {
+      sell_price: number | null;
+      supplier_name: string;
+    }
+  >();
+
+  if (context.customerType === "C") {
+    const cPriceMap = await fetchCPriceMap(
+      supabaseUrl,
+      serviceRoleKey,
+      invite.organization_id,
+      context.cPriceListId,
+      baseItems.map((item) => ({
+        brand: item.brand,
+        product_code: item.code,
+      })),
+    );
+    for (const item of baseItems) {
+      const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
+      previewByCode.set(key, {
+        sell_price: cPriceMap.get(key) ?? null,
+        supplier_name: "",
+      });
+    }
+  } else {
+    const marginPercent = context.customerType === "B" ? context.effectiveMarginB : context.effectiveMarginA;
+    const bestOptionMap = await fetchPortalBestSupplierPreviewMap(
+      supabaseUrl,
+      serviceRoleKey,
+      invite.organization_id,
+      baseItems
+        .filter((item) => item.brand_id && item.normalized_code)
+        .map((item) => ({
+          brandId: item.brand_id,
+          normalizedCode: item.normalized_code,
+        })),
+    );
+    for (const item of baseItems) {
+      const bestOption = bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`);
+      if (!bestOption) continue;
+      previewByCode.set(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`, {
+        sell_price:
+          bestOption.buy_price == null ? null : roundMoney(Number(bestOption.buy_price) * (1 + marginPercent / 100)),
+        supplier_name: bestOption.supplier_name || "",
+      });
+    }
+    if (prefersCPriceWhereAvailable(context)) {
+      const cPriceMap = await fetchCPriceMap(
+        supabaseUrl,
+        serviceRoleKey,
+        invite.organization_id,
+        context.cPriceListId,
+        baseItems.map((item) => ({
+          brand: item.brand,
+          product_code: item.code,
+        })),
+      );
+      for (const item of baseItems) {
+        const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
+        const existing = previewByCode.get(key);
+        const cPrice = cPriceMap.get(key);
+        if (cPrice == null) continue;
+        previewByCode.set(key, {
+          sell_price: cPrice,
+          supplier_name: existing?.supplier_name || "",
+        });
+      }
+    }
+  }
+
+  return baseItems.map((item) => {
+    const preview = previewByCode.get(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`);
+    return {
+      code: item.code,
+      brand: item.brand,
+      description: item.description,
+      oem_no: item.oem_no,
+      vehicle: item.vehicle,
+      tariff: item.tariff,
+      origin: item.origin,
+      weight_kg: item.weight_kg,
+      image_url: item.image_url,
+      sell_price: preview?.sell_price ?? null,
+      currency: context.currency,
+      supplier_name: preview?.supplier_name || "",
+      lifecycle_status: item.lifecycle_status,
+      lifecycle_note: item.lifecycle_note,
+      lifecycle_warning: item.lifecycle_status === "discontinued" ? buildDiscontinuedWarning(item.code, item.lifecycle_note) : null,
+      replacement_code: item.replacement?.new_code || null,
+      replacement_old_code: item.replacement?.old_code || null,
+      replacement_reason: item.replacement?.reason || null,
+      replacement_warning: item.replacement ? buildReplacementWarning(item.replacement.old_code, item.replacement.new_code || item.code, item.replacement.reason) : null,
+      recommendation_reason: item.recommendation_reason || null,
+      available_qty: item.available_qty == null ? null : Number(item.available_qty),
+    } satisfies PortalCatalogSearchItem;
+  });
+}
+
+async function fetchPortalCatalogRecommendations(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  invite: PortalInviteRow,
+  search: string,
+  brandMap: { byId: Map<string, string>; byName: Map<string, string> },
+  baseItems: SearchCatalogBaseItem[],
+  replacementRowsByKey: Map<string, { old_code: string; new_code: string; reason: string | null }>,
+) {
+  if (!search || !baseItems.length || !shouldStrictlyFilterCodeSearch(search)) return [] as SearchCatalogBaseItem[];
+
+  const anchorRows = baseItems.slice(0, 6).map((item) => ({ description: item.description }));
+  const anchorDescriptionTokens = resolveCatalogFamilyAnchor(anchorRows);
+  if (!anchorDescriptionTokens.length) return [] as SearchCatalogBaseItem[];
+
+  const anchorVehicleTokens = [...new Set(baseItems.slice(0, 6).flatMap((item) => extractVehicleMakerTokens(item.vehicle)))];
+  const anchorBrandSet = new Set(baseItems.slice(0, 6).map((item) => item.brand.trim().toLowerCase()).filter(Boolean));
+  const existingKeys = new Set(baseItems.map((item) => `${item.brand.trim().toLowerCase()}::${item.normalized_code}`));
+
+  const candidateRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+    select: "product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
+    organization_id: `eq.${invite.organization_id}`,
+    or: `(${anchorDescriptionTokens.slice(0, 3).map((token) => `description.ilike.*${token}*`).join(",")})`,
+    order: "product_code.asc",
+    limit: "120",
+  }).catch(() => []);
+  if (!candidateRows.length) return [] as SearchCatalogBaseItem[];
+
+  const candidateBaseItems = mapCatalogRowsToBaseItems(candidateRows, brandMap, replacementRowsByKey);
+  const stockMap = await fetchPortalSearchStockMap(supabaseUrl, serviceRoleKey, invite.organization_id, candidateBaseItems);
+
+  return candidateBaseItems
+    .filter((item) => !existingKeys.has(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`))
+    .map((item) => {
+      const descriptionTokens = extractDescriptionFamilyTokens(item.description);
+      const vehicleTokens = extractVehicleMakerTokens(item.vehicle);
+      const descriptionMatches = countSharedTokens(descriptionTokens, anchorDescriptionTokens);
+      const vehicleMatches = countSharedTokens(vehicleTokens, anchorVehicleTokens);
+      const stockEntry = stockMap.get(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`);
+      const availableQty = stockEntry?.available_qty ?? 0;
+      const score =
+        descriptionMatches * 10 +
+        vehicleMatches * 8 +
+        (availableQty > 0 ? 20 : 0) +
+        (!anchorBrandSet.has(item.brand.trim().toLowerCase()) ? 3 : 0) +
+        (item.replacement ? 2 : 0);
+      return {
+        ...item,
+        available_qty: availableQty > 0 ? roundMoney(availableQty) : null,
+        recommendation_reason:
+          availableQty > 0 && vehicleMatches > 0
+            ? "In-stock related alternative for the same vehicle family."
+            : availableQty > 0
+              ? "In-stock related item from the same product family."
+              : "Related item from the same product family.",
+        __score: score,
+        __descriptionMatches: descriptionMatches,
+        __vehicleMatches: vehicleMatches,
+      };
+    })
+    .filter((item) => item.__descriptionMatches > 0 && (anchorVehicleTokens.length === 0 || item.__vehicleMatches > 0 || (item.available_qty ?? 0) > 0))
+    .sort((left, right) => right.__score - left.__score)
+    .slice(0, 8)
+    .map(({ __score: _score, __descriptionMatches: _descriptionMatches, __vehicleMatches: _vehicleMatches, ...item }) => item);
+}
+
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
@@ -739,7 +1062,7 @@ export async function searchPortalCatalog(
   invite: PortalInviteRow,
   query: string,
   brand: string,
-): Promise<PortalCatalogSearchItem[]> {
+): Promise<PortalCatalogSearchResponse> {
   if (invite.party_type !== "customer" || !invite.access_can_view_orders) {
     throw new Error("This portal cannot search items");
   }
@@ -901,123 +1224,26 @@ export async function searchPortalCatalog(
     );
   }
   rows = filterCatalogRowsBySearchRelevance(rows, search, replacementRowsByKey);
-  const baseItems = rows.map((row) => ({
-    code: String(row.product_code || ""),
-    brand: brandMap.byId.get(String(row.brand_id || "")) || "",
-    brand_id: String(row.brand_id || ""),
-    normalized_code: String(row.normalized_code || normalizePartCode(String(row.product_code || ""))),
-    description: String(row.description || ""),
-    oem_no: String(row.oem_no || ""),
-    vehicle: String(row.vehicle || ""),
-    tariff: String(row.hs_code || ""),
-    origin: String(row.origin || ""),
-    weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
-    image_url: String(row.image_url || ""),
-    lifecycle_status: normalizeLifecycleStatus(row.lifecycle_status),
-    lifecycle_note: String(row.lifecycle_note || "").trim() || null,
-    replacement: replacementRowsByKey.get(
-      `${String(row.brand_id || "")}::${String(row.normalized_code || normalizePartCode(String(row.product_code || "")))}`
-    ) || null,
-  }));
-  if (!baseItems.length) return [];
-
+  const baseItems = mapCatalogRowsToBaseItems(rows, brandMap, replacementRowsByKey);
+  if (!baseItems.length) return { items: [], recommendations: [] };
   const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
-  const previewByCode = new Map<
-    string,
-    {
-      sell_price: number | null;
-      supplier_name: string;
-    }
-  >();
-
-  if (context.customerType === "C") {
-    const cPriceMap = await fetchCPriceMap(
-      supabaseUrl,
-      serviceRoleKey,
-      invite.organization_id,
-      context.cPriceListId,
-      baseItems.map((item) => ({
-        brand: item.brand,
-        product_code: item.code,
-      })),
-    );
-    for (const item of baseItems) {
-      const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
-      previewByCode.set(key, {
-        sell_price: cPriceMap.get(key) ?? null,
-        supplier_name: "",
-      });
-    }
-  } else {
-    const marginPercent = context.customerType === "B" ? context.effectiveMarginB : context.effectiveMarginA;
-    const bestOptionMap = await fetchPortalBestSupplierPreviewMap(
-      supabaseUrl,
-      serviceRoleKey,
-      invite.organization_id,
-      baseItems
-        .filter((item) => item.brand_id && item.normalized_code)
-        .map((item) => ({
-          brandId: item.brand_id,
-          normalizedCode: item.normalized_code,
-        })),
-    );
-    for (const item of baseItems) {
-      const bestOption = bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`);
-      if (!bestOption) continue;
-      previewByCode.set(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`, {
-        sell_price:
-          bestOption.buy_price == null ? null : roundMoney(Number(bestOption.buy_price) * (1 + marginPercent / 100)),
-        supplier_name: bestOption.supplier_name || "",
-      });
-    }
-    if (prefersCPriceWhereAvailable(context)) {
-      const cPriceMap = await fetchCPriceMap(
-        supabaseUrl,
-        serviceRoleKey,
-        invite.organization_id,
-        context.cPriceListId,
-        baseItems.map((item) => ({
-          brand: item.brand,
-          product_code: item.code,
-        })),
-      );
-      for (const item of baseItems) {
-        const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
-        const existing = previewByCode.get(key);
-        const cPrice = cPriceMap.get(key);
-        if (cPrice == null) continue;
-        previewByCode.set(key, {
-          sell_price: cPrice,
-          supplier_name: existing?.supplier_name || "",
-        });
-      }
-    }
-  }
-
-  return baseItems.map((item) => {
-    const preview = previewByCode.get(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`);
-    return {
-      code: item.code,
-      brand: item.brand,
-      description: item.description,
-      oem_no: item.oem_no,
-      vehicle: item.vehicle,
-      tariff: item.tariff,
-      origin: item.origin,
-      weight_kg: item.weight_kg,
-      image_url: item.image_url,
-      sell_price: preview?.sell_price ?? null,
-      currency: context.currency,
-      supplier_name: preview?.supplier_name || "",
-      lifecycle_status: item.lifecycle_status,
-      lifecycle_note: item.lifecycle_note,
-      lifecycle_warning: item.lifecycle_status === "discontinued" ? buildDiscontinuedWarning(item.code, item.lifecycle_note) : null,
-      replacement_code: item.replacement?.new_code || null,
-      replacement_old_code: item.replacement?.old_code || null,
-      replacement_reason: item.replacement?.reason || null,
-      replacement_warning: item.replacement ? buildReplacementWarning(item.replacement.old_code, item.replacement.new_code || item.code, item.replacement.reason) : null,
-    };
-  });
+  const recommendationsBase = await fetchPortalCatalogRecommendations(
+    supabaseUrl,
+    serviceRoleKey,
+    invite,
+    search,
+    brandMap,
+    baseItems,
+    replacementRowsByKey,
+  );
+  const [items, recommendations] = await Promise.all([
+    hydratePortalCatalogItems(supabaseUrl, serviceRoleKey, invite, context, baseItems),
+    hydratePortalCatalogItems(supabaseUrl, serviceRoleKey, invite, context, recommendationsBase),
+  ]);
+  return {
+    items,
+    recommendations,
+  };
 }
 
 function mergeInputRows(rows: PortalOrderInputRow[]) {
