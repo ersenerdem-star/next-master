@@ -454,7 +454,7 @@ export function PortalPage() {
   const [orderSearchBrand, setOrderSearchBrand] = useState("");
   const [catalogResults, setCatalogResults] = useState<PortalCatalogSearchItem[]>([]);
   const [portalRecommendations, setPortalRecommendations] = useState<PortalCatalogSearchItem[]>([]);
-  const [portalSearchView, setPortalSearchView] = useState<PortalSearchView>("cards");
+  const [portalSearchView, setPortalSearchView] = useState<PortalSearchView>("list");
   const [isCompactPortalSearch, setIsCompactPortalSearch] = useState(() =>
     typeof window === "undefined" ? false : window.innerWidth < PORTAL_COMPACT_SEARCH_BREAKPOINT_PX,
   );

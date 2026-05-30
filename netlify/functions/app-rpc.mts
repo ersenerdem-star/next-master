@@ -138,6 +138,20 @@ function buildOriginalNumberVariants(value: string) {
   return [...variants];
 }
 
+function buildComparableOriginalNumberTokens(value: string) {
+  const tokens = new Set<string>();
+  for (const variant of buildOriginalNumberVariants(value)) {
+    const normalized = normalizePartCode(variant);
+    if (normalized.length >= 6) tokens.add(normalized);
+    const stripped = normalized.replace(/^[A-Z]{1,4}(?=\d{6,}[A-Z]{0,4}$)/, "").replace(/[A-Z]{1,4}$/, "");
+    if (stripped.length >= 6) tokens.add(stripped);
+    for (const digitRun of normalized.match(/\d{6,}/g) || []) {
+      if (digitRun.length >= 6) tokens.add(digitRun);
+    }
+  }
+  return [...tokens];
+}
+
 function splitOriginalNumberCandidates(value: string) {
   const raw = String(value || "").replace(/\r/g, "\n").trim();
   if (!raw) return [];
@@ -149,34 +163,13 @@ function splitOriginalNumberCandidates(value: string) {
 }
 
 function matchesOriginalNumberSearch(haystack: string, needle: string) {
-  const needleVariants = buildOriginalNumberVariants(needle);
-  if (!needleVariants.length) return false;
+  const needleTokens = buildComparableOriginalNumberTokens(needle);
+  if (!needleTokens.length) return false;
   const candidates = splitOriginalNumberCandidates(haystack);
-  if (
-    candidates.some((candidate) => {
-      const candidateVariants = buildOriginalNumberVariants(candidate);
-      if (!candidateVariants.length) return false;
-      return candidateVariants.some((candidateVariant) =>
-        needleVariants.some(
-          (needleVariant) =>
-            candidateVariant === needleVariant ||
-            candidateVariant.includes(needleVariant) ||
-            needleVariant.includes(candidateVariant),
-        ),
-      );
-    })
-  ) {
+  if (candidates.some((candidate) => buildComparableOriginalNumberTokens(candidate).some((token) => needleTokens.includes(token)))) {
     return true;
   }
-  const haystackVariants = buildOriginalNumberVariants(haystack);
-  return haystackVariants.some((haystackVariant) =>
-    needleVariants.some(
-      (needleVariant) =>
-        haystackVariant === needleVariant ||
-        haystackVariant.includes(needleVariant) ||
-        needleVariant.includes(haystackVariant),
-    ),
-  );
+  return buildComparableOriginalNumberTokens(haystack).some((token) => needleTokens.includes(token));
 }
 
 function shouldRunLooseOriginalNumberSearch(search: string) {
@@ -341,15 +334,17 @@ function matchesCatalogFamilyRow(row: CatalogSourceRow, search: string) {
   const familyVariants = buildOriginalNumberFamilyTokens(search);
   if (!familyVariants.length) return false;
   const normalizedProductCode = normalizePartCode(String(row.product_code || ""));
+  const normalizedCode = normalizePartCode(String(row.normalized_code || ""));
   const normalizedOem = normalizePartCode(String(row.normalized_oem || ""));
   return (
     matchesOriginalNumberSearch(String(row.oem_no || row.normalized_oem || ""), search) ||
     familyVariants.some(
       (variant) =>
         normalizedProductCode === variant ||
-        normalizedProductCode.includes(variant) ||
+        normalizedCode === variant ||
         normalizedOem === variant ||
-        normalizedOem.includes(variant),
+        buildComparableOriginalNumberTokens(String(row.product_code || "")).includes(variant) ||
+        buildComparableOriginalNumberTokens(String(row.normalized_oem || row.oem_no || "")).includes(variant),
     )
   );
 }

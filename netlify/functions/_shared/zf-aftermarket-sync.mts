@@ -43,6 +43,7 @@ const BRAND_CONFIGS = [
   { key: "wabco", internalName: "Wabco", officialFilter: "WABCO", aliases: ["Wabco", "WABCO"] },
   { key: "boge", internalName: "Boge", officialFilter: "BOGE", aliases: ["Boge", "BOGE"] },
 ] as const;
+const DEFAULT_DISCOVERY_PREFIXES = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 export async function syncBrandCatalogFromZfAftermarket(input: {
   supabaseUrl: string;
@@ -381,12 +382,13 @@ async function fetchCatalogRows(supabaseUrl: string, headers: Record<string, str
 }
 
 function buildSeedPrefixes(rows: any[]) {
-  return dedupeStrings(
+  const derived = dedupeStrings(
     rows
       .map((row) => row.normalized_code)
       .filter((value) => String(value || "").length >= 3)
       .map((value) => String(value).slice(0, 3)),
   );
+  return derived.length ? derived : DEFAULT_DISCOVERY_PREFIXES;
 }
 
 async function crawlOfficialPrefixes({

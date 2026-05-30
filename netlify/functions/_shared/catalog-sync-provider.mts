@@ -4,6 +4,7 @@ import { syncBrandCatalogFromMann } from "./mann-sync.mts";
 import { syncBrandCatalogFromDonaldson } from "./donaldson-sync.mts";
 import { syncBrandCatalogFromZfAftermarket } from "./zf-aftermarket-sync.mts";
 import { syncBrandCatalogFromMasterPower } from "./masterpower-sync.mts";
+import { syncBrandCatalogFromValeoService } from "./valeo-sync.mts";
 import { canonicalizeInternalBrandName, normalizeBrandKey } from "./brand-standardization.mts";
 
 export type CatalogSyncPreferredProvider =
@@ -12,7 +13,8 @@ export type CatalogSyncPreferredProvider =
   | "mann_official"
   | "donaldson_official"
   | "zf_aftermarket"
-  | "masterpower_official";
+  | "masterpower_official"
+  | "valeo_service";
 
 export type CatalogSyncSourceType = "marketplace" | "official";
 
@@ -71,6 +73,13 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredProviderLabel: "Master Power official catalog",
     preferredSourceType: "official",
     preferredSourceUrl: "https://www.masterpower.com.br/produtos",
+  },
+  valeo: {
+    aliases: ["valeo"],
+    preferredProviderKey: "valeo_service",
+    preferredProviderLabel: "Valeo Service official catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://www.valeoservice.us/en-us",
   },
 };
 
@@ -169,6 +178,15 @@ export async function syncBrandCatalog(input: {
     fallbackUsed = false;
   } else if (plan.preferredProviderKey === "masterpower_official") {
     result = await syncBrandCatalogFromMasterPower({
+      ...input,
+      brandName: plan.brandName,
+    });
+    executionProviderKey = plan.preferredProviderKey;
+    executionProviderLabel = plan.preferredProviderLabel;
+    executionSourceType = plan.preferredSourceType;
+    fallbackUsed = false;
+  } else if (plan.preferredProviderKey === "valeo_service") {
+    result = await syncBrandCatalogFromValeoService({
       ...input,
       brandName: plan.brandName,
     });
