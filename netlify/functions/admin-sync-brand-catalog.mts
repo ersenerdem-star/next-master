@@ -1,7 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { requireCallerProfile } from "./_shared/auth.mts";
 import { json, readJson } from "./_shared/http.mts";
-import { syncBrandCatalogFromSpareto } from "./_shared/spareto-sync.mts";
+import { syncBrandCatalog } from "./_shared/catalog-sync-provider.mts";
 
 export default async (req: Request, _context: Context) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -16,7 +16,7 @@ export default async (req: Request, _context: Context) => {
       return json({ error: "Brand name is required" }, 400);
     }
 
-    const result = await syncBrandCatalogFromSpareto({
+    const result = await syncBrandCatalog({
       supabaseUrl: caller.supabaseUrl,
       serviceRoleKey: caller.serviceRoleKey,
       brandName,

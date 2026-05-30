@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
-import { syncBrandCatalogFromSpareto } from "../../infrastructure/api/adminApi";
+import { syncBrandCatalog } from "../../infrastructure/api/adminApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { createCloudCatalogRow, deleteCloudCatalogRow, fetchCatalogExportRows, fetchCatalogRowsByCodes, fetchCloudCatalog, updateCloudCatalogRow } from "../../infrastructure/api/catalogApi";
 import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenceUsage } from "../../infrastructure/api/codeReferencesApi";
@@ -1042,7 +1042,7 @@ export function CatalogPage() {
     }
   }
 
-  async function handleSyncSelectedBrandFromSpareto() {
+  async function handleSyncSelectedBrand() {
     if (!isOnline) {
       const message = "Connect to the internet to re-synch brand catalog data.";
       setError(message);
@@ -1062,9 +1062,12 @@ export function CatalogPage() {
     actionFeedback.begin(`Re-Synching ${catalogBrand}...`);
 
     try {
-      const result = await syncBrandCatalogFromSpareto(catalogBrand, true);
+      const result = await syncBrandCatalog(catalogBrand, true);
+      const sourceNote = result.fallbackUsed
+        ? ` Preferred source: ${result.preferredProviderLabel}. Current inline sync fallback: ${result.executionProviderLabel}.`
+        : ` Source: ${result.executionProviderLabel}.`;
       setStatus(
-        `${result.targetBrandName}: ${result.resolvedRows.toLocaleString("en-US")} synced, ${result.newRowsInListing.toLocaleString("en-US")} new, ${result.discontinuedRows.toLocaleString("en-US")} discontinued, ${result.replacementRows.toLocaleString("en-US")} replacements, ${result.errorRows.toLocaleString("en-US")} errors.`,
+        `${result.targetBrandName}: ${result.resolvedRows.toLocaleString("en-US")} synced, ${result.newRowsInListing.toLocaleString("en-US")} new, ${result.discontinuedRows.toLocaleString("en-US")} discontinued, ${result.replacementRows.toLocaleString("en-US")} replacements, ${result.errorRows.toLocaleString("en-US")} errors.${sourceNote}`,
       );
       actionFeedback.succeed(
         `${result.targetBrandName}: ${result.resolvedRows.toLocaleString("en-US")} catalog rows synced, ${result.replacementRows.toLocaleString("en-US")} replacement links processed.`,
@@ -1124,7 +1127,7 @@ export function CatalogPage() {
               Import CSV
             </Button>
             {catalogBrand ? (
-              <Button variant="secondary" onClick={() => void handleSyncSelectedBrandFromSpareto()} disabled={!isOnline} busy={syncingBrandCatalog} busyLabel="Re-Synching...">
+              <Button variant="secondary" onClick={() => void handleSyncSelectedBrand()} disabled={!isOnline} busy={syncingBrandCatalog} busyLabel="Re-Synching...">
                 Re-Synch
               </Button>
             ) : null}

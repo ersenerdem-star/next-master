@@ -187,7 +187,7 @@ export async function sendAdminTestEmail(email: string) {
   return payload as { ok: boolean; messageId?: string; email?: string };
 }
 
-export async function syncBrandCatalogFromSpareto(brandName: string, refreshExisting = true) {
+export async function syncBrandCatalog(brandName: string, refreshExisting = true) {
   const accessToken = await getCallerAccessToken();
 
   const response = await fetch(syncBrandCatalogUrl, {
@@ -205,7 +205,16 @@ export async function syncBrandCatalogFromSpareto(brandName: string, refreshExis
   }
   return payload as {
     ok: boolean;
+    syncBrandName: string;
     targetBrandName: string;
+    preferredProviderKey: string;
+    preferredProviderLabel: string;
+    preferredSourceType: "official" | "marketplace";
+    preferredSourceUrl: string;
+    executionProviderKey: string;
+    executionProviderLabel: string;
+    executionSourceType: "official" | "marketplace";
+    fallbackUsed: boolean;
     listingUniqueRows: number;
     newRowsInListing: number;
     incompleteExistingRows: number;

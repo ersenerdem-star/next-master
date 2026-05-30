@@ -1,4 +1,5 @@
 import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "./catalog-standardization.mts";
+import { canonicalizeInternalBrandName } from "./brand-standardization.mts";
 
 type SyncBrandTarget = {
   brandId: string;
@@ -14,31 +15,6 @@ const requestHeaders = {
   "cache-control": "no-cache",
   pragma: "no-cache",
 };
-
-export function canonicalizeInternalBrandName(input: string) {
-  const value = String(input || "").trim();
-  if (!value) return "";
-  const lower = value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-  if (lower === "lemforder" || lower === "lemforder") return "Lemforder";
-  if (lower === "wabco") return "WABCO";
-  if (lower === "trw") return "TRW";
-  if (lower === "bosch") return "Bosch";
-  if (lower === "mann" || lower === "mann-filter") return "Mann";
-  if (lower === "sachs") return "Sachs";
-  if (lower === "nrf") return "NRF";
-  if (lower === "skf") return "SKF";
-  if (lower === "knorrbremse" || lower === "knorr-bremse") return "Knorr-Bremse";
-  if (lower === "fag") return "FAG";
-  if (lower === "nissens") return "Nissens";
-  if (lower === "ina") return "INA";
-  if (lower === "donaldson") return "Donaldson";
-  if (lower === "valeo") return "Valeo";
-  if (lower === "hepu") return "HEPU";
-  return value;
-}
 
 export function resolveSparetoBrandQuery(input: string) {
   const value = canonicalizeInternalBrandName(input);
