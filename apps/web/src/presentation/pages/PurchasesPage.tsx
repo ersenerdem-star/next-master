@@ -100,6 +100,7 @@ function mergeCatalogLineIntoPurchaseDraft(draft: LocalPurchaseOrder, nextLine: 
 function createCatalogPurchaseOrderDraft(
   payload: {
     product_code: string;
+    old_code?: string;
     brand: string;
     description: string;
     oem_no: string;
@@ -114,7 +115,7 @@ function createCatalogPurchaseOrderDraft(
     sales_order_id: "",
     sales_order_no: "",
     product_code: payload.product_code,
-    old_code: "",
+    old_code: payload.old_code || "",
     brand: payload.brand,
     description: payload.description,
     qty: 1,
@@ -361,7 +362,7 @@ export function PurchasesPage({
       sales_order_id: "",
       sales_order_no: "",
       product_code: pending.product_code,
-      old_code: "",
+      old_code: pending.requested_code && normalizePartCode(pending.requested_code) !== normalizePartCode(pending.product_code) ? pending.requested_code : "",
       brand: pending.brand,
       description: pending.description || "",
       qty: 1,
@@ -382,6 +383,7 @@ export function PurchasesPage({
           createCatalogPurchaseOrderDraft(
             {
               product_code: pending.product_code,
+              old_code: pending.requested_code && normalizePartCode(pending.requested_code) !== normalizePartCode(pending.product_code) ? pending.requested_code : "",
               brand: pending.brand,
               description: pending.description || "",
               oem_no: pending.oem_no || "",

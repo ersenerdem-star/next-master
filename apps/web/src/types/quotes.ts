@@ -21,6 +21,7 @@ export type QuoteLine = {
   id?: string;
   line_no?: number;
   product_code?: string | null;
+  old_code?: string | null;
   brand_text?: string | null;
   description?: string | null;
   qty?: number | null;
@@ -34,6 +35,9 @@ export type QuoteLine = {
   origin?: string | null;
   weight_kg?: number | null;
   c_sell_price?: number | null;
+  lifecycle_status?: "active" | "discontinued" | null;
+  lifecycle_note?: string | null;
+  lifecycle_warning?: string | null;
 };
 
 export type QuoteDetail = {

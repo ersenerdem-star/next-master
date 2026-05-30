@@ -69,6 +69,33 @@ type BrandMapCacheEntry = {
 
 const BRAND_MAP_CACHE_TTL_MS = 2 * 60 * 1000;
 const brandMapCache = new Map<string, BrandMapCacheEntry>();
+const DESCRIPTION_FAMILY_STOPWORDS = new Set([
+  "and",
+  "the",
+  "with",
+  "without",
+  "for",
+  "kit",
+  "set",
+  "repair",
+  "service",
+  "assy",
+  "assembly",
+  "complete",
+  "rear",
+  "front",
+  "left",
+  "right",
+  "upper",
+  "lower",
+  "inner",
+  "outer",
+  "heavy",
+  "duty",
+  "truck",
+  "vehicle",
+  "part",
+]);
 
 function normalizePartCode(value: string) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -301,12 +328,80 @@ function matchesCatalogExactFamilyRow(row: CatalogSourceRow, search: string) {
   );
 }
 
+function extractDescriptionFamilyTokens(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(/\s+/g)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !/\d/.test(token) && !DESCRIPTION_FAMILY_STOPWORDS.has(token))
+    .slice(0, 6);
+}
+
+function resolveCatalogFamilyAnchor(rows: CatalogSourceRow[]) {
+  const tokenLists = rows
+    .map((row) => extractDescriptionFamilyTokens(String(row.description || "")))
+    .filter((tokens) => tokens.length);
+  if (!tokenLists.length) return [] as string[];
+  const intersection = tokenLists.reduce<string[]>((current, tokens) => current.filter((token) => tokens.includes(token)), [...tokenLists[0]]);
+  if (intersection.length) return intersection.slice(0, 3);
+  return tokenLists[0].slice(0, 3);
+}
+
+function matchesCatalogDescriptionFamily(row: CatalogSourceRow, anchorTokens: string[]) {
+  if (!anchorTokens.length) return true;
+  const rowTokens = extractDescriptionFamilyTokens(String(row.description || ""));
+  return rowTokens.some((token) => anchorTokens.includes(token));
+}
+
+function hasCatalogReplacementMatch(
+  row: CatalogSourceRow,
+  replacementRowsByKey: Map<string, { old_code: string; new_code: string; reason: string | null }>,
+) {
+  const brandId = String(row.brand_id || "");
+  const normalizedCode = String(row.normalized_code || normalizePartCode(String(row.product_code || "")));
+  return replacementRowsByKey.has(`${brandId}::${normalizedCode}`);
+}
+
+function filterCatalogRowsBySearchRelevance(
+  rows: CatalogSourceRow[],
+  search: string,
+  replacementRowsByKey: Map<string, { old_code: string; new_code: string; reason: string | null }> = new Map(),
+) {
+  const deduped = dedupeCatalogRows(rows);
+  if (!search || !shouldStrictlyFilterCodeSearch(search)) return deduped;
+  const exactRows = deduped.filter((row) => matchesCatalogExactFamilyRow(row, search) || hasCatalogReplacementMatch(row, replacementRowsByKey));
+  if (!exactRows.length) {
+    return deduped.filter((row) => matchesCatalogExactFamilyRow(row, search) || hasCatalogReplacementMatch(row, replacementRowsByKey));
+  }
+  const anchorTokens = resolveCatalogFamilyAnchor(exactRows);
+  return deduped.filter((row) => {
+    if (exactRows.includes(row)) return true;
+    if (hasCatalogReplacementMatch(row, replacementRowsByKey)) return true;
+    if (!matchesCatalogFamilyRow(row, search)) return false;
+    return matchesCatalogDescriptionFamily(row, anchorTokens);
+  });
+}
+
 function parseContentRangeTotal(value: string | null, fallback: number) {
   if (!value) return fallback;
   const match = value.match(/\/(\d+|\*)$/);
   if (!match || match[1] === "*") return fallback;
   const total = Number(match[1]);
   return Number.isFinite(total) ? total : fallback;
+}
+
+function buildReplacementWarning(oldCode: string, newCode: string, reason?: string | null) {
+  const previousCode = String(oldCode || "").trim();
+  const replacementCode = String(newCode || "").trim();
+  const detail = String(reason || "").trim();
+  const base =
+    previousCode && replacementCode
+      ? `Old Code ${previousCode} => New Code ${replacementCode}.`
+      : replacementCode
+        ? `Use New Code ${replacementCode}.`
+        : "Replacement code available.";
+  return detail ? `${base} ${detail}` : base;
 }
 
 async function fetchRestRowsWithCount<T>(
@@ -376,6 +471,7 @@ async function fetchCloudCatalogPageViaRest(
   const pageSize = Math.min(250, Math.max(1, Number(args.input_page_size || 50) || 50));
   const offset = (page - 1) * pageSize;
   const normalizedSearch = normalizePartCode(search);
+  const fetchLimit = search && shouldStrictlyFilterCodeSearch(search) ? Math.max(pageSize * 4, 120) : pageSize;
   const brandMaps = await fetchBrandMaps(supabaseUrl, serviceRoleKey, caller.organizationId);
   const selectedBrandId = brand ? brandMaps.byName.get(normalizePartCode(brand)) || "" : "";
   const select =
@@ -384,7 +480,7 @@ async function fetchCloudCatalogPageViaRest(
     select,
     organization_id: `eq.${caller.organizationId}`,
     order: "product_code.asc",
-    limit: String(pageSize),
+    limit: String(fetchLimit),
     offset: String(offset),
   };
   if (selectedBrandId) baseParams.brand_id = `eq.${selectedBrandId}`;
@@ -393,6 +489,59 @@ async function fetchCloudCatalogPageViaRest(
   }
 
   let { rows, totalCount } = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", baseParams);
+  const replacementRowsByKey = new Map<
+    string,
+    {
+      old_code: string;
+      new_code: string;
+      reason: string | null;
+    }
+  >();
+  if (search && normalizedSearch.length >= 3) {
+    const referenceRows = await fetchRestRowsWithCount<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "item_code_references", {
+      select: "brand_id,old_code,new_code,reason,normalized_new_code",
+      organization_id: `eq.${caller.organizationId}`,
+      is_active: "eq.true",
+      normalized_old_code: `eq.${normalizedSearch}`,
+      ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+      limit: "200",
+    }).catch(() => ({ rows: [] as Record<string, unknown>[], totalCount: 0 }));
+    if (referenceRows.rows.length) {
+      const brandIds = [...new Set(referenceRows.rows.map((row) => String(row.brand_id || "")).filter(Boolean))];
+      const newCodes = [...new Set(referenceRows.rows.map((row) => String(row.normalized_new_code || normalizePartCode(String(row.new_code || "")))).filter(Boolean))];
+      for (const row of referenceRows.rows) {
+        const brandId = String(row.brand_id || "");
+        const normalizedNewCode = String(row.normalized_new_code || normalizePartCode(String(row.new_code || "")));
+        if (!brandId || !normalizedNewCode) continue;
+        replacementRowsByKey.set(`${brandId}::${normalizedNewCode}`, {
+          old_code: String(row.old_code || ""),
+          new_code: String(row.new_code || ""),
+          reason: String(row.reason || "").trim() || null,
+        });
+      }
+      if (brandIds.length && newCodes.length) {
+        const replacementCatalogRows = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
+          select,
+          organization_id: `eq.${caller.organizationId}`,
+          brand_id: `in.(${brandIds.join(",")})`,
+          normalized_code: `in.(${newCodes.join(",")})`,
+          order: "product_code.asc",
+          limit: String(Math.max(120, newCodes.length * 4)),
+        }).catch(() => ({ rows: [] as CatalogSourceRow[], totalCount: 0 }));
+        if (replacementCatalogRows.rows.length) {
+          rows = dedupeCatalogRows([
+            ...rows,
+            ...replacementCatalogRows.rows.filter((row) => {
+              const brandId = String(row.brand_id || "");
+              const normalizedCode = String(row.normalized_code || normalizePartCode(String(row.product_code || "")));
+              return replacementRowsByKey.has(`${brandId}::${normalizedCode}`);
+            }),
+          ]);
+          totalCount = Math.max(totalCount, rows.length);
+        }
+      }
+    }
+  }
   if (search && shouldRunLooseOriginalNumberSearch(search) && rows.length < pageSize) {
     const familyClauses = buildOriginalNumberFamilyClauses(search);
     if (familyClauses.length) {
@@ -439,11 +588,9 @@ async function fetchCloudCatalogPageViaRest(
     rows = filtered.slice(offset, offset + pageSize);
   }
 
-  if (search && shouldStrictlyFilterCodeSearch(search)) {
-    const filtered = dedupeCatalogRows(rows).filter((row) => matchesCatalogExactFamilyRow(row, search));
-    totalCount = filtered.length;
-    rows = filtered.slice(offset, offset + pageSize);
-  }
+  const filteredByRelevance = filterCatalogRowsBySearchRelevance(rows, search, replacementRowsByKey);
+  totalCount = filteredByRelevance.length;
+  rows = filteredByRelevance.slice(offset, offset + pageSize);
 
   return rows.map((row) => ({
     total_count: totalCount,
@@ -459,6 +606,18 @@ async function fetchCloudCatalogPageViaRest(
     weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
     lifecycle_status: String(row.lifecycle_status || ""),
     lifecycle_note: String(row.lifecycle_note || ""),
+    replacement_old_code:
+      replacementRowsByKey.get(`${String(row.brand_id || "")}::${String(row.normalized_code || normalizePartCode(String(row.product_code || "")))}`)?.old_code || "",
+    replacement_code:
+      replacementRowsByKey.get(`${String(row.brand_id || "")}::${String(row.normalized_code || normalizePartCode(String(row.product_code || "")))}`)?.new_code || "",
+    replacement_reason:
+      replacementRowsByKey.get(`${String(row.brand_id || "")}::${String(row.normalized_code || normalizePartCode(String(row.product_code || "")))}`)?.reason || "",
+    replacement_warning: (() => {
+      const reference = replacementRowsByKey.get(
+        `${String(row.brand_id || "")}::${String(row.normalized_code || normalizePartCode(String(row.product_code || "")))}`
+      );
+      return reference ? buildReplacementWarning(reference.old_code, reference.new_code || String(row.product_code || ""), reference.reason) : "";
+    })(),
   }));
 }
 

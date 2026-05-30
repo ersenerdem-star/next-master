@@ -72,14 +72,14 @@ function filterCachedCatalogRows(rows: CatalogRow[], search: string, brand: stri
   const filtered = rows.filter((row) => {
     if (brand && String(row.brand || "").toLowerCase() !== brand.toLowerCase()) return false;
     if (!trimmedSearch) return true;
-    const rawMatch = [row.product_code, row.brand, row.description, row.oem_no, row.vehicle, row.hs_code, row.origin]
+    const rawMatch = [row.product_code, row.brand, row.description, row.oem_no, row.vehicle, row.hs_code, row.origin, row.replacement_old_code, row.replacement_code]
       .filter(Boolean)
       .join(" ")
       .toLowerCase()
       .includes(trimmedSearch.toLowerCase());
     if (rawMatch) return true;
     if (normalizedSearch) {
-      const normalizedFields = [row.product_code, row.oem_no].map((value) => normalizePartCode(String(value || "")));
+      const normalizedFields = [row.product_code, row.oem_no, row.replacement_old_code, row.replacement_code].map((value) => normalizePartCode(String(value || "")));
       if (normalizedFields.some((value) => value.includes(normalizedSearch))) return true;
     }
     return matchesOriginalNumberSearch(row.oem_no || "", trimmedSearch);
@@ -474,6 +474,7 @@ export function CatalogPage() {
     if (!selectedCatalogDraft) return;
     storeCatalogTransfer(PENDING_CATALOG_SALES_ITEM_KEY, {
       product_code: selectedCatalogDraft.product_code,
+      requested_code: selectedCatalogDraft.replacement_old_code || selectedCatalogDraft.product_code,
       brand: selectedCatalogDraft.brand,
       description: selectedCatalogDraft.description || "",
       oem_no: selectedCatalogDraft.oem_no || "",
@@ -482,6 +483,7 @@ export function CatalogPage() {
       weight_kg: parseWeightInput(selectedCatalogDraft.weight_kg),
       lifecycle_status: selectedCatalogDraft.lifecycle_status || "active",
       lifecycle_note: selectedCatalogDraft.lifecycle_note || "",
+      replacement_warning: selectedCatalogDraft.replacement_warning || "",
     });
     dispatchAppNavigation({ page: "Sales" });
     actionFeedback.succeed(`${selectedCatalogDraft.product_code} sent to Sales Order Workbench.`);
@@ -491,6 +493,7 @@ export function CatalogPage() {
     if (!selectedCatalogDraft) return;
     storeCatalogTransfer(PENDING_CATALOG_PURCHASE_ITEM_KEY, {
       product_code: selectedCatalogDraft.product_code,
+      requested_code: selectedCatalogDraft.replacement_old_code || selectedCatalogDraft.product_code,
       brand: selectedCatalogDraft.brand,
       description: selectedCatalogDraft.description || "",
       oem_no: selectedCatalogDraft.oem_no || "",
@@ -499,6 +502,7 @@ export function CatalogPage() {
       weight_kg: parseWeightInput(selectedCatalogDraft.weight_kg),
       lifecycle_status: selectedCatalogDraft.lifecycle_status || "active",
       lifecycle_note: selectedCatalogDraft.lifecycle_note || "",
+      replacement_warning: selectedCatalogDraft.replacement_warning || "",
     });
     dispatchAppNavigation({ page: "Purchases" });
     actionFeedback.succeed(`${selectedCatalogDraft.product_code} sent to Purchase Order draft.`);
@@ -590,16 +594,20 @@ export function CatalogPage() {
         key: "name",
         header: "Name",
         render: (row: CatalogRow) => (
-          <input
-            className="inline-edit-input"
-            value={drafts[row.product_id]?.description ?? row.description ?? ""}
-            onChange={(event) =>
-              setDrafts((current) => ({
-                ...current,
-                [row.product_id]: { ...(current[row.product_id] || row), description: event.target.value },
-              }))
-            }
-          />
+          <div>
+            <input
+              className="inline-edit-input"
+              value={drafts[row.product_id]?.description ?? row.description ?? ""}
+              onChange={(event) =>
+                setDrafts((current) => ({
+                  ...current,
+                  [row.product_id]: { ...(current[row.product_id] || row), description: event.target.value },
+                }))
+              }
+            />
+            {row.replacement_warning ? <div className="warning-text">{row.replacement_warning}</div> : null}
+            {row.lifecycle_status === "discontinued" && row.lifecycle_note ? <div className="warning-text">{row.lifecycle_note}</div> : null}
+          </div>
         ),
       },
       {
@@ -1195,6 +1203,7 @@ export function CatalogPage() {
             <div className="workbench-detail-panel__title">{selectedCatalogDraft.product_code}</div>
             <div className="document-marks document-marks--compact">
               <span className="mark-badge">{selectedCatalogDraft.brand || "No brand"}</span>
+              {selectedCatalogDraft.replacement_warning ? <span className="mark-badge mark-badge--accent">Replacement</span> : null}
               <span className={`mark-badge ${selectedCatalogDraft.lifecycle_status === "discontinued" ? "mark-badge--danger" : "mark-badge--success"}`}>
                 {selectedCatalogDraft.lifecycle_status || "active"}
               </span>
@@ -1226,6 +1235,7 @@ export function CatalogPage() {
               <div><span>Origin</span><strong>{selectedCatalogDraft.origin || "-"}</strong></div>
               <div><span>Weight</span><strong>{selectedCatalogDraft.weight_kg ?? "-"}</strong></div>
               <div><span>Reference Links</span><strong>{referenceCoverage[`${selectedCatalogRow.brand.trim().toLowerCase()}::${normalizePartCode(selectedCatalogRow.product_code)}`] || 0}</strong></div>
+              {selectedCatalogDraft.replacement_warning ? <div><span>Replacement</span><strong>{selectedCatalogDraft.replacement_warning}</strong></div> : null}
             </div>
             <div className="toolbar toolbar--wrap">
               <Button variant="secondary" onClick={queueCatalogItemForSalesOrder}>

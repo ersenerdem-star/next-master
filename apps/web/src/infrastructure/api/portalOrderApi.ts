@@ -16,6 +16,10 @@ export type PortalCatalogSearchItem = {
   lifecycle_status?: "active" | "discontinued" | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
+  replacement_old_code?: string | null;
+  replacement_code?: string | null;
+  replacement_reason?: string | null;
+  replacement_warning?: string | null;
 };
 
 export type PortalOrderInputRow = {
@@ -48,6 +52,10 @@ export type PortalPreparedLine = {
   lifecycle_status?: "active" | "discontinued" | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
+  replacement_old_code?: string | null;
+  replacement_code?: string | null;
+  replacement_reason?: string | null;
+  replacement_warning?: string | null;
 };
 
 type PortalOrderResponse = {

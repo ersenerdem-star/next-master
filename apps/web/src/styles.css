@@ -3341,6 +3341,10 @@ select {
   font-weight: 800;
 }
 
+.portal-search-card__warning--accent {
+  color: #b45309;
+}
+
 .portal-search-card__actions {
   display: flex;
   justify-content: flex-end;

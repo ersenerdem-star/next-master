@@ -199,6 +199,10 @@ export async function fetchCloudCatalog(input: {
     weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
     lifecycle_status: normalizeCatalogLifecycleStatus(String(row.lifecycle_status || "")),
     lifecycle_note: String(row.lifecycle_note || ""),
+    replacement_old_code: String(row.replacement_old_code || "") || null,
+    replacement_code: String(row.replacement_code || "") || null,
+    replacement_reason: String(row.replacement_reason || "") || null,
+    replacement_warning: String(row.replacement_warning || "") || null,
   }));
 }
 

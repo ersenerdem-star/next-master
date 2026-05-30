@@ -178,6 +178,16 @@ function renderDiscontinuedBadge(row: { lifecycle_status?: string | null; lifecy
   );
 }
 
+function renderReplacementBadge(row: { replacement_warning?: string | null }) {
+  if (!String(row.replacement_warning || "").trim()) return null;
+  return (
+    <div>
+      <span className="mark-badge mark-badge--accent">Replacement</span>
+      <div className="warning-text">{row.replacement_warning}</div>
+    </div>
+  );
+}
+
 function matchesPaymentStatusFilter(status: string | undefined, filter: string) {
   if (!filter) return true;
   const normalized = String(status || "").trim().toLowerCase().replaceAll("_", " ");
@@ -201,7 +211,7 @@ type PortalSalesOrderRow = PortalSnapshot["salesOrders"][number];
 
 function mapPortalSalesOrderToPreparedLines(row: PortalSalesOrderRow): PortalPreparedLine[] {
   return (row.lines || []).map((line, index) => {
-    const requestedCode = String(line.requested_code || line.code || "");
+    const requestedCode = String(line.old_code || line.requested_code || line.code || "");
     const resolvedCode = String(line.code || requestedCode || "");
     const qty = Math.max(1, Number(line.qty || 1) || 1);
     const buyPrice = line.buy_price == null ? null : Number(line.buy_price);
@@ -240,11 +250,12 @@ function mapPortalSalesOrderToPreparedLines(row: PortalSalesOrderRow): PortalPre
 }
 
 function buildOfflinePreparedLineFromCatalogItem(item: PortalCatalogSearchItem): PortalPreparedLine {
-  const requestedCode = String(item.code || "").trim();
+  const requestedCode = String(item.replacement_old_code || item.code || "").trim();
+  const replacementWarning = String(item.replacement_warning || "").trim();
   return {
     lineId: `offline-${requestedCode}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     requestedCode,
-    resolvedCode: requestedCode,
+    resolvedCode: String(item.code || "").trim(),
     brand: String(item.brand || ""),
     description: String(item.description || ""),
     qty: 1,
@@ -260,11 +271,15 @@ function buildOfflinePreparedLineFromCatalogItem(item: PortalCatalogSearchItem):
     price_date: "",
     notes: "",
     found: true,
-    codeChanged: false,
-    codeChangeWarning: "",
+    codeChanged: Boolean(replacementWarning),
+    codeChangeWarning: replacementWarning,
     lifecycle_status: item.lifecycle_status ?? "active",
     lifecycle_note: item.lifecycle_note ?? null,
     lifecycle_warning: item.lifecycle_warning ?? null,
+    replacement_old_code: item.replacement_old_code ?? null,
+    replacement_code: item.replacement_code ?? null,
+    replacement_reason: item.replacement_reason ?? null,
+    replacement_warning: replacementWarning || null,
   };
 }
 
@@ -753,6 +768,7 @@ export function PortalPage() {
           render: (row: PortalCatalogSearchItem) => (
             <div>
               <div>{row.description || "-"}</div>
+              {renderReplacementBadge(row)}
               {renderDiscontinuedBadge(row)}
             </div>
           ),
@@ -796,6 +812,7 @@ export function PortalPage() {
             <div>
               <div>{row.description || "-"}</div>
               {row.sell_price == null ? <div className="warning-text">No live price found for this item.</div> : null}
+              {renderReplacementBadge(row)}
               {renderDiscontinuedBadge(row)}
             </div>
           ),
@@ -1429,7 +1446,7 @@ export function PortalPage() {
       return;
     }
     const prepared = await appendPortalRows(
-      [{ code: item.code, brand: item.brand, qty: 1 }],
+      [{ code: item.replacement_old_code || item.code, brand: item.brand, qty: 1 }],
       `{count} item added to ${portalSalesOrderNo || "New Basket"} in Basket.`,
     );
     if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
@@ -2550,6 +2567,9 @@ export function PortalPage() {
                                 <span>{row.origin || "No origin"}</span>
                                 <span>{formatWeight(row.weight_kg)}</span>
                               </div>
+                              {row.replacement_warning ? (
+                                <div className="portal-search-card__warning portal-search-card__warning--accent">Replacement</div>
+                              ) : null}
                               {row.lifecycle_status === "discontinued" ? (
                                 <div className="portal-search-card__warning">Discontinued</div>
                               ) : null}
@@ -2747,6 +2767,7 @@ export function PortalPage() {
                   <div><span>Origin</span><strong>{portalPreview.item.origin || "-"}</strong></div>
                   <div><span>Weight</span><strong>{formatWeight(portalPreview.item.weight_kg)}</strong></div>
                   <div><span>Unit Price</span><strong>{portalPreview.item.sell_price == null ? "-" : formatMoney(portalPreview.item.sell_price, portalPreview.item.currency || portalOrderCurrency)}</strong></div>
+                  {portalPreview.item.replacement_warning ? <div><span>Replacement</span><strong>{portalPreview.item.replacement_warning}</strong></div> : null}
                   {portalPreview.item.lifecycle_warning ? <div><span>Lifecycle</span><strong>{portalPreview.item.lifecycle_warning}</strong></div> : null}
                 </>
               )}

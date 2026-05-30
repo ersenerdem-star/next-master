@@ -14,4 +14,8 @@ export type CatalogRow = {
   weight_kg: number | null;
   lifecycle_status: CatalogLifecycleStatus | null;
   lifecycle_note: string;
+  replacement_old_code?: string | null;
+  replacement_code?: string | null;
+  replacement_reason?: string | null;
+  replacement_warning?: string | null;
 };

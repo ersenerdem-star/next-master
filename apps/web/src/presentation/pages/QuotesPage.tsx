@@ -393,7 +393,7 @@ function mapDetailLineToBuilderLine(
 
   return {
     lineId: String(line.id || nextLineId()),
-    requestedCode: line.product_code || "",
+    requestedCode: line.old_code || line.product_code || "",
     resolvedCode: line.product_code || "",
     brand: line.brand_text || "",
     description: line.description || "",
@@ -409,8 +409,15 @@ function mapDetailLineToBuilderLine(
     price_date: line.price_date || fallbackResolved?.price_date || "",
     notes: line.notes || fallbackResolved?.notes || "",
     found: true,
-    codeChanged: false,
-    codeChangeWarning: "",
+    codeChanged: Boolean(
+      String(line.old_code || "").trim() &&
+        normalizePartCode(String(line.old_code || "")) !== normalizePartCode(String(line.product_code || ""))
+    ),
+    codeChangeWarning:
+      String(line.old_code || "").trim() &&
+      normalizePartCode(String(line.old_code || "")) !== normalizePartCode(String(line.product_code || ""))
+        ? `Old Code ${String(line.old_code || "").trim()} => New Code ${String(line.product_code || "").trim()}.`
+        : "",
     supplierOptions,
     selectedSupplierKey: `${option.supplier_name}-0`,
   };
@@ -679,7 +686,7 @@ export function QuotesPage({
       try {
         const line = await buildBuilderLine(
           {
-            code: pendingItem.product_code,
+            code: pendingItem.requested_code || pendingItem.product_code,
             brand: pendingItem.brand,
             qty: 1,
           },
@@ -695,6 +702,7 @@ export function QuotesPage({
           weight_kg: pendingItem.weight_kg ?? line.weight_kg,
           lifecycle_status: (pendingItem.lifecycle_status as QuoteBuilderLine["lifecycle_status"]) ?? line.lifecycle_status,
           lifecycle_note: pendingItem.lifecycle_note ?? line.lifecycle_note,
+          codeChangeWarning: line.codeChangeWarning || pendingItem.replacement_warning || "",
         };
         setQuoteBuilderLines((current) => mergeCatalogLineIntoSalesDraft(current, enrichedLine));
         setBuilderStatus(`${pendingItem.product_code} added from catalog.`);

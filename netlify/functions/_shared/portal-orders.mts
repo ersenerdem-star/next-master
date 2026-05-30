@@ -52,6 +52,10 @@ type PortalCatalogSearchItem = {
   lifecycle_status?: "active" | "discontinued" | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
+  replacement_code?: string | null;
+  replacement_old_code?: string | null;
+  replacement_reason?: string | null;
+  replacement_warning?: string | null;
 };
 
 type PortalPriceListRow = {
@@ -95,6 +99,10 @@ type PreparedPortalLine = {
   lifecycle_status?: "active" | "discontinued" | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
+  replacement_code?: string | null;
+  replacement_old_code?: string | null;
+  replacement_reason?: string | null;
+  replacement_warning?: string | null;
   supplierOptions: Array<{
     supplier_id?: string | null;
     supplier_name: string;
@@ -132,6 +140,33 @@ type PortalLookupCacheEntry<T> = {
 
 const portalBrandMapCache = new Map<string, PortalLookupCacheEntry<{ byId: Map<string, string>; byName: Map<string, string> }>>();
 const portalCustomerContextCache = new Map<string, PortalLookupCacheEntry<CustomerPricingContext>>();
+const DESCRIPTION_FAMILY_STOPWORDS = new Set([
+  "and",
+  "the",
+  "with",
+  "without",
+  "for",
+  "kit",
+  "set",
+  "repair",
+  "service",
+  "assy",
+  "assembly",
+  "complete",
+  "rear",
+  "front",
+  "left",
+  "right",
+  "upper",
+  "lower",
+  "inner",
+  "outer",
+  "heavy",
+  "duty",
+  "truck",
+  "vehicle",
+  "part",
+]);
 
 function normalizePartCode(value: string) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -296,6 +331,61 @@ function matchesCatalogExactFamilyRow(row: Record<string, unknown>, search: stri
   );
 }
 
+function extractDescriptionFamilyTokens(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(/\s+/g)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !/\d/.test(token) && !DESCRIPTION_FAMILY_STOPWORDS.has(token))
+    .slice(0, 6);
+}
+
+function resolveCatalogFamilyAnchor(rows: Array<Record<string, unknown>>) {
+  const tokenLists = rows
+    .map((row) => extractDescriptionFamilyTokens(String(row.description || "")))
+    .filter((tokens) => tokens.length);
+  if (!tokenLists.length) return [] as string[];
+  const intersection = tokenLists.reduce<string[]>((current, tokens) => current.filter((token) => tokens.includes(token)), [...tokenLists[0]]);
+  if (intersection.length) return intersection.slice(0, 3);
+  return tokenLists[0].slice(0, 3);
+}
+
+function matchesCatalogDescriptionFamily(row: Record<string, unknown>, anchorTokens: string[]) {
+  if (!anchorTokens.length) return true;
+  const rowTokens = extractDescriptionFamilyTokens(String(row.description || ""));
+  return rowTokens.some((token) => anchorTokens.includes(token));
+}
+
+function hasCatalogReplacementMatch(
+  row: Record<string, unknown>,
+  replacementRowsByKey: Map<string, { old_code: string; new_code: string; reason: string | null }>,
+) {
+  const brandId = String(row.brand_id || "");
+  const normalizedCode = String(row.normalized_code || normalizePartCode(String(row.product_code || "")));
+  return replacementRowsByKey.has(`${brandId}::${normalizedCode}`);
+}
+
+function filterCatalogRowsBySearchRelevance(
+  rows: Array<Record<string, unknown>>,
+  search: string,
+  replacementRowsByKey: Map<string, { old_code: string; new_code: string; reason: string | null }> = new Map(),
+) {
+  const deduped = dedupeCatalogRows(rows);
+  if (!search || !shouldStrictlyFilterCodeSearch(search)) return deduped;
+  const exactRows = deduped.filter((row) => matchesCatalogExactFamilyRow(row, search) || hasCatalogReplacementMatch(row, replacementRowsByKey));
+  if (!exactRows.length) {
+    return deduped.filter((row) => matchesCatalogExactFamilyRow(row, search) || hasCatalogReplacementMatch(row, replacementRowsByKey));
+  }
+  const anchorTokens = resolveCatalogFamilyAnchor(exactRows);
+  return deduped.filter((row) => {
+    if (exactRows.includes(row)) return true;
+    if (hasCatalogReplacementMatch(row, replacementRowsByKey)) return true;
+    if (!matchesCatalogFamilyRow(row, search)) return false;
+    return matchesCatalogDescriptionFamily(row, anchorTokens);
+  });
+}
+
 type PortalSearchMode = "strict" | "loose";
 
 function shouldRunLooseOriginalNumberSearch(search: string) {
@@ -386,6 +476,19 @@ function buildDiscontinuedWarning(resolvedCode: string, note?: string | null) {
   const code = String(resolvedCode || "").trim();
   const base = code ? `Production ended for ${code}.` : "Production ended for this item.";
   const detail = String(note || "").trim();
+  return detail ? `${base} ${detail}` : base;
+}
+
+function buildReplacementWarning(oldCode: string, newCode: string, reason?: string | null) {
+  const previousCode = String(oldCode || "").trim();
+  const replacementCode = String(newCode || "").trim();
+  const detail = String(reason || "").trim();
+  const base =
+    previousCode && replacementCode
+      ? `Old Code ${previousCode} => New Code ${replacementCode}.`
+      : replacementCode
+        ? `Use New Code ${replacementCode}.`
+        : "Replacement code available.";
   return detail ? `${base} ${detail}` : base;
 }
 
@@ -657,6 +760,60 @@ export async function searchPortalCatalog(
   }
 
   let rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", params);
+  const replacementRowsByKey = new Map<
+    string,
+    {
+      old_code: string;
+      new_code: string;
+      reason: string | null;
+    }
+  >();
+
+  if (search && normalizedSearch.length >= 3) {
+    const referenceRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "item_code_references", {
+      select: "brand_id,old_code,new_code,reason,normalized_new_code",
+      organization_id: `eq.${invite.organization_id}`,
+      is_active: "eq.true",
+      normalized_old_code: `eq.${normalizedSearch}`,
+      ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+      limit: "200",
+    }).catch(() => []);
+
+    if (referenceRows.length) {
+      const brandIds = [...new Set(referenceRows.map((row) => String(row.brand_id || "")).filter(Boolean))];
+      const newCodes = [...new Set(referenceRows.map((row) => String(row.normalized_new_code || normalizePartCode(String(row.new_code || "")))).filter(Boolean))];
+      for (const row of referenceRows) {
+        const brandId = String(row.brand_id || "");
+        const normalizedNewCode = String(row.normalized_new_code || normalizePartCode(String(row.new_code || "")));
+        if (!brandId || !normalizedNewCode) continue;
+        replacementRowsByKey.set(`${brandId}::${normalizedNewCode}`, {
+          old_code: String(row.old_code || ""),
+          new_code: String(row.new_code || ""),
+          reason: String(row.reason || "").trim() || null,
+        });
+      }
+      if (brandIds.length && newCodes.length) {
+        const replacementCatalogRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+          select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
+          organization_id: `eq.${invite.organization_id}`,
+          brand_id: `in.(${brandIds.join(",")})`,
+          normalized_code: `in.(${newCodes.join(",")})`,
+          order: "product_code.asc",
+          limit: String(Math.max(120, newCodes.length * 4)),
+        }).catch(() => []);
+        if (replacementCatalogRows.length) {
+          rows = dedupeCatalogRows([
+            ...rows,
+            ...replacementCatalogRows.filter((row) => {
+              const brandId = String(row.brand_id || "");
+              const normalizedCode = String(row.normalized_code || normalizePartCode(String(row.product_code || "")));
+              return replacementRowsByKey.has(`${brandId}::${normalizedCode}`);
+            }),
+          ]);
+        }
+      }
+    }
+  }
   if (search && shouldRunLooseOriginalNumberSearch(search)) {
     const familyCore = buildOriginalNumberFamilyCore(search);
     if (familyCore.length >= 6) {
@@ -743,9 +900,7 @@ export async function searchPortalCatalog(
       ),
     );
   }
-  if (search && shouldStrictlyFilterCodeSearch(search)) {
-    rows = dedupeCatalogRows(rows).filter((row) => matchesCatalogExactFamilyRow(row, search));
-  }
+  rows = filterCatalogRowsBySearchRelevance(rows, search, replacementRowsByKey);
   const baseItems = rows.map((row) => ({
     code: String(row.product_code || ""),
     brand: brandMap.byId.get(String(row.brand_id || "")) || "",
@@ -760,6 +915,9 @@ export async function searchPortalCatalog(
     image_url: String(row.image_url || ""),
     lifecycle_status: normalizeLifecycleStatus(row.lifecycle_status),
     lifecycle_note: String(row.lifecycle_note || "").trim() || null,
+    replacement: replacementRowsByKey.get(
+      `${String(row.brand_id || "")}::${String(row.normalized_code || normalizePartCode(String(row.product_code || "")))}`
+    ) || null,
   }));
   if (!baseItems.length) return [];
 
@@ -854,6 +1012,10 @@ export async function searchPortalCatalog(
       lifecycle_status: item.lifecycle_status,
       lifecycle_note: item.lifecycle_note,
       lifecycle_warning: item.lifecycle_status === "discontinued" ? buildDiscontinuedWarning(item.code, item.lifecycle_note) : null,
+      replacement_code: item.replacement?.new_code || null,
+      replacement_old_code: item.replacement?.old_code || null,
+      replacement_reason: item.replacement?.reason || null,
+      replacement_warning: item.replacement ? buildReplacementWarning(item.replacement.old_code, item.replacement.new_code || item.code, item.replacement.reason) : null,
     };
   });
 }
@@ -1452,6 +1614,10 @@ async function resolvePreparedLine(
     lifecycle_status: lifecycleStatus,
     lifecycle_note: lifecycleNote,
     lifecycle_warning: lifecycleStatus === "discontinued" ? buildDiscontinuedWarning(resolvedCode, lifecycleNote) : null,
+    replacement_code: referenceMatch?.new_code || null,
+    replacement_old_code: referenceMatch?.old_code || null,
+    replacement_reason: referenceMatch?.reason || null,
+    replacement_warning: referenceMatch ? buildReplacementWarning(referenceMatch.old_code, referenceMatch.new_code || resolvedCode, referenceMatch.reason) : null,
     supplierOptions,
     selectedSupplierKey: supplierOptions[0] ? `${supplierOptions[0].supplier_name}-0` : "",
   };

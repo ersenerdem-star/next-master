@@ -1,5 +1,6 @@
 export type CatalogTransferPayload = {
   product_code: string;
+  requested_code?: string | null;
   brand: string;
   description: string;
   oem_no: string;
@@ -8,6 +9,7 @@ export type CatalogTransferPayload = {
   weight_kg: number | null;
   lifecycle_status?: string | null;
   lifecycle_note?: string | null;
+  replacement_warning?: string | null;
 };
 
 export type AppNavigationDetail = {
