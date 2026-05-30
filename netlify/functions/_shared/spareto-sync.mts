@@ -552,7 +552,8 @@ function extractReferenceNumbers(html: string, heading: string) {
 }
 
 function extractVehicleManufacturers(html: string) {
-  const vehiclesSection = capture(html, /<section[^>]+id=['"]nav-vehicles['"][^>]*>([\s\S]*?)<\/section>/i);
+  const vehiclesSectionMatch = html.match(/<section[^>]+id=['"]nav-vehicles['"][^>]*>([\s\S]*?)<\/section>/i);
+  const vehiclesSection = vehiclesSectionMatch?.[1] || "";
   if (!vehiclesSection) return "";
   const manufacturers = [];
   const headingPattern = /<div[^>]*class=['"][^'"]*\bcol-6\b[^'"]*['"][^>]*style=['"][^'"]*font-weight:\s*bold[^'"]*['"][^>]*>([\s\S]*?)<\/div>\s*<div[^>]*class=['"][^'"]*\bcol-5\b[^'"]*['"][^>]*>\s*\d+\s+vehicles?\s*<\/div>/gi;
@@ -578,6 +579,7 @@ function formatVehicleManufacturer(value: string) {
     "MERCEDES BENZ": "Mercedes-Benz",
     "MERCEDES-BENZ": "Mercedes-Benz",
     SCANIA: "Scania",
+    VW: "Volkswagen",
     VOLKSWAGEN: "Volkswagen",
     VOLVO: "Volvo",
   };
