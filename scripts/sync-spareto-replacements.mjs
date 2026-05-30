@@ -570,7 +570,7 @@ async function upsertCodeReferenceBatch(payload) {
 }
 
 function extractReplacementCodeFromNote(note) {
-  const match = String(note || "").match(/Replacement code:\s*([^.\s]+)/i);
+  const match = String(note || "").match(/Replacement code:\s*([A-Za-z0-9.-]+)/i);
   return match ? match[1] : "";
 }
 
