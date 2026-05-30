@@ -1,6 +1,8 @@
 import { normalizeCatalogDisplayCode } from "./catalog-standardization.mts";
 
 const MASTERPOWER_PRODUCTS_URL = "https://www.masterpower.com.br/produtos";
+const MASTERPOWER_DEFAULT_ORIGIN = "BR";
+const MASTERPOWER_DEFAULT_HS_CODE = "8414801190";
 
 const requestHeaders = {
   "user-agent":
@@ -339,8 +341,8 @@ function buildMergedCatalogRow(target: SyncBrandTarget, current: CatalogRow | nu
     description: detail.description || current?.description || listingItem.description || "",
     oem_no: current?.oem_no || "",
     vehicle: detail.vehicle || current?.vehicle || "",
-    hs_code: current?.hs_code || "",
-    origin: current?.origin || "",
+    hs_code: MASTERPOWER_DEFAULT_HS_CODE,
+    origin: MASTERPOWER_DEFAULT_ORIGIN,
     weight_kg: current?.weight_kg ?? null,
     image_url: detail.image_url || listingItem.image_url || current?.image_url || "",
     lifecycle_status: current?.lifecycle_status || "active",
@@ -364,7 +366,13 @@ function hasCatalogDelta(current: CatalogRow, next: CatalogRow) {
 }
 
 function shouldProcessRow(row: CatalogRow) {
-  return !normalizeTextValue(row.description) || !normalizeTextValue(row.vehicle) || !normalizeTextValue(row.image_url);
+  return (
+    !normalizeTextValue(row.description) ||
+    !normalizeTextValue(row.vehicle) ||
+    !normalizeTextValue(row.image_url) ||
+    normalizeTextValue(row.hs_code) !== MASTERPOWER_DEFAULT_HS_CODE ||
+    normalizeTextValue(row.origin).toUpperCase() !== MASTERPOWER_DEFAULT_ORIGIN
+  );
 }
 
 function normalizeLifecycleStatus(value: unknown): "active" | "discontinued" {
