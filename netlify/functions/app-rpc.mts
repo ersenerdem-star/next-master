@@ -49,6 +49,7 @@ type CatalogSourceRow = {
   product_code?: string | null;
   description?: string | null;
   oem_no?: string | null;
+  vehicle?: string | null;
   hs_code?: string | null;
   origin?: string | null;
   weight_kg?: number | string | null;
@@ -204,6 +205,7 @@ function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "s
     clauses.add(`product_code.ilike.*${escaped}*`);
     clauses.add(`oem_no.ilike.*${escaped}*`);
     clauses.add(`description.ilike.*${escaped}*`);
+    clauses.add(`vehicle.ilike.*${escaped}*`);
   }
   if (separatorInsensitivePattern && separatorInsensitivePattern !== escaped.toUpperCase()) {
     clauses.add(`product_code.ilike.*${separatorInsensitivePattern}*`);
@@ -335,7 +337,7 @@ async function fetchCloudCatalogPageViaRest(
   const brandMaps = await fetchBrandMaps(supabaseUrl, serviceRoleKey, caller.organizationId);
   const selectedBrandId = brand ? brandMaps.byName.get(normalizePartCode(brand)) || "" : "";
   const select =
-    "id,product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note";
+    "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note";
   const baseParams: Record<string, string> = {
     select,
     organization_id: `eq.${caller.organizationId}`,
@@ -440,6 +442,7 @@ async function fetchCloudCatalogPageViaRest(
     image_url: String(row.image_url || ""),
     description: String(row.description || ""),
     oem_no: String(row.oem_no || ""),
+    vehicle: String(row.vehicle || ""),
     hs_code: String(row.hs_code || ""),
     origin: String(row.origin || ""),
     weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),

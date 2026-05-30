@@ -8,6 +8,7 @@ export type CatalogRow = {
   image_url?: string;
   description: string;
   oem_no: string;
+  vehicle: string;
   hs_code: string;
   origin: string;
   weight_kg: number | null;

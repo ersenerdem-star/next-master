@@ -70,7 +70,7 @@ function filterCachedCatalogRows(rows: CatalogRow[], search: string, brand: stri
   const filtered = rows.filter((row) => {
     if (brand && String(row.brand || "").toLowerCase() !== brand.toLowerCase()) return false;
     if (!trimmedSearch) return true;
-    const rawMatch = [row.product_code, row.brand, row.description, row.oem_no, row.hs_code, row.origin]
+    const rawMatch = [row.product_code, row.brand, row.description, row.oem_no, row.vehicle, row.hs_code, row.origin]
       .filter(Boolean)
       .join(" ")
       .toLowerCase()
@@ -126,6 +126,7 @@ export function CatalogPage() {
     brand_name: "",
     description: "",
     oem_no: "",
+    vehicle: "",
     hs_code: "",
     origin: "",
     weight_kg: "",
@@ -577,6 +578,22 @@ export function CatalogPage() {
         ),
       },
       {
+        key: "vehicle",
+        header: "Vehicle",
+        render: (row: CatalogRow) => (
+          <input
+            className="inline-edit-input"
+            value={drafts[row.product_id]?.vehicle ?? row.vehicle ?? ""}
+            onChange={(event) =>
+              setDrafts((current) => ({
+                ...current,
+                [row.product_id]: { ...(current[row.product_id] || row), vehicle: event.target.value },
+              }))
+            }
+          />
+        ),
+      },
+      {
         key: "hs",
         header: "HS",
         render: (row: CatalogRow) => (
@@ -698,6 +715,7 @@ export function CatalogPage() {
                     brand: draft.brand,
                     description: draft.description || null,
                     oem_no: draft.oem_no || null,
+                    vehicle: draft.vehicle || null,
                     hs_code: draft.hs_code || null,
                     origin: draft.origin || null,
                     weight_kg: parseWeightInput(draft.weight_kg),
@@ -841,6 +859,7 @@ export function CatalogPage() {
       const nameIndex = indexOfAny("Product_Name", "Name", "Description");
       const oemIndex = indexOfAny("OEM_No", "OEM", "Original_Number");
       const hsIndex = indexOfAny("HS_Code", "HS", "GTIP");
+      const vehicleIndex = indexOfAny("Vehicle", "Vehicles", "Fit_Vehicles", "Fit Vehicles", "Applications");
       const originIndex = indexOfAny("Origin", "Country_Of_Origin");
       const weightIndex = indexOfAny("Weight_kg", "Weight", "Net_Weight");
       const imageUrlIndex = indexOfAny("Image_URL", "Image Url", "Image");
@@ -873,6 +892,7 @@ export function CatalogPage() {
           brand: normalizeText(row[brandIndex]) || activeImportBrand || "Unbranded",
           description: normalizeText(row[nameIndex]),
           oem_no: normalizeText(row[oemIndex]),
+          vehicle: normalizeText(row[vehicleIndex]),
           hs_code: normalizeText(row[hsIndex]),
           origin: normalizeText(row[originIndex]),
           weight_kg: normalizeNumber(row[weightIndex]),
@@ -953,12 +973,13 @@ export function CatalogPage() {
     try {
       const exportData = await fetchCatalogExportRows({ brandName: exportBrand });
       const exportRows = [
-        ["Product_Code", "Brand", "Product_Name", "OEM_No", "HS_Code", "Origin", "Weight_kg", "Image_URL", "Lifecycle_Status", "Lifecycle_Note"],
+        ["Product_Code", "Brand", "Product_Name", "OEM_No", "Vehicle", "HS_Code", "Origin", "Weight_kg", "Image_URL", "Lifecycle_Status", "Lifecycle_Note"],
         ...exportData.map((row) => [
           row.product_code,
           row.brand,
           row.description || "",
           row.oem_no || "",
+          row.vehicle || "",
           row.hs_code || "",
           row.origin || "",
           row.weight_kg ?? "",
@@ -1141,6 +1162,7 @@ export function CatalogPage() {
             <div className="workbench-detail-list">
               <div><span>Description</span><strong>{selectedCatalogDraft.description || "-"}</strong></div>
               <div><span>OEM</span><strong>{selectedCatalogDraft.oem_no || "-"}</strong></div>
+              <div><span>Vehicle</span><strong>{selectedCatalogDraft.vehicle || "-"}</strong></div>
               <div><span>HS</span><strong>{selectedCatalogDraft.hs_code || "-"}</strong></div>
               <div><span>Origin</span><strong>{selectedCatalogDraft.origin || "-"}</strong></div>
               <div><span>Weight</span><strong>{selectedCatalogDraft.weight_kg ?? "-"}</strong></div>
@@ -1315,6 +1337,7 @@ export function CatalogPage() {
               />
               <Input label="Product Name" value={createDraft.description} onChange={(value) => setCreateDraft((current) => ({ ...current, description: value }))} />
               <Input label="OEM" value={createDraft.oem_no} onChange={(value) => setCreateDraft((current) => ({ ...current, oem_no: value }))} />
+              <Input label="Vehicle" value={createDraft.vehicle} onChange={(value) => setCreateDraft((current) => ({ ...current, vehicle: value }))} />
               <Input label="HS Code" value={createDraft.hs_code} onChange={(value) => setCreateDraft((current) => ({ ...current, hs_code: value }))} />
               <Input label="Origin" value={createDraft.origin} onChange={(value) => setCreateDraft((current) => ({ ...current, origin: value }))} />
               <Input label="Weight" value={createDraft.weight_kg} onChange={(value) => setCreateDraft((current) => ({ ...current, weight_kg: value }))} />
@@ -1348,6 +1371,7 @@ export function CatalogPage() {
                       brand: activeBrand,
                       description: createDraft.description.trim() || null,
                       oem_no: createDraft.oem_no.trim() || null,
+                      vehicle: createDraft.vehicle.trim() || null,
                       hs_code: createDraft.hs_code.trim() || null,
                       origin: createDraft.origin.trim() || null,
                       weight_kg: parseWeightInput(createDraft.weight_kg),
@@ -1360,6 +1384,7 @@ export function CatalogPage() {
                       brand_name: "",
                       description: "",
                       oem_no: "",
+                      vehicle: "",
                       hs_code: "",
                       origin: "",
                       weight_kg: "",

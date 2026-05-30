@@ -223,6 +223,7 @@ export async function syncBrandCatalogFromSpareto(input: {
     product_code: row.product_code,
     description: emptyToNull(row.description),
     oem_no: emptyToNull(row.oem_no),
+    vehicle: emptyToNull(row.vehicle),
     hs_code: emptyToNull(row.hs_code),
     origin: emptyToNull(row.origin),
     weight_kg: row.weight_kg == null || Number.isNaN(Number(row.weight_kg)) ? null : Number(row.weight_kg),
@@ -380,7 +381,7 @@ async function fetchExistingCatalogRows(supabaseUrl: string, headers: Record<str
   let offset = 0;
   while (true) {
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/catalog_products?select=product_code,normalized_code,description,oem_no,hs_code,origin,weight_kg,image_url,lifecycle_status,lifecycle_note&brand_id=eq.${encodeURIComponent(brandId)}&limit=${restPageLimit}&offset=${offset}`,
+      `${supabaseUrl}/rest/v1/catalog_products?select=product_code,normalized_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,lifecycle_status,lifecycle_note&brand_id=eq.${encodeURIComponent(brandId)}&limit=${restPageLimit}&offset=${offset}`,
       { headers },
     );
     const text = await response.text();
@@ -395,6 +396,7 @@ async function fetchExistingCatalogRows(supabaseUrl: string, headers: Record<str
         normalized_code: normalizeCode(row.normalized_code || row.product_code || ""),
         description: String(row.description || "").trim(),
         oem_no: String(row.oem_no || "").trim(),
+        vehicle: String(row.vehicle || "").trim(),
         hs_code: String(row.hs_code || "").trim(),
         origin: String(row.origin || "").trim(),
         weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
@@ -501,6 +503,7 @@ async function fetchSparetoDetail(card: any, requestTimeoutMs: number, targetBra
     normalized_code: card.normalized_code,
     description: normalizeCatalogDescription(detail.product_name || card.description || ""),
     oem_no: detail.oe_numbers || "",
+    vehicle: detail.vehicle || "",
     hs_code: detail.customs_code || "",
     origin: formatOrigin(detail.country_of_origin),
     weight_kg: detail.weight_kg,
@@ -525,6 +528,7 @@ function extractDetailProperties(html: string) {
       "",
     customs_code: captureTableValue(html, "Customs Code"),
     country_of_origin: captureTableValue(html, "Country of Origin"),
+    vehicle: extractVehicleManufacturers(html),
     weight_kg: parseWeight(
       capture(
         html,
@@ -545,6 +549,42 @@ function extractReferenceNumbers(html: string, heading: string) {
     if (value) numbers.push(value);
   }
   return compactReferenceNumbers(numbers);
+}
+
+function extractVehicleManufacturers(html: string) {
+  const vehiclesSection = capture(html, /<section[^>]+id=['"]nav-vehicles['"][^>]*>([\s\S]*?)<\/section>/i);
+  if (!vehiclesSection) return "";
+  const manufacturers = [];
+  const headingPattern = /<div[^>]*class=['"][^'"]*\bcol-6\b[^'"]*['"][^>]*style=['"][^'"]*font-weight:\s*bold[^'"]*['"][^>]*>([\s\S]*?)<\/div>\s*<div[^>]*class=['"][^'"]*\bcol-5\b[^'"]*['"][^>]*>\s*\d+\s+vehicles?\s*<\/div>/gi;
+  for (const match of vehiclesSection.matchAll(headingPattern)) {
+    const formatted = formatVehicleManufacturer(cleanText(match[1]));
+    if (formatted) manufacturers.push(formatted);
+  }
+  return [...new Set(manufacturers)].join(", ");
+}
+
+function formatVehicleManufacturer(value: string) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  const upper = normalized.toUpperCase();
+  const known: Record<string, string> = {
+    AUDI: "Audi",
+    BMW: "BMW",
+    DAF: "DAF",
+    FORD: "Ford",
+    IVECO: "IVECO",
+    MAN: "MAN",
+    MERCEDES: "Mercedes-Benz",
+    "MERCEDES BENZ": "Mercedes-Benz",
+    "MERCEDES-BENZ": "Mercedes-Benz",
+    SCANIA: "Scania",
+    VOLKSWAGEN: "Volkswagen",
+    VOLVO: "Volvo",
+  };
+  if (known[upper]) return known[upper];
+  return normalized
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (_, char) => char.toUpperCase());
 }
 
 function captureTableValue(html: string, label: string) {
@@ -583,6 +623,7 @@ function extractCurrentLifecycle(html: string, targetBrandSlug: string) {
 function buildCatalogRow(target: SyncBrandTarget, candidate: any, detail: any, existing: any) {
   const nextDescription = normalizeCatalogDescription(preferCatalogValue(detail.description, candidate.description, existing?.description));
   const nextOemNo = preferCatalogValue(existing?.oem_no, detail.oem_no);
+  const nextVehicle = preferCatalogValue(existing?.vehicle, detail.vehicle);
   const nextHsCode = preferCatalogValue(existing?.hs_code, detail.hs_code);
   const nextOrigin = preferOrigin(existing?.origin, detail.origin);
   const nextWeight = existing?.weight_kg ?? detail.weight_kg ?? null;
@@ -597,6 +638,7 @@ function buildCatalogRow(target: SyncBrandTarget, candidate: any, detail: any, e
     normalized_code: candidate.normalized_code,
     description: nextDescription,
     oem_no: nextOemNo,
+    vehicle: nextVehicle,
     hs_code: nextHsCode,
     origin: nextOrigin,
     weight_kg: nextWeight,
@@ -610,6 +652,7 @@ function buildCatalogRow(target: SyncBrandTarget, candidate: any, detail: any, e
 function isIncomplete(row: any) {
   return !String(row.description || "").trim() ||
     !String(row.oem_no || "").trim() ||
+    !String(row.vehicle || "").trim() ||
     !String(row.hs_code || "").trim() ||
     !String(row.origin || "").trim() ||
     row.weight_kg == null ||

@@ -14,13 +14,13 @@ import { supabaseClient } from "./supabaseClient";
 import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 
 const CATALOG_SELECT_WITH_IMAGE =
-  "id,product_code,image_url,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note";
+  "id,product_code,image_url,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note";
 const CATALOG_SELECT_NO_IMAGE =
-  "id,product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note";
+  "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note";
 const CATALOG_GLOBAL_SELECT_WITH_IMAGE =
-  "id,product_code,image_url,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
+  "id,product_code,image_url,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
 const CATALOG_GLOBAL_SELECT_NO_IMAGE =
-  "id,product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
+  "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
 
 type CatalogSearchMode = "strict" | "loose";
 
@@ -30,6 +30,7 @@ type CatalogQueryRow = {
   image_url?: string | null;
   description: string | null;
   oem_no: string | null;
+  vehicle: string | null;
   hs_code: string | null;
   origin: string | null;
   weight_kg: number | null;
@@ -55,7 +56,7 @@ function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: Ca
   const looseOriginalPattern = buildLooseOriginalNumberPattern(search);
   const clauses = [`product_code.ilike.%${escaped}%`, `oem_no.ilike.%${escaped}%`];
   if (!isLikelyCatalogCodeSearch(search)) {
-    clauses.push(`description.ilike.%${escaped}%`);
+    clauses.push(`description.ilike.%${escaped}%`, `vehicle.ilike.%${escaped}%`);
   }
   if (normalizedSearch.length >= 3) {
     clauses.push(
@@ -192,6 +193,7 @@ export async function fetchCloudCatalog(input: {
     image_url: String(row.image_url || ""),
     description: String(row.description || ""),
     oem_no: String(row.oem_no || ""),
+    vehicle: String(row.vehicle || ""),
     hs_code: String(row.hs_code || ""),
     origin: String(row.origin || ""),
     weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
@@ -207,6 +209,7 @@ export async function updateCloudCatalogRow(
     brand: string;
     description: string | null;
     oem_no: string | null;
+    vehicle: string | null;
     hs_code: string | null;
     origin: string | null;
     weight_kg: number | null;
@@ -223,6 +226,7 @@ export async function updateCloudCatalogRow(
       brand_id: brandId,
       description: updates.description ? normalizeCatalogDescription(updates.description) : null,
       oem_no: updates.oem_no,
+      vehicle: updates.vehicle?.trim() || null,
       hs_code: updates.hs_code,
       origin: updates.origin,
       weight_kg: updates.weight_kg,
@@ -240,6 +244,7 @@ export async function createCloudCatalogRow(input: {
   brand: string;
   description: string | null;
   oem_no: string | null;
+  vehicle: string | null;
   hs_code: string | null;
   origin: string | null;
   weight_kg: number | null;
@@ -255,6 +260,7 @@ export async function createCloudCatalogRow(input: {
     product_code: normalizeCatalogDisplayCode(input.product_code, input.brand),
     description: input.description ? normalizeCatalogDescription(input.description) : null,
     oem_no: input.oem_no,
+    vehicle: input.vehicle?.trim() || null,
     hs_code: input.hs_code,
     origin: input.origin,
     weight_kg: input.weight_kg,
@@ -297,6 +303,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     image_url?: string | null;
     description: string | null;
     oem_no: string | null;
+    vehicle: string | null;
     hs_code: string | null;
     origin: string | null;
     weight_kg: number | null;
@@ -326,23 +333,23 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     };
 
     let { data, error } = await buildQuery(
-      "product_code,image_url,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+      "product_code,image_url,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
       "strict",
     );
     if (error && isMissingCatalogImageError(error)) {
       ({ data, error } = await buildQuery(
-        "product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+        "product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
         "strict",
       ));
     }
     if (!error && search && shouldRunLooseOriginalNumberSearch(search) && !(data || []).length) {
       ({ data, error } = await buildQuery(
-        "product_code,image_url,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+        "product_code,image_url,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
         "loose",
       ));
       if (error && isMissingCatalogImageError(error)) {
         ({ data, error } = await buildQuery(
-          "product_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+          "product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
           "loose",
         ));
       }
@@ -363,6 +370,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     image_url: row.image_url || "",
     description: row.description || "",
     oem_no: row.oem_no || "",
+    vehicle: row.vehicle || "",
     hs_code: row.hs_code || "",
     origin: row.origin || "",
     weight_kg: row.weight_kg,
@@ -434,6 +442,7 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
         image_url?: string | null;
         description: string | null;
         oem_no: string | null;
+        vehicle: string | null;
         hs_code: string | null;
         origin: string | null;
         weight_kg: number | null;
@@ -447,6 +456,7 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
         image_url: row.image_url ?? "",
         description: row.description ?? "",
         oem_no: row.oem_no ?? "",
+        vehicle: row.vehicle ?? "",
         hs_code: row.hs_code ?? "",
         origin: row.origin ?? "",
         weight_kg: row.weight_kg,

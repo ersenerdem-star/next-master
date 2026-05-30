@@ -9,6 +9,7 @@ export async function bulkImportCatalog(payload: Array<Record<string, unknown>>)
       String(row.brand || row.Brand || row.brand_name || ""),
     ),
     description: row.description == null ? null : normalizeCatalogDescription(String(row.description || "")),
+    vehicle: row.vehicle == null ? null : String(row.vehicle || "").trim() || null,
   }));
   await callAppRpc("bulk_import_catalog", { payload: normalizedPayload });
 }

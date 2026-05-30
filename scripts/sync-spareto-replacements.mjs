@@ -219,6 +219,7 @@ async function main() {
             product_code: row.product_code,
             description: emptyToNull(row.description),
             oem_no: emptyToNull(row.oem_no),
+            vehicle: emptyToNull(row.vehicle),
             hs_code: emptyToNull(row.hs_code),
             origin: emptyToNull(row.origin),
             weight_kg: row.weight_kg == null || Number.isNaN(row.weight_kg) ? null : row.weight_kg,
@@ -345,7 +346,7 @@ async function fetchExistingCatalogRows(brandId) {
   let offset = 0;
   while (true) {
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/catalog_products?select=product_code,normalized_code,description,oem_no,hs_code,origin,weight_kg,image_url,lifecycle_status,lifecycle_note&brand_id=eq.${encodeURIComponent(brandId)}&limit=${restPageLimit}&offset=${offset}`,
+      `${supabaseUrl}/rest/v1/catalog_products?select=product_code,normalized_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,lifecycle_status,lifecycle_note&brand_id=eq.${encodeURIComponent(brandId)}&limit=${restPageLimit}&offset=${offset}`,
       { headers },
     );
     const text = await response.text();
@@ -360,6 +361,7 @@ async function fetchExistingCatalogRows(brandId) {
         normalized_code: normalizeCode(row.normalized_code || row.product_code || ""),
         description: String(row.description || "").trim(),
         oem_no: String(row.oem_no || "").trim(),
+        vehicle: String(row.vehicle || "").trim(),
         hs_code: String(row.hs_code || "").trim(),
         origin: String(row.origin || "").trim(),
         weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
@@ -386,6 +388,7 @@ async function fetchSparetoDetailPage(input) {
     product_code: productCode,
     description: normalizeCatalogDescription(detail.product_name || ""),
     oem_no: detail.oe_numbers || "",
+    vehicle: detail.vehicle || "",
     hs_code: detail.customs_code || "",
     origin: formatOrigin(detail.country_of_origin),
     weight_kg: detail.weight_kg,
@@ -412,6 +415,7 @@ function extractDetailProperties(html) {
       "",
     customs_code: captureTableValue(html, "Customs Code"),
     country_of_origin: captureTableValue(html, "Country of Origin"),
+    vehicle: extractVehicleManufacturers(html),
     weight_kg: parseWeight(
       capture(
         html,
@@ -470,6 +474,42 @@ function extractReferenceNumbers(html, heading) {
   return compactReferenceNumbers(numbers);
 }
 
+function extractVehicleManufacturers(html) {
+  const vehiclesSection = capture(html, /<section[^>]+id=['"]nav-vehicles['"][^>]*>([\s\S]*?)<\/section>/i);
+  if (!vehiclesSection) return "";
+  const manufacturers = [];
+  const headingPattern = /<div[^>]*class=['"][^'"]*\bcol-6\b[^'"]*['"][^>]*style=['"][^'"]*font-weight:\s*bold[^'"]*['"][^>]*>([\s\S]*?)<\/div>\s*<div[^>]*class=['"][^'"]*\bcol-5\b[^'"]*['"][^>]*>\s*\d+\s+vehicles?\s*<\/div>/gi;
+  for (const match of vehiclesSection.matchAll(headingPattern)) {
+    const formatted = formatVehicleManufacturer(cleanText(match[1]));
+    if (formatted) manufacturers.push(formatted);
+  }
+  return [...new Set(manufacturers)].join(", ");
+}
+
+function formatVehicleManufacturer(value) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  const upper = normalized.toUpperCase();
+  const known = {
+    AUDI: "Audi",
+    BMW: "BMW",
+    DAF: "DAF",
+    FORD: "Ford",
+    IVECO: "IVECO",
+    MAN: "MAN",
+    MERCEDES: "Mercedes-Benz",
+    "MERCEDES BENZ": "Mercedes-Benz",
+    "MERCEDES-BENZ": "Mercedes-Benz",
+    SCANIA: "Scania",
+    VOLKSWAGEN: "Volkswagen",
+    VOLVO: "Volvo",
+  };
+  if (known[upper]) return known[upper];
+  return normalized
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (_, char) => char.toUpperCase());
+}
+
 function captureTableValue(html, label) {
   const escaped = escapeRegExp(label);
   return capture(html, new RegExp(`<td>${escaped}<\\/td>\\s*<td>([\\s\\S]*?)<\\/td>`, "i"));
@@ -484,6 +524,7 @@ function buildCatalogRow(target, existing, detail) {
     product_code: normalizeCatalogDisplayCode(detail.product_code || existing?.product_code, target.name),
     description: normalizeCatalogDescription(preferCatalogValue(detail.description, existing?.description)),
     oem_no: preferCatalogValue(existing?.oem_no, detail.oem_no),
+    vehicle: preferCatalogValue(existing?.vehicle, detail.vehicle),
     hs_code: preferCatalogValue(existing?.hs_code, detail.hs_code),
     origin: preferOrigin(existing?.origin, detail.origin),
     weight_kg: existing?.weight_kg ?? detail.weight_kg ?? null,
