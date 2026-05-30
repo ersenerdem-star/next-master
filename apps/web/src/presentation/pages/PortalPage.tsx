@@ -1592,6 +1592,17 @@ export function PortalPage() {
     setActiveSection("desk");
   }
 
+  function handleClearPortalSearch() {
+    setOrderSearch("");
+    setOrderSearchBrand("");
+    setCatalogResults([]);
+    setPortalRecommendations([]);
+    setPortalOrderStatus("");
+    setError("");
+    setSelectedCatalogCode("");
+    setPortalPreview(null);
+  }
+
   async function handleDeletePortalDraft(row: PortalSalesOrderRow) {
     if (!isOnline) {
       setError("Connect to the internet to delete saved baskets from the portal.");
@@ -2479,6 +2490,9 @@ export function PortalPage() {
                   </Button>
                   <Button type="button" variant="secondary" onClick={downloadQuoteTemplate}>
                     Template
+                  </Button>
+                  <Button type="button" variant="secondary" onClick={handleClearPortalSearch}>
+                    Clear Search
                   </Button>
                   <Button type="submit" variant="secondary" busy={searchingCatalog} busyLabel="Searching..." onClick={() => void handlePortalCatalogSearch()}>
                     Search
