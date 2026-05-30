@@ -166,41 +166,33 @@ function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "s
   const escaped = search.replace(/[%*(),]/g, " ").trim();
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
   const normalizedSearchVariants = buildOriginalNumberVariants(search).filter((variant) => variant.length >= 6);
-  const looseOriginalPattern = buildLooseOriginalNumberPattern(search);
-  const separatorInsensitivePattern = buildSeparatorInsensitivePattern(search);
   const clauses = new Set<string>();
   const isCodeSearch = isLikelyCatalogCodeSearch(search);
 
   if (isCodeSearch) {
-    if (normalizedSearch.length >= 3) {
-      clauses.add(`normalized_code.eq.${normalizedSearch}`);
-      clauses.add(`normalized_oem.eq.${normalizedSearch}`);
-      clauses.add(`normalized_code.like.${normalizedSearch}*`);
-      clauses.add(`normalized_oem.like.${normalizedSearch}*`);
-    }
-    for (const variant of normalizedSearchVariants) {
+    const strictVariants = [...new Set(
+      [normalizedSearch, ...normalizedSearchVariants]
+        .map((variant) => String(variant || "").trim())
+        .filter((variant) => variant.length >= 3),
+    )];
+    for (const variant of strictVariants) {
       clauses.add(`normalized_code.eq.${variant}`);
       clauses.add(`normalized_oem.eq.${variant}`);
       clauses.add(`normalized_code.like.${variant}*`);
       clauses.add(`normalized_oem.like.${variant}*`);
-    }
-    if (escaped && escaped.length <= 24 && /[A-Z]/i.test(escaped)) {
-      clauses.add(`product_code.ilike.${escaped}*`);
-      clauses.add(`oem_no.ilike.${escaped}*`);
-    }
-    if (separatorInsensitivePattern && separatorInsensitivePattern !== escaped.toUpperCase() && /[A-Z]/i.test(separatorInsensitivePattern)) {
-      clauses.add(`product_code.ilike.${separatorInsensitivePattern}*`);
-      clauses.add(`oem_no.ilike.${separatorInsensitivePattern}*`);
+      if (variant.length <= 24) {
+        clauses.add(`product_code.ilike.${variant}*`);
+      }
     }
     if (mode === "loose" && normalizedOriginalSearch.length >= 6) {
       clauses.add(`normalized_oem.like.*${normalizedOriginalSearch}*`);
-    }
-    if (mode === "loose" && looseOriginalPattern.length >= 6 && /[A-Z]/i.test(looseOriginalPattern)) {
-      clauses.add(`oem_no.ilike.${looseOriginalPattern}*`);
+      clauses.add(`normalized_code.like.*${normalizedOriginalSearch}*`);
     }
     return `(${[...clauses].join(",")})`;
   }
 
+  const looseOriginalPattern = buildLooseOriginalNumberPattern(search);
+  const separatorInsensitivePattern = buildSeparatorInsensitivePattern(search);
   if (escaped) {
     clauses.add(`product_code.ilike.*${escaped}*`);
     clauses.add(`oem_no.ilike.*${escaped}*`);
@@ -269,13 +261,6 @@ function buildOriginalNumberFamilyClauses(search: string) {
     clauses.add(`normalized_oem.like.*${token}*`);
     clauses.add(`normalized_code.eq.${token}`);
     clauses.add(`normalized_code.like.*${token}*`);
-    clauses.add(`oem_no.ilike.*${token}*`);
-    clauses.add(`product_code.ilike.*${token}*`);
-    const loosePattern = buildLooseOriginalNumberPattern(token);
-    if (loosePattern.length >= 6) {
-      clauses.add(`oem_no.ilike.*${loosePattern}*`);
-      clauses.add(`product_code.ilike.*${loosePattern}*`);
-    }
   }
   return [...clauses];
 }
@@ -389,33 +374,7 @@ async function fetchCloudCatalogPageViaRest(
   }
 
   let { rows, totalCount } = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", baseParams);
-  if (search && shouldRunLooseOriginalNumberSearch(search)) {
-    const familyCore = buildOriginalNumberFamilyCore(search);
-    if (familyCore.length >= 6) {
-      const familyPattern = buildLooseOriginalNumberPattern(familyCore);
-      const familyRows = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
-        select,
-        organization_id: `eq.${caller.organizationId}`,
-        ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
-        or: `(${[
-          `normalized_oem.like.*${familyCore}*`,
-          `normalized_code.like.*${familyCore}*`,
-          familyPattern.length >= 6 ? `oem_no.ilike.*${familyPattern}*` : "",
-          familyPattern.length >= 6 ? `product_code.ilike.*${familyPattern}*` : "",
-        ]
-          .filter(Boolean)
-          .join(",")})`,
-        order: "product_code.asc",
-        limit: "160",
-      }).catch(() => ({ rows: [] as CatalogSourceRow[], totalCount: 0 }));
-      if (familyRows.rows.length) {
-        const merged = dedupeCatalogRows([...rows, ...familyRows.rows]).filter((row) => matchesCatalogFamilyRow(row, search));
-        totalCount = merged.length;
-        rows = merged.slice(offset, offset + pageSize);
-      }
-    }
-  }
-  if (search && shouldRunLooseOriginalNumberSearch(search)) {
+  if (search && shouldRunLooseOriginalNumberSearch(search) && rows.length < pageSize) {
     const familyClauses = buildOriginalNumberFamilyClauses(search);
     if (familyClauses.length) {
       const familySweepRows = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
@@ -424,39 +383,10 @@ async function fetchCloudCatalogPageViaRest(
         ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
         or: `(${familyClauses.join(",")})`,
         order: "product_code.asc",
-        limit: "220",
+        limit: String(Math.min(160, Math.max(pageSize * 3, 80))),
       }).catch(() => ({ rows: [] as CatalogSourceRow[], totalCount: 0 }));
       if (familySweepRows.rows.length) {
         const merged = dedupeCatalogRows([...rows, ...familySweepRows.rows]).filter((row) => matchesCatalogFamilyRow(row, search));
-        totalCount = merged.length;
-        rows = merged.slice(offset, offset + pageSize);
-      }
-    }
-  }
-  if (search && isLikelyCatalogCodeSearch(search)) {
-    const supplementalVariants = supplementalSearchVariants(search);
-    if (supplementalVariants.length) {
-      const fallbackBase: Record<string, string> = {
-        select,
-        organization_id: `eq.${caller.organizationId}`,
-        order: "product_code.asc",
-        limit: "120",
-      };
-      if (selectedBrandId) fallbackBase.brand_id = `eq.${selectedBrandId}`;
-      const supplementalRows = (
-        await Promise.all(
-          supplementalVariants.map((variant) =>
-            fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
-              ...fallbackBase,
-              normalized_oem: `like.*${variant}*`,
-            }).catch(() => ({ rows: [] as CatalogSourceRow[], totalCount: 0 })),
-          ),
-        )
-      ).flatMap((result) => result.rows);
-      if (supplementalRows.length) {
-        const merged = dedupeCatalogRows([...rows, ...supplementalRows]).filter(
-          (row) => matchesCatalogFamilyRow(row, search) || supplementalVariants.some((variant) => normalizePartCode(String(row.product_code || "")).includes(variant)),
-        );
         totalCount = merged.length;
         rows = merged.slice(offset, offset + pageSize);
       }
