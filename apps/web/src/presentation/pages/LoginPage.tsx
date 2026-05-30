@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabaseClient } from "../../infrastructure/api/supabaseClient";
 import { Button } from "../components/common/Button";
 import { Input } from "../components/common/Input";
@@ -6,6 +6,12 @@ import { Input } from "../components/common/Input";
 type LoginPageProps = {
   onSuccess: () => void;
   recoveryMode?: boolean;
+};
+
+type AdminLoginBranding = {
+  companyName: string;
+  logoDataUrl: string;
+  label: string;
 };
 
 function normalizeLoginName(value: string) {
@@ -29,7 +35,23 @@ function authEmailCandidates(value: string) {
     : [];
 }
 
+function buildLoginInitials(value: string) {
+  return String(value || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((token) => token[0]?.toUpperCase() || "")
+    .join("")
+    .slice(0, 2) || "AO";
+}
+
 export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
+  const [branding, setBranding] = useState<AdminLoginBranding>({
+    companyName: "Asad Otomotiv",
+    logoDataUrl: "",
+    label: "Admin Workspace",
+  });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -38,6 +60,28 @@ export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [forgotMode, setForgotMode] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      try {
+        const response = await fetch("/api/admin-login-branding");
+        if (!response.ok) return;
+        const payload = (await response.json()) as { branding?: AdminLoginBranding };
+        if (!cancelled && payload.branding) {
+          setBranding(payload.branding);
+        }
+      } catch {
+        return;
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleLogin() {
     setLoading(true);
@@ -119,11 +163,23 @@ export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
   const title = recoveryMode ? "Reset Password" : "Next Master";
   const description = recoveryMode
     ? "Enter your new password to finish recovery."
-    : "Login with your existing Supabase account to view real cloud data.";
+    : "Login with your account to access the operational workspace.";
+  const loginInitials = buildLoginInitials(branding.companyName);
 
   return (
-    <div className="login-shell">
+    <div className="login-shell login-shell--admin">
       <div className="login-card">
+        {!recoveryMode ? (
+          <div className="login-brand">
+            <div className={`login-brand__logo${branding.logoDataUrl ? " login-brand__logo--image" : ""}`} aria-hidden="true">
+              {branding.logoDataUrl ? <img src={branding.logoDataUrl} alt="" className="login-brand__logo-image" /> : loginInitials}
+            </div>
+            <div className="login-brand__copy">
+              <span>{branding.label}</span>
+              <strong>{branding.companyName}</strong>
+            </div>
+          </div>
+        ) : null}
         <div>
           <h1>{title}</h1>
           <p>{description}</p>

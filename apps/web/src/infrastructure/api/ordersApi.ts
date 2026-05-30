@@ -76,6 +76,7 @@ const SALES_ORDER_SUMMARY_COLUMNS = [
   "created_at",
   "updated_at",
   "confirmed_at",
+  "lines",
 ].join(",");
 
 const PURCHASE_ORDER_COLUMNS = [
@@ -109,6 +110,7 @@ const PURCHASE_ORDER_SUMMARY_COLUMNS = [
   "updated_at",
   "total_amount",
   "line_count",
+  "lines",
 ].join(",");
 
 const INVOICE_COLUMNS = [
@@ -164,6 +166,7 @@ const INVOICE_SUMMARY_COLUMNS = [
   "margin_percent",
   "created_at",
   "updated_at",
+  "lines",
 ].join(",");
 
 const BILL_COLUMNS = [
@@ -205,6 +208,7 @@ const BILL_SUMMARY_COLUMNS = [
   "total_amount",
   "created_at",
   "updated_at",
+  "lines",
 ].join(",");
 
 const PAYMENT_RECEIVED_COLUMNS = [

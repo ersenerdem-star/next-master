@@ -1,5 +1,5 @@
 import type { CatalogRow } from "../../types/catalog";
-import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "../../domain/shared/catalogFormatting";
+import { normalizeCatalogDescription, normalizeCatalogDisplayCode, normalizeCatalogOrigin } from "../../domain/shared/catalogFormatting";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import {
   buildLooseOriginalNumberPattern,
@@ -228,7 +228,7 @@ export async function updateCloudCatalogRow(
       oem_no: updates.oem_no,
       vehicle: updates.vehicle?.trim() || null,
       hs_code: updates.hs_code,
-      origin: updates.origin,
+      origin: updates.origin ? normalizeCatalogOrigin(updates.origin) : null,
       weight_kg: updates.weight_kg,
       lifecycle_status: normalizeCatalogLifecycleStatus(updates.lifecycle_status),
       lifecycle_note: updates.lifecycle_note?.trim() || null,
@@ -262,7 +262,7 @@ export async function createCloudCatalogRow(input: {
     oem_no: input.oem_no,
     vehicle: input.vehicle?.trim() || null,
     hs_code: input.hs_code,
-    origin: input.origin,
+    origin: input.origin ? normalizeCatalogOrigin(input.origin) : null,
     weight_kg: input.weight_kg,
     lifecycle_status: normalizeCatalogLifecycleStatus(input.lifecycle_status),
     lifecycle_note: input.lifecycle_note?.trim() || null,

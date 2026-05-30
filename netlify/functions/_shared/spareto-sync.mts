@@ -833,6 +833,8 @@ function formatOrigin(value: string) {
   const raw = String(value || "").trim();
   if (!raw) return "";
   const map = new Map<string, string>([
+    ["ARGENTINA", "AR"],
+    ["AUSTRALIA", "AU"],
     ["GERMANY", "DE"],
     ["POLAND", "PL"],
     ["ITALY", "IT"],
@@ -844,11 +846,13 @@ function formatOrigin(value: string) {
     ["ROMANIA", "RO"],
     ["HUNGARY", "HU"],
     ["BULGARIA", "BG"],
+    ["BOSNIA AND HERZEGOVINA", "BA"],
     ["NETHERLANDS", "NL"],
     ["BELGIUM", "BE"],
     ["UNITED KINGDOM", "GB"],
     ["PORTUGAL", "PT"],
     ["AUSTRIA", "AT"],
+    ["EGYPT", "EG"],
     ["SWEDEN", "SE"],
     ["DENMARK", "DK"],
     ["SWITZERLAND", "CH"],
@@ -859,6 +863,8 @@ function formatOrigin(value: string) {
     ["KOREA", "KR"],
     ["MEXICO", "MX"],
     ["INDIA", "IN"],
+    ["LUXEMBOURG", "LU"],
+    ["VIETNAM", "VN"],
   ]);
   const normalized = raw.toUpperCase();
   return map.get(normalized) || (normalized.length <= 3 ? normalized : raw);

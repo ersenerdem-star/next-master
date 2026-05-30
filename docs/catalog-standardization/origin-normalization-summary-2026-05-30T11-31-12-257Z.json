@@ -1,0 +1,106 @@
+{
+  "checked_at": "2026-05-30T11:31:12.198Z",
+  "updated_rows": 785,
+  "examples": [
+    {
+      "id": "00c2d505-6e5d-4b17-b34b-af2590c4eb36",
+      "origin": "AR"
+    },
+    {
+      "id": "00e86f18-0317-4f2f-baa6-f49bc6a683a7",
+      "origin": "HR"
+    },
+    {
+      "id": "01025b5f-c578-4fd4-b2b0-86f4093ac015",
+      "origin": "IN"
+    },
+    {
+      "id": "01535305-2430-4b1d-aad2-9886ca713bd8",
+      "origin": "DE"
+    },
+    {
+      "id": "0172d2ad-09e5-4e39-b9a6-da89b215519f",
+      "origin": "IT"
+    },
+    {
+      "id": "019439f5-66ca-4f64-89ec-5e05ab1716b0",
+      "origin": "JP"
+    },
+    {
+      "id": "01fb4d61-3a6b-4c34-b15a-89eb017baec9",
+      "origin": "DE"
+    },
+    {
+      "id": "02a5c0df-f02b-4bda-b14d-a41d36bd5b60",
+      "origin": "DE"
+    },
+    {
+      "id": "02c0a629-0ec3-4a78-8227-b88a5643e042",
+      "origin": "CA"
+    },
+    {
+      "id": "02d53be8-4134-4952-978f-94587741ecb5",
+      "origin": "IN"
+    },
+    {
+      "id": "0315277f-3001-49e7-a4b6-4f19d4fc4739",
+      "origin": "JP"
+    },
+    {
+      "id": "03670344-a629-4dfe-99fe-f7f7658b7200",
+      "origin": "DE"
+    },
+    {
+      "id": "03fc8cee-087c-414c-a82c-1d5013f04289",
+      "origin": "BA"
+    },
+    {
+      "id": "0439ceda-a505-40c8-bf09-5257a7a3749f",
+      "origin": "AR"
+    },
+    {
+      "id": "04c92eeb-f9a7-4526-a823-cbe556ff507a",
+      "origin": "JP"
+    },
+    {
+      "id": "057e38a4-daa4-4133-82f4-5201e670d77b",
+      "origin": "DE"
+    },
+    {
+      "id": "0585a60a-6b72-4c7c-886e-790a045b92a2",
+      "origin": "AR"
+    },
+    {
+      "id": "061739d4-da47-4cb9-85bf-3df56412af1b",
+      "origin": "AR"
+    },
+    {
+      "id": "06258a50-c898-4933-81f9-ffcb11dfd7e1",
+      "origin": "BR"
+    },
+    {
+      "id": "062a7aee-0013-4eea-87ef-92a092323c36",
+      "origin": "AR"
+    },
+    {
+      "id": "065cb4b3-b1f5-45fa-851f-6f2c1a5bf7ba",
+      "origin": "AR"
+    },
+    {
+      "id": "06c9061e-31b1-4ce9-8037-fc56513d4959",
+      "origin": "JP"
+    },
+    {
+      "id": "06cb5a99-6f06-4b58-a0bc-0228440e6c3f",
+      "origin": "DE"
+    },
+    {
+      "id": "06f5bec4-ff90-4898-b8ed-c245fd43d0c6",
+      "origin": "IN"
+    },
+    {
+      "id": "0756c7bc-130e-4d22-b583-55a2d6bfa94c",
+      "origin": "VN"
+    }
+  ]
+}

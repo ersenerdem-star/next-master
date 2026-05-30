@@ -778,8 +778,11 @@ function sleep(ms) {
 }
 
 const ORIGIN_CODES = {
+  argentina: "AR",
+  australia: "AU",
   austria: "AT",
   belgium: "BE",
+  bosniaandherzegovina: "BA",
   brazil: "BR",
   bulgaria: "BG",
   canada: "CA",
@@ -788,6 +791,7 @@ const ORIGIN_CODES = {
   czechrepublic: "CZ",
   czechia: "CZ",
   denmark: "DK",
+  egypt: "EG",
   estonia: "EE",
   finland: "FI",
   france: "FR",
@@ -802,6 +806,7 @@ const ORIGIN_CODES = {
   japan: "JP",
   latvia: "LV",
   lithuania: "LT",
+  luxembourg: "LU",
   malaysia: "MY",
   mexico: "MX",
   netherlands: "NL",
@@ -824,6 +829,7 @@ const ORIGIN_CODES = {
   turkey: "TR",
   unitedkingdom: "GB",
   unitedstates: "US",
+  vietnam: "VN",
 };
 
 await main();

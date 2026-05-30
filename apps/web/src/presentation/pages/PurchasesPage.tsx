@@ -49,7 +49,7 @@ function formatAvailabilityQty(value: number) {
   return Number.isInteger(value) ? String(value) : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
-function buildPurchaseOrderBrandSummary(lines: LocalPurchaseOrder["lines"]) {
+function buildPurchaseOrderBrandSummary(lines: Array<{ brand: string }>) {
   const labels: string[] = [];
   const seen = new Set<string>();
 
@@ -65,6 +65,35 @@ function buildPurchaseOrderBrandSummary(lines: LocalPurchaseOrder["lines"]) {
   return {
     labels: labels.slice(0, 3),
     extraCount: Math.max(0, labels.length - 3),
+  };
+}
+
+function mergeCatalogLineIntoPurchaseDraft(draft: LocalPurchaseOrder, nextLine: LocalPurchaseOrderLine) {
+  const nextKey = `${String(nextLine.brand || "").trim().toLowerCase()}::${normalizePartCode(nextLine.product_code || nextLine.old_code || "")}`;
+  const existingIndex = draft.lines.findIndex((line) => `${String(line.brand || "").trim().toLowerCase()}::${normalizePartCode(line.product_code || line.old_code || "")}` === nextKey);
+  const nextLines =
+    existingIndex < 0
+      ? [nextLine, ...draft.lines]
+      : draft.lines.map((line, index) =>
+          index !== existingIndex
+            ? line
+            : {
+                ...line,
+                qty: line.qty + nextLine.qty,
+                description: line.description || nextLine.description,
+                oem_no: line.oem_no || nextLine.oem_no,
+                hs_code: line.hs_code || nextLine.hs_code,
+                weight_kg: line.weight_kg ?? nextLine.weight_kg,
+                origin: line.origin || nextLine.origin,
+              },
+        );
+  const totalAmount = Math.round(nextLines.reduce((sum, line) => sum + Number(line.line_total || 0), 0) * 100) / 100;
+  return {
+    ...draft,
+    lines: nextLines,
+    line_count: nextLines.length,
+    total_amount: totalAmount,
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -328,22 +357,44 @@ export function PurchasesPage({
     pendingCatalogPurchaseHandledRef.current = true;
 
     setActiveTab("Purchase Orders");
-    const draft = recomputePurchaseOrderTotals(
-      createCatalogPurchaseOrderDraft(
-        {
-          product_code: pending.product_code,
-          brand: pending.brand,
-          description: pending.description || "",
-          oem_no: pending.oem_no || "",
-          hs_code: pending.hs_code || "",
-          origin: pending.origin || "",
-          weight_kg: pending.weight_kg ?? null,
-        },
-        companyProfiles[0]?.companyName || "",
-      ),
-    );
-    setSelectedPurchaseOrderId(draft.id);
-    setPurchaseOrderDraft(draft);
+    const nextLine: LocalPurchaseOrderLine = {
+      sales_order_id: "",
+      sales_order_no: "",
+      product_code: pending.product_code,
+      old_code: "",
+      brand: pending.brand,
+      description: pending.description || "",
+      qty: 1,
+      oem_no: pending.oem_no || "",
+      hs_code: pending.hs_code || "",
+      weight_kg: pending.weight_kg ?? null,
+      supplier_name: "",
+      buy_price: 0,
+      line_total: 0,
+      origin: pending.origin || "",
+      notes: "",
+    };
+    setSelectedPurchaseOrderId("");
+    setPurchaseOrderDraft((current) => {
+      const baseDraft =
+        current ||
+        recomputePurchaseOrderTotals(
+          createCatalogPurchaseOrderDraft(
+            {
+              product_code: pending.product_code,
+              brand: pending.brand,
+              description: pending.description || "",
+              oem_no: pending.oem_no || "",
+              hs_code: pending.hs_code || "",
+              origin: pending.origin || "",
+              weight_kg: pending.weight_kg ?? null,
+            },
+            companyProfiles[0]?.companyName || "",
+          ),
+        );
+      const nextDraft = current ? mergeCatalogLineIntoPurchaseDraft(baseDraft, nextLine) : baseDraft;
+      return nextDraft;
+    });
     setPurchaseOrderSourceSnapshot("");
     setPurchaseOrdersView("detail");
     actionFeedback.succeed(`${pending.product_code} added to Purchase Order draft.`);
@@ -445,13 +496,14 @@ export function PurchasesPage({
 
   const purchaseOrderColumns = useMemo(
     () => [
-      { key: "po", header: "PO No", render: (row: LocalPurchaseOrder) => row.id },
+      { key: "po", header: "PO No", render: (row: LocalPurchaseOrder) => row.id, sortValue: (row: LocalPurchaseOrder) => row.id },
       {
         key: "supplier",
         header: "Vendor",
         render: (row: LocalPurchaseOrder) => (
           <span title={row.supplier_name || "-"}>{getAdminVendorLabel(row.supplier_name)}</span>
         ),
+        sortValue: (row: LocalPurchaseOrder) => getAdminVendorLabel(row.supplier_name),
       },
       {
         key: "company",
@@ -459,14 +511,16 @@ export function PurchasesPage({
         render: (row: LocalPurchaseOrder) => (
           <span title={row.purchase_company || "-"}>{buildEntityAlias(row.purchase_company)}</span>
         ),
+        sortValue: (row: LocalPurchaseOrder) => buildEntityAlias(row.purchase_company),
       },
-      { key: "sales", header: "Sales Order", render: (row: LocalPurchaseOrder) => row.sales_order_no },
+      { key: "sales", header: "Sales Order", render: (row: LocalPurchaseOrder) => row.sales_order_no, sortValue: (row: LocalPurchaseOrder) => row.sales_order_no },
       {
         key: "customer",
         header: "Customer",
         render: (row: LocalPurchaseOrder) => (
           <span title={row.customer_name || "-"}>{getAdminCustomerLabel(row.customer_name)}</span>
         ),
+        sortValue: (row: LocalPurchaseOrder) => getAdminCustomerLabel(row.customer_name),
       },
       {
         key: "brands",
@@ -483,24 +537,42 @@ export function PurchasesPage({
             </span>
           );
         },
+        sortValue: (row: LocalPurchaseOrder) => buildPurchaseOrderBrandSummary(row.lines).labels.join(", "),
       },
-      { key: "amount", header: "Purchase Total", render: (row: LocalPurchaseOrder) => formatMoney(row.total_amount, row.currency) },
-      { key: "status", header: "Status", render: (row: LocalPurchaseOrder) => row.status },
-      { key: "created", header: "Created", render: (row: LocalPurchaseOrder) => row.created_at.slice(0, 10) },
+      { key: "amount", header: "Purchase Total", render: (row: LocalPurchaseOrder) => formatMoney(row.total_amount, row.currency), sortValue: (row: LocalPurchaseOrder) => row.total_amount },
+      { key: "status", header: "Status", render: (row: LocalPurchaseOrder) => row.status, sortValue: (row: LocalPurchaseOrder) => row.status },
+      { key: "created", header: "Created", render: (row: LocalPurchaseOrder) => row.created_at.slice(0, 10), sortValue: (row: LocalPurchaseOrder) => row.created_at },
     ],
     [],
   );
 
   const billColumns = useMemo(
     () => [
-      { key: "bill", header: "Bill No", render: (row: LocalBill) => row.id },
-      { key: "po", header: "Purchase Order", render: (row: LocalBill) => row.purchase_order_no },
-      { key: "supplier", header: "Vendor", render: (row: LocalBill) => <span title={row.supplier_name || "-"}>{getAdminVendorLabel(row.supplier_name)}</span> },
-      { key: "company", header: "Purchase Company", render: (row: LocalBill) => <span title={row.purchase_company || "-"}>{buildEntityAlias(row.purchase_company)}</span> },
-      { key: "date", header: "Bill Date", render: (row: LocalBill) => row.bill_date || "-" },
-      { key: "due", header: "Due Date", render: (row: LocalBill) => row.due_date || "-" },
-      { key: "amount", header: "Total Amount", render: (row: LocalBill) => formatMoney(row.total_amount, row.currency) },
-      { key: "status", header: "Status", render: (row: LocalBill) => row.status },
+      { key: "bill", header: "Bill No", render: (row: LocalBill) => row.id, sortValue: (row: LocalBill) => row.id },
+      { key: "po", header: "Purchase Order", render: (row: LocalBill) => row.purchase_order_no, sortValue: (row: LocalBill) => row.purchase_order_no },
+      { key: "supplier", header: "Vendor", render: (row: LocalBill) => <span title={row.supplier_name || "-"}>{getAdminVendorLabel(row.supplier_name)}</span>, sortValue: (row: LocalBill) => getAdminVendorLabel(row.supplier_name) },
+      { key: "company", header: "Purchase Company", render: (row: LocalBill) => <span title={row.purchase_company || "-"}>{buildEntityAlias(row.purchase_company)}</span>, sortValue: (row: LocalBill) => buildEntityAlias(row.purchase_company) },
+      {
+        key: "brands",
+        header: "Brand",
+        render: (row: LocalBill) => {
+          const brandSummary = buildPurchaseOrderBrandSummary(row.lines);
+          if (!brandSummary.labels.length) return "-";
+          return (
+            <span className="document-marks document-marks--compact">
+              {brandSummary.labels.map((brand) => (
+                <BrandPill key={`${row.id}-${brand}`} brand={brand} compact />
+              ))}
+              {brandSummary.extraCount > 0 ? <span className="mark-badge mark-badge--info">+{brandSummary.extraCount}</span> : null}
+            </span>
+          );
+        },
+        sortValue: (row: LocalBill) => buildPurchaseOrderBrandSummary(row.lines).labels.join(", "),
+      },
+      { key: "date", header: "Bill Date", render: (row: LocalBill) => row.bill_date || "-", sortValue: (row: LocalBill) => row.bill_date || "" },
+      { key: "due", header: "Due Date", render: (row: LocalBill) => row.due_date || "-", sortValue: (row: LocalBill) => row.due_date || "" },
+      { key: "amount", header: "Total Amount", render: (row: LocalBill) => formatMoney(row.total_amount, row.currency), sortValue: (row: LocalBill) => row.total_amount },
+      { key: "status", header: "Status", render: (row: LocalBill) => row.status, sortValue: (row: LocalBill) => row.status },
     ],
     [],
   );

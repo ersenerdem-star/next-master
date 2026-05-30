@@ -191,7 +191,7 @@ type PortalSelection =
   | { kind: "purchase-order"; id: string }
   | { kind: "bill"; id: string };
 type PortalSection = "desk" | "pricelist" | "orders" | "billing" | "statement" | "account";
-type PortalNavGroupKey = "search" | "documents" | "finance" | "account";
+type PortalNavGroupKey = "search" | "pricing" | "documents" | "finance" | "account";
 type PortalSearchView = "cards" | "list";
 
 type PortalLine = NonNullable<PortalSnapshot["invoices"][number]["lines"]>[number];
@@ -1061,7 +1061,7 @@ export function PortalPage() {
     const loginBrandLabel = loginBranding?.portalLabel || "Self-Service Access";
     const loginBrandInitials = buildPortalLoginInitials(loginBrandName);
     return (
-      <div className="portal-shell">
+      <div className="portal-shell portal-shell--login">
         <div className="portal-login-card">
           <div className="portal-login-brand">
             <div className={`portal-login-brand__logo${loginBrandLogo ? " portal-login-brand__logo--image" : ""}`} aria-hidden="true">
@@ -1250,12 +1250,19 @@ export function PortalPage() {
       key: "search" as const,
       code: "01",
       title: "Search",
-      caption: "Parts & Pricing",
+      caption: "Parts",
       items: portalSections.filter((section) => section.key === "desk"),
     },
     {
-      key: "documents" as const,
+      key: "pricing" as const,
       code: "02",
+      title: "Price Lists",
+      caption: "Downloads",
+      items: portalSections.filter((section) => section.key === "pricelist"),
+    },
+    {
+      key: "documents" as const,
+      code: "03",
       title: "Documents",
       caption: activeSnapshot.invite.party_type === "customer" ? "Orders & Invoices" : "PO & Bills",
       items: portalSections
@@ -1270,17 +1277,17 @@ export function PortalPage() {
     },
     {
       key: "finance" as const,
-      code: "03",
+      code: "04",
       title: "Finance",
       caption: "Statement & Payments",
       items: portalSections.filter((section) => section.key === "statement"),
     },
     {
       key: "account" as const,
-      code: "04",
+      code: "05",
       title: "Account",
       caption: "Profile",
-      items: portalSections.filter((section) => section.key === "account" || section.key === "pricelist"),
+      items: portalSections.filter((section) => section.key === "account"),
     },
   ].filter((group) => group.items.length > 0);
   const activePortalGroup =

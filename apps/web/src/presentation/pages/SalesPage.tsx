@@ -607,8 +607,8 @@ export function SalesPage({
   }
 
   const invoiceColumns = [
-    { key: "invoice", header: "Invoice No", render: (row: LocalInvoice) => row.id },
-    { key: "salesOrder", header: "Sales Order", render: (row: LocalInvoice) => row.sales_order_no },
+    { key: "invoice", header: "Invoice No", render: (row: LocalInvoice) => row.id, sortValue: (row: LocalInvoice) => row.id },
+    { key: "salesOrder", header: "Sales Order", render: (row: LocalInvoice) => row.sales_order_no, sortValue: (row: LocalInvoice) => row.sales_order_no },
     {
       key: "brands",
       header: "Brand",
@@ -624,6 +624,7 @@ export function SalesPage({
           </span>
         );
       },
+      sortValue: (row: LocalInvoice) => buildInvoiceBrandSummary(row.lines).labels.join(", "),
     },
     {
       key: "customer",
@@ -633,17 +634,19 @@ export function SalesPage({
           {findCustomerByNameInList(customers, row.customer_name)?.display_name?.trim() || buildEntityAlias(row.customer_name)}
         </span>
       ),
+      sortValue: (row: LocalInvoice) => findCustomerByNameInList(customers, row.customer_name)?.display_name?.trim() || buildEntityAlias(row.customer_name),
     },
     {
       key: "seller",
       header: "Seller Company",
       render: (row: LocalInvoice) => <span title={row.seller_company || "-"}>{buildEntityAlias(row.seller_company)}</span>,
+      sortValue: (row: LocalInvoice) => buildEntityAlias(row.seller_company),
     },
-    { key: "date", header: "Date", render: (row: LocalInvoice) => row.quote_date || "-" },
-    { key: "amount", header: "Total Amount", render: (row: LocalInvoice) => `${row.total_amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
-    { key: "profit", header: "Profit", render: (row: LocalInvoice) => `${row.profit_total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
-    { key: "margin", header: "Margin %", render: (row: LocalInvoice) => `${row.margin_percent.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` },
-    { key: "status", header: "Status", render: (row: LocalInvoice) => row.status },
+    { key: "date", header: "Date", render: (row: LocalInvoice) => row.quote_date || "-", sortValue: (row: LocalInvoice) => row.quote_date || "" },
+    { key: "amount", header: "Total Amount", render: (row: LocalInvoice) => `${row.total_amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}`, sortValue: (row: LocalInvoice) => row.total_amount },
+    { key: "profit", header: "Profit", render: (row: LocalInvoice) => `${row.profit_total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}`, sortValue: (row: LocalInvoice) => row.profit_total },
+    { key: "margin", header: "Margin %", render: (row: LocalInvoice) => `${row.margin_percent.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`, sortValue: (row: LocalInvoice) => row.margin_percent },
+    { key: "status", header: "Status", render: (row: LocalInvoice) => row.status, sortValue: (row: LocalInvoice) => row.status },
     {
       key: "actions",
       header: "Actions",

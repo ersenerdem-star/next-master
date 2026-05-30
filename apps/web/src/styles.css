@@ -1043,6 +1043,34 @@ select {
   letter-spacing: 0.02em;
 }
 
+.data-table__sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.data-table__sort-button:hover {
+  color: #0f172a;
+}
+
+.data-table__sort-button.active {
+  color: #b45309;
+}
+
+.data-table__sort-indicator {
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .empty-state {
   border: 1px dashed #cbd5e1;
   border-radius: 12px;
@@ -1061,6 +1089,44 @@ select {
   background: #f8fafc;
 }
 
+.login-shell,
+.portal-shell--login {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.login-shell::before,
+.portal-shell--login::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(249, 115, 22, 0.12), transparent 20%),
+    radial-gradient(circle at 82% 18%, rgba(59, 130, 246, 0.1), transparent 18%),
+    radial-gradient(circle at 72% 78%, rgba(16, 185, 129, 0.1), transparent 22%),
+    radial-gradient(circle at 28% 82%, rgba(148, 163, 184, 0.12), transparent 18%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900'%3E%3Cg fill='none' stroke='%23cbd5e1' stroke-width='10' opacity='0.34'%3E%3Cpath d='M110 560h250l30 45h120v70H80v-55h30z'/%3E%3Ccircle cx='180' cy='676' r='28'/%3E%3Ccircle cx='430' cy='676' r='28'/%3E%3Cpath d='M620 650h210l52-68h182l62 68h160'/%3E%3Ccircle cx='710' cy='650' r='24'/%3E%3Ccircle cx='1038' cy='650' r='24'/%3E%3Cpath d='M1110 360h250l85 70h-420z'/%3E%3Cpath d='M1040 380h-100l-50 120h40'/%3E%3Cpath d='M1180 510h190l34 45h-278z'/%3E%3Crect x='180' y='220' width='150' height='110' rx='18'/%3E%3Cpath d='M330 245h150v50H330z'/%3E%3Ccircle cx='225' cy='345' r='24'/%3E%3Ccircle cx='430' cy='345' r='24'/%3E%3Crect x='700' y='210' width='180' height='96' rx='18'/%3E%3Cpath d='M890 170v250'/%3E%3Cpath d='M890 180l130 55'/%3E%3Cpath d='M670 705h210'/%3E%3Cpath d='M1240 700h150'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+  background-position: center;
+  background-size: auto, auto, auto, auto, cover;
+  opacity: 0.95;
+  pointer-events: none;
+  z-index: -2;
+}
+
+.login-shell::after,
+.portal-shell--login::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.76), rgba(248, 250, 252, 0.84)),
+    repeating-linear-gradient(120deg, rgba(255, 255, 255, 0.18) 0, rgba(255, 255, 255, 0.18) 2px, transparent 2px, transparent 22px);
+  pointer-events: none;
+  z-index: -1;
+}
+
 .login-card {
   width: min(420px, calc(100vw - 32px));
   display: flex;
@@ -1071,6 +1137,68 @@ select {
   background: #fff;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
   padding: 22px;
+  position: relative;
+  z-index: 1;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 2px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.login-brand__logo {
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f97316 0%, #c2410c 100%);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  box-shadow: 0 12px 26px rgba(194, 65, 12, 0.22);
+}
+
+.login-brand__logo--image {
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.12);
+}
+
+.login-brand__logo-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+.login-brand__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.login-brand__copy span {
+  color: #c2410c;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.login-brand__copy strong {
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
 }
 
 .login-options {
@@ -1753,6 +1881,24 @@ select {
   word-break: break-word;
 }
 
+.catalog-detail-list-text {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
+  line-height: 1.45;
+}
+
+.catalog-detail-expand {
+  border: 0;
+  background: transparent;
+  color: #c2410c;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+}
+
 .workbench-detail-panel__media {
   display: grid;
   place-items: center;
@@ -2432,6 +2578,8 @@ select {
   border-radius: 18px;
   padding: 24px;
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+  position: relative;
+  z-index: 1;
 }
 
 .portal-login-brand {

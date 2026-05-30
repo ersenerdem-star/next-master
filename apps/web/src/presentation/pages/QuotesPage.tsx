@@ -321,6 +321,27 @@ function buildOrderBrandSummary(lines: QuoteBuilderLine[]) {
   };
 }
 
+function mergeCatalogLineIntoSalesDraft(currentLines: QuoteBuilderLine[], nextLine: QuoteBuilderLine) {
+  const nextKey = lineMetadataKey(nextLine.brand || "", nextLine.resolvedCode || nextLine.requestedCode);
+  const existingIndex = currentLines.findIndex((line) => lineMetadataKey(line.brand || "", line.resolvedCode || line.requestedCode) === nextKey);
+  if (existingIndex < 0) return [nextLine, ...currentLines];
+  return currentLines.map((line, index) =>
+    index !== existingIndex
+      ? line
+      : {
+          ...line,
+          qty: line.qty + nextLine.qty,
+          description: line.description || nextLine.description,
+          oem_no: line.oem_no || nextLine.oem_no,
+          hs_code: line.hs_code || nextLine.hs_code,
+          origin: line.origin || nextLine.origin,
+          weight_kg: line.weight_kg ?? nextLine.weight_kg,
+          lifecycle_status: nextLine.lifecycle_status ?? line.lifecycle_status,
+          lifecycle_note: line.lifecycle_note ?? nextLine.lifecycle_note,
+        },
+  );
+}
+
 function getQuoteBuilderLineIssues(line: QuoteBuilderLine) {
   const issues: string[] = [];
   if (line.codeChanged) issues.push("Replacement");
@@ -647,7 +668,13 @@ export function QuotesPage({
     let cancelled = false;
 
     async function run() {
-      startNewSalesOrder();
+      if (!quoteBuilderLines.length) {
+        resetSalesOrderEditor();
+        setSelectedLocalSalesOrderId("");
+        onSelectedSalesOrderChange?.("");
+      }
+      setSalesOrdersView("detail");
+      setPdfView(false);
       setBuilderStatus(`Adding ${pendingItem.product_code} from catalog...`);
       try {
         const line = await buildBuilderLine(
@@ -669,7 +696,7 @@ export function QuotesPage({
           lifecycle_status: (pendingItem.lifecycle_status as QuoteBuilderLine["lifecycle_status"]) ?? line.lifecycle_status,
           lifecycle_note: pendingItem.lifecycle_note ?? line.lifecycle_note,
         };
-        setQuoteBuilderLines([enrichedLine]);
+        setQuoteBuilderLines((current) => mergeCatalogLineIntoSalesDraft(current, enrichedLine));
         setBuilderStatus(`${pendingItem.product_code} added from catalog.`);
         actionFeedback.succeed(`${pendingItem.product_code} added to Sales Order Workbench.`);
       } catch (caught) {
@@ -683,7 +710,7 @@ export function QuotesPage({
     return () => {
       cancelled = true;
     };
-  }, [actionFeedback, companyProfiles]);
+  }, [actionFeedback, companyProfiles, onSelectedSalesOrderChange, quoteBuilderLines.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2179,11 +2206,13 @@ export function QuotesPage({
         key: "customer",
         header: "Customer",
         render: (row: LocalSalesOrder) => <strong title={row.customer_name || "Unnamed customer"}>{getAdminCustomerLabel(row.customer_name)}</strong>,
+        sortValue: (row: LocalSalesOrder) => getAdminCustomerLabel(row.customer_name),
       },
       {
         key: "salesOrderNo",
         header: "Sales Order",
         render: (row: LocalSalesOrder) => row.sales_order_no,
+        sortValue: (row: LocalSalesOrder) => row.sales_order_no,
       },
       {
         key: "brands",
@@ -2202,6 +2231,7 @@ export function QuotesPage({
             </span>
           );
         },
+        sortValue: (row: LocalSalesOrder) => buildOrderBrandSummary(row.lines).labels.join(", "),
       },
       {
         key: "status",
@@ -2220,21 +2250,25 @@ export function QuotesPage({
             </span>
           );
         },
+        sortValue: (row: LocalSalesOrder) => row.status,
       },
       {
         key: "sellerCompany",
         header: "Seller Company",
         render: (row: LocalSalesOrder) => <span title={row.seller_company || "-"}>{buildEntityAlias(row.seller_company)}</span>,
+        sortValue: (row: LocalSalesOrder) => buildEntityAlias(row.seller_company),
       },
       {
         key: "date",
         header: "Date",
         render: (row: LocalSalesOrder) => formatDate(row.quote_date),
+        sortValue: (row: LocalSalesOrder) => row.quote_date,
       },
       {
         key: "amount",
         header: "Amount",
         render: (row: LocalSalesOrder) => formatMoney(row.sales_total, row.currency || "EUR"),
+        sortValue: (row: LocalSalesOrder) => row.sales_total,
       },
     ],
     [selectedLocalSalesOrderIds, salesOrderDocumentState],

@@ -89,6 +89,7 @@ function filterCachedCatalogRows(rows: CatalogRow[], search: string, brand: stri
 export function CatalogPage() {
   const actionFeedback = useActionFeedback();
   const selectedCatalogPopupRef = useRef<HTMLDivElement | null>(null);
+  const catalogCacheHydratedRef = useRef(false);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [importBrand, setImportBrand] = useState("");
@@ -120,6 +121,7 @@ export function CatalogPage() {
   const [referenceOldCodeUsage, setReferenceOldCodeUsage] = useState<CodeReferenceUsage | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; code: string; name: string } | null>(null);
   const [selectedCatalogProductId, setSelectedCatalogProductId] = useState("");
+  const [showFullSelectedOem, setShowFullSelectedOem] = useState(false);
   const [createDraft, setCreateDraft] = useState({
     product_code: "",
     brand: "",
@@ -184,21 +186,32 @@ export function CatalogPage() {
   }, [isOnline]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (!brands.length) return;
+    if (catalogBrand && !brands.some((item) => item.name === catalogBrand)) {
+      setCatalogBrand("");
+    }
+    if (submittedCatalogBrand && !brands.some((item) => item.name === submittedCatalogBrand)) {
+      setSubmittedCatalogBrand("");
+    }
+  }, [brands, catalogBrand, submittedCatalogBrand]);
+
+  useEffect(() => {
+    if (catalogCacheHydratedRef.current || typeof window === "undefined") return;
+    catalogCacheHydratedRef.current = true;
     const cached = readCatalogCache();
     if (!cached) return;
-    if (!brands.length && cached.brands.length) setBrands(cached.brands);
-    if (!rows.length && cached.rows.length) setRows(cached.rows);
-    if (!search && cached.search) setSearch(cached.search);
-    if (!submittedSearch && cached.submittedSearch) setSubmittedSearch(cached.submittedSearch);
-    if (!catalogBrand && cached.catalogBrand) setCatalogBrand(cached.catalogBrand);
-    if (!submittedCatalogBrand && cached.submittedCatalogBrand) setSubmittedCatalogBrand(cached.submittedCatalogBrand);
-    if (!selectedCatalogProductId && cached.selectedCatalogProductId) setSelectedCatalogProductId(cached.selectedCatalogProductId);
+    if (cached.brands.length) setBrands(cached.brands);
+    if (cached.rows.length) setRows(cached.rows);
+    setSearch(cached.search || cached.submittedSearch || "");
+    setSubmittedSearch(cached.submittedSearch || cached.search || "");
+    setCatalogBrand(cached.catalogBrand || cached.submittedCatalogBrand || "");
+    setSubmittedCatalogBrand(cached.submittedCatalogBrand || cached.catalogBrand || "");
+    setSelectedCatalogProductId(cached.selectedCatalogProductId || "");
     if (!isOnline) {
       setStatus("Offline mode active. Showing cached catalog data.");
       setError("");
     }
-  }, [brands.length, rows.length, search, submittedSearch, catalogBrand, submittedCatalogBrand, selectedCatalogProductId, isOnline]);
+  }, [isOnline]);
 
   useEffect(() => {
     let cancelled = false;
@@ -347,6 +360,10 @@ export function CatalogPage() {
   }, [rows, selectedCatalogProductId]);
 
   useEffect(() => {
+    setShowFullSelectedOem(false);
+  }, [selectedCatalogProductId]);
+
+  useEffect(() => {
     if (!selectedCatalogProductId) return;
 
     const handlePointerDown = (event: MouseEvent | TouchEvent) => {
@@ -378,16 +395,16 @@ export function CatalogPage() {
       writeCatalogCache({
         brands: brands.length ? brands : existing?.brands || [],
         rows: rows.length ? rows : existing?.rows || [],
-        search: submittedSearch || existing?.search || "",
-        submittedSearch: submittedSearch || existing?.submittedSearch || "",
-        catalogBrand: submittedCatalogBrand || existing?.catalogBrand || "",
-        submittedCatalogBrand: submittedCatalogBrand || existing?.submittedCatalogBrand || "",
-        selectedCatalogProductId: selectedCatalogProductId || existing?.selectedCatalogProductId || "",
+        search: search || existing?.search || "",
+        submittedSearch: submittedSearch || "",
+        catalogBrand: catalogBrand || "",
+        submittedCatalogBrand: submittedCatalogBrand || "",
+        selectedCatalogProductId,
         updatedAt: new Date().toISOString(),
       });
     }, CATALOG_CACHE_WRITE_DELAY_MS);
     return () => window.clearTimeout(handle);
-  }, [brands, rows, submittedSearch, submittedCatalogBrand, selectedCatalogProductId]);
+  }, [brands, rows, search, submittedSearch, catalogBrand, submittedCatalogBrand, selectedCatalogProductId]);
 
   const total = rows[0]?.total_count ?? 0;
   const originalNumberBrandMatches = useMemo(() => {
@@ -415,10 +432,33 @@ export function CatalogPage() {
     [rows, selectedCatalogProductId],
   );
   const selectedCatalogDraft = selectedCatalogRow ? drafts[selectedCatalogRow.product_id] || selectedCatalogRow : null;
+  const selectedCatalogOemValues = useMemo(() => {
+    return String(selectedCatalogDraft?.oem_no || "")
+      .split(/\s*,\s*|\s*;\s*/g)
+      .map((value) => value.trim())
+      .filter(Boolean);
+  }, [selectedCatalogDraft]);
+  const visibleSelectedCatalogOemValues = showFullSelectedOem ? selectedCatalogOemValues : selectedCatalogOemValues.slice(0, 5);
+
+  function clearCatalogSearch() {
+    setSearch("");
+    setSubmittedSearch("");
+    setCatalogBrand("");
+    setSubmittedCatalogBrand("");
+    setRows([]);
+    setDrafts({});
+    setPreviewSelection(null);
+    setSelectedCatalogProductId("");
+    setStatus("");
+    setError("");
+    setSearchingCatalog(false);
+    actionFeedback.succeed("Catalog filters cleared.");
+  }
 
   function applyCatalogFilters(nextSearch: string, nextBrand: string, announce = true) {
     setSearchingCatalog(true);
     setPreviewSelection(null);
+    setSelectedCatalogProductId("");
     if (announce) {
       actionFeedback.begin(
         `${isOnline ? "Searching" : "Filtering cached"} catalog for ${nextBrand || "all brands"} / ${nextSearch.trim() || "all items"}...`,
@@ -1045,7 +1085,7 @@ export function CatalogPage() {
           <div>
             <span className="search-focus-card__eyebrow">Admin Search</span>
             <h2 className="search-focus-card__title">Catalog Search</h2>
-            <p>Connected to live Supabase catalog data.</p>
+            <p>Connected to live catalog data.</p>
           </div>
           <div className="toolbar">
             <Select
@@ -1053,17 +1093,11 @@ export function CatalogPage() {
               options={[{ value: "", label: "All Brands" }, ...editableBrandOptions]}
               onChange={(value) => {
                 setCatalogBrand(value);
-                if (value) {
+                if (value || search.trim()) {
                   applyCatalogFilters(search, value);
                   return;
                 }
-                if (!search.trim()) {
-                  setSubmittedCatalogBrand("");
-                  setSubmittedSearch("");
-                  setRows([]);
-                  setStatus("");
-                  setError("");
-                }
+                clearCatalogSearch();
               }}
             />
             <Input value={search} onChange={setSearch} placeholder="Search catalog" onEnter={() => applyCatalogFilters(search, catalogBrand)} />
@@ -1075,6 +1109,9 @@ export function CatalogPage() {
               busyLabel={isOnline ? "Searching..." : "Filtering..."}
             >
               Search
+            </Button>
+            <Button variant="secondary" onClick={clearCatalogSearch} disabled={!search && !submittedSearch && !catalogBrand && !submittedCatalogBrand && !rows.length}>
+              Clear Search
             </Button>
             <Button variant="secondary" onClick={() => setShowExportDialog(true)} disabled={!brands.length || !isOnline} busy={exportingCatalog} busyLabel="Preparing...">
               Export CSV
@@ -1161,7 +1198,21 @@ export function CatalogPage() {
             </div>
             <div className="workbench-detail-list">
               <div><span>Description</span><strong>{selectedCatalogDraft.description || "-"}</strong></div>
-              <div><span>OEM</span><strong>{selectedCatalogDraft.oem_no || "-"}</strong></div>
+              <div>
+                <span>OEM</span>
+                <strong className="catalog-detail-list-text">
+                  {visibleSelectedCatalogOemValues.length ? visibleSelectedCatalogOemValues.join(", ") : "-"}
+                  {selectedCatalogOemValues.length > 5 ? (
+                    <button
+                      type="button"
+                      className="catalog-detail-expand"
+                      onClick={() => setShowFullSelectedOem((current) => !current)}
+                    >
+                      {showFullSelectedOem ? "Less" : "..."}
+                    </button>
+                  ) : null}
+                </strong>
+              </div>
               <div><span>Vehicle</span><strong>{selectedCatalogDraft.vehicle || "-"}</strong></div>
               <div><span>HS</span><strong>{selectedCatalogDraft.hs_code || "-"}</strong></div>
               <div><span>Origin</span><strong>{selectedCatalogDraft.origin || "-"}</strong></div>
