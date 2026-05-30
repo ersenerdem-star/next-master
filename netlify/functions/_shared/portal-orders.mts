@@ -816,6 +816,7 @@ async function fetchPortalCatalogRecommendations(
   const stockMap = await fetchPortalSearchStockMap(supabaseUrl, serviceRoleKey, invite.organization_id, candidateBaseItems);
 
   return candidateBaseItems
+    .filter((item) => item.lifecycle_status !== "discontinued")
     .filter((item) => !existingKeys.has(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`))
     .map((item) => {
       const descriptionTokens = extractDescriptionFamilyTokens(item.description);
