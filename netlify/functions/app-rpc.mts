@@ -162,6 +162,11 @@ function isLikelyCatalogCodeSearch(search: string) {
   return /\d/.test(value) || /[-/+.()]/.test(value);
 }
 
+function shouldStrictlyFilterCodeSearch(search: string) {
+  const normalizedOriginal = normalizeOriginalNumberSearch(search);
+  return isLikelyCatalogCodeSearch(search) && /^\d{10,}$/.test(normalizedOriginal);
+}
+
 function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "strict" | "loose") {
   const escaped = search.replace(/[%*(),]/g, " ").trim();
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
@@ -279,6 +284,20 @@ function matchesCatalogFamilyRow(row: CatalogSourceRow, search: string) {
         normalizedOem === variant ||
         normalizedOem.includes(variant),
     )
+  );
+}
+
+function matchesCatalogExactFamilyRow(row: CatalogSourceRow, search: string) {
+  const familyVariants = new Set(buildOriginalNumberFamilyTokens(search));
+  if (!familyVariants.size) return false;
+  const normalizedProductCode = normalizePartCode(String(row.product_code || ""));
+  const normalizedCode = normalizePartCode(String(row.normalized_code || ""));
+  const normalizedOem = normalizePartCode(String(row.normalized_oem || ""));
+  if (familyVariants.has(normalizedProductCode) || familyVariants.has(normalizedCode) || familyVariants.has(normalizedOem)) {
+    return true;
+  }
+  return splitOriginalNumberCandidates(String(row.oem_no || "")).some((candidate) =>
+    buildOriginalNumberVariants(candidate).some((variant) => familyVariants.has(variant)),
   );
 }
 
@@ -416,6 +435,12 @@ async function fetchCloudCatalogPageViaRest(
     const filtered = dedupeCatalogRows(fallbackByNormalized.rows).filter(
       (row) => matchesCatalogFamilyRow(row, search) || normalizePartCode(String(row.product_code || "")).includes(normalizedSearch),
     );
+    totalCount = filtered.length;
+    rows = filtered.slice(offset, offset + pageSize);
+  }
+
+  if (search && shouldStrictlyFilterCodeSearch(search)) {
+    const filtered = dedupeCatalogRows(rows).filter((row) => matchesCatalogExactFamilyRow(row, search));
     totalCount = filtered.length;
     rows = filtered.slice(offset, offset + pageSize);
   }

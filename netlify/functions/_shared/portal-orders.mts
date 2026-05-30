@@ -282,6 +282,20 @@ function matchesCatalogFamilyRow(row: Record<string, unknown>, search: string) {
   );
 }
 
+function matchesCatalogExactFamilyRow(row: Record<string, unknown>, search: string) {
+  const familyVariants = new Set(buildOriginalNumberFamilyTokens(search));
+  if (!familyVariants.size) return false;
+  const normalizedProductCode = normalizePartCode(String(row.product_code || ""));
+  const normalizedCode = normalizePartCode(String(row.normalized_code || ""));
+  const normalizedOem = normalizePartCode(String(row.normalized_oem || ""));
+  if (familyVariants.has(normalizedProductCode) || familyVariants.has(normalizedCode) || familyVariants.has(normalizedOem)) {
+    return true;
+  }
+  return splitOriginalNumberCandidates(String(row.oem_no || "")).some((candidate) =>
+    buildOriginalNumberVariants(candidate).some((variant) => familyVariants.has(variant)),
+  );
+}
+
 type PortalSearchMode = "strict" | "loose";
 
 function shouldRunLooseOriginalNumberSearch(search: string) {
@@ -292,6 +306,11 @@ function isLikelyPortalCodeSearch(search: string) {
   const value = String(search || "").trim();
   if (!value) return false;
   return /\d/.test(value) || /[-/+.()]/.test(value);
+}
+
+function shouldStrictlyFilterCodeSearch(search: string) {
+  const normalizedOriginal = normalizeOriginalNumberSearch(search);
+  return isLikelyPortalCodeSearch(search) && /^\d{10,}$/.test(normalizedOriginal);
 }
 
 function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mode: PortalSearchMode) {
@@ -723,6 +742,9 @@ export async function searchPortalCatalog(
         (row) => matchesCatalogFamilyRow(row, search) || normalizePartCode(String(row.product_code || "")).includes(normalizedSearch),
       ),
     );
+  }
+  if (search && shouldStrictlyFilterCodeSearch(search)) {
+    rows = dedupeCatalogRows(rows).filter((row) => matchesCatalogExactFamilyRow(row, search));
   }
   const baseItems = rows.map((row) => ({
     code: String(row.product_code || ""),
