@@ -194,6 +194,10 @@ function shouldStrictlyFilterCodeSearch(search: string) {
   return isLikelyCatalogCodeSearch(search) && /^\d{10,}$/.test(normalizedOriginal);
 }
 
+function normalizeLifecycleStatus(value: unknown): "active" | "discontinued" {
+  return String(value || "").trim().toLowerCase() === "discontinued" ? "discontinued" : "active";
+}
+
 function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "strict" | "loose") {
   const escaped = search.replace(/[%*(),]/g, " ").trim();
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
