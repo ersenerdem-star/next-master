@@ -53,10 +53,12 @@ export async function syncBrandCatalogFromBoschAftermarket(input: {
   brandName: string;
   refreshExisting?: boolean;
   concurrency?: number;
+  pageSize?: number;
   requestTimeoutMs?: number;
 }) {
   const refreshExisting = input.refreshExisting !== false;
   const concurrency = Math.max(1, input.concurrency ?? 5);
+  const searchPageSize = Math.max(24, input.pageSize ?? 48);
   const requestTimeoutMs = Math.max(5000, input.requestTimeoutMs ?? 30000);
   const headers = {
     apikey: input.serviceRoleKey,
@@ -67,7 +69,33 @@ export async function syncBrandCatalogFromBoschAftermarket(input: {
   const target = await resolveBoschTarget(input.supabaseUrl, headers, input.brandName);
   const supportsImageColumn = await detectCatalogImageColumn(input.supabaseUrl, headers);
   const existingRows = await fetchBoschCatalogRows(input.supabaseUrl, headers, target);
-  const workRows = existingRows.filter((row) => refreshExisting || shouldProcessRow(row));
+  const existingByCode = new Map(existingRows.map((row) => [row.normalized_code, row]));
+  const seedPrefixes = buildSeedPrefixes(existingRows);
+  const discoveredSearchMap = await crawlOfficialPrefixes({
+    prefixes: seedPrefixes,
+    searchPageSize,
+    requestTimeoutMs,
+  });
+
+  const workMap = new Map<string, any>();
+  for (const row of existingRows) {
+    if (refreshExisting || shouldProcessRow(row)) {
+      workMap.set(row.normalized_code, {
+        existing: row,
+        searchItem: discoveredSearchMap.get(row.normalized_code) || null,
+        source: "existing",
+      });
+    }
+  }
+  for (const [normalizedCode, searchItem] of discoveredSearchMap.entries()) {
+    if (existingByCode.has(normalizedCode)) continue;
+    workMap.set(normalizedCode, {
+      existing: null,
+      searchItem,
+      source: "search",
+    });
+  }
+  const workItems = Array.from(workMap.values());
 
   const catalogPayload: Array<Record<string, unknown>> = [];
   const replacementPayload: Array<Record<string, unknown>> = [];
@@ -80,12 +108,12 @@ export async function syncBrandCatalogFromBoschAftermarket(input: {
   let discontinuedRows = 0;
   const errorRows: Array<{ product_code: string; normalized_code: string; error: string }> = [];
 
-  await runPool(workRows, concurrency, async (row) => {
+  await runPool(workItems, concurrency, async (item) => {
     try {
-      const resolved = await resolveBoschOfficialPayload(row, requestTimeoutMs);
+      const resolved = await resolveBoschOfficialPayload(item.existing, item.searchItem, searchPageSize, requestTimeoutMs);
       const vehicles = await fetchBoschVehicleMakers(resolved.productNumber, requestTimeoutMs).catch(() => []);
-      const merged = mergeCatalogRow(target, row, resolved.searchItem, resolved.detail, vehicles);
-      const changed = hasCatalogDelta(row, merged);
+      const merged = mergeCatalogRow(target, item.existing, resolved.searchItem, resolved.detail, vehicles);
+      const changed = !item.existing || hasCatalogDelta(item.existing, merged);
 
       matchedRows += 1;
       if (changed) changedRows += 1;
@@ -94,7 +122,7 @@ export async function syncBrandCatalogFromBoschAftermarket(input: {
       if (normalizeTextValue(merged.image_url)) imageRows += 1;
       if (normalizeLifecycleStatus(merged.lifecycle_status) === "discontinued") discontinuedRows += 1;
 
-      if (refreshExisting || changed) {
+      if (refreshExisting || changed || item.source === "search") {
         catalogPayload.push(merged);
       }
 
@@ -116,8 +144,8 @@ export async function syncBrandCatalogFromBoschAftermarket(input: {
       }
     } catch (error) {
       errorRows.push({
-        product_code: row.product_code,
-        normalized_code: row.normalized_code,
+        product_code: item.existing?.product_code || item.searchItem?.product_code || "",
+        normalized_code: item.existing?.normalized_code || item.searchItem?.normalized_code || "",
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -196,12 +224,12 @@ export async function syncBrandCatalogFromBoschAftermarket(input: {
     targetBrandName: target.name,
     organizationId: target.organization_id,
     existingRows: existingRows.length,
-    listingPagesProcessed: 0,
+    listingPagesProcessed: seedPrefixes.length,
     listingLastPage: 0,
-    listingUniqueRows: existingRows.length,
-    newRowsInListing: 0,
+    listingUniqueRows: discoveredSearchMap.size,
+    newRowsInListing: [...discoveredSearchMap.keys()].filter((code) => !existingByCode.has(code)).length,
     incompleteExistingRows: existingRows.filter((row) => shouldProcessRow(row)).length,
-    candidateRows: workRows.length,
+    candidateRows: workItems.length,
     resolvedRows: matchedRows,
     errorRows: errorRows.length,
     discontinuedRows,
@@ -280,15 +308,15 @@ async function fetchBoschCatalogRows(supabaseUrl: string, headers: Record<string
   return dedupeBy(results, (row) => row.normalized_code);
 }
 
-async function resolveBoschOfficialPayload(row: any, requestTimeoutMs: number) {
-  const candidates = buildBoschProductCandidates(row);
+async function resolveBoschOfficialPayload(existing: any, searchItem: any, searchPageSize: number, requestTimeoutMs: number) {
+  const candidates = buildBoschProductCandidates(existing, searchItem);
   for (const candidate of candidates) {
     const detail = await fetchBoschDetail(candidate, requestTimeoutMs, { accept404: true });
     if (detail?.productNumber) {
       const lifecycle = extractLifecycle(detail, candidate);
       return {
         productNumber: normalizeCode(detail.productNumber || candidate),
-        searchItem: null,
+        searchItem,
         detail,
         replacement_code: lifecycle.replacement_code,
         replacement_reason: lifecycle.replacement_reason,
@@ -297,10 +325,11 @@ async function resolveBoschOfficialPayload(row: any, requestTimeoutMs: number) {
   }
 
   for (const term of candidates) {
-    const searchItems = await fetchBoschSearchItems(term, requestTimeoutMs);
+    const searchItems = (await fetchBoschSearchItems(term, requestTimeoutMs, searchPageSize)).items;
     const exact =
-      searchItems.find((item) => item.normalized_code === row.normalized_code) ||
-      searchItems.find((item) => normalizeCode(item.product_code) === row.normalized_code) ||
+      searchItems.find((item) => item.normalized_code === existing?.normalized_code) ||
+      searchItems.find((item) => normalizeCode(item.product_code) === existing?.normalized_code) ||
+      searchItems.find((item) => item.normalized_code === searchItem?.normalized_code) ||
       searchItems[0] ||
       null;
     if (!exact?.productNumber) continue;
@@ -315,14 +344,17 @@ async function resolveBoschOfficialPayload(row: any, requestTimeoutMs: number) {
     };
   }
 
-  throw new Error(`Official Bosch product not found for ${row.product_code}`);
+  throw new Error(`Official Bosch product not found for ${existing?.product_code || searchItem?.product_code || ""}`);
 }
 
-function buildBoschProductCandidates(row: any) {
+function buildBoschProductCandidates(existing: any, searchItem: any) {
   const rawValues = [
-    String(row.product_code || "").trim(),
-    String(row.normalized_code || "").trim(),
-    String(row.product_code || "").replace(/\s+/g, ""),
+    String(existing?.product_code || "").trim(),
+    String(existing?.normalized_code || "").trim(),
+    String(existing?.product_code || "").replace(/\s+/g, ""),
+    String(searchItem?.product_code || "").trim(),
+    String(searchItem?.normalized_code || "").trim(),
+    String(searchItem?.productNumber || "").trim(),
   ];
   return dedupeStrings(
     rawValues
@@ -331,10 +363,10 @@ function buildBoschProductCandidates(row: any) {
   );
 }
 
-async function fetchBoschSearchItems(term: string, requestTimeoutMs: number) {
+async function fetchBoschSearchItems(term: string, requestTimeoutMs: number, pageSize = 12, pageNumber = 1) {
   const url = new URL(`${BOSCH_API_BASE_URL}/${BOSCH_LOCALE_PATH}/search/${encodeURIComponent(term)}`);
-  url.searchParams.set("pageNumber", "1");
-  url.searchParams.set("pageSize", "12");
+  url.searchParams.set("pageNumber", String(pageNumber));
+  url.searchParams.set("pageSize", String(pageSize));
   url.searchParams.set("queryPIM", "true");
   url.searchParams.set("catalogId", BOSCH_CATALOG_ID);
   url.searchParams.set("pimCountry", BOSCH_PIM_COUNTRY);
@@ -342,15 +374,66 @@ async function fetchBoschSearchItems(term: string, requestTimeoutMs: number) {
 
   const payload = await fetchJson(url.toString(), requestTimeoutMs);
   const items = Array.isArray(payload?.products) ? payload.products : [];
-  return items
-    .map((item: any) => ({
-      productNumber: normalizeCode(item.productNumber || ""),
-      product_code: formatBoschDisplayCode(item.productNumber || ""),
-      normalized_code: normalizeCode(item.productNumber || ""),
-      description: normalizeCatalogDescription(cleanText(item.name || item.description || "")),
-      image_url: normalizeImageUrl(item.image || ""),
-    }))
-    .filter((item: any) => item.productNumber);
+  return {
+    foundResults: Number(payload?.foundResults || items.length) || items.length,
+    hasMoreData: Boolean(payload?.hasMoreData),
+    items: items
+      .map((item: any) => ({
+        productNumber: normalizeCode(item.productNumber || ""),
+        product_code: formatBoschDisplayCode(item.productNumber || ""),
+        normalized_code: normalizeCode(item.productNumber || ""),
+        description: normalizeCatalogDescription(cleanText(item.name || item.description || "")),
+        image_url: normalizeImageUrl(item.image || ""),
+      }))
+      .filter((item: any) => item.productNumber),
+  };
+}
+
+async function crawlOfficialPrefixes(input: {
+  prefixes: string[];
+  searchPageSize: number;
+  requestTimeoutMs: number;
+}) {
+  const results = new Map<string, any>();
+  await runPool(input.prefixes, 2, async (prefix) => {
+    try {
+      const items = await fetchAllBoschSearchItems(prefix, input.searchPageSize, input.requestTimeoutMs);
+      for (const item of items) {
+        if (!item.normalized_code || results.has(item.normalized_code)) continue;
+        results.set(item.normalized_code, item);
+      }
+    } catch {
+      return;
+    }
+  });
+  return results;
+}
+
+async function fetchAllBoschSearchItems(term: string, pageSize: number, requestTimeoutMs: number) {
+  const firstPage = await fetchBoschSearchItems(term, requestTimeoutMs, pageSize, 1);
+  const items = [...firstPage.items];
+  let pageNumber = 2;
+  let hasMoreData = firstPage.hasMoreData;
+  const hardPageLimit = 20;
+
+  while (hasMoreData && pageNumber <= hardPageLimit) {
+    const page = await fetchBoschSearchItems(term, requestTimeoutMs, pageSize, pageNumber);
+    if (!page.items.length) break;
+    items.push(...page.items);
+    hasMoreData = page.hasMoreData;
+    pageNumber += 1;
+  }
+
+  return dedupeBy(items, (item) => item.normalized_code);
+}
+
+function buildSeedPrefixes(rows: any[]) {
+  return dedupeStrings(
+    rows
+      .map((row) => row.normalized_code)
+      .filter((value) => String(value || "").length >= 4)
+      .map((value) => String(value).slice(0, 4)),
+  );
 }
 
 async function fetchBoschDetail(productNumber: string, requestTimeoutMs: number, options: { accept404: boolean }) {
@@ -374,32 +457,32 @@ async function fetchBoschVehicleMakers(productNumber: string, requestTimeoutMs: 
 }
 
 function mergeCatalogRow(target: any, existing: any, searchItem: any, detail: any, vehicles: string[]) {
-  const lifecycle = extractLifecycle(detail, detail?.productNumber || searchItem?.productNumber || existing.normalized_code);
+  const lifecycle = extractLifecycle(detail, detail?.productNumber || searchItem?.productNumber || existing?.normalized_code);
   const replacementNote = lifecycle.replacement_code
     ? `Replacement code: ${formatBoschDisplayCode(lifecycle.replacement_code)}.`
     : "";
   const lifecycleNote =
     lifecycle.note ||
     replacementNote ||
-    existing.lifecycle_note ||
+    existing?.lifecycle_note ||
     "";
 
   return {
     organization_id: target.organization_id,
     brand_id: target.brand_id,
-    product_code: formatBoschDisplayCode(existing.product_code || searchItem?.product_code || detail?.productNumber || existing.normalized_code),
-    normalized_code: normalizeCode(existing.normalized_code || detail?.productNumber || searchItem?.productNumber || existing.product_code),
+    product_code: formatBoschDisplayCode(existing?.product_code || searchItem?.product_code || detail?.productNumber || existing?.normalized_code),
+    normalized_code: normalizeCode(existing?.normalized_code || detail?.productNumber || searchItem?.productNumber || existing?.product_code),
     description:
       normalizeCatalogDescription(cleanText(detail?.name || "")) ||
       normalizeCatalogDescription(cleanText(searchItem?.description || "")) ||
-      existing.description ||
+      existing?.description ||
       "",
-    oem_no: extractBoschOemNumbers(detail) || existing.oem_no || "",
-    vehicle: vehicles.join(", ") || existing.vehicle || "",
-    hs_code: existing.hs_code || "",
-    origin: existing.origin || "",
-    weight_kg: existing.weight_kg == null || Number.isNaN(Number(existing.weight_kg)) ? null : Number(existing.weight_kg),
-    image_url: extractBoschImageUrl(detail) || searchItem?.image_url || existing.image_url || "",
+    oem_no: extractBoschOemNumbers(detail) || existing?.oem_no || "",
+    vehicle: vehicles.join(", ") || existing?.vehicle || "",
+    hs_code: existing?.hs_code || "",
+    origin: existing?.origin || "",
+    weight_kg: existing?.weight_kg == null || Number.isNaN(Number(existing?.weight_kg)) ? null : Number(existing?.weight_kg),
+    image_url: extractBoschImageUrl(detail) || searchItem?.image_url || existing?.image_url || "",
     lifecycle_status: lifecycle.status,
     lifecycle_note: lifecycleNote.trim(),
   };
