@@ -1,4 +1,5 @@
 import { syncBrandCatalogFromSpareto } from "./spareto-sync.mts";
+import { syncBrandCatalogFromMann } from "./mann-sync.mts";
 import { canonicalizeInternalBrandName, normalizeBrandKey } from "./brand-standardization.mts";
 
 export type CatalogSyncPreferredProvider =
@@ -16,9 +17,9 @@ export type CatalogSyncPlan = {
   preferredProviderLabel: string;
   preferredSourceType: CatalogSyncSourceType;
   preferredSourceUrl: string;
-  executionProviderKey: "spareto";
+  executionProviderKey: CatalogSyncPreferredProvider;
   executionProviderLabel: string;
-  executionSourceType: "marketplace";
+  executionSourceType: CatalogSyncSourceType;
   fallbackUsed: boolean;
 };
 
@@ -111,10 +112,21 @@ export async function syncBrandCatalog(input: {
   requestTimeoutMs?: number;
 }) {
   const plan = resolveCatalogSyncPlan(input.brandName);
-  const result = await syncBrandCatalogFromSpareto({
-    ...input,
-    brandName: plan.brandName,
-  });
+  const useMannOfficial = plan.preferredProviderKey === "mann_official";
+  const result = useMannOfficial
+    ? await syncBrandCatalogFromMann({
+        ...input,
+        brandName: plan.brandName,
+      })
+    : await syncBrandCatalogFromSpareto({
+        ...input,
+        brandName: plan.brandName,
+      });
+
+  const executionProviderKey = useMannOfficial ? plan.preferredProviderKey : plan.executionProviderKey;
+  const executionProviderLabel = useMannOfficial ? plan.preferredProviderLabel : plan.executionProviderLabel;
+  const executionSourceType = useMannOfficial ? plan.preferredSourceType : plan.executionSourceType;
+  const fallbackUsed = useMannOfficial ? false : plan.fallbackUsed;
 
   return {
     ...result,
@@ -123,9 +135,9 @@ export async function syncBrandCatalog(input: {
     preferredProviderLabel: plan.preferredProviderLabel,
     preferredSourceType: plan.preferredSourceType,
     preferredSourceUrl: plan.preferredSourceUrl,
-    executionProviderKey: plan.executionProviderKey,
-    executionProviderLabel: plan.executionProviderLabel,
-    executionSourceType: plan.executionSourceType,
-    fallbackUsed: plan.fallbackUsed,
+    executionProviderKey,
+    executionProviderLabel,
+    executionSourceType,
+    fallbackUsed,
   };
 }
