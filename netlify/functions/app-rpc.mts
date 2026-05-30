@@ -265,14 +265,37 @@ function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "s
   return `(${[...clauses].join(",")})`;
 }
 
+function buildCatalogRowDedupKey(row: CatalogSourceRow) {
+  const brandId = String(row.brand_id || "").trim();
+  const normalizedCode = String(row.normalized_code || normalizePartCode(String(row.product_code || ""))).trim();
+  if (brandId && normalizedCode) return `${brandId}::${normalizedCode}`;
+  return String(row.id || row.product_code || "").trim();
+}
+
+function scoreCatalogRowCompleteness(row: CatalogSourceRow) {
+  let score = 0;
+  if (String(row.image_url || "").trim()) score += 4;
+  if (String(row.oem_no || "").trim()) score += 3;
+  if (String(row.vehicle || "").trim()) score += 3;
+  if (String(row.description || "").trim()) score += 2;
+  if (String(row.hs_code || "").trim()) score += 1;
+  if (String(row.origin || "").trim()) score += 1;
+  if (row.weight_kg != null && String(row.weight_kg).trim() !== "") score += 1;
+  if (normalizeLifecycleStatus(row.lifecycle_status) !== "discontinued") score += 1;
+  return score;
+}
+
 function dedupeCatalogRows(rows: CatalogSourceRow[]) {
-  const seen = new Set<string>();
-  return rows.filter((row) => {
-    const id = String(row.id || row.product_code || "");
-    if (!id || seen.has(id)) return false;
-    seen.add(id);
-    return true;
-  });
+  const bestByKey = new Map<string, CatalogSourceRow>();
+  for (const row of rows) {
+    const key = buildCatalogRowDedupKey(row);
+    if (!key) continue;
+    const current = bestByKey.get(key);
+    if (!current || scoreCatalogRowCompleteness(row) > scoreCatalogRowCompleteness(current)) {
+      bestByKey.set(key, row);
+    }
+  }
+  return [...bestByKey.values()];
 }
 
 function supplementalSearchVariants(search: string) {
