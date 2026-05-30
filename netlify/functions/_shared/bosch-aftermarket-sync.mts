@@ -70,11 +70,12 @@ export async function syncBrandCatalogFromBoschAftermarket(input: {
   const supportsImageColumn = await detectCatalogImageColumn(input.supabaseUrl, headers);
   const existingRows = await fetchBoschCatalogRows(input.supabaseUrl, headers, target);
   const existingByCode = new Map(existingRows.map((row) => [row.normalized_code, row]));
-  const seedPrefixes = buildSeedPrefixes(existingRows);
+  const seedPrefixes = buildSeedPrefixes(existingRows, 160);
   const discoveredSearchMap = await crawlOfficialPrefixes({
     prefixes: seedPrefixes,
     searchPageSize,
     requestTimeoutMs,
+    prefixConcurrency: Math.max(2, Math.min(concurrency, 6)),
   });
 
   const workMap = new Map<string, any>();
@@ -393,9 +394,10 @@ async function crawlOfficialPrefixes(input: {
   prefixes: string[];
   searchPageSize: number;
   requestTimeoutMs: number;
+  prefixConcurrency: number;
 }) {
   const results = new Map<string, any>();
-  await runPool(input.prefixes, 2, async (prefix) => {
+  await runPool(input.prefixes, input.prefixConcurrency, async (prefix) => {
     try {
       const items = await fetchAllBoschSearchItems(prefix, input.searchPageSize, input.requestTimeoutMs);
       for (const item of items) {
@@ -414,7 +416,7 @@ async function fetchAllBoschSearchItems(term: string, pageSize: number, requestT
   const items = [...firstPage.items];
   let pageNumber = 2;
   let hasMoreData = firstPage.hasMoreData;
-  const hardPageLimit = 20;
+  const hardPageLimit = 6;
 
   while (hasMoreData && pageNumber <= hardPageLimit) {
     const page = await fetchBoschSearchItems(term, requestTimeoutMs, pageSize, pageNumber);
@@ -427,13 +429,20 @@ async function fetchAllBoschSearchItems(term: string, pageSize: number, requestT
   return dedupeBy(items, (item) => item.normalized_code);
 }
 
-function buildSeedPrefixes(rows: any[]) {
-  return dedupeStrings(
-    rows
-      .map((row) => row.normalized_code)
-      .filter((value) => String(value || "").length >= 4)
-      .map((value) => String(value).slice(0, 4)),
-  );
+function buildSeedPrefixes(rows: any[], maxPrefixes: number) {
+  const prefixCounts = new Map<string, number>();
+  for (const row of rows) {
+    const normalizedCode = normalizeCode(row?.normalized_code || row?.product_code || "");
+    if (normalizedCode.length < 4) continue;
+    const prefix = normalizedCode.slice(0, 4);
+    if (!/^\d/.test(prefix)) continue;
+    prefixCounts.set(prefix, (prefixCounts.get(prefix) || 0) + 1);
+  }
+
+  return [...prefixCounts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, maxPrefixes)
+    .map(([prefix]) => prefix);
 }
 
 async function fetchBoschDetail(productNumber: string, requestTimeoutMs: number, options: { accept404: boolean }) {
