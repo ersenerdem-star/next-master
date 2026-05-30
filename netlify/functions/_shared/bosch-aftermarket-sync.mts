@@ -55,6 +55,7 @@ export async function syncBrandCatalogFromBoschAftermarket(input: {
   concurrency?: number;
   pageSize?: number;
   requestTimeoutMs?: number;
+  seedPrefixes?: string[];
 }) {
   const refreshExisting = input.refreshExisting !== false;
   const concurrency = Math.max(1, input.concurrency ?? 5);
@@ -70,7 +71,15 @@ export async function syncBrandCatalogFromBoschAftermarket(input: {
   const supportsImageColumn = await detectCatalogImageColumn(input.supabaseUrl, headers);
   const existingRows = await fetchBoschCatalogRows(input.supabaseUrl, headers, target);
   const existingByCode = new Map(existingRows.map((row) => [row.normalized_code, row]));
-  const seedPrefixes = buildSeedPrefixes(existingRows, 160);
+  const seedPrefixes =
+    Array.isArray(input.seedPrefixes) && input.seedPrefixes.length
+      ? dedupeStrings(
+          input.seedPrefixes
+            .map((value) => normalizeCode(value))
+            .filter((value) => value.length >= 4 && value.length <= 6 && /^\d/.test(value)),
+        )
+      : buildSeedPrefixes(existingRows, 160);
+  const seedPrefixSet = new Set(seedPrefixes);
   const discoveredSearchMap = await crawlOfficialPrefixes({
     prefixes: seedPrefixes,
     searchPageSize,
@@ -80,7 +89,11 @@ export async function syncBrandCatalogFromBoschAftermarket(input: {
 
   const workMap = new Map<string, any>();
   for (const row of existingRows) {
-    if (refreshExisting || shouldProcessRow(row)) {
+    const normalizedRowCode = normalizeCode(row.normalized_code || row.product_code || "");
+    const isScopedExistingRow =
+      !seedPrefixSet.size || [...seedPrefixSet].some((prefix) => normalizedRowCode.startsWith(prefix));
+    const hasOfficialSearchMatch = discoveredSearchMap.has(row.normalized_code);
+    if (refreshExisting ? isScopedExistingRow : isScopedExistingRow && hasOfficialSearchMatch && shouldProcessRow(row)) {
       workMap.set(row.normalized_code, {
         existing: row,
         searchItem: discoveredSearchMap.get(row.normalized_code) || null,
@@ -227,6 +240,7 @@ export async function syncBrandCatalogFromBoschAftermarket(input: {
     existingRows: existingRows.length,
     listingPagesProcessed: seedPrefixes.length,
     listingLastPage: 0,
+    seedPrefixesProcessed: seedPrefixes,
     listingUniqueRows: discoveredSearchMap.size,
     newRowsInListing: [...discoveredSearchMap.keys()].filter((code) => !existingByCode.has(code)).length,
     incompleteExistingRows: existingRows.filter((row) => shouldProcessRow(row)).length,
@@ -430,19 +444,46 @@ async function fetchAllBoschSearchItems(term: string, pageSize: number, requestT
 }
 
 function buildSeedPrefixes(rows: any[], maxPrefixes: number) {
-  const prefixCounts = new Map<string, number>();
-  for (const row of rows) {
-    const normalizedCode = normalizeCode(row?.normalized_code || row?.product_code || "");
-    if (normalizedCode.length < 4) continue;
-    const prefix = normalizedCode.slice(0, 4);
-    if (!/^\d/.test(prefix)) continue;
-    prefixCounts.set(prefix, (prefixCounts.get(prefix) || 0) + 1);
+  const normalizedCodes = rows
+    .map((row) => normalizeCode(row?.normalized_code || row?.product_code || ""))
+    .filter((value) => value.length >= 4 && /^\d/.test(value));
+
+  const fourDigitCounts = countPrefixes(normalizedCodes, 4);
+  const seedPrefixes: string[] = [];
+
+  for (const [prefix4, count4] of [...fourDigitCounts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))) {
+    if (count4 <= 250) {
+      seedPrefixes.push(prefix4);
+      continue;
+    }
+
+    const matching4 = normalizedCodes.filter((value) => value.startsWith(prefix4));
+    const fiveDigitCounts = countPrefixes(matching4, 5);
+    for (const [prefix5, count5] of [...fiveDigitCounts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))) {
+      if (count5 <= 120) {
+        seedPrefixes.push(prefix5);
+        continue;
+      }
+
+      const matching5 = matching4.filter((value) => value.startsWith(prefix5));
+      const sixDigitCounts = countPrefixes(matching5, 6);
+      for (const [prefix6] of [...sixDigitCounts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))) {
+        seedPrefixes.push(prefix6);
+      }
+    }
   }
 
-  return [...prefixCounts.entries()]
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-    .slice(0, maxPrefixes)
-    .map(([prefix]) => prefix);
+  return dedupeStrings(seedPrefixes).slice(0, maxPrefixes);
+}
+
+function countPrefixes(values: string[], length: number) {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    if (value.length < length) continue;
+    const prefix = value.slice(0, length);
+    counts.set(prefix, (counts.get(prefix) || 0) + 1);
+  }
+  return counts;
 }
 
 async function fetchBoschDetail(productNumber: string, requestTimeoutMs: number, options: { accept404: boolean }) {
