@@ -217,6 +217,47 @@ async function fetchPortalCompanyProfile(
   );
 }
 
+function normalizeBrandNameList(values: string[]) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function extractRelatedBrandName(row: Record<string, unknown>) {
+  const related = row.brands as { name?: string | null } | Array<{ name?: string | null }> | null | undefined;
+  if (Array.isArray(related)) return String(related[0]?.name || "").trim();
+  return String(related?.name || "").trim();
+}
+
+async function fetchPortalAvailableBrands(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  enabled: boolean,
+) {
+  if (!enabled) return [];
+  const direct = normalizeBrandNameList(
+    (
+      await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "brands", {
+        select: "name",
+        organization_id: `eq.${organizationId}`,
+        order: "name.asc",
+      })
+    ).map((row) => String(row.name || "")),
+  );
+  if (direct.length) return direct;
+
+  const fallback = normalizeBrandNameList(
+    (
+      await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+        select: "brand_id,brands(name)",
+        organization_id: `eq.${organizationId}`,
+        order: "brand_id.asc",
+        limit: "5000",
+      })
+    ).map((row) => extractRelatedBrandName(row)),
+  );
+  return fallback;
+}
+
 function mapSalesOrderLines(lines: unknown) {
   if (!Array.isArray(lines)) return [];
   return lines.map((line) => {
@@ -470,17 +511,12 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         })
       : [];
 
-    const availableBrands = invite.access_can_view_orders
-      ? (
-        await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "brands", {
-            select: "name",
-            organization_id: `eq.${invite.organization_id}`,
-            order: "name.asc",
-          })
-        )
-          .map((row) => String(row.name || "").trim())
-          .filter(Boolean)
-      : [];
+    const availableBrands = await fetchPortalAvailableBrands(
+      supabaseUrl,
+      serviceRoleKey,
+      invite.organization_id,
+      invite.access_can_view_orders,
+    );
 
     const accountRows = [
       ...invoices.map((row) => ({
@@ -758,7 +794,12 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     companyProfile,
     customer: null,
     vendor,
-    availableBrands: [],
+    availableBrands: await fetchPortalAvailableBrands(
+      supabaseUrl,
+      serviceRoleKey,
+      invite.organization_id,
+      invite.access_can_view_orders,
+    ),
     salesOrders: [],
     invoices: [],
     creditNotes: [],
@@ -854,7 +895,12 @@ export async function buildPortalFallbackSnapshot(supabaseUrl: string, serviceRo
     companyProfile,
     customer: invite.party_type === "customer" ? baseParty : null,
     vendor: invite.party_type === "vendor" ? baseParty : null,
-    availableBrands: [],
+    availableBrands: await fetchPortalAvailableBrands(
+      supabaseUrl,
+      serviceRoleKey,
+      invite.organization_id,
+      invite.access_can_view_orders,
+    ),
     salesOrders: [],
     purchaseOrders: [],
     invoices: [],

@@ -249,13 +249,51 @@ function buildOriginalNumberFamilyCore(search: string) {
   return normalizeOriginalNumberSearch(search);
 }
 
+function buildOriginalNumberFamilyTokens(search: string) {
+  const tokens = new Set<string>();
+  for (const variant of buildOriginalNumberVariants(search)) {
+    const cleaned = variant.replace(/^[A-Z]{1,4}(?=\d{6,}[A-Z]{0,4}$)/, "").replace(/[A-Z]{1,4}$/, "");
+    if (cleaned.length >= 6) tokens.add(cleaned);
+    if (variant.length >= 6) tokens.add(variant);
+    for (const digitRun of variant.match(/\d{6,}/g) || []) {
+      tokens.add(digitRun);
+    }
+  }
+  return [...tokens].filter((token) => token.length >= 6);
+}
+
+function buildOriginalNumberFamilyClauses(search: string) {
+  const clauses = new Set<string>();
+  for (const token of buildOriginalNumberFamilyTokens(search)) {
+    clauses.add(`normalized_oem.eq.${token}`);
+    clauses.add(`normalized_oem.like.*${token}*`);
+    clauses.add(`normalized_code.eq.${token}`);
+    clauses.add(`normalized_code.like.*${token}*`);
+    clauses.add(`oem_no.ilike.*${token}*`);
+    clauses.add(`product_code.ilike.*${token}*`);
+    const loosePattern = buildLooseOriginalNumberPattern(token);
+    if (loosePattern.length >= 6) {
+      clauses.add(`oem_no.ilike.*${loosePattern}*`);
+      clauses.add(`product_code.ilike.*${loosePattern}*`);
+    }
+  }
+  return [...clauses];
+}
+
 function matchesCatalogFamilyRow(row: CatalogSourceRow, search: string) {
-  const familyVariants = buildOriginalNumberVariants(search).filter((variant) => variant.length >= 6);
+  const familyVariants = buildOriginalNumberFamilyTokens(search);
   if (!familyVariants.length) return false;
   const normalizedProductCode = normalizePartCode(String(row.product_code || ""));
+  const normalizedOem = normalizePartCode(String(row.normalized_oem || ""));
   return (
     matchesOriginalNumberSearch(String(row.oem_no || row.normalized_oem || ""), search) ||
-    familyVariants.some((variant) => normalizedProductCode === variant || normalizedProductCode.includes(variant))
+    familyVariants.some(
+      (variant) =>
+        normalizedProductCode === variant ||
+        normalizedProductCode.includes(variant) ||
+        normalizedOem === variant ||
+        normalizedOem.includes(variant),
+    )
   );
 }
 
@@ -372,6 +410,24 @@ async function fetchCloudCatalogPageViaRest(
       }).catch(() => ({ rows: [] as CatalogSourceRow[], totalCount: 0 }));
       if (familyRows.rows.length) {
         const merged = dedupeCatalogRows([...rows, ...familyRows.rows]).filter((row) => matchesCatalogFamilyRow(row, search));
+        totalCount = merged.length;
+        rows = merged.slice(offset, offset + pageSize);
+      }
+    }
+  }
+  if (search && shouldRunLooseOriginalNumberSearch(search)) {
+    const familyClauses = buildOriginalNumberFamilyClauses(search);
+    if (familyClauses.length) {
+      const familySweepRows = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
+        select,
+        organization_id: `eq.${caller.organizationId}`,
+        ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+        or: `(${familyClauses.join(",")})`,
+        order: "product_code.asc",
+        limit: "220",
+      }).catch(() => ({ rows: [] as CatalogSourceRow[], totalCount: 0 }));
+      if (familySweepRows.rows.length) {
+        const merged = dedupeCatalogRows([...rows, ...familySweepRows.rows]).filter((row) => matchesCatalogFamilyRow(row, search));
         totalCount = merged.length;
         rows = merged.slice(offset, offset + pageSize);
       }

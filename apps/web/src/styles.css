@@ -1417,6 +1417,18 @@ select {
   color: #b45309;
 }
 
+.catalog-thumb-fallback__logo {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  display: block;
+}
+
+.catalog-thumb-fallback--detail .catalog-thumb-fallback__logo {
+  width: 72px;
+  height: 72px;
+}
+
 .catalog-thumb-fallback--detail .catalog-thumb-fallback__mono {
   font-size: 42px;
 }
@@ -1499,11 +1511,23 @@ select {
   color: inherit;
 }
 
+.vehicle-badge__logo {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  display: block;
+}
+
 .vehicle-badge--compact .vehicle-badge__mark {
   min-width: 24px;
   height: 24px;
   padding: 0 6px;
   font-size: 10px;
+}
+
+.vehicle-badge--compact .vehicle-badge__logo {
+  width: 15px;
+  height: 15px;
 }
 
 .vehicle-badge__label {

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { resolveNamedLogo } from "./logoAssets";
 
 type VehicleBadgeMeta = {
   label: string;
@@ -97,16 +98,21 @@ export function VehicleBadges({
 
   return (
     <div className={`vehicle-badge-list${compact ? " vehicle-badge-list--compact" : ""}${className ? ` ${className}` : ""}`}>
-      {visibleItems.map((item) => (
-        <span
-          key={item.label}
-          className={`vehicle-badge vehicle-badge--${item.tone}${compact ? " vehicle-badge--compact" : ""}`}
-          title={item.label}
-        >
-          <span className="vehicle-badge__mark">{item.mark}</span>
-          {!compact ? <span className="vehicle-badge__label">{item.label}</span> : null}
-        </span>
-      ))}
+      {visibleItems.map((item) => {
+        const logoAsset = resolveNamedLogo(item.label);
+        return (
+          <span
+            key={item.label}
+            className={`vehicle-badge vehicle-badge--${item.tone}${compact ? " vehicle-badge--compact" : ""}`}
+            title={item.label}
+          >
+            <span className="vehicle-badge__mark">
+              {logoAsset ? <img src={logoAsset.src} alt="" className="vehicle-badge__logo" /> : item.mark}
+            </span>
+            {!compact ? <span className="vehicle-badge__label">{item.label}</span> : null}
+          </span>
+        );
+      })}
       {expandable && hiddenCount > 0 ? (
         <button type="button" className="vehicle-badge-more" onClick={() => setExpanded(true)} title={items.slice(limit).map((item) => item.label).join(", ")}>
           ...{hiddenCount}
