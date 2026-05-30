@@ -1,10 +1,6 @@
 alter table public.catalog_products
   add column if not exists vehicle text;
 
-update public.catalog_products
-set vehicle = null
-where trim(coalesce(vehicle, '')) = '';
-
 create or replace function public.cloud_catalog_page(
   input_search text default '',
   input_page integer default 1,
