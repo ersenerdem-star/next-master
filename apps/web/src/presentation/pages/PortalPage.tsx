@@ -7,6 +7,8 @@ import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { SectionCard } from "../components/common/SectionCard";
 import { BrandPill } from "../components/common/BrandPill";
+import { ProductVisual } from "../components/common/ProductVisual";
+import { VehicleBadges } from "../components/common/VehicleBadges";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 import { openAccountStatementPrintWindow } from "../../shared/accountStatementPrint";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
@@ -721,24 +723,23 @@ export function PortalPage() {
         {
           key: "image",
           header: "Photo",
-          render: (row: PortalCatalogSearchItem) =>
-            row.image_url ? (
-              <button
-                type="button"
-                className="catalog-thumb-button"
-                onClick={() =>
-                  setPreviewImage({
-                    src: row.image_url || "",
-                    code: row.code,
-                    name: row.description || "",
-                  })
-                }
-              >
-                <img src={row.image_url} alt={row.code} className="catalog-thumb" loading="lazy" />
-              </button>
-            ) : (
-              <span>-</span>
-            ),
+          render: (row: PortalCatalogSearchItem) => (
+            <ProductVisual
+              imageUrl={row.image_url}
+              brand={row.brand}
+              alt={row.code}
+              onPreview={
+                row.image_url
+                  ? () =>
+                      setPreviewImage({
+                        src: row.image_url || "",
+                        code: row.code,
+                        name: row.description || "",
+                      })
+                  : null
+              }
+            />
+          ),
         },
         {
           key: "code",
@@ -2531,7 +2532,7 @@ export function PortalPage() {
                           >
                             <div className="portal-search-card__top">
                               <div className="portal-search-card__media">
-                                {row.image_url ? <img src={row.image_url} alt={row.code} className="catalog-thumb catalog-thumb--detail" loading="lazy" /> : <div className="empty-state">No photo</div>}
+                                <ProductVisual imageUrl={row.image_url} brand={row.brand} alt={row.code} detail />
                               </div>
                               <div className="portal-search-card__meta">
                                 <div className="portal-search-card__code">{row.code || "-"}</div>
@@ -2543,6 +2544,7 @@ export function PortalPage() {
                             </div>
                             <div className="portal-search-card__body">
                               <strong>{row.description || "-"}</strong>
+                              {row.vehicle ? <VehicleBadges value={row.vehicle} compact limit={3} className="portal-search-card__vehicles" /> : null}
                               <div className="portal-search-card__specs">
                                 <span>{row.tariff || "No tariff"}</span>
                                 <span>{row.origin || "No origin"}</span>
@@ -2692,35 +2694,29 @@ export function PortalPage() {
               </div>
             </div>
             <div className="workbench-detail-panel__media">
-              {portalPreview.item.image_url ? (
-                <button
-                  type="button"
-                  className="catalog-thumb-button catalog-thumb-button--detail"
-                  onClick={() =>
-                    setPreviewImage({
-                      src: portalPreview.item.image_url || "",
-                      code:
-                        portalPreview.kind === "catalog"
-                          ? portalPreview.item.code || ""
-                          : portalPreview.item.resolvedCode || portalPreview.item.requestedCode || "",
-                      name: portalPreview.item.description || "",
-                    })
-                  }
-                >
-                  <img
-                    src={portalPreview.item.image_url}
-                    alt={
-                      portalPreview.kind === "catalog"
-                        ? portalPreview.item.code || ""
-                        : portalPreview.item.resolvedCode || portalPreview.item.requestedCode || ""
-                    }
-                    className="catalog-thumb catalog-thumb--detail"
-                    loading="lazy"
-                  />
-                </button>
-              ) : (
-                <div className="empty-state">No photo</div>
-              )}
+              <ProductVisual
+                imageUrl={portalPreview.item.image_url}
+                brand={portalPreview.item.brand}
+                alt={
+                  portalPreview.kind === "catalog"
+                    ? portalPreview.item.code || ""
+                    : portalPreview.item.resolvedCode || portalPreview.item.requestedCode || ""
+                }
+                detail
+                onPreview={
+                  portalPreview.item.image_url
+                    ? () =>
+                        setPreviewImage({
+                          src: portalPreview.item.image_url || "",
+                          code:
+                            portalPreview.kind === "catalog"
+                              ? portalPreview.item.code || ""
+                              : portalPreview.item.resolvedCode || portalPreview.item.requestedCode || "",
+                          name: portalPreview.item.description || "",
+                        })
+                    : null
+                }
+              />
             </div>
             <div className="workbench-detail-list">
               {portalPreview.kind === "basket" ? (
@@ -2741,6 +2737,12 @@ export function PortalPage() {
                   <div><span>Code</span><strong>{portalPreview.item.code || "-"}</strong></div>
                   <div><span>Description</span><strong>{portalPreview.item.description || "-"}</strong></div>
                   <div><span>OEM</span><strong>{portalPreview.item.oem_no || "-"}</strong></div>
+                  <div>
+                    <span>Vehicle</span>
+                    <strong className="catalog-detail-list-text">
+                      <VehicleBadges value={portalPreview.item.vehicle || ""} limit={5} expandable />
+                    </strong>
+                  </div>
                   <div><span>Tariff</span><strong>{portalPreview.item.tariff || "-"}</strong></div>
                   <div><span>Origin</span><strong>{portalPreview.item.origin || "-"}</strong></div>
                   <div><span>Weight</span><strong>{formatWeight(portalPreview.item.weight_kg)}</strong></div>

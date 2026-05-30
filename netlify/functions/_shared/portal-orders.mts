@@ -41,6 +41,7 @@ type PortalCatalogSearchItem = {
   brand: string;
   description: string;
   oem_no: string;
+  vehicle: string;
   tariff: string;
   origin: string;
   weight_kg: number | null;
@@ -587,7 +588,7 @@ export async function searchPortalCatalog(
   const normalizedSearch = normalizePartCode(search);
   const selectedBrandId = brand ? brandMap.byName.get(brand.trim().toLowerCase()) || "" : "";
   const params: Record<string, string> = {
-    select: "product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
+    select: "product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
     organization_id: `eq.${invite.organization_id}`,
     order: "product_code.asc",
     limit: "24",
@@ -604,7 +605,7 @@ export async function searchPortalCatalog(
     if (familyCore.length >= 6) {
       const familyPattern = buildLooseOriginalNumberPattern(familyCore);
       const familyRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
-        select: "id,product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
+        select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
         organization_id: `eq.${invite.organization_id}`,
         ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
         or: `(${[
@@ -630,7 +631,7 @@ export async function searchPortalCatalog(
         await Promise.all(
           variants.map((variant) =>
             fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
-              select: "id,product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
+              select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
               organization_id: `eq.${invite.organization_id}`,
               ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
               normalized_oem: `like.*${variant}*`,
@@ -656,7 +657,7 @@ export async function searchPortalCatalog(
   if (!rows.length && search && shouldRunLooseOriginalNumberSearch(search)) {
     const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
     const normalizedRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
-      select: "id,product_code,description,oem_no,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
+      select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
       organization_id: `eq.${invite.organization_id}`,
       ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
       normalized_oem: `like.*${normalizedOriginalSearch}*`,
@@ -676,6 +677,7 @@ export async function searchPortalCatalog(
     normalized_code: String(row.normalized_code || normalizePartCode(String(row.product_code || ""))),
     description: String(row.description || ""),
     oem_no: String(row.oem_no || ""),
+    vehicle: String(row.vehicle || ""),
     tariff: String(row.hs_code || ""),
     origin: String(row.origin || ""),
     weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
@@ -765,6 +767,7 @@ export async function searchPortalCatalog(
       brand: item.brand,
       description: item.description,
       oem_no: item.oem_no,
+      vehicle: item.vehicle,
       tariff: item.tariff,
       origin: item.origin,
       weight_kg: item.weight_kg,

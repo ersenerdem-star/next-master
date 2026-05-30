@@ -1386,6 +1386,57 @@ select {
   display: block;
 }
 
+.catalog-thumb-fallback {
+  width: 52px;
+  height: 52px;
+  border: 1px solid #dbe3f0;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(245, 158, 11, 0.18), transparent 46%),
+    linear-gradient(160deg, #fff7ed 0%, #ffffff 58%, #eff6ff 100%);
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.catalog-thumb-fallback--detail {
+  width: min(100%, 220px);
+  height: 220px;
+  border-radius: 18px;
+  gap: 10px;
+  padding: 20px;
+}
+
+.catalog-thumb-fallback__mono {
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  color: #b45309;
+}
+
+.catalog-thumb-fallback--detail .catalog-thumb-fallback__mono {
+  font-size: 42px;
+}
+
+.catalog-thumb-fallback__label {
+  max-width: 100%;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #475569;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.catalog-thumb-fallback--detail .catalog-thumb-fallback__label {
+  font-size: 14px;
+}
+
 .catalog-thumb-button {
   display: inline-flex;
   padding: 0;
@@ -1403,6 +1454,117 @@ select {
   width: min(100%, 220px);
   height: 220px;
   border-radius: 14px;
+}
+
+.vehicle-badge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.vehicle-badge-list--compact {
+  gap: 5px;
+}
+
+.vehicle-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid #d7e2ef;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  color: #0f172a;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+
+.vehicle-badge--compact {
+  padding-right: 6px;
+}
+
+.vehicle-badge__mark {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  background: rgba(255, 255, 255, 0.88);
+  color: inherit;
+}
+
+.vehicle-badge--compact .vehicle-badge__mark {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  font-size: 10px;
+}
+
+.vehicle-badge__label {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.vehicle-badge--mercedes {
+  background: linear-gradient(180deg, #f3f4f6, #ffffff);
+  color: #111827;
+}
+
+.vehicle-badge--man {
+  background: linear-gradient(180deg, #eff6ff, #ffffff);
+  color: #1d4ed8;
+}
+
+.vehicle-badge--volvo {
+  background: linear-gradient(180deg, #ecfeff, #ffffff);
+  color: #0f766e;
+}
+
+.vehicle-badge--daf {
+  background: linear-gradient(180deg, #fff7ed, #ffffff);
+  color: #c2410c;
+}
+
+.vehicle-badge--scania {
+  background: linear-gradient(180deg, #f0fdf4, #ffffff);
+  color: #15803d;
+}
+
+.vehicle-badge--volkswagen,
+.vehicle-badge--audi,
+.vehicle-badge--bmw {
+  background: linear-gradient(180deg, #eef2ff, #ffffff);
+  color: #4338ca;
+}
+
+.vehicle-badge--ford,
+.vehicle-badge--opel,
+.vehicle-badge--peugeot,
+.vehicle-badge--citroen,
+.vehicle-badge--toyota,
+.vehicle-badge--nissan,
+.vehicle-badge--renault,
+.vehicle-badge--iveco,
+.vehicle-badge--generic {
+  background: linear-gradient(180deg, #f8fafc, #ffffff);
+  color: #334155;
+}
+
+.vehicle-badge-more {
+  border: 0;
+  background: transparent;
+  padding: 0 2px;
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .modal-card--image-preview {
@@ -3042,6 +3204,22 @@ select {
   border: 0;
 }
 
+.portal-search-card__media .catalog-thumb-fallback--detail {
+  width: 88px;
+  height: 88px;
+  padding: 10px 8px;
+  gap: 4px;
+  border-radius: 10px;
+}
+
+.portal-search-card__media .catalog-thumb-fallback--detail .catalog-thumb-fallback__mono {
+  font-size: 18px;
+}
+
+.portal-search-card__media .catalog-thumb-fallback--detail .catalog-thumb-fallback__label {
+  font-size: 9px;
+}
+
 .portal-search-card__meta {
   min-width: 0;
   display: flex;
@@ -3066,6 +3244,10 @@ select {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.portal-search-card__vehicles {
+  margin-top: 2px;
 }
 
 .portal-search-card__body {
@@ -3728,7 +3910,8 @@ select {
   }
 
   .portal-search-card__media,
-  .portal-search-card__media .catalog-thumb--detail {
+  .portal-search-card__media .catalog-thumb--detail,
+  .portal-search-card__media .catalog-thumb-fallback--detail {
     min-height: 72px;
     width: 72px;
     height: 72px;
@@ -3847,6 +4030,11 @@ select {
   }
 
   .portal-search-card__media .catalog-thumb--detail {
+    width: 100px;
+    height: 100px;
+  }
+
+  .portal-search-card__media .catalog-thumb-fallback--detail {
     width: 100px;
     height: 100px;
   }

@@ -13,7 +13,9 @@ import { Button } from "../components/common/Button";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
+import { ProductVisual } from "../components/common/ProductVisual";
 import { Select } from "../components/common/Select";
+import { VehicleBadges } from "../components/common/VehicleBadges";
 import { downloadCsv, normalizeNumber, normalizeText, parseCsv, toCsv } from "../../shared/csv";
 import { downloadCatalogLifecycleTemplate, downloadCatalogTemplate } from "../../shared/importTemplates";
 import { dispatchAppNavigation, PENDING_CATALOG_PURCHASE_ITEM_KEY, PENDING_CATALOG_SALES_ITEM_KEY, storeCatalogTransfer } from "../../shared/catalogTransfer";
@@ -528,24 +530,23 @@ export function CatalogPage() {
       {
         key: "image",
         header: "Image",
-        render: (row: CatalogRow) =>
-          row.image_url ? (
-            <button
-              type="button"
-              className="catalog-thumb-button"
-              onClick={() =>
-                setPreviewImage({
-                  src: row.image_url || "",
-                  code: row.product_code,
-                  name: row.description || "",
-                })
-              }
-            >
-              <img src={row.image_url} alt={row.product_code} className="catalog-thumb" loading="lazy" />
-            </button>
-          ) : (
-            <span>-</span>
-          ),
+        render: (row: CatalogRow) => (
+          <ProductVisual
+            imageUrl={row.image_url}
+            brand={drafts[row.product_id]?.brand ?? row.brand}
+            alt={row.product_code}
+            onPreview={
+              row.image_url
+                ? () =>
+                    setPreviewImage({
+                      src: row.image_url || "",
+                      code: row.product_code,
+                      name: row.description || "",
+                    })
+                : null
+            }
+          />
+        ),
       },
       {
         key: "code",
@@ -1171,23 +1172,22 @@ export function CatalogPage() {
               </Button>
             </div>
             <div className="workbench-detail-panel__media">
-              {selectedCatalogRow.image_url ? (
-                <button
-                  type="button"
-                  className="catalog-thumb-button catalog-thumb-button--detail"
-                  onClick={() =>
-                    setPreviewImage({
-                      src: selectedCatalogRow.image_url || "",
-                      code: selectedCatalogDraft.product_code,
-                      name: selectedCatalogDraft.description || "",
-                    })
-                  }
-                >
-                  <img src={selectedCatalogRow.image_url} alt={selectedCatalogDraft.product_code} className="catalog-thumb catalog-thumb--detail" loading="lazy" />
-                </button>
-              ) : (
-                <div className="empty-state">No image</div>
-              )}
+              <ProductVisual
+                imageUrl={selectedCatalogRow.image_url}
+                brand={selectedCatalogDraft.brand}
+                alt={selectedCatalogDraft.product_code}
+                detail
+                onPreview={
+                  selectedCatalogRow.image_url
+                    ? () =>
+                        setPreviewImage({
+                          src: selectedCatalogRow.image_url || "",
+                          code: selectedCatalogDraft.product_code,
+                          name: selectedCatalogDraft.description || "",
+                        })
+                    : null
+                }
+              />
             </div>
             <div className="workbench-detail-panel__title">{selectedCatalogDraft.product_code}</div>
             <div className="document-marks document-marks--compact">
@@ -1213,7 +1213,12 @@ export function CatalogPage() {
                   ) : null}
                 </strong>
               </div>
-              <div><span>Vehicle</span><strong>{selectedCatalogDraft.vehicle || "-"}</strong></div>
+              <div>
+                <span>Vehicle</span>
+                <strong className="catalog-detail-list-text">
+                  <VehicleBadges value={selectedCatalogDraft.vehicle || ""} limit={5} expandable />
+                </strong>
+              </div>
               <div><span>HS</span><strong>{selectedCatalogDraft.hs_code || "-"}</strong></div>
               <div><span>Origin</span><strong>{selectedCatalogDraft.origin || "-"}</strong></div>
               <div><span>Weight</span><strong>{selectedCatalogDraft.weight_kg ?? "-"}</strong></div>

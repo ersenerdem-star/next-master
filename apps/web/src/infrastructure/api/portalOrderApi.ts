@@ -5,6 +5,7 @@ export type PortalCatalogSearchItem = {
   brand: string;
   description: string;
   oem_no: string;
+  vehicle: string;
   tariff: string;
   origin: string;
   weight_kg: number | null;
