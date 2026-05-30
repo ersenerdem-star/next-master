@@ -3156,6 +3156,29 @@ select {
   align-items: end;
 }
 
+.portal-filter-grid--desk > .field:nth-child(2) .field__label {
+  color: #0f766e;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.portal-filter-grid--desk > .field:nth-child(2) .field__input {
+  min-height: 52px;
+  border-width: 2px;
+  border-color: rgba(15, 118, 110, 0.56);
+  background: linear-gradient(180deg, rgba(240, 253, 250, 0.96) 0%, #ffffff 100%);
+  box-shadow:
+    0 0 0 4px rgba(20, 184, 166, 0.12),
+    inset 0 0 0 1px rgba(15, 118, 110, 0.08);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.portal-filter-grid--desk > .field:nth-child(2) .field__input::placeholder {
+  color: #0f766e;
+  opacity: 0.72;
+}
+
 .portal-filter-stat {
   border: 1px solid #dbe5ef;
   border-radius: 16px;

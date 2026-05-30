@@ -212,13 +212,24 @@ function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "s
       clauses.add(`normalized_oem.eq.${variant}`);
       clauses.add(`normalized_code.like.${variant}*`);
       clauses.add(`normalized_oem.like.${variant}*`);
+      if (variant.length >= 8) {
+        clauses.add(`normalized_oem.like.*${variant}*`);
+        clauses.add(`oem_no.ilike.*${variant}*`);
+      }
       if (variant.length <= 24) {
         clauses.add(`product_code.ilike.${variant}*`);
+        if (variant.length >= 8) {
+          clauses.add(`product_code.ilike.*${variant}*`);
+        }
       }
     }
     if (mode === "loose" && normalizedOriginalSearch.length >= 6) {
       clauses.add(`normalized_oem.like.*${normalizedOriginalSearch}*`);
       clauses.add(`normalized_code.like.*${normalizedOriginalSearch}*`);
+      if (normalizedOriginalSearch.length >= 8) {
+        clauses.add(`oem_no.ilike.*${normalizedOriginalSearch}*`);
+        clauses.add(`product_code.ilike.*${normalizedOriginalSearch}*`);
+      }
     }
     return `(${[...clauses].join(",")})`;
   }
@@ -293,6 +304,8 @@ function buildOriginalNumberFamilyClauses(search: string) {
     clauses.add(`normalized_oem.like.*${token}*`);
     clauses.add(`normalized_code.eq.${token}`);
     clauses.add(`normalized_code.like.*${token}*`);
+    clauses.add(`oem_no.ilike.*${token}*`);
+    clauses.add(`product_code.ilike.*${token}*`);
   }
   return [...clauses];
 }
@@ -555,6 +568,24 @@ async function fetchCloudCatalogPageViaRest(
       }).catch(() => ({ rows: [] as CatalogSourceRow[], totalCount: 0 }));
       if (familySweepRows.rows.length) {
         const merged = dedupeCatalogRows([...rows, ...familySweepRows.rows]).filter((row) => matchesCatalogFamilyRow(row, search));
+        totalCount = merged.length;
+        rows = merged.slice(offset, offset + pageSize);
+      }
+    }
+  }
+  if (search && shouldRunLooseOriginalNumberSearch(search) && rows.length < Math.max(pageSize, 40)) {
+    const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
+    if (normalizedOriginalSearch.length >= 8) {
+      const exactOemRows = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
+        select,
+        organization_id: `eq.${caller.organizationId}`,
+        ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+        oem_no: `ilike.*${normalizedOriginalSearch}*`,
+        order: "product_code.asc",
+        limit: String(Math.min(180, Math.max(pageSize * 3, 80))),
+      }).catch(() => ({ rows: [] as CatalogSourceRow[], totalCount: 0 }));
+      if (exactOemRows.rows.length) {
+        const merged = dedupeCatalogRows([...rows, ...exactOemRows.rows]);
         totalCount = merged.length;
         rows = merged.slice(offset, offset + pageSize);
       }

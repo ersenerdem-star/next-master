@@ -1209,10 +1209,6 @@ export function PortalPage() {
       label: `${row.sales_order_no || row.id} · ${(row.line_count || row.lines?.length || 0).toLocaleString("en-US")} lines`,
     })),
   ];
-  const portalOrderTotals = {
-    subtotal: portalDraftLines.reduce((sum, line) => sum + Number(line.sell_price || 0) * Number(line.qty || 0), 0),
-    purchaseTotal: portalDraftLines.reduce((sum, line) => sum + Number(line.buy_price || 0) * Number(line.qty || 0), 0),
-  };
   const portalOrderCurrency = activeSnapshot.pricingProfile?.currency || activeSnapshot.accountSummary.currency || "EUR";
   const portalDraftHasMissingPrices = portalDraftLines.some((line) => line.sell_price == null);
   const portalDraftDiscontinuedCount = portalDraftLines.filter((line) => line.lifecycle_status === "discontinued").length;
@@ -2445,25 +2441,6 @@ export function PortalPage() {
         <div className="portal-section-stack">
           <SectionCard title="Part Search" className="search-focus-card search-focus-card--portal">
             <div className="portal-order-builder">
-              <div className="portal-order-builder__meta">
-                <div className="dashboard-stat">
-                  <span>Active Basket</span>
-                  <strong>{portalSalesOrderNo || "New Basket"}</strong>
-                </div>
-                <div className="dashboard-stat">
-                  <span>Currency</span>
-                  <strong>{portalOrderCurrency}</strong>
-                </div>
-                <div className="dashboard-stat">
-                  <span>Basket Total</span>
-                  <strong>{formatMoney(portalOrderTotals.subtotal, portalOrderCurrency)}</strong>
-                </div>
-                <div className="dashboard-stat">
-                  <span>Warning Items</span>
-                  <strong>{portalDraftWarningLines.length.toLocaleString("en-US")}</strong>
-                </div>
-              </div>
-
               <form
                 className="portal-filter-grid portal-filter-grid--desk"
                 onSubmit={(event) => {
@@ -2484,7 +2461,7 @@ export function PortalPage() {
                     if (target) handleResumePortalDraft(target);
                   }}
                 />
-                <Input label="Part Search" value={orderSearch} placeholder="Part no, original no, description" onChange={setOrderSearch} />
+                <Input label="Part No / OEM Search" value={orderSearch} placeholder="Write part number or OEM number here" onChange={setOrderSearch} />
                 <Select label="Brand" value={orderSearchBrand} options={portalBrandOptions} onChange={setOrderSearchBrand} />
                 <div className="portal-builder-actions">
                   <input
@@ -2508,6 +2485,11 @@ export function PortalPage() {
                   </Button>
                 </div>
               </form>
+
+              <div className="portal-inline-note portal-inline-note--soft">
+                <span>Search Target</span>
+                <strong>Type the original number or brand code in the middle field. Exact matches stay above; stock-backed alternatives appear in the recommendation block below.</strong>
+              </div>
 
               <div className="portal-inline-note portal-inline-note--soft">
                 <span>Import Format</span>

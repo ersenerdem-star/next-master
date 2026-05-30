@@ -467,16 +467,28 @@ function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mo
       clauses.add(`normalized_oem.eq.${normalizedSearch}`);
       clauses.add(`normalized_code.like.${normalizedSearch}*`);
       clauses.add(`normalized_oem.like.${normalizedSearch}*`);
+      if (normalizedOriginalSearch.length >= 8) {
+        clauses.add(`normalized_oem.like.*${normalizedOriginalSearch}*`);
+        clauses.add(`oem_no.ilike.*${normalizedOriginalSearch}*`);
+      }
     }
     for (const variant of normalizedSearchVariants) {
       clauses.add(`normalized_code.eq.${variant}`);
       clauses.add(`normalized_oem.eq.${variant}`);
       clauses.add(`normalized_code.like.${variant}*`);
       clauses.add(`normalized_oem.like.${variant}*`);
+      if (variant.length >= 8) {
+        clauses.add(`normalized_oem.like.*${variant}*`);
+        clauses.add(`oem_no.ilike.*${variant}*`);
+      }
     }
-    if (escaped && escaped.length <= 24 && /[A-Z]/i.test(escaped)) {
+    if (escaped && escaped.length <= 24 && (/[A-Z]/i.test(escaped) || normalizedOriginalSearch.length >= 8)) {
       clauses.add(`product_code.ilike.${escaped}*`);
       clauses.add(`oem_no.ilike.${escaped}*`);
+      if (normalizedOriginalSearch.length >= 8) {
+        clauses.add(`product_code.ilike.*${escaped}*`);
+        clauses.add(`oem_no.ilike.*${escaped}*`);
+      }
     }
     if (separatorInsensitivePattern && separatorInsensitivePattern !== escaped.toUpperCase() && /[A-Z]/i.test(separatorInsensitivePattern)) {
       clauses.add(`product_code.ilike.${separatorInsensitivePattern}*`);
@@ -1198,6 +1210,22 @@ export async function searchPortalCatalog(
         rows = dedupeCatalogRows([...rows, ...supplementalRows]).filter(
           (row) => matchesCatalogFamilyRow(row, search) || variants.some((variant) => normalizePartCode(String(row.product_code || "")).includes(variant)),
         );
+      }
+    }
+  }
+  if (search && shouldRunLooseOriginalNumberSearch(search)) {
+    const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
+    if (normalizedOriginalSearch.length >= 8) {
+      const exactOemRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+        select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
+        organization_id: `eq.${invite.organization_id}`,
+        ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+        oem_no: `ilike.*${normalizedOriginalSearch}*`,
+        order: "product_code.asc",
+        limit: "180",
+      }).catch(() => []);
+      if (exactOemRows.length) {
+        rows = dedupeCatalogRows([...rows, ...exactOemRows]);
       }
     }
   }
