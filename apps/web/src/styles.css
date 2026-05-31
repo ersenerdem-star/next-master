@@ -1073,7 +1073,7 @@ select {
 }
 
 .data-table--catalog {
-  table-layout: fixed;
+  min-width: 1720px;
 }
 
 .data-table--catalog th:nth-child(1),
@@ -1083,27 +1083,27 @@ select {
 
 .data-table--catalog th:nth-child(2),
 .data-table--catalog td:nth-child(2) {
-  width: 130px;
+  min-width: 140px;
 }
 
 .data-table--catalog th:nth-child(3),
 .data-table--catalog td:nth-child(3) {
-  width: 128px;
+  min-width: 132px;
 }
 
 .data-table--catalog th:nth-child(4),
 .data-table--catalog td:nth-child(4) {
-  width: 18%;
+  min-width: 280px;
 }
 
 .data-table--catalog th:nth-child(5),
 .data-table--catalog td:nth-child(5) {
-  width: 16%;
+  min-width: 240px;
 }
 
 .data-table--catalog th:nth-child(6),
 .data-table--catalog td:nth-child(6) {
-  width: 18%;
+  min-width: 260px;
 }
 
 .data-table--catalog th:nth-child(7),
@@ -1114,22 +1114,22 @@ select {
 .data-table--catalog td:nth-child(9),
 .data-table--catalog th:nth-child(12),
 .data-table--catalog td:nth-child(12) {
-  width: 92px;
+  min-width: 100px;
 }
 
 .data-table--catalog th:nth-child(10),
 .data-table--catalog td:nth-child(10) {
-  width: 130px;
+  min-width: 140px;
 }
 
 .data-table--catalog th:nth-child(11),
 .data-table--catalog td:nth-child(11) {
-  width: 14%;
+  min-width: 240px;
 }
 
 .data-table--catalog th:nth-child(13),
 .data-table--catalog td:nth-child(13) {
-  width: 244px;
+  min-width: 244px;
 }
 
 .data-table th,
