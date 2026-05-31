@@ -16,6 +16,8 @@ const brands = brandArg
   .filter(Boolean);
 const chunkSize = parseIntArg("--chunk-size=", 12);
 const maxPrefixes = parseIntArg("--max-prefixes=", 0);
+const startChunk = parseIntArg("--start-chunk=", 1);
+const endChunk = parseIntArg("--end-chunk=", 0);
 const detailConcurrency = parseIntArg("--detail-concurrency=", 6);
 const batchSize = parseIntArg("--batch-size=", 250);
 const sleepMs = parseIntArg("--sleep-ms=", 10);
@@ -52,6 +54,9 @@ for (const brandName of brands) {
   for (let index = 0; index < plan.prefixes.length; index += chunkSize) {
     chunks.push(plan.prefixes.slice(index, index + chunkSize));
   }
+  const effectiveStartChunk = Math.max(1, startChunk);
+  const effectiveEndChunk = endChunk > 0 ? Math.min(endChunk, chunks.length) : chunks.length;
+  const selectedChunks = chunks.slice(effectiveStartChunk - 1, effectiveEndChunk);
 
   if (planOnly) {
     aggregate.push({
@@ -63,20 +68,24 @@ for (const brandName of brands) {
       prefixCount: plan.prefixes.length,
       chunkSize,
       totalChunks: chunks.length,
-      chunkPreview: chunks.slice(0, 5),
+      startChunk: effectiveStartChunk,
+      endChunk: effectiveEndChunk,
+      selectedChunkCount: selectedChunks.length,
+      chunkPreview: selectedChunks.slice(0, 5),
     });
     continue;
   }
 
   const chunkResults = [];
-  for (let index = 0; index < chunks.length; index += 1) {
-    const prefixChunk = chunks[index];
+  for (let index = 0; index < selectedChunks.length; index += 1) {
+    const prefixChunk = selectedChunks[index];
+    const chunkNumber = effectiveStartChunk + index;
     console.error(
       JSON.stringify(
         {
           phase: "chunk-start",
           brand: brandName,
-          chunk: index + 1,
+          chunk: chunkNumber,
           totalChunks: chunks.length,
           prefixChunk,
         },
@@ -94,7 +103,7 @@ for (const brandName of brands) {
     });
 
     chunkResults.push({
-      chunk: index + 1,
+      chunk: chunkNumber,
       totalChunks: chunks.length,
       prefixes: prefixChunk,
       result,
@@ -105,7 +114,7 @@ for (const brandName of brands) {
         {
           phase: "chunk-complete",
           brand: brandName,
-          chunk: index + 1,
+          chunk: chunkNumber,
           totalChunks: chunks.length,
           matchedRows: result.matched_rows,
           changedRows: result.changed_rows,
@@ -136,6 +145,9 @@ for (const brandName of brands) {
     prefixCount: plan.prefixes.length,
     chunkSize,
     totalChunks: chunks.length,
+    startChunk: effectiveStartChunk,
+    endChunk: effectiveEndChunk,
+    selectedChunkCount: selectedChunks.length,
     aggregateMatchedRows: sum(chunkResults.map((entry) => entry.result.matched_rows || 0)),
     aggregateChangedRows: sum(chunkResults.map((entry) => entry.result.changed_rows || 0)),
     aggregateOemRows: sum(chunkResults.map((entry) => entry.result.oem_rows || 0)),
