@@ -125,6 +125,7 @@ export async function syncBrandCatalogFromValeoService(input: {
   refreshExisting?: boolean;
   concurrency?: number;
   requestTimeoutMs?: number;
+  lineIds?: number[];
 }) {
   const refreshExisting = input.refreshExisting !== false;
   const concurrency = Math.max(1, input.concurrency ?? 4);
@@ -140,7 +141,7 @@ export async function syncBrandCatalogFromValeoService(input: {
   const supportsImageColumn = await detectCatalogImageColumn(input.supabaseUrl, headers);
   const existingRows = await fetchCatalogRows(input.supabaseUrl, headers, target);
   const existingByCode = new Map(existingRows.map((row) => [row.normalized_code, row]));
-  const crawl = await crawlValeoCatalog(requestTimeoutMs, concurrency, target.name, brandTargetMode);
+  const crawl = await crawlValeoCatalog(requestTimeoutMs, concurrency, target.name, brandTargetMode, input.lineIds || []);
   const valeoItems = crawl.items;
 
   const catalogPayload: Array<Record<string, unknown>> = [];
@@ -371,9 +372,12 @@ async function crawlValeoCatalog(
   concurrency: number,
   targetBrandName: string,
   targetMode: ValeoBrandTargetMode,
+  lineIds: number[],
 ) {
   const productLinesPage = await fetchPageProps(VALEO_PRODUCT_LINES_URL, requestTimeoutMs);
-  const productLines = Array.isArray(productLinesPage.productLines) ? (productLinesPage.productLines as ValeoProductLine[]) : [];
+  const allProductLines = Array.isArray(productLinesPage.productLines) ? (productLinesPage.productLines as ValeoProductLine[]) : [];
+  const lineIdSet = new Set((Array.isArray(lineIds) ? lineIds : []).map((value) => Number(value)).filter((value) => Number.isFinite(value) && value > 0));
+  const productLines = lineIdSet.size ? allProductLines.filter((line) => lineIdSet.has(Number(line.id))) : allProductLines;
   const partsMap = new Map<string, ValeoPartGroup>();
   let listingPagesProcessed = 1;
   let productLinesProcessed = 0;

@@ -146,6 +146,7 @@ export async function syncBrandCatalog(input: {
   pageSize?: number;
   requestTimeoutMs?: number;
   seedPrefixes?: string[];
+  lineIds?: number[];
 }) {
   const plan = resolveCatalogSyncPlan(input.brandName);
   let result;
