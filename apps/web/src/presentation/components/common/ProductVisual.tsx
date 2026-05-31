@@ -2,12 +2,18 @@ import { useEffect, useState } from "react";
 
 import { resolveNamedLogo } from "./logoAssets";
 
+export type ProductMediaItem = {
+  src: string;
+  label?: string;
+};
+
 type ProductVisualProps = {
   imageUrl?: string | null;
+  imageGallery?: ProductMediaItem[];
   brand?: string | null;
   alt: string;
   detail?: boolean;
-  onPreview?: (() => void) | null;
+  onPreview?: ((item: ProductMediaItem | null) => void) | null;
 };
 
 function buildBrandMonogram(value: string) {
@@ -43,36 +49,94 @@ function isKnownPlaceholderImageUrl(value: string) {
   ].some((token) => normalized.includes(token));
 }
 
-export function ProductVisual({ imageUrl, brand, alt, detail = false, onPreview = null }: ProductVisualProps) {
+export function ProductVisual({ imageUrl, imageGallery = [], brand, alt, detail = false, onPreview = null }: ProductVisualProps) {
   const displayBrand = String(brand || "").trim();
   const monogram = buildBrandMonogram(displayBrand || alt);
   const logoAsset = resolveNamedLogo(displayBrand);
   const [imageFailed, setImageFailed] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
   const resolvedImageUrl = String(imageUrl || "").trim();
-  const shouldUseFallback = !resolvedImageUrl || isKnownPlaceholderImageUrl(resolvedImageUrl) || imageFailed;
+  const normalizedGallery = imageGallery
+    .map((item) => ({
+      src: String(item?.src || "").trim(),
+      label: String(item?.label || "").trim(),
+    }))
+    .filter((item) => item.src && !isKnownPlaceholderImageUrl(item.src));
+  const galleryItems = normalizedGallery.length
+    ? normalizedGallery
+    : resolvedImageUrl && !isKnownPlaceholderImageUrl(resolvedImageUrl)
+      ? [{ src: resolvedImageUrl, label: "" }]
+      : [];
+  const activeGalleryItem = galleryItems[Math.min(activeImageIndex, Math.max(galleryItems.length - 1, 0))] || null;
+  const shouldUseFallback = !activeGalleryItem?.src || imageFailed;
 
   useEffect(() => {
     setImageFailed(false);
-  }, [resolvedImageUrl]);
+    setActiveImageIndex(0);
+  }, [resolvedImageUrl, JSON.stringify(galleryItems.map((item) => item.src))]);
 
   if (!shouldUseFallback) {
-    const image = (
+    const imageElement = (
       <img
-        src={resolvedImageUrl}
+        src={activeGalleryItem.src}
         alt={alt}
         className={`catalog-thumb${detail ? " catalog-thumb--detail" : ""}`}
         loading="lazy"
         onError={() => setImageFailed(true)}
       />
     );
-    if (onPreview) {
+    const mediaElement = onPreview ? (
+      <button
+        type="button"
+        className={`catalog-thumb-button${detail ? " catalog-thumb-button--detail" : ""}`}
+        onClick={() => onPreview(activeGalleryItem)}
+      >
+        {imageElement}
+      </button>
+    ) : (
+      imageElement
+    );
+
+    if (detail && galleryItems.length > 1) {
       return (
-        <button type="button" className={`catalog-thumb-button${detail ? " catalog-thumb-button--detail" : ""}`} onClick={onPreview}>
-          {image}
-        </button>
+        <div className="catalog-media-carousel">
+          {mediaElement}
+          <div className="catalog-media-carousel__toolbar">
+            <button
+              type="button"
+              className="catalog-media-carousel__nav"
+              onClick={() => setActiveImageIndex((current) => (current <= 0 ? galleryItems.length - 1 : current - 1))}
+              aria-label="Previous image"
+            >
+              ‹
+            </button>
+            <span className="catalog-media-carousel__caption">{activeGalleryItem.label || `Image ${activeImageIndex + 1}`}</span>
+            <button
+              type="button"
+              className="catalog-media-carousel__nav"
+              onClick={() => setActiveImageIndex((current) => (current >= galleryItems.length - 1 ? 0 : current + 1))}
+              aria-label="Next image"
+            >
+              ›
+            </button>
+          </div>
+          <div className="catalog-media-carousel__thumbs">
+            {galleryItems.map((item, index) => (
+              <button
+                key={`${item.src}::${index}`}
+                type="button"
+                className={`catalog-media-carousel__thumb${index === activeImageIndex ? " active" : ""}`}
+                onClick={() => setActiveImageIndex(index)}
+              >
+                {item.label || `Image ${index + 1}`}
+              </button>
+            ))}
+          </div>
+        </div>
       );
     }
-    return image;
+
+    return mediaElement;
   }
 
   return (

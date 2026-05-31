@@ -1470,12 +1470,73 @@ select {
 .catalog-thumb-button--detail {
   width: 100%;
   justify-content: center;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .catalog-thumb--detail {
   width: min(100%, 220px);
   height: 220px;
   border-radius: 14px;
+}
+
+.catalog-media-carousel {
+  width: min(100%, 220px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.catalog-media-carousel__toolbar {
+  display: grid;
+  grid-template-columns: 28px 1fr 28px;
+  align-items: center;
+  gap: 8px;
+}
+
+.catalog-media-carousel__nav {
+  border: 1px solid #d7e2ef;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 999px;
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.catalog-media-carousel__caption {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #475569;
+  text-align: center;
+}
+
+.catalog-media-carousel__thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.catalog-media-carousel__thumb {
+  border: 1px solid #d7e2ef;
+  background: #fff;
+  color: #475569;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.catalog-media-carousel__thumb.active {
+  border-color: #ea580c;
+  color: #9a3412;
+  background: #fff7ed;
 }
 
 .vehicle-badge-list {

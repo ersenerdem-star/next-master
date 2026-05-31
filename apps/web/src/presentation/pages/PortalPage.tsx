@@ -29,6 +29,8 @@ import {
   type PortalCatalogSearchItem,
   type PortalPreparedLine,
 } from "../../infrastructure/api/portalOrderApi";
+import { fetchCatalogProductMedia } from "../../infrastructure/api/catalogMediaApi";
+import type { ProductMediaItem } from "../components/common/ProductVisual";
 import { parseOrderImportFile } from "../../shared/orderImport";
 
 const SESSION_KEY = "next-master-portal-session";
@@ -496,6 +498,7 @@ export function PortalPage() {
   const [selectedCatalogCode, setSelectedCatalogCode] = useState("");
   const [selectedDraftLineId, setSelectedDraftLineId] = useState("");
   const [portalPreview, setPortalPreview] = useState<{ kind: "catalog"; item: PortalCatalogSearchItem } | { kind: "basket"; item: PortalPreparedLine } | null>(null);
+  const [portalPreviewMedia, setPortalPreviewMedia] = useState<ProductMediaItem[]>([]);
   const [previewImage, setPreviewImage] = useState<{ src: string; code: string; name: string } | null>(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const portalPricingCurrency = snapshot?.pricingProfile?.currency || snapshot?.accountSummary.currency || "EUR";
@@ -1163,6 +1166,35 @@ export function PortalPage() {
       setSelectedDraftLineId(portalDraftLines[0]?.lineId || "");
     }
   }, [portalDraftLines, selectedDraftLineId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (!portalPreview) {
+        if (!cancelled) setPortalPreviewMedia([]);
+        return;
+      }
+      const code = portalPreview.kind === "catalog" ? portalPreview.item.code : portalPreview.item.resolvedCode || portalPreview.item.requestedCode;
+      const fallbackItems = portalPreview.item.image_url ? [{ src: portalPreview.item.image_url, label: "Product" }] : [];
+      if (!cancelled) setPortalPreviewMedia(fallbackItems);
+      try {
+        const items = await fetchCatalogProductMedia({
+          brand: portalPreview.item.brand,
+          code: code || "",
+          imageUrl: portalPreview.item.image_url || "",
+        });
+        if (!cancelled && items.length) setPortalPreviewMedia(items);
+      } catch {
+        if (!cancelled) setPortalPreviewMedia(fallbackItems);
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [portalPreview]);
 
   if (!snapshot) {
     const loginBrandLogo = loginBranding?.companyProfile?.logo_data_url || "";
@@ -2955,6 +2987,7 @@ export function PortalPage() {
             <div className="workbench-detail-panel__media">
               <ProductVisual
                 imageUrl={portalPreview.item.image_url}
+                imageGallery={portalPreviewMedia}
                 brand={portalPreview.item.brand}
                 alt={
                   portalPreview.kind === "catalog"
@@ -2963,10 +2996,10 @@ export function PortalPage() {
                 }
                 detail
                 onPreview={
-                  portalPreview.item.image_url
-                    ? () =>
+                  portalPreviewMedia.length || portalPreview.item.image_url
+                    ? (item) =>
                         setPreviewImage({
-                          src: portalPreview.item.image_url || "",
+                          src: item?.src || portalPreview.item.image_url || "",
                           code:
                             portalPreview.kind === "catalog"
                               ? portalPreview.item.code || ""

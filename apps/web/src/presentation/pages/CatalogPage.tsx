@@ -3,6 +3,7 @@ import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { syncBrandCatalog } from "../../infrastructure/api/adminApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { createCloudCatalogRow, deleteCloudCatalogRow, fetchCatalogExportRows, fetchCatalogRowsByCodes, fetchCloudCatalog, updateCloudCatalogRow } from "../../infrastructure/api/catalogApi";
+import { fetchCatalogProductMedia } from "../../infrastructure/api/catalogMediaApi";
 import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenceUsage } from "../../infrastructure/api/codeReferencesApi";
 import { bulkImportCatalog } from "../../infrastructure/api/importApi";
 import { matchesOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
@@ -13,7 +14,7 @@ import { Button } from "../components/common/Button";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
-import { ProductVisual } from "../components/common/ProductVisual";
+import { ProductVisual, type ProductMediaItem } from "../components/common/ProductVisual";
 import { Select } from "../components/common/Select";
 import { VehicleBadges } from "../components/common/VehicleBadges";
 import { downloadCsv, normalizeNumber, normalizeText, parseCsv, toCsv } from "../../shared/csv";
@@ -123,6 +124,7 @@ export function CatalogPage() {
   const [referenceOldCodeUsage, setReferenceOldCodeUsage] = useState<CodeReferenceUsage | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; code: string; name: string } | null>(null);
   const [selectedCatalogProductId, setSelectedCatalogProductId] = useState("");
+  const [selectedCatalogMedia, setSelectedCatalogMedia] = useState<ProductMediaItem[]>([]);
   const [showFullSelectedOem, setShowFullSelectedOem] = useState(false);
   const [createDraft, setCreateDraft] = useState({
     product_code: "",
@@ -448,6 +450,34 @@ export function CatalogPage() {
       .filter(Boolean);
   }, [selectedCatalogDraft]);
   const visibleSelectedCatalogOemValues = showFullSelectedOem ? selectedCatalogOemValues : selectedCatalogOemValues.slice(0, 5);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (!selectedCatalogRow) {
+        if (!cancelled) setSelectedCatalogMedia([]);
+        return;
+      }
+      const fallbackItems = selectedCatalogRow.image_url ? [{ src: selectedCatalogRow.image_url, label: "Product" }] : [];
+      if (!cancelled) setSelectedCatalogMedia(fallbackItems);
+      try {
+        const items = await fetchCatalogProductMedia({
+          brand: selectedCatalogRow.brand,
+          code: selectedCatalogRow.product_code,
+          imageUrl: selectedCatalogRow.image_url || "",
+        });
+        if (!cancelled && items.length) setSelectedCatalogMedia(items);
+      } catch {
+        if (!cancelled) setSelectedCatalogMedia(fallbackItems);
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCatalogRow]);
 
   function clearCatalogSearch() {
     setSearch("");
@@ -1192,14 +1222,15 @@ export function CatalogPage() {
             <div className="workbench-detail-panel__media">
               <ProductVisual
                 imageUrl={selectedCatalogRow.image_url}
+                imageGallery={selectedCatalogMedia}
                 brand={selectedCatalogDraft.brand}
                 alt={selectedCatalogDraft.product_code}
                 detail
                 onPreview={
-                  selectedCatalogRow.image_url
-                    ? () =>
+                  selectedCatalogMedia.length || selectedCatalogRow.image_url
+                    ? (item) =>
                         setPreviewImage({
-                          src: selectedCatalogRow.image_url || "",
+                          src: item?.src || selectedCatalogRow.image_url || "",
                           code: selectedCatalogDraft.product_code,
                           name: selectedCatalogDraft.description || "",
                         })
