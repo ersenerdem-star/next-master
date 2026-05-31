@@ -36,14 +36,25 @@ const KNOWN_MANUFACTURER_PATTERNS = [
 ];
 
 const BRAND_CONFIGS = [
-  { key: "zf", internalName: "ZF", officialFilter: "ZF", aliases: ["ZF"] },
-  { key: "lemforder", internalName: "Lemforder", officialFilter: "LEMFÖRDER", aliases: ["Lemforder", "Lemförder"] },
-  { key: "sachs", internalName: "Sachs", officialFilter: "SACHS", aliases: ["Sachs"] },
-  { key: "trw", internalName: "TRW", officialFilter: "TRW", aliases: ["TRW"] },
-  { key: "wabco", internalName: "Wabco", officialFilter: "WABCO", aliases: ["Wabco", "WABCO"] },
-  { key: "boge", internalName: "Boge", officialFilter: "BOGE", aliases: ["Boge", "BOGE"] },
+  {
+    key: "zf",
+    internalName: "ZF",
+    officialFilter: "ZF",
+    aliases: ["ZF"],
+    emptyStateQueries: ["damper", "absorber", "gearbox", "valve", "filter", "pump", "module", "fork"],
+  },
+  {
+    key: "lemforder",
+    internalName: "Lemforder",
+    officialFilter: "LEMFÖRDER",
+    aliases: ["Lemforder", "Lemförder"],
+    emptyStateQueries: ["LEMFORDER"],
+  },
+  { key: "sachs", internalName: "Sachs", officialFilter: "SACHS", aliases: ["Sachs"], emptyStateQueries: ["SACHS"] },
+  { key: "trw", internalName: "TRW", officialFilter: "TRW", aliases: ["TRW"], emptyStateQueries: ["TRW"] },
+  { key: "wabco", internalName: "Wabco", officialFilter: "WABCO", aliases: ["Wabco", "WABCO"], emptyStateQueries: ["WABCO"] },
+  { key: "boge", internalName: "Boge", officialFilter: "BOGE", aliases: ["Boge", "BOGE"], emptyStateQueries: ["BOGE"] },
 ] as const;
-const DEFAULT_DISCOVERY_PREFIXES = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 export async function syncBrandCatalogFromZfAftermarket(input: {
   supabaseUrl: string;
@@ -53,6 +64,7 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
   concurrency?: number;
   pageSize?: number;
   requestTimeoutMs?: number;
+  seedPrefixes?: string[];
 }) {
   const refreshExisting = input.refreshExisting !== false;
   const detailConcurrency = Math.max(1, input.concurrency ?? 6);
@@ -68,10 +80,10 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
   const supportsImageColumn = await detectCatalogImageColumn(input.supabaseUrl, headers);
   const existingRows = await fetchCatalogRows(input.supabaseUrl, headers, target);
   const existingByCode = new Map(existingRows.map((row) => [row.normalized_code, row]));
-  const seedPrefixes = buildSeedPrefixes(existingRows);
-  const discoveredSearchMap = await crawlOfficialPrefixes({
+  const discoveryQueries = buildDiscoveryQueries(target, existingRows, input.seedPrefixes);
+  const discoveredSearchMap = await crawlOfficialQueries({
     target,
-    prefixes: seedPrefixes,
+    queries: discoveryQueries,
     searchPageSize,
     requestTimeoutMs,
   });
@@ -294,7 +306,7 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
     targetBrandName: target.brand_name,
     organizationId: target.organization_id,
     existingRows: existingRows.length,
-    listingPagesProcessed: seedPrefixes.length,
+    listingPagesProcessed: discoveryQueries.length,
     listingLastPage: 0,
     listingUniqueRows: discoveredSearchMap.size,
     newRowsInListing: [...discoveredSearchMap.keys()].filter((code) => !existingByCode.has(code)).length,
@@ -381,31 +393,39 @@ async function fetchCatalogRows(supabaseUrl: string, headers: Record<string, str
   return dedupeBy(results, (row) => row.normalized_code);
 }
 
-function buildSeedPrefixes(rows: any[]) {
+function buildDiscoveryQueries(target: any, rows: any[], overrides: string[] | undefined) {
+  const explicit = dedupeStrings(
+    (Array.isArray(overrides) ? overrides : [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean),
+  );
+  if (explicit.length) return explicit;
+
   const derived = dedupeStrings(
     rows
       .map((row) => row.normalized_code)
-      .filter((value) => String(value || "").length >= 3)
-      .map((value) => String(value).slice(0, 3)),
+      .filter((value) => String(value || "").length >= 4)
+      .map((value) => String(value).slice(0, 4)),
   );
-  return derived.length ? derived : DEFAULT_DISCOVERY_PREFIXES;
+  if (derived.length) return derived;
+  return dedupeStrings((target.emptyStateQueries || []).map((value: string) => String(value || "").trim()).filter(Boolean));
 }
 
-async function crawlOfficialPrefixes({
+async function crawlOfficialQueries({
   target,
-  prefixes,
+  queries,
   searchPageSize,
   requestTimeoutMs,
 }: {
   target: any;
-  prefixes: string[];
+  queries: string[];
   searchPageSize: number;
   requestTimeoutMs: number;
 }) {
   const results = new Map<string, any>();
-  await runPool(prefixes, 2, async (prefix) => {
+  await runPool(queries, 2, async (query) => {
     try {
-      const items = await fetchAllSearchItems(target, prefix, searchPageSize, requestTimeoutMs);
+      const items = await fetchAllSearchItems(target, query, searchPageSize, requestTimeoutMs);
       for (const item of items) {
         if (!item.normalized_code || results.has(item.normalized_code)) continue;
         results.set(item.normalized_code, item);

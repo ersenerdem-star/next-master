@@ -8,6 +8,7 @@ const concurrencyArg = process.argv.find((arg) => arg.startsWith("--concurrency=
 const pageSizeArg = process.argv.find((arg) => arg.startsWith("--page-size="));
 const timeoutArg = process.argv.find((arg) => arg.startsWith("--timeout-ms="));
 const lineIdsArg = process.argv.find((arg) => arg.startsWith("--line-ids="));
+const seedPrefixesArg = process.argv.find((arg) => arg.startsWith("--seed-prefixes="));
 
 if (!supabaseUrl || !serviceRoleKey) {
   throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
@@ -24,6 +25,10 @@ const lineIds = String(lineIdsArg?.split("=")[1] || "")
   .split(",")
   .map((value) => Number.parseInt(value.trim(), 10))
   .filter((value) => Number.isFinite(value) && value > 0);
+const seedPrefixes = String(seedPrefixesArg?.split("=")[1] || "")
+  .split(",")
+  .map((value) => String(value || "").trim())
+  .filter(Boolean);
 
 const result = await syncBrandCatalog({
   supabaseUrl,
@@ -34,6 +39,7 @@ const result = await syncBrandCatalog({
   pageSize: Number.isFinite(pageSize) ? pageSize : 48,
   requestTimeoutMs: Number.isFinite(requestTimeoutMs) ? requestTimeoutMs : 20000,
   lineIds,
+  seedPrefixes,
 });
 
 console.log(JSON.stringify(result, null, 2));

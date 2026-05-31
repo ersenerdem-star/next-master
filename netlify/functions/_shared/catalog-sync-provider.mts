@@ -123,17 +123,16 @@ export function resolveCatalogSyncPlan(inputBrandName: string): CatalogSyncPlan 
     };
   }
 
-  const fallbackUsed = matchedConfig.preferredProviderKey !== "spareto";
   return {
     brandName,
     preferredProviderKey: matchedConfig.preferredProviderKey,
     preferredProviderLabel: matchedConfig.preferredProviderLabel,
     preferredSourceType: matchedConfig.preferredSourceType,
     preferredSourceUrl: matchedConfig.preferredSourceUrl,
-    executionProviderKey: "spareto",
-    executionProviderLabel: "Spareto catalog",
-    executionSourceType: "marketplace",
-    fallbackUsed,
+    executionProviderKey: matchedConfig.preferredProviderKey,
+    executionProviderLabel: matchedConfig.preferredProviderLabel,
+    executionSourceType: matchedConfig.preferredSourceType,
+    fallbackUsed: false,
   };
 }
 
