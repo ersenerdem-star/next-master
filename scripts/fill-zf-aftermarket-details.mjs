@@ -927,7 +927,7 @@ async function resolveExtraCodes({ target, extraCodes, existingByCode, processed
       errors.push({
         brand_name: target.internalName,
         product_code: code,
-        normalized_code,
+        normalized_code: normalizedCode,
         source_url: "",
         error: error instanceof Error ? error.message : String(error),
       });
