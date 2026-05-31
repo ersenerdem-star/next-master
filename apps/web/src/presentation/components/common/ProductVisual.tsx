@@ -45,7 +45,6 @@ export function ProductVisual({ imageUrl, brand, alt, detail = false, onPreview 
       aria-label={displayBrand ? `${displayBrand} brand fallback` : `${alt} fallback`}
     >
       {logoAsset ? <img src={logoAsset.src} alt="" className="catalog-thumb-fallback__logo" /> : <span className="catalog-thumb-fallback__mono">{monogram}</span>}
-      <span className="catalog-thumb-fallback__label">{displayBrand || "Brand"}</span>
     </div>
   );
 }
