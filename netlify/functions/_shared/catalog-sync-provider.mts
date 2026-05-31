@@ -81,6 +81,20 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredSourceType: "official",
     preferredSourceUrl: "https://www.valeoservice.us/en-us",
   },
+  fte: {
+    aliases: ["fte"],
+    preferredProviderKey: "valeo_service",
+    preferredProviderLabel: "Valeo Service official cross-reference catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://www.valeoservice.us/en-us",
+  },
+  swf: {
+    aliases: ["swf"],
+    preferredProviderKey: "valeo_service",
+    preferredProviderLabel: "Valeo Service official cross-reference catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://www.valeoservice.us/en-us",
+  },
 };
 
 export function resolveCatalogSyncPlan(inputBrandName: string): CatalogSyncPlan {

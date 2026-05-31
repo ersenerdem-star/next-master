@@ -1,4 +1,5 @@
 import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "./catalog-standardization.mts";
+import { normalizeBrandKey } from "./brand-standardization.mts";
 
 const VALEO_PRODUCT_LINES_URL = "https://www.valeoservice.us/en-us/techassist/products/product-lines";
 
@@ -97,11 +98,13 @@ type ValeoPartGroup = {
 type ValeoListingProduct = {
   product_code: string;
   normalized_code: string;
+  source_normalized_code: string;
   description: string;
   additional_description: string;
   supplier_id: string;
   reference_code: string;
   oem_no: string;
+  oem_by_brand: Record<string, string[]>;
   vehicle: string;
   weight_kg: number | null;
   image_url: string;
@@ -110,6 +113,10 @@ type ValeoListingProduct = {
   replacement_code: string | null;
   replacement_reason: string | null;
 };
+
+type ValeoBrandTargetMode =
+  | { kind: "native" }
+  | { kind: "cross_reference"; sourceBrandLabel: string };
 
 export async function syncBrandCatalogFromValeoService(input: {
   supabaseUrl: string;
@@ -133,7 +140,8 @@ export async function syncBrandCatalogFromValeoService(input: {
   const existingRows = await fetchCatalogRows(input.supabaseUrl, headers, target);
   const existingByCode = new Map(existingRows.map((row) => [row.normalized_code, row]));
   const crawl = await crawlValeoCatalog(requestTimeoutMs, concurrency);
-  const listingByCode = new Map(crawl.items.map((row) => [row.normalized_code, row]));
+  const brandTargetMode = resolveValeoBrandTargetMode(target.name);
+  const valeoItems = materializeValeoTargetItems(crawl.items, target.name, brandTargetMode);
 
   const catalogPayload: Array<Record<string, unknown>> = [];
   const replacementPayload: Array<Record<string, unknown>> = [];
@@ -144,7 +152,7 @@ export async function syncBrandCatalogFromValeoService(input: {
   let discontinuedRows = 0;
   let weightRows = 0;
 
-  for (const item of crawl.items) {
+  for (const item of valeoItems) {
     const current = existingByCode.get(item.normalized_code) || null;
     const merged = buildMergedCatalogRow(target, current, item);
     const changed = !current || hasCatalogDelta(current, merged);
@@ -211,7 +219,7 @@ export async function syncBrandCatalogFromValeoService(input: {
   }
 
   const replacementDeduped = dedupeBy(
-    replacementPayload,
+    replacementPayload.filter((row) => normalizeTextValue(row.old_code) && normalizeTextValue(row.new_code)),
     (row) => `${String(row.brand_id)}::${normalizeCode(String(row.old_code || ""))}::${normalizeCode(String(row.new_code || ""))}`,
   );
   const processedReplacementBatches = [];
@@ -252,10 +260,10 @@ export async function syncBrandCatalogFromValeoService(input: {
     existingRows: existingRows.length,
     listingPagesProcessed: crawl.listingPagesProcessed,
     listingLastPage: 0,
-    listingUniqueRows: crawl.items.length,
-    newRowsInListing: crawl.items.filter((row) => !existingByCode.has(row.normalized_code)).length,
+    listingUniqueRows: valeoItems.length,
+    newRowsInListing: valeoItems.filter((row) => !existingByCode.has(row.normalized_code)).length,
     incompleteExistingRows: existingRows.filter((row) => shouldProcessRow(row)).length,
-    candidateRows: crawl.items.length,
+    candidateRows: valeoItems.length,
     resolvedRows: matchedRows,
     errorRows: 0,
     discontinuedRows,
@@ -464,10 +472,11 @@ function mapValeoListingProduct(product: any): ValeoListingProduct {
   const normalizedCode = normalizeCode(productCode);
   const description = normalizeCatalogDescription(normalizeTextValue(product?.description || ""));
   const additionalDescription = normalizeTextValue(product?.additionalDescription || "");
-  const oemNumbers = flattenValeoOemNumbers(product?.oemNumbers || {});
+  const oemByBrand = parseValeoOemBrandMap(product?.oemNumbers || {});
+  const oemNumbers = flattenValeoOemNumbers(oemByBrand);
   const vehicle = extractValeoVehicles({
     additionalDescription,
-    oemNumberKeys: Object.keys(product?.oemNumbers || {}),
+    oemNumberKeys: Object.keys(oemByBrand || {}),
   });
   const weightKg = extractValeoWeightKg(product?.packageInfo?.weight || []);
   const lifecycleStatus = normalizeValeoLifecycleStatus(product?.statusDescription || product?.statusCode);
@@ -475,11 +484,13 @@ function mapValeoListingProduct(product: any): ValeoListingProduct {
   return {
     product_code: productCode,
     normalized_code: normalizedCode,
+    source_normalized_code: normalizedCode,
     description,
     additional_description: additionalDescription,
     supplier_id: normalizeTextValue(product?.brandId || ""),
     reference_code: normalizeTextValue(product?.reference || product?.valeoPartNumber || ""),
     oem_no: oemNumbers,
+    oem_by_brand: oemByBrand,
     vehicle,
     weight_kg: weightKg,
     image_url: "",
@@ -508,7 +519,8 @@ async function fetchValeoProductDetail(supplierId: string, reference: string, re
 function enrichValeoListingProduct(target: ValeoListingProduct, detail: any) {
   const detailDescription = normalizeCatalogDescription(normalizeTextValue(detail?.description || ""));
   const detailAdditionalDescription = normalizeTextValue(detail?.additionalDescription || "");
-  const detailOem = flattenValeoOemNumbers(detail?.oemNumbers || {});
+  const detailOemByBrand = parseValeoOemBrandMap(detail?.oemNumbers || {});
+  const detailOem = flattenValeoOemNumbers(detailOemByBrand);
   const detailVehicle = extractValeoVehiclesFromDetail(detail);
   const detailWeightKg = extractValeoWeightKg(detail?.packageInfo?.weight || []);
   const detailLifecycleStatus = normalizeValeoLifecycleStatus(detail?.statusDescription || detail?.statusCode);
@@ -517,7 +529,10 @@ function enrichValeoListingProduct(target: ValeoListingProduct, detail: any) {
 
   if (detailDescription) target.description = detailDescription;
   if (detailAdditionalDescription) target.additional_description = detailAdditionalDescription;
-  if (detailOem) target.oem_no = detailOem;
+  if (detailOem) {
+    target.oem_no = detailOem;
+    target.oem_by_brand = detailOemByBrand;
+  }
   if (detailVehicle) target.vehicle = detailVehicle;
   if (detailWeightKg != null) target.weight_kg = detailWeightKg;
   if (detailImage) target.image_url = detailImage;
@@ -604,10 +619,62 @@ function buildMergedCatalogRow(target: SyncBrandTarget, current: CatalogRow | nu
     hs_code: current?.hs_code || "",
     origin: current?.origin || "",
     weight_kg: listing.weight_kg ?? current?.weight_kg ?? null,
-    image_url: current?.image_url || "",
+    image_url: listing.image_url || current?.image_url || "",
     lifecycle_status: listing.lifecycle_status || current?.lifecycle_status || "active",
     lifecycle_note: listing.lifecycle_note || current?.lifecycle_note || null,
   };
+}
+
+function resolveValeoBrandTargetMode(brandName: string): ValeoBrandTargetMode {
+  return normalizeCode(brandName) === "VALEO"
+    ? { kind: "native" }
+    : { kind: "cross_reference", sourceBrandLabel: brandName };
+}
+
+function materializeValeoTargetItems(
+  sourceItems: ValeoListingProduct[],
+  targetBrandName: string,
+  targetMode: ValeoBrandTargetMode,
+) {
+  if (targetMode.kind === "native") return sourceItems;
+
+  const targetBrandLabel = normalizeTextValue(targetMode.sourceBrandLabel);
+  const sourceByNormalizedCode = new Map(sourceItems.map((item) => [item.source_normalized_code, item]));
+  const derivedItems: ValeoListingProduct[] = [];
+
+  for (const item of sourceItems) {
+    const targetCodes = resolveValeoBrandCodes(item.oem_by_brand, targetBrandLabel);
+    if (!targetCodes.length) continue;
+    const replacementSource = item.replacement_code ? sourceByNormalizedCode.get(normalizeCode(item.replacement_code)) || null : null;
+    const replacementCodes = replacementSource ? resolveValeoBrandCodes(replacementSource.oem_by_brand, targetBrandLabel) : [];
+    for (const targetCode of targetCodes) {
+      const displayCode = normalizeCatalogDisplayCode(targetCode, targetBrandName);
+      derivedItems.push({
+        ...item,
+        product_code: displayCode,
+        normalized_code: normalizeCode(displayCode),
+        replacement_code: replacementCodes[0] ? normalizeCatalogDisplayCode(replacementCodes[0], targetBrandName) : null,
+        replacement_reason: replacementCodes[0]
+          ? item.replacement_reason || `Replacement derived from ${targetBrandLabel} official cross-reference.`
+          : item.replacement_reason,
+      });
+    }
+  }
+
+  return dedupeBy(
+    derivedItems.map((item) => ({
+      ...item,
+      product_code: normalizeCatalogDisplayCode(item.product_code, targetBrandName),
+      normalized_code: normalizeCode(item.product_code),
+    })),
+    (row) => row.normalized_code,
+  );
+}
+
+function resolveValeoBrandCodes(oemByBrand: Record<string, string[]>, targetBrandLabel: string) {
+  const targetKey = normalizeBrandKey(targetBrandLabel);
+  const matchedEntry = Object.entries(oemByBrand || {}).find(([brandLabel]) => normalizeBrandKey(brandLabel) === targetKey);
+  return dedupeStrings((matchedEntry?.[1] || []).map((value) => normalizeTextValue(value)).filter(Boolean));
 }
 
 function hasCatalogDelta(current: CatalogRow, next: CatalogRow) {
@@ -647,10 +714,21 @@ function parseNextData(html: string) {
   return JSON.parse(match[1]);
 }
 
-function flattenValeoOemNumbers(input: Record<string, any>) {
+function parseValeoOemBrandMap(input: Record<string, any>) {
+  const result: Record<string, string[]> = {};
+  for (const [brandLabel, list] of Object.entries(input || {})) {
+    const normalizedBrandLabel = normalizeTextValue(brandLabel);
+    const values = dedupeStrings(flattenBrandOemNumbers(list).map((value) => normalizeTextValue(value)).filter(Boolean));
+    if (!normalizedBrandLabel || !values.length) continue;
+    result[normalizedBrandLabel] = values;
+  }
+  return result;
+}
+
+function flattenValeoOemNumbers(input: Record<string, string[]>) {
   const values: string[] = [];
   for (const list of Object.values(input || {})) {
-    values.push(...flattenBrandOemNumbers(list));
+    values.push(...(Array.isArray(list) ? list : []));
   }
   return dedupeStrings(values.map((value) => normalizeTextValue(value)).filter(Boolean)).join(", ");
 }
