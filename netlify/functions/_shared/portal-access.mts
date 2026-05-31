@@ -60,6 +60,15 @@ function isPortalInviteUsable(invite: PortalInviteRow | null | undefined) {
   return true;
 }
 
+function isPortalInvitePasswordReady(invite: PortalInviteRow | null | undefined) {
+  if (!invite) return false;
+  const status = String(invite.status || "").trim().toLowerCase();
+  if (status === "disabled") return false;
+  if (hasPortalInviteExpired(invite)) return false;
+  if (!String(invite.invite_token_hash || "").trim()) return false;
+  return status === "active" || status === "invited" || status === "draft";
+}
+
 function requirePortalCustomerScope(invite: PortalInviteRow) {
   if (invite.party_type !== "customer") {
     throw new Error("Portal invite is not scoped to a customer.");
@@ -405,7 +414,7 @@ async function fetchPortalInviteByEmailPreview(supabaseUrl: string, serviceRoleK
     order: "updated_at.desc",
     limit: "10",
   });
-  return invites.find((invite) => isPortalInviteUsable(invite)) || null;
+  return invites.find((invite) => isPortalInviteUsable(invite)) || invites.find((invite) => isPortalInvitePasswordReady(invite)) || null;
 }
 
 export async function fetchPortalInviteByEmail(supabaseUrl: string, serviceRoleKey: string, email: string) {
@@ -438,12 +447,12 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
       order: "updated_at.desc",
       limit: "20",
     });
-    invite = invites.find((row) => isPortalInviteUsable(row)) || null;
+    invite = invites.find((row) => isPortalInviteUsable(row)) || invites.find((row) => isPortalInvitePasswordReady(row)) || null;
   } catch {
     invite = null;
   }
 
-  if (!isPortalInviteUsable(invite)) {
+  if (!isPortalInvitePasswordReady(invite)) {
     throw new Error("Portal invite not found or disabled");
   }
 

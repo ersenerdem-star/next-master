@@ -485,6 +485,7 @@ async function updatePortalInvitePassword(input: {
     payload: {
       invite_token_hash: tokenHash,
       invite_token: null,
+      status: "active",
       expires_at: null,
       updated_at: new Date().toISOString(),
     },

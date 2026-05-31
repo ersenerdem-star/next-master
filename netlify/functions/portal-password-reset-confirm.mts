@@ -57,7 +57,7 @@ export default async (req: Request, _context: Context) => {
     }
 
     const invite = await fetchPortalInviteByIdAndEmail(supabaseUrl, serviceRoleKey, payload.invite_id, payload.email);
-    if (!invite || invite.status === "disabled" || invite.status === "draft" || !invite.updated_at) {
+    if (!invite || invite.status === "disabled" || !invite.updated_at) {
       return json({ error: "Reset link is invalid or expired." }, 401);
     }
     if (String(invite.updated_at || "") !== String(payload.updated_at || "")) {
