@@ -1199,6 +1199,7 @@ export function CatalogPage() {
           <div className="workbench-main-layout">
             <div className="workbench-main-layout__table">
               <DataTable
+                className="data-table--catalog"
                 rows={rows}
                 columns={columns}
                 emptyText={loading ? "Loading..." : !submittedSearch.trim() && !submittedCatalogBrand ? "Select a brand or search to load catalog." : "No products found"}
