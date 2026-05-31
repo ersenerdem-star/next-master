@@ -47,6 +47,13 @@ const limitArg = args.get("limit");
 const rowLimit = limitArg == null ? null : Math.max(1, Number.parseInt(limitArg, 10) || 0);
 const prefixLimitArg = args.get("prefix-limit");
 const prefixLimit = prefixLimitArg == null ? null : Math.max(1, Number.parseInt(prefixLimitArg, 10) || 0);
+const existingPrefixesArg = String(args.get("existing-prefixes") || "").trim();
+const existingPrefixes = dedupeStrings(
+  existingPrefixesArg
+    .split(",")
+    .map((value) => normalizeCode(value))
+    .filter(Boolean),
+);
 
 const headers = {
   apikey: serviceRoleKey,
@@ -172,7 +179,8 @@ async function main() {
   const brandSummaries = [];
 
   for (const target of targets) {
-    const existingRows = await fetchCatalogRows(target);
+    const allExistingRows = await fetchCatalogRows(target);
+    const existingRows = filterRowsByPrefixes(allExistingRows, existingPrefixes);
     const existingByCode = new Map(existingRows.map((row) => [row.normalized_code, row]));
     const allSeedPrefixes = discoverMissing ? buildSeedPrefixes(existingRows) : [];
     const seedPrefixes = prefixLimit == null ? allSeedPrefixes : allSeedPrefixes.slice(0, prefixLimit);
@@ -186,7 +194,17 @@ async function main() {
 
     const workMap = new Map();
     for (const row of existingRows) {
-      if (missingOnly) continue;
+      if (missingOnly) {
+        if (shouldProcessRow(row)) {
+          workMap.set(row.normalized_code, {
+            target,
+            existing: row,
+            searchItem: discoveredSearchMap.get(row.normalized_code) || null,
+            source: "existing",
+          });
+        }
+        continue;
+      }
       if (refreshExisting || shouldProcessRow(row)) {
         workMap.set(row.normalized_code, {
           target,
@@ -367,7 +385,9 @@ async function main() {
     brandSummaries.push({
       brand_name: target.internalName,
       brand_id: target.brand_id,
+      total_existing_rows: allExistingRows.length,
       existing_rows: existingRows.length,
+      prefix_filter_count: existingPrefixes.length,
       prefix_count: seedPrefixes.length,
       total_prefix_count: allSeedPrefixes.length,
       discovered_search_rows: discoveredSearchMap.size,
@@ -603,6 +623,11 @@ function buildSeedPrefixes(rows) {
       .filter((value) => String(value || "").length >= 3)
       .map((value) => String(value).slice(0, 3)),
   );
+}
+
+function filterRowsByPrefixes(rows, prefixes) {
+  if (!Array.isArray(prefixes) || prefixes.length === 0) return rows;
+  return rows.filter((row) => prefixes.some((prefix) => String(row.normalized_code || "").startsWith(prefix)));
 }
 
 async function crawlOfficialPrefixes({ target, prefixes, errors }) {
