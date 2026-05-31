@@ -31,7 +31,16 @@ export default async (req: Request, _context: Context) => {
       email,
       sessionToken,
     });
-    const branding = await buildPortalBranding(supabaseUrl, serviceRoleKey, invite);
+    let branding;
+    try {
+      branding = await buildPortalBranding(supabaseUrl, serviceRoleKey, invite);
+    } catch {
+      branding = {
+        companyProfile: null,
+        portalLabel: invite.party_type === "customer" ? "Customer Portal" : "Vendor Portal",
+        partyName: String(invite.party_name || invite.email || ""),
+      };
+    }
     return json({ ok: true, branding, sessionToken: nextSessionToken });
   } catch (error) {
     return json({ error: sanitizeUserFacingError(error, "Portal branding load failed") }, 401);

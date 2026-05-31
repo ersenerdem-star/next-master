@@ -108,6 +108,11 @@ async function fetchPortalCustomerRecord(
       select,
       organization_id: `eq.${organizationId}`,
       company_name: `eq.${invite.party_name}`,
+    })) ||
+    (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
+      select,
+      organization_id: `eq.${organizationId}`,
+      email: `eq.${String(invite.email || "").trim().toLowerCase()}`,
     }));
 
   try {
@@ -897,21 +902,36 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
 
 export async function buildPortalBranding(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {
   if (invite.party_type === "customer") {
-    const customer = await fetchPortalCustomerRecord(supabaseUrl, serviceRoleKey, invite.organization_id, invite);
+    let customer: Record<string, unknown> | null = null;
+    try {
+      customer = await fetchPortalCustomerRecord(supabaseUrl, serviceRoleKey, invite.organization_id, invite);
+    } catch {
+      customer = null;
+    }
     const { sellerCompanyProfileId } = readCustomerPortalMetadata(customer);
-    const companyProfile = await fetchPortalCompanyProfile(supabaseUrl, serviceRoleKey, invite.organization_id, sellerCompanyProfileId);
+    let companyProfile: Record<string, unknown> | null = null;
+    try {
+      companyProfile = await fetchPortalCompanyProfile(supabaseUrl, serviceRoleKey, invite.organization_id, sellerCompanyProfileId);
+    } catch {
+      companyProfile = null;
+    }
     return {
       companyProfile,
       portalLabel: "Customer Portal",
-      partyName: String(customer?.display_name || customer?.company_name || invite.party_name || ""),
+      partyName: String(customer?.display_name || customer?.company_name || invite.party_name || invite.email || ""),
     };
   }
 
-  const companyProfile = await fetchPortalCompanyProfile(supabaseUrl, serviceRoleKey, invite.organization_id);
+  let companyProfile: Record<string, unknown> | null = null;
+  try {
+    companyProfile = await fetchPortalCompanyProfile(supabaseUrl, serviceRoleKey, invite.organization_id);
+  } catch {
+    companyProfile = null;
+  }
   return {
     companyProfile,
     portalLabel: "Vendor Portal",
-    partyName: String(invite.party_name || ""),
+    partyName: String(invite.party_name || invite.email || ""),
   };
 }
 
