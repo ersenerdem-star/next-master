@@ -230,6 +230,38 @@ const VEHICLE_MAKER_PATTERNS = [
   { label: "Chevrolet", pattern: /\bCHEVROLET\b/i },
 ];
 
+function portalAllowedBrandIds(invite: PortalInviteRow) {
+  return [...new Set((Array.isArray(invite.allowed_brand_ids) ? invite.allowed_brand_ids : []).map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function applyPortalBrandScope(params: Record<string, string>, invite: PortalInviteRow, selectedBrandId = "") {
+  const allowedBrandIds = portalAllowedBrandIds(invite);
+  const allowedSet = new Set(allowedBrandIds);
+  if (selectedBrandId) {
+    if (allowedSet.size && !allowedSet.has(selectedBrandId)) {
+      throw new Error("Brand is outside this portal scope.");
+    }
+    params.brand_id = `eq.${selectedBrandId}`;
+    return { allowedBrandIds, allowedSet };
+  }
+  if (allowedSet.size) {
+    params.brand_id = `in.(${allowedBrandIds.join(",")})`;
+  }
+  return { allowedBrandIds, allowedSet };
+}
+
+function assertPortalRowsWithinBrandScope(invite: PortalInviteRow, brandMap: { byId: Map<string, string>; byName: Map<string, string> }, rows: PortalOrderInputRow[]) {
+  const allowedBrandIds = portalAllowedBrandIds(invite);
+  if (!allowedBrandIds.length) return;
+  const allowedSet = new Set(allowedBrandIds);
+  for (const row of rows) {
+    const brandId = brandMap.byName.get(String(row.brand || "").trim().toLowerCase()) || "";
+    if (!brandId || !allowedSet.has(brandId)) {
+      throw new Error(`Brand is outside this portal scope: ${String(row.brand || "").trim() || "Unknown"}`);
+    }
+  }
+}
+
 function normalizePartCode(value: string) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -809,6 +841,7 @@ async function fetchPortalCatalogRecommendations(
   const candidateRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
     select: "product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
     organization_id: `eq.${invite.organization_id}`,
+    ...(portalAllowedBrandIds(invite).length ? { brand_id: `in.(${portalAllowedBrandIds(invite).join(",")})` } : {}),
     or: `(${anchorDescriptionTokens.slice(0, 3).map((token) => `description.ilike.*${token}*`).join(",")})`,
     order: "product_code.asc",
     limit: "120",
@@ -1115,7 +1148,7 @@ export async function searchPortalCatalog(
     limit: "24",
   };
 
-  if (selectedBrandId) params.brand_id = `eq.${selectedBrandId}`;
+  const { allowedBrandIds } = applyPortalBrandScope(params, invite, selectedBrandId);
   if (search) {
     params.or = buildPortalCatalogSearchOr(search, normalizedSearch, "strict");
   }
@@ -1136,7 +1169,11 @@ export async function searchPortalCatalog(
       organization_id: `eq.${invite.organization_id}`,
       is_active: "eq.true",
       normalized_old_code: `eq.${normalizedSearch}`,
-      ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+      ...(selectedBrandId
+        ? { brand_id: `eq.${selectedBrandId}` }
+        : allowedBrandIds.length
+          ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
+          : {}),
       limit: "200",
     }).catch(() => []);
 
@@ -1182,7 +1219,11 @@ export async function searchPortalCatalog(
       const familyRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
         select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
         organization_id: `eq.${invite.organization_id}`,
-        ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+        ...(selectedBrandId
+          ? { brand_id: `eq.${selectedBrandId}` }
+          : allowedBrandIds.length
+            ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
+            : {}),
         or: `(${[
           `normalized_oem.like.*${familyCore}*`,
           `normalized_code.like.*${familyCore}*`,
@@ -1205,7 +1246,11 @@ export async function searchPortalCatalog(
       const tokenRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
         select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
         organization_id: `eq.${invite.organization_id}`,
-        ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+        ...(selectedBrandId
+          ? { brand_id: `eq.${selectedBrandId}` }
+          : allowedBrandIds.length
+            ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
+            : {}),
         or: `(${familyClauses.join(",")})`,
         order: "product_code.asc",
         limit: "220",
@@ -1224,7 +1269,11 @@ export async function searchPortalCatalog(
             fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
               select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
               organization_id: `eq.${invite.organization_id}`,
-              ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+              ...(selectedBrandId
+                ? { brand_id: `eq.${selectedBrandId}` }
+                : allowedBrandIds.length
+                  ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
+                  : {}),
               normalized_oem: `like.*${variant}*`,
               order: "product_code.asc",
               limit: "120",
@@ -1245,7 +1294,11 @@ export async function searchPortalCatalog(
       const exactOemRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
         select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
         organization_id: `eq.${invite.organization_id}`,
-        ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+        ...(selectedBrandId
+          ? { brand_id: `eq.${selectedBrandId}` }
+          : allowedBrandIds.length
+            ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
+            : {}),
         oem_no: `ilike.*${normalizedOriginalSearch}*`,
         order: "product_code.asc",
         limit: "180",
@@ -1266,7 +1319,11 @@ export async function searchPortalCatalog(
     const normalizedRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
       select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
       organization_id: `eq.${invite.organization_id}`,
-      ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+      ...(selectedBrandId
+        ? { brand_id: `eq.${selectedBrandId}` }
+        : allowedBrandIds.length
+          ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
+          : {}),
       normalized_oem: `like.*${normalizedOriginalSearch}*`,
       order: "product_code.asc",
       limit: "100",
@@ -1586,6 +1643,10 @@ export async function buildPortalPriceListRows(
   const brandName = brandMap.byId.get(brandId) || "";
   if (!brandId || !brandName) {
     throw new Error("Brand not found for portal price list");
+  }
+  const allowedBrandIds = portalAllowedBrandIds(invite);
+  if (allowedBrandIds.length && !allowedBrandIds.includes(brandId)) {
+    throw new Error("Brand is outside this portal scope.");
   }
 
   const cacheKey = [
@@ -1939,6 +2000,8 @@ export async function preparePortalOrderLines(
   rows: PortalOrderInputRow[],
 ) {
   const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
+  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
+  assertPortalRowsWithinBrandScope(invite, brandMap, rows);
   const mergedRows = mergeInputRows(rows);
   const prepared: PreparedPortalLine[] = [];
 

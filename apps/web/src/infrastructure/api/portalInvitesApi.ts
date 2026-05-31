@@ -4,6 +4,9 @@ import { callAppAdminRecords } from "./appAdminRecordsApi";
 import { getCurrentOrgId, isUuid } from "./organizationApi";
 
 function mapPortalInviteRow(row: Record<string, unknown>): PortalInvite {
+  const allowedBrandIds = Array.isArray(row.allowed_brand_ids)
+    ? row.allowed_brand_ids.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
   return {
     id: String(row.id || ""),
     party_type: String(row.party_type || "customer") as PortalInvite["party_type"],
@@ -19,6 +22,7 @@ function mapPortalInviteRow(row: Record<string, unknown>): PortalInvite {
     created_at: String(row.created_at || ""),
     updated_at: String(row.updated_at || ""),
     has_password: Boolean(row.has_password ?? row.invite_token_hash),
+    allowed_brand_ids: allowedBrandIds,
     access: {
       can_view_account: Boolean(row.access_can_view_account),
       can_view_invoices: Boolean(row.access_can_view_invoices),
@@ -44,6 +48,7 @@ function mapPortalInvitePayload(input: PortalInvite, organizationId: string) {
     access_can_view_invoices: input.access.can_view_invoices,
     access_can_view_payments: input.access.can_view_payments,
     access_can_view_orders: input.access.can_view_orders,
+    allowed_brand_ids: [...new Set((input.allowed_brand_ids || []).map((value) => String(value || "").trim()).filter(Boolean))],
     created_at: input.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };

@@ -20,11 +20,12 @@ export type PortalInviteRow = {
   access_can_view_invoices: boolean;
   access_can_view_payments: boolean;
   access_can_view_orders: boolean;
+  allowed_brand_ids?: string[] | null;
   updated_at: string | null;
 };
 
 const PORTAL_INVITE_SELECT =
-  "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders,updated_at";
+  "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders,allowed_brand_ids,updated_at";
 
 const CUSTOMER_PORTAL_SELECT =
   "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,custom_fields,seller_company_profile_id,price_list_type,portal_c_price_mode";
@@ -68,6 +69,10 @@ function requirePortalCustomerScope(invite: PortalInviteRow) {
     throw new Error("Portal invite is missing its customer scope.");
   }
   return customerId;
+}
+
+function portalAllowedBrandIds(invite: PortalInviteRow) {
+  return [...new Set((Array.isArray(invite.allowed_brand_ids) ? invite.allowed_brand_ids : []).map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
 async function fetchFirst<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
@@ -258,26 +263,40 @@ async function fetchPortalAvailableBrands(
   serviceRoleKey: string,
   organizationId: string,
   enabled: boolean,
+  allowedBrandIds: string[] = [],
 ) {
   if (!enabled) return [];
+  const allowedSet = new Set(allowedBrandIds.filter(Boolean));
+  const directParams: Record<string, string> = {
+    select: "name",
+    organization_id: `eq.${organizationId}`,
+    order: "name.asc",
+  };
+  if (allowedSet.size) {
+    directParams.id = `in.(${[...allowedSet].join(",")})`;
+  }
   const direct = normalizeBrandNameList(
     (
       await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "brands", {
-        select: "name",
-        organization_id: `eq.${organizationId}`,
-        order: "name.asc",
+        ...directParams,
       })
     ).map((row) => String(row.name || "")),
   );
   if (direct.length) return direct;
 
+  const fallbackParams: Record<string, string> = {
+    select: "brand_id,brands(name)",
+    organization_id: `eq.${organizationId}`,
+    order: "brand_id.asc",
+    limit: "5000",
+  };
+  if (allowedSet.size) {
+    fallbackParams.brand_id = `in.(${[...allowedSet].join(",")})`;
+  }
   const fallback = normalizeBrandNameList(
     (
       await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
-        select: "brand_id,brands(name)",
-        organization_id: `eq.${organizationId}`,
-        order: "brand_id.asc",
-        limit: "5000",
+        ...fallbackParams,
       })
     ).map((row) => extractRelatedBrandName(row)),
   );
@@ -600,6 +619,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       serviceRoleKey,
       invite.organization_id,
       invite.access_can_view_orders,
+      portalAllowedBrandIds(invite),
     );
 
     const accountRows = [
@@ -883,6 +903,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       serviceRoleKey,
       invite.organization_id,
       invite.access_can_view_orders,
+      portalAllowedBrandIds(invite),
     ),
     salesOrders: [],
     invoices: [],
@@ -999,6 +1020,7 @@ export async function buildPortalFallbackSnapshot(supabaseUrl: string, serviceRo
       serviceRoleKey,
       invite.organization_id,
       invite.access_can_view_orders,
+      portalAllowedBrandIds(invite),
     ),
     salesOrders: [],
     purchaseOrders: [],

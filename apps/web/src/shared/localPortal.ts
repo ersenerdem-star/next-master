@@ -49,6 +49,7 @@ export function createEmptyPortalInvite(): PortalInvite {
     created_at: nowIso(),
     updated_at: nowIso(),
     has_password: false,
+    allowed_brand_ids: [],
     access: {
       can_view_account: true,
       can_view_invoices: true,

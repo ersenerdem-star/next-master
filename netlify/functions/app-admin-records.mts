@@ -122,6 +122,7 @@ const PORTAL_INVITE_COLUMNS = [
   "access_can_view_invoices",
   "access_can_view_payments",
   "access_can_view_orders",
+  "allowed_brand_ids",
   "created_at",
   "updated_at",
 ].join(",");
@@ -261,6 +262,35 @@ async function sanitizeCustomerPayload(input: {
   return next;
 }
 
+async function sanitizePortalInvitePayload(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+  payload: Record<string, unknown>;
+}) {
+  const next = { ...input.payload };
+  const rawBrandIds = Array.isArray(next.allowed_brand_ids)
+    ? next.allowed_brand_ids.map((value) => String(value || "").trim()).filter((value) => isUuid(value))
+    : [];
+  if (!rawBrandIds.length) {
+    next.allowed_brand_ids = [];
+    return next;
+  }
+  const rows = await getJson<Array<Record<string, unknown>>>(
+    buildRestUrl(input.supabaseUrl, "brands", {
+      select: "id",
+      organization_id: `eq.${input.organizationId}`,
+      id: `in.(${[...new Set(rawBrandIds)].join(",")})`,
+    }),
+    {
+      headers: serviceRoleHeaders(input.serviceRoleKey),
+    },
+  ).catch(() => []);
+  const allowedSet = new Set(rows.map((row) => String(row.id || "").trim()).filter(Boolean));
+  next.allowed_brand_ids = [...new Set(rawBrandIds.filter((value) => allowedSet.has(value)))];
+  return next;
+}
+
 async function listRows<T>(input: {
   supabaseUrl: string;
   serviceRoleKey: string;
@@ -386,6 +416,9 @@ function decoratePortalInviteRow(row: Record<string, unknown> | null) {
   if (!row) return null;
   const next = { ...row } as Record<string, unknown>;
   next.has_password = Boolean(next.invite_token_hash);
+  next.allowed_brand_ids = Array.isArray(next.allowed_brand_ids)
+    ? next.allowed_brand_ids.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
   delete next.invite_token_hash;
   delete next.invite_token;
   return next;
@@ -640,6 +673,12 @@ async function upsertPortalInvite(input: {
   payload: Record<string, unknown>;
   id: string;
 }) {
+  const nextPayload = await sanitizePortalInvitePayload({
+    supabaseUrl: input.supabaseUrl,
+    serviceRoleKey: input.serviceRoleKey,
+    organizationId: input.organizationId,
+    payload: input.payload,
+  });
   if (input.id) {
     try {
       const rows = await updateSingleRow<Record<string, unknown>>({
@@ -649,14 +688,15 @@ async function upsertPortalInvite(input: {
         select: PORTAL_INVITE_COLUMNS,
         organizationId: input.organizationId,
         id: input.id,
-        payload: input.payload,
+        payload: nextPayload,
       });
       return decoratePortalInviteRow(rows[0] || null);
     } catch (primaryError) {
-      const legacyPayload = { ...input.payload };
+      const legacyPayload = { ...nextPayload };
       delete legacyPayload.customer_id;
       delete legacyPayload.vendor_id;
       delete legacyPayload.expires_at;
+      delete legacyPayload.allowed_brand_ids;
       const rows = await updateSingleRow<Record<string, unknown>>({
         supabaseUrl: input.supabaseUrl,
         serviceRoleKey: input.serviceRoleKey,
@@ -678,14 +718,15 @@ async function upsertPortalInvite(input: {
       serviceRoleKey: input.serviceRoleKey,
       table: "portal_invites",
       select: PORTAL_INVITE_COLUMNS,
-      payload: input.payload,
+      payload: nextPayload,
     });
     return decoratePortalInviteRow(rows[0] || null);
   } catch (primaryError) {
-    const legacyPayload = { ...input.payload };
+    const legacyPayload = { ...nextPayload };
     delete legacyPayload.customer_id;
     delete legacyPayload.vendor_id;
     delete legacyPayload.expires_at;
+    delete legacyPayload.allowed_brand_ids;
     const rows = await insertSingleRow<Record<string, unknown>>({
       supabaseUrl: input.supabaseUrl,
       serviceRoleKey: input.serviceRoleKey,

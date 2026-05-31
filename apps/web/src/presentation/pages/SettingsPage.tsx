@@ -22,6 +22,8 @@ import {
   setPortalInviteStatus,
   upsertPortalInvite,
 } from "../../infrastructure/api/portalInvitesApi";
+import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
+import type { BrandOption } from "../../types/brand";
 import { fetchAppSession } from "../../infrastructure/api/appSessionApi";
 import { fetchOrgUsers, getPresenceStatus } from "../../infrastructure/api/usersApi";
 import { fetchVendors } from "../../infrastructure/api/vendorsApi";
@@ -100,6 +102,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const [emailTemplateStatus, setEmailTemplateStatus] = useState("");
   const [customers, setCustomers] = useState<LocalCustomer[]>([]);
   const [vendors, setVendors] = useState<LocalVendor[]>([]);
+  const [brandOptions, setBrandOptions] = useState<BrandOption[]>([]);
   const [loggingOut, setLoggingOut] = useState(false);
   const [savingCompanyProfile, setSavingCompanyProfile] = useState(false);
   const [passwordBusyUserId, setPasswordBusyUserId] = useState("");
@@ -136,11 +139,12 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
 
     async function run() {
       try {
-        const [companyRows, portalRows, customerRows, vendorRows, templateRows, outboundRows] = await Promise.all([
+        const [companyRows, portalRows, customerRows, vendorRows, brandRows, templateRows, outboundRows] = await Promise.all([
           fetchCompanyProfiles(),
           fetchPortalInvites(),
           fetchCustomers(),
           fetchVendors(),
+          fetchCloudBrands(),
           fetchEmailTemplates(),
           fetchOutboundEmails(),
         ]);
@@ -149,6 +153,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
         setPortalInvites(portalRows);
         setCustomers(customerRows);
         setVendors(vendorRows);
+        setBrandOptions(brandRows);
         setEmailTemplates(templateRows);
         setOutboundEmails(outboundRows);
         if (templateRows[0]) {
@@ -452,6 +457,18 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     }));
   }
 
+  function togglePortalAllowedBrand(brandId: string, checked: boolean) {
+    setPortalDraft((current) => {
+      const nextSet = new Set((current.allowed_brand_ids || []).map((value) => String(value || "").trim()).filter(Boolean));
+      if (checked) nextSet.add(brandId);
+      else nextSet.delete(brandId);
+      return {
+        ...current,
+        allowed_brand_ids: [...nextSet],
+      };
+    });
+  }
+
   function updateEmailTemplateField<K extends keyof EmailTemplate>(key: K, value: EmailTemplate[K]) {
     setEmailTemplateDraft((current) => (current ? { ...current, [key]: value } : current));
   }
@@ -560,6 +577,14 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const portalColumns = [
     { key: "type", header: "Type", render: (row: PortalInvite) => row.party_type },
     { key: "party", header: "Party", render: (row: PortalInvite) => row.party_name || "-" },
+    {
+      key: "brandScope",
+      header: "Brand Scope",
+      render: (row: PortalInvite) =>
+        row.allowed_brand_ids.length
+          ? `${row.allowed_brand_ids.length} selected`
+          : "All Brands",
+    },
     { key: "email", header: "Email", render: (row: PortalInvite) => row.email || "-" },
     { key: "contact", header: "Contact", render: (row: PortalInvite) => row.contact_name || "-" },
     { key: "status", header: "Status", render: (row: PortalInvite) => row.status },
@@ -1174,6 +1199,30 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
             <input type="checkbox" checked={portalDraft.access.can_view_orders} onChange={(event) => updatePortalAccess("can_view_orders", event.target.checked)} />
             <span className="field__label">View orders</span>
           </label>
+        </div>
+        <div className="field">
+          <span className="field__label">Brand Scope</span>
+          <div className="meta-row">
+            <span>{portalDraft.allowed_brand_ids.length ? `${portalDraft.allowed_brand_ids.length} brand selected` : "All Brands"}</span>
+            <Button variant="secondary" className="button--compact" onClick={() => updatePortalField("allowed_brand_ids", [])}>
+              Clear Scope
+            </Button>
+          </div>
+          <div className="settings-grid">
+            {brandOptions.map((brand) => (
+              <label key={brand.id} className="field checkbox-field">
+                <input
+                  type="checkbox"
+                  checked={portalDraft.allowed_brand_ids.includes(brand.id)}
+                  onChange={(event) => togglePortalAllowedBrand(brand.id, event.target.checked)}
+                />
+                <span className="field__label">{brand.name}</span>
+              </label>
+            ))}
+          </div>
+          <span className="field__help">
+            Empty scope means all brands. If you select brands here, portal search, price list, and order flow only use those brands.
+          </span>
         </div>
         <div className="toolbar toolbar--wrap">
           <Button
