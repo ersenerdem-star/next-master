@@ -1,0 +1,116 @@
+{
+  "total_rows_scanned": 102452,
+  "total_rows_changed": 28634,
+  "oem_changed_rows": 28629,
+  "lifecycle_changed_rows": 5,
+  "brands": [
+    {
+      "brand": "Bosch",
+      "rows_changed": 3857,
+      "oem_changed": 3857,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "SKF",
+      "rows_changed": 3366,
+      "oem_changed": 3366,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "TRW",
+      "rows_changed": 2528,
+      "oem_changed": 2528,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "ATE",
+      "rows_changed": 2386,
+      "oem_changed": 2386,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "Lemforder",
+      "rows_changed": 2355,
+      "oem_changed": 2355,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "Valeo",
+      "rows_changed": 2311,
+      "oem_changed": 2311,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "Mann",
+      "rows_changed": 1847,
+      "oem_changed": 1847,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "Nissens",
+      "rows_changed": 1826,
+      "oem_changed": 1826,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "Sachs",
+      "rows_changed": 1745,
+      "oem_changed": 1745,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "NRF",
+      "rows_changed": 1345,
+      "oem_changed": 1345,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "FAG",
+      "rows_changed": 1289,
+      "oem_changed": 1289,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "WABCO",
+      "rows_changed": 1195,
+      "oem_changed": 1195,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "INA",
+      "rows_changed": 1073,
+      "oem_changed": 1073,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "Hepu",
+      "rows_changed": 839,
+      "oem_changed": 839,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "Knorr-Bremse",
+      "rows_changed": 423,
+      "oem_changed": 423,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "Donaldson",
+      "rows_changed": 243,
+      "oem_changed": 243,
+      "lifecycle_changed": 0
+    },
+    {
+      "brand": "ZF",
+      "rows_changed": 5,
+      "oem_changed": 0,
+      "lifecycle_changed": 5
+    },
+    {
+      "brand": "FTE",
+      "rows_changed": 1,
+      "oem_changed": 1,
+      "lifecycle_changed": 0
+    }
+  ]
+}

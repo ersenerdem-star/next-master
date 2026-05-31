@@ -768,7 +768,7 @@ function mergeCatalogRow({ target, existing, official, discontinuedMap, newProdu
     organization_id: target.organization_id,
     brand_id: target.brand_id,
     product_code: normalizeCatalogDisplayCode(existing.product_code, target.name),
-    oem_no: official.oem_no || existing.oem_no || "",
+    oem_no: sanitizeCatalogOemNumbers(official.oem_no || existing.oem_no || ""),
     vehicle: official.vehicle || existing.vehicle || "",
     hs_code: official.hs_code || existing.hs_code || "",
     weight_kg: official.weight_kg ?? existing.weight_kg ?? null,
@@ -1202,7 +1202,31 @@ function buildSearchVariants(productCode) {
 function normalizeLifecycleStatus(value) {
   const text = String(value || "").trim().toLowerCase();
   if (!text) return "active";
-  return /discontinued|obsolete|replaced|production stopped/.test(text) ? "discontinued" : "active";
+  return /discontinued|obsolete|replaced|replacement only|superceded|superseded|production ended|production end|production stopped|not in production|no longer deliverable|no longer available|not supplied|end of life|article ended|ended/.test(text)
+    ? "discontinued"
+    : "active";
+}
+
+function sanitizeCatalogOemNumbers(value) {
+  const raw = String(value || "").replace(/\r/g, "\n").trim();
+  if (!raw) return "";
+  const parts = raw
+    .split(/[,;\n|]+/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const values = new Set();
+  for (const part of parts.length ? parts : [raw]) {
+    const digitGroups = part.match(/\d+/g) || [];
+    if (!digitGroups.length) continue;
+    const longGroups = digitGroups.filter((group) => group.length >= 4);
+    if (longGroups.length >= 2) {
+      for (const group of longGroups) values.add(group);
+      continue;
+    }
+    const compact = digitGroups.join("");
+    if (compact.length >= 4) values.add(compact);
+  }
+  return [...values].join(", ");
 }
 
 function parseWeight(value) {

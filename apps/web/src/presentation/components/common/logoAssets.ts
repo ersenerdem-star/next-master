@@ -18,9 +18,14 @@ const LOGO_PRESETS: LogoPreset[] = [
   { match: /\bate\b/i, label: "ATE", wordmark: "ATE", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#93c5fd" },
   { match: /donaldson/i, label: "Donaldson", wordmark: "DONALDSON", bgFrom: "#fef2f2", bgTo: "#ffffff", fg: "#c81e1e", stroke: "#fca5a5" },
   { match: /wabco/i, label: "WABCO", wordmark: "WABCO", bgFrom: "#ecfeff", bgTo: "#ffffff", fg: "#0f766e", stroke: "#67e8f9" },
+  { match: /\bzf\b/i, label: "ZF", wordmark: "ZF", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#93c5fd" },
+  { match: /lemforder/i, label: "Lemforder", wordmark: "LEMFORDER", bgFrom: "#eef2ff", bgTo: "#ffffff", fg: "#4338ca", stroke: "#a5b4fc" },
   { match: /sachs/i, label: "Sachs", wordmark: "SACHS", bgFrom: "#f5f3ff", bgTo: "#ffffff", fg: "#6d28d9", stroke: "#c4b5fd" },
+  { match: /boge/i, label: "Boge", wordmark: "BOGE", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#0f172a", stroke: "#cbd5e1" },
   { match: /mann/i, label: "MANN", wordmark: "MANN", bgFrom: "#fefce8", bgTo: "#ffffff", fg: "#a16207", stroke: "#fde047" },
   { match: /febi/i, label: "febi", wordmark: "FEBI", bgFrom: "#fef2f2", bgTo: "#ffffff", fg: "#b91c1c", stroke: "#fca5a5" },
+  { match: /\bfte\b/i, label: "FTE", wordmark: "FTE", bgFrom: "#eef2ff", bgTo: "#ffffff", fg: "#1e3a8a", stroke: "#93c5fd" },
+  { match: /\bswf\b/i, label: "SWF", wordmark: "SWF", bgFrom: "#fff7ed", bgTo: "#ffffff", fg: "#c2410c", stroke: "#fdba74" },
   { match: /\btrw\b/i, label: "TRW", wordmark: "TRW", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1e40af", stroke: "#93c5fd" },
   { match: /hella/i, label: "Hella", wordmark: "HELLA", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#bfdbfe" },
   { match: /hepu/i, label: "HEPU", wordmark: "HEPU", bgFrom: "#f0fdf4", bgTo: "#ffffff", fg: "#15803d", stroke: "#86efac" },
@@ -43,6 +48,7 @@ function encodeSvg(svg: string) {
 }
 
 function buildSvgPreset(preset: LogoPreset) {
+  const fontSize = preset.wordmark.length > 8 ? "16" : preset.wordmark.length > 5 ? "22" : "28";
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="${preset.label}">
       <defs>
@@ -53,7 +59,7 @@ function buildSvgPreset(preset: LogoPreset) {
       </defs>
       <rect x="4" y="4" width="112" height="112" rx="26" fill="url(#g)" stroke="${preset.stroke || "#dbe3f0"}" stroke-width="4"/>
       <rect x="16" y="16" width="88" height="88" rx="20" fill="rgba(255,255,255,0.82)" />
-      <text x="60" y="67" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${preset.wordmark.length > 5 ? "22" : "28"}" font-weight="800" letter-spacing="1.5" fill="${preset.fg}">
+      <text x="60" y="67" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="800" letter-spacing="1.5" fill="${preset.fg}">
         ${preset.wordmark}
       </text>
     </svg>

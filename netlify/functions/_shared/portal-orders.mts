@@ -1,5 +1,6 @@
 import { buildRestUrl, getJson, sendJson, serviceRoleHeaders } from "./http.mts";
 import { buildPortalSnapshot } from "./portal-access.mts";
+import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./catalog-standardization.mts";
 
 type PortalInviteRow = {
   id: string;
@@ -309,7 +310,7 @@ function scoreCatalogRowCompleteness(row: Record<string, unknown>) {
   if (String(row.hs_code || "").trim()) score += 1;
   if (String(row.origin || "").trim()) score += 1;
   if (row.weight_kg != null && String(row.weight_kg).trim() !== "") score += 1;
-  if (normalizeLifecycleStatus(row.lifecycle_status) !== "discontinued") score += 1;
+  if (normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`) !== "discontinued") score += 1;
   return score;
 }
 
@@ -548,10 +549,6 @@ function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mo
   return `(${[...clauses].join(",")})`;
 }
 
-function normalizeLifecycleStatus(value: unknown): "active" | "discontinued" {
-  return String(value || "").trim().toLowerCase() === "discontinued" ? "discontinued" : "active";
-}
-
 function buildDiscontinuedWarning(resolvedCode: string, note?: string | null) {
   const code = String(resolvedCode || "").trim();
   const base = code ? `Production ended for ${code}.` : "Production ended for this item.";
@@ -603,13 +600,13 @@ function mapCatalogRowsToBaseItems(
       brand_id: String(row.brand_id || ""),
       normalized_code: String(row.normalized_code || normalizePartCode(String(row.product_code || ""))),
       description: String(row.description || ""),
-      oem_no: String(row.oem_no || ""),
+      oem_no: sanitizeCatalogOemNumbers(row.oem_no),
       vehicle: String(row.vehicle || ""),
       tariff: String(row.hs_code || ""),
       origin: String(row.origin || ""),
       weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
       image_url: String(row.image_url || ""),
-      lifecycle_status: normalizeLifecycleStatus(row.lifecycle_status),
+      lifecycle_status: normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`),
       lifecycle_note: String(row.lifecycle_note || "").trim() || null,
       replacement:
         replacementRowsByKey.get(
@@ -1412,11 +1409,11 @@ async function fetchPortalCatalogBrandRows(
       ...page.map((row) => ({
         product_code: String(row.product_code || ""),
         description: row.description == null ? null : String(row.description),
-        oem_no: row.oem_no == null ? null : String(row.oem_no),
+        oem_no: row.oem_no == null ? null : sanitizeCatalogOemNumbers(row.oem_no),
         hs_code: row.hs_code == null ? null : String(row.hs_code),
         origin: row.origin == null ? null : String(row.origin),
         weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
-        lifecycle_status: normalizeLifecycleStatus(row.lifecycle_status),
+        lifecycle_status: normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`),
         lifecycle_note: String(row.lifecycle_note || "").trim() || null,
       })),
     );
@@ -1856,7 +1853,7 @@ async function resolvePreparedLine(
     context.customerType === "C"
       ? null
       : fallbackSupplier?.sell_price ?? computeSellFromBuy(buyPrice, context);
-  const lifecycleStatus = normalizeLifecycleStatus(catalogMatch?.lifecycle_status);
+  const lifecycleStatus = normalizeLifecycleStatus(`${String(catalogMatch?.lifecycle_status || "")} ${String(catalogMatch?.lifecycle_note || "")}`);
   const lifecycleNote = String(catalogMatch?.lifecycle_note || "").trim() || null;
 
   return {
@@ -1866,7 +1863,7 @@ async function resolvePreparedLine(
     brand: row.brand || "",
     description: String(catalogMatch?.description || ""),
     qty: row.qty,
-    oem_no: String(catalogMatch?.oem_no || ""),
+    oem_no: sanitizeCatalogOemNumbers(catalogMatch?.oem_no),
     hs_code: String(catalogMatch?.hs_code || ""),
     origin: String(catalogMatch?.origin || ""),
     weight_kg: catalogMatch?.weight_kg == null ? null : Number(catalogMatch.weight_kg),

@@ -1,7 +1,16 @@
 export type CatalogLifecycleStatus = "active" | "discontinued";
 
 export function normalizeCatalogLifecycleStatus(value: string | null | undefined): CatalogLifecycleStatus {
-  return String(value || "").trim().toLowerCase() === "discontinued" ? "discontinued" : "active";
+  const text = String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  if (!text) return "active";
+  return /discontinued|obsolete|replaced|replacement only|superceded|superseded|production ended|production end|production stopped|not in production|no longer deliverable|no longer available|not supplied|end of life|article ended|ended|unavailable|not available|teslim edilemiyor|sunulmuyor|artik sunulmuyor|uretimden|kaldirilacak/.test(text)
+    ? "discontinued"
+    : "active";
 }
 
 export function buildDiscontinuedWarning(input: {

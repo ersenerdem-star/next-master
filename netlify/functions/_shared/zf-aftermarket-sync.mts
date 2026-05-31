@@ -1,4 +1,4 @@
-import { normalizeCatalogDisplayCode } from "./catalog-standardization.mts";
+import { normalizeCatalogDisplayCode, normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./catalog-standardization.mts";
 
 const requestHeaders = {
   "user-agent":
@@ -651,7 +651,7 @@ function normalizeDetailPayload(target: any, payload: any) {
     product_code: detailNumber,
     description: formatOfficialDescription(target, details.name || ""),
     source_url: detailNumber ? `https://aftermarket.zf.com/tr/catalog/products/${encodeURIComponent(detailNumber)}` : "",
-    oem_no: dedupeStrings(oemNumbers).join(", "),
+    oem_no: sanitizeCatalogOemNumbers(dedupeStrings(oemNumbers).join(", ")),
     vehicle,
     hs_code: hsCode,
     origin,
@@ -714,7 +714,7 @@ function mergeCatalogRow({ target, existing, searchItem, detail }: any) {
     brand_id: target.brand_id,
     product_code: productCode,
     description: detail.description || searchItem?.description || existing?.description || "",
-    oem_no: detail.oem_no || existing?.oem_no || "",
+    oem_no: sanitizeCatalogOemNumbers(detail.oem_no || existing?.oem_no || ""),
     vehicle: detail.vehicle || existing?.vehicle || "",
     hs_code: detail.hs_code || existing?.hs_code || "",
     origin: detail.origin || existing?.origin || "",
@@ -947,17 +947,6 @@ function normalizeBrandKey(value: unknown) {
     .replace(/[^a-z0-9]/g, "");
 }
 
-function normalizeLifecycleStatus(value: unknown) {
-  const text = String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase();
-  if (!text) return "active";
-  return /discontinued|obsolete|replaced|production stopped|teslim edilemiyor|unavailable|not available|sunulmuyor|uretimden|artik sunulmuyor|kaldirilacak/.test(text)
-    ? "discontinued"
-    : "active";
-}
 
 function cleanText(value: unknown) {
   return String(value || "")

@@ -68,6 +68,31 @@ export function normalizeOrigin(value: string): string {
   return raw;
 }
 
+export function sanitizeCatalogOemNumbers(value: string | null | undefined): string {
+  const raw = String(value || "").replace(/\r/g, "\n").trim();
+  if (!raw) return "";
+
+  const parts = raw
+    .split(/[,;\n|]+/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const values = new Set<string>();
+  for (const part of parts.length ? parts : [raw]) {
+    const digitGroups = part.match(/\d+/g) || [];
+    if (!digitGroups.length) continue;
+    const longGroups = digitGroups.filter((group) => group.length >= 4);
+    if (longGroups.length >= 2) {
+      for (const group of longGroups) values.add(group);
+      continue;
+    }
+    const compact = digitGroups.join("");
+    if (compact.length >= 4) values.add(compact);
+  }
+
+  return [...values].join(", ");
+}
+
 export function splitOriginalNumberCandidates(value: string): string[] {
   const raw = String(value || "").replace(/\r/g, "\n").trim();
   if (!raw) return [];

@@ -1,4 +1,5 @@
 import { buildRestUrl, getJson, serviceRoleHeaders } from "./http.mts";
+import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./catalog-standardization.mts";
 import { createPortalSessionToken, hashPortalToken, isPortalInviteExpired, verifyPortalSessionToken } from "./portal-security.mts";
 
 export type PortalInviteRow = {
@@ -149,10 +150,6 @@ function toNumber(value: unknown) {
   return Number(value ?? 0) || 0;
 }
 
-function normalizeLifecycleStatus(value: unknown): "active" | "discontinued" {
-  return String(value || "").trim().toLowerCase() === "discontinued" ? "discontinued" : "active";
-}
-
 function buildDiscontinuedWarning(resolvedCode: string, note?: string | null) {
   const code = String(resolvedCode || "").trim();
   const base = code ? `Production ended for ${code}.` : "Production ended for this item.";
@@ -266,7 +263,7 @@ function mapSalesOrderLines(lines: unknown) {
     const sellPrice = row.sell_price == null ? null : toNumber(row.sell_price);
     const purchaseTotal = row.buy_price == null ? null : toNumber(row.buy_price) * qty;
     const salesTotal = sellPrice == null ? null : sellPrice * qty;
-    const lifecycleStatus = normalizeLifecycleStatus(row.lifecycle_status);
+    const lifecycleStatus = normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`);
     const lifecycleNote = String(row.lifecycle_note || "").trim() || null;
     const resolvedCode = String(row.resolvedCode || row.requestedCode || "");
     return {
@@ -275,7 +272,7 @@ function mapSalesOrderLines(lines: unknown) {
       brand: String(row.brand || ""),
       description: String(row.description || ""),
       qty,
-      oem_no: String(row.oem_no || ""),
+      oem_no: sanitizeCatalogOemNumbers(row.oem_no),
       hs_code: String(row.hs_code || ""),
       origin: String(row.origin || ""),
       weight_kg: row.weight_kg == null ? null : toNumber(row.weight_kg),
@@ -301,7 +298,7 @@ function mapInvoiceLines(lines: unknown) {
   if (!Array.isArray(lines)) return [];
   return lines.map((line) => {
     const row = (line || {}) as Record<string, unknown>;
-    const lifecycleStatus = normalizeLifecycleStatus(row.lifecycle_status);
+    const lifecycleStatus = normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`);
     const lifecycleNote = String(row.lifecycle_note || "").trim() || null;
     const resolvedCode = String(row.product_code || "");
     return {
@@ -310,7 +307,7 @@ function mapInvoiceLines(lines: unknown) {
       brand: String(row.brand || ""),
       description: String(row.description || ""),
       qty: toNumber(row.qty),
-      oem_no: String(row.oem_no || ""),
+      oem_no: sanitizeCatalogOemNumbers(row.oem_no),
       hs_code: String(row.hs_code || ""),
       origin: String(row.origin || ""),
       weight_kg: row.weight_kg == null ? null : toNumber(row.weight_kg),
@@ -341,7 +338,7 @@ function mapPurchaseOrderLines(lines: unknown) {
       brand: String(row.brand || ""),
       description: String(row.description || ""),
       qty: toNumber(row.qty),
-      oem_no: String(row.oem_no || ""),
+      oem_no: sanitizeCatalogOemNumbers(row.oem_no),
       origin: String(row.origin || ""),
       supplier_name: String(row.supplier_name || ""),
       buy_price: row.buy_price == null ? null : toNumber(row.buy_price),

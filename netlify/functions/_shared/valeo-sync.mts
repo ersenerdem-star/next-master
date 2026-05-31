@@ -1,4 +1,9 @@
-import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "./catalog-standardization.mts";
+import {
+  normalizeCatalogDescription,
+  normalizeCatalogDisplayCode,
+  normalizeLifecycleStatus,
+  sanitizeCatalogOemNumbers,
+} from "./catalog-standardization.mts";
 import { normalizeBrandKey } from "./brand-standardization.mts";
 
 const VALEO_PRODUCT_LINES_URL = "https://www.valeoservice.us/en-us/techassist/products/product-lines";
@@ -500,7 +505,7 @@ function mapValeoListingProduct(product: any): ValeoListingProduct {
     additional_description: additionalDescription,
     supplier_id: normalizeTextValue(product?.brandId || ""),
     reference_code: normalizeTextValue(product?.reference || product?.valeoPartNumber || ""),
-    oem_no: oemNumbers,
+    oem_no: sanitizeCatalogOemNumbers(oemNumbers),
     oem_by_brand: oemByBrand,
     vehicle,
     weight_kg: weightKg,
@@ -625,7 +630,7 @@ function buildMergedCatalogRow(target: SyncBrandTarget, current: CatalogRow | nu
     product_code: productCode,
     normalized_code: normalizeCode(productCode),
     description: listing.description || current?.description || "",
-    oem_no: listing.oem_no || current?.oem_no || "",
+    oem_no: sanitizeCatalogOemNumbers(listing.oem_no || current?.oem_no || ""),
     vehicle: listing.vehicle || current?.vehicle || "",
     hs_code: current?.hs_code || "",
     origin: current?.origin || "",
@@ -811,10 +816,6 @@ function normalizeValeoLifecycleStatus(value: unknown): "active" | "discontinued
   if (!text) return "active";
   if (/(superceded|superseded|discontinued|obsolete|no longer|end of life|ended)/i.test(text)) return "discontinued";
   return "active";
-}
-
-function normalizeLifecycleStatus(value: unknown): "active" | "discontinued" {
-  return String(value || "").trim().toLowerCase() === "discontinued" ? "discontinued" : "active";
 }
 
 function normalizeCode(value: unknown) {

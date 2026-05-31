@@ -1,6 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { buildRestUrl, json, readJson, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
 import { resolveCaller } from "./_shared/app-auth.mts";
+import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./_shared/catalog-standardization.mts";
 import { canAccessCustomerOps, canAccessOperationsModules, isSuperadminRole } from "./_shared/roles.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
@@ -187,10 +188,6 @@ function shouldStrictlyFilterCodeSearch(search: string) {
   return isLikelyCatalogCodeSearch(search) && /^\d{10,}$/.test(normalizedOriginal);
 }
 
-function normalizeLifecycleStatus(value: unknown): "active" | "discontinued" {
-  return String(value || "").trim().toLowerCase() === "discontinued" ? "discontinued" : "active";
-}
-
 function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "strict" | "loose") {
   const escaped = search.replace(/[%*(),]/g, " ").trim();
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
@@ -278,7 +275,7 @@ function scoreCatalogRowCompleteness(row: CatalogSourceRow) {
   if (String(row.hs_code || "").trim()) score += 1;
   if (String(row.origin || "").trim()) score += 1;
   if (row.weight_kg != null && String(row.weight_kg).trim() !== "") score += 1;
-  if (normalizeLifecycleStatus(row.lifecycle_status) !== "discontinued") score += 1;
+  if (normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`) !== "discontinued") score += 1;
   return score;
 }
 
@@ -652,12 +649,12 @@ async function fetchCloudCatalogPageViaRest(
     brand: brandMaps.byId.get(String(row.brand_id || "")) || "",
     image_url: String(row.image_url || ""),
     description: String(row.description || ""),
-    oem_no: String(row.oem_no || ""),
+    oem_no: sanitizeCatalogOemNumbers(row.oem_no),
     vehicle: String(row.vehicle || ""),
     hs_code: String(row.hs_code || ""),
     origin: String(row.origin || ""),
     weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
-    lifecycle_status: String(row.lifecycle_status || ""),
+    lifecycle_status: normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`),
     lifecycle_note: String(row.lifecycle_note || ""),
     replacement_old_code:
       replacementRowsByKey.get(`${String(row.brand_id || "")}::${String(row.normalized_code || normalizePartCode(String(row.product_code || "")))}`)?.old_code || "",
