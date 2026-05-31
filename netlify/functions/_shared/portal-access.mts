@@ -1,6 +1,6 @@
 import { buildRestUrl, getJson, serviceRoleHeaders } from "./http.mts";
 import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./catalog-standardization.mts";
-import { createPortalSessionToken, hashPortalToken, isPortalInviteExpired, verifyPortalSessionToken } from "./portal-security.mts";
+import { createPortalSessionToken, hashPortalToken, verifyPortalSessionToken } from "./portal-security.mts";
 
 export type PortalInviteRow = {
   id: string;
@@ -348,8 +348,21 @@ function mapPurchaseOrderLines(lines: unknown) {
   });
 }
 
-export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: string, email: string, token: string) {
-  const tokenHash = await hashPortalToken(token);
+async function fetchPortalInviteByEmailPreview(supabaseUrl: string, serviceRoleKey: string, email: string) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!normalizedEmail) return null;
+  const invites = await fetchAllOptional<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
+    select:
+      "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders",
+    email: `eq.${normalizedEmail}`,
+    order: "updated_at.desc",
+    limit: "10",
+  });
+  return invites.find((invite) => invite.status !== "disabled") || null;
+}
+
+export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: string, email: string, password: string) {
+  const tokenHash = await hashPortalToken(password);
   let invite: PortalInviteRow | null = null;
 
   try {
@@ -366,9 +379,6 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
   if (!invite || invite.status === "disabled") {
     throw new Error("Portal invite not found or disabled");
   }
-  if (isPortalInviteExpired(invite.expires_at)) {
-    throw new Error("Portal invite expired. Request a new invite.");
-  }
 
   await touchPortalInvite(supabaseUrl, serviceRoleKey, invite);
 
@@ -381,6 +391,7 @@ export async function resolvePortalInvite(
   sessionSecret: string,
   auth: {
     email?: string | null;
+    password?: string | null;
     token?: string | null;
     sessionToken?: string | null;
   },
@@ -404,23 +415,54 @@ export async function resolvePortalInvite(
     if (!invite || invite.status === "disabled") {
       throw new Error("Portal session is no longer active.");
     }
-    if (isPortalInviteExpired(invite.expires_at)) {
-      throw new Error("Portal invite expired. Request a new invite.");
-    }
 
     await touchPortalInvite(supabaseUrl, serviceRoleKey, invite);
     return { invite, sessionToken };
   }
 
   const email = providedEmail;
-  const token = String(auth.token || "").trim();
-  if (!email || !token) {
-    throw new Error("Email and invite token are required");
+  const password = String(auth.password || "").trim();
+  if (!email || !password) {
+    throw new Error("Email and password are required");
   }
 
-  const invite = await validatePortalInvite(supabaseUrl, serviceRoleKey, email, token);
+  const invite = await validatePortalInvite(supabaseUrl, serviceRoleKey, email, password);
   const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email);
   return { invite, sessionToken: nextSessionToken };
+}
+
+export async function resolvePortalInvitePreview(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  sessionSecret: string,
+  auth: {
+    email?: string | null;
+    sessionToken?: string | null;
+  },
+) {
+  const sessionToken = String(auth.sessionToken || "").trim();
+  if (sessionToken) {
+    const session = await verifyPortalSessionToken(sessionSecret, sessionToken);
+    if (!session) {
+      throw new Error("Portal session expired. Sign in again.");
+    }
+    const invite = await fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
+      select:
+        "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders",
+      id: `eq.${session.invite_id}`,
+      email: `eq.${session.email}`,
+    });
+    if (!invite || invite.status === "disabled") {
+      throw new Error("Portal session is no longer active.");
+    }
+    return { invite, sessionToken };
+  }
+
+  const invite = await fetchPortalInviteByEmailPreview(supabaseUrl, serviceRoleKey, auth.email || "");
+  if (!invite) {
+    throw new Error("Portal invite not found or disabled");
+  }
+  return { invite, sessionToken: "" };
 }
 
 export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {

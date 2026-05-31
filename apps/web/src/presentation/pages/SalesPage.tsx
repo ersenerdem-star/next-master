@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastructure/api/companyProfilesApi";
 import { fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
 import {
+  deleteInvoice,
+  deletePaymentReceived,
   fetchInvoiceById,
   fetchInvoiceSummaries,
   fetchPaymentsReceived,
@@ -439,6 +441,48 @@ export function SalesPage({
     actionFeedback.succeed("Invoice PDF view opened.");
   }
 
+  async function handleDeleteInvoice(row: LocalInvoice) {
+    if (!window.confirm(`Delete invoice ${row.id}? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      actionFeedback.begin(`Deleting invoice ${row.id}...`);
+      await deleteInvoice(row.id);
+      const refreshed = await fetchInvoiceSummaries();
+      setInvoices(refreshed);
+      if (selectedInvoiceId === row.id) {
+        setSelectedInvoiceId("");
+        setInvoiceDraft(null);
+        setInvoicesView("list");
+        onSelectedInvoiceChange?.("");
+      }
+      actionFeedback.succeed(`Invoice ${row.id} deleted.`);
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Invoice delete failed");
+    }
+  }
+
+  async function handleDeletePaymentReceived(row: LocalPaymentReceived) {
+    if (!window.confirm(`Delete payment ${row.id}? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      actionFeedback.begin(`Deleting payment ${row.id}...`);
+      await deletePaymentReceived(row.id);
+      const [refreshedPayments, refreshedInvoices] = await Promise.all([fetchPaymentsReceived(), fetchInvoiceSummaries()]);
+      setPaymentsReceived(refreshedPayments);
+      setInvoices(refreshedInvoices);
+      if (selectedPaymentReceivedId === row.id) {
+        const next = refreshedPayments[0] || null;
+        setSelectedPaymentReceivedId(next?.id || "");
+        setPaymentReceivedDraft(next ? { ...next } : createEmptyPaymentReceived(null));
+      }
+      actionFeedback.succeed(`Payment ${row.id} deleted.`);
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Payment delete failed");
+    }
+  }
+
   const selectedInvoice = useMemo(() => invoices.find((item) => item.id === selectedInvoiceId) || null, [invoices, selectedInvoiceId]);
   const invoiceDiscontinuedLineCount = useMemo(
     () => invoiceDraft?.lines.filter((line) => line.lifecycle_status === "discontinued").length || 0,
@@ -651,9 +695,28 @@ export function SalesPage({
       key: "actions",
       header: "Actions",
       render: (row: LocalInvoice) => (
-        <Button variant="secondary" className="button--compact" onClick={() => handlePrintInvoice(row)}>
-          PDF / Print
-        </Button>
+        <div className="inline-actions">
+          <Button
+            variant="secondary"
+            className="button--compact"
+            onClick={(event) => {
+              event.stopPropagation();
+              handlePrintInvoice(row);
+            }}
+          >
+            PDF / Print
+          </Button>
+          <Button
+            variant="secondary"
+            className="button--compact danger-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleDeleteInvoice(row);
+            }}
+          >
+            Delete
+          </Button>
+        </div>
       ),
     },
   ];
@@ -667,6 +730,22 @@ export function SalesPage({
     { key: "reference", header: "Reference", render: (row: LocalPaymentReceived) => row.reference_no || "-" },
     { key: "amount", header: "Amount", render: (row: LocalPaymentReceived) => formatMoney(row.amount, row.currency) },
     { key: "status", header: "Status", render: (row: LocalPaymentReceived) => row.status },
+    {
+      key: "actions",
+      header: "Delete",
+      render: (row: LocalPaymentReceived) => (
+        <Button
+          variant="secondary"
+          className="button--compact danger-button"
+          onClick={(event) => {
+            event.stopPropagation();
+            void handleDeletePaymentReceived(row);
+          }}
+        >
+          Delete
+        </Button>
+      ),
+    },
   ];
 
   return (

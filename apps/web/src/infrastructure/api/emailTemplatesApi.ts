@@ -2,7 +2,7 @@ import type { LocalPurchaseOrder } from "../../types/orders";
 import type { PortalInvite } from "../../types/portal";
 import type { EmailTemplate, EmailTemplateKey, OutboundEmail } from "../../types/emailTemplates";
 import { getCurrentOrgId } from "./organizationApi";
-import { fetchPortalInvites, issuePortalInviteToken } from "./portalInvitesApi";
+import { fetchPortalInvites } from "./portalInvitesApi";
 import { supabaseClient } from "./supabaseClient";
 
 const EMAIL_TEMPLATE_COLUMNS = [
@@ -37,19 +37,19 @@ const DEFAULT_TEMPLATES: Record<EmailTemplateKey, Pick<EmailTemplate, "template_
     template_name: "Customer Portal Invite",
     subject: "Portal access for {{party_name}}",
     body:
-      "Hello {{contact_name}},\n\nYour customer portal access is ready for {{party_name}}.\n\nPortal link: {{portal_link}}\nInvite token: {{invite_token}}\n\nYou can review account balance, invoices, payments, and orders based on your permissions.\n\nRegards,\n{{company_name}}",
+      "Hello {{contact_name}},\n\nYour customer portal access is ready for {{party_name}}.\n\nPortal link: {{portal_link}}\nPassword: Use the password set by your admin.\n\nYou can review account balance, invoices, payments, and orders based on your permissions.\n\nRegards,\n{{company_name}}",
   },
   vendor_portal_invite: {
     template_name: "Vendor Portal Invite",
     subject: "Vendor portal access for {{party_name}}",
     body:
-      "Hello {{contact_name}},\n\nYour vendor portal access is ready for {{party_name}}.\n\nPortal link: {{portal_link}}\nInvite token: {{invite_token}}\n\nYou can review purchase orders, bills, and payment activity based on your permissions.\n\nRegards,\n{{company_name}}",
+      "Hello {{contact_name}},\n\nYour vendor portal access is ready for {{party_name}}.\n\nPortal link: {{portal_link}}\nPassword: Use the password set by your admin.\n\nYou can review purchase orders, bills, and payment activity based on your permissions.\n\nRegards,\n{{company_name}}",
   },
   vendor_purchase_order_confirmed: {
     template_name: "Vendor Purchase Order Confirmed",
     subject: "Purchase order {{purchase_order_no}} confirmed",
     body:
-      "Hello {{vendor_name}},\n\nPurchase order {{purchase_order_no}} is confirmed.\nCustomer: {{customer_name}}\nPurchase company: {{purchase_company}}\nCurrency: {{currency}}\nTotal amount: {{total_amount}}\n\nPortal link: {{portal_link}}\nInvite token: {{invite_token}}\n\nPlease review and proceed.\n\nRegards,\n{{company_name}}",
+      "Hello {{vendor_name}},\n\nPurchase order {{purchase_order_no}} is confirmed.\nCustomer: {{customer_name}}\nPurchase company: {{purchase_company}}\nCurrency: {{currency}}\nTotal amount: {{total_amount}}\n\nPortal link: {{portal_link}}\nPassword: Use the password set by your admin.\n\nPlease review and proceed.\n\nRegards,\n{{company_name}}",
   },
   internal_user_welcome: {
     template_name: "Internal User Welcome",
@@ -261,7 +261,7 @@ export async function deliverQueuedEmails(emailIds: string[] = []) {
   };
 }
 
-export async function queuePortalInviteEmail(portalInvite: PortalInvite, companyName: string, portalBaseUrl: string, inviteToken: string) {
+export async function queuePortalInviteEmail(portalInvite: PortalInvite, companyName: string, portalBaseUrl: string) {
   const templates = await fetchEmailTemplates();
   const templateKey: EmailTemplateKey = portalInvite.party_type === "vendor" ? "vendor_portal_invite" : "customer_portal_invite";
   const template = templates.find((item) => item.template_key === templateKey);
@@ -272,7 +272,7 @@ export async function queuePortalInviteEmail(portalInvite: PortalInvite, company
     party_name: portalInvite.party_name,
     contact_name: portalInvite.contact_name || portalInvite.party_name,
     portal_link: portalLink,
-    invite_token: inviteToken,
+    invite_token: "",
     company_name: companyName,
   };
 
@@ -296,12 +296,14 @@ export async function queueVendorPurchaseOrderEmail(purchaseOrder: LocalPurchase
   if (!vendorInvite?.email) {
     throw new Error(`No vendor portal email configured for ${purchaseOrder.supplier_name}.`);
   }
+  if (!vendorInvite.has_password) {
+    throw new Error(`Portal password is not configured for ${purchaseOrder.supplier_name}.`);
+  }
 
   const templates = await fetchEmailTemplates();
   const template = templates.find((item) => item.template_key === "vendor_purchase_order_confirmed");
   if (!template) throw new Error("Vendor purchase order email template not found.");
 
-  const issued = await issuePortalInviteToken(vendorInvite.id);
   const portalLink = `${portalBaseUrl.replace(/\/$/, "")}/portal?email=${encodeURIComponent(vendorInvite.email)}`;
   const variables = {
     vendor_name: purchaseOrder.supplier_name,
@@ -311,7 +313,7 @@ export async function queueVendorPurchaseOrderEmail(purchaseOrder: LocalPurchase
     currency: purchaseOrder.currency || "EUR",
     total_amount: Number(purchaseOrder.total_amount || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     portal_link: portalLink,
-    invite_token: issued.token,
+    invite_token: "",
     company_name: companyName,
   };
 

@@ -48,6 +48,7 @@ export function createEmptyPortalInvite(): PortalInvite {
     expires_at: "",
     created_at: nowIso(),
     updated_at: nowIso(),
+    has_password: false,
     access: {
       can_view_account: true,
       can_view_invoices: true,
@@ -65,6 +66,7 @@ export function upsertPortalInvite(input: PortalInvite) {
     invite_token: input.invite_token || previous?.invite_token || "",
     created_at: previous?.created_at || input.created_at || nowIso(),
     updated_at: nowIso(),
+    has_password: input.has_password ?? previous?.has_password ?? false,
   };
   const next = [nextInvite, ...current.filter((item) => item.id !== input.id)].sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
   savePortalInvites(next);

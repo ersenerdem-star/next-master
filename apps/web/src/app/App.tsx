@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Component, Suspense, lazy, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { clearCachedAppSession, fetchAppSession } from "../infrastructure/api/appSessionApi";
 import { supabaseClient } from "../infrastructure/api/supabaseClient";
 import { touchCurrentUserPresence } from "../infrastructure/api/usersApi";
@@ -125,12 +125,37 @@ function getDefaultPage(role: AppRole) {
   return canAccessSalesModules(role) ? "Sales" : "Home";
 }
 
+class PageErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(_error: unknown, _errorInfo: ErrorInfo) {}
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="loading-screen">
+          <div>
+            <strong>Page failed to render.</strong>
+            <div>Reload the workspace and try the menu again.</div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function App() {
   const isPortalRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/portal");
   const [sessionReady, setSessionReady] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [appRole, setAppRole] = useState<AppRole>("");
   const [appRoleReady, setAppRoleReady] = useState(false);
+  const appRoleRef = useRef<AppRole>("");
   const [appSessionReloadTick, setAppSessionReloadTick] = useState(0);
   const [activePage, setActivePage] = useState("Home");
   const [accessNotice, setAccessNotice] = useState("");
@@ -150,6 +175,10 @@ export function App() {
   const [purchasesTab, setPurchasesTab] = useState<"Vendors" | "Purchase Orders" | "Bills" | "Payments Made">("Vendors");
   const [reportsTab, setReportsTab] = useState<"Master" | "Item Transactions" | "Inventory Analytics">("Master");
   const [settingsTab, setSettingsTab] = useState<"session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics">("session");
+
+  useEffect(() => {
+    appRoleRef.current = appRole;
+  }, [appRole]);
 
   useEffect(() => {
     let mounted = true;
@@ -218,6 +247,11 @@ export function App() {
     }
 
     let cancelled = false;
+    const roleTimeoutId = window.setTimeout(() => {
+      if (cancelled) return;
+      setAppRole((current) => current || appRoleRef.current || "");
+      setAppRoleReady(true);
+    }, 10000);
     setAppRoleReady(false);
 
     async function run() {
@@ -227,10 +261,11 @@ export function App() {
         setAppRole(normalizeAppRole(session.role));
       } catch {
         if (!cancelled) {
-          setAppRole("");
+          setAppRole((current) => current || appRoleRef.current || "");
         }
       } finally {
         if (!cancelled) {
+          window.clearTimeout(roleTimeoutId);
           setAppRoleReady(true);
         }
       }
@@ -239,6 +274,7 @@ export function App() {
     void run();
     return () => {
       cancelled = true;
+      window.clearTimeout(roleTimeoutId);
     };
   }, [appSessionReloadTick, loggedIn, isPortalRoute]);
 
@@ -594,7 +630,9 @@ export function App() {
     return (
       <ActionFeedbackProvider>
         <Suspense fallback={renderPageFallback("Loading portal...")}>
-          <PortalPage />
+          <PageErrorBoundary key="portal">
+            <PortalPage />
+          </PageErrorBoundary>
         </Suspense>
       </ActionFeedbackProvider>
     );
@@ -672,7 +710,9 @@ export function App() {
         onNavigateSub={handleSubNavigate}
       >
         <Suspense fallback={renderPageFallback(`Loading ${activePage}...`)}>
-          {pageContent}
+          <PageErrorBoundary key={`${activePage}:${activeSubPage || "root"}`}>
+            {pageContent}
+          </PageErrorBoundary>
         </Suspense>
       </AppShell>
     </ActionFeedbackProvider>

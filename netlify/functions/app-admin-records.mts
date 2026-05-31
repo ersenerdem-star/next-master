@@ -115,6 +115,7 @@ const PORTAL_INVITE_COLUMNS = [
   "email",
   "contact_name",
   "status",
+  "invite_token_hash",
   "last_sent_at",
   "expires_at",
   "access_can_view_account",
@@ -133,6 +134,7 @@ const LEGACY_PORTAL_INVITE_COLUMNS = [
   "contact_name",
   "status",
   "invite_token",
+  "invite_token_hash",
   "last_sent_at",
   "access_can_view_account",
   "access_can_view_invoices",
@@ -352,28 +354,198 @@ async function deleteSingleRow(input: {
 
 async function listPortalInvites(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
   try {
-    return await listRows<Record<string, unknown>>({
+    return decoratePortalInviteRows(
+      await listRows<Record<string, unknown>>({
+        supabaseUrl,
+        serviceRoleKey,
+        table: "portal_invites",
+        select: PORTAL_INVITE_COLUMNS,
+        organizationId,
+        order: "updated_at.desc",
+      }),
+    );
+  } catch (primaryError) {
+    try {
+      return decoratePortalInviteRows(
+        await listRows<Record<string, unknown>>({
+          supabaseUrl,
+          serviceRoleKey,
+          table: "portal_invites",
+          select: LEGACY_PORTAL_INVITE_COLUMNS,
+          organizationId,
+          order: "updated_at.desc",
+        }),
+      );
+    } catch (legacyError) {
+      throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Portal invites load failed")));
+    }
+  }
+}
+
+function decoratePortalInviteRow(row: Record<string, unknown> | null) {
+  if (!row) return null;
+  const next = { ...row } as Record<string, unknown>;
+  next.has_password = Boolean(next.invite_token_hash);
+  delete next.invite_token_hash;
+  delete next.invite_token;
+  return next;
+}
+
+function decoratePortalInviteRows(rows: Record<string, unknown>[]) {
+  return rows.map((row) => decoratePortalInviteRow(row) || {});
+}
+
+async function updatePortalInviteWithFallback(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+  id: string;
+  payload: Record<string, unknown>;
+  primaryErrorFallback: string;
+}) {
+  try {
+    const rows = await updateSingleRow<Record<string, unknown>>({
       supabaseUrl,
       serviceRoleKey,
       table: "portal_invites",
       select: PORTAL_INVITE_COLUMNS,
       organizationId,
-      order: "updated_at.desc",
+      id: input.id,
+      payload: input.payload,
     });
+    return decoratePortalInviteRow(rows[0] || null);
   } catch (primaryError) {
-    try {
-      return await listRows<Record<string, unknown>>({
-        supabaseUrl,
-        serviceRoleKey,
-        table: "portal_invites",
-        select: LEGACY_PORTAL_INVITE_COLUMNS,
-        organizationId,
-        order: "updated_at.desc",
-      });
-    } catch (legacyError) {
-      throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Portal invites load failed")));
-    }
+    const legacyPayload = { ...input.payload };
+    delete legacyPayload.expires_at;
+    const legacyRows = await updateSingleRow<Record<string, unknown>>({
+      supabaseUrl: input.supabaseUrl,
+      serviceRoleKey: input.serviceRoleKey,
+      table: "portal_invites",
+      select: LEGACY_PORTAL_INVITE_COLUMNS,
+      organizationId: input.organizationId,
+      id: input.id,
+      payload: legacyPayload,
+    }).catch((legacyError) => {
+      throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, input.primaryErrorFallback)));
+    });
+    return decoratePortalInviteRow(legacyRows[0] || null);
   }
+}
+
+async function updatePortalInvitePassword(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+  id: string;
+  password: string;
+}) {
+  const password = String(input.password || "").trim();
+  if (password.length < 8) {
+    throw new Error("Portal password must be at least 8 characters.");
+  }
+  const tokenHash = await hashPortalToken(password);
+  return updatePortalInviteWithFallback({
+    supabaseUrl: input.supabaseUrl,
+    serviceRoleKey: input.serviceRoleKey,
+    organizationId: input.organizationId,
+    id: input.id,
+    payload: {
+      invite_token_hash: tokenHash,
+      invite_token: null,
+      expires_at: null,
+      updated_at: new Date().toISOString(),
+    },
+    primaryErrorFallback: "Portal password update failed",
+  });
+}
+
+async function clearPortalInvitePassword(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+  id: string;
+}) {
+  return updatePortalInviteWithFallback({
+    supabaseUrl: input.supabaseUrl,
+    serviceRoleKey: input.serviceRoleKey,
+    organizationId: input.organizationId,
+    id: input.id,
+    payload: {
+      invite_token_hash: null,
+      invite_token: null,
+      expires_at: null,
+      updated_at: new Date().toISOString(),
+    },
+    primaryErrorFallback: "Portal password clear failed",
+  });
+}
+
+async function issuePortalInviteTokenRecord(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+  id: string;
+}) {
+  const token = generatePortalToken();
+  const tokenHash = await hashPortalToken(token);
+  const expiresAt = buildExpiryIso();
+  const invite = await updatePortalInviteWithFallback({
+    supabaseUrl: input.supabaseUrl,
+    serviceRoleKey: input.serviceRoleKey,
+    organizationId: input.organizationId,
+    id: input.id,
+    payload: {
+      invite_token: null,
+      invite_token_hash: tokenHash,
+      expires_at: expiresAt,
+      updated_at: new Date().toISOString(),
+    },
+    primaryErrorFallback: "Portal token issue failed",
+  });
+  return {
+    invite,
+    token,
+  };
+}
+
+async function markPortalInviteSentRecord(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+  id: string;
+}) {
+  return updatePortalInviteWithFallback({
+    supabaseUrl: input.supabaseUrl,
+    serviceRoleKey: input.serviceRoleKey,
+    organizationId: input.organizationId,
+    id: input.id,
+    payload: {
+      status: "invited",
+      last_sent_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    primaryErrorFallback: "Portal invite send failed",
+  });
+}
+
+async function setPortalInviteStatusRecord(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+  id: string;
+  status: string;
+}) {
+  return updatePortalInviteWithFallback({
+    supabaseUrl: input.supabaseUrl,
+    serviceRoleKey: input.serviceRoleKey,
+    organizationId: input.organizationId,
+    id: input.id,
+    payload: {
+      status: input.status,
+      updated_at: new Date().toISOString(),
+    },
+    primaryErrorFallback: "Portal invite status update failed",
+  });
 }
 
 function stripCustomerOptionalFields(payload: Record<string, unknown>) {
@@ -428,7 +600,7 @@ async function upsertCustomerRecord(input: {
         id: input.id,
         payload,
       });
-      return rows[0] || null;
+      return decoratePortalInviteRow(rows[0] || null);
     }
     const rows = await insertSingleRow<Record<string, unknown>>({
       supabaseUrl: input.supabaseUrl,
@@ -479,7 +651,7 @@ async function upsertPortalInvite(input: {
         id: input.id,
         payload: input.payload,
       });
-      return rows[0] || null;
+      return decoratePortalInviteRow(rows[0] || null);
     } catch (primaryError) {
       const legacyPayload = { ...input.payload };
       delete legacyPayload.customer_id;
@@ -508,7 +680,7 @@ async function upsertPortalInvite(input: {
       select: PORTAL_INVITE_COLUMNS,
       payload: input.payload,
     });
-    return rows[0] || null;
+    return decoratePortalInviteRow(rows[0] || null);
   } catch (primaryError) {
     const legacyPayload = { ...input.payload };
     delete legacyPayload.customer_id;
@@ -523,7 +695,7 @@ async function upsertPortalInvite(input: {
     }).catch((legacyError) => {
       throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Portal invite create failed")));
     });
-    return rows[0] || null;
+    return decoratePortalInviteRow(rows[0] || null);
   }
 }
 
@@ -686,95 +858,59 @@ export default async (req: Request, _context: Context) => {
         return json({ ok: true, data: true });
       }
       if (action === "issueToken") {
-        const token = generatePortalToken();
-        const tokenHash = await hashPortalToken(token);
-        const expiresAt = buildExpiryIso();
-        const rows = await updateSingleRow<Record<string, unknown>>({
+        const issued = await issuePortalInviteTokenRecord({
           supabaseUrl,
           serviceRoleKey,
-          table: "portal_invites",
-          select: PORTAL_INVITE_COLUMNS,
           organizationId: caller.organizationId,
           id,
-          payload: {
-            invite_token: null,
-            invite_token_hash: tokenHash,
-            expires_at: expiresAt,
-            updated_at: new Date().toISOString(),
-          },
         });
         return json({
           ok: true,
           data: {
-            invite: rows[0] || null,
-            token,
+            invite: issued.invite,
+            token: issued.token,
           },
         });
       }
-      if (action === "markSent") {
-        const rows = await updateSingleRow<Record<string, unknown>>({
+      if (action === "setPassword") {
+        const password = String((body?.payload as Record<string, unknown> | undefined)?.password || "").trim();
+        const data = await updatePortalInvitePassword({
           supabaseUrl,
           serviceRoleKey,
-          table: "portal_invites",
-          select: PORTAL_INVITE_COLUMNS,
           organizationId: caller.organizationId,
           id,
-          payload: {
-            status: "invited",
-            last_sent_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-        }).catch(async (primaryError) => {
-          const legacyRows = await updateSingleRow<Record<string, unknown>>({
-            supabaseUrl,
-            serviceRoleKey,
-            table: "portal_invites",
-            select: LEGACY_PORTAL_INVITE_COLUMNS,
-            organizationId: caller.organizationId,
-            id,
-            payload: {
-              status: "invited",
-              last_sent_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-          }).catch((legacyError) => {
-            throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Portal invite send failed")));
-          });
-          return legacyRows;
+          password,
         });
-        return json({ ok: true, data: rows[0] || null });
+        return json({ ok: true, data });
+      }
+      if (action === "clearPassword") {
+        const data = await clearPortalInvitePassword({
+          supabaseUrl,
+          serviceRoleKey,
+          organizationId: caller.organizationId,
+          id,
+        });
+        return json({ ok: true, data });
+      }
+      if (action === "markSent") {
+        const data = await markPortalInviteSentRecord({
+          supabaseUrl,
+          serviceRoleKey,
+          organizationId: caller.organizationId,
+          id,
+        });
+        return json({ ok: true, data });
       }
       if (action === "setStatus") {
         const status = String(body?.status || "").trim();
-        const rows = await updateSingleRow<Record<string, unknown>>({
+        const data = await setPortalInviteStatusRecord({
           supabaseUrl,
           serviceRoleKey,
-          table: "portal_invites",
-          select: PORTAL_INVITE_COLUMNS,
           organizationId: caller.organizationId,
           id,
-          payload: {
-            status,
-            updated_at: new Date().toISOString(),
-          },
-        }).catch(async (primaryError) => {
-          const legacyRows = await updateSingleRow<Record<string, unknown>>({
-            supabaseUrl,
-            serviceRoleKey,
-            table: "portal_invites",
-            select: LEGACY_PORTAL_INVITE_COLUMNS,
-            organizationId: caller.organizationId,
-            id,
-            payload: {
-              status,
-              updated_at: new Date().toISOString(),
-            },
-          }).catch((legacyError) => {
-            throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Portal invite status update failed")));
-          });
-          return legacyRows;
+          status,
         });
-        return json({ ok: true, data: rows[0] || null });
+        return json({ ok: true, data });
       }
     }
 

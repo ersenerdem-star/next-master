@@ -18,6 +18,7 @@ function mapPortalInviteRow(row: Record<string, unknown>): PortalInvite {
     expires_at: String(row.expires_at || ""),
     created_at: String(row.created_at || ""),
     updated_at: String(row.updated_at || ""),
+    has_password: Boolean(row.has_password ?? row.invite_token_hash),
     access: {
       can_view_account: Boolean(row.access_can_view_account),
       can_view_invoices: Boolean(row.access_can_view_invoices),
@@ -119,4 +120,25 @@ export async function deletePortalInvite(portalInviteId: string) {
     action: "delete",
     id: portalInviteId,
   });
+}
+
+export async function setPortalInvitePassword(portalInviteId: string, password: string): Promise<PortalInvite | null> {
+  if (!isUuid(portalInviteId)) return null;
+  const data = await callAppAdminRecords<Record<string, unknown> | null>({
+    resource: "portalInvites",
+    action: "setPassword",
+    id: portalInviteId,
+    payload: { password },
+  });
+  return data ? mapPortalInviteRow(data) : null;
+}
+
+export async function clearPortalInvitePassword(portalInviteId: string): Promise<PortalInvite | null> {
+  if (!isUuid(portalInviteId)) return null;
+  const data = await callAppAdminRecords<Record<string, unknown> | null>({
+    resource: "portalInvites",
+    action: "clearPassword",
+    id: portalInviteId,
+  });
+  return data ? mapPortalInviteRow(data) : null;
 }

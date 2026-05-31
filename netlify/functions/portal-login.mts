@@ -17,9 +17,9 @@ export default async (req: Request, _context: Context) => {
   try {
     const body = await req.json();
     const email = String(body?.email || "").trim();
-    const token = String(body?.token || "").trim();
+    const password = String(body?.password || "").trim();
     const sessionToken = String(body?.sessionToken || body?.session_token || "").trim();
-    if (!sessionToken && (!email || !token)) return json({ error: "Email and invite token are required" }, 400);
+    if (!sessionToken && (!email || !password)) return json({ error: "Email and password are required" }, 400);
 
     const rateLimit = await enforcePortalRateLimit(req, supabaseUrl, serviceRoleKey, "login", email);
     if (!rateLimit.allowed) {
@@ -30,7 +30,7 @@ export default async (req: Request, _context: Context) => {
 
     const { invite, sessionToken: nextSessionToken } = await resolvePortalInvite(supabaseUrl, serviceRoleKey, sessionSecret, {
       email,
-      token,
+      password,
       sessionToken,
     });
     let snapshot;

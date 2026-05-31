@@ -4,6 +4,8 @@ import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, in
 import {
   buildAndUpsertBillFromPurchaseOrder,
   buildAndUpsertMergedBillFromPurchaseOrders,
+  deleteBill,
+  deletePaymentMade,
   deletePurchaseOrder,
   fetchBillById,
   fetchBillSummaries,
@@ -496,6 +498,25 @@ export function PurchasesPage({
     setPaymentMadeDraft({ ...current });
   }, [paymentsMade, selectedPaymentMadeId]);
 
+  const billCountByPurchaseOrderId = useMemo(() => {
+    const map = new Map<string, number>();
+    bills.forEach((bill) => {
+      const purchaseOrderIds = new Set<string>();
+      if (bill.purchase_order_id) {
+        purchaseOrderIds.add(bill.purchase_order_id);
+      }
+      bill.lines.forEach((line) => {
+        if (line.purchase_order_id) {
+          purchaseOrderIds.add(line.purchase_order_id);
+        }
+      });
+      purchaseOrderIds.forEach((purchaseOrderId) => {
+        map.set(purchaseOrderId, (map.get(purchaseOrderId) || 0) + 1);
+      });
+    });
+    return map;
+  }, [bills]);
+
   const purchaseOrderColumns = useMemo(
     () => [
       { key: "po", header: "PO No", render: (row: LocalPurchaseOrder) => row.id, sortValue: (row: LocalPurchaseOrder) => row.id },
@@ -544,8 +565,24 @@ export function PurchasesPage({
       { key: "amount", header: "Purchase Total", render: (row: LocalPurchaseOrder) => formatMoney(row.total_amount, row.currency), sortValue: (row: LocalPurchaseOrder) => row.total_amount },
       { key: "status", header: "Status", render: (row: LocalPurchaseOrder) => row.status, sortValue: (row: LocalPurchaseOrder) => row.status },
       { key: "created", header: "Created", render: (row: LocalPurchaseOrder) => row.created_at.slice(0, 10), sortValue: (row: LocalPurchaseOrder) => row.created_at },
+      {
+        key: "actions",
+        header: "Delete",
+        render: (row: LocalPurchaseOrder) => (
+          <Button
+            variant="secondary"
+            className="button--compact danger-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleDeletePurchaseOrderRow(row);
+            }}
+          >
+            Delete
+          </Button>
+        ),
+      },
     ],
-    [],
+    [billCountByPurchaseOrderId, purchaseOrderDraft, selectedPurchaseOrderId],
   );
 
   const billColumns = useMemo(
@@ -575,8 +612,24 @@ export function PurchasesPage({
       { key: "due", header: "Due Date", render: (row: LocalBill) => row.due_date || "-", sortValue: (row: LocalBill) => row.due_date || "" },
       { key: "amount", header: "Total Amount", render: (row: LocalBill) => formatMoney(row.total_amount, row.currency), sortValue: (row: LocalBill) => row.total_amount },
       { key: "status", header: "Status", render: (row: LocalBill) => row.status, sortValue: (row: LocalBill) => row.status },
+      {
+        key: "actions",
+        header: "Delete",
+        render: (row: LocalBill) => (
+          <Button
+            variant="secondary"
+            className="button--compact danger-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleDeleteBillRow(row);
+            }}
+          >
+            Delete
+          </Button>
+        ),
+      },
     ],
-    [],
+    [billDraft, selectedBillId],
   );
 
   const paymentMadeColumns = useMemo(
@@ -589,28 +642,25 @@ export function PurchasesPage({
       { key: "reference", header: "Reference", render: (row: LocalPaymentMade) => row.reference_no || "-" },
       { key: "amount", header: "Amount", render: (row: LocalPaymentMade) => formatMoney(row.amount, row.currency) },
       { key: "status", header: "Status", render: (row: LocalPaymentMade) => row.status },
+      {
+        key: "actions",
+        header: "Delete",
+        render: (row: LocalPaymentMade) => (
+          <Button
+            variant="secondary"
+            className="button--compact danger-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleDeletePaymentMadeRow(row);
+            }}
+          >
+            Delete
+          </Button>
+        ),
+      },
     ],
-    [],
+    [selectedPaymentMadeId],
   );
-
-  const billCountByPurchaseOrderId = useMemo(() => {
-    const map = new Map<string, number>();
-    bills.forEach((bill) => {
-      const purchaseOrderIds = new Set<string>();
-      if (bill.purchase_order_id) {
-        purchaseOrderIds.add(bill.purchase_order_id);
-      }
-      bill.lines.forEach((line) => {
-        if (line.purchase_order_id) {
-          purchaseOrderIds.add(line.purchase_order_id);
-        }
-      });
-      purchaseOrderIds.forEach((purchaseOrderId) => {
-        map.set(purchaseOrderId, (map.get(purchaseOrderId) || 0) + 1);
-      });
-    });
-    return map;
-  }, [bills]);
 
   const purchaseOrderColumnsWithMarks = useMemo(
     () =>
@@ -1079,6 +1129,33 @@ export function PurchasesPage({
     }
   }
 
+  async function handleDeletePurchaseOrderRow(row: LocalPurchaseOrder) {
+    const relatedBillCount = billCountByPurchaseOrderId.get(row.id) || 0;
+    if (relatedBillCount > 0) {
+      actionFeedback.fail(`Purchase order ${row.id} cannot be deleted because ${relatedBillCount.toLocaleString("en-US")} bill record exists.`);
+      return;
+    }
+    if (!window.confirm(`Delete purchase order ${row.id}? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      actionFeedback.begin(`Deleting purchase order ${row.id}...`);
+      await deletePurchaseOrder(row.id);
+      const refreshed = await fetchPurchaseOrderSummaries();
+      setPurchaseOrders(refreshed);
+      setSelectedPurchaseOrderIds((current) => current.filter((item) => item !== row.id));
+      if (selectedPurchaseOrderId === row.id || purchaseOrderDraft?.id === row.id) {
+        setSelectedPurchaseOrderId("");
+        setPurchaseOrderDraft(null);
+        setPurchaseOrderSourceSnapshot("");
+        setPurchaseOrdersView("list");
+      }
+      actionFeedback.succeed(`Purchase order ${row.id} deleted.`);
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase order delete failed");
+    }
+  }
+
   async function handleBulkDeletePurchaseOrders(orderIds: string[]) {
     const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)));
     if (!uniqueIds.length) {
@@ -1229,6 +1306,27 @@ export function PurchasesPage({
     }
   }
 
+  async function handleDeleteBillRow(row: LocalBill) {
+    if (!window.confirm(`Delete bill ${row.id}? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      actionFeedback.begin(`Deleting bill ${row.id}...`);
+      await deleteBill(row.id);
+      const refreshed = await fetchBillSummaries();
+      setBills(refreshed);
+      if (selectedBillId === row.id || billDraft?.id === row.id) {
+        setSelectedBillId("");
+        setBillDraft(null);
+        setBillSourceSnapshot("");
+        setBillsView("list");
+      }
+      actionFeedback.succeed(`Bill ${row.id} deleted.`);
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Bill delete failed");
+    }
+  }
+
   async function savePaymentMadeDraft() {
     if (!paymentMadeDraft) return;
     const previousId = selectedPaymentMadeId;
@@ -1248,6 +1346,27 @@ export function PurchasesPage({
       actionFeedback.succeed(`Payment ${saved.id} saved.`);
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Payment save failed");
+    }
+  }
+
+  async function handleDeletePaymentMadeRow(row: LocalPaymentMade) {
+    if (!window.confirm(`Delete payment ${row.id}? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      actionFeedback.begin(`Deleting payment ${row.id}...`);
+      await deletePaymentMade(row.id);
+      const [refreshedPayments, refreshedBills] = await Promise.all([fetchPaymentsMade(), fetchBillSummaries()]);
+      setPaymentsMade(refreshedPayments);
+      setBills(refreshedBills);
+      if (selectedPaymentMadeId === row.id) {
+        const next = refreshedPayments[0] || null;
+        setSelectedPaymentMadeId(next?.id || "");
+        setPaymentMadeDraft(next ? { ...next } : createEmptyPaymentMade(null));
+      }
+      actionFeedback.succeed(`Payment ${row.id} deleted.`);
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Payment delete failed");
     }
   }
 

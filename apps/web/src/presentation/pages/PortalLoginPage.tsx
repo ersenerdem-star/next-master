@@ -9,14 +9,14 @@ type PortalLoginPageProps = {
 
 export function PortalLoginPage({ onSuccess }: PortalLoginPageProps) {
   const [email, setEmail] = useState("");
-  const [token, setToken] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const inviteToken = params.get("token") || "";
-    if (inviteToken) setToken(inviteToken);
+    const inviteEmail = params.get("email") || "";
+    if (inviteEmail) setEmail(inviteEmail);
   }, []);
 
   async function handleSubmit() {
@@ -24,8 +24,8 @@ export function PortalLoginPage({ onSuccess }: PortalLoginPageProps) {
       setError("Enter portal email.");
       return;
     }
-    if (!token.trim()) {
-      setError("Enter invite token.");
+    if (!password.trim()) {
+      setError("Enter portal password.");
       return;
     }
 
@@ -37,7 +37,7 @@ export function PortalLoginPage({ onSuccess }: PortalLoginPageProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim(),
-          token: token.trim(),
+          password: password.trim(),
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -65,9 +65,9 @@ export function PortalLoginPage({ onSuccess }: PortalLoginPageProps) {
           </div>
         </div>
         <h1>Portal Access</h1>
-        <p>Sign in with your invited portal email and token.</p>
+        <p>Sign in with your portal email and password.</p>
         <Input label="Portal Email" value={email} onChange={setEmail} placeholder="vendor@company.com" />
-        <Input label="Invite Token" value={token} onChange={setToken} placeholder="Paste invite token" />
+        <Input label="Password" type="password" value={password} onChange={setPassword} placeholder="Portal password" />
         {error ? <div className="error-text">{error}</div> : null}
         <Button busy={loading} busyLabel="Signing in..." onClick={() => void handleSubmit()}>
           Sign In

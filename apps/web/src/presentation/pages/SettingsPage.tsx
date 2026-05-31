@@ -12,7 +12,16 @@ import {
 import { createEmptyCloudCompanyProfile, deleteCompanyProfileById, fetchCompanyProfiles, upsertCompanyProfile } from "../../infrastructure/api/companyProfilesApi";
 import { fetchCustomers } from "../../infrastructure/api/customersApi";
 import { deliverQueuedEmails, fetchEmailTemplates, fetchOutboundEmails, queuePortalInviteEmail, setOutboundEmailStatus, upsertEmailTemplate } from "../../infrastructure/api/emailTemplatesApi";
-import { createEmptyCloudPortalInvite, deletePortalInvite, fetchPortalInvites, issuePortalInviteToken, markPortalInviteSent, setPortalInviteStatus, upsertPortalInvite } from "../../infrastructure/api/portalInvitesApi";
+import {
+  clearPortalInvitePassword,
+  createEmptyCloudPortalInvite,
+  deletePortalInvite,
+  fetchPortalInvites,
+  markPortalInviteSent,
+  setPortalInvitePassword,
+  setPortalInviteStatus,
+  upsertPortalInvite,
+} from "../../infrastructure/api/portalInvitesApi";
 import { fetchAppSession } from "../../infrastructure/api/appSessionApi";
 import { fetchOrgUsers, getPresenceStatus } from "../../infrastructure/api/usersApi";
 import { fetchVendors } from "../../infrastructure/api/vendorsApi";
@@ -83,6 +92,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [companyProfileStatus, setCompanyProfileStatus] = useState("");
   const [portalStatus, setPortalStatus] = useState("");
+  const [portalPasswordDrafts, setPortalPasswordDrafts] = useState<Record<string, string>>({});
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
   const [selectedTemplateKey, setSelectedTemplateKey] = useState("");
   const [emailTemplateDraft, setEmailTemplateDraft] = useState<EmailTemplate | null>(null);
@@ -97,6 +107,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const [savingUserId, setSavingUserId] = useState("");
   const [deletingUserId, setDeletingUserId] = useState("");
   const [sendingPortalInviteId, setSendingPortalInviteId] = useState("");
+  const [portalPasswordBusyId, setPortalPasswordBusyId] = useState("");
   const [sendingQueuedEmails, setSendingQueuedEmails] = useState(false);
   const [changingPortalStatusId, setChangingPortalStatusId] = useState("");
   const [diagnostics, setDiagnostics] = useState<AdminDiagnostics | null>(null);
@@ -552,7 +563,83 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     { key: "email", header: "Email", render: (row: PortalInvite) => row.email || "-" },
     { key: "contact", header: "Contact", render: (row: PortalInvite) => row.contact_name || "-" },
     { key: "status", header: "Status", render: (row: PortalInvite) => row.status },
+    { key: "passwordStatus", header: "Password", render: (row: PortalInvite) => (row.has_password ? "Configured" : "Missing") },
     { key: "sent", header: "Last Sent", render: (row: PortalInvite) => row.last_sent_at || "-" },
+    {
+      key: "passwordActions",
+      header: "Portal Password",
+      render: (row: PortalInvite) => (
+        <div className="inline-password-reset">
+          <input
+            className="inline-password-reset__input"
+            type="password"
+            placeholder={row.has_password ? "Update password" : "Set password"}
+            value={portalPasswordDrafts[row.id] || ""}
+            onChange={(event) =>
+              setPortalPasswordDrafts((current) => ({
+                ...current,
+                [row.id]: event.target.value,
+              }))
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                event.currentTarget.parentElement?.querySelector("button")?.click();
+              }
+            }}
+          />
+          <Button
+            variant="secondary"
+            className="button--compact"
+            busy={portalPasswordBusyId === row.id}
+            busyLabel="Saving..."
+            onClick={async () => {
+              const password = String(portalPasswordDrafts[row.id] || "").trim();
+              if (password.length < 8) {
+                setPortalStatus("Portal password must be at least 8 characters.");
+                return;
+              }
+              try {
+                setPortalPasswordBusyId(row.id);
+                const updated = await setPortalInvitePassword(row.id, password);
+                setPortalInvites(await fetchPortalInvites());
+                setPortalPasswordDrafts((current) => ({ ...current, [row.id]: "" }));
+                setPortalStatus(updated ? `Portal password saved for ${row.party_name}.` : "Portal password saved.");
+              } catch (caught) {
+                setPortalStatus(caught instanceof Error ? caught.message : "Portal password save failed");
+              } finally {
+                setPortalPasswordBusyId("");
+              }
+            }}
+          >
+            {row.has_password ? "Update" : "Set"}
+          </Button>
+          <Button
+            variant="secondary"
+            className="button--compact danger-button"
+            busy={portalPasswordBusyId === `clear:${row.id}`}
+            busyLabel="Clearing..."
+            disabled={!row.has_password}
+            onClick={async () => {
+              if (!row.has_password) return;
+              try {
+                setPortalPasswordBusyId(`clear:${row.id}`);
+                await clearPortalInvitePassword(row.id);
+                setPortalInvites(await fetchPortalInvites());
+                setPortalPasswordDrafts((current) => ({ ...current, [row.id]: "" }));
+                setPortalStatus(`Portal password cleared for ${row.party_name}.`);
+              } catch (caught) {
+                setPortalStatus(caught instanceof Error ? caught.message : "Portal password clear failed");
+              } finally {
+                setPortalPasswordBusyId("");
+              }
+            }}
+          >
+            Clear
+          </Button>
+        </div>
+      ),
+    },
     {
       key: "actions",
       header: "Actions",
@@ -564,11 +651,14 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
             busy={sendingPortalInviteId === row.id}
             busyLabel="Sending..."
             onClick={async () => {
+              if (!row.has_password) {
+                setPortalStatus(`Set a portal password for ${row.party_name} before sending access.`);
+                return;
+              }
               try {
                 setSendingPortalInviteId(row.id);
                 const companyName = companyProfile.companyName || companyProfiles[0]?.companyName || "Next Master";
-                const issued = await issuePortalInviteToken(row.id);
-                const queued = await queuePortalInviteEmail(issued.invite, companyName, window.location.origin, issued.token);
+                const queued = await queuePortalInviteEmail(row, companyName, window.location.origin);
                 const delivery = await deliverQueuedEmails([queued.id]);
                 const sent = delivery.sentCount > 0 ? await markPortalInviteSent(row.id) : null;
                 setPortalInvites(await fetchPortalInvites());
@@ -1117,7 +1207,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
         {portalStatus ? <div className="success-text">{portalStatus}</div> : null}
         <div className="meta-row">
           <span>{portalInvites.length.toLocaleString("en-US")} portal records</span>
-          <span>Portal access is bound to the selected party record. Send Invite rotates a short-lived token, queues mail, then tries delivery.</span>
+          <span>Portal access is bound to the selected party record. Set a password first, then send the access email.</span>
         </div>
         <DataTable rows={portalInvites} columns={portalColumns} emptyText="No customer or vendor portal invite prepared yet." />
       </SectionCard> : null}
@@ -1153,8 +1243,8 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           </div>
         </div>
         <div className="meta-row">
-          <span>Available tokens depend on template type.</span>
-          <span>Examples: {`{{party_name}} {{portal_link}} {{invite_token}} {{purchase_order_no}} {{company_name}} {{full_name}} {{user_email}} {{login_link}} {{set_password_link}}`}</span>
+          <span>Available variables depend on template type.</span>
+          <span>Examples: {`{{party_name}} {{portal_link}} {{purchase_order_no}} {{company_name}} {{full_name}} {{user_email}} {{login_link}} {{set_password_link}}`}</span>
         </div>
         <div className="toolbar toolbar--wrap">
           <Button

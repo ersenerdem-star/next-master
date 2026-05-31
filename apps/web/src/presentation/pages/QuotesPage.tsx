@@ -2278,6 +2278,22 @@ export function QuotesPage({
         render: (row: LocalSalesOrder) => formatMoney(row.sales_total, row.currency || "EUR"),
         sortValue: (row: LocalSalesOrder) => row.sales_total,
       },
+      {
+        key: "actions",
+        header: "Delete",
+        render: (row: LocalSalesOrder) => (
+          <Button
+            variant="secondary"
+            className="button--compact danger-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleDeleteSalesOrders([row.id]);
+            }}
+          >
+            Delete
+          </Button>
+        ),
+      },
     ],
     [selectedLocalSalesOrderIds, salesOrderDocumentState],
   );

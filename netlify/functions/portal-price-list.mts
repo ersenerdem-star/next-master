@@ -18,10 +18,10 @@ export default async (req: Request, _context: Context) => {
   try {
     const body = await req.json();
     const email = String(body?.email || "").trim();
-    const token = String(body?.token || "").trim();
+    const password = String(body?.password || "").trim();
     const sessionToken = String(body?.sessionToken || body?.session_token || "").trim();
     const brand = String(body?.brand || "").trim();
-    if (!sessionToken && (!email || !token)) return json({ error: "Email and invite token are required" }, 400);
+    if (!sessionToken && (!email || !password)) return json({ error: "Email and password are required" }, 400);
     if (!brand) return json({ error: "Select a brand to download the price list" }, 400);
 
     const rateLimit = await enforcePortalRateLimit(req, supabaseUrl, serviceRoleKey, "price_list", email);
@@ -33,7 +33,7 @@ export default async (req: Request, _context: Context) => {
 
     const { invite, sessionToken: nextSessionToken } = await resolvePortalInvite(supabaseUrl, serviceRoleKey, sessionSecret, {
       email,
-      token,
+      password,
       sessionToken,
     });
     const result = await buildPortalPriceListRows(supabaseUrl, serviceRoleKey, invite, brand);

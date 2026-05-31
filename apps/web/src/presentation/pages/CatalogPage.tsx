@@ -203,16 +203,23 @@ export function CatalogPage() {
     const cached = readCatalogCache();
     if (!cached) return;
     if (cached.brands.length) setBrands(cached.brands);
-    if (cached.rows.length) setRows(cached.rows);
-    setSearch(cached.search || cached.submittedSearch || "");
-    setSubmittedSearch(cached.submittedSearch || cached.search || "");
-    setCatalogBrand(cached.catalogBrand || cached.submittedCatalogBrand || "");
-    setSubmittedCatalogBrand(cached.submittedCatalogBrand || cached.catalogBrand || "");
-    setSelectedCatalogProductId(cached.selectedCatalogProductId || "");
     if (!isOnline) {
+      if (cached.rows.length) setRows(cached.rows);
+      setSearch(cached.search || cached.submittedSearch || "");
+      setSubmittedSearch(cached.submittedSearch || cached.search || "");
+      setCatalogBrand(cached.catalogBrand || cached.submittedCatalogBrand || "");
+      setSubmittedCatalogBrand(cached.submittedCatalogBrand || cached.catalogBrand || "");
+      setSelectedCatalogProductId(cached.selectedCatalogProductId || "");
       setStatus("Offline mode active. Showing cached catalog data.");
       setError("");
+      return;
     }
+    setRows([]);
+    setSearch("");
+    setSubmittedSearch("");
+    setCatalogBrand("");
+    setSubmittedCatalogBrand("");
+    setSelectedCatalogProductId("");
   }, [isOnline]);
 
   useEffect(() => {

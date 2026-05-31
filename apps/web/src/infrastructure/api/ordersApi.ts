@@ -853,6 +853,28 @@ export async function upsertInvoice(invoice: LocalInvoice, previousId?: string):
   return mapInvoiceRow(data as unknown as Record<string, unknown>);
 }
 
+export async function deleteInvoice(invoiceId: string): Promise<void> {
+  const organizationId = await getCurrentOrgId();
+  const { data: paymentRows, error: paymentError } = await supabaseClient
+    .from("payments_received")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("invoice_id", invoiceId)
+    .limit(1);
+  if (paymentError) throw new Error(paymentError.message || "Invoice delete check failed");
+  if ((paymentRows || []).length) {
+    throw new Error("Delete linked payments first, then delete the invoice.");
+  }
+
+  const { error } = await supabaseClient
+    .from("invoices")
+    .delete()
+    .eq("organization_id", organizationId)
+    .eq("id", invoiceId);
+
+  if (error) throw new Error(error.message || "Invoice delete failed");
+}
+
 export async function upsertPurchaseOrder(order: LocalPurchaseOrder): Promise<LocalPurchaseOrder> {
   const organizationId = await getCurrentOrgId();
   const payload = mapPurchaseOrderPayload(order, organizationId);
@@ -957,6 +979,17 @@ export async function buildAndUpsertMergedBillFromPurchaseOrders(orders: LocalPu
 
 export async function deleteBill(billId: string): Promise<void> {
   const organizationId = await getCurrentOrgId();
+  const { data: paymentRows, error: paymentError } = await supabaseClient
+    .from("payments_made")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("bill_id", billId)
+    .limit(1);
+  if (paymentError) throw new Error(paymentError.message || "Bill delete check failed");
+  if ((paymentRows || []).length) {
+    throw new Error("Delete linked payments first, then delete the bill.");
+  }
+
   const { error } = await supabaseClient
     .from("bills")
     .delete()
@@ -975,6 +1008,29 @@ export async function fetchPaymentsReceived(): Promise<LocalPaymentReceived[]> {
     .order("updated_at", { ascending: false });
   if (error) throw new Error(error.message || "Payments received load failed");
   return ((data || []) as unknown as Record<string, unknown>[]).map(mapPaymentReceivedRow);
+}
+
+export async function deletePaymentReceived(paymentId: string): Promise<void> {
+  const organizationId = await getCurrentOrgId();
+  const { data: paymentRows, error: paymentError } = await supabaseClient
+    .from("payments_received")
+    .select(PAYMENT_RECEIVED_COLUMNS)
+    .eq("organization_id", organizationId)
+    .eq("id", paymentId)
+    .limit(1);
+  if (paymentError) throw new Error(paymentError.message || "Payment received delete failed");
+  const payment = paymentRows?.[0] as unknown as Record<string, unknown> | undefined;
+
+  const { error } = await supabaseClient
+    .from("payments_received")
+    .delete()
+    .eq("organization_id", organizationId)
+    .eq("id", paymentId);
+
+  if (error) throw new Error(error.message || "Payment received delete failed");
+  if (payment?.invoice_id) {
+    await syncInvoicePaidStatus(organizationId, String(payment.invoice_id));
+  }
 }
 
 export async function fetchPaymentsReceivedByCustomerNames(names: string[]): Promise<LocalPaymentReceived[]> {
@@ -1024,6 +1080,29 @@ export async function fetchPaymentsMade(): Promise<LocalPaymentMade[]> {
     .order("updated_at", { ascending: false });
   if (error) throw new Error(error.message || "Payments made load failed");
   return ((data || []) as unknown as Record<string, unknown>[]).map(mapPaymentMadeRow);
+}
+
+export async function deletePaymentMade(paymentId: string): Promise<void> {
+  const organizationId = await getCurrentOrgId();
+  const { data: paymentRows, error: paymentError } = await supabaseClient
+    .from("payments_made")
+    .select(PAYMENT_MADE_COLUMNS)
+    .eq("organization_id", organizationId)
+    .eq("id", paymentId)
+    .limit(1);
+  if (paymentError) throw new Error(paymentError.message || "Payment made delete failed");
+  const payment = paymentRows?.[0] as unknown as Record<string, unknown> | undefined;
+
+  const { error } = await supabaseClient
+    .from("payments_made")
+    .delete()
+    .eq("organization_id", organizationId)
+    .eq("id", paymentId);
+
+  if (error) throw new Error(error.message || "Payment made delete failed");
+  if (payment?.bill_id) {
+    await syncBillPaidStatus(organizationId, String(payment.bill_id));
+  }
 }
 
 export async function fetchPaymentsMadeBySupplierNames(names: string[]): Promise<LocalPaymentMade[]> {

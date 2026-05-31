@@ -320,7 +320,7 @@ function readStoredCredentials(): PortalCredentials | null {
   try {
     const parsed = JSON.parse(raw) as Partial<PortalCredentials>;
     if (!parsed.email) return null;
-    return { email: parsed.email, token: "", sessionToken: parsed.sessionToken || "" };
+    return { email: parsed.email, password: "", sessionToken: parsed.sessionToken || "" };
   } catch {
     return null;
   }
@@ -423,8 +423,6 @@ function getDefaultPortalSection(snapshot: PortalSnapshot) {
 export function PortalPage() {
   const search = new URLSearchParams(window.location.search);
   const portalLinkEmail = search.get("email") || "";
-  const portalLinkToken = search.get("token") || "";
-  const hasPortalLinkCredentials = Boolean(portalLinkToken && portalLinkEmail);
   const portalImportRef = useRef<HTMLInputElement | null>(null);
   const portalDraftLinesRef = useRef<HTMLDivElement | null>(null);
   const portalCachedDraftRef = useRef<PortalOfflineCache["draft"] | null>(null);
@@ -434,7 +432,7 @@ export function PortalPage() {
     const stored = typeof window !== "undefined" ? readStoredCredentials() : null;
     return {
       email: portalLinkEmail || stored?.email || "",
-      token: portalLinkToken || stored?.token || "",
+      password: "",
       sessionToken: stored?.sessionToken || "",
     };
   });
@@ -513,12 +511,11 @@ export function PortalPage() {
     }
     if (!isOnline) return;
 
-    const previewCredentials = hasPortalLinkCredentials
-      ? { email: portalLinkEmail, token: portalLinkToken, sessionToken: credentials.sessionToken || "" }
-      : credentials.email && credentials.token
-        ? { email: credentials.email, token: credentials.token, sessionToken: "" }
-        : credentials.email && credentials.sessionToken
-          ? { email: credentials.email, token: "", sessionToken: credentials.sessionToken }
+    const previewCredentials =
+      credentials.email && credentials.sessionToken
+        ? { email: credentials.email, sessionToken: credentials.sessionToken }
+        : credentials.email
+          ? { email: credentials.email, sessionToken: "" }
           : null;
 
     if (!previewCredentials) {
@@ -527,7 +524,7 @@ export function PortalPage() {
       return;
     }
 
-    const previewKey = `${previewCredentials.email}::${previewCredentials.token || previewCredentials.sessionToken}`;
+    const previewKey = `${previewCredentials.email}::${previewCredentials.sessionToken || "preview"}`;
     if (portalBrandingKeyRef.current === previewKey) return;
     portalBrandingKeyRef.current = previewKey;
 
@@ -546,11 +543,11 @@ export function PortalPage() {
     return () => {
       cancelled = true;
     };
-  }, [credentials.email, credentials.sessionToken, credentials.token, hasPortalLinkCredentials, isOnline, portalLinkEmail, portalLinkToken, snapshot]);
+  }, [credentials.email, credentials.sessionToken, isOnline, snapshot]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if ((hasPortalLinkCredentials && isOnline) || snapshot || !credentials.email) return;
+    if (snapshot || !credentials.email) return;
     const cached = readPortalCache(credentials.email);
     if (!cached?.snapshot) return;
     portalCachedDraftRef.current = cached.draft;
@@ -562,10 +559,10 @@ export function PortalPage() {
     setPaymentStatusFilter("");
     setStatus(isOnline ? "Cached portal workspace loaded." : "Offline mode active. Showing cached portal data and local basket.");
     setError("");
-  }, [credentials.email, hasPortalLinkCredentials, isOnline, snapshot]);
+  }, [credentials.email, isOnline, snapshot]);
 
   useEffect(() => {
-    if (!isOnline || hasPortalLinkCredentials || !credentials.email || !credentials.sessionToken) return;
+    if (!isOnline || !credentials.email || !credentials.sessionToken) return;
     const refreshKey = `${credentials.email}::${credentials.sessionToken}`;
     if (portalAutoRefreshKeyRef.current === refreshKey) return;
     portalAutoRefreshKeyRef.current = refreshKey;
@@ -575,7 +572,7 @@ export function PortalPage() {
       .then(({ snapshot: next, sessionToken }) => {
         if (cancelled) return;
         setSnapshot(next);
-        const nextCredentials = { email: credentials.email, token: "", sessionToken };
+        const nextCredentials = { email: credentials.email, password: "", sessionToken };
         setCredentials(nextCredentials);
         writeStoredCredentials(nextCredentials);
         setError("");
@@ -596,52 +593,7 @@ export function PortalPage() {
     return () => {
       cancelled = true;
     };
-  }, [credentials, hasPortalLinkCredentials, isOnline, snapshot]);
-
-  useEffect(() => {
-    const token = portalLinkToken;
-    const email = portalLinkEmail;
-    if (!token || !email) return;
-    if (!isOnline) {
-      const cached = readPortalCache(email);
-      if (cached?.snapshot) {
-        portalCachedDraftRef.current = cached.draft;
-        setSnapshot(cached.snapshot);
-        setSelection(null);
-        setActiveSection(cached.draft.activeSection || getDefaultPortalSection(cached.snapshot));
-        setDocumentSearch("");
-        setBrandFilter("");
-        setPaymentStatusFilter("");
-        setStatus("Offline mode active. Showing cached portal data and local basket.");
-        setError("");
-        return;
-      }
-      setSnapshot(null);
-      setError("Connect to the internet to start a new portal session.");
-      return;
-    }
-    setLoading(true);
-    setError("");
-    loginPortal({ email, token })
-      .then(({ snapshot: next, sessionToken }) => {
-        setSnapshot(next);
-        setSelection(null);
-        setActiveSection(getDefaultPortalSection(next));
-        setDocumentSearch("");
-        setBrandFilter("");
-        setPaymentStatusFilter("");
-        setStatus("Portal session active.");
-        const nextCredentials = { email, token: "", sessionToken };
-        setCredentials(nextCredentials);
-        writeStoredCredentials(nextCredentials);
-        clearPortalQueryParams();
-      })
-      .catch((caught) => {
-        setSnapshot(null);
-        setError(caught instanceof Error ? caught.message : "Portal login failed");
-      })
-      .finally(() => setLoading(false));
-  }, [isOnline, portalLinkEmail, portalLinkToken]);
+  }, [credentials.email, credentials.sessionToken, isOnline, snapshot]);
 
   const accountColumns = useMemo(
     () => [
@@ -905,7 +857,7 @@ export function PortalPage() {
       setBrandFilter("");
       setPaymentStatusFilter("");
       setStatus("Portal session active.");
-      const nextCredentials = { email: credentials.email, token: "", sessionToken };
+      const nextCredentials = { email: credentials.email, password: "", sessionToken };
       setCredentials(nextCredentials);
       writeStoredCredentials(nextCredentials);
       clearPortalQueryParams();
@@ -930,7 +882,7 @@ export function PortalPage() {
       setSnapshot(next);
       setSelection(null);
       setStatus("Portal data refreshed.");
-      const nextCredentials = { email: credentials.email, token: "", sessionToken };
+      const nextCredentials = { email: credentials.email, password: "", sessionToken };
       setCredentials(nextCredentials);
       writeStoredCredentials(nextCredentials);
     } catch (caught) {
@@ -942,7 +894,7 @@ export function PortalPage() {
 
   function handleLogout() {
     writePortalCache(credentials.email, null);
-    setCredentials({ email: credentials.email, token: "", sessionToken: "" });
+    setCredentials({ email: credentials.email, password: "", sessionToken: "" });
     setSnapshot(null);
     setSelection(null);
     setActiveSection("desk");
@@ -1099,7 +1051,7 @@ export function PortalPage() {
             </div>
           </div>
           <h1>Portal Login</h1>
-          <p>Enter invite email and token to access customer or vendor self-service.</p>
+          <p>Enter portal email and password to access customer or vendor self-service.</p>
           <form
             className="portal-login-form"
             onSubmit={(event) => {
@@ -1108,7 +1060,13 @@ export function PortalPage() {
             }}
           >
             <Input label="Email" value={credentials.email} placeholder="name@company.com" onChange={(value) => setCredentials((current) => ({ ...current, email: value }))} />
-            <Input label="Invite Token" value={credentials.token} placeholder="Portal invite token" onChange={(value) => setCredentials((current) => ({ ...current, token: value }))} />
+            <Input
+              label="Password"
+              type="password"
+              value={credentials.password || ""}
+              placeholder="Portal password"
+              onChange={(value) => setCredentials((current) => ({ ...current, password: value }))}
+            />
             <div className="inline-actions">
               <Button type="submit" busy={loading} busyLabel="Signing in..." onClick={() => void handleLogin()}>
                 Sign In

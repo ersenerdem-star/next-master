@@ -207,6 +207,7 @@ export type PortalSnapshot = {
 
 export type PortalCredentials = {
   email: string;
-  token: string;
+  password?: string;
+  token?: string;
   sessionToken?: string;
 };

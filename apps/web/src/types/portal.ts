@@ -22,5 +22,6 @@ export type PortalInvite = {
   expires_at: string;
   created_at: string;
   updated_at: string;
+  has_password?: boolean;
   access: PortalAccess;
 };
