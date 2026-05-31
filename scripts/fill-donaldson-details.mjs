@@ -1,8 +1,59 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
 import {
   normalizeCatalogDisplayCode,
   normalizeLifecycleStatus,
   sanitizeCatalogOemNumbers,
-} from "./catalog-standardization.mts";
+} from "./_shared/catalog-standardization.mjs";
+
+const repoRoot = "/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp";
+const outputDir = path.join(repoRoot, "docs", "donaldson-detail-fill");
+const urlCachePath = path.join(outputDir, "donaldson-url-map.json");
+
+const supabaseUrl = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
+const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
+
+if (!supabaseUrl || !serviceRoleKey) {
+  throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
+}
+
+const args = new Map();
+for (let index = 2; index < process.argv.length; index += 1) {
+  const token = process.argv[index];
+  if (!token.startsWith("--")) continue;
+  const [rawKey, rawValue] = token.slice(2).split("=", 2);
+  if (rawValue != null) {
+    args.set(rawKey, rawValue);
+    continue;
+  }
+  const next = process.argv[index + 1];
+  if (next && !next.startsWith("--")) {
+    args.set(rawKey, next);
+    index += 1;
+  } else {
+    args.set(rawKey, "true");
+  }
+}
+
+const applyMode = args.has("apply");
+const refreshExisting = args.has("refresh-existing");
+const detailConcurrency = Math.max(1, Number.parseInt(args.get("concurrency") || "5", 10) || 5);
+const batchSize = Math.max(1, Number.parseInt(args.get("batch-size") || "200", 10) || 200);
+const sitemapConcurrency = Math.max(1, Number.parseInt(args.get("sitemap-concurrency") || "2", 10) || 2);
+const requestTimeoutMs = Math.max(4000, Number.parseInt(args.get("request-timeout-ms") || "60000", 10) || 60000);
+const sleepMs = Math.max(0, Number.parseInt(args.get("sleep-ms") || "25", 10) || 25);
+const limitArg = args.get("limit");
+const rowLimit = limitArg == null ? null : Math.max(1, Number.parseInt(limitArg, 10) || 0);
+
+fs.mkdirSync(outputDir, { recursive: true });
+
+const headers = {
+  apikey: serviceRoleKey,
+  Authorization: `Bearer ${serviceRoleKey}`,
+  "Content-Type": "application/json",
+};
 
 const requestHeaders = {
   "user-agent":
@@ -13,66 +64,68 @@ const requestHeaders = {
   pragma: "no-cache",
 };
 
-export async function syncBrandCatalogFromDonaldson(input: {
-  supabaseUrl: string;
-  serviceRoleKey: string;
-  brandName: string;
-  refreshExisting?: boolean;
-  concurrency?: number;
-  requestTimeoutMs?: number;
-}) {
-  const refreshExisting = input.refreshExisting !== false;
-  const concurrency = Math.max(1, input.concurrency ?? 5);
-  const requestTimeoutMs = Math.max(5000, input.requestTimeoutMs ?? 30000);
-  const headers = {
-    apikey: input.serviceRoleKey,
-    Authorization: `Bearer ${input.serviceRoleKey}`,
-    "Content-Type": "application/json",
-  };
+async function main() {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const matchedCsvPath = path.join(outputDir, `donaldson-detail-fill-${timestamp}.csv`);
+  const errorsCsvPath = path.join(outputDir, `donaldson-detail-fill-errors-${timestamp}.csv`);
+  const summaryPath = path.join(outputDir, `donaldson-detail-fill-summary-${timestamp}.json`);
 
-  const target = await resolveDonaldsonTarget(input.supabaseUrl, headers);
-  const catalogRows = await fetchDonaldsonCatalogRows(input.supabaseUrl, headers, target.brand_id);
-  const urlMap = await resolveDonaldsonProductUrls(catalogRows, requestTimeoutMs);
+  const target = await resolveDonaldsonTarget();
+  const catalogRows = await fetchDonaldsonCatalogRows(target.brand_id);
+  const selectedCatalogRows = rowLimit == null ? catalogRows : catalogRows.slice(0, rowLimit);
+  const urlMap = await resolveDonaldsonProductUrls(selectedCatalogRows);
 
-  const catalogPayload: Array<Record<string, unknown>> = [];
-  const replacementPayload: Array<Record<string, unknown>> = [];
-  const seenReplacementKeys = new Set<string>();
-  let matchedRows = 0;
-  let changedRows = 0;
-  let oemRows = 0;
-  let vehicleRows = 0;
-  let discontinuedRows = 0;
-  const errorRows: Array<{ product_code: string; normalized_code: string; error: string }> = [];
+  const matched = [];
+  const errors = [];
+  const catalogPayload = [];
+  const replacementPayload = [];
+  const seenReplacementKeys = new Set();
 
-  await runPool(catalogRows, concurrency, async (row) => {
+  await runPool(selectedCatalogRows, detailConcurrency, async (row, index) => {
     const productUrl = urlMap.get(row.normalized_code) || "";
     if (!productUrl) {
-      errorRows.push({
+      errors.push({
         product_code: row.product_code,
         normalized_code: row.normalized_code,
+        source_url: "",
         error: "Product URL not found in Donaldson sitemaps",
       });
+      if ((index + 1) % 100 === 0 || index + 1 === selectedCatalogRows.length) {
+        console.error(`Donaldson detail progress: ${index + 1}/${selectedCatalogRows.length}`);
+      }
       return;
     }
 
     try {
-      const page = await fetchDonaldsonProductPage(productUrl, row.product_code, requestTimeoutMs);
+      const page = await fetchDonaldsonProductPage(productUrl, row.product_code);
       const detail = extractDonaldsonDetail(page.html, page.sourceUrl);
       const merged = mergeCatalogRow(target, row, detail);
       const changed = hasCatalogDelta(row, merged);
+      const replacementKey = detail.replacement_code
+        ? `${target.organization_id}::${target.brand_id}::${normalizeCode(row.product_code)}`
+        : "";
 
-      matchedRows += 1;
-      if (changed) changedRows += 1;
-      if (normalizeTextValue(merged.oem_no)) oemRows += 1;
-      if (normalizeTextValue(merged.vehicle)) vehicleRows += 1;
-      if (String(merged.lifecycle_status || "") === "discontinued") discontinuedRows += 1;
+      matched.push({
+        product_code: row.product_code,
+        normalized_code: row.normalized_code,
+        source_url: page.sourceUrl,
+        vehicle: merged.vehicle || "",
+        oem_no: merged.oem_no || "",
+        lifecycle_status: merged.lifecycle_status,
+        lifecycle_note: merged.lifecycle_note || "",
+        replacement_code: detail.replacement_code || "",
+        alternate_codes: detail.alternate_parts.map((item) => item.code).join(" | "),
+        alternate_notes: detail.alternate_parts.map((item) => item.note).filter(Boolean).join(" | "),
+        changed: changed ? "yes" : "no",
+      });
 
       if (refreshExisting || changed) {
         catalogPayload.push(merged);
       }
 
-      if (detail.replacement_code) {
-        const replacement = {
+      if (detail.replacement_code && !seenReplacementKeys.has(replacementKey)) {
+        seenReplacementKeys.add(replacementKey);
+        replacementPayload.push({
           organization_id: target.organization_id,
           brand_id: target.brand_id,
           old_code: normalizeCatalogDisplayCode(row.product_code, target.name),
@@ -80,34 +133,67 @@ export async function syncBrandCatalogFromDonaldson(input: {
           original_number: null,
           reason: detail.replacement_reason,
           is_active: true,
-        };
-        const replacementKey = `${replacement.organization_id}::${replacement.brand_id}::${normalizeCode(replacement.old_code)}::${normalizeCode(replacement.new_code)}`;
-        if (!seenReplacementKeys.has(replacementKey)) {
-          seenReplacementKeys.add(replacementKey);
-          replacementPayload.push(replacement);
-        }
+        });
       }
     } catch (error) {
-      errorRows.push({
+      errors.push({
         product_code: row.product_code,
         normalized_code: row.normalized_code,
+        source_url: productUrl,
         error: error instanceof Error ? error.message : String(error),
       });
     }
+
+    if ((index + 1) % 100 === 0 || index + 1 === selectedCatalogRows.length) {
+      console.error(`Donaldson detail progress: ${index + 1}/${selectedCatalogRows.length}`);
+    }
+    if (sleepMs > 0) {
+      await sleep(sleepMs);
+    }
   });
 
-  const batchSize = 200;
+  writeCsv(
+    matchedCsvPath,
+    [
+      "Product_Code",
+      "Normalized_Code",
+      "Source_URL",
+      "Vehicle",
+      "OEM_No",
+      "Lifecycle_Status",
+      "Lifecycle_Note",
+      "Replacement_Code",
+      "Alternate_Codes",
+      "Alternate_Notes",
+      "Changed",
+    ],
+    matched.map((row) => [
+      row.product_code,
+      row.normalized_code,
+      row.source_url,
+      row.vehicle,
+      row.oem_no,
+      row.lifecycle_status,
+      row.lifecycle_note,
+      row.replacement_code,
+      row.alternate_codes,
+      row.alternate_notes,
+      row.changed,
+    ]),
+  );
+
+  writeCsv(
+    errorsCsvPath,
+    ["Product_Code", "Normalized_Code", "Source_URL", "Error"],
+    errors.map((row) => [row.product_code, row.normalized_code, row.source_url, row.error]),
+  );
+
   const processedBatches = [];
-  if (catalogPayload.length) {
-    for (let index = 0; index < catalogPayload.length; index += batchSize) {
-      const batch = catalogPayload.slice(index, index + batchSize);
-      const response = await fetch(`${input.supabaseUrl}/rest/v1/catalog_products?on_conflict=organization_id,brand_id,normalized_code`, {
-        method: "POST",
-        headers: {
-          ...headers,
-          Prefer: "resolution=merge-duplicates,return=minimal",
-        },
-        body: JSON.stringify(
+  if (applyMode) {
+    if (catalogPayload.length) {
+      for (let index = 0; index < catalogPayload.length; index += batchSize) {
+        const batch = catalogPayload.slice(index, index + batchSize);
+        const result = await upsertCatalogBatch(
           batch.map((row) => ({
             organization_id: row.organization_id,
             brand_id: row.brand_id,
@@ -118,27 +204,15 @@ export async function syncBrandCatalogFromDonaldson(input: {
             lifecycle_note: emptyToNull(row.lifecycle_note),
             updated_at: new Date().toISOString(),
           })),
-        ),
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`catalog_products upsert failed: ${response.status} ${text}`);
+        );
+        processedBatches.push({ type: "catalog", batch: index / batchSize + 1, rows: batch.length, result });
       }
-      processedBatches.push({ type: "catalog", batch: index / batchSize + 1, rows: batch.length, status: response.status });
     }
-  }
 
-  const processedReplacementBatches = [];
-  if (replacementPayload.length) {
-    for (let index = 0; index < replacementPayload.length; index += batchSize) {
-      const batch = replacementPayload.slice(index, index + batchSize);
-      const response = await fetch(`${input.supabaseUrl}/rest/v1/item_code_references?on_conflict=organization_id,brand_id,normalized_old_code`, {
-        method: "POST",
-        headers: {
-          ...headers,
-          Prefer: "resolution=merge-duplicates,return=minimal",
-        },
-        body: JSON.stringify(
+    if (replacementPayload.length) {
+      for (let index = 0; index < replacementPayload.length; index += batchSize) {
+        const batch = replacementPayload.slice(index, index + batchSize);
+        const result = await upsertCodeReferenceBatch(
           batch.map((row) => ({
             organization_id: row.organization_id,
             brand_id: row.brand_id,
@@ -149,50 +223,50 @@ export async function syncBrandCatalogFromDonaldson(input: {
             is_active: row.is_active,
             updated_at: new Date().toISOString(),
           })),
-        ),
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`item_code_references upsert failed: ${response.status} ${text}`);
+        );
+        processedBatches.push({ type: "code_reference", batch: index / batchSize + 1, rows: batch.length, result });
       }
-      processedReplacementBatches.push({ type: "code_reference", batch: index / batchSize + 1, rows: batch.length, status: response.status });
     }
   }
 
-  return {
-    targetBrandId: target.brand_id,
-    targetBrandName: target.name,
-    organizationId: target.organization_id,
-    existingRows: catalogRows.length,
-    listingPagesProcessed: 0,
-    listingLastPage: 0,
-    listingUniqueRows: catalogRows.length,
-    newRowsInListing: 0,
-    incompleteExistingRows: catalogRows.filter((row) => shouldProcessRow(row)).length,
-    candidateRows: catalogRows.length,
-    resolvedRows: matchedRows,
-    errorRows: errorRows.length,
-    discontinuedRows,
-    replacementRows: replacementPayload.length,
-    replacementFetchRows: 0,
-    supportsImageColumn: false,
-    processedBatches,
-    processedReplacementBatches,
-    oemRows,
-    vehicleRows,
-    imageRows: 0,
-    hsRows: 0,
-    weightRows: 0,
+  const summary = {
+    mode: applyMode ? "apply" : "plan",
+    brand_name: target.name,
+    brand_id: target.brand_id,
+    organization_id: target.organization_id,
+    selected_rows: selectedCatalogRows.length,
+    sitemap_matched_urls: urlMap.size,
+    detail_rows: matched.length,
+    changed_rows: matched.filter((row) => row.changed === "yes").length,
+    oem_rows: matched.filter((row) => String(row.oem_no || "").trim()).length,
+    vehicle_rows: matched.filter((row) => String(row.vehicle || "").trim()).length,
+    discontinued_rows: matched.filter((row) => String(row.lifecycle_status || "") === "discontinued").length,
+    replacement_rows: replacementPayload.length,
+    error_rows: errors.length,
+    matched_csv: matchedCsvPath,
+    errors_csv: errorsCsvPath,
+    processed_batches: processedBatches,
+    refresh_existing: refreshExisting,
   };
+
+  fs.writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify(summary, null, 2));
 }
 
-async function resolveDonaldsonTarget(supabaseUrl: string, headers: Record<string, string>) {
-  const response = await fetch(`${supabaseUrl}/rest/v1/brands?select=id,name,organization_id&name=ilike.Donaldson&limit=1`, { headers });
+async function resolveDonaldsonTarget() {
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/brands?select=id,name,organization_id&name=ilike.Donaldson&limit=1`,
+    { headers },
+  );
   const text = await response.text();
   const rows = text ? JSON.parse(text) : [];
-  if (!response.ok) throw new Error(`Donaldson brand lookup failed: ${response.status} ${text}`);
+  if (!response.ok) {
+    throw new Error(`Donaldson brand lookup failed: ${response.status} ${text}`);
+  }
   const brand = Array.isArray(rows) ? rows[0] : null;
-  if (!brand?.id || !brand?.organization_id) throw new Error("Donaldson brand target not found");
+  if (!brand?.id || !brand?.organization_id) {
+    throw new Error("Donaldson brand target not found");
+  }
   return {
     brand_id: String(brand.id),
     organization_id: String(brand.organization_id),
@@ -200,7 +274,7 @@ async function resolveDonaldsonTarget(supabaseUrl: string, headers: Record<strin
   };
 }
 
-async function fetchDonaldsonCatalogRows(supabaseUrl: string, headers: Record<string, string>, brandId: string) {
+async function fetchDonaldsonCatalogRows(brandId) {
   const results = [];
   const pageLimit = 1000;
   let offset = 0;
@@ -211,7 +285,9 @@ async function fetchDonaldsonCatalogRows(supabaseUrl: string, headers: Record<st
     );
     const text = await response.text();
     const rows = text ? JSON.parse(text) : [];
-    if (!response.ok) throw new Error(`catalog_products fetch failed: ${response.status} ${text}`);
+    if (!response.ok) {
+      throw new Error(`catalog_products fetch failed: ${response.status} ${text}`);
+    }
     if (!Array.isArray(rows) || rows.length === 0) break;
     results.push(
       ...rows
@@ -233,18 +309,27 @@ async function fetchDonaldsonCatalogRows(supabaseUrl: string, headers: Record<st
   return dedupeBy(results, (row) => row.normalized_code);
 }
 
-async function resolveDonaldsonProductUrls(rows: any[], requestTimeoutMs: number) {
-  const urlMap = new Map<string, string>();
+async function resolveDonaldsonProductUrls(rows) {
+  const urlMap = new Map();
+  const cached = readUrlCache();
+  for (const row of rows) {
+    const cachedUrl = cached[row.normalized_code];
+    if (cachedUrl) {
+      urlMap.set(row.normalized_code, cachedUrl);
+    }
+  }
+
   for (const row of rows) {
     const code = normalizeCatalogDisplayCode(row.product_code, "Donaldson");
     const normalizedCode = normalizeCode(code);
     if (!normalizedCode || urlMap.has(normalizedCode)) continue;
     urlMap.set(normalizedCode, buildDonaldsonProductUrl(code, "en-tr"));
   }
+  writeUrlCache(urlMap);
   return urlMap;
 }
 
-function extractDonaldsonDetail(html: string, sourceUrl: string) {
+function extractDonaldsonDetail(html, sourceUrl) {
   const vehicleItems = extractUseCaseItems(html);
   const oemItems = extractOemItems(html);
   const alternateParts = extractAlternateParts(html);
@@ -260,10 +345,11 @@ function extractDonaldsonDetail(html: string, sourceUrl: string) {
     lifecycle_note: lifecycle.note,
     replacement_code: lifecycle.replacement_code,
     replacement_reason: lifecycle.reason,
+    alternate_parts: alternateParts,
   };
 }
 
-function extractUseCaseItems(html: string) {
+function extractUseCaseItems(html) {
   const blockMatch = html.match(/Use Cases\s*\/\s*Applications<\/b>\s*<\/h2>\s*<p><ul>([\s\S]*?)<\/ul><\/p>/i);
   const section = blockMatch?.[1] || "";
   if (!section) return [];
@@ -276,14 +362,18 @@ function extractUseCaseItems(html: string) {
   return dedupeStrings(values);
 }
 
-function simplifyUseCase(value: string) {
+function simplifyUseCase(value) {
   const cleaned = String(value || "").trim();
   if (!cleaned) return "";
-  return cleaned.replace(/\s+(including|such as|like)\s+.*$/i, "").replace(/\s+/g, " ").trim();
+  return cleaned
+    .replace(/\s+(including|such as|like)\s+.*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function extractOemItems(html: string) {
+function extractOemItems(html) {
   const values = [];
+
   const sectionMatch = html.match(/<section class="ListCrossReferenceDetailPageComp[\s\S]*?<\/section>/i);
   const section = sectionMatch?.[0] || "";
   if (section) {
@@ -292,6 +382,7 @@ function extractOemItems(html: string) {
       if (looksLikeUsefulPartNumber(value)) values.push(value);
     }
   }
+
   const inlineJsonMatches = [
     ...html.matchAll(/"manufacturePartNumber"\s*:\s*"([^"]+)"/gi),
     ...html.matchAll(/manufacturePartNumber['"]?\s*:\s*['"]([^'"]+)['"]/gi),
@@ -300,10 +391,11 @@ function extractOemItems(html: string) {
     const value = cleanText(match[1]);
     if (looksLikeUsefulPartNumber(value)) values.push(value);
   }
+
   return dedupeStrings(values);
 }
 
-function extractAlternateParts(html: string) {
+function extractAlternateParts(html) {
   const sectionMatch = html.match(/<div id="alternateBody"[\s\S]*?<\/section>/i);
   const section = sectionMatch?.[0] || "";
   if (!section) return [];
@@ -326,7 +418,7 @@ function extractAlternateParts(html: string) {
   return dedupeBy(items, (item) => normalizeCode(item.code));
 }
 
-function extractLifecycle(html: string, alternateParts: Array<{ code: string; url: string; note: string }>) {
+function extractLifecycle(html, alternateParts) {
   const text = cleanText(html);
   const discontinued =
     /no longer deliverable by the manufacturer/i.test(text) ||
@@ -338,6 +430,7 @@ function extractLifecycle(html: string, alternateParts: Array<{ code: string; ur
 
   let replacementCode = "";
   let reason = "";
+
   const explicitReplacementMatch =
     html.match(/Product has been replaced by:\s*[\s\S]{0,500}?<a[^>]*>([^<]+)<\/a>/i) ||
     html.match(/Product has been replaced by:\s*([A-Z0-9-]+)/i) ||
@@ -358,7 +451,9 @@ function extractLifecycle(html: string, alternateParts: Array<{ code: string; ur
   let note = "";
   if (replacementCode) {
     note = `Replacement code: ${replacementCode}.`;
-    if (reason) note = `${note} ${reason}`.trim();
+    if (reason) {
+      note = `${note} ${reason}`.trim();
+    }
   } else if (discontinued) {
     note = "Not in production according to Donaldson source.";
   }
@@ -371,13 +466,14 @@ function extractLifecycle(html: string, alternateParts: Array<{ code: string; ur
   };
 }
 
-function mergeCatalogRow(target: { organization_id: string; brand_id: string; name: string }, existing: any, detail: any) {
+function mergeCatalogRow(target, existing, detail) {
   const nextLifecycleStatus =
     normalizeLifecycleStatus(
       `${detail.lifecycle_status || ""} ${detail.lifecycle_note || ""} ${detail.replacement_reason || ""}`,
     ) === "discontinued"
       ? "discontinued"
       : normalizeLifecycleStatus(existing.lifecycle_status);
+  const nextLifecycleNote = detail.lifecycle_note || existing.lifecycle_note || "";
   return {
     organization_id: target.organization_id,
     brand_id: target.brand_id,
@@ -385,11 +481,11 @@ function mergeCatalogRow(target: { organization_id: string; brand_id: string; na
     oem_no: sanitizeCatalogOemNumbers(detail.oem_no || existing.oem_no || ""),
     vehicle: detail.vehicle || existing.vehicle || "",
     lifecycle_status: nextLifecycleStatus,
-    lifecycle_note: detail.lifecycle_note || existing.lifecycle_note || "",
+    lifecycle_note: nextLifecycleNote,
   };
 }
 
-function hasCatalogDelta(existing: any, next: any) {
+function hasCatalogDelta(existing, next) {
   return (
     normalizeTextValue(existing.oem_no) !== normalizeTextValue(next.oem_no) ||
     normalizeTextValue(existing.vehicle) !== normalizeTextValue(next.vehicle) ||
@@ -398,7 +494,39 @@ function hasCatalogDelta(existing: any, next: any) {
   );
 }
 
-async function fetchText(url: string, requestTimeoutMs: number) {
+async function upsertCatalogBatch(payload) {
+  const response = await fetch(`${supabaseUrl}/rest/v1/catalog_products?on_conflict=organization_id,brand_id,normalized_code`, {
+    method: "POST",
+    headers: {
+      ...headers,
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`catalog_products upsert failed: ${response.status} ${text}`);
+  }
+  return { status: response.status };
+}
+
+async function upsertCodeReferenceBatch(payload) {
+  const response = await fetch(`${supabaseUrl}/rest/v1/item_code_references?on_conflict=organization_id,brand_id,normalized_old_code`, {
+    method: "POST",
+    headers: {
+      ...headers,
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`item_code_references upsert failed: ${response.status} ${text}`);
+  }
+  return { status: response.status };
+}
+
+async function fetchText(url) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
   try {
@@ -407,20 +535,22 @@ async function fetchText(url: string, requestTimeoutMs: number) {
       signal: controller.signal,
     });
     const text = await response.text();
-    if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
+    }
     return text;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function fetchDonaldsonProductPage(initialUrl: string, productCode: string, requestTimeoutMs: number) {
+async function fetchDonaldsonProductPage(initialUrl, productCode) {
   const candidates = dedupeStrings([initialUrl, ...buildDonaldsonProductCandidates(productCode)]);
-  let lastError: unknown = null;
+  let lastError = null;
   for (const candidate of candidates) {
     if (!candidate) continue;
     try {
-      const html = await fetchText(candidate, requestTimeoutMs);
+      const html = await fetchText(candidate);
       return { html, sourceUrl: candidate };
     } catch (error) {
       lastError = error;
@@ -429,7 +559,7 @@ async function fetchDonaldsonProductPage(initialUrl: string, productCode: string
   throw lastError instanceof Error ? lastError : new Error(`Donaldson product page fetch failed for ${productCode}`);
 }
 
-async function runPool(items: any[], concurrencyLimit: number, worker: (item: any, index: number) => Promise<void>) {
+async function runPool(items, concurrencyLimit, worker) {
   let cursor = 0;
   const runners = Array.from({ length: Math.min(concurrencyLimit, items.length) }, async () => {
     while (true) {
@@ -442,7 +572,20 @@ async function runPool(items: any[], concurrencyLimit: number, worker: (item: an
   await Promise.all(runners);
 }
 
-function deriveProductCodeFromDonaldsonUrl(url: string) {
+function writeCsv(filePath, headersRow, rows) {
+  const lines = [headersRow, ...rows].map((row) => row.map((cell) => toCsvCell(cell)).join(","));
+  fs.writeFileSync(filePath, `${lines.join("\n")}\n`, "utf8");
+}
+
+function toCsvCell(value) {
+  const text = value == null ? "" : String(value);
+  if (/["\n,]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function deriveProductCodeFromDonaldsonUrl(url) {
   try {
     const pathname = new URL(url).pathname;
     const parts = pathname.split("/").filter(Boolean);
@@ -454,18 +597,36 @@ function deriveProductCodeFromDonaldsonUrl(url: string) {
   }
 }
 
-function buildDonaldsonProductCandidates(productCode: string) {
+function buildDonaldsonProductCandidates(productCode) {
   const code = normalizeCatalogDisplayCode(productCode, "Donaldson");
   if (!code) return [];
   return ["en-tr", "en-us"].map((locale) => buildDonaldsonProductUrl(code, locale));
 }
 
-function buildDonaldsonProductUrl(productCode: string, locale: string) {
+function buildDonaldsonProductUrl(productCode, locale) {
   const code = normalizeCatalogDisplayCode(productCode, "Donaldson");
   return `https://shop.donaldson.com/store/${locale}/product/${encodeURIComponent(code)}`;
 }
 
-function resolveDonaldsonRelativeUrl(value: string) {
+function readUrlCache() {
+  try {
+    const text = fs.readFileSync(urlCachePath, "utf8");
+    const data = JSON.parse(text);
+    return data && typeof data === "object" ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeUrlCache(urlMap) {
+  const current = readUrlCache();
+  for (const [code, url] of urlMap.entries()) {
+    current[code] = url;
+  }
+  fs.writeFileSync(urlCachePath, `${JSON.stringify(current, null, 2)}\n`, "utf8");
+}
+
+function resolveDonaldsonRelativeUrl(value) {
   const text = String(value || "").trim();
   if (!text) return "";
   try {
@@ -475,7 +636,7 @@ function resolveDonaldsonRelativeUrl(value: string) {
   }
 }
 
-function cleanText(value: unknown) {
+function cleanText(value) {
   return String(value || "")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
@@ -487,15 +648,15 @@ function cleanText(value: unknown) {
     .trim();
 }
 
-function looksLikeUsefulPartNumber(value: string) {
+function looksLikeUsefulPartNumber(value) {
   const text = String(value || "").trim();
   if (!text) return false;
   return /[A-Z0-9]/i.test(text) && /[0-9]/.test(text) && text.length >= 4;
 }
 
-function dedupeBy<T>(items: T[], keyFn: (item: T) => string) {
-  const seen = new Set<string>();
-  const result: T[] = [];
+function dedupeBy(items, keyFn) {
+  const seen = new Set();
+  const result = [];
   for (const item of items) {
     const key = keyFn(item);
     if (!key || seen.has(key)) continue;
@@ -505,33 +666,30 @@ function dedupeBy<T>(items: T[], keyFn: (item: T) => string) {
   return result;
 }
 
-function dedupeStrings(values: string[]) {
+function dedupeStrings(values) {
   return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
 }
 
-function normalizeCode(value: unknown) {
+function normalizeCode(value) {
   return String(value || "")
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
 }
 
-function emptyToNull(value: unknown) {
+function emptyToNull(value) {
   const text = String(value || "").trim();
   return text ? text : null;
 }
 
-function normalizeTextValue(value: unknown) {
+function normalizeTextValue(value) {
   return String(value || "").trim();
 }
 
-function shouldProcessRow(row: any) {
-  if (!normalizeTextValue(sanitizeCatalogOemNumbers(row.oem_no))) return true;
-  if (!normalizeTextValue(row.vehicle)) return true;
-  if (
-    normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`) === "discontinued" &&
-    !normalizeTextValue(row.lifecycle_note)
-  ) {
-    return true;
-  }
-  return false;
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
