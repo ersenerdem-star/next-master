@@ -1,6 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { json } from "./_shared/http.mts";
 import { resolvePortalInvite } from "./_shared/portal-access.mts";
+import { writePortalAuditEvent } from "./_shared/portal-audit.mts";
 import { buildPortalPriceListRows } from "./_shared/portal-orders.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
@@ -12,6 +13,7 @@ export default async (req: Request, _context: Context) => {
   const supabaseUrl = Netlify.env.get("SUPABASE_URL");
   const serviceRoleKey = Netlify.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const sessionSecret = Netlify.env.get("PORTAL_SESSION_SECRET") || serviceRoleKey;
+  let auditEmail = "";
   if (!supabaseUrl || !serviceRoleKey) {
     return json({ error: "System configuration is incomplete." }, 500);
   }
@@ -19,6 +21,7 @@ export default async (req: Request, _context: Context) => {
   try {
     const body = await req.json();
     const email = String(body?.email || "").trim();
+    auditEmail = email;
     const password = String(body?.password || "").trim();
     const sessionToken = String(body?.sessionToken || body?.session_token || readPortalSessionCookie(req) || "").trim();
     const brand = String(body?.brand || "").trim();
@@ -27,6 +30,12 @@ export default async (req: Request, _context: Context) => {
 
     const rateLimit = await enforcePortalRateLimit(req, supabaseUrl, serviceRoleKey, "price_list", email);
     if (!rateLimit.allowed) {
+      await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+        email,
+        eventType: "portal_price_list",
+        status: "rate_limited",
+        details: { brand },
+      });
       return json({ error: "Too many price list downloads. Try again later." }, 429, {
         "Retry-After": String(rateLimit.retryAfterSeconds),
       });
@@ -38,11 +47,26 @@ export default async (req: Request, _context: Context) => {
       sessionToken,
     });
     const result = await buildPortalPriceListRows(supabaseUrl, serviceRoleKey, invite, brand);
+    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+      organizationId: invite.organization_id,
+      inviteId: invite.id,
+      partyType: invite.party_type,
+      email: invite.email,
+      eventType: "portal_price_list",
+      status: "ok",
+      details: { brand, rowCount: result.rows.length },
+    });
     return json({ ok: true, ...result }, 200, {
       "Set-Cookie": buildPortalSessionCookie(nextSessionToken),
     });
   } catch (error) {
     const message = sanitizeUserFacingError(error, "Portal price list download failed");
+    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+      email: auditEmail,
+      eventType: "portal_price_list",
+      status: "failed",
+      details: { reason: message },
+    });
     return json({ error: message }, 400, {
       ...(message === "Your session has expired. Sign in again." ? { "Set-Cookie": buildExpiredPortalSessionCookie() } : {}),
     });

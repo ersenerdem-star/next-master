@@ -1,6 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { json } from "./_shared/http.mts";
 import { buildPortalBranding, fetchPortalInviteByEmail } from "./_shared/portal-access.mts";
+import { writePortalAuditEvent } from "./_shared/portal-audit.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { createPortalPasswordResetToken } from "./_shared/portal-security.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
@@ -35,6 +36,7 @@ export default async (req: Request, _context: Context) => {
   const sessionSecret = Netlify.env.get("PORTAL_SESSION_SECRET") || serviceRoleKey;
   const resendApiKey = Netlify.env.get("RESEND_API_KEY");
   const emailFrom = Netlify.env.get("EMAIL_FROM");
+  let auditEmail = "";
   if (!supabaseUrl || !serviceRoleKey || !sessionSecret) {
     return json({ error: "System configuration is incomplete." }, 500);
   }
@@ -45,10 +47,16 @@ export default async (req: Request, _context: Context) => {
   try {
     const body = await req.json().catch(() => ({}));
     const email = String(body?.email || "").trim().toLowerCase();
+    auditEmail = email;
     if (!email) return json({ error: "Email is required" }, 400);
 
     const rateLimit = await enforcePortalRateLimit(req, supabaseUrl, serviceRoleKey, "password_reset_request", email);
     if (!rateLimit.allowed) {
+      await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+        email,
+        eventType: "portal_password_reset_request",
+        status: "rate_limited",
+      });
       return json({ error: "Too many password reset attempts. Try again later." }, 429, {
         "Retry-After": String(rateLimit.retryAfterSeconds),
       });
@@ -56,6 +64,12 @@ export default async (req: Request, _context: Context) => {
 
     const invite = await fetchPortalInviteByEmail(supabaseUrl, serviceRoleKey, email).catch(() => null);
     if (!invite || invite.status === "disabled" || invite.status === "draft" || !invite.invite_token_hash || !invite.updated_at) {
+      await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+        email,
+        eventType: "portal_password_reset_request",
+        status: "failed",
+        details: { reason: "invite_not_found_or_inactive" },
+      });
       return json({ ok: true, message: GENERIC_MESSAGE });
     }
 
@@ -82,9 +96,23 @@ export default async (req: Request, _context: Context) => {
     ].join("\n");
 
     await sendResetEmail(resendApiKey, emailFrom, invite.email, subject, message);
+    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+      organizationId: invite.organization_id,
+      inviteId: invite.id,
+      partyType: invite.party_type,
+      email: invite.email,
+      eventType: "portal_password_reset_request",
+      status: "ok",
+    });
 
     return json({ ok: true, message: GENERIC_MESSAGE });
   } catch (error) {
+    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+      email: auditEmail,
+      eventType: "portal_password_reset_request",
+      status: "failed",
+      details: { reason: sanitizeUserFacingError(error, "Portal password reset request failed") },
+    });
     return json({ error: sanitizeUserFacingError(error, "Portal password reset request failed") }, 500);
   }
 };

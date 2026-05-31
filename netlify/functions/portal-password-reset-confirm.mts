@@ -5,6 +5,7 @@ import {
   buildPortalSnapshot,
   fetchPortalInviteByIdAndEmail,
 } from "./_shared/portal-access.mts";
+import { writePortalAuditEvent } from "./_shared/portal-audit.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import {
   buildPortalSessionCookie,
@@ -20,6 +21,7 @@ export default async (req: Request, _context: Context) => {
   const supabaseUrl = Netlify.env.get("SUPABASE_URL");
   const serviceRoleKey = Netlify.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const sessionSecret = Netlify.env.get("PORTAL_SESSION_SECRET") || serviceRoleKey;
+  let auditEmail = "";
   if (!supabaseUrl || !serviceRoleKey || !sessionSecret) {
     return json({ error: "System configuration is incomplete." }, 500);
   }
@@ -27,6 +29,7 @@ export default async (req: Request, _context: Context) => {
   try {
     const body = await req.json().catch(() => ({}));
     const email = String(body?.email || "").trim().toLowerCase();
+    auditEmail = email;
     const resetToken = String(body?.resetToken || body?.reset_token || "").trim();
     const password = String(body?.password || "").trim();
     if (!email || !resetToken || !password) {
@@ -38,6 +41,11 @@ export default async (req: Request, _context: Context) => {
 
     const rateLimit = await enforcePortalRateLimit(req, supabaseUrl, serviceRoleKey, "password_reset_confirm", email);
     if (!rateLimit.allowed) {
+      await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+        email,
+        eventType: "portal_password_reset_confirm",
+        status: "rate_limited",
+      });
       return json({ error: "Too many password reset attempts. Try again later." }, 429, {
         "Retry-After": String(rateLimit.retryAfterSeconds),
       });
@@ -97,11 +105,26 @@ export default async (req: Request, _context: Context) => {
     } catch {
       snapshot = await buildPortalFallbackSnapshot(supabaseUrl, serviceRoleKey, nextInvite);
     }
+    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+      organizationId: invite.organization_id,
+      inviteId: invite.id,
+      partyType: invite.party_type,
+      email: invite.email,
+      eventType: "portal_password_reset_confirm",
+      status: "ok",
+    });
     return json({ ok: true, snapshot }, 200, {
       "Set-Cookie": buildPortalSessionCookie(sessionToken),
     });
   } catch (error) {
-    return json({ error: sanitizeUserFacingError(error, "Portal password reset failed") }, 500);
+    const message = sanitizeUserFacingError(error, "Portal password reset failed");
+    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+      email: auditEmail,
+      eventType: "portal_password_reset_confirm",
+      status: "failed",
+      details: { reason: message },
+    });
+    return json({ error: message }, 500);
   }
 };
 

@@ -35,6 +35,14 @@ const CUSTOMER_PORTAL_SELECT_BASE =
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 const COMPANY_PROFILE_SELECT = "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url";
 
+function toPortalBrandingProfile(companyProfile: Record<string, unknown> | null) {
+  if (!companyProfile) return null;
+  return {
+    company_name: String(companyProfile.company_name || "").trim() || "",
+    logo_data_url: String(companyProfile.logo_data_url || "").trim() || "",
+  };
+}
+
 async function fetchFirst<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
   const rows = await getJson<Array<T>>(buildRestUrl(supabaseUrl, table, params), {
     headers: serviceRoleHeaders(serviceRoleKey),
@@ -918,7 +926,7 @@ export async function buildPortalBranding(supabaseUrl: string, serviceRoleKey: s
       companyProfile = null;
     }
     return {
-      companyProfile,
+      companyProfile: toPortalBrandingProfile(companyProfile),
       portalLabel: "Customer Portal",
       partyName: String(customer?.display_name || customer?.company_name || invite.party_name || invite.email || ""),
     };
@@ -931,7 +939,7 @@ export async function buildPortalBranding(supabaseUrl: string, serviceRoleKey: s
     companyProfile = null;
   }
   return {
-    companyProfile,
+    companyProfile: toPortalBrandingProfile(companyProfile),
     portalLabel: "Vendor Portal",
     partyName: String(invite.party_name || invite.email || ""),
   };

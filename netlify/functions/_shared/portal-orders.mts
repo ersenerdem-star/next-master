@@ -162,6 +162,8 @@ const CUSTOMER_ORDER_SELECT =
 const CUSTOMER_ORDER_SELECT_LEGACY =
   "id,display_name,company_name,currency,payment_terms,contract_nr,custom_fields,price_list_type";
 const PORTAL_LOOKUP_CACHE_TTL_MS = 2 * 60 * 1000;
+const PORTAL_PRICE_LIST_CACHE_TTL_MS = 5 * 60 * 1000;
+const PORTAL_PRICE_LIST_MAX_ROWS = 12000;
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 
 type PortalLookupCacheEntry<T> = {
@@ -171,6 +173,15 @@ type PortalLookupCacheEntry<T> = {
 
 const portalBrandMapCache = new Map<string, PortalLookupCacheEntry<{ byId: Map<string, string>; byName: Map<string, string> }>>();
 const portalCustomerContextCache = new Map<string, PortalLookupCacheEntry<CustomerPricingContext>>();
+const portalPriceListCache = new Map<
+  string,
+  PortalLookupCacheEntry<{
+    priceListType: CustomerPricingContext["customerType"];
+    pricingMode: CustomerPricingContext["portalCPriceMode"];
+    currency: string;
+    rows: PortalPriceListRow[];
+  }>
+>();
 const DESCRIPTION_FAMILY_STOPWORDS = new Set([
   "and",
   "the",
@@ -1382,6 +1393,7 @@ async function fetchPortalCatalogBrandRows(
   organizationId: string,
   brandId: string,
   brandName: string,
+  maxRows = PORTAL_PRICE_LIST_MAX_ROWS,
 ) {
   const rows: Array<{
     product_code: string;
@@ -1417,6 +1429,9 @@ async function fetchPortalCatalogBrandRows(
         lifecycle_note: String(row.lifecycle_note || "").trim() || null,
       })),
     );
+    if (rows.length > maxRows) {
+      throw new Error("This brand price list is too large to download right now.");
+    }
     if (page.length < pageSize) break;
     offset += pageSize;
   }
@@ -1574,14 +1589,34 @@ export async function buildPortalPriceListRows(
     throw new Error("Brand not found for portal price list");
   }
 
+  const cacheKey = [
+    invite.organization_id,
+    context.customer.id,
+    brandId,
+    context.customerType,
+    context.portalCPriceMode,
+    context.effectiveMarginA,
+    context.effectiveMarginB,
+    context.cPriceListId,
+  ].join("::");
+  const cached = portalPriceListCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
   const catalogRows = await fetchPortalCatalogBrandRows(supabaseUrl, serviceRoleKey, invite.organization_id, brandId, brandName);
   if (!catalogRows.length) {
-    return {
+    const emptyResult = {
       priceListType: context.customerType,
       pricingMode: context.portalCPriceMode,
       currency: context.currency,
       rows: [],
     };
+    portalPriceListCache.set(cacheKey, {
+      value: emptyResult,
+      expiresAt: Date.now() + PORTAL_PRICE_LIST_CACHE_TTL_MS,
+    });
+    return emptyResult;
   }
 
   let salesPriceByCode = new Map<string, number>();
@@ -1631,7 +1666,7 @@ export async function buildPortalPriceListRows(
     }
   }
 
-  return {
+  const result = {
     priceListType: context.customerType,
     pricingMode: context.portalCPriceMode,
     currency: context.currency,
@@ -1646,6 +1681,11 @@ export async function buildPortalPriceListRows(
       lifecycle_note: row.lifecycle_note,
     })),
   };
+  portalPriceListCache.set(cacheKey, {
+    value: result,
+    expiresAt: Date.now() + PORTAL_PRICE_LIST_CACHE_TTL_MS,
+  });
+  return result;
 }
 
 async function resolvePortalCatalogSupplierData(
