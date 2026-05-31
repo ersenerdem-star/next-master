@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import { resolveNamedLogo } from "./logoAssets";
 
 type ProductVisualProps = {
@@ -21,13 +23,48 @@ function buildBrandMonogram(value: string) {
     .join("");
 }
 
+function isKnownPlaceholderImageUrl(value: string) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return true;
+  return [
+    "placeholder-image",
+    "placeholder",
+    "image-not-available",
+    "no-image",
+    "noimage",
+    "not-available",
+    "camera.svg",
+    "camera-icon",
+    "icon-camera",
+    "coming-soon",
+    "coming_soon",
+    "imagecomingsoon",
+    "default-image",
+  ].some((token) => normalized.includes(token));
+}
+
 export function ProductVisual({ imageUrl, brand, alt, detail = false, onPreview = null }: ProductVisualProps) {
   const displayBrand = String(brand || "").trim();
   const monogram = buildBrandMonogram(displayBrand || alt);
   const logoAsset = resolveNamedLogo(displayBrand);
+  const [imageFailed, setImageFailed] = useState(false);
+  const resolvedImageUrl = String(imageUrl || "").trim();
+  const shouldUseFallback = !resolvedImageUrl || isKnownPlaceholderImageUrl(resolvedImageUrl) || imageFailed;
 
-  if (imageUrl) {
-    const image = <img src={imageUrl} alt={alt} className={`catalog-thumb${detail ? " catalog-thumb--detail" : ""}`} loading="lazy" />;
+  useEffect(() => {
+    setImageFailed(false);
+  }, [resolvedImageUrl]);
+
+  if (!shouldUseFallback) {
+    const image = (
+      <img
+        src={resolvedImageUrl}
+        alt={alt}
+        className={`catalog-thumb${detail ? " catalog-thumb--detail" : ""}`}
+        loading="lazy"
+        onError={() => setImageFailed(true)}
+      />
+    );
     if (onPreview) {
       return (
         <button type="button" className={`catalog-thumb-button${detail ? " catalog-thumb-button--detail" : ""}`} onClick={onPreview}>

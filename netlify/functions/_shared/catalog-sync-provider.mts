@@ -6,6 +6,7 @@ import { syncBrandCatalogFromZfAftermarket } from "./zf-aftermarket-sync.mts";
 import { syncBrandCatalogFromMasterPower } from "./masterpower-sync.mts";
 import { syncBrandCatalogFromValeoService } from "./valeo-sync.mts";
 import { syncBrandCatalogFromBrembo } from "./brembo-sync.mts";
+import { syncBrandCatalogFromSkfAutomotive } from "./skf-automotive-sync.mts";
 import { canonicalizeInternalBrandName, normalizeBrandKey } from "./brand-standardization.mts";
 
 export type CatalogSyncPreferredProvider =
@@ -16,7 +17,8 @@ export type CatalogSyncPreferredProvider =
   | "zf_aftermarket"
   | "masterpower_official"
   | "valeo_service"
-  | "brembo_official";
+  | "brembo_official"
+  | "skf_automotive";
 
 export type CatalogSyncSourceType = "marketplace" | "official";
 
@@ -103,6 +105,13 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredProviderLabel: "Brembo Parts official catalog",
     preferredSourceType: "official",
     preferredSourceUrl: "https://www.bremboparts.com/europe/en",
+  },
+  skf: {
+    aliases: ["skf"],
+    preferredProviderKey: "skf_automotive",
+    preferredProviderLabel: "SKF Automotive official catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://automotive.skf.com/eur/en/product-catalogue",
   },
 };
 
@@ -219,6 +228,15 @@ export async function syncBrandCatalog(input: {
     fallbackUsed = false;
   } else if (plan.preferredProviderKey === "brembo_official") {
     result = await syncBrandCatalogFromBrembo({
+      ...input,
+      brandName: plan.brandName,
+    });
+    executionProviderKey = plan.preferredProviderKey;
+    executionProviderLabel = plan.preferredProviderLabel;
+    executionSourceType = plan.preferredSourceType;
+    fallbackUsed = false;
+  } else if (plan.preferredProviderKey === "skf_automotive") {
+    result = await syncBrandCatalogFromSkfAutomotive({
       ...input,
       brandName: plan.brandName,
     });
