@@ -135,13 +135,13 @@ export async function syncBrandCatalogFromValeoService(input: {
     "Content-Type": "application/json",
   };
 
+  const brandTargetMode = resolveValeoBrandTargetMode(input.brandName);
   const target = await resolveOrCreateTargetBrand(input.supabaseUrl, headers, input.brandName);
   const supportsImageColumn = await detectCatalogImageColumn(input.supabaseUrl, headers);
   const existingRows = await fetchCatalogRows(input.supabaseUrl, headers, target);
   const existingByCode = new Map(existingRows.map((row) => [row.normalized_code, row]));
-  const crawl = await crawlValeoCatalog(requestTimeoutMs, concurrency);
-  const brandTargetMode = resolveValeoBrandTargetMode(target.name);
-  const valeoItems = materializeValeoTargetItems(crawl.items, target.name, brandTargetMode);
+  const crawl = await crawlValeoCatalog(requestTimeoutMs, concurrency, target.name, brandTargetMode);
+  const valeoItems = crawl.items;
 
   const catalogPayload: Array<Record<string, unknown>> = [];
   const replacementPayload: Array<Record<string, unknown>> = [];
@@ -366,7 +366,12 @@ async function fetchCatalogRows(supabaseUrl: string, headers: Record<string, str
   return dedupeBy(results, (row) => row.normalized_code);
 }
 
-async function crawlValeoCatalog(requestTimeoutMs: number, concurrency: number) {
+async function crawlValeoCatalog(
+  requestTimeoutMs: number,
+  concurrency: number,
+  targetBrandName: string,
+  targetMode: ValeoBrandTargetMode,
+) {
   const productLinesPage = await fetchPageProps(VALEO_PRODUCT_LINES_URL, requestTimeoutMs);
   const productLines = Array.isArray(productLinesPage.productLines) ? (productLinesPage.productLines as ValeoProductLine[]) : [];
   const partsMap = new Map<string, ValeoPartGroup>();
@@ -416,7 +421,7 @@ async function crawlValeoCatalog(requestTimeoutMs: number, concurrency: number) 
     }
   });
 
-  const items = [...listingMap.values()].map((item) => {
+  const sourceItems = [...listingMap.values()].map((item) => {
     const replacement = replacementMap.get(item.normalized_code);
     return replacement
       ? {
@@ -426,6 +431,8 @@ async function crawlValeoCatalog(requestTimeoutMs: number, concurrency: number) 
         }
       : item;
   });
+
+  const items = materializeValeoTargetItems(sourceItems, targetBrandName, targetMode);
 
   await runPool(items, concurrency, async (item) => {
     const detail = await fetchValeoProductDetail(item.supplier_id, item.reference_code, requestTimeoutMs);
