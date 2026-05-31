@@ -416,10 +416,11 @@ export async function resolvePortalInvite(
     sessionToken?: string | null;
   },
 ) {
+  const providedPassword = String(auth.password || "").trim();
   const sessionToken = String(auth.sessionToken || "").trim();
   const providedEmail = String(auth.email || "").trim().toLowerCase();
 
-  if (sessionToken) {
+  if (!providedPassword && sessionToken) {
     const session = await verifyPortalSessionToken(sessionSecret, sessionToken);
     if (!session) {
       throw new Error("Portal session expired. Sign in again.");
@@ -440,12 +441,11 @@ export async function resolvePortalInvite(
   }
 
   const email = providedEmail;
-  const password = String(auth.password || "").trim();
-  if (!email || !password) {
+  if (!email || !providedPassword) {
     throw new Error("Email and password are required");
   }
 
-  const invite = await validatePortalInvite(supabaseUrl, serviceRoleKey, email, password);
+  const invite = await validatePortalInvite(supabaseUrl, serviceRoleKey, email, providedPassword);
   const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email);
   return { invite, sessionToken: nextSessionToken };
 }

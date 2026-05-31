@@ -597,9 +597,16 @@ export function PortalPage() {
       .catch((caught) => {
         if (cancelled) return;
         portalAutoRefreshKeyRef.current = "";
-        if (!snapshot) {
-          setError(caught instanceof Error ? caught.message : "Portal refresh failed");
+        const message = caught instanceof Error ? caught.message : "Portal refresh failed";
+        if (message.toLowerCase().includes("session expired")) {
+          const nextCredentials = { email: credentials.email, password: "", sessionToken: "" };
+          setCredentials(nextCredentials);
+          writeStoredCredentials(null);
+          setError("");
+          setStatus("");
+          return;
         }
+        setError(message);
       });
 
     return () => {
@@ -862,7 +869,11 @@ export function PortalPage() {
       setLoading(true);
       setError("");
       setStatus("");
-      const { snapshot: next, sessionToken } = await loginPortal(credentials);
+      const { snapshot: next, sessionToken } = await loginPortal({
+        email: credentials.email,
+        password: credentials.password || "",
+        sessionToken: "",
+      });
       setSnapshot(next);
       setSelection(null);
       setActiveSection(getDefaultPortalSection(next));
