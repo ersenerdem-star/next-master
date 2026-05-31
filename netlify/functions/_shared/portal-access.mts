@@ -43,6 +43,33 @@ function toPortalBrandingProfile(companyProfile: Record<string, unknown> | null)
   };
 }
 
+function hasPortalInviteExpired(invite: PortalInviteRow | null | undefined) {
+  const expiresAt = String(invite?.expires_at || "").trim();
+  if (!expiresAt) return false;
+  const timestamp = Date.parse(expiresAt);
+  if (!Number.isFinite(timestamp)) return false;
+  return timestamp <= Date.now();
+}
+
+function isPortalInviteUsable(invite: PortalInviteRow | null | undefined) {
+  if (!invite) return false;
+  const status = String(invite.status || "").trim().toLowerCase();
+  if (status !== "active" && status !== "invited") return false;
+  if (hasPortalInviteExpired(invite)) return false;
+  return true;
+}
+
+function requirePortalCustomerScope(invite: PortalInviteRow) {
+  if (invite.party_type !== "customer") {
+    throw new Error("Portal invite is not scoped to a customer.");
+  }
+  const customerId = String(invite.customer_id || "").trim();
+  if (!customerId) {
+    throw new Error("Portal invite is missing its customer scope.");
+  }
+  return customerId;
+}
+
 async function fetchFirst<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
   const rows = await getJson<Array<T>>(buildRestUrl(supabaseUrl, table, params), {
     headers: serviceRoleHeaders(serviceRoleKey),
@@ -99,29 +126,14 @@ async function fetchPortalCustomerRecord(
   organizationId: string,
   invite: PortalInviteRow,
 ) {
+  const customerId = requirePortalCustomerScope(invite);
   const trySelect = async (select: string) =>
-    (invite.customer_id
-      ? await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
-          select,
-          organization_id: `eq.${organizationId}`,
-          id: `eq.${invite.customer_id}`,
-        })
-      : null) ||
-    (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
+    await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
       select,
       organization_id: `eq.${organizationId}`,
-      display_name: `eq.${invite.party_name}`,
-    })) ||
-    (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
-      select,
-      organization_id: `eq.${organizationId}`,
-      company_name: `eq.${invite.party_name}`,
-    })) ||
-    (await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customers", {
-      select,
-      organization_id: `eq.${organizationId}`,
-      email: `eq.${String(invite.email || "").trim().toLowerCase()}`,
-    }));
+      id: `eq.${customerId}`,
+      limit: "1",
+    });
 
   try {
     return await trySelect(CUSTOMER_PORTAL_SELECT);
@@ -374,7 +386,7 @@ async function fetchPortalInviteByEmailPreview(supabaseUrl: string, serviceRoleK
     order: "updated_at.desc",
     limit: "10",
   });
-  return invites.find((invite) => invite.status !== "disabled") || null;
+  return invites.find((invite) => isPortalInviteUsable(invite)) || null;
 }
 
 export async function fetchPortalInviteByEmail(supabaseUrl: string, serviceRoleKey: string, email: string) {
@@ -409,7 +421,7 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
     invite = null;
   }
 
-  if (!invite || invite.status === "disabled") {
+  if (!isPortalInviteUsable(invite)) {
     throw new Error("Portal invite not found or disabled");
   }
 
@@ -445,7 +457,7 @@ export async function resolvePortalInvite(
       email: `eq.${session.email}`,
     });
 
-    if (!invite || invite.status === "disabled") {
+    if (!isPortalInviteUsable(invite)) {
       throw new Error("Portal session is no longer active.");
     }
 
@@ -484,7 +496,7 @@ export async function resolvePortalInvitePreview(
       id: `eq.${session.invite_id}`,
       email: `eq.${session.email}`,
     });
-    if (!invite || invite.status === "disabled") {
+    if (!isPortalInviteUsable(invite)) {
       throw new Error("Portal session is no longer active.");
     }
     const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email);

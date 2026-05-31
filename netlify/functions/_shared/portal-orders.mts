@@ -950,24 +950,17 @@ async function fetchPortalCustomerForOrders(
   serviceRoleKey: string,
   invite: PortalInviteRow,
 ): Promise<CustomerRow | null> {
+  const customerId = String(invite.customer_id || "").trim();
+  if (!customerId) {
+    throw new Error("Portal invite is missing its customer scope.");
+  }
   const trySelect = async (select: string) =>
-    (invite.customer_id
-      ? await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
-          select,
-          organization_id: `eq.${invite.organization_id}`,
-          id: `eq.${invite.customer_id}`,
-        })
-      : null) ||
-    (await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
+    await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
       select,
       organization_id: `eq.${invite.organization_id}`,
-      display_name: `eq.${invite.party_name}`,
-    })) ||
-    (await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
-      select,
-      organization_id: `eq.${invite.organization_id}`,
-      company_name: `eq.${invite.party_name}`,
-    }));
+      id: `eq.${customerId}`,
+      limit: "1",
+    });
 
   try {
     return await trySelect(CUSTOMER_ORDER_SELECT);
@@ -990,8 +983,11 @@ async function resolvePortalCustomer(
   if (invite.party_type !== "customer" || !invite.access_can_view_orders) {
     throw new Error("This portal cannot create sales orders");
   }
+  if (!String(invite.customer_id || "").trim()) {
+    throw new Error("This portal invite is missing its customer scope.");
+  }
 
-  const cacheKey = `${invite.organization_id}::${String(invite.party_name || "").trim().toLowerCase()}`;
+  const cacheKey = `${invite.organization_id}::${String(invite.customer_id || "").trim()}`;
   const cached = portalCustomerContextCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.value;
@@ -1109,6 +1105,9 @@ export async function searchPortalCatalog(
   const search = String(query || "").trim();
   const normalizedSearch = normalizePartCode(search);
   const selectedBrandId = brand ? brandMap.byName.get(brand.trim().toLowerCase()) || "" : "";
+  if (brand && !selectedBrandId) {
+    throw new Error("Brand not found for portal search");
+  }
   const params: Record<string, string> = {
     select: "product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
     organization_id: `eq.${invite.organization_id}`,
