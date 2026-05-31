@@ -4,9 +4,65 @@ const requestHeaders = {
   "user-agent":
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0 Safari/537.36",
   accept: "application/json, text/plain, */*",
-  "accept-language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+  "accept-language": "en-US,en;q=0.9,tr;q=0.6",
   "cache-control": "no-cache",
   pragma: "no-cache",
+};
+
+const ORIGIN_CODES: Record<string, string> = {
+  ARGENTINA: "AR",
+  AUSTRALIA: "AU",
+  AUSTRIA: "AT",
+  BELGIUM: "BE",
+  BOSNIAANDHERZEGOVINA: "BA",
+  BRAZIL: "BR",
+  BULGARIA: "BG",
+  CANADA: "CA",
+  CHINA: "CN",
+  CROATIA: "HR",
+  CZECHIA: "CZ",
+  CZECHREPUBLIC: "CZ",
+  DENMARK: "DK",
+  EGYPT: "EG",
+  ESTONIA: "EE",
+  FINLAND: "FI",
+  FRANCE: "FR",
+  GERMANY: "DE",
+  GREECE: "GR",
+  HUNGARY: "HU",
+  INDIA: "IN",
+  INDONESIA: "ID",
+  IRELAND: "IE",
+  ISRAEL: "IL",
+  ITALY: "IT",
+  JAPAN: "JP",
+  KOREA: "KR",
+  LATVIA: "LV",
+  LITHUANIA: "LT",
+  LUXEMBOURG: "LU",
+  MALAYSIA: "MY",
+  MEXICO: "MX",
+  NETHERLANDS: "NL",
+  NORWAY: "NO",
+  POLAND: "PL",
+  PORTUGAL: "PT",
+  ROMANIA: "RO",
+  SERBIA: "RS",
+  SINGAPORE: "SG",
+  SLOVAKIA: "SK",
+  SLOVENIA: "SI",
+  SOUTHAFRICA: "ZA",
+  SOUTHKOREA: "KR",
+  SPAIN: "ES",
+  SWEDEN: "SE",
+  SWITZERLAND: "CH",
+  TAIWAN: "TW",
+  THAILAND: "TH",
+  TURKEY: "TR",
+  UNITEDKINGDOM: "GB",
+  UNITEDSTATES: "US",
+  USA: "US",
+  VIETNAM: "VN",
 };
 
 const KNOWN_MANUFACTURER_PATTERNS = [
@@ -457,7 +513,7 @@ async function fetchSearchPage(target: any, term: string, offset: number, search
   url.searchParams.set("ipp", String(searchPageSize));
   url.searchParams.set("offset", String(offset));
   url.searchParams.set("filters", `brandname=${target.officialFilter}`);
-  url.searchParams.set("language", "tr");
+  url.searchParams.set("language", "en");
 
   const payload = await fetchJson(url.toString(), requestTimeoutMs);
   const productPayload = payload?.products;
@@ -477,7 +533,7 @@ function normalizeSearchItem(target: any, item: any) {
     brand_name: target.internalName,
     product_code: productCode,
     normalized_code: normalizedCode,
-    description: cleanText(item.name || ""),
+    description: formatOfficialDescription(target, item.name || ""),
     source_url: String(item.moreDetails?.href || item.productDetailsPageHref || "").trim()
       ? `https://aftermarket.zf.com${String(item.moreDetails?.href || item.productDetailsPageHref || "").trim()}`
       : "",
@@ -527,7 +583,7 @@ async function fetchArticle(target: any, articleCode: string, requestTimeoutMs: 
   const url = new URL(`https://aftermarket.zf.com/api/articles/${encodeURIComponent(articleCode)}`);
   url.searchParams.set("expand", "specifications,extended");
   url.searchParams.set("country", "TR");
-  url.searchParams.set("language", "tr");
+  url.searchParams.set("language", "en");
   return fetchJson(url.toString(), requestTimeoutMs, { accept404: true });
 }
 
@@ -553,14 +609,19 @@ function normalizeDetailPayload(target: any, payload: any) {
   }
 
   const imageUrl = chooseBestImage(details.images || []);
+  const specEntries = [];
   const specText = [];
   for (const spec of generalSpecifications) {
     const label = cleanText(spec.label || "");
     const values = Array.isArray(spec.values) ? spec.values.map((value: any) => cleanText(value.text || value)).filter(Boolean) : [];
     if (!values.length) continue;
+    specEntries.push({ label, values });
     specText.push(`${label}: ${values.join(", ")}`);
   }
-  const vehicle = extractVehicleList([...textModules, ...specText].join(" | "));
+  const vehicle = dedupeStrings([
+    ...extractVehicleTokens([...textModules, ...specText].join(" | ")),
+    ...extractVehicleTokens(referenceNumbers.map((group) => cleanText(group.label || "")).join(" | ")),
+  ]).join(", ");
   const status = details.status || {};
   const replacedByValues = Array.isArray(details.replacedBy?.values) ? details.replacedBy.values : [];
   const replacementCodeRaw = cleanText(replacedByValues[0]?.text || "");
@@ -570,15 +631,30 @@ function normalizeDetailPayload(target: any, payload: any) {
     ...collectRelatedCodes(specifications.inPartsList?.parts || []),
     replacementCode,
   ]);
+  const hsCode = extractSpecValue(specEntries, [
+    /commodity\s*code/i,
+    /customs\s*tariff/i,
+    /tariff\s*(?:number|code)/i,
+    /customs\s*code/i,
+    /g[\s-]*tip/i,
+  ]);
+  const origin = normalizeOriginCode(
+    extractSpecValue(specEntries, [
+      /country\s*of\s*origin/i,
+      /origin/i,
+      /mense/i,
+      /ulke/i,
+    ]),
+  );
 
   return {
     product_code: detailNumber,
-    description: cleanText(details.name || ""),
+    description: formatOfficialDescription(target, details.name || ""),
     source_url: detailNumber ? `https://aftermarket.zf.com/tr/catalog/products/${encodeURIComponent(detailNumber)}` : "",
     oem_no: dedupeStrings(oemNumbers).join(", "),
     vehicle,
-    hs_code: "",
-    origin: "",
+    hs_code: hsCode,
+    origin,
     weight_kg: extractWeightKg(details),
     image_url: imageUrl,
     lifecycle_status: normalizeLifecycleStatus(status.value || status.key),
@@ -743,6 +819,9 @@ async function detectCatalogImageColumn(supabaseUrl: string, headers: Record<str
 
 function shouldProcessRow(row: any) {
   if (!normalizeTextValue(row.oem_no)) return true;
+  if (!normalizeTextValue(row.vehicle)) return true;
+  if (!normalizeTextValue(row.hs_code)) return true;
+  if (!normalizeTextValue(row.origin)) return true;
   if (!normalizeTextValue(row.image_url)) return true;
   if (row.weight_kg == null || Number.isNaN(Number(row.weight_kg))) return true;
   if (normalizeLifecycleStatus(row.lifecycle_status) === "discontinued" && !normalizeTextValue(row.lifecycle_note)) return true;
@@ -785,9 +864,9 @@ function parseWeight(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function extractVehicleList(raw: string) {
+function extractVehicleTokens(raw: string) {
   const text = cleanText(raw);
-  if (!text) return "";
+  if (!text) return [];
   const hits = [];
   const normalized = ` ${text.toUpperCase()} `;
   for (const entry of KNOWN_MANUFACTURER_PATTERNS) {
@@ -795,7 +874,69 @@ function extractVehicleList(raw: string) {
     if (matchIndex < 0) continue;
     hits.push({ label: entry.label, index: matchIndex });
   }
-  return dedupeStrings(hits.sort((left, right) => left.index - right.index).map((item) => item.label)).join(", ");
+  return dedupeStrings(hits.sort((left, right) => left.index - right.index).map((item) => item.label));
+}
+
+function extractVehicleList(raw: string) {
+  return extractVehicleTokens(raw).join(", ");
+}
+
+function extractSpecValue(entries: Array<{ label: string; values: string[] }>, patterns: RegExp[]) {
+  for (const entry of entries) {
+    if (!patterns.some((pattern) => pattern.test(entry.label))) continue;
+    const value = entry.values.join(", ").trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+function normalizeOriginCode(value: unknown) {
+  const raw = cleanText(value);
+  if (!raw) return "";
+  const compact = raw
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z]/g, "");
+  if (ORIGIN_CODES[compact]) return ORIGIN_CODES[compact];
+  const upper = raw.toUpperCase();
+  if (/^[A-Z]{2,3}$/.test(upper)) return upper;
+  return raw;
+}
+
+function formatOfficialDescription(target: any, value: unknown) {
+  const cleaned = cleanText(value);
+  if (!cleaned) return "";
+  const stripped = stripBrandPrefix(cleaned, target);
+  if (isMostlyUppercase(stripped)) return toTitleCase(stripped);
+  if (stripped === stripped.toLowerCase()) return stripped.replace(/^\p{Ll}/u, (letter) => letter.toUpperCase());
+  return stripped;
+}
+
+function stripBrandPrefix(value: string, target: any) {
+  const aliases = dedupeStrings([target?.internalName || "", ...(target?.aliases || []), target?.officialFilter || ""]);
+  let result = value;
+  for (const alias of aliases) {
+    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/Ö/g, "[ÖO]").replace(/ö/g, "[öo]");
+    result = result.replace(new RegExp(`^${escaped}\\s+`, "i"), "").trim();
+  }
+  return result;
+}
+
+function isMostlyUppercase(value: string) {
+  const letters = value.match(/[A-Za-z]/g) || [];
+  if (!letters.length) return false;
+  const uppercase = letters.filter((letter) => letter === letter.toUpperCase()).length;
+  return uppercase / letters.length >= 0.75;
+}
+
+function toTitleCase(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (match) => match.toUpperCase())
+    .replace(/\bZf\b/g, "ZF")
+    .replace(/\bTrw\b/g, "TRW")
+    .replace(/\bBoge\b/g, "Boge");
 }
 
 function normalizeBrandKey(value: unknown) {
