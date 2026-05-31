@@ -431,11 +431,14 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
   let invite: PortalInviteRow | null = null;
 
   try {
-    invite = await fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
+    const invites = await fetchAllOptional<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
       select: PORTAL_INVITE_SELECT,
-      email: `eq.${email}`,
+      email: `eq.${String(email || "").trim().toLowerCase()}`,
       invite_token_hash: `eq.${tokenHash}`,
+      order: "updated_at.desc",
+      limit: "20",
     });
+    invite = invites.find((row) => isPortalInviteUsable(row)) || null;
   } catch {
     invite = null;
   }
