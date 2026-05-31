@@ -29,6 +29,28 @@ select {
   min-height: 100vh;
 }
 
+.app-desktop-stage {
+  width: 100%;
+}
+
+.app-desktop-frame {
+  width: 100%;
+}
+
+.app-desktop-stage--scaled {
+  position: relative;
+  min-height: var(--app-desktop-scaled-height, 0px);
+}
+
+.app-desktop-frame--scaled {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: var(--app-desktop-base-width, 1440px);
+  transform: translateX(-50%) scale(var(--app-desktop-scale, 1));
+  transform-origin: top center;
+}
+
 .sidebar {
   border-right: 1px solid #d6dde8;
   background:
@@ -3218,6 +3240,8 @@ select {
 .portal-filter-grid--desk {
   grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr) minmax(200px, 0.7fr) auto;
   align-items: end;
+  gap: 18px;
+  row-gap: 20px;
 }
 
 .portal-filter-grid--desk > .field:nth-child(2) .field__label {
@@ -3265,7 +3289,7 @@ select {
 .portal-order-builder {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .portal-order-builder__meta {
@@ -3279,6 +3303,8 @@ select {
   align-items: end;
   gap: 10px;
   flex-wrap: wrap;
+  justify-content: flex-end;
+  align-self: end;
 }
 
 .portal-workbench {
@@ -3767,7 +3793,7 @@ select {
   }
 }
 
-@media (max-width: 1280px) {
+@media (max-width: 768px) {
   .app-shell {
     grid-template-columns: 1fr;
   }
@@ -3777,12 +3803,72 @@ select {
   }
 
   .main,
-  .portal-shell--login {
-    padding: 16px 16px 104px;
+  .portal-shell {
+    padding: 14px 14px 104px;
+  }
+
+  .sidebar {
+    padding: 12px 10px;
+  }
+
+  .brand-panel,
+  .section-card,
+  .quote-list-panel,
+  .quote-editor-panel,
+  .portal-header,
+  .portal-login-card,
+  .modal-card {
+    border-radius: 16px;
+  }
+
+  .nav-item {
+    gap: 10px;
+    padding: 10px 11px;
+  }
+
+  .nav-submenu {
+    margin-left: 10px;
+    padding-left: 14px;
+  }
+
+  .nav-submenu__item {
+    padding: 8px 9px;
   }
 
   .brand {
     font-size: 20px;
+  }
+
+  .topbar-panel {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px 14px;
+  }
+
+  .topbar-panel__code {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+
+  .topbar h1,
+  .portal-brand h1 {
+    font-size: 24px;
+  }
+
+  .topbar-build {
+    padding: 12px 14px;
+  }
+
+  .quote-list-panel__header,
+  .quote-editor-panel__header {
+    padding: 18px 18px 14px;
+  }
+
+  .quote-list-panel__body,
+  .quote-editor-panel > .section-card,
+  .quote-editor-panel > .section-card + .section-card {
+    margin: 0 12px 12px;
   }
 
   .stats-grid,
@@ -3888,73 +3974,6 @@ select {
   .mobile-subnav,
   .mobile-bottom-nav {
     display: flex;
-  }
-}
-
-@media (max-width: 768px) {
-  .main,
-  .portal-shell {
-    padding: 14px 14px 104px;
-  }
-
-  .sidebar {
-    padding: 12px 10px;
-  }
-
-  .brand-panel,
-  .section-card,
-  .quote-list-panel,
-  .quote-editor-panel,
-  .portal-header,
-  .portal-login-card,
-  .modal-card {
-    border-radius: 16px;
-  }
-
-  .nav-item {
-    gap: 10px;
-    padding: 10px 11px;
-  }
-
-  .nav-submenu {
-    margin-left: 10px;
-    padding-left: 14px;
-  }
-
-  .nav-submenu__item {
-    padding: 8px 9px;
-  }
-
-  .topbar-panel {
-    grid-template-columns: 40px minmax(0, 1fr);
-    gap: 12px;
-    padding: 12px 14px;
-  }
-
-  .topbar-panel__code {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
-  }
-
-  .topbar h1,
-  .portal-brand h1 {
-    font-size: 24px;
-  }
-
-  .topbar-build {
-    padding: 12px 14px;
-  }
-
-  .quote-list-panel__header,
-  .quote-editor-panel__header {
-    padding: 18px 18px 14px;
-  }
-
-  .quote-list-panel__body,
-  .quote-editor-panel > .section-card,
-  .quote-editor-panel > .section-card + .section-card {
-    margin: 0 12px 12px;
   }
 
   .portal-summary-grid,

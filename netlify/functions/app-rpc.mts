@@ -185,7 +185,7 @@ function isLikelyCatalogCodeSearch(search: string) {
 
 function shouldStrictlyFilterCodeSearch(search: string) {
   const normalizedOriginal = normalizeOriginalNumberSearch(search);
-  return isLikelyCatalogCodeSearch(search) && /^\d{10,}$/.test(normalizedOriginal);
+  return isLikelyCatalogCodeSearch(search) && normalizedOriginal.length >= 6;
 }
 
 function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "strict" | "loose") {
@@ -318,13 +318,56 @@ function buildOriginalNumberFamilyClauses(search: string) {
   const clauses = new Set<string>();
   for (const token of buildOriginalNumberFamilyTokens(search)) {
     clauses.add(`normalized_oem.eq.${token}`);
-    clauses.add(`normalized_oem.like.*${token}*`);
     clauses.add(`normalized_code.eq.${token}`);
-    clauses.add(`normalized_code.like.*${token}*`);
+    clauses.add(`normalized_code.like.${token}*`);
     clauses.add(`oem_no.ilike.*${token}*`);
-    clauses.add(`product_code.ilike.*${token}*`);
+    if (!/^\d+$/.test(token) || token.length >= 8) {
+      clauses.add(`product_code.ilike.${token}*`);
+    }
   }
   return [...clauses];
+}
+
+function collectCatalogComparableTokensFromRows(rows: CatalogSourceRow[]) {
+  const tokens = new Set<string>();
+  for (const row of rows) {
+    for (const candidate of [
+      String(row.product_code || ""),
+      String(row.normalized_code || ""),
+      String(row.oem_no || ""),
+      String(row.normalized_oem || ""),
+    ]) {
+      for (const token of buildComparableOriginalNumberTokens(candidate)) {
+        if (token.length >= 6) tokens.add(token);
+      }
+    }
+  }
+  return [...tokens].slice(0, 24);
+}
+
+function buildCatalogSeedExpansionClauses(tokens: string[]) {
+  const clauses = new Set<string>();
+  for (const token of tokens) {
+    clauses.add(`normalized_code.eq.${token}`);
+    clauses.add(`normalized_oem.eq.${token}`);
+    clauses.add(`normalized_code.like.${token}*`);
+    clauses.add(`normalized_oem.like.*${token}*`);
+    clauses.add(`oem_no.ilike.*${token}*`);
+    if (!/^\d+$/.test(token) || token.length >= 8) {
+      clauses.add(`product_code.ilike.${token}*`);
+    }
+  }
+  return [...clauses];
+}
+
+function matchesCatalogSeedTokenRow(row: CatalogSourceRow, seedTokens: Set<string>) {
+  if (!seedTokens.size) return false;
+  return [
+    String(row.product_code || ""),
+    String(row.normalized_code || ""),
+    String(row.oem_no || ""),
+    String(row.normalized_oem || ""),
+  ].some((candidate) => buildComparableOriginalNumberTokens(candidate).some((token) => seedTokens.has(token)));
 }
 
 function matchesCatalogFamilyRow(row: CatalogSourceRow, search: string) {
@@ -406,11 +449,12 @@ function filterCatalogRowsBySearchRelevance(
   if (!exactRows.length) {
     return deduped.filter((row) => matchesCatalogExactFamilyRow(row, search) || hasCatalogReplacementMatch(row, replacementRowsByKey));
   }
+  const seedTokens = new Set(collectCatalogComparableTokensFromRows(exactRows));
   const anchorTokens = resolveCatalogFamilyAnchor(exactRows);
   return deduped.filter((row) => {
     if (exactRows.includes(row)) return true;
     if (hasCatalogReplacementMatch(row, replacementRowsByKey)) return true;
-    if (!matchesCatalogFamilyRow(row, search)) return false;
+    if (!matchesCatalogFamilyRow(row, search) && !matchesCatalogSeedTokenRow(row, seedTokens)) return false;
     return matchesCatalogDescriptionFamily(row, anchorTokens);
   });
 }
@@ -636,6 +680,26 @@ async function fetchCloudCatalogPageViaRest(
     );
     totalCount = filtered.length;
     rows = filtered.slice(offset, offset + pageSize);
+  }
+
+  if (search && shouldStrictlyFilterCodeSearch(search)) {
+    const exactSeedRows = dedupeCatalogRows(rows).filter(
+      (row) => matchesCatalogExactFamilyRow(row, search) || hasCatalogReplacementMatch(row, replacementRowsByKey),
+    );
+    const seedClauses = buildCatalogSeedExpansionClauses(collectCatalogComparableTokensFromRows(exactSeedRows));
+    if (seedClauses.length) {
+      const seedExpansionRows = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
+        select,
+        organization_id: `eq.${caller.organizationId}`,
+        ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+        or: `(${seedClauses.join(",")})`,
+        order: "product_code.asc",
+        limit: "240",
+      }).catch(() => ({ rows: [] as CatalogSourceRow[], totalCount: 0 }));
+      if (seedExpansionRows.rows.length) {
+        rows = dedupeCatalogRows([...rows, ...seedExpansionRows.rows]);
+      }
+    }
   }
 
   const filteredByRelevance = filterCatalogRowsBySearchRelevance(rows, search, replacementRowsByKey);

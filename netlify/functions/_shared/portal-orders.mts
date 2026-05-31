@@ -396,18 +396,56 @@ function buildOriginalNumberFamilyClauses(search: string) {
   const clauses = new Set<string>();
   for (const token of buildOriginalNumberFamilyTokens(search)) {
     clauses.add(`normalized_oem.eq.${token}`);
-    clauses.add(`normalized_oem.like.*${token}*`);
     clauses.add(`normalized_code.eq.${token}`);
-    clauses.add(`normalized_code.like.*${token}*`);
+    clauses.add(`normalized_code.like.${token}*`);
     clauses.add(`oem_no.ilike.*${token}*`);
-    clauses.add(`product_code.ilike.*${token}*`);
-    const loosePattern = buildLooseOriginalNumberPattern(token);
-    if (loosePattern.length >= 6) {
-      clauses.add(`oem_no.ilike.*${loosePattern}*`);
-      clauses.add(`product_code.ilike.*${loosePattern}*`);
+    if (!/^\d+$/.test(token) || token.length >= 8) {
+      clauses.add(`product_code.ilike.${token}*`);
     }
   }
   return [...clauses];
+}
+
+function collectCatalogComparableTokensFromRows(rows: Array<Record<string, unknown>>) {
+  const tokens = new Set<string>();
+  for (const row of rows) {
+    for (const candidate of [
+      String(row.product_code || ""),
+      String(row.normalized_code || ""),
+      String(row.oem_no || ""),
+      String(row.normalized_oem || ""),
+    ]) {
+      for (const token of buildComparableOriginalNumberTokens(candidate)) {
+        if (token.length >= 6) tokens.add(token);
+      }
+    }
+  }
+  return [...tokens].slice(0, 24);
+}
+
+function buildCatalogSeedExpansionClauses(tokens: string[]) {
+  const clauses = new Set<string>();
+  for (const token of tokens) {
+    clauses.add(`normalized_code.eq.${token}`);
+    clauses.add(`normalized_oem.eq.${token}`);
+    clauses.add(`normalized_code.like.${token}*`);
+    clauses.add(`normalized_oem.like.*${token}*`);
+    clauses.add(`oem_no.ilike.*${token}*`);
+    if (!/^\d+$/.test(token) || token.length >= 8) {
+      clauses.add(`product_code.ilike.${token}*`);
+    }
+  }
+  return [...clauses];
+}
+
+function matchesCatalogSeedTokenRow(row: Record<string, unknown>, seedTokens: Set<string>) {
+  if (!seedTokens.size) return false;
+  return [
+    String(row.product_code || ""),
+    String(row.normalized_code || ""),
+    String(row.oem_no || ""),
+    String(row.normalized_oem || ""),
+  ].some((candidate) => buildComparableOriginalNumberTokens(candidate).some((token) => seedTokens.has(token)));
 }
 
 function matchesCatalogFamilyRow(row: Record<string, unknown>, search: string) {
@@ -489,11 +527,12 @@ function filterCatalogRowsBySearchRelevance(
   if (!exactRows.length) {
     return deduped.filter((row) => matchesCatalogExactFamilyRow(row, search) || hasCatalogReplacementMatch(row, replacementRowsByKey));
   }
+  const seedTokens = new Set(collectCatalogComparableTokensFromRows(exactRows));
   const anchorTokens = resolveCatalogFamilyAnchor(exactRows);
   return deduped.filter((row) => {
     if (exactRows.includes(row)) return true;
     if (hasCatalogReplacementMatch(row, replacementRowsByKey)) return true;
-    if (!matchesCatalogFamilyRow(row, search)) return false;
+    if (!matchesCatalogFamilyRow(row, search) && !matchesCatalogSeedTokenRow(row, seedTokens)) return false;
     return matchesCatalogDescriptionFamily(row, anchorTokens);
   });
 }
@@ -512,7 +551,7 @@ function isLikelyPortalCodeSearch(search: string) {
 
 function shouldStrictlyFilterCodeSearch(search: string) {
   const normalizedOriginal = normalizeOriginalNumberSearch(search);
-  return isLikelyPortalCodeSearch(search) && /^\d{10,}$/.test(normalizedOriginal);
+  return isLikelyPortalCodeSearch(search) && normalizedOriginal.length >= 6;
 }
 
 function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mode: PortalSearchMode) {
@@ -1333,6 +1372,30 @@ export async function searchPortalCatalog(
         (row) => matchesCatalogFamilyRow(row, search) || normalizePartCode(String(row.product_code || "")).includes(normalizedSearch),
       ),
     );
+  }
+
+  if (search && shouldStrictlyFilterCodeSearch(search)) {
+    const exactSeedRows = dedupeCatalogRows(rows).filter(
+      (row) => matchesCatalogExactFamilyRow(row, search) || hasCatalogReplacementMatch(row, replacementRowsByKey),
+    );
+    const seedClauses = buildCatalogSeedExpansionClauses(collectCatalogComparableTokensFromRows(exactSeedRows));
+    if (seedClauses.length) {
+      const seedExpansionRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+        select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
+        organization_id: `eq.${invite.organization_id}`,
+        ...(selectedBrandId
+          ? { brand_id: `eq.${selectedBrandId}` }
+          : allowedBrandIds.length
+            ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
+            : {}),
+        or: `(${seedClauses.join(",")})`,
+        order: "product_code.asc",
+        limit: "240",
+      }).catch(() => []);
+      if (seedExpansionRows.length) {
+        rows = dedupeCatalogRows([...rows, ...seedExpansionRows]);
+      }
+    }
   }
   rows = filterCatalogRowsBySearchRelevance(rows, search, replacementRowsByKey);
   const baseItems = mapCatalogRowsToBaseItems(rows, brandMap, replacementRowsByKey);

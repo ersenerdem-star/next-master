@@ -1,4 +1,8 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+
+const APP_DESKTOP_BASE_WIDTH_PX = 1440;
+const APP_DESKTOP_SCALE_SIDE_PADDING_PX = 24;
+const APP_MOBILE_LAYOUT_BREAKPOINT_PX = 768;
 
 type SubNavItem = {
   key: string;
@@ -53,11 +57,18 @@ export function AppShell({
   onNavigate,
   onNavigateSub,
 }: AppShellProps) {
+  const appDesktopFrameRef = useRef<HTMLDivElement | null>(null);
   const meta = pageMeta[activePage as keyof typeof pageMeta] || pageMeta.Home;
   const context = contextMeta[buildMeta.context as keyof typeof contextMeta] || {
     label: buildMeta.context || "Build",
     className: "is-local",
   };
+  const [appViewportWidth, setAppViewportWidth] = useState(() =>
+    typeof window === "undefined" ? APP_DESKTOP_BASE_WIDTH_PX : window.innerWidth,
+  );
+  const [appDesktopFrameHeight, setAppDesktopFrameHeight] = useState(() =>
+    typeof window === "undefined" ? 0 : window.innerHeight,
+  );
   const commitShort = buildMeta.commit.slice(0, 8);
   const builtAtLabel = new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
@@ -65,8 +76,51 @@ export function AppShell({
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(buildMeta.builtAt));
+  const shouldScaleAppDesktop =
+    appViewportWidth > APP_MOBILE_LAYOUT_BREAKPOINT_PX &&
+    appViewportWidth < APP_DESKTOP_BASE_WIDTH_PX;
+  const appDesktopScale = shouldScaleAppDesktop
+    ? Math.min(1, (appViewportWidth - APP_DESKTOP_SCALE_SIDE_PADDING_PX) / APP_DESKTOP_BASE_WIDTH_PX)
+    : 1;
+  const appDesktopScaledHeight = shouldScaleAppDesktop
+    ? Math.max(
+        typeof window === "undefined" ? 0 : window.innerHeight - APP_DESKTOP_SCALE_SIDE_PADDING_PX,
+        Math.ceil(appDesktopFrameHeight * appDesktopScale),
+      )
+    : 0;
+  const appDesktopStageStyle: CSSProperties | undefined = shouldScaleAppDesktop
+    ? {
+        "--app-desktop-scale": String(appDesktopScale),
+        "--app-desktop-scaled-height": `${appDesktopScaledHeight}px`,
+        "--app-desktop-base-width": `${APP_DESKTOP_BASE_WIDTH_PX}px`,
+      } as CSSProperties
+    : undefined;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const syncViewportWidth = () => setAppViewportWidth(window.innerWidth);
+    syncViewportWidth();
+    window.addEventListener("resize", syncViewportWidth);
+    return () => window.removeEventListener("resize", syncViewportWidth);
+  }, []);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const node = appDesktopFrameRef.current;
+    if (!node) return;
+    const syncFrameHeight = () => setAppDesktopFrameHeight(node.scrollHeight);
+    syncFrameHeight();
+    const observer = new ResizeObserver(syncFrameHeight);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [activePage, activeSubPage, children, notice, shouldScaleAppDesktop]);
 
   return (
+    <div className={`app-desktop-stage${shouldScaleAppDesktop ? " app-desktop-stage--scaled" : ""}`} style={appDesktopStageStyle}>
+      <div
+        ref={appDesktopFrameRef}
+        className={`app-desktop-frame${shouldScaleAppDesktop ? " app-desktop-frame--scaled" : ""}`}
+      >
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-panel">
@@ -161,6 +215,8 @@ export function AppShell({
           </button>
         ))}
       </nav>
+    </div>
+      </div>
     </div>
   );
 }
