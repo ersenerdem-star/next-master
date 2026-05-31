@@ -269,6 +269,7 @@ async function sanitizePortalInvitePayload(input: {
   payload: Record<string, unknown>;
 }) {
   const next = { ...input.payload };
+  next.email = String(next.email || "").trim().toLowerCase();
   const rawBrandIds = Array.isArray(next.allowed_brand_ids)
     ? next.allowed_brand_ids.map((value) => String(value || "").trim()).filter((value) => isUuid(value))
     : [];

@@ -411,7 +411,7 @@ async function fetchPortalInviteByEmailPreview(supabaseUrl: string, serviceRoleK
   if (!normalizedEmail) return null;
   const invites = await fetchAllOptional<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
     select: PORTAL_INVITE_SELECT,
-    email: `eq.${normalizedEmail}`,
+    email: `ilike.${normalizedEmail}`,
     order: "updated_at.desc",
     limit: "10",
   });
@@ -431,7 +431,7 @@ export async function fetchPortalInviteByIdAndEmail(
   return fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
     select: PORTAL_INVITE_SELECT,
     id: `eq.${inviteId}`,
-    email: `eq.${String(email || "").trim().toLowerCase()}`,
+    email: `ilike.${String(email || "").trim().toLowerCase()}`,
     limit: "1",
   });
 }
@@ -443,7 +443,7 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
   try {
     const invites = await fetchAllOptional<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
       select: PORTAL_INVITE_SELECT,
-      email: `eq.${String(email || "").trim().toLowerCase()}`,
+      email: `ilike.${String(email || "").trim().toLowerCase()}`,
       invite_token_hash: `eq.${tokenHash}`,
       order: "updated_at.desc",
       limit: "20",
@@ -486,7 +486,7 @@ export async function resolvePortalInvite(
     const invite = await fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
       select: PORTAL_INVITE_SELECT,
       id: `eq.${session.invite_id}`,
-      email: `eq.${session.email}`,
+      email: `ilike.${session.email}`,
     });
 
     if (!isPortalInviteUsable(invite)) {
@@ -526,7 +526,7 @@ export async function resolvePortalInvitePreview(
     const invite = await fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
       select: PORTAL_INVITE_SELECT,
       id: `eq.${session.invite_id}`,
-      email: `eq.${session.email}`,
+      email: `ilike.${session.email}`,
     });
     if (!isPortalInviteUsable(invite)) {
       throw new Error("Portal session is no longer active.");
