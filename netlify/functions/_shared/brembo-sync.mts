@@ -688,7 +688,7 @@ function extractBremboVehicleLabel(brands: BremboApplicationBrand[], application
 function extractBremboLifecycleSignal(detailHtml: string) {
   const text = decodeHtml(stripTags(detailHtml)).replace(/\s+/g, " ").trim();
   const match = text.match(
-    /(no longer deliverable|not in production|production ended|production end|production stopped|superseded|superceded|obsolete|discontinued|replacement only)/i,
+    /(no longer available|no longer deliverable|not in production|production ended|production end|production stopped|superseded|superceded|obsolete|discontinued|replacement only)/i,
   );
   return normalizeTextValue(match?.[0] || "");
 }
