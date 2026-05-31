@@ -20,7 +20,11 @@ export type PortalInviteRow = {
   access_can_view_invoices: boolean;
   access_can_view_payments: boolean;
   access_can_view_orders: boolean;
+  updated_at: string | null;
 };
+
+const PORTAL_INVITE_SELECT =
+  "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders,updated_at";
 
 const CUSTOMER_PORTAL_SELECT =
   "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,custom_fields,seller_company_profile_id,price_list_type,portal_c_price_mode";
@@ -352,13 +356,30 @@ async function fetchPortalInviteByEmailPreview(supabaseUrl: string, serviceRoleK
   const normalizedEmail = String(email || "").trim().toLowerCase();
   if (!normalizedEmail) return null;
   const invites = await fetchAllOptional<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
-    select:
-      "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders",
+    select: PORTAL_INVITE_SELECT,
     email: `eq.${normalizedEmail}`,
     order: "updated_at.desc",
     limit: "10",
   });
   return invites.find((invite) => invite.status !== "disabled") || null;
+}
+
+export async function fetchPortalInviteByEmail(supabaseUrl: string, serviceRoleKey: string, email: string) {
+  return fetchPortalInviteByEmailPreview(supabaseUrl, serviceRoleKey, email);
+}
+
+export async function fetchPortalInviteByIdAndEmail(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  inviteId: string,
+  email: string,
+) {
+  return fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
+    select: PORTAL_INVITE_SELECT,
+    id: `eq.${inviteId}`,
+    email: `eq.${String(email || "").trim().toLowerCase()}`,
+    limit: "1",
+  });
 }
 
 export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: string, email: string, password: string) {
@@ -367,8 +388,7 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
 
   try {
     invite = await fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
-      select:
-        "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders",
+      select: PORTAL_INVITE_SELECT,
       email: `eq.${email}`,
       invite_token_hash: `eq.${tokenHash}`,
     });
@@ -406,8 +426,7 @@ export async function resolvePortalInvite(
     }
 
     const invite = await fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
-      select:
-        "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders",
+      select: PORTAL_INVITE_SELECT,
       id: `eq.${session.invite_id}`,
       email: `eq.${session.email}`,
     });
@@ -447,8 +466,7 @@ export async function resolvePortalInvitePreview(
       throw new Error("Portal session expired. Sign in again.");
     }
     const invite = await fetchFirst<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
-      select:
-        "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders",
+      select: PORTAL_INVITE_SELECT,
       id: `eq.${session.invite_id}`,
       email: `eq.${session.email}`,
     });

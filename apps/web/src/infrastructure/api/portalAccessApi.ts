@@ -5,6 +5,7 @@ type PortalResponse = {
   snapshot?: PortalSnapshot;
   branding?: PortalBranding;
   sessionToken?: string;
+  message?: string;
   error?: string;
 };
 
@@ -61,5 +62,55 @@ export async function fetchPortalBranding(credentials: PortalCredentials): Promi
   return {
     branding: data.branding,
     sessionToken: String(data.sessionToken || credentials.sessionToken || ""),
+  };
+}
+
+export async function requestPortalPasswordReset(email: string) {
+  const response = await fetch("/api/portal-password-reset-request", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  const data = (await response.json().catch(() => ({}))) as PortalResponse;
+  if (!response.ok) {
+    const fallback =
+      response.status === 404
+        ? "Portal functions are not available on this runtime yet. Use Netlify dev or deployed app."
+        : `Portal request failed: ${response.status}`;
+    throw new Error(data.error || fallback);
+  }
+  return {
+    ok: true,
+    message: String(data.message || "If the portal email exists, a reset link has been sent."),
+  };
+}
+
+export async function confirmPortalPasswordReset(email: string, resetToken: string, password: string) {
+  const response = await fetch("/api/portal-password-reset-confirm", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email,
+      resetToken,
+      password,
+    }),
+  });
+
+  const data = (await response.json().catch(() => ({}))) as PortalResponse;
+  if (!response.ok || !data.snapshot) {
+    const fallback =
+      response.status === 404
+        ? "Portal functions are not available on this runtime yet. Use Netlify dev or deployed app."
+        : `Portal request failed: ${response.status}`;
+    throw new Error(data.error || fallback);
+  }
+  return {
+    snapshot: data.snapshot,
+    sessionToken: String(data.sessionToken || ""),
   };
 }

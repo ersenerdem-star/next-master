@@ -44,7 +44,16 @@ type PortalSessionPayload = {
   exp: number;
 };
 
+type PortalPasswordResetPayload = {
+  purpose: "portal_password_reset";
+  invite_id: string;
+  email: string;
+  updated_at: string;
+  exp: number;
+};
+
 const PORTAL_SESSION_TTL_SECONDS = 12 * 60 * 60;
+const PORTAL_PASSWORD_RESET_TTL_SECONDS = 60 * 60;
 
 export async function createPortalSessionToken(secret: string, inviteId: string, email: string) {
   const payload: PortalSessionPayload = {
@@ -68,6 +77,38 @@ export async function verifyPortalSessionToken(secret: string, token: string) {
   try {
     const payload = JSON.parse(decodeBase64Url(payloadPart)) as PortalSessionPayload;
     if (!payload?.invite_id || !payload?.email || !payload?.exp) return null;
+    if (Number(payload.exp) <= Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+export async function createPortalPasswordResetToken(secret: string, inviteId: string, email: string, updatedAt: string) {
+  const payload: PortalPasswordResetPayload = {
+    purpose: "portal_password_reset",
+    invite_id: String(inviteId || ""),
+    email: String(email || "").trim().toLowerCase(),
+    updated_at: String(updatedAt || ""),
+    exp: Math.floor(Date.now() / 1000) + PORTAL_PASSWORD_RESET_TTL_SECONDS,
+  };
+  const payloadText = JSON.stringify(payload);
+  const payloadPart = encodeBase64Url(payloadText);
+  const signature = await hmacSha256(secret, payloadPart);
+  return `${payloadPart}.${signature}`;
+}
+
+export async function verifyPortalPasswordResetToken(secret: string, token: string) {
+  const [payloadPart, signature] = String(token || "").split(".");
+  if (!payloadPart || !signature) return null;
+
+  const expectedSignature = await hmacSha256(secret, payloadPart);
+  if (expectedSignature !== signature) return null;
+
+  try {
+    const payload = JSON.parse(decodeBase64Url(payloadPart)) as PortalPasswordResetPayload;
+    if (payload?.purpose !== "portal_password_reset") return null;
+    if (!payload?.invite_id || !payload?.email || !payload?.updated_at || !payload?.exp) return null;
     if (Number(payload.exp) <= Math.floor(Date.now() / 1000)) return null;
     return payload;
   } catch {

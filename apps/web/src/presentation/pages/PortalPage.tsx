@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fetchPortalBranding, fetchPortalSnapshot, loginPortal } from "../../infrastructure/api/portalAccessApi";
+import {
+  confirmPortalPasswordReset,
+  fetchPortalBranding,
+  fetchPortalSnapshot,
+  loginPortal,
+  requestPortalPasswordReset,
+} from "../../infrastructure/api/portalAccessApi";
 import type { PortalBranding, PortalCredentials, PortalSnapshot } from "../../types/portalSession";
 import { Button } from "../components/common/Button";
 import { DataTable } from "../components/common/DataTable";
@@ -342,9 +348,11 @@ function writeStoredCredentials(credentials: PortalCredentials | null) {
 
 function clearPortalQueryParams() {
   const url = new URL(window.location.href);
-  if (!url.searchParams.has("email") && !url.searchParams.has("token")) return;
+  if (!url.searchParams.has("email") && !url.searchParams.has("token") && !url.searchParams.has("reset") && !url.searchParams.has("reset_token")) return;
   url.searchParams.delete("email");
   url.searchParams.delete("token");
+  url.searchParams.delete("reset");
+  url.searchParams.delete("reset_token");
   window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
@@ -423,6 +431,7 @@ function getDefaultPortalSection(snapshot: PortalSnapshot) {
 export function PortalPage() {
   const search = new URLSearchParams(window.location.search);
   const portalLinkEmail = search.get("email") || "";
+  const portalResetToken = search.get("reset") || search.get("reset_token") || "";
   const portalImportRef = useRef<HTMLInputElement | null>(null);
   const portalDraftLinesRef = useRef<HTMLDivElement | null>(null);
   const portalCachedDraftRef = useRef<PortalOfflineCache["draft"] | null>(null);
@@ -433,7 +442,7 @@ export function PortalPage() {
     return {
       email: portalLinkEmail || stored?.email || "",
       password: "",
-      sessionToken: stored?.sessionToken || "",
+      sessionToken: portalResetToken ? "" : stored?.sessionToken || "",
     };
   });
   const [snapshot, setSnapshot] = useState<PortalSnapshot | null>(null);
@@ -448,6 +457,9 @@ export function PortalPage() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [portalForgotMode, setPortalForgotMode] = useState(false);
+  const [portalResetPassword, setPortalResetPassword] = useState("");
+  const [portalResetConfirmPassword, setPortalResetConfirmPassword] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
   const [orderSearchBrand, setOrderSearchBrand] = useState("");
   const [catalogResults, setCatalogResults] = useState<PortalCatalogSearchItem[]>([]);
@@ -547,7 +559,7 @@ export function PortalPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (snapshot || !credentials.email) return;
+    if (snapshot || !credentials.email || portalResetToken) return;
     const cached = readPortalCache(credentials.email);
     if (!cached?.snapshot) return;
     portalCachedDraftRef.current = cached.draft;
@@ -559,10 +571,10 @@ export function PortalPage() {
     setPaymentStatusFilter("");
     setStatus(isOnline ? "Cached portal workspace loaded." : "Offline mode active. Showing cached portal data and local basket.");
     setError("");
-  }, [credentials.email, isOnline, snapshot]);
+  }, [credentials.email, isOnline, portalResetToken, snapshot]);
 
   useEffect(() => {
-    if (!isOnline || !credentials.email || !credentials.sessionToken) return;
+    if (!isOnline || !credentials.email || !credentials.sessionToken || portalResetToken) return;
     const refreshKey = `${credentials.email}::${credentials.sessionToken}`;
     if (portalAutoRefreshKeyRef.current === refreshKey) return;
     portalAutoRefreshKeyRef.current = refreshKey;
@@ -593,7 +605,7 @@ export function PortalPage() {
     return () => {
       cancelled = true;
     };
-  }, [credentials.email, credentials.sessionToken, isOnline, snapshot]);
+  }, [credentials.email, credentials.sessionToken, isOnline, portalResetToken, snapshot]);
 
   const accountColumns = useMemo(
     () => [
@@ -849,6 +861,7 @@ export function PortalPage() {
     try {
       setLoading(true);
       setError("");
+      setStatus("");
       const { snapshot: next, sessionToken } = await loginPortal(credentials);
       setSnapshot(next);
       setSelection(null);
@@ -864,6 +877,73 @@ export function PortalPage() {
     } catch (caught) {
       setSnapshot(null);
       setError(caught instanceof Error ? caught.message : "Portal login failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handlePortalForgotPassword() {
+    if (!credentials.email.trim()) {
+      setError("Enter portal email first.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+      const response = await requestPortalPasswordReset(credentials.email);
+      setStatus(response.message);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Portal password reset request failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handlePortalResetPassword() {
+    if (!credentials.email.trim()) {
+      setError("Portal email is required.");
+      return;
+    }
+    if (!portalResetPassword.trim()) {
+      setError("Enter a new portal password.");
+      return;
+    }
+    if (portalResetPassword.length < 8) {
+      setError("Portal password must be at least 8 characters.");
+      return;
+    }
+    if (portalResetPassword !== portalResetConfirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+      setStatus("");
+      const { snapshot: next, sessionToken } = await confirmPortalPasswordReset(
+        credentials.email,
+        portalResetToken,
+        portalResetPassword,
+      );
+      setSnapshot(next);
+      setSelection(null);
+      setActiveSection(getDefaultPortalSection(next));
+      setDocumentSearch("");
+      setBrandFilter("");
+      setPaymentStatusFilter("");
+      setPortalResetPassword("");
+      setPortalResetConfirmPassword("");
+      setPortalForgotMode(false);
+      setStatus("Portal password updated.");
+      const nextCredentials = { email: credentials.email, password: "", sessionToken };
+      setCredentials(nextCredentials);
+      writeStoredCredentials(nextCredentials);
+      clearPortalQueryParams();
+    } catch (caught) {
+      setSnapshot(null);
+      setError(caught instanceof Error ? caught.message : "Portal password reset failed");
     } finally {
       setLoading(false);
     }
@@ -1050,29 +1130,91 @@ export function PortalPage() {
               <strong>{loginBrandName}</strong>
             </div>
           </div>
-          <h1>Portal Login</h1>
-          <p>Enter portal email and password to access customer or vendor self-service.</p>
+          <h1>{portalResetToken ? "Create New Password" : "Portal Login"}</h1>
+          <p>
+            {portalResetToken
+              ? "Create a new portal password to continue."
+              : portalForgotMode
+                ? "Enter the portal email address and a reset link will be sent if the account is active."
+                : "Enter portal email and password to access customer or vendor self-service."}
+          </p>
           <form
             className="portal-login-form"
             onSubmit={(event) => {
               event.preventDefault();
+              if (portalResetToken) {
+                void handlePortalResetPassword();
+                return;
+              }
+              if (portalForgotMode) {
+                void handlePortalForgotPassword();
+                return;
+              }
               void handleLogin();
             }}
           >
             <Input label="Email" value={credentials.email} placeholder="name@company.com" onChange={(value) => setCredentials((current) => ({ ...current, email: value }))} />
-            <Input
-              label="Password"
-              type="password"
-              value={credentials.password || ""}
-              placeholder="Portal password"
-              onChange={(value) => setCredentials((current) => ({ ...current, password: value }))}
-            />
+            {portalResetToken ? (
+              <>
+                <Input
+                  label="New Password"
+                  type="password"
+                  value={portalResetPassword}
+                  placeholder="New portal password"
+                  onChange={setPortalResetPassword}
+                />
+                <Input
+                  label="Confirm Password"
+                  type="password"
+                  value={portalResetConfirmPassword}
+                  placeholder="Repeat new password"
+                  onChange={setPortalResetConfirmPassword}
+                />
+              </>
+            ) : portalForgotMode ? null : (
+              <Input
+                label="Password"
+                type="password"
+                value={credentials.password || ""}
+                placeholder="Portal password"
+                onChange={(value) => setCredentials((current) => ({ ...current, password: value }))}
+              />
+            )}
             <div className="inline-actions">
-              <Button type="submit" busy={loading} busyLabel="Signing in..." onClick={() => void handleLogin()}>
-                Sign In
+              <Button
+                type="submit"
+                busy={loading}
+                busyLabel={portalResetToken ? "Saving..." : portalForgotMode ? "Sending..." : "Signing in..."}
+                onClick={() => {
+                  if (portalResetToken) {
+                    void handlePortalResetPassword();
+                    return;
+                  }
+                  if (portalForgotMode) {
+                    void handlePortalForgotPassword();
+                    return;
+                  }
+                  void handleLogin();
+                }}
+              >
+                {portalResetToken ? "Save New Password" : portalForgotMode ? "Send Reset Link" : "Sign In"}
               </Button>
             </div>
             {error ? <div className="warning-text">{error}</div> : null}
+            {status ? <div className="success-text">{status}</div> : null}
+            {!portalResetToken ? (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  setPortalForgotMode((current) => !current);
+                  setError("");
+                  setStatus("");
+                }}
+              >
+                {portalForgotMode ? "Back to sign in" : "Forgot password?"}
+              </button>
+            ) : null}
           </form>
         </div>
       </div>
