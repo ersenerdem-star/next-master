@@ -66,9 +66,7 @@ function isPortalInvitePasswordReady(invite: PortalInviteRow | null | undefined)
   const status = String(invite.status || "").trim().toLowerCase();
   if (status === "disabled") return false;
   if (!String(invite.invite_token_hash || "").trim()) return false;
-  if (status === "active" || status === "draft") return true;
-  if (status === "invited") return !hasPortalInviteExpired(invite);
-  return false;
+  return status === "active" || status === "invited" || status === "draft";
 }
 
 function requirePortalCustomerScope(invite: PortalInviteRow) {
