@@ -1,6 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { requireCallerProfile } from "./_shared/auth.mts";
 import { buildRestUrl, getJson, json, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
+import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 export default async (req: Request, _context: Context) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -80,7 +81,7 @@ export default async (req: Request, _context: Context) => {
       email: targetProfile.email,
     });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "User delete failed" }, 500);
+    return json({ error: sanitizeUserFacingError(error, "User delete failed") }, 500);
   }
 };
 

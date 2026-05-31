@@ -4,14 +4,14 @@ type PortalResponse = {
   ok?: boolean;
   snapshot?: PortalSnapshot;
   branding?: PortalBranding;
-  sessionToken?: string;
   message?: string;
   error?: string;
 };
 
-async function postPortalJson(path: string, credentials: PortalCredentials): Promise<{ snapshot: PortalSnapshot; sessionToken: string }> {
+async function postPortalJson(path: string, credentials: PortalCredentials): Promise<{ snapshot: PortalSnapshot }> {
   const response = await fetch(path, {
     method: "POST",
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
     },
@@ -29,7 +29,6 @@ async function postPortalJson(path: string, credentials: PortalCredentials): Pro
 
   return {
     snapshot: data.snapshot,
-    sessionToken: String(data.sessionToken || credentials.sessionToken || ""),
   };
 }
 
@@ -41,9 +40,10 @@ export async function fetchPortalSnapshot(credentials: PortalCredentials) {
   return postPortalJson("/api/portal-data", credentials);
 }
 
-export async function fetchPortalBranding(credentials: PortalCredentials): Promise<{ branding: PortalBranding; sessionToken: string }> {
+export async function fetchPortalBranding(credentials: PortalCredentials): Promise<{ branding: PortalBranding }> {
   const response = await fetch("/api/portal-branding", {
     method: "POST",
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
     },
@@ -61,13 +61,13 @@ export async function fetchPortalBranding(credentials: PortalCredentials): Promi
 
   return {
     branding: data.branding,
-    sessionToken: String(data.sessionToken || credentials.sessionToken || ""),
   };
 }
 
 export async function requestPortalPasswordReset(email: string) {
   const response = await fetch("/api/portal-password-reset-request", {
     method: "POST",
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
     },
@@ -91,6 +91,7 @@ export async function requestPortalPasswordReset(email: string) {
 export async function confirmPortalPasswordReset(email: string, resetToken: string, password: string) {
   const response = await fetch("/api/portal-password-reset-confirm", {
     method: "POST",
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
     },
@@ -111,6 +112,12 @@ export async function confirmPortalPasswordReset(email: string, resetToken: stri
   }
   return {
     snapshot: data.snapshot,
-    sessionToken: String(data.sessionToken || ""),
   };
+}
+
+export async function logoutPortalSession() {
+  await fetch("/api/portal-logout", {
+    method: "POST",
+    credentials: "same-origin",
+  }).catch(() => undefined);
 }

@@ -7,6 +7,7 @@ import {
 } from "./_shared/portal-access.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import {
+  buildPortalSessionCookie,
   createPortalSessionToken,
   hashPortalToken,
   verifyPortalPasswordResetToken,
@@ -96,7 +97,9 @@ export default async (req: Request, _context: Context) => {
     } catch {
       snapshot = await buildPortalFallbackSnapshot(supabaseUrl, serviceRoleKey, nextInvite);
     }
-    return json({ ok: true, snapshot, sessionToken });
+    return json({ ok: true, snapshot }, 200, {
+      "Set-Cookie": buildPortalSessionCookie(sessionToken),
+    });
   } catch (error) {
     return json({ error: sanitizeUserFacingError(error, "Portal password reset failed") }, 500);
   }

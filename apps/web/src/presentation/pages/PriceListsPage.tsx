@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { read, utils } from "xlsx";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCatalogExportRows } from "../../infrastructure/api/catalogApi";
 import { fetchCPriceMapForRows, getCPriceForRow } from "../../infrastructure/api/cPriceApi";
@@ -14,6 +13,7 @@ import { Input } from "../components/common/Input";
 import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
 import { downloadCPriceListTemplate } from "../../shared/importTemplates";
+import { assertSpreadsheetFile, isSpreadsheetTextExtension, readSpreadsheetMatrix } from "../../shared/spreadsheetImport";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 
 function normalizeImportHeader(value: string) {
@@ -40,18 +40,11 @@ async function parseCPriceImportFile(file: File) {
   const extension = file.name.split(".").pop()?.toLowerCase() || "";
   let parsedRows: string[][] = [];
 
-  if (["csv", "tsv", "txt"].includes(extension)) {
+  if (isSpreadsheetTextExtension(extension)) {
+    assertSpreadsheetFile(file, ["csv", "tsv", "txt", "xlsx", "xlsm", "xls"]);
     parsedRows = parseCsv(await file.text());
   } else if (["xlsx", "xlsm", "xls"].includes(extension)) {
-    const workbook = read(await file.arrayBuffer(), { type: "array" });
-    const firstSheetName = workbook.SheetNames[0];
-    if (!firstSheetName) return [];
-    const sheet = workbook.Sheets[firstSheetName];
-    parsedRows = utils.sheet_to_json<string[]>(sheet, {
-      header: 1,
-      defval: "",
-      raw: false,
-    });
+    parsedRows = await readSpreadsheetMatrix(file);
   } else {
     throw new Error("Upload CSV, TSV, TXT, XLSX or XLS files.");
   }

@@ -54,6 +54,42 @@ type PortalPasswordResetPayload = {
 
 const PORTAL_SESSION_TTL_SECONDS = 12 * 60 * 60;
 const PORTAL_PASSWORD_RESET_TTL_SECONDS = 60 * 60;
+export const PORTAL_SESSION_COOKIE_NAME = "__Host-next-master-portal";
+
+function parseCookieHeader(cookieHeader: string) {
+  return String(cookieHeader || "")
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce<Record<string, string>>((accumulator, entry) => {
+      const separatorIndex = entry.indexOf("=");
+      if (separatorIndex <= 0) return accumulator;
+      const key = entry.slice(0, separatorIndex).trim();
+      const value = entry.slice(separatorIndex + 1).trim();
+      if (!key) return accumulator;
+      accumulator[key] = value;
+      return accumulator;
+    }, {});
+}
+
+export function readPortalSessionCookie(req: Request) {
+  const cookies = parseCookieHeader(req.headers.get("cookie") || "");
+  const raw = cookies[PORTAL_SESSION_COOKIE_NAME];
+  if (!raw) return "";
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+export function buildPortalSessionCookie(token: string) {
+  return `${PORTAL_SESSION_COOKIE_NAME}=${encodeURIComponent(String(token || "").trim())}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${PORTAL_SESSION_TTL_SECONDS}`;
+}
+
+export function buildExpiredPortalSessionCookie() {
+  return `${PORTAL_SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+}
 
 export async function createPortalSessionToken(secret: string, inviteId: string, email: string) {
   const payload: PortalSessionPayload = {

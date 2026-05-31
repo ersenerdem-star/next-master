@@ -3,6 +3,7 @@ import { json } from "./_shared/http.mts";
 import { resolvePortalInvite } from "./_shared/portal-access.mts";
 import { preparePortalOrderLines } from "./_shared/portal-orders.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
+import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 export default async (req: Request, _context: Context) => {
@@ -19,7 +20,7 @@ export default async (req: Request, _context: Context) => {
     const body = await req.json();
     const email = String(body?.email || "").trim();
     const password = String(body?.password || "").trim();
-    const sessionToken = String(body?.sessionToken || body?.session_token || "").trim();
+    const sessionToken = String(body?.sessionToken || body?.session_token || readPortalSessionCookie(req) || "").trim();
     const rows = Array.isArray(body?.rows) ? body.rows : [];
     if (!sessionToken && (!email || !password)) return json({ error: "Email and password are required" }, 400);
     if (!rows.length) return json({ error: "At least one row is required" }, 400);
@@ -37,9 +38,14 @@ export default async (req: Request, _context: Context) => {
       sessionToken,
     });
     const prepared = await preparePortalOrderLines(supabaseUrl, serviceRoleKey, invite, rows);
-    return json({ ok: true, ...prepared, sessionToken: nextSessionToken });
+    return json({ ok: true, ...prepared }, 200, {
+      "Set-Cookie": buildPortalSessionCookie(nextSessionToken),
+    });
   } catch (error) {
-    return json({ error: sanitizeUserFacingError(error, "Portal order pricing failed") }, 400);
+    const message = sanitizeUserFacingError(error, "Portal order pricing failed");
+    return json({ error: message }, 400, {
+      ...(message === "Your session has expired. Sign in again." ? { "Set-Cookie": buildExpiredPortalSessionCookie() } : {}),
+    });
   }
 };
 

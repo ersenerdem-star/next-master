@@ -2,6 +2,7 @@ import type { Config, Context } from "@netlify/functions";
 import { createClient } from "@supabase/supabase-js";
 import { requireCallerProfile } from "./_shared/auth.mts";
 import { buildRestUrl, getJson, json, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
+import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 const allowedRoles = new Set(["superadmin", "admin", "sales", "viewer"]);
 
@@ -129,7 +130,7 @@ export default async (req: Request, _context: Context) => {
       isActive: Boolean(updatedProfile.is_active),
     });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "User update failed" }, 500);
+    return json({ error: sanitizeUserFacingError(error, "User update failed") }, 500);
   }
 };
 

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { read, utils } from "xlsx";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { createCodeReference, deleteCodeReference, fetchCodeReferences, importCodeReferences, inspectCodeReferenceUsage, updateCodeReference } from "../../infrastructure/api/codeReferencesApi";
 import { parseCsv } from "../../shared/csv";
@@ -11,6 +10,7 @@ import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { downloadCodeReferenceTemplate } from "../../shared/importTemplates";
+import { assertSpreadsheetFile, isSpreadsheetTextExtension, readSpreadsheetMatrix } from "../../shared/spreadsheetImport";
 
 export function CodeReferencesPage() {
   const actionFeedback = useActionFeedback();
@@ -189,14 +189,11 @@ export function CodeReferencesPage() {
     const defaultReason = "Automatic replacement";
     let parsed: string[][] = [];
 
-    if (["csv", "tsv", "txt"].includes(extension)) {
+    if (isSpreadsheetTextExtension(extension)) {
+      assertSpreadsheetFile(file, ["csv", "tsv", "txt", "xlsx", "xlsm", "xls"]);
       parsed = parseCsv(await file.text());
     } else if (["xlsx", "xlsm", "xls"].includes(extension)) {
-      const workbook = read(await file.arrayBuffer(), { type: "array" });
-      const firstSheetName = workbook.SheetNames[0];
-      if (!firstSheetName) return [];
-      const sheet = workbook.Sheets[firstSheetName];
-      parsed = utils.sheet_to_json<string[]>(sheet, { header: 1, defval: "", raw: false });
+      parsed = await readSpreadsheetMatrix(file);
     } else {
       throw new Error("Upload CSV, TSV, TXT, XLSX or XLS files.");
     }

@@ -442,7 +442,8 @@ export async function resolvePortalInvite(
     }
 
     await touchPortalInvite(supabaseUrl, serviceRoleKey, invite);
-    return { invite, sessionToken };
+    const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email);
+    return { invite, sessionToken: nextSessionToken };
   }
 
   const email = providedEmail;
@@ -478,7 +479,8 @@ export async function resolvePortalInvitePreview(
     if (!invite || invite.status === "disabled") {
       throw new Error("Portal session is no longer active.");
     }
-    return { invite, sessionToken };
+    const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email);
+    return { invite, sessionToken: nextSessionToken };
   }
 
   const invite = await fetchPortalInviteByEmailPreview(supabaseUrl, serviceRoleKey, auth.email || "");

@@ -1,6 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { requireCallerProfile } from "./_shared/auth.mts";
 import { buildRestUrl, getJson, json, serviceRoleHeaders } from "./_shared/http.mts";
+import { sanitizeUserFacingError, sanitizeUserFacingMessage } from "./_shared/user-message.mts";
 
 type OutboundEmailRow = {
   id: string;
@@ -33,7 +34,7 @@ async function sendWithResend(apiKey: string, from: string, row: OutboundEmailRo
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.message || `Resend failed: ${response.status}`);
+    throw new Error(sanitizeUserFacingMessage(data?.message || `Resend failed: ${response.status}`, "Email delivery failed"));
   }
   return data;
 }
@@ -52,7 +53,7 @@ async function patchEmailStatus(supabaseUrl: string, serviceRoleKey: string, id:
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error(data?.message || `Outbound email status patch failed: ${response.status}`);
+    throw new Error(sanitizeUserFacingMessage(data?.message || `Outbound email status patch failed: ${response.status}`, "Email status update failed"));
   }
 }
 
@@ -115,7 +116,7 @@ export default async (req: Request, _context: Context) => {
       failedIds,
     });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Queued email send failed" }, 500);
+    return json({ error: sanitizeUserFacingError(error, "Queued email send failed") }, 500);
   }
 };
 

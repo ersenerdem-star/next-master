@@ -4,6 +4,7 @@ import {
   fetchPortalBranding,
   fetchPortalSnapshot,
   loginPortal,
+  logoutPortalSession,
   requestPortalPasswordReset,
 } from "../../infrastructure/api/portalAccessApi";
 import type { PortalBranding, PortalCredentials, PortalSnapshot } from "../../types/portalSession";
@@ -331,7 +332,7 @@ function readStoredCredentials(): PortalCredentials | null {
   try {
     const parsed = JSON.parse(raw) as Partial<PortalCredentials>;
     if (!parsed.email) return null;
-    return { email: parsed.email, password: "", sessionToken: parsed.sessionToken || "" };
+    return { email: parsed.email, password: "", sessionToken: "" };
   } catch {
     return null;
   }
@@ -346,7 +347,6 @@ function writeStoredCredentials(credentials: PortalCredentials | null) {
     SESSION_KEY,
     JSON.stringify({
       email: credentials.email,
-      sessionToken: credentials.sessionToken || "",
     }),
   );
 }
@@ -448,7 +448,7 @@ export function PortalPage() {
     return {
       email: portalLinkEmail || stored?.email || "",
       password: "",
-      sessionToken: portalResetToken ? "" : stored?.sessionToken || "",
+      sessionToken: "",
     };
   });
   const [snapshot, setSnapshot] = useState<PortalSnapshot | null>(null);
@@ -566,12 +566,7 @@ export function PortalPage() {
     }
     if (!isOnline) return;
 
-    const previewCredentials =
-      credentials.email && credentials.sessionToken
-        ? { email: credentials.email, sessionToken: credentials.sessionToken }
-        : credentials.email
-          ? { email: credentials.email, sessionToken: "" }
-          : null;
+    const previewCredentials = credentials.email ? { email: credentials.email, sessionToken: "" } : null;
 
     if (!previewCredentials) {
       portalBrandingKeyRef.current = "";
@@ -579,7 +574,7 @@ export function PortalPage() {
       return;
     }
 
-    const previewKey = `${previewCredentials.email}::${previewCredentials.sessionToken || "preview"}`;
+    const previewKey = `${previewCredentials.email}::preview`;
     if (portalBrandingKeyRef.current === previewKey) return;
     portalBrandingKeyRef.current = previewKey;
 
@@ -598,7 +593,7 @@ export function PortalPage() {
     return () => {
       cancelled = true;
     };
-  }, [credentials.email, credentials.sessionToken, isOnline, snapshot]);
+  }, [credentials.email, isOnline, snapshot]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -617,17 +612,17 @@ export function PortalPage() {
   }, [credentials.email, isOnline, portalResetToken, snapshot]);
 
   useEffect(() => {
-    if (!isOnline || !credentials.email || !credentials.sessionToken || portalResetToken) return;
-    const refreshKey = `${credentials.email}::${credentials.sessionToken}`;
+    if (!isOnline || !credentials.email || !snapshot || portalResetToken) return;
+    const refreshKey = credentials.email;
     if (portalAutoRefreshKeyRef.current === refreshKey) return;
     portalAutoRefreshKeyRef.current = refreshKey;
 
     let cancelled = false;
     fetchPortalSnapshot(credentials)
-      .then(({ snapshot: next, sessionToken }) => {
+      .then(({ snapshot: next }) => {
         if (cancelled) return;
         setSnapshot(next);
-        const nextCredentials = { email: credentials.email, password: "", sessionToken };
+        const nextCredentials = { email: credentials.email, password: "", sessionToken: "" };
         setCredentials(nextCredentials);
         writeStoredCredentials(nextCredentials);
         setError("");
@@ -655,7 +650,7 @@ export function PortalPage() {
     return () => {
       cancelled = true;
     };
-  }, [credentials.email, credentials.sessionToken, isOnline, portalResetToken, snapshot]);
+  }, [credentials.email, isOnline, portalResetToken, snapshot]);
 
   const accountColumns = useMemo(
     () => [
@@ -912,7 +907,7 @@ export function PortalPage() {
       setLoading(true);
       setError("");
       setStatus("");
-      const { snapshot: next, sessionToken } = await loginPortal({
+      const { snapshot: next } = await loginPortal({
         email: credentials.email,
         password: credentials.password || "",
         sessionToken: "",
@@ -924,7 +919,7 @@ export function PortalPage() {
       setBrandFilter("");
       setPaymentStatusFilter("");
       setStatus("Portal session active.");
-      const nextCredentials = { email: credentials.email, password: "", sessionToken };
+      const nextCredentials = { email: credentials.email, password: "", sessionToken: "" };
       setCredentials(nextCredentials);
       writeStoredCredentials(nextCredentials);
       clearPortalQueryParams();
@@ -976,7 +971,7 @@ export function PortalPage() {
       setLoading(true);
       setError("");
       setStatus("");
-      const { snapshot: next, sessionToken } = await confirmPortalPasswordReset(
+      const { snapshot: next } = await confirmPortalPasswordReset(
         credentials.email,
         portalResetToken,
         portalResetPassword,
@@ -991,7 +986,7 @@ export function PortalPage() {
       setPortalResetConfirmPassword("");
       setPortalForgotMode(false);
       setStatus("Portal password updated.");
-      const nextCredentials = { email: credentials.email, password: "", sessionToken };
+      const nextCredentials = { email: credentials.email, password: "", sessionToken: "" };
       setCredentials(nextCredentials);
       writeStoredCredentials(nextCredentials);
       clearPortalQueryParams();
@@ -1012,11 +1007,11 @@ export function PortalPage() {
     try {
       setLoading(true);
       setError("");
-      const { snapshot: next, sessionToken } = await fetchPortalSnapshot(credentials);
+      const { snapshot: next } = await fetchPortalSnapshot(credentials);
       setSnapshot(next);
       setSelection(null);
       setStatus("Portal data refreshed.");
-      const nextCredentials = { email: credentials.email, password: "", sessionToken };
+      const nextCredentials = { email: credentials.email, password: "", sessionToken: "" };
       setCredentials(nextCredentials);
       writeStoredCredentials(nextCredentials);
     } catch (caught) {
@@ -1026,7 +1021,8 @@ export function PortalPage() {
     }
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    await logoutPortalSession();
     writePortalCache(credentials.email, null);
     setCredentials({ email: credentials.email, password: "", sessionToken: "" });
     setSnapshot(null);
@@ -2324,7 +2320,7 @@ export function PortalPage() {
           <Button variant="secondary" busy={loading} busyLabel="Refreshing..." onClick={() => void handleRefresh()}>
             Refresh
           </Button>
-          <Button variant="secondary" onClick={handleLogout}>
+          <Button variant="secondary" onClick={() => void handleLogout()}>
             Logout
           </Button>
         </div>

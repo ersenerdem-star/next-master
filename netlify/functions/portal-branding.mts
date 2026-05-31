@@ -27,7 +27,7 @@ export default async (req: Request, _context: Context) => {
       });
     }
 
-    const { invite, sessionToken: nextSessionToken } = await resolvePortalInvitePreview(supabaseUrl, serviceRoleKey, sessionSecret, {
+    const { invite } = await resolvePortalInvitePreview(supabaseUrl, serviceRoleKey, sessionSecret, {
       email,
       sessionToken,
     });
@@ -41,7 +41,7 @@ export default async (req: Request, _context: Context) => {
         partyName: String(invite.party_name || invite.email || ""),
       };
     }
-    return json({ ok: true, branding, sessionToken: nextSessionToken });
+    return json({ ok: true, branding });
   } catch (error) {
     return json({ error: sanitizeUserFacingError(error, "Portal branding load failed") }, 401);
   }

@@ -1,6 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { requireCallerProfile } from "./_shared/auth.mts";
 import { json } from "./_shared/http.mts";
+import { sanitizeUserFacingError, sanitizeUserFacingMessage } from "./_shared/user-message.mts";
 
 export default async (req: Request, _context: Context) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -37,12 +38,12 @@ export default async (req: Request, _context: Context) => {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      return json({ error: data?.message || `Resend failed: ${response.status}` }, 500);
+      return json({ error: sanitizeUserFacingMessage(data?.message || `Resend failed: ${response.status}`, "Test email failed") }, 500);
     }
 
     return json({ ok: true, email, messageId: data?.id || "" });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Test email failed" }, 500);
+    return json({ error: sanitizeUserFacingError(error, "Test email failed") }, 500);
   }
 };
 

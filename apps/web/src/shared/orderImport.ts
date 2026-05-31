@@ -1,5 +1,5 @@
-import { read, utils } from "xlsx";
 import { parseCsv } from "./csv";
+import { assertSpreadsheetFile, isSpreadsheetTextExtension, readSpreadsheetMatrix } from "./spreadsheetImport";
 
 type ImportedOrderRow = {
   code: string;
@@ -55,21 +55,17 @@ function rowsFromCsv(text: string) {
 
 export async function parseOrderImportFile(file: File, fallbackBrand = ""): Promise<ImportedOrderRow[]> {
   const extension = file.name.split(".").pop()?.toLowerCase() || "";
-  if (["csv", "tsv", "txt"].includes(extension)) {
+  if (isSpreadsheetTextExtension(extension)) {
+    assertSpreadsheetFile(file, ["csv", "tsv", "txt", "xlsx", "xlsm", "xls"]);
     const text = await file.text();
     return mapRows(rowsFromCsv(text), fallbackBrand);
   }
 
   if (["xlsx", "xlsm", "xls"].includes(extension)) {
-    const buffer = await file.arrayBuffer();
-    const workbook = read(buffer, { type: "array" });
-    const firstSheetName = workbook.SheetNames[0];
-    if (!firstSheetName) return [];
-    const sheet = workbook.Sheets[firstSheetName];
-    const rows = utils.sheet_to_json<Record<string, unknown>>(sheet, {
-      defval: "",
-      raw: false,
-    });
+    const [headerRow = [], ...bodyRows] = await readSpreadsheetMatrix(file);
+    if (!headerRow.length) return [];
+    const headers = headerRow.map((cell) => normalizeHeader(cell));
+    const rows = bodyRows.map((cells) => Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? ""])));
     return mapRows(rows, fallbackBrand);
   }
 

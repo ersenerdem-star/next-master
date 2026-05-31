@@ -1,6 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { requireCallerProfile } from "./_shared/auth.mts";
 import { buildRestUrl, getJson, json, serviceRoleHeaders } from "./_shared/http.mts";
+import { sanitizeUserFacingError, sanitizeUserFacingMessage } from "./_shared/user-message.mts";
 
 export default async (req: Request, _context: Context) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -30,7 +31,7 @@ export default async (req: Request, _context: Context) => {
       );
     } catch (error) {
       databaseOk = false;
-      databaseDetail = error instanceof Error ? error.message : "Database probe failed";
+      databaseDetail = sanitizeUserFacingMessage(error instanceof Error ? error.message : error, "Database probe failed");
     }
 
     if (!caller.supabaseAnonKey || !caller.serviceRoleKey || !caller.supabaseUrl) {
@@ -67,7 +68,7 @@ export default async (req: Request, _context: Context) => {
       },
     });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Diagnostics failed" }, 500);
+    return json({ error: sanitizeUserFacingError(error, "Diagnostics failed") }, 500);
   }
 };
 

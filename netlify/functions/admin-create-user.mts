@@ -2,6 +2,7 @@ import type { Config, Context } from "@netlify/functions";
 import { createClient } from "@supabase/supabase-js";
 import { requireCallerProfile } from "./_shared/auth.mts";
 import { buildRestUrl, getJson, json, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
+import { sanitizeUserFacingError, sanitizeUserFacingMessage } from "./_shared/user-message.mts";
 
 const allowedRoles = new Set(["admin", "sales", "viewer"]);
 const welcomeTemplateKey = "internal_user_welcome";
@@ -265,7 +266,7 @@ export default async (req: Request, _context: Context) => {
         throw new Error("Welcome email queue failed");
       }
     } catch (error) {
-      welcomeEmailError = error instanceof Error ? error.message : "Welcome email queue failed";
+      welcomeEmailError = sanitizeUserFacingMessage(error instanceof Error ? error.message : error, "Welcome email queue failed");
     }
 
     return json({
@@ -279,7 +280,7 @@ export default async (req: Request, _context: Context) => {
       welcomeEmailError: welcomeEmailError || undefined,
     });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "User create failed" }, 500);
+    return json({ error: sanitizeUserFacingError(error, "User create failed") }, 500);
   }
 };
 

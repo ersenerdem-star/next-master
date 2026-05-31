@@ -1,5 +1,6 @@
 import type { Config } from "@netlify/functions";
 import { json } from "./_shared/http.mts";
+import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 const BREMBO_HOME_URL = "https://www.bremboparts.com/europe/en";
 const BREMBO_SEARCH_CODE_URL = `${BREMBO_HOME_URL}/catalogue/search/searchcode`;
@@ -43,7 +44,7 @@ export default async (req: Request) => {
 
     return json({ ok: true, items });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Media load failed" }, 400);
+    return json({ error: sanitizeUserFacingError(error, "Media load failed") }, 400);
   }
 };
 

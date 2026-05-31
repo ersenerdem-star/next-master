@@ -2,6 +2,7 @@ import type { Config, Context } from "@netlify/functions";
 import { requireCallerProfile } from "./_shared/auth.mts";
 import { json, readJson } from "./_shared/http.mts";
 import { syncBrandCatalog } from "./_shared/catalog-sync-provider.mts";
+import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 export default async (req: Request, _context: Context) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -31,7 +32,7 @@ export default async (req: Request, _context: Context) => {
       ...result,
     });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Brand catalog sync failed" }, 500);
+    return json({ error: sanitizeUserFacingError(error, "Brand catalog sync failed") }, 500);
   }
 };
 

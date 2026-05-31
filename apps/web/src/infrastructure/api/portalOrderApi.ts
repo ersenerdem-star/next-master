@@ -62,7 +62,6 @@ export type PortalPreparedLine = {
 
 type PortalOrderResponse = {
   ok?: boolean;
-  sessionToken?: string;
   error?: string;
   items?: PortalCatalogSearchItem[];
   recommendations?: PortalCatalogSearchItem[];
@@ -88,6 +87,7 @@ type PortalOrderResponse = {
 async function postPortalOrderJson(path: string, payload: Record<string, unknown>) {
   const response = await fetch(path, {
     method: "POST",
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
     },
