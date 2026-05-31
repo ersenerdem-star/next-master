@@ -55,7 +55,8 @@ function hasPortalInviteExpired(invite: PortalInviteRow | null | undefined) {
 function isPortalInviteUsable(invite: PortalInviteRow | null | undefined) {
   if (!invite) return false;
   const status = String(invite.status || "").trim().toLowerCase();
-  if (status !== "active" && status !== "invited") return false;
+  if (status === "active") return true;
+  if (status !== "invited") return false;
   if (hasPortalInviteExpired(invite)) return false;
   return true;
 }
@@ -64,9 +65,10 @@ function isPortalInvitePasswordReady(invite: PortalInviteRow | null | undefined)
   if (!invite) return false;
   const status = String(invite.status || "").trim().toLowerCase();
   if (status === "disabled") return false;
-  if (hasPortalInviteExpired(invite)) return false;
   if (!String(invite.invite_token_hash || "").trim()) return false;
-  return status === "active" || status === "invited" || status === "draft";
+  if (status === "active" || status === "draft") return true;
+  if (status === "invited") return !hasPortalInviteExpired(invite);
+  return false;
 }
 
 function requirePortalCustomerScope(invite: PortalInviteRow) {
@@ -173,6 +175,7 @@ async function touchPortalInvite(supabaseUrl: string, serviceRoleKey: string, in
     headers: serviceRoleHeaders(serviceRoleKey),
     body: JSON.stringify({
       status: "active",
+      expires_at: null,
       last_used_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }),
