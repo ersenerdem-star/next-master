@@ -163,6 +163,10 @@ const KNOWN_MANUFACTURER_PATTERNS = [
 
 fs.mkdirSync(outputDir, { recursive: true });
 
+function targetBrandLabel(targets) {
+  return targets.map((target) => target.internalName).join(", ");
+}
+
 async function main() {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const matchedCsvPath = path.join(outputDir, `zf-aftermarket-detail-fill-${timestamp}.csv`);
@@ -467,10 +471,13 @@ async function main() {
     if (dedupedCatalogPayload.length) {
       for (let index = 0; index < dedupedCatalogPayload.length; index += batchSize) {
         const batch = dedupedCatalogPayload.slice(index, index + batchSize);
+        const batchNumber = index / batchSize + 1;
+        console.error(`${targetBrandLabel(targets)} catalog batch ${batchNumber} start: ${batch.length} rows`);
         const result = await upsertCatalogBatch(batch);
+        console.error(`${targetBrandLabel(targets)} catalog batch ${batchNumber} complete: status ${result.status}`);
         processedBatches.push({
           type: "catalog",
-          batch: index / batchSize + 1,
+          batch: batchNumber,
           rows: batch.length,
           result,
         });
@@ -480,6 +487,8 @@ async function main() {
     if (replacementPayload.length) {
       for (let index = 0; index < replacementPayload.length; index += batchSize) {
         const batch = replacementPayload.slice(index, index + batchSize);
+        const batchNumber = index / batchSize + 1;
+        console.error(`${targetBrandLabel(targets)} code reference batch ${batchNumber} start: ${batch.length} rows`);
         const result = await upsertCodeReferenceBatch(
           batch.map((row) => ({
             organization_id: row.organization_id,
@@ -492,9 +501,10 @@ async function main() {
             updated_at: new Date().toISOString(),
           })),
         );
+        console.error(`${targetBrandLabel(targets)} code reference batch ${batchNumber} complete: status ${result.status}`);
         processedBatches.push({
           type: "code_reference",
-          batch: index / batchSize + 1,
+          batch: batchNumber,
           rows: batch.length,
           result,
         });
