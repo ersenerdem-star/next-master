@@ -208,22 +208,13 @@ function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "s
       clauses.add(`normalized_oem.like.${variant}*`);
       if (variant.length >= 8) {
         clauses.add(`normalized_oem.like.*${variant}*`);
-        clauses.add(`oem_no.ilike.*${variant}*`);
       }
       if (variant.length <= 24) {
         clauses.add(`product_code.ilike.${variant}*`);
-        if (variant.length >= 8) {
-          clauses.add(`product_code.ilike.*${variant}*`);
-        }
       }
     }
     if (mode === "loose" && normalizedOriginalSearch.length >= 6) {
       clauses.add(`normalized_oem.like.*${normalizedOriginalSearch}*`);
-      clauses.add(`normalized_code.like.*${normalizedOriginalSearch}*`);
-      if (normalizedOriginalSearch.length >= 8) {
-        clauses.add(`oem_no.ilike.*${normalizedOriginalSearch}*`);
-        clauses.add(`product_code.ilike.*${normalizedOriginalSearch}*`);
-      }
     }
     return `(${[...clauses].join(",")})`;
   }
@@ -320,7 +311,10 @@ function buildOriginalNumberFamilyClauses(search: string) {
     clauses.add(`normalized_oem.eq.${token}`);
     clauses.add(`normalized_code.eq.${token}`);
     clauses.add(`normalized_code.like.${token}*`);
-    clauses.add(`oem_no.ilike.*${token}*`);
+    clauses.add(`normalized_oem.like.${token}*`);
+    if (token.length >= 8) {
+      clauses.add(`normalized_oem.like.*${token}*`);
+    }
     if (!/^\d+$/.test(token) || token.length >= 8) {
       clauses.add(`product_code.ilike.${token}*`);
     }
@@ -342,7 +336,7 @@ function collectCatalogComparableTokensFromRows(rows: CatalogSourceRow[]) {
       }
     }
   }
-  return [...tokens].slice(0, 24);
+  return [...tokens].slice(0, 12);
 }
 
 function buildCatalogSeedExpansionClauses(tokens: string[]) {
@@ -351,8 +345,10 @@ function buildCatalogSeedExpansionClauses(tokens: string[]) {
     clauses.add(`normalized_code.eq.${token}`);
     clauses.add(`normalized_oem.eq.${token}`);
     clauses.add(`normalized_code.like.${token}*`);
-    clauses.add(`normalized_oem.like.*${token}*`);
-    clauses.add(`oem_no.ilike.*${token}*`);
+    clauses.add(`normalized_oem.like.${token}*`);
+    if (token.length >= 8) {
+      clauses.add(`normalized_oem.like.*${token}*`);
+    }
     if (!/^\d+$/.test(token) || token.length >= 8) {
       clauses.add(`product_code.ilike.${token}*`);
     }
@@ -547,7 +543,7 @@ async function fetchCloudCatalogPageViaRest(
   const pageSize = Math.min(250, Math.max(1, Number(args.input_page_size || 50) || 50));
   const offset = (page - 1) * pageSize;
   const normalizedSearch = normalizePartCode(search);
-  const fetchLimit = search && shouldStrictlyFilterCodeSearch(search) ? Math.max(pageSize * 4, 120) : pageSize;
+  const fetchLimit = search && shouldStrictlyFilterCodeSearch(search) ? Math.max(pageSize * 2, 80) : pageSize;
   const brandMaps = await fetchBrandMaps(supabaseUrl, serviceRoleKey, caller.organizationId);
   const selectedBrandId = brand ? brandMaps.byName.get(normalizePartCode(brand)) || "" : "";
   const select =
@@ -636,24 +632,6 @@ async function fetchCloudCatalogPageViaRest(
       }
     }
   }
-  if (search && shouldRunLooseOriginalNumberSearch(search) && rows.length < Math.max(pageSize, 40)) {
-    const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
-    if (normalizedOriginalSearch.length >= 8) {
-      const exactOemRows = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
-        select,
-        organization_id: `eq.${caller.organizationId}`,
-        ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
-        oem_no: `ilike.*${normalizedOriginalSearch}*`,
-        order: "product_code.asc",
-        limit: String(Math.min(180, Math.max(pageSize * 3, 80))),
-      }).catch(() => ({ rows: [] as CatalogSourceRow[], totalCount: 0 }));
-      if (exactOemRows.rows.length) {
-        const merged = dedupeCatalogRows([...rows, ...exactOemRows.rows]);
-        totalCount = merged.length;
-        rows = merged.slice(offset, offset + pageSize);
-      }
-    }
-  }
   if (!rows.length && search && shouldRunLooseOriginalNumberSearch(search)) {
     ({ rows, totalCount } = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
       ...baseParams,
@@ -667,7 +645,7 @@ async function fetchCloudCatalogPageViaRest(
       select,
       organization_id: `eq.${caller.organizationId}`,
       order: "product_code.asc",
-      limit: "200",
+      limit: "120",
     };
     if (selectedBrandId) fallbackBase.brand_id = `eq.${selectedBrandId}`;
     const fallbackByNormalized = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
@@ -694,7 +672,7 @@ async function fetchCloudCatalogPageViaRest(
         ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
         or: `(${seedClauses.join(",")})`,
         order: "product_code.asc",
-        limit: "240",
+        limit: "120",
       }).catch(() => ({ rows: [] as CatalogSourceRow[], totalCount: 0 }));
       if (seedExpansionRows.rows.length) {
         rows = dedupeCatalogRows([...rows, ...seedExpansionRows.rows]);

@@ -398,7 +398,10 @@ function buildOriginalNumberFamilyClauses(search: string) {
     clauses.add(`normalized_oem.eq.${token}`);
     clauses.add(`normalized_code.eq.${token}`);
     clauses.add(`normalized_code.like.${token}*`);
-    clauses.add(`oem_no.ilike.*${token}*`);
+    clauses.add(`normalized_oem.like.${token}*`);
+    if (token.length >= 8) {
+      clauses.add(`normalized_oem.like.*${token}*`);
+    }
     if (!/^\d+$/.test(token) || token.length >= 8) {
       clauses.add(`product_code.ilike.${token}*`);
     }
@@ -420,7 +423,7 @@ function collectCatalogComparableTokensFromRows(rows: Array<Record<string, unkno
       }
     }
   }
-  return [...tokens].slice(0, 24);
+  return [...tokens].slice(0, 12);
 }
 
 function buildCatalogSeedExpansionClauses(tokens: string[]) {
@@ -429,8 +432,10 @@ function buildCatalogSeedExpansionClauses(tokens: string[]) {
     clauses.add(`normalized_code.eq.${token}`);
     clauses.add(`normalized_oem.eq.${token}`);
     clauses.add(`normalized_code.like.${token}*`);
-    clauses.add(`normalized_oem.like.*${token}*`);
-    clauses.add(`oem_no.ilike.*${token}*`);
+    clauses.add(`normalized_oem.like.${token}*`);
+    if (token.length >= 8) {
+      clauses.add(`normalized_oem.like.*${token}*`);
+    }
     if (!/^\d+$/.test(token) || token.length >= 8) {
       clauses.add(`product_code.ilike.${token}*`);
     }
@@ -570,7 +575,6 @@ function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mo
       clauses.add(`normalized_oem.like.${normalizedSearch}*`);
       if (normalizedOriginalSearch.length >= 8) {
         clauses.add(`normalized_oem.like.*${normalizedOriginalSearch}*`);
-        clauses.add(`oem_no.ilike.*${normalizedOriginalSearch}*`);
       }
     }
     for (const variant of normalizedSearchVariants) {
@@ -580,26 +584,16 @@ function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mo
       clauses.add(`normalized_oem.like.${variant}*`);
       if (variant.length >= 8) {
         clauses.add(`normalized_oem.like.*${variant}*`);
-        clauses.add(`oem_no.ilike.*${variant}*`);
       }
     }
     if (escaped && escaped.length <= 24 && (/[A-Z]/i.test(escaped) || normalizedOriginalSearch.length >= 8)) {
       clauses.add(`product_code.ilike.${escaped}*`);
-      clauses.add(`oem_no.ilike.${escaped}*`);
-      if (normalizedOriginalSearch.length >= 8) {
-        clauses.add(`product_code.ilike.*${escaped}*`);
-        clauses.add(`oem_no.ilike.*${escaped}*`);
-      }
     }
     if (separatorInsensitivePattern && separatorInsensitivePattern !== escaped.toUpperCase() && /[A-Z]/i.test(separatorInsensitivePattern)) {
       clauses.add(`product_code.ilike.${separatorInsensitivePattern}*`);
-      clauses.add(`oem_no.ilike.${separatorInsensitivePattern}*`);
     }
     if (mode === "loose" && normalizedOriginalSearch.length >= 6) {
       clauses.add(`normalized_oem.like.*${normalizedOriginalSearch}*`);
-    }
-    if (mode === "loose" && looseOriginalPattern.length >= 6 && /[A-Z]/i.test(looseOriginalPattern)) {
-      clauses.add(`oem_no.ilike.${looseOriginalPattern}*`);
     }
     return `(${[...clauses].join(",")})`;
   }
@@ -1254,7 +1248,6 @@ export async function searchPortalCatalog(
   if (search && shouldRunLooseOriginalNumberSearch(search)) {
     const familyCore = buildOriginalNumberFamilyCore(search);
     if (familyCore.length >= 6) {
-      const familyPattern = buildLooseOriginalNumberPattern(familyCore);
       const familyRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
         select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
         organization_id: `eq.${invite.organization_id}`,
@@ -1266,8 +1259,7 @@ export async function searchPortalCatalog(
         or: `(${[
           `normalized_oem.like.*${familyCore}*`,
           `normalized_code.like.*${familyCore}*`,
-          familyPattern.length >= 6 ? `oem_no.ilike.*${familyPattern}*` : "",
-          familyPattern.length >= 6 ? `product_code.ilike.*${familyPattern}*` : "",
+          familyCore.length >= 8 && !/^\d+$/.test(familyCore) ? `product_code.ilike.${familyCore}*` : "",
         ]
           .filter(Boolean)
           .join(",")})`,
@@ -1327,26 +1319,6 @@ export async function searchPortalCatalog(
       }
     }
   }
-  if (search && shouldRunLooseOriginalNumberSearch(search)) {
-    const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
-    if (normalizedOriginalSearch.length >= 8) {
-      const exactOemRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
-        select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
-        organization_id: `eq.${invite.organization_id}`,
-        ...(selectedBrandId
-          ? { brand_id: `eq.${selectedBrandId}` }
-          : allowedBrandIds.length
-            ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
-            : {}),
-        oem_no: `ilike.*${normalizedOriginalSearch}*`,
-        order: "product_code.asc",
-        limit: "180",
-      }).catch(() => []);
-      if (exactOemRows.length) {
-        rows = dedupeCatalogRows([...rows, ...exactOemRows]);
-      }
-    }
-  }
   if (!rows.length && search && shouldRunLooseOriginalNumberSearch(search)) {
     rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
       ...params,
@@ -1390,7 +1362,7 @@ export async function searchPortalCatalog(
             : {}),
         or: `(${seedClauses.join(",")})`,
         order: "product_code.asc",
-        limit: "240",
+        limit: "120",
       }).catch(() => []);
       if (seedExpansionRows.length) {
         rows = dedupeCatalogRows([...rows, ...seedExpansionRows]);
