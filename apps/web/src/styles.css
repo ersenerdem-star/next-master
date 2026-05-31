@@ -2766,6 +2766,28 @@ select {
   gap: 20px;
 }
 
+.portal-desktop-stage {
+  width: 100%;
+}
+
+.portal-desktop-frame {
+  width: 100%;
+}
+
+.portal-desktop-stage--scaled {
+  position: relative;
+  min-height: var(--portal-desktop-scaled-height, 0px);
+}
+
+.portal-desktop-frame--scaled {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: var(--portal-desktop-base-width, 1440px);
+  transform: translateX(-50%) scale(var(--portal-desktop-scale, 1));
+  transform-origin: top center;
+}
+
 .portal-login-card {
   width: min(520px, 100%);
   margin: 10vh auto 0;
@@ -3675,22 +3697,6 @@ select {
     grid-template-columns: minmax(0, 1fr) 280px;
   }
 
-  .portal-layout {
-    grid-template-columns: minmax(220px, 250px) minmax(0, 1fr);
-  }
-
-  .portal-workbench {
-    grid-template-columns: minmax(0, 1fr) 280px;
-  }
-
-  .portal-record-layout {
-    grid-template-columns: minmax(0, 1fr) 320px;
-  }
-
-  .portal-search-card-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .catalog-selected-popup {
     right: 18px;
     top: 104px;
@@ -3710,7 +3716,7 @@ select {
   }
 
   .main,
-  .portal-shell {
+  .portal-shell--login {
     padding: 16px 16px 104px;
   }
 
@@ -3737,27 +3743,9 @@ select {
   .quote-cloud-summary,
   .quote-line-toolbar,
   .quote-form-grid,
-  .portal-summary-grid,
-  .portal-kpi-strip,
-  .portal-layout,
-  .portal-filter-grid,
-  .portal-filter-grid--desk,
-  .portal-summary-list,
-  .portal-record-layout,
-  .portal-workbench,
-  .portal-order-builder__meta,
-  .portal-statement-actions,
-  .portal-detail-grid,
-  .portal-detail-totals {
+  .quote-summary-internal,
+  .quote-line-toolbar--bottom {
     grid-template-columns: 1fr;
-  }
-
-  .portal-search-card-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .portal-sidebar {
-    display: none;
   }
 
   .workbench-detail-panel {
@@ -3837,9 +3825,7 @@ select {
   }
 
   .mobile-subnav,
-  .mobile-bottom-nav,
-  .portal-mobile-subnav,
-  .portal-mobile-bottom-nav {
+  .mobile-bottom-nav {
     display: flex;
   }
 }
@@ -3908,6 +3894,30 @@ select {
   .quote-editor-panel > .section-card,
   .quote-editor-panel > .section-card + .section-card {
     margin: 0 12px 12px;
+  }
+
+  .portal-summary-grid,
+  .portal-kpi-strip,
+  .portal-layout,
+  .portal-filter-grid,
+  .portal-filter-grid--desk,
+  .portal-summary-list,
+  .portal-record-layout,
+  .portal-workbench,
+  .portal-order-builder__meta,
+  .portal-statement-actions,
+  .portal-detail-grid,
+  .portal-detail-totals {
+    grid-template-columns: 1fr;
+  }
+
+  .portal-sidebar {
+    display: none;
+  }
+
+  .portal-mobile-subnav,
+  .portal-mobile-bottom-nav {
+    display: flex;
   }
 
   .quote-list-section__header,

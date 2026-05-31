@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   confirmPortalPasswordReset,
   fetchPortalBranding,
@@ -35,6 +35,9 @@ const SESSION_KEY = "next-master-portal-session";
 const PORTAL_CACHE_PREFIX = "next-master-portal-cache";
 const PORTAL_CACHE_WRITE_DELAY_MS = 250;
 const PORTAL_COMPACT_SEARCH_BREAKPOINT_PX = 1280;
+const PORTAL_MOBILE_LAYOUT_BREAKPOINT_PX = 768;
+const PORTAL_DESKTOP_BASE_WIDTH_PX = 1440;
+const PORTAL_DESKTOP_SCALE_SIDE_PADDING_PX = 24;
 
 type PortalOfflineDraft = {
   portalDraftLines: PortalPreparedLine[];
@@ -437,6 +440,7 @@ export function PortalPage() {
   const portalCachedDraftRef = useRef<PortalOfflineCache["draft"] | null>(null);
   const portalAutoRefreshKeyRef = useRef("");
   const portalBrandingKeyRef = useRef("");
+  const portalDesktopFrameRef = useRef<HTMLDivElement | null>(null);
   const [credentials, setCredentials] = useState<PortalCredentials>(() => {
     const stored = typeof window !== "undefined" ? readStoredCredentials() : null;
     return {
@@ -468,6 +472,12 @@ export function PortalPage() {
   const [isCompactPortalSearch, setIsCompactPortalSearch] = useState(() =>
     typeof window === "undefined" ? false : window.innerWidth < PORTAL_COMPACT_SEARCH_BREAKPOINT_PX,
   );
+  const [portalViewportWidth, setPortalViewportWidth] = useState(() =>
+    typeof window === "undefined" ? PORTAL_DESKTOP_BASE_WIDTH_PX : window.innerWidth,
+  );
+  const [portalDesktopFrameHeight, setPortalDesktopFrameHeight] = useState(() =>
+    typeof window === "undefined" ? 0 : window.innerHeight,
+  );
   const [portalDraftLines, setPortalDraftLines] = useState<PortalPreparedLine[]>([]);
   const [portalOrderId, setPortalOrderId] = useState("");
   const [portalSalesOrderNo, setPortalSalesOrderNo] = useState("");
@@ -490,6 +500,19 @@ export function PortalPage() {
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const portalPricingCurrency = snapshot?.pricingProfile?.currency || snapshot?.accountSummary.currency || "EUR";
   const effectivePortalSearchView: PortalSearchView = isCompactPortalSearch ? "list" : portalSearchView;
+  const shouldScalePortalDesktop =
+    Boolean(snapshot) &&
+    portalViewportWidth > PORTAL_MOBILE_LAYOUT_BREAKPOINT_PX &&
+    portalViewportWidth < PORTAL_DESKTOP_BASE_WIDTH_PX;
+  const portalDesktopScale = shouldScalePortalDesktop
+    ? Math.min(1, (portalViewportWidth - PORTAL_DESKTOP_SCALE_SIDE_PADDING_PX) / PORTAL_DESKTOP_BASE_WIDTH_PX)
+    : 1;
+  const portalDesktopScaledHeight = shouldScalePortalDesktop
+    ? Math.max(
+        typeof window === "undefined" ? 0 : window.innerHeight - PORTAL_DESKTOP_SCALE_SIDE_PADDING_PX,
+        Math.ceil(portalDesktopFrameHeight * portalDesktopScale),
+      )
+    : 0;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -505,12 +528,29 @@ export function PortalPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const syncViewportWidth = () => setPortalViewportWidth(window.innerWidth);
     const mediaQuery = window.matchMedia(`(max-width: ${PORTAL_COMPACT_SEARCH_BREAKPOINT_PX - 1}px)`);
     const syncCompactPortalSearch = () => setIsCompactPortalSearch(mediaQuery.matches);
+    syncViewportWidth();
     syncCompactPortalSearch();
+    window.addEventListener("resize", syncViewportWidth);
     mediaQuery.addEventListener("change", syncCompactPortalSearch);
-    return () => mediaQuery.removeEventListener("change", syncCompactPortalSearch);
+    return () => {
+      window.removeEventListener("resize", syncViewportWidth);
+      mediaQuery.removeEventListener("change", syncCompactPortalSearch);
+    };
   }, []);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const node = portalDesktopFrameRef.current;
+    if (!node) return;
+    const syncFrameHeight = () => setPortalDesktopFrameHeight(node.scrollHeight);
+    syncFrameHeight();
+    const observer = new ResizeObserver(() => syncFrameHeight());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [snapshot]);
 
   useEffect(() => {
     if (snapshot) {
@@ -2222,9 +2262,21 @@ export function PortalPage() {
 
   const orderDetailOpen = Boolean(selectedDocument && (selectedDocument.kind === "sales-order" || selectedDocument.kind === "purchase-order"));
   const billingDetailOpen = Boolean(selectedDocument && (selectedDocument.kind === "invoice" || selectedDocument.kind === "bill"));
+  const portalDesktopStageStyle: CSSProperties | undefined = shouldScalePortalDesktop
+    ? {
+        "--portal-desktop-scale": String(portalDesktopScale),
+        "--portal-desktop-scaled-height": `${portalDesktopScaledHeight}px`,
+        "--portal-desktop-base-width": `${PORTAL_DESKTOP_BASE_WIDTH_PX}px`,
+      } as CSSProperties
+    : undefined;
 
   return (
-    <div className="portal-shell">
+    <div className={`portal-desktop-stage${shouldScalePortalDesktop ? " portal-desktop-stage--scaled" : ""}`} style={portalDesktopStageStyle}>
+      <div
+        ref={portalDesktopFrameRef}
+        className={`portal-desktop-frame${shouldScalePortalDesktop ? " portal-desktop-frame--scaled" : ""}`}
+      >
+    <div className="portal-shell portal-shell--workspace">
       <div className="portal-header">
         <div className="portal-brand">
           {activeSnapshot.companyProfile?.logo_data_url ? <img src={activeSnapshot.companyProfile.logo_data_url} alt="Portal logo" className="portal-brand__logo" /> : null}
@@ -3001,6 +3053,8 @@ export function PortalPage() {
           </div>
         </div>
       ) : null}
+    </div>
+      </div>
     </div>
   );
 }
