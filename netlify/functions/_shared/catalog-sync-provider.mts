@@ -5,6 +5,7 @@ import { syncBrandCatalogFromDonaldson } from "./donaldson-sync.mts";
 import { syncBrandCatalogFromZfAftermarket } from "./zf-aftermarket-sync.mts";
 import { syncBrandCatalogFromMasterPower } from "./masterpower-sync.mts";
 import { syncBrandCatalogFromValeoService } from "./valeo-sync.mts";
+import { syncBrandCatalogFromBrembo } from "./brembo-sync.mts";
 import { canonicalizeInternalBrandName, normalizeBrandKey } from "./brand-standardization.mts";
 
 export type CatalogSyncPreferredProvider =
@@ -14,7 +15,8 @@ export type CatalogSyncPreferredProvider =
   | "donaldson_official"
   | "zf_aftermarket"
   | "masterpower_official"
-  | "valeo_service";
+  | "valeo_service"
+  | "brembo_official";
 
 export type CatalogSyncSourceType = "marketplace" | "official";
 
@@ -94,6 +96,13 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredProviderLabel: "Valeo Service official cross-reference catalog",
     preferredSourceType: "official",
     preferredSourceUrl: "https://www.valeoservice.us/en-us",
+  },
+  brembo: {
+    aliases: ["brembo"],
+    preferredProviderKey: "brembo_official",
+    preferredProviderLabel: "Brembo Parts official catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://www.bremboparts.com/europe/en",
   },
 };
 
@@ -201,6 +210,15 @@ export async function syncBrandCatalog(input: {
     fallbackUsed = false;
   } else if (plan.preferredProviderKey === "valeo_service") {
     result = await syncBrandCatalogFromValeoService({
+      ...input,
+      brandName: plan.brandName,
+    });
+    executionProviderKey = plan.preferredProviderKey;
+    executionProviderLabel = plan.preferredProviderLabel;
+    executionSourceType = plan.preferredSourceType;
+    fallbackUsed = false;
+  } else if (plan.preferredProviderKey === "brembo_official") {
+    result = await syncBrandCatalogFromBrembo({
       ...input,
       brandName: plan.brandName,
     });

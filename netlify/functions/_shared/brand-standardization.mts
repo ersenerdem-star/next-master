@@ -22,6 +22,7 @@ export function canonicalizeInternalBrandName(input: string) {
   if (lower === "valeo") return "Valeo";
   if (lower === "fte") return "FTE";
   if (lower === "swf") return "SWF";
+  if (lower === "brembo") return "Brembo";
   if (lower === "hepu") return "HEPU";
   if (lower === "zf") return "ZF";
   if (lower === "boge") return "Boge";
