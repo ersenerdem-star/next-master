@@ -573,7 +573,7 @@ function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mo
       clauses.add(`normalized_oem.eq.${normalizedSearch}`);
       clauses.add(`normalized_code.like.${normalizedSearch}*`);
       clauses.add(`normalized_oem.like.${normalizedSearch}*`);
-      if (normalizedOriginalSearch.length >= 8) {
+      if (mode === "loose" && normalizedOriginalSearch.length >= 8) {
         clauses.add(`normalized_oem.like.*${normalizedOriginalSearch}*`);
       }
     }
@@ -582,7 +582,7 @@ function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mo
       clauses.add(`normalized_oem.eq.${variant}`);
       clauses.add(`normalized_code.like.${variant}*`);
       clauses.add(`normalized_oem.like.${variant}*`);
-      if (variant.length >= 8) {
+      if (mode === "loose" && variant.length >= 8) {
         clauses.add(`normalized_oem.like.*${variant}*`);
       }
     }

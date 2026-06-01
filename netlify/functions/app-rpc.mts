@@ -206,7 +206,7 @@ function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "s
       clauses.add(`normalized_oem.eq.${variant}`);
       clauses.add(`normalized_code.like.${variant}*`);
       clauses.add(`normalized_oem.like.${variant}*`);
-      if (variant.length >= 8) {
+      if (mode === "loose" && variant.length >= 8) {
         clauses.add(`normalized_oem.like.*${variant}*`);
       }
       if (variant.length <= 24) {
