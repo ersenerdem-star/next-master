@@ -1204,6 +1204,9 @@ select {
 }
 
 .empty-state {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
   border: 1px dashed #cbd5e1;
   border-radius: 12px;
   padding: 22px;
@@ -2166,6 +2169,7 @@ select {
 
 .workbench-main-layout__table {
   min-width: 0;
+  width: 100%;
 }
 
 .workbench-detail-panel {
