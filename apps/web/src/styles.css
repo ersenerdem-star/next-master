@@ -1039,7 +1039,7 @@ select {
 
 .table-wrap--catalog {
   width: 100%;
-  min-width: 1720px;
+  max-width: 100%;
 }
 
 .table-wrap--tall {
