@@ -220,7 +220,7 @@ export default async (req: Request, _context: Context) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   try {
-    const caller = await requireCallerProfile(req, ["admin", "sales"]);
+    const caller = await requireCallerProfile(req, ["superadmin", "admin", "sales"]);
     if ("error" in caller) return json({ error: caller.error }, caller.status);
 
     const payload = await req.json().catch(() => ({}));
