@@ -499,6 +499,41 @@ async function fetchRestRowsWithCount<T>(
   };
 }
 
+async function fetchRestRows<T>(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  table: string,
+  params: Record<string, string>,
+) {
+  const response = await fetch(buildRestUrl(supabaseUrl, table, params), {
+    headers: serviceRoleHeaders(serviceRoleKey),
+  });
+  const data = await readJson<Array<T> & { message?: string; error?: string; msg?: string }>(response);
+  if (!response.ok) {
+    throw new Error(sanitizeUserFacingError(data?.msg || data?.message || data?.error || "Catalog request failed"));
+  }
+  return (data ?? []) as T[];
+}
+
+async function fetchRestCountOnly(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  table: string,
+  params: Record<string, string>,
+) {
+  const response = await fetch(buildRestUrl(supabaseUrl, table, { ...params, select: "id", limit: "1", offset: "0" }), {
+    headers: {
+      ...serviceRoleHeaders(serviceRoleKey),
+      Prefer: "count=planned",
+    },
+  });
+  if (!response.ok) {
+    const data = await readJson<{ message?: string; error?: string; msg?: string }>(response).catch(() => ({}));
+    throw new Error(sanitizeUserFacingError(data?.msg || data?.message || data?.error || "Catalog count request failed"));
+  }
+  return parseContentRangeTotal(response.headers.get("content-range"), 0);
+}
+
 async function fetchBrandMaps(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
   const cached = brandMapCache.get(organizationId);
   if (cached && cached.expiresAt > Date.now()) {
@@ -560,6 +595,35 @@ async function fetchCloudCatalogPageViaRest(
   if (selectedBrandId) baseParams.brand_id = `eq.${selectedBrandId}`;
   if (search) {
     baseParams.or = buildCatalogSearchOr(search, normalizedSearch, "strict");
+  }
+
+  if (!search && selectedBrandId) {
+    const [brandRows, brandTotalCount] = await Promise.all([
+      fetchRestRows<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", baseParams),
+      fetchRestCountOnly(supabaseUrl, serviceRoleKey, "catalog_products", {
+        organization_id: `eq.${caller.organizationId}`,
+        brand_id: `eq.${selectedBrandId}`,
+      }).catch(() => 0),
+    ]);
+    return brandRows.map((row) => ({
+      total_count: brandTotalCount || brandRows.length,
+      product_id: String(row.id || ""),
+      product_code: String(row.product_code || ""),
+      brand: brandMaps.byId.get(String(row.brand_id || "")) || "",
+      image_url: String(row.image_url || ""),
+      description: String(row.description || ""),
+      oem_no: sanitizeCatalogOemNumbers(row.oem_no),
+      vehicle: String(row.vehicle || ""),
+      hs_code: String(row.hs_code || ""),
+      origin: String(row.origin || ""),
+      weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
+      lifecycle_status: normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`),
+      lifecycle_note: String(row.lifecycle_note || ""),
+      replacement_old_code: "",
+      replacement_code: "",
+      replacement_reason: "",
+      replacement_warning: "",
+    }));
   }
 
   let { rows, totalCount } = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", baseParams);
