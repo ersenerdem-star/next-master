@@ -429,6 +429,24 @@ function decoratePortalInviteRows(rows: Record<string, unknown>[]) {
   return rows.map((row) => decoratePortalInviteRow(row) || {});
 }
 
+function matchesPortalInviteIdentity(
+  row: Record<string, unknown>,
+  payload: Record<string, unknown>,
+) {
+  const partyType = String(payload.party_type || "").trim();
+  const email = String(payload.email || "").trim().toLowerCase();
+  if (!partyType || !email) return false;
+  if (String(row.party_type || "").trim() !== partyType) return false;
+  if (String(row.email || "").trim().toLowerCase() !== email) return false;
+  if (partyType === "customer") {
+    return String(row.customer_id || "").trim() === String(payload.customer_id || "").trim();
+  }
+  if (partyType === "vendor") {
+    return String(row.vendor_id || "").trim() === String(payload.vendor_id || "").trim();
+  }
+  return false;
+}
+
 async function updatePortalInviteWithFallback(input: {
   supabaseUrl: string;
   serviceRoleKey: string;
@@ -681,7 +699,27 @@ async function upsertPortalInvite(input: {
     organizationId: input.organizationId,
     payload: input.payload,
   });
-  if (input.id) {
+  let targetId = String(input.id || "").trim();
+  if (!targetId) {
+    const existingRows = await getJson<Array<Record<string, unknown>>>(
+      buildRestUrl(input.supabaseUrl, "portal_invites", {
+        select: PORTAL_INVITE_COLUMNS,
+        organization_id: `eq.${input.organizationId}`,
+        email: `eq.${String(nextPayload.email || "").trim().toLowerCase()}`,
+        party_type: `eq.${String(nextPayload.party_type || "").trim()}`,
+        order: "updated_at.desc",
+        limit: "20",
+      }),
+      {
+        headers: serviceRoleHeaders(input.serviceRoleKey),
+      },
+    ).catch(() => []);
+    const reusableRow = existingRows.find((row) => matchesPortalInviteIdentity(row, nextPayload));
+    if (reusableRow) {
+      targetId = String(reusableRow.id || "").trim();
+    }
+  }
+  if (targetId) {
     try {
       const rows = await updateSingleRow<Record<string, unknown>>({
         supabaseUrl: input.supabaseUrl,
@@ -689,7 +727,7 @@ async function upsertPortalInvite(input: {
         table: "portal_invites",
         select: PORTAL_INVITE_COLUMNS,
         organizationId: input.organizationId,
-        id: input.id,
+        id: targetId,
         payload: nextPayload,
       });
       return decoratePortalInviteRow(rows[0] || null);
@@ -705,7 +743,7 @@ async function upsertPortalInvite(input: {
         table: "portal_invites",
         select: LEGACY_PORTAL_INVITE_COLUMNS,
         organizationId: input.organizationId,
-        id: input.id,
+        id: targetId,
         payload: legacyPayload,
       }).catch((legacyError) => {
         throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Portal invite save failed")));

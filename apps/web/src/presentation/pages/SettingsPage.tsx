@@ -683,7 +683,12 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               try {
                 setSendingPortalInviteId(row.id);
                 const companyName = companyProfile.companyName || companyProfiles[0]?.companyName || "Next Master";
-                const delivery = await sendPortalInviteEmail(row.id, companyName, window.location.origin);
+                const delivery = await sendPortalInviteEmail(row.id, companyName, window.location.origin, {
+                  email: row.email,
+                  party_type: row.party_type,
+                  customer_id: row.customer_id,
+                  vendor_id: row.vendor_id,
+                });
                 setPortalInvites(await fetchPortalInvites());
                 setOutboundEmails(await fetchOutboundEmails());
                 setPortalStatus(

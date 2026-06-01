@@ -261,7 +261,17 @@ export async function deliverQueuedEmails(emailIds: string[] = []) {
   };
 }
 
-export async function sendPortalInviteEmail(portalInviteId: string, companyName: string, portalBaseUrl: string) {
+export async function sendPortalInviteEmail(
+  portalInviteId: string,
+  companyName: string,
+  portalBaseUrl: string,
+  invite?: {
+    email?: string;
+    party_type?: string;
+    customer_id?: string;
+    vendor_id?: string;
+  },
+) {
   const {
     data: { session },
   } = await supabaseClient.auth.getSession();
@@ -278,6 +288,10 @@ export async function sendPortalInviteEmail(portalInviteId: string, companyName:
       portalInviteId,
       companyName,
       portalBaseUrl,
+      email: String(invite?.email || "").trim().toLowerCase(),
+      partyType: String(invite?.party_type || "").trim().toLowerCase(),
+      customerId: String(invite?.customer_id || "").trim(),
+      vendorId: String(invite?.vendor_id || "").trim(),
     }),
   });
 

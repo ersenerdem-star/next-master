@@ -8,6 +8,8 @@ type PortalInviteRow = {
   organization_id: string;
   party_type: "customer" | "vendor";
   party_name: string;
+  customer_id?: string | null;
+  vendor_id?: string | null;
   email: string;
   contact_name: string | null;
   status: "draft" | "invited" | "active" | "disabled";
@@ -23,7 +25,8 @@ type OutboundEmailRow = {
   id: string;
 };
 
-const PORTAL_INVITE_SELECT = "id,organization_id,party_type,party_name,email,contact_name,status,invite_token_hash";
+const PORTAL_INVITE_SELECT =
+  "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,updated_at";
 
 const DEFAULT_TEMPLATES = {
   customer_portal_invite: {
@@ -163,6 +166,78 @@ async function patchPortalInviteSent(supabaseUrl: string, serviceRoleKey: string
   }
 }
 
+function matchesPortalInviteScope(
+  invite: PortalInviteRow,
+  partyType: string,
+  email: string,
+  customerId: string,
+  vendorId: string,
+) {
+  if (invite.party_type !== partyType) return false;
+  if (String(invite.email || "").trim().toLowerCase() !== email) return false;
+  if (partyType === "customer" && customerId) {
+    return String(invite.customer_id || "").trim() === customerId;
+  }
+  if (partyType === "vendor" && vendorId) {
+    return String(invite.vendor_id || "").trim() === vendorId;
+  }
+  return true;
+}
+
+async function resolvePortalInviteForSend(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+  portalInviteId: string;
+  email: string;
+  partyType: string;
+  customerId: string;
+  vendorId: string;
+}) {
+  const directInvite =
+    (
+      await getJson<Array<PortalInviteRow>>(
+        buildRestUrl(input.supabaseUrl, "portal_invites", {
+          select: PORTAL_INVITE_SELECT,
+          organization_id: `eq.${input.organizationId}`,
+          id: `eq.${input.portalInviteId}`,
+          limit: "1",
+        }),
+        {
+          headers: serviceRoleHeaders(input.serviceRoleKey),
+        },
+      ).catch(() => [])
+    )[0] || null;
+
+  if (directInvite && directInvite.status !== "disabled") {
+    return directInvite;
+  }
+
+  if (!input.email || !input.partyType) return directInvite;
+
+  const candidateInvites = await getJson<Array<PortalInviteRow>>(
+    buildRestUrl(input.supabaseUrl, "portal_invites", {
+      select: PORTAL_INVITE_SELECT,
+      organization_id: `eq.${input.organizationId}`,
+      email: `eq.${input.email}`,
+      party_type: `eq.${input.partyType}`,
+      order: "updated_at.desc",
+      limit: "20",
+    }),
+    {
+      headers: serviceRoleHeaders(input.serviceRoleKey),
+    },
+  ).catch(() => []);
+
+  return (
+    candidateInvites.find(
+      (invite) =>
+        invite.status !== "disabled" &&
+        matchesPortalInviteScope(invite, input.partyType, input.email, input.customerId, input.vendorId),
+    ) || directInvite
+  );
+}
+
 export default async (req: Request, _context: Context) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
@@ -180,24 +255,24 @@ export default async (req: Request, _context: Context) => {
     const portalInviteId = String(payload?.portalInviteId || "").trim();
     const companyName = String(payload?.companyName || "").trim() || "Next Master";
     const portalBaseUrl = String(payload?.portalBaseUrl || "").trim();
+    const email = String(payload?.email || "").trim().toLowerCase();
+    const partyType = String(payload?.partyType || "").trim().toLowerCase();
+    const customerId = String(payload?.customerId || "").trim();
+    const vendorId = String(payload?.vendorId || "").trim();
     if (!portalInviteId || !portalBaseUrl) {
       return json({ error: "Portal invite id and portal base URL are required." }, 400);
     }
 
-    const invite =
-      (
-        await getJson<Array<PortalInviteRow>>(
-          buildRestUrl(caller.supabaseUrl, "portal_invites", {
-            select: PORTAL_INVITE_SELECT,
-            organization_id: `eq.${caller.profile.organization_id}`,
-            id: `eq.${portalInviteId}`,
-            limit: "1",
-          }),
-          {
-            headers: serviceRoleHeaders(caller.serviceRoleKey),
-          },
-        ).catch(() => [])
-      )[0] || null;
+    const invite = await resolvePortalInviteForSend({
+      supabaseUrl: caller.supabaseUrl,
+      serviceRoleKey: caller.serviceRoleKey,
+      organizationId: caller.profile.organization_id,
+      portalInviteId,
+      email,
+      partyType,
+      customerId,
+      vendorId,
+    });
 
     if (!invite || invite.status === "disabled") {
       return json({ error: "Portal invite not found or disabled." }, 404);
