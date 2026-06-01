@@ -63,7 +63,7 @@ export default async (req: Request, _context: Context) => {
     }
 
     const invite = await fetchPortalInviteByEmail(supabaseUrl, serviceRoleKey, email).catch(() => null);
-    if (!invite || invite.status === "disabled" || !invite.invite_token_hash || !invite.updated_at) {
+    if (!invite || invite.status === "disabled" || !invite.updated_at) {
       await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
         email,
         eventType: "portal_password_reset_request",

@@ -41,6 +41,11 @@ const DEFAULT_TEMPLATES = {
   },
 } as const;
 
+function hasConfiguredPortalPassword(invite: PortalInviteRow | null | undefined) {
+  if (!invite) return false;
+  return String(invite.status || "").trim().toLowerCase() === "active" && Boolean(String(invite.invite_token_hash || "").trim());
+}
+
 function renderTemplate(input: string, values: Record<string, string>) {
   return input.replace(/\{\{(.*?)\}\}/g, (_, rawKey: string) => values[rawKey.trim()] ?? "");
 }
@@ -249,7 +254,7 @@ export default async (req: Request, _context: Context) => {
     if (!invite || invite.status === "disabled") {
       return json({ error: "Portal invite not found or disabled." }, 404);
     }
-    if (!String(invite.invite_token_hash || "").trim()) {
+    if (!hasConfiguredPortalPassword(invite)) {
       return json({ error: "Set a portal password before sending access." }, 400);
     }
 

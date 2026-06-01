@@ -66,7 +66,7 @@ function isPortalInvitePasswordReady(invite: PortalInviteRow | null | undefined)
   const status = String(invite.status || "").trim().toLowerCase();
   if (status === "disabled") return false;
   if (!String(invite.invite_token_hash || "").trim()) return false;
-  return status === "active" || status === "invited" || status === "draft";
+  return status === "active";
 }
 
 function requirePortalCustomerScope(invite: PortalInviteRow) {
@@ -440,6 +440,7 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
   const normalizedEmail = String(email || "").trim().toLowerCase();
   const tokenHash = await hashPortalToken(password);
   let invite: PortalInviteRow | null = null;
+  let fallbackInvites: PortalInviteRow[] = [];
 
   try {
     const invites = await fetchAllOptional<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
@@ -456,7 +457,7 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
 
   if (!isPortalInvitePasswordReady(invite)) {
     try {
-      const fallbackInvites = await fetchAllOptional<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
+      fallbackInvites = await fetchAllOptional<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
         select: PORTAL_INVITE_SELECT,
         email: `ilike.${normalizedEmail}`,
         order: "updated_at.desc",
@@ -473,11 +474,16 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
         ) ||
         null;
     } catch {
+      fallbackInvites = [];
       invite = null;
     }
   }
 
   if (!isPortalInvitePasswordReady(invite)) {
+    const hasKnownInvite = fallbackInvites.some((row) => isPortalInviteUsable(row) || isPortalInvitePasswordReady(row));
+    if (hasKnownInvite) {
+      throw new Error("Portal password is incorrect. Use Forgot password.");
+    }
     throw new Error("Portal invite not found or disabled");
   }
 

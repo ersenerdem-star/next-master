@@ -416,7 +416,8 @@ async function listPortalInvites(supabaseUrl: string, serviceRoleKey: string, or
 function decoratePortalInviteRow(row: Record<string, unknown> | null) {
   if (!row) return null;
   const next = { ...row } as Record<string, unknown>;
-  next.has_password = Boolean(next.invite_token_hash);
+  const status = String(next.status || "").trim().toLowerCase();
+  next.has_password = status === "active" && Boolean(next.invite_token_hash);
   next.allowed_brand_ids = Array.isArray(next.allowed_brand_ids)
     ? next.allowed_brand_ids.map((value) => String(value || "").trim()).filter(Boolean)
     : [];
