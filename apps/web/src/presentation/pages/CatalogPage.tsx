@@ -1199,6 +1199,7 @@ export function CatalogPage() {
           <div className="workbench-main-layout">
             <div className="workbench-main-layout__table">
               <DataTable
+                wrapClassName="table-wrap--catalog"
                 className="data-table--catalog"
                 rows={rows}
                 columns={columns}

@@ -14,9 +14,18 @@ type DataTableProps<T> = {
   onRowClick?: (row: T) => void;
   rowClassName?: (row: T) => string;
   className?: string;
+  wrapClassName?: string;
 };
 
-export function DataTable<T>({ rows, columns, emptyText = "No rows found", onRowClick, rowClassName, className = "" }: DataTableProps<T>) {
+export function DataTable<T>({
+  rows,
+  columns,
+  emptyText = "No rows found",
+  onRowClick,
+  rowClassName,
+  className = "",
+  wrapClassName = "",
+}: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState("");
   const [sortDirection, setSortDirection] = useState<"asc" | "">("");
 
@@ -61,11 +70,15 @@ export function DataTable<T>({ rows, columns, emptyText = "No rows found", onRow
   }
 
   if (!rows.length) {
-    return <div className="empty-state">{emptyText}</div>;
+    return (
+      <div className={`table-wrap${wrapClassName ? ` ${wrapClassName}` : ""}`}>
+        <div className="empty-state">{emptyText}</div>
+      </div>
+    );
   }
 
   return (
-    <div className="table-wrap">
+    <div className={`table-wrap${wrapClassName ? ` ${wrapClassName}` : ""}`}>
       <table className={`data-table${className ? ` ${className}` : ""}`}>
         <thead>
           <tr>

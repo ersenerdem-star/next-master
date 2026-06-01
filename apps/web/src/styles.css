@@ -1037,6 +1037,11 @@ select {
   width: 100%;
 }
 
+.table-wrap--catalog {
+  width: 100%;
+  min-width: 1720px;
+}
+
 .table-wrap--tall {
   max-height: 520px;
   overflow: auto;
@@ -1073,82 +1078,63 @@ select {
 }
 
 .data-table--catalog {
-  width: 100%;
-  min-width: 100%;
-  table-layout: fixed;
+  min-width: 1720px;
 }
 
 .data-table--catalog th:nth-child(1),
 .data-table--catalog td:nth-child(1) {
-  width: 5%;
+  width: 72px;
 }
 
 .data-table--catalog th:nth-child(2),
 .data-table--catalog td:nth-child(2) {
-  width: 8%;
+  min-width: 140px;
 }
 
 .data-table--catalog th:nth-child(3),
 .data-table--catalog td:nth-child(3) {
-  width: 8%;
+  min-width: 132px;
 }
 
 .data-table--catalog th:nth-child(4),
 .data-table--catalog td:nth-child(4) {
-  width: 13%;
+  min-width: 280px;
 }
 
 .data-table--catalog th:nth-child(5),
 .data-table--catalog td:nth-child(5) {
-  width: 11%;
+  min-width: 240px;
 }
 
 .data-table--catalog th:nth-child(6),
 .data-table--catalog td:nth-child(6) {
-  width: 13%;
+  min-width: 260px;
 }
 
 .data-table--catalog th:nth-child(7),
-.data-table--catalog td:nth-child(7) {
-  width: 6%;
-}
-
+.data-table--catalog td:nth-child(7),
 .data-table--catalog th:nth-child(8),
-.data-table--catalog td:nth-child(8) {
-  width: 4%;
-}
-
+.data-table--catalog td:nth-child(8),
 .data-table--catalog th:nth-child(9),
-.data-table--catalog td:nth-child(9) {
-  width: 4%;
+.data-table--catalog td:nth-child(9),
+.data-table--catalog th:nth-child(12),
+.data-table--catalog td:nth-child(12) {
+  min-width: 100px;
 }
 
 .data-table--catalog th:nth-child(10),
 .data-table--catalog td:nth-child(10) {
-  width: 6%;
+  min-width: 140px;
 }
 
 .data-table--catalog th:nth-child(11),
 .data-table--catalog td:nth-child(11) {
-  width: 6%;
-}
-
-.data-table--catalog th:nth-child(12),
-.data-table--catalog td:nth-child(12) {
-  width: 4%;
+  min-width: 240px;
 }
 
 .data-table--catalog th:nth-child(13),
 .data-table--catalog td:nth-child(13) {
-  width: 12%;
-}
-
-.data-table--catalog .inline-edit-input {
-  min-width: 0;
-}
-
-.data-table--catalog .inline-actions {
-  flex-wrap: wrap;
+  min-width: 244px;
 }
 
 .data-table th,
