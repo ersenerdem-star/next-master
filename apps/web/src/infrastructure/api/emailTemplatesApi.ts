@@ -261,6 +261,47 @@ export async function deliverQueuedEmails(emailIds: string[] = []) {
   };
 }
 
+export async function sendPortalInviteEmail(portalInviteId: string, companyName: string, portalBaseUrl: string) {
+  const {
+    data: { session },
+  } = await supabaseClient.auth.getSession();
+  const accessToken = session?.access_token;
+  if (!accessToken) throw new Error("No active session for portal invite delivery.");
+
+  const response = await fetch("/api/send-portal-invite", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      portalInviteId,
+      companyName,
+      portalBaseUrl,
+    }),
+  });
+
+  const data = (await response.json().catch(() => ({}))) as {
+    ok?: boolean;
+    error?: string;
+    sent?: boolean;
+    queuedEmailId?: string;
+  };
+
+  if (!response.ok) {
+    const fallback =
+      response.status === 404
+        ? "Portal invite delivery function is not available on this runtime. Use deployed app."
+        : `Portal invite send failed: ${response.status}`;
+    throw new Error(data.error || fallback);
+  }
+
+  return {
+    sent: Boolean(data.sent),
+    queuedEmailId: String(data.queuedEmailId || ""),
+  };
+}
+
 export async function queuePortalInviteEmail(portalInvite: PortalInvite, companyName: string, portalBaseUrl: string) {
   const templates = await fetchEmailTemplates();
   const templateKey: EmailTemplateKey = portalInvite.party_type === "vendor" ? "vendor_portal_invite" : "customer_portal_invite";

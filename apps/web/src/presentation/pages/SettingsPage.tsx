@@ -11,7 +11,7 @@ import {
 } from "../../infrastructure/api/adminApi";
 import { createEmptyCloudCompanyProfile, deleteCompanyProfileById, fetchCompanyProfiles, upsertCompanyProfile } from "../../infrastructure/api/companyProfilesApi";
 import { fetchCustomers } from "../../infrastructure/api/customersApi";
-import { deliverQueuedEmails, fetchEmailTemplates, fetchOutboundEmails, queuePortalInviteEmail, setOutboundEmailStatus, upsertEmailTemplate } from "../../infrastructure/api/emailTemplatesApi";
+import { deliverQueuedEmails, fetchEmailTemplates, fetchOutboundEmails, sendPortalInviteEmail, setOutboundEmailStatus, upsertEmailTemplate } from "../../infrastructure/api/emailTemplatesApi";
 import {
   clearPortalInvitePassword,
   createEmptyCloudPortalInvite,
@@ -683,13 +683,11 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               try {
                 setSendingPortalInviteId(row.id);
                 const companyName = companyProfile.companyName || companyProfiles[0]?.companyName || "Next Master";
-                const queued = await queuePortalInviteEmail(row, companyName, window.location.origin);
-                const delivery = await deliverQueuedEmails([queued.id]);
-                const sent = delivery.sentCount > 0 ? await markPortalInviteSent(row.id) : null;
+                const delivery = await sendPortalInviteEmail(row.id, companyName, window.location.origin);
                 setPortalInvites(await fetchPortalInvites());
                 setOutboundEmails(await fetchOutboundEmails());
                 setPortalStatus(
-                  sent
+                  delivery.sent
                     ? `Invitation sent to ${row.email}.`
                     : `Invitation queued for ${row.email}, but delivery did not complete on this runtime.`,
                 );
