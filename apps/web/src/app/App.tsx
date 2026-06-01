@@ -296,7 +296,7 @@ export function App() {
     void touch();
     const intervalId = window.setInterval(() => {
       void touch();
-    }, 5 * 60 * 1000);
+    }, 15 * 60 * 1000);
 
     const handleFocus = () => {
       void touch();

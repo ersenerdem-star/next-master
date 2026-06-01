@@ -96,11 +96,11 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
     .map(
       (line) => `
         <tr>
-          <td>${safeText(line.code)}</td>
-          <td>${safeText(line.description)}</td>
+          <td><span class="line-code">${safeText(line.code)}</span></td>
+          <td><span class="line-description">${safeText(line.description)}</span></td>
           <td>${safeText(line.origin || "")}</td>
           <td>${safeText(line.brand || "")}</td>
-          <td>${safeText(line.orderNo || "")}</td>
+          <td><span class="line-order-no">${safeText(line.orderNo || "")}</span></td>
           <td>${safeText(line.weight || "")}</td>
           <td>${safeText(line.gtip || "")}</td>
           <td>${safeText(line.qty)}</td>
@@ -168,11 +168,16 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
         table { width:100%; border-collapse:collapse; margin-top:4mm; page-break-inside:auto; table-layout:fixed; }
         thead { display:table-header-group; }
         tfoot { display:table-footer-group; }
-        tr { page-break-inside:avoid; page-break-after:auto; }
-        th, td { border:0.25mm solid #d7dee8; padding:1.5mm 1.7mm; text-align:left; vertical-align:top; font-size:7.2pt; overflow-wrap:anywhere; }
+        tbody { page-break-inside:auto; }
+        tr { page-break-inside:avoid; break-inside:avoid-page; page-break-after:auto; }
+        th, td { border:0.25mm solid #d7dee8; padding:1.5mm 1.7mm; text-align:left; vertical-align:top; font-size:7.2pt; word-break:normal; overflow-wrap:break-word; }
         th { background:#f4f7fa; font-weight:700; line-height:1.18; }
+        th:nth-child(1), td:nth-child(1),
+        th:nth-child(5), td:nth-child(5) { white-space:nowrap; }
         td:nth-child(8), td:nth-child(9), td:nth-child(10),
         th:nth-child(8), th:nth-child(9), th:nth-child(10) { text-align:right; }
+        .line-code, .line-order-no { white-space:nowrap; word-break:keep-all; overflow-wrap:normal; }
+        .line-description { white-space:normal; word-break:normal; overflow-wrap:break-word; }
         .totals { display:flex; justify-content:space-between; align-items:flex-start; gap:6mm; margin-top:4mm; }
         .totals-note { flex:1; min-height:10mm; font-size:7.4pt; line-height:1.42; padding-top:0.5mm; }
         .totals-card { min-width:60mm; max-width:68mm; }
@@ -228,11 +233,11 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
         </div>
         <table>
           <colgroup>
-            <col style="width:12%;" />
-            <col style="width:29%;" />
+            <col style="width:14%;" />
+            <col style="width:27%;" />
             <col style="width:7%;" />
             <col style="width:9%;" />
-            <col style="width:14%;" />
+            <col style="width:13%;" />
             <col style="width:8%;" />
             <col style="width:9%;" />
             <col style="width:6%;" />
