@@ -69,6 +69,7 @@ type BrandMapCacheEntry = {
 };
 
 const BRAND_MAP_CACHE_TTL_MS = 2 * 60 * 1000;
+const CODE_SEARCH_EXPANSION_THRESHOLD = 8;
 const brandMapCache = new Map<string, BrandMapCacheEntry>();
 const DESCRIPTION_FAMILY_STOPWORDS = new Set([
   "and",
@@ -544,6 +545,7 @@ async function fetchCloudCatalogPageViaRest(
   const offset = (page - 1) * pageSize;
   const normalizedSearch = normalizePartCode(search);
   const fetchLimit = search && shouldStrictlyFilterCodeSearch(search) ? Math.max(pageSize * 2, 80) : pageSize;
+  const shouldConstrainCodeExpansion = shouldStrictlyFilterCodeSearch(search);
   const brandMaps = await fetchBrandMaps(supabaseUrl, serviceRoleKey, caller.organizationId);
   const selectedBrandId = brand ? brandMaps.byName.get(normalizePartCode(brand)) || "" : "";
   const select =
@@ -614,7 +616,11 @@ async function fetchCloudCatalogPageViaRest(
       }
     }
   }
-  if (search && shouldRunLooseOriginalNumberSearch(search) && rows.length < pageSize) {
+  if (
+    search &&
+    shouldRunLooseOriginalNumberSearch(search) &&
+    rows.length < (shouldConstrainCodeExpansion ? CODE_SEARCH_EXPANSION_THRESHOLD : pageSize)
+  ) {
     const familyClauses = buildOriginalNumberFamilyClauses(search);
     if (familyClauses.length) {
       const familySweepRows = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
@@ -660,7 +666,7 @@ async function fetchCloudCatalogPageViaRest(
     rows = filtered.slice(offset, offset + pageSize);
   }
 
-  if (search && shouldStrictlyFilterCodeSearch(search)) {
+  if (search && shouldStrictlyFilterCodeSearch(search) && rows.length > 0 && rows.length < CODE_SEARCH_EXPANSION_THRESHOLD) {
     const exactSeedRows = dedupeCatalogRows(rows).filter(
       (row) => matchesCatalogExactFamilyRow(row, search) || hasCatalogReplacementMatch(row, replacementRowsByKey),
     );

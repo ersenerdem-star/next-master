@@ -543,6 +543,7 @@ function filterCatalogRowsBySearchRelevance(
 }
 
 type PortalSearchMode = "strict" | "loose";
+const PORTAL_CODE_SEARCH_EXPANSION_THRESHOLD = 8;
 
 function shouldRunLooseOriginalNumberSearch(search: string) {
   return normalizeOriginalNumberSearch(search).length >= 6;
@@ -1170,6 +1171,7 @@ export async function searchPortalCatalog(
   const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
   const search = String(query || "").trim();
   const normalizedSearch = normalizePartCode(search);
+  const shouldConstrainCodeExpansion = shouldStrictlyFilterCodeSearch(search);
   const selectedBrandId = brand ? brandMap.byName.get(brand.trim().toLowerCase()) || "" : "";
   if (brand && !selectedBrandId) {
     throw new Error("Brand not found for portal search");
@@ -1245,7 +1247,11 @@ export async function searchPortalCatalog(
       }
     }
   }
-  if (search && shouldRunLooseOriginalNumberSearch(search)) {
+  if (
+    search &&
+    shouldRunLooseOriginalNumberSearch(search) &&
+    rows.length < (shouldConstrainCodeExpansion ? PORTAL_CODE_SEARCH_EXPANSION_THRESHOLD : 24)
+  ) {
     const familyCore = buildOriginalNumberFamilyCore(search);
     if (familyCore.length >= 6) {
       const familyRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
@@ -1271,7 +1277,11 @@ export async function searchPortalCatalog(
       }
     }
   }
-  if (search && shouldRunLooseOriginalNumberSearch(search)) {
+  if (
+    search &&
+    shouldRunLooseOriginalNumberSearch(search) &&
+    rows.length < (shouldConstrainCodeExpansion ? PORTAL_CODE_SEARCH_EXPANSION_THRESHOLD : 24)
+  ) {
     const familyClauses = buildOriginalNumberFamilyClauses(search);
     if (familyClauses.length) {
       const tokenRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
@@ -1346,7 +1356,12 @@ export async function searchPortalCatalog(
     );
   }
 
-  if (search && shouldStrictlyFilterCodeSearch(search)) {
+  if (
+    search &&
+    shouldStrictlyFilterCodeSearch(search) &&
+    rows.length > 0 &&
+    rows.length < PORTAL_CODE_SEARCH_EXPANSION_THRESHOLD
+  ) {
     const exactSeedRows = dedupeCatalogRows(rows).filter(
       (row) => matchesCatalogExactFamilyRow(row, search) || hasCatalogReplacementMatch(row, replacementRowsByKey),
     );
