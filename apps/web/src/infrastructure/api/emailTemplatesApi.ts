@@ -299,6 +299,7 @@ export async function sendPortalInviteEmail(
     ok?: boolean;
     error?: string;
     sent?: boolean;
+    queued?: boolean;
     queuedEmailId?: string;
   };
 
@@ -310,9 +311,24 @@ export async function sendPortalInviteEmail(
     throw new Error(data.error || fallback);
   }
 
+  const queuedEmailId = String(data.queuedEmailId || "");
+  if (queuedEmailId) {
+    try {
+      const delivery = await deliverQueuedEmails([queuedEmailId]);
+      if (delivery.sentCount > 0) {
+        return {
+          sent: true,
+          queuedEmailId,
+        };
+      }
+    } catch {
+      // Keep the portal invite queued even if the immediate delivery attempt fails.
+    }
+  }
+
   return {
     sent: Boolean(data.sent),
-    queuedEmailId: String(data.queuedEmailId || ""),
+    queuedEmailId,
   };
 }
 

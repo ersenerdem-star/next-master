@@ -1,7 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { requireCallerProfile } from "./_shared/auth.mts";
 import { buildRestUrl, getJson, json, serviceRoleHeaders } from "./_shared/http.mts";
-import { sanitizeUserFacingError, sanitizeUserFacingMessage } from "./_shared/user-message.mts";
+import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 type PortalInviteRow = {
   id: string;
@@ -43,28 +43,6 @@ const DEFAULT_TEMPLATES = {
 
 function renderTemplate(input: string, values: Record<string, string>) {
   return input.replace(/\{\{(.*?)\}\}/g, (_, rawKey: string) => values[rawKey.trim()] ?? "");
-}
-
-async function sendWithResend(apiKey: string, from: string, to: string, subject: string, body: string) {
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to,
-      subject,
-      text: body,
-    }),
-  });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(sanitizeUserFacingMessage(data?.message || `Resend failed: ${response.status}`, "Portal invite email failed"));
-  }
-  return data;
 }
 
 async function upsertOutboundEmail(input: {
@@ -245,12 +223,6 @@ export default async (req: Request, _context: Context) => {
     const caller = await requireCallerProfile(req, ["admin", "sales"]);
     if ("error" in caller) return json({ error: caller.error }, caller.status);
 
-    const resendApiKey = Netlify.env.get("RESEND_API_KEY");
-    const emailFrom = Netlify.env.get("EMAIL_FROM");
-    if (!resendApiKey || !emailFrom) {
-      return json({ error: "Missing email delivery environment variables" }, 500);
-    }
-
     const payload = await req.json().catch(() => ({}));
     const portalInviteId = String(payload?.portalInviteId || "").trim();
     const companyName = String(payload?.companyName || "").trim() || "Next Master";
@@ -318,15 +290,8 @@ export default async (req: Request, _context: Context) => {
       body,
     });
 
-    try {
-      await sendWithResend(resendApiKey, emailFrom, invite.email, subject, body);
-      await patchOutboundEmailStatus(caller.supabaseUrl, caller.serviceRoleKey, queued.id, "sent");
-      await patchPortalInviteSent(caller.supabaseUrl, caller.serviceRoleKey, invite);
-      return json({ ok: true, sent: true, queuedEmailId: queued.id });
-    } catch (error) {
-      await patchOutboundEmailStatus(caller.supabaseUrl, caller.serviceRoleKey, queued.id, "failed");
-      throw error;
-    }
+    await patchPortalInviteSent(caller.supabaseUrl, caller.serviceRoleKey, invite);
+    return json({ ok: true, sent: false, queued: true, queuedEmailId: queued.id });
   } catch (error) {
     return json({ error: sanitizeUserFacingError(error, "Portal invite send failed") }, 500);
   }

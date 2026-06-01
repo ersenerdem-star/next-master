@@ -437,13 +437,14 @@ export async function fetchPortalInviteByIdAndEmail(
 }
 
 export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: string, email: string, password: string) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
   const tokenHash = await hashPortalToken(password);
   let invite: PortalInviteRow | null = null;
 
   try {
     const invites = await fetchAllOptional<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
       select: PORTAL_INVITE_SELECT,
-      email: `ilike.${String(email || "").trim().toLowerCase()}`,
+      email: `ilike.${normalizedEmail}`,
       invite_token_hash: `eq.${tokenHash}`,
       order: "updated_at.desc",
       limit: "20",
@@ -451,6 +452,29 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
     invite = invites.find((row) => isPortalInviteUsable(row)) || invites.find((row) => isPortalInvitePasswordReady(row)) || null;
   } catch {
     invite = null;
+  }
+
+  if (!isPortalInvitePasswordReady(invite)) {
+    try {
+      const fallbackInvites = await fetchAllOptional<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
+        select: PORTAL_INVITE_SELECT,
+        email: `ilike.${normalizedEmail}`,
+        order: "updated_at.desc",
+        limit: "20",
+      });
+      invite =
+        fallbackInvites.find(
+          (row) =>
+            isPortalInviteUsable(row) && String(row.invite_token_hash || "").trim().toLowerCase() === tokenHash,
+        ) ||
+        fallbackInvites.find(
+          (row) =>
+            isPortalInvitePasswordReady(row) && String(row.invite_token_hash || "").trim().toLowerCase() === tokenHash,
+        ) ||
+        null;
+    } catch {
+      invite = null;
+    }
   }
 
   if (!isPortalInvitePasswordReady(invite)) {
