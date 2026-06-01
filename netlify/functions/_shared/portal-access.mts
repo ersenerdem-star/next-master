@@ -480,7 +480,7 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
   }
 
   if (!isPortalInvitePasswordReady(invite)) {
-    const hasKnownInvite = fallbackInvites.some((row) => isPortalInviteUsable(row) || isPortalInvitePasswordReady(row));
+    const hasKnownInvite = fallbackInvites.some((row) => String(row.status || "").trim().toLowerCase() !== "disabled");
     if (hasKnownInvite) {
       throw new Error("Portal password is incorrect. Use Forgot password.");
     }
