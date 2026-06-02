@@ -44,7 +44,7 @@ if (args.has("batch-size")) importArgs.push(`--batch-size=${String(args.get("bat
 if (args.has("import")) importArgs.push("--import");
 
 const importSummary = JSON.parse(
-  execNode(importScript, importArgs),
+  execNode(importScript, importArgs, resolveImportEnv()),
 );
 
 console.log(
@@ -59,11 +59,44 @@ console.log(
   ),
 );
 
-function execNode(scriptPath, scriptArgs) {
+function execNode(scriptPath, scriptArgs, extraEnv = {}) {
   return execFileSync(process.execPath, [scriptPath, ...scriptArgs], {
     cwd: repoRoot,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
-    env: process.env,
+    env: {
+      ...process.env,
+      ...extraEnv,
+    },
   });
+}
+
+function resolveImportEnv() {
+  if (!args.has("import")) return {};
+
+  const supabaseUrl = String(process.env.SUPABASE_URL || "").trim();
+  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  if (supabaseUrl && serviceRoleKey) {
+    return {};
+  }
+
+  const nextSupabaseUrl = supabaseUrl || runNetlifyEnvGet("SUPABASE_URL");
+  const nextServiceRoleKey = serviceRoleKey || runNetlifyEnvGet("SUPABASE_SERVICE_ROLE_KEY");
+  return {
+    SUPABASE_URL: nextSupabaseUrl,
+    SUPABASE_SERVICE_ROLE_KEY: nextServiceRoleKey,
+  };
+}
+
+function runNetlifyEnvGet(name) {
+  const value = execFileSync("npx", ["netlify", "env:get", name], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    maxBuffer: 8 * 1024 * 1024,
+    env: process.env,
+  }).trim();
+  if (!value) {
+    throw new Error(`Netlify env ${name} is empty`);
+  }
+  return value;
 }
