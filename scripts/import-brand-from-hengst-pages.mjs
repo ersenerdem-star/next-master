@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { canonicalizeBrandName } from "./_shared/brand-standardization.mjs";
 import {
   normalizeCatalogDescription,
@@ -57,14 +58,14 @@ const headers = {
 async function main() {
   const htmlFiles = listHtmlFiles(sourceDir);
   if (!htmlFiles.length) {
-    throw new Error(`No .html or .htm files found under ${sourceDir}`);
+    throw new Error(`No .html, .htm, .xhtml, or .webarchive files found under ${sourceDir}`);
   }
 
   const rowsByCode = new Map();
   let duplicateRowsCollapsed = 0;
 
   for (const filePath of htmlFiles) {
-    const html = fs.readFileSync(filePath, "utf8");
+    const html = readSourceHtml(filePath);
     const row = extractHengstProduct(html, filePath, brandName);
     if (!row.product_code || !row.normalized_code) continue;
     const existing = rowsByCode.get(row.normalized_code);
@@ -167,12 +168,60 @@ function listHtmlFiles(rootDir) {
         pending.push(nextPath);
         continue;
       }
-      if (entry.isFile() && /\.(html?|xhtml)$/i.test(entry.name)) {
+      if (entry.isFile() && /\.(html?|xhtml|webarchive)$/i.test(entry.name)) {
         results.push(nextPath);
       }
     }
   }
   return results;
+}
+
+function readSourceHtml(filePath) {
+  if (/\.webarchive$/i.test(filePath)) {
+    return extractHtmlFromWebArchive(filePath);
+  }
+  return fs.readFileSync(filePath, "utf8");
+}
+
+function extractHtmlFromWebArchive(filePath) {
+  const jsonText = execFileSync("plutil", ["-convert", "json", "-o", "-", filePath], {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const payload = JSON.parse(jsonText);
+  const mainResource = payload?.WebMainResource || payload?.MainResource || null;
+  const data = mainResource?.WebResourceData?.CF$UID != null
+    ? resolveUidData(payload, mainResource.WebResourceData.CF$UID)
+    : mainResource?.WebResourceData;
+  const text = decodePlistData(data);
+  if (!text) {
+    throw new Error(`Unable to extract HTML from webarchive: ${filePath}`);
+  }
+  return text;
+}
+
+function resolveUidData(payload, uid) {
+  const objects = Array.isArray(payload?.$objects) ? payload.$objects : null;
+  if (!objects || !Number.isInteger(uid) || uid < 0 || uid >= objects.length) return null;
+  return objects[uid];
+}
+
+function decodePlistData(value) {
+  if (!value) return "";
+  if (typeof value === "string") {
+    try {
+      return Buffer.from(value, "base64").toString("utf8");
+    } catch {
+      return value;
+    }
+  }
+  if (Array.isArray(value)) {
+    return Buffer.from(value).toString("utf8");
+  }
+  if (value?.data && typeof value.data === "string") {
+    return Buffer.from(value.data, "base64").toString("utf8");
+  }
+  return "";
 }
 
 function extractHengstProduct(html, filePath, brand) {
