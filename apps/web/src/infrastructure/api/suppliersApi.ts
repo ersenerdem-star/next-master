@@ -85,6 +85,87 @@ export async function fetchCloudSupplierPrices({
   return (data || []) as SupplierPriceRow[];
 }
 
+export async function fetchCloudSupplierPricesAcrossSuppliers(input: {
+  suppliers: SupplierSummary[];
+  search: string;
+  freshness: string;
+  pageSizePerSupplier?: number;
+}): Promise<SupplierPriceRow[]> {
+  const search = input.search.trim();
+  if (!search) {
+    throw new Error("Search is required when All suppliers is selected");
+  }
+
+  const activeSuppliers = (input.suppliers || []).filter((supplier) => supplier.is_active);
+  const pageSizePerSupplier = Math.min(Math.max(input.pageSizePerSupplier || 10, 1), 50);
+  const normalizedSearch = normalizePartCode(search) || search;
+
+  const results = await Promise.allSettled(
+    activeSuppliers.map(async (supplier) => {
+      const rows = await fetchCloudSupplierPrices({
+        supplierId: supplier.supplier_id,
+        search,
+        freshness: input.freshness,
+        page: 1,
+        pageSize: pageSizePerSupplier,
+      });
+      return { supplier, rows };
+    }),
+  );
+
+  const merged: SupplierPriceRow[] = [];
+  for (const result of results) {
+    if (result.status !== "fulfilled") continue;
+    const { supplier, rows } = result.value;
+    if (rows.length) {
+      merged.push(
+        ...rows.map((row) => ({
+          ...row,
+          supplier_name: supplier.name,
+          is_placeholder: false,
+        })),
+      );
+      continue;
+    }
+    if (input.freshness === "all") {
+      merged.push({
+        total_count: 0,
+        price_id: `missing-${supplier.supplier_id}-${normalizedSearch}`,
+        supplier_name: supplier.name,
+        product_code: search,
+        brand: null,
+        description: null,
+        oem_no: null,
+        buy_price: null,
+        currency: null,
+        price_date: null,
+        moq: null,
+        lead_time_days: null,
+        notes: null,
+        freshness: "no price",
+        is_placeholder: true,
+      });
+    }
+  }
+
+  merged.sort((left, right) => {
+    const leftRank = left.buy_price == null ? 1 : 0;
+    const rightRank = right.buy_price == null ? 1 : 0;
+    if (leftRank !== rightRank) return leftRank - rightRank;
+    const supplierCompare = String(left.supplier_name || "").localeCompare(String(right.supplier_name || ""));
+    if (supplierCompare !== 0) return supplierCompare;
+    const priceCompare = Number(left.buy_price ?? Number.MAX_SAFE_INTEGER) - Number(right.buy_price ?? Number.MAX_SAFE_INTEGER);
+    if (priceCompare !== 0) return priceCompare;
+    return String(left.product_code || "").localeCompare(String(right.product_code || ""));
+  });
+
+  const totalCount = merged.length;
+  return merged.map((row) => ({
+    ...row,
+    total_count: totalCount,
+  }));
+}
+
 export async function deleteSupplierBrandSummaryRow(input: { supplierId: string; brand: string }) {
   const data = await callAppRpc<number>("deactivate_supplier_prices_by_filter", {
     input_supplier_id: input.supplierId,

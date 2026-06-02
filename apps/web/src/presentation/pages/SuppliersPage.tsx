@@ -3,7 +3,11 @@ import { normalizePartCode } from "../../domain/shared/normalize";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCloudCatalog } from "../../infrastructure/api/catalogApi";
 import { bulkImportSupplierPrices } from "../../infrastructure/api/importApi";
-import { fetchCloudSupplierPrices, fetchCloudSuppliers } from "../../infrastructure/api/suppliersApi";
+import {
+  fetchCloudSupplierPrices,
+  fetchCloudSupplierPricesAcrossSuppliers,
+  fetchCloudSuppliers,
+} from "../../infrastructure/api/suppliersApi";
 import type { BrandOption } from "../../types/brand";
 import type { CatalogRow } from "../../types/catalog";
 import type { SupplierPriceRow, SupplierSummary } from "../../types/suppliers";
@@ -93,7 +97,6 @@ export function SuppliersPage() {
         if (cancelled) return;
         setSuppliers(result);
         const defaultSupplierId = result[0]?.supplier_id || "";
-        setSelectedSupplierId((current) => current || defaultSupplierId);
         setImportSupplierId((current) => current || defaultSupplierId);
         setImportSupplierName((current) => current || result[0]?.name || "");
       } catch (caught) {
@@ -115,7 +118,7 @@ export function SuppliersPage() {
     let cancelled = false;
 
     async function run() {
-      if (!selectedSupplierId) {
+      if (!selectedSupplierId && !submittedSearch.trim()) {
         setRows([]);
         return;
       }
@@ -123,13 +126,20 @@ export function SuppliersPage() {
       setLoadingRows(true);
       setError("");
       try {
-        const result = await fetchCloudSupplierPrices({
-          supplierId: selectedSupplierId,
-          search: submittedSearch,
-          freshness,
-          page: 1,
-          pageSize: 50,
-        });
+        const result = selectedSupplierId
+          ? await fetchCloudSupplierPrices({
+              supplierId: selectedSupplierId,
+              search: submittedSearch,
+              freshness,
+              page: 1,
+              pageSize: 50,
+            })
+          : await fetchCloudSupplierPricesAcrossSuppliers({
+              suppliers,
+              search: submittedSearch,
+              freshness,
+              pageSizePerSupplier: 10,
+            });
         if (!cancelled) setRows(result);
       } catch (caught) {
         if (!cancelled) {
@@ -145,27 +155,27 @@ export function SuppliersPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedSupplierId, submittedSearch, freshness]);
+  }, [selectedSupplierId, submittedSearch, freshness, suppliers]);
 
   useEffect(() => {
     if (!searchingSuppliers || loadingRows) return;
-    const nextTotal = rows[0]?.total_count ?? 0;
+    const nextTotal = selectedSupplierId ? rows[0]?.total_count ?? 0 : rows.length;
     if (error) {
       actionFeedback.fail(error);
     } else {
       actionFeedback.succeed(`${nextTotal.toLocaleString("en-US")} supplier rows loaded.`);
     }
     setSearchingSuppliers(false);
-  }, [searchingSuppliers, loadingRows, error, rows, actionFeedback]);
+  }, [searchingSuppliers, loadingRows, error, rows, actionFeedback, selectedSupplierId]);
 
-  const total = rows[0]?.total_count ?? 0;
+  const total = selectedSupplierId ? rows[0]?.total_count ?? 0 : rows.length;
 
   const supplierOptions = [
+    { value: "", label: "All suppliers" },
     ...suppliers.map((supplier) => ({
       value: supplier.supplier_id,
       label: `${supplier.name} (${supplier.line_count.toLocaleString("en-US")})`,
     })),
-    { value: "__new__", label: "New supplier..." },
   ];
   const brandOptions = [
     ...brands.map((item) => ({ value: item.name, label: item.name })),
@@ -179,19 +189,30 @@ export function SuppliersPage() {
     value: supplier.supplier_id,
     label: `${supplier.name} (${supplier.line_count.toLocaleString("en-US")})`,
   }));
+  const importSupplierOptions = [...selectableSupplierOptions, { value: "__new__", label: "New supplier..." }];
 
   const columns = useMemo(
     () => [
+      {
+        key: "supplier",
+        header: "Supplier",
+        render: (row: SupplierPriceRow) =>
+          row.supplier_name || suppliers.find((item) => item.supplier_id === selectedSupplierId)?.name || "-",
+      },
       { key: "code", header: "Code", render: (row: SupplierPriceRow) => row.product_code },
       { key: "brand", header: "Brand", render: (row: SupplierPriceRow) => <BrandPill brand={row.brand} compact /> },
-      { key: "name", header: "Name", render: (row: SupplierPriceRow) => row.description || "-" },
+      {
+        key: "name",
+        header: "Name",
+        render: (row: SupplierPriceRow) => (row.is_placeholder ? "No price found for this supplier" : row.description || "-"),
+      },
       { key: "oem", header: "OEM", render: (row: SupplierPriceRow) => row.oem_no || "-" },
       { key: "price", header: "Buy", render: (row: SupplierPriceRow) => row.buy_price ?? "-" },
       { key: "currency", header: "Currency", render: (row: SupplierPriceRow) => row.currency || "-" },
       { key: "date", header: "Price Date", render: (row: SupplierPriceRow) => row.price_date || "-" },
       { key: "freshness", header: "Freshness", render: (row: SupplierPriceRow) => row.freshness || "-" },
     ],
-    [],
+    [selectedSupplierId, suppliers],
   );
 
   useEffect(() => {
@@ -246,7 +267,7 @@ export function SuppliersPage() {
   }, [showManualPriceDialog, manualPriceDraft.brand, manualPriceDraft.product_code]);
 
   async function reloadSupplierRows(nextSearch = submittedSearch, nextFreshness = freshness, supplierId = selectedSupplierId) {
-    if (!supplierId) {
+    if (!supplierId && !nextSearch.trim()) {
       setRows([]);
       return;
     }
@@ -255,13 +276,20 @@ export function SuppliersPage() {
     setError("");
     setStatus("");
     try {
-      const result = await fetchCloudSupplierPrices({
-        supplierId,
-        search: nextSearch,
-        freshness: nextFreshness,
-        page: 1,
-        pageSize: 50,
-      });
+      const result = supplierId
+        ? await fetchCloudSupplierPrices({
+            supplierId,
+            search: nextSearch,
+            freshness: nextFreshness,
+            page: 1,
+            pageSize: 50,
+          })
+        : await fetchCloudSupplierPricesAcrossSuppliers({
+            suppliers,
+            search: nextSearch,
+            freshness: nextFreshness,
+            pageSizePerSupplier: 10,
+          });
       setRows(result);
     } catch (caught) {
       setRows([]);
@@ -445,15 +473,29 @@ export function SuppliersPage() {
     }
   }
 
+  function handleSupplierSearchSubmit() {
+    const nextSearch = search.trim();
+    if (!selectedSupplierId && !nextSearch) {
+      const message = "All suppliers search requires a part number, OEM, or name.";
+      setError(message);
+      actionFeedback.fail(message);
+      return;
+    }
+    setSearchingSuppliers(true);
+    actionFeedback.begin(`Searching supplier rows for ${nextSearch || "all items"}...`);
+    setSubmittedSearch(search);
+  }
+
   function handleSupplierExport() {
     setExportingSuppliers(true);
     actionFeedback.begin("Preparing supplier CSV export...");
     const exportRows = [
-      ["Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Lead_Time_Days", "Notes"],
+      ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Lead_Time_Days", "Notes"],
       ...rows.map((row) => [
+        row.supplier_name || suppliers.find((supplier) => supplier.supplier_id === selectedSupplierId)?.name || "",
         row.product_code,
         row.brand || "",
-        row.description || "",
+        row.is_placeholder ? "No price found for this supplier" : row.description || "",
         row.oem_no || "",
         row.buy_price ?? "",
         row.price_date || "",
@@ -487,19 +529,11 @@ export function SuppliersPage() {
               value={search}
               onChange={setSearch}
               placeholder="Product code, OEM, name"
-              onEnter={() => {
-                setSearchingSuppliers(true);
-                actionFeedback.begin(`Searching supplier rows for ${search.trim() || "all items"}...`);
-                setSubmittedSearch(search);
-              }}
+              onEnter={handleSupplierSearchSubmit}
             />
             <Select label="Freshness" value={freshness} options={freshnessOptions} onChange={setFreshness} />
             <Button
-              onClick={() => {
-                setSearchingSuppliers(true);
-                actionFeedback.begin(`Searching supplier rows for ${search.trim() || "all items"}...`);
-                setSubmittedSearch(search);
-              }}
+              onClick={handleSupplierSearchSubmit}
               busy={searchingSuppliers}
               busyLabel="Searching..."
             >
@@ -556,7 +590,7 @@ export function SuppliersPage() {
               <Select
                 label="Supplier"
                 value={importSupplierId}
-                options={supplierOptions}
+                options={importSupplierOptions}
                 onChange={(value) => {
                   setImportSupplierId(value);
                   if (value === "__new__") {
