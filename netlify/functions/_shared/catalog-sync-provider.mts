@@ -116,9 +116,6 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredProviderLabel: "Hengst.Connect official catalog",
     preferredSourceType: "official",
     preferredSourceUrl: "https://www.hengstconnect.com/en/",
-    executionProviderKey: "spareto",
-    executionProviderLabel: "Spareto catalog",
-    executionSourceType: "marketplace",
   },
   skf: {
     aliases: ["skf"],
@@ -260,6 +257,10 @@ export async function syncBrandCatalog(input: {
     executionProviderLabel = plan.preferredProviderLabel;
     executionSourceType = plan.preferredSourceType;
     fallbackUsed = false;
+  } else if (plan.preferredProviderKey === "hengst_connect") {
+    throw new Error(
+      "Hengst official source is currently blocking automated access with Cloudflare 403. Official sync is not yet available for this brand.",
+    );
   } else {
     result = await syncBrandCatalogFromSpareto({
       ...input,
