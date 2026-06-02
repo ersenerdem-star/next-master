@@ -164,6 +164,9 @@ const CUSTOMER_ORDER_SELECT_LEGACY =
 const PORTAL_LOOKUP_CACHE_TTL_MS = 2 * 60 * 1000;
 const PORTAL_PRICE_LIST_CACHE_TTL_MS = 5 * 60 * 1000;
 const PORTAL_PRICE_LIST_MAX_ROWS = 100000;
+const PORTAL_PRICE_LIST_CATALOG_PAGE_SIZE = 5000;
+const PORTAL_PRICE_LIST_SUPPLIER_PAGE_SIZE = 5000;
+const PORTAL_PRICE_LIST_ITEM_PAGE_SIZE = 5000;
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 
 type PortalLookupCacheEntry<T> = {
@@ -1438,20 +1441,29 @@ async function fetchCPriceMap(
   const brandIds = [...new Set(rows.map((row) => brandMap.byName.get(row.brand.trim().toLowerCase()) || "").filter(Boolean))];
   const normalizedCodes = [...new Set(rows.map((row) => normalizePartCode(row.product_code)).filter(Boolean))];
   if (!brandIds.length || !normalizedCodes.length) return map;
+  const normalizedCodeSet = new Set(normalizedCodes);
 
-  const items = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customer_price_list_items", {
-    select: "brand_id,normalized_code,sell_price",
-    organization_id: `eq.${organizationId}`,
-    price_list_id: `eq.${cPriceListId}`,
-    brand_id: `in.(${brandIds.join(",")})`,
-    normalized_code: `in.(${normalizedCodes.join(",")})`,
-  });
-
-  for (const row of items) {
-    const brandName = brandMap.byId.get(String(row.brand_id || ""));
-    const normalizedCode = String(row.normalized_code || "");
-    if (!brandName || !normalizedCode) continue;
-    map.set(`${brandName.toLowerCase()}::${normalizedCode}`, Number(row.sell_price || 0));
+  for (const brandChunk of chunkValues(brandIds, 25)) {
+    let offset = 0;
+    while (true) {
+      const items = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customer_price_list_items", {
+        select: "brand_id,normalized_code,sell_price",
+        organization_id: `eq.${organizationId}`,
+        price_list_id: `eq.${cPriceListId}`,
+        brand_id: `in.(${brandChunk.join(",")})`,
+        order: "normalized_code.asc",
+        limit: String(PORTAL_PRICE_LIST_ITEM_PAGE_SIZE),
+        offset: String(offset),
+      });
+      for (const row of items) {
+        const brandName = brandMap.byId.get(String(row.brand_id || ""));
+        const normalizedCode = String(row.normalized_code || "");
+        if (!brandName || !normalizedCode || !normalizedCodeSet.has(normalizedCode)) continue;
+        map.set(`${brandName.toLowerCase()}::${normalizedCode}`, Number(row.sell_price || 0));
+      }
+      if (items.length < PORTAL_PRICE_LIST_ITEM_PAGE_SIZE) break;
+      offset += PORTAL_PRICE_LIST_ITEM_PAGE_SIZE;
+    }
   }
 
   return map;
@@ -1470,24 +1482,34 @@ async function fetchCPriceEntryMap(
   const brandIds = [...new Set(rows.map((row) => brandMap.byName.get(row.brand.trim().toLowerCase()) || "").filter(Boolean))];
   const normalizedCodes = [...new Set(rows.map((row) => normalizePartCode(row.product_code)).filter(Boolean))];
   if (!brandIds.length || !normalizedCodes.length) return map;
+  const normalizedCodeSet = new Set(normalizedCodes);
 
-  const items = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customer_price_list_items", {
-    select: "brand_id,normalized_code,sell_price,updated_at",
-    organization_id: `eq.${organizationId}`,
-    price_list_id: `eq.${cPriceListId}`,
-    brand_id: `in.(${brandIds.join(",")})`,
-    normalized_code: `in.(${normalizedCodes.join(",")})`,
-    order: "updated_at.desc",
-  });
-
-  for (const row of items) {
-    const brandName = brandMap.byId.get(String(row.brand_id || ""));
-    const normalizedCode = String(row.normalized_code || "");
-    if (!brandName || !normalizedCode || map.has(`${brandName.toLowerCase()}::${normalizedCode}`)) continue;
-    map.set(`${brandName.toLowerCase()}::${normalizedCode}`, {
-      sell_price: Number(row.sell_price || 0),
-      price_date: row.updated_at == null ? null : String(row.updated_at).slice(0, 10),
-    });
+  for (const brandChunk of chunkValues(brandIds, 25)) {
+    let offset = 0;
+    while (true) {
+      const items = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customer_price_list_items", {
+        select: "brand_id,normalized_code,sell_price,updated_at",
+        organization_id: `eq.${organizationId}`,
+        price_list_id: `eq.${cPriceListId}`,
+        brand_id: `in.(${brandChunk.join(",")})`,
+        order: "updated_at.desc",
+        limit: String(PORTAL_PRICE_LIST_ITEM_PAGE_SIZE),
+        offset: String(offset),
+      });
+      for (const row of items) {
+        const brandName = brandMap.byId.get(String(row.brand_id || ""));
+        const normalizedCode = String(row.normalized_code || "");
+        if (!brandName || !normalizedCode || !normalizedCodeSet.has(normalizedCode)) continue;
+        const key = `${brandName.toLowerCase()}::${normalizedCode}`;
+        if (map.has(key)) continue;
+        map.set(key, {
+          sell_price: Number(row.sell_price || 0),
+          price_date: row.updated_at == null ? null : String(row.updated_at).slice(0, 10),
+        });
+      }
+      if (items.length < PORTAL_PRICE_LIST_ITEM_PAGE_SIZE) break;
+      offset += PORTAL_PRICE_LIST_ITEM_PAGE_SIZE;
+    }
   }
 
   return map;
@@ -1511,7 +1533,7 @@ async function fetchPortalCatalogBrandRows(
     lifecycle_status: "active" | "discontinued";
     lifecycle_note: string | null;
   }> = [];
-  const pageSize = 1000;
+  const pageSize = PORTAL_PRICE_LIST_CATALOG_PAGE_SIZE;
   let offset = 0;
 
   while (true) {
@@ -1599,21 +1621,25 @@ async function fetchPortalBestSupplierOptionMap(
       notes: string | null;
     }
   >();
-  for (const chunk of chunkValues(normalizedCodes, 200)) {
+  if (!normalizedCodes.length) return bestByCode;
+  const normalizedCodeSet = new Set(normalizedCodes);
+  let offset = 0;
+
+  while (true) {
     const supplierRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "supplier_prices", {
       select: "normalized_code,buy_price,valid_from,notes,suppliers(name)",
       organization_id: `eq.${organizationId}`,
       brand_id: `eq.${brandId}`,
       is_active: "eq.true",
       buy_price: "not.is.null",
-      normalized_code: `in.(${chunk.join(",")})`,
-      order: "buy_price.asc",
-      limit: "5000",
+      order: "normalized_code.asc",
+      limit: String(PORTAL_PRICE_LIST_SUPPLIER_PAGE_SIZE),
+      offset: String(offset),
     });
     for (const row of supplierRows) {
       const normalizedCode = String(row.normalized_code || "");
       const buyPrice = row.buy_price == null ? null : Number(row.buy_price);
-      if (!normalizedCode || buyPrice == null || !Number.isFinite(buyPrice)) continue;
+      if (!normalizedCodeSet.has(normalizedCode) || buyPrice == null || !Number.isFinite(buyPrice)) continue;
       const current = bestByCode.get(normalizedCode);
       if (current && Number(current.buy_price ?? Number.MAX_SAFE_INTEGER) <= buyPrice) continue;
       bestByCode.set(normalizedCode, {
@@ -1623,6 +1649,8 @@ async function fetchPortalBestSupplierOptionMap(
         notes: row.notes == null ? null : String(row.notes),
       });
     }
+    if (supplierRows.length < PORTAL_PRICE_LIST_SUPPLIER_PAGE_SIZE) break;
+    offset += PORTAL_PRICE_LIST_SUPPLIER_PAGE_SIZE;
   }
   return bestByCode;
 }
