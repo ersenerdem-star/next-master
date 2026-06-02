@@ -163,7 +163,7 @@ const CUSTOMER_ORDER_SELECT_LEGACY =
   "id,display_name,company_name,currency,payment_terms,contract_nr,custom_fields,price_list_type";
 const PORTAL_LOOKUP_CACHE_TTL_MS = 2 * 60 * 1000;
 const PORTAL_PRICE_LIST_CACHE_TTL_MS = 5 * 60 * 1000;
-const PORTAL_PRICE_LIST_MAX_ROWS = 12000;
+const PORTAL_PRICE_LIST_MAX_ROWS = 100000;
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 
 type PortalLookupCacheEntry<T> = {
