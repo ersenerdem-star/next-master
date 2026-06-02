@@ -1,8 +1,47 @@
-export function normalizeCatalogDisplayCode(value: string): string {
-  return String(value || "")
+export function normalizeCatalogDisplayCode(value: string, brandName = ""): string {
+  const text = String(value || "")
     .replace(/\s+/g, " ")
     .trim()
     .toUpperCase();
+
+  if (!text) return "";
+
+  const normalizedBrand = String(brandName || "")
+    .trim()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+
+  if (normalizedBrand === "hengst") {
+    return normalizeHengstDisplayCode(text);
+  }
+
+  return text;
+}
+
+function normalizeHengstDisplayCode(value: string): string {
+  const text = String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+
+  if (!text) return "";
+
+  // Hengst aftermarket codes use the visible title code, such as
+  // "E340H D247". Pure numeric material numbers are internal references and
+  // should not be reformatted into a primary catalog code.
+  if (/^\d+$/.test(text)) {
+    return text;
+  }
+
+  const compact = text.replace(/\s+/g, "");
+  const spacedMatch = compact.match(/^([A-Z]+\d+[A-Z]*)(D\d+[A-Z0-9]*)$/);
+  if (spacedMatch) {
+    return `${spacedMatch[1]} ${spacedMatch[2]}`.trim();
+  }
+
+  return text;
 }
 
 export function normalizeCatalogDescription(value: string): string {

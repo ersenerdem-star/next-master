@@ -6,6 +6,7 @@ import { syncBrandCatalogFromZfAftermarket } from "./zf-aftermarket-sync.mts";
 import { syncBrandCatalogFromMasterPower } from "./masterpower-sync.mts";
 import { syncBrandCatalogFromValeoService } from "./valeo-sync.mts";
 import { syncBrandCatalogFromBrembo } from "./brembo-sync.mts";
+import { syncBrandCatalogFromHengstConnect } from "./hengst-sync.mts";
 import { syncBrandCatalogFromSkfAutomotive } from "./skf-automotive-sync.mts";
 import { canonicalizeInternalBrandName, normalizeBrandKey } from "./brand-standardization.mts";
 
@@ -258,9 +259,14 @@ export async function syncBrandCatalog(input: {
     executionSourceType = plan.preferredSourceType;
     fallbackUsed = false;
   } else if (plan.preferredProviderKey === "hengst_connect") {
-    throw new Error(
-      "Hengst official source is currently blocking automated access with Cloudflare 403. Official sync is not yet available for this brand.",
-    );
+    result = await syncBrandCatalogFromHengstConnect({
+      ...input,
+      brandName: plan.brandName,
+    });
+    executionProviderKey = plan.preferredProviderKey;
+    executionProviderLabel = plan.preferredProviderLabel;
+    executionSourceType = plan.preferredSourceType;
+    fallbackUsed = false;
   } else {
     result = await syncBrandCatalogFromSpareto({
       ...input,
