@@ -13,9 +13,6 @@ import {
 const repoRoot = "/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp";
 const outputDir = path.join(repoRoot, "docs", "hengst-imports");
 
-const supabaseUrl = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
-const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
-
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 1) {
   const token = process.argv[index];
@@ -38,6 +35,9 @@ const sourceDir = String(args.get("source-dir") || "").trim();
 const brandName = canonicalizeBrandName(String(args.get("brand-name") || "Hengst").trim() || "Hengst");
 const importMode = args.has("import");
 const batchSize = Number.parseInt(args.get("batch-size") || "200", 10) || 200;
+const importEnv = resolveImportEnv();
+const supabaseUrl = String(importEnv.SUPABASE_URL || "").replace(/\/+$/, "");
+const serviceRoleKey = String(importEnv.SUPABASE_SERVICE_ROLE_KEY || "");
 
 if (!sourceDir) {
   throw new Error("--source-dir is required");
@@ -55,6 +55,35 @@ const headers = {
   "Content-Type": "application/json",
 };
 
+function resolveImportEnv() {
+  if (!importMode) return process.env;
+
+  const supabaseUrl = String(process.env.SUPABASE_URL || "").trim();
+  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  if (supabaseUrl && serviceRoleKey) {
+    return process.env;
+  }
+
+  return {
+    ...process.env,
+    SUPABASE_URL: supabaseUrl || runNetlifyEnvGet("SUPABASE_URL"),
+    SUPABASE_SERVICE_ROLE_KEY: serviceRoleKey || runNetlifyEnvGet("SUPABASE_SERVICE_ROLE_KEY"),
+  };
+}
+
+function runNetlifyEnvGet(name) {
+  const value = execFileSync("npx", ["netlify", "env:get", name], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    maxBuffer: 8 * 1024 * 1024,
+    env: process.env,
+  }).trim();
+  if (!value) {
+    throw new Error(`Netlify env ${name} is empty`);
+  }
+  return value;
+}
+
 async function main() {
   const htmlFiles = listHtmlFiles(sourceDir);
   if (!htmlFiles.length) {
@@ -63,17 +92,25 @@ async function main() {
 
   const rowsByCode = new Map();
   let duplicateRowsCollapsed = 0;
+  const skippedFiles = [];
 
   for (const filePath of htmlFiles) {
-    const html = readSourceHtml(filePath);
-    const row = extractHengstProduct(html, filePath, brandName);
-    if (!row.product_code || !row.normalized_code) continue;
-    const existing = rowsByCode.get(row.normalized_code);
-    if (existing) {
-      duplicateRowsCollapsed += 1;
-      rowsByCode.set(row.normalized_code, mergeRows(existing, row));
-    } else {
-      rowsByCode.set(row.normalized_code, row);
+    try {
+      const html = readSourceHtml(filePath);
+      const row = extractHengstProduct(html, filePath, brandName);
+      if (!row.product_code || !row.normalized_code) continue;
+      const existing = rowsByCode.get(row.normalized_code);
+      if (existing) {
+        duplicateRowsCollapsed += 1;
+        rowsByCode.set(row.normalized_code, mergeRows(existing, row));
+      } else {
+        rowsByCode.set(row.normalized_code, row);
+      }
+    } catch (error) {
+      skippedFiles.push({
+        file_path: filePath,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -146,6 +183,8 @@ async function main() {
     scanned_files: htmlFiles.length,
     unique_rows: rows.length,
     duplicate_rows_collapsed: duplicateRowsCollapsed,
+    skipped_files: skippedFiles,
+    skipped_file_count: skippedFiles.length,
     csv_path: csvPath,
     summary_path: summaryPath,
     imported_rows: importMode ? rows.length : 0,
