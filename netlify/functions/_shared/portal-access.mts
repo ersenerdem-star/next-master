@@ -443,40 +443,25 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
   let fallbackInvites: PortalInviteRow[] = [];
 
   try {
-    const invites = await fetchAllOptional<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
+    fallbackInvites = await fetchAllOptional<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
       select: PORTAL_INVITE_SELECT,
       email: `ilike.${normalizedEmail}`,
-      invite_token_hash: `eq.${tokenHash}`,
       order: "updated_at.desc",
       limit: "20",
     });
-    invite = invites.find((row) => isPortalInviteUsable(row)) || invites.find((row) => isPortalInvitePasswordReady(row)) || null;
+    invite =
+      fallbackInvites.find(
+        (row) =>
+          isPortalInviteUsable(row) && String(row.invite_token_hash || "").trim().toLowerCase() === tokenHash,
+      ) ||
+      fallbackInvites.find(
+        (row) =>
+          isPortalInvitePasswordReady(row) && String(row.invite_token_hash || "").trim().toLowerCase() === tokenHash,
+      ) ||
+      null;
   } catch {
+    fallbackInvites = [];
     invite = null;
-  }
-
-  if (!isPortalInvitePasswordReady(invite)) {
-    try {
-      fallbackInvites = await fetchAllOptional<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
-        select: PORTAL_INVITE_SELECT,
-        email: `ilike.${normalizedEmail}`,
-        order: "updated_at.desc",
-        limit: "20",
-      });
-      invite =
-        fallbackInvites.find(
-          (row) =>
-            isPortalInviteUsable(row) && String(row.invite_token_hash || "").trim().toLowerCase() === tokenHash,
-        ) ||
-        fallbackInvites.find(
-          (row) =>
-            isPortalInvitePasswordReady(row) && String(row.invite_token_hash || "").trim().toLowerCase() === tokenHash,
-        ) ||
-        null;
-    } catch {
-      fallbackInvites = [];
-      invite = null;
-    }
   }
 
   if (!isPortalInvitePasswordReady(invite)) {
