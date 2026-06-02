@@ -22,7 +22,36 @@ Write:
 
 Do not use the numeric item number as the main catalog code.
 
-### Save pages from Safari
+### Capture pages from Safari
+
+The fastest path is to capture the live Safari tab HTML directly.
+
+1. Open one or more official Hengst product pages in Safari.
+2. Run:
+
+```bash
+node scripts/capture-hengst-pages-from-safari.mjs
+```
+
+This captures the current front Hengst tab into:
+
+- `docs/hengst-imports/captures/<timestamp>/`
+
+If you want to capture every open Hengst tab in Safari:
+
+```bash
+node scripts/capture-hengst-pages-from-safari.mjs --all-tabs
+```
+
+Then import that capture folder with:
+
+```bash
+node scripts/import-brand-from-hengst-pages.mjs --source-dir=/absolute/path/to/capture/folder
+```
+
+### Save pages manually from Safari
+
+If you prefer manual files:
 
 1. Open the official Hengst product page in Safari.
 2. Save the page as either:
