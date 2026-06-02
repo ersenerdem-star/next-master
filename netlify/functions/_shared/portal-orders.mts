@@ -765,6 +765,25 @@ async function hydratePortalCatalogItems(
   >();
 
   if (context.customerType === "C") {
+    const bestOptionMap = await fetchPortalBestSupplierPreviewMap(
+      supabaseUrl,
+      serviceRoleKey,
+      invite.organization_id,
+      baseItems
+        .filter((item) => item.brand_id && item.normalized_code)
+        .map((item) => ({
+          brandId: item.brand_id,
+          normalizedCode: item.normalized_code,
+        })),
+    );
+    for (const item of baseItems) {
+      const bestOption = bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`);
+      if (!bestOption) continue;
+      previewByCode.set(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`, {
+        sell_price: computeSellFromBuy(bestOption.buy_price, context),
+        supplier_name: bestOption.supplier_name || "",
+      });
+    }
     const cPriceMap = await fetchCPriceMap(
       supabaseUrl,
       serviceRoleKey,
@@ -777,9 +796,12 @@ async function hydratePortalCatalogItems(
     );
     for (const item of baseItems) {
       const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
+      const cPrice = cPriceMap.get(key);
+      if (cPrice == null) continue;
+      const existing = previewByCode.get(key);
       previewByCode.set(key, {
-        sell_price: cPriceMap.get(key) ?? null,
-        supplier_name: "",
+        sell_price: cPrice,
+        supplier_name: existing?.supplier_name || "",
       });
     }
   } else {
@@ -955,10 +977,13 @@ function normalizePortalCustomerType(value: string): CustomerPricingContext["cus
   return "A";
 }
 
+function portalSupplierFallbackCustomerType(context: CustomerPricingContext): "A" | "B" {
+  return context.customerType === "B" ? "B" : "A";
+}
+
 function computeSellFromBuy(buyPrice: number | null, context: CustomerPricingContext) {
   if (buyPrice == null) return null;
-  if (context.customerType === "C") return null;
-  const marginPercent = context.customerType === "B" ? context.effectiveMarginB : context.effectiveMarginA;
+  const marginPercent = portalSupplierFallbackCustomerType(context) === "B" ? context.effectiveMarginB : context.effectiveMarginA;
   return roundMoney(Number(buyPrice) * (1 + marginPercent / 100));
 }
 
@@ -968,6 +993,10 @@ function prefersCPriceWhereAvailable(context: CustomerPricingContext) {
 
 function portalFallbackPriceType(context: CustomerPricingContext) {
   return context.customerType === "C" ? "C" : context.customerType;
+}
+
+function portalSupplierFallbackPriceType(context: CustomerPricingContext): PortalPriceListRow["price_list_type"] {
+  return portalSupplierFallbackCustomerType(context);
 }
 
 function hasUsablePrice(value: unknown) {
@@ -1761,6 +1790,19 @@ export async function buildPortalPriceListRows(
   let priceDateByCode = new Map<string, string | null>();
   const priceTypeByCode = new Map<string, PortalPriceListRow["price_list_type"]>();
   if (context.customerType === "C") {
+    const bestOptionMap = await fetchPortalBestSupplierOptionMap(
+      supabaseUrl,
+      serviceRoleKey,
+      invite.organization_id,
+      brandId,
+      [...new Set(catalogRows.map((row) => row.normalized_code).filter(Boolean))],
+    );
+    for (const [normalizedCode, bestOption] of bestOptionMap.entries()) {
+      if (bestOption.buy_price == null) continue;
+      salesPriceByCode.set(normalizedCode, computeSellFromBuy(bestOption.buy_price, context));
+      priceDateByCode.set(normalizedCode, bestOption.price_date || null);
+      priceTypeByCode.set(normalizedCode, portalSupplierFallbackPriceType(context));
+    }
     const cPriceEntryMap = await fetchCPriceEntryMap(
       supabaseUrl,
       serviceRoleKey,
@@ -2028,9 +2070,7 @@ async function resolvePreparedLine(
   const codeChanged = Boolean(referenceMatch) || normalizePartCode(resolvedCode) !== normalizePartCode(row.code);
   const buyPrice = fallbackSupplier?.buy_price ?? null;
   const computedSell =
-    context.customerType === "C"
-      ? null
-      : fallbackSupplier?.sell_price ?? computeSellFromBuy(buyPrice, context);
+    fallbackSupplier?.sell_price ?? computeSellFromBuy(buyPrice, context);
   const lifecycleStatus = normalizeLifecycleStatus(`${String(catalogMatch?.lifecycle_status || "")} ${String(catalogMatch?.lifecycle_note || "")}`);
   const lifecycleNote = String(catalogMatch?.lifecycle_note || "").trim() || null;
 
@@ -2105,8 +2145,6 @@ export async function preparePortalOrderLines(
       line.c_sell_price = value == null ? null : Number(value);
       if (value != null) {
         line.sell_price = Number(value);
-      } else if (context.customerType === "C") {
-        line.sell_price = null;
       }
     });
   }
