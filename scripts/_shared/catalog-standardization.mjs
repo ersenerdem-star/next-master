@@ -24,10 +24,28 @@ export function normalizeCatalogDisplayCode(value, brand = "") {
   if (canonicalBrand === "BOSCH") {
     return formatBoschDisplayCode(value);
   }
+  if (canonicalBrand === "HENGST") {
+    return formatHengstDisplayCode(value);
+  }
   return String(value || "")
     .replace(/\s+/g, " ")
     .trim()
     .toUpperCase();
+}
+
+function formatHengstDisplayCode(value) {
+  const raw = String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+  if (!raw) return "";
+  if (/^\d+$/.test(raw)) return raw;
+  const compact = raw.replace(/\s+/g, "");
+  const match = compact.match(/^([A-Z]+\d+[A-Z]*)(D\d+[A-Z0-9]*)$/);
+  if (match) {
+    return `${match[1]} ${match[2]}`.trim();
+  }
+  return raw;
 }
 
 export function normalizeCatalogDescription(value) {

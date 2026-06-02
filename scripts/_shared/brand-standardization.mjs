@@ -97,6 +97,12 @@ const BRAND_STANDARDS = [
     sparetoQuery: "HEPU",
     sparetoSlug: "hepu",
   },
+  {
+    keys: ["HENGST"],
+    canonical: "Hengst",
+    sparetoQuery: "HENGST",
+    sparetoSlug: "hengst",
+  },
 ];
 
 function buildFallbackSlug(value) {
