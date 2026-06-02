@@ -20,12 +20,17 @@ type PrintMetaItem = {
 
 type PrintLine = {
   code: string;
+  oldCode?: string;
   description: string;
   origin?: string;
   brand?: string;
   orderNo?: string;
   weight?: string;
   gtip?: string;
+  alerts?: Array<{
+    text: string;
+    tone?: "warning" | "danger" | "muted";
+  }>;
   qty: number;
   unitPrice: number;
   amount: number;
@@ -94,10 +99,19 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
   const totalWeight = input.totalWeight ?? null;
   const rowsHtml = input.lines
     .map(
-      (line) => `
+      (line) => {
+        const alertsHtml = (line.alerts || [])
+          .filter((alert) => String(alert?.text || "").trim())
+          .map(
+            (alert) =>
+              `<div class="line-alert line-alert--${safeText(alert.tone || "warning")}">${safeText(alert.text)}</div>`,
+          )
+          .join("");
+        const oldCodeHtml = line.oldCode ? `<div class="line-subtext">Old code: ${safeText(line.oldCode)}</div>` : "";
+        return `
         <tr>
-          <td><span class="line-code">${safeText(line.code)}</span></td>
-          <td><span class="line-description">${safeText(line.description)}</span></td>
+          <td><div class="line-code-wrap"><span class="line-code">${safeText(line.code)}</span>${oldCodeHtml}</div></td>
+          <td><span class="line-description">${safeText(line.description)}</span>${alertsHtml ? `<div class="line-alerts">${alertsHtml}</div>` : ""}</td>
           <td>${safeText(line.origin || "")}</td>
           <td>${safeText(line.brand || "")}</td>
           <td><span class="line-order-no">${safeText(line.orderNo || "")}</span></td>
@@ -107,7 +121,8 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
           <td>${formatMoney(line.unitPrice, currency)}</td>
           <td>${formatMoney(line.amount, currency)}</td>
         </tr>
-      `,
+      `;
+      },
     )
     .join("");
   const metaRows = input.meta
@@ -176,8 +191,15 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
         th:nth-child(5), td:nth-child(5) { white-space:nowrap; }
         td:nth-child(8), td:nth-child(9), td:nth-child(10),
         th:nth-child(8), th:nth-child(9), th:nth-child(10) { text-align:right; }
+        .line-code-wrap { display:flex; flex-direction:column; gap:0.6mm; }
         .line-code, .line-order-no { white-space:nowrap; word-break:keep-all; overflow-wrap:normal; }
         .line-description { white-space:normal; word-break:normal; overflow-wrap:break-word; }
+        .line-subtext { font-size:6.3pt; color:#64748b; line-height:1.18; white-space:normal; word-break:break-word; overflow-wrap:anywhere; }
+        .line-alerts { display:flex; flex-direction:column; gap:0.5mm; margin-top:0.8mm; }
+        .line-alert { font-size:6.4pt; font-weight:700; line-height:1.22; }
+        .line-alert--warning { color:#b45309; }
+        .line-alert--danger { color:#b91c1c; }
+        .line-alert--muted { color:#475569; font-weight:600; }
         .totals { display:flex; justify-content:space-between; align-items:flex-start; gap:6mm; margin-top:4mm; }
         .totals-note { flex:1; min-height:10mm; font-size:7.4pt; line-height:1.42; padding-top:0.5mm; }
         .totals-card { min-width:60mm; max-width:68mm; }

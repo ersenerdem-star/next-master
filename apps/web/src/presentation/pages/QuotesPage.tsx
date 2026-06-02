@@ -106,6 +106,28 @@ function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function compactWarningText(value: string | null | undefined) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function buildSalesOrderPrintAlerts(line: QuoteBuilderLine) {
+  const alerts: Array<{ text: string; tone?: "warning" | "danger" | "muted" }> = [];
+  const codeWarning = compactWarningText(line.codeChangeWarning);
+  const lifecycleWarning = compactWarningText(line.lifecycle_warning);
+  if (codeWarning) {
+    alerts.push({ text: codeWarning, tone: "warning" });
+  }
+  if (line.lifecycle_status === "discontinued") {
+    alerts.push({
+      text: lifecycleWarning || `Discontinued item: ${line.resolvedCode || line.requestedCode}.`,
+      tone: "danger",
+    });
+  } else if (lifecycleWarning && lifecycleWarning !== codeWarning) {
+    alerts.push({ text: lifecycleWarning, tone: "muted" });
+  }
+  return alerts;
+}
+
 function formatMoney(value: number | null | undefined, currency = "EUR") {
   const numeric = Number(value ?? 0);
   return new Intl.NumberFormat("en-US", {
@@ -473,12 +495,14 @@ function buildDraftQuoteHtml(input: {
       const total = roundMoney(sellUnit * line.qty);
       return {
         code: line.resolvedCode,
+        oldCode: line.codeChanged ? line.requestedCode : "",
         description: line.description || "",
         origin: line.origin || "",
         brand: line.brand || "",
         orderNo: input.quoteNo || "-",
         weight: line.weight_kg == null ? "" : String(line.weight_kg),
         gtip: line.hs_code || "",
+        alerts: buildSalesOrderPrintAlerts(line),
         qty: line.qty,
         unitPrice: sellUnit,
         amount: total,

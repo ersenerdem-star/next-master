@@ -83,6 +83,29 @@ export function SalesPage({
     );
   }
 
+  function compactWarningText(value: string | null | undefined) {
+    return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function buildInvoicePrintAlerts(line: LocalInvoice["lines"][number]) {
+    const alerts: Array<{ text: string; tone?: "warning" | "danger" | "muted" }> = [];
+    const oldCode = String(line.old_code || "").trim();
+    const productCode = String(line.product_code || "").trim();
+    if (oldCode && oldCode !== productCode) {
+      alerts.push({ text: `Changed No: ${oldCode} -> ${productCode}.`, tone: "warning" });
+    }
+    const lifecycleWarning = compactWarningText(line.lifecycle_warning);
+    if (line.lifecycle_status === "discontinued") {
+      alerts.push({
+        text: lifecycleWarning || `Discontinued item: ${productCode || oldCode || "this item"}.`,
+        tone: "danger",
+      });
+    } else if (lifecycleWarning) {
+      alerts.push({ text: lifecycleWarning, tone: "muted" });
+    }
+    return alerts;
+  }
+
   function cloneInvoice(input: LocalInvoice): LocalInvoice {
     return {
       ...input,
@@ -406,12 +429,14 @@ export function SalesPage({
       ],
       lines: row.lines.map((line) => ({
         code: line.product_code,
+        oldCode: line.old_code || "",
         description: line.description || "",
         origin: line.origin || "",
         brand: line.brand || "",
         orderNo: row.sales_order_no || "",
         weight: line.weight_kg == null ? "" : String(line.weight_kg),
         gtip: line.hs_code || "",
+        alerts: buildInvoicePrintAlerts(line),
         qty: line.qty,
         unitPrice: Number(line.sell_price || 0) || 0,
         amount: Number(line.sales_total || 0) || 0,
