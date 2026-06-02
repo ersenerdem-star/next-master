@@ -18,6 +18,7 @@ export type CatalogSyncPreferredProvider =
   | "masterpower_official"
   | "valeo_service"
   | "brembo_official"
+  | "hengst_connect"
   | "skf_automotive";
 
 export type CatalogSyncSourceType = "marketplace" | "official";
@@ -40,6 +41,9 @@ type BrandSourceConfig = {
   preferredProviderLabel: string;
   preferredSourceType: CatalogSyncSourceType;
   preferredSourceUrl: string;
+  executionProviderKey?: CatalogSyncPreferredProvider;
+  executionProviderLabel?: string;
+  executionSourceType?: CatalogSyncSourceType;
 };
 
 const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
@@ -106,6 +110,16 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredSourceType: "official",
     preferredSourceUrl: "https://www.bremboparts.com/europe/en",
   },
+  hengst: {
+    aliases: ["hengst"],
+    preferredProviderKey: "hengst_connect",
+    preferredProviderLabel: "Hengst.Connect official catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://www.hengstconnect.com/en/",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto catalog",
+    executionSourceType: "marketplace",
+  },
   skf: {
     aliases: ["skf"],
     preferredProviderKey: "skf_automotive",
@@ -147,10 +161,12 @@ export function resolveCatalogSyncPlan(inputBrandName: string): CatalogSyncPlan 
     preferredProviderLabel: matchedConfig.preferredProviderLabel,
     preferredSourceType: matchedConfig.preferredSourceType,
     preferredSourceUrl: matchedConfig.preferredSourceUrl,
-    executionProviderKey: matchedConfig.preferredProviderKey,
-    executionProviderLabel: matchedConfig.preferredProviderLabel,
-    executionSourceType: matchedConfig.preferredSourceType,
-    fallbackUsed: false,
+    executionProviderKey: matchedConfig.executionProviderKey || matchedConfig.preferredProviderKey,
+    executionProviderLabel: matchedConfig.executionProviderLabel || matchedConfig.preferredProviderLabel,
+    executionSourceType: matchedConfig.executionSourceType || matchedConfig.preferredSourceType,
+    fallbackUsed:
+      (matchedConfig.executionProviderKey || matchedConfig.preferredProviderKey) !== matchedConfig.preferredProviderKey ||
+      (matchedConfig.executionSourceType || matchedConfig.preferredSourceType) !== matchedConfig.preferredSourceType,
   };
 }
 
