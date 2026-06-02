@@ -49,6 +49,27 @@ Then import that capture folder with:
 node scripts/import-brand-from-hengst-pages.mjs --source-dir=/absolute/path/to/capture/folder
 ```
 
+### One-command capture and import
+
+If you want one command for both steps:
+
+```bash
+node scripts/run-hengst-safari-import.mjs --all-tabs
+```
+
+To write directly into `catalog_products`:
+
+```bash
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/run-hengst-safari-import.mjs --all-tabs --import
+```
+
+This will:
+
+1. capture the current open Hengst Safari tabs
+2. save the HTML files under `docs/hengst-imports/captures/<timestamp>/`
+3. run the official Hengst parser on that folder
+4. optionally import the parsed rows into the catalog
+
 ### Save pages manually from Safari
 
 If you prefer manual files:
