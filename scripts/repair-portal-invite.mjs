@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
 function runCommand(command, args) {
   return String(execFileSync(command, args, { encoding: "utf8" }) || "").trim();
@@ -14,6 +15,7 @@ function parseArgs(argv) {
   const options = {
     email: "",
     apply: false,
+    password: "",
   };
   for (const rawArg of argv) {
     const arg = String(rawArg || "").trim();
@@ -24,9 +26,17 @@ function parseArgs(argv) {
     }
     if (arg === "--apply") {
       options.apply = true;
+      continue;
+    }
+    if (arg.startsWith("--password=")) {
+      options.password = arg.slice("--password=".length);
     }
   }
   return options;
+}
+
+function hashPortalToken(token) {
+  return createHash("sha256").update(String(token || ""), "utf8").digest("hex");
 }
 
 function serviceRoleHeaders(serviceRoleKey) {
@@ -112,6 +122,26 @@ async function fetchCustomers(supabaseUrl, serviceRoleKey, email) {
   return rows;
 }
 
+async function fetchOutboundEmails(supabaseUrl, serviceRoleKey, email) {
+  const response = await fetch(
+    buildRestUrl(supabaseUrl, "outbound_emails", {
+      select: "id,organization_id,template_key,recipient_type,recipient_name,recipient_email,related_type,related_id,status,created_at,updated_at,sent_at",
+      recipient_email: `ilike.${email}`,
+      order: "updated_at.desc",
+      limit: "100",
+    }),
+    {
+      headers: serviceRoleHeaders(serviceRoleKey),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Outbound email lookup failed: ${response.status} ${await response.text()}`);
+  }
+  const rows = await response.json();
+  if (!Array.isArray(rows)) throw new Error("Outbound email lookup returned unexpected payload.");
+  return rows;
+}
+
 async function fetchOrganizationCustomers(supabaseUrl, serviceRoleKey, organizationId) {
   const response = await fetch(
     buildRestUrl(supabaseUrl, "customers", {
@@ -128,6 +158,27 @@ async function fetchOrganizationCustomers(supabaseUrl, serviceRoleKey, organizat
   }
   const rows = await response.json();
   if (!Array.isArray(rows)) throw new Error("Organization customer lookup returned unexpected payload.");
+  return rows;
+}
+
+async function fetchOrganizationPortalInvites(supabaseUrl, serviceRoleKey, organizationId) {
+  const response = await fetch(
+    buildRestUrl(supabaseUrl, "portal_invites", {
+      select:
+        "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,updated_at",
+      organization_id: `eq.${organizationId}`,
+      order: "updated_at.desc",
+      limit: "500",
+    }),
+    {
+      headers: serviceRoleHeaders(serviceRoleKey),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Organization portal invite lookup failed: ${response.status} ${await response.text()}`);
+  }
+  const rows = await response.json();
+  if (!Array.isArray(rows)) throw new Error("Organization portal invite lookup returned unexpected payload.");
   return rows;
 }
 
@@ -163,6 +214,11 @@ async function main() {
 
   const rows = await fetchInvites(supabaseUrl, serviceRoleKey, options.email);
   const customers = await fetchCustomers(supabaseUrl, serviceRoleKey, options.email).catch(() => []);
+  const outboundEmails = await fetchOutboundEmails(supabaseUrl, serviceRoleKey, options.email).catch(() => []);
+  const organizationIdFromEmailRow = String(rows[0]?.organization_id || outboundEmails[0]?.organization_id || "").trim();
+  const organizationInvites = organizationIdFromEmailRow
+    ? await fetchOrganizationPortalInvites(supabaseUrl, serviceRoleKey, organizationIdFromEmailRow).catch(() => [])
+    : [];
   const orgCustomerCache = new Map();
   const grouped = new Map();
   for (const row of rows) {
@@ -235,6 +291,18 @@ async function main() {
     email: options.email,
     rowCount: rows.length,
     customerMatches: customers,
+    outboundEmails,
+    organizationInvites: organizationInvites.slice(0, 50).map((row) => ({
+      id: row.id,
+      party_name: row.party_name,
+      email: row.email,
+      party_type: row.party_type,
+      customer_id: row.customer_id,
+      vendor_id: row.vendor_id,
+      status: row.status,
+      has_hash: hasHash(row),
+      updated_at: row.updated_at,
+    })),
     rows: rows.map((row) => ({
       id: row.id,
       organization_id: row.organization_id,
@@ -253,6 +321,29 @@ async function main() {
     repairs,
     applied: false,
   };
+
+  if (options.password) {
+    if (rows.length !== 1) {
+      throw new Error(`Cannot set password because ${rows.length} portal invite rows matched ${options.email}.`);
+    }
+    if (String(options.password || "").trim().length < 8) {
+      throw new Error("Password must be at least 8 characters.");
+    }
+    const target = rows[0];
+    repairs.push({
+      key: scopeKey(target),
+      targetId: String(target.id || ""),
+      payload: {
+        email: options.email,
+        invite_token_hash: hashPortalToken(options.password),
+        invite_token: null,
+        status: "active",
+        expires_at: null,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    output.repairs = repairs;
+  }
 
   if (options.apply && repairs.length) {
     for (const repair of repairs) {
