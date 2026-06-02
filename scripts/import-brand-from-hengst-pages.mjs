@@ -91,6 +91,7 @@ async function main() {
       "Description",
       "OEM_No",
       "Vehicle",
+      "Weight_Kg",
       "Image_URL",
       "Detail_URL",
       "Source_File",
@@ -102,6 +103,7 @@ async function main() {
       row.description,
       row.oem_no,
       row.vehicle,
+      row.weight_kg == null ? "" : String(row.weight_kg),
       row.image_url,
       row.detail_url,
       row.source_file,
@@ -113,14 +115,15 @@ async function main() {
   if (importMode && rows.length) {
     target = await resolveOrCreateTargetBrand(brandName);
     const supportsImageColumn = await detectCatalogImageColumn();
+    const supportsWeightColumn = await detectCatalogWeightColumn();
     const payload = rows.map((row) => ({
       organization_id: target.organization_id,
       brand_id: target.brand_id,
       product_code: row.product_code,
-      normalized_code: row.normalized_code,
       description: emptyToNull(row.description),
       oem_no: emptyToNull(row.oem_no),
       vehicle: emptyToNull(row.vehicle),
+      ...(supportsWeightColumn ? { weight_kg: row.weight_kg == null || Number.isNaN(row.weight_kg) ? null : row.weight_kg } : {}),
       ...(supportsImageColumn ? { image_url: emptyToNull(row.image_url) } : {}),
       updated_at: new Date().toISOString(),
     }));
@@ -230,8 +233,9 @@ function extractHengstProduct(html, filePath, brand) {
   const description = normalizeCatalogDescription(extractDescription(html, productCode));
   const oemNo = sanitizeCatalogOemNumbers(extractOemTableCodes(html).join(", "));
   const vehicle = extractVehicleStrings(html).join(" | ");
+  const weightKg = extractWeightKg(html);
   const imageUrl = sanitizeImageUrl(extractPrimaryImage(html));
-  const detailUrl = extractCanonicalUrl(html);
+  const detailUrl = sanitizeDetailUrl(extractCanonicalUrl(html));
 
   return {
     product_code: productCode,
@@ -240,6 +244,7 @@ function extractHengstProduct(html, filePath, brand) {
     description,
     oem_no: oemNo,
     vehicle,
+    weight_kg: weightKg,
     image_url: imageUrl,
     detail_url: detailUrl,
     source_file: filePath,
@@ -257,6 +262,17 @@ function extractProductTitleCode(html) {
 }
 
 function extractDescription(html, productCode) {
+  const introDescription = html.match(/<div[^>]*class="c-product-intro__description"[^>]*>\s*([\s\S]*?)\s*<\/div>/i)?.[1];
+  if (introDescription) {
+    const cleaned = decodeHtml(String(introDescription).replace(/<[^>]+>/g, " "))
+      .replace(/\s+/g, " ")
+      .trim();
+    if (cleaned) return cleaned;
+  }
+
+  const productName = extractProductName(html);
+  if (productName) return productName;
+
   const snippet = html.match(/<h1[^>]*>[\s\S]{0,900}?<\/h1>/i)?.[0] || "";
   const cleaned = decodeHtml(snippet.replace(/<[^>]+>/g, " "))
     .replace(/\s+/g, " ")
@@ -272,6 +288,14 @@ function extractDescription(html, productCode) {
 function extractMetaDescription(html) {
   const match = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i);
   return match?.[1] ? decodeHtml(match[1]).trim() : "";
+}
+
+function extractProductName(html) {
+  const match = html.match(/<div[^>]*class="c-product-headline__name"[^>]*>\s*([\s\S]*?)\s*<\/div>/i);
+  if (!match?.[1]) return "";
+  return decodeHtml(String(match[1]).replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function extractLabelValue(html, label) {
@@ -293,13 +317,29 @@ function extractOemTableCodes(html) {
 
 function extractVehicleStrings(html) {
   const values = new Set();
-  for (const match of html.matchAll(/Vehicle Application[\s\S]{0,12000}?<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
-    const text = decodeHtml(String(match[1] || "").replace(/<[^>]+>/g, " "))
-      .replace(/\s+/g, " ")
-      .trim();
-    if (text) values.add(text);
+  const section = html.match(/<hengst-product-vehicle-data[\s\S]*?<\/hengst-product-vehicle-data>/i)?.[0] || "";
+  if (!section) return [...values];
+
+  for (const match of section.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const cells = [...String(match[1] || "").matchAll(/<td[^>]*>\s*([\s\S]*?)\s*<\/td>/gi)]
+      .map((cell) => decodeHtml(String(cell[1] || "").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    if (!cells.length) continue;
+    const text = cells.join(" | ").trim();
+    if (text) {
+      values.add(text);
+    }
   }
   return [...values];
+}
+
+function extractWeightKg(html) {
+  const section = html.match(/<table[^>]*class="c-product-tab__table"[\s\S]*?Dimensions and weight[\s\S]*?<\/table>/i)?.[0] || "";
+  if (!section) return null;
+  const match = section.match(/<td[^>]*>\s*Net Weight\s*<\/td>\s*<td[^>]*>[\s\S]*?<li[^>]*>\s*([\d.,]+)\s*<span[^>]*>\s*kg\s*<\/span>/i);
+  if (!match?.[1]) return null;
+  const value = Number.parseFloat(String(match[1]).replace(",", "."));
+  return Number.isFinite(value) ? value : null;
 }
 
 function extractPrimaryImage(html) {
@@ -312,6 +352,13 @@ function extractCanonicalUrl(html) {
   if (canonical?.[1]) return decodeHtml(canonical[1]).trim();
   const og = html.match(/<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i);
   return og?.[1] ? decodeHtml(og[1]).trim() : "";
+}
+
+function sanitizeDetailUrl(url) {
+  return String(url || "")
+    .replace(/(?:%0D|%0A)+/gi, "")
+    .replace(/[\r\n]+/g, "")
+    .trim();
 }
 
 function mergeRows(existing, incoming) {
@@ -383,6 +430,18 @@ async function detectCatalogImageColumn() {
     return true;
   } catch (error) {
     if (String(error || "").toLowerCase().includes("image_url")) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function detectCatalogWeightColumn() {
+  try {
+    await getJson("/rest/v1/catalog_products?select=weight_kg&limit=1");
+    return true;
+  } catch (error) {
+    if (String(error || "").toLowerCase().includes("weight_kg")) {
       return false;
     }
     throw error;

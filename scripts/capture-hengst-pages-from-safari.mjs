@@ -28,6 +28,8 @@ for (let index = 2; index < process.argv.length; index += 1) {
 const outputDir = path.resolve(String(args.get("output-dir") || defaultOutputDir));
 const captureAllTabs = args.has("all-tabs");
 const delayMs = Math.max(300, Number.parseInt(args.get("delay-ms") || "900", 10) || 900);
+const fieldDelimiter = "|||";
+const rowDelimiter = "<<<ROW>>>";
 
 fs.mkdirSync(outputDir, { recursive: true });
 
@@ -84,20 +86,23 @@ function listHengstTabs() {
     'set tabUrl to URL of t',
     'if tabUrl is not missing value and tabUrl contains "hengstconnect.com" then',
     'set tabName to name of t',
-    'set end of outputLines to (windowIndex as string) & tab & (tabIndex as string) & tab & tabUrl & tab & tabName',
+    `set end of outputLines to (windowIndex as string) & "${fieldDelimiter}" & (tabIndex as string) & "${fieldDelimiter}" & tabUrl & "${fieldDelimiter}" & tabName`,
     'end if',
     'end repeat',
     'end repeat',
-    'return outputLines as string',
+    `set AppleScript's text item delimiters to "${rowDelimiter}"`,
+    'set outputText to outputLines as text',
+    'set AppleScript\'s text item delimiters to ""',
+    'return outputText',
     'end tell',
   ]);
 
   return String(result || "")
-    .split(/\r?\n/)
+    .split(rowDelimiter)
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const [windowIndex, tabIndex, url, title] = line.split("\t");
+      const [windowIndex, tabIndex, url, title] = line.split(fieldDelimiter);
       return {
         windowIndex: Number.parseInt(windowIndex || "0", 10),
         tabIndex: Number.parseInt(tabIndex || "0", 10),
@@ -112,14 +117,17 @@ function getFrontHengstTab() {
   const result = runOsaScript([
     'tell application "Safari"',
     'if (count of windows) is 0 then error "Safari has no open windows"',
-    'set tabUrl to URL of current tab of front window',
+    'set targetWindow to front window',
+    'set frontWindowIndex to index of targetWindow',
+    'set frontTabIndex to index of current tab of targetWindow',
+    'set tabUrl to URL of current tab of targetWindow',
     'if tabUrl is missing value or tabUrl does not contain "hengstconnect.com" then error "Front Safari tab is not a Hengst page"',
-    'set tabName to name of current tab of front window',
-    'return "1" & tab & "1" & tab & tabUrl & tab & tabName',
+    'set tabName to name of current tab of targetWindow',
+    `return (frontWindowIndex as string) & "${fieldDelimiter}" & (frontTabIndex as string) & "${fieldDelimiter}" & tabUrl & "${fieldDelimiter}" & tabName`,
     'end tell',
   ]);
 
-  const [windowIndex, tabIndex, url, title] = String(result || "").split("\t");
+  const [windowIndex, tabIndex, url, title] = String(result || "").split(fieldDelimiter);
   return {
     windowIndex: Number.parseInt(windowIndex || "1", 10),
     tabIndex: Number.parseInt(tabIndex || "1", 10),
