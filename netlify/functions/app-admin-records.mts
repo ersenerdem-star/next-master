@@ -270,6 +270,62 @@ async function sanitizePortalInvitePayload(input: {
 }) {
   const next = { ...input.payload };
   next.email = String(next.email || "").trim().toLowerCase();
+  next.party_type = String(next.party_type || "").trim().toLowerCase();
+  next.party_name = String(next.party_name || "").trim();
+  next.contact_name = String(next.contact_name || "").trim();
+  next.customer_id = String(next.customer_id || "").trim();
+  next.vendor_id = String(next.vendor_id || "").trim();
+
+  if (!next.email) {
+    throw new Error("Portal email is required.");
+  }
+  if (next.party_type !== "customer" && next.party_type !== "vendor") {
+    throw new Error("Portal party type must be customer or vendor.");
+  }
+  if (!next.party_name) {
+    throw new Error("Portal party name is required.");
+  }
+
+  if (next.party_type === "customer") {
+    next.vendor_id = "";
+    if (!isUuid(String(next.customer_id || ""))) {
+      throw new Error("Select a valid customer before saving portal access.");
+    }
+    const customerRows = await getJson<Array<Record<string, unknown>>>(
+      buildRestUrl(input.supabaseUrl, "customers", {
+        select: "id",
+        organization_id: `eq.${input.organizationId}`,
+        id: `eq.${String(next.customer_id || "").trim()}`,
+        limit: "1",
+      }),
+      {
+        headers: serviceRoleHeaders(input.serviceRoleKey),
+      },
+    ).catch(() => []);
+    if (!customerRows[0]?.id) {
+      throw new Error("Selected customer was not found in this organization.");
+    }
+  } else {
+    next.customer_id = "";
+    if (!isUuid(String(next.vendor_id || ""))) {
+      throw new Error("Select a valid vendor before saving portal access.");
+    }
+    const vendorRows = await getJson<Array<Record<string, unknown>>>(
+      buildRestUrl(input.supabaseUrl, "vendors", {
+        select: "id",
+        organization_id: `eq.${input.organizationId}`,
+        id: `eq.${String(next.vendor_id || "").trim()}`,
+        limit: "1",
+      }),
+      {
+        headers: serviceRoleHeaders(input.serviceRoleKey),
+      },
+    ).catch(() => []);
+    if (!vendorRows[0]?.id) {
+      throw new Error("Selected vendor was not found in this organization.");
+    }
+  }
+
   const rawBrandIds = Array.isArray(next.allowed_brand_ids)
     ? next.allowed_brand_ids.map((value) => String(value || "").trim()).filter((value) => isUuid(value))
     : [];
@@ -734,8 +790,6 @@ async function upsertPortalInvite(input: {
       return decoratePortalInviteRow(rows[0] || null);
     } catch (primaryError) {
       const legacyPayload = { ...nextPayload };
-      delete legacyPayload.customer_id;
-      delete legacyPayload.vendor_id;
       delete legacyPayload.expires_at;
       delete legacyPayload.allowed_brand_ids;
       const rows = await updateSingleRow<Record<string, unknown>>({
@@ -764,8 +818,6 @@ async function upsertPortalInvite(input: {
     return decoratePortalInviteRow(rows[0] || null);
   } catch (primaryError) {
     const legacyPayload = { ...nextPayload };
-    delete legacyPayload.customer_id;
-    delete legacyPayload.vendor_id;
     delete legacyPayload.expires_at;
     delete legacyPayload.allowed_brand_ids;
     const rows = await insertSingleRow<Record<string, unknown>>({

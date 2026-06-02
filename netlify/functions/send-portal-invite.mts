@@ -46,6 +46,17 @@ function hasConfiguredPortalPassword(invite: PortalInviteRow | null | undefined)
   return String(invite.status || "").trim().toLowerCase() === "active" && Boolean(String(invite.invite_token_hash || "").trim());
 }
 
+function hasPortalScope(invite: PortalInviteRow | null | undefined) {
+  if (!invite) return false;
+  if (invite.party_type === "customer") {
+    return Boolean(String(invite.customer_id || "").trim());
+  }
+  if (invite.party_type === "vendor") {
+    return Boolean(String(invite.vendor_id || "").trim());
+  }
+  return false;
+}
+
 function renderTemplate(input: string, values: Record<string, string>) {
   return input.replace(/\{\{(.*?)\}\}/g, (_, rawKey: string) => values[rawKey.trim()] ?? "");
 }
@@ -253,6 +264,9 @@ export default async (req: Request, _context: Context) => {
 
     if (!invite || invite.status === "disabled") {
       return json({ error: "Portal invite not found or disabled." }, 404);
+    }
+    if (!hasPortalScope(invite)) {
+      return json({ error: "Portal invite is missing customer or vendor scope. Save portal access again." }, 409);
     }
     if (!hasConfiguredPortalPassword(invite)) {
       return json({ error: "Set a portal password before sending access." }, 400);

@@ -321,8 +321,12 @@ export async function sendPortalInviteEmail(
           queuedEmailId,
         };
       }
-    } catch {
-      // Keep the portal invite queued even if the immediate delivery attempt fails.
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Invitation was queued but delivery did not complete. Retry from Outbound Emails.";
+      throw new Error(`${message} Queued email id: ${queuedEmailId}`);
     }
   }
 
