@@ -418,6 +418,18 @@ export function CatalogPage() {
   }, [brands, rows, search, submittedSearch, catalogBrand, submittedCatalogBrand, selectedCatalogProductId]);
 
   const total = rows[0]?.total_count ?? 0;
+  const trimmedSubmittedSearch = submittedSearch.trim();
+  const hasSubmittedSearch = Boolean(trimmedSubmittedSearch);
+  const hasSubmittedBrand = Boolean(submittedCatalogBrand);
+  const catalogCountLabel = loading
+    ? "Loading catalog..."
+    : !hasSubmittedSearch && !hasSubmittedBrand
+      ? "Select a brand or search to load catalog."
+      : hasSubmittedBrand && !hasSubmittedSearch
+        ? `${submittedCatalogBrand}: ${total.toLocaleString("en-US")} items`
+        : hasSubmittedBrand
+          ? `${total.toLocaleString("en-US")} matches in ${submittedCatalogBrand}`
+          : `${total.toLocaleString("en-US")} catalog rows`;
   const originalNumberBrandMatches = useMemo(() => {
     if (!submittedSearch.trim() || !rows.length) return [];
     return Array.from(
@@ -1180,13 +1192,7 @@ export function CatalogPage() {
         </div>
         <div className="section-card__body">
           <div className="meta-row">
-            <span>
-              {loading
-                ? "Loading catalog..."
-                : !submittedSearch.trim() && !submittedCatalogBrand
-                  ? "Select a brand or search to load catalog."
-                  : `${total.toLocaleString("en-US")} catalog rows`}
-            </span>
+            <span>{catalogCountLabel}</span>
             {originalNumberBrandMatches.length ? (
               <span>
                 Original No Brands: <strong>{originalNumberBrandMatches.join(", ")}</strong>
