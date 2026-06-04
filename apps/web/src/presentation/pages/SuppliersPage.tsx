@@ -28,6 +28,32 @@ const freshnessOptions = [
   { value: "unknown", label: "Unknown" },
 ];
 
+const SUPPLIER_IMPORT_COLUMNS = [
+  "Product_Code",
+  "Brand",
+  "Product_Name",
+  "OEM_No",
+  "Buy_Price_EUR",
+  "Price_Date",
+  "MOQ",
+  "Lead_Time_Days",
+  "Notes",
+] as const;
+
+const SUPPLIER_IMPORT_HEADER_ALIASES: Record<(typeof SUPPLIER_IMPORT_COLUMNS)[number], string[]> = {
+  Product_Code: ["Product_Code", "Product Code", "Part_No", "Part No", "PartNo", "Code"],
+  Brand: ["Brand", "Brand_Name", "Brand Name"],
+  Product_Name: ["Product_Name", "Product Name", "Description", "Name"],
+  OEM_No: ["OEM_No", "OEM No", "OEM", "Original_Number", "Original Number"],
+  Buy_Price_EUR: ["Buy_Price_EUR", "Buy Price EUR", "Buy_Price", "Buy Price", "Price_EUR", "Price"],
+  Price_Date: ["Price_Date", "Price Date", "Valid_From", "Date"],
+  MOQ: ["MOQ", "Min_Qty", "Minimum Order Quantity"],
+  Lead_Time_Days: ["Lead_Time_Days", "Lead Time Days", "Lead_Time", "Lead Time"],
+  Notes: ["Notes", "Note", "Comment", "Comments"],
+};
+
+const SUPPLIER_IMPORT_REQUIRED_COLUMNS = ["Product_Code", "Buy_Price_EUR"] as const;
+
 export function SuppliersPage() {
   const actionFeedback = useActionFeedback();
   const [brands, setBrands] = useState<BrandOption[]>([]);
@@ -324,30 +350,38 @@ export function SuppliersPage() {
       const text = await file.text();
       const parsedRows = parseCsv(text);
       const [header = [], ...dataRows] = parsedRows;
-      const indexOf = (name: string) => header.findIndex((cell) => cell.trim().toLowerCase() === name.toLowerCase());
-      const codeIndex = indexOf("Product_Code");
-      const brandIndex = indexOf("Brand");
-      const nameIndex = indexOf("Product_Name");
-      const oemIndex = indexOf("OEM_No");
-      const priceIndex = indexOf("Buy_Price_EUR");
-      const dateIndex = indexOf("Price_Date");
-      const moqIndex = indexOf("MOQ");
-      const leadIndex = indexOf("Lead_Time_Days");
-      const notesIndex = indexOf("Notes");
+      const codeIndex = findSupplierImportHeaderIndex(header, "Product_Code");
+      const brandIndex = findSupplierImportHeaderIndex(header, "Brand");
+      const nameIndex = findSupplierImportHeaderIndex(header, "Product_Name");
+      const oemIndex = findSupplierImportHeaderIndex(header, "OEM_No");
+      const priceIndex = findSupplierImportHeaderIndex(header, "Buy_Price_EUR");
+      const dateIndex = findSupplierImportHeaderIndex(header, "Price_Date");
+      const moqIndex = findSupplierImportHeaderIndex(header, "MOQ");
+      const leadIndex = findSupplierImportHeaderIndex(header, "Lead_Time_Days");
+      const notesIndex = findSupplierImportHeaderIndex(header, "Notes");
+
+      const missingRequiredHeaders = SUPPLIER_IMPORT_REQUIRED_COLUMNS.filter(
+        (column) => findSupplierImportHeaderIndex(header, column) === -1,
+      );
+      if (missingRequiredHeaders.length) {
+        throw new Error(
+          `Supplier CSV headers are invalid. Missing: ${missingRequiredHeaders.join(", ")}. Use template columns: ${SUPPLIER_IMPORT_COLUMNS.join(", ")}`,
+        );
+      }
 
       const payload = dataRows
         .map((row) => ({
           supplier_name: activeSupplierName,
-          brand: activeImportBrand || normalizeText(row[brandIndex]) || "Unbranded",
+          brand: activeImportBrand || normalizeText(brandIndex === -1 ? "" : row[brandIndex]) || "Unbranded",
           product_code: normalizeText(row[codeIndex]),
-          description: normalizeText(row[nameIndex]),
-          oem_no: normalizeText(row[oemIndex]),
+          description: normalizeText(nameIndex === -1 ? "" : row[nameIndex]),
+          oem_no: normalizeText(oemIndex === -1 ? "" : row[oemIndex]),
           buy_price: normalizeNumber(row[priceIndex]),
           currency: "EUR",
-          moq: normalizeNumber(row[moqIndex]),
-          lead_time_days: normalizeNumber(row[leadIndex]),
-          notes: normalizeText(row[notesIndex]),
-          valid_from: normalizeText(row[dateIndex]),
+          moq: normalizeNumber(moqIndex === -1 ? "" : row[moqIndex]),
+          lead_time_days: normalizeNumber(leadIndex === -1 ? "" : row[leadIndex]),
+          notes: normalizeText(notesIndex === -1 ? "" : row[notesIndex]),
+          valid_from: normalizeText(dateIndex === -1 ? "" : row[dateIndex]),
           is_active: true,
         }))
         .filter((row) => row.product_code && row.buy_price !== null);
@@ -559,6 +593,15 @@ export function SuppliersPage() {
             <Button variant="secondary" onClick={() => setShowImportDialog(true)}>
               Import CSV
             </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                downloadSupplierTemplate();
+                actionFeedback.succeed("Supplier import template downloaded.");
+              }}
+            >
+              Download Template
+            </Button>
           </div>
         </div>
         <div className="section-card__body">
@@ -642,6 +685,7 @@ export function SuppliersPage() {
               <Input label="Selected file" value={importFile?.name ?? ""} onChange={() => undefined} disabled />
             </div>
             <div className="modal-hint">Supplier, supplier name, brand, import mode, target, and file are required.</div>
+            <div className="modal-hint">Expected columns: {SUPPLIER_IMPORT_COLUMNS.join(", ")}</div>
             <div className="toolbar">
               <Button
                 variant="secondary"
@@ -791,4 +835,9 @@ export function SuppliersPage() {
       ) : null}
     </div>
   );
+}
+
+function findSupplierImportHeaderIndex(header: string[], logicalColumn: (typeof SUPPLIER_IMPORT_COLUMNS)[number]) {
+  const aliases = SUPPLIER_IMPORT_HEADER_ALIASES[logicalColumn] || [logicalColumn];
+  return header.findIndex((cell) => aliases.some((alias) => cell.trim().toLowerCase() === alias.toLowerCase()));
 }
