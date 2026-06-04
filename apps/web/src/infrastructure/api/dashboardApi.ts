@@ -291,6 +291,7 @@ async function fetchNewPortalOrderCount() {
     .select("id", { count: "planned", head: true })
     .eq("source_channel", "portal")
     .not("portal_submitted_at", "is", null)
+    .eq("status", "draft")
     .is("portal_seen_at", null);
 
   if (error) {

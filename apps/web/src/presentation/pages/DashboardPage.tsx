@@ -52,6 +52,11 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
   const [brandSummarySupplier, setBrandSummarySupplier] = useState("");
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriodKey>("thisMonth");
   const showSystemPanels = canAccessSystemModules(role);
+  const isDraftPortalAlert = (quote: DashboardSalesOrderSummary) =>
+    quote.source_channel === "portal" &&
+    Boolean(quote.portal_submitted_at) &&
+    !quote.portal_seen_at &&
+    String(quote.status || "").toLowerCase() === "draft";
 
   useEffect(() => {
     if (!showSystemPanels) return;
@@ -323,7 +328,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
                   </span>
                 </span>
                 <span className="dashboard-order-meta">
-                  {quote.source_channel === "portal" && quote.portal_submitted_at && !quote.portal_seen_at ? (
+                  {isDraftPortalAlert(quote) ? (
                     <span className="mark-badge mark-badge--accent">New Order</span>
                   ) : null}
                   <span>{quote.status || "-"}</span>

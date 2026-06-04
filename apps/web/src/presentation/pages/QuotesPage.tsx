@@ -116,6 +116,17 @@ function compactWarningText(value: string | null | undefined) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+function isDraftPortalAlert(order: Pick<LocalSalesOrder, "source_channel" | "portal_submitted_at" | "portal_seen_at" | "status">, purchaseOrderCount = 0, invoiceCount = 0) {
+  return (
+    order.source_channel === "portal" &&
+    Boolean(order.portal_submitted_at) &&
+    !order.portal_seen_at &&
+    String(order.status || "").toLowerCase() === "draft" &&
+    purchaseOrderCount === 0 &&
+    invoiceCount === 0
+  );
+}
+
 function buildSalesOrderPrintAlerts(line: QuoteBuilderLine) {
   const alerts: Array<{ text: string; tone?: "warning" | "danger" | "muted" }> = [];
   const codeWarning = compactWarningText(line.codeChangeWarning);
@@ -2195,6 +2206,11 @@ export function QuotesPage({
     try {
       actionFeedback.begin(`Converting ${invoiceReadyOrders.length.toLocaleString("en-US")} sales order(s) to invoices...`);
       await Promise.all(invoiceReadyOrders.map((order) => upsertInvoice(buildInvoiceFromSalesOrder(order))));
+      await Promise.all(
+        invoiceReadyOrders
+          .filter((order) => order.source_channel === "portal" && order.portal_submitted_at)
+          .map((order) => markSalesOrderPortalSeen(order.id)),
+      );
       await refreshLocalSalesOrders();
       actionFeedback.succeed(
         `${invoiceReadyOrders.length.toLocaleString("en-US")} invoice(s) created.${invoiceReadyOrders.length !== selectedOrders.length ? ` ${selectedOrders.length - invoiceReadyOrders.length} non-confirmed order(s) skipped.` : ""}`,
@@ -2311,7 +2327,7 @@ export function QuotesPage({
           return (
             <span className="document-marks document-marks--compact">
               <span className={`mark-badge ${row.status === "confirmed" ? "mark-badge--success" : ""}`}>{row.status.toUpperCase()}</span>
-              {row.source_channel === "portal" && row.portal_submitted_at && !row.portal_seen_at ? (
+              {isDraftPortalAlert(row, poCount, invoiceCount) ? (
                 <span className="mark-badge mark-badge--accent">New Order</span>
               ) : null}
               {poCount > 0 ? <span className="mark-badge mark-badge--info">{poCount} PO</span> : null}
@@ -2393,12 +2409,15 @@ export function QuotesPage({
       const saved = await upsertSalesOrder(order);
       const purchaseOrders = buildPurchaseOrdersFromSalesOrder(saved);
       await replacePurchaseOrdersForSalesOrder(saved.id, purchaseOrders);
-      await refreshLocalSalesOrders(saved.id);
-      setPendingConfirmedOrder(saved);
+      const seenOrder =
+        saved.source_channel === "portal" && saved.portal_submitted_at ? await markSalesOrderPortalSeen(saved.id) : null;
+      const effectiveOrder = seenOrder || saved;
+      await refreshLocalSalesOrders(effectiveOrder.id);
+      setPendingConfirmedOrder(effectiveOrder);
       setInvoicePromptOpen(true);
-      setQuoteNo(saved.sales_order_no);
-      setBuilderStatus(`${saved.sales_order_no} confirmed. ${purchaseOrders.length.toLocaleString("en-US")} purchase orders created by supplier.`);
-      actionFeedback.succeed(`${saved.sales_order_no} confirmed. ${purchaseOrders.length.toLocaleString("en-US")} supplier purchase orders created.`);
+      setQuoteNo(effectiveOrder.sales_order_no);
+      setBuilderStatus(`${effectiveOrder.sales_order_no} confirmed. ${purchaseOrders.length.toLocaleString("en-US")} purchase orders created by supplier.`);
+      actionFeedback.succeed(`${effectiveOrder.sales_order_no} confirmed. ${purchaseOrders.length.toLocaleString("en-US")} supplier purchase orders created.`);
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Mark as confirmed failed");
     } finally {
@@ -2415,6 +2434,10 @@ export function QuotesPage({
       setCreatingInvoice(true);
       actionFeedback.begin(`Creating invoice from ${pendingConfirmedOrder.sales_order_no}...`);
       const invoice = await upsertInvoice(buildInvoiceFromSalesOrder(pendingConfirmedOrder));
+      if (pendingConfirmedOrder.source_channel === "portal" && pendingConfirmedOrder.portal_submitted_at) {
+        await markSalesOrderPortalSeen(pendingConfirmedOrder.id);
+      }
+      await refreshLocalSalesOrders(pendingConfirmedOrder.id);
       setBuilderStatus(`${pendingConfirmedOrder.sales_order_no} confirmed. Invoice ${invoice.id} created.`);
       actionFeedback.succeed(`Invoice ${invoice.id} created from ${pendingConfirmedOrder.sales_order_no}.`);
       setInvoicePromptOpen(false);
@@ -2581,7 +2604,13 @@ export function QuotesPage({
                 </div>
                 {currentLocalSalesOrder.source_channel === "portal" && currentLocalSalesOrder.portal_submitted_at ? (
                   <span className="mark-badge mark-badge--accent">
-                    {currentLocalSalesOrder.portal_seen_at ? "Portal Order" : "New Portal Order"}
+                    {isDraftPortalAlert(
+                      currentLocalSalesOrder,
+                      salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0,
+                      salesOrderDocumentState.invoiceCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0,
+                    )
+                      ? "New Portal Order"
+                      : "Portal Order"}
                   </span>
                 ) : null}
                 {(salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0) > 0 ? (
