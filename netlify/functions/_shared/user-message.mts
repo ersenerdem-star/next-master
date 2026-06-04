@@ -28,7 +28,11 @@ export function sanitizeUserFacingMessage(message: unknown, fallback = "The requ
     return "Your session has expired. Sign in again.";
   }
 
-  if (normalized.includes("timed out")) {
+  if (
+    normalized.includes("timed out") ||
+    normalized.includes("statement timeout") ||
+    normalized.includes("canceling statement due to statement timeout")
+  ) {
     return "The request took too long. Please try again.";
   }
 

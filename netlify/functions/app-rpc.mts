@@ -106,6 +106,24 @@ function normalizePartCode(value: string) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+function isStatementTimeoutLike(error: unknown) {
+  const normalized = String(error || "").toLowerCase();
+  return (
+    normalized.includes("statement timeout") ||
+    normalized.includes("canceling statement due to statement timeout") ||
+    normalized.includes("the request took too long")
+  );
+}
+
+function sortCatalogRowsByProductCode<T extends CatalogSourceRow>(rows: T[]) {
+  return [...rows].sort((left, right) =>
+    String(left.product_code || "").localeCompare(String(right.product_code || ""), undefined, {
+      numeric: true,
+      sensitivity: "base",
+    }),
+  );
+}
+
 function normalizeOriginalNumberSearch(value: string) {
   const normalized = normalizePartCode(value);
   if (!normalized) return "";
@@ -517,7 +535,11 @@ async function fetchRestRows<T>(
   });
   const data = await readJson<Array<T> & { message?: string; error?: string; msg?: string }>(response);
   if (!response.ok) {
-    throw new Error(sanitizeUserFacingError(data?.msg || data?.message || data?.error || "Catalog request failed"));
+    const rawError = data?.msg || data?.message || data?.error || "Catalog request failed";
+    if (isStatementTimeoutLike(rawError)) {
+      throw new Error(String(rawError));
+    }
+    throw new Error(sanitizeUserFacingError(rawError));
   }
   return (data ?? []) as T[];
 }
@@ -653,8 +675,18 @@ async function fetchCloudCatalogPageViaRest(
   }
 
   if (!search && selectedBrandId) {
-    const [brandRows, brandTotalCount] = await Promise.all([
-      fetchRestRows<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", baseParams),
+    let brandRows: CatalogSourceRow[];
+    try {
+      brandRows = await fetchRestRows<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", baseParams);
+    } catch (error) {
+      if (!isStatementTimeoutLike(error)) throw error;
+      const fallbackParams = { ...baseParams };
+      delete fallbackParams.order;
+      brandRows = sortCatalogRowsByProductCode(
+        await fetchRestRows<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", fallbackParams),
+      );
+    }
+    const [brandTotalCount] = await Promise.all([
       fetchCachedBrandCount(supabaseUrl, serviceRoleKey, caller.organizationId, selectedBrandId),
     ]);
     const fallbackTotalCount =
