@@ -154,7 +154,7 @@ type CustomerPricingContext = {
   portalCPriceMode: "standard" | "prefer_c_when_available";
   effectiveMarginA: number;
   effectiveMarginB: number;
-  cPriceListId: string;
+  cPriceListIds: string[];
 };
 
 const CUSTOMER_ORDER_SELECT =
@@ -788,7 +788,7 @@ async function hydratePortalCatalogItems(
       supabaseUrl,
       serviceRoleKey,
       invite.organization_id,
-      context.cPriceListId,
+      context.cPriceListIds,
       baseItems.map((item) => ({
         brand: item.brand,
         product_code: item.code,
@@ -831,7 +831,7 @@ async function hydratePortalCatalogItems(
         supabaseUrl,
         serviceRoleKey,
         invite.organization_id,
-        context.cPriceListId,
+        context.cPriceListIds,
         baseItems.map((item) => ({
           brand: item.brand,
           product_code: item.code,
@@ -988,7 +988,7 @@ function computeSellFromBuy(buyPrice: number | null, context: CustomerPricingCon
 }
 
 function prefersCPriceWhereAvailable(context: CustomerPricingContext) {
-  return context.customerType !== "C" && context.portalCPriceMode === "prefer_c_when_available" && Boolean(context.cPriceListId);
+  return context.customerType !== "C" && context.portalCPriceMode === "prefer_c_when_available" && context.cPriceListIds.length > 0;
 }
 
 function portalFallbackPriceType(context: CustomerPricingContext) {
@@ -1124,10 +1124,10 @@ async function resolvePortalCustomer(
     null;
 
   const priceLists = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customer_price_lists", {
-    select: "id,list_type,margin_percent,is_active",
+    select: "id,list_type,margin_percent,is_active,updated_at,created_at",
     organization_id: `eq.${invite.organization_id}`,
     is_active: "eq.true",
-    order: "updated_at.desc",
+    order: "updated_at.desc,created_at.desc",
   });
 
   const byType = new Map<string, Record<string, unknown>>();
@@ -1143,7 +1143,14 @@ async function resolvePortalCustomer(
   const marginOverride = marginOverrideRaw == null ? null : Number(marginOverrideRaw);
   const effectiveMarginA = (priceListType === "A" || priceListType === "Other") && marginOverride != null ? marginOverride : defaultMarginA;
   const effectiveMarginB = priceListType === "B" && marginOverride != null ? marginOverride : defaultMarginB;
-  const cPriceListId = String(byType.get("C")?.id || "");
+  const cPriceListIds = [
+    ...new Set(
+      priceLists
+        .filter((row) => String(row.list_type || "").trim().toUpperCase() === "C")
+        .map((row) => String(row.id || "").trim())
+        .filter(Boolean),
+    ),
+  ];
 
   const context = {
     organizationId: invite.organization_id,
@@ -1154,7 +1161,7 @@ async function resolvePortalCustomer(
     portalCPriceMode,
     effectiveMarginA,
     effectiveMarginB,
-    cPriceListId,
+    cPriceListIds,
   };
   portalCustomerContextCache.set(cacheKey, {
     value: context,
@@ -1461,24 +1468,29 @@ async function fetchCPriceMap(
   supabaseUrl: string,
   serviceRoleKey: string,
   organizationId: string,
-  cPriceListId: string,
+  cPriceListIds: string[],
   rows: Array<{ brand: string; product_code: string }>,
 ) {
   const map = new Map<string, number>();
-  if (!cPriceListId || !rows.length) return map;
+  if (!cPriceListIds.length || !rows.length) return map;
   const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, organizationId);
   const brandIds = [...new Set(rows.map((row) => brandMap.byName.get(row.brand.trim().toLowerCase()) || "").filter(Boolean))];
   const normalizedCodes = [...new Set(rows.map((row) => normalizePartCode(row.product_code)).filter(Boolean))];
   if (!brandIds.length || !normalizedCodes.length) return map;
   const normalizedCodeSet = new Set(normalizedCodes);
+  const listPriority = new Map<string, number>();
+  cPriceListIds.forEach((id, index) => {
+    listPriority.set(id, index);
+  });
+  const resultPriority = new Map<string, number>();
 
   for (const brandChunk of chunkValues(brandIds, 25)) {
     let offset = 0;
     while (true) {
       const items = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customer_price_list_items", {
-        select: "brand_id,normalized_code,sell_price",
+        select: "price_list_id,brand_id,normalized_code,sell_price",
         organization_id: `eq.${organizationId}`,
-        price_list_id: `eq.${cPriceListId}`,
+        price_list_id: `in.(${cPriceListIds.join(",")})`,
         brand_id: `in.(${brandChunk.join(",")})`,
         order: "normalized_code.asc",
         limit: String(PORTAL_PRICE_LIST_ITEM_PAGE_SIZE),
@@ -1488,7 +1500,12 @@ async function fetchCPriceMap(
         const brandName = brandMap.byId.get(String(row.brand_id || ""));
         const normalizedCode = String(row.normalized_code || "");
         if (!brandName || !normalizedCode || !normalizedCodeSet.has(normalizedCode)) continue;
-        map.set(`${brandName.toLowerCase()}::${normalizedCode}`, Number(row.sell_price || 0));
+        const key = `${brandName.toLowerCase()}::${normalizedCode}`;
+        const priority = listPriority.get(String(row.price_list_id || "")) ?? Number.MAX_SAFE_INTEGER;
+        const currentPriority = resultPriority.get(key);
+        if (currentPriority != null && currentPriority <= priority) continue;
+        map.set(key, Number(row.sell_price || 0));
+        resultPriority.set(key, priority);
       }
       if (items.length < PORTAL_PRICE_LIST_ITEM_PAGE_SIZE) break;
       offset += PORTAL_PRICE_LIST_ITEM_PAGE_SIZE;
@@ -1502,24 +1519,29 @@ async function fetchCPriceEntryMap(
   supabaseUrl: string,
   serviceRoleKey: string,
   organizationId: string,
-  cPriceListId: string,
+  cPriceListIds: string[],
   rows: Array<{ brand: string; product_code: string }>,
 ) {
   const map = new Map<string, { sell_price: number; price_date: string | null }>();
-  if (!cPriceListId || !rows.length) return map;
+  if (!cPriceListIds.length || !rows.length) return map;
   const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, organizationId);
   const brandIds = [...new Set(rows.map((row) => brandMap.byName.get(row.brand.trim().toLowerCase()) || "").filter(Boolean))];
   const normalizedCodes = [...new Set(rows.map((row) => normalizePartCode(row.product_code)).filter(Boolean))];
   if (!brandIds.length || !normalizedCodes.length) return map;
   const normalizedCodeSet = new Set(normalizedCodes);
+  const listPriority = new Map<string, number>();
+  cPriceListIds.forEach((id, index) => {
+    listPriority.set(id, index);
+  });
+  const resultPriority = new Map<string, number>();
 
   for (const brandChunk of chunkValues(brandIds, 25)) {
     let offset = 0;
     while (true) {
       const items = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customer_price_list_items", {
-        select: "brand_id,normalized_code,sell_price,updated_at",
+        select: "price_list_id,brand_id,normalized_code,sell_price,updated_at",
         organization_id: `eq.${organizationId}`,
-        price_list_id: `eq.${cPriceListId}`,
+        price_list_id: `in.(${cPriceListIds.join(",")})`,
         brand_id: `in.(${brandChunk.join(",")})`,
         order: "updated_at.desc",
         limit: String(PORTAL_PRICE_LIST_ITEM_PAGE_SIZE),
@@ -1530,11 +1552,14 @@ async function fetchCPriceEntryMap(
         const normalizedCode = String(row.normalized_code || "");
         if (!brandName || !normalizedCode || !normalizedCodeSet.has(normalizedCode)) continue;
         const key = `${brandName.toLowerCase()}::${normalizedCode}`;
-        if (map.has(key)) continue;
+        const priority = listPriority.get(String(row.price_list_id || "")) ?? Number.MAX_SAFE_INTEGER;
+        const currentPriority = resultPriority.get(key);
+        if (currentPriority != null && currentPriority <= priority) continue;
         map.set(key, {
           sell_price: Number(row.sell_price || 0),
           price_date: row.updated_at == null ? null : String(row.updated_at).slice(0, 10),
         });
+        resultPriority.set(key, priority);
       }
       if (items.length < PORTAL_PRICE_LIST_ITEM_PAGE_SIZE) break;
       offset += PORTAL_PRICE_LIST_ITEM_PAGE_SIZE;
@@ -1764,7 +1789,7 @@ export async function buildPortalPriceListRows(
     context.portalCPriceMode,
     context.effectiveMarginA,
     context.effectiveMarginB,
-    context.cPriceListId,
+    context.cPriceListIds.join(","),
   ].join("::");
   const cached = portalPriceListCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
@@ -1807,7 +1832,7 @@ export async function buildPortalPriceListRows(
       supabaseUrl,
       serviceRoleKey,
       invite.organization_id,
-      context.cPriceListId,
+      context.cPriceListIds,
       catalogRows.map((row) => ({ brand: row.brand, product_code: row.product_code })),
     );
     for (const [key, value] of cPriceEntryMap.entries()) {
@@ -1835,7 +1860,7 @@ export async function buildPortalPriceListRows(
         supabaseUrl,
         serviceRoleKey,
         invite.organization_id,
-        context.cPriceListId,
+        context.cPriceListIds,
         catalogRows.map((row) => ({ brand: row.brand, product_code: row.product_code })),
       );
       for (const [key, value] of cPriceEntryMap.entries()) {
@@ -2134,7 +2159,7 @@ export async function preparePortalOrderLines(
       supabaseUrl,
       serviceRoleKey,
       invite.organization_id,
-      context.cPriceListId,
+      context.cPriceListIds,
       prepared.map((row) => ({
         brand: row.brand,
         product_code: row.resolvedCode,
