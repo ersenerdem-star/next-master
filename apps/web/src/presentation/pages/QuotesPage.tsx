@@ -560,6 +560,7 @@ export function QuotesPage({
   const [selectedLocalSalesOrderIds, setSelectedLocalSalesOrderIds] = useState<string[]>([]);
   const [salesOrderActionsOpen, setSalesOrderActionsOpen] = useState(false);
   const [workbenchMode, setWorkbenchMode] = useState<"existing" | "new">("existing");
+  const [salesOrderSourceSnapshot, setSalesOrderSourceSnapshot] = useState("");
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
   const [detail, setDetail] = useState<QuoteDetail>({ quote: null, lines: [] });
   const [loadingQuotes, setLoadingQuotes] = useState(false);
@@ -1274,6 +1275,7 @@ export function QuotesPage({
   async function loadLocalSalesOrderIntoEditor(order: LocalSalesOrder) {
     const detailOrder = order.lines.length ? order : await fetchSalesOrderById(order.id);
     setWorkbenchMode("existing");
+    setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(detailOrder));
     setSelectedLocalSalesOrderId(detailOrder.id);
     setSelectedQuoteId("");
     onSelectedQuoteChange?.("");
@@ -1369,6 +1371,7 @@ export function QuotesPage({
           lines: syncedLines,
         });
         const saved = await upsertSalesOrder(order);
+        setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(saved));
         await refreshLocalSalesOrders(saved.id);
       }
 
@@ -1475,7 +1478,6 @@ export function QuotesPage({
       quoteBuilderLines,
     ],
   );
-  const savedSalesOrderSnapshot = useMemo(() => serializeSalesOrderForDirtyCheck(currentLocalSalesOrder), [currentLocalSalesOrder]);
   const salesOrderHasUnsavedChanges = useMemo(() => {
     if (workbenchMode === "new") {
       return Boolean(
@@ -1488,9 +1490,8 @@ export function QuotesPage({
           shippingCost !== "0",
       );
     }
-    return Boolean(currentLocalSalesOrder) && salesOrderDraftSnapshot !== savedSalesOrderSnapshot;
+    return Boolean(selectedLocalSalesOrderId) && salesOrderDraftSnapshot !== salesOrderSourceSnapshot;
   }, [
-    currentLocalSalesOrder,
     customerName,
     resolvedCustomerName,
     discountAmount,
@@ -1498,7 +1499,8 @@ export function QuotesPage({
     quoteBuilderLines.length,
     quoteNotes,
     salesOrderDraftSnapshot,
-    savedSalesOrderSnapshot,
+    salesOrderSourceSnapshot,
+    selectedLocalSalesOrderId,
     shippingCost,
     workbenchMode,
   ]);
@@ -1509,6 +1511,9 @@ export function QuotesPage({
       return null;
     }
     const saved = await upsertSalesOrder(buildSalesOrderPayload("draft"));
+    setWorkbenchMode("existing");
+    setSelectedLocalSalesOrderId(saved.id);
+    setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(saved));
     await refreshLocalSalesOrders(saved.id);
     setQuoteNo(saved.sales_order_no);
     setBuilderStatus(`Draft saved as ${saved.sales_order_no}.`);
@@ -2082,6 +2087,7 @@ export function QuotesPage({
   function resetSalesOrderEditor() {
     setSalesOrdersView("detail");
     setWorkbenchMode("new");
+    setSalesOrderSourceSnapshot("");
     onSelectedSalesOrderChange?.("");
     setSelectedQuoteId("");
     onSelectedQuoteChange?.("");
@@ -2412,6 +2418,7 @@ export function QuotesPage({
       const seenOrder =
         saved.source_channel === "portal" && saved.portal_submitted_at ? await markSalesOrderPortalSeen(saved.id) : null;
       const effectiveOrder = seenOrder || saved;
+      setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(effectiveOrder));
       await refreshLocalSalesOrders(effectiveOrder.id);
       setPendingConfirmedOrder(effectiveOrder);
       setInvoicePromptOpen(true);
