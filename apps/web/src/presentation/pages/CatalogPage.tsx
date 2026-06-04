@@ -114,6 +114,13 @@ function filterCachedCatalogRows(rows: CatalogRow[], search: string, brand: stri
   return filtered.map((row) => ({ ...row, total_count: total }));
 }
 
+function buildCatalogRowDraft(row: CatalogRow, existing?: CatalogRowDraft | null): CatalogRowDraft {
+  return {
+    ...(existing || row),
+    weight_kg: existing?.weight_kg ?? row.weight_kg ?? null,
+  };
+}
+
 export function CatalogPage() {
   const actionFeedback = useActionFeedback();
   const selectedCatalogPopupRef = useRef<HTMLDivElement | null>(null);
@@ -611,6 +618,96 @@ export function CatalogPage() {
     actionFeedback.succeed(`${selectedCatalogDraft.product_code} sent to Purchase Order draft.`);
   }
 
+  function patchCatalogDraft(row: CatalogRow, patch: Partial<CatalogRowDraft>) {
+    setDrafts((current) => ({
+      ...current,
+      [row.product_id]: {
+        ...buildCatalogRowDraft(row, current[row.product_id]),
+        ...patch,
+      },
+    }));
+  }
+
+  async function saveCatalogRow(row: CatalogRow) {
+    if (!isOnline) {
+      setError("Connect to the internet to save catalog changes.");
+      return;
+    }
+    const draft = drafts[row.product_id] || buildCatalogRowDraft(row);
+    try {
+      setError("");
+      setStatus("");
+      setRowActionKey(`save:${row.product_id}`);
+      actionFeedback.begin(`Saving catalog row ${draft.product_code}...`);
+      await updateCloudCatalogRow(row.product_id, {
+        product_code: draft.product_code,
+        brand: draft.brand,
+        description: draft.description || null,
+        oem_no: draft.oem_no || null,
+        vehicle: draft.vehicle || null,
+        hs_code: draft.hs_code || null,
+        origin: draft.origin || null,
+        weight_kg: parseWeightInput(draft.weight_kg),
+        lifecycle_status: draft.lifecycle_status || "active",
+        lifecycle_note: draft.lifecycle_note || null,
+      });
+      await reloadCatalog(submittedSearch, submittedCatalogBrand);
+      setStatus(`Catalog row ${draft.product_code} saved.`);
+      actionFeedback.succeed(`Catalog row ${draft.product_code} saved.`);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Catalog update failed";
+      setError(message);
+      actionFeedback.fail(message);
+    } finally {
+      setRowActionKey("");
+    }
+  }
+
+  async function deleteCatalogRow(row: CatalogRow) {
+    if (!isOnline) {
+      setError("Connect to the internet to delete catalog rows.");
+      return;
+    }
+    if (!confirm(`Delete ${row.product_code} from catalog?`)) return;
+    try {
+      setError("");
+      setStatus("");
+      setRowActionKey(`delete:${row.product_id}`);
+      actionFeedback.begin(`Deleting catalog row ${row.product_code}...`);
+      await deleteCloudCatalogRow(row.product_id);
+      await reloadCatalog(submittedSearch, submittedCatalogBrand);
+      setSelectedCatalogProductId("");
+      setStatus(`Catalog row ${row.product_code} deleted.`);
+      actionFeedback.succeed(`Catalog row ${row.product_code} deleted.`);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Catalog delete failed";
+      setError(message);
+      actionFeedback.fail(message);
+    } finally {
+      setRowActionKey("");
+    }
+  }
+
+  function openReferenceDialogForRow(row: CatalogRow) {
+    if (!isOnline) {
+      setError("Connect to the internet to create or edit code references.");
+      return;
+    }
+    const coverageKey = `${row.brand.trim().toLowerCase()}::${normalizePartCode(row.product_code)}`;
+    const hasReference = (referenceCoverage[coverageKey] || 0) > 0;
+    const draft = drafts[row.product_id] || buildCatalogRowDraft(row);
+    setReferenceDraft({
+      brand: draft.brand || row.brand || "",
+      old_code: "",
+      new_code: draft.product_code || row.product_code || "",
+      original_number: draft.oem_no || row.oem_no || "",
+      reason: hasReference ? "Update existing replacement mapping" : "Supplier changed / replacement code",
+    });
+    setError("");
+    setStatus("");
+    setShowReferenceDialog(true);
+  }
+
   function renderReferenceOldCodeHint(usage: CodeReferenceUsage | null) {
     if (!usage) return null;
     if (usage.matchesOldCode.length) {
@@ -659,57 +756,28 @@ export function CatalogPage() {
         key: "code",
         header: "Code",
         render: (row: CatalogRow) => (
-          <input
-            className="inline-edit-input"
-            value={drafts[row.product_id]?.product_code ?? row.product_code}
-            onChange={(event) =>
-              setDrafts((current) => ({
-                ...current,
-                [row.product_id]: { ...(current[row.product_id] || row), product_code: event.target.value },
-              }))
-            }
-          />
+          <div className="catalog-cell catalog-cell--code">
+            <strong className="catalog-code">{drafts[row.product_id]?.product_code ?? row.product_code}</strong>
+          </div>
         ),
       },
       {
         key: "brand",
         header: "Brand",
         render: (row: CatalogRow) => (
-          <select
-            className="inline-edit-input"
-            value={drafts[row.product_id]?.brand ?? row.brand}
-            onChange={(event) =>
-              setDrafts((current) => ({
-                ...current,
-                [row.product_id]: { ...(current[row.product_id] || row), brand: event.target.value },
-              }))
-            }
-          >
-            {editableBrandOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <div className="catalog-cell">
+            <span className="catalog-brand-badge">{drafts[row.product_id]?.brand ?? row.brand}</span>
+          </div>
         ),
       },
       {
         key: "name",
         header: "Name",
         render: (row: CatalogRow) => (
-          <div>
-            <input
-              className="inline-edit-input"
-              value={drafts[row.product_id]?.description ?? row.description ?? ""}
-              onChange={(event) =>
-                setDrafts((current) => ({
-                  ...current,
-                  [row.product_id]: { ...(current[row.product_id] || row), description: event.target.value },
-                }))
-              }
-            />
-            {row.replacement_warning ? <div className="warning-text">{row.replacement_warning}</div> : null}
-            {row.lifecycle_status === "discontinued" && row.lifecycle_note ? <div className="warning-text">{row.lifecycle_note}</div> : null}
+          <div className="catalog-cell catalog-cell--stack">
+            <strong className="catalog-name">{drafts[row.product_id]?.description ?? row.description ?? "-"}</strong>
+            {row.replacement_warning ? <span className="catalog-inline-flag">Replacement mapped</span> : null}
+            {row.lifecycle_status === "discontinued" && row.lifecycle_note ? <span className="catalog-inline-flag catalog-inline-flag--danger">{row.lifecycle_note}</span> : null}
           </div>
         ),
       },
@@ -717,121 +785,65 @@ export function CatalogPage() {
         key: "oem",
         header: "OEM",
         render: (row: CatalogRow) => (
-          <input
-            className="inline-edit-input"
-            value={drafts[row.product_id]?.oem_no ?? row.oem_no ?? ""}
-            onChange={(event) =>
-              setDrafts((current) => ({
-                ...current,
-                [row.product_id]: { ...(current[row.product_id] || row), oem_no: event.target.value },
-              }))
-            }
-          />
+          <div className="catalog-cell catalog-cell--stack">
+            <span className="catalog-mono catalog-clip">{drafts[row.product_id]?.oem_no ?? row.oem_no ?? "-"}</span>
+          </div>
         ),
       },
       {
         key: "vehicle",
         header: "Vehicle",
         render: (row: CatalogRow) => (
-          <input
-            className="inline-edit-input"
-            value={drafts[row.product_id]?.vehicle ?? row.vehicle ?? ""}
-            onChange={(event) =>
-              setDrafts((current) => ({
-                ...current,
-                [row.product_id]: { ...(current[row.product_id] || row), vehicle: event.target.value },
-              }))
-            }
-          />
+          <div className="catalog-cell catalog-cell--stack">
+            <VehicleBadges value={drafts[row.product_id]?.vehicle ?? row.vehicle ?? ""} limit={3} expandable />
+          </div>
         ),
       },
       {
         key: "hs",
         header: "HS",
         render: (row: CatalogRow) => (
-          <input
-            className="inline-edit-input"
-            value={drafts[row.product_id]?.hs_code ?? row.hs_code ?? ""}
-            onChange={(event) =>
-              setDrafts((current) => ({
-                ...current,
-                [row.product_id]: { ...(current[row.product_id] || row), hs_code: event.target.value },
-              }))
-            }
-          />
+          <div className="catalog-cell">
+            <span className="catalog-mono">{drafts[row.product_id]?.hs_code ?? row.hs_code ?? "-"}</span>
+          </div>
         ),
       },
       {
         key: "origin",
         header: "Origin",
         render: (row: CatalogRow) => (
-          <input
-            className="inline-edit-input"
-            value={drafts[row.product_id]?.origin ?? row.origin ?? ""}
-            onChange={(event) =>
-              setDrafts((current) => ({
-                ...current,
-                [row.product_id]: { ...(current[row.product_id] || row), origin: event.target.value },
-              }))
-            }
-          />
+          <div className="catalog-cell">
+            <span className="catalog-origin-chip">{drafts[row.product_id]?.origin ?? row.origin ?? "-"}</span>
+          </div>
         ),
       },
       {
         key: "weight",
         header: "Weight",
         render: (row: CatalogRow) => (
-          <input
-            className="inline-edit-input"
-            value={String(drafts[row.product_id]?.weight_kg ?? row.weight_kg ?? "")}
-            onChange={(event) =>
-              setDrafts((current) => ({
-                ...current,
-                [row.product_id]: { ...(current[row.product_id] || row), weight_kg: event.target.value },
-              }))
-            }
-          />
+          <div className="catalog-cell">
+            <span className="catalog-mono">{String(drafts[row.product_id]?.weight_kg ?? row.weight_kg ?? "-")}</span>
+          </div>
         ),
       },
       {
         key: "lifecycle",
         header: "Lifecycle",
         render: (row: CatalogRow) => (
-          <select
-            className="inline-edit-input"
-            value={drafts[row.product_id]?.lifecycle_status ?? row.lifecycle_status ?? "active"}
-            onChange={(event) =>
-              setDrafts((current) => ({
-                ...current,
-                [row.product_id]: {
-                  ...(current[row.product_id] || row),
-                  lifecycle_status: normalizeCatalogLifecycleStatus(event.target.value),
-                },
-              }))
-            }
-          >
-            {lifecycleOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <div className="catalog-cell">
+            <span className={`catalog-state-badge ${(drafts[row.product_id]?.lifecycle_status ?? row.lifecycle_status ?? "active") === "discontinued" ? "is-danger" : "is-live"}`}>
+              {drafts[row.product_id]?.lifecycle_status ?? row.lifecycle_status ?? "active"}
+            </span>
+          </div>
         ),
       },
       {
         key: "lifecycleNote",
         header: "Lifecycle Note",
         render: (row: CatalogRow) => (
-          <input
-            className="inline-edit-input"
-            value={drafts[row.product_id]?.lifecycle_note ?? row.lifecycle_note ?? ""}
-            onChange={(event) =>
-              setDrafts((current) => ({
-                ...current,
-                [row.product_id]: { ...(current[row.product_id] || row), lifecycle_note: event.target.value },
-              }))
-            }
-          />
+          <div className="catalog-cell catalog-cell--stack">
+            <span className="catalog-clip">{drafts[row.product_id]?.lifecycle_note ?? row.lifecycle_note ?? "-"}</span>
+          </div>
         ),
       },
       {
@@ -851,112 +863,15 @@ export function CatalogPage() {
             <Button
               variant="secondary"
               className="button--compact"
-              onClick={async () => {
-                if (!isOnline) {
-                  setError("Connect to the internet to save catalog changes.");
-                  return;
-                }
-                const draft = drafts[row.product_id] || row;
-                try {
-                  setError("");
-                  setStatus("");
-                  setRowActionKey(`save:${row.product_id}`);
-                  actionFeedback.begin(`Saving catalog row ${draft.product_code}...`);
-                  await updateCloudCatalogRow(row.product_id, {
-                    product_code: draft.product_code,
-                    brand: draft.brand,
-                    description: draft.description || null,
-                    oem_no: draft.oem_no || null,
-                    vehicle: draft.vehicle || null,
-                    hs_code: draft.hs_code || null,
-                    origin: draft.origin || null,
-                    weight_kg: parseWeightInput(draft.weight_kg),
-                    lifecycle_status: draft.lifecycle_status || "active",
-                    lifecycle_note: draft.lifecycle_note || null,
-                  });
-                  await reloadCatalog(submittedSearch, submittedCatalogBrand);
-                  setStatus(`Catalog row ${draft.product_code} saved.`);
-                  actionFeedback.succeed(`Catalog row ${draft.product_code} saved.`);
-                } catch (caught) {
-                  const message = caught instanceof Error ? caught.message : "Catalog update failed";
-                  setError(message);
-                  actionFeedback.fail(message);
-                } finally {
-                  setRowActionKey("");
-                }
-              }}
-              disabled={!isOnline}
-              busy={rowActionKey === `save:${row.product_id}`}
-              busyLabel="Saving..."
+              onClick={() => setSelectedCatalogProductId((current) => (current === row.product_id ? "" : row.product_id))}
             >
-              Save
-            </Button>
-            <Button
-              variant="secondary"
-              className="button--compact danger-button"
-              onClick={async () => {
-                if (!isOnline) {
-                  setError("Connect to the internet to delete catalog rows.");
-                  return;
-                }
-                if (!confirm(`Delete ${row.product_code} from catalog?`)) return;
-                try {
-                  setError("");
-                  setStatus("");
-                  setRowActionKey(`delete:${row.product_id}`);
-                  actionFeedback.begin(`Deleting catalog row ${row.product_code}...`);
-                  await deleteCloudCatalogRow(row.product_id);
-                  await reloadCatalog(submittedSearch, submittedCatalogBrand);
-                  setStatus(`Catalog row ${row.product_code} deleted.`);
-                  actionFeedback.succeed(`Catalog row ${row.product_code} deleted.`);
-                } catch (caught) {
-                  const message = caught instanceof Error ? caught.message : "Catalog delete failed";
-                  setError(message);
-                  actionFeedback.fail(message);
-                } finally {
-                  setRowActionKey("");
-                }
-              }}
-              disabled={!isOnline}
-              busy={rowActionKey === `delete:${row.product_id}`}
-              busyLabel="Deleting..."
-            >
-              Delete
-            </Button>
-            <Button
-              variant="secondary"
-              className="button--compact"
-              onClick={() => {
-                if (!isOnline) {
-                  setError("Connect to the internet to create or edit code references.");
-                  return;
-                }
-                const coverageKey = `${row.brand.trim().toLowerCase()}::${normalizePartCode(row.product_code)}`;
-                const hasReference = (referenceCoverage[coverageKey] || 0) > 0;
-                const draft = drafts[row.product_id] || row;
-                setReferenceDraft({
-                  brand: draft.brand || row.brand || "",
-                  old_code: "",
-                  new_code: draft.product_code || row.product_code || "",
-                  original_number: draft.oem_no || row.oem_no || "",
-                  reason: hasReference ? "Update existing replacement mapping" : "Supplier changed / replacement code",
-                });
-                setError("");
-                setStatus("");
-                setShowReferenceDialog(true);
-              }}
-              disabled={!isOnline}
-            >
-              {(() => {
-                const coverageKey = `${row.brand.trim().toLowerCase()}::${normalizePartCode(row.product_code)}`;
-                return (referenceCoverage[coverageKey] || 0) > 0 ? "Edit Ref" : "Add Ref";
-              })()}
+              {selectedCatalogProductId === row.product_id ? "Close" : "Inspect"}
             </Button>
           </div>
         ),
       },
     ],
-    [drafts, editableBrandOptions, referenceCoverage, rowActionKey, submittedSearch, submittedCatalogBrand],
+    [drafts, referenceCoverage, selectedCatalogProductId],
   );
 
   async function reloadCatalog(nextSearch = submittedSearch, nextBrand = submittedCatalogBrand) {
@@ -1195,14 +1110,14 @@ export function CatalogPage() {
 
   return (
     <div className="page-stack">
-      <section className="section-card search-focus-card search-focus-card--admin">
+      <section className="section-card search-focus-card search-focus-card--admin catalog-workbench">
         <div className="section-card__header section-card__header--row">
           <div>
             <span className="search-focus-card__eyebrow">Admin Search</span>
             <h2 className="search-focus-card__title">Catalog Search</h2>
             <p>Connected to live catalog data.</p>
           </div>
-          <div className="toolbar">
+          <div className="toolbar toolbar--wrap catalog-command-bar">
             <Select
               value={catalogBrand}
               options={[{ value: "", label: "All Brands" }, ...editableBrandOptions]}
@@ -1244,8 +1159,8 @@ export function CatalogPage() {
             ) : null}
           </div>
         </div>
-        <div className="section-card__body">
-          <div className="meta-row">
+        <div className="section-card__body section-card__body--catalog">
+          <div className="meta-row catalog-meta-strip">
             <span>{catalogCountLabel}</span>
             {originalNumberBrandMatches.length ? (
               <span>
@@ -1256,7 +1171,7 @@ export function CatalogPage() {
             {error ? <span className="error-text">{error}</span> : null}
           </div>
           {!isOnline ? <div className="warning-text">Offline mode active. Search works only on cached catalog data. Save, import, export, delete, and re-synch require internet.</div> : null}
-          <div className="workbench-main-layout">
+          <div className="workbench-main-layout catalog-workbench-layout">
             <div className="workbench-main-layout__table">
               <DataTable
                 wrapClassName="table-wrap--catalog"
@@ -1274,7 +1189,7 @@ export function CatalogPage() {
 
       {selectedCatalogRow && selectedCatalogDraft ? (
         <div className="catalog-selected-popup" ref={selectedCatalogPopupRef}>
-          <div className="workbench-detail-panel workbench-detail-panel--catalog">
+        <div className="workbench-detail-panel workbench-detail-panel--catalog">
             <div className="toolbar toolbar--wrap">
               <span className="workbench-detail-panel__eyebrow">Selected Item</span>
               <Button variant="secondary" className="button--compact" onClick={() => setSelectedCatalogProductId("")}>
@@ -1308,6 +1223,60 @@ export function CatalogPage() {
                 {selectedCatalogDraft.lifecycle_status || "active"}
               </span>
             </div>
+            <div className="catalog-detail-editor">
+              <Input
+                label="Code"
+                value={selectedCatalogDraft.product_code || ""}
+                onChange={(value) => patchCatalogDraft(selectedCatalogRow, { product_code: value })}
+              />
+              <Select
+                label="Brand"
+                value={selectedCatalogDraft.brand || selectedCatalogRow.brand || ""}
+                options={editableBrandOptions}
+                onChange={(value) => patchCatalogDraft(selectedCatalogRow, { brand: value })}
+              />
+              <Select
+                label="Lifecycle"
+                value={selectedCatalogDraft.lifecycle_status || "active"}
+                options={lifecycleOptions.map((option) => ({ value: option.value, label: option.label }))}
+                onChange={(value) => patchCatalogDraft(selectedCatalogRow, { lifecycle_status: normalizeCatalogLifecycleStatus(value) })}
+              />
+              <Input
+                label="Weight"
+                value={String(selectedCatalogDraft.weight_kg ?? "")}
+                onChange={(value) => patchCatalogDraft(selectedCatalogRow, { weight_kg: value })}
+              />
+              <Input
+                label="Description"
+                value={selectedCatalogDraft.description || ""}
+                onChange={(value) => patchCatalogDraft(selectedCatalogRow, { description: value })}
+              />
+              <Input
+                label="OEM"
+                value={selectedCatalogDraft.oem_no || ""}
+                onChange={(value) => patchCatalogDraft(selectedCatalogRow, { oem_no: value })}
+              />
+              <Input
+                label="Vehicle"
+                value={selectedCatalogDraft.vehicle || ""}
+                onChange={(value) => patchCatalogDraft(selectedCatalogRow, { vehicle: value })}
+              />
+              <Input
+                label="Lifecycle Note"
+                value={selectedCatalogDraft.lifecycle_note || ""}
+                onChange={(value) => patchCatalogDraft(selectedCatalogRow, { lifecycle_note: value })}
+              />
+              <Input
+                label="HS"
+                value={selectedCatalogDraft.hs_code || ""}
+                onChange={(value) => patchCatalogDraft(selectedCatalogRow, { hs_code: value })}
+              />
+              <Input
+                label="Origin"
+                value={selectedCatalogDraft.origin || ""}
+                onChange={(value) => patchCatalogDraft(selectedCatalogRow, { origin: value })}
+              />
+            </div>
             <div className="workbench-detail-list">
               <div><span>Description</span><strong>{selectedCatalogDraft.description || "-"}</strong></div>
               <div>
@@ -1338,6 +1307,31 @@ export function CatalogPage() {
               {selectedCatalogDraft.replacement_warning ? <div><span>Replacement</span><strong>{selectedCatalogDraft.replacement_warning}</strong></div> : null}
             </div>
             <div className="toolbar toolbar--wrap">
+              <Button
+                variant="secondary"
+                onClick={() => void saveCatalogRow(selectedCatalogRow)}
+                disabled={!isOnline}
+                busy={rowActionKey === `save:${selectedCatalogRow.product_id}`}
+                busyLabel="Saving..."
+              >
+                Save Changes
+              </Button>
+              <Button
+                variant="secondary"
+                className="danger-button"
+                onClick={() => void deleteCatalogRow(selectedCatalogRow)}
+                disabled={!isOnline}
+                busy={rowActionKey === `delete:${selectedCatalogRow.product_id}`}
+                busyLabel="Deleting..."
+              >
+                Delete Item
+              </Button>
+              <Button variant="secondary" onClick={() => openReferenceDialogForRow(selectedCatalogRow)} disabled={!isOnline}>
+                {(() => {
+                  const coverageKey = `${selectedCatalogRow.brand.trim().toLowerCase()}::${normalizePartCode(selectedCatalogRow.product_code)}`;
+                  return (referenceCoverage[coverageKey] || 0) > 0 ? "Edit Reference" : "Add Reference";
+                })()}
+              </Button>
               <Button variant="secondary" onClick={queueCatalogItemForSalesOrder}>
                 Add to Sales Order
               </Button>
