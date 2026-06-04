@@ -50,6 +50,8 @@ type QuotesPageProps = {
   salesOrdersNavTick?: number;
 };
 
+type CustomerPricingMode = "standard" | "prefer_c_when_available";
+
 type QuoteImportRow = {
   code: string;
   brand: string;
@@ -104,6 +106,10 @@ function toNumber(value: number | null | undefined) {
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function shouldUseCPriceForCustomer(customerType: "A" | "B" | "C" | "Other", pricingMode: CustomerPricingMode) {
+  return customerType === "C" || pricingMode === "prefer_c_when_available";
 }
 
 function compactWarningText(value: string | null | undefined) {
@@ -377,6 +383,7 @@ function getQuoteBuilderLineIssues(line: QuoteBuilderLine) {
 function mapDetailLineToBuilderLine(
   line: QuoteDetail["lines"][number],
   currencyType: "A" | "B" | "C" | "Other",
+  pricingMode: CustomerPricingMode,
   fallbackResolved?: {
     supplier_name?: string | null;
     buy_price?: number | null;
@@ -389,7 +396,7 @@ function mapDetailLineToBuilderLine(
   const buyPrice = line.buy_price ?? fallbackResolved?.buy_price ?? null;
   const baseSell = line.sell_price ?? fallbackResolved?.sell_price ?? null;
   const cSell = line.c_sell_price ?? null;
-  const sellPrice = currencyType === "C" ? cSell ?? baseSell : baseSell;
+  const sellPrice = shouldUseCPriceForCustomer(currencyType, pricingMode) ? cSell ?? baseSell : baseSell;
   const supplierName = line.supplier_name || fallbackResolved?.supplier_name || "";
   const option =
     supplierOptionsInput?.[0] ||
@@ -601,6 +608,8 @@ export function QuotesPage({
     const customerLabel = customerSelection === "__manual__" ? manualCustomerName : customerName;
     return customerLabel ? findCustomerByNameInList(customers, customerLabel) : null;
   }, [customers, customerSelection, customerName, manualCustomerName]);
+  const customerPricingMode: CustomerPricingMode = selectedCustomerProfile?.portal_c_price_mode || "standard";
+  const shouldUseCPricePricing = shouldUseCPriceForCustomer(customerType, customerPricingMode);
 
   const customerMarginOverride = selectedCustomerProfile?.price_list_margin_percent ?? null;
   const effectiveMarginA =
@@ -932,7 +941,13 @@ export function QuotesPage({
           setCurrency(String(quoteMeta.currency || "EUR"));
           setQuoteBuilderLines(
             enrichedLines.map((line, index) =>
-              mapDetailLineToBuilderLine(line, customerType, resolvedPatches[index] || undefined, resolvedPatches[index]?.supplierOptions),
+              mapDetailLineToBuilderLine(
+                line,
+                customerType,
+                customerPricingMode,
+                resolvedPatches[index] || undefined,
+                resolvedPatches[index]?.supplierOptions,
+              ),
             ),
           );
           setBuilderStatus(`${enrichedLines.length.toLocaleString("en-US")} lines loaded into Sales Order Workbench.`);
@@ -951,7 +966,7 @@ export function QuotesPage({
     return () => {
       cancelled = true;
     };
-  }, [selectedQuoteId, customerType, effectiveMarginA, effectiveMarginB]);
+  }, [selectedQuoteId, customerType, customerPricingMode, effectiveMarginA, effectiveMarginB]);
 
   const draftTotals = useMemo(() => {
     const purchase = roundMoney(quoteBuilderLines.reduce((sum, line) => sum + toNumber(line.buy_price) * line.qty, 0));
@@ -978,12 +993,17 @@ export function QuotesPage({
           null;
         const buyPrice = selected?.buy_price ?? line.buy_price;
         if (buyPrice == null) return line;
-        if (customerType === "C") {
+        if (shouldUseCPricePricing) {
+          const marginPercent = customerType === "B" ? effectiveMarginB : effectiveMarginA;
+          const fallbackSellPrice =
+            customerType === "C"
+              ? line.sell_price
+              : roundMoney(Number(buyPrice) * (1 + marginPercent / 100));
           return {
             ...line,
             supplier_name: line.supplier_name || selected?.supplier_name || "",
             buy_price: buyPrice,
-            sell_price: line.c_sell_price ?? line.sell_price,
+            sell_price: line.c_sell_price ?? fallbackSellPrice,
             price_date: line.price_date || selected?.price_date || "",
             notes: line.notes || selected?.notes || "",
           };
@@ -1000,13 +1020,13 @@ export function QuotesPage({
         };
       }),
     );
-  }, [customerType, effectiveMarginA, effectiveMarginB]);
+  }, [customerType, customerPricingMode, shouldUseCPricePricing, effectiveMarginA, effectiveMarginB]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
-      if (customerType !== "C" || !quoteBuilderLines.length) return;
+      if (!shouldUseCPricePricing || !quoteBuilderLines.length) return;
 
       const cPriceMap = await fetchCPriceMapForRows(
         quoteBuilderLines.map((line) => ({
@@ -1023,10 +1043,17 @@ export function QuotesPage({
             brand: line.brand,
             product_code: line.resolvedCode || line.requestedCode,
           });
+          const marginPercent = customerType === "B" ? effectiveMarginB : effectiveMarginA;
+          const fallbackSellPrice =
+            customerType === "C"
+              ? line.sell_price
+              : line.buy_price != null
+                ? roundMoney(Number(line.buy_price) * (1 + marginPercent / 100))
+                : line.sell_price;
           return {
             ...line,
             c_sell_price: cSellPrice,
-            sell_price: cSellPrice ?? line.sell_price,
+            sell_price: cSellPrice ?? fallbackSellPrice,
           };
         }),
       );
@@ -1038,6 +1065,10 @@ export function QuotesPage({
     };
   }, [
     customerType,
+    customerPricingMode,
+    effectiveMarginA,
+    effectiveMarginB,
+    shouldUseCPricePricing,
     quoteBuilderLines.length,
     quoteBuilderLines.map((line) => `${line.brand}|${line.resolvedCode || line.requestedCode}`).join("||"),
   ]);
@@ -1112,7 +1143,11 @@ export function QuotesPage({
     return "";
   }, [detail.lines, quoteBuilderLines]);
 
-  async function hydrateStoredBuilderLine(line: QuoteBuilderLine, orderCustomerType: "A" | "B" | "C" | "Other") {
+  async function hydrateStoredBuilderLine(
+    line: QuoteBuilderLine,
+    orderCustomerType: "A" | "B" | "C" | "Other",
+    orderPricingMode: CustomerPricingMode,
+  ) {
     const selectedFromOptions =
       line.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === line.selectedSupplierKey) || line.supplierOptions[0] || null;
 
@@ -1142,7 +1177,7 @@ export function QuotesPage({
           weight_kg: resolved.weight_kg ?? line.weight_kg,
           supplier_name: line.supplier_name || selectedFromOptions?.supplier_name || "",
           buy_price: buyPrice,
-          sell_price: orderCustomerType === "C" ? line.c_sell_price ?? sellBase : sellBase,
+          sell_price: shouldUseCPriceForCustomer(orderCustomerType, orderPricingMode) ? line.c_sell_price ?? sellBase : sellBase,
           price_date: line.price_date || selectedFromOptions?.price_date || "",
           notes: line.notes || selectedFromOptions?.notes || "",
           lifecycle_status: resolved.lifecycle_status ?? line.lifecycle_status ?? "active",
@@ -1156,7 +1191,7 @@ export function QuotesPage({
           ...line,
           supplier_name: line.supplier_name || selectedFromOptions?.supplier_name || "",
           buy_price: buyPrice,
-          sell_price: orderCustomerType === "C" ? line.c_sell_price ?? sellBase : sellBase,
+          sell_price: shouldUseCPriceForCustomer(orderCustomerType, orderPricingMode) ? line.c_sell_price ?? sellBase : sellBase,
           price_date: line.price_date || selectedFromOptions?.price_date || "",
           notes: line.notes || selectedFromOptions?.notes || "",
           lifecycle_status: line.lifecycle_status ?? "active",
@@ -1199,10 +1234,9 @@ export function QuotesPage({
         weight_kg: resolved.weight_kg ?? line.weight_kg,
         supplier_name: resolved.supplier_name || supplierOptions[0]?.supplier_name || line.supplier_name,
         buy_price: resolved.buy_price ?? supplierOptions[0]?.buy_price ?? line.buy_price,
-        sell_price:
-          orderCustomerType === "C"
-            ? cSellPrice ?? resolved.sell_price ?? supplierOptions[0]?.sell_price ?? line.sell_price
-            : resolved.sell_price ?? supplierOptions[0]?.sell_price ?? line.sell_price,
+        sell_price: shouldUseCPriceForCustomer(orderCustomerType, orderPricingMode)
+          ? cSellPrice ?? resolved.sell_price ?? supplierOptions[0]?.sell_price ?? line.sell_price
+          : resolved.sell_price ?? supplierOptions[0]?.sell_price ?? line.sell_price,
         c_sell_price: cSellPrice ?? line.c_sell_price,
         price_date: resolved.price_date || supplierOptions[0]?.price_date || line.price_date,
         notes: resolved.notes || supplierOptions[0]?.notes || line.notes,
@@ -1279,6 +1313,7 @@ export function QuotesPage({
       actionFeedback.begin(`Re-syncing ${quoteNo || "sales order"} from catalog...`);
       const syncedLines = await resyncSalesOrderLinesFromCatalog(quoteBuilderLines, {
         customerType,
+        customerPricingMode,
         marginA: effectiveMarginA,
         marginB: effectiveMarginB,
         onlyFillBlanks: resyncOnlyFillBlanks,
@@ -1555,7 +1590,7 @@ export function QuotesPage({
                       supplier_name: selected.supplier_name || "",
                       buy_price: selected.buy_price ?? null,
                       sell_price:
-                        customerType === "C"
+                        shouldUseCPricePricing
                           ? item.c_sell_price ?? item.sell_price
                           : selected.buy_price != null
                             ? roundMoney(Number(selected.buy_price) * (1 + (customerType === "B" ? effectiveMarginB : effectiveMarginA) / 100))
@@ -1683,7 +1718,7 @@ export function QuotesPage({
     });
 
     let cSellPrice: number | null = null;
-    if (customerType === "C") {
+    if (shouldUseCPricePricing) {
       const cPriceMap =
         options?.cPriceMap ||
         (await fetchCPriceMapForRows([
@@ -1709,7 +1744,7 @@ export function QuotesPage({
                 supplier_name: resolved.supplier_name || "",
                 buy_price: resolved.buy_price ?? null,
                 price_date: resolved.price_date || null,
-                sell_price: customerType === "C" ? cSellPrice ?? resolved.sell_price ?? null : resolved.sell_price ?? null,
+                sell_price: shouldUseCPricePricing ? cSellPrice ?? resolved.sell_price ?? null : resolved.sell_price ?? null,
                 notes: resolved.notes || null,
               },
             ]
@@ -1730,10 +1765,9 @@ export function QuotesPage({
       weight_kg: resolved.weight_kg ?? null,
       supplier_name: resolved.supplier_name || effectiveSupplierOptions[0]?.supplier_name || "",
       buy_price: resolved.buy_price ?? effectiveSupplierOptions[0]?.buy_price ?? null,
-      sell_price:
-        customerType === "C"
-          ? cSellPrice ?? resolved.sell_price ?? effectiveSupplierOptions[0]?.sell_price ?? null
-          : resolved.sell_price ?? effectiveSupplierOptions[0]?.sell_price ?? null,
+      sell_price: shouldUseCPricePricing
+        ? cSellPrice ?? resolved.sell_price ?? effectiveSupplierOptions[0]?.sell_price ?? null
+        : resolved.sell_price ?? effectiveSupplierOptions[0]?.sell_price ?? null,
       c_sell_price: cSellPrice,
       price_date: resolved.price_date || effectiveSupplierOptions[0]?.price_date || "",
       notes: resolved.notes || effectiveSupplierOptions[0]?.notes || "",

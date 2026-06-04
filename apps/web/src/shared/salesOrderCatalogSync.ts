@@ -9,6 +9,7 @@ import type { LocalBillLine, LocalInvoiceLine, LocalPurchaseOrderLine } from "..
 
 export type SalesOrderCatalogSyncOptions = {
   customerType: "A" | "B" | "C" | "Other";
+  customerPricingMode?: "standard" | "prefer_c_when_available";
   marginA: number;
   marginB: number;
   onlyFillBlanks?: boolean;
@@ -31,6 +32,13 @@ export type PurchaseOrderCatalogSyncOptions = {
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function shouldUseCPriceForSalesOrder(
+  customerType: "A" | "B" | "C" | "Other",
+  customerPricingMode: "standard" | "prefer_c_when_available" = "standard",
+) {
+  return customerType === "C" || customerPricingMode === "prefer_c_when_available";
 }
 
 function isBlankText(value: string | null | undefined) {
@@ -237,7 +245,7 @@ async function refreshLinePricesFromCatalog(
     });
 
     const cPriceMap =
-      options.customerType === "C"
+      shouldUseCPriceForSalesOrder(options.customerType, options.customerPricingMode)
         ? await fetchCPriceMapForRows([
             {
               brand: canonicalizeBrandName(resolved.brand || line.brand || ""),
@@ -252,13 +260,13 @@ async function refreshLinePricesFromCatalog(
       supplierOptions[0] ||
       null;
 
-    const nextSellPrice =
-      options.customerType === "C"
-        ? getCPriceForRow(cPriceMap || new Map<string, number>(), {
-            brand: resolved.brand || line.brand || "",
-            product_code: resolved.product_code || line.resolvedCode || line.requestedCode,
-          })
-        : selected?.sell_price ?? resolved.sell_price ?? line.sell_price;
+    const cSellPrice = shouldUseCPriceForSalesOrder(options.customerType, options.customerPricingMode)
+      ? getCPriceForRow(cPriceMap || new Map<string, number>(), {
+          brand: resolved.brand || line.brand || "",
+          product_code: resolved.product_code || line.resolvedCode || line.requestedCode,
+        })
+      : null;
+    const nextSellPrice = cSellPrice ?? selected?.sell_price ?? resolved.sell_price ?? line.sell_price;
 
     const refreshed = mergeCatalogMetadata(
       {
@@ -284,7 +292,7 @@ async function refreshLinePricesFromCatalog(
       supplier_name: selected?.supplier_name || resolved.supplier_name || line.supplier_name,
       buy_price: selected?.buy_price ?? resolved.buy_price ?? line.buy_price,
       sell_price: nextSellPrice,
-      c_sell_price: options.customerType === "C" ? nextSellPrice : line.c_sell_price,
+      c_sell_price: cSellPrice ?? line.c_sell_price,
       price_date: selected?.price_date || resolved.price_date || line.price_date,
       supplierOptions: supplierOptions.length ? supplierOptions : line.supplierOptions,
       selectedSupplierKey: selected ? `${selected.supplier_name}-${supplierOptions.indexOf(selected)}` : line.selectedSupplierKey,
