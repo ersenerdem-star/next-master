@@ -1,7 +1,14 @@
+import { execFileSync } from "node:child_process";
 import { syncBrandCatalog } from "../netlify/functions/_shared/catalog-sync-provider.mts";
 
-const supabaseUrl = String(process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
-const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+function resolveEnvValue(name) {
+  const direct = String(process.env[name] || "").trim();
+  if (direct) return direct;
+  return String(execFileSync("npx", ["netlify", "env:get", name], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }) || "").trim();
+}
+
+const supabaseUrl = resolveEnvValue("SUPABASE_URL").replace(/\/+$/, "");
+const serviceRoleKey = resolveEnvValue("SUPABASE_SERVICE_ROLE_KEY");
 const brandName = String(process.argv[2] || "").trim();
 const refreshExisting = process.argv.includes("--no-refresh") ? false : true;
 const concurrencyArg = process.argv.find((arg) => arg.startsWith("--concurrency="));
