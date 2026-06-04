@@ -36,6 +36,7 @@ const LOGO_PRESETS: LogoPreset[] = [
   { match: /nissens/i, label: "Nissens", wordmark: "NISSENS", assetSrc: "/brand-logos/nissens_logo.png", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#93c5fd" },
   { match: /master\s*power/i, label: "Master Power", wordmark: "MASTER POWER", assetSrc: "/brand-logos/masterpower_logo.png", bgFrom: "#fff7ed", bgTo: "#ffffff", fg: "#c2410c", stroke: "#fdba74" },
   { match: /meyle/i, label: "Meyle", wordmark: "MEYLE", assetSrc: "/brand-logos/meyle_logo.svg", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#111827", stroke: "#cbd5e1" },
+  { match: /mahle/i, label: "Mahle", wordmark: "MAHLE", assetSrc: "/brand-logos/mahle_logo.jpg", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#93c5fd" },
   { match: /luk/i, label: "LuK", wordmark: "LUK", assetSrc: "/brand-logos/luk_logo.png", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#0f172a", stroke: "#cbd5e1" },
   { match: /ina/i, label: "INA", wordmark: "INA", assetSrc: "/brand-logos/ina_logo.png", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#0f172a", stroke: "#cbd5e1" },
   { match: /fag/i, label: "FAG", wordmark: "FAG", assetSrc: "/brand-logos/fag_logo.jpg", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#0f172a", stroke: "#cbd5e1" },

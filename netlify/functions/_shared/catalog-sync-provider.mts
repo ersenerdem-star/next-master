@@ -8,6 +8,7 @@ import { syncBrandCatalogFromValeoService } from "./valeo-sync.mts";
 import { syncBrandCatalogFromBrembo } from "./brembo-sync.mts";
 import { syncBrandCatalogFromHengstConnect } from "./hengst-sync.mts";
 import { syncBrandCatalogFromMeyleOfficial } from "./meyle-sync.mts";
+import { syncBrandCatalogFromMahleTecAlliance } from "./mahle-sync.mts";
 import { syncBrandCatalogFromSkfAutomotive } from "./skf-automotive-sync.mts";
 import { canonicalizeInternalBrandName, normalizeBrandKey } from "./brand-standardization.mts";
 
@@ -22,6 +23,7 @@ export type CatalogSyncPreferredProvider =
   | "brembo_official"
   | "hengst_connect"
   | "meyle_official"
+  | "mahle_tecalliance"
   | "skf_automotive";
 
 export type CatalogSyncSourceType = "marketplace" | "official";
@@ -126,6 +128,13 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredProviderLabel: "MEYLE official parts catalog",
     preferredSourceType: "official",
     preferredSourceUrl: "https://www.meyle.com/en/parts-catalog",
+  },
+  mahle: {
+    aliases: ["mahle"],
+    preferredProviderKey: "mahle_tecalliance",
+    preferredProviderLabel: "Mahle TecAlliance official catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=GB&sessionArticleCountry=GB",
   },
   skf: {
     aliases: ["skf"],
@@ -279,6 +288,15 @@ export async function syncBrandCatalog(input: {
     fallbackUsed = false;
   } else if (plan.preferredProviderKey === "meyle_official") {
     result = await syncBrandCatalogFromMeyleOfficial({
+      ...input,
+      brandName: plan.brandName,
+    });
+    executionProviderKey = plan.preferredProviderKey;
+    executionProviderLabel = plan.preferredProviderLabel;
+    executionSourceType = plan.preferredSourceType;
+    fallbackUsed = false;
+  } else if (plan.preferredProviderKey === "mahle_tecalliance") {
+    result = await syncBrandCatalogFromMahleTecAlliance({
       ...input,
       brandName: plan.brandName,
     });
