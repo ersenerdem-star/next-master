@@ -68,6 +68,30 @@ function writeCatalogCache(cache: CatalogOfflineCache | null) {
   window.localStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify(cache));
 }
 
+function buildCatalogCacheSnapshot(params: {
+  brands: BrandOption[];
+  rows: CatalogRow[];
+  drafts: Record<string, CatalogRowDraft>;
+  search: string;
+  submittedSearch: string;
+  catalogBrand: string;
+  submittedCatalogBrand: string;
+  selectedCatalogProductId: string;
+}) {
+  const existing = readCatalogCache();
+  return {
+    brands: params.brands.length ? params.brands : existing?.brands || [],
+    rows: params.rows.length ? params.rows : existing?.rows || [],
+    drafts: Object.keys(params.drafts).length ? params.drafts : existing?.drafts || {},
+    search: params.search || existing?.search || "",
+    submittedSearch: params.submittedSearch || "",
+    catalogBrand: params.catalogBrand || "",
+    submittedCatalogBrand: params.submittedCatalogBrand || "",
+    selectedCatalogProductId: params.selectedCatalogProductId,
+    updatedAt: new Date().toISOString(),
+  } satisfies CatalogOfflineCache;
+}
+
 function filterCachedCatalogRows(rows: CatalogRow[], search: string, brand: string) {
   const trimmedSearch = search.trim();
   const normalizedSearch = normalizePartCode(trimmedSearch);
@@ -272,11 +296,9 @@ export function CatalogPage() {
                 pageSize: 50,
               });
         if (!cancelled) setRows(result);
-        if (!cancelled) setDrafts({});
       } catch (caught) {
         if (!cancelled) {
           setRows([]);
-          setDrafts({});
           setError(caught instanceof Error ? caught.message : "Catalog request failed");
         }
       } finally {
@@ -398,21 +420,53 @@ export function CatalogPage() {
   }, [selectedCatalogProductId]);
 
   useEffect(() => {
-    const existing = readCatalogCache();
     const handle = window.setTimeout(() => {
-      writeCatalogCache({
-        brands: brands.length ? brands : existing?.brands || [],
-        rows: rows.length ? rows : existing?.rows || [],
-        drafts: Object.keys(drafts).length ? drafts : existing?.drafts || {},
-        search: search || existing?.search || "",
-        submittedSearch: submittedSearch || "",
-        catalogBrand: catalogBrand || "",
-        submittedCatalogBrand: submittedCatalogBrand || "",
-        selectedCatalogProductId,
-        updatedAt: new Date().toISOString(),
-      });
+      writeCatalogCache(
+        buildCatalogCacheSnapshot({
+          brands,
+          rows,
+          drafts,
+          search,
+          submittedSearch,
+          catalogBrand,
+          submittedCatalogBrand,
+          selectedCatalogProductId,
+        }),
+      );
     }, CATALOG_CACHE_WRITE_DELAY_MS);
     return () => window.clearTimeout(handle);
+  }, [brands, rows, drafts, search, submittedSearch, catalogBrand, submittedCatalogBrand, selectedCatalogProductId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const flushCache = () => {
+      writeCatalogCache(
+        buildCatalogCacheSnapshot({
+          brands,
+          rows,
+          drafts,
+          search,
+          submittedSearch,
+          catalogBrand,
+          submittedCatalogBrand,
+          selectedCatalogProductId,
+        }),
+      );
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flushCache();
+      }
+    };
+
+    window.addEventListener("pagehide", flushCache);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", flushCache);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [brands, rows, drafts, search, submittedSearch, catalogBrand, submittedCatalogBrand, selectedCatalogProductId]);
 
   const total = rows[0]?.total_count ?? 0;

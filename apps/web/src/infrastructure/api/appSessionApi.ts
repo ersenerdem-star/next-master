@@ -21,7 +21,28 @@ type AppSessionSnapshot = {
   role: string;
 };
 
-let cachedSession: AppSessionSnapshot | null = null;
+const APP_SESSION_CACHE_KEY = "next-master-app-session-cache";
+
+function readPersistedSession() {
+  if (typeof window === "undefined") return null as AppSessionSnapshot | null;
+  try {
+    const raw = window.localStorage.getItem(APP_SESSION_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as AppSessionSnapshot) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedSession(snapshot: AppSessionSnapshot | null) {
+  if (typeof window === "undefined") return;
+  if (!snapshot) {
+    window.localStorage.removeItem(APP_SESSION_CACHE_KEY);
+    return;
+  }
+  window.localStorage.setItem(APP_SESSION_CACHE_KEY, JSON.stringify(snapshot));
+}
+
+let cachedSession: AppSessionSnapshot | null = readPersistedSession();
 
 async function getAccessToken() {
   const { data, error } = await supabaseClient.auth.getSession();
@@ -57,9 +78,15 @@ export async function fetchAppSession(forceRefresh = false): Promise<AppSessionS
   }
 
   cachedSession = next;
+  writePersistedSession(next);
   return next;
 }
 
 export function clearCachedAppSession() {
   cachedSession = null;
+  writePersistedSession(null);
+}
+
+export function getCachedAppSessionSnapshot() {
+  return cachedSession;
 }

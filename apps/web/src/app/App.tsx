@@ -1,5 +1,5 @@
 import { Component, Suspense, lazy, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
-import { clearCachedAppSession, fetchAppSession } from "../infrastructure/api/appSessionApi";
+import { clearCachedAppSession, fetchAppSession, getCachedAppSessionSnapshot } from "../infrastructure/api/appSessionApi";
 import { supabaseClient } from "../infrastructure/api/supabaseClient";
 import { touchCurrentUserPresence } from "../infrastructure/api/usersApi";
 import { ActionFeedbackProvider } from "../presentation/components/common/ActionFeedback";
@@ -185,11 +185,13 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
 export function App() {
   const isPortalRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/portal");
   const initialUiState = typeof window === "undefined" || isPortalRoute ? null : readPersistedAppUiState();
+  const initialAppSession = typeof window === "undefined" || isPortalRoute ? null : getCachedAppSessionSnapshot();
+  const initialAppRole = normalizeAppRole(initialAppSession?.role || "");
   const [sessionReady, setSessionReady] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
-  const [appRole, setAppRole] = useState<AppRole>("");
-  const [appRoleReady, setAppRoleReady] = useState(false);
-  const appRoleRef = useRef<AppRole>("");
+  const [appRole, setAppRole] = useState<AppRole>(initialAppRole);
+  const [appRoleReady, setAppRoleReady] = useState(Boolean(initialAppRole));
+  const appRoleRef = useRef<AppRole>(initialAppRole);
   const [appSessionReloadTick, setAppSessionReloadTick] = useState(0);
   const [activePage, setActivePage] = useState(initialUiState?.activePage || "Home");
   const [accessNotice, setAccessNotice] = useState("");
@@ -312,7 +314,9 @@ export function App() {
       setAppRole((current) => current || appRoleRef.current || "");
       setAppRoleReady(true);
     }, 10000);
-    setAppRoleReady(false);
+    if (!appRoleRef.current) {
+      setAppRoleReady(false);
+    }
 
     async function run() {
       try {
