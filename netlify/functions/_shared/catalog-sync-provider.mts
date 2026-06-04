@@ -15,9 +15,15 @@ import { canonicalizeInternalBrandName, normalizeBrandKey } from "./brand-standa
 export type CatalogSyncPreferredProvider =
   | "spareto"
   | "bosch_aftermarket"
+  | "ate_official"
   | "mann_official"
   | "donaldson_official"
   | "zf_aftermarket"
+  | "schaeffler_aftermarket"
+  | "knorr_bremse_aftermarket"
+  | "hepu_official"
+  | "nissens_official"
+  | "nrf_official"
   | "masterpower_official"
   | "valeo_service"
   | "brembo_official"
@@ -65,6 +71,16 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredSourceType: "official",
     preferredSourceUrl: "https://www.boschaftermarket.com/tr/tr/urunler/product-search.html",
   },
+  ate: {
+    aliases: ["ate"],
+    preferredProviderKey: "ate_official",
+    preferredProviderLabel: "ATE official online catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://www.ate-brakes.com/catalogues/online-catalogues/",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto exact-detail fallback",
+    executionSourceType: "marketplace",
+  },
   mann: {
     aliases: ["mann", "mann-filter"],
     preferredProviderKey: "mann_official",
@@ -78,6 +94,26 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredProviderLabel: "Donaldson official catalog",
     preferredSourceType: "official",
     preferredSourceUrl: "https://shop.donaldson.com/store/en-tr/product",
+  },
+  schaeffler: {
+    aliases: ["fag", "ina", "luk", "luk"],
+    preferredProviderKey: "schaeffler_aftermarket",
+    preferredProviderLabel: "Schaeffler Vehicle Lifetime Solutions official catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://vehiclelifetimesolutions.schaeffler.com/en",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto exact-detail fallback",
+    executionSourceType: "marketplace",
+  },
+  knorrbremse: {
+    aliases: ["knorr-bremse", "knorr bremse"],
+    preferredProviderKey: "knorr_bremse_aftermarket",
+    preferredProviderLabel: "Knorr-Bremse TruckServices official catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://www.knorr-bremsecvs.com/",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto exact-detail fallback",
+    executionSourceType: "marketplace",
   },
   zf: {
     aliases: ["zf", "lemforder", "lemförder", "sachs", "trw", "wabco", "boge"],
@@ -121,6 +157,16 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredSourceType: "official",
     preferredSourceUrl: "https://www.bremboparts.com/europe/en",
   },
+  hepu: {
+    aliases: ["hepu"],
+    preferredProviderKey: "hepu_official",
+    preferredProviderLabel: "HEPU official online catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://www.hepu.de/en/online-katalog.php",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto exact-detail fallback",
+    executionSourceType: "marketplace",
+  },
   hengst: {
     aliases: ["hengst"],
     preferredProviderKey: "hengst_connect",
@@ -148,6 +194,26 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredProviderLabel: "SKF Automotive official catalog",
     preferredSourceType: "official",
     preferredSourceUrl: "https://automotive.skf.com/eur/en/product-catalogue",
+  },
+  nissens: {
+    aliases: ["nissens"],
+    preferredProviderKey: "nissens_official",
+    preferredProviderLabel: "Nissens Customer Portal official catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://catalogue.nissens.com/FrontPage",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto exact-detail fallback",
+    executionSourceType: "marketplace",
+  },
+  nrf: {
+    aliases: ["nrf"],
+    preferredProviderKey: "nrf_official",
+    preferredProviderLabel: "NRF official product portal",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://www.nrf.eu/product/",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto exact-detail fallback",
+    executionSourceType: "marketplace",
   },
   payen: {
     aliases: ["payen"],
