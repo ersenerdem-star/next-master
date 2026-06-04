@@ -16,6 +16,9 @@ const pageSizeArg = process.argv.find((arg) => arg.startsWith("--page-size="));
 const timeoutArg = process.argv.find((arg) => arg.startsWith("--timeout-ms="));
 const lineIdsArg = process.argv.find((arg) => arg.startsWith("--line-ids="));
 const seedPrefixesArg = process.argv.find((arg) => arg.startsWith("--seed-prefixes="));
+const maxPagesArg = process.argv.find((arg) => arg.startsWith("--max-pages="));
+const candidateLimitArg = process.argv.find((arg) => arg.startsWith("--candidate-limit="));
+const sparetoFallbackLimitArg = process.argv.find((arg) => arg.startsWith("--spareto-fallback-limit="));
 
 if (!supabaseUrl || !serviceRoleKey) {
   throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
@@ -28,6 +31,9 @@ if (!brandName) {
 const concurrency = Number.parseInt(concurrencyArg?.split("=")[1] || "8", 10);
 const pageSize = Number.parseInt(pageSizeArg?.split("=")[1] || "48", 10);
 const requestTimeoutMs = Number.parseInt(timeoutArg?.split("=")[1] || "20000", 10);
+const maxPages = Number.parseInt(maxPagesArg?.split("=")[1] || "0", 10);
+const candidateLimit = Number.parseInt(candidateLimitArg?.split("=")[1] || "0", 10);
+const sparetoFallbackLimit = Number.parseInt(sparetoFallbackLimitArg?.split("=")[1] || "0", 10);
 const lineIds = String(lineIdsArg?.split("=")[1] || "")
   .split(",")
   .map((value) => Number.parseInt(value.trim(), 10))
@@ -45,8 +51,12 @@ const result = await syncBrandCatalog({
   concurrency: Number.isFinite(concurrency) ? concurrency : 8,
   pageSize: Number.isFinite(pageSize) ? pageSize : 48,
   requestTimeoutMs: Number.isFinite(requestTimeoutMs) ? requestTimeoutMs : 20000,
+  maxPages: Number.isFinite(maxPages) && maxPages > 0 ? maxPages : undefined,
+  candidateLimit: Number.isFinite(candidateLimit) && candidateLimit > 0 ? candidateLimit : undefined,
   lineIds,
   seedPrefixes,
+  sparetoFallbackLimit:
+    Number.isFinite(sparetoFallbackLimit) && sparetoFallbackLimit > 0 ? sparetoFallbackLimit : undefined,
 });
 
 console.log(JSON.stringify(result, null, 2));

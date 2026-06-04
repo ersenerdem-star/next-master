@@ -115,6 +115,66 @@ const BRAND_STANDARDS = [
     sparetoQuery: "MAHLE",
     sparetoSlug: "mahle",
   },
+  {
+    keys: ["PAYEN"],
+    canonical: "Payen",
+    sparetoQuery: "PAYEN",
+    sparetoSlug: "payen",
+  },
+  {
+    keys: ["JURID", "JURIDPARTS"],
+    canonical: "Jurid",
+    sparetoQuery: "JURID",
+    sparetoSlug: "jurid",
+  },
+  {
+    keys: ["GOETZE"],
+    canonical: "Goetze",
+    sparetoQuery: "GOETZE",
+    sparetoSlug: "goetze",
+  },
+  {
+    keys: ["GLYCO"],
+    canonical: "Glyco",
+    sparetoQuery: "GLYCO",
+    sparetoSlug: "glyco",
+  },
+  {
+    keys: ["NURAL", "NURALPARTS"],
+    canonical: "Nural",
+    sparetoQuery: "NURAL",
+    sparetoSlug: "nural",
+  },
+  {
+    keys: ["FERODO"],
+    canonical: "Ferodo",
+    sparetoQuery: "FERODO",
+    sparetoSlug: "ferodo",
+  },
+  {
+    keys: ["CHAMPION"],
+    canonical: "Champion",
+    sparetoQuery: "CHAMPION",
+    sparetoSlug: "champion",
+  },
+  {
+    keys: ["BERU"],
+    canonical: "Beru",
+    sparetoQuery: "BERU",
+    sparetoSlug: "beru",
+  },
+  {
+    keys: ["AE", "AEPARTS"],
+    canonical: "AE",
+    sparetoQuery: "AE",
+    sparetoSlug: "ae",
+  },
+  {
+    keys: ["FPDIESEL", "FP-DIESEL"],
+    canonical: "FP Diesel",
+    sparetoQuery: "FP DIESEL",
+    sparetoSlug: "fp-diesel",
+  },
 ];
 
 function buildFallbackSlug(value) {

@@ -26,6 +26,16 @@ export function canonicalizeInternalBrandName(input: string) {
   if (lower === "hengst") return "Hengst";
   if (lower === "meyle") return "Meyle";
   if (lower === "mahle") return "Mahle";
+  if (lower === "payen") return "Payen";
+  if (lower === "jurid" || lower === "juridparts") return "Jurid";
+  if (lower === "goetze") return "Goetze";
+  if (lower === "glyco") return "Glyco";
+  if (lower === "nural" || lower === "nuralparts") return "Nural";
+  if (lower === "ferodo") return "Ferodo";
+  if (lower === "champion") return "Champion";
+  if (lower === "beru") return "Beru";
+  if (lower === "ae" || lower === "aeparts") return "AE";
+  if (lower === "fpdiesel" || lower === "fp-diesel") return "FP Diesel";
   if (lower === "hepu") return "HEPU";
   if (lower === "zf") return "ZF";
   if (lower === "boge") return "Boge";

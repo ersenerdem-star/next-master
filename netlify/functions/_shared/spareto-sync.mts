@@ -49,6 +49,26 @@ export function resolveSparetoBrandQuery(input: string) {
       return "VALEO";
     case "HEPU":
       return "HEPU";
+    case "Payen":
+      return "PAYEN";
+    case "Jurid":
+      return "JURID";
+    case "Goetze":
+      return "GOETZE";
+    case "Glyco":
+      return "GLYCO";
+    case "Nural":
+      return "NURAL";
+    case "Ferodo":
+      return "FERODO";
+    case "Champion":
+      return "CHAMPION";
+    case "Beru":
+      return "BERU";
+    case "AE":
+      return "AE";
+    case "FP Diesel":
+      return "FP DIESEL";
     default:
       return value.toUpperCase();
   }
@@ -87,6 +107,26 @@ function resolveSparetoBrandSlug(input: string) {
       return "valeo";
     case "HEPU":
       return "hepu";
+    case "Payen":
+      return "payen";
+    case "Jurid":
+      return "jurid";
+    case "Goetze":
+      return "goetze";
+    case "Glyco":
+      return "glyco";
+    case "Nural":
+      return "nural";
+    case "Ferodo":
+      return "ferodo";
+    case "Champion":
+      return "champion";
+    case "Beru":
+      return "beru";
+    case "AE":
+      return "ae";
+    case "FP Diesel":
+      return "fp-diesel";
     default:
       return value
         .normalize("NFKD")
@@ -106,6 +146,8 @@ export async function syncBrandCatalogFromSpareto(input: {
   concurrency?: number;
   pageSize?: number;
   requestTimeoutMs?: number;
+  maxPages?: number;
+  candidateLimit?: number;
 }) {
   const brandName = canonicalizeInternalBrandName(input.brandName);
   const brandQuery = resolveSparetoBrandQuery(brandName);
@@ -114,6 +156,9 @@ export async function syncBrandCatalogFromSpareto(input: {
   const concurrency = Math.max(1, input.concurrency ?? 8);
   const pageSize = Math.max(12, input.pageSize ?? 48);
   const requestTimeoutMs = Math.max(5000, input.requestTimeoutMs ?? 20000);
+  const maxPages = Number.isFinite(input.maxPages) && Number(input.maxPages) > 0 ? Math.max(1, Number(input.maxPages)) : undefined;
+  const candidateLimit =
+    Number.isFinite(input.candidateLimit) && Number(input.candidateLimit) > 0 ? Math.max(1, Number(input.candidateLimit)) : undefined;
   const headers = {
     apikey: input.serviceRoleKey,
     Authorization: `Bearer ${input.serviceRoleKey}`,
@@ -125,20 +170,21 @@ export async function syncBrandCatalogFromSpareto(input: {
   const existingRows = await fetchExistingCatalogRows(input.supabaseUrl, headers, target.brandId);
   const existingByCode = new Map(existingRows.map((row) => [row.normalized_code, row]));
 
-  const listing = await fetchSparetoListing(brandQuery, pageSize, requestTimeoutMs);
+  const listing = await fetchSparetoListing(brandQuery, pageSize, requestTimeoutMs, maxPages);
   const candidates = listing.rows.filter((row) => {
     const existing = existingByCode.get(row.normalized_code);
     if (!existing) return true;
     if (refreshExisting) return true;
     return isIncomplete(existing);
   });
+  const limitedCandidates = candidateLimit ? candidates.slice(0, candidateLimit) : candidates;
 
   const resolvedRows: Array<Record<string, unknown>> = [];
   const errorRows: Array<{ product_code: string; normalized_code: string; source_url: string; error: string }> = [];
   const replacementRows: Array<Record<string, unknown>> = [];
   const replacementFetchQueue = new Map<string, { product_code: string; normalized_code: string; source_url: string; image_url: string }>();
 
-  await runPool(candidates, concurrency, async (candidate) => {
+  await runPool(limitedCandidates, concurrency, async (candidate) => {
     try {
       const detail = await fetchSparetoDetail(candidate, requestTimeoutMs, brandSlug);
       const existing = existingByCode.get(candidate.normalized_code) || null;
@@ -277,7 +323,8 @@ export async function syncBrandCatalogFromSpareto(input: {
       const existing = existingByCode.get(row.normalized_code);
       return existing ? isIncomplete(existing) : false;
     }).length,
-    candidateRows: candidates.length,
+    candidateRows: limitedCandidates.length,
+    candidateRowsBeforeLimit: candidates.length,
     resolvedRows: mergedRows.length,
     errorRows: errorRows.length,
     discontinuedRows,
@@ -322,8 +369,8 @@ export async function completeMissingCatalogFieldsFromSpareto(input: {
   const supportsImageColumn = await detectCatalogImageColumn(input.supabaseUrl, headers);
   const existingRows = await fetchExistingCatalogRows(input.supabaseUrl, headers, target.brandId);
   const incompleteRows = existingRows
-    .filter((row) => isIncomplete(row))
-    .sort((left, right) => scoreIncomplete(right) - scoreIncomplete(left))
+    .filter((row) => needsSparetoHelperPass(brandName, row))
+    .sort((left, right) => scoreHelperPriority(brandName, right) - scoreHelperPriority(brandName, left))
     .slice(0, rowLimit);
 
   const resolvedRows: Array<Record<string, unknown>> = [];
@@ -404,7 +451,7 @@ export async function completeMissingCatalogFieldsFromSpareto(input: {
     targetBrandName: target.name,
     organizationId: target.organizationId,
     supportsImageColumn,
-    incompleteRowsBefore: existingRows.filter((row) => isIncomplete(row)).length,
+    incompleteRowsBefore: existingRows.filter((row) => needsSparetoHelperPass(brandName, row)).length,
     candidateRows: incompleteRows.length,
     matchedRows,
     unmatchedRows,
@@ -512,15 +559,25 @@ async function fetchExistingCatalogRows(supabaseUrl: string, headers: Record<str
   return dedupeBy(results, (row) => row.normalized_code);
 }
 
-async function fetchSparetoListing(brandQuery: string, pageSize: number, requestTimeoutMs: number) {
+async function fetchSparetoListing(brandQuery: string, pageSize: number, requestTimeoutMs: number, maxPages?: number) {
   const rowsByCode = new Map();
   let page = 1;
   let lastPage = 1;
   let pagesProcessed = 0;
 
   while (true) {
-    const url = `https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=${encodeURIComponent(brandQuery)}&per_page=${pageSize}&page=${page}`;
-    const html = await fetchText(url, requestTimeoutMs);
+    const brandFilterUrl = `https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=${encodeURIComponent(brandQuery)}&per_page=${pageSize}&page=${page}`;
+    let html = "";
+    try {
+      html = await fetchText(brandFilterUrl, requestTimeoutMs);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/HTTP 500\b/i.test(message)) {
+        throw error;
+      }
+      const keywordSearchUrl = `https://spareto.com/products?keywords=${encodeURIComponent(brandQuery)}&per_page=${pageSize}&page=${page}`;
+      html = await fetchText(keywordSearchUrl, requestTimeoutMs);
+    }
     const cards = extractListingCards(html, brandQuery);
     if (pagesProcessed === 0) {
       lastPage = extractLastPage(html, page);
@@ -534,6 +591,7 @@ async function fetchSparetoListing(brandQuery: string, pageSize: number, request
 
     pagesProcessed += 1;
     if (page >= lastPage) break;
+    if (maxPages && pagesProcessed >= maxPages) break;
     page += 1;
   }
 
@@ -803,11 +861,33 @@ function scoreIncomplete(row: any) {
   return score;
 }
 
+function needsSparetoHelperPass(brandName: string, row: any) {
+  return isIncomplete(row) || needsEnglishDescriptionFallback(brandName, row);
+}
+
+function scoreHelperPriority(brandName: string, row: any) {
+  let score = scoreIncomplete(row);
+  if (needsEnglishDescriptionFallback(brandName, row)) score += 5;
+  return score;
+}
+
+function needsEnglishDescriptionFallback(brandName: string, row: any) {
+  if (normalizeBrand(brandName) !== "bosch") return false;
+  return isTurkishLikeDescription(row?.description);
+}
+
 function isPlaceholderDescription(description: unknown, referenceCode: unknown) {
   const normalizedDescription = normalizeCode(description);
   const normalizedReference = normalizeCode(referenceCode);
   if (!normalizedDescription || !normalizedReference) return false;
   return normalizedDescription === normalizedReference;
+}
+
+function isTurkishLikeDescription(value: unknown) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  if (/[çğıöşüÇĞİÖŞÜ]/.test(text)) return true;
+  return /\b(sensoru|fren|ön|arka|balatası|debriyaj|sürücü|sıcaklık|yakıt|hava|diskli|enjeksiyon|nozul|pompa|silecek|filtre|tamir|takımı|supap|basınç|kiti|meme|ısıtma)\b/i.test(text);
 }
 
 function preferCatalogValue(...values: unknown[]) {

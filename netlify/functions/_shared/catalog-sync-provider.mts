@@ -24,7 +24,8 @@ export type CatalogSyncPreferredProvider =
   | "hengst_connect"
   | "meyle_official"
   | "mahle_tecalliance"
-  | "skf_automotive";
+  | "skf_automotive"
+  | "federal_mogul_aftermarket";
 
 export type CatalogSyncSourceType = "marketplace" | "official";
 
@@ -143,6 +144,106 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredSourceType: "official",
     preferredSourceUrl: "https://automotive.skf.com/eur/en/product-catalogue",
   },
+  payen: {
+    aliases: ["payen"],
+    preferredProviderKey: "federal_mogul_aftermarket",
+    preferredProviderLabel: "Federal Mogul Aftermarket official brand page",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://aftermarket.federalmogulpowertrain.com.tr/payen/",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto catalog fallback",
+    executionSourceType: "marketplace",
+  },
+  jurid: {
+    aliases: ["jurid", "jurid parts"],
+    preferredProviderKey: "federal_mogul_aftermarket",
+    preferredProviderLabel: "Federal Mogul Aftermarket official brand page",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://aftermarket.federalmogulpowertrain.com.tr/jurid-parts/",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto catalog fallback",
+    executionSourceType: "marketplace",
+  },
+  goetze: {
+    aliases: ["goetze"],
+    preferredProviderKey: "federal_mogul_aftermarket",
+    preferredProviderLabel: "Federal Mogul Aftermarket official brand page",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://aftermarket.federalmogulpowertrain.com.tr/goetze/",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto catalog fallback",
+    executionSourceType: "marketplace",
+  },
+  glyco: {
+    aliases: ["glyco"],
+    preferredProviderKey: "federal_mogul_aftermarket",
+    preferredProviderLabel: "Federal Mogul Aftermarket official brand page",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://aftermarket.federalmogulpowertrain.com.tr/glyco/",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto catalog fallback",
+    executionSourceType: "marketplace",
+  },
+  nural: {
+    aliases: ["nural", "nural parts", "nüral"],
+    preferredProviderKey: "federal_mogul_aftermarket",
+    preferredProviderLabel: "Federal Mogul Aftermarket official brand page",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://aftermarket.federalmogulpowertrain.com.tr/nural/",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto catalog fallback",
+    executionSourceType: "marketplace",
+  },
+  ferodo: {
+    aliases: ["ferodo"],
+    preferredProviderKey: "federal_mogul_aftermarket",
+    preferredProviderLabel: "Federal Mogul Aftermarket official brand page",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://aftermarket.federalmogulpowertrain.com.tr/ferodo/",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto catalog fallback",
+    executionSourceType: "marketplace",
+  },
+  champion: {
+    aliases: ["champion"],
+    preferredProviderKey: "federal_mogul_aftermarket",
+    preferredProviderLabel: "Federal Mogul Aftermarket official brand page",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://aftermarket.federalmogulpowertrain.com.tr/champion/",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto catalog fallback",
+    executionSourceType: "marketplace",
+  },
+  beru: {
+    aliases: ["beru"],
+    preferredProviderKey: "federal_mogul_aftermarket",
+    preferredProviderLabel: "Federal Mogul Aftermarket official brand page",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://aftermarket.federalmogulpowertrain.com.tr/beru/",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto catalog fallback",
+    executionSourceType: "marketplace",
+  },
+  ae: {
+    aliases: ["ae", "ae parts"],
+    preferredProviderKey: "federal_mogul_aftermarket",
+    preferredProviderLabel: "Federal Mogul Aftermarket official brand page",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://aftermarket.federalmogulpowertrain.com.tr/ae-parts-2/",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto catalog fallback",
+    executionSourceType: "marketplace",
+  },
+  fpdiesel: {
+    aliases: ["fp diesel", "fp-diesel", "fpdiesel"],
+    preferredProviderKey: "federal_mogul_aftermarket",
+    preferredProviderLabel: "Federal Mogul Aftermarket official brand page",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://aftermarket.federalmogulpowertrain.com.tr/fp-diesel/",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto catalog fallback",
+    executionSourceType: "marketplace",
+  },
 };
 
 export function resolveCatalogSyncPlan(inputBrandName: string): CatalogSyncPlan {
@@ -194,6 +295,8 @@ export async function syncBrandCatalog(input: {
   concurrency?: number;
   pageSize?: number;
   requestTimeoutMs?: number;
+  maxPages?: number;
+  candidateLimit?: number;
   seedPrefixes?: string[];
   lineIds?: number[];
   sparetoFallbackLimit?: number;
