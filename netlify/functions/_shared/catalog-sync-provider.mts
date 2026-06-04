@@ -27,6 +27,8 @@ export type CatalogSyncPreferredProvider =
   | "skf_automotive"
   | "federal_mogul_aftermarket";
 
+export type CatalogSyncCompletionProvider = "spareto";
+
 export type CatalogSyncSourceType = "marketplace" | "official";
 
 export type CatalogSyncPlan = {
@@ -39,6 +41,8 @@ export type CatalogSyncPlan = {
   executionProviderLabel: string;
   executionSourceType: CatalogSyncSourceType;
   fallbackUsed: boolean;
+  completionProviders: CatalogSyncCompletionProvider[];
+  mandatorySourceCompletion: boolean;
 };
 
 type BrandSourceConfig = {
@@ -50,6 +54,7 @@ type BrandSourceConfig = {
   executionProviderKey?: CatalogSyncPreferredProvider;
   executionProviderLabel?: string;
   executionSourceType?: CatalogSyncSourceType;
+  completionProviders?: CatalogSyncCompletionProvider[];
 };
 
 const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
@@ -269,8 +274,13 @@ export function resolveCatalogSyncPlan(inputBrandName: string): CatalogSyncPlan 
       executionProviderLabel: "Spareto catalog",
       executionSourceType: "marketplace",
       fallbackUsed: false,
+      completionProviders: [],
+      mandatorySourceCompletion: false,
     };
   }
+
+  const completionProviders =
+    matchedConfig.completionProviders || (matchedConfig.preferredProviderKey !== "spareto" ? (["spareto"] as CatalogSyncCompletionProvider[]) : []);
 
   return {
     brandName,
@@ -284,6 +294,8 @@ export function resolveCatalogSyncPlan(inputBrandName: string): CatalogSyncPlan 
     fallbackUsed:
       (matchedConfig.executionProviderKey || matchedConfig.preferredProviderKey) !== matchedConfig.preferredProviderKey ||
       (matchedConfig.executionSourceType || matchedConfig.preferredSourceType) !== matchedConfig.preferredSourceType,
+    completionProviders,
+    mandatorySourceCompletion: completionProviders.length > 0,
   };
 }
 
@@ -414,9 +426,9 @@ export async function syncBrandCatalog(input: {
     });
   }
 
-  const shouldApplySparetoFallback = plan.preferredProviderKey !== "spareto";
-  const sparetoFallback =
-    shouldApplySparetoFallback && result?.targetBrandId && result?.organizationId
+  const shouldApplySparetoCompletion = plan.completionProviders.includes("spareto");
+  const sparetoCompletion =
+    shouldApplySparetoCompletion && result?.targetBrandId && result?.organizationId
       ? await completeMissingCatalogFieldsFromSpareto({
           supabaseUrl: input.supabaseUrl,
           serviceRoleKey: input.serviceRoleKey,
@@ -429,8 +441,25 @@ export async function syncBrandCatalog(input: {
         })
       : null;
 
+  const sourceCompletion = [
+    sparetoCompletion
+      ? {
+          providerKey: "spareto",
+          providerLabel: "Spareto exact-detail completion",
+          sourceType: "marketplace",
+          mandatory: plan.mandatorySourceCompletion,
+          candidateRows: sparetoCompletion.candidateRows,
+          matchedRows: sparetoCompletion.matchedRows,
+          unmatchedRows: sparetoCompletion.unmatchedRows,
+          updatedRows: sparetoCompletion.updatedRows,
+          errorRows: sparetoCompletion.errorRows,
+        }
+      : null,
+  ].filter(Boolean);
+
   return {
     ...result,
+    syncMode: plan.mandatorySourceCompletion ? "source_pipeline" : "single_source",
     syncBrandName: plan.brandName,
     preferredProviderKey: plan.preferredProviderKey,
     preferredProviderLabel: plan.preferredProviderLabel,
@@ -440,6 +469,9 @@ export async function syncBrandCatalog(input: {
     executionProviderLabel,
     executionSourceType,
     fallbackUsed,
-    sparetoHelperFallback: sparetoFallback,
+    completionProviders: plan.completionProviders,
+    mandatorySourceCompletion: plan.mandatorySourceCompletion,
+    sourceCompletion,
+    sparetoHelperFallback: sparetoCompletion,
   };
 }
