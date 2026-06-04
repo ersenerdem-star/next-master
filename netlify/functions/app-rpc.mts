@@ -568,6 +568,7 @@ async function fetchRestCountOnlySoft(
   serviceRoleKey: string,
   table: string,
   params: Record<string, string>,
+  countMode: "planned" | "exact" = "planned",
   timeoutMs = BRAND_COUNT_SOFT_TIMEOUT_MS,
 ) {
   const controller = new AbortController();
@@ -576,7 +577,7 @@ async function fetchRestCountOnlySoft(
     const response = await fetch(buildRestUrl(supabaseUrl, table, { ...params, select: "id", limit: "1", offset: "0" }), {
       headers: {
         ...serviceRoleHeaders(serviceRoleKey),
-        Prefer: "count=planned",
+        Prefer: `count=${countMode}`,
       },
       signal: controller.signal,
     });
@@ -686,9 +687,23 @@ async function fetchCloudCatalogPageViaRest(
         await fetchRestRows<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", fallbackParams),
       );
     }
-    const [brandTotalCount] = await Promise.all([
+    let [brandTotalCount] = await Promise.all([
       fetchCachedBrandCount(supabaseUrl, serviceRoleKey, caller.organizationId, selectedBrandId),
     ]);
+    const observedVisibleCount = offset + brandRows.length;
+    if ((brandTotalCount ?? 0) < observedVisibleCount) {
+      const exactCount = await fetchRestCountOnlySoft(
+        supabaseUrl,
+        serviceRoleKey,
+        "catalog_products",
+        {
+          organization_id: `eq.${caller.organizationId}`,
+          brand_id: `eq.${selectedBrandId}`,
+        },
+        "exact",
+      );
+      brandTotalCount = exactCount != null && exactCount >= observedVisibleCount ? exactCount : null;
+    }
     const fallbackTotalCount =
       brandTotalCount != null
         ? brandTotalCount
