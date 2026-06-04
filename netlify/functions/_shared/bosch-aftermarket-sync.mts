@@ -522,11 +522,7 @@ function mergeCatalogRow(target: any, existing: any, searchItem: any, detail: an
     brand_id: target.brand_id,
     product_code: formatBoschDisplayCode(existing?.product_code || searchItem?.product_code || detail?.productNumber || existing?.normalized_code),
     normalized_code: normalizeCode(existing?.normalized_code || detail?.productNumber || searchItem?.productNumber || existing?.product_code),
-    description:
-      normalizeCatalogDescription(cleanText(detail?.name || "")) ||
-      normalizeCatalogDescription(cleanText(searchItem?.description || "")) ||
-      existing?.description ||
-      "",
+    description: extractBoschDescription(detail, searchItem, existing),
     oem_no: extractBoschOemNumbers(detail) || existing?.oem_no || "",
     vehicle: vehicles.join(", ") || existing?.vehicle || "",
     hs_code: existing?.hs_code || "",
@@ -546,7 +542,41 @@ function extractBoschOemNumbers(detail: any) {
       return cleanText(values[1] || "");
     })
     .filter(looksLikeUsefulPartNumber);
-  return dedupeStrings(codes).join(", ");
+  return joinLimitedValues(dedupeStrings(codes), 1200);
+}
+
+function extractBoschDescription(detail: any, searchItem: any, existing: any) {
+  const referenceCode =
+    detail?.productNumber ||
+    searchItem?.productNumber ||
+    searchItem?.product_code ||
+    existing?.normalized_code ||
+    existing?.product_code ||
+    "";
+  const detailName = normalizeCatalogDescription(cleanText(detail?.name || ""));
+  const specName = normalizeCatalogDescription(extractBoschSpecificationValue(detail, ["Tanımlama", "Identification"]));
+  const searchDescription = normalizeCatalogDescription(cleanText(searchItem?.description || ""));
+  const existingDescription = normalizeCatalogDescription(cleanText(existing?.description || ""));
+
+  for (const candidate of [detailName, specName, searchDescription, existingDescription]) {
+    if (candidate && !isBoschPlaceholderDescription(candidate, referenceCode)) {
+      return candidate;
+    }
+  }
+
+  return detailName || specName || searchDescription || existingDescription || "";
+}
+
+function extractBoschSpecificationValue(detail: any, labels: string[]) {
+  const targetLabels = new Set(labels.map((label) => normalizeTextValue(label).toLowerCase()));
+  const items = Array.isArray(detail?.specificationTabData) ? detail.specificationTabData : [];
+  for (const item of items) {
+    const values = Array.isArray(item?.columnData) ? item.columnData : [];
+    const label = normalizeTextValue(values[0]).toLowerCase();
+    if (!targetLabels.has(label)) continue;
+    return cleanText(values[1] || "");
+  }
+  return "";
 }
 
 function extractBoschImageUrl(detail: any) {
@@ -702,6 +732,7 @@ function shouldProcessRow(row: any) {
   if (!normalizeTextValue(row.vehicle)) return true;
   if (!normalizeTextValue(row.image_url)) return true;
   if (!normalizeTextValue(row.description)) return true;
+  if (isBoschPlaceholderDescription(row.description, row.normalized_code || row.product_code)) return true;
   if (normalizeLifecycleStatus(row.lifecycle_status) === "discontinued" && !normalizeTextValue(row.lifecycle_note)) return true;
   return false;
 }
@@ -750,6 +781,25 @@ function normalizeCode(value: unknown) {
 
 function normalizeTextValue(value: unknown) {
   return String(value || "").trim();
+}
+
+function joinLimitedValues(values: string[], maxLength: number) {
+  const result: string[] = [];
+  let totalLength = 0;
+  for (const value of values) {
+    if (!value) continue;
+    const nextLength = totalLength === 0 ? value.length : totalLength + 2 + value.length;
+    if (nextLength > maxLength) break;
+    result.push(value);
+    totalLength = nextLength;
+  }
+  return result.join(", ");
+}
+
+function isBoschPlaceholderDescription(description: unknown, productCode: unknown) {
+  const normalizedDescription = normalizeCode(description);
+  const normalizedCode = normalizeCode(productCode);
+  return Boolean(normalizedDescription && normalizedCode && normalizedDescription === normalizedCode);
 }
 
 function normalizeLifecycleStatus(value: unknown) {
