@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { canonicalizeBrandName, resolveSparetoBrandQuery } from "./_shared/brand-standardization.mjs";
-import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "./_shared/catalog-standardization.mjs";
+import { normalizeCatalogDescription, normalizeCatalogDisplayCode, normalizeCatalogOrigin } from "./_shared/catalog-standardization.mjs";
 
 const repoRoot = "/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp";
 const outputDir = path.join(repoRoot, "docs", "catalog-standardization");
@@ -66,11 +66,15 @@ for (let index = 2; index < process.argv.length; index += 1) {
   }
 }
 
-const inputBrands = String(args.get("brands") || "")
+const requestedBrandsArg = String(args.get("brands") || "");
+const rawBrandTokens = requestedBrandsArg
   .split(",")
+  .map((value) => String(value || "").trim())
+  .filter(Boolean);
+const useAllBrands = rawBrandTokens.some((value) => value.toLowerCase() === "all");
+const inputBrands = rawBrandTokens
   .map((value) => canonicalizeBrandName(value))
   .filter(Boolean);
-const brands = inputBrands.length ? inputBrands : defaultBrands;
 const skipListing = args.has("skip-listing");
 const pageSize = Math.max(12, Number.parseInt(args.get("page-size") || "48", 10) || 48);
 const requestTimeoutMs = Math.max(5000, Number.parseInt(args.get("request-timeout-ms") || "20000", 10) || 20000);
@@ -84,6 +88,12 @@ async function main() {
   const csvPath = path.join(outputDir, `catalog-standardization-changes-${timestamp}.csv`);
 
   const brandRows = await fetchAll("/rest/v1/brands?select=id,name,organization_id&order=name.asc");
+  const brands =
+    useAllBrands
+      ? brandRows.map((row) => canonicalizeBrandName(String(row.name || ""))).filter(Boolean)
+      : inputBrands.length
+        ? inputBrands
+        : defaultBrands;
   const changeRows = [];
   const brandSummaries = [];
 
@@ -109,7 +119,8 @@ async function main() {
     for (const row of existingRows) {
       const nextProductCode = listingMap.get(row.normalized_code) || normalizeCatalogDisplayCode(row.product_code, targetBrand);
       const nextDescription = row.description ? normalizeCatalogDescription(row.description) : "";
-      if (nextProductCode === row.product_code && nextDescription === row.description) continue;
+      const nextOrigin = row.origin ? normalizeCatalogOrigin(row.origin) : "";
+      if (nextProductCode === row.product_code && nextDescription === row.description && nextOrigin === row.origin) continue;
 
       changeRows.push({
         organization_id: row.organization_id,
@@ -117,12 +128,15 @@ async function main() {
         normalized_code: row.normalized_code,
         product_code: nextProductCode,
         description: nextDescription || null,
+        origin: nextOrigin || null,
         updated_at: new Date().toISOString(),
         __brand: targetBrand,
         __from_code: row.product_code,
         __to_code: nextProductCode,
         __from_description: row.description,
         __to_description: nextDescription,
+        __from_origin: row.origin,
+        __to_origin: nextOrigin,
       });
       changedRows += 1;
     }
@@ -142,10 +156,11 @@ async function main() {
     const payload = changeRows.map((row) => ({
       organization_id: row.organization_id,
       brand_id: row.brand_id,
-      product_code: row.product_code,
-      description: row.description,
-      updated_at: row.updated_at,
-    }));
+        product_code: row.product_code,
+        description: row.description,
+        origin: row.origin,
+        updated_at: row.updated_at,
+      }));
 
     for (let index = 0; index < payload.length; index += 300) {
       const batch = payload.slice(index, index + 300);
@@ -166,8 +181,16 @@ async function main() {
 
   writeCsv(
     csvPath,
-    ["Brand", "From_Code", "To_Code", "From_Description", "To_Description"],
-    changeRows.map((row) => [row.__brand, row.__from_code, row.__to_code, row.__from_description, row.__to_description]),
+    ["Brand", "From_Code", "To_Code", "From_Description", "To_Description", "From_Origin", "To_Origin"],
+    changeRows.map((row) => [
+      row.__brand,
+      row.__from_code,
+      row.__to_code,
+      row.__from_description,
+      row.__to_description,
+      row.__from_origin,
+      row.__to_origin,
+    ]),
   );
 
   const summary = {
@@ -185,7 +208,7 @@ async function main() {
 
 async function fetchCatalogRows(brandId, brandName) {
   const rows = await fetchAll(
-    `/rest/v1/catalog_products?select=organization_id,brand_id,product_code,normalized_code,description&brand_id=eq.${encodeURIComponent(brandId)}&order=product_code.asc`,
+    `/rest/v1/catalog_products?select=organization_id,brand_id,product_code,normalized_code,description,origin&brand_id=eq.${encodeURIComponent(brandId)}&order=product_code.asc`,
   );
   return rows.map((row) => ({
     organization_id: String(row.organization_id || "").trim(),
@@ -193,6 +216,7 @@ async function fetchCatalogRows(brandId, brandName) {
     product_code: String(row.product_code || "").trim(),
     normalized_code: normalizeCode(row.normalized_code || row.product_code || ""),
     description: String(row.description || "").replace(/\s+/g, " ").trim(),
+    origin: String(row.origin || "").replace(/\s+/g, " ").trim(),
   }));
 }
 
