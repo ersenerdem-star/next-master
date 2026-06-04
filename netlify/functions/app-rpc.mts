@@ -69,8 +69,11 @@ type BrandMapCacheEntry = {
 };
 
 const BRAND_MAP_CACHE_TTL_MS = 2 * 60 * 1000;
+const BRAND_COUNT_CACHE_TTL_MS = 5 * 60 * 1000;
+const BRAND_COUNT_SOFT_TIMEOUT_MS = 1500;
 const CODE_SEARCH_EXPANSION_THRESHOLD = 8;
 const brandMapCache = new Map<string, BrandMapCacheEntry>();
+const brandCountCache = new Map<string, { count: number; expiresAt: number }>();
 const DESCRIPTION_FAMILY_STOPWORDS = new Set([
   "and",
   "the",
@@ -477,6 +480,10 @@ function buildReplacementWarning(oldCode: string, newCode: string, reason?: stri
   return detail ? `${base} ${detail}` : base;
 }
 
+function brandCountCacheKey(organizationId: string, brandId: string) {
+  return `${organizationId}::${brandId}`;
+}
+
 async function fetchRestRowsWithCount<T>(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -532,6 +539,54 @@ async function fetchRestCountOnly(
     throw new Error(sanitizeUserFacingError(data?.msg || data?.message || data?.error || "Catalog count request failed"));
   }
   return parseContentRangeTotal(response.headers.get("content-range"), 0);
+}
+
+async function fetchRestCountOnlySoft(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  table: string,
+  params: Record<string, string>,
+  timeoutMs = BRAND_COUNT_SOFT_TIMEOUT_MS,
+) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(buildRestUrl(supabaseUrl, table, { ...params, select: "id", limit: "1", offset: "0" }), {
+      headers: {
+        ...serviceRoleHeaders(serviceRoleKey),
+        Prefer: "count=planned",
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    return parseContentRangeTotal(response.headers.get("content-range"), 0);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchCachedBrandCount(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  brandId: string,
+) {
+  const key = brandCountCacheKey(organizationId, brandId);
+  const cached = brandCountCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.count;
+  const count = await fetchRestCountOnlySoft(supabaseUrl, serviceRoleKey, "catalog_products", {
+    organization_id: `eq.${organizationId}`,
+    brand_id: `eq.${brandId}`,
+  });
+  if (count != null) {
+    brandCountCache.set(key, {
+      count,
+      expiresAt: Date.now() + BRAND_COUNT_CACHE_TTL_MS,
+    });
+  }
+  return count;
 }
 
 async function fetchBrandMaps(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
@@ -600,13 +655,16 @@ async function fetchCloudCatalogPageViaRest(
   if (!search && selectedBrandId) {
     const [brandRows, brandTotalCount] = await Promise.all([
       fetchRestRows<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", baseParams),
-      fetchRestCountOnly(supabaseUrl, serviceRoleKey, "catalog_products", {
-        organization_id: `eq.${caller.organizationId}`,
-        brand_id: `eq.${selectedBrandId}`,
-      }).catch(() => 0),
+      fetchCachedBrandCount(supabaseUrl, serviceRoleKey, caller.organizationId, selectedBrandId),
     ]);
+    const fallbackTotalCount =
+      brandTotalCount != null
+        ? brandTotalCount
+        : brandRows.length >= fetchLimit
+          ? -(offset + brandRows.length)
+          : brandRows.length;
     return brandRows.map((row) => ({
-      total_count: brandTotalCount || brandRows.length,
+      total_count: fallbackTotalCount,
       product_id: String(row.id || ""),
       product_code: String(row.product_code || ""),
       brand: brandMaps.byId.get(String(row.brand_id || "")) || "",
