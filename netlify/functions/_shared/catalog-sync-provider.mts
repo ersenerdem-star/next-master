@@ -7,6 +7,7 @@ import { syncBrandCatalogFromMasterPower } from "./masterpower-sync.mts";
 import { syncBrandCatalogFromValeoService } from "./valeo-sync.mts";
 import { syncBrandCatalogFromBrembo } from "./brembo-sync.mts";
 import { syncBrandCatalogFromHengstConnect } from "./hengst-sync.mts";
+import { syncBrandCatalogFromMeyleOfficial } from "./meyle-sync.mts";
 import { syncBrandCatalogFromSkfAutomotive } from "./skf-automotive-sync.mts";
 import { canonicalizeInternalBrandName, normalizeBrandKey } from "./brand-standardization.mts";
 
@@ -20,6 +21,7 @@ export type CatalogSyncPreferredProvider =
   | "valeo_service"
   | "brembo_official"
   | "hengst_connect"
+  | "meyle_official"
   | "skf_automotive";
 
 export type CatalogSyncSourceType = "marketplace" | "official";
@@ -117,6 +119,13 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredProviderLabel: "Hengst.Connect official catalog",
     preferredSourceType: "official",
     preferredSourceUrl: "https://www.hengstconnect.com/en/",
+  },
+  meyle: {
+    aliases: ["meyle"],
+    preferredProviderKey: "meyle_official",
+    preferredProviderLabel: "MEYLE official parts catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://www.meyle.com/en/parts-catalog",
   },
   skf: {
     aliases: ["skf"],
@@ -260,6 +269,15 @@ export async function syncBrandCatalog(input: {
     fallbackUsed = false;
   } else if (plan.preferredProviderKey === "hengst_connect") {
     result = await syncBrandCatalogFromHengstConnect({
+      ...input,
+      brandName: plan.brandName,
+    });
+    executionProviderKey = plan.preferredProviderKey;
+    executionProviderLabel = plan.preferredProviderLabel;
+    executionSourceType = plan.preferredSourceType;
+    fallbackUsed = false;
+  } else if (plan.preferredProviderKey === "meyle_official") {
+    result = await syncBrandCatalogFromMeyleOfficial({
       ...input,
       brandName: plan.brandName,
     });

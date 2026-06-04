@@ -103,6 +103,12 @@ const BRAND_STANDARDS = [
     sparetoQuery: "HENGST",
     sparetoSlug: "hengst",
   },
+  {
+    keys: ["MEYLE"],
+    canonical: "Meyle",
+    sparetoQuery: "MEYLE",
+    sparetoSlug: "meyle",
+  },
 ];
 
 function buildFallbackSlug(value) {
