@@ -1,0 +1,126 @@
+{
+  "organizationId": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+  "brandId": "089669ff-5855-4abd-9bb7-e13b8d3f940f",
+  "scannedRows": 56399,
+  "totalCandidateRows": 10539,
+  "candidateOffset": 0,
+  "candidateLimit": 0,
+  "candidateRows": 10539,
+  "updatedRows": 3242,
+  "errorRows": 7297,
+  "remainingPlaceholderRows": 7297,
+  "sampleRemainingCodes": [
+    "0 029 621 106",
+    "0 189 999 110",
+    "0 189 999 270",
+    "0 189 999 271",
+    "0 189 999 280",
+    "0 227 401 003",
+    "0 227 990 001",
+    "0 242 140 572",
+    "0 242 140 573",
+    "0 242 140 580",
+    "0 242 140 581",
+    "0 242 145 616",
+    "0 242 145 623",
+    "0 250 001 010",
+    "0 250 403 031",
+    "0 258 004 010",
+    "0 258 030 186",
+    "0 258 986 784",
+    "0 260 120 025",
+    "026122202K",
+    "026154400K",
+    "026154401G",
+    "026154701W",
+    "0 263 006 177",
+    "0 265 008 340"
+  ],
+  "processedBatches": [
+    {
+      "batch": 1,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 2,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 3,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 4,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 5,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 6,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 7,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 8,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 9,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 10,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 11,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 12,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 13,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 14,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 15,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 16,
+      "rows": 200,
+      "status": 200
+    },
+    {
+      "batch": 17,
+      "rows": 42,
+      "status": 200
+    }
+  ]
+}

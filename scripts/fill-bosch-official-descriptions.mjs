@@ -25,7 +25,7 @@ const concurrency = parseIntArg("--concurrency=", 6);
 const requestTimeoutMs = parseIntArg("--timeout-ms=", 20000);
 const batchSize = parseIntArg("--batch-size=", 100);
 const offset = parseIntArg("--offset=", 0);
-const limit = parseIntArg("--limit=", 500);
+const limit = parseIntArg("--limit=", 0);
 
 const supabaseUrl = resolveEnvValue("SUPABASE_URL").replace(/\/+$/, "");
 const serviceRoleKey = resolveEnvValue("SUPABASE_SERVICE_ROLE_KEY");
@@ -43,7 +43,7 @@ const headers = {
 const { brandId, organizationId } = await resolveBoschTarget();
 const existingRows = await fetchAllBoschRows(organizationId, brandId);
 const allCandidateRows = existingRows.filter((row) => isPlaceholderDescription(row.description, row.normalized_code || row.product_code));
-const candidateRows = allCandidateRows.slice(offset, offset + limit);
+const candidateRows = limit > 0 ? allCandidateRows.slice(offset, offset + limit) : allCandidateRows.slice(offset);
 const updates = [];
 const errors = [];
 let processedCount = 0;
