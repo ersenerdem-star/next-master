@@ -1,19 +1,23 @@
 #!/usr/bin/env node
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
 const repoRoot = "/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp";
-const inputCsvPath = path.join(
+const defaultInputCsvPath = path.join(
   repoRoot,
   "docs",
-  "juventa-catalog-fill",
-  "juventa-fill-unmatched-2026-05-18T12-42-40-090Z.csv",
+  "bosch-official-description-fill",
+  "bosch-official-description-fill-errors-2026-06-04T16-01-29-737Z.csv",
 );
 const outputDir = path.join(repoRoot, "docs", "spareto-bosch-fill");
-
-const supabaseUrl = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
-const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
+const defaultCacheCsvPath = path.join(
+  repoRoot,
+  "docs",
+  "spareto-brand-imports",
+  "spareto-bosch-import-2026-05-25T11-44-51-783Z.csv",
+);
 
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 1) {
@@ -40,6 +44,11 @@ const importMode = args.has("import");
 const sleepMs = Number.parseInt(args.get("sleep-ms") || "150", 10) || 150;
 const batchSize = Number.parseInt(args.get("batch-size") || "200", 10) || 200;
 const requestTimeoutMs = Number.parseInt(args.get("request-timeout-ms") || "20000", 10) || 20000;
+const inputCsvPath = path.resolve(args.get("input") || defaultInputCsvPath);
+const cacheCsvPath = path.resolve(args.get("cache-input") || defaultCacheCsvPath);
+
+const supabaseUrl = importMode ? resolveEnvValue("SUPABASE_URL").replace(/\/+$/, "") : String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
+const serviceRoleKey = importMode ? resolveEnvValue("SUPABASE_SERVICE_ROLE_KEY") : String(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
 
 if (importMode && (!supabaseUrl || !serviceRoleKey)) {
   throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for --import mode");
@@ -64,16 +73,30 @@ const requestHeaders = {
 
 async function main() {
   const allRows = parseCsv(fs.readFileSync(inputCsvPath, "utf8"))
-    .filter((row) => normalizeText(row.Brand) === "BOSCH")
     .map((row) => ({
       brand: "Bosch",
-      product_code: String(row.Product_Code || "").trim(),
-      normalized_code: normalizeCode(row.Product_Code || row.Normalized_Code || ""),
+      product_code: String(row.Product_Code || row.product_code || "").trim(),
+      normalized_code: normalizeCode(row.Product_Code || row.product_code || row.Normalized_Code || row.normalized_code || ""),
     }))
     .filter((row) => row.product_code && row.normalized_code);
 
   const dedupedRows = dedupeBy(allRows, (row) => row.normalized_code);
-  const selectedRows = dedupedRows.slice(offset, limit == null ? undefined : offset + limit);
+  const initialSelectedRows = dedupedRows.slice(offset, limit == null ? undefined : offset + limit);
+  let selectedRows = initialSelectedRows;
+  let target = null;
+  let livePlaceholderCount = null;
+  let liveSkippedCount = 0;
+  const sparetoCache = loadSparetoCache(cacheCsvPath);
+  let cachedMatchCount = 0;
+  let liveMatchCount = 0;
+
+  if (importMode) {
+    target = await resolveBoschTarget();
+    const livePlaceholderCodes = await fetchLivePlaceholderCodes(target, initialSelectedRows.map((row) => row.normalized_code));
+    selectedRows = initialSelectedRows.filter((row) => livePlaceholderCodes.has(row.normalized_code));
+    livePlaceholderCount = selectedRows.length;
+    liveSkippedCount = initialSelectedRows.length - selectedRows.length;
+  }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const matchedCsvPath = path.join(outputDir, `spareto-bosch-fill-matched-${timestamp}.csv`);
@@ -87,8 +110,14 @@ async function main() {
   for (let index = 0; index < selectedRows.length; index += 1) {
     const row = selectedRows[index];
     try {
-      const result = await resolveBoschFromSpareto(row.product_code, row.normalized_code);
+      const cached = sparetoCache.get(row.normalized_code);
+      const result = cached || (await resolveBoschFromSpareto(row.product_code, row.normalized_code));
       if (result) {
+        if (cached) {
+          cachedMatchCount += 1;
+        } else {
+          liveMatchCount += 1;
+        }
         matched.push(result);
       } else {
         unmatched.push({
@@ -148,7 +177,6 @@ async function main() {
 
   const processedBatches = [];
   if (importMode && matched.length) {
-    const target = await resolveBoschTarget();
     const payload = matched.map((row) => ({
       organization_id: target.organization_id,
       brand_id: target.brand_id,
@@ -176,6 +204,12 @@ async function main() {
     mode: importMode ? "import" : "plan",
     source_file: inputCsvPath,
     selected_rows: selectedRows.length,
+    initial_selected_rows: initialSelectedRows.length,
+    live_placeholder_rows: livePlaceholderCount,
+    live_skipped_rows: liveSkippedCount,
+    cache_file: cacheCsvPath,
+    cached_match_rows: cachedMatchCount,
+    live_match_rows: liveMatchCount,
     offset,
     limit,
     matched_rows: matched.length,
@@ -188,6 +222,12 @@ async function main() {
 
   fs.writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
   console.log(JSON.stringify(summary, null, 2));
+}
+
+function resolveEnvValue(name) {
+  const direct = String(process.env[name] || "").trim();
+  if (direct) return direct;
+  return String(execFileSync("npx", ["netlify", "env:get", name], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }) || "").trim();
 }
 
 async function resolveBoschFromSpareto(productCode, normalizedCode) {
@@ -215,11 +255,17 @@ async function resolveBoschFromSpareto(productCode, normalizedCode) {
   const sourceUrl = new URL(match.href, "https://spareto.com").toString();
   const detailHtml = await fetchText(sourceUrl);
   const detail = extractDetailProperties(detailHtml);
+  const description = deriveSparetoDescription({
+    productCode,
+    normalizedCode,
+    description: detail.product_name || match.item_name || "",
+    sourceUrl,
+  });
 
   return {
     brand: "Bosch",
     product_code: productCode,
-    description: detail.product_name || match.item_name || "",
+    description,
     oem_no: detail.trade_numbers || "",
     hs_code: detail.customs_code || "",
     origin: detail.country_of_origin || "",
@@ -227,6 +273,67 @@ async function resolveBoschFromSpareto(productCode, normalizedCode) {
     source_url: sourceUrl,
     matched_spareto_code: match.item_id,
   };
+}
+
+function loadSparetoCache(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return new Map();
+  }
+
+  const rows = parseCsv(fs.readFileSync(filePath, "utf8"));
+  const cache = new Map();
+  for (const row of rows) {
+    const normalizedCode = normalizeCode(row.Normalized_Code || row.Product_Code || row.product_code || "");
+    if (!normalizedCode) continue;
+    const productCode = String(row.Product_Code || row.product_code || normalizedCode).trim();
+    const sourceUrl = String(row.Source_URL || row.source_url || "").trim();
+    const description = deriveSparetoDescription({
+      productCode,
+      normalizedCode,
+      description: row.Product_Name || row.product_name || row.Description || row.description || "",
+      sourceUrl,
+    });
+    const oemNo = String(row.OEM_No || row.oem_no || "").trim();
+    const hsCode = String(row.HS_Code || row.hs_code || "").trim();
+    const origin = String(row.Origin || row.origin || "").trim();
+    const weightKg = parseWeight(row.Weight_kg || row.weight_kg || "");
+    if (!description && !oemNo && !hsCode && !origin && weightKg == null) continue;
+    cache.set(normalizedCode, {
+      brand: "Bosch",
+      product_code: productCode,
+      description,
+      oem_no: oemNo,
+      hs_code: hsCode,
+      origin,
+      weight_kg: weightKg,
+      source_url: sourceUrl,
+      matched_spareto_code: productCode,
+    });
+  }
+  return cache;
+}
+
+function deriveSparetoDescription({ productCode, normalizedCode, description, sourceUrl }) {
+  const cleanDescription = cleanText(description);
+  if (cleanDescription && normalizeCode(cleanDescription) !== normalizedCode && normalizeCode(cleanDescription) !== normalizeCode(productCode)) {
+    return cleanDescription;
+  }
+  const slugMatch = String(sourceUrl || "").match(/\/products\/([^/]+)\//i);
+  const rawSlug = slugMatch ? slugMatch[1] : "";
+  const descriptionFromSlug = rawSlug
+    .split("-")
+    .filter((part) => part && normalizeText(part) !== "BOSCH")
+    .join(" ")
+    .trim();
+  return descriptionFromSlug ? toTitleCase(descriptionFromSlug) : "";
+}
+
+function toTitleCase(value) {
+  return String(value || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => (part.length <= 2 && /[A-Z0-9]/i.test(part) ? part.toUpperCase() : `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`))
+    .join(" ");
 }
 
 function extractSearchCards(html) {
@@ -337,6 +444,38 @@ async function resolveBoschTarget() {
     brand_id: brand.id,
     organization_id: brand.organization_id,
   };
+}
+
+async function fetchLivePlaceholderCodes(target, normalizedCodes) {
+  const placeholderCodes = new Set();
+  const uniqueCodes = [...new Set(normalizedCodes.filter(Boolean))];
+  const chunkSize = 200;
+
+  for (let index = 0; index < uniqueCodes.length; index += chunkSize) {
+    const chunk = uniqueCodes.slice(index, index + chunkSize);
+    const inClause = chunk.map((value) => `"${value}"`).join(",");
+    const url = new URL(`${supabaseUrl}/rest/v1/catalog_products`);
+    url.searchParams.set("select", "normalized_code,product_code,description");
+    url.searchParams.set("organization_id", `eq.${target.organization_id}`);
+    url.searchParams.set("brand_id", `eq.${target.brand_id}`);
+    url.searchParams.set("normalized_code", `in.(${inClause})`);
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Live Bosch placeholder lookup failed: ${response.status} ${text}`);
+    }
+    const rows = await response.json();
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const normalizedCode = normalizeCode(row.normalized_code || row.product_code || "");
+      if (!normalizedCode) continue;
+      const normalizedDescription = normalizeCode(row.description || "");
+      if (!normalizedDescription || normalizedDescription === normalizedCode) {
+        placeholderCodes.add(normalizedCode);
+      }
+    }
+  }
+
+  return placeholderCodes;
 }
 
 async function upsertCatalogBatch(payload) {
