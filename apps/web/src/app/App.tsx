@@ -72,6 +72,39 @@ const settingsSubNav = [
   { key: "diagnostics", label: "Diagnostics" },
 ] as const;
 
+const APP_UI_STATE_KEY = "next-master-app-ui-state";
+
+type PersistedAppUiState = {
+  activePage?: string;
+  itemsTab?: "Catalog" | "Code References";
+  inventoryInitialTab?: "Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers";
+  inventorySelectedWarehouseId?: string;
+  inventoryStockSearch?: string;
+  salesTab?: "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists";
+  purchasesTab?: "Vendors" | "Purchase Orders" | "Bills" | "Payments Made";
+  reportsTab?: "Master" | "Item Transactions" | "Inventory Analytics";
+  settingsTab?: "session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics";
+};
+
+function readPersistedAppUiState() {
+  if (typeof window === "undefined") return null as PersistedAppUiState | null;
+  try {
+    const raw = window.localStorage.getItem(APP_UI_STATE_KEY);
+    return raw ? (JSON.parse(raw) as PersistedAppUiState) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedAppUiState(next: PersistedAppUiState | null) {
+  if (typeof window === "undefined") return;
+  if (!next) {
+    window.localStorage.removeItem(APP_UI_STATE_KEY);
+    return;
+  }
+  window.localStorage.setItem(APP_UI_STATE_KEY, JSON.stringify(next));
+}
+
 const allNavItems = [
   { key: "Home", code: "01", caption: "Overview" },
   { key: "Items", code: "02", caption: "Master Data" },
@@ -151,13 +184,14 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
 
 export function App() {
   const isPortalRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/portal");
+  const initialUiState = typeof window === "undefined" || isPortalRoute ? null : readPersistedAppUiState();
   const [sessionReady, setSessionReady] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [appRole, setAppRole] = useState<AppRole>("");
   const [appRoleReady, setAppRoleReady] = useState(false);
   const appRoleRef = useRef<AppRole>("");
   const [appSessionReloadTick, setAppSessionReloadTick] = useState(0);
-  const [activePage, setActivePage] = useState("Home");
+  const [activePage, setActivePage] = useState(initialUiState?.activePage || "Home");
   const [accessNotice, setAccessNotice] = useState("");
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [selectedSalesOrderId, setSelectedSalesOrderId] = useState("");
@@ -167,18 +201,44 @@ export function App() {
   const [selectedBillId, setSelectedBillId] = useState("");
   const [salesOrdersNavTick, setSalesOrdersNavTick] = useState(0);
   const [salesInvoicesNavTick, setSalesInvoicesNavTick] = useState(0);
-  const [itemsTab, setItemsTab] = useState<"Catalog" | "Code References">("Catalog");
-  const [inventoryInitialTab, setInventoryInitialTab] = useState<"Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers">("Warehouses");
-  const [inventorySelectedWarehouseId, setInventorySelectedWarehouseId] = useState("");
-  const [inventoryStockSearch, setInventoryStockSearch] = useState("");
-  const [salesTab, setSalesTab] = useState<"Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists">("Sales Orders");
-  const [purchasesTab, setPurchasesTab] = useState<"Vendors" | "Purchase Orders" | "Bills" | "Payments Made">("Vendors");
-  const [reportsTab, setReportsTab] = useState<"Master" | "Item Transactions" | "Inventory Analytics">("Master");
-  const [settingsTab, setSettingsTab] = useState<"session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics">("session");
+  const [itemsTab, setItemsTab] = useState<"Catalog" | "Code References">(initialUiState?.itemsTab || "Catalog");
+  const [inventoryInitialTab, setInventoryInitialTab] = useState<"Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers">(initialUiState?.inventoryInitialTab || "Warehouses");
+  const [inventorySelectedWarehouseId, setInventorySelectedWarehouseId] = useState(initialUiState?.inventorySelectedWarehouseId || "");
+  const [inventoryStockSearch, setInventoryStockSearch] = useState(initialUiState?.inventoryStockSearch || "");
+  const [salesTab, setSalesTab] = useState<"Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists">(initialUiState?.salesTab || "Sales Orders");
+  const [purchasesTab, setPurchasesTab] = useState<"Vendors" | "Purchase Orders" | "Bills" | "Payments Made">(initialUiState?.purchasesTab || "Vendors");
+  const [reportsTab, setReportsTab] = useState<"Master" | "Item Transactions" | "Inventory Analytics">(initialUiState?.reportsTab || "Master");
+  const [settingsTab, setSettingsTab] = useState<"session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics">(initialUiState?.settingsTab || "session");
 
   useEffect(() => {
     appRoleRef.current = appRole;
   }, [appRole]);
+
+  useEffect(() => {
+    if (isPortalRoute) return;
+    writePersistedAppUiState({
+      activePage,
+      itemsTab,
+      inventoryInitialTab,
+      inventorySelectedWarehouseId,
+      inventoryStockSearch,
+      salesTab,
+      purchasesTab,
+      reportsTab,
+      settingsTab,
+    });
+  }, [
+    activePage,
+    inventoryInitialTab,
+    inventorySelectedWarehouseId,
+    inventoryStockSearch,
+    isPortalRoute,
+    itemsTab,
+    purchasesTab,
+    reportsTab,
+    salesTab,
+    settingsTab,
+  ]);
 
   useEffect(() => {
     let mounted = true;

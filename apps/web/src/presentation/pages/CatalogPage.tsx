@@ -31,6 +31,7 @@ type CatalogRowDraft = Omit<CatalogRow, "weight_kg"> & {
 type CatalogOfflineCache = {
   brands: BrandOption[];
   rows: CatalogRow[];
+  drafts: Record<string, CatalogRowDraft>;
   search: string;
   submittedSearch: string;
   catalogBrand: string;
@@ -205,23 +206,17 @@ export function CatalogPage() {
     const cached = readCatalogCache();
     if (!cached) return;
     if (cached.brands.length) setBrands(cached.brands);
+    if (cached.rows.length) setRows(cached.rows);
+    if (cached.drafts && Object.keys(cached.drafts).length) setDrafts(cached.drafts);
+    setSearch(cached.search || cached.submittedSearch || "");
+    setSubmittedSearch(cached.submittedSearch || cached.search || "");
+    setCatalogBrand(cached.catalogBrand || cached.submittedCatalogBrand || "");
+    setSubmittedCatalogBrand(cached.submittedCatalogBrand || cached.catalogBrand || "");
+    setSelectedCatalogProductId(cached.selectedCatalogProductId || "");
     if (!isOnline) {
-      if (cached.rows.length) setRows(cached.rows);
-      setSearch(cached.search || cached.submittedSearch || "");
-      setSubmittedSearch(cached.submittedSearch || cached.search || "");
-      setCatalogBrand(cached.catalogBrand || cached.submittedCatalogBrand || "");
-      setSubmittedCatalogBrand(cached.submittedCatalogBrand || cached.catalogBrand || "");
-      setSelectedCatalogProductId(cached.selectedCatalogProductId || "");
       setStatus("Offline mode active. Showing cached catalog data.");
       setError("");
-      return;
     }
-    setRows([]);
-    setSearch("");
-    setSubmittedSearch("");
-    setCatalogBrand("");
-    setSubmittedCatalogBrand("");
-    setSelectedCatalogProductId("");
   }, [isOnline]);
 
   useEffect(() => {
@@ -408,6 +403,7 @@ export function CatalogPage() {
       writeCatalogCache({
         brands: brands.length ? brands : existing?.brands || [],
         rows: rows.length ? rows : existing?.rows || [],
+        drafts: Object.keys(drafts).length ? drafts : existing?.drafts || {},
         search: search || existing?.search || "",
         submittedSearch: submittedSearch || "",
         catalogBrand: catalogBrand || "",
@@ -417,7 +413,7 @@ export function CatalogPage() {
       });
     }, CATALOG_CACHE_WRITE_DELAY_MS);
     return () => window.clearTimeout(handle);
-  }, [brands, rows, search, submittedSearch, catalogBrand, submittedCatalogBrand, selectedCatalogProductId]);
+  }, [brands, rows, drafts, search, submittedSearch, catalogBrand, submittedCatalogBrand, selectedCatalogProductId]);
 
   const total = rows[0]?.total_count ?? 0;
   const hasApproximateTotal = total < 0;
