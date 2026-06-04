@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { canonicalizeBrandName, resolveSparetoBrandQuery } from "./_shared/brand-standardization.mjs";
@@ -8,8 +9,8 @@ import { normalizeCatalogDescription, normalizeCatalogDisplayCode, normalizeCata
 const repoRoot = "/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp";
 const outputDir = path.join(repoRoot, "docs", "catalog-standardization");
 
-const supabaseUrl = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
-const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
+const supabaseUrl = resolveEnvValue("SUPABASE_URL").replace(/\/+$/, "");
+const serviceRoleKey = resolveEnvValue("SUPABASE_SERVICE_ROLE_KEY");
 
 if (!supabaseUrl || !serviceRoleKey) {
   throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
@@ -81,6 +82,18 @@ const requestTimeoutMs = Math.max(5000, Number.parseInt(args.get("request-timeou
 const apply = args.has("apply");
 
 fs.mkdirSync(outputDir, { recursive: true });
+
+function resolveEnvValue(name) {
+  const direct = String(process.env[name] || "").trim();
+  if (direct) return direct;
+  return String(
+    execFileSync("npx", ["netlify", "env:get", name, "--context", "production"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      maxBuffer: 8 * 1024 * 1024,
+    }) || "",
+  ).trim();
+}
 
 async function main() {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");

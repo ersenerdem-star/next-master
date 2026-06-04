@@ -1,10 +1,24 @@
 #!/usr/bin/env node
 
-const supabaseUrl = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
-const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
+import { execFileSync } from "node:child_process";
+
+const supabaseUrl = resolveEnvValue("SUPABASE_URL").replace(/\/+$/, "");
+const serviceRoleKey = resolveEnvValue("SUPABASE_SERVICE_ROLE_KEY");
 
 if (!supabaseUrl || !serviceRoleKey) {
   throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
+}
+
+function resolveEnvValue(name) {
+  const direct = String(process.env[name] || "").trim();
+  if (direct) return direct;
+  return String(
+    execFileSync("npx", ["netlify", "env:get", name, "--context", "production"], {
+      cwd: "/Users/ersen/Documents/Codex/2026-05-11-quote-desk-next-mvp",
+      encoding: "utf8",
+      maxBuffer: 8 * 1024 * 1024,
+    }) || "",
+  ).trim();
 }
 
 const args = new Map();
@@ -30,6 +44,12 @@ const onlyFillBlanks = args.has("only-fill-blanks");
 const salesOrderId = String(args.get("sales-order-id") || "").trim();
 const organizationId = String(args.get("organization-id") || "").trim();
 const limit = Number.parseInt(String(args.get("limit") || "0"), 10) || 0;
+const catalogChunkSize = Math.max(25, Number.parseInt(String(args.get("catalog-chunk-size") || "60"), 10) || 60);
+const requestedBrands = String(args.get("brands") || "")
+  .split(",")
+  .map((value) => String(value || "").trim().toLowerCase())
+  .filter(Boolean);
+const requestedBrandSet = new Set(requestedBrands);
 
 const headers = {
   apikey: serviceRoleKey,
@@ -109,6 +129,8 @@ async function main() {
   const candidates = [];
   for (const order of salesOrders) {
     for (const line of Array.isArray(order.lines) ? order.lines : []) {
+      const normalizedBrand = String(line.brand || "").trim().toLowerCase();
+      if (requestedBrandSet.size && !requestedBrandSet.has(normalizedBrand)) continue;
       const brandId = brandIdByName.get(String(line.brand || "").trim().toLowerCase()) || "";
       const normalizedCode = normalizePartCode(line.resolvedCode || line.requestedCode || "");
       if (!brandId || !normalizedCode) continue;
@@ -125,6 +147,8 @@ async function main() {
   for (const order of salesOrders) {
     let orderChanged = false;
     const nextLines = (Array.isArray(order.lines) ? order.lines : []).map((line) => {
+      const normalizedBrand = String(line.brand || "").trim().toLowerCase();
+      if (requestedBrandSet.size && !requestedBrandSet.has(normalizedBrand)) return line;
       const brandId = brandIdByName.get(String(line.brand || "").trim().toLowerCase()) || "";
       const normalizedCode = normalizePartCode(line.resolvedCode || line.requestedCode || "");
       const metadata = catalogByKey.get(`${String(line.brand || "").trim().toLowerCase()}::${normalizedCode}`);
@@ -183,6 +207,7 @@ async function main() {
       {
         apply: applyMode,
         only_fill_blanks: onlyFillBlanks,
+        filtered_brands: [...requestedBrandSet],
         scanned_orders: salesOrders.length,
         updated_orders: updatedOrderCount,
         updated_lines: updatedLineCount,
@@ -208,7 +233,7 @@ async function fetchCatalogMap(candidates, brandNameById) {
   const groupedBrandIds = [...new Set(candidates.map((item) => item.brandId).filter(Boolean))];
   const groupedCodes = [...new Set(candidates.map((item) => item.normalizedCode).filter(Boolean))];
 
-  for (const codeChunk of chunk(groupedCodes, 200)) {
+  for (const codeChunk of chunk(groupedCodes, catalogChunkSize)) {
     const [exactRows, oemRows] = await Promise.all([
       fetchJson(
         `${supabaseUrl}/rest/v1/catalog_products?select=brand_id,product_code,normalized_code,description,oem_no,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note&brand_id=in.(${groupedBrandIds.join(",")})&normalized_code=in.(${codeChunk.join(",")})&limit=50000`,
