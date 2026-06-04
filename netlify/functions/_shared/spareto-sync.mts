@@ -289,6 +289,131 @@ export async function syncBrandCatalogFromSpareto(input: {
   };
 }
 
+export async function completeMissingCatalogFieldsFromSpareto(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  brandName: string;
+  targetBrandId?: string;
+  organizationId?: string;
+  concurrency?: number;
+  requestTimeoutMs?: number;
+  limit?: number;
+}) {
+  const brandName = canonicalizeInternalBrandName(input.brandName);
+  const brandQuery = resolveSparetoBrandQuery(brandName);
+  const brandSlug = resolveSparetoBrandSlug(brandName);
+  const concurrency = Math.max(1, Math.min(input.concurrency ?? 6, 8));
+  const requestTimeoutMs = Math.max(5000, input.requestTimeoutMs ?? 20000);
+  const rowLimit = Math.max(1, input.limit ?? 500);
+  const headers = {
+    apikey: input.serviceRoleKey,
+    Authorization: `Bearer ${input.serviceRoleKey}`,
+    "Content-Type": "application/json",
+  };
+
+  const target =
+    input.targetBrandId && input.organizationId
+      ? {
+          brandId: String(input.targetBrandId).trim(),
+          organizationId: String(input.organizationId).trim(),
+          name: brandName,
+        }
+      : await resolveOrCreateTargetBrand(input.supabaseUrl, headers, brandName);
+  const supportsImageColumn = await detectCatalogImageColumn(input.supabaseUrl, headers);
+  const existingRows = await fetchExistingCatalogRows(input.supabaseUrl, headers, target.brandId);
+  const incompleteRows = existingRows
+    .filter((row) => isIncomplete(row))
+    .sort((left, right) => scoreIncomplete(right) - scoreIncomplete(left))
+    .slice(0, rowLimit);
+
+  const resolvedRows: Array<Record<string, unknown>> = [];
+  const errorRows: Array<{ product_code: string; normalized_code: string; error: string }> = [];
+  let matchedRows = 0;
+  let unmatchedRows = 0;
+
+  await runPool(incompleteRows, concurrency, async (existing) => {
+    try {
+      const detail = await resolveExactSparetoDetail(existing, brandQuery, brandSlug, requestTimeoutMs);
+      if (!detail) {
+        unmatchedRows += 1;
+        return;
+      }
+      const candidate = {
+        product_code: existing.product_code,
+        normalized_code: existing.normalized_code,
+        description: existing.description,
+        image_url: existing.image_url,
+        source_url: detail.source_url,
+      };
+      const merged = buildCatalogRow(target, candidate, detail, existing);
+      if (!hasCatalogDelta(existing, merged)) {
+        unmatchedRows += 1;
+        return;
+      }
+      matchedRows += 1;
+      resolvedRows.push(merged);
+    } catch (error) {
+      errorRows.push({
+        product_code: existing.product_code,
+        normalized_code: existing.normalized_code,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  const payload = resolvedRows.map((row) => ({
+    organization_id: row.organization_id,
+    brand_id: row.brand_id,
+    product_code: row.product_code,
+    description: emptyToNull(row.description),
+    oem_no: emptyToNull(row.oem_no),
+    vehicle: emptyToNull(row.vehicle),
+    hs_code: emptyToNull(row.hs_code),
+    origin: emptyToNull(row.origin),
+    weight_kg: row.weight_kg == null || Number.isNaN(Number(row.weight_kg)) ? null : Number(row.weight_kg),
+    lifecycle_status: emptyToNull(row.lifecycle_status) || "active",
+    lifecycle_note: emptyToNull(row.lifecycle_note),
+    ...(supportsImageColumn ? { image_url: emptyToNull(row.image_url) } : {}),
+    updated_at: new Date().toISOString(),
+  }));
+
+  const batchSize = 300;
+  const processedBatches = [];
+  for (let index = 0; index < payload.length; index += batchSize) {
+    const batch = payload.slice(index, index + batchSize);
+    const response = await fetch(
+      `${input.supabaseUrl}/rest/v1/catalog_products?on_conflict=organization_id,brand_id,normalized_code`,
+      {
+        method: "POST",
+        headers: {
+          ...headers,
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify(batch),
+      },
+    );
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`catalog_products Spareto fallback upsert failed: ${response.status} ${text}`);
+    }
+    processedBatches.push({ batch: index / batchSize + 1, rows: batch.length, status: response.status });
+  }
+
+  return {
+    targetBrandId: target.brandId,
+    targetBrandName: target.name,
+    organizationId: target.organizationId,
+    supportsImageColumn,
+    incompleteRowsBefore: existingRows.filter((row) => isIncomplete(row)).length,
+    candidateRows: incompleteRows.length,
+    matchedRows,
+    unmatchedRows,
+    errorRows: errorRows.length,
+    updatedRows: payload.length,
+    processedBatches,
+  };
+}
+
 async function resolveOrCreateTargetBrand(supabaseUrl: string, headers: Record<string, string>, brandName: string): Promise<SyncBrandTarget> {
   const existingBrands = await fetchAll(supabaseUrl, headers, "/rest/v1/brands?select=id,name,organization_id&order=name.asc");
   const exact =
@@ -493,6 +618,21 @@ async function fetchSparetoDetail(card: any, requestTimeoutMs: number, targetBra
   };
 }
 
+async function resolveExactSparetoDetail(existing: any, brandQuery: string, targetBrandSlug: string, requestTimeoutMs: number) {
+  const searchUrl = `https://spareto.com/products?keywords=${encodeURIComponent(existing.product_code)}`;
+  const html = await fetchText(searchUrl, requestTimeoutMs);
+  if (/Nothing Matches your Search/i.test(html)) {
+    return null;
+  }
+
+  const cards = extractListingCards(html, brandQuery);
+  const exact = cards.find((card) => normalizeCode(card.product_code) === existing.normalized_code);
+  if (!exact?.source_url) {
+    return null;
+  }
+  return fetchSparetoDetail(exact, requestTimeoutMs, targetBrandSlug);
+}
+
 function extractDetailProperties(html: string) {
   const ogTitle = capture(html, /<meta content='([^']+)' property='og:title'>/i) || capture(html, /<meta property="og:title" content="([^"]+)"/i);
   const titleText = capture(html, /<title>([\s\S]*?)<\/title>/i);
@@ -629,6 +769,7 @@ function buildCatalogRow(target: SyncBrandTarget, candidate: any, detail: any, e
 
 function isIncomplete(row: any) {
   return !String(row.description || "").trim() ||
+    isPlaceholderDescription(row.description, row.normalized_code || row.product_code) ||
     !String(row.oem_no || "").trim() ||
     !String(row.vehicle || "").trim() ||
     !String(row.hs_code || "").trim() ||
@@ -636,6 +777,37 @@ function isIncomplete(row: any) {
     row.weight_kg == null ||
     Number.isNaN(Number(row.weight_kg)) ||
     !String(row.image_url || "").trim();
+}
+
+function hasCatalogDelta(existing: any, merged: any) {
+  return normalizeTextValue(existing?.description) !== normalizeTextValue(merged?.description) ||
+    normalizeTextValue(existing?.oem_no) !== normalizeTextValue(merged?.oem_no) ||
+    normalizeTextValue(existing?.vehicle) !== normalizeTextValue(merged?.vehicle) ||
+    normalizeTextValue(existing?.hs_code) !== normalizeTextValue(merged?.hs_code) ||
+    normalizeTextValue(existing?.origin) !== normalizeTextValue(merged?.origin) ||
+    normalizeWeightValue(existing?.weight_kg) !== normalizeWeightValue(merged?.weight_kg) ||
+    normalizeTextValue(existing?.image_url) !== normalizeTextValue(merged?.image_url) ||
+    normalizeTextValue(existing?.lifecycle_status) !== normalizeTextValue(merged?.lifecycle_status) ||
+    normalizeTextValue(existing?.lifecycle_note) !== normalizeTextValue(merged?.lifecycle_note);
+}
+
+function scoreIncomplete(row: any) {
+  let score = 0;
+  if (!String(row.description || "").trim() || isPlaceholderDescription(row.description, row.normalized_code || row.product_code)) score += 4;
+  if (!String(row.image_url || "").trim()) score += 3;
+  if (!String(row.oem_no || "").trim()) score += 2;
+  if (!String(row.vehicle || "").trim()) score += 2;
+  if (!String(row.hs_code || "").trim()) score += 1;
+  if (!String(row.origin || "").trim()) score += 1;
+  if (row.weight_kg == null || Number.isNaN(Number(row.weight_kg))) score += 1;
+  return score;
+}
+
+function isPlaceholderDescription(description: unknown, referenceCode: unknown) {
+  const normalizedDescription = normalizeCode(description);
+  const normalizedReference = normalizeCode(referenceCode);
+  if (!normalizedDescription || !normalizedReference) return false;
+  return normalizedDescription === normalizedReference;
 }
 
 function preferCatalogValue(...values: unknown[]) {
@@ -721,6 +893,16 @@ async function fetchText(url: string, requestTimeoutMs: number) {
   return await response.text();
 }
 
+async function getJson<T>(url: string, init?: RequestInit) {
+  const response = await fetch(url, init);
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : [];
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} for ${url}: ${text}`);
+  }
+  return payload as T;
+}
+
 async function fetchAll(supabaseUrl: string, headers: Record<string, string>, initialPath: string) {
   const results = [];
   const restPageLimit = 1000;
@@ -752,6 +934,15 @@ function normalizeCode(value: unknown) {
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "")
     .trim();
+}
+
+function normalizeTextValue(value: unknown) {
+  return String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function normalizeWeightValue(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function parseWeight(value: string) {

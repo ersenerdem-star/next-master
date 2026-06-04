@@ -1,4 +1,4 @@
-import { syncBrandCatalogFromSpareto } from "./spareto-sync.mts";
+import { completeMissingCatalogFieldsFromSpareto, syncBrandCatalogFromSpareto } from "./spareto-sync.mts";
 import { syncBrandCatalogFromBoschAftermarket } from "./bosch-aftermarket-sync.mts";
 import { syncBrandCatalogFromMann } from "./mann-sync.mts";
 import { syncBrandCatalogFromDonaldson } from "./donaldson-sync.mts";
@@ -187,6 +187,7 @@ export async function syncBrandCatalog(input: {
   requestTimeoutMs?: number;
   seedPrefixes?: string[];
   lineIds?: number[];
+  sparetoFallbackLimit?: number;
 }) {
   const plan = resolveCatalogSyncPlan(input.brandName);
   let result;
@@ -292,6 +293,21 @@ export async function syncBrandCatalog(input: {
     });
   }
 
+  const shouldApplySparetoFallback = plan.preferredProviderKey !== "spareto";
+  const sparetoFallback =
+    shouldApplySparetoFallback && result?.targetBrandId && result?.organizationId
+      ? await completeMissingCatalogFieldsFromSpareto({
+          supabaseUrl: input.supabaseUrl,
+          serviceRoleKey: input.serviceRoleKey,
+          brandName: plan.brandName,
+          targetBrandId: result.targetBrandId,
+          organizationId: result.organizationId,
+          concurrency: Math.max(2, Math.min(input.concurrency ?? 6, 6)),
+          requestTimeoutMs: input.requestTimeoutMs,
+          limit: input.sparetoFallbackLimit ?? 500,
+        })
+      : null;
+
   return {
     ...result,
     syncBrandName: plan.brandName,
@@ -303,5 +319,6 @@ export async function syncBrandCatalog(input: {
     executionProviderLabel,
     executionSourceType,
     fallbackUsed,
+    sparetoHelperFallback: sparetoFallback,
   };
 }
