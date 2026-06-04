@@ -27,7 +27,7 @@ import { consumeCatalogTransfer, PENDING_CATALOG_SALES_ITEM_KEY } from "../../sh
 import { buildInvoiceFromSalesOrder, buildLocalSalesOrder, buildPurchaseOrdersFromSalesOrder } from "../../shared/localOrders";
 import { resyncSalesOrderLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
-import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
+import { buildBusinessDocumentHtml, openBusinessDocumentPreview } from "../../shared/documentPrint";
 import { buildEntityAlias } from "../../shared/entityAlias";
 import { Select } from "../components/common/Select";
 import type { CompanyProfile } from "../../types/company";
@@ -605,9 +605,18 @@ export function QuotesPage({
   const [quoteNotes, setQuoteNotes] = useState("");
 
   const selectedCustomerProfile = useMemo(() => {
-    const customerLabel = customerSelection === "__manual__" ? manualCustomerName : customerName;
+    const customerLabel = customerSelection === "__manual__" ? manualCustomerName : customerSelection;
     return customerLabel ? findCustomerByNameInList(customers, customerLabel) : null;
-  }, [customers, customerSelection, customerName, manualCustomerName]);
+  }, [customers, customerSelection, manualCustomerName]);
+  const resolvedCustomerName = useMemo(() => {
+    if (customerSelection === "__manual__") return manualCustomerName.trim();
+    return (
+      String(selectedCustomerProfile?.display_name || "").trim() ||
+      String(selectedCustomerProfile?.company_name || "").trim() ||
+      customerSelection.trim() ||
+      customerName.trim()
+    );
+  }, [customerName, customerSelection, manualCustomerName, selectedCustomerProfile]);
   const customerPricingMode: CustomerPricingMode = selectedCustomerProfile?.portal_c_price_mode || "standard";
   const shouldUseCPricePricing = shouldUseCPriceForCustomer(customerType, customerPricingMode);
 
@@ -1325,7 +1334,7 @@ export function QuotesPage({
         const order = buildLocalSalesOrder({
           id: selectedLocalSalesOrderId,
           sales_order_no: quoteNo.trim() || currentLocalSalesOrder?.sales_order_no || "",
-          customer_name: customerSelection === "__manual__" ? manualCustomerName.trim() : customerName.trim(),
+          customer_name: resolvedCustomerName,
           seller_company: sellerCompany.trim(),
           purchase_company: buyerInfo.trim(),
           quote_date: quoteDate,
@@ -1369,7 +1378,7 @@ export function QuotesPage({
     return buildLocalSalesOrder({
       id: selectedLocalSalesOrderId || undefined,
       sales_order_no: quoteNo.trim() || `SO-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Date.now().toString().slice(-4)}`,
-      customer_name: customerSelection === "__manual__" ? manualCustomerName.trim() : customerName.trim(),
+      customer_name: resolvedCustomerName,
       seller_company: sellerCompany.trim(),
       purchase_company: buyerInfo.trim(),
       quote_date: quoteDate,
@@ -1438,6 +1447,7 @@ export function QuotesPage({
       customerSelection,
       manualCustomerName,
       customerName,
+      resolvedCustomerName,
       sellerCompany,
       buyerInfo,
       quoteDate,
@@ -1460,6 +1470,7 @@ export function QuotesPage({
       return Boolean(
         quoteBuilderLines.length ||
           customerName.trim() ||
+          resolvedCustomerName.trim() ||
           manualCustomerName.trim() ||
           quoteNotes.trim() ||
           discountAmount !== "0" ||
@@ -1470,6 +1481,7 @@ export function QuotesPage({
   }, [
     currentLocalSalesOrder,
     customerName,
+    resolvedCustomerName,
     discountAmount,
     manualCustomerName,
     quoteBuilderLines.length,
@@ -1903,7 +1915,7 @@ export function QuotesPage({
       actionFeedback.begin(`Preparing Sales Order Excel for ${quoteBuilderLines.length.toLocaleString("en-US")} line(s)...`);
       const rows: Array<Array<string | number>> = [
         ["Sales Order No", quoteNo],
-        ["Customer", customerSelection === "__manual__" ? manualCustomerName : customerName],
+        ["Customer", resolvedCustomerName],
         ["Date", quoteDate],
         ["Currency", currency],
         ["Customer Type", customerType],
@@ -1914,7 +1926,7 @@ export function QuotesPage({
         ["Delivery Term", deliveryTerm],
         ["Payment Terms", paymentTerms],
         [],
-        ["Line", "Part No", "Old Code", "Brand", "Description", "OEM", "HS", "Origin", "Weight kg", "Qty", "Supplier", "Price Date", "Buy Unit", "Buy Total", "Sell Unit", "Sell Total", "Profit", "Margin %", "Notes"],
+        ["Line", "Part No", "Old Code", "Changed No Warning", "Lifecycle Status", "Lifecycle Warning", "Brand", "Description", "OEM", "HS", "Origin", "Weight kg", "Qty", "Supplier", "Price Date", "Buy Unit", "Buy Total", "Sell Unit", "Sell Total", "Profit", "Margin %", "Notes"],
       ];
 
       quoteBuilderLines.forEach((line, index) => {
@@ -1928,6 +1940,9 @@ export function QuotesPage({
           index + 1,
           line.resolvedCode,
           line.codeChanged ? line.requestedCode : "",
+          line.codeChangeWarning,
+          line.lifecycle_status === "discontinued" ? "Discontinued" : "Active",
+          line.lifecycle_warning || "",
           line.brand,
           line.description,
           line.oem_no,
@@ -1954,7 +1969,7 @@ export function QuotesPage({
       rows.push(["Total Amount", draftTotals.totalAmount]);
       rows.push(["Profit", draftTotals.profit]);
       rows.push(["Margin %", draftTotals.margin]);
-      const blob = buildXlsxBlob("Sales Order Draft", rows, [8, 9, 12, 13, 14, 15, 16, 17]);
+      const blob = buildXlsxBlob("Sales Order Draft", rows, [11, 12, 15, 16, 17, 18, 19, 20]);
       downloadBlob(`${(quoteNo || "sales-order-draft").replace(/[^a-z0-9_-]+/gi, "-")}.xlsx`, blob);
       actionFeedback.succeed("Sales order Excel downloaded.");
     } catch (caught) {
@@ -1967,11 +1982,6 @@ export function QuotesPage({
   function handlePrintDraftPdf() {
     if (!quoteBuilderLines.length) {
       actionFeedback.fail("Add quote lines first.");
-      return;
-    }
-    const win = window.open("about:blank", "_blank");
-    if (!win) {
-      actionFeedback.fail("Popup blocked while opening PDF view.");
       return;
     }
     const profile =
@@ -1988,7 +1998,7 @@ export function QuotesPage({
         footerNote: "",
         logoDataUrl: "",
       };
-    const currentCustomer = findCustomerByNameInList(customers, customerSelection === "__manual__" ? manualCustomerName : customerName);
+    const currentCustomer = selectedCustomerProfile;
     const safeCompany = profile.companyName
       ? profile
       : {
@@ -2000,11 +2010,11 @@ export function QuotesPage({
     setPrintingDraft(true);
     try {
       actionFeedback.begin(`Preparing PDF view for ${quoteNo || "sales order draft"}...`);
-      win.document.write(
+      openBusinessDocumentPreview(
         buildDraftQuoteHtml({
           quoteNo,
           quoteDate,
-          customerName: customerSelection === "__manual__" ? manualCustomerName : customerName,
+          customerName: resolvedCustomerName,
           contractNr: sellerInfo,
           currency,
           deliveryTerm,
@@ -2019,15 +2029,8 @@ export function QuotesPage({
           customer: currentCustomer,
         }),
       );
-      win.document.close();
-      win.focus();
       actionFeedback.succeed("PDF view opened.");
     } catch (caught) {
-      try {
-        win.close();
-      } catch {
-        // no-op
-      }
       actionFeedback.fail(caught instanceof Error ? caught.message : "PDF view failed");
     } finally {
       setPrintingDraft(false);
@@ -2737,11 +2740,11 @@ export function QuotesPage({
                   <div className="invoice-address-grid">
                     <div className="invoice-address-card">
                       <div className="invoice-address-card__title">Billing Address</div>
-                      <div className="invoice-address-card__body">{buildCustomerAddressBlock(selectedCustomerProfile, customerName || "-")}</div>
+                      <div className="invoice-address-card__body">{buildCustomerAddressBlock(selectedCustomerProfile, resolvedCustomerName || "-")}</div>
                     </div>
                     <div className="invoice-address-card">
                       <div className="invoice-address-card__title">Shipping Address</div>
-                      <div className="invoice-address-card__body">{buildCustomerShippingBlock(selectedCustomerProfile, customerName || "-")}</div>
+                      <div className="invoice-address-card__body">{buildCustomerShippingBlock(selectedCustomerProfile, resolvedCustomerName || "-")}</div>
                     </div>
                     <div className="invoice-company-pill">{sellerCompany || "No seller company selected"}</div>
                   </div>

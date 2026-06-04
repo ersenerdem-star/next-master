@@ -27,7 +27,7 @@ import { CustomersPage } from "./CustomersPage";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { useActionFeedback } from "../components/common/ActionFeedback";
-import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
+import { buildBusinessDocumentHtml, openBusinessDocumentPreview } from "../../shared/documentPrint";
 import { BrandPill } from "../components/common/BrandPill";
 import { buildEntityAlias } from "../../shared/entityAlias";
 
@@ -455,15 +455,12 @@ export function SalesPage({
   }
 
   function handlePrintInvoice(row: LocalInvoice) {
-    const win = window.open("about:blank", "_blank");
-    if (!win) {
-      actionFeedback.fail("Popup blocked while opening invoice view.");
-      return;
+    try {
+      openBusinessDocumentPreview(buildInvoiceHtml(row));
+      actionFeedback.succeed("Invoice PDF view opened.");
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : "Invoice PDF view failed");
     }
-    win.document.write(buildInvoiceHtml(row));
-    win.document.close();
-    win.focus();
-    actionFeedback.succeed("Invoice PDF view opened.");
   }
 
   async function handleDeleteInvoice(row: LocalInvoice) {

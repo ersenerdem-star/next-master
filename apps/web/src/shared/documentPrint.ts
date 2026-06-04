@@ -311,3 +311,16 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
     </body>
   </html>`;
 }
+
+export function openBusinessDocumentPreview(html: string) {
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const objectUrl = URL.createObjectURL(blob);
+  const previewWindow = window.open(objectUrl, "_blank", "noopener,noreferrer");
+  if (!previewWindow) {
+    URL.revokeObjectURL(objectUrl);
+    throw new Error("Popup blocked while opening PDF view.");
+  }
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  previewWindow.focus();
+  return previewWindow;
+}
