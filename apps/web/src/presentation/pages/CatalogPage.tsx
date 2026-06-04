@@ -297,11 +297,13 @@ export function CatalogPage() {
 
   useEffect(() => {
     if (!searchingCatalog || loading) return;
-    const nextTotal = rows[0]?.total_count ?? 0;
+    const rawTotal = rows[0]?.total_count ?? rows.length;
+    const nextTotal = Math.abs(rawTotal) || rows.length;
+    const totalLabel = `${nextTotal.toLocaleString("en-US")}${rawTotal < 0 ? "+" : ""}`;
     if (error) {
       actionFeedback.fail(error);
     } else {
-      actionFeedback.succeed(`${nextTotal.toLocaleString("en-US")} catalog rows loaded.`);
+      actionFeedback.succeed(`${totalLabel} catalog rows loaded.`);
     }
     setSearchingCatalog(false);
   }, [searchingCatalog, loading, error, rows, actionFeedback]);
