@@ -6,6 +6,7 @@ import {
   deleteSalesOrder,
   fetchInvoiceSalesLinkSummaries,
   fetchPurchaseOrderSalesLinkSummaries,
+  fetchSalesOrderBrandSummaries,
   fetchSalesOrderById,
   fetchSalesOrderSummaries,
   markSalesOrderPortalSeen,
@@ -321,6 +322,7 @@ function buildPendingImportLine(row: QuoteImportRow): QuoteBuilderLine {
     buy_price: null,
     sell_price: null,
     c_sell_price: null,
+    manual_sell_price: false,
     price_date: "",
     notes: "Resolving prices...",
     found: false,
@@ -512,6 +514,7 @@ function mapDetailLineToBuilderLine(
     buy_price: buyPrice,
     sell_price: sellPrice,
     c_sell_price: cSell,
+    manual_sell_price: Boolean((line as QuoteBuilderLine & { manual_sell_price?: boolean }).manual_sell_price),
     price_date: line.price_date || fallbackResolved?.price_date || "",
     notes: line.notes || fallbackResolved?.notes || "",
     found: true,
@@ -631,6 +634,7 @@ export function QuotesPage({
   const [localSalesOrders, setLocalSalesOrders] = useState<LocalSalesOrder[]>([]);
   const [savedPurchaseOrders, setSavedPurchaseOrders] = useState<PurchaseOrderSalesLinkSummary[]>([]);
   const [savedInvoices, setSavedInvoices] = useState<InvoiceSalesLinkSummary[]>([]);
+  const [salesOrderBrandsById, setSalesOrderBrandsById] = useState<Record<string, string[]>>({});
   const [selectedLocalSalesOrderId, setSelectedLocalSalesOrderId] = useState(initialWorkspaceCache?.selectedLocalSalesOrderId || "");
   const [selectedLocalSalesOrderIds, setSelectedLocalSalesOrderIds] = useState<string[]>([]);
   const [salesOrderActionsOpen, setSalesOrderActionsOpen] = useState(false);
@@ -739,6 +743,15 @@ export function QuotesPage({
           setSavedPurchaseOrders([]);
           setSavedInvoices([]);
         }
+      }
+
+      try {
+        const brandSummaryRows = await fetchSalesOrderBrandSummaries();
+        if (!cancelled) {
+          setSalesOrderBrandsById(Object.fromEntries(brandSummaryRows.map((row) => [row.id, row.brands])));
+        }
+      } catch {
+        if (!cancelled) setSalesOrderBrandsById({});
       }
     }
 
@@ -1107,7 +1120,7 @@ export function QuotesPage({
             ...line,
             supplier_name: line.supplier_name || selected?.supplier_name || "",
             buy_price: buyPrice,
-            sell_price: line.c_sell_price ?? fallbackSellPrice,
+            sell_price: line.manual_sell_price ? line.sell_price : line.c_sell_price ?? fallbackSellPrice,
             price_date: line.price_date || selected?.price_date || "",
             notes: line.notes || selected?.notes || "",
           };
@@ -1118,7 +1131,7 @@ export function QuotesPage({
           ...line,
           supplier_name: line.supplier_name || selected?.supplier_name || "",
           buy_price: buyPrice,
-          sell_price: roundMoney(Number(buyPrice) * (1 + marginPercent / 100)),
+          sell_price: line.manual_sell_price ? line.sell_price : roundMoney(Number(buyPrice) * (1 + marginPercent / 100)),
           price_date: line.price_date || selected?.price_date || "",
           notes: line.notes || selected?.notes || "",
         };
@@ -1157,7 +1170,7 @@ export function QuotesPage({
           return {
             ...line,
             c_sell_price: cSellPrice,
-            sell_price: cSellPrice ?? fallbackSellPrice,
+            sell_price: line.manual_sell_price ? line.sell_price : cSellPrice ?? fallbackSellPrice,
           };
         }),
       );
@@ -1806,7 +1819,9 @@ export function QuotesPage({
                       supplier_name: selected.supplier_name || "",
                       buy_price: selected.buy_price ?? null,
                       sell_price:
-                        shouldUseCPricePricing
+                        item.manual_sell_price
+                          ? item.sell_price
+                          : shouldUseCPricePricing
                           ? item.c_sell_price ?? item.sell_price
                           : selected.buy_price != null
                             ? roundMoney(Number(selected.buy_price) * (1 + (customerType === "B" ? effectiveMarginB : effectiveMarginA) / 100))
@@ -1841,7 +1856,37 @@ export function QuotesPage({
       }
     }
 
-    columns.push({ key: "sell", header: pdfView ? "Unit Price" : "Sell", render: (row: QuoteBuilderLine) => formatMoney(row.sell_price, currency) });
+    columns.push({
+      key: "sell",
+      header: pdfView ? "Unit Price" : "Sell",
+      render: (row: QuoteBuilderLine) =>
+        pdfView ? (
+          formatMoney(row.sell_price, currency)
+        ) : (
+          <input
+            className="inline-edit-input"
+            type="number"
+            min={0}
+            step="0.01"
+            value={row.sell_price ?? ""}
+            onChange={(event) => {
+              const raw = event.target.value;
+              const nextValue = raw === "" ? null : roundMoney(Number(raw.replace(",", ".")) || 0);
+              setQuoteBuilderLines((current) =>
+                current.map((item) =>
+                  item.lineId !== row.lineId
+                    ? item
+                    : {
+                        ...item,
+                        sell_price: nextValue,
+                        manual_sell_price: true,
+                      },
+                ),
+              );
+            }}
+          />
+        ),
+    });
     columns.push({ key: "sellTotal", header: "Line Total", render: (row: QuoteBuilderLine) => formatMoney(roundMoney(toNumber(row.sell_price) * row.qty), currency) });
 
     if (!pdfView && effectiveWorkbenchColumnVisibility.profit) {
@@ -1985,6 +2030,7 @@ export function QuotesPage({
         ? cSellPrice ?? resolved.sell_price ?? effectiveSupplierOptions[0]?.sell_price ?? null
         : resolved.sell_price ?? effectiveSupplierOptions[0]?.sell_price ?? null,
       c_sell_price: cSellPrice,
+      manual_sell_price: false,
       price_date: resolved.price_date || effectiveSupplierOptions[0]?.price_date || "",
       notes: resolved.notes || effectiveSupplierOptions[0]?.notes || "",
       found: resolved.found === true,
@@ -2547,6 +2593,23 @@ export function QuotesPage({
         sortValue: (row: LocalSalesOrder) => row.status,
       },
       {
+        key: "brands",
+        header: "Brands",
+        render: (row: LocalSalesOrder) => {
+          const brands = salesOrderBrandsById[row.id] || [];
+          if (!brands.length) return "-";
+          return (
+            <div className="document-marks document-marks--compact">
+              {brands.slice(0, 3).map((brand) => (
+                <BrandPill key={`${row.id}-${brand}`} brand={brand} compact />
+              ))}
+              {brands.length > 3 ? <span className="mark-badge mark-badge--info">+{brands.length - 3}</span> : null}
+            </div>
+          );
+        },
+        sortValue: (row: LocalSalesOrder) => (salesOrderBrandsById[row.id] || []).join("|"),
+      },
+      {
         key: "sellerCompany",
         header: "Seller Company",
         render: (row: LocalSalesOrder) => <span title={row.seller_company || "-"}>{buildEntityAlias(row.seller_company)}</span>,
@@ -2581,7 +2644,7 @@ export function QuotesPage({
         ),
       },
     ],
-    [selectedLocalSalesOrderIds, salesOrderDocumentState],
+    [selectedLocalSalesOrderIds, salesOrderBrandsById, salesOrderDocumentState],
   );
 
   async function handleSaveDraft() {

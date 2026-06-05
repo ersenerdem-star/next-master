@@ -48,6 +48,7 @@ export type QuoteBuilderLine = {
   buy_price: number | null;
   sell_price: number | null;
   c_sell_price: number | null;
+  manual_sell_price?: boolean;
   price_date: string;
   notes: string;
   found: boolean;

@@ -705,6 +705,40 @@ export async function fetchSalesOrderSummaries(): Promise<LocalSalesOrder[]> {
   return fetchOrderCollection("sales_orders", SALES_ORDER_SUMMARY_COLUMNS, mapSalesOrderRow);
 }
 
+export type SalesOrderBrandSummary = {
+  id: string;
+  brands: string[];
+};
+
+export async function fetchSalesOrderBrandSummaries(): Promise<SalesOrderBrandSummary[]> {
+  await bootstrapOrdersFromLocalIfNeeded();
+  const organizationId = await getCurrentOrgId();
+  const { data, error } = await supabaseClient
+    .from("sales_orders")
+    .select("id,lines")
+    .eq("organization_id", organizationId)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw new Error(error.message || "sales_orders brand summaries load failed");
+  return ((data || []) as Array<Record<string, unknown>>).map((row) => {
+    const seen = new Set<string>();
+    const brands: string[] = [];
+    const lines = Array.isArray(row.lines) ? (row.lines as Array<Record<string, unknown>>) : [];
+    lines.forEach((line) => {
+      const brand = String(line.brand || "").trim();
+      if (!brand) return;
+      const key = brand.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      brands.push(brand);
+    });
+    return {
+      id: String(row.id || ""),
+      brands,
+    };
+  });
+}
+
 export type PurchaseOrderSalesLinkSummary = {
   id: string;
   sales_order_id: string;
