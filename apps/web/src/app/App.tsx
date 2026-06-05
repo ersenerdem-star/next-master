@@ -288,9 +288,16 @@ export function App() {
       setSessionReady(true);
 
       if (event === "SIGNED_IN" || event === "USER_UPDATED") {
-        clearCachedAppSession();
-        setAppRole("");
-        setAppRoleReady(false);
+        const cachedRole = normalizeAppRole(getCachedAppSessionSnapshot()?.role || "");
+        const hasKnownRole = Boolean(appRoleRef.current || cachedRole);
+        if (hasKnownRole) {
+          setAppRole((current) => current || appRoleRef.current || cachedRole);
+          setAppRoleReady(true);
+        } else {
+          clearCachedAppSession();
+          setAppRole("");
+          setAppRoleReady(false);
+        }
         setAppSessionReloadTick((current) => current + 1);
       }
     });
