@@ -742,6 +742,24 @@ export function QuotesPage({
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      try {
+        const rows = await fetchInventoryAvailabilitySummary();
+        if (!cancelled) setInventoryAvailabilityRows(rows);
+      } catch {
+        if (!cancelled) setInventoryAvailabilityRows([]);
+      }
+    }
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [
     salesOrdersView,
     salesOrderFilter,
@@ -774,24 +792,6 @@ export function QuotesPage({
     quoteNotes,
     quoteBuilderLines,
   ]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function run() {
-      try {
-        const rows = await fetchInventoryAvailabilitySummary();
-        if (!cancelled) setInventoryAvailabilityRows(rows);
-      } catch {
-        if (!cancelled) setInventoryAvailabilityRows([]);
-      }
-    }
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
