@@ -226,6 +226,7 @@ export function PriceListsPage() {
       setDownloadingPriceList(true);
       actionFeedback.begin(`Preparing ${downloadListType} price list for ${downloadBrand}...`);
       const sheetRows: Array<Array<string | number | null>> = [["New_Code", "Old_Codes", "Brand", "Product_Name", "OEM_No", "HS_Code", "Origin", "Weight_kg", "Price_List_Type", "Sales_Price_EUR", "Notes"]];
+      let oldCodeCoverageTimedOut = false;
 
       if (downloadListType === "C") {
         const catalogRows = await fetchCatalogExportRows({ brandName: downloadBrand });
@@ -235,9 +236,15 @@ export function PriceListsPage() {
             product_code: row.product_code,
           })),
         );
-        const oldCodesByNewCode = await fetchOldCodesByNewCodeForBrand({
+        const oldCodesByNewCode: Record<string, string[]> = await fetchOldCodesByNewCodeForBrand({
           brand: downloadBrand,
           newCodes: catalogRows.map((row) => row.product_code),
+        }).catch((caught) => {
+          if (caught instanceof Error && caught.message.includes("Old code coverage load timed out")) {
+            oldCodeCoverageTimedOut = true;
+            return {} as Record<string, string[]>;
+          }
+          throw caught;
         });
 
         sheetRows.push(
@@ -263,9 +270,15 @@ export function PriceListsPage() {
           marginA: Number(marginA) / 100,
           marginB: Number(marginB) / 100,
         });
-        const oldCodesByNewCode = await fetchOldCodesByNewCodeForBrand({
+        const oldCodesByNewCode: Record<string, string[]> = await fetchOldCodesByNewCodeForBrand({
           brand: downloadBrand,
           newCodes: rows.map((row) => row.product_code),
+        }).catch((caught) => {
+          if (caught instanceof Error && caught.message.includes("Old code coverage load timed out")) {
+            oldCodeCoverageTimedOut = true;
+            return {} as Record<string, string[]>;
+          }
+          throw caught;
         });
         const salesSelector =
           downloadListType === "A"
@@ -291,7 +304,11 @@ export function PriceListsPage() {
 
       const blob = buildXlsxBlob(`${downloadBrand} ${downloadListType}`, sheetRows, [8, 10, 13]);
       downloadBlob(`price-list-${downloadBrand.toLowerCase().replace(/\s+/g, "-")}-${downloadListType.toLowerCase()}.xlsx`, blob);
-      setStatus(`${downloadListType} price list downloaded for ${downloadBrand}.`);
+      setStatus(
+        oldCodeCoverageTimedOut
+          ? `${downloadListType} price list downloaded for ${downloadBrand}. Old code column was skipped because coverage lookup took too long.`
+          : `${downloadListType} price list downloaded for ${downloadBrand}.`,
+      );
       actionFeedback.succeed(`${downloadListType} price list downloaded for ${downloadBrand}.`);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Price list download failed";

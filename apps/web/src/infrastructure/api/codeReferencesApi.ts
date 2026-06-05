@@ -17,6 +17,14 @@ async function withTimeout<T>(promiseLike: PromiseLike<T> | T, label: string, ti
   }
 }
 
+function chunkArray<T>(rows: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < rows.length; index += size) {
+    chunks.push(rows.slice(index, index + size));
+  }
+  return chunks;
+}
+
 function mapCodeReferenceError(message: string) {
   if (message.includes("item_code_references_organization_id_brand_id_normalized_ol_key")) {
     return "This old customer code already has a mapping for this brand. Edit the existing reference instead of creating a duplicate.";
@@ -445,24 +453,27 @@ export async function fetchOldCodesByNewCodeForBrand(input: {
   if (!brand || !normalizedCodes.length) return {};
 
   const brandRow = await resolveBrandRow(brand);
-  const { data, error } = await withTimeout(
-    supabaseClient
-      .from("item_code_references")
-      .select("old_code,new_code")
-      .eq("brand_id", brandRow.id)
-      .eq("is_active", true)
-      .in("normalized_new_code", normalizedCodes),
-    "Old code coverage load",
-  );
-
-  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Old code coverage load failed"));
-
   const output: Record<string, string[]> = {};
-  for (const row of (data || []) as Array<{ old_code: string; new_code: string }>) {
-    const normalizedNewCode = normalizePartCode(row.new_code);
-    if (!normalizedNewCode) continue;
-    if (!output[normalizedNewCode]) output[normalizedNewCode] = [];
-    output[normalizedNewCode].push(row.old_code);
+
+  for (const codeChunk of chunkArray(normalizedCodes, 250)) {
+    const { data, error } = await withTimeout(
+      supabaseClient
+        .from("item_code_references")
+        .select("old_code,new_code")
+        .eq("brand_id", brandRow.id)
+        .eq("is_active", true)
+        .in("normalized_new_code", codeChunk),
+      "Old code coverage load",
+    );
+
+    if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Old code coverage load failed"));
+
+    for (const row of (data || []) as Array<{ old_code: string; new_code: string }>) {
+      const normalizedNewCode = normalizePartCode(row.new_code);
+      if (!normalizedNewCode) continue;
+      if (!output[normalizedNewCode]) output[normalizedNewCode] = [];
+      output[normalizedNewCode].push(row.old_code);
+    }
   }
 
   return output;
