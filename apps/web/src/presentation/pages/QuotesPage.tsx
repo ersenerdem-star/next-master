@@ -70,6 +70,75 @@ type InvoiceSalesLinkSummary = {
   sales_order_ids: string[];
 };
 
+const SALES_ORDER_WORKSPACE_CACHE_KEY = "next-master-sales-order-workspace";
+const SALES_ORDER_WORKSPACE_CACHE_WRITE_DELAY_MS = 250;
+const SALES_ORDER_IMPORT_CHUNK_SIZE = 75;
+
+type PersistedSalesOrderWorkspace = {
+  salesOrdersView?: "list" | "detail";
+  salesOrderFilter?: "all" | "draft" | "confirmed" | "purchased" | "invoiced";
+  workbenchMode?: "existing" | "new";
+  selectedLocalSalesOrderId?: string;
+  selectedQuoteId?: string;
+  salesOrderSourceSnapshot?: string;
+  builderStatus?: string;
+  quoteNo?: string;
+  customerName?: string;
+  customerSelection?: string;
+  manualCustomerName?: string;
+  sellerCompany?: string;
+  quoteDate?: string;
+  currency?: string;
+  quoteBrand?: string;
+  quoteBrandSelection?: string;
+  quoteQty?: string;
+  customerType?: "A" | "B" | "C" | "Other";
+  shippingCost?: string;
+  discountAmount?: string;
+  supplierMode?: string;
+  sellerInfo?: string;
+  buyerInfo?: string;
+  deliveryTermSelection?: string;
+  paymentTermsSelection?: string;
+  deliveryTerm?: string;
+  paymentTerms?: string;
+  packingDetails?: string;
+  quoteNotes?: string;
+  quoteBuilderLines?: QuoteBuilderLine[];
+  updatedAt?: string;
+};
+
+function readSalesOrderWorkspaceCache() {
+  if (typeof window === "undefined") return null as PersistedSalesOrderWorkspace | null;
+  try {
+    const raw = window.localStorage.getItem(SALES_ORDER_WORKSPACE_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as PersistedSalesOrderWorkspace) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSalesOrderWorkspaceCache(cache: PersistedSalesOrderWorkspace | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (!cache) {
+      window.localStorage.removeItem(SALES_ORDER_WORKSPACE_CACHE_KEY);
+      return;
+    }
+    window.localStorage.setItem(SALES_ORDER_WORKSPACE_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // Best-effort cache only.
+  }
+}
+
+function chunkRows<T>(rows: T[], size: number) {
+  const batches: T[][] = [];
+  for (let index = 0; index < rows.length; index += size) {
+    batches.push(rows.slice(index, index + size));
+  }
+  return batches;
+}
+
 const DELIVERY_TERM_OPTIONS = [
   "EXW",
   "FCA",
@@ -544,21 +613,26 @@ export function QuotesPage({
   salesOrdersNavTick = 0,
 }: QuotesPageProps) {
   const actionFeedback = useActionFeedback();
+  const initialWorkspaceCache = typeof window === "undefined" ? null : readSalesOrderWorkspaceCache();
   const importRef = useRef<HTMLInputElement | null>(null);
+  const workspaceCacheWriteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const workspaceCacheSnapshotRef = useRef<PersistedSalesOrderWorkspace | null>(initialWorkspaceCache);
   const [search, setSearch] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");
-  const [salesOrdersView, setSalesOrdersView] = useState<"list" | "detail">(externalSelectedQuoteId || externalSelectedSalesOrderId ? "detail" : "list");
-  const [salesOrderFilter, setSalesOrderFilter] = useState<"all" | "draft" | "confirmed" | "purchased" | "invoiced">("all");
+  const [salesOrdersView, setSalesOrdersView] = useState<"list" | "detail">(
+    externalSelectedQuoteId || externalSelectedSalesOrderId ? "detail" : initialWorkspaceCache?.salesOrdersView || "list",
+  );
+  const [salesOrderFilter, setSalesOrderFilter] = useState<"all" | "draft" | "confirmed" | "purchased" | "invoiced">(initialWorkspaceCache?.salesOrderFilter || "all");
   const [quotes, setQuotes] = useState<QuoteSummary[]>([]);
   const [localSalesOrders, setLocalSalesOrders] = useState<LocalSalesOrder[]>([]);
   const [savedPurchaseOrders, setSavedPurchaseOrders] = useState<PurchaseOrderSalesLinkSummary[]>([]);
   const [savedInvoices, setSavedInvoices] = useState<InvoiceSalesLinkSummary[]>([]);
-  const [selectedLocalSalesOrderId, setSelectedLocalSalesOrderId] = useState("");
+  const [selectedLocalSalesOrderId, setSelectedLocalSalesOrderId] = useState(initialWorkspaceCache?.selectedLocalSalesOrderId || "");
   const [selectedLocalSalesOrderIds, setSelectedLocalSalesOrderIds] = useState<string[]>([]);
   const [salesOrderActionsOpen, setSalesOrderActionsOpen] = useState(false);
-  const [workbenchMode, setWorkbenchMode] = useState<"existing" | "new">("existing");
-  const [salesOrderSourceSnapshot, setSalesOrderSourceSnapshot] = useState("");
-  const [selectedQuoteId, setSelectedQuoteId] = useState("");
+  const [workbenchMode, setWorkbenchMode] = useState<"existing" | "new">(initialWorkspaceCache?.workbenchMode || "existing");
+  const [salesOrderSourceSnapshot, setSalesOrderSourceSnapshot] = useState(initialWorkspaceCache?.salesOrderSourceSnapshot || "");
+  const [selectedQuoteId, setSelectedQuoteId] = useState(externalSelectedQuoteId || initialWorkspaceCache?.selectedQuoteId || "");
   const [detail, setDetail] = useState<QuoteDetail>({ quote: null, lines: [] });
   const [loadingQuotes, setLoadingQuotes] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -568,17 +642,17 @@ export function QuotesPage({
   const [quoteLinePreview, setQuoteLinePreview] = useState<QuoteBuilderLine | null>(null);
 
   const [quoteCode, setQuoteCode] = useState("");
-  const [quoteBrand, setQuoteBrand] = useState("");
-  const [quoteBrandSelection, setQuoteBrandSelection] = useState("");
-  const [quoteQty, setQuoteQty] = useState("1");
+  const [quoteBrand, setQuoteBrand] = useState(initialWorkspaceCache?.quoteBrand || "");
+  const [quoteBrandSelection, setQuoteBrandSelection] = useState(initialWorkspaceCache?.quoteBrandSelection || "");
+  const [quoteQty, setQuoteQty] = useState(initialWorkspaceCache?.quoteQty || "1");
   const [brandOptions, setBrandOptions] = useState<Array<{ value: string; label: string }>>([]);
-  const [customerType, setCustomerType] = useState<"A" | "B" | "C" | "Other">("A");
+  const [customerType, setCustomerType] = useState<"A" | "B" | "C" | "Other">(initialWorkspaceCache?.customerType || "A");
   const [marginA, setMarginA] = useState(10);
   const [marginB, setMarginB] = useState(15);
-  const [quoteBuilderLines, setQuoteBuilderLines] = useState<QuoteBuilderLine[]>([]);
+  const [quoteBuilderLines, setQuoteBuilderLines] = useState<QuoteBuilderLine[]>(initialWorkspaceCache?.quoteBuilderLines || []);
   const [customers, setCustomers] = useState<LocalCustomer[]>([]);
   const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
-  const [builderStatus, setBuilderStatus] = useState("");
+  const [builderStatus, setBuilderStatus] = useState(initialWorkspaceCache?.builderStatus || "");
   const [resolvingLine, setResolvingLine] = useState(false);
   const [importingLines, setImportingLines] = useState(false);
   const [exportingXlsx, setExportingXlsx] = useState(false);
@@ -594,24 +668,24 @@ export function QuotesPage({
   const [inventoryAvailabilityRows, setInventoryAvailabilityRows] = useState<InventoryAvailabilitySummary[]>([]);
   const pendingCatalogSalesHandledRef = useRef(false);
 
-  const [quoteNo, setQuoteNo] = useState("");
-  const [customerName, setCustomerName] = useState("");
-  const [customerSelection, setCustomerSelection] = useState("");
-  const [manualCustomerName, setManualCustomerName] = useState("");
-  const [sellerCompany, setSellerCompany] = useState("");
-  const [quoteDate, setQuoteDate] = useState(new Date().toISOString().slice(0, 10));
-  const [currency, setCurrency] = useState("EUR");
-  const [shippingCost, setShippingCost] = useState("0");
-  const [discountAmount, setDiscountAmount] = useState("0");
-  const [supplierMode, setSupplierMode] = useState("Best price");
-  const [sellerInfo, setSellerInfo] = useState("");
-  const [buyerInfo, setBuyerInfo] = useState("");
-  const [deliveryTermSelection, setDeliveryTermSelection] = useState("");
-  const [paymentTermsSelection, setPaymentTermsSelection] = useState("");
-  const [deliveryTerm, setDeliveryTerm] = useState("");
-  const [paymentTerms, setPaymentTerms] = useState("");
-  const [packingDetails, setPackingDetails] = useState("");
-  const [quoteNotes, setQuoteNotes] = useState("");
+  const [quoteNo, setQuoteNo] = useState(initialWorkspaceCache?.quoteNo || "");
+  const [customerName, setCustomerName] = useState(initialWorkspaceCache?.customerName || "");
+  const [customerSelection, setCustomerSelection] = useState(initialWorkspaceCache?.customerSelection || "");
+  const [manualCustomerName, setManualCustomerName] = useState(initialWorkspaceCache?.manualCustomerName || "");
+  const [sellerCompany, setSellerCompany] = useState(initialWorkspaceCache?.sellerCompany || "");
+  const [quoteDate, setQuoteDate] = useState(initialWorkspaceCache?.quoteDate || new Date().toISOString().slice(0, 10));
+  const [currency, setCurrency] = useState(initialWorkspaceCache?.currency || "EUR");
+  const [shippingCost, setShippingCost] = useState(initialWorkspaceCache?.shippingCost || "0");
+  const [discountAmount, setDiscountAmount] = useState(initialWorkspaceCache?.discountAmount || "0");
+  const [supplierMode, setSupplierMode] = useState(initialWorkspaceCache?.supplierMode || "Best price");
+  const [sellerInfo, setSellerInfo] = useState(initialWorkspaceCache?.sellerInfo || "");
+  const [buyerInfo, setBuyerInfo] = useState(initialWorkspaceCache?.buyerInfo || "");
+  const [deliveryTermSelection, setDeliveryTermSelection] = useState(initialWorkspaceCache?.deliveryTermSelection || "");
+  const [paymentTermsSelection, setPaymentTermsSelection] = useState(initialWorkspaceCache?.paymentTermsSelection || "");
+  const [deliveryTerm, setDeliveryTerm] = useState(initialWorkspaceCache?.deliveryTerm || "");
+  const [paymentTerms, setPaymentTerms] = useState(initialWorkspaceCache?.paymentTerms || "");
+  const [packingDetails, setPackingDetails] = useState(initialWorkspaceCache?.packingDetails || "");
+  const [quoteNotes, setQuoteNotes] = useState(initialWorkspaceCache?.quoteNotes || "");
 
   const selectedCustomerProfile = useMemo(() => {
     const customerLabel = customerSelection === "__manual__" ? manualCustomerName : customerSelection;
@@ -668,7 +742,38 @@ export function QuotesPage({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [
+    salesOrdersView,
+    salesOrderFilter,
+    workbenchMode,
+    selectedLocalSalesOrderId,
+    selectedQuoteId,
+    salesOrderSourceSnapshot,
+    builderStatus,
+    quoteNo,
+    customerName,
+    customerSelection,
+    manualCustomerName,
+    sellerCompany,
+    quoteDate,
+    currency,
+    quoteBrand,
+    quoteBrandSelection,
+    quoteQty,
+    customerType,
+    shippingCost,
+    discountAmount,
+    supplierMode,
+    sellerInfo,
+    buyerInfo,
+    deliveryTermSelection,
+    paymentTermsSelection,
+    deliveryTerm,
+    paymentTerms,
+    packingDetails,
+    quoteNotes,
+    quoteBuilderLines,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1100,6 +1205,78 @@ export function QuotesPage({
     [localSalesOrders, selectedLocalSalesOrderId],
   );
   const currentDraftDisplayLabel = quoteNo || currentLocalSalesOrder?.sales_order_no || "sales order";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const snapshot: PersistedSalesOrderWorkspace = {
+      salesOrdersView,
+      salesOrderFilter,
+      workbenchMode,
+      selectedLocalSalesOrderId,
+      selectedQuoteId,
+      salesOrderSourceSnapshot,
+      builderStatus,
+      quoteNo,
+      customerName,
+      customerSelection,
+      manualCustomerName,
+      sellerCompany,
+      quoteDate,
+      currency,
+      quoteBrand,
+      quoteBrandSelection,
+      quoteQty,
+      customerType,
+      shippingCost,
+      discountAmount,
+      supplierMode,
+      sellerInfo,
+      buyerInfo,
+      deliveryTermSelection,
+      paymentTermsSelection,
+      deliveryTerm,
+      paymentTerms,
+      packingDetails,
+      quoteNotes,
+      quoteBuilderLines,
+      updatedAt: new Date().toISOString(),
+    };
+    workspaceCacheSnapshotRef.current = snapshot;
+
+    if (workspaceCacheWriteTimeoutRef.current) {
+      window.clearTimeout(workspaceCacheWriteTimeoutRef.current);
+    }
+    workspaceCacheWriteTimeoutRef.current = window.setTimeout(() => {
+      writeSalesOrderWorkspaceCache(snapshot);
+      workspaceCacheWriteTimeoutRef.current = null;
+    }, SALES_ORDER_WORKSPACE_CACHE_WRITE_DELAY_MS);
+
+    return () => {
+      if (workspaceCacheWriteTimeoutRef.current) {
+        window.clearTimeout(workspaceCacheWriteTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const flushWorkspaceCache = () => {
+      writeSalesOrderWorkspaceCache(workspaceCacheSnapshotRef.current);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flushWorkspaceCache();
+    };
+
+    window.addEventListener("beforeunload", flushWorkspaceCache);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      flushWorkspaceCache();
+      window.removeEventListener("beforeunload", flushWorkspaceCache);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   function getAdminCustomerLabel(value: string) {
     const customer = findCustomerByNameInList(customers, value);
@@ -1830,13 +2007,30 @@ export function QuotesPage({
     ]);
   }
 
-  async function buildImportLines(rows: QuoteImportRow[]) {
-    return await batchResolveQuoteImportRows({
-      rows,
-      customerType,
-      marginA: effectiveMarginA,
-      marginB: effectiveMarginB,
-    });
+  async function buildImportLines(
+    rows: QuoteImportRow[],
+    onChunkResolved?: (resolvedLines: QuoteBuilderLine[], detail: { processedRows: number; totalRows: number }) => void,
+  ) {
+    const batches = chunkRows(rows, SALES_ORDER_IMPORT_CHUNK_SIZE);
+    const allLines: QuoteBuilderLine[] = [];
+    let processedRows = 0;
+
+    for (const batch of batches) {
+      const resolvedLines = await batchResolveQuoteImportRows({
+        rows: batch,
+        customerType,
+        marginA: effectiveMarginA,
+        marginB: effectiveMarginB,
+      });
+      processedRows += batch.length;
+      allLines.push(...resolvedLines);
+      onChunkResolved?.(resolvedLines, {
+        processedRows,
+        totalRows: rows.length,
+      });
+    }
+
+    return allLines;
   }
 
   async function handleResolveQuoteLine() {
@@ -1903,9 +2097,14 @@ export function QuotesPage({
         throw new Error("Brand is required for import. Include a Brand column, choose a brand below, or use a file name that clearly contains a single brand.");
       }
       setBuilderStatus(`Importing and pricing ${normalizedRows.length.toLocaleString("en-US")} lines...`);
-      const hydratedLines = await buildImportLines(normalizedRows);
-      setQuoteBuilderLines((current) => [...hydratedLines, ...current]);
-      const importedDiscontinuedCount = hydratedLines.filter((line) => line.lifecycle_status === "discontinued").length;
+      let importedDiscontinuedCount = 0;
+      const hydratedLines = await buildImportLines(normalizedRows, (resolvedLines, progress) => {
+        importedDiscontinuedCount += resolvedLines.filter((line) => line.lifecycle_status === "discontinued").length;
+        setQuoteBuilderLines((current) => [...current, ...resolvedLines]);
+        setBuilderStatus(
+          `Imported ${progress.processedRows.toLocaleString("en-US")} / ${progress.totalRows.toLocaleString("en-US")} lines...`,
+        );
+      });
       setBuilderStatus(
         importedDiscontinuedCount
           ? `Pricing ready for ${hydratedLines.length.toLocaleString("en-US")} imported lines. ${importedDiscontinuedCount.toLocaleString("en-US")} item(s) are discontinued.`
