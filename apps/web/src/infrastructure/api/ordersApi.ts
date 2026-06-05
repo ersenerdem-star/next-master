@@ -50,33 +50,16 @@ const SALES_ORDER_SUMMARY_COLUMNS = [
   "sales_order_no",
   "customer_name",
   "seller_company",
-  "purchase_company",
   "quote_date",
   "currency",
   "customer_type",
-  "shipping_cost",
-  "discount_amount",
-  "supplier_mode",
-  "preferred_supplier",
-  "seller_info",
-  "buyer_info",
-  "delivery_term",
-  "payment_terms",
-  "packing_details",
-  "notes",
   "status",
-  "purchase_total",
   "sales_total",
-  "profit_total",
-  "margin_percent",
   "source_channel",
-  "portal_invite_id",
   "portal_submitted_at",
   "portal_seen_at",
-  "created_at",
   "updated_at",
   "confirmed_at",
-  "lines",
 ].join(",");
 
 const PURCHASE_ORDER_COLUMNS = [
@@ -720,6 +703,50 @@ export async function fetchSalesOrders(): Promise<LocalSalesOrder[]> {
 
 export async function fetchSalesOrderSummaries(): Promise<LocalSalesOrder[]> {
   return fetchOrderCollection("sales_orders", SALES_ORDER_SUMMARY_COLUMNS, mapSalesOrderRow);
+}
+
+export type PurchaseOrderSalesLinkSummary = {
+  id: string;
+  sales_order_id: string;
+};
+
+export type InvoiceSalesLinkSummary = {
+  id: string;
+  sales_order_id: string;
+  sales_order_ids: string[];
+};
+
+export async function fetchPurchaseOrderSalesLinkSummaries(): Promise<PurchaseOrderSalesLinkSummary[]> {
+  await bootstrapOrdersFromLocalIfNeeded();
+  const organizationId = await getCurrentOrgId();
+  const { data, error } = await supabaseClient
+    .from("purchase_orders")
+    .select("id,sales_order_id")
+    .eq("organization_id", organizationId)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw new Error(error.message || "purchase_orders load failed");
+  return ((data || []) as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id || ""),
+    sales_order_id: String(row.sales_order_id || ""),
+  }));
+}
+
+export async function fetchInvoiceSalesLinkSummaries(): Promise<InvoiceSalesLinkSummary[]> {
+  await bootstrapOrdersFromLocalIfNeeded();
+  const organizationId = await getCurrentOrgId();
+  const { data, error } = await supabaseClient
+    .from("invoices")
+    .select("id,sales_order_id,sales_order_ids")
+    .eq("organization_id", organizationId)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw new Error(error.message || "invoices load failed");
+  return ((data || []) as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id || ""),
+    sales_order_id: String(row.sales_order_id || ""),
+    sales_order_ids: Array.isArray(row.sales_order_ids) ? (row.sales_order_ids as string[]) : [],
+  }));
 }
 
 export async function fetchSalesOrderById(salesOrderId: string): Promise<LocalSalesOrder> {

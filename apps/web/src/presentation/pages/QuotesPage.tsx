@@ -4,8 +4,8 @@ import { findCodeReferenceMatch } from "../../infrastructure/api/codeReferencesA
 import { fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
 import {
   deleteSalesOrder,
-  fetchInvoiceSummaries,
-  fetchPurchaseOrderSummaries,
+  fetchInvoiceSalesLinkSummaries,
+  fetchPurchaseOrderSalesLinkSummaries,
   fetchSalesOrderById,
   fetchSalesOrderSummaries,
   markSalesOrderPortalSeen,
@@ -33,7 +33,7 @@ import { Select } from "../components/common/Select";
 import type { CompanyProfile } from "../../types/company";
 import type { LocalCustomer } from "../../types/customers";
 import type { CodeReferenceMatch } from "../../types/codeReferences";
-import type { LocalInvoice, LocalPurchaseOrder, LocalSalesOrder } from "../../types/orders";
+import type { LocalSalesOrder } from "../../types/orders";
 import type { QuoteBuilderLine } from "../../types/quoteBuilder";
 import type { QuoteDetail, QuoteSummary } from "../../types/quotes";
 import { Button } from "../components/common/Button";
@@ -57,6 +57,17 @@ type QuoteImportRow = {
   code: string;
   brand: string;
   qty: number;
+};
+
+type PurchaseOrderSalesLinkSummary = {
+  id: string;
+  sales_order_id: string;
+};
+
+type InvoiceSalesLinkSummary = {
+  id: string;
+  sales_order_id: string;
+  sales_order_ids: string[];
 };
 
 const DELIVERY_TERM_OPTIONS = [
@@ -346,21 +357,6 @@ function renderInventoryAvailabilityBadge(
   );
 }
 
-function buildOrderBrandSummary(lines: QuoteBuilderLine[]) {
-  const brands = Array.from(
-    new Set(
-      lines
-        .map((line) => canonicalizeBrandName(line.brand || ""))
-        .map((brand) => brand.trim())
-        .filter(Boolean),
-    ),
-  ).sort((left, right) => left.localeCompare(right));
-  return {
-    labels: brands.slice(0, 4),
-    extraCount: Math.max(0, brands.length - 4),
-  };
-}
-
 function mergeCatalogLineIntoSalesDraft(currentLines: QuoteBuilderLine[], nextLine: QuoteBuilderLine) {
   const nextKey = lineMetadataKey(nextLine.brand || "", nextLine.resolvedCode || nextLine.requestedCode);
   const existingIndex = currentLines.findIndex((line) => lineMetadataKey(line.brand || "", line.resolvedCode || line.requestedCode) === nextKey);
@@ -555,8 +551,8 @@ export function QuotesPage({
   const [salesOrderFilter, setSalesOrderFilter] = useState<"all" | "draft" | "confirmed" | "purchased" | "invoiced">("all");
   const [quotes, setQuotes] = useState<QuoteSummary[]>([]);
   const [localSalesOrders, setLocalSalesOrders] = useState<LocalSalesOrder[]>([]);
-  const [savedPurchaseOrders, setSavedPurchaseOrders] = useState<LocalPurchaseOrder[]>([]);
-  const [savedInvoices, setSavedInvoices] = useState<LocalInvoice[]>([]);
+  const [savedPurchaseOrders, setSavedPurchaseOrders] = useState<PurchaseOrderSalesLinkSummary[]>([]);
+  const [savedInvoices, setSavedInvoices] = useState<InvoiceSalesLinkSummary[]>([]);
   const [selectedLocalSalesOrderId, setSelectedLocalSalesOrderId] = useState("");
   const [selectedLocalSalesOrderIds, setSelectedLocalSalesOrderIds] = useState<string[]>([]);
   const [salesOrderActionsOpen, setSalesOrderActionsOpen] = useState(false);
@@ -645,19 +641,23 @@ export function QuotesPage({
 
     async function run() {
       try {
-        const [salesOrderRows, purchaseOrderRows, invoiceRows] = await Promise.all([
-          fetchSalesOrderSummaries(),
-          fetchPurchaseOrderSummaries(),
-          fetchInvoiceSummaries(),
+        const salesOrderRows = await fetchSalesOrderSummaries();
+        if (!cancelled) setLocalSalesOrders(salesOrderRows);
+      } catch {
+        if (!cancelled) setLocalSalesOrders([]);
+      }
+
+      try {
+        const [purchaseOrderRows, invoiceRows] = await Promise.all([
+          fetchPurchaseOrderSalesLinkSummaries(),
+          fetchInvoiceSalesLinkSummaries(),
         ]);
         if (!cancelled) {
-          setLocalSalesOrders(salesOrderRows);
           setSavedPurchaseOrders(purchaseOrderRows);
           setSavedInvoices(invoiceRows);
         }
       } catch {
         if (!cancelled) {
-          setLocalSalesOrders([]);
           setSavedPurchaseOrders([]);
           setSavedInvoices([]);
         }
@@ -2133,17 +2133,20 @@ export function QuotesPage({
   }
 
   async function refreshLocalSalesOrders(nextSelectedId?: string) {
-    const [nextSalesOrders, nextPurchaseOrders, nextInvoices] = await Promise.all([
-      fetchSalesOrderSummaries(),
-      fetchPurchaseOrderSummaries(),
-      fetchInvoiceSummaries(),
-    ]);
+    const nextSalesOrders = await fetchSalesOrderSummaries();
     setLocalSalesOrders(nextSalesOrders);
-    setSavedPurchaseOrders(nextPurchaseOrders);
-    setSavedInvoices(nextInvoices);
     if (nextSelectedId) {
       setSelectedLocalSalesOrderId(nextSelectedId);
     }
+    void Promise.all([fetchPurchaseOrderSalesLinkSummaries(), fetchInvoiceSalesLinkSummaries()])
+      .then(([nextPurchaseOrders, nextInvoices]) => {
+        setSavedPurchaseOrders(nextPurchaseOrders);
+        setSavedInvoices(nextInvoices);
+      })
+      .catch(() => {
+        setSavedPurchaseOrders([]);
+        setSavedInvoices([]);
+      });
   }
 
   function toggleLocalSalesOrderSelection(orderId: string, forceChecked?: boolean) {
@@ -2237,8 +2240,14 @@ export function QuotesPage({
     });
 
     savedInvoices.forEach((row) => {
-      if (!row.sales_order_id) return;
-      invoiceCountBySalesOrderId.set(row.sales_order_id, (invoiceCountBySalesOrderId.get(row.sales_order_id) || 0) + 1);
+      const linkedOrderIds = new Set<string>();
+      if (row.sales_order_id) linkedOrderIds.add(row.sales_order_id);
+      (row.sales_order_ids || []).forEach((id) => {
+        if (id) linkedOrderIds.add(id);
+      });
+      linkedOrderIds.forEach((id) => {
+        invoiceCountBySalesOrderId.set(id, (invoiceCountBySalesOrderId.get(id) || 0) + 1);
+      });
     });
 
     return {
@@ -2307,25 +2316,6 @@ export function QuotesPage({
         sortValue: (row: LocalSalesOrder) => row.sales_order_no,
       },
       {
-        key: "brands",
-        header: "Brands",
-        render: (row: LocalSalesOrder) => {
-          const brandSummary = buildOrderBrandSummary(row.lines);
-          if (!brandSummary.labels.length) return "-";
-          return (
-            <span className="document-marks document-marks--compact">
-              {brandSummary.labels.map((brand) => (
-                <span key={`${row.id}-${brand}`} className="mark-badge">
-                  {brand}
-                </span>
-              ))}
-              {brandSummary.extraCount > 0 ? <span className="mark-badge mark-badge--info">+{brandSummary.extraCount}</span> : null}
-            </span>
-          );
-        },
-        sortValue: (row: LocalSalesOrder) => buildOrderBrandSummary(row.lines).labels.join(", "),
-      },
-      {
         key: "status",
         header: "Status",
         render: (row: LocalSalesOrder) => {
@@ -2334,6 +2324,9 @@ export function QuotesPage({
           return (
             <span className="document-marks document-marks--compact">
               <span className={`mark-badge ${row.status === "confirmed" ? "mark-badge--success" : ""}`}>{row.status.toUpperCase()}</span>
+              <span className={`mark-badge ${row.source_channel === "portal" ? "mark-badge--accent" : "mark-badge--info"}`}>
+                {row.source_channel === "portal" ? "Portal" : "Internal"}
+              </span>
               {isDraftPortalAlert(row, poCount, invoiceCount) ? (
                 <span className="mark-badge mark-badge--accent">New Order</span>
               ) : null}
