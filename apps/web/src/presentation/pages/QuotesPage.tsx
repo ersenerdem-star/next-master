@@ -760,38 +760,7 @@ export function QuotesPage({
     return () => {
       cancelled = true;
     };
-  }, [
-    salesOrdersView,
-    salesOrderFilter,
-    workbenchMode,
-    selectedLocalSalesOrderId,
-    selectedQuoteId,
-    salesOrderSourceSnapshot,
-    builderStatus,
-    quoteNo,
-    customerName,
-    customerSelection,
-    manualCustomerName,
-    sellerCompany,
-    quoteDate,
-    currency,
-    quoteBrand,
-    quoteBrandSelection,
-    quoteQty,
-    customerType,
-    shippingCost,
-    discountAmount,
-    supplierMode,
-    sellerInfo,
-    buyerInfo,
-    deliveryTermSelection,
-    paymentTermsSelection,
-    deliveryTerm,
-    paymentTerms,
-    packingDetails,
-    quoteNotes,
-    quoteBuilderLines,
-  ]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1256,7 +1225,38 @@ export function QuotesPage({
         window.clearTimeout(workspaceCacheWriteTimeoutRef.current);
       }
     };
-  }, []);
+  }, [
+    salesOrdersView,
+    salesOrderFilter,
+    workbenchMode,
+    selectedLocalSalesOrderId,
+    selectedQuoteId,
+    salesOrderSourceSnapshot,
+    builderStatus,
+    quoteNo,
+    customerName,
+    customerSelection,
+    manualCustomerName,
+    sellerCompany,
+    quoteDate,
+    currency,
+    quoteBrand,
+    quoteBrandSelection,
+    quoteQty,
+    customerType,
+    shippingCost,
+    discountAmount,
+    supplierMode,
+    sellerInfo,
+    buyerInfo,
+    deliveryTermSelection,
+    paymentTermsSelection,
+    deliveryTerm,
+    paymentTerms,
+    packingDetails,
+    quoteNotes,
+    quoteBuilderLines,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
