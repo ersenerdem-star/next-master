@@ -5,6 +5,7 @@ import { parseCsv } from "../../shared/csv";
 import type { BrandOption } from "../../types/brand";
 import type { CodeReferenceRow, CodeReferenceUsage } from "../../types/codeReferences";
 import { Button } from "../components/common/Button";
+import { DraggableSurface } from "../components/common/DraggableSurface";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
@@ -499,8 +500,8 @@ export function CodeReferencesPage() {
 
       {showCreateDialog ? (
         <div className="modal-backdrop">
-          <div className="modal-card">
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
+            <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>Add Code Reference</h3>
                 <p>Create an approved old-code to new-code mapping for quotes and pricing warnings.</p>
@@ -585,14 +586,14 @@ export function CodeReferencesPage() {
                 Create Reference
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
 
       {showImportDialog ? (
         <div className="modal-backdrop">
-          <div className="modal-card">
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
+            <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>Import Code References CSV</h3>
                 <p>Accepted columns: Brand, Old_Code, New_Code, Original_Number, Reason, Active.</p>
@@ -659,7 +660,7 @@ export function CodeReferencesPage() {
                 Import
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
     </div>

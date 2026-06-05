@@ -10,6 +10,7 @@ import {
 import type { PortalBranding, PortalCredentials, PortalSnapshot } from "../../types/portalSession";
 import { Button } from "../components/common/Button";
 import { DataTable } from "../components/common/DataTable";
+import { DraggableSurface } from "../components/common/DraggableSurface";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { SectionCard } from "../components/common/SectionCard";
@@ -2958,19 +2959,19 @@ export function PortalPage() {
 
       {portalOverlay ? (
         <div className="modal-backdrop">
-          <div className="modal-card modal-card--compact">
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card modal-card--compact" dragHandleSelector=".draggable-surface__handle">
+            <div className="modal-card__header draggable-surface__handle">
               <h3>{portalOverlay.title}</h3>
               <p>{portalOverlay.message}</p>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
 
       {portalPreview ? (
         <div className="modal-backdrop" onClick={() => setPortalPreview(null)}>
-          <div className="modal-card modal-card--compact" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card modal-card--compact" dragHandleSelector=".draggable-surface__handle" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>
                   {portalPreview.kind === "catalog"
@@ -3058,14 +3059,14 @@ export function PortalPage() {
                 Close
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
 
       {previewImage ? (
         <div className="modal-backdrop" onClick={() => setPreviewImage(null)}>
-          <div className="modal-card modal-card--image-preview" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card modal-card--image-preview" dragHandleSelector=".draggable-surface__handle" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>{previewImage.code}</h3>
                 <p>{previewImage.name || "Portal image preview"}</p>
@@ -3079,7 +3080,7 @@ export function PortalPage() {
                 Close
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
     </div>

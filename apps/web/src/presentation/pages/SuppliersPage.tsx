@@ -12,6 +12,7 @@ import type { BrandOption } from "../../types/brand";
 import type { CatalogRow } from "../../types/catalog";
 import type { SupplierPriceRow, SupplierSummary } from "../../types/suppliers";
 import { Button } from "../components/common/Button";
+import { DraggableSurface } from "../components/common/DraggableSurface";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
@@ -622,8 +623,8 @@ export function SuppliersPage() {
 
       {showImportDialog ? (
         <div className="modal-backdrop">
-          <div className="modal-card">
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
+            <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>Supplier CSV Import</h3>
                 <p>All fields in this screen must be completed before import.</p>
@@ -733,14 +734,14 @@ export function SuppliersPage() {
                 Import
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
 
       {showManualPriceDialog ? (
         <div className="modal-backdrop">
-          <div className="modal-card">
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
+            <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>Manual Supplier Price</h3>
                 <p>Add or update one supplier price row for a specific part number.</p>
@@ -830,7 +831,7 @@ export function SuppliersPage() {
                 Save Price
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
     </div>

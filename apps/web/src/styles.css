@@ -1004,6 +1004,8 @@ select {
 
 .modal-card {
   width: min(860px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
   border-radius: 18px;
   background: #fff;
   border: 1px solid #e2e8f0;
@@ -1013,6 +1015,23 @@ select {
 
 .modal-card--compact {
   width: min(520px, 100%);
+}
+
+.draggable-surface__handle {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.is-dragging .draggable-surface__handle {
+  cursor: grabbing;
+}
+
+.modal-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .modal-card__header h3 {
@@ -2219,6 +2238,9 @@ select {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  max-height: calc(100vh - 140px);
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: 16px;
   border: 1px solid rgba(137, 156, 179, 0.26);
   border-radius: 22px;
@@ -2237,6 +2259,10 @@ select {
   top: 120px;
   z-index: 50;
   width: min(420px, calc(100vw - 32px));
+}
+
+.workbench-detail-panel__dragbar {
+  align-items: center;
 }
 
 .workbench-detail-panel__eyebrow {

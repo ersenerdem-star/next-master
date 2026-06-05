@@ -31,6 +31,7 @@ import type { LocalBill, LocalBillLine, LocalPaymentMade, LocalPurchaseOrder, Lo
 import type { LocalVendor } from "../../types/vendors";
 import { DataTable } from "../components/common/DataTable";
 import { Button } from "../components/common/Button";
+import { DraggableSurface } from "../components/common/DraggableSurface";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { BrandPill } from "../components/common/BrandPill";
@@ -1901,8 +1902,8 @@ export function PurchasesPage({
 
       {purchaseLinePreview ? (
         <div className="modal-backdrop" onClick={() => setPurchaseLinePreview(null)}>
-          <div className="modal-card modal-card--compact" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card modal-card--compact" dragHandleSelector=".draggable-surface__handle" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>{purchaseLinePreview.product_code || "-"}</h3>
                 <p>{purchaseLinePreview.brand || "Purchase order line preview"}</p>
@@ -1923,14 +1924,14 @@ export function PurchasesPage({
                 Close
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
 
       {billLinePreview ? (
         <div className="modal-backdrop" onClick={() => setBillLinePreview(null)}>
-          <div className="modal-card modal-card--compact" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card modal-card--compact" dragHandleSelector=".draggable-surface__handle" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>{billLinePreview.product_code || "-"}</h3>
                 <p>{billLinePreview.brand || "Bill line preview"}</p>
@@ -1953,7 +1954,7 @@ export function PurchasesPage({
                 Close
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
 

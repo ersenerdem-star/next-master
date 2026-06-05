@@ -9,6 +9,7 @@ import type { BrandOption } from "../../types/brand";
 import { fetchAllCloudMaster } from "../../infrastructure/api/masterApi";
 import { Button } from "../components/common/Button";
 import { useActionFeedback } from "../components/common/ActionFeedback";
+import { DraggableSurface } from "../components/common/DraggableSurface";
 import { Input } from "../components/common/Input";
 import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
@@ -340,8 +341,8 @@ export function PriceListsPage() {
 
       {showCImportDialog ? (
         <div className="modal-backdrop">
-          <div className="modal-card">
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
+            <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>C Price List Import</h3>
                 <p>Manual special prices. These values override formula-based pricing for customer C.</p>
@@ -412,7 +413,7 @@ export function PriceListsPage() {
                 Import
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
     </SectionCard>

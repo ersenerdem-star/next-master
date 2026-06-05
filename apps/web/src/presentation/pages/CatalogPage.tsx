@@ -11,6 +11,7 @@ import type { BrandOption } from "../../types/brand";
 import type { CatalogRow } from "../../types/catalog";
 import type { CodeReferenceUsage } from "../../types/codeReferences";
 import { Button } from "../components/common/Button";
+import { DraggableSurface } from "../components/common/DraggableSurface";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
@@ -887,6 +888,24 @@ export function CatalogPage() {
     setError("");
     setStatus("");
     try {
+      const normalizedSearch = normalizePartCode(nextSearch);
+      const shouldTryDirectCodeLookup =
+        Boolean(nextBrand) &&
+        normalizedSearch.length >= 5 &&
+        /\d/.test(nextSearch) &&
+        !nextSearch.includes(",");
+
+      if (shouldTryDirectCodeLookup) {
+        const directRows = await fetchCatalogRowsByCodes({
+          brandName: nextBrand,
+          codes: [nextSearch],
+        });
+        if (directRows.length) {
+          setRows(directRows);
+          return;
+        }
+      }
+
       const result = await fetchCloudCatalog({
         search: nextSearch,
         brandName: nextBrand,
@@ -1188,9 +1207,9 @@ export function CatalogPage() {
       </section>
 
       {selectedCatalogRow && selectedCatalogDraft ? (
-        <div className="catalog-selected-popup" ref={selectedCatalogPopupRef}>
+        <DraggableSurface className="catalog-selected-popup" ref={selectedCatalogPopupRef} dragHandleSelector=".draggable-surface__handle">
         <div className="workbench-detail-panel workbench-detail-panel--catalog">
-            <div className="toolbar toolbar--wrap">
+            <div className="toolbar toolbar--wrap workbench-detail-panel__dragbar draggable-surface__handle">
               <span className="workbench-detail-panel__eyebrow">Selected Item</span>
               <Button variant="secondary" className="button--compact" onClick={() => setSelectedCatalogProductId("")}>
                 Close
@@ -1341,13 +1360,13 @@ export function CatalogPage() {
             </div>
             {selectedCatalogDraft.lifecycle_note ? <div className="info-text">{selectedCatalogDraft.lifecycle_note}</div> : null}
           </div>
-        </div>
+        </DraggableSurface>
       ) : null}
 
       {showImportDialog ? (
         <div className="modal-backdrop">
-          <div className="modal-card">
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
+            <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>Catalog CSV Import</h3>
                 <p>Fill all required fields before starting the import.</p>
@@ -1433,14 +1452,14 @@ export function CatalogPage() {
                 Import
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
 
       {showExportDialog ? (
         <div className="modal-backdrop">
-          <div className="modal-card">
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
+            <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>Catalog CSV Export</h3>
                 <p>Select a brand to download its full catalog list.</p>
@@ -1465,14 +1484,14 @@ export function CatalogPage() {
                 Export CSV
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
 
       {showCreateDialog ? (
         <div className="modal-backdrop">
-          <div className="modal-card">
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
+            <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>Add New Item</h3>
                 <p>Create a new catalog product under Items.</p>
@@ -1580,14 +1599,14 @@ export function CatalogPage() {
                 Create Item
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
 
       {showReferenceDialog ? (
         <div className="modal-backdrop">
-          <div className="modal-card">
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
+            <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>Add Code Reference</h3>
                 <p>Create a mapping from the customer's old code to this current valid catalog code.</p>
@@ -1668,14 +1687,14 @@ export function CatalogPage() {
                 Save Reference
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
 
       {previewImage ? (
         <div className="modal-backdrop" onClick={() => setPreviewImage(null)}>
-          <div className="modal-card modal-card--image-preview" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card modal-card--image-preview" dragHandleSelector=".draggable-surface__handle" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>{previewImage.code}</h3>
                 <p>{previewImage.name || "Catalog image preview"}</p>
@@ -1689,7 +1708,7 @@ export function CatalogPage() {
                 Close
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
     </div>

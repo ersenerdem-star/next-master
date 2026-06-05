@@ -422,26 +422,25 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
 
   for (let index = 0; index < normalizedCodes.length; index += chunkSize) {
     const codeChunk = normalizedCodes.slice(index, index + chunkSize);
-    const buildQuery = (selectClause: string) =>
+    const normalizedCodeChunk = Array.from(new Set(codeChunk.map((code) => normalizePartCode(code)).filter(Boolean)));
+    const buildQuery = (selectClause: string, column: "product_code" | "normalized_code", values: string[]) =>
       supabaseClient
         .from("catalog_products")
         .select(selectClause)
         .eq("organization_id", organizationId)
         .eq("brand_id", brandRow.id)
-        .in("product_code", codeChunk)
+        .in(column, values)
         .order("product_code", { ascending: true });
 
-    let { data, error } = await buildQuery(CATALOG_SELECT_WITH_IMAGE);
-    if (error && isMissingCatalogImageError(error)) {
-      ({ data, error } = await buildQuery(CATALOG_SELECT_NO_IMAGE));
-    }
-
-    if (error) {
-      throw new Error(sanitizeUserFacingMessage(error.message, "Imported catalog rows load failed"));
-    }
-
-    result.push(
-      ...((data ?? []) as unknown as Array<{
+    const executeQuery = async (column: "product_code" | "normalized_code", values: string[]) => {
+      let { data, error } = await buildQuery(CATALOG_SELECT_WITH_IMAGE, column, values);
+      if (error && isMissingCatalogImageError(error)) {
+        ({ data, error } = await buildQuery(CATALOG_SELECT_NO_IMAGE, column, values));
+      }
+      if (error) {
+        throw new Error(sanitizeUserFacingMessage(error.message, "Imported catalog rows load failed"));
+      }
+      return (data ?? []) as unknown as Array<{
         id: string;
         product_code: string;
         image_url?: string | null;
@@ -453,7 +452,19 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
         weight_kg: number | null;
         lifecycle_status: string | null;
         lifecycle_note: string | null;
-      }>).map((row) => ({
+      }>;
+    };
+
+    const exactRows = await executeQuery("product_code", codeChunk);
+    const normalizedRows = normalizedCodeChunk.length ? await executeQuery("normalized_code", normalizedCodeChunk) : [];
+    const mergedRows = Array.from(
+      new Map(
+        [...exactRows, ...normalizedRows].map((row) => [String(row.id || row.product_code), row]),
+      ).values(),
+    );
+
+    result.push(
+      ...mergedRows.map((row) => ({
         total_count: normalizedCodes.length,
         product_id: row.id,
         product_code: row.product_code,

@@ -39,6 +39,7 @@ import type { QuoteDetail, QuoteSummary } from "../../types/quotes";
 import { Button } from "../components/common/Button";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { DataTable } from "../components/common/DataTable";
+import { DraggableSurface } from "../components/common/DraggableSurface";
 import { Input } from "../components/common/Input";
 import { BrandPill } from "../components/common/BrandPill";
 
@@ -3017,8 +3018,8 @@ export function QuotesPage({
 
       {invoicePromptOpen && pendingConfirmedOrder ? (
         <div className="modal-backdrop">
-          <div className="modal-card">
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
+            <div className="modal-card__header draggable-surface__handle">
               <h3>Convert to Invoice?</h3>
               <p>
                 {pendingConfirmedOrder.sales_order_no} confirmed and supplier purchase orders created. Do you want to create the sales invoice now?
@@ -3043,14 +3044,14 @@ export function QuotesPage({
                 Convert to Invoice
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
 
       {quoteLinePreview ? (
         <div className="modal-backdrop" onClick={() => setQuoteLinePreview(null)}>
-          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-card__header">
+          <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-card__header draggable-surface__handle">
               <h3>{quoteLinePreview.resolvedCode || quoteLinePreview.requestedCode || "-"}</h3>
               <p>Sales order line preview</p>
             </div>
@@ -3085,7 +3086,7 @@ export function QuotesPage({
                 Close
               </Button>
             </div>
-          </div>
+          </DraggableSurface>
         </div>
       ) : null}
     </div>
