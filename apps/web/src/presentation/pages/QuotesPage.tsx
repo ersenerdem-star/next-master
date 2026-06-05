@@ -614,6 +614,10 @@ export function QuotesPage({
 }: QuotesPageProps) {
   const actionFeedback = useActionFeedback();
   const initialWorkspaceCache = typeof window === "undefined" ? null : readSalesOrderWorkspaceCache();
+  const initialCachedQuoteId =
+    initialWorkspaceCache?.workbenchMode === "new" && !initialWorkspaceCache?.selectedLocalSalesOrderId
+      ? initialWorkspaceCache?.selectedQuoteId || ""
+      : "";
   const importRef = useRef<HTMLInputElement | null>(null);
   const workspaceCacheWriteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const workspaceCacheSnapshotRef = useRef<PersistedSalesOrderWorkspace | null>(initialWorkspaceCache);
@@ -632,7 +636,7 @@ export function QuotesPage({
   const [salesOrderActionsOpen, setSalesOrderActionsOpen] = useState(false);
   const [workbenchMode, setWorkbenchMode] = useState<"existing" | "new">(initialWorkspaceCache?.workbenchMode || "existing");
   const [salesOrderSourceSnapshot, setSalesOrderSourceSnapshot] = useState(initialWorkspaceCache?.salesOrderSourceSnapshot || "");
-  const [selectedQuoteId, setSelectedQuoteId] = useState(externalSelectedQuoteId || initialWorkspaceCache?.selectedQuoteId || "");
+  const [selectedQuoteId, setSelectedQuoteId] = useState(externalSelectedQuoteId || initialCachedQuoteId);
   const [detail, setDetail] = useState<QuoteDetail>({ quote: null, lines: [] });
   const [loadingQuotes, setLoadingQuotes] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -962,6 +966,10 @@ export function QuotesPage({
     let cancelled = false;
 
     async function run() {
+      if (salesOrdersView !== "detail" || selectedLocalSalesOrderId) {
+        setLoadingDetail(false);
+        return;
+      }
       if (!selectedQuoteId) {
         setDetail({ quote: null, lines: [] });
         return;
@@ -1062,7 +1070,7 @@ export function QuotesPage({
     return () => {
       cancelled = true;
     };
-  }, [selectedQuoteId, customerType, customerPricingMode, effectiveMarginA, effectiveMarginB]);
+  }, [selectedQuoteId, selectedLocalSalesOrderId, salesOrdersView, customerType, customerPricingMode, effectiveMarginA, effectiveMarginB]);
 
   const draftTotals = useMemo(() => {
     const purchase = roundMoney(quoteBuilderLines.reduce((sum, line) => sum + toNumber(line.buy_price) * line.qty, 0));
@@ -1182,7 +1190,7 @@ export function QuotesPage({
       salesOrderFilter,
       workbenchMode,
       selectedLocalSalesOrderId,
-      selectedQuoteId,
+      selectedQuoteId: workbenchMode === "new" && !selectedLocalSalesOrderId ? selectedQuoteId : "",
       salesOrderSourceSnapshot,
       builderStatus,
       quoteNo,
@@ -1691,6 +1699,8 @@ export function QuotesPage({
     const saved = await upsertSalesOrder(buildSalesOrderPayload("draft"));
     setWorkbenchMode("existing");
     setSelectedLocalSalesOrderId(saved.id);
+    setSelectedQuoteId("");
+    onSelectedQuoteChange?.("");
     setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(saved));
     await refreshLocalSalesOrders(saved.id);
     setQuoteNo(saved.sales_order_no);
@@ -2611,6 +2621,8 @@ export function QuotesPage({
       const seenOrder =
         saved.source_channel === "portal" && saved.portal_submitted_at ? await markSalesOrderPortalSeen(saved.id) : null;
       const effectiveOrder = seenOrder || saved;
+      setSelectedQuoteId("");
+      onSelectedQuoteChange?.("");
       setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(effectiveOrder));
       await refreshLocalSalesOrders(effectiveOrder.id);
       setPendingConfirmedOrder(effectiveOrder);
