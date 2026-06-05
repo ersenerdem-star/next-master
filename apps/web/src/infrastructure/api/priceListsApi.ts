@@ -10,6 +10,64 @@ export type PriceListSetting = {
   isManual: boolean;
 };
 
+export type BrandMarginPriceSummary = {
+  salesPrice: number | null;
+  notes: string;
+};
+
+type SupplierPriceSummaryRow = {
+  normalized_code: string | null;
+  supplier_id: string | null;
+  buy_price: number | null;
+  valid_from: string | null;
+  updated_at: string | null;
+  notes: string | null;
+};
+
+function chunkValues<T>(rows: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < rows.length; index += size) {
+    chunks.push(rows.slice(index, index + size));
+  }
+  return chunks;
+}
+
+function compareSupplierPriceRows(a: SupplierPriceSummaryRow, b: SupplierPriceSummaryRow) {
+  const priceDiff = Number(a.buy_price || 0) - Number(b.buy_price || 0);
+  if (priceDiff !== 0) return priceDiff;
+  const validFromDiff = String(b.valid_from || "").localeCompare(String(a.valid_from || ""));
+  if (validFromDiff !== 0) return validFromDiff;
+  return String(b.updated_at || "").localeCompare(String(a.updated_at || ""));
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+async function resolveBrandRow(organizationId: string, brandName: string) {
+  const trimmed = brandName.trim();
+  if (!trimmed) {
+    throw new Error("Brand is required");
+  }
+
+  const { data, error } = await supabaseClient
+    .from("brands")
+    .select("id,name")
+    .eq("organization_id", organizationId)
+    .ilike("name", trimmed)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message || "Brand lookup failed");
+  }
+  if (!data?.id) {
+    throw new Error(`Brand not found: ${trimmed}`);
+  }
+
+  return { id: String(data.id), name: String(data.name || trimmed) };
+}
+
 export async function fetchPriceListSettings(): Promise<PriceListSetting[]> {
   const orgId = await getCurrentOrgId();
   const { data, error } = await supabaseClient
@@ -40,6 +98,73 @@ export async function fetchPriceListSettings(): Promise<PriceListSetting[]> {
   return ["A", "B", "C"]
     .map((type) => byType.get(type))
     .filter(Boolean) as PriceListSetting[];
+}
+
+export async function fetchBrandMarginPriceSummaries(input: {
+  brandName: string;
+  rows: Array<{ product_code: string | null | undefined }>;
+  marginPercent: number;
+}) {
+  const organizationId = await getCurrentOrgId();
+  const brand = await resolveBrandRow(organizationId, input.brandName);
+  const normalizedCodes = Array.from(
+    new Set(
+      input.rows
+        .map((row) => normalizePartCode(String(row.product_code || "")))
+        .filter(Boolean),
+    ),
+  );
+
+  if (!normalizedCodes.length) {
+    return new Map<string, BrandMarginPriceSummary>();
+  }
+
+  const bestPriceByCode = new Map<string, SupplierPriceSummaryRow>();
+  const notesByCode = new Map<string, Set<string>>();
+
+  for (const codeChunk of chunkValues(normalizedCodes, 500)) {
+    const { data, error } = await supabaseClient
+      .from("supplier_prices")
+      .select("normalized_code,supplier_id,buy_price,valid_from,updated_at,notes")
+      .eq("organization_id", organizationId)
+      .eq("brand_id", brand.id)
+      .eq("is_active", true)
+      .not("buy_price", "is", null)
+      .in("normalized_code", codeChunk);
+
+    if (error) {
+      throw new Error(error.message || "Failed to load supplier pricing");
+    }
+
+    for (const row of (data || []) as SupplierPriceSummaryRow[]) {
+      const normalizedCode = String(row.normalized_code || "");
+      if (!normalizedCode || row.buy_price == null) continue;
+
+      const note = String(row.notes || "").trim();
+      if (note) {
+        const notes = notesByCode.get(normalizedCode) || new Set<string>();
+        notes.add(note);
+        notesByCode.set(normalizedCode, notes);
+      }
+
+      const current = bestPriceByCode.get(normalizedCode);
+      if (!current || compareSupplierPriceRows(row, current) < 0) {
+        bestPriceByCode.set(normalizedCode, row);
+      }
+    }
+  }
+
+  const output = new Map<string, BrandMarginPriceSummary>();
+  for (const normalizedCode of normalizedCodes) {
+    const best = bestPriceByCode.get(normalizedCode);
+    const notes = notesByCode.get(normalizedCode);
+    output.set(normalizedCode, {
+      salesPrice: best?.buy_price == null ? null : roundMoney(Number(best.buy_price) * (1 + input.marginPercent)),
+      notes: notes?.size ? [...notes].join(" | ") : "",
+    });
+  }
+
+  return output;
 }
 
 async function ensurePriceList(listType: "A" | "B" | "C", options?: { isManual?: boolean; name?: string }) {

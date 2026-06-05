@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCatalogExportRows } from "../../infrastructure/api/catalogApi";
 import { fetchCPriceMapForRows, getCPriceForRow } from "../../infrastructure/api/cPriceApi";
-import { fetchPriceListSettings, importCPriceList, updateMarginPriceList } from "../../infrastructure/api/priceListsApi";
+import { fetchBrandMarginPriceSummaries, fetchPriceListSettings, importCPriceList, updateMarginPriceList } from "../../infrastructure/api/priceListsApi";
 import { fetchOldCodesByNewCodeForBrand } from "../../infrastructure/api/codeReferencesApi";
 import { parseCsv, normalizeText } from "../../shared/csv";
+import { normalizePartCode } from "../../domain/shared/normalize";
 import type { BrandOption } from "../../types/brand";
-import { fetchAllCloudMaster } from "../../infrastructure/api/masterApi";
 import { Button } from "../components/common/Button";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { DraggableSurface } from "../components/common/DraggableSurface";
@@ -35,6 +35,17 @@ function normalizeLoosePrice(value: string | null | undefined) {
   const numeric = match[0].replace(/\s+/g, "").replace(",", ".");
   const parsed = Number(numeric);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isOldCodeCoverageTimeoutError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("old code coverage load timed out") ||
+    normalized.includes("statement timeout") ||
+    normalized.includes("canceling statement due to statement timeout") ||
+    normalized.includes("the request took too long")
+  );
 }
 
 async function parseCPriceImportFile(file: File) {
@@ -240,7 +251,7 @@ export function PriceListsPage() {
           brand: downloadBrand,
           newCodes: catalogRows.map((row) => row.product_code),
         }).catch((caught) => {
-          if (caught instanceof Error && caught.message.includes("Old code coverage load timed out")) {
+          if (isOldCodeCoverageTimeoutError(caught)) {
             oldCodeCoverageTimedOut = true;
             return {} as Record<string, string[]>;
           }
@@ -263,42 +274,42 @@ export function PriceListsPage() {
           ]),
         );
       } else {
-        const rows = await fetchAllCloudMaster({
-          search: "",
-          brand: downloadBrand,
-          scope: "catalog",
-          marginA: Number(marginA) / 100,
-          marginB: Number(marginB) / 100,
+        const catalogRows = await fetchCatalogExportRows({ brandName: downloadBrand });
+        const marginPercent = downloadListType === "A" ? Number(marginA) / 100 : Number(marginB) / 100;
+        const salesPriceMap = await fetchBrandMarginPriceSummaries({
+          brandName: downloadBrand,
+          rows: catalogRows,
+          marginPercent,
         });
         const oldCodesByNewCode: Record<string, string[]> = await fetchOldCodesByNewCodeForBrand({
           brand: downloadBrand,
-          newCodes: rows.map((row) => row.product_code),
+          newCodes: catalogRows.map((row) => row.product_code),
         }).catch((caught) => {
-          if (caught instanceof Error && caught.message.includes("Old code coverage load timed out")) {
+          if (isOldCodeCoverageTimeoutError(caught)) {
             oldCodeCoverageTimedOut = true;
             return {} as Record<string, string[]>;
           }
           throw caught;
         });
-        const salesSelector =
-          downloadListType === "A"
-            ? (row: (typeof rows)[number]) => row.sales_a
-            : (row: (typeof rows)[number]) => row.sales_b;
 
         sheetRows.push(
-          ...rows.map((row) => [
-            row.product_code,
-            (oldCodesByNewCode[row.product_code.replace(/[^A-Za-z0-9]/g, "").toUpperCase()] || []).join(" | "),
-            row.brand,
-            row.description || "",
-            row.oem_no || "",
-            row.hs_code || "",
-            row.origin || "",
-            row.weight_kg ?? "",
-            `${downloadListType} Price List`,
-            salesSelector(row) ?? "",
-            row.notes || "",
-          ]),
+          ...catalogRows.map((row) => {
+            const normalizedCode = normalizePartCode(row.product_code);
+            const priceSummary = salesPriceMap.get(normalizedCode);
+            return [
+              row.product_code,
+              (oldCodesByNewCode[normalizedCode] || []).join(" | "),
+              row.brand,
+              row.description || "",
+              row.oem_no || "",
+              row.hs_code || "",
+              row.origin || "",
+              row.weight_kg ?? "",
+              `${downloadListType} Price List`,
+              priceSummary?.salesPrice ?? "",
+              priceSummary?.notes || "",
+            ];
+          }),
         );
       }
 
