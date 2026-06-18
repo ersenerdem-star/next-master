@@ -18,15 +18,15 @@ import {
   type AppRole,
 } from "../shared/roles";
 
-const DashboardPage = lazy(() => import("../presentation/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
-const InventoryPage = lazy(() => import("../presentation/pages/InventoryPage").then((module) => ({ default: module.InventoryPage })));
-const ItemsPage = lazy(() => import("../presentation/pages/ItemsPage").then((module) => ({ default: module.ItemsPage })));
-const LoginPage = lazy(() => import("../presentation/pages/LoginPage").then((module) => ({ default: module.LoginPage })));
-const PortalPage = lazy(() => import("../presentation/pages/PortalPage").then((module) => ({ default: module.PortalPage })));
-const PurchasesPage = lazy(() => import("../presentation/pages/PurchasesPage").then((module) => ({ default: module.PurchasesPage })));
-const ReportsPage = lazy(() => import("../presentation/pages/ReportsPage").then((module) => ({ default: module.ReportsPage })));
-const SalesPage = lazy(() => import("../presentation/pages/SalesPage").then((module) => ({ default: module.SalesPage })));
-const SettingsPage = lazy(() => import("../presentation/pages/SettingsPage").then((module) => ({ default: module.SettingsPage })));
+const DashboardPage = lazy(() => import("../modules/admin/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
+const InventoryPage = lazy(() => import("../modules/warehouse/pages/InventoryPage").then((module) => ({ default: module.InventoryPage })));
+const ItemsPage = lazy(() => import("../modules/admin/pages/ItemsPage").then((module) => ({ default: module.ItemsPage })));
+const LoginPage = lazy(() => import("../modules/admin/pages/LoginPage").then((module) => ({ default: module.LoginPage })));
+const PortalPage = lazy(() => import("../modules/portal/pages/PortalPage").then((module) => ({ default: module.PortalPage })));
+const PurchasesPage = lazy(() => import("../modules/admin/pages/PurchasesPage").then((module) => ({ default: module.PurchasesPage })));
+const ReportsPage = lazy(() => import("../modules/admin/pages/ReportsPage").then((module) => ({ default: module.ReportsPage })));
+const SalesPage = lazy(() => import("../modules/admin/pages/SalesPage").then((module) => ({ default: module.SalesPage })));
+const SettingsPage = lazy(() => import("../modules/admin/pages/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 
 const itemSubNav = [
   { key: "Catalog", label: "Catalog" },
