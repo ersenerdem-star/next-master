@@ -6,3 +6,31 @@ apps/web/dist
 apps/web/.env.local
 *.tsbuildinfo
 backups/
+
+# Generated review packages and one-off handoff bundles.
+review-package/
+review-package.zip
+
+# Generated audit and stress-test reports. Source docs stay tracked; run outputs do not.
+docs/security/*.json
+docs/performance/*.json
+docs/**/captures/
+docs/**/*.log
+docs/**/*.csv
+docs/**/*.json
+
+# Generated catalog/import evidence. Keep policy/README docs tracked, keep timestamped run outputs local.
+docs/**/*-summary-*.json
+docs/**/*-errors-*.csv
+docs/**/*-changes-*.csv
+docs/**/*-catalog-20*.csv
+docs/**/*-import-20*.csv
+docs/**/*-fill-20*.csv
+docs/**/*-audit-20*.json
+
+# Local OCR/mobile/platform experiments. Promote into apps/mobile only when it becomes product source.
+android/
+ios/
+capacitor.config.ts
+deno.lock
+eng.traineddata

@@ -1,4 +1,5 @@
 import type { CatalogLifecycleStatus } from "../domain/shared/lifecycle";
+import type { CatalogMarketSegment } from "../domain/shared/catalogSegments";
 
 export type CatalogRow = {
   total_count: number;
@@ -6,6 +7,7 @@ export type CatalogRow = {
   product_code: string;
   brand: string;
   image_url?: string;
+  market_segment: CatalogMarketSegment | null;
   description: string;
   oem_no: string;
   vehicle: string;

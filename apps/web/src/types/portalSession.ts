@@ -137,6 +137,7 @@ type PortalDocumentLine = {
   requested_code?: string;
   old_code?: string;
   brand?: string;
+  market_segment?: string | null;
   description?: string;
   qty: number;
   oem_no?: string;

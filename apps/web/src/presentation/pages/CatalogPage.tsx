@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CATALOG_MARKET_SEGMENT_OPTIONS, formatCatalogMarketSegmentLabel, normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { syncBrandCatalog } from "../../infrastructure/api/adminApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
@@ -37,6 +38,8 @@ type CatalogOfflineCache = {
   submittedSearch: string;
   catalogBrand: string;
   submittedCatalogBrand: string;
+  catalogSegment: string;
+  submittedCatalogSegment: string;
   selectedCatalogProductId: string;
   updatedAt: string;
 };
@@ -77,6 +80,8 @@ function buildCatalogCacheSnapshot(params: {
   submittedSearch: string;
   catalogBrand: string;
   submittedCatalogBrand: string;
+  catalogSegment: string;
+  submittedCatalogSegment: string;
   selectedCatalogProductId: string;
 }) {
   const existing = readCatalogCache();
@@ -88,18 +93,32 @@ function buildCatalogCacheSnapshot(params: {
     submittedSearch: params.submittedSearch || "",
     catalogBrand: params.catalogBrand || "",
     submittedCatalogBrand: params.submittedCatalogBrand || "",
+    catalogSegment: params.catalogSegment || existing?.catalogSegment || "",
+    submittedCatalogSegment: params.submittedCatalogSegment || existing?.submittedCatalogSegment || "",
     selectedCatalogProductId: params.selectedCatalogProductId,
     updatedAt: new Date().toISOString(),
   } satisfies CatalogOfflineCache;
 }
 
-function filterCachedCatalogRows(rows: CatalogRow[], search: string, brand: string) {
+function filterCachedCatalogRows(rows: CatalogRow[], search: string, brand: string, marketSegment: string) {
   const trimmedSearch = search.trim();
   const normalizedSearch = normalizePartCode(trimmedSearch);
+  const normalizedSegment = normalizeCatalogMarketSegment(marketSegment);
   const filtered = rows.filter((row) => {
     if (brand && String(row.brand || "").toLowerCase() !== brand.toLowerCase()) return false;
+    if (normalizedSegment && row.market_segment !== normalizedSegment) return false;
     if (!trimmedSearch) return true;
-    const rawMatch = [row.product_code, row.brand, row.description, row.oem_no, row.vehicle, row.hs_code, row.origin, row.replacement_old_code, row.replacement_code]
+    const rawMatch = [
+      row.product_code,
+      row.brand,
+      row.description,
+      row.oem_no,
+      row.vehicle,
+      row.hs_code,
+      row.origin,
+      row.replacement_old_code,
+      row.replacement_code,
+    ]
       .filter(Boolean)
       .join(" ")
       .toLowerCase()
@@ -140,6 +159,8 @@ export function CatalogPage() {
   const [submittedSearch, setSubmittedSearch] = useState("");
   const [catalogBrand, setCatalogBrand] = useState("");
   const [submittedCatalogBrand, setSubmittedCatalogBrand] = useState("");
+  const [catalogSegment, setCatalogSegment] = useState("");
+  const [submittedCatalogSegment, setSubmittedCatalogSegment] = useState("");
   const [previewSelection, setPreviewSelection] = useState<{ brand: string; codes: string[] } | null>(null);
   const [rows, setRows] = useState<CatalogRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, CatalogRowDraft>>({});
@@ -159,6 +180,7 @@ export function CatalogPage() {
   const [selectedCatalogProductId, setSelectedCatalogProductId] = useState("");
   const [selectedCatalogMedia, setSelectedCatalogMedia] = useState<ProductMediaItem[]>([]);
   const [showFullSelectedOem, setShowFullSelectedOem] = useState(false);
+  const [importCatalogSegment, setImportCatalogSegment] = useState("");
   const [createDraft, setCreateDraft] = useState({
     product_code: "",
     brand: "",
@@ -168,6 +190,7 @@ export function CatalogPage() {
     vehicle: "",
     hs_code: "",
     origin: "",
+    market_segment: "",
     weight_kg: "",
     lifecycle_status: "active",
     lifecycle_note: "",
@@ -244,12 +267,24 @@ export function CatalogPage() {
     setSubmittedSearch(cached.submittedSearch || cached.search || "");
     setCatalogBrand(cached.catalogBrand || cached.submittedCatalogBrand || "");
     setSubmittedCatalogBrand(cached.submittedCatalogBrand || cached.catalogBrand || "");
+    setCatalogSegment(cached.catalogSegment || cached.submittedCatalogSegment || "");
+    setSubmittedCatalogSegment(cached.submittedCatalogSegment || cached.catalogSegment || "");
     setSelectedCatalogProductId(cached.selectedCatalogProductId || "");
     if (!isOnline) {
       setStatus("Offline mode active. Showing cached catalog data.");
       setError("");
     }
   }, [isOnline]);
+
+  useEffect(() => {
+    if (!CATALOG_MARKET_SEGMENT_OPTIONS.length) return;
+    if (catalogSegment && !CATALOG_MARKET_SEGMENT_OPTIONS.some((option) => option.value === catalogSegment)) {
+      setCatalogSegment("");
+    }
+    if (submittedCatalogSegment && !CATALOG_MARKET_SEGMENT_OPTIONS.some((option) => option.value === submittedCatalogSegment)) {
+      setSubmittedCatalogSegment("");
+    }
+  }, [catalogSegment, submittedCatalogSegment]);
 
   useEffect(() => {
     let cancelled = false;
@@ -259,14 +294,14 @@ export function CatalogPage() {
         const cached = readCatalogCache();
         const cachedRows = cached?.rows || [];
         const offlineRows =
-          !submittedSearch.trim() && !submittedCatalogBrand
+          !submittedSearch.trim() && !submittedCatalogBrand && !submittedCatalogSegment
             ? cachedRows
-            : filterCachedCatalogRows(cachedRows, submittedSearch, submittedCatalogBrand);
+            : filterCachedCatalogRows(cachedRows, submittedSearch, submittedCatalogBrand, submittedCatalogSegment);
         if (!cancelled) {
           setRows(offlineRows);
           setLoading(false);
           setError("");
-          if (submittedSearch.trim() || submittedCatalogBrand) {
+          if (submittedSearch.trim() || submittedCatalogBrand || submittedCatalogSegment) {
             setStatus(
               offlineRows.length
                 ? `Offline mode active. Showing ${offlineRows.length.toLocaleString("en-US")} cached catalog row(s).`
@@ -277,7 +312,7 @@ export function CatalogPage() {
         return;
       }
 
-      if (!submittedSearch.trim() && !submittedCatalogBrand) {
+      if (!submittedSearch.trim() && !submittedCatalogBrand && !submittedCatalogSegment) {
         if (!cancelled) {
           setRows([]);
           setLoading(false);
@@ -296,10 +331,12 @@ export function CatalogPage() {
             ? await fetchCatalogRowsByCodes({
                 brandName: previewSelection.brand,
                 codes: previewSelection.codes,
+                marketSegment: submittedCatalogSegment,
               })
             : await fetchCloudCatalog({
                 search: submittedSearch,
                 brandName: submittedCatalogBrand,
+                marketSegment: submittedCatalogSegment,
                 page: 1,
                 pageSize: 50,
               });
@@ -318,7 +355,7 @@ export function CatalogPage() {
     return () => {
       cancelled = true;
     };
-  }, [isOnline, submittedSearch, submittedCatalogBrand, previewSelection]);
+  }, [isOnline, submittedSearch, submittedCatalogBrand, submittedCatalogSegment, previewSelection]);
 
   useEffect(() => {
     if (!searchingCatalog || loading) return;
@@ -430,37 +467,41 @@ export function CatalogPage() {
   useEffect(() => {
     const handle = window.setTimeout(() => {
       writeCatalogCache(
-        buildCatalogCacheSnapshot({
-          brands,
-          rows,
-          drafts,
-          search,
-          submittedSearch,
-          catalogBrand,
-          submittedCatalogBrand,
-          selectedCatalogProductId,
-        }),
-      );
+          buildCatalogCacheSnapshot({
+            brands,
+            rows,
+            drafts,
+            search,
+            submittedSearch,
+            catalogBrand,
+            submittedCatalogBrand,
+            catalogSegment,
+            submittedCatalogSegment,
+            selectedCatalogProductId,
+          }),
+        );
     }, CATALOG_CACHE_WRITE_DELAY_MS);
     return () => window.clearTimeout(handle);
-  }, [brands, rows, drafts, search, submittedSearch, catalogBrand, submittedCatalogBrand, selectedCatalogProductId]);
+  }, [brands, rows, drafts, search, submittedSearch, catalogBrand, submittedCatalogBrand, catalogSegment, submittedCatalogSegment, selectedCatalogProductId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const flushCache = () => {
       writeCatalogCache(
-        buildCatalogCacheSnapshot({
-          brands,
-          rows,
-          drafts,
-          search,
-          submittedSearch,
-          catalogBrand,
-          submittedCatalogBrand,
-          selectedCatalogProductId,
-        }),
-      );
+          buildCatalogCacheSnapshot({
+            brands,
+            rows,
+            drafts,
+            search,
+            submittedSearch,
+            catalogBrand,
+            submittedCatalogBrand,
+            catalogSegment,
+            submittedCatalogSegment,
+            selectedCatalogProductId,
+          }),
+        );
     };
 
     const handleVisibilityChange = () => {
@@ -475,7 +516,7 @@ export function CatalogPage() {
       window.removeEventListener("pagehide", flushCache);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [brands, rows, drafts, search, submittedSearch, catalogBrand, submittedCatalogBrand, selectedCatalogProductId]);
+  }, [brands, rows, drafts, search, submittedSearch, catalogBrand, submittedCatalogBrand, catalogSegment, submittedCatalogSegment, selectedCatalogProductId]);
 
   const total = rows[0]?.total_count ?? 0;
   const hasApproximateTotal = total < 0;
@@ -483,14 +524,17 @@ export function CatalogPage() {
   const trimmedSubmittedSearch = submittedSearch.trim();
   const hasSubmittedSearch = Boolean(trimmedSubmittedSearch);
   const hasSubmittedBrand = Boolean(submittedCatalogBrand);
+  const hasSubmittedSegment = Boolean(submittedCatalogSegment);
   const catalogCountLabel = loading
     ? "Loading catalog..."
-    : !hasSubmittedSearch && !hasSubmittedBrand
-      ? "Select a brand or search to load catalog."
-    : hasSubmittedBrand && !hasSubmittedSearch
+    : !hasSubmittedSearch && !hasSubmittedBrand && !hasSubmittedSegment
+      ? "Select a brand, segment, or search to load catalog."
+    : hasSubmittedBrand && !hasSubmittedSearch && !hasSubmittedSegment
         ? `${submittedCatalogBrand}: ${visibleTotal.toLocaleString("en-US")}${hasApproximateTotal ? "+" : ""} items`
+        : hasSubmittedSegment && !hasSubmittedBrand && !hasSubmittedSearch
+          ? `${formatCatalogMarketSegmentLabel(submittedCatalogSegment)}: ${visibleTotal.toLocaleString("en-US")}${hasApproximateTotal ? "+" : ""} items`
         : hasSubmittedBrand
-          ? `${visibleTotal.toLocaleString("en-US")} matches in ${submittedCatalogBrand}`
+          ? `${visibleTotal.toLocaleString("en-US")} matches in ${submittedCatalogBrand}${hasSubmittedSegment ? ` / ${formatCatalogMarketSegmentLabel(submittedCatalogSegment)}` : ""}`
           : `${visibleTotal.toLocaleString("en-US")} catalog rows`;
   const originalNumberBrandMatches = useMemo(() => {
     if (!submittedSearch.trim() || !rows.length) return [];
@@ -558,6 +602,8 @@ export function CatalogPage() {
     setSubmittedSearch("");
     setCatalogBrand("");
     setSubmittedCatalogBrand("");
+    setCatalogSegment("");
+    setSubmittedCatalogSegment("");
     setRows([]);
     setDrafts({});
     setPreviewSelection(null);
@@ -568,17 +614,18 @@ export function CatalogPage() {
     actionFeedback.succeed("Catalog filters cleared.");
   }
 
-  function applyCatalogFilters(nextSearch: string, nextBrand: string, announce = true) {
+  function applyCatalogFilters(nextSearch: string, nextBrand: string, nextSegment = catalogSegment, announce = true) {
     setSearchingCatalog(true);
     setPreviewSelection(null);
     setSelectedCatalogProductId("");
     if (announce) {
       actionFeedback.begin(
-        `${isOnline ? "Searching" : "Filtering cached"} catalog for ${nextBrand || "all brands"} / ${nextSearch.trim() || "all items"}...`,
+        `${isOnline ? "Searching" : "Filtering cached"} catalog for ${nextBrand || "all brands"} / ${formatCatalogMarketSegmentLabel(nextSegment)} / ${nextSearch.trim() || "all items"}...`,
       );
     }
     setSubmittedSearch(nextSearch);
     setSubmittedCatalogBrand(nextBrand);
+    setSubmittedCatalogSegment(normalizeCatalogMarketSegment(nextSegment) || "");
   }
 
   function queueCatalogItemForSalesOrder() {
@@ -591,6 +638,7 @@ export function CatalogPage() {
       oem_no: selectedCatalogDraft.oem_no || "",
       hs_code: selectedCatalogDraft.hs_code || "",
       origin: selectedCatalogDraft.origin || "",
+      market_segment: selectedCatalogDraft.market_segment || null,
       weight_kg: parseWeightInput(selectedCatalogDraft.weight_kg),
       lifecycle_status: selectedCatalogDraft.lifecycle_status || "active",
       lifecycle_note: selectedCatalogDraft.lifecycle_note || "",
@@ -610,6 +658,7 @@ export function CatalogPage() {
       oem_no: selectedCatalogDraft.oem_no || "",
       hs_code: selectedCatalogDraft.hs_code || "",
       origin: selectedCatalogDraft.origin || "",
+      market_segment: selectedCatalogDraft.market_segment || null,
       weight_kg: parseWeightInput(selectedCatalogDraft.weight_kg),
       lifecycle_status: selectedCatalogDraft.lifecycle_status || "active",
       lifecycle_note: selectedCatalogDraft.lifecycle_note || "",
@@ -640,19 +689,20 @@ export function CatalogPage() {
       setStatus("");
       setRowActionKey(`save:${row.product_id}`);
       actionFeedback.begin(`Saving catalog row ${draft.product_code}...`);
-      await updateCloudCatalogRow(row.product_id, {
-        product_code: draft.product_code,
-        brand: draft.brand,
-        description: draft.description || null,
-        oem_no: draft.oem_no || null,
-        vehicle: draft.vehicle || null,
-        hs_code: draft.hs_code || null,
-        origin: draft.origin || null,
-        weight_kg: parseWeightInput(draft.weight_kg),
-        lifecycle_status: draft.lifecycle_status || "active",
-        lifecycle_note: draft.lifecycle_note || null,
-      });
-      await reloadCatalog(submittedSearch, submittedCatalogBrand);
+        await updateCloudCatalogRow(row.product_id, {
+          product_code: draft.product_code,
+          brand: draft.brand,
+          description: draft.description || null,
+          oem_no: draft.oem_no || null,
+          vehicle: draft.vehicle || null,
+          hs_code: draft.hs_code || null,
+          origin: draft.origin || null,
+          market_segment: draft.market_segment || null,
+          weight_kg: parseWeightInput(draft.weight_kg),
+          lifecycle_status: draft.lifecycle_status || "active",
+          lifecycle_note: draft.lifecycle_note || null,
+        });
+      await reloadCatalog(submittedSearch, submittedCatalogBrand, submittedCatalogSegment);
       setStatus(`Catalog row ${draft.product_code} saved.`);
       actionFeedback.succeed(`Catalog row ${draft.product_code} saved.`);
     } catch (caught) {
@@ -676,7 +726,7 @@ export function CatalogPage() {
       setRowActionKey(`delete:${row.product_id}`);
       actionFeedback.begin(`Deleting catalog row ${row.product_code}...`);
       await deleteCloudCatalogRow(row.product_id);
-      await reloadCatalog(submittedSearch, submittedCatalogBrand);
+      await reloadCatalog(submittedSearch, submittedCatalogBrand, submittedCatalogSegment);
       setSelectedCatalogProductId("");
       setStatus(`Catalog row ${row.product_code} deleted.`);
       actionFeedback.succeed(`Catalog row ${row.product_code} deleted.`);
@@ -768,6 +818,17 @@ export function CatalogPage() {
         render: (row: CatalogRow) => (
           <div className="catalog-cell">
             <span className="catalog-brand-badge">{drafts[row.product_id]?.brand ?? row.brand}</span>
+          </div>
+        ),
+      },
+      {
+        key: "segment",
+        header: "Segment",
+        render: (row: CatalogRow) => (
+          <div className="catalog-cell">
+            <span className="catalog-segment-badge">
+              {formatCatalogMarketSegmentLabel(drafts[row.product_id]?.market_segment ?? row.market_segment)}
+            </span>
           </div>
         ),
       },
@@ -875,11 +936,11 @@ export function CatalogPage() {
     [drafts, referenceCoverage, selectedCatalogProductId],
   );
 
-  async function reloadCatalog(nextSearch = submittedSearch, nextBrand = submittedCatalogBrand) {
+  async function reloadCatalog(nextSearch = submittedSearch, nextBrand = submittedCatalogBrand, nextSegment = submittedCatalogSegment) {
     if (!isOnline) {
       const cached = readCatalogCache();
       const cachedRows = cached?.rows || [];
-      setRows(filterCachedCatalogRows(cachedRows, nextSearch, nextBrand));
+      setRows(filterCachedCatalogRows(cachedRows, nextSearch, nextBrand, nextSegment));
       setError("");
       setStatus("Offline mode active. Showing cached catalog data.");
       return;
@@ -899,6 +960,7 @@ export function CatalogPage() {
         const directRows = await fetchCatalogRowsByCodes({
           brandName: nextBrand,
           codes: [nextSearch],
+          marketSegment: nextSegment,
         });
         if (directRows.length) {
           setRows(directRows);
@@ -909,6 +971,7 @@ export function CatalogPage() {
       const result = await fetchCloudCatalog({
         search: nextSearch,
         brandName: nextBrand,
+        marketSegment: nextSegment,
         page: 1,
         pageSize: 50,
       });
@@ -947,12 +1010,15 @@ export function CatalogPage() {
       const hsIndex = indexOfAny("HS_Code", "HS", "GTIP");
       const vehicleIndex = indexOfAny("Vehicle", "Vehicles", "Fit_Vehicles", "Fit Vehicles", "Applications");
       const originIndex = indexOfAny("Origin", "Country_Of_Origin");
+      const segmentIndex = indexOfAny("Market_Segment", "Market Segment", "Segment", "Catalog_Segment");
       const weightIndex = indexOfAny("Weight_kg", "Weight", "Net_Weight");
       const imageUrlIndex = indexOfAny("Image_URL", "Image Url", "Image");
       const lifecycleStatusIndex = indexOfAny("Lifecycle_Status", "Lifecycle");
       const lifecycleNoteIndex = indexOfAny("Lifecycle_Note", "Lifecycle Note", "Discontinued_Note", "Discontinued Note");
       const selectedImportBrand = importBrand === "__new__" ? importBrandName.trim() : importBrand.trim();
+      const selectedImportSegment = normalizeCatalogMarketSegment(importCatalogSegment);
       const rowBrands = dataRows.map((row) => normalizeText(row[brandIndex]) ?? "");
+      const rowSegments = dataRows.map((row) => normalizeCatalogMarketSegment(normalizeText(row[segmentIndex]) || "") || "");
       const detectedBrands = Array.from(
         new Set(
           rowBrands
@@ -960,14 +1026,23 @@ export function CatalogPage() {
             .map((value) => value.toLowerCase()),
         ),
       );
+      const detectedSegments = Array.from(new Set(rowSegments.filter(Boolean)));
       const activeImportBrand =
         selectedImportBrand ||
         (detectedBrands.length === 1
           ? rowBrands.find((value) => value.length > 0) || ""
           : "");
+      const activeImportSegment =
+        selectedImportSegment ||
+        (detectedSegments.length === 1
+          ? detectedSegments[0] || ""
+          : "");
 
       if (!activeImportBrand) {
         throw new Error("Catalog import requires a single brand selection or a single brand in the file");
+      }
+      if (!activeImportSegment) {
+        throw new Error("Catalog import requires a market segment selection or a single segment in the file");
       }
 
       actionFeedback.begin(`Importing catalog CSV for ${activeImportBrand}...`);
@@ -981,6 +1056,7 @@ export function CatalogPage() {
           vehicle: normalizeText(row[vehicleIndex]),
           hs_code: normalizeText(row[hsIndex]),
           origin: normalizeText(row[originIndex]),
+          market_segment: normalizeCatalogMarketSegment(normalizeText(row[segmentIndex]) || activeImportSegment) || activeImportSegment,
           weight_kg: normalizeNumber(row[weightIndex]),
           image_url: normalizeText(row[imageUrlIndex]),
           lifecycle_status: normalizeCatalogLifecycleStatus(normalizeText(row[lifecycleStatusIndex])),
@@ -1018,12 +1094,16 @@ export function CatalogPage() {
       });
       setCatalogBrand(refreshedBrandName);
       setSubmittedCatalogBrand(refreshedBrandName);
+      setCatalogSegment(activeImportSegment);
+      setSubmittedCatalogSegment(activeImportSegment);
+      setImportCatalogSegment(activeImportSegment);
       setSearch("");
       setSubmittedSearch("");
       setExportBrand(refreshedBrandName);
       const importedRows = await fetchCatalogRowsByCodes({
         brandName: refreshedBrandName,
         codes: importedCodes,
+        marketSegment: activeImportSegment,
       });
       setRows(importedRows);
       setDrafts({});
@@ -1057,9 +1137,9 @@ export function CatalogPage() {
     actionFeedback.begin(`Preparing catalog CSV export for ${exportBrand}...`);
 
     try {
-      const exportData = await fetchCatalogExportRows({ brandName: exportBrand });
+      const exportData = await fetchCatalogExportRows({ brandName: exportBrand, marketSegment: catalogSegment || undefined });
       const exportRows = [
-        ["Product_Code", "Brand", "Product_Name", "OEM_No", "Vehicle", "HS_Code", "Origin", "Weight_kg", "Image_URL", "Lifecycle_Status", "Lifecycle_Note"],
+        ["Product_Code", "Brand", "Product_Name", "OEM_No", "Vehicle", "HS_Code", "Origin", "Market_Segment", "Weight_kg", "Image_URL", "Lifecycle_Status", "Lifecycle_Note"],
         ...exportData.map((row) => [
           row.product_code,
           row.brand,
@@ -1068,6 +1148,7 @@ export function CatalogPage() {
           row.vehicle || "",
           row.hs_code || "",
           row.origin || "",
+          row.market_segment || "",
           row.weight_kg ?? "",
           row.image_url || "",
           row.lifecycle_status || "active",
@@ -1117,7 +1198,7 @@ export function CatalogPage() {
       actionFeedback.succeed(
         `${result.targetBrandName}: ${result.resolvedRows.toLocaleString("en-US")} catalog rows synced, ${result.replacementRows.toLocaleString("en-US")} replacement links processed.`,
       );
-      applyCatalogFilters(search, catalogBrand, false);
+      applyCatalogFilters(search, catalogBrand, catalogSegment, false);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Brand catalog sync failed";
       setError(message);
@@ -1142,33 +1223,59 @@ export function CatalogPage() {
               options={[{ value: "", label: "All Brands" }, ...editableBrandOptions]}
               onChange={(value) => {
                 setCatalogBrand(value);
-                if (value || search.trim()) {
-                  applyCatalogFilters(search, value);
+                if (value || search.trim() || catalogSegment) {
+                  applyCatalogFilters(search, value, catalogSegment);
                   return;
                 }
                 clearCatalogSearch();
               }}
             />
-            <Input value={search} onChange={setSearch} placeholder="Search catalog" onEnter={() => applyCatalogFilters(search, catalogBrand)} />
+            <Select
+              value={catalogSegment}
+              options={[{ value: "", label: "All Segments" }, ...CATALOG_MARKET_SEGMENT_OPTIONS]}
+              onChange={(value) => {
+                setCatalogSegment(value);
+                if (value || search.trim() || catalogBrand) {
+                  applyCatalogFilters(search, catalogBrand, value);
+                  return;
+                }
+                clearCatalogSearch();
+              }}
+            />
+            <Input value={search} onChange={setSearch} placeholder="Search catalog" onEnter={() => applyCatalogFilters(search, catalogBrand, catalogSegment)} />
             <Button
               onClick={() => {
-                applyCatalogFilters(search, catalogBrand);
+                applyCatalogFilters(search, catalogBrand, catalogSegment);
               }}
               busy={searchingCatalog}
               busyLabel={isOnline ? "Searching..." : "Filtering..."}
             >
               Search
             </Button>
-            <Button variant="secondary" onClick={clearCatalogSearch} disabled={!search && !submittedSearch && !catalogBrand && !submittedCatalogBrand && !rows.length}>
+            <Button variant="secondary" onClick={clearCatalogSearch} disabled={!search && !submittedSearch && !catalogBrand && !submittedCatalogBrand && !catalogSegment && !submittedCatalogSegment && !rows.length}>
               Clear Search
             </Button>
             <Button variant="secondary" onClick={() => setShowExportDialog(true)} disabled={!brands.length || !isOnline} busy={exportingCatalog} busyLabel="Preparing...">
               Export CSV
             </Button>
-            <Button variant="secondary" onClick={() => setShowCreateDialog(true)} disabled={!isOnline}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setCreateDraft((current) => ({ ...current, market_segment: catalogSegment }));
+                setShowCreateDialog(true);
+              }}
+              disabled={!isOnline}
+            >
               Add New Item
             </Button>
-            <Button variant="secondary" onClick={() => setShowImportDialog(true)} disabled={!isOnline}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setImportCatalogSegment(catalogSegment);
+                setShowImportDialog(true);
+              }}
+              disabled={!isOnline}
+            >
               Import CSV
             </Button>
             {catalogBrand ? (
@@ -1197,7 +1304,7 @@ export function CatalogPage() {
                 className="data-table--catalog"
                 rows={rows}
                 columns={columns}
-                emptyText={loading ? "Loading..." : !submittedSearch.trim() && !submittedCatalogBrand ? "Select a brand or search to load catalog." : "No products found"}
+                emptyText={loading ? "Loading..." : !submittedSearch.trim() && !submittedCatalogBrand && !submittedCatalogSegment ? "Select a brand, segment, or search to load catalog." : "No products found"}
                 onRowClick={(row) => setSelectedCatalogProductId((current) => (current === row.product_id ? "" : row.product_id))}
                 rowClassName={(row) => (row.product_id === selectedCatalogProductId ? "data-table__row--active" : "")}
               />
@@ -1237,6 +1344,7 @@ export function CatalogPage() {
             <div className="workbench-detail-panel__title">{selectedCatalogDraft.product_code}</div>
             <div className="document-marks document-marks--compact">
               <span className="mark-badge">{selectedCatalogDraft.brand || "No brand"}</span>
+              <span className="mark-badge">{formatCatalogMarketSegmentLabel(selectedCatalogDraft.market_segment)}</span>
               {selectedCatalogDraft.replacement_warning ? <span className="mark-badge mark-badge--accent">Replacement</span> : null}
               <span className={`mark-badge ${selectedCatalogDraft.lifecycle_status === "discontinued" ? "mark-badge--danger" : "mark-badge--success"}`}>
                 {selectedCatalogDraft.lifecycle_status || "active"}
@@ -1253,6 +1361,12 @@ export function CatalogPage() {
                 value={selectedCatalogDraft.brand || selectedCatalogRow.brand || ""}
                 options={editableBrandOptions}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { brand: value })}
+              />
+              <Select
+                label="Market Segment"
+                value={selectedCatalogDraft.market_segment || selectedCatalogRow.market_segment || ""}
+                options={CATALOG_MARKET_SEGMENT_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                onChange={(value) => patchCatalogDraft(selectedCatalogRow, { market_segment: normalizeCatalogMarketSegment(value) })}
               />
               <Select
                 label="Lifecycle"
@@ -1313,6 +1427,7 @@ export function CatalogPage() {
                   ) : null}
                 </strong>
               </div>
+              <div><span>Segment</span><strong>{formatCatalogMarketSegmentLabel(selectedCatalogDraft.market_segment)}</strong></div>
               <div>
                 <span>Vehicle</span>
                 <strong className="catalog-detail-list-text">
@@ -1329,7 +1444,7 @@ export function CatalogPage() {
               <Button
                 variant="secondary"
                 onClick={() => void saveCatalogRow(selectedCatalogRow)}
-                disabled={!isOnline}
+                disabled={!isOnline || !selectedCatalogDraft.market_segment}
                 busy={rowActionKey === `save:${selectedCatalogRow.product_id}`}
                 busyLabel="Saving..."
               >
@@ -1386,6 +1501,12 @@ export function CatalogPage() {
                   }
                 }}
               />
+              <Select
+                label="Market Segment"
+                value={importCatalogSegment}
+                options={[{ value: "", label: "Select segment..." }, ...CATALOG_MARKET_SEGMENT_OPTIONS]}
+                onChange={setImportCatalogSegment}
+              />
               <Input
                 label="Brand Name"
                 value={importBrandName}
@@ -1406,7 +1527,7 @@ export function CatalogPage() {
               </label>
               <Input label="Selected file" value={importFile?.name ?? ""} onChange={() => undefined} disabled />
             </div>
-            <div className="modal-hint">Brand, target, and file are required for every catalog CSV import. For discontinued/EOL updates, use the lifecycle template instead of full export.</div>
+            <div className="modal-hint">Brand, segment, target, and file are required for every catalog CSV import. For discontinued/EOL updates, use the lifecycle template instead of full export.</div>
             <div className="toolbar">
               <Button
                 variant="secondary"
@@ -1437,6 +1558,7 @@ export function CatalogPage() {
                   setImportFile(null);
                   setImportBrand("");
                   setImportBrandName("");
+                  setImportCatalogSegment("");
                 }}
               >
                 Cancel Import
@@ -1466,10 +1588,10 @@ export function CatalogPage() {
               </div>
             </div>
             <div className="modal-form-grid">
-              <Select label="Brand" value={exportBrand} options={editableBrandOptions} onChange={setExportBrand} />
-              <Input label="Scope" value="All items for selected brand" onChange={() => undefined} disabled />
-            </div>
-          <div className="modal-hint">This export ignores the current search box and downloads the full catalog of the selected brand.</div>
+            <Select label="Brand" value={exportBrand} options={editableBrandOptions} onChange={setExportBrand} />
+            <Input label="Scope" value="All items for selected brand" onChange={() => undefined} disabled />
+          </div>
+          <div className="modal-hint">This export ignores the current search box and downloads the current catalog scope for the selected brand.</div>
             <div className="modal-actions">
               <Button
                 variant="secondary"
@@ -1511,6 +1633,12 @@ export function CatalogPage() {
                   }))
                 }
               />
+              <Select
+                label="Market Segment"
+                value={createDraft.market_segment}
+                options={CATALOG_MARKET_SEGMENT_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                onChange={(value) => setCreateDraft((current) => ({ ...current, market_segment: value }))}
+              />
               <Input
                 label="Brand Name"
                 value={createDraft.brand_name}
@@ -1531,7 +1659,7 @@ export function CatalogPage() {
               />
               <Input label="Lifecycle Note" value={createDraft.lifecycle_note} onChange={(value) => setCreateDraft((current) => ({ ...current, lifecycle_note: value }))} />
             </div>
-            <div className="modal-hint">Product code and brand are required. The item will be created directly in cloud catalog.</div>
+            <div className="modal-hint">Product code, brand, and market segment are required. The item will be created directly in cloud catalog.</div>
             <div className="modal-actions">
               <Button variant="secondary" onClick={() => setShowCreateDialog(false)}>
                 Cancel
@@ -1556,6 +1684,7 @@ export function CatalogPage() {
                       vehicle: createDraft.vehicle.trim() || null,
                       hs_code: createDraft.hs_code.trim() || null,
                       origin: createDraft.origin.trim() || null,
+                      market_segment: normalizeCatalogMarketSegment(createDraft.market_segment),
                       weight_kg: parseWeightInput(createDraft.weight_kg),
                       lifecycle_status: createDraft.lifecycle_status,
                       lifecycle_note: createDraft.lifecycle_note.trim() || null,
@@ -1569,6 +1698,7 @@ export function CatalogPage() {
                       vehicle: "",
                       hs_code: "",
                       origin: "",
+                      market_segment: "",
                       weight_kg: "",
                       lifecycle_status: "active",
                       lifecycle_note: "",
@@ -1576,7 +1706,7 @@ export function CatalogPage() {
                     const refreshedBrands = await fetchCloudBrands();
                     setBrands(refreshedBrands);
                     setShowCreateDialog(false);
-                    await reloadCatalog(submittedSearch, submittedCatalogBrand);
+                    await reloadCatalog(submittedSearch, submittedCatalogBrand, submittedCatalogSegment);
                     setStatus("Catalog item created successfully.");
                     actionFeedback.succeed(`Catalog item ${createDraft.product_code.trim()} created.`);
                   } catch (caught) {
@@ -1591,6 +1721,7 @@ export function CatalogPage() {
                   !isOnline ||
                   !createDraft.product_code.trim() ||
                   !createDraft.brand ||
+                  !createDraft.market_segment ||
                   (createDraft.brand === "__new__" && !createDraft.brand_name.trim())
                 }
                 busy={creatingItem}

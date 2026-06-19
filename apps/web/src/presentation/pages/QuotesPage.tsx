@@ -622,7 +622,7 @@ export function QuotesPage({
       ? initialWorkspaceCache?.selectedQuoteId || ""
       : "";
   const importRef = useRef<HTMLInputElement | null>(null);
-  const workspaceCacheWriteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const workspaceCacheWriteTimeoutRef = useRef<number | null>(null);
   const workspaceCacheSnapshotRef = useRef<PersistedSalesOrderWorkspace | null>(initialWorkspaceCache);
   const [search, setSearch] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");

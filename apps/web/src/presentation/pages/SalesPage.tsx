@@ -13,6 +13,7 @@ import {
   upsertPaymentReceived,
 } from "../../infrastructure/api/ordersApi";
 import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
+import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
 import { QuotesPage } from "./QuotesPage";
 import { PriceListsPage } from "./PriceListsPage";
 import { SectionCard } from "../components/common/SectionCard";
@@ -22,6 +23,7 @@ import { DataTable } from "../components/common/DataTable";
 import type { CompanyProfile } from "../../types/company";
 import type { LocalCustomer } from "../../types/customers";
 import type { LocalInvoice, LocalPaymentReceived, LocalSalesOrder } from "../../types/orders";
+import type { Warehouse } from "../../types/warehouses";
 import { Button } from "../components/common/Button";
 import { CustomersPage } from "./CustomersPage";
 import { Input } from "../components/common/Input";
@@ -67,6 +69,7 @@ export function SalesPage({
   const [selectedSalesOrderIds, setSelectedSalesOrderIds] = useState<string[]>([]);
   const [customers, setCustomers] = useState<LocalCustomer[]>([]);
   const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [marginA, setMarginA] = useState(10);
   const [marginB, setMarginB] = useState(15);
   const [invoiceResyncOnlyFillBlanks, setInvoiceResyncOnlyFillBlanks] = useState(true);
@@ -226,6 +229,43 @@ export function SalesPage({
       cancelled = true;
     };
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "Invoices") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await fetchWarehouses();
+        if (cancelled) return;
+        setWarehouses(rows);
+      } catch {
+        if (!cancelled) setWarehouses([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "Invoices") return;
+    if (!invoiceDraft || invoiceDraft.warehouse_id) return;
+    const preferredWarehouse =
+      warehouses.find((row) => row.is_active !== false && row.fulfillment_model === "stocked") ||
+      warehouses.find((row) => row.is_active !== false) ||
+      null;
+    if (!preferredWarehouse) return;
+    setInvoiceDraft((current) =>
+      current && !current.warehouse_id
+        ? {
+            ...current,
+            warehouse_id: preferredWarehouse.id,
+            warehouse_code: preferredWarehouse.warehouse_code || "",
+            warehouse_name: preferredWarehouse.warehouse_name || "",
+          }
+        : current,
+    );
+  }, [activeTab, invoiceDraft, warehouses]);
 
   useEffect(() => {
     let cancelled = false;
@@ -513,6 +553,20 @@ export function SalesPage({
 
   function updateInvoiceDraft<K extends keyof LocalInvoice>(key: K, value: LocalInvoice[K]) {
     setInvoiceDraft((current) => (current ? { ...current, [key]: value } : current));
+  }
+
+  function updateInvoiceWarehouse(warehouseId: string) {
+    const selectedWarehouse = warehouses.find((row) => row.id === warehouseId) || null;
+    setInvoiceDraft((current) =>
+      current
+        ? {
+            ...current,
+            warehouse_id: selectedWarehouse?.id || null,
+            warehouse_code: selectedWarehouse?.warehouse_code || "",
+            warehouse_name: selectedWarehouse?.warehouse_name || "",
+          }
+        : current,
+    );
   }
 
   async function handleResyncInvoiceFromCatalog() {
@@ -850,6 +904,15 @@ export function SalesPage({
                 <div className="invoice-meta-grid">
                   <Input label="Invoice No" value={invoiceDraft.id} onChange={(value) => updateInvoiceDraft("id", value)} />
                   <Input label="Sales Order" value={invoiceDraft.sales_order_no} onChange={(value) => updateInvoiceDraft("sales_order_no", value)} />
+                  <Select
+                    label="Warehouse"
+                    value={invoiceDraft.warehouse_id || ""}
+                    options={[
+                      { value: "", label: "Select Warehouse" },
+                      ...warehouses.map((row) => ({ value: row.id, label: `${row.warehouse_code} · ${row.warehouse_name}`.trim() })),
+                    ]}
+                    onChange={updateInvoiceWarehouse}
+                  />
                   <Input label="Customer" value={invoiceDraft.customer_name} onChange={(value) => updateInvoiceDraft("customer_name", value)} />
                   <Input label="Invoice Date" type="date" value={invoiceDraft.quote_date} onChange={(value) => updateInvoiceDraft("quote_date", value)} />
                   <Input label="Due Date" type="date" value={invoiceDraft.due_date} onChange={(value) => updateInvoiceDraft("due_date", value)} />

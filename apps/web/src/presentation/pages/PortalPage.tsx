@@ -151,10 +151,12 @@ function mergePortalPreparedLines(current: PortalPreparedLine[], next: PortalPre
   const merged = [...current];
   for (const line of next) {
     const lineCode = normalizePartCode(String(line.requestedCode || line.resolvedCode || ""));
+    const lineSegment = String(line.market_segment || "").toLowerCase();
     const existing = merged.find(
       (item) =>
         normalizePartCode(String(item.requestedCode || item.resolvedCode || "")) === lineCode &&
-        String(item.brand || "").toLowerCase() === String(line.brand || "").toLowerCase(),
+        String(item.brand || "").toLowerCase() === String(line.brand || "").toLowerCase() &&
+        String(item.market_segment || "").toLowerCase() === lineSegment,
     );
     if (existing) {
       existing.qty += line.qty;
@@ -239,6 +241,7 @@ function mapPortalSalesOrderToPreparedLines(row: PortalSalesOrderRow): PortalPre
       requestedCode,
       resolvedCode,
       brand: String(line.brand || ""),
+      market_segment: line.market_segment ?? null,
       description: String(line.description || ""),
       qty,
       oem_no: String(line.oem_no || ""),
@@ -272,6 +275,7 @@ function buildOfflinePreparedLineFromCatalogItem(item: PortalCatalogSearchItem):
     requestedCode,
     resolvedCode: String(item.code || "").trim(),
     brand: String(item.brand || ""),
+    market_segment: item.market_segment ?? null,
     description: String(item.description || ""),
     qty: 1,
     oem_no: String(item.oem_no || ""),
@@ -775,6 +779,7 @@ export function PortalPage() {
           render: (row: PortalCatalogSearchItem) => <span className="portal-result-code">{row.code || "-"}</span>,
         },
         { key: "brand", header: "Brand", render: (row: PortalCatalogSearchItem) => <BrandPill brand={row.brand} compact /> },
+        { key: "segment", header: "Segment", render: (row: PortalCatalogSearchItem) => row.market_segment || "-" },
         {
           key: "description",
           header: "Description",
@@ -818,6 +823,7 @@ export function PortalPage() {
       const columns = [
         { key: "code", header: "Code", render: (row: PortalPreparedLine) => row.resolvedCode || row.requestedCode || "-" },
         { key: "brand", header: "Brand", render: (row: PortalPreparedLine) => <BrandPill brand={row.brand} compact /> },
+        { key: "segment", header: "Segment", render: (row: PortalPreparedLine) => row.market_segment || "-" },
         {
           key: "description",
           header: "Description",
@@ -1569,7 +1575,7 @@ export function PortalPage() {
     }
   }
 
-  async function appendPortalRows(rows: Array<{ code: string; brand: string; qty: number }>, statusText: string) {
+  async function appendPortalRows(rows: Array<{ code: string; brand: string; qty: number; market_segment?: string | null }>, statusText: string) {
     if (!rows.length) return [] as PortalPreparedLine[];
     try {
       setPreparingPortalOrder(true);
@@ -1636,7 +1642,7 @@ export function PortalPage() {
       return;
     }
     const prepared = await appendPortalRows(
-      [{ code: item.replacement_old_code || item.code, brand: item.brand, qty: 1 }],
+      [{ code: item.replacement_old_code || item.code, brand: item.brand, qty: 1, market_segment: item.market_segment || null }],
       `{count} item added to ${portalSalesOrderNo || "New Basket"} in Basket.`,
     );
     if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
@@ -1714,6 +1720,7 @@ export function PortalPage() {
           code: line.requestedCode || line.resolvedCode,
           brand: line.brand,
           qty: Number(line.qty || 0),
+          market_segment: line.market_segment || null,
         })),
       });
       setSnapshot(result.snapshot);

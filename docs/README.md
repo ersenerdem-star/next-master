@@ -21,3 +21,15 @@ npm run dev
 - `apps/web` -> React frontend
 - `supabase` -> migrations and functions
 - `docs` -> architecture and planning docs
+
+## Core architecture
+
+- See `docs/core-architecture.md` for the module tree and protocol chain.
+- See `docs/core-guardian.md` for the fail-closed core protection rules.
+
+## Repo hygiene
+
+- Source files must stay in `apps/web/src`, `netlify/functions`, `supabase/migrations`, and `scripts`.
+- Generated run outputs stay local and ignored. Summarize durable findings in Markdown instead of committing raw batch CSV/JSON files.
+- Run `npm run predeploy:verify` before production deploys.
+- See `docs/repo-hygiene-protocol.md` for the full boundary and RTL/workbench rules.

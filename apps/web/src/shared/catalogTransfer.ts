@@ -6,6 +6,7 @@ export type CatalogTransferPayload = {
   oem_no: string;
   hs_code: string;
   origin: string;
+  market_segment?: string | null;
   weight_kg: number | null;
   lifecycle_status?: string | null;
   lifecycle_note?: string | null;

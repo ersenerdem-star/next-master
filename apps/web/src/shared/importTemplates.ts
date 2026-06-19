@@ -4,8 +4,8 @@ export function downloadCatalogTemplate() {
   downloadCsv(
     "catalog-import-template.csv",
     toCsv([
-      ["Product_Code", "Brand", "Product_Name", "OEM_No", "Vehicle", "HS_Code", "Origin", "Weight_kg"],
-      ["0986332404", "Bosch", "Starter", "1519524", "Mercedes-Benz, MAN", "851140", "HU", "3.142"],
+      ["Product_Code", "Brand", "Product_Name", "OEM_No", "Vehicle", "HS_Code", "Origin", "Market_Segment", "Weight_kg"],
+      ["0986332404", "Bosch", "Starter", "1519524", "Mercedes-Benz, MAN", "851140", "HU", "pc", "3.142"],
     ]),
   );
 }

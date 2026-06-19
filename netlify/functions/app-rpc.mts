@@ -2,6 +2,7 @@ import type { Config, Context } from "@netlify/functions";
 import { buildRestUrl, json, readJson, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
 import { resolveCaller } from "./_shared/app-auth.mts";
 import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./_shared/catalog-standardization.mts";
+import { normalizeCatalogMarketSegment } from "./_shared/catalog/catalog-segments.mts";
 import { canAccessCustomerOps, canAccessOperationsModules, isSuperadminRole } from "./_shared/roles.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
@@ -53,6 +54,7 @@ type CatalogSourceRow = {
   vehicle?: string | null;
   hs_code?: string | null;
   origin?: string | null;
+  market_segment?: string | null;
   weight_kg?: number | string | null;
   image_url?: string | null;
   brand_id?: string | null;
@@ -275,7 +277,8 @@ function buildCatalogSearchOr(search: string, normalizedSearch: string, mode: "s
 function buildCatalogRowDedupKey(row: CatalogSourceRow) {
   const brandId = String(row.brand_id || "").trim();
   const normalizedCode = String(row.normalized_code || normalizePartCode(String(row.product_code || ""))).trim();
-  if (brandId && normalizedCode) return `${brandId}::${normalizedCode}`;
+  const marketSegment = normalizeCatalogMarketSegment(String(row.market_segment || "")) || "";
+  if (brandId && normalizedCode) return `${brandId}::${marketSegment}::${normalizedCode}`;
   return String(row.id || row.product_code || "").trim();
 }
 
@@ -287,6 +290,7 @@ function scoreCatalogRowCompleteness(row: CatalogSourceRow) {
   if (String(row.description || "").trim()) score += 2;
   if (String(row.hs_code || "").trim()) score += 1;
   if (String(row.origin || "").trim()) score += 1;
+  if (normalizeCatalogMarketSegment(String(row.market_segment || ""))) score += 1;
   if (row.weight_kg != null && String(row.weight_kg).trim() !== "") score += 1;
   if (normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`) !== "discontinued") score += 1;
   return score;
@@ -653,6 +657,7 @@ async function fetchCloudCatalogPageViaRest(
 ) {
   const search = String(args.input_search || "").trim();
   const brand = String(args.input_brand || "").trim();
+  const marketSegment = normalizeCatalogMarketSegment(String(args.input_market_segment || ""));
   const page = Math.max(1, Number(args.input_page || 1) || 1);
   const pageSize = Math.min(250, Math.max(1, Number(args.input_page_size || 50) || 50));
   const offset = (page - 1) * pageSize;
@@ -662,7 +667,7 @@ async function fetchCloudCatalogPageViaRest(
   const brandMaps = await fetchBrandMaps(supabaseUrl, serviceRoleKey, caller.organizationId);
   const selectedBrandId = brand ? brandMaps.byName.get(normalizePartCode(brand)) || "" : "";
   const select =
-    "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note";
+    "id,product_code,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note";
   const baseParams: Record<string, string> = {
     select,
     organization_id: `eq.${caller.organizationId}`,
@@ -671,6 +676,7 @@ async function fetchCloudCatalogPageViaRest(
     offset: String(offset),
   };
   if (selectedBrandId) baseParams.brand_id = `eq.${selectedBrandId}`;
+  if (marketSegment) baseParams.market_segment = `eq.${marketSegment}`;
   if (search) {
     baseParams.or = buildCatalogSearchOr(search, normalizedSearch, "strict");
   }
@@ -687,9 +693,13 @@ async function fetchCloudCatalogPageViaRest(
         await fetchRestRows<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", fallbackParams),
       );
     }
-    let [brandTotalCount] = await Promise.all([
-      fetchCachedBrandCount(supabaseUrl, serviceRoleKey, caller.organizationId, selectedBrandId),
-    ]);
+    let brandTotalCount = marketSegment
+      ? await fetchRestCountOnlySoft(supabaseUrl, serviceRoleKey, "catalog_products", {
+          organization_id: `eq.${caller.organizationId}`,
+          brand_id: `eq.${selectedBrandId}`,
+          market_segment: `eq.${marketSegment}`,
+        })
+      : await fetchCachedBrandCount(supabaseUrl, serviceRoleKey, caller.organizationId, selectedBrandId);
     const observedVisibleCount = offset + brandRows.length;
     if ((brandTotalCount ?? 0) < observedVisibleCount) {
       const exactCount = await fetchRestCountOnlySoft(
@@ -699,6 +709,7 @@ async function fetchCloudCatalogPageViaRest(
         {
           organization_id: `eq.${caller.organizationId}`,
           brand_id: `eq.${selectedBrandId}`,
+          ...(marketSegment ? { market_segment: `eq.${marketSegment}` } : {}),
         },
         "exact",
       );
@@ -721,6 +732,7 @@ async function fetchCloudCatalogPageViaRest(
       vehicle: String(row.vehicle || ""),
       hs_code: String(row.hs_code || ""),
       origin: String(row.origin || ""),
+      market_segment: normalizeCatalogMarketSegment(row.market_segment),
       weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
       lifecycle_status: normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`),
       lifecycle_note: String(row.lifecycle_note || ""),
@@ -870,6 +882,7 @@ async function fetchCloudCatalogPageViaRest(
     vehicle: String(row.vehicle || ""),
     hs_code: String(row.hs_code || ""),
     origin: String(row.origin || ""),
+    market_segment: normalizeCatalogMarketSegment(row.market_segment),
     weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
     lifecycle_status: normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`),
     lifecycle_note: String(row.lifecycle_note || ""),

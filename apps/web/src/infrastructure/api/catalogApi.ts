@@ -1,4 +1,5 @@
 import type { CatalogRow } from "../../types/catalog";
+import { normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
 import { normalizeCatalogDescription, normalizeCatalogDisplayCode, normalizeCatalogOrigin } from "../../domain/shared/catalogFormatting";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import {
@@ -15,13 +16,13 @@ import { supabaseClient } from "./supabaseClient";
 import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 
 const CATALOG_SELECT_WITH_IMAGE =
-  "id,product_code,image_url,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note";
+  "id,product_code,image_url,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note";
 const CATALOG_SELECT_NO_IMAGE =
-  "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note";
+  "id,product_code,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note";
 const CATALOG_GLOBAL_SELECT_WITH_IMAGE =
-  "id,product_code,image_url,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
+  "id,product_code,image_url,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
 const CATALOG_GLOBAL_SELECT_NO_IMAGE =
-  "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
+  "id,product_code,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
 
 type CatalogSearchMode = "strict" | "loose";
 
@@ -34,6 +35,7 @@ type CatalogQueryRow = {
   vehicle: string | null;
   hs_code: string | null;
   origin: string | null;
+  market_segment: string | null;
   weight_kg: number | null;
   lifecycle_status: string | null;
   lifecycle_note: string | null;
@@ -174,15 +176,25 @@ async function resolveOrCreateBrandId(brandName: string) {
   return data.id as string;
 }
 
+function requireCatalogMarketSegment(value: string | null | undefined) {
+  const normalized = normalizeCatalogMarketSegment(value);
+  if (!normalized) {
+    throw new Error("Market segment is required. Choose Truck, Bus, Agriculture, Marine, Passenger Car, or Industrial.");
+  }
+  return normalized;
+}
+
 export async function fetchCloudCatalog(input: {
   search: string;
   brandName?: string;
+  marketSegment?: string;
   page?: number;
   pageSize?: number;
 }): Promise<CatalogRow[]> {
   const data = await callAppRpc<Array<Record<string, unknown>>>("cloud_catalog_page", {
     input_search: input.search,
     input_brand: input.brandName?.trim() || "",
+    input_market_segment: normalizeCatalogMarketSegment(input.marketSegment) || "",
     input_page: input.page ?? 1,
     input_page_size: input.pageSize ?? 50,
   });
@@ -197,6 +209,7 @@ export async function fetchCloudCatalog(input: {
     vehicle: String(row.vehicle || ""),
     hs_code: String(row.hs_code || ""),
     origin: String(row.origin || ""),
+    market_segment: normalizeCatalogMarketSegment(String(row.market_segment || "")),
     weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
     lifecycle_status: normalizeCatalogLifecycleStatus(String(row.lifecycle_status || "")),
     lifecycle_note: String(row.lifecycle_note || ""),
@@ -217,12 +230,14 @@ export async function updateCloudCatalogRow(
     vehicle: string | null;
     hs_code: string | null;
     origin: string | null;
+    market_segment: string | null;
     weight_kg: number | null;
     lifecycle_status: string | null;
     lifecycle_note: string | null;
   },
 ) {
   const brandId = await resolveBrandId(updates.brand);
+  const marketSegment = requireCatalogMarketSegment(updates.market_segment);
 
   const { error } = await supabaseClient
     .from("catalog_products")
@@ -234,6 +249,7 @@ export async function updateCloudCatalogRow(
       vehicle: updates.vehicle?.trim() || null,
       hs_code: updates.hs_code,
       origin: updates.origin ? normalizeCatalogOrigin(updates.origin) : null,
+      market_segment: marketSegment,
       weight_kg: updates.weight_kg,
       lifecycle_status: normalizeCatalogLifecycleStatus(updates.lifecycle_status),
       lifecycle_note: updates.lifecycle_note?.trim() || null,
@@ -252,12 +268,14 @@ export async function createCloudCatalogRow(input: {
   vehicle: string | null;
   hs_code: string | null;
   origin: string | null;
+  market_segment: string | null;
   weight_kg: number | null;
   lifecycle_status?: string | null;
   lifecycle_note?: string | null;
 }) {
   const organizationId = await getCurrentOrgId();
   const brandId = await resolveOrCreateBrandId(input.brand);
+  const marketSegment = requireCatalogMarketSegment(input.market_segment);
 
   const { error } = await supabaseClient.from("catalog_products").insert({
     organization_id: organizationId,
@@ -268,6 +286,7 @@ export async function createCloudCatalogRow(input: {
     vehicle: input.vehicle?.trim() || null,
     hs_code: input.hs_code,
     origin: input.origin ? normalizeCatalogOrigin(input.origin) : null,
+    market_segment: marketSegment,
     weight_kg: input.weight_kg,
     lifecycle_status: normalizeCatalogLifecycleStatus(input.lifecycle_status),
     lifecycle_note: input.lifecycle_note?.trim() || null,
@@ -281,7 +300,7 @@ export async function deleteCloudCatalogRow(productId: string) {
   if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Catalog delete failed"));
 }
 
-export async function fetchCatalogExportRows(input: { brandName: string; search?: string }) {
+export async function fetchCatalogExportRows(input: { brandName: string; search?: string; marketSegment?: string }) {
   const organizationId = await getCurrentOrgId();
   const brandName = input.brandName.trim();
   if (!brandName) {
@@ -311,6 +330,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     vehicle: string | null;
     hs_code: string | null;
     origin: string | null;
+    market_segment: string | null;
     weight_kg: number | null;
     lifecycle_status: string | null;
     lifecycle_note: string | null;
@@ -322,6 +342,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
   while (true) {
     const search = input.search?.trim();
     const normalizedSearch = normalizePartCode(search || "");
+    const marketSegment = normalizeCatalogMarketSegment(input.marketSegment);
     const buildQuery = (selectClause: string, mode: CatalogSearchMode) => {
       let query = supabaseClient
         .from("catalog_products")
@@ -330,6 +351,9 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
         .order("product_code", { ascending: true })
         .range(from, from + pageSize - 1);
 
+      if (marketSegment) {
+        query = query.eq("market_segment", marketSegment);
+      }
       if (search) {
         query = query.or(buildCatalogSearchOr(search, normalizedSearch, mode));
       }
@@ -338,23 +362,23 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     };
 
     let { data, error } = await buildQuery(
-      "product_code,image_url,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+      "product_code,image_url,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
       "strict",
     );
     if (error && isMissingCatalogImageError(error)) {
       ({ data, error } = await buildQuery(
-        "product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+        "product_code,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
         "strict",
       ));
     }
     if (!error && search && shouldRunLooseOriginalNumberSearch(search) && !(data || []).length) {
       ({ data, error } = await buildQuery(
-        "product_code,image_url,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+        "product_code,image_url,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
         "loose",
       ));
       if (error && isMissingCatalogImageError(error)) {
         ({ data, error } = await buildQuery(
-          "product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,lifecycle_status,lifecycle_note",
+          "product_code,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
           "loose",
         ));
       }
@@ -378,13 +402,14 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     vehicle: row.vehicle || "",
     hs_code: row.hs_code || "",
     origin: row.origin || "",
+    market_segment: normalizeCatalogMarketSegment(row.market_segment),
     weight_kg: row.weight_kg,
     lifecycle_status: normalizeCatalogLifecycleStatus(row.lifecycle_status),
     lifecycle_note: row.lifecycle_note || "",
   }));
 }
 
-export async function fetchCatalogRowsByCodes(input: { brandName: string; codes: string[] }): Promise<CatalogRow[]> {
+export async function fetchCatalogRowsByCodes(input: { brandName: string; codes: string[]; marketSegment?: string }): Promise<CatalogRow[]> {
   const organizationId = await getCurrentOrgId();
   const brandName = input.brandName.trim();
   const normalizedCodes = Array.from(
@@ -419,6 +444,7 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
 
   const result: CatalogRow[] = [];
   const chunkSize = 500;
+  const marketSegment = normalizeCatalogMarketSegment(input.marketSegment);
 
   for (let index = 0; index < normalizedCodes.length; index += chunkSize) {
     const codeChunk = normalizedCodes.slice(index, index + chunkSize);
@@ -429,6 +455,7 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
         .select(selectClause)
         .eq("organization_id", organizationId)
         .eq("brand_id", brandRow.id)
+        .match(marketSegment ? { market_segment: marketSegment } : {})
         .in(column, values)
         .order("product_code", { ascending: true });
 
@@ -449,6 +476,7 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
         vehicle: string | null;
         hs_code: string | null;
         origin: string | null;
+        market_segment: string | null;
         weight_kg: number | null;
         lifecycle_status: string | null;
         lifecycle_note: string | null;
@@ -475,6 +503,7 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
         vehicle: row.vehicle ?? "",
         hs_code: row.hs_code ?? "",
         origin: row.origin ?? "",
+        market_segment: normalizeCatalogMarketSegment(row.market_segment),
         weight_kg: row.weight_kg,
         lifecycle_status: normalizeCatalogLifecycleStatus(row.lifecycle_status),
         lifecycle_note: row.lifecycle_note ?? "",

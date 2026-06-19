@@ -3,6 +3,7 @@ import type { PortalCredentials, PortalSnapshot } from "../../types/portalSessio
 export type PortalCatalogSearchItem = {
   code: string;
   brand: string;
+  market_segment: string | null;
   description: string;
   oem_no: string;
   vehicle: string;
@@ -28,6 +29,7 @@ export type PortalOrderInputRow = {
   code: string;
   brand: string;
   qty: number;
+  market_segment?: string | null;
 };
 
 export type PortalPreparedLine = {
@@ -35,6 +37,7 @@ export type PortalPreparedLine = {
   requestedCode: string;
   resolvedCode: string;
   brand: string;
+  market_segment: string | null;
   description: string;
   qty: number;
   oem_no: string;

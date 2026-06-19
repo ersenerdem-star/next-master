@@ -7,7 +7,14 @@
   "scripts": {
     "dev": "npm --workspace apps/web run dev",
     "build": "npm --workspace apps/web run build",
-    "preview": "npm --workspace apps/web run preview"
+    "preview": "npm --workspace apps/web run preview",
+    "audit:hygiene": "node scripts/check-worktree-hygiene.mjs",
+    "audit:hygiene:strict": "node scripts/check-worktree-hygiene.mjs --strict",
+    "audit:modules": "node scripts/check-module-boundaries.mjs",
+    "audit:core": "node scripts/check-core-guardian.mjs",
+    "audit:secrets": "node scripts/check-secret-surface.mjs",
+    "clean:worktree": "node scripts/clean-worktree-artifacts.mjs",
+    "predeploy:verify": "npm run build && npm run audit:core && npm run audit:secrets && npm run audit:hygiene:strict"
   },
   "devDependencies": {
     "yaml": "^2.9.0"

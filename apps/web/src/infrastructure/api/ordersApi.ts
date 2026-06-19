@@ -10,6 +10,7 @@ import type {
 } from "../../types/orders";
 import { supabaseClient } from "./supabaseClient";
 import { getCurrentOrgId } from "./organizationApi";
+import { fetchWarehouses } from "./warehousesApi";
 
 const SALES_ORDER_COLUMNS = [
   "id",
@@ -99,6 +100,10 @@ const PURCHASE_ORDER_SUMMARY_COLUMNS = [
 const INVOICE_COLUMNS = [
   "id",
   "sales_order_id",
+  "sales_order_ids",
+  "warehouse_id",
+  "warehouse_code",
+  "warehouse_name",
   "sales_order_no",
   "customer_name",
   "seller_company",
@@ -127,6 +132,10 @@ const INVOICE_COLUMNS = [
 const INVOICE_SUMMARY_COLUMNS = [
   "id",
   "sales_order_id",
+  "sales_order_ids",
+  "warehouse_id",
+  "warehouse_code",
+  "warehouse_name",
   "sales_order_no",
   "customer_name",
   "seller_company",
@@ -296,6 +305,10 @@ function mapInvoiceRow(row: Record<string, unknown>): LocalInvoice {
   return {
     id: String(row.id || ""),
     sales_order_id: String(row.sales_order_id || ""),
+    sales_order_ids: Array.isArray(row.sales_order_ids) ? (row.sales_order_ids as string[]) : [],
+    warehouse_id: row.warehouse_id ? String(row.warehouse_id) : null,
+    warehouse_code: String(row.warehouse_code || ""),
+    warehouse_name: String(row.warehouse_name || ""),
     sales_order_no: String(row.sales_order_no || ""),
     customer_name: String(row.customer_name || ""),
     seller_company: String(row.seller_company || ""),
@@ -444,6 +457,10 @@ function mapInvoicePayload(invoice: LocalInvoice, organizationId: string) {
     id: invoice.id,
     organization_id: organizationId,
     sales_order_id: invoice.sales_order_id,
+    sales_order_ids: invoice.sales_order_ids ?? [],
+    warehouse_id: invoice.warehouse_id || null,
+    warehouse_code: invoice.warehouse_code || "",
+    warehouse_name: invoice.warehouse_name || "",
     sales_order_no: invoice.sales_order_no,
     customer_name: invoice.customer_name,
     seller_company: invoice.seller_company,
@@ -467,6 +484,39 @@ function mapInvoicePayload(invoice: LocalInvoice, organizationId: string) {
     lines: invoice.lines,
     created_at: invoice.created_at || nowIso(),
     updated_at: nowIso(),
+  };
+}
+
+async function resolveInvoiceWarehouseDefaults(invoice: LocalInvoice) {
+  if (invoice.warehouse_id && String(invoice.warehouse_id).trim()) {
+    return {
+      ...invoice,
+      warehouse_id: String(invoice.warehouse_id).trim(),
+      warehouse_code: String(invoice.warehouse_code || "").trim(),
+      warehouse_name: String(invoice.warehouse_name || "").trim(),
+    };
+  }
+
+  const warehouses = await fetchWarehouses();
+  const preferredWarehouse =
+    warehouses.find((row) => row.is_active !== false && String(row.fulfillment_model || "").toLowerCase() === "stocked") ||
+    warehouses.find((row) => row.is_active !== false) ||
+    null;
+
+  if (!preferredWarehouse) {
+    return {
+      ...invoice,
+      warehouse_id: null,
+      warehouse_code: "",
+      warehouse_name: "",
+    };
+  }
+
+  return {
+    ...invoice,
+    warehouse_id: preferredWarehouse.id,
+    warehouse_code: preferredWarehouse.warehouse_code || "",
+    warehouse_name: preferredWarehouse.warehouse_name || "",
   };
 }
 
@@ -903,7 +953,8 @@ export async function upsertInvoice(invoice: LocalInvoice, previousId?: string):
     if (deleteError) throw new Error(deleteError.message || "Previous invoice cleanup failed");
   }
 
-  const payload = mapInvoicePayload(invoice, organizationId);
+  const resolvedInvoice = await resolveInvoiceWarehouseDefaults(invoice);
+  const payload = mapInvoicePayload(resolvedInvoice, organizationId);
   const { data, error } = await supabaseClient
     .from("invoices")
     .upsert(payload, { onConflict: "id" })
