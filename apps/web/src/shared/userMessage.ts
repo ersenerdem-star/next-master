@@ -37,6 +37,10 @@ export function sanitizeUserFacingMessage(message: unknown, fallback = "The requ
     return "The request took too long. Please try again.";
   }
 
+  if (normalized.includes("catalog_products_market_segment_check") || normalized.includes("market segment check")) {
+    return "Market segment must be one of PC, CV, LCV, Motorcycle, Engines, Universal, Marine, Industrial, or Agriculture.";
+  }
+
   if (
     normalized.includes("supabase") ||
     normalized.includes("postgrest") ||

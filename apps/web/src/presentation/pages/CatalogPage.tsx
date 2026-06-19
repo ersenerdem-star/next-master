@@ -697,7 +697,7 @@ export function CatalogPage() {
           vehicle: draft.vehicle || null,
           hs_code: draft.hs_code || null,
           origin: draft.origin || null,
-          market_segment: draft.market_segment || null,
+          market_segment: normalizeCatalogMarketSegment(draft.market_segment),
           weight_kg: parseWeightInput(draft.weight_kg),
           lifecycle_status: draft.lifecycle_status || "active",
           lifecycle_note: draft.lifecycle_note || null,

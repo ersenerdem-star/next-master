@@ -1,4 +1,5 @@
 import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "../../domain/shared/catalogFormatting";
+import { normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
 import { callAppRpc } from "./appRpcApi";
 
 export async function bulkImportCatalog(payload: Array<Record<string, unknown>>) {
@@ -10,6 +11,7 @@ export async function bulkImportCatalog(payload: Array<Record<string, unknown>>)
     ),
     description: row.description == null ? null : normalizeCatalogDescription(String(row.description || "")),
     vehicle: row.vehicle == null ? null : String(row.vehicle || "").trim() || null,
+    market_segment: normalizeCatalogMarketSegment(String(row.market_segment || "")),
   }));
   await callAppRpc("bulk_import_catalog", { payload: normalizedPayload });
 }

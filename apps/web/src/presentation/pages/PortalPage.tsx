@@ -35,6 +35,14 @@ import { fetchCatalogProductMedia } from "../../infrastructure/api/catalogMediaA
 import type { ProductMediaItem } from "../components/common/ProductVisual";
 import { parseOrderImportFile } from "../../shared/orderImport";
 
+const buildMeta = __APP_BUILD_META__;
+const buildContextMeta = {
+  production: { label: "Production", className: "is-production" },
+  "deploy-preview": { label: "Preview", className: "is-preview" },
+  "branch-deploy": { label: "Branch", className: "is-branch" },
+  local: { label: "Local", className: "is-local" },
+} as const;
+
 const SESSION_KEY = "next-master-portal-session";
 const PORTAL_CACHE_PREFIX = "next-master-portal-cache";
 const PORTAL_CACHE_WRITE_DELAY_MS = 250;
@@ -507,6 +515,17 @@ export function PortalPage() {
   const [previewImage, setPreviewImage] = useState<{ src: string; code: string; name: string } | null>(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const portalPricingCurrency = snapshot?.pricingProfile?.currency || snapshot?.accountSummary.currency || "EUR";
+  const portalBuildContext = buildContextMeta[buildMeta.context as keyof typeof buildContextMeta] || {
+    label: buildMeta.context || "Build",
+    className: "is-local",
+  };
+  const portalCommitShort = buildMeta.commit.slice(0, 8);
+  const portalBuiltAtLabel = new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(buildMeta.builtAt));
   const effectivePortalSearchView: PortalSearchView = isCompactPortalSearch ? "list" : portalSearchView;
   const shouldScalePortalDesktop =
     Boolean(snapshot) &&
@@ -1513,6 +1532,10 @@ export function PortalPage() {
           : activeSection === "statement"
             ? "Use this area for statement, payments, and credits only."
             : "Review your account identity, addresses, and financial profile.";
+  const portalDeskSummaryText =
+    activeSection === "desk"
+      ? "Search part numbers, OEM codes, and matched alternatives."
+      : activeSectionHelpText;
 
   function handlePortalGroupNavigate(groupKey: PortalNavGroupKey) {
     const targetGroup = portalNavGroups.find((group) => group.key === groupKey);
@@ -2324,13 +2347,27 @@ export function PortalPage() {
             {portalSellerDetails ? <div className="portal-brand__meta">{portalSellerDetails}</div> : null}
           </div>
         </div>
-        <div className="inline-actions">
-          <Button variant="secondary" busy={loading} busyLabel="Refreshing..." onClick={() => void handleRefresh()}>
-            Refresh
-          </Button>
-          <Button variant="secondary" onClick={() => void handleLogout()}>
-            Logout
-          </Button>
+        <div className="portal-header__right">
+          <div className="topbar-build portal-header__build-context">
+            <div className="topbar-build__eyebrow">Build Context</div>
+            <div className="topbar-build__chips">
+              <span className={`topbar-chip ${portalBuildContext.className}`}>{portalBuildContext.label}</span>
+              <span className="topbar-chip">{buildMeta.branch}</span>
+              <span className="topbar-chip">{portalCommitShort}</span>
+            </div>
+            <div className="topbar-build__meta">
+              <span>Built {portalBuiltAtLabel}</span>
+              {buildMeta.deployUrl ? <span>Deploy ready</span> : null}
+            </div>
+          </div>
+          <div className="inline-actions inline-actions--portal-header">
+            <Button variant="secondary" busy={loading} busyLabel="Refreshing..." onClick={() => void handleRefresh()}>
+              Refresh
+            </Button>
+            <Button variant="secondary" onClick={() => void handleLogout()}>
+              Logout
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -2387,9 +2424,9 @@ export function PortalPage() {
           </div>
           {status ? <div className="success-text">{status}</div> : null}
           {error ? <div className="warning-text">{error}</div> : null}
-          <div className="portal-inline-note portal-inline-note--soft">
+          <div className="portal-inline-note portal-inline-note--soft portal-inline-note--compact">
             <span>Current View</span>
-            <strong>{activeSectionHelpText}</strong>
+            <strong>{portalDeskSummaryText}</strong>
           </div>
           {!isOnline ? <div className="warning-text">Offline mode active. Basket changes stay on this device until you reconnect and confirm the basket.</div> : null}
 
@@ -2693,25 +2730,15 @@ export function PortalPage() {
                   <Button type="button" variant="secondary" onClick={handleClearPortalSearch}>
                     Clear Search
                   </Button>
-                  <Button type="submit" variant="secondary" busy={searchingCatalog} busyLabel="Searching..." onClick={() => void handlePortalCatalogSearch()}>
-                    Search
-                  </Button>
-                </div>
-              </form>
-
-              <div className="portal-inline-note portal-inline-note--soft">
-                <span>Search Target</span>
-                <strong>Type the original number or brand code in the middle field. Exact matches stay above; stock-backed alternatives appear in the recommendation block below.</strong>
+                <Button type="submit" variant="secondary" busy={searchingCatalog} busyLabel="Searching...">
+                  Search
+                </Button>
               </div>
+            </form>
 
-              <div className="portal-inline-note portal-inline-note--soft">
-                <span>Import Format</span>
-                <strong>Upload Excel or CSV with Brand, Part Code, and Qty columns. Part No and Product Code headers are also accepted.</strong>
-              </div>
-
-              <div className="portal-inline-note portal-inline-note--soft">
-                <span>Search Logic</span>
-                <strong>Original number search returns matching alternatives. Added items always appear in the basket below.</strong>
+              <div className="portal-inline-note portal-inline-note--soft portal-inline-note--compact">
+                <span>Search Guide</span>
+                <strong>Use the middle field for part number or OEM code. Import Brand, Part Code, and Qty files with Excel or CSV; exact matches stay on top and alternatives appear below.</strong>
               </div>
 
               <Input label="Notes" value={portalOrderNotes} placeholder="Order note for your internal buying team" onChange={setPortalOrderNotes} />
@@ -2806,6 +2833,8 @@ export function PortalPage() {
                       <DataTable
                         rows={catalogResults}
                         columns={portalCatalogColumns}
+                        className="data-table--portal-search"
+                        wrapClassName="table-wrap--portal-search"
                         emptyText={searchingCatalog ? "Searching items..." : "Search by part number, original number, or description to load matching products and alternatives."}
                         onRowClick={(row) => {
                           setSelectedCatalogCode(row.code);
