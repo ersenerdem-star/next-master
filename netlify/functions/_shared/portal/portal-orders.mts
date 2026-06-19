@@ -183,6 +183,8 @@ const CUSTOMER_ORDER_SELECT_LEGACY =
   "id,display_name,company_name,currency,payment_terms,contract_nr,custom_fields,price_list_type";
 const PORTAL_LOOKUP_CACHE_TTL_MS = 2 * 60 * 1000;
 const PORTAL_SEARCH_RESULT_CACHE_TTL_MS = 3 * 60 * 1000;
+const PORTAL_SEARCH_QUERY_TIMEOUT_MS = 3500;
+const PORTAL_SEARCH_PREVIEW_TIMEOUT_MS = 1800;
 const PORTAL_PRICE_LIST_CACHE_TTL_MS = 5 * 60 * 1000;
 const PORTAL_PRICE_LIST_MAX_ROWS = 100000;
 const PORTAL_PRICE_LIST_CATALOG_PAGE_SIZE = 250;
@@ -472,6 +474,7 @@ async function fetchPortalExactSearchRows(
   search: string,
   selectedBrandId: string,
   allowedBrandIds: string[],
+  timeoutMs?: number,
 ) {
   const variants = buildPortalExactSearchVariants(search);
   if (!variants.length) return [] as Array<Record<string, unknown>>;
@@ -497,11 +500,11 @@ async function fetchPortalExactSearchRows(
     fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
       ...baseParams,
       normalized_code: `in.(${variants.join(",")})`,
-    }).catch(() => []),
+    }, timeoutMs).catch(() => []),
     fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
       ...baseParams,
       normalized_oem: `in.(${variants.join(",")})`,
-    }).catch(() => []),
+    }, timeoutMs).catch(() => []),
   ]);
   const exactMatches = dedupeCatalogRows([...exactCodeRows, ...exactOemRows]).filter((row) => matchesCatalogExactFamilyRow(row, search));
   if (exactMatches.length || !productCodeClauses.length) {
@@ -510,7 +513,7 @@ async function fetchPortalExactSearchRows(
   const productCodeRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
     ...baseParams,
     or: `(${productCodeClauses.join(",")})`,
-  }).catch(() => []);
+  }, timeoutMs).catch(() => []);
   return dedupeCatalogRows([...exactMatches, ...productCodeRows]).filter((row) => matchesCatalogExactFamilyRow(row, search));
 }
 
@@ -833,6 +836,7 @@ async function fetchPortalSearchStockMap(
   serviceRoleKey: string,
   organizationId: string,
   items: Array<{ brand: string; normalized_code: string }>,
+  timeoutMs?: number,
 ) {
   const map = new Map<
     string,
@@ -850,7 +854,7 @@ async function fetchPortalSearchStockMap(
     organization_id: `eq.${organizationId}`,
     product_code_key: `in.(${codeKeys.join(",")})`,
     limit: String(Math.max(240, codeKeys.length * 12)),
-  }).catch(() => []);
+  }, timeoutMs).catch(() => []);
 
   for (const row of snapshotRows) {
     const brand = String(row.brand || "").trim().toLowerCase();
@@ -885,6 +889,7 @@ async function buildPortalCatalogPreviewMap(
   invite: PortalInviteRow,
   context: CustomerPricingContext,
   baseItems: SearchCatalogBaseItem[],
+  timeoutMs?: number,
 ) {
   const previewByCode = new Map<
     string,
@@ -905,6 +910,7 @@ async function buildPortalCatalogPreviewMap(
         brand: item.brand,
         product_code: item.code,
       })),
+      timeoutMs,
     ).catch(() => new Map());
     for (const item of baseItems) {
       const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
@@ -927,6 +933,7 @@ async function buildPortalCatalogPreviewMap(
           brandId: item.brand_id,
           normalizedCode: item.normalized_code,
         })),
+      timeoutMs,
     ).catch(() => new Map());
     for (const item of baseItems) {
       const bestOption = bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`);
@@ -947,6 +954,7 @@ async function buildPortalCatalogPreviewMap(
           brand: item.brand,
           product_code: item.code,
         })),
+        timeoutMs,
       ).catch(() => new Map());
       for (const item of baseItems) {
         const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
@@ -1012,6 +1020,7 @@ async function fetchPortalCatalogRecommendations(
   brandMap: { byId: Map<string, string>; byName: Map<string, string> },
   baseItems: SearchCatalogBaseItem[],
   replacementRowsByKey: Map<string, { old_code: string; new_code: string; reason: string | null }>,
+  timeoutMs?: number,
 ) {
   if (!search || !baseItems.length || !shouldStrictlyFilterCodeSearch(search)) return [] as SearchCatalogBaseItem[];
 
@@ -1030,11 +1039,11 @@ async function fetchPortalCatalogRecommendations(
     or: `(${anchorDescriptionTokens.slice(0, 3).map((token) => `description.ilike.*${token}*`).join(",")})`,
     order: "product_code.asc",
     limit: "120",
-  }).catch(() => []);
+  }, timeoutMs).catch(() => []);
   if (!candidateRows.length) return [] as SearchCatalogBaseItem[];
 
   const candidateBaseItems = mapCatalogRowsToBaseItems(candidateRows, brandMap, replacementRowsByKey);
-  const stockMap = await fetchPortalSearchStockMap(supabaseUrl, serviceRoleKey, invite.organization_id, candidateBaseItems).catch(
+  const stockMap = await fetchPortalSearchStockMap(supabaseUrl, serviceRoleKey, invite.organization_id, candidateBaseItems, timeoutMs).catch(
     () => new Map(),
   );
 
@@ -1140,18 +1149,32 @@ function rpcUrl(supabaseUrl: string, fn: string) {
   return new URL(`/rest/v1/rpc/${fn}`, supabaseUrl).toString();
 }
 
-async function fetchFirst<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
+async function fetchFirst<T>(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  table: string,
+  params: Record<string, string>,
+  timeoutMs?: number,
+) {
   const rows = await getJson<Array<T>>(buildRestUrl(supabaseUrl, table, params), {
     headers: serviceRoleHeaders(serviceRoleKey),
+    ...(timeoutMs ? { timeoutMs } : {}),
   });
   return rows[0] || null;
 }
 
-async function fetchAll<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
+async function fetchAll<T>(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  table: string,
+  params: Record<string, string>,
+  timeoutMs?: number,
+) {
   const requestedLimit = parsePositiveInteger(params.limit);
   if (!requestedLimit || requestedLimit <= POSTGREST_PAGE_CAP) {
     return getJson<Array<T>>(buildRestUrl(supabaseUrl, table, params), {
       headers: serviceRoleHeaders(serviceRoleKey),
+      ...(timeoutMs ? { timeoutMs } : {}),
     });
   }
 
@@ -1169,6 +1192,7 @@ async function fetchAll<T>(supabaseUrl: string, serviceRoleKey: string, table: s
       }),
       {
         headers: serviceRoleHeaders(serviceRoleKey),
+        ...(timeoutMs ? { timeoutMs } : {}),
       },
     );
     rows.push(...page);
@@ -1205,9 +1229,15 @@ function resolveBrandIdsFromMap(brandMap: { byId: Map<string, string>; byName: M
   return [...matches].filter(Boolean);
 }
 
-async function fetchAllSoft<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
+async function fetchAllSoft<T>(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  table: string,
+  params: Record<string, string>,
+  timeoutMs?: number,
+) {
   try {
-    return await fetchAll<T>(supabaseUrl, serviceRoleKey, table, params);
+    return await fetchAll<T>(supabaseUrl, serviceRoleKey, table, params, timeoutMs);
   } catch (error) {
     if (isPortalTimeoutLike(error)) {
       console.warn(
@@ -1237,6 +1267,7 @@ async function fetchPortalCustomerForOrders(
   supabaseUrl: string,
   serviceRoleKey: string,
   invite: PortalInviteRow,
+  timeoutMs?: number,
 ): Promise<CustomerRow | null> {
   const customerId = String(invite.customer_id || "").trim();
   if (!customerId) {
@@ -1248,7 +1279,7 @@ async function fetchPortalCustomerForOrders(
       organization_id: `eq.${invite.organization_id}`,
       id: `eq.${customerId}`,
       limit: "1",
-    });
+    }, timeoutMs);
 
   try {
     return await trySelect(CUSTOMER_ORDER_SELECT);
@@ -1267,6 +1298,7 @@ async function resolvePortalCustomer(
   supabaseUrl: string,
   serviceRoleKey: string,
   invite: PortalInviteRow,
+  timeoutMs?: number,
 ): Promise<CustomerPricingContext> {
   if (invite.party_type !== "customer" || !invite.access_can_view_orders) {
     throw new Error("This portal cannot create sales orders");
@@ -1281,7 +1313,7 @@ async function resolvePortalCustomer(
     return cached.value;
   }
 
-  const customer = await fetchPortalCustomerForOrders(supabaseUrl, serviceRoleKey, invite);
+  const customer = await fetchPortalCustomerForOrders(supabaseUrl, serviceRoleKey, invite, timeoutMs);
   const customerMeta = parseEmbeddedCustomerMeta(customer?.custom_fields);
 
   if (!customer?.id) {
@@ -1303,13 +1335,13 @@ async function resolvePortalCustomer(
           select: "id,company_name",
           organization_id: `eq.${invite.organization_id}`,
           id: `eq.${sellerCompanyProfileId}`,
-        }).catch(() => null)
+        }, timeoutMs).catch(() => null)
       : null) ||
     (await fetchFirst<CompanyProfileRow>(supabaseUrl, serviceRoleKey, "company_profiles", {
       select: "id,company_name",
       organization_id: `eq.${invite.organization_id}`,
       order: "updated_at.desc",
-    })) ||
+    }, timeoutMs)) ||
     null;
 
   const priceLists = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "customer_price_lists", {
@@ -1317,7 +1349,7 @@ async function resolvePortalCustomer(
     organization_id: `eq.${invite.organization_id}`,
     is_active: "eq.true",
     order: "updated_at.desc,created_at.desc",
-  });
+  }, timeoutMs);
 
   const byType = new Map<string, Record<string, unknown>>();
   for (const row of priceLists) {
@@ -1403,7 +1435,7 @@ export async function searchPortalCatalog(
   if (cached && cached.expiresAt > Date.now()) {
     return cached.value;
   }
-  const contextPromise = resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite)
+  const contextPromise = resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite, PORTAL_SEARCH_QUERY_TIMEOUT_MS)
     .then((value) => ({ value }))
     .catch((error) => ({ error }));
   const startedAt = Date.now();
@@ -1430,19 +1462,27 @@ export async function searchPortalCatalog(
 
   let rows: Array<Record<string, unknown>> = [];
   if (search && strictCodeSearch) {
-    rows = await fetchPortalExactSearchRows(supabaseUrl, serviceRoleKey, invite, search, selectedBrandId, allowedBrandIds);
+    rows = await fetchPortalExactSearchRows(
+      supabaseUrl,
+      serviceRoleKey,
+      invite,
+      search,
+      selectedBrandId,
+      allowedBrandIds,
+      PORTAL_SEARCH_QUERY_TIMEOUT_MS,
+    );
     if (!rows.length) {
       const retryOr = buildPortalTimeoutRetryOr(search);
       if (retryOr) {
         rows = await fetchAllSoft<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
           ...params,
           or: retryOr,
-        });
+        }, PORTAL_SEARCH_QUERY_TIMEOUT_MS);
       }
     }
   } else {
     try {
-      rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", params);
+      rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", params, PORTAL_SEARCH_QUERY_TIMEOUT_MS);
     } catch (error) {
       if (!search || !isPortalTimeoutLike(error)) {
         throw error;
@@ -1452,7 +1492,7 @@ export async function searchPortalCatalog(
       rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
         ...params,
         or: retryOr,
-      });
+      }, PORTAL_SEARCH_QUERY_TIMEOUT_MS);
     }
   }
   const replacementRowsByKey = new Map<
@@ -1476,7 +1516,7 @@ export async function searchPortalCatalog(
           ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
           : {}),
       limit: "200",
-    }).catch(() => []);
+    }, PORTAL_SEARCH_QUERY_TIMEOUT_MS).catch(() => []);
 
     if (referenceRows.length) {
       const brandIds = [...new Set(referenceRows.map((row) => String(row.brand_id || "")).filter(Boolean))];
@@ -1499,7 +1539,7 @@ export async function searchPortalCatalog(
           normalized_code: `in.(${newCodes.join(",")})`,
           order: "product_code.asc",
           limit: String(Math.max(120, newCodes.length * 4)),
-        }).catch(() => []);
+        }, PORTAL_SEARCH_QUERY_TIMEOUT_MS).catch(() => []);
         if (replacementCatalogRows.length) {
           rows = dedupeCatalogRows([
             ...rows,
@@ -1527,7 +1567,7 @@ export async function searchPortalCatalog(
         or: `(${familyClauses.join(",")})`,
         order: "product_code.asc",
         limit: "120",
-      }).catch(() => []);
+      }, PORTAL_SEARCH_QUERY_TIMEOUT_MS).catch(() => []);
       if (tokenRows.length) {
         rows = dedupeCatalogRows([...rows, ...tokenRows]).filter((row) => matchesCatalogFamilyRow(row, search));
       }
@@ -1537,7 +1577,7 @@ export async function searchPortalCatalog(
     rows = await fetchAllSoft<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
       ...params,
       or: buildPortalCatalogSearchOr(search, normalizedSearch, "loose"),
-    });
+    }, PORTAL_SEARCH_QUERY_TIMEOUT_MS);
   }
   if (!rows.length && search && shouldRunLooseOriginalNumberSearch(search)) {
     const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
@@ -1552,7 +1592,7 @@ export async function searchPortalCatalog(
       normalized_oem: `like.*${normalizedOriginalSearch}*`,
       order: "product_code.asc",
       limit: "100",
-    }).catch(() => []);
+    }, PORTAL_SEARCH_QUERY_TIMEOUT_MS).catch(() => []);
     rows = dedupeCatalogRows(
       normalizedRows.filter(
         (row) => matchesCatalogFamilyRow(row, search) || normalizePartCode(String(row.product_code || "")).includes(normalizedSearch),
@@ -1584,27 +1624,72 @@ export async function searchPortalCatalog(
     return emptyResult;
   }
   const contextResult = await contextPromise;
+  let currency = "EUR";
+  let recommendationsBase: SearchCatalogBaseItem[] = [];
+  let previewByCode = new Map<string, { sell_price: number | null; supplier_name: string }>();
   if ("error" in contextResult) {
-    throw contextResult.error;
+    console.warn(
+      JSON.stringify({
+        scope: "portal-order-search",
+        stage: "pricing-context-skipped",
+        inviteId: invite.id,
+        organizationId: invite.organization_id,
+        reason: String(contextResult.error instanceof Error ? contextResult.error.message : contextResult.error || ""),
+      }),
+    );
+  } else {
+    const context = contextResult.value;
+    currency = context.currency;
+    recommendationsBase = shouldLoadPortalRecommendations(search, baseItems)
+      ? await fetchPortalCatalogRecommendations(
+          supabaseUrl,
+          serviceRoleKey,
+          invite,
+          search,
+          brandMap,
+          baseItems,
+          replacementRowsByKey,
+          PORTAL_SEARCH_PREVIEW_TIMEOUT_MS,
+        ).catch((error) => {
+          console.warn(
+            JSON.stringify({
+              scope: "portal-order-search",
+              stage: "recommendations-skipped",
+              inviteId: invite.id,
+              organizationId: invite.organization_id,
+              reason: String(error instanceof Error ? error.message : error || ""),
+            }),
+          );
+          return [] as SearchCatalogBaseItem[];
+        })
+      : [];
+    const previewItems = new Map<string, SearchCatalogBaseItem>();
+    for (const item of [...baseItems.slice(0, 8), ...recommendationsBase.slice(0, 4)]) {
+      previewItems.set(portalCatalogPreviewKey(item.brand, item.normalized_code), item);
+    }
+    previewByCode = await buildPortalCatalogPreviewMap(
+      supabaseUrl,
+      serviceRoleKey,
+      invite,
+      context,
+      [...previewItems.values()],
+      PORTAL_SEARCH_PREVIEW_TIMEOUT_MS,
+    ).catch((error) => {
+      console.warn(
+        JSON.stringify({
+          scope: "portal-order-search",
+          stage: "pricing-preview-skipped",
+          inviteId: invite.id,
+          organizationId: invite.organization_id,
+          reason: String(error instanceof Error ? error.message : error || ""),
+        }),
+      );
+      return new Map<string, { sell_price: number | null; supplier_name: string }>();
+    });
   }
-  const context = contextResult.value;
-  const recommendationsBase = shouldLoadPortalRecommendations(search, baseItems)
-    ? await fetchPortalCatalogRecommendations(supabaseUrl, serviceRoleKey, invite, search, brandMap, baseItems, replacementRowsByKey)
-    : [];
-  const previewItems = new Map<string, SearchCatalogBaseItem>();
-  for (const item of [...baseItems.slice(0, 16), ...recommendationsBase.slice(0, 4)]) {
-    previewItems.set(portalCatalogPreviewKey(item.brand, item.normalized_code), item);
-  }
-  const previewByCode = await buildPortalCatalogPreviewMap(
-    supabaseUrl,
-    serviceRoleKey,
-    invite,
-    context,
-    [...previewItems.values()],
-  );
   const result = {
-    items: mapPortalCatalogItems(baseItems, previewByCode, context.currency),
-    recommendations: mapPortalCatalogItems(recommendationsBase, previewByCode, context.currency),
+    items: mapPortalCatalogItems(baseItems, previewByCode, currency),
+    recommendations: mapPortalCatalogItems(recommendationsBase, previewByCode, currency),
   };
   console.info(
     JSON.stringify({
@@ -1653,6 +1738,7 @@ async function fetchCPriceMap(
   organizationId: string,
   cPriceListIds: string[],
   rows: Array<{ brand: string; product_code: string }>,
+  timeoutMs?: number,
 ) {
   const map = new Map<string, number>();
   if (!cPriceListIds.length || !rows.length) return map;
@@ -1677,7 +1763,7 @@ async function fetchCPriceMap(
         normalized_code: `in.(${codeChunk.join(",")})`,
         order: "normalized_code.asc",
         limit: String(Math.max(PORTAL_PRICE_LIST_ITEM_PAGE_SIZE, codeChunk.length * Math.max(1, cPriceListIds.length))),
-      });
+      }, timeoutMs);
       for (const row of items) {
         const brandName = brandMap.byId.get(String(row.brand_id || ""));
         const normalizedCode = String(row.normalized_code || "");
@@ -1701,6 +1787,7 @@ async function fetchCPriceEntryMap(
   organizationId: string,
   cPriceListIds: string[],
   rows: Array<{ brand: string; product_code: string }>,
+  timeoutMs?: number,
 ) {
   const map = new Map<string, { sell_price: number; price_date: string | null }>();
   if (!cPriceListIds.length || !rows.length) return map;
@@ -1725,7 +1812,7 @@ async function fetchCPriceEntryMap(
         normalized_code: `in.(${codeChunk.join(",")})`,
         order: "updated_at.desc",
         limit: String(Math.max(PORTAL_PRICE_LIST_ITEM_PAGE_SIZE, codeChunk.length * Math.max(1, cPriceListIds.length))),
-      });
+      }, timeoutMs);
       for (const row of items) {
         const brandName = brandMap.byId.get(String(row.brand_id || ""));
         const normalizedCode = String(row.normalized_code || "");
@@ -1753,6 +1840,7 @@ async function fetchPortalBrandCPriceEntryMap(
   brandId: string,
   brandName: string,
   cPriceListIds: string[],
+  timeoutMs?: number,
 ) {
   const map = new Map<string, { sell_price: number; price_date: string | null }>();
   if (!brandId || !brandName || !cPriceListIds.length) return map;
@@ -1772,7 +1860,7 @@ async function fetchPortalBrandCPriceEntryMap(
       order: "normalized_code.asc",
       limit: String(PORTAL_PRICE_LIST_ITEM_PAGE_SIZE),
       offset: String(offset),
-    });
+    }, timeoutMs);
     if (!items.length) break;
 
     for (const row of items) {
@@ -1881,6 +1969,7 @@ async function fetchPortalBestSupplierPriceMap(
   organizationId: string,
   brandId: string,
   normalizedCodes: string[],
+  timeoutMs?: number,
 ) {
   const bestByCode = new Map<string, number>();
   for (const chunk of chunkValues(normalizedCodes, PORTAL_SUPPLIER_LOOKUP_CODE_CHUNK_SIZE)) {
@@ -1892,7 +1981,7 @@ async function fetchPortalBestSupplierPriceMap(
       buy_price: "not.is.null",
       normalized_code: `in.(${chunk.join(",")})`,
       limit: String(PORTAL_PRICE_LIST_SUPPLIER_PAGE_SIZE),
-    });
+    }, timeoutMs);
     for (const row of supplierRows) {
       const normalizedCode = String(row.normalized_code || "");
       const buyPrice = row.buy_price == null ? null : Number(row.buy_price);
@@ -1912,6 +2001,7 @@ async function fetchPortalBestSupplierOptionMap(
   organizationId: string,
   brandId: string,
   normalizedCodes: string[],
+  timeoutMs?: number,
 ) {
   const bestByCode = new Map<
     string,
@@ -1934,7 +2024,7 @@ async function fetchPortalBestSupplierOptionMap(
       buy_price: "not.is.null",
       normalized_code: `in.(${codeChunk.join(",")})`,
       limit: String(PORTAL_PRICE_LIST_SUPPLIER_PAGE_SIZE),
-    });
+    }, timeoutMs);
     for (const row of supplierRows) {
       const supplier = (row.suppliers as { name?: unknown } | null | undefined) || null;
       const normalizedCode = String(row.normalized_code || "");
@@ -1958,6 +2048,7 @@ async function fetchPortalBestSupplierPreviewMap(
   serviceRoleKey: string,
   organizationId: string,
   items: Array<{ brandId: string; normalizedCode: string }>,
+  timeoutMs?: number,
 ) {
   const bestByKey = new Map<
     string,
@@ -1980,7 +2071,7 @@ async function fetchPortalBestSupplierPreviewMap(
         buy_price: "not.is.null",
         normalized_code: `in.(${codeChunk.join(",")})`,
         limit: String(PORTAL_PRICE_LIST_SUPPLIER_PAGE_SIZE),
-      });
+      }, timeoutMs);
       for (const row of supplierRows) {
         const supplier = (row.suppliers as { name?: unknown } | null | undefined) || null;
         const brandId = String(row.brand_id || "");

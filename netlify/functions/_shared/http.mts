@@ -10,8 +10,32 @@ export async function readJson<T>(response: Response) {
   return (await response.json().catch(() => ({}))) as T;
 }
 
-export async function getJson<T>(url: string, init: RequestInit) {
-  const response = await fetch(url, init);
+async function fetchJson<T>(url: string, init: RequestInit & { timeoutMs?: number }) {
+  const { timeoutMs, signal, ...requestInit } = init;
+  const controller = timeoutMs && !signal ? new AbortController() : null;
+  const timeoutHandle =
+    timeoutMs && controller
+      ? setTimeout(() => {
+          controller.abort();
+        }, timeoutMs)
+      : null;
+  try {
+    return (await fetch(url, {
+      ...requestInit,
+      signal: signal || controller?.signal,
+    })) as Response;
+  } catch (error) {
+    if ((error instanceof DOMException && error.name === "AbortError") || String(error || "").toLowerCase().includes("aborted")) {
+      throw new Error(`Request timed out after ${timeoutMs || 0}ms`);
+    }
+    throw error;
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
+}
+
+export async function getJson<T>(url: string, init: RequestInit & { timeoutMs?: number }) {
+  const response = await fetchJson<T>(url, init);
   const data = await readJson<T & { message?: string; error?: string; msg?: string }>(response);
   if (!response.ok) {
     throw new Error(sanitizeUserFacingMessage(data?.msg || data?.message || data?.error || `Request failed: ${response.status}`));
@@ -19,8 +43,8 @@ export async function getJson<T>(url: string, init: RequestInit) {
   return data as T;
 }
 
-export async function sendJson<T>(url: string, init: RequestInit) {
-  const response = await fetch(url, init);
+export async function sendJson<T>(url: string, init: RequestInit & { timeoutMs?: number }) {
+  const response = await fetchJson<T>(url, init);
   const data = await readJson<T & { message?: string; error?: string; msg?: string }>(response);
   if (!response.ok) {
     throw new Error(sanitizeUserFacingMessage(data?.msg || data?.message || data?.error || `Request failed: ${response.status}`));
