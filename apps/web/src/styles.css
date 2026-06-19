@@ -1961,6 +1961,7 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   min-height: 26px;
   padding: 0.18rem 0.68rem;
   border-radius: 999px;
@@ -1977,6 +1978,26 @@ select {
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     0 6px 14px rgba(245, 158, 11, 0.16);
   white-space: nowrap;
+}
+
+.brand-pill--with-logo {
+  justify-content: flex-start;
+  max-width: 100%;
+}
+
+.brand-pill__logo {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border-radius: 5px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.brand-pill__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .brand-pill--compact {
@@ -3807,14 +3828,29 @@ select {
   vertical-align: bottom;
 }
 
+.portal-result-description {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.portal-result-description > div:first-child {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .portal-result-code {
   font-size: 12px;
   font-weight: 700;
 }
 
 .portal-result-price {
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
 }
 
 .portal-workbench__side {
@@ -5481,42 +5517,51 @@ textarea {
 .table-wrap--portal-search {
   width: 100%;
   max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 .data-table--portal-search {
   width: 100%;
-  min-width: 100%;
+  min-width: 1420px;
   table-layout: fixed;
+}
+
+.data-table--portal-search th,
+.data-table--portal-search td {
+  vertical-align: middle;
 }
 
 .data-table--portal-search th:nth-child(1),
 .data-table--portal-search td:nth-child(1) {
-  width: 84px;
+  width: 82px;
 }
 
 .data-table--portal-search th:nth-child(2),
 .data-table--portal-search td:nth-child(2) {
-  width: 140px;
+  width: 148px;
 }
 
 .data-table--portal-search th:nth-child(3),
 .data-table--portal-search td:nth-child(3) {
-  width: 120px;
+  width: 168px;
 }
 
 .data-table--portal-search th:nth-child(4),
 .data-table--portal-search td:nth-child(4) {
-  width: 120px;
+  width: 104px;
 }
 
 .data-table--portal-search th:nth-child(5),
 .data-table--portal-search td:nth-child(5) {
-  width: 34%;
+  width: auto;
+  vertical-align: top;
 }
 
 .data-table--portal-search th:nth-child(6),
 .data-table--portal-search td:nth-child(6) {
-  width: 128px;
+  width: 150px;
+  white-space: nowrap;
 }
 
 .data-table--portal-search th:nth-child(7),
@@ -5526,15 +5571,15 @@ textarea {
 
 .data-table--portal-search th:nth-child(8),
 .data-table--portal-search td:nth-child(8) {
-  width: 96px;
+  width: 90px;
 }
 
 .data-table--portal-search th:nth-child(9),
 .data-table--portal-search td:nth-child(9) {
-  width: 90px;
+  width: 84px;
 }
 
 .data-table--portal-search th:nth-child(10),
 .data-table--portal-search td:nth-child(10) {
-  width: 132px;
+  width: 148px;
 }

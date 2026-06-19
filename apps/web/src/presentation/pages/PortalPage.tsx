@@ -797,13 +797,13 @@ export function PortalPage() {
           header: "Code",
           render: (row: PortalCatalogSearchItem) => <span className="portal-result-code">{row.code || "-"}</span>,
         },
-        { key: "brand", header: "Brand", render: (row: PortalCatalogSearchItem) => <BrandPill brand={row.brand} compact /> },
+        { key: "brand", header: "Brand", render: (row: PortalCatalogSearchItem) => <BrandPill brand={row.brand} compact withLogo /> },
         { key: "segment", header: "Segment", render: (row: PortalCatalogSearchItem) => row.market_segment || "-" },
         {
           key: "description",
           header: "Description",
           render: (row: PortalCatalogSearchItem) => (
-            <div>
+            <div className="portal-result-description">
               <div>{row.description || "-"}</div>
               {renderReplacementBadge(row)}
               {renderDiscontinuedBadge(row)}
@@ -814,7 +814,7 @@ export function PortalPage() {
           key: "price",
           header: `Price ${portalPricingCurrency}`,
           render: (row: PortalCatalogSearchItem) => (
-            <span className="portal-result-price">
+            <span className="portal-result-price" title={row.sell_price == null ? "Price on request" : formatMoney(Number(row.sell_price || 0), row.currency || portalPricingCurrency)}>
               {row.sell_price == null ? "Price on request" : formatMoney(Number(row.sell_price || 0), row.currency || portalPricingCurrency)}
             </span>
           ),
