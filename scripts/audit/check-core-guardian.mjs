@@ -86,6 +86,7 @@ const requiredDirectories = [
   "scripts/ops",
   "scripts/shared",
   "scripts/sync",
+  "scripts/maintenance/ensure-tecalliance-brand-records.mjs",
 ];
 
 for (const relativePath of requiredFiles) {
@@ -113,6 +114,9 @@ if (exists(path.join(docsDir, "core-guardian.md"))) {
   const guardianDoc = read("docs/core-guardian.md");
   if (!hasAnyText(guardianDoc, ["Core Guardian", "audit:core", "predeploy:verify"])) {
     addFinding(findings, "critical", "docs", path.join(docsDir, "core-guardian.md"), "Guardian doc is missing enforcement references.");
+  }
+  if (!hasAnyText(guardianDoc, ["guardian:brands", "registry-backed TecAlliance brands"])) {
+    addFinding(findings, "critical", "docs", path.join(docsDir, "core-guardian.md"), "Guardian doc is missing brand registry repair references.");
   }
 }
 

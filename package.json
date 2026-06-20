@@ -13,6 +13,7 @@
     "audit:modules": "node scripts/check-module-boundaries.mjs",
     "audit:core": "node scripts/check-core-guardian.mjs",
     "audit:secrets": "node scripts/check-secret-surface.mjs",
+    "guardian:brands": "node scripts/maintenance/ensure-tecalliance-brand-records.mjs",
     "clean:worktree": "node scripts/clean-worktree-artifacts.mjs",
     "predeploy:verify": "npm run build && npm run audit:core && npm run audit:secrets && npm run audit:hygiene:strict",
     "ship": "node scripts/ship-staged-to-production.mjs",
