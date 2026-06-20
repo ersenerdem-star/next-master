@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { deliverQueuedEmails, queueVendorPurchaseOrderEmail } from "../../infrastructure/api/emailTemplatesApi";
-import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, inventoryAvailabilityLookupKey, type InventoryAvailabilitySummary } from "../../infrastructure/api/inventoryApi";
+import {
+  buildInventoryAvailabilityLookup,
+  buildPurchaseReceiveDraft,
+  fetchInventoryAvailabilitySummary,
+  fetchPurchaseReceives,
+  inventoryAvailabilityLookupKey,
+  postPurchaseReceive,
+  type InventoryAvailabilitySummary,
+} from "../../infrastructure/api/inventoryApi";
 import {
   buildAndUpsertBillFromPurchaseOrder,
   buildAndUpsertMergedBillFromPurchaseOrders,
@@ -38,6 +46,8 @@ import { BrandPill } from "../components/common/BrandPill";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { buildEntityAlias } from "../../shared/entityAlias";
+import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
+import type { Warehouse } from "../../types/warehouses";
 
 function formatMoney(value: number, currency = "EUR") {
   return `${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
@@ -244,8 +254,22 @@ export function PurchasesPage({
   const [purchaseOrderResyncKeepPrices, setPurchaseOrderResyncKeepPrices] = useState(true);
   const [resyncingPurchaseOrder, setResyncingPurchaseOrder] = useState(false);
   const [inventoryAvailabilityRows, setInventoryAvailabilityRows] = useState<InventoryAvailabilitySummary[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [receiveWarehouseId, setReceiveWarehouseId] = useState("");
   const pendingCatalogPurchaseHandledRef = useRef(false);
   const inventoryAvailabilityLookup = useMemo(() => buildInventoryAvailabilityLookup(inventoryAvailabilityRows), [inventoryAvailabilityRows]);
+  const stockedWarehouses = useMemo(
+    () => warehouses.filter((warehouse) => warehouse.is_active !== false && warehouse.fulfillment_model !== "dropship"),
+    [warehouses],
+  );
+  const receiveWarehouseOptions = useMemo(
+    () =>
+      stockedWarehouses.map((warehouse) => ({
+        value: warehouse.id,
+        label: `${warehouse.warehouse_code || warehouse.warehouse_name || "Warehouse"} - ${warehouse.warehouse_name || warehouse.warehouse_code}`,
+      })),
+    [stockedWarehouses],
+  );
 
   useEffect(() => {
     setActiveTab(activeTabProp);
@@ -314,10 +338,23 @@ export function PurchasesPage({
 
     async function run() {
       try {
-        const rows = await fetchInventoryAvailabilitySummary();
-        if (!cancelled) setInventoryAvailabilityRows(rows);
+        const [availabilityRows, warehouseRows] = await Promise.all([fetchInventoryAvailabilitySummary(), fetchWarehouses()]);
+        if (cancelled) return;
+        setInventoryAvailabilityRows(availabilityRows);
+        setWarehouses(warehouseRows);
+        setReceiveWarehouseId((current) => {
+          if (current && warehouseRows.some((warehouse) => warehouse.id === current && warehouse.is_active !== false && warehouse.fulfillment_model !== "dropship")) {
+            return current;
+          }
+          const firstStocked = warehouseRows.find((warehouse) => warehouse.is_active !== false && warehouse.fulfillment_model !== "dropship");
+          return firstStocked?.id || "";
+        });
       } catch {
-        if (!cancelled) setInventoryAvailabilityRows([]);
+        if (!cancelled) {
+          setInventoryAvailabilityRows([]);
+          setWarehouses([]);
+          setReceiveWarehouseId("");
+        }
       }
     }
 
@@ -990,6 +1027,32 @@ export function PurchasesPage({
     return JSON.stringify(recomputeBillTotals(input));
   }
 
+  function getSelectedReceiveWarehouse() {
+    return stockedWarehouses.find((warehouse) => warehouse.id === receiveWarehouseId) || stockedWarehouses[0] || null;
+  }
+
+  async function postRemainingPurchaseReceive(order: LocalPurchaseOrder) {
+    const warehouse = getSelectedReceiveWarehouse();
+    if (!warehouse) {
+      throw new Error("Select an active stocked warehouse before converting purchase orders to bills.");
+    }
+
+    const receives = await fetchPurchaseReceives();
+    const receiveDraft = buildPurchaseReceiveDraft(order, warehouse, receives);
+    const hasRemainingQty = receiveDraft.lines.some((line) => Number(line.qty_received || 0) > 0);
+    if (!hasRemainingQty) {
+      return null;
+    }
+
+    return postPurchaseReceive(
+      {
+        ...receiveDraft,
+        notes: `Auto receive from bill conversion for ${order.id}`,
+      },
+      order,
+    );
+  }
+
   const savedPurchaseOrderSnapshot = useMemo(() => {
     if (!purchaseOrderDraft) return "";
     return purchaseOrderSourceSnapshot;
@@ -1196,15 +1259,22 @@ export function PurchasesPage({
     if (!purchaseOrderDraft) return;
     try {
       actionFeedback.begin(`Converting ${purchaseOrderDraft.id} to bill...`);
-      const saved = await buildAndUpsertBillFromPurchaseOrder(recomputePurchaseOrderTotals(purchaseOrderDraft));
-      const refreshed = await fetchBillSummaries();
+      const order = recomputePurchaseOrderTotals(purchaseOrderDraft);
+      const saved = await buildAndUpsertBillFromPurchaseOrder(order);
+      const receive = await postRemainingPurchaseReceive(order);
+      const [refreshed, refreshedPurchaseOrders] = await Promise.all([fetchBillSummaries(), fetchPurchaseOrderSummaries()]);
       setBills(refreshed);
+      setPurchaseOrders(refreshedPurchaseOrders);
       setSelectedBillId(saved.id);
       setBillDraft({ ...saved, lines: saved.lines.map((line) => ({ ...line })) });
       setBillSourceSnapshot(serializeBillForDirtyCheck(saved));
       setActiveTab("Bills");
       setBillsView("detail");
-      actionFeedback.succeed(`Bill ${saved.id} created from ${purchaseOrderDraft.id}.`);
+      actionFeedback.succeed(
+        receive
+          ? `Bill ${saved.id} created and stock received into ${receive.warehouse_code || receive.warehouse_name}.`
+          : `Bill ${saved.id} created. Purchase order was already fully received.`,
+      );
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Convert to bill failed");
     }
@@ -1227,12 +1297,16 @@ export function PurchasesPage({
 
     try {
       actionFeedback.begin(`Converting ${orders.length.toLocaleString("en-US")} purchase order(s) to bills...`);
-      await Promise.all(orders.map((order) => buildAndUpsertBillFromPurchaseOrder(recomputePurchaseOrderTotals(order))));
+      const normalizedOrders = orders.map((order) => recomputePurchaseOrderTotals(order));
+      await Promise.all(normalizedOrders.map((order) => buildAndUpsertBillFromPurchaseOrder(order)));
+      const postedReceives = await Promise.all(normalizedOrders.map((order) => postRemainingPurchaseReceive(order)));
       const [refreshedPurchaseOrders, refreshedBills] = await Promise.all([fetchPurchaseOrderSummaries(), fetchBillSummaries()]);
       setPurchaseOrders(refreshedPurchaseOrders);
       setBills(refreshedBills);
       setBillsView("list");
-      actionFeedback.succeed(`${orders.length.toLocaleString("en-US")} bill(s) created or updated.`);
+      actionFeedback.succeed(
+        `${orders.length.toLocaleString("en-US")} bill(s) created or updated; ${postedReceives.filter(Boolean).length.toLocaleString("en-US")} stock receive(s) posted.`,
+      );
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Bulk convert to bill failed");
     }
@@ -1273,7 +1347,9 @@ export function PurchasesPage({
 
     try {
       actionFeedback.begin(`Merging ${orders.length.toLocaleString("en-US")} purchase order(s) into one bill...`);
-      const merged = await buildAndUpsertMergedBillFromPurchaseOrders(orders.map((order) => recomputePurchaseOrderTotals(order)));
+      const normalizedOrders = orders.map((order) => recomputePurchaseOrderTotals(order));
+      const merged = await buildAndUpsertMergedBillFromPurchaseOrders(normalizedOrders);
+      const postedReceives = await Promise.all(normalizedOrders.map((order) => postRemainingPurchaseReceive(order)));
       const [refreshedPurchaseOrders, refreshedBills] = await Promise.all([fetchPurchaseOrderSummaries(), fetchBillSummaries()]);
       setPurchaseOrders(refreshedPurchaseOrders);
       setBills(refreshedBills);
@@ -1283,7 +1359,9 @@ export function PurchasesPage({
       setBillSourceSnapshot(serializeBillForDirtyCheck(merged));
       setActiveTab("Bills");
       setBillsView("detail");
-      actionFeedback.succeed(`Merged bill ${merged.id} created from ${orders.length.toLocaleString("en-US")} purchase order(s).`);
+      actionFeedback.succeed(
+        `Merged bill ${merged.id} created; ${postedReceives.filter(Boolean).length.toLocaleString("en-US")} stock receive(s) posted.`,
+      );
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Merged bill create failed");
     }
@@ -1403,6 +1481,12 @@ export function PurchasesPage({
                     <span>Delete is blocked when bills already exist. Convert creates or updates bills from selected purchase orders.</span>
                   </div>
                   <div className="toolbar toolbar--wrap">
+                    <Select
+                      label="Stock Receive Warehouse"
+                      value={receiveWarehouseId}
+                      options={[{ value: "", label: "Select stocked warehouse" }, ...receiveWarehouseOptions]}
+                      onChange={setReceiveWarehouseId}
+                    />
                     <Button
                       variant="secondary"
                       className="button--compact"
@@ -1498,6 +1582,12 @@ export function PurchasesPage({
                     onChange={(value) =>
                       setPurchaseOrderDraft((current) => (current ? { ...current, status: value as LocalPurchaseOrder["status"] } : current))
                     }
+                  />
+                  <Select
+                    label="Stock Receive Warehouse"
+                    value={receiveWarehouseId}
+                    options={[{ value: "", label: "Select stocked warehouse" }, ...receiveWarehouseOptions]}
+                    onChange={setReceiveWarehouseId}
                   />
                 </div>
                     <table className="simple-edit-table">
