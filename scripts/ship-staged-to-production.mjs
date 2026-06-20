@@ -28,14 +28,15 @@ function parseArgs(argv) {
   const options = {
     dryRun: false,
     skipBuild: false,
-    allowMigrations: false,
     message: "",
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--dry-run") options.dryRun = true;
     else if (arg === "--skip-build") options.skipBuild = true;
-    else if (arg === "--allow-migrations") options.allowMigrations = true;
+    else if (arg === "--allow-migrations") {
+      console.log("Legacy --allow-migrations detected. Staged Supabase migrations are now applied automatically before commit/push.");
+    }
     else if (arg === "--message" || arg === "-m") {
       options.message = String(argv[index + 1] || "").trim();
       index += 1;
@@ -61,19 +62,9 @@ function stagedFiles() {
     .filter(Boolean);
 }
 
-function ensureSafeStagedSet(files, options) {
+function ensureSafeStagedSet(files) {
   if (!files.length) {
     throw new Error("No staged files. Stage only the intended production files first, then run npm run ship.");
-  }
-  const migrations = files.filter((file) => file.startsWith("supabase/migrations/"));
-  if (migrations.length && !options.allowMigrations) {
-    throw new Error(
-      [
-        "Staged Supabase migration detected.",
-        "Apply/confirm the SQL first, then rerun with --allow-migrations if the deploy should include it.",
-        ...migrations.map((file) => `- ${file}`),
-      ].join("\n"),
-    );
   }
 }
 
@@ -116,6 +107,20 @@ function runProductionGuardians() {
   run(process.execPath, [path.join(repoRoot, "scripts/maintenance/ensure-tecalliance-brand-records.mjs"), "--apply"]);
 }
 
+function stagedMigrationFiles(files) {
+  return files.filter((file) => file.startsWith("supabase/migrations/") && file.endsWith(".sql"));
+}
+
+function applySupabaseMigrations(files) {
+  const migrations = stagedMigrationFiles(files);
+  if (!migrations.length) return;
+
+  const applyScript = path.join(repoRoot, "scripts/ops/apply-staged-supabase-migrations.mjs");
+  const args = [applyScript];
+  for (const file of migrations) args.push("--file", file);
+  run(process.execPath, args);
+}
+
 function reportDeployState(commit) {
   const deployStateScript = path.join(repoRoot, "scripts/ops/check-netlify-deploy-state.mjs");
   const result = spawnSync(process.execPath, [deployStateScript, "--commit", commit], {
@@ -130,7 +135,7 @@ function reportDeployState(commit) {
 
 ensureMainBranch();
 const files = stagedFiles();
-ensureSafeStagedSet(files, options);
+ensureSafeStagedSet(files);
 
 console.log("Production ship staged files:");
 for (const file of files) console.log(`- ${file}`);
@@ -145,9 +150,12 @@ if (!options.skipBuild) {
 }
 
 if (options.dryRun) {
+  run(process.execPath, [path.join(repoRoot, "scripts/ops/apply-staged-supabase-migrations.mjs"), "--dry-run"]);
   console.log("Dry run complete. No commit or push was made.");
   process.exit(0);
 }
+
+applySupabaseMigrations(files);
 
 const message = commitMessage(options);
 run("git", ["commit", "-m", message]);
