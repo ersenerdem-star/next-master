@@ -35,6 +35,8 @@ const BRAND_ALIAS_MAP: Record<string, string> = {
   trw: "TRW",
   wabco: "Wabco",
   behr: "Behr",
+  knorr: "Knorr-Bremse",
+  knorrbremse: "Knorr-Bremse",
 };
 
 export function normalizeBrandKey(value: string): string {

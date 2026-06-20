@@ -19,7 +19,7 @@ function formatBoschDisplayCode(value: string): string {
     .trim();
 }
 
-const COMPACT_CODE_BRANDS = new Set(["BOSCH", "SACHS", "LEMFORDER", "WABCO", "ZF", "MANN", "MANNFILTER", "MAHLE", "KNORRBREMSE"]);
+const COMPACT_CODE_BRANDS = new Set(["BOSCH", "SACHS", "LEMFORDER", "WABCO", "ZF", "MANN", "MANNFILTER", "MAHLE", "KNORR", "KNORRBREMSE"]);
 
 function formatCompactDisplayCode(value: string): string {
   return String(value || "")

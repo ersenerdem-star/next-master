@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
-import { fetchInventoryMovements, fetchWarehouseStockItems } from "../../infrastructure/api/inventoryApi";
+import { fetchInventoryMovements, fetchPurchaseReceives, fetchWarehouseStockItems } from "../../infrastructure/api/inventoryApi";
 import { fetchSalesOrders, fetchPurchaseOrders, fetchInvoices } from "../../infrastructure/api/ordersApi";
 import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
 import { buildEntityAlias } from "../../shared/entityAlias";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
-import { includesLooseText } from "../../domain/shared/normalize";
-import type { InventoryMovement, WarehouseStockItem } from "../../types/inventory";
+import { includesLooseText, normalizePartCode } from "../../domain/shared/normalize";
+import type { InventoryMovement, PurchaseReceive, WarehouseStockItem } from "../../types/inventory";
 import type { LocalInvoice, LocalPurchaseOrder, LocalSalesOrder } from "../../types/orders";
 import type { Warehouse } from "../../types/warehouses";
 import { useActionFeedback } from "../components/common/ActionFeedback";
@@ -17,7 +17,7 @@ import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
 import { BrandPill } from "../components/common/BrandPill";
 
-type AnalyticsTab = "Turnover" | "Aging" | "Forecast" | "Pending Procurement";
+type AnalyticsTab = "Turnover" | "Aging" | "Forecast" | "Pending Procurement" | "Vendor Balance" | "Customer Balance";
 
 type TurnoverRow = {
   brand: string;
@@ -71,6 +71,40 @@ type PendingProcurementRow = {
   status: string;
 };
 
+type VendorBalanceRow = {
+  purchase_order_id: string;
+  purchase_order_no: string;
+  supplier_name: string;
+  sales_order_id: string;
+  sales_order_no: string;
+  customer_name: string;
+  order_date: string;
+  brand: string;
+  product_code: string;
+  description: string;
+  qty_ordered: number;
+  qty_received: number;
+  qty_remaining: number;
+  amount_remaining: number;
+  status: string;
+};
+
+type CustomerBalanceRow = {
+  sales_order_id: string;
+  sales_order_no: string;
+  customer_name: string;
+  order_date: string;
+  source_channel: string;
+  brand: string;
+  product_code: string;
+  description: string;
+  qty_ordered: number;
+  qty_invoiced: number;
+  qty_remaining: number;
+  amount_remaining: number;
+  status: string;
+};
+
 type AnalyticsFilters = {
   brand: string;
   warehouseId: string;
@@ -108,7 +142,7 @@ function formatDate(value: string) {
 }
 
 function normalizeKey(brand: string, code: string) {
-  return `${brand.trim().toLowerCase()}::${code.trim().toLowerCase()}`;
+  return `${brand.trim().toLowerCase()}::${normalizePartCode(code)}`;
 }
 
 function dayDiff(fromIso: string, toIso: string) {
@@ -149,6 +183,34 @@ function buildPurchaseCoverageMap(purchaseOrders: LocalPurchaseOrder[]) {
   return coverage;
 }
 
+function buildPurchaseReceiveCoverageMap(purchaseReceives: PurchaseReceive[]) {
+  const coverage = new Map<string, number>();
+  purchaseReceives
+    .filter((receive) => receive.status === "posted")
+    .forEach((receive) => {
+      receive.lines.forEach((line) => {
+        const key = `${receive.purchase_order_id}::${normalizeKey(line.brand || "", line.product_code || line.old_code || "")}`;
+        coverage.set(key, round((coverage.get(key) || 0) + toNumber(line.qty_received)));
+      });
+    });
+  return coverage;
+}
+
+function buildInvoiceCoverageMap(invoices: LocalInvoice[]) {
+  const coverage = new Map<string, number>();
+  invoices
+    .filter((invoice) => ["confirmed", "open", "paid"].includes(String(invoice.status || "").toLowerCase()))
+    .forEach((invoice) => {
+      invoice.lines.forEach((line) => {
+        const salesOrderId = line.sales_order_id || invoice.sales_order_id || invoice.sales_order_ids?.[0] || "";
+        if (!salesOrderId) return;
+        const key = `${salesOrderId}::${normalizeKey(line.brand || "", line.product_code || line.old_code || "")}`;
+        coverage.set(key, round((coverage.get(key) || 0) + toNumber(line.qty)));
+      });
+    });
+  return coverage;
+}
+
 export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWarehouse, onOpenInventoryItem }: InventoryAnalyticsPageProps) {
   const actionFeedback = useActionFeedback();
   const [activeTab, setActiveTab] = useState<AnalyticsTab>("Turnover");
@@ -167,6 +229,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
   });
   const [stockItems, setStockItems] = useState<WarehouseStockItem[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  const [purchaseReceives, setPurchaseReceives] = useState<PurchaseReceive[]>([]);
   const [salesOrders, setSalesOrders] = useState<LocalSalesOrder[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<LocalPurchaseOrder[]>([]);
   const [invoices, setInvoices] = useState<LocalInvoice[]>([]);
@@ -192,7 +255,8 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
   }, [actionFeedback]);
 
   async function handleLoad() {
-    if (!filters.brand && !filters.warehouseId && !filters.codeSearch.trim()) {
+    const canLoadWithoutScope = activeTab === "Vendor Balance" || activeTab === "Customer Balance" || activeTab === "Pending Procurement";
+    if (!canLoadWithoutScope && !filters.brand && !filters.warehouseId && !filters.codeSearch.trim()) {
       actionFeedback.fail("Select a brand, warehouse, or enter a code first.");
       return;
     }
@@ -201,15 +265,17 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
       setLoading(true);
       setLoaded(true);
       actionFeedback.begin("Loading inventory analytics...");
-      const [stockRows, movementRows, salesOrderRows, purchaseOrderRows, invoiceRows] = await Promise.all([
+      const [stockRows, movementRows, receiveRows, salesOrderRows, purchaseOrderRows, invoiceRows] = await Promise.all([
         fetchWarehouseStockItems(filters.warehouseId || undefined),
         fetchInventoryMovements(filters.warehouseId || undefined),
+        fetchPurchaseReceives(),
         fetchSalesOrders(),
         fetchPurchaseOrders(),
         fetchInvoices(),
       ]);
       setStockItems(stockRows);
       setMovements(movementRows);
+      setPurchaseReceives(receiveRows);
       setSalesOrders(salesOrderRows);
       setPurchaseOrders(purchaseOrderRows);
       setInvoices(invoiceRows);
@@ -217,6 +283,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
     } catch (caught) {
       setStockItems([]);
       setMovements([]);
+      setPurchaseReceives([]);
       setSalesOrders([]);
       setPurchaseOrders([]);
       setInvoices([]);
@@ -471,6 +538,91 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
       .sort((a, b) => a.order_date.localeCompare(b.order_date) || a.sales_order_no.localeCompare(b.sales_order_no));
   }, [filters.brand, filters.codeSearch, filters.dateFrom, filters.dateTo, purchaseOrders, salesOrders]);
 
+  const vendorBalanceRows = useMemo<VendorBalanceRow[]>(() => {
+    const receiveCoverage = buildPurchaseReceiveCoverageMap(purchaseReceives);
+    const needle = filters.codeSearch.trim().toLowerCase();
+    return purchaseOrders
+      .flatMap((purchaseOrder) =>
+        purchaseOrder.lines.map((line) => {
+          const productCode = line.product_code || line.old_code || "";
+          const key = `${purchaseOrder.id}::${normalizeKey(line.brand || "", productCode)}`;
+          const orderedQty = round(toNumber(line.qty));
+          const receivedQty = round(receiveCoverage.get(key) || 0);
+          const remainingQty = Math.max(0, round(orderedQty - receivedQty));
+          return {
+            purchase_order_id: purchaseOrder.id,
+            purchase_order_no: purchaseOrder.id,
+            supplier_name: purchaseOrder.supplier_name,
+            sales_order_id: line.sales_order_id || purchaseOrder.sales_order_id,
+            sales_order_no: line.sales_order_no || purchaseOrder.sales_order_no,
+            customer_name: purchaseOrder.customer_name,
+            order_date: String(purchaseOrder.created_at || "").slice(0, 10),
+            brand: line.brand || "",
+            product_code: productCode,
+            description: line.description || "",
+            qty_ordered: orderedQty,
+            qty_received: receivedQty,
+            qty_remaining: remainingQty,
+            amount_remaining: round(remainingQty * toNumber(line.buy_price)),
+            status: purchaseOrder.status,
+          };
+        }),
+      )
+      .filter((row) => {
+        if (row.qty_remaining <= 0) return false;
+        if (filters.brand && row.brand.trim().toLowerCase() !== filters.brand.trim().toLowerCase()) return false;
+        if (filters.dateFrom && row.order_date && row.order_date < filters.dateFrom) return false;
+        if (filters.dateTo && row.order_date && row.order_date > filters.dateTo) return false;
+        if (needle) {
+          if (!includesLooseText(`${row.purchase_order_no} ${row.supplier_name} ${row.sales_order_no} ${row.customer_name} ${row.product_code} ${row.description}`, needle)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => a.supplier_name.localeCompare(b.supplier_name) || a.sales_order_no.localeCompare(b.sales_order_no) || a.product_code.localeCompare(b.product_code));
+  }, [filters.brand, filters.codeSearch, filters.dateFrom, filters.dateTo, purchaseOrders, purchaseReceives]);
+
+  const customerBalanceRows = useMemo<CustomerBalanceRow[]>(() => {
+    const invoiceCoverage = buildInvoiceCoverageMap(invoices);
+    const needle = filters.codeSearch.trim().toLowerCase();
+    return salesOrders
+      .filter((order) => order.status === "confirmed")
+      .flatMap((order) =>
+        order.lines.map((line) => {
+          const productCode = line.resolvedCode || line.requestedCode || "";
+          const key = `${order.id}::${normalizeKey(line.brand || "", productCode)}`;
+          const orderedQty = round(toNumber(line.qty));
+          const invoicedQty = round(invoiceCoverage.get(key) || 0);
+          const remainingQty = Math.max(0, round(orderedQty - invoicedQty));
+          return {
+            sales_order_id: order.id,
+            sales_order_no: order.sales_order_no,
+            customer_name: order.customer_name,
+            order_date: order.quote_date || String(order.updated_at || "").slice(0, 10),
+            source_channel: order.source_channel || "internal",
+            brand: line.brand || "",
+            product_code: productCode,
+            description: line.description || "",
+            qty_ordered: orderedQty,
+            qty_invoiced: invoicedQty,
+            qty_remaining: remainingQty,
+            amount_remaining: round(remainingQty * toNumber(line.sell_price)),
+            status: order.status,
+          };
+        }),
+      )
+      .filter((row) => {
+        if (row.qty_remaining <= 0) return false;
+        if (filters.brand && row.brand.trim().toLowerCase() !== filters.brand.trim().toLowerCase()) return false;
+        if (filters.dateFrom && row.order_date && row.order_date < filters.dateFrom) return false;
+        if (filters.dateTo && row.order_date && row.order_date > filters.dateTo) return false;
+        if (needle) {
+          if (!includesLooseText(`${row.sales_order_no} ${row.customer_name} ${row.product_code} ${row.description}`, needle)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => a.customer_name.localeCompare(b.customer_name) || a.sales_order_no.localeCompare(b.sales_order_no) || a.product_code.localeCompare(b.product_code));
+  }, [filters.brand, filters.codeSearch, filters.dateFrom, filters.dateTo, invoices, salesOrders]);
+
   const turnoverColumns = useMemo(
     () => [
       { key: "brand", header: "Brand", render: (row: TurnoverRow) => <BrandPill brand={row.brand} compact /> },
@@ -590,12 +742,79 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
     [onOpenSalesOrder],
   );
 
+  const vendorBalanceColumns = useMemo(
+    () => [
+      {
+        key: "supplier",
+        header: "Vendor",
+        render: (row: VendorBalanceRow) => <span title={row.supplier_name || "-"}>{buildEntityAlias(row.supplier_name)}</span>,
+      },
+      { key: "po", header: "Purchase Order", render: (row: VendorBalanceRow) => row.purchase_order_no || "-" },
+      { key: "salesorder", header: "Sales Order", render: (row: VendorBalanceRow) => row.sales_order_no || "-" },
+      {
+        key: "customer",
+        header: "Customer",
+        render: (row: VendorBalanceRow) => <span title={row.customer_name || "-"}>{buildEntityAlias(row.customer_name)}</span>,
+      },
+      { key: "date", header: "PO Date", render: (row: VendorBalanceRow) => row.order_date || "-" },
+      { key: "brand", header: "Brand", render: (row: VendorBalanceRow) => <BrandPill brand={row.brand} compact /> },
+      { key: "code", header: "Code", render: (row: VendorBalanceRow) => row.product_code || "-" },
+      { key: "description", header: "Description", render: (row: VendorBalanceRow) => row.description || "-" },
+      { key: "ordered", header: "Ordered", render: (row: VendorBalanceRow) => row.qty_ordered.toLocaleString("en-US") },
+      { key: "received", header: "Received", render: (row: VendorBalanceRow) => row.qty_received.toLocaleString("en-US") },
+      { key: "remaining", header: "Vendor Balance", render: (row: VendorBalanceRow) => row.qty_remaining.toLocaleString("en-US") },
+      { key: "amount", header: "Open Cost", render: (row: VendorBalanceRow) => formatMoney(row.amount_remaining) },
+      {
+        key: "action",
+        header: "Action",
+        render: (row: VendorBalanceRow) => (
+          <Button className="button--compact" variant="secondary" onClick={() => onOpenSalesOrder?.(row.sales_order_id)}>
+            Open Sales Order
+          </Button>
+        ),
+      },
+    ],
+    [onOpenSalesOrder],
+  );
+
+  const customerBalanceColumns = useMemo(
+    () => [
+      { key: "order", header: "Sales Order", render: (row: CustomerBalanceRow) => row.sales_order_no || "-" },
+      {
+        key: "customer",
+        header: "Customer",
+        render: (row: CustomerBalanceRow) => <span title={row.customer_name || "-"}>{buildEntityAlias(row.customer_name)}</span>,
+      },
+      { key: "date", header: "SO Date", render: (row: CustomerBalanceRow) => row.order_date || "-" },
+      { key: "source", header: "Source", render: (row: CustomerBalanceRow) => row.source_channel || "-" },
+      { key: "brand", header: "Brand", render: (row: CustomerBalanceRow) => <BrandPill brand={row.brand} compact /> },
+      { key: "code", header: "Code", render: (row: CustomerBalanceRow) => row.product_code || "-" },
+      { key: "description", header: "Description", render: (row: CustomerBalanceRow) => row.description || "-" },
+      { key: "ordered", header: "Ordered", render: (row: CustomerBalanceRow) => row.qty_ordered.toLocaleString("en-US") },
+      { key: "invoiced", header: "Invoiced", render: (row: CustomerBalanceRow) => row.qty_invoiced.toLocaleString("en-US") },
+      { key: "remaining", header: "Customer Balance", render: (row: CustomerBalanceRow) => row.qty_remaining.toLocaleString("en-US") },
+      { key: "amount", header: "Open Sales", render: (row: CustomerBalanceRow) => formatMoney(row.amount_remaining) },
+      {
+        key: "action",
+        header: "Action",
+        render: (row: CustomerBalanceRow) => (
+          <Button className="button--compact" variant="secondary" onClick={() => onOpenSalesOrder?.(row.sales_order_id)}>
+            Open Sales Order
+          </Button>
+        ),
+      },
+    ],
+    [onOpenSalesOrder],
+  );
+
   const activeRows = useMemo(() => {
     if (activeTab === "Turnover") return turnoverRows;
     if (activeTab === "Aging") return agingRows;
     if (activeTab === "Forecast") return forecastRows;
-    return pendingProcurementRows;
-  }, [activeTab, turnoverRows, agingRows, forecastRows, pendingProcurementRows]);
+    if (activeTab === "Pending Procurement") return pendingProcurementRows;
+    if (activeTab === "Vendor Balance") return vendorBalanceRows;
+    return customerBalanceRows;
+  }, [activeTab, turnoverRows, agingRows, forecastRows, pendingProcurementRows, vendorBalanceRows, customerBalanceRows]);
 
   async function handleExport() {
     const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
@@ -623,12 +842,51 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
           ...forecastRows.map((row) => [row.brand, row.product_code, row.description, row.on_hand_qty, row.monthly_demand_qty, row.months_cover ?? "", row.recommended_qty, row.reorder_qty, row.status]),
         ];
         numericColumns = [3, 4, 5, 6, 7];
-      } else {
+      } else if (activeTab === "Pending Procurement") {
         rows = [
           ["Sales_Order", "Customer", "Date", "Source", "Brand", "Code", "Description", "Qty_Ordered", "Qty_Purchased", "Qty_Pending"],
           ...pendingProcurementRows.map((row) => [row.sales_order_no, row.customer_name, row.order_date, row.source_channel, row.brand, row.product_code, row.description, row.qty_ordered, row.qty_purchased, row.qty_pending]),
         ];
         numericColumns = [7, 8, 9];
+      } else if (activeTab === "Vendor Balance") {
+        rows = [
+          ["Vendor", "Purchase_Order", "Sales_Order", "Customer", "PO_Date", "Brand", "Code", "Description", "Qty_Ordered", "Qty_Received", "Vendor_Balance_Qty", "Open_Cost_EUR", "Status"],
+          ...vendorBalanceRows.map((row) => [
+            row.supplier_name,
+            row.purchase_order_no,
+            row.sales_order_no,
+            row.customer_name,
+            row.order_date,
+            row.brand,
+            row.product_code,
+            row.description,
+            row.qty_ordered,
+            row.qty_received,
+            row.qty_remaining,
+            row.amount_remaining,
+            row.status,
+          ]),
+        ];
+        numericColumns = [8, 9, 10, 11];
+      } else {
+        rows = [
+          ["Sales_Order", "Customer", "SO_Date", "Source", "Brand", "Code", "Description", "Qty_Ordered", "Qty_Invoiced", "Customer_Balance_Qty", "Open_Sales_EUR", "Status"],
+          ...customerBalanceRows.map((row) => [
+            row.sales_order_no,
+            row.customer_name,
+            row.order_date,
+            row.source_channel,
+            row.brand,
+            row.product_code,
+            row.description,
+            row.qty_ordered,
+            row.qty_invoiced,
+            row.qty_remaining,
+            row.amount_remaining,
+            row.status,
+          ]),
+        ];
+        numericColumns = [7, 8, 9, 10];
       }
 
       const blob = buildXlsxBlob(activeTab.slice(0, 31), rows, numericColumns);
@@ -691,7 +949,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
       ) : null}
 
       <div className="module-tabs">
-        {(["Turnover", "Aging", "Forecast", "Pending Procurement"] as AnalyticsTab[]).map((tab) => (
+        {(["Turnover", "Aging", "Forecast", "Pending Procurement", "Vendor Balance", "Customer Balance"] as AnalyticsTab[]).map((tab) => (
           <button key={tab} className={`module-tab${activeTab === tab ? " active" : ""}`} onClick={() => setActiveTab(tab)}>
             {tab}
           </button>
@@ -793,6 +1051,54 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
                 </div>
               </div>
               <DataTable rows={pendingProcurementRows} columns={pendingColumns} emptyText="No pending procurement lines for the selected filters." />
+            </>
+          ) : null}
+
+          {activeTab === "Vendor Balance" ? (
+            <>
+              <div className="settings-grid settings-stats-grid">
+                <div className="settings-item">
+                  <span className="settings-label">Open Vendor Lines</span>
+                  <strong>{vendorBalanceRows.length.toLocaleString("en-US")}</strong>
+                </div>
+                <div className="settings-item">
+                  <span className="settings-label">Vendor Balance Qty</span>
+                  <strong>{vendorBalanceRows.reduce((sum, row) => sum + row.qty_remaining, 0).toLocaleString("en-US")}</strong>
+                </div>
+                <div className="settings-item">
+                  <span className="settings-label">Open Cost</span>
+                  <strong>{formatMoney(vendorBalanceRows.reduce((sum, row) => sum + row.amount_remaining, 0))}</strong>
+                </div>
+                <div className="settings-item">
+                  <span className="settings-label">Vendors Affected</span>
+                  <strong>{new Set(vendorBalanceRows.map((row) => row.supplier_name)).size.toLocaleString("en-US")}</strong>
+                </div>
+              </div>
+              <DataTable rows={vendorBalanceRows} columns={vendorBalanceColumns} emptyText="No open vendor balance lines for the selected filters." />
+            </>
+          ) : null}
+
+          {activeTab === "Customer Balance" ? (
+            <>
+              <div className="settings-grid settings-stats-grid">
+                <div className="settings-item">
+                  <span className="settings-label">Open Customer Lines</span>
+                  <strong>{customerBalanceRows.length.toLocaleString("en-US")}</strong>
+                </div>
+                <div className="settings-item">
+                  <span className="settings-label">Customer Balance Qty</span>
+                  <strong>{customerBalanceRows.reduce((sum, row) => sum + row.qty_remaining, 0).toLocaleString("en-US")}</strong>
+                </div>
+                <div className="settings-item">
+                  <span className="settings-label">Open Sales</span>
+                  <strong>{formatMoney(customerBalanceRows.reduce((sum, row) => sum + row.amount_remaining, 0))}</strong>
+                </div>
+                <div className="settings-item">
+                  <span className="settings-label">Customers Affected</span>
+                  <strong>{new Set(customerBalanceRows.map((row) => row.customer_name)).size.toLocaleString("en-US")}</strong>
+                </div>
+              </div>
+              <DataTable rows={customerBalanceRows} columns={customerBalanceColumns} emptyText="No open customer balance lines for the selected filters." />
             </>
           ) : null}
         </>

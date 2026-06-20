@@ -21,7 +21,7 @@ function formatBoschDisplayCode(value) {
 
 export function normalizeCatalogDisplayCode(value, brand = "") {
   const canonicalBrand = normalizeBrandKey(brand);
-  const compactBrands = new Set(["BOSCH", "SACHS", "LEMFORDER", "WABCO", "ZF", "MANN", "MANNFILTER", "MAHLE", "KNORRBREMSE"]);
+  const compactBrands = new Set(["BOSCH", "SACHS", "LEMFORDER", "WABCO", "ZF", "MANN", "MANNFILTER", "MAHLE", "KNORR", "KNORRBREMSE"]);
   if (compactBrands.has(canonicalBrand)) {
     return canonicalBrand === "BOSCH" ? formatBoschDisplayCode(value) : formatCompactDisplayCode(value);
   }
