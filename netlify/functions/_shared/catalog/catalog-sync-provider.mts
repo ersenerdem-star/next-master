@@ -66,14 +66,32 @@ export type CatalogSyncPlan = {
 };
 
 export const DEFAULT_CATALOG_SYNC_BATCH_SEQUENCE = [1, 50, 100, 500, 1000, 2000, 3000] as const;
+const MANDATORY_TECHNICAL_FIELDS = [
+  "ean",
+  "oem_no",
+  "description",
+  "vehicle",
+  "vehicle_model",
+  "market_segment",
+  "engine_code",
+  "lifecycle_status",
+  "lifecycle_note",
+  "replacement_code",
+  "hs_code",
+  "origin",
+  "weight_kg",
+  "image_url",
+] as const;
 
 export type CatalogSyncBatchPassSummary = {
   candidateLimit: number;
+  candidateRowsBeforeLimit: number;
   candidateRows: number;
   resolvedRows: number;
   errorRows: number;
   fallbackUsed: boolean;
   sourceCompletionRows: number;
+  truncatedByCandidateLimit: boolean;
   completedPass: boolean;
 };
 
@@ -575,7 +593,7 @@ export function resolveCatalogSyncPlan(inputBrandName: string): CatalogSyncPlan 
       fallbackUsed: false,
       completionProviders: [],
       mandatorySourceCompletion: false,
-      mandatoryTechnicalFields: ["ean"],
+      mandatoryTechnicalFields: [...MANDATORY_TECHNICAL_FIELDS],
       sourcePolicyVersion: CATALOG_SOURCE_POLICY_VERSION,
       sourcePolicy,
     };
@@ -603,7 +621,7 @@ export function resolveCatalogSyncPlan(inputBrandName: string): CatalogSyncPlan 
       (matchedConfig.executionSourceType || matchedConfig.preferredSourceType) !== matchedConfig.preferredSourceType,
     completionProviders,
     mandatorySourceCompletion: completionProviders.length > 0,
-    mandatoryTechnicalFields: ["ean"],
+    mandatoryTechnicalFields: [...MANDATORY_TECHNICAL_FIELDS],
     sourcePolicyVersion: CATALOG_SOURCE_POLICY_VERSION,
     sourcePolicy,
   };
@@ -830,33 +848,50 @@ export async function syncBrandCatalogWithProgressiveBatches(input: {
 
   let finalResult: Awaited<ReturnType<typeof syncBrandCatalog>> | null = null;
   const batchProgression: CatalogSyncBatchPassSummary[] = [];
+  const usedCandidateLimits = new Set<number>();
+  let candidateLimit = batchSequence[0] || 1;
 
-  for (const candidateLimit of batchSequence) {
+  while (Number.isFinite(candidateLimit) && candidateLimit > 0 && !usedCandidateLimits.has(candidateLimit)) {
+    usedCandidateLimits.add(candidateLimit);
     finalResult = await syncBrandCatalog({
       ...input,
       candidateLimit,
       sparetoFallbackLimit: input.sparetoFallbackLimit ?? candidateLimit,
     });
 
-    const candidateRows = Number(finalResult?.candidateRowsBeforeLimit ?? finalResult?.candidateRows ?? 0);
+    const candidateRowsBeforeLimit = Number(finalResult?.candidateRowsBeforeLimit ?? finalResult?.candidateRows ?? 0);
+    const candidateRows = Number(finalResult?.candidateRows ?? candidateRowsBeforeLimit);
     const resolvedRows = Number(finalResult?.resolvedRows ?? 0);
     const errorRows = Number(finalResult?.errorRows ?? 0);
     const sourceCompletionRows = Array.isArray(finalResult?.sourceCompletion)
       ? finalResult.sourceCompletion.reduce((sum, item) => sum + Number(item?.updatedRows || 0), 0)
       : 0;
-    const completedPass = resolvedRows < candidateLimit || candidateRows <= candidateLimit;
+    const truncatedByCandidateLimit = Boolean(
+      finalResult && typeof finalResult === "object" && "truncatedByCandidateLimit" in finalResult
+        ? (finalResult as { truncatedByCandidateLimit?: boolean }).truncatedByCandidateLimit
+        : candidateRowsBeforeLimit > candidateLimit,
+    );
+    const completedPass = !truncatedByCandidateLimit;
 
     batchProgression.push({
       candidateLimit,
+      candidateRowsBeforeLimit,
       candidateRows,
       resolvedRows,
       errorRows,
       fallbackUsed: Boolean(finalResult?.fallbackUsed),
       sourceCompletionRows,
+      truncatedByCandidateLimit,
       completedPass,
     });
 
     if (completedPass) break;
+
+    const nextCandidateLimit = candidateRowsBeforeLimit > candidateLimit ? candidateRowsBeforeLimit : 0;
+    if (!nextCandidateLimit || nextCandidateLimit <= candidateLimit) {
+      break;
+    }
+    candidateLimit = nextCandidateLimit;
   }
 
   if (!finalResult) {
@@ -865,7 +900,7 @@ export async function syncBrandCatalogWithProgressiveBatches(input: {
 
   return {
     ...finalResult,
-    syncBatchSequence: batchSequence,
+    syncBatchSequence: batchProgression.map((pass) => pass.candidateLimit),
     syncBatchProgression: batchProgression,
     syncBatchStrategy: "progressive",
   };

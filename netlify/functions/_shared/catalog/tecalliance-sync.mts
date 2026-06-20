@@ -253,6 +253,8 @@ export async function syncBrandCatalogFromTecAllianceBrand(
   }
 
   const candidateLimit = Number.isFinite(input.candidateLimit ?? NaN) && Number(input.candidateLimit) > 0 ? Math.floor(Number(input.candidateLimit)) : null;
+  const candidateRowsBeforeLimit = workMap.size;
+  const truncatedByCandidateLimit = Boolean(candidateLimit && candidateRowsBeforeLimit > candidateLimit);
   if (candidateLimit && workMap.size > candidateLimit) {
     const limited = new Map<string, { existing: CatalogRow | null; article: TecAllianceApiArticle | null; searchTerm: string | null }>();
     for (const [code, item] of workMap.entries()) {
@@ -364,7 +366,9 @@ export async function syncBrandCatalogFromTecAllianceBrand(
     listingUniqueRows: discovery.articlesByCode.size,
     newRowsInListing: [...discovery.articlesByCode.keys()].filter((code) => !existingByCode.has(code)).length,
     incompleteExistingRows: existingRows.filter((row) => shouldProcessRow(row)).length,
+    candidateRowsBeforeLimit,
     candidateRows: workMap.size,
+    truncatedByCandidateLimit,
     resolvedRows: matchedRows,
     errorRows: errorRows.length,
     discontinuedRows,
@@ -458,16 +462,49 @@ function consumeTecAllianceArticles(
   config: TecAllianceSyncConfig,
   brandName: string,
 ) {
-  const allowedManufacturers = new Set((config.manufacturerNames || [config.providerLabel]).map((value) => normalizeTextValue(value).toUpperCase()).filter(Boolean));
+  const allowedManufacturers = buildAllowedManufacturerMatchers(config);
 
   for (const article of articles) {
     const productCode = normalizeCatalogDisplayCode(article.articleNumber || "", brandName);
     const normalizedCode = normalizeCode(productCode);
-    const supplierName = normalizeTextValue(article.mfrName || "").toUpperCase();
+    const supplierName = normalizeTextValue(article.mfrName || "");
     if (!productCode || !normalizedCode) continue;
-    if (allowedManufacturers.size && supplierName && !allowedManufacturers.has(supplierName)) continue;
+    if (allowedManufacturers.size && supplierName && !matchesAllowedManufacturer(supplierName, allowedManufacturers)) continue;
     target.set(normalizedCode, article);
   }
+}
+
+function buildAllowedManufacturerMatchers(config: TecAllianceSyncConfig) {
+  const exact = new Set(
+    (config.manufacturerNames || [config.providerLabel])
+      .map((value) => normalizeTextValue(value).toUpperCase())
+      .filter(Boolean),
+  );
+  const compact = new Set(
+    [...exact]
+      .map((value) => normalizeManufacturerMatcherValue(value))
+      .filter(Boolean),
+  );
+  return { exact, compact };
+}
+
+function matchesAllowedManufacturer(
+  supplierName: string,
+  allowed: { exact: Set<string>; compact: Set<string> },
+) {
+  const normalized = normalizeTextValue(supplierName).toUpperCase();
+  const compact = normalizeManufacturerMatcherValue(normalized);
+  if (!compact) return false;
+  if (allowed.exact.has(normalized) || allowed.compact.has(compact)) return true;
+  for (const candidate of allowed.compact) {
+    if (!candidate) continue;
+    if (compact.includes(candidate) || candidate.includes(compact)) return true;
+  }
+  return false;
+}
+
+function normalizeManufacturerMatcherValue(value: string) {
+  return normalizeTextValue(value).toUpperCase().replace(/[^A-Z0-9]+/g, "");
 }
 
 async function searchTecAllianceExactArticle(

@@ -2,7 +2,10 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveCatalogSyncPlan, syncBrandCatalog } from "../netlify/functions/_shared/catalog-sync-provider.mts";
+import {
+  resolveCatalogSyncPlan,
+  syncBrandCatalogWithProgressiveBatches,
+} from "../netlify/functions/_shared/catalog/catalog-sync-provider.mts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -77,7 +80,7 @@ for (const brandName of targetBrands) {
   const plan = resolveCatalogSyncPlan(brandName);
   try {
     const result = await Promise.race([
-      syncBrandCatalog({
+      syncBrandCatalogWithProgressiveBatches({
         supabaseUrl,
         serviceRoleKey,
         brandName,

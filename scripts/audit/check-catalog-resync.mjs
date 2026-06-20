@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), "../..");
 
-const page = readFileSync(path.join(repoRoot, "apps/web/src/modules/admin/pages/CatalogPage.tsx"), "utf8");
+const page = readFileSync(path.join(repoRoot, "apps/web/src/presentation/pages/CatalogPage.tsx"), "utf8");
 const sync = readFileSync(path.join(repoRoot, "netlify/functions/_shared/catalog/catalog-sync-provider.mts"), "utf8");
 const admin = readFileSync(path.join(repoRoot, "netlify/functions/admin-sync-brand-catalog.mts"), "utf8");
 

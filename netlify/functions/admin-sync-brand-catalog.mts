@@ -1,7 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { requireCallerProfile } from "./_shared/auth.mts";
 import { json, readJson } from "./_shared/http.mts";
-import { syncBrandCatalog } from "./_shared/catalog-sync-provider.mts";
+import { syncBrandCatalogWithProgressiveBatches } from "./_shared/catalog/catalog-sync-provider.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 export default async (req: Request, _context: Context) => {
@@ -17,7 +17,7 @@ export default async (req: Request, _context: Context) => {
       return json({ error: "Brand name is required" }, 400);
     }
 
-    const result = await syncBrandCatalog({
+    const result = await syncBrandCatalogWithProgressiveBatches({
       supabaseUrl: caller.supabaseUrl,
       serviceRoleKey: caller.serviceRoleKey,
       brandName,

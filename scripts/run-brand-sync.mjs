@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { syncBrandCatalog } from "../netlify/functions/_shared/catalog-sync-provider.mts";
+import { syncBrandCatalogWithProgressiveBatches } from "../netlify/functions/_shared/catalog/catalog-sync-provider.mts";
 
 function resolveEnvValue(name) {
   const direct = String(process.env[name] || "").trim();
@@ -43,7 +43,7 @@ const seedPrefixes = String(seedPrefixesArg?.split("=")[1] || "")
   .map((value) => String(value || "").trim())
   .filter(Boolean);
 
-const result = await syncBrandCatalog({
+const result = await syncBrandCatalogWithProgressiveBatches({
   supabaseUrl,
   serviceRoleKey,
   brandName,

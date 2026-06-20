@@ -1,4 +1,4 @@
-import { syncBrandCatalog } from "../netlify/functions/_shared/catalog-sync-provider.mts";
+import { syncBrandCatalog } from "../netlify/functions/_shared/catalog/catalog-sync-provider.mts";
 
 const supabaseUrl = String(process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
 const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
