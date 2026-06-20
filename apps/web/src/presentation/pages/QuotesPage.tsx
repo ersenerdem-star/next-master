@@ -21,7 +21,7 @@ import { resolveQuoteLine } from "../../infrastructure/api/quoteResolverApi";
 import { fetchCloudQuoteDetail, fetchCloudQuotes } from "../../infrastructure/api/quotesApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, inventoryAvailabilityLookupKey, type InventoryAvailabilitySummary } from "../../infrastructure/api/inventoryApi";
-import { canonicalizeBrandName, normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
+import { canonicalizeBrandName, matchesOriginalNumberSearch, normalizeBrandKey, normalizePartCode, normalizeSearchText } from "../../domain/shared/normalize";
 import { parseCsv } from "../../shared/csv";
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import { consumeCatalogTransfer, PENDING_CATALOG_SALES_ITEM_KEY } from "../../shared/catalogTransfer";
@@ -130,6 +130,62 @@ function writeSalesOrderWorkspaceCache(cache: PersistedSalesOrderWorkspace | nul
   } catch {
     // Best-effort cache only.
   }
+}
+
+function matchesSalesOrderSearch(order: LocalSalesOrder, search: string) {
+  const term = String(search || "").trim();
+  if (!term) return true;
+
+  const normalizedTerm = normalizeSearchText(term);
+  const compactTerm = normalizePartCode(term);
+
+  const scalarHaystacks = [
+    order.sales_order_no,
+    order.customer_name,
+    order.seller_company,
+    order.purchase_company,
+    order.status,
+    order.source_channel || "",
+    buildEntityAlias(order.customer_name),
+    buildEntityAlias(order.seller_company),
+    buildEntityAlias(order.purchase_company),
+  ];
+
+  if (
+    scalarHaystacks.some(
+      (value) =>
+        normalizeSearchText(value).includes(normalizedTerm) ||
+        String(value || "")
+          .toLowerCase()
+          .includes(term.toLowerCase()),
+    )
+  ) {
+    return true;
+  }
+
+  if (compactTerm && normalizePartCode(order.sales_order_no).includes(compactTerm)) {
+    return true;
+  }
+
+  return order.lines.some((line) => {
+    const lineHaystacks = [
+      line.requestedCode,
+      line.resolvedCode,
+      line.brand,
+      line.description,
+      line.oem_no,
+      line.hs_code,
+      line.origin,
+      line.notes,
+      line.supplier_name,
+    ];
+    return lineHaystacks.some(
+      (value) =>
+        normalizeSearchText(value).includes(normalizedTerm) ||
+        matchesOriginalNumberSearch(String(value || ""), term) ||
+        (compactTerm && normalizePartCode(String(value || "")).includes(compactTerm)),
+    );
+  });
 }
 
 function chunkRows<T>(rows: T[], size: number) {
@@ -2512,7 +2568,9 @@ export function QuotesPage({
   }, [savedPurchaseOrders, savedInvoices]);
 
   const filteredLocalSalesOrders = useMemo(() => {
+    const searchTerm = search.trim();
     return localSalesOrders.filter((order) => {
+      if (!matchesSalesOrderSearch(order, searchTerm)) return false;
       const poCount = salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(order.id) || 0;
       const invoiceCount = salesOrderDocumentState.invoiceCountBySalesOrderId.get(order.id) || 0;
       switch (salesOrderFilter) {
@@ -2528,7 +2586,7 @@ export function QuotesPage({
           return true;
       }
     });
-  }, [localSalesOrders, salesOrderDocumentState, salesOrderFilter]);
+  }, [localSalesOrders, salesOrderDocumentState, salesOrderFilter, search]);
 
   const selectedLocalSalesOrders = useMemo(
     () => localSalesOrders.filter((order) => selectedLocalSalesOrderIds.includes(order.id)),

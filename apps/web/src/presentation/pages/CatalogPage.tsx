@@ -22,6 +22,7 @@ import { VehicleBadges } from "../components/common/VehicleBadges";
 import { downloadCsv, normalizeNumber, normalizeText, parseCsv, toCsv } from "../../shared/csv";
 import { downloadCatalogLifecycleTemplate, downloadCatalogTemplate } from "../../shared/importTemplates";
 import { dispatchAppNavigation, PENDING_CATALOG_PURCHASE_ITEM_KEY, PENDING_CATALOG_SALES_ITEM_KEY, storeCatalogTransfer } from "../../shared/catalogTransfer";
+import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 
 const CATALOG_CACHE_KEY = "next-master-catalog-cache";
 const CATALOG_CACHE_WRITE_DELAY_MS = 250;
@@ -29,6 +30,8 @@ const CATALOG_CACHE_WRITE_DELAY_MS = 250;
 type CatalogRowDraft = Omit<CatalogRow, "weight_kg"> & {
   weight_kg: number | string | null;
 };
+
+type CatalogExportFormat = "csv" | "xlsx";
 
 type CatalogOfflineCache = {
   brands: BrandOption[];
@@ -153,6 +156,7 @@ export function CatalogPage() {
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [exportBrand, setExportBrand] = useState("");
+  const [exportFormat, setExportFormat] = useState<CatalogExportFormat>("csv");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showReferenceDialog, setShowReferenceDialog] = useState(false);
   const [search, setSearch] = useState("");
@@ -343,8 +347,8 @@ export function CatalogPage() {
         if (!cancelled) setRows(result);
       } catch (caught) {
         if (!cancelled) {
-          setRows([]);
           setError(caught instanceof Error ? caught.message : "Catalog request failed");
+          setStatus("Catalog request failed. Keeping the last visible result set.");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -977,8 +981,8 @@ export function CatalogPage() {
       });
       setRows(result);
     } catch (caught) {
-      setRows([]);
       setError(caught instanceof Error ? caught.message : "Catalog request failed");
+      setStatus("Catalog request failed. Keeping the last visible result set.");
     } finally {
       setLoading(false);
     }
@@ -1121,6 +1125,19 @@ export function CatalogPage() {
     }
   }
 
+  function openCatalogExport(format: CatalogExportFormat) {
+    setExportFormat(format);
+    setShowExportDialog(true);
+  }
+
+  function buildCatalogExportName(format: CatalogExportFormat) {
+    const brandSlug = exportBrand
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return `catalog-${brandSlug || "export"}.${format}`;
+  }
+
   async function handleCatalogExport() {
     if (!isOnline) {
       setError("Connect to the internet to export catalog data.");
@@ -1134,7 +1151,8 @@ export function CatalogPage() {
     setExportingCatalog(true);
     setError("");
     setStatus("");
-    actionFeedback.begin(`Preparing catalog CSV export for ${exportBrand}...`);
+    const exportLabel = exportFormat === "xlsx" ? "Excel" : "CSV";
+    actionFeedback.begin(`Preparing catalog ${exportLabel} export for ${exportBrand}...`);
 
     try {
       const exportData = await fetchCatalogExportRows({ brandName: exportBrand, marketSegment: catalogSegment || undefined });
@@ -1155,10 +1173,15 @@ export function CatalogPage() {
           row.lifecycle_note || "",
         ]),
       ];
-      downloadCsv(`catalog-${exportBrand.toLowerCase().replace(/\s+/g, "-")}.csv`, toCsv(exportRows));
+      if (exportFormat === "xlsx") {
+        const sheetName = `${exportBrand} Catalog`.slice(0, 31) || "Catalog";
+        downloadBlob(buildCatalogExportName("xlsx"), buildXlsxBlob(sheetName, exportRows, [8]));
+      } else {
+        downloadCsv(buildCatalogExportName("csv"), toCsv(exportRows));
+      }
       setShowExportDialog(false);
-      setStatus(`Catalog CSV downloaded for ${exportBrand}.`);
-      actionFeedback.succeed(`Catalog CSV downloaded for ${exportBrand}.`);
+      setStatus(`Catalog ${exportLabel} downloaded for ${exportBrand}.`);
+      actionFeedback.succeed(`Catalog ${exportLabel} downloaded for ${exportBrand}.`);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Catalog export failed";
       setError(message);
@@ -1255,8 +1278,11 @@ export function CatalogPage() {
             <Button variant="secondary" onClick={clearCatalogSearch} disabled={!search && !submittedSearch && !catalogBrand && !submittedCatalogBrand && !catalogSegment && !submittedCatalogSegment && !rows.length}>
               Clear Search
             </Button>
-            <Button variant="secondary" onClick={() => setShowExportDialog(true)} disabled={!brands.length || !isOnline} busy={exportingCatalog} busyLabel="Preparing...">
+            <Button variant="secondary" onClick={() => openCatalogExport("csv")} disabled={!brands.length || !isOnline} busy={exportingCatalog && exportFormat === "csv"} busyLabel="Preparing...">
               Export CSV
+            </Button>
+            <Button variant="secondary" onClick={() => openCatalogExport("xlsx")} disabled={!brands.length || !isOnline} busy={exportingCatalog && exportFormat === "xlsx"} busyLabel="Preparing...">
+              Export Excel
             </Button>
             <Button
               variant="secondary"
@@ -1583,15 +1609,15 @@ export function CatalogPage() {
           <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
             <div className="modal-card__header draggable-surface__handle">
               <div>
-                <h3>Catalog CSV Export</h3>
-                <p>Select a brand to download its full catalog list.</p>
+                <h3>Catalog {exportFormat === "xlsx" ? "Excel" : "CSV"} Export</h3>
+                <p>Select a brand to download its full catalog list as {exportFormat === "xlsx" ? "Excel" : "CSV"}.</p>
               </div>
             </div>
             <div className="modal-form-grid">
-            <Select label="Brand" value={exportBrand} options={editableBrandOptions} onChange={setExportBrand} />
-            <Input label="Scope" value="All items for selected brand" onChange={() => undefined} disabled />
-          </div>
-          <div className="modal-hint">This export ignores the current search box and downloads the current catalog scope for the selected brand.</div>
+              <Select label="Brand" value={exportBrand} options={editableBrandOptions} onChange={setExportBrand} />
+              <Input label="Scope" value="All items for selected brand" onChange={() => undefined} disabled />
+            </div>
+            <div className="modal-hint">This export ignores the current search box and downloads the current catalog scope for the selected brand.</div>
             <div className="modal-actions">
               <Button
                 variant="secondary"
@@ -1603,7 +1629,7 @@ export function CatalogPage() {
                 Cancel
               </Button>
               <Button onClick={() => void handleCatalogExport()} disabled={!exportBrand} busy={exportingCatalog} busyLabel="Preparing...">
-                Export CSV
+                Export {exportFormat === "xlsx" ? "Excel" : "CSV"}
               </Button>
             </div>
           </DraggableSurface>

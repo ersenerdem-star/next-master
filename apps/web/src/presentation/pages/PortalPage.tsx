@@ -1429,7 +1429,7 @@ export function PortalPage() {
     ),
   ).sort((left, right) => left.localeCompare(right));
   const portalSearchCards = catalogResults;
-  const portalRecommendationCards = portalRecommendations;
+  const portalRecommendationCards = portalRecommendations.slice(0, 3);
   const portalOrderHistoryRows =
     activeSnapshot.invite.party_type === "customer"
       ? filteredSalesOrders.filter((row) => !(row.source_channel === "portal" && !row.portal_submitted_at && String(row.status || "").toLowerCase() === "draft"))
@@ -1588,11 +1588,8 @@ export function PortalPage() {
         `${items.length.toLocaleString("en-US")} matching product and alternative result(s) found for the basket flow.${result.recommendations.length ? ` ${result.recommendations.length.toLocaleString("en-US")} stock-backed recommendation(s) added below.` : ""}`,
       );
     } catch (caught) {
-      setCatalogResults([]);
-      setPortalRecommendations([]);
-      setSelectedCatalogCode("");
-      setPortalPreview(null);
       setError(caught instanceof Error ? caught.message : "Portal item search failed");
+      setPortalOrderStatus("Search failed. Keeping the last visible result set.");
     } finally {
       setSearchingCatalog(false);
     }
