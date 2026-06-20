@@ -92,7 +92,7 @@ async function main() {
         matched.push(result);
       } else {
         unmatched.push({
-          brand: "WABCO",
+          brand: "Wabco",
           product_code: row.product_code,
           normalized_code: row.normalized_code,
           reason: "No exact WABCO detail page match",
@@ -100,7 +100,7 @@ async function main() {
       }
     } catch (error) {
       errors.push({
-        brand: "WABCO",
+        brand: "Wabco",
         product_code: row.product_code,
         normalized_code: row.normalized_code,
         error: error instanceof Error ? error.message : String(error),
@@ -205,7 +205,7 @@ async function resolveWabcoFromCustomerCentre(productCode, normalizedCode) {
   }
 
   return {
-    brand: "WABCO",
+    brand: "Wabco",
     product_code: productCode,
     description: detail.product_name || "",
     oem_no: detail.replaces || "",

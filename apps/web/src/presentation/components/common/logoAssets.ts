@@ -18,7 +18,7 @@ const LOGO_PRESETS: LogoPreset[] = [
   { match: /bosch/i, label: "Bosch", wordmark: "BOSCH", assetSrc: "/brand-logos/bosch_logo.png", bgFrom: "#fff7ed", bgTo: "#ffffff", fg: "#c2410c", stroke: "#fdba74" },
   { match: /\bate\b/i, label: "ATE", wordmark: "ATE", assetSrc: "/brand-logos/ate_logo.png", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#93c5fd" },
   { match: /donaldson/i, label: "Donaldson", wordmark: "DONALDSON", assetSrc: "/brand-logos/donaldson_logo.png", bgFrom: "#fef2f2", bgTo: "#ffffff", fg: "#c81e1e", stroke: "#fca5a5" },
-  { match: /wabco/i, label: "WABCO", wordmark: "WABCO", assetSrc: "/brand-logos/wabco_logo.png", bgFrom: "#ecfeff", bgTo: "#ffffff", fg: "#0f766e", stroke: "#67e8f9" },
+  { match: /wabco/i, label: "Wabco", wordmark: "Wabco", assetSrc: "/brand-logos/wabco_logo.png", bgFrom: "#ecfeff", bgTo: "#ffffff", fg: "#0f766e", stroke: "#67e8f9" },
   { match: /\bzf\b/i, label: "ZF", wordmark: "ZF", assetSrc: "/brand-logos/zf_logo.png", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#93c5fd" },
   { match: /lemforder/i, label: "Lemforder", wordmark: "LEMFORDER", assetSrc: "/brand-logos/lemforder_logo.jpg", bgFrom: "#eef2ff", bgTo: "#ffffff", fg: "#4338ca", stroke: "#a5b4fc" },
   { match: /sachs/i, label: "Sachs", wordmark: "SACHS", assetSrc: "/brand-logos/sachs_logo.png", bgFrom: "#f5f3ff", bgTo: "#ffffff", fg: "#6d28d9", stroke: "#c4b5fd" },

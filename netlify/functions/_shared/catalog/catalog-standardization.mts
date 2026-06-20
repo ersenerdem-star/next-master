@@ -13,7 +13,8 @@ export function normalizeCatalogDisplayCode(value: string, brandName = ""): stri
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "");
 
-  if (normalizedBrand === "bosch" || normalizedBrand === "sachs") {
+  const compactBrands = new Set(["bosch", "sachs", "lemforder", "wabco", "zf", "mann", "mannfilter", "mahle", "knorrbremse"]);
+  if (compactBrands.has(normalizedBrand)) {
     return text.replace(/[^A-Z0-9]/g, "");
   }
 

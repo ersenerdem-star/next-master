@@ -19,6 +19,15 @@ function formatBoschDisplayCode(value: string): string {
     .trim();
 }
 
+const COMPACT_CODE_BRANDS = new Set(["BOSCH", "SACHS", "LEMFORDER", "WABCO", "ZF", "MANN", "MANNFILTER", "MAHLE", "KNORRBREMSE"]);
+
+function formatCompactDisplayCode(value: string): string {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
 const ORIGIN_CODES: Record<string, string> = {
   ARGENTINA: "AR",
   AUSTRALIA: "AU",
@@ -77,6 +86,9 @@ const ORIGIN_CODES: Record<string, string> = {
 
 export function normalizeCatalogDisplayCode(value: string, brand?: string): string {
   const canonicalBrand = normalizeBrandKey(brand || "");
+  if (COMPACT_CODE_BRANDS.has(canonicalBrand)) {
+    return formatCompactDisplayCode(value);
+  }
   if (canonicalBrand === "BOSCH") {
     return formatBoschDisplayCode(value);
   }

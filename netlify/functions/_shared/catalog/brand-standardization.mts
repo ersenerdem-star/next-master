@@ -7,7 +7,7 @@ export function canonicalizeInternalBrandName(input: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "");
   if (lower === "lemforder") return "Lemforder";
-  if (lower === "wabco") return "WABCO";
+  if (lower === "wabco") return "Wabco";
   if (lower === "trw") return "TRW";
   if (lower === "bosch") return "Bosch";
   if (lower === "mann" || lower === "mannfilter") return "Mann";
@@ -26,6 +26,8 @@ export function canonicalizeInternalBrandName(input: string) {
   if (lower === "hengst") return "Hengst";
   if (lower === "meyle") return "Meyle";
   if (lower === "mahle") return "Mahle";
+  if (lower === "dayco") return "Dayco";
+  if (lower === "vitesco") return "Vitesco";
   if (lower === "hella") return "Hella";
   if (lower === "knecht") return "Knecht";
   if (lower === "clevite") return "Clevite";
@@ -55,9 +57,20 @@ export function canonicalizeInternalBrandName(input: string) {
   if (lower === "ferodo") return "Ferodo";
   if (lower === "champion") return "Champion";
   if (lower === "beru") return "Beru";
+  if (lower === "beral") return "Beral";
+  if (lower === "monroe") return "Monroe";
+  if (lower === "moog") return "Moog";
+  if (lower === "walker") return "Walker";
   if (lower === "ae" || lower === "aeparts") return "AE";
   if (lower === "fpdiesel" || lower === "fp-diesel") return "FP Diesel";
   if (lower === "hepu") return "HEPU";
+  if (lower === "holset") return "Holset";
+  if (lower === "borgwarner" || lower === "borgwagner") return "BorgWarner";
+  if (lower === "garrett") return "Garrett";
+  if (lower === "kkk") return "KKK";
+  if (lower === "schwitzer") return "Schwitzer";
+  if (lower === "ihi") return "IHI";
+  if (lower === "mitsubishiturbochargers") return "Mitsubishi Turbochargers";
   if (lower === "zf") return "ZF";
   if (lower === "boge") return "Boge";
   return value;

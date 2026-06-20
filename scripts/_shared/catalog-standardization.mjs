@@ -21,8 +21,9 @@ function formatBoschDisplayCode(value) {
 
 export function normalizeCatalogDisplayCode(value, brand = "") {
   const canonicalBrand = normalizeBrandKey(brand);
-  if (canonicalBrand === "BOSCH") {
-    return formatBoschDisplayCode(value);
+  const compactBrands = new Set(["BOSCH", "SACHS", "LEMFORDER", "WABCO", "ZF", "MANN", "MANNFILTER", "MAHLE", "KNORRBREMSE"]);
+  if (compactBrands.has(canonicalBrand)) {
+    return canonicalBrand === "BOSCH" ? formatBoschDisplayCode(value) : formatCompactDisplayCode(value);
   }
   if (canonicalBrand === "HENGST") {
     return formatHengstDisplayCode(value);
@@ -46,6 +47,12 @@ function formatHengstDisplayCode(value) {
     return `${match[1]} ${match[2]}`.trim();
   }
   return raw;
+}
+
+function formatCompactDisplayCode(value) {
+  const raw = String(value || "").trim().toUpperCase();
+  if (!raw) return "";
+  return raw.replace(/[^A-Z0-9]/g, "");
 }
 
 export function normalizeCatalogDescription(value) {

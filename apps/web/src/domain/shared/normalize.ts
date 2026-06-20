@@ -33,7 +33,7 @@ const BRAND_ALIAS_MAP: Record<string, string> = {
   nrf: "NRF",
   sachs: "Sachs",
   trw: "TRW",
-  wabco: "WABCO",
+  wabco: "Wabco",
 };
 
 export function normalizeBrandKey(value: string): string {

@@ -31,7 +31,7 @@ export function resolveSparetoBrandQuery(input: string) {
       return "BOSCH";
     case "TRW":
       return "TRW";
-    case "WABCO":
+    case "Wabco":
       return "WABCO";
     case "Mann":
       return "MANN-FILTER";
@@ -87,7 +87,7 @@ function resolveSparetoBrandSlug(input: string) {
       return "lemforder";
     case "Bosch":
       return "bosch";
-    case "WABCO":
+    case "Wabco":
       return "wabco";
     case "TRW":
       return "trw";

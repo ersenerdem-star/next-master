@@ -70,10 +70,10 @@ async function main() {
   const existingRows = await fetchExistingCatalogRows(target.brand_id);
   const existingByCode = new Map(existingRows.map((row) => [row.normalized_code, row]));
 
-  console.error(`WABCO existing catalog rows: ${existingRows.length}`);
+  console.error(`Wabco existing catalog rows: ${existingRows.length}`);
 
   const listing = await fetchSparetoListing();
-  console.error(`WABCO Spareto listing rows: ${listing.rows.length}`);
+  console.error(`Wabco Spareto listing rows: ${listing.rows.length}`);
 
   const candidates = listing.rows.filter((row) => {
     const existing = existingByCode.get(row.normalized_code);
@@ -82,7 +82,7 @@ async function main() {
   });
   const selectedCandidates = detailLimit == null ? candidates : candidates.slice(0, detailLimit);
 
-  console.error(`WABCO candidate detail rows: ${selectedCandidates.length}`);
+  console.error(`Wabco candidate detail rows: ${selectedCandidates.length}`);
 
   const resolvedRows = [];
   const errorRows = [];
@@ -101,7 +101,7 @@ async function main() {
       });
     }
     if ((index + 1) % 100 === 0 || index + 1 === selectedCandidates.length) {
-      console.error(`WABCO detail progress: ${index + 1}/${selectedCandidates.length}`);
+      console.error(`Wabco detail progress: ${index + 1}/${selectedCandidates.length}`);
     }
     if (sleepMs > 0) {
       await sleep(sleepMs);
@@ -126,7 +126,7 @@ async function main() {
     ],
     mergedRows.map((row) => [
       row.product_code,
-      "WABCO",
+      "Wabco",
       row.description,
       row.oem_no,
       row.hs_code,
@@ -211,7 +211,7 @@ async function resolveWabcoTarget() {
   return {
     brand_id: String(brand.id),
     organization_id: String(brand.organization_id),
-    name: String(brand.name || "WABCO"),
+    name: String(brand.name || "Wabco"),
   };
 }
 
