@@ -361,11 +361,14 @@ function buildPolicyProfile(providerKey: string, brandName: string): PolicyProfi
   if (
     [
       "ate_official",
+      "dayco_official",
       "schaeffler_aftermarket",
       "knorr_bremse_aftermarket",
+      "wabco_customercentre",
       "hepu_official",
       "nissens_official",
       "nrf_official",
+      "masterturbo_official",
       "federal_mogul_aftermarket",
     ].includes(providerKey)
   ) {

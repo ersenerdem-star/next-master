@@ -9,6 +9,6 @@ export async function syncBrandCatalogFromMahleTecAlliance(_input: {
   seedPrefixes?: string[];
 }) {
   throw new Error(
-    "Mahle official source is routed to the TecAlliance catalog at https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=GB&sessionArticleCountry=GB, but an automated official search/detail sync has not been implemented yet. Do not fall back to Spareto for primary catalog creation.",
+    "Mahle official source is routed to the TecAlliance catalog at https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=AE&sessionArticleCountry=AE, but an automated official search/detail sync has not been implemented yet. Do not fall back to Spareto for primary catalog creation.",
   );
 }

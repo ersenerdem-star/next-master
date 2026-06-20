@@ -19,7 +19,7 @@ const TECALLIANCE_BRAND_REGISTRY: TecAllianceBrandRegistryEntry[] = [
     managedBrandNames: ["Mahle"],
     preferredProviderKey: "tecalliance_mahle",
     preferredProviderLabel: "Mahle TecAlliance official catalog",
-    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=GB&sessionArticleCountry=GB",
+    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=AE&sessionArticleCountry=AE",
     seedPrefixes: ["K"],
     sync: {
       providerLabel: "Mahle",
@@ -34,7 +34,7 @@ const TECALLIANCE_BRAND_REGISTRY: TecAllianceBrandRegistryEntry[] = [
     managedBrandNames: ["Knecht"],
     preferredProviderKey: "tecalliance_knecht",
     preferredProviderLabel: "Knecht TecAlliance official catalog",
-    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=GB&sessionArticleCountry=GB",
+    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=AE&sessionArticleCountry=AE",
     sync: {
       providerLabel: "Knecht",
       providerId: 22620,
@@ -48,7 +48,7 @@ const TECALLIANCE_BRAND_REGISTRY: TecAllianceBrandRegistryEntry[] = [
     managedBrandNames: ["Clevite"],
     preferredProviderKey: "tecalliance_clevite",
     preferredProviderLabel: "Clevite TecAlliance official catalog",
-    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=GB&sessionArticleCountry=GB",
+    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=AE&sessionArticleCountry=AE",
     sync: {
       providerLabel: "Clevite",
       providerId: 22620,
@@ -62,7 +62,7 @@ const TECALLIANCE_BRAND_REGISTRY: TecAllianceBrandRegistryEntry[] = [
     managedBrandNames: ["Purolator India"],
     preferredProviderKey: "tecalliance_purolator_india",
     preferredProviderLabel: "Purolator India TecAlliance official catalog",
-    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=GB&sessionArticleCountry=GB",
+    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=AE&sessionArticleCountry=AE",
     sync: {
       providerLabel: "Purolator India",
       providerId: 22620,
@@ -76,7 +76,7 @@ const TECALLIANCE_BRAND_REGISTRY: TecAllianceBrandRegistryEntry[] = [
     managedBrandNames: ["Metal Leve"],
     preferredProviderKey: "tecalliance_metal_leve",
     preferredProviderLabel: "Metal Leve TecAlliance official catalog",
-    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=GB&sessionArticleCountry=GB",
+    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=AE&sessionArticleCountry=AE",
     sync: {
       providerLabel: "Metal Leve",
       providerId: 22620,
@@ -90,7 +90,7 @@ const TECALLIANCE_BRAND_REGISTRY: TecAllianceBrandRegistryEntry[] = [
     managedBrandNames: ["Izumi"],
     preferredProviderKey: "tecalliance_izumi",
     preferredProviderLabel: "Izumi TecAlliance official catalog",
-    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=GB&sessionArticleCountry=GB",
+    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=AE&sessionArticleCountry=AE",
     sync: {
       providerLabel: "Izumi",
       providerId: 22620,
