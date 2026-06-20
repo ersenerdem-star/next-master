@@ -167,6 +167,9 @@ const PORTAL_PRICE_LIST_MAX_ROWS = 100000;
 const PORTAL_PRICE_LIST_CATALOG_PAGE_SIZE = 5000;
 const PORTAL_PRICE_LIST_SUPPLIER_PAGE_SIZE = 5000;
 const PORTAL_PRICE_LIST_ITEM_PAGE_SIZE = 5000;
+const PORTAL_SEARCH_REST_TIMEOUT_MS = 2800;
+const PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS = 900;
+const PORTAL_SEARCH_PRICE_REST_TIMEOUT_MS = 900;
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 
 type PortalLookupCacheEntry<T> = {
@@ -629,6 +632,22 @@ function buildPortalCatalogSearchOr(search: string, normalizedSearch: string, mo
   return `(${[...clauses].join(",")})`;
 }
 
+function buildPortalFastCatalogSearchOr(search: string, normalizedSearch: string) {
+  const escaped = search.replace(/[%*(),]/g, " ").trim();
+  const clauses = new Set<string>();
+  const variants = [normalizedSearch, ...buildOriginalNumberVariants(search)].filter((variant) => variant.length >= 3).slice(0, 5);
+  for (const variant of variants) {
+    clauses.add(`normalized_code.eq.${variant}`);
+    clauses.add(`normalized_oem.eq.${variant}`);
+    clauses.add(`normalized_code.like.${variant}*`);
+    clauses.add(`normalized_oem.like.${variant}*`);
+  }
+  if (escaped && escaped.length <= 24) {
+    clauses.add(`product_code.ilike.${escaped}*`);
+  }
+  return `(${[...clauses].join(",")})`;
+}
+
 function buildDiscontinuedWarning(resolvedCode: string, note?: string | null) {
   const code = String(resolvedCode || "").trim();
   const base = code ? `Production ended for ${code}.` : "Production ended for this item.";
@@ -698,11 +717,38 @@ function mapCatalogRowsToBaseItems(
     .filter((item) => item.code && item.brand && item.normalized_code);
 }
 
+function mapPortalCatalogItemsWithoutPricing(baseItems: SearchCatalogBaseItem[], currency: string): PortalCatalogSearchItem[] {
+  return baseItems.map((item) => ({
+    code: item.code,
+    brand: item.brand,
+    description: item.description,
+    oem_no: item.oem_no,
+    vehicle: item.vehicle,
+    tariff: item.tariff,
+    origin: item.origin,
+    weight_kg: item.weight_kg,
+    image_url: item.image_url,
+    sell_price: null,
+    currency,
+    supplier_name: "",
+    lifecycle_status: item.lifecycle_status,
+    lifecycle_note: item.lifecycle_note,
+    lifecycle_warning: item.lifecycle_status === "discontinued" ? buildDiscontinuedWarning(item.code, item.lifecycle_note) : null,
+    replacement_code: item.replacement?.new_code || null,
+    replacement_old_code: item.replacement?.old_code || null,
+    replacement_reason: item.replacement?.reason || null,
+    replacement_warning: item.replacement ? buildReplacementWarning(item.replacement.old_code, item.replacement.new_code || item.code, item.replacement.reason) : null,
+    recommendation_reason: item.recommendation_reason || null,
+    available_qty: item.available_qty == null ? null : Number(item.available_qty),
+  }));
+}
+
 async function fetchPortalSearchStockMap(
   supabaseUrl: string,
   serviceRoleKey: string,
   organizationId: string,
   items: Array<{ brand: string; normalized_code: string }>,
+  timeoutMs = PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS,
 ) {
   const map = new Map<
     string,
@@ -720,7 +766,7 @@ async function fetchPortalSearchStockMap(
     organization_id: `eq.${organizationId}`,
     product_code_key: `in.(${codeKeys.join(",")})`,
     limit: String(Math.max(240, codeKeys.length * 12)),
-  }).catch(() => []);
+  }, timeoutMs).catch(() => []);
 
   for (const row of snapshotRows) {
     const brand = String(row.brand || "").trim().toLowerCase();
@@ -755,6 +801,7 @@ async function hydratePortalCatalogItems(
   invite: PortalInviteRow,
   context: CustomerPricingContext,
   baseItems: SearchCatalogBaseItem[],
+  timeoutMs?: number,
 ) {
   const previewByCode = new Map<
     string,
@@ -775,7 +822,8 @@ async function hydratePortalCatalogItems(
           brandId: item.brand_id,
           normalizedCode: item.normalized_code,
         })),
-    );
+      timeoutMs,
+    ).catch(() => new Map());
     for (const item of baseItems) {
       const bestOption = bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`);
       if (!bestOption) continue;
@@ -793,7 +841,8 @@ async function hydratePortalCatalogItems(
         brand: item.brand,
         product_code: item.code,
       })),
-    );
+      timeoutMs,
+    ).catch(() => new Map());
     for (const item of baseItems) {
       const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
       const cPrice = cPriceMap.get(key);
@@ -816,7 +865,8 @@ async function hydratePortalCatalogItems(
           brandId: item.brand_id,
           normalizedCode: item.normalized_code,
         })),
-    );
+      timeoutMs,
+    ).catch(() => new Map());
     for (const item of baseItems) {
       const bestOption = bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`);
       if (!bestOption) continue;
@@ -836,7 +886,8 @@ async function hydratePortalCatalogItems(
           brand: item.brand,
           product_code: item.code,
         })),
-      );
+        timeoutMs,
+      ).catch(() => new Map());
       for (const item of baseItems) {
         const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
         const existing = previewByCode.get(key);
@@ -886,6 +937,7 @@ async function fetchPortalCatalogRecommendations(
   brandMap: { byId: Map<string, string>; byName: Map<string, string> },
   baseItems: SearchCatalogBaseItem[],
   replacementRowsByKey: Map<string, { old_code: string; new_code: string; reason: string | null }>,
+  timeoutMs = PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS,
 ) {
   if (!search || !baseItems.length || !shouldStrictlyFilterCodeSearch(search)) return [] as SearchCatalogBaseItem[];
 
@@ -904,11 +956,13 @@ async function fetchPortalCatalogRecommendations(
     or: `(${anchorDescriptionTokens.slice(0, 3).map((token) => `description.ilike.*${token}*`).join(",")})`,
     order: "product_code.asc",
     limit: "120",
-  }).catch(() => []);
+  }, timeoutMs).catch(() => []);
   if (!candidateRows.length) return [] as SearchCatalogBaseItem[];
 
   const candidateBaseItems = mapCatalogRowsToBaseItems(candidateRows, brandMap, replacementRowsByKey);
-  const stockMap = await fetchPortalSearchStockMap(supabaseUrl, serviceRoleKey, invite.organization_id, candidateBaseItems);
+  const stockMap = await fetchPortalSearchStockMap(supabaseUrl, serviceRoleKey, invite.organization_id, candidateBaseItems, timeoutMs).catch(
+    () => new Map(),
+  );
 
   return candidateBaseItems
     .filter((item) => item.lifecycle_status !== "discontinued")
@@ -1030,9 +1084,10 @@ async function fetchFirst<T>(supabaseUrl: string, serviceRoleKey: string, table:
   return rows[0] || null;
 }
 
-async function fetchAll<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
+async function fetchAll<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>, timeoutMs?: number) {
   return getJson<Array<T>>(buildRestUrl(supabaseUrl, table, params), {
     headers: serviceRoleHeaders(serviceRoleKey),
+    timeoutMs,
   });
 }
 
@@ -1179,7 +1234,7 @@ async function resolveBrandMap(supabaseUrl: string, serviceRoleKey: string, orga
     select: "id,name",
     organization_id: `eq.${organizationId}`,
     order: "name.asc",
-  });
+  }, PORTAL_SEARCH_REST_TIMEOUT_MS);
   const byId = new Map<string, string>();
   const byName = new Map<string, string>();
   for (const row of brands) {
@@ -1210,7 +1265,6 @@ export async function searchPortalCatalog(
   const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
   const search = String(query || "").trim();
   const normalizedSearch = normalizePartCode(search);
-  const shouldConstrainCodeExpansion = shouldStrictlyFilterCodeSearch(search);
   const selectedBrandId = brand ? brandMap.byName.get(brand.trim().toLowerCase()) || "" : "";
   if (brand && !selectedBrandId) {
     throw new Error("Brand not found for portal search");
@@ -1224,10 +1278,14 @@ export async function searchPortalCatalog(
 
   const { allowedBrandIds } = applyPortalBrandScope(params, invite, selectedBrandId);
   if (search) {
-    params.or = buildPortalCatalogSearchOr(search, normalizedSearch, "strict");
+    params.or = isLikelyPortalCodeSearch(search)
+      ? buildPortalFastCatalogSearchOr(search, normalizedSearch)
+      : buildPortalCatalogSearchOr(search, normalizedSearch, "strict");
   }
 
-  let rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", params);
+  let rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", params, PORTAL_SEARCH_REST_TIMEOUT_MS).catch(
+    () => [] as Record<string, unknown>[],
+  );
   const replacementRowsByKey = new Map<
     string,
     {
@@ -1237,7 +1295,7 @@ export async function searchPortalCatalog(
     }
   >();
 
-  if (search && normalizedSearch.length >= 3) {
+  if (!rows.length && search && normalizedSearch.length >= 3) {
     const referenceRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "item_code_references", {
       select: "brand_id,old_code,new_code,reason,normalized_new_code",
       organization_id: `eq.${invite.organization_id}`,
@@ -1249,7 +1307,7 @@ export async function searchPortalCatalog(
           ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
           : {}),
       limit: "200",
-    }).catch(() => []);
+    }, PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS).catch(() => []);
 
     if (referenceRows.length) {
       const brandIds = [...new Set(referenceRows.map((row) => String(row.brand_id || "")).filter(Boolean))];
@@ -1272,7 +1330,7 @@ export async function searchPortalCatalog(
           normalized_code: `in.(${newCodes.join(",")})`,
           order: "product_code.asc",
           limit: String(Math.max(120, newCodes.length * 4)),
-        }).catch(() => []);
+        }, PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS).catch(() => []);
         if (replacementCatalogRows.length) {
           rows = dedupeCatalogRows([
             ...rows,
@@ -1289,7 +1347,7 @@ export async function searchPortalCatalog(
   if (
     search &&
     shouldRunLooseOriginalNumberSearch(search) &&
-    rows.length < (shouldConstrainCodeExpansion ? PORTAL_CODE_SEARCH_EXPANSION_THRESHOLD : 24)
+    !rows.length
   ) {
     const familyCore = buildOriginalNumberFamilyCore(search);
     if (familyCore.length >= 6) {
@@ -1310,7 +1368,7 @@ export async function searchPortalCatalog(
           .join(",")})`,
         order: "product_code.asc",
         limit: "160",
-      }).catch(() => []);
+      }, PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS).catch(() => []);
       if (familyRows.length) {
         rows = dedupeCatalogRows([...rows, ...familyRows]).filter((row) => matchesCatalogFamilyRow(row, search));
       }
@@ -1319,7 +1377,7 @@ export async function searchPortalCatalog(
   if (
     search &&
     shouldRunLooseOriginalNumberSearch(search) &&
-    rows.length < (shouldConstrainCodeExpansion ? PORTAL_CODE_SEARCH_EXPANSION_THRESHOLD : 24)
+    !rows.length
   ) {
     const familyClauses = buildOriginalNumberFamilyClauses(search);
     if (familyClauses.length) {
@@ -1334,33 +1392,33 @@ export async function searchPortalCatalog(
         or: `(${familyClauses.join(",")})`,
         order: "product_code.asc",
         limit: "220",
-      }).catch(() => []);
+      }, PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS).catch(() => []);
       if (tokenRows.length) {
         rows = dedupeCatalogRows([...rows, ...tokenRows]).filter((row) => matchesCatalogFamilyRow(row, search));
       }
     }
   }
-  if (search && isLikelyPortalCodeSearch(search)) {
+  if (!rows.length && search && isLikelyPortalCodeSearch(search)) {
     const variants = supplementalSearchVariants(search);
     if (variants.length) {
-      const supplementalRows = (
-        await Promise.all(
-          variants.map((variant) =>
-            fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
-              select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
-              organization_id: `eq.${invite.organization_id}`,
-              ...(selectedBrandId
-                ? { brand_id: `eq.${selectedBrandId}` }
-                : allowedBrandIds.length
-                  ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
-                  : {}),
-              normalized_oem: `like.*${variant}*`,
-              order: "product_code.asc",
-              limit: "120",
-            }).catch(() => []),
-          ),
-        )
-      ).flat();
+        const supplementalRows = (
+          await Promise.all(
+            variants.map((variant) =>
+              fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+                select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
+                organization_id: `eq.${invite.organization_id}`,
+                ...(selectedBrandId
+                  ? { brand_id: `eq.${selectedBrandId}` }
+                  : allowedBrandIds.length
+                    ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
+                    : {}),
+                normalized_oem: `like.*${variant}*`,
+                order: "product_code.asc",
+                limit: "120",
+            }, PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS).catch(() => []),
+            ),
+          )
+        ).flat();
       if (supplementalRows.length) {
         rows = dedupeCatalogRows([...rows, ...supplementalRows]).filter(
           (row) => matchesCatalogFamilyRow(row, search) || variants.some((variant) => normalizePartCode(String(row.product_code || "")).includes(variant)),
@@ -1372,7 +1430,7 @@ export async function searchPortalCatalog(
     rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
       ...params,
       or: buildPortalCatalogSearchOr(search, normalizedSearch, "loose"),
-    });
+    }, PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS).catch(() => []);
   }
   if (!rows.length && search && shouldRunLooseOriginalNumberSearch(search)) {
     const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
@@ -1387,7 +1445,7 @@ export async function searchPortalCatalog(
       normalized_oem: `like.*${normalizedOriginalSearch}*`,
       order: "product_code.asc",
       limit: "100",
-    }).catch(() => []);
+    }, PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS).catch(() => []);
     rows = dedupeCatalogRows(
       normalizedRows.filter(
         (row) => matchesCatalogFamilyRow(row, search) || normalizePartCode(String(row.product_code || "")).includes(normalizedSearch),
@@ -1399,7 +1457,7 @@ export async function searchPortalCatalog(
     search &&
     shouldStrictlyFilterCodeSearch(search) &&
     rows.length > 0 &&
-    rows.length < PORTAL_CODE_SEARCH_EXPANSION_THRESHOLD
+    rows.length < 3
   ) {
     const exactSeedRows = dedupeCatalogRows(rows).filter(
       (row) => matchesCatalogExactFamilyRow(row, search) || hasCatalogReplacementMatch(row, replacementRowsByKey),
@@ -1417,7 +1475,7 @@ export async function searchPortalCatalog(
         or: `(${seedClauses.join(",")})`,
         order: "product_code.asc",
         limit: "120",
-      }).catch(() => []);
+      }, PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS).catch(() => []);
       if (seedExpansionRows.length) {
         rows = dedupeCatalogRows([...rows, ...seedExpansionRows]);
       }
@@ -1426,23 +1484,22 @@ export async function searchPortalCatalog(
   rows = filterCatalogRowsBySearchRelevance(rows, search, replacementRowsByKey);
   const baseItems = mapCatalogRowsToBaseItems(rows, brandMap, replacementRowsByKey);
   if (!baseItems.length) return { items: [], recommendations: [] };
-  const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
-  const recommendationsBase = await fetchPortalCatalogRecommendations(
-    supabaseUrl,
-    serviceRoleKey,
-    invite,
-    search,
-    brandMap,
-    baseItems,
-    replacementRowsByKey,
-  );
-  const [items, recommendations] = await Promise.all([
-    hydratePortalCatalogItems(supabaseUrl, serviceRoleKey, invite, context, baseItems),
-    hydratePortalCatalogItems(supabaseUrl, serviceRoleKey, invite, context, recommendationsBase),
-  ]);
+  const cachedContext = portalCustomerContextCache.get(`${invite.organization_id}::${String(invite.customer_id || "").trim()}`);
+  const currency = cachedContext && cachedContext.expiresAt > Date.now() ? cachedContext.value.currency || "EUR" : "EUR";
+  const fallbackItems = mapPortalCatalogItemsWithoutPricing(baseItems, currency);
+  const items = cachedContext?.value
+    ? await hydratePortalCatalogItems(
+        supabaseUrl,
+        serviceRoleKey,
+        invite,
+        cachedContext.value,
+        baseItems,
+        PORTAL_SEARCH_PRICE_REST_TIMEOUT_MS,
+      ).catch(() => fallbackItems)
+    : fallbackItems;
   return {
     items,
-    recommendations,
+    recommendations: [],
   };
 }
 
@@ -1470,6 +1527,7 @@ async function fetchCPriceMap(
   organizationId: string,
   cPriceListIds: string[],
   rows: Array<{ brand: string; product_code: string }>,
+  timeoutMs?: number,
 ) {
   const map = new Map<string, number>();
   if (!cPriceListIds.length || !rows.length) return map;
@@ -1492,10 +1550,11 @@ async function fetchCPriceMap(
         organization_id: `eq.${organizationId}`,
         price_list_id: `in.(${cPriceListIds.join(",")})`,
         brand_id: `in.(${brandChunk.join(",")})`,
+        ...(normalizedCodes.length <= 200 ? { normalized_code: `in.(${normalizedCodes.join(",")})` } : {}),
         order: "normalized_code.asc",
         limit: String(PORTAL_PRICE_LIST_ITEM_PAGE_SIZE),
         offset: String(offset),
-      });
+      }, timeoutMs);
       for (const row of items) {
         const brandName = brandMap.byId.get(String(row.brand_id || ""));
         const normalizedCode = String(row.normalized_code || "");
@@ -1543,6 +1602,7 @@ async function fetchCPriceEntryMap(
         organization_id: `eq.${organizationId}`,
         price_list_id: `in.(${cPriceListIds.join(",")})`,
         brand_id: `in.(${brandChunk.join(",")})`,
+        ...(normalizedCodes.length <= 200 ? { normalized_code: `in.(${normalizedCodes.join(",")})` } : {}),
         order: "updated_at.desc",
         limit: String(PORTAL_PRICE_LIST_ITEM_PAGE_SIZE),
         offset: String(offset),
@@ -1714,6 +1774,7 @@ async function fetchPortalBestSupplierPreviewMap(
   serviceRoleKey: string,
   organizationId: string,
   items: Array<{ brandId: string; normalizedCode: string }>,
+  timeoutMs?: number,
 ) {
   const bestByKey = new Map<
     string,
@@ -1737,7 +1798,7 @@ async function fetchPortalBestSupplierPreviewMap(
         normalized_code: `in.(${codeChunk.join(",")})`,
         order: "buy_price.asc",
         limit: "5000",
-      });
+      }, timeoutMs);
       for (const row of supplierRows) {
         const brandId = String(row.brand_id || "");
         const normalizedCode = String(row.normalized_code || "");

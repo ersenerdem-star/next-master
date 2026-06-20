@@ -36,12 +36,12 @@ export default async (req: Request, _context: Context) => {
 
     const rateLimit = await enforcePortalRateLimit(req, supabaseUrl, serviceRoleKey, "search", email);
     if (!rateLimit.allowed) {
-      await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+      void writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
         email,
         eventType: "portal_search",
         status: "rate_limited",
         details: { brand, queryLength: query.length },
-      });
+      }).catch(() => undefined);
       return json({ error: "Too many part searches. Try again later." }, 429, {
         "Retry-After": String(rateLimit.retryAfterSeconds),
       });
@@ -53,7 +53,7 @@ export default async (req: Request, _context: Context) => {
       sessionToken,
     });
     const result = await searchPortalCatalog(supabaseUrl, serviceRoleKey, invite, query, brand);
-    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+    void writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       organizationId: invite.organization_id,
       inviteId: invite.id,
       partyType: invite.party_type,
@@ -66,18 +66,18 @@ export default async (req: Request, _context: Context) => {
         itemCount: result.items.length,
         recommendationCount: result.recommendations.length,
       },
-    });
+    }).catch(() => undefined);
     return json({ ok: true, items: result.items, recommendations: result.recommendations }, 200, {
       "Set-Cookie": buildPortalSessionCookie(nextSessionToken),
     });
   } catch (error) {
     const message = sanitizeUserFacingError(error, "Portal item search failed");
-    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+    void writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       email: auditEmail,
       eventType: "portal_search",
       status: "failed",
       details: { reason: message },
-    });
+    }).catch(() => undefined);
     return json({ error: message }, 400, {
       ...(message === "Your session has expired. Sign in again." ? { "Set-Cookie": buildExpiredPortalSessionCookie() } : {}),
     });

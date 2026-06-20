@@ -14,7 +14,9 @@
     "audit:core": "node scripts/check-core-guardian.mjs",
     "audit:secrets": "node scripts/check-secret-surface.mjs",
     "clean:worktree": "node scripts/clean-worktree-artifacts.mjs",
-    "predeploy:verify": "npm run build && npm run audit:core && npm run audit:secrets && npm run audit:hygiene:strict"
+    "predeploy:verify": "npm run build && npm run audit:core && npm run audit:secrets && npm run audit:hygiene:strict",
+    "ship": "node scripts/ship-staged-to-production.mjs",
+    "ship:dry-run": "node scripts/ship-staged-to-production.mjs --dry-run"
   },
   "devDependencies": {
     "yaml": "^2.9.0"
