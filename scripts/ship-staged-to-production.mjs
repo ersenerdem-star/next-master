@@ -116,6 +116,18 @@ function runProductionGuardians() {
   run(process.execPath, [path.join(repoRoot, "scripts/maintenance/ensure-tecalliance-brand-records.mjs"), "--apply"]);
 }
 
+function reportDeployState(commit) {
+  const deployStateScript = path.join(repoRoot, "scripts/ops/check-netlify-deploy-state.mjs");
+  const result = spawnSync(process.execPath, [deployStateScript, "--commit", commit], {
+    cwd: repoRoot,
+    stdio: "inherit",
+    shell: false,
+  });
+  if (result.status !== 0) {
+    console.log("Production deploy status check did not complete. Git push remains complete; rerun npm run deploy:status.");
+  }
+}
+
 ensureMainBranch();
 const files = stagedFiles();
 ensureSafeStagedSet(files, options);
@@ -139,6 +151,8 @@ if (options.dryRun) {
 
 const message = commitMessage(options);
 run("git", ["commit", "-m", message]);
+const shippedCommit = read("git", ["rev-parse", "HEAD"]);
 run("git", ["push", "origin", "HEAD:main"]);
 
-console.log("Pushed to origin/main. Netlify Git-based production deploy should start automatically.");
+console.log("Pushed to origin/main. Checking Git-connected Netlify production deploy state...");
+reportDeployState(shippedCommit);

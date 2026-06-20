@@ -17,6 +17,7 @@
     "guardian:brands:apply": "node scripts/maintenance/ensure-tecalliance-brand-records.mjs --apply",
     "clean:worktree": "node scripts/clean-worktree-artifacts.mjs",
     "predeploy:verify": "npm run guardian:brands:apply && npm run build && npm run audit:core && npm run audit:secrets && npm run audit:hygiene:strict",
+    "deploy:status": "node scripts/ops/check-netlify-deploy-state.mjs",
     "ship": "node scripts/ship-staged-to-production.mjs",
     "ship:dry-run": "node scripts/ship-staged-to-production.mjs --dry-run"
   },
