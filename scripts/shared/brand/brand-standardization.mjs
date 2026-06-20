@@ -122,6 +122,12 @@ const BRAND_STANDARDS = [
     sparetoSlug: "mahle",
   },
   {
+    keys: ["BEHR"],
+    canonical: "Behr",
+    sparetoQuery: "BEHR",
+    sparetoSlug: "behr",
+  },
+  {
     keys: ["DAYCO"],
     canonical: "Dayco",
     sparetoQuery: "DAYCO",

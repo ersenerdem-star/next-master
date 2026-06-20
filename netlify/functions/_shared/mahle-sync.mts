@@ -1,4 +1,6 @@
-export async function syncBrandCatalogFromMahleTecAlliance(_input: {
+import { syncBrandCatalogFromMahleTecAlliance as syncCatalogMahleTecAlliance } from "./catalog/mahle-sync.mts";
+
+export async function syncBrandCatalogFromMahleTecAlliance(input: {
   supabaseUrl: string;
   serviceRoleKey: string;
   brandName: string;
@@ -8,7 +10,5 @@ export async function syncBrandCatalogFromMahleTecAlliance(_input: {
   requestTimeoutMs?: number;
   seedPrefixes?: string[];
 }) {
-  throw new Error(
-    "Mahle official source is routed to the TecAlliance catalog at https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=AE&sessionArticleCountry=AE, but an automated official search/detail sync has not been implemented yet. Do not fall back to Spareto for primary catalog creation.",
-  );
+  return syncCatalogMahleTecAlliance(input);
 }

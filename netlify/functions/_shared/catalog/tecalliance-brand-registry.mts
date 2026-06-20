@@ -29,6 +29,21 @@ const TECALLIANCE_BRAND_REGISTRY: TecAllianceBrandRegistryEntry[] = [
     },
   },
   {
+    key: "behr",
+    aliases: ["behr"],
+    managedBrandNames: ["Behr"],
+    preferredProviderKey: "tecalliance_behr",
+    preferredProviderLabel: "Behr TecAlliance official catalog",
+    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/qa/home",
+    seedPrefixes: ["B"],
+    sync: {
+      providerLabel: "Behr",
+      providerId: 22620,
+      dataSupplierId: 287,
+      manufacturerNames: ["BEHR"],
+    },
+  },
+  {
     key: "knecht",
     aliases: ["knecht"],
     managedBrandNames: ["Knecht"],

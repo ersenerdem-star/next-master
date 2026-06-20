@@ -15,6 +15,7 @@ export function canonicalizeInternalBrandName(input: string) {
   if (lower === "nrf") return "NRF";
   if (lower === "skf") return "SKF";
   if (lower === "knorrbremse") return "Knorr-Bremse";
+  if (lower === "behr") return "Behr";
   if (lower === "fag") return "FAG";
   if (lower === "nissens") return "Nissens";
   if (lower === "ina") return "INA";

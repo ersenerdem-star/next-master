@@ -292,6 +292,13 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredSourceType: "official",
     preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/en/home?sessionTargetCountry=AE&sessionArticleCountry=AE",
   },
+  behr: {
+    aliases: ["behr"],
+    preferredProviderKey: "mahle_tecalliance",
+    preferredProviderLabel: "Behr TecAlliance official catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://web.tecalliance.net/mahle-catalog/qa/home",
+  },
   skf: {
     aliases: ["skf"],
     preferredProviderKey: "skf_automotive",

@@ -11,7 +11,7 @@ export async function syncBrandCatalogFromMahleTecAlliance(input: {
   requestTimeoutMs?: number;
   seedPrefixes?: string[];
 }) {
-  const entry = resolveTecAllianceBrandEntry("Mahle");
+  const entry = resolveTecAllianceBrandEntry(input.brandName) || resolveTecAllianceBrandEntry("Mahle");
   if (!entry) {
     throw new Error("Mahle TecAlliance registry entry is missing.");
   }
