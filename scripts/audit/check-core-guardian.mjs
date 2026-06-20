@@ -67,6 +67,7 @@ const requiredFiles = [
   "netlify/functions/_shared/portal/portal-rate-limit.mts",
   "netlify/functions/_shared/portal/portal-security.mts",
   "netlify/functions/_shared/warehouse/warehouse-partner-auth.mts",
+  "scripts/ops/ensure-netlify-linked.mjs",
 ];
 
 const requiredDirectories = [
@@ -118,13 +119,16 @@ if (exists(path.join(docsDir, "core-guardian.md"))) {
   if (!hasAnyText(guardianDoc, ["guardian:brands", "guardian:brands:apply", "registry-backed TecAlliance brands"])) {
     addFinding(findings, "critical", "docs", path.join(docsDir, "core-guardian.md"), "Guardian doc is missing brand registry repair references.");
   }
+  if (!hasAnyText(guardianDoc, ["netlify:ensure-link", "ersen-quote-desk", "state.json"])) {
+    addFinding(findings, "critical", "docs", path.join(docsDir, "core-guardian.md"), "Guardian doc is missing Netlify link bootstrap references.");
+  }
 }
 
 const packageJsonPath = path.join(repoRoot, "package.json");
 if (exists(packageJsonPath)) {
   const packageJson = read("package.json");
-  if (!hasAnyText(packageJson, ["guardian:brands:apply", "predeploy:verify"])) {
-    addFinding(findings, "critical", "scripts", packageJsonPath, "Package scripts must wire brand guardian apply into production verification.");
+  if (!hasAnyText(packageJson, ["guardian:brands:apply", "predeploy:verify", "netlify:ensure-link"])) {
+    addFinding(findings, "critical", "scripts", packageJsonPath, "Package scripts must wire Netlify link bootstrap and brand guardian apply into production verification.");
   }
 }
 
@@ -139,8 +143,8 @@ if (exists(appAdminRecordsPath)) {
 const shipPath = path.join(repoRoot, "scripts/ship-staged-to-production.mjs");
 if (exists(shipPath)) {
   const shipScript = read("scripts/ship-staged-to-production.mjs");
-  if (!hasAnyText(shipScript, ["runProductionGuardians", "guardian:brands:apply"])) {
-    addFinding(findings, "critical", "scripts", shipPath, "Production ship script must run brand guardian apply before build/push.");
+  if (!hasAnyText(shipScript, ["runProductionGuardians", "guardian:brands:apply", "netlify:ensure-link"])) {
+    addFinding(findings, "critical", "scripts", shipPath, "Production ship script must run Netlify link bootstrap and brand guardian apply before build/push.");
   }
 }
 

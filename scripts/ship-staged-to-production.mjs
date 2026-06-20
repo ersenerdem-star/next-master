@@ -101,9 +101,11 @@ function runAudit(scriptPath) {
 
 function runProductionGuardians() {
   if (commandExists("npm")) {
+    run("npm", ["run", "netlify:ensure-link"]);
     run("npm", ["run", "guardian:brands:apply"]);
     return;
   }
+  run(process.execPath, [path.join(repoRoot, "scripts/ops/ensure-netlify-linked.mjs")]);
   run(process.execPath, [path.join(repoRoot, "scripts/maintenance/ensure-tecalliance-brand-records.mjs"), "--apply"]);
 }
 

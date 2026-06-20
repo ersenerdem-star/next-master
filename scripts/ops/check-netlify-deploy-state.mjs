@@ -52,8 +52,10 @@ function parseArgs(argv) {
 
 function resolveNetlifyState(repoRoot) {
   const localState = readJson(path.join(repoRoot, ".netlify", "state.json")) || {};
+  const siteId = process.env.NETLIFY_SITE_ID || localState.siteId || "";
   return {
-    siteId: process.env.NETLIFY_SITE_ID || localState.siteId || "",
+    siteId,
+    localLinked: Boolean(siteId),
     siteName: process.env.NETLIFY_SITE_NAME || localState.siteName || DEFAULT_SITE_NAME,
     siteUrl: trimSlash(process.env.NETLIFY_SITE_URL || process.env.URL || localState.siteUrl || DEFAULT_SITE_URL),
   };
@@ -150,7 +152,7 @@ function printSummary({ netlifyState, gitState, live }) {
   console.log(`- site: ${netlifyState.siteName} (${netlifyState.siteUrl})`);
   console.log(`- source: ${gitState.branch} ${gitState.shortCommit}`);
   console.log(`- remote: ${gitState.remote}`);
-  console.log("- local Netlify CLI state: optional; not a production gate");
+  console.log(`- local Netlify CLI state: ${netlifyState.localLinked ? "linked" : "bootstrap required (run npm run netlify:ensure-link)"}`);
 
   if (live.status === "confirmed") {
     console.log(`- live check: confirmed ${gitState.shortCommit}`);
