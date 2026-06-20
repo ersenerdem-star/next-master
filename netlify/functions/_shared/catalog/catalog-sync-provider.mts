@@ -360,7 +360,7 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredProviderKey: "nrf_official",
     preferredProviderLabel: "NRF official product portal",
     preferredSourceType: "official",
-    preferredSourceUrl: "https://webshop.nrf.eu",
+    preferredSourceUrl: "https://webshop.nrf.eu//12003.html",
     executionProviderKey: "spareto",
     executionProviderLabel: "Spareto exact-detail fallback",
     executionSourceType: "marketplace",
