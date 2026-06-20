@@ -662,10 +662,12 @@ async function fetchCloudCatalogPageViaRest(
   const pageSize = Math.min(250, Math.max(1, Number(args.input_page_size || 50) || 50));
   const offset = (page - 1) * pageSize;
   const normalizedSearch = normalizePartCode(search);
-  const fetchLimit = search && shouldStrictlyFilterCodeSearch(search) ? Math.max(pageSize * 2, 80) : pageSize;
-  const shouldConstrainCodeExpansion = shouldStrictlyFilterCodeSearch(search);
   const brandMaps = await fetchBrandMaps(supabaseUrl, serviceRoleKey, caller.organizationId);
   const selectedBrandId = brand ? brandMaps.byName.get(normalizePartCode(brand)) || "" : "";
+  const strictCodeSearch = shouldStrictlyFilterCodeSearch(search);
+  const searchBrandId = strictCodeSearch ? "" : selectedBrandId;
+  const fetchLimit = search && strictCodeSearch ? Math.max(pageSize * 2, 80) : pageSize;
+  const shouldConstrainCodeExpansion = strictCodeSearch;
   const select =
     "id,product_code,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note";
   const baseParams: Record<string, string> = {
@@ -675,7 +677,7 @@ async function fetchCloudCatalogPageViaRest(
     limit: String(fetchLimit),
     offset: String(offset),
   };
-  if (selectedBrandId) baseParams.brand_id = `eq.${selectedBrandId}`;
+  if (searchBrandId) baseParams.brand_id = `eq.${searchBrandId}`;
   if (marketSegment) baseParams.market_segment = `eq.${marketSegment}`;
   if (search) {
     baseParams.or = buildCatalogSearchOr(search, normalizedSearch, "strict");
@@ -758,7 +760,7 @@ async function fetchCloudCatalogPageViaRest(
       organization_id: `eq.${caller.organizationId}`,
       is_active: "eq.true",
       normalized_old_code: `eq.${normalizedSearch}`,
-      ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+      ...(searchBrandId ? { brand_id: `eq.${searchBrandId}` } : {}),
       limit: "200",
     }).catch(() => ({ rows: [] as Record<string, unknown>[], totalCount: 0 }));
     if (referenceRows.rows.length) {
@@ -804,10 +806,10 @@ async function fetchCloudCatalogPageViaRest(
   ) {
     const familyClauses = buildOriginalNumberFamilyClauses(search);
     if (familyClauses.length) {
-      const familySweepRows = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
+    const familySweepRows = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
         select,
         organization_id: `eq.${caller.organizationId}`,
-        ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+        ...(searchBrandId ? { brand_id: `eq.${searchBrandId}` } : {}),
         or: `(${familyClauses.join(",")})`,
         order: "product_code.asc",
         limit: String(Math.min(160, Math.max(pageSize * 3, 80))),
@@ -834,7 +836,7 @@ async function fetchCloudCatalogPageViaRest(
       order: "product_code.asc",
       limit: "120",
     };
-    if (selectedBrandId) fallbackBase.brand_id = `eq.${selectedBrandId}`;
+    if (searchBrandId) fallbackBase.brand_id = `eq.${searchBrandId}`;
     const fallbackByNormalized = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
       ...fallbackBase,
       normalized_oem: `like.*${normalizedOriginalSearch}*`,
@@ -856,7 +858,7 @@ async function fetchCloudCatalogPageViaRest(
       const seedExpansionRows = await fetchRestRowsWithCount<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
         select,
         organization_id: `eq.${caller.organizationId}`,
-        ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+        ...(searchBrandId ? { brand_id: `eq.${searchBrandId}` } : {}),
         or: `(${seedClauses.join(",")})`,
         order: "product_code.asc",
         limit: "120",

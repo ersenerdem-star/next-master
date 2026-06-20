@@ -1430,7 +1430,17 @@ export async function searchPortalCatalog(
   if (invite.party_type !== "customer" || !invite.access_can_view_orders) {
     throw new Error("This portal cannot search items");
   }
-  const searchCacheKey = buildPortalSearchCacheKey(invite, query, brand);
+  const search = String(query || "").trim();
+  const normalizedSearch = normalizePartCode(search);
+  const strictCodeSearch = shouldStrictlyFilterCodeSearch(search);
+  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
+  const selectedBrandIds = brand ? resolveBrandIdsFromMap(brandMap, brand) : [];
+  const selectedBrandId = selectedBrandIds[0] || "";
+  if (brand && !selectedBrandId) {
+    throw new Error("Brand not found for portal search");
+  }
+  const searchBrandId = strictCodeSearch ? "" : selectedBrandId;
+  const searchCacheKey = buildPortalSearchCacheKey(invite, query, strictCodeSearch ? "" : brand);
   const cached = portalCatalogSearchCache.get(searchCacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.value;
@@ -1439,15 +1449,6 @@ export async function searchPortalCatalog(
     .then((value) => ({ value }))
     .catch((error) => ({ error }));
   const startedAt = Date.now();
-  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
-  const search = String(query || "").trim();
-  const normalizedSearch = normalizePartCode(search);
-  const strictCodeSearch = shouldStrictlyFilterCodeSearch(search);
-  const selectedBrandIds = brand ? resolveBrandIdsFromMap(brandMap, brand) : [];
-  const selectedBrandId = selectedBrandIds[0] || "";
-  if (brand && !selectedBrandId) {
-    throw new Error("Brand not found for portal search");
-  }
   const params: Record<string, string> = {
     select: "product_code,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
     organization_id: `eq.${invite.organization_id}`,
@@ -1455,7 +1456,7 @@ export async function searchPortalCatalog(
     limit: "24",
   };
 
-  const { allowedBrandIds } = applyPortalBrandScope(params, invite, selectedBrandId);
+  const { allowedBrandIds } = applyPortalBrandScope(params, invite, searchBrandId);
   if (search && !strictCodeSearch) {
     params.or = buildPortalCatalogSearchOr(search, normalizedSearch, "strict");
   }
@@ -1467,7 +1468,7 @@ export async function searchPortalCatalog(
       serviceRoleKey,
       invite,
       search,
-      selectedBrandId,
+      searchBrandId,
       allowedBrandIds,
       PORTAL_SEARCH_QUERY_TIMEOUT_MS,
     );
@@ -1510,8 +1511,8 @@ export async function searchPortalCatalog(
       organization_id: `eq.${invite.organization_id}`,
       is_active: "eq.true",
       normalized_old_code: `eq.${normalizedSearch}`,
-      ...(selectedBrandId
-        ? { brand_id: `eq.${selectedBrandId}` }
+      ...(searchBrandId
+        ? { brand_id: `eq.${searchBrandId}` }
         : allowedBrandIds.length
           ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
           : {}),
@@ -1559,8 +1560,8 @@ export async function searchPortalCatalog(
       const tokenRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
         select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note",
         organization_id: `eq.${invite.organization_id}`,
-        ...(selectedBrandId
-          ? { brand_id: `eq.${selectedBrandId}` }
+        ...(searchBrandId
+          ? { brand_id: `eq.${searchBrandId}` }
           : allowedBrandIds.length
             ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
             : {}),
@@ -1584,8 +1585,8 @@ export async function searchPortalCatalog(
     const normalizedRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
       select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
       organization_id: `eq.${invite.organization_id}`,
-      ...(selectedBrandId
-        ? { brand_id: `eq.${selectedBrandId}` }
+      ...(searchBrandId
+        ? { brand_id: `eq.${searchBrandId}` }
         : allowedBrandIds.length
           ? { brand_id: `in.(${allowedBrandIds.join(",")})` }
           : {}),
