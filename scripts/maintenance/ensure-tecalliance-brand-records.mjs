@@ -87,6 +87,26 @@ async function fetchBrands(supabaseUrl, serviceRoleKey) {
   return rows;
 }
 
+async function hasCatalogProductsForBrand(supabaseUrl, serviceRoleKey, organizationId, brandId) {
+  const response = await fetch(
+    buildRestUrl(supabaseUrl, "catalog_products", {
+      select: "id",
+      organization_id: `eq.${organizationId}`,
+      brand_id: `eq.${brandId}`,
+      limit: "1",
+    }),
+    {
+      headers: serviceRoleHeaders(serviceRoleKey),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Catalog coverage lookup failed: ${response.status} ${await response.text()}`);
+  }
+  const rows = await response.json();
+  if (!Array.isArray(rows)) throw new Error("Catalog coverage lookup returned unexpected payload.");
+  return Boolean(rows[0]?.id);
+}
+
 async function insertBrand(supabaseUrl, serviceRoleKey, payload) {
   const response = await fetch(buildRestUrl(supabaseUrl, "brands", { select: "id,organization_id,name" }), {
     method: "POST",
@@ -150,6 +170,22 @@ async function main() {
   const registryBrands = canonicalBrandRows();
   const missing = registryBrands.filter((row) => !existingByKey.has(normalizeBrandKey(row.name)));
   const created = [];
+  const emptyCatalogBrands = [];
+
+  for (const brand of registryBrands) {
+    const existingRow = existingByKey.get(normalizeBrandKey(brand.name));
+    if (!existingRow?.id) continue;
+    const hasCatalog = await hasCatalogProductsForBrand(supabaseUrl, serviceRoleKey, targetOrganizationId, String(existingRow.id));
+    if (!hasCatalog) {
+      emptyCatalogBrands.push({
+        id: String(existingRow.id),
+        name: String(existingRow.name || brand.name),
+        registryKey: brand.registryKey,
+        providerKey: brand.providerKey,
+        sourceUrl: brand.sourceUrl,
+      });
+    }
+  }
 
   if (options.apply) {
     for (const brand of missing) {
@@ -174,8 +210,10 @@ async function main() {
     existing_brand_count: targetBrands.length,
     missing_brand_count: missing.length,
     created_brand_count: created.length,
+    empty_catalog_brand_count: emptyCatalogBrands.length,
     missing_brands: missing,
     created_brands: created,
+    empty_catalog_brands: emptyCatalogBrands,
     checked_at: new Date().toISOString(),
   };
 

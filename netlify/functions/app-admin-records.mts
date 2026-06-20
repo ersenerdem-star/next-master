@@ -3,6 +3,7 @@ import { buildRestUrl, getJson, json, sendJson, serviceRoleHeaders } from "./_sh
 import { resolveCaller } from "./_shared/app-auth.mts";
 import { canAccessCustomerOps, canAccessOperationsModules, isSuperadminRole } from "./_shared/roles.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
+import { listTecAllianceBrandEntries } from "./_shared/catalog/tecalliance-brand-registry.mts";
 
 const CUSTOMER_COLUMNS = [
   "id",
@@ -148,6 +149,14 @@ const LEGACY_PORTAL_INVITE_COLUMNS = [
 const PORTAL_TOKEN_TTL_DAYS = 14;
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 const BRAND_COLUMNS = ["id", "name"].join(",");
+
+function normalizeBrandKey(value: unknown) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
 
 function encodeHex(input: ArrayBuffer) {
   return Array.from(new Uint8Array(input))
@@ -346,6 +355,52 @@ async function sanitizePortalInvitePayload(input: {
   const allowedSet = new Set(rows.map((row) => String(row.id || "").trim()).filter(Boolean));
   next.allowed_brand_ids = [...new Set(rawBrandIds.filter((value) => allowedSet.has(value)))];
   return next;
+}
+
+async function ensureTecAllianceBrandRecords(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+}) {
+  const currentRows = await getJson<Array<Record<string, unknown>>>(
+    buildRestUrl(input.supabaseUrl, "brands", {
+      select: BRAND_COLUMNS,
+      organization_id: `eq.${input.organizationId}`,
+      limit: "5000",
+    }),
+    {
+      headers: serviceRoleHeaders(input.serviceRoleKey),
+    },
+  ).catch(() => []);
+  const existing = new Set(currentRows.map((row) => normalizeBrandKey(row.name)).filter(Boolean));
+  const missingNames: string[] = [];
+
+  for (const entry of listTecAllianceBrandEntries()) {
+    for (const rawName of entry.managedBrandNames || []) {
+      const name = String(rawName || "").trim();
+      if (!name) continue;
+      const key = normalizeBrandKey(name);
+      if (!key || existing.has(key)) continue;
+      existing.add(key);
+      missingNames.push(name);
+    }
+  }
+
+  if (!missingNames.length) return { created: 0 };
+
+  await sendJson<unknown>(
+    `${input.supabaseUrl}/rest/v1/brands`,
+    {
+      method: "POST",
+      headers: {
+        ...serviceRoleHeaders(input.serviceRoleKey),
+        Prefer: "resolution=ignore-duplicates",
+      },
+      body: JSON.stringify(missingNames.map((name) => ({ organization_id: input.organizationId, name }))),
+    },
+  );
+
+  return { created: missingNames.length };
 }
 
 async function listRows<T>(input: {
@@ -1051,6 +1106,13 @@ export default async (req: Request, _context: Context) => {
     if (resource === "brands") {
       if (!canUseCustomerRecords) return json({ error: "Staff access required" }, 403);
       if (action === "list") {
+        await ensureTecAllianceBrandRecords({
+          supabaseUrl,
+          serviceRoleKey,
+          organizationId: caller.organizationId,
+        }).catch((error) => {
+          console.warn("TecAlliance brand seed skipped:", error instanceof Error ? error.message : String(error));
+        });
         const data = await listRows<Record<string, unknown>>({
           supabaseUrl,
           serviceRoleKey,

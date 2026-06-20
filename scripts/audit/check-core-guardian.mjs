@@ -115,8 +115,32 @@ if (exists(path.join(docsDir, "core-guardian.md"))) {
   if (!hasAnyText(guardianDoc, ["Core Guardian", "audit:core", "predeploy:verify"])) {
     addFinding(findings, "critical", "docs", path.join(docsDir, "core-guardian.md"), "Guardian doc is missing enforcement references.");
   }
-  if (!hasAnyText(guardianDoc, ["guardian:brands", "registry-backed TecAlliance brands"])) {
+  if (!hasAnyText(guardianDoc, ["guardian:brands", "guardian:brands:apply", "registry-backed TecAlliance brands"])) {
     addFinding(findings, "critical", "docs", path.join(docsDir, "core-guardian.md"), "Guardian doc is missing brand registry repair references.");
+  }
+}
+
+const packageJsonPath = path.join(repoRoot, "package.json");
+if (exists(packageJsonPath)) {
+  const packageJson = read("package.json");
+  if (!hasAnyText(packageJson, ["guardian:brands:apply", "predeploy:verify"])) {
+    addFinding(findings, "critical", "scripts", packageJsonPath, "Package scripts must wire brand guardian apply into production verification.");
+  }
+}
+
+const appAdminRecordsPath = path.join(repoRoot, "netlify/functions/app-admin-records.mts");
+if (exists(appAdminRecordsPath)) {
+  const appAdminRecords = read("netlify/functions/app-admin-records.mts");
+  if (!hasAnyText(appAdminRecords, ["ensureTecAllianceBrandRecords", "listTecAllianceBrandEntries"])) {
+    addFinding(findings, "critical", "functions", appAdminRecordsPath, "Admin brand-list endpoint must auto-seed registry-backed brands.");
+  }
+}
+
+const shipPath = path.join(repoRoot, "scripts/ship-staged-to-production.mjs");
+if (exists(shipPath)) {
+  const shipScript = read("scripts/ship-staged-to-production.mjs");
+  if (!hasAnyText(shipScript, ["runProductionGuardians", "guardian:brands:apply"])) {
+    addFinding(findings, "critical", "scripts", shipPath, "Production ship script must run brand guardian apply before build/push.");
   }
 }
 

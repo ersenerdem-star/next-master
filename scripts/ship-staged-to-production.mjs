@@ -108,6 +108,14 @@ function runAudit(scriptPath) {
   run(process.execPath, [path.join(repoRoot, scriptPath)]);
 }
 
+function runProductionGuardians() {
+  if (commandExists("npm")) {
+    run("npm", ["run", "guardian:brands:apply"]);
+    return;
+  }
+  run(process.execPath, [path.join(repoRoot, "scripts/maintenance/ensure-tecalliance-brand-records.mjs"), "--apply"]);
+}
+
 ensureMainBranch();
 const files = stagedFiles();
 ensureSafeStagedSet(files, options);
@@ -118,6 +126,7 @@ for (const file of files) console.log(`- ${file}`);
 run("git", ["diff", "--check", "--cached"]);
 
 if (!options.skipBuild) {
+  runProductionGuardians();
   runBuild();
   runAudit("scripts/check-core-guardian.mjs");
   runAudit("scripts/check-secret-surface.mjs");
