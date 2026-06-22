@@ -18,9 +18,20 @@ function formatCompactDisplayCode(value) {
   return raw.replace(/[^A-Z0-9]/g, "");
 }
 
+function formatSpaceOnlyDisplayCode(value) {
+  const raw = String(value || "").trim().toUpperCase();
+  if (!raw) return "";
+  return raw.replace(/\s+/g, "");
+}
+
 export function normalizeCatalogDisplayCode(value, brand = "") {
   const canonicalBrand = normalizeBrandKey(brand);
-  const compactBrands = new Set(["BOSCH", "SACHS", "LEMFORDER", "WABCO", "ZF", "MANN", "MANNFILTER", "MAHLE", "KNORR", "KNORRBREMSE"]);
+  const spaceOnlyBrands = new Set(["MANN", "MANNFILTER"]);
+  if (spaceOnlyBrands.has(canonicalBrand)) {
+    return formatSpaceOnlyDisplayCode(value);
+  }
+
+  const compactBrands = new Set(["BOSCH", "SACHS", "LEMFORDER", "WABCO", "ZF", "MAHLE", "KNORR", "KNORRBREMSE"]);
   if (compactBrands.has(canonicalBrand)) {
     return canonicalBrand === "BOSCH" ? formatBoschDisplayCode(value) : formatCompactDisplayCode(value);
   }
