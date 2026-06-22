@@ -6,29 +6,26 @@ function normalizeBrandKey(value) {
     .replace(/[^A-Z0-9]/g, "");
 }
 
-function formatBoschDisplayCode(value) {
-  const raw = String(value || "").trim().toUpperCase();
-  if (!raw) return "";
-  const compact = raw.replace(/[^A-Z0-9]/g, "");
-  if (/^\d{10}$/.test(compact)) {
-    return `${compact.slice(0, 1)} ${compact.slice(1, 4)} ${compact.slice(4, 7)} ${compact.slice(7, 10)}`;
-  }
-  return raw
-    .replace(/[-_/.,]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 export function normalizeCatalogDisplayCode(value, brand = "") {
   const canonicalBrand = normalizeBrandKey(brand);
-  const spaceOnlyBrands = new Set(["MANN", "MANNFILTER"]);
+  const spaceOnlyBrands = new Set([
+    "BOSCH",
+    "SACHS",
+    "LEMFORDER",
+    "WABCO",
+    "MAHLE",
+    "KNORR",
+    "KNORRBREMSE",
+    "MANN",
+    "MANNFILTER",
+  ]);
   if (spaceOnlyBrands.has(canonicalBrand)) {
     return formatSpaceOnlyDisplayCode(value);
   }
 
-  const compactBrands = new Set(["BOSCH", "SACHS", "LEMFORDER", "WABCO", "ZF", "MAHLE", "KNORR", "KNORRBREMSE"]);
-  if (compactBrands.has(canonicalBrand)) {
-    return canonicalBrand === "BOSCH" ? formatBoschDisplayCode(value) : formatCompactDisplayCode(value);
+  const dotAndSpaceBrands = new Set(["ZF"]);
+  if (dotAndSpaceBrands.has(canonicalBrand)) {
+    return formatDotAndSpaceDisplayCode(value);
   }
   if (canonicalBrand === "HENGST") {
     return formatHengstDisplayCode(value);
@@ -54,16 +51,16 @@ function formatHengstDisplayCode(value) {
   return raw;
 }
 
-function formatCompactDisplayCode(value) {
-  const raw = String(value || "").trim().toUpperCase();
-  if (!raw) return "";
-  return raw.replace(/[^A-Z0-9]/g, "");
-}
-
 function formatSpaceOnlyDisplayCode(value) {
   const raw = String(value || "").trim().toUpperCase();
   if (!raw) return "";
   return raw.replace(/\s+/g, "");
+}
+
+function formatDotAndSpaceDisplayCode(value) {
+  const raw = String(value || "").trim().toUpperCase();
+  if (!raw) return "";
+  return raw.replace(/[\s.]+/g, "");
 }
 
 export function normalizeCatalogDescription(value) {

@@ -6,34 +6,31 @@ function normalizeBrandKey(value: string): string {
     .replace(/[^A-Z0-9]/g, "");
 }
 
-function formatBoschDisplayCode(value: string): string {
-  const raw = String(value || "").trim().toUpperCase();
-  if (!raw) return "";
-  const compact = raw.replace(/[^A-Z0-9]/g, "");
-  if (/^\d{10}$/.test(compact)) {
-    return `${compact.slice(0, 1)} ${compact.slice(1, 4)} ${compact.slice(4, 7)} ${compact.slice(7, 10)}`;
-  }
-  return raw
-    .replace(/[-_/.,]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-const COMPACT_CODE_BRANDS = new Set(["BOSCH", "SACHS", "LEMFORDER", "WABCO", "ZF", "MAHLE", "KNORR", "KNORRBREMSE"]);
-const SPACE_ONLY_CODE_BRANDS = new Set(["MANN", "MANNFILTER"]);
-
-function formatCompactDisplayCode(value: string): string {
-  return String(value || "")
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "");
-}
+const SPACE_ONLY_CODE_BRANDS = new Set([
+  "BOSCH",
+  "SACHS",
+  "LEMFORDER",
+  "WABCO",
+  "MAHLE",
+  "KNORR",
+  "KNORRBREMSE",
+  "MANN",
+  "MANNFILTER",
+]);
+const DOT_AND_SPACE_CODE_BRANDS = new Set(["ZF"]);
 
 function formatSpaceOnlyDisplayCode(value: string): string {
   return String(value || "")
     .trim()
     .toUpperCase()
     .replace(/\s+/g, "");
+}
+
+function formatDotAndSpaceDisplayCode(value: string): string {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s.]+/g, "");
 }
 
 const ORIGIN_CODES: Record<string, string> = {
@@ -97,11 +94,8 @@ export function normalizeCatalogDisplayCode(value: string, brand?: string): stri
   if (SPACE_ONLY_CODE_BRANDS.has(canonicalBrand)) {
     return formatSpaceOnlyDisplayCode(value);
   }
-  if (COMPACT_CODE_BRANDS.has(canonicalBrand)) {
-    return formatCompactDisplayCode(value);
-  }
-  if (canonicalBrand === "BOSCH") {
-    return formatBoschDisplayCode(value);
+  if (DOT_AND_SPACE_CODE_BRANDS.has(canonicalBrand)) {
+    return formatDotAndSpaceDisplayCode(value);
   }
   return String(value || "")
     .replace(/\s+/g, " ")
