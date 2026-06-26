@@ -17,7 +17,8 @@ import {
   formatMasterNumber,
 } from "../components/master/MasterIntelligenceComponents";
 
-const DASHBOARD_PAGE_SIZE = 150;
+const DASHBOARD_PAGE_SIZE = 50;
+const DASHBOARD_HEAVY_BRAND_MESSAGE = "This brand has many items. Please narrow the search or open Supplier Comparison.";
 
 const scopeOptions = [
   { value: "catalog", label: "Catalog only" },
@@ -47,6 +48,20 @@ function sortByGapPercent(left: MasterRow, right: MasterRow) {
 
 function sortByGapAmount(left: MasterRow, right: MasterRow) {
   return numericValue(right.price_gap) - numericValue(left.price_gap);
+}
+
+function getDashboardErrorMessage(caught: unknown) {
+  const message = caught instanceof Error ? caught.message : String(caught || "");
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes("request too long") ||
+    normalized.includes("timeout") ||
+    normalized.includes("timed out") ||
+    normalized.includes("took too long")
+  ) {
+    return DASHBOARD_HEAVY_BRAND_MESSAGE;
+  }
+  return message || "Procurement dashboard request failed";
 }
 
 function InsightSection({
@@ -168,7 +183,7 @@ export function ProcurementDashboardPage({ onOpenSupplierComparison }: Procureme
       } catch (caught) {
         if (!cancelled) {
           setRows([]);
-          setError(caught instanceof Error ? caught.message : "Procurement dashboard request failed");
+          setError(getDashboardErrorMessage(caught));
         }
       } finally {
         if (!cancelled) setLoadingRows(false);
