@@ -8,6 +8,7 @@ import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 type MasterParams = {
   search: string;
   brand: string;
+  brandId?: string;
   scope: string;
   page?: number;
   pageSize?: number;
@@ -175,6 +176,19 @@ function isMissingExportRpc(error: unknown) {
       message.includes("Could not find") ||
       message.includes("RPC is not allowed")
     )
+  );
+}
+
+function shouldFallbackFromFastMasterRpc(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const normalized = message.toLowerCase();
+  return (
+    isRequestTimeoutError(error) ||
+    normalized.includes("schema cache") ||
+    normalized.includes("could not find") ||
+    normalized.includes("does not exist") ||
+    normalized.includes("rpc is not allowed") ||
+    normalized.includes("the request could not be completed right now")
   );
 }
 
@@ -506,6 +520,33 @@ export async function fetchCloudMaster({
   });
 
   return (data || []) as MasterRow[];
+}
+
+export async function fetchCloudMasterFast(params: MasterParams): Promise<MasterRow[]> {
+  const brandId = String(params.brandId || "").trim();
+  if (!brandId || params.scope !== "catalog") {
+    return fetchCloudMaster(params);
+  }
+
+  try {
+    const pageSize = params.pageSize ?? 50;
+    const data = await callAppRpc<MasterRow[]>("cloud_master_page_fast", {
+      input_search: params.search,
+      input_brand_id: brandId,
+      input_page: params.page ?? 1,
+      input_page_size: pageSize,
+      input_margin_a: params.marginA ?? 0.1,
+      input_margin_b: params.marginB ?? 0.15,
+    });
+    const rows = (data || []) as MasterRow[];
+    return rows.map((row) => ({
+      ...row,
+      total_count: row.total_count ?? rows.length,
+    }));
+  } catch (error) {
+    if (!shouldFallbackFromFastMasterRpc(error)) throw error;
+    return fetchCloudMaster(params);
+  }
 }
 
 async function fetchCloudMasterExportPage({

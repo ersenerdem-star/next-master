@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCPriceMapForRows, getCPriceForRow } from "../../infrastructure/api/cPriceApi";
-import { CLOUD_MASTER_EXPORT_MAX_ROWS, fetchAllCloudMaster, fetchCloudMaster } from "../../infrastructure/api/masterApi";
+import { CLOUD_MASTER_EXPORT_MAX_ROWS, fetchAllCloudMaster, fetchCloudMasterFast } from "../../infrastructure/api/masterApi";
 import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
 import type { BrandOption } from "../../types/brand";
 import type { MasterRow } from "../../types/master";
@@ -30,7 +30,7 @@ const scopeOptions = [
 export function MasterPage() {
   const actionFeedback = useActionFeedback();
   const [brands, setBrands] = useState<BrandOption[]>([]);
-  const [brand, setBrand] = useState("");
+  const [brandId, setBrandId] = useState("");
   const [search, setSearch] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");
   const [scope, setScope] = useState("catalog");
@@ -51,6 +51,9 @@ export function MasterPage() {
     }));
   }
 
+  const selectedBrand = brands.find((item) => item.id === brandId) || null;
+  const brandName = selectedBrand?.name || "";
+
   useEffect(() => {
     let cancelled = false;
 
@@ -61,7 +64,7 @@ export function MasterPage() {
         const result = await fetchCloudBrands();
         if (cancelled) return;
         setBrands(result);
-        setBrand((current) => current || result[0]?.name || "");
+        setBrandId((current) => current || result[0]?.id || "");
       } catch (caught) {
         if (!cancelled) {
           setError(caught instanceof Error ? caught.message : "Brand request failed");
@@ -106,7 +109,7 @@ export function MasterPage() {
     let cancelled = false;
 
     async function run() {
-      if (!brand) {
+      if (!brandId || !brandName) {
         setRows([]);
         setExportNotice("");
         return;
@@ -116,9 +119,10 @@ export function MasterPage() {
       setError("");
       setExportNotice("");
       try {
-        const result = await fetchCloudMaster({
+        const result = await fetchCloudMasterFast({
           search: submittedSearch,
-          brand,
+          brand: brandName,
+          brandId,
           scope,
           page: 1,
           pageSize: 50,
@@ -141,11 +145,11 @@ export function MasterPage() {
     return () => {
       cancelled = true;
     };
-  }, [brand, scope, submittedSearch, marginA, marginB]);
+  }, [brandId, brandName, scope, submittedSearch, marginA, marginB]);
 
   useEffect(() => {
     if (!searching || loadingRows) return;
-    const nextTotal = rows[0]?.total_count ?? 0;
+    const nextTotal = rows[0]?.total_count ?? rows.length;
     if (error) {
       actionFeedback.fail(error);
     } else {
@@ -154,7 +158,7 @@ export function MasterPage() {
     setSearching(false);
   }, [searching, loadingRows, error, rows, actionFeedback]);
 
-  const total = rows[0]?.total_count ?? 0;
+  const total = rows[0]?.total_count ?? rows.length;
   const avgGapPercent = useMemo(() => {
     const values = rows
       .map((row) => Number(row.price_gap_percent))
@@ -179,11 +183,11 @@ export function MasterPage() {
 
   const brandOptions = [
     { value: "", label: "Select brand" },
-    ...brands.map((item) => ({ value: item.name, label: item.name })),
+    ...brands.map((item) => ({ value: item.id, label: item.name })),
   ];
   const scopeLabel = scopeOptions.find((item) => item.value === scope)?.label || scope;
   const activeFilterChips = [
-    brand ? `Brand: ${brand}` : "",
+    brandName ? `Brand: ${brandName}` : "",
     submittedSearch.trim() ? `Search: ${submittedSearch.trim()}` : "",
     scope ? `Scope: ${scopeLabel}` : "",
   ].filter(Boolean);
@@ -262,12 +266,12 @@ export function MasterPage() {
   );
 
   async function loadMasterExportRows() {
-    if (!brand) {
+    if (!brandName) {
       throw new Error("Select a brand first.");
     }
     const exportRows = await fetchAllCloudMaster({
       search: submittedSearch,
-      brand,
+      brand: brandName,
       scope,
       marginA,
       marginB,
@@ -338,10 +342,10 @@ export function MasterPage() {
         ]),
       ];
       const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-      const fileBrand = (brand || "all-brands").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+      const fileBrand = (brandName || "all-brands").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
       downloadBlob(
         `${fileBrand}-${stamp}-master.xlsx`,
-        buildXlsxBlob(`${brand || "All"} Master`, rowsForSheet, [6, 8, 10, 11, 12, 14, 15, 16, 17]),
+        buildXlsxBlob(`${brandName || "All"} Master`, rowsForSheet, [6, 8, 10, 11, 12, 14, 15, 16, 17]),
       );
       if (exportRows.length >= CLOUD_MASTER_EXPORT_MAX_ROWS) {
         const notice = `Export limited to first ${CLOUD_MASTER_EXPORT_MAX_ROWS.toLocaleString("en-US")} rows. Narrow the search or brand scope for a smaller file.`;
@@ -363,7 +367,7 @@ export function MasterPage() {
   function handleSearch() {
     setExportNotice("");
     setSearching(true);
-    actionFeedback.begin(`Searching supplier comparison for ${search.trim() || brand || "all items"}...`);
+    actionFeedback.begin(`Searching supplier comparison for ${search.trim() || brandName || "all items"}...`);
     setSubmittedSearch(search);
   }
 
@@ -396,7 +400,7 @@ export function MasterPage() {
             onEnter={handleSearch}
           />
           <div className="smart-filter-bar__selects">
-            <Select label="Brand" value={brand} options={brandOptions} onChange={setBrand} />
+            <Select label="Brand" value={brandId} options={brandOptions} onChange={setBrandId} />
             <Select label="Scope" value={scope} options={scopeOptions} onChange={setScope} />
           </div>
           <Button onClick={handleSearch} busy={searching} busyLabel="Searching...">
@@ -445,7 +449,7 @@ export function MasterPage() {
               columns={columns}
               className="decision-table"
               wrapClassName="decision-table-wrap"
-              emptyText={!brand ? "Select a brand or search to compare supplier prices." : "No supplier comparisons found for the current filters."}
+              emptyText={!brandId ? "Select a brand or search to compare supplier prices." : "No supplier comparisons found for the current filters."}
             />
           )}
         </div>
