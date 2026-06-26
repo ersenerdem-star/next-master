@@ -14,6 +14,7 @@ const ALLOWED_RPCS = new Set([
   "cloud_master_export",
   "cloud_master_page",
   "cloud_master_page_fast",
+  "cloud_master_priced_page_fast",
   "search_catalog_products",
   "cloud_quote_supplier_options",
   "cloud_resolve_quote_line",
@@ -42,6 +43,7 @@ const OPERATIONS_RPCS = new Set([
   "cloud_master_export",
   "cloud_master_page",
   "cloud_master_page_fast",
+  "cloud_master_priced_page_fast",
 ]);
 
 const CUSTOMER_STAFF_RPCS = new Set([

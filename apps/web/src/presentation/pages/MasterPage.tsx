@@ -23,8 +23,8 @@ import {
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 
 const scopeOptions = [
-  { value: "catalog", label: "Catalog only" },
-  { value: "all", label: "Catalog + supplier only" },
+  { value: "priced", label: "Priced items" },
+  { value: "catalog", label: "Catalog items" },
 ];
 
 export function MasterPage() {
@@ -33,7 +33,7 @@ export function MasterPage() {
   const [brandId, setBrandId] = useState("");
   const [search, setSearch] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");
-  const [scope, setScope] = useState("catalog");
+  const [scope, setScope] = useState("priced");
   const [marginA, setMarginA] = useState(0.1);
   const [marginB, setMarginB] = useState(0.15);
   const [rows, setRows] = useState<MasterRow[]>([]);
@@ -272,6 +272,7 @@ export function MasterPage() {
     const exportRows = await fetchAllCloudMaster({
       search: submittedSearch,
       brand: brandName,
+      brandId,
       scope,
       marginA,
       marginB,

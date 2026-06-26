@@ -23,6 +23,7 @@ type MasterExportParams = Omit<MasterParams, "page" | "pageSize"> & {
 
 export const CLOUD_MASTER_EXPORT_MAX_ROWS = 5000;
 const CLOUD_MASTER_EXPORT_DEFAULT_PAGE_SIZE = 500;
+const CLOUD_MASTER_PRICED_EXPORT_MAX_PAGE_SIZE = 250;
 const CLOUD_MASTER_EXPORT_RETRY_PAGE_SIZES = [500, 250, 100];
 
 type BrandLookup = {
@@ -190,6 +191,24 @@ function shouldFallbackFromFastMasterRpc(error: unknown) {
     normalized.includes("rpc is not allowed") ||
     normalized.includes("the request could not be completed right now")
   );
+}
+
+function createPricedFastError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const normalized = message.toLowerCase();
+  if (isRequestTimeoutError(error)) {
+    return new Error("Priced supplier comparison request took too long. Narrow the search or try again.");
+  }
+  if (
+    normalized.includes("schema cache") ||
+    normalized.includes("could not find") ||
+    normalized.includes("does not exist") ||
+    normalized.includes("rpc is not allowed") ||
+    normalized.includes("the request could not be completed right now")
+  ) {
+    return new Error("Priced supplier comparison is not available yet. Apply Migration 75 and retry.");
+  }
+  return new Error(message || fallback);
 }
 
 function isRequestTimeoutError(error: unknown) {
@@ -522,9 +541,17 @@ export async function fetchCloudMaster({
   return (data || []) as MasterRow[];
 }
 
-export async function fetchCloudMasterFast(params: MasterParams): Promise<MasterRow[]> {
+function normalizeFastMasterRows(data: MasterRow[] | null | undefined) {
+  const rows = (data || []) as MasterRow[];
+  return rows.map((row) => ({
+    ...row,
+    total_count: row.total_count ?? rows.length,
+  }));
+}
+
+async function fetchCloudMasterCatalogFast(params: MasterParams): Promise<MasterRow[]> {
   const brandId = String(params.brandId || "").trim();
-  if (!brandId || params.scope !== "catalog") {
+  if (!brandId) {
     return fetchCloudMaster(params);
   }
 
@@ -538,15 +565,46 @@ export async function fetchCloudMasterFast(params: MasterParams): Promise<Master
       input_margin_a: params.marginA ?? 0.1,
       input_margin_b: params.marginB ?? 0.15,
     });
-    const rows = (data || []) as MasterRow[];
-    return rows.map((row) => ({
-      ...row,
-      total_count: row.total_count ?? rows.length,
-    }));
+    return normalizeFastMasterRows(data);
   } catch (error) {
     if (!shouldFallbackFromFastMasterRpc(error)) throw error;
     return fetchCloudMaster(params);
   }
+}
+
+async function fetchCloudMasterPricedFastPage(params: MasterParams): Promise<MasterRow[]> {
+  const brandId = String(params.brandId || "").trim();
+  if (!brandId) {
+    throw new Error("Select a brand first.");
+  }
+
+  try {
+    const data = await callAppRpc<MasterRow[]>("cloud_master_priced_page_fast", {
+      input_search: params.search,
+      input_brand_id: brandId,
+      input_page: params.page ?? 1,
+      input_page_size: params.pageSize ?? 50,
+      input_margin_a: params.marginA ?? 0.1,
+      input_margin_b: params.marginB ?? 0.15,
+    });
+    return normalizeFastMasterRows(data);
+  } catch (error) {
+    throw createPricedFastError(error, "Priced supplier comparison could not be loaded.");
+  }
+}
+
+export async function fetchCloudMasterPricedFast(params: MasterParams): Promise<MasterRow[]> {
+  return fetchCloudMasterPricedFastPage(params);
+}
+
+export async function fetchCloudMasterFast(params: MasterParams): Promise<MasterRow[]> {
+  if (params.scope === "priced") {
+    return fetchCloudMasterPricedFast(params);
+  }
+  if (params.scope === "catalog") {
+    return fetchCloudMasterCatalogFast(params);
+  }
+  return fetchCloudMaster(params);
 }
 
 async function fetchCloudMasterExportPage({
@@ -569,6 +627,26 @@ async function fetchCloudMasterExportPage({
   });
 
   return (data || []) as MasterRow[];
+}
+
+async function fetchCloudMasterPricedExportRows(params: MasterExportParams, pageSize: number, maxRows: number) {
+  const { maxRows: _maxRows, pageSize: _pageSize, ...masterParams } = params;
+  const allRows: MasterRow[] = [];
+  const effectivePageSize = Math.min(CLOUD_MASTER_PRICED_EXPORT_MAX_PAGE_SIZE, pageSize, maxRows);
+  const maxPages = Math.ceil(maxRows / effectivePageSize);
+
+  for (let page = 1; page <= maxPages && allRows.length < maxRows; page += 1) {
+    const currentPageSize = Math.min(effectivePageSize, maxRows - allRows.length);
+    const rows = await fetchCloudMasterPricedFastPage({
+      ...masterParams,
+      page,
+      pageSize: currentPageSize,
+    });
+    allRows.push(...rows);
+    if (rows.length < currentPageSize) break;
+  }
+
+  return allRows.slice(0, maxRows);
 }
 
 async function fetchCloudMasterExportRows(params: MasterExportParams, pageSize: number, maxRows: number) {
@@ -613,7 +691,9 @@ export async function fetchAllCloudMaster(params: MasterExportParams): Promise<M
 
   for (const pageSize of retryPageSizes) {
     try {
-      const allRows = await fetchCloudMasterExportRows(params, pageSize, maxRows);
+      const allRows = params.scope === "priced"
+        ? await fetchCloudMasterPricedExportRows(params, pageSize, maxRows)
+        : await fetchCloudMasterExportRows(params, pageSize, maxRows);
       return allRows.map((row) => ({
         ...row,
         total_count: allRows.length,
