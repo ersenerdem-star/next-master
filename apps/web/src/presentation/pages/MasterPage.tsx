@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCPriceMapForRows, getCPriceForRow } from "../../infrastructure/api/cPriceApi";
-import { fetchAllCloudMaster, fetchCloudMaster } from "../../infrastructure/api/masterApi";
+import { CLOUD_MASTER_EXPORT_MAX_ROWS, fetchAllCloudMaster, fetchCloudMaster } from "../../infrastructure/api/masterApi";
 import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
 import type { BrandOption } from "../../types/brand";
 import type { MasterRow } from "../../types/master";
@@ -40,6 +40,7 @@ export function MasterPage() {
   const [loadingBrands, setLoadingBrands] = useState(false);
   const [loadingRows, setLoadingRows] = useState(false);
   const [error, setError] = useState("");
+  const [exportNotice, setExportNotice] = useState("");
   const [searching, setSearching] = useState(false);
   const [exportingMaster, setExportingMaster] = useState(false);
 
@@ -107,11 +108,13 @@ export function MasterPage() {
     async function run() {
       if (!brand) {
         setRows([]);
+        setExportNotice("");
         return;
       }
 
       setLoadingRows(true);
       setError("");
+      setExportNotice("");
       try {
         const result = await fetchCloudMaster({
           search: submittedSearch,
@@ -268,6 +271,7 @@ export function MasterPage() {
       scope,
       marginA,
       marginB,
+      maxRows: CLOUD_MASTER_EXPORT_MAX_ROWS,
     });
     const cPriceMap = await fetchCPriceMapForRows(exportRows);
     return applyCPrices(exportRows, cPriceMap);
@@ -276,6 +280,7 @@ export function MasterPage() {
   async function handleMasterExport() {
     try {
       setError("");
+      setExportNotice("");
       setExportingMaster(true);
       actionFeedback.begin("Preparing master export...");
       const exportRows = await loadMasterExportRows();
@@ -338,10 +343,17 @@ export function MasterPage() {
         `${fileBrand}-${stamp}-master.xlsx`,
         buildXlsxBlob(`${brand || "All"} Master`, rowsForSheet, [6, 8, 10, 11, 12, 14, 15, 16, 17]),
       );
-      actionFeedback.succeed("Master export downloaded.");
+      if (exportRows.length >= CLOUD_MASTER_EXPORT_MAX_ROWS) {
+        const notice = `Export limited to first ${CLOUD_MASTER_EXPORT_MAX_ROWS.toLocaleString("en-US")} rows. Narrow the search or brand scope for a smaller file.`;
+        setExportNotice(notice);
+        actionFeedback.succeed(notice);
+      } else {
+        actionFeedback.succeed("Master export downloaded.");
+      }
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Master export failed";
       setError(message);
+      setExportNotice("");
       actionFeedback.fail(message);
     } finally {
       setExportingMaster(false);
@@ -349,6 +361,7 @@ export function MasterPage() {
   }
 
   function handleSearch() {
+    setExportNotice("");
     setSearching(true);
     actionFeedback.begin(`Searching supplier comparison for ${search.trim() || brand || "all items"}...`);
     setSubmittedSearch(search);
@@ -417,6 +430,7 @@ export function MasterPage() {
             </p>
           </div>
           {error ? <div className="procurement-error-state">{error}</div> : null}
+          {exportNotice ? <div className="procurement-warning-state">{exportNotice}</div> : null}
         </div>
         <div className="section-card__body">
           {loadingRows ? (

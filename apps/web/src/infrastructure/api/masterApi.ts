@@ -15,6 +15,15 @@ type MasterParams = {
   marginB?: number;
 };
 
+type MasterExportParams = Omit<MasterParams, "page" | "pageSize"> & {
+  maxRows?: number;
+  pageSize?: number;
+};
+
+export const CLOUD_MASTER_EXPORT_MAX_ROWS = 5000;
+const CLOUD_MASTER_EXPORT_DEFAULT_PAGE_SIZE = 500;
+const CLOUD_MASTER_EXPORT_RETRY_PAGE_SIZES = [500, 250, 100];
+
 type BrandLookup = {
   id: string;
   name: string;
@@ -167,6 +176,24 @@ function isMissingExportRpc(error: unknown) {
       message.includes("RPC is not allowed")
     )
   );
+}
+
+function isRequestTimeoutError(error: unknown) {
+  const message = (error instanceof Error ? error.message : String(error || "")).toLowerCase();
+  return (
+    message.includes("request took too long") ||
+    message.includes("request timed out") ||
+    message.includes("timed out") ||
+    message.includes("timeout") ||
+    message.includes("504") ||
+    message.includes("524")
+  );
+}
+
+function clampPositiveInteger(value: unknown, fallback: number, max: number) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
+  return Math.min(Math.max(Math.floor(numeric), 1), max);
 }
 
 function roundPriceMetric(value: number) {
@@ -503,34 +530,62 @@ async function fetchCloudMasterExportPage({
   return (data || []) as MasterRow[];
 }
 
-export async function fetchAllCloudMaster(params: Omit<MasterParams, "page" | "pageSize">): Promise<MasterRow[]> {
-  const pageSize = 1000;
-  let page = 1;
+async function fetchCloudMasterExportRows(params: MasterExportParams, pageSize: number, maxRows: number) {
+  const { maxRows: _maxRows, pageSize: _pageSize, ...masterParams } = params;
   const allRows: MasterRow[] = [];
+  const maxPages = Math.ceil(maxRows / pageSize);
 
-  while (true) {
+  for (let page = 1; page <= maxPages && allRows.length < maxRows; page += 1) {
+    const currentPageSize = Math.min(pageSize, maxRows - allRows.length);
     let rows: MasterRow[];
     try {
       rows = await fetchCloudMasterExportPage({
-        ...params,
+        ...masterParams,
         page,
-        pageSize,
+        pageSize: currentPageSize,
       });
     } catch (error) {
       if (!isMissingExportRpc(error)) throw error;
       rows = await fetchCloudMaster({
-        ...params,
+        ...masterParams,
         page,
-        pageSize,
+        pageSize: currentPageSize,
       });
     }
     allRows.push(...rows);
-    if (rows.length < pageSize) break;
-    page += 1;
+    if (rows.length < currentPageSize) break;
   }
 
-  return allRows.map((row) => ({
-    ...row,
-    total_count: allRows.length,
-  }));
+  return allRows.slice(0, maxRows);
+}
+
+export async function fetchAllCloudMaster(params: MasterExportParams): Promise<MasterRow[]> {
+  const maxRows = clampPositiveInteger(params.maxRows, CLOUD_MASTER_EXPORT_MAX_ROWS, CLOUD_MASTER_EXPORT_MAX_ROWS);
+  const requestedPageSize = clampPositiveInteger(
+    params.pageSize,
+    CLOUD_MASTER_EXPORT_DEFAULT_PAGE_SIZE,
+    Math.min(1000, maxRows),
+  );
+  const retryPageSizes = [requestedPageSize, ...CLOUD_MASTER_EXPORT_RETRY_PAGE_SIZES]
+    .filter((size, index, sizes) => size <= maxRows && size <= requestedPageSize && sizes.indexOf(size) === index);
+  let timeoutError: unknown = null;
+
+  for (const pageSize of retryPageSizes) {
+    try {
+      const allRows = await fetchCloudMasterExportRows(params, pageSize, maxRows);
+      return allRows.map((row) => ({
+        ...row,
+        total_count: allRows.length,
+      }));
+    } catch (error) {
+      if (!isRequestTimeoutError(error)) throw error;
+      timeoutError = error;
+    }
+  }
+
+  throw new Error(
+    timeoutError
+      ? "Master export is too large for the current filters. Narrow the search or export a smaller scope."
+      : "Master export failed.",
+  );
 }
