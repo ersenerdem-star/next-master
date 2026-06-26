@@ -340,6 +340,31 @@ export type InventoryByBrandProductWarehouseRow = {
   last_moved_at: string | null;
 };
 
+export type ProcurementDashboardSummaryItem = {
+  brand: string;
+  product_code: string;
+  normalized_code: string;
+  cheapest_supplier: string;
+  cheapest_price: number | null;
+  second_supplier_name?: string | null;
+  second_price?: number | null;
+  price_gap?: number | null;
+  price_gap_percent?: number | null;
+  stock_qty?: number | null;
+  lead_time_days?: number | null;
+};
+
+export type ProcurementDashboardSummary = {
+  total_rollups: number;
+  with_second_supplier: number;
+  single_supplier_count: number;
+  avg_gap_percent: number | null;
+  high_gap_count: number;
+  max_refreshed_at: string | null;
+  top_high_gap_items: ProcurementDashboardSummaryItem[];
+  single_supplier_items: ProcurementDashboardSummaryItem[];
+};
+
 export type RefreshReportingCoreResult = {
   status: "ok";
   organization_id: string;

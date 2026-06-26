@@ -1,5 +1,6 @@
 import { supabaseClient } from "./supabaseClient";
 import { sanitizeUserFacingMessage } from "../../shared/userMessage";
+import { getCurrentOrgId } from "./organizationApi";
 import type {
   AccountTransactionRow,
   BillLineRow,
@@ -10,6 +11,8 @@ import type {
   OpenPurchaseOrdersByBrandProductRow,
   OpenSalesOrdersByBrandProductRow,
   PurchasePriceVarianceReportRow,
+  ProcurementDashboardSummary,
+  ProcurementDashboardSummaryItem,
   PriceVarianceCheckRow,
   RefreshReportingCoreLoggedResult,
   RefreshReportingCoreResult,
@@ -32,6 +35,13 @@ export type ReportingReportFilters = {
   brandId?: string;
   productQuery?: string;
   partyQuery?: string;
+  limit?: number;
+};
+
+export type ProcurementDashboardSummaryFilters = {
+  organizationId?: string;
+  brandId?: string | null;
+  highGapThreshold?: number;
   limit?: number;
 };
 
@@ -67,6 +77,62 @@ async function fetchViewRows<T extends Record<string, unknown>>(viewName: string
   const { data, error } = await query;
   if (error) throw new Error(sanitizeUserFacingMessage(error.message, "The request could not be completed right now."));
   return (data ?? []) as T[];
+}
+
+function toNullableNumber(value: unknown) {
+  if (value == null || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function normalizeDashboardItem(value: unknown): ProcurementDashboardSummaryItem {
+  const row = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  return {
+    brand: String(row.brand || ""),
+    product_code: String(row.product_code || ""),
+    normalized_code: String(row.normalized_code || ""),
+    cheapest_supplier: String(row.cheapest_supplier || ""),
+    cheapest_price: toNullableNumber(row.cheapest_price),
+    second_supplier_name: row.second_supplier_name == null ? null : String(row.second_supplier_name || ""),
+    second_price: toNullableNumber(row.second_price),
+    price_gap: toNullableNumber(row.price_gap),
+    price_gap_percent: toNullableNumber(row.price_gap_percent),
+    stock_qty: toNullableNumber(row.stock_qty),
+    lead_time_days: toNullableNumber(row.lead_time_days),
+  };
+}
+
+function normalizeDashboardItems(value: unknown) {
+  return Array.isArray(value) ? value.map(normalizeDashboardItem) : [];
+}
+
+function normalizeDashboardSummary(value: unknown): ProcurementDashboardSummary {
+  const row = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  return {
+    total_rollups: Number(row.total_rollups || 0),
+    with_second_supplier: Number(row.with_second_supplier || 0),
+    single_supplier_count: Number(row.single_supplier_count || 0),
+    avg_gap_percent: toNullableNumber(row.avg_gap_percent),
+    high_gap_count: Number(row.high_gap_count || 0),
+    max_refreshed_at: row.max_refreshed_at == null ? null : String(row.max_refreshed_at || ""),
+    top_high_gap_items: normalizeDashboardItems(row.top_high_gap_items),
+    single_supplier_items: normalizeDashboardItems(row.single_supplier_items),
+  };
+}
+
+export async function fetchProcurementDashboardSummary(options: ProcurementDashboardSummaryFilters = {}) {
+  const organizationId = options.organizationId || await getCurrentOrgId();
+  const { data, error } = await supabaseClient.rpc("procurement_dashboard_summary", {
+    p_organization_id: organizationId,
+    p_brand_id: options.brandId || null,
+    p_high_gap_threshold: options.highGapThreshold ?? 10,
+    p_limit: options.limit && options.limit > 0 ? options.limit : 10,
+  });
+  if (error) {
+    throw new Error(sanitizeUserFacingMessage(error.message, "The request could not be completed right now."));
+  }
+  const firstRow = Array.isArray(data) ? data[0] : data;
+  return normalizeDashboardSummary(firstRow);
 }
 
 export async function refreshReportingCore(organizationId?: string | null): Promise<RefreshReportingCoreResult> {

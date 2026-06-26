@@ -6343,6 +6343,20 @@ textarea {
   gap: 5px;
 }
 
+.procurement-dashboard-mini-metric {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 7px;
+  border: 1px solid #d8dee8;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
 .procurement-insight-empty {
   border: 1px dashed rgba(121, 145, 168, 0.38);
   border-radius: 8px;
