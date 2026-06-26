@@ -10,7 +10,16 @@ import { Button } from "../components/common/Button";
 import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
-import { BrandPill } from "../components/common/BrandPill";
+import {
+  HIGH_GAP_PERCENT,
+  MetricTile,
+  MoneyCell,
+  PercentCell,
+  ProductIdentityCell,
+  RiskBadge,
+  SupplierComparisonCell,
+  formatMasterNumber,
+} from "../components/master/MasterIntelligenceComponents";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 
 const scopeOptions = [
@@ -143,26 +152,108 @@ export function MasterPage() {
   }, [searching, loadingRows, error, rows, actionFeedback]);
 
   const total = rows[0]?.total_count ?? 0;
+  const avgGapPercent = useMemo(() => {
+    const values = rows
+      .map((row) => Number(row.price_gap_percent))
+      .filter((value) => Number.isFinite(value));
+    if (!values.length) return null;
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+  }, [rows]);
+  const summary = useMemo(() => {
+    const withSecondSupplier = rows.filter((row) => row.second_price != null || Boolean(String(row.second_supplier_name || "").trim())).length;
+    const highGap = rows.filter((row) => Number(row.price_gap_percent ?? 0) >= HIGH_GAP_PERCENT).length;
+    const singleSupplier = rows.filter((row) => {
+      const hasSecondSupplier = row.second_price != null || Boolean(String(row.second_supplier_name || "").trim());
+      return !hasSecondSupplier || Number(row.supplier_count ?? 0) <= 1;
+    }).length;
+    return {
+      rowsShown: rows.length,
+      withSecondSupplier,
+      highGap,
+      singleSupplier,
+    };
+  }, [rows]);
 
   const brandOptions = [
     { value: "", label: "Select brand" },
     ...brands.map((item) => ({ value: item.name, label: item.name })),
   ];
+  const scopeLabel = scopeOptions.find((item) => item.value === scope)?.label || scope;
+  const activeFilterChips = [
+    brand ? `Brand: ${brand}` : "",
+    submittedSearch.trim() ? `Search: ${submittedSearch.trim()}` : "",
+    scope ? `Scope: ${scopeLabel}` : "",
+  ].filter(Boolean);
 
   const columns = useMemo(
     () => [
-      { key: "code", header: "Code", render: (row: MasterRow) => row.product_code },
-      { key: "brand", header: "Brand", render: (row: MasterRow) => <BrandPill brand={row.brand} compact /> },
-      { key: "name", header: "Name", render: (row: MasterRow) => row.description || "-" },
-      { key: "hs", header: "HS", render: (row: MasterRow) => row.hs_code || "-" },
-      { key: "origin", header: "Origin", render: (row: MasterRow) => row.origin || "-" },
-      { key: "weight", header: "Weight", render: (row: MasterRow) => row.weight_kg ?? "-" },
-      { key: "supplier", header: "Cheapest Supplier", render: (row: MasterRow) => row.cheapest_supplier || "-" },
-      { key: "price", header: "Cheapest", render: (row: MasterRow) => row.cheapest_price ?? "-" },
-      { key: "salesA", header: "A Sales", render: (row: MasterRow) => row.sales_a ?? "-" },
-      { key: "salesB", header: "B Sales", render: (row: MasterRow) => row.sales_b ?? "-" },
-      { key: "salesC", header: "C Sales", render: (row: MasterRow) => row.sales_c ?? "-" },
-      { key: "status", header: "Status", render: (row: MasterRow) => row.catalog_status || "-" },
+      {
+        key: "product",
+        header: "Product",
+        render: (row: MasterRow) => <ProductIdentityCell row={row} />,
+        sortValue: (row: MasterRow) => row.product_code,
+      },
+      {
+        key: "decision",
+        header: "Supplier Decision",
+        render: (row: MasterRow) => <SupplierComparisonCell row={row} />,
+        sortValue: (row: MasterRow) => row.cheapest_supplier || "",
+      },
+      {
+        key: "bestPrice",
+        header: "Best Price",
+        render: (row: MasterRow) => <MoneyCell value={row.cheapest_price} />,
+        sortValue: (row: MasterRow) => row.cheapest_price ?? 0,
+      },
+      {
+        key: "second",
+        header: "2nd Supplier / Price",
+        render: (row: MasterRow) => (
+          <div className="second-supplier-cell">
+            <span className="second-supplier-cell__name">{row.second_supplier_name || "No second supplier"}</span>
+            <MoneyCell value={row.second_price} muted={row.second_price == null} />
+          </div>
+        ),
+        sortValue: (row: MasterRow) => row.second_price ?? 0,
+      },
+      {
+        key: "gap",
+        header: "Gap",
+        render: (row: MasterRow) => {
+          const isHighGap = Number(row.price_gap_percent ?? 0) >= HIGH_GAP_PERCENT;
+          const hasGap = row.price_gap != null || row.price_gap_percent != null;
+          return (
+            <div className="gap-cell">
+              <MoneyCell value={row.price_gap} muted={!hasGap} />
+              <PercentCell value={row.price_gap_percent} muted={!hasGap} />
+              {hasGap ? <RiskBadge label={isHighGap ? "High gap" : "Competitive"} tone={isHighGap ? "info" : "success"} /> : <RiskBadge label="No gap" tone="neutral" />}
+            </div>
+          );
+        },
+        sortValue: (row: MasterRow) => row.price_gap_percent ?? 0,
+      },
+      {
+        key: "sales",
+        header: "Sales Prices A/B/C",
+        render: (row: MasterRow) => (
+          <div className="sales-price-stack">
+            <span><strong>A</strong><MoneyCell value={row.sales_a} /></span>
+            <span><strong>B</strong><MoneyCell value={row.sales_b} /></span>
+            <span><strong>C</strong><MoneyCell value={row.sales_c} /></span>
+          </div>
+        ),
+      },
+      {
+        key: "meta",
+        header: "Meta",
+        render: (row: MasterRow) => (
+          <div className="master-meta-cell">
+            <span>{row.origin || "No origin"}</span>
+            <span>{row.weight_kg == null ? "No weight" : `${formatMasterNumber(row.weight_kg, 3)} kg`}</span>
+            <span>{row.hs_code ? `HS ${row.hs_code}` : "No HS"}</span>
+          </div>
+        ),
+      },
     ],
     [],
   );
@@ -204,6 +295,10 @@ export function MasterPage() {
         "Weight_kg",
         "Cheapest_Supplier",
         "Cheapest_EUR",
+        "Second_Supplier",
+        "Second_EUR",
+        "Price_Gap_EUR",
+        "Price_Gap_Percent",
         "Price_Date",
         "A_Sales_EUR",
         "B_Sales_EUR",
@@ -224,6 +319,10 @@ export function MasterPage() {
           row.weight_kg ?? "",
           row.cheapest_supplier || "",
           row.cheapest_price ?? "",
+          row.second_supplier_name || "",
+          row.second_price ?? "",
+          row.price_gap ?? "",
+          row.price_gap_percent ?? "",
           row.price_date || "",
           row.sales_a ?? "",
           row.sales_b ?? "",
@@ -237,7 +336,7 @@ export function MasterPage() {
       const fileBrand = (brand || "all-brands").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
       downloadBlob(
         `${fileBrand}-${stamp}-master.xlsx`,
-        buildXlsxBlob(`${brand || "All"} Master`, rowsForSheet, [6, 8, 10, 11, 12, 13]),
+        buildXlsxBlob(`${brand || "All"} Master`, rowsForSheet, [6, 8, 10, 11, 12, 14, 15, 16, 17]),
       );
       actionFeedback.succeed("Master export downloaded.");
     } catch (caught) {
@@ -249,64 +348,92 @@ export function MasterPage() {
     }
   }
 
+  function handleSearch() {
+    setSearching(true);
+    actionFeedback.begin(`Searching supplier comparison for ${search.trim() || brand || "all items"}...`);
+    setSubmittedSearch(search);
+  }
+
   return (
-    <div className="page-stack">
-      <section className="section-card">
+    <div className="page-stack procurement-master-page">
+      <section className="procurement-page-header">
+        <div>
+          <span className="procurement-page-header__eyebrow">Procurement Intelligence</span>
+          <h2>Supplier Comparison</h2>
+          <p>Best supplier, second supplier, price gap and sales price intelligence</p>
+        </div>
+        <Button
+          variant="secondary"
+          className="button--compact procurement-export-button"
+          onClick={() => void handleMasterExport()}
+          busy={exportingMaster}
+          busyLabel="Preparing..."
+        >
+          Export XLSX
+        </Button>
+      </section>
+
+      <section className="smart-filter-bar" aria-label="Supplier comparison filters">
+        <div className="smart-filter-bar__controls">
+          <Input
+            label="Search product/OEM/description"
+            value={search}
+            onChange={setSearch}
+            placeholder="Code, OEM, name"
+            onEnter={handleSearch}
+          />
+          <div className="smart-filter-bar__selects">
+            <Select label="Brand" value={brand} options={brandOptions} onChange={setBrand} />
+            <Select label="Scope" value={scope} options={scopeOptions} onChange={setScope} />
+          </div>
+          <Button onClick={handleSearch} busy={searching} busyLabel="Searching...">
+            Search
+          </Button>
+        </div>
+        <div className="active-filter-chip-row" aria-label="Active filters">
+          {activeFilterChips.length ? activeFilterChips.map((chip) => <span key={chip} className="active-filter-chip">{chip}</span>) : <span className="active-filter-chip active-filter-chip--empty">No active filters</span>}
+        </div>
+      </section>
+
+      <section className="metric-strip" aria-label="Supplier comparison summary">
+        <MetricTile label="Rows Shown" value={summary.rowsShown.toLocaleString("en-US")} detail={loadingRows ? "Loading latest page" : "Current page"} tone="neutral" />
+        <MetricTile label="Total Items" value={total ? total.toLocaleString("en-US") : "-"} detail="Filtered result set" tone="neutral" />
+        <MetricTile label="With 2nd Supplier" value={summary.withSecondSupplier.toLocaleString("en-US")} detail="Comparison ready" tone="success" />
+        <MetricTile label="High Gap Items" value={summary.highGap.toLocaleString("en-US")} detail={`Gap >= ${HIGH_GAP_PERCENT}%`} tone={summary.highGap ? "info" : "neutral"} />
+        <MetricTile label="Single Supplier" value={summary.singleSupplier.toLocaleString("en-US")} detail="No second supplier" tone={summary.singleSupplier ? "warning" : "success"} />
+        <MetricTile label="Average Gap" value={avgGapPercent == null ? "-" : `${formatMasterNumber(avgGapPercent, 2)}%`} detail="Rows with gap data" tone="neutral" />
+      </section>
+
+      <section className="section-card procurement-table-card">
         <div className="section-card__header section-card__header--row">
           <div>
-            <h2>Master</h2>
-            <p>Live comparison view driven by supplier prices and catalog enrichment.</p>
+            <h2>Decision Table</h2>
+            <p>
+              {loadingBrands
+                ? "Loading brand context..."
+                : loadingRows
+                  ? "Refreshing supplier intelligence..."
+                  : `${summary.rowsShown.toLocaleString("en-US")} rows shown${total ? ` from ${total.toLocaleString("en-US")} total` : ""}`}
+            </p>
           </div>
-          <div className="toolbar toolbar--wrap">
-            <Select label="Brand" value={brand} options={brandOptions} onChange={setBrand} />
-            <Input
-              label="Search"
-              value={search}
-              onChange={setSearch}
-              placeholder="Code, OEM, name"
-              onEnter={() => {
-                setSearching(true);
-                actionFeedback.begin(`Searching master for ${search.trim() || brand || "all items"}...`);
-                setSubmittedSearch(search);
-              }}
-            />
-            <Select label="Scope" value={scope} options={scopeOptions} onChange={setScope} />
-            <Button
-              onClick={() => {
-                setSearching(true);
-                actionFeedback.begin(`Searching master for ${search.trim() || brand || "all items"}...`);
-                setSubmittedSearch(search);
-              }}
-              busy={searching}
-              busyLabel="Searching..."
-            >
-              Search
-            </Button>
-            <Button
-              variant="secondary"
-              className="button--compact"
-              onClick={() => void handleMasterExport()}
-              busy={exportingMaster}
-              busyLabel="Preparing..."
-            >
-              Master XLSX
-            </Button>
-          </div>
+          {error ? <div className="procurement-error-state">{error}</div> : null}
         </div>
         <div className="section-card__body">
-          <div className="meta-row">
-            <span>
-              {!brand
-                ? "Select a brand to load master."
-                : loadingBrands
-                ? "Loading brands..."
-                : loadingRows
-                  ? "Loading master rows..."
-                  : `${total.toLocaleString("en-US")} master rows`}
-            </span>
-            {error ? <span className="error-text">{error}</span> : null}
-          </div>
-          <DataTable rows={rows} columns={columns} emptyText={!brand ? "Select a brand to load master." : loadingRows ? "Loading..." : "No master rows found"} />
+          {loadingRows ? (
+            <div className="procurement-loading-state" role="status">
+              <span className="procurement-loading-state__label">Building supplier comparison</span>
+              <span className="procurement-loading-state__bar" />
+              <span className="procurement-loading-state__bar procurement-loading-state__bar--short" />
+            </div>
+          ) : (
+            <DataTable
+              rows={rows}
+              columns={columns}
+              className="decision-table"
+              wrapClassName="decision-table-wrap"
+              emptyText={!brand ? "Select a brand or search to compare supplier prices." : "No supplier comparisons found for the current filters."}
+            />
+          )}
         </div>
       </section>
     </div>

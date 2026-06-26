@@ -10,6 +10,10 @@ export type MasterRow = {
   weight_kg: number | null;
   cheapest_supplier: string | null;
   cheapest_price: number | null;
+  second_supplier_name: string | null;
+  second_price: number | null;
+  price_gap: number | null;
+  price_gap_percent: number | null;
   price_date: string | null;
   sales_a: number | null;
   sales_b: number | null;

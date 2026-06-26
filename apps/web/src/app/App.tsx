@@ -57,10 +57,14 @@ const purchasesSubNav = [
 ] as const;
 
 const reportsSubNav = [
-  { key: "Master", label: "Master" },
+  { key: "Procurement Dashboard", label: "Procurement Dashboard" },
+  { key: "Master", label: "Supplier Comparison" },
+  { key: "Core Reports", label: "Core Reports" },
   { key: "Item Transactions", label: "Item Transactions" },
   { key: "Inventory Analytics", label: "Inventory Analytics" },
 ] as const;
+
+type ReportsTab = (typeof reportsSubNav)[number]["key"];
 
 const settingsSubNav = [
   { key: "session", label: "Session" },
@@ -82,7 +86,7 @@ type PersistedAppUiState = {
   inventoryStockSearch?: string;
   salesTab?: "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists";
   purchasesTab?: "Vendors" | "Purchase Orders" | "Bills" | "Payments Made";
-  reportsTab?: "Master" | "Item Transactions" | "Inventory Analytics";
+  reportsTab?: ReportsTab;
   settingsTab?: "session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics";
 };
 
@@ -209,7 +213,7 @@ export function App() {
   const [inventoryStockSearch, setInventoryStockSearch] = useState(initialUiState?.inventoryStockSearch || "");
   const [salesTab, setSalesTab] = useState<"Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists">(initialUiState?.salesTab || "Sales Orders");
   const [purchasesTab, setPurchasesTab] = useState<"Vendors" | "Purchase Orders" | "Bills" | "Payments Made">(initialUiState?.purchasesTab || "Vendors");
-  const [reportsTab, setReportsTab] = useState<"Master" | "Item Transactions" | "Inventory Analytics">(initialUiState?.reportsTab || "Master");
+  const [reportsTab, setReportsTab] = useState<ReportsTab>(initialUiState?.reportsTab || "Procurement Dashboard");
   const [settingsTab, setSettingsTab] = useState<"session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics">(initialUiState?.settingsTab || "session");
 
   useEffect(() => {
@@ -597,7 +601,7 @@ export function App() {
         showAccessNotice("This report is not enabled for your user. Ask superadmin to open this permission.");
         return;
       }
-      setReportsTab(nextSubPage as "Master" | "Item Transactions" | "Inventory Analytics");
+      setReportsTab(nextSubPage as ReportsTab);
       return;
     }
     if (activePage === "Settings" && settingsSubNavItems.some((item) => item.key === nextSubPage)) {
@@ -653,7 +657,7 @@ export function App() {
     if (reportsSubNavItems.length && !reportsSubNavItems.some((item) => item.key === reportsTab)) {
       const firstItem = reportsSubNavItems[0];
       if (firstItem) {
-        setReportsTab(firstItem.key as "Master" | "Item Transactions" | "Inventory Analytics");
+        setReportsTab(firstItem.key as ReportsTab);
       }
     }
   }, [reportsSubNavItems, reportsTab]);
@@ -761,6 +765,7 @@ export function App() {
         onOpenBill={openBill}
         onOpenInventoryWarehouse={openInventoryWarehouse}
         onOpenInventoryItem={openInventoryItem}
+        onOpenSupplierComparison={() => setReportsTab("Master")}
       />
     ) : activePage === "Settings" ? (
       <SettingsPage initialTab={settingsTab} onLogout={handleLogout} onOpenRelatedRecord={openRelatedRecord} />

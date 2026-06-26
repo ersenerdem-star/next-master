@@ -11,7 +11,9 @@ const ALLOWED_RPCS = new Set([
   "bulk_import_catalog",
   "bulk_import_supplier_prices",
   "cloud_catalog_page",
+  "cloud_master_export",
   "cloud_master_page",
+  "search_catalog_products",
   "cloud_quote_supplier_options",
   "cloud_resolve_quote_line",
   "cloud_supplier_brand_summary",
@@ -32,9 +34,11 @@ const SUPERADMIN_RPCS = new Set([
   "cloud_supplier_price_page",
   "deactivate_supplier_prices_by_filter",
   "list_cloud_suppliers",
+  "search_catalog_products",
 ]);
 
 const OPERATIONS_RPCS = new Set([
+  "cloud_master_export",
   "cloud_master_page",
 ]);
 
@@ -649,6 +653,24 @@ async function fetchBrandMaps(supabaseUrl: string, serviceRoleKey: string, organ
   return { byId, byName };
 }
 
+async function fetchCatalogPageViaRpc(
+  supabaseUrl: string,
+  supabaseAnonKey: string,
+  authorizationHeader: string,
+  rpcName: "cloud_catalog_page" | "search_catalog_products",
+  args: Record<string, unknown>,
+) {
+  return sendJson<Array<Record<string, unknown>>>(`${supabaseUrl}/rest/v1/rpc/${rpcName}`, {
+    method: "POST",
+    headers: {
+      apikey: supabaseAnonKey,
+      Authorization: authorizationHeader,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(args),
+  });
+}
+
 async function fetchCloudCatalogPageViaRest(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -918,6 +940,7 @@ export default async (req: Request, _context: Context) => {
     const body = await req.json().catch(() => ({}));
     const name = String(body?.name || "").trim();
     const args = body?.args && typeof body.args === "object" ? body.args : {};
+    const authorizationHeader = String(req.headers.get("authorization") || "");
 
     if (!ALLOWED_RPCS.has(name)) {
       return json({ error: "RPC is not allowed through app gateway" }, 403);
@@ -935,9 +958,18 @@ export default async (req: Request, _context: Context) => {
       return json({ error: "Staff access required" }, 403);
     }
 
-    if (name === "cloud_catalog_page") {
-      const data = await fetchCloudCatalogPageViaRest(supabaseUrl, serviceRoleKey, caller, args);
-      return json({ ok: true, data });
+    if (name === "cloud_catalog_page" || name === "search_catalog_products") {
+      try {
+        const data = await fetchCatalogPageViaRpc(supabaseUrl, supabaseAnonKey, authorizationHeader, "search_catalog_products", args);
+        return json({ ok: true, data });
+      } catch (error) {
+        if (name === "search_catalog_products") {
+          const data = await fetchCloudCatalogPageViaRest(supabaseUrl, serviceRoleKey, caller, args);
+          return json({ ok: true, data });
+        }
+        const data = await fetchCloudCatalogPageViaRest(supabaseUrl, serviceRoleKey, caller, args);
+        return json({ ok: true, data });
+      }
     }
 
     const data = await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/${name}`, {
