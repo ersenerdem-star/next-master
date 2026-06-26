@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCPriceMapForRows, getCPriceForRow } from "../../infrastructure/api/cPriceApi";
-import { CLOUD_MASTER_EXPORT_MAX_ROWS, fetchAllCloudMaster, fetchCloudMasterFast } from "../../infrastructure/api/masterApi";
+import { CLOUD_MASTER_EXPORT_MAX_ROWS, CLOUD_MASTER_PRICED_EXPORT_MAX_ROWS, fetchAllCloudMaster, fetchCloudMasterFast } from "../../infrastructure/api/masterApi";
 import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
 import type { BrandOption } from "../../types/brand";
 import type { MasterRow } from "../../types/master";
@@ -269,6 +269,7 @@ export function MasterPage() {
     if (!brandName) {
       throw new Error("Select a brand first.");
     }
+    const maxRows = scope === "priced" ? CLOUD_MASTER_PRICED_EXPORT_MAX_ROWS : CLOUD_MASTER_EXPORT_MAX_ROWS;
     const exportRows = await fetchAllCloudMaster({
       search: submittedSearch,
       brand: brandName,
@@ -276,7 +277,7 @@ export function MasterPage() {
       scope,
       marginA,
       marginB,
-      maxRows: CLOUD_MASTER_EXPORT_MAX_ROWS,
+      maxRows,
     });
     const cPriceMap = await fetchCPriceMapForRows(exportRows);
     return applyCPrices(exportRows, cPriceMap);
@@ -348,8 +349,9 @@ export function MasterPage() {
         `${fileBrand}-${stamp}-master.xlsx`,
         buildXlsxBlob(`${brandName || "All"} Master`, rowsForSheet, [6, 8, 10, 11, 12, 14, 15, 16, 17]),
       );
-      if (exportRows.length >= CLOUD_MASTER_EXPORT_MAX_ROWS) {
-        const notice = `Export limited to first ${CLOUD_MASTER_EXPORT_MAX_ROWS.toLocaleString("en-US")} rows. Narrow the search or brand scope for a smaller file.`;
+      const maxRows = scope === "priced" ? CLOUD_MASTER_PRICED_EXPORT_MAX_ROWS : CLOUD_MASTER_EXPORT_MAX_ROWS;
+      if (exportRows.length >= maxRows) {
+        const notice = `Export limited to first ${maxRows.toLocaleString("en-US")} rows. Narrow the search or brand scope for a smaller file.`;
         setExportNotice(notice);
         actionFeedback.succeed(notice);
       } else {
