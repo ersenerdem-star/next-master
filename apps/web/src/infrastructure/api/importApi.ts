@@ -26,6 +26,8 @@ export async function bulkImportSupplierPrices(
 ) {
   let processed = 0;
   let catalogSynced = 0;
+  let rollupRefreshStatus = "not_requested";
+  let rollupRefreshError = "";
   const totalRows = payload.length;
   const totalChunks = Math.max(1, Math.ceil(totalRows / SUPPLIER_IMPORT_CHUNK_SIZE));
 
@@ -44,12 +46,19 @@ export async function bulkImportSupplierPrices(
     });
   }
 
-  const supplierPriceRollups = Number(await callAppRpc<number>("refresh_supplier_price_rollups"));
+  try {
+    const refreshResult = await callAppRpc<{ queued?: boolean; status?: string }>("queue_supplier_price_rollups_refresh");
+    rollupRefreshStatus = String(refreshResult?.status || (refreshResult?.queued ? "queued" : "requested"));
+  } catch (error) {
+    rollupRefreshStatus = "queue_failed";
+    rollupRefreshError = error instanceof Error ? error.message : String(error || "");
+  }
 
   return {
     processed,
     catalogSynced,
-    supplierPriceRollups,
+    rollupRefreshStatus,
+    rollupRefreshError,
     totalRows,
     totalChunks,
   };

@@ -16,6 +16,7 @@ const ALLOWED_RPCS = new Set([
   "cloud_master_page_fast",
   "cloud_master_priced_export_page_fast",
   "cloud_master_priced_page_fast",
+  "queue_supplier_price_rollups_refresh",
   "search_catalog_products",
   "cloud_quote_supplier_options",
   "cloud_resolve_quote_line",
@@ -25,7 +26,6 @@ const ALLOWED_RPCS = new Set([
   "get_cloud_quote",
   "list_cloud_quotes",
   "list_cloud_suppliers",
-  "refresh_supplier_price_rollups",
   "touch_user_presence",
 ]);
 
@@ -38,7 +38,7 @@ const SUPERADMIN_RPCS = new Set([
   "cloud_supplier_price_page",
   "deactivate_supplier_prices_by_filter",
   "list_cloud_suppliers",
-  "refresh_supplier_price_rollups",
+  "queue_supplier_price_rollups_refresh",
   "search_catalog_products",
 ]);
 
@@ -933,7 +933,7 @@ async function fetchCloudCatalogPageViaRest(
   }));
 }
 
-export default async (req: Request, _context: Context) => {
+export default async (req: Request, context: Context) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const supabaseUrl = Netlify.env.get("SUPABASE_URL");
@@ -964,6 +964,27 @@ export default async (req: Request, _context: Context) => {
 
     if (CUSTOMER_STAFF_RPCS.has(name) && !canAccessCustomerOps(caller.role)) {
       return json({ error: "Staff access required" }, 403);
+    }
+
+    if (name === "queue_supplier_price_rollups_refresh") {
+      const task = (async () => {
+        await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/refresh_supplier_price_rollups_logged`, {
+          method: "POST",
+          headers: {
+            apikey: supabaseAnonKey,
+            Authorization: authorizationHeader,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            p_organization_id: caller.organizationId,
+          }),
+        });
+      })().catch((error) => {
+        console.error("supplier price rollups refresh failed", error);
+      });
+
+      context.waitUntil(task);
+      return json({ ok: true, data: { queued: true, status: "queued", organization_id: caller.organizationId } });
     }
 
     if (name === "cloud_catalog_page" || name === "search_catalog_products") {
