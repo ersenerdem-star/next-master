@@ -25,6 +25,7 @@ const ALLOWED_RPCS = new Set([
   "get_cloud_quote",
   "list_cloud_quotes",
   "list_cloud_suppliers",
+  "refresh_supplier_price_rollups",
   "touch_user_presence",
 ]);
 
@@ -37,6 +38,7 @@ const SUPERADMIN_RPCS = new Set([
   "cloud_supplier_price_page",
   "deactivate_supplier_prices_by_filter",
   "list_cloud_suppliers",
+  "refresh_supplier_price_rollups",
   "search_catalog_products",
 ]);
 

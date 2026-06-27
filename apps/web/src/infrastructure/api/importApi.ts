@@ -44,9 +44,12 @@ export async function bulkImportSupplierPrices(
     });
   }
 
+  const supplierPriceRollups = Number(await callAppRpc<number>("refresh_supplier_price_rollups"));
+
   return {
     processed,
     catalogSynced,
+    supplierPriceRollups,
     totalRows,
     totalChunks,
   };
