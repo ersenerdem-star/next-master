@@ -12,10 +12,12 @@ import { getStatementPeriodLabel, isDateInStatementPeriod, openAccountStatementP
 import type { CompanyProfile } from "../../types/company";
 import type { LocalCustomer } from "../../types/customers";
 import type { LocalInvoice, LocalPaymentReceived } from "../../types/orders";
+import { useI18n } from "../../i18n/I18nProvider";
 
 type CustomerTab = "Other Details" | "Address" | "Contact Persons" | "Custom Fields" | "Reporting Tags" | "Remarks";
 
 export function CustomersPage() {
+  const { t, locale } = useI18n();
   const actionFeedback = useActionFeedback();
   const [customers, setCustomers] = useState<LocalCustomer[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -50,7 +52,7 @@ export function CustomersPage() {
         }
       } catch (caught) {
         if (!cancelled) {
-          actionFeedback.fail(caught instanceof Error ? caught.message : "Customers load failed");
+          actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.customers.loadFailed"));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -61,10 +63,24 @@ export function CustomersPage() {
     return () => {
       cancelled = true;
     };
-  }, [actionFeedback]);
+  }, [actionFeedback, t]);
 
   const tabs: CustomerTab[] = ["Other Details", "Address", "Contact Persons", "Custom Fields", "Reporting Tags", "Remarks"];
   const selectedCustomer = useMemo(() => customers.find((item) => item.id === selectedId) || null, [customers, selectedId]);
+
+  const customerTabLabels: Record<CustomerTab, string> = {
+    "Other Details": t("sales.customers.tabs.otherDetails"),
+    Address: t("sales.customers.tabs.address"),
+    "Contact Persons": t("sales.customers.tabs.contactPersons"),
+    "Custom Fields": t("sales.customers.tabs.customFields"),
+    "Reporting Tags": t("sales.customers.tabs.reportingTags"),
+    Remarks: t("sales.customers.tabs.remarks"),
+  };
+
+  const statementDocumentTypeLabels: Record<string, string> = {
+    Invoice: t("sales.customers.statement.invoice"),
+    Payment: t("sales.customers.statement.payment"),
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -96,7 +112,7 @@ export function CustomersPage() {
         if (!cancelled) {
           setInvoices([]);
           setPaymentsReceived([]);
-          actionFeedback.fail(caught instanceof Error ? caught.message : "Customer statement load failed");
+          actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.customers.statementLoadFailed"));
         }
       } finally {
         if (!cancelled) setLoadingStatement(false);
@@ -107,7 +123,7 @@ export function CustomersPage() {
     return () => {
       cancelled = true;
     };
-  }, [actionFeedback, selectedCustomer]);
+  }, [actionFeedback, selectedCustomer, t]);
 
   async function refreshCustomers(nextSelectedId?: string) {
     const rows = await fetchCustomers();
@@ -171,18 +187,32 @@ export function CustomersPage() {
 
   const statementColumns = useMemo(
     () => [
-      { key: "date", header: "Date", render: (row: AccountStatementRow) => row.date || "-" },
-      { key: "type", header: "Type", render: (row: AccountStatementRow) => row.document_type || "-" },
-      { key: "document", header: "Document", render: (row: AccountStatementRow) => row.document_no || "-" },
-      { key: "due", header: "Due Date", render: (row: AccountStatementRow) => row.due_date || "-" },
-      { key: "status", header: "Status", render: (row: AccountStatementRow) => row.status || "-" },
-      { key: "subtotal", header: "Subtotal", render: (row: AccountStatementRow) => `${row.subtotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
-      { key: "discount", header: "Discount", render: (row: AccountStatementRow) => `${row.discount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
-      { key: "shipping", header: "Shipping", render: (row: AccountStatementRow) => `${row.shipping.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
-      { key: "total", header: "Total", render: (row: AccountStatementRow) => `${row.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
+      { key: "date", header: t("sales.customers.statement.date"), render: (row: AccountStatementRow) => row.date || "-" },
+      { key: "type", header: t("sales.customers.statement.type"), render: (row: AccountStatementRow) => statementDocumentTypeLabels[row.document_type || ""] || row.document_type || "-" },
+      { key: "document", header: t("sales.customers.statement.document"), render: (row: AccountStatementRow) => row.document_no || "-" },
+      { key: "due", header: t("sales.customers.statement.dueDate"), render: (row: AccountStatementRow) => row.due_date || "-" },
+      { key: "status", header: t("sales.customers.statement.status"), render: (row: AccountStatementRow) => row.status ? t(`sales.statuses.${row.status}`) : "-" },
+      { key: "subtotal", header: t("sales.customers.statement.subtotal"), render: (row: AccountStatementRow) => `${row.subtotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
+      { key: "discount", header: t("sales.customers.statement.discount"), render: (row: AccountStatementRow) => `${row.discount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
+      { key: "shipping", header: t("sales.customers.statement.shipping"), render: (row: AccountStatementRow) => `${row.shipping.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
+      { key: "total", header: t("sales.customers.statement.total"), render: (row: AccountStatementRow) => `${row.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
     ],
-    [],
+    [statementDocumentTypeLabels, t],
   );
+
+  const visibleStatementPeriodLabel = useMemo(() => {
+    const parsed = new Date(`${statementAnchorDate}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return getStatementPeriodLabel(statementPeriodType, statementAnchorDate);
+    const year = parsed.getFullYear();
+    if (statementPeriodType === "monthly") {
+      return new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { month: "long", year: "numeric" }).format(parsed);
+    }
+    if (statementPeriodType === "quarterly") {
+      const quarter = Math.floor(parsed.getMonth() / 3) + 1;
+      return t("sales.customers.statement.periodLabelQuarter", { quarter, year });
+    }
+    return String(year);
+  }, [locale, statementAnchorDate, statementPeriodType, t]);
 
   function updateDraft(patch: Partial<LocalCustomer>) {
     setDraft((current) => (current ? { ...current, ...patch } : current));
@@ -198,7 +228,7 @@ export function CustomersPage() {
     setSelectedId(next.id);
     setDraft(next);
     setActiveTab("Other Details");
-    actionFeedback.succeed("New customer draft ready.");
+    actionFeedback.succeed(t("sales.customers.newDraftReady"));
   }
 
   async function handleSave() {
@@ -209,21 +239,21 @@ export function CustomersPage() {
         ? draft.seller_company_profile_id
         : "";
     if (!displayName) {
-      actionFeedback.fail("Display Name or Company Name is required.");
+      actionFeedback.fail(t("sales.customers.displayOrCompanyRequired"));
       return;
     }
     if (!draft.price_list_type) {
-      actionFeedback.fail("Price List is required.");
+      actionFeedback.fail(t("sales.customers.priceListRequired"));
       return;
     }
     if (draft.price_list_type === "Other" && draft.price_list_margin_percent == null) {
-      actionFeedback.fail("Price List Margin % is required when Price List is Other.");
+      actionFeedback.fail(t("sales.customers.priceListMarginRequired"));
       return;
     }
 
     try {
       setSaving(true);
-      actionFeedback.begin(`Saving customer ${displayName}...`);
+      actionFeedback.begin(t("sales.customers.savingCustomer", { customerName: displayName }));
       const saved = await upsertCustomer({
         ...draft,
         display_name: displayName,
@@ -233,9 +263,9 @@ export function CustomersPage() {
       setCustomers(rows);
       setSelectedId(saved.id);
       setDraft(saved);
-      actionFeedback.succeed(`Customer ${displayName} saved.`);
+      actionFeedback.succeed(t("sales.customers.customerSaved", { customerName: displayName }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Customer save failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.customers.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -244,7 +274,7 @@ export function CustomersPage() {
   function handleCancel() {
     if (selectedCustomer) {
       setDraft(selectedCustomer);
-      actionFeedback.succeed("Customer changes reverted.");
+      actionFeedback.succeed(t("sales.customers.changesReverted"));
       return;
     }
     const next = createEmptyCloudCustomer(customers);
@@ -254,14 +284,15 @@ export function CustomersPage() {
 
   async function handleDelete() {
     if (!draft?.id) return;
-    if (!confirm(`Delete customer ${draft.display_name || draft.company_name || draft.customer_number}?`)) return;
+    const customerLabel = draft.display_name || draft.company_name || draft.customer_number;
+    if (!confirm(t("sales.customers.deleteConfirm", { customerName: customerLabel }))) return;
     try {
-      actionFeedback.begin(`Deleting customer ${draft.display_name || draft.company_name || draft.customer_number}...`);
+      actionFeedback.begin(t("sales.customers.deletingCustomer", { customerName: customerLabel }));
       await deleteCustomer(draft.id);
       await refreshCustomers();
-      actionFeedback.succeed("Customer deleted.");
+      actionFeedback.succeed(t("sales.customers.customerDeleted"));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Customer delete failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.customers.deleteFailed"));
     }
   }
 
@@ -269,14 +300,14 @@ export function CustomersPage() {
     <div className="customers-shell">
       <aside className="customers-sidebar">
         <div className="customers-sidebar__header">
-          <h3>Customers</h3>
+          <h3>{t("sales.customers.title")}</h3>
           <Button className="button--compact" onClick={handleAddNew}>
-            + Add Customer
+            + {t("sales.customers.addCustomer")}
           </Button>
         </div>
         <div className="customers-list">
           {loading ? (
-            <div className="empty-state">Loading customers...</div>
+            <div className="empty-state">{t("sales.customers.loading")}</div>
           ) : customers.length ? (
             customers.map((customer) => (
               <button
@@ -289,23 +320,23 @@ export function CustomersPage() {
               </button>
             ))
           ) : (
-            <div className="empty-state">No customers yet.</div>
+            <div className="empty-state">{t("sales.customers.empty")}</div>
           )}
         </div>
       </aside>
 
       <section className="customers-editor">
         <div className="customers-editor__header">
-          <h2>Edit Customer</h2>
+          <h2>{t("sales.customers.editCustomer")}</h2>
           <div className="toolbar">
             <Button variant="secondary" onClick={handleCancel}>
-              Cancel
+              {t("sales.customers.cancel")}
             </Button>
             <Button variant="secondary" className="danger-button" onClick={() => void handleDelete()}>
-              Delete
+              {t("common.delete")}
             </Button>
-            <Button onClick={() => void handleSave()} busy={saving} busyLabel="Saving...">
-              Save
+            <Button onClick={() => void handleSave()} busy={saving} busyLabel={t("common.saving")}>
+              {t("sales.customers.save")}
             </Button>
           </div>
         </div>
@@ -314,79 +345,79 @@ export function CustomersPage() {
           <div className="customers-form">
             <div className="customers-edit-card">
               <div className="customers-form-row">
-                <div className="customers-form-row__label">Customer Type</div>
+                <div className="customers-form-row__label">{t("sales.customers.customerType")}</div>
                 <div className="customers-radio-group">
                   {(["Business", "Individual"] as const).map((item) => (
                     <label key={item} className="customers-radio">
                       <input type="radio" checked={draft.customer_type === item} onChange={() => updateDraft({ customer_type: item })} />
-                      <span>{item}</span>
+                      <span>{t(`sales.customers.customerTypes.${item}`)}</span>
                     </label>
                   ))}
                 </div>
               </div>
 
               <div className="customers-form-row">
-                <div className="customers-form-row__label">Primary Contact</div>
+                <div className="customers-form-row__label">{t("sales.customers.primaryContact")}</div>
                 <div className="customers-inline-fields customers-inline-fields--contact">
                   <label className="field customer-field customer-field--salutation">
                     <select className="field__input" value={draft.salutation} onChange={(event) => updateDraft({ salutation: event.target.value })}>
-                      <option value="">Salutation</option>
-                      <option value="Mr.">Mr.</option>
-                      <option value="Ms.">Ms.</option>
-                      <option value="Mrs.">Mrs.</option>
-                      <option value="Company">Company</option>
+                      <option value="">{t("sales.customers.salutation")}</option>
+                      <option value="Mr.">{t("sales.customers.salutations.mr")}</option>
+                      <option value="Ms.">{t("sales.customers.salutations.ms")}</option>
+                      <option value="Mrs.">{t("sales.customers.salutations.mrs")}</option>
+                      <option value="Company">{t("sales.customers.salutations.company")}</option>
                     </select>
                   </label>
-                  <Input value={draft.first_name} onChange={(value) => updateDraft({ first_name: value })} placeholder="First Name" />
-                  <Input value={draft.last_name} onChange={(value) => updateDraft({ last_name: value })} placeholder="Last Name" />
+                  <Input value={draft.first_name} onChange={(value) => updateDraft({ first_name: value })} placeholder={t("sales.customers.firstName")} />
+                  <Input value={draft.last_name} onChange={(value) => updateDraft({ last_name: value })} placeholder={t("sales.customers.lastName")} />
                 </div>
               </div>
 
               <div className="customers-form-row">
-                <div className="customers-form-row__label">Company Name</div>
+                <div className="customers-form-row__label">{t("sales.customers.companyName")}</div>
                 <div className="customers-field-wrap customers-field-wrap--wide">
                   <Input value={draft.company_name} onChange={(value) => updateDraft({ company_name: value })} />
                 </div>
               </div>
 
               <div className="customers-form-row">
-                <div className="customers-form-row__label customers-form-row__label customers-form-row__label--required">Display Name</div>
+                <div className="customers-form-row__label customers-form-row__label customers-form-row__label--required">{t("sales.customers.displayName")}</div>
                 <div className="customers-field-wrap customers-field-wrap--wide">
                   <Input value={draft.display_name} onChange={(value) => updateDraft({ display_name: value })} />
                 </div>
               </div>
 
               <div className="customers-form-row">
-                <div className="customers-form-row__label">Email Address</div>
+                <div className="customers-form-row__label">{t("sales.customers.emailAddress")}</div>
                 <div className="customers-field-wrap customers-field-wrap--wide">
                   <Input value={draft.email} onChange={(value) => updateDraft({ email: value })} />
                 </div>
               </div>
 
               <div className="customers-form-row">
-                <div className="customers-form-row__label customers-form-row__label--required">Customer Number</div>
+                <div className="customers-form-row__label customers-form-row__label--required">{t("sales.customers.customerNumber")}</div>
                 <div className="customers-field-wrap customers-field-wrap--medium">
                   <Input value={draft.customer_number} onChange={(value) => updateDraft({ customer_number: value })} />
                 </div>
               </div>
 
               <div className="customers-form-row">
-                <div className="customers-form-row__label">Phone</div>
+                <div className="customers-form-row__label">{t("sales.customers.phone")}</div>
                 <div className="customers-inline-fields customers-inline-fields--phone">
-                  <Input value={draft.work_phone} onChange={(value) => updateDraft({ work_phone: value })} placeholder="Work Phone" />
-                  <Input value={draft.mobile_phone} onChange={(value) => updateDraft({ mobile_phone: value })} placeholder="Mobile" />
+                  <Input value={draft.work_phone} onChange={(value) => updateDraft({ work_phone: value })} placeholder={t("sales.customers.workPhone")} />
+                  <Input value={draft.mobile_phone} onChange={(value) => updateDraft({ mobile_phone: value })} placeholder={t("sales.customers.mobile")} />
                 </div>
               </div>
 
               <div className="customers-form-row">
-                <div className="customers-form-row__label">Customer Language</div>
+                <div className="customers-form-row__label">{t("sales.customers.customerLanguage")}</div>
                 <div className="customers-field-wrap customers-field-wrap--wide">
                   <label className="field customer-field">
                     <select className="field__input" value={draft.language} onChange={(event) => updateDraft({ language: event.target.value })}>
-                      <option value="English">English</option>
-                      <option value="Turkish">Turkish</option>
-                      <option value="Russian">Russian</option>
-                      <option value="German">German</option>
+                      <option value="English">{t("sales.customers.languages.english")}</option>
+                      <option value="Turkish">{t("sales.customers.languages.turkish")}</option>
+                      <option value="Russian">{t("sales.customers.languages.russian")}</option>
+                      <option value="German">{t("sales.customers.languages.german")}</option>
                     </select>
                   </label>
                 </div>
@@ -396,7 +427,7 @@ export function CustomersPage() {
             <div className="customers-tabs">
               {tabs.map((tab) => (
                 <button key={tab} className={`customers-tab${activeTab === tab ? " active" : ""}`} onClick={() => setActiveTab(tab)}>
-                  {tab}
+                  {customerTabLabels[tab]}
                 </button>
               ))}
             </div>
@@ -405,11 +436,11 @@ export function CustomersPage() {
               {activeTab === "Other Details" ? (
                 <div className="customers-edit-card customers-edit-card--narrow">
                   <div className="customers-form-row">
-                    <div className="customers-form-row__label">Tax Rate</div>
+                    <div className="customers-form-row__label">{t("sales.customers.taxRate")}</div>
                     <div className="customers-field-wrap customers-field-wrap--wide">
                       <label className="field customer-field">
                         <select className="field__input" value={draft.tax_rate} onChange={(event) => updateDraft({ tax_rate: event.target.value })}>
-                          <option value="">Select a Tax</option>
+                          <option value="">{t("sales.customers.selectTax")}</option>
                           <option value="0%">0%</option>
                           <option value="10%">10%</option>
                           <option value="20%">20%</option>
@@ -418,46 +449,46 @@ export function CustomersPage() {
                     </div>
                   </div>
                   <div className="customers-form-row">
-                    <div className="customers-form-row__label">Company ID</div>
+                    <div className="customers-form-row__label">{t("sales.customers.companyId")}</div>
                     <div className="customers-field-wrap customers-field-wrap--wide">
                       <Input value={draft.company_id} onChange={(value) => updateDraft({ company_id: value })} />
                     </div>
                   </div>
                   <div className="customers-form-row">
-                    <div className="customers-form-row__label">Currency</div>
+                    <div className="customers-form-row__label">{t("sales.customers.currency")}</div>
                     <div className="customers-field-wrap customers-field-wrap--wide">
                       <label className="field customer-field">
                         <select className="field__input" value={draft.currency} onChange={(event) => updateDraft({ currency: event.target.value })}>
-                          <option value="EUR">EUR - Euro</option>
-                          <option value="USD">USD - US Dollar</option>
-                          <option value="TRY">TRY - Turkish Lira</option>
+                          <option value="EUR">{t("sales.customers.currencies.eur")}</option>
+                          <option value="USD">{t("sales.customers.currencies.usd")}</option>
+                          <option value="TRY">{t("sales.customers.currencies.try")}</option>
                         </select>
                       </label>
                     </div>
                   </div>
                   <div className="customers-form-row">
-                    <div className="customers-form-row__label">Payment Terms</div>
+                    <div className="customers-form-row__label">{t("sales.customers.paymentTerms")}</div>
                     <div className="customers-field-wrap customers-field-wrap--wide">
                       <label className="field customer-field">
                         <select className="field__input" value={draft.payment_terms} onChange={(event) => updateDraft({ payment_terms: event.target.value })}>
-                          <option value="Cash in Advance">Cash in Advance</option>
-                          <option value="Due on Receipt">Due on Receipt</option>
-                          <option value="Net 7">Net 7</option>
-                          <option value="Net 15">Net 15</option>
-                          <option value="Net 30">Net 30</option>
-                          <option value="Net 60">Net 60</option>
+                          <option value="Cash in Advance">{t("sales.customers.paymentTerms.cashInAdvance")}</option>
+                          <option value="Due on Receipt">{t("sales.customers.paymentTerms.dueOnReceipt")}</option>
+                          <option value="Net 7">{t("sales.customers.paymentTerms.net7")}</option>
+                          <option value="Net 15">{t("sales.customers.paymentTerms.net15")}</option>
+                          <option value="Net 30">{t("sales.customers.paymentTerms.net30")}</option>
+                          <option value="Net 60">{t("sales.customers.paymentTerms.net60")}</option>
                         </select>
                       </label>
                     </div>
                   </div>
                   <div className="customers-form-row">
-                    <div className="customers-form-row__label">Contract Nr</div>
+                    <div className="customers-form-row__label">{t("sales.customers.contractNr")}</div>
                     <div className="customers-field-wrap customers-field-wrap--wide">
                       <Input value={draft.contract_nr} onChange={(value) => updateDraft({ contract_nr: value })} />
                     </div>
                   </div>
                   <div className="customers-form-row">
-                    <div className="customers-form-row__label">Main Seller</div>
+                    <div className="customers-form-row__label">{t("sales.customers.mainSeller")}</div>
                     <div className="customers-field-wrap customers-field-wrap--wide">
                       <label className="field customer-field">
                         <select
@@ -465,7 +496,7 @@ export function CustomersPage() {
                           value={draft.seller_company_profile_id}
                           onChange={(event) => updateDraft({ seller_company_profile_id: event.target.value })}
                         >
-                          <option value="">Default company profile</option>
+                          <option value="">{t("sales.customers.defaultCompanyProfile")}</option>
                           {companyProfiles.map((item) => (
                             <option key={item.id} value={item.id}>
                               {item.companyName}
@@ -476,7 +507,7 @@ export function CustomersPage() {
                     </div>
                   </div>
                   <div className="customers-form-row">
-                    <div className="customers-form-row__label">Price List</div>
+                    <div className="customers-form-row__label">{t("sales.customers.priceList")}</div>
                     <div className="customers-field-wrap customers-field-wrap--wide">
                       <label className="field customer-field">
                         <select
@@ -490,18 +521,18 @@ export function CustomersPage() {
                             });
                           }}
                         >
-                          <option value="">Select price list</option>
-                          <option value="A">A Price List</option>
-                          <option value="B">B Price List</option>
-                          <option value="C">C Price List</option>
-                          <option value="Other">Other</option>
+                          <option value="">{t("sales.customers.selectPriceList")}</option>
+                          <option value="A">{t("sales.customers.priceLists.a")}</option>
+                          <option value="B">{t("sales.customers.priceLists.b")}</option>
+                          <option value="C">{t("sales.customers.priceLists.c")}</option>
+                          <option value="Other">{t("sales.customers.priceLists.other")}</option>
                         </select>
                       </label>
                     </div>
                   </div>
                   {draft.price_list_type && draft.price_list_type !== "C" ? (
                     <div className="customers-form-row">
-                      <div className="customers-form-row__label">C Price Rule</div>
+                      <div className="customers-form-row__label">{t("sales.customers.cPriceRule")}</div>
                       <div className="customers-field-wrap customers-field-wrap--wide">
                         <label className="field customer-field">
                           <select
@@ -509,8 +540,8 @@ export function CustomersPage() {
                             value={draft.portal_c_price_mode}
                             onChange={(event) => updateDraft({ portal_c_price_mode: event.target.value as LocalCustomer["portal_c_price_mode"] })}
                           >
-                            <option value="standard">Use selected account price list only</option>
-                            <option value="prefer_c_when_available">Use C prices where available</option>
+                            <option value="standard">{t("sales.customers.cPriceRules.standard")}</option>
+                            <option value="prefer_c_when_available">{t("sales.customers.cPriceRules.preferCWhenAvailable")}</option>
                           </select>
                         </label>
                       </div>
@@ -518,7 +549,7 @@ export function CustomersPage() {
                   ) : null}
                   {draft.price_list_type === "Other" ? (
                     <div className="customers-form-row">
-                      <div className="customers-form-row__label customers-form-row__label--required">Price List Margin %</div>
+                      <div className="customers-form-row__label customers-form-row__label--required">{t("sales.customers.priceListMargin")}</div>
                       <div className="customers-field-wrap customers-field-wrap--medium">
                         <Input
                           value={draft.price_list_margin_percent == null ? "" : String(draft.price_list_margin_percent)}
@@ -540,7 +571,7 @@ export function CustomersPage() {
               {activeTab === "Address" ? (
                 <div className="customers-edit-card customers-edit-card--narrow">
                   <div className="customers-form-row customers-form-row--top">
-                    <div className="customers-form-row__label">Billing Address</div>
+                    <div className="customers-form-row__label">{t("sales.customers.billingAddress")}</div>
                     <div className="customers-field-wrap customers-field-wrap--full">
                       <label className="field customer-field">
                         <textarea className="field__input field__input--textarea" value={draft.billing_address} onChange={(event) => updateDraft({ billing_address: event.target.value })} />
@@ -548,7 +579,7 @@ export function CustomersPage() {
                     </div>
                   </div>
                   <div className="customers-form-row customers-form-row--top">
-                    <div className="customers-form-row__label">Shipping Address</div>
+                    <div className="customers-form-row__label">{t("sales.customers.shippingAddress")}</div>
                     <div className="customers-field-wrap customers-field-wrap--full">
                       <label className="field customer-field">
                         <textarea className="field__input field__input--textarea" value={draft.shipping_address} onChange={(event) => updateDraft({ shipping_address: event.target.value })} />
@@ -561,10 +592,10 @@ export function CustomersPage() {
               {activeTab === "Contact Persons" ? (
                 <div className="customers-edit-card customers-edit-card--narrow">
                   <div className="customers-form-row customers-form-row--top">
-                    <div className="customers-form-row__label">Contact Persons</div>
+                    <div className="customers-form-row__label">{t("sales.customers.contactPersons")}</div>
                     <div className="customers-field-wrap customers-field-wrap--full">
                       <label className="field customer-field">
-                        <textarea className="field__input field__input--textarea" value={draft.contact_persons} onChange={(event) => updateDraft({ contact_persons: event.target.value })} placeholder="Name, role, phone, email..." />
+                        <textarea className="field__input field__input--textarea" value={draft.contact_persons} onChange={(event) => updateDraft({ contact_persons: event.target.value })} placeholder={t("sales.customers.contactPersonsPlaceholder")} />
                       </label>
                     </div>
                   </div>
@@ -574,10 +605,10 @@ export function CustomersPage() {
               {activeTab === "Custom Fields" ? (
                 <div className="customers-edit-card customers-edit-card--narrow">
                   <div className="customers-form-row customers-form-row--top">
-                    <div className="customers-form-row__label">Custom Fields</div>
+                    <div className="customers-form-row__label">{t("sales.customers.customFields")}</div>
                     <div className="customers-field-wrap customers-field-wrap--full">
                       <label className="field customer-field">
-                        <textarea className="field__input field__input--textarea" value={draft.custom_fields} onChange={(event) => updateDraft({ custom_fields: event.target.value })} placeholder="Internal custom field notes..." />
+                        <textarea className="field__input field__input--textarea" value={draft.custom_fields} onChange={(event) => updateDraft({ custom_fields: event.target.value })} placeholder={t("sales.customers.customFieldsPlaceholder")} />
                       </label>
                     </div>
                   </div>
@@ -587,10 +618,10 @@ export function CustomersPage() {
               {activeTab === "Reporting Tags" ? (
                 <div className="customers-edit-card customers-edit-card--narrow">
                   <div className="customers-form-row customers-form-row--top">
-                    <div className="customers-form-row__label">Reporting Tags</div>
+                    <div className="customers-form-row__label">{t("sales.customers.reportingTags")}</div>
                     <div className="customers-field-wrap customers-field-wrap--full">
                       <label className="field customer-field">
-                        <textarea className="field__input field__input--textarea" value={draft.reporting_tags} onChange={(event) => updateDraft({ reporting_tags: event.target.value })} placeholder="Region, channel, sales owner..." />
+                        <textarea className="field__input field__input--textarea" value={draft.reporting_tags} onChange={(event) => updateDraft({ reporting_tags: event.target.value })} placeholder={t("sales.customers.reportingTagsPlaceholder")} />
                       </label>
                     </div>
                   </div>
@@ -600,10 +631,10 @@ export function CustomersPage() {
               {activeTab === "Remarks" ? (
                 <div className="customers-edit-card customers-edit-card--narrow">
                   <div className="customers-form-row customers-form-row--top">
-                    <div className="customers-form-row__label">Remarks</div>
+                    <div className="customers-form-row__label">{t("sales.customers.remarks")}</div>
                     <div className="customers-field-wrap customers-field-wrap--full">
                       <label className="field customer-field">
-                        <textarea className="field__input field__input--textarea" value={draft.remarks} onChange={(event) => updateDraft({ remarks: event.target.value })} placeholder="Any customer remarks..." />
+                        <textarea className="field__input field__input--textarea" value={draft.remarks} onChange={(event) => updateDraft({ remarks: event.target.value })} placeholder={t("sales.customers.remarksPlaceholder")} />
                       </label>
                     </div>
                   </div>
@@ -611,19 +642,19 @@ export function CustomersPage() {
               ) : null}
             </div>
 
-            <SectionCard title="Account Statement">
+            <SectionCard title={t("sales.customers.statement.title")}>
                 <div className="toolbar toolbar--wrap">
                   <Select
-                    label="Period"
+                    label={t("sales.customers.statement.period")}
                   value={statementPeriodType}
                   options={[
-                    { value: "monthly", label: "Monthly" },
-                    { value: "quarterly", label: "Quarterly" },
-                    { value: "yearly", label: "Yearly" },
+                    { value: "monthly", label: t("sales.customers.statement.periods.monthly") },
+                    { value: "quarterly", label: t("sales.customers.statement.periods.quarterly") },
+                    { value: "yearly", label: t("sales.customers.statement.periods.yearly") },
                   ]}
                   onChange={(value) => setStatementPeriodType(value as StatementPeriodType)}
                   />
-                  <Input label="Anchor Date" type="date" value={statementAnchorDate} onChange={setStatementAnchorDate} />
+                  <Input label={t("sales.customers.statement.anchorDate")} type="date" value={statementAnchorDate} onChange={setStatementAnchorDate} />
                   <Button
                     disabled={loadingStatement}
                     variant="secondary"
@@ -639,15 +670,15 @@ export function CustomersPage() {
                     })
                   }
                   >
-                    Print / PDF
+                    {t("sales.customers.statement.printPdf")}
                   </Button>
                 </div>
-                {loadingStatement ? <div className="empty-state">Loading customer statement...</div> : null}
+                {loadingStatement ? <div className="empty-state">{t("sales.customers.statement.loading")}</div> : null}
                 <div className="meta-row">
-                  <span>{customerStatementRows.length.toLocaleString("en-US")} statement rows</span>
-                  <span>{getStatementPeriodLabel(statementPeriodType, statementAnchorDate)}</span>
+                  <span>{t("sales.customers.statement.rowCount", { count: customerStatementRows.length.toLocaleString("en-US") })}</span>
+                  <span>{visibleStatementPeriodLabel}</span>
               </div>
-              <DataTable rows={customerStatementRows} columns={statementColumns} emptyText="No invoice activity in the selected period." />
+              <DataTable rows={customerStatementRows} columns={statementColumns} emptyText={t("sales.customers.statement.empty")} />
             </SectionCard>
           </div>
         ) : null}
