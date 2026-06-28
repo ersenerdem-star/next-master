@@ -14,6 +14,12 @@ const localeStorageKey = "next-master-locale";
 
 type MessageTree = Record<string, Record<string, string>>;
 
+type LocalePreferenceInput = {
+  preferredLocale?: string | null;
+  storedLocale?: string | null;
+  browserLocale?: string | null;
+};
+
 type I18nContextValue = {
   locale: LocaleCode;
   localeOptions: Array<{ value: LocaleCode; label: string }>;
@@ -28,17 +34,22 @@ const messagesByLocale: Record<LocaleCode, MessageTree> = {
   tr: trMessages,
 };
 
-function isLocaleCode(value: string | null | undefined): value is LocaleCode {
-  return value === "en" || value === "tr";
+function normalizeLocaleCandidate(value: string | null | undefined): LocaleCode | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized.startsWith("tr")) return "tr";
+  if (normalized.startsWith("en")) return "en";
+  return null;
 }
 
-function readStoredLocale(): LocaleCode {
-  if (typeof window === "undefined") return "en";
+function readStoredLocale(): string | null {
+  if (typeof window === "undefined") return null;
   try {
     const stored = window.localStorage.getItem(localeStorageKey);
-    return isLocaleCode(stored) ? stored : "en";
+    return stored;
   } catch {
-    return "en";
+    return null;
   }
 }
 
@@ -51,12 +62,36 @@ function writeStoredLocale(locale: LocaleCode) {
   }
 }
 
+function readBrowserLocale(): string | null {
+  if (typeof navigator === "undefined") return null;
+  const candidates = [...(navigator.languages || []), navigator.language];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const normalized = candidate.trim();
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
 function resolveMessage(tree: MessageTree, path: string) {
   const [namespace, ...rest] = path.split(".");
   if (!namespace || !rest.length) return undefined;
   const group = tree[namespace];
   if (!group) return undefined;
   return group[rest.join(".")];
+}
+
+export function resolveLocalePreference({
+  preferredLocale,
+  storedLocale,
+  browserLocale,
+}: LocalePreferenceInput): LocaleCode {
+  return (
+    normalizeLocaleCandidate(preferredLocale) ??
+    normalizeLocaleCandidate(storedLocale) ??
+    normalizeLocaleCandidate(browserLocale) ??
+    "en"
+  );
 }
 
 function createTranslator(locale: LocaleCode) {
@@ -71,14 +106,32 @@ function createTranslator(locale: LocaleCode) {
   };
 }
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<LocaleCode>(() => readStoredLocale());
+export function I18nProvider({
+  children,
+  preferredLocale,
+}: {
+  children: ReactNode;
+  preferredLocale?: string | null;
+}) {
+  const [locale, setLocaleState] = useState<LocaleCode>(() =>
+    resolveLocalePreference({
+      preferredLocale,
+      storedLocale: readStoredLocale(),
+      browserLocale: readBrowserLocale(),
+    }),
+  );
 
   const t = useMemo(() => createTranslator(locale), [locale]);
 
   const setLocale = useCallback((nextLocale: LocaleCode) => {
     setLocaleState(nextLocale);
   }, []);
+
+  useEffect(() => {
+    const nextLocale = normalizeLocaleCandidate(preferredLocale);
+    if (!nextLocale) return;
+    setLocaleState((current) => (current === nextLocale ? current : nextLocale));
+  }, [preferredLocale]);
 
   useEffect(() => {
     writeStoredLocale(locale);
