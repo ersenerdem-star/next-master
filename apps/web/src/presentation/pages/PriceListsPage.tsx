@@ -16,6 +16,9 @@ import { Select } from "../components/common/Select";
 import { downloadCPriceListTemplate } from "../../shared/importTemplates";
 import { assertSpreadsheetFile, isSpreadsheetTextExtension, readSpreadsheetMatrix } from "../../shared/spreadsheetImport";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
+import { useI18n } from "../../i18n/I18nProvider";
+
+type TranslateFn = (path: string, params?: Record<string, string | number>) => string;
 
 function normalizeImportHeader(value: string) {
   return String(value || "")
@@ -48,7 +51,7 @@ function isOldCodeCoverageTimeoutError(error: unknown) {
   );
 }
 
-async function parseCPriceImportFile(file: File) {
+async function parseCPriceImportFile(file: File, t: TranslateFn) {
   const extension = file.name.split(".").pop()?.toLowerCase() || "";
   let parsedRows: string[][] = [];
 
@@ -58,7 +61,7 @@ async function parseCPriceImportFile(file: File) {
   } else if (["xlsx", "xlsm", "xls"].includes(extension)) {
     parsedRows = await readSpreadsheetMatrix(file);
   } else {
-    throw new Error("Upload CSV, TSV, TXT, XLSX or XLS files.");
+    throw new Error(t("sales.priceLists.uploadSpreadsheetFiles"));
   }
 
   const [header = [], ...dataRows] = parsedRows;
@@ -103,9 +106,11 @@ async function parseCPriceImportFile(file: File) {
 }
 
 export function PriceListsPage() {
+  const { t } = useI18n();
   const actionFeedback = useActionFeedback();
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [status, setStatus] = useState("");
+  const [statusTone, setStatusTone] = useState<"success" | "error" | null>(null);
   const [marginA, setMarginA] = useState("10");
   const [marginB, setMarginB] = useState("15");
   const [showCImportDialog, setShowCImportDialog] = useState(false);
@@ -134,7 +139,8 @@ export function PriceListsPage() {
       } catch (caught) {
         if (!cancelled) {
           setBrands([]);
-          setStatus(caught instanceof Error ? caught.message : "Price list settings load failed");
+          setStatus(caught instanceof Error ? caught.message : t("sales.priceLists.loadFailed"));
+          setStatusTone("error");
         }
       }
     }
@@ -146,38 +152,47 @@ export function PriceListsPage() {
   }, []);
 
   const cBrandOptions = [
+    { value: "", label: t("sales.priceLists.selectBrand") },
     ...brands.map((item) => ({ value: item.name, label: item.name })),
-    { value: "__new__", label: "New brand..." },
+    { value: "__new__", label: t("sales.priceLists.newBrand") },
   ];
 
   const cImportModeOptions = [
-    { value: "replace", label: "Replace selected brand in C list" },
-    { value: "merge", label: "Merge into selected brand in C list" },
+    { value: "replace", label: t("sales.priceLists.replaceCList") },
+    { value: "merge", label: t("sales.priceLists.mergeCList") },
   ];
   const downloadListOptions = [
-    { value: "A", label: "A Price List" },
-    { value: "B", label: "B Price List" },
-    { value: "C", label: "C Price List" },
+    { value: "A", label: t("sales.priceLists.aPriceList") },
+    { value: "B", label: t("sales.priceLists.bPriceList") },
+    { value: "C", label: t("sales.priceLists.cPriceList") },
+  ];
+  const downloadBrandOptions = [
+    { value: "", label: brands.length ? t("sales.priceLists.selectBrand") : t("sales.priceLists.noBrandsAvailable") },
+    ...brands.map((item) => ({ value: item.name, label: item.name })),
   ];
 
   async function handleSaveMargins() {
     const nextA = Number(marginA);
     const nextB = Number(marginB);
     if (!Number.isFinite(nextA) || !Number.isFinite(nextB)) {
-      setStatus("A and B margins must be numeric.");
+      setStatus(t("sales.priceLists.marginsMustBeNumeric"));
+      setStatusTone("error");
       return;
     }
 
     try {
       setStatus("");
+      setStatusTone(null);
       setSavingMargins(true);
-      actionFeedback.begin("Saving A and B margin settings...");
+      actionFeedback.begin(t("sales.priceLists.savingMargins"));
       await Promise.all([updateMarginPriceList("A", nextA), updateMarginPriceList("B", nextB)]);
-      setStatus("A and B margins updated.");
-      actionFeedback.succeed("A and B margins updated.");
+      setStatus(t("sales.priceLists.marginsUpdated"));
+      setStatusTone("success");
+      actionFeedback.succeed(t("sales.priceLists.marginsUpdated"));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Margin update failed";
+      const message = caught instanceof Error ? caught.message : t("sales.priceLists.marginUpdateFailed");
       setStatus(message);
+      setStatusTone("error");
       actionFeedback.fail(message);
     } finally {
       setSavingMargins(false);
@@ -187,17 +202,19 @@ export function PriceListsPage() {
   async function handleImportCPriceList() {
     const activeBrand = cImportBrand === "__new__" ? cImportBrandName.trim() : cImportBrand;
     if (!activeBrand || !cImportFile) {
-      setStatus("Brand and file are required for C price import.");
+      setStatus(t("sales.priceLists.brandAndFileRequired"));
+      setStatusTone("error");
       return;
     }
 
     try {
       setStatus("");
+      setStatusTone(null);
       setImportingC(true);
-      actionFeedback.begin(`Importing C price list for ${activeBrand}...`);
-      const rows = await parseCPriceImportFile(cImportFile);
+      actionFeedback.begin(t("sales.priceLists.importingForBrand", { brandName: activeBrand }));
+      const rows = await parseCPriceImportFile(cImportFile, t);
       if (!rows.length) {
-        throw new Error("No valid C price rows found in file.");
+        throw new Error(t("sales.priceLists.noValidRows"));
       }
       const result = await importCPriceList({
         brandName: activeBrand,
@@ -214,12 +231,16 @@ export function PriceListsPage() {
       }
       setCImportFile(null);
       setShowCImportDialog(false);
-      const duplicateNote = result.duplicateCount ? ` ${result.duplicateCount} duplicate code row collapsed.` : "";
-      setStatus(`C price list imported for ${result.brandName}. ${result.uniqueCount} unique rows loaded.${duplicateNote}`);
-      actionFeedback.succeed(`C price list imported for ${result.brandName}.`);
+      const duplicateNote = result.duplicateCount
+        ? t("sales.priceLists.importDuplicateNote", { count: result.duplicateCount })
+        : "";
+      setStatus(t("sales.priceLists.importedStatus", { brandName: result.brandName, uniqueCount: result.uniqueCount, duplicateNote }).trim());
+      setStatusTone("success");
+      actionFeedback.succeed(t("sales.priceLists.importedForBrand", { brandName: result.brandName }));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "C price import failed";
+      const message = caught instanceof Error ? caught.message : t("sales.priceLists.cImportFailed");
       setStatus(message);
+      setStatusTone("error");
       actionFeedback.fail(message);
     } finally {
       setImportingC(false);
@@ -228,14 +249,16 @@ export function PriceListsPage() {
 
   async function handleDownloadPriceList() {
     if (!downloadBrand) {
-      setStatus("Select a brand before downloading a price list.");
+      setStatus(t("sales.priceLists.selectBrandBeforeDownload"));
+      setStatusTone("error");
       return;
     }
 
     try {
       setStatus("");
+      setStatusTone(null);
       setDownloadingPriceList(true);
-      actionFeedback.begin(`Preparing ${downloadListType} price list for ${downloadBrand}...`);
+      actionFeedback.begin(t("sales.priceLists.preparingDownload", { listType: downloadListType, brandName: downloadBrand }));
       const sheetRows: Array<Array<string | number | null>> = [["New_Code", "Old_Codes", "Brand", "Product_Name", "OEM_No", "HS_Code", "Origin", "Weight_kg", "Price_List_Type", "Sales_Price_EUR", "Notes"]];
       let oldCodeCoverageTimedOut = false;
 
@@ -317,13 +340,15 @@ export function PriceListsPage() {
       downloadBlob(`price-list-${downloadBrand.toLowerCase().replace(/\s+/g, "-")}-${downloadListType.toLowerCase()}.xlsx`, blob);
       setStatus(
         oldCodeCoverageTimedOut
-          ? `${downloadListType} price list downloaded for ${downloadBrand}. Old code column was skipped because coverage lookup took too long.`
-          : `${downloadListType} price list downloaded for ${downloadBrand}.`,
+          ? t("sales.priceLists.downloadedOldCodesSkipped", { listType: downloadListType, brandName: downloadBrand })
+          : t("sales.priceLists.downloaded", { listType: downloadListType, brandName: downloadBrand }),
       );
-      actionFeedback.succeed(`${downloadListType} price list downloaded for ${downloadBrand}.`);
+      setStatusTone("success");
+      actionFeedback.succeed(t("sales.priceLists.downloaded", { listType: downloadListType, brandName: downloadBrand }));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Price list download failed";
+      const message = caught instanceof Error ? caught.message : t("sales.priceLists.downloadFailed");
       setStatus(message);
+      setStatusTone("error");
       actionFeedback.fail(message);
     } finally {
       setDownloadingPriceList(false);
@@ -331,54 +356,54 @@ export function PriceListsPage() {
   }
 
   return (
-    <SectionCard title="Price Lists">
+    <SectionCard title={t("sales.priceLists.title")}>
       <div className="settings-grid">
         <div className="settings-item">
-          <span className="settings-label">A Margin %</span>
-          <Input value={marginA} onChange={setMarginA} />
+          <span className="settings-label">{t("sales.priceLists.aMarginLabel")}</span>
+          <Input value={marginA} placeholder={t("sales.priceLists.marginPlaceholder")} onChange={setMarginA} />
         </div>
         <div className="settings-item">
-          <span className="settings-label">B Margin %</span>
-          <Input value={marginB} onChange={setMarginB} />
+          <span className="settings-label">{t("sales.priceLists.bMarginLabel")}</span>
+          <Input value={marginB} placeholder={t("sales.priceLists.marginPlaceholder")} onChange={setMarginB} />
         </div>
       </div>
       <div className="toolbar toolbar--wrap">
-        <Button onClick={() => void handleSaveMargins()} busy={savingMargins} busyLabel="Saving...">
-          Save A/B Margins
+        <Button onClick={() => void handleSaveMargins()} busy={savingMargins} busyLabel={t("common.saving")}>
+          {t("sales.priceLists.saveMargins")}
         </Button>
         <Button variant="secondary" onClick={() => setShowCImportDialog(true)}>
-          Upload C Price List
+          {t("sales.priceLists.uploadCPriceList")}
         </Button>
       </div>
       <div className="settings-grid">
         <div className="settings-item">
-          <span className="settings-label">Download Brand</span>
-          <Select value={downloadBrand} options={brands.map((item) => ({ value: item.name, label: item.name }))} onChange={setDownloadBrand} />
+          <span className="settings-label">{t("sales.priceLists.downloadBrand")}</span>
+          <Select value={downloadBrand} options={downloadBrandOptions} onChange={setDownloadBrand} />
         </div>
         <div className="settings-item">
-          <span className="settings-label">Price List Type</span>
+          <span className="settings-label">{t("sales.priceLists.priceListType")}</span>
           <Select value={downloadListType} options={downloadListOptions} onChange={(value) => setDownloadListType(value as "A" | "B" | "C")} />
         </div>
       </div>
       <div className="toolbar toolbar--wrap">
-        <Button variant="secondary" onClick={() => void handleDownloadPriceList()} disabled={!downloadBrand} busy={downloadingPriceList} busyLabel="Preparing...">
-          Download Price List
+        <Button variant="secondary" onClick={() => void handleDownloadPriceList()} disabled={!downloadBrand} busy={downloadingPriceList} busyLabel={t("sales.priceLists.preparing")}>
+          {t("sales.priceLists.downloadPriceList")}
         </Button>
       </div>
-      {status ? <div className={status.includes("updated") || status.includes("imported") ? "success-text" : "error-text"}>{status}</div> : null}
+      {status ? <div className={statusTone === "success" ? "success-text" : "error-text"}>{status}</div> : null}
 
       {showCImportDialog ? (
         <div className="modal-backdrop">
           <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
             <div className="modal-card__header draggable-surface__handle">
               <div>
-                <h3>C Price List Import</h3>
-                <p>Manual special prices. These values override formula-based pricing for customer C.</p>
+                <h3>{t("sales.priceLists.modalTitle")}</h3>
+                <p>{t("sales.priceLists.modalDescription")}</p>
               </div>
             </div>
             <div className="modal-form-grid">
               <Select
-                label="Brand"
+                label={t("sales.priceLists.brand")}
                 value={cImportBrand}
                 options={cBrandOptions}
                 onChange={(value) => {
@@ -391,15 +416,16 @@ export function PriceListsPage() {
                 }}
               />
               <Input
-                label="Brand Name"
+                label={t("sales.priceLists.brandName")}
                 value={cImportBrandName}
+                placeholder={t("sales.priceLists.brandNamePlaceholder")}
                 onChange={setCImportBrandName}
                 disabled={cImportBrand !== "__new__"}
               />
-              <Select label="Import Mode" value={cImportMode} options={cImportModeOptions} onChange={setCImportMode} />
-              <Input label="Target" value="Customer C manual price list" onChange={() => undefined} disabled />
+              <Select label={t("sales.priceLists.importMode")} value={cImportMode} options={cImportModeOptions} onChange={setCImportMode} />
+              <Input label={t("sales.priceLists.target")} value={t("sales.priceLists.targetCustomerCManual")} onChange={() => undefined} disabled />
               <label className="field">
-                <span className="field__label">File</span>
+                <span className="field__label">{t("sales.priceLists.file")}</span>
                 <input
                   className="field__input"
                   type="file"
@@ -407,19 +433,19 @@ export function PriceListsPage() {
                   onChange={(event) => setCImportFile(event.target.files?.[0] ?? null)}
                 />
               </label>
-              <Input label="Selected file" value={cImportFile?.name ?? ""} onChange={() => undefined} disabled />
+              <Input label={t("sales.priceLists.selectedFile")} value={cImportFile?.name ?? ""} placeholder={t("sales.priceLists.noFileSelected")} onChange={() => undefined} disabled />
             </div>
-            <div className="modal-hint">Brand, import mode, target, and file are required. C list is fully manual and not formula-based.</div>
+            <div className="modal-hint">{t("sales.priceLists.modalHint")}</div>
             <div className="toolbar">
               <Button
                 variant="secondary"
                 className="button--compact"
                 onClick={() => {
                   downloadCPriceListTemplate();
-                  actionFeedback.succeed("C price list sample template downloaded.");
+                  actionFeedback.succeed(t("sales.priceLists.sampleTemplateDownloaded"));
                 }}
               >
-                Download Sample Template
+                {t("sales.priceLists.downloadSampleTemplate")}
               </Button>
             </div>
             <div className="modal-actions">
@@ -430,15 +456,15 @@ export function PriceListsPage() {
                   setCImportFile(null);
                 }}
               >
-                Cancel Import
+                {t("sales.priceLists.cancelImport")}
               </Button>
               <Button
                 onClick={() => void handleImportCPriceList()}
                 disabled={!cImportBrand || !(cImportBrand === "__new__" ? cImportBrandName.trim() : true) || !cImportMode || !cImportFile}
                 busy={importingC}
-                busyLabel="Importing..."
+                busyLabel={t("sales.priceLists.importing")}
               >
-                Import
+                {t("sales.priceLists.import")}
               </Button>
             </div>
           </DraggableSurface>
