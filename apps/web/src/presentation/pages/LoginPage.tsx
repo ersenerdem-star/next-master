@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { supabaseClient } from "../../infrastructure/api/supabaseClient";
 import { Button } from "../components/common/Button";
 import { Input } from "../components/common/Input";
+import { Select } from "../components/common/Select";
+import { useI18n, type LocaleCode } from "../../i18n/I18nProvider";
 
 type LoginPageProps = {
   onSuccess: () => void;
@@ -47,10 +49,11 @@ function buildLoginInitials(value: string) {
 }
 
 export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
+  const { locale, localeOptions, setLocale, t } = useI18n();
   const [branding, setBranding] = useState<AdminLoginBranding>({
     companyName: "Asad Otomotiv",
     logoDataUrl: "",
-    label: "Admin Workspace",
+    label: "",
   });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -88,7 +91,7 @@ export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
     setError("");
     setMessage("");
     const candidates = authEmailCandidates(email);
-    let loginError: Error | null = new Error("Invalid login credentials");
+    let loginError: Error | null = new Error(t("auth.invalidLoginCredentials"));
 
     for (const candidate of candidates) {
       const { error } = await supabaseClient.auth.signInWithPassword({
@@ -112,7 +115,7 @@ export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
 
   async function handleForgotPassword() {
     if (!email.trim()) {
-      setError("Enter your user name or email first.");
+      setError(t("auth.enterUserNameFirst"));
       return;
     }
 
@@ -130,16 +133,16 @@ export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
       return;
     }
 
-    setMessage("Reset email sent. Open the link in your inbox to set a new password.");
+    setMessage(t("auth.resetEmailSent"));
   }
 
   async function handleResetPassword() {
     if (!password.trim()) {
-      setError("Enter a new password.");
+      setError(t("auth.enterNewPassword"));
       return;
     }
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError(t("auth.passwordsDoNotMatch"));
       return;
     }
 
@@ -160,10 +163,11 @@ export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
     onSuccess();
   }
 
-  const title = recoveryMode ? "Reset Password" : "Next Master";
+  const title = recoveryMode ? t("auth.resetPassword") : "Next Master";
   const description = recoveryMode
-    ? "Enter your new password to finish recovery."
-    : "Login with your account to access the operational workspace.";
+    ? t("auth.resetPasswordDescription")
+    : t("auth.loginDescription");
+  const brandingLabel = branding.label || t("auth.adminWorkspace");
   const loginInitials = buildLoginInitials(branding.companyName);
 
   return (
@@ -175,7 +179,7 @@ export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
               {branding.logoDataUrl ? <img src={branding.logoDataUrl} alt="" className="login-brand__logo-image" /> : loginInitials}
             </div>
             <div className="login-brand__copy">
-              <span>{branding.label}</span>
+              <span>{brandingLabel}</span>
               <strong>{branding.companyName}</strong>
             </div>
           </div>
@@ -185,45 +189,56 @@ export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
           <p>{description}</p>
         </div>
         {!recoveryMode ? (
-          <Input label="Email or User Name" value={email} onChange={setEmail} placeholder="importer or name@company.com" />
+          <Input
+            label={t("auth.emailOrUserName")}
+            value={email}
+            onChange={setEmail}
+            placeholder={t("auth.emailOrUserNamePlaceholder")}
+          />
         ) : null}
         <Input
-          label={recoveryMode ? "New Password" : "Password"}
+          label={recoveryMode ? t("auth.newPassword") : t("auth.password")}
           type={showPassword ? "text" : "password"}
           value={password}
           onChange={setPassword}
-          placeholder={recoveryMode ? "New password" : "Password"}
+          placeholder={recoveryMode ? t("auth.newPassword") : t("auth.password")}
         />
         {recoveryMode ? (
           <Input
-            label="Confirm Password"
+            label={t("auth.confirmPassword")}
             type="password"
             value={confirmPassword}
             onChange={setConfirmPassword}
-            placeholder="Repeat password"
+            placeholder={t("auth.confirmPassword")}
           />
         ) : null}
         <div className="login-options">
-          {!recoveryMode ? <span /> : <span />}
+          <Select
+            label={t("common.language")}
+            value={locale}
+            options={localeOptions}
+            onChange={(value) => setLocale(value as LocaleCode)}
+            fieldClassName="field--mini"
+          />
           <label className="checkbox-row">
             <input
               type="checkbox"
               checked={showPassword}
               onChange={(event) => setShowPassword(event.target.checked)}
             />
-            <span>Show password</span>
+            <span>{t("auth.showPassword")}</span>
           </label>
         </div>
         {error ? <div className="error-text">{error}</div> : null}
         {message ? <div className="success-text">{message}</div> : null}
         {recoveryMode ? (
           <Button onClick={handleResetPassword} disabled={loading}>
-            {loading ? "Saving..." : "Save new password"}
+            {loading ? t("common.saving") : t("auth.saveNewPassword")}
           </Button>
         ) : forgotMode ? (
           <>
             <Button onClick={handleForgotPassword} disabled={loading}>
-              {loading ? "Sending..." : "Send reset email"}
+              {loading ? t("common.sending") : t("auth.sendResetEmail")}
             </Button>
             <button
               className="text-button"
@@ -233,13 +248,13 @@ export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
                 setMessage("");
               }}
             >
-              Back to sign in
+              {t("auth.backToSignIn")}
             </button>
           </>
         ) : (
           <>
             <Button onClick={handleLogin} disabled={loading}>
-              {loading ? "Signing in..." : "Sign in"}
+              {loading ? t("auth.signingIn") : t("auth.signIn")}
             </Button>
             <button
               className="text-button"
@@ -249,7 +264,7 @@ export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
                 setMessage("");
               }}
             >
-              Forgot password?
+              {t("auth.forgotPassword")}
             </button>
           </>
         )}

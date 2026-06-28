@@ -1,0 +1,162 @@
+export type LocaleMessages = {
+  common: Record<string, string>;
+  auth: Record<string, string>;
+  nav: Record<string, string>;
+  sales: Record<string, string>;
+  portal: Record<string, string>;
+  warehouse: Record<string, string>;
+  reports: Record<string, string>;
+  admin: Record<string, string>;
+  guardian: Record<string, string>;
+  documents: Record<string, string>;
+  warnings: Record<string, string>;
+  statuses: Record<string, string>;
+  errors: Record<string, string>;
+};
+
+export const enMessages = {
+  common: {
+    language: "Language",
+    close: "Close",
+    sections: "Sections",
+    primaryNavigation: "Primary navigation",
+    build: "Build",
+    buildContext: "Build Context",
+    built: "Built",
+    deployReady: "Deploy ready",
+    checkingSession: "Checking session...",
+    loadingWorkspace: "Loading workspace...",
+    loadingSignIn: "Loading sign-in...",
+    loadingPortal: "Loading portal...",
+    loadingPage: "Loading...",
+    saving: "Saving...",
+    sending: "Sending...",
+  },
+  auth: {
+    adminWorkspace: "Admin Workspace",
+    resetPassword: "Reset Password",
+    resetPasswordDescription: "Enter your new password to finish recovery.",
+    loginDescription: "Login with your account to access the operational workspace.",
+    portalAccessTitle: "Portal Access",
+    portalDescription: "Sign in with your portal email and password.",
+    emailOrUserName: "Email or User Name",
+    emailOrUserNamePlaceholder: "importer or name@company.com",
+    password: "Password",
+    newPassword: "New Password",
+    confirmPassword: "Confirm Password",
+    showPassword: "Show password",
+    signIn: "Sign in",
+    signingIn: "Signing in...",
+    saveNewPassword: "Save new password",
+    sendResetEmail: "Send reset email",
+    backToSignIn: "Back to sign in",
+    forgotPassword: "Forgot password?",
+    enterUserNameFirst: "Enter your user name or email first.",
+    enterNewPassword: "Enter a new password.",
+    passwordsDoNotMatch: "Passwords do not match.",
+    resetEmailSent: "Reset email sent. Open the link in your inbox to set a new password.",
+    portalEmail: "Portal Email",
+    portalEmailPlaceholder: "vendor@company.com",
+    portalPassword: "Password",
+    portalEnterEmail: "Enter portal email.",
+    portalEnterPassword: "Enter portal password.",
+    portalLoginFailed: "Portal login failed",
+    invalidLoginCredentials: "Invalid login credentials",
+  },
+  nav: {
+    home: "Overview",
+    homeCaption: "Operational overview and live summaries",
+    items: "Master Data",
+    itemsCaption: "Product codes, catalog definitions, and item master data",
+    catalog: "Catalog",
+    codeReferences: "Code References",
+    inventory: "Warehouses",
+    inventoryCaption: "Warehouses, stock positions, and movement control",
+    purchaseReceives: "Purchase Receives",
+    stockMovements: "Stock Movements",
+    onHand: "On Hand",
+    transfers: "Transfers",
+    sales: "Sales",
+    salesCaption: "Sales orders, price lists, supplier sales pricing, and customer-facing flows",
+    purchases: "Purchases",
+    purchasesCaption: "Inbound procurement, receipts, and vendor-side workflows",
+    reports: "Reports",
+    reportsCaption: "Reporting views and analytical pricing comparisons",
+    settings: "Settings",
+    settingsCaption: "Application and company-level settings",
+    customers: "Customers",
+    salesOrders: "Sales Orders",
+    invoices: "Invoices",
+    paymentsReceived: "Payments Received",
+    priceLists: "Price Lists",
+    vendors: "Vendors",
+    purchaseOrders: "Purchase Orders",
+    bills: "Bills",
+    paymentsMade: "Payments Made",
+    procurementDashboard: "Procurement Dashboard",
+    supplierComparison: "Supplier Comparison",
+    coreReports: "Core Reports",
+    itemTransactions: "Item Transactions",
+    inventoryAnalytics: "Inventory Analytics",
+    session: "Session",
+    users: "Users",
+    companies: "Companies",
+    portals: "Portals",
+    templates: "Templates",
+    emails: "Outgoing Emails",
+    diagnostics: "Diagnostics",
+    driveConsole: "Drive Console",
+    operationalCockpit: "Operational cockpit",
+  },
+  sales: {
+    title: "Sales",
+    orders: "Sales Orders",
+    customers: "Customers",
+    invoices: "Invoices",
+    paymentsReceived: "Payments Received",
+    priceLists: "Price Lists",
+  },
+  portal: {
+    title: "Portal",
+  },
+  warehouse: {
+    title: "Warehouse",
+  },
+  reports: {
+    title: "Reports",
+  },
+  admin: {
+    title: "Admin",
+  },
+  guardian: {
+    title: "Guardian",
+  },
+  documents: {
+    title: "Documents",
+  },
+  warnings: {
+    title: "Warnings",
+  },
+  statuses: {
+    production: "Production",
+    preview: "Preview",
+    branch: "Branch",
+    local: "Local",
+  },
+  errors: {
+    pageFailedToRender: "Page failed to render.",
+    reloadWorkspace: "Reload the workspace and try the menu again.",
+    salesAccessDenied: "Sales access is not enabled for this user. Ask superadmin to open the sales workflow.",
+    purchaseAccessDenied: "Purchase access is not enabled for this user. Ask superadmin to open purchase permissions.",
+    invoiceAccessDenied: "Invoice access is not enabled for this user. Ask superadmin to open the sales workflow.",
+    billAccessDenied: "Bill access is not enabled for this user. Ask superadmin to open purchase permissions.",
+    warehouseAccessDenied: "Warehouse access is not enabled for this user. Ask superadmin to open warehouse permissions.",
+    catalogAccessDenied: "Catalog and supplier master data are enabled only for superadmin.",
+    operationAreaAccessDenied: "This operation area is not enabled for your user. Ask superadmin to open purchase or warehouse permissions.",
+    areaAccessDenied: "This area is not enabled for your user. Ask superadmin to open the required permission.",
+    inventoryDetailAccessDenied: "This inventory detail is not enabled for your user. Ask superadmin to open warehouse permissions.",
+    purchaseDetailAccessDenied: "This purchase detail is not enabled for your user. Ask superadmin to open purchase permissions.",
+    reportAccessDenied: "This report is not enabled for your user. Ask superadmin to open this permission.",
+    detailAccessDenied: "This detail is not enabled for your user. Ask superadmin to open the required permission.",
+  },
+} as const satisfies LocaleMessages;

@@ -4,6 +4,7 @@ import { supabaseClient } from "../infrastructure/api/supabaseClient";
 import { touchCurrentUserPresence } from "../infrastructure/api/usersApi";
 import { ActionFeedbackProvider } from "../presentation/components/common/ActionFeedback";
 import { AppShell } from "../presentation/layout/AppShell";
+import { useI18n } from "../i18n/I18nProvider";
 import { APP_NAVIGATION_EVENT, type AppNavigationDetail } from "../shared/catalogTransfer";
 import {
   canAccessCustomerOps,
@@ -29,51 +30,51 @@ const SalesPage = lazy(() => import("../presentation/pages/SalesPage").then((mod
 const SettingsPage = lazy(() => import("../presentation/pages/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 
 const itemSubNav = [
-  { key: "Catalog", label: "Catalog" },
-  { key: "Code References", label: "Code References" },
+  { key: "Catalog", labelKey: "nav.catalog" },
+  { key: "Code References", labelKey: "nav.codeReferences" },
 ] as const;
 
 const inventorySubNav = [
-  { key: "Warehouses", label: "Warehouses" },
-  { key: "Purchase Receives", label: "Purchase Receives" },
-  { key: "Stock Movements", label: "Stock Movements" },
-  { key: "On Hand", label: "On Hand" },
-  { key: "Transfers", label: "Transfers" },
+  { key: "Warehouses", labelKey: "nav.inventory" },
+  { key: "Purchase Receives", labelKey: "nav.purchaseReceives" },
+  { key: "Stock Movements", labelKey: "nav.stockMovements" },
+  { key: "On Hand", labelKey: "nav.onHand" },
+  { key: "Transfers", labelKey: "nav.transfers" },
 ] as const;
 
 const salesSubNav = [
-  { key: "Customers", label: "Customers" },
-  { key: "Sales Orders", label: "Sales Orders" },
-  { key: "Invoices", label: "Invoices" },
-  { key: "Payments Received", label: "Payments Received" },
-  { key: "Price Lists", label: "Price Lists" },
+  { key: "Customers", labelKey: "nav.customers" },
+  { key: "Sales Orders", labelKey: "nav.salesOrders" },
+  { key: "Invoices", labelKey: "nav.invoices" },
+  { key: "Payments Received", labelKey: "nav.paymentsReceived" },
+  { key: "Price Lists", labelKey: "nav.priceLists" },
 ] as const;
 
 const purchasesSubNav = [
-  { key: "Vendors", label: "Vendors" },
-  { key: "Purchase Orders", label: "Purchase Orders" },
-  { key: "Bills", label: "Bills" },
-  { key: "Payments Made", label: "Payments Made" },
+  { key: "Vendors", labelKey: "nav.vendors" },
+  { key: "Purchase Orders", labelKey: "nav.purchaseOrders" },
+  { key: "Bills", labelKey: "nav.bills" },
+  { key: "Payments Made", labelKey: "nav.paymentsMade" },
 ] as const;
 
 const reportsSubNav = [
-  { key: "Procurement Dashboard", label: "Procurement Dashboard" },
-  { key: "Master", label: "Supplier Comparison" },
-  { key: "Core Reports", label: "Core Reports" },
-  { key: "Item Transactions", label: "Item Transactions" },
-  { key: "Inventory Analytics", label: "Inventory Analytics" },
+  { key: "Procurement Dashboard", labelKey: "nav.procurementDashboard" },
+  { key: "Master", labelKey: "nav.supplierComparison" },
+  { key: "Core Reports", labelKey: "nav.coreReports" },
+  { key: "Item Transactions", labelKey: "nav.itemTransactions" },
+  { key: "Inventory Analytics", labelKey: "nav.inventoryAnalytics" },
 ] as const;
 
 type ReportsTab = (typeof reportsSubNav)[number]["key"];
 
 const settingsSubNav = [
-  { key: "session", label: "Session" },
-  { key: "users", label: "Users" },
-  { key: "companies", label: "Companies" },
-  { key: "portals", label: "Portals" },
-  { key: "templates", label: "Templates" },
-  { key: "emails", label: "Outgoing Emails" },
-  { key: "diagnostics", label: "Diagnostics" },
+  { key: "session", labelKey: "nav.session" },
+  { key: "users", labelKey: "nav.users" },
+  { key: "companies", labelKey: "nav.companies" },
+  { key: "portals", labelKey: "nav.portals" },
+  { key: "templates", labelKey: "nav.templates" },
+  { key: "emails", labelKey: "nav.emails" },
+  { key: "diagnostics", labelKey: "nav.diagnostics" },
 ] as const;
 
 const APP_UI_STATE_KEY = "next-master-app-ui-state";
@@ -110,13 +111,13 @@ function writePersistedAppUiState(next: PersistedAppUiState | null) {
 }
 
 const allNavItems = [
-  { key: "Home", code: "01", caption: "Overview" },
-  { key: "Items", code: "02", caption: "Master Data" },
-  { key: "Inventory", code: "03", caption: "Warehouses" },
-  { key: "Sales", code: "04", caption: "Orders & AR" },
-  { key: "Purchases", code: "05", caption: "Procurement" },
-  { key: "Reports", code: "06", caption: "Analytics" },
-  { key: "Settings", code: "07", caption: "Controls" },
+  { key: "Home", code: "01", labelKey: "nav.home", captionKey: "nav.homeCaption" },
+  { key: "Items", code: "02", labelKey: "nav.items", captionKey: "nav.itemsCaption" },
+  { key: "Inventory", code: "03", labelKey: "nav.inventory", captionKey: "nav.inventoryCaption" },
+  { key: "Sales", code: "04", labelKey: "nav.sales", captionKey: "nav.salesCaption" },
+  { key: "Purchases", code: "05", labelKey: "nav.purchases", captionKey: "nav.purchasesCaption" },
+  { key: "Reports", code: "06", labelKey: "nav.reports", captionKey: "nav.reportsCaption" },
+  { key: "Settings", code: "07", labelKey: "nav.settings", captionKey: "nav.settingsCaption" },
 ] as const;
 
 function getAllowedNavItems(role: AppRole) {
@@ -162,7 +163,10 @@ function getDefaultPage(role: AppRole) {
   return canAccessSalesModules(role) ? "Sales" : "Home";
 }
 
-class PageErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+class PageErrorBoundary extends Component<
+  { children: ReactNode; title: string; description: string },
+  { hasError: boolean }
+> {
   state = { hasError: false };
 
   static getDerivedStateFromError() {
@@ -176,8 +180,8 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
       return (
         <div className="loading-screen">
           <div>
-            <strong>Page failed to render.</strong>
-            <div>Reload the workspace and try the menu again.</div>
+            <strong>{this.props.title}</strong>
+            <div>{this.props.description}</div>
           </div>
         </div>
       );
@@ -187,6 +191,7 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
 }
 
 export function App() {
+  const { t } = useI18n();
   const isPortalRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/portal");
   const initialUiState = typeof window === "undefined" || isPortalRoute ? null : readPersistedAppUiState();
   const initialAppSession = typeof window === "undefined" || isPortalRoute ? null : getCachedAppSessionSnapshot();
@@ -437,7 +442,7 @@ export function App() {
 
   function openSalesOrder(salesOrderId: string) {
     if (!canAccessSalesModules(appRole)) {
-      showAccessNotice("Sales access is not enabled for this user. Ask superadmin to open the sales workflow.");
+      showAccessNotice(t("errors.salesAccessDenied"));
       return;
     }
     setSelectedSalesOrderId(salesOrderId);
@@ -451,7 +456,7 @@ export function App() {
 
   function openPurchaseOrder(purchaseOrderId: string) {
     if (!canAccessPurchasingModules(appRole)) {
-      showAccessNotice("Purchase access is not enabled for this user. Ask superadmin to open purchase permissions.");
+      showAccessNotice(t("errors.purchaseAccessDenied"));
       return;
     }
     setSelectedPurchaseOrderId(purchaseOrderId);
@@ -465,7 +470,7 @@ export function App() {
 
   function openInvoice(invoiceId: string) {
     if (!canAccessSalesModules(appRole)) {
-      showAccessNotice("Invoice access is not enabled for this user. Ask superadmin to open the sales workflow.");
+      showAccessNotice(t("errors.invoiceAccessDenied"));
       return;
     }
     setSelectedInvoiceId(invoiceId);
@@ -479,7 +484,7 @@ export function App() {
 
   function openBill(billId: string) {
     if (!canAccessPurchasingModules(appRole)) {
-      showAccessNotice("Bill access is not enabled for this user. Ask superadmin to open purchase permissions.");
+      showAccessNotice(t("errors.billAccessDenied"));
       return;
     }
     setSelectedBillId(billId);
@@ -493,7 +498,7 @@ export function App() {
 
   function openInventoryWarehouse(warehouseId: string) {
     if (!canAccessInventoryModules(appRole)) {
-      showAccessNotice("Warehouse access is not enabled for this user. Ask superadmin to open warehouse permissions.");
+      showAccessNotice(t("errors.warehouseAccessDenied"));
       return;
     }
     setInventoryInitialTab("On Hand");
@@ -504,7 +509,7 @@ export function App() {
 
   function openInventoryTab(tab: "Warehouses" | "On Hand") {
     if (!canAccessInventoryModules(appRole)) {
-      showAccessNotice("Warehouse access is not enabled for this user. Ask superadmin to open warehouse permissions.");
+      showAccessNotice(t("errors.warehouseAccessDenied"));
       return;
     }
     setInventoryInitialTab(tab);
@@ -515,7 +520,7 @@ export function App() {
 
   function openInventoryItem(codeSearch: string, warehouseId?: string) {
     if (!canAccessInventoryModules(appRole)) {
-      showAccessNotice("Warehouse access is not enabled for this user. Ask superadmin to open warehouse permissions.");
+      showAccessNotice(t("errors.warehouseAccessDenied"));
       return;
     }
     setInventoryInitialTab("On Hand");
@@ -550,11 +555,11 @@ export function App() {
   function handleMainNavigate(nextPage: string) {
     if (!allowedNavItems.some((item) => item.key === nextPage)) {
       if (nextPage === "Items") {
-        showAccessNotice("Catalog and supplier master data are enabled only for superadmin.");
+        showAccessNotice(t("errors.catalogAccessDenied"));
       } else if (nextPage === "Purchases" || nextPage === "Inventory" || nextPage === "Reports") {
-        showAccessNotice("This operation area is not enabled for your user. Ask superadmin to open purchase or warehouse permissions.");
+        showAccessNotice(t("errors.operationAreaAccessDenied"));
       } else {
-        showAccessNotice("This area is not enabled for your user. Ask superadmin to open the required permission.");
+        showAccessNotice(t("errors.areaAccessDenied"));
       }
       return;
     }
@@ -569,7 +574,7 @@ export function App() {
     }
     if (activePage === "Inventory" && inventorySubNav.some((item) => item.key === nextSubPage)) {
       if (!inventorySubNavItems.some((item) => item.key === nextSubPage)) {
-        showAccessNotice("This inventory detail is not enabled for your user. Ask superadmin to open warehouse permissions.");
+        showAccessNotice(t("errors.inventoryDetailAccessDenied"));
         return;
       }
       setInventoryInitialTab(nextSubPage as "Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers");
@@ -590,7 +595,7 @@ export function App() {
     }
     if (activePage === "Purchases" && purchasesSubNav.some((item) => item.key === nextSubPage)) {
       if (!purchasesSubNavItems.some((item) => item.key === nextSubPage)) {
-        showAccessNotice("This purchase detail is not enabled for your user. Ask superadmin to open purchase permissions.");
+        showAccessNotice(t("errors.purchaseDetailAccessDenied"));
         return;
       }
       setPurchasesTab(nextSubPage as "Vendors" | "Purchase Orders" | "Bills" | "Payments Made");
@@ -598,7 +603,7 @@ export function App() {
     }
     if (activePage === "Reports" && reportsSubNav.some((item) => item.key === nextSubPage)) {
       if (!reportsSubNavItems.some((item) => item.key === nextSubPage)) {
-        showAccessNotice("This report is not enabled for your user. Ask superadmin to open this permission.");
+        showAccessNotice(t("errors.reportAccessDenied"));
         return;
       }
       setReportsTab(nextSubPage as ReportsTab);
@@ -609,7 +614,7 @@ export function App() {
       setAccessNotice("");
       return;
     }
-    showAccessNotice("This detail is not enabled for your user. Ask superadmin to open the required permission.");
+    showAccessNotice(t("errors.detailAccessDenied"));
   }
 
   const salesSubNavItems = useMemo(() => getSalesSubNav(appRole), [appRole]);
@@ -618,6 +623,16 @@ export function App() {
   const reportsSubNavItems = useMemo(() => getReportsSubNav(appRole), [appRole]);
   const settingsSubNavItems = useMemo(() => getSettingsSubNav(appRole), [appRole]);
   const allowedNavItems = useMemo(() => getAllowedNavItems(appRole), [appRole]);
+  const localizedNavItems = useMemo(
+    () =>
+      allowedNavItems.map((item) => ({
+        key: item.key,
+        code: item.code,
+        label: t(item.labelKey),
+        caption: t(item.captionKey),
+      })),
+    [allowedNavItems, t],
+  );
 
   useEffect(() => {
     if (!appRoleReady || !allowedNavItems.length) return;
@@ -686,6 +701,15 @@ export function App() {
                 ? settingsSubNavItems
                 : [];
 
+  const localizedSubNavItems = useMemo(
+    () =>
+      subNavItems.map((item) => ({
+        key: item.key,
+        label: t(item.labelKey),
+      })),
+    [subNavItems, t],
+  );
+
   const activeSubPage =
     activePage === "Items"
       ? itemsTab
@@ -704,8 +728,8 @@ export function App() {
   if (isPortalRoute) {
     return (
       <ActionFeedbackProvider>
-        <Suspense fallback={renderPageFallback("Loading portal...")}>
-          <PageErrorBoundary key="portal">
+        <Suspense fallback={renderPageFallback(t("common.loadingPortal"))}>
+          <PageErrorBoundary key="portal" title={t("errors.pageFailedToRender")} description={t("errors.reloadWorkspace")}>
             <PortalPage />
           </PageErrorBoundary>
         </Suspense>
@@ -714,13 +738,13 @@ export function App() {
   }
 
   if (!sessionReady) {
-    return <div className="loading-screen">Checking session...</div>;
+    return <div className="loading-screen">{t("common.checkingSession")}</div>;
   }
 
   if (!loggedIn || recoveryMode) {
     return (
       <ActionFeedbackProvider>
-        <Suspense fallback={renderPageFallback("Loading sign-in...")}>
+        <Suspense fallback={renderPageFallback(t("common.loadingSignIn"))}>
           <LoginPage
             recoveryMode={recoveryMode}
             onSuccess={() => {
@@ -734,7 +758,7 @@ export function App() {
   }
 
   if (!appRoleReady) {
-    return <div className="loading-screen">Loading workspace...</div>;
+    return <div className="loading-screen">{t("common.loadingWorkspace")}</div>;
   }
 
   const pageContent =
@@ -780,13 +804,17 @@ export function App() {
         activeSubPage={activeSubPage}
         notice={accessNotice}
         onDismissNotice={() => setAccessNotice("")}
-        navItems={allowedNavItems}
-        subNavItems={subNavItems}
+        navItems={localizedNavItems}
+        subNavItems={localizedSubNavItems}
         onNavigate={handleMainNavigate}
         onNavigateSub={handleSubNavigate}
       >
-        <Suspense fallback={renderPageFallback(`Loading ${activePage}...`)}>
-          <PageErrorBoundary key={`${activePage}:${activeSubPage || "root"}`}>
+        <Suspense fallback={renderPageFallback(t("common.loadingPage"))}>
+          <PageErrorBoundary
+            key={`${activePage}:${activeSubPage || "root"}`}
+            title={t("errors.pageFailedToRender")}
+            description={t("errors.reloadWorkspace")}
+          >
             {pageContent}
           </PageErrorBoundary>
         </Suspense>
