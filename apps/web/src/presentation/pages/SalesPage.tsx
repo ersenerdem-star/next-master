@@ -29,6 +29,7 @@ import { CustomersPage } from "./CustomersPage";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { useActionFeedback } from "../components/common/ActionFeedback";
+import { useI18n } from "../../i18n/I18nProvider";
 import { buildBusinessDocumentHtml, openBusinessDocumentPreview } from "../../shared/documentPrint";
 import { BrandPill } from "../components/common/BrandPill";
 import { buildEntityAlias } from "../../shared/entityAlias";
@@ -56,6 +57,7 @@ export function SalesPage({
   selectedInvoiceId: externalSelectedInvoiceId = "",
   onSelectedInvoiceChange,
 }: SalesPageProps) {
+  const { t } = useI18n();
   const actionFeedback = useActionFeedback();
   const [activeTab, setActiveTab] = useState<"Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists">(activeTabProp);
   const [invoicesView, setInvoicesView] = useState<"list" | "detail">(externalSelectedInvoiceId ? "detail" : "list");
@@ -80,7 +82,7 @@ export function SalesPage({
     if (String(row.lifecycle_status || "").trim().toLowerCase() !== "discontinued") return null;
     return (
       <div>
-        <span className="mark-badge mark-badge--danger">Discontinued</span>
+        <span className="mark-badge mark-badge--danger">{t("sales.warnings.discontinued")}</span>
         {row.lifecycle_warning ? <div className="warning-text">{row.lifecycle_warning}</div> : null}
       </div>
     );
@@ -497,18 +499,18 @@ export function SalesPage({
   function handlePrintInvoice(row: LocalInvoice) {
     try {
       openBusinessDocumentPreview(buildInvoiceHtml(row));
-      actionFeedback.succeed("Invoice PDF view opened.");
+      actionFeedback.succeed(t("sales.invoices.pdfViewOpened"));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Invoice PDF view failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.invoices.pdfViewFailed"));
     }
   }
 
   async function handleDeleteInvoice(row: LocalInvoice) {
-    if (!window.confirm(`Delete invoice ${row.id}? This cannot be undone.`)) {
+    if (!window.confirm(t("sales.invoices.deleteConfirm", { invoiceNo: row.id }))) {
       return;
     }
     try {
-      actionFeedback.begin(`Deleting invoice ${row.id}...`);
+      actionFeedback.begin(t("sales.invoices.deleting", { invoiceNo: row.id }));
       await deleteInvoice(row.id);
       const refreshed = await fetchInvoiceSummaries();
       setInvoices(refreshed);
@@ -518,18 +520,18 @@ export function SalesPage({
         setInvoicesView("list");
         onSelectedInvoiceChange?.("");
       }
-      actionFeedback.succeed(`Invoice ${row.id} deleted.`);
+      actionFeedback.succeed(t("sales.invoices.deleted", { invoiceNo: row.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Invoice delete failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.invoices.deleteFailed"));
     }
   }
 
   async function handleDeletePaymentReceived(row: LocalPaymentReceived) {
-    if (!window.confirm(`Delete payment ${row.id}? This cannot be undone.`)) {
+    if (!window.confirm(t("sales.payments.deleteConfirm", { paymentNo: row.id }))) {
       return;
     }
     try {
-      actionFeedback.begin(`Deleting payment ${row.id}...`);
+      actionFeedback.begin(t("sales.payments.deleting", { paymentNo: row.id }));
       await deletePaymentReceived(row.id);
       const [refreshedPayments, refreshedInvoices] = await Promise.all([fetchPaymentsReceived(), fetchInvoiceSummaries()]);
       setPaymentsReceived(refreshedPayments);
@@ -539,9 +541,9 @@ export function SalesPage({
         setSelectedPaymentReceivedId(next?.id || "");
         setPaymentReceivedDraft(next ? { ...next } : createEmptyPaymentReceived(null));
       }
-      actionFeedback.succeed(`Payment ${row.id} deleted.`);
+      actionFeedback.succeed(t("sales.payments.deleted", { paymentNo: row.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Payment delete failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.payments.deleteFailed"));
     }
   }
 
@@ -573,7 +575,7 @@ export function SalesPage({
     if (!invoiceDraft) return;
     try {
       setResyncingInvoice(true);
-      actionFeedback.begin(`Re-syncing invoice ${invoiceDraft.id} from catalog...`);
+      actionFeedback.begin(t("sales.invoices.resyncingFromCatalog", { invoiceNo: invoiceDraft.id }));
       const salesOrderCustomerType = salesOrders.find((row) => row.id === invoiceDraft.sales_order_id)?.customer_type || "A";
       const nextLines = await resyncInvoiceLinesFromCatalog(invoiceDraft.lines, {
         customerType: salesOrderCustomerType,
@@ -591,9 +593,9 @@ export function SalesPage({
       setInvoices(refreshed);
       setSelectedInvoiceId(saved.id);
       setInvoiceDraft(cloneInvoice(saved));
-      actionFeedback.succeed("Invoice re-synced from catalog.");
+      actionFeedback.succeed(t("sales.invoices.resyncedFromCatalog"));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Invoice catalog re-sync failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.invoices.resyncFailed"));
     } finally {
       setResyncingInvoice(false);
     }
@@ -609,7 +611,7 @@ export function SalesPage({
       updated_at: new Date().toISOString(),
     };
     try {
-      actionFeedback.begin(`Saving invoice ${payload.id}...`);
+      actionFeedback.begin(t("sales.invoices.savingInvoice", { invoiceNo: payload.id }));
       const saved = await upsertInvoice(payload, previousId);
       const next = [saved, ...invoices.filter((item) => item.id !== previousId && item.id !== saved.id)].sort((a, b) =>
         String(b.updated_at).localeCompare(String(a.updated_at)),
@@ -617,9 +619,9 @@ export function SalesPage({
       setInvoices(next);
       setSelectedInvoiceId(saved.id);
       setInvoiceDraft(cloneInvoice(saved));
-      actionFeedback.succeed(`Invoice ${saved.id} saved.`);
+      actionFeedback.succeed(t("sales.invoices.saved", { invoiceNo: saved.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Invoice save failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.invoices.saveFailed"));
     }
   }
 
@@ -632,16 +634,16 @@ export function SalesPage({
       updated_at: new Date().toISOString(),
     };
     try {
-      actionFeedback.begin(`Saving payment ${payload.id}...`);
+      actionFeedback.begin(t("sales.payments.savingPayment", { paymentNo: payload.id }));
       const saved = await upsertPaymentReceived(payload, previousId);
       const [refreshedPayments, refreshedInvoices] = await Promise.all([fetchPaymentsReceived(), fetchInvoiceSummaries()]);
       setPaymentsReceived(refreshedPayments);
       setInvoices(refreshedInvoices);
       setSelectedPaymentReceivedId(saved.id);
       setPaymentReceivedDraft({ ...saved });
-      actionFeedback.succeed(`Payment ${saved.id} saved.`);
+      actionFeedback.succeed(t("sales.payments.saved", { paymentNo: saved.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Payment save failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.payments.saveFailed"));
     }
   }
 
@@ -650,7 +652,7 @@ export function SalesPage({
     setSelectedPaymentReceivedId(next.id);
     setPaymentReceivedDraft(next);
     setActiveTab("Payments Received");
-    actionFeedback.succeed("New payment draft ready.");
+    actionFeedback.succeed(t("sales.payments.newDraftReady"));
   }
 
   const invoiceReadyOrders = useMemo(
@@ -664,11 +666,11 @@ export function SalesPage({
 
   async function handleCreateInvoicesFromSelection() {
     if (!selectedSalesOrderIds.length) {
-      actionFeedback.fail("Select confirmed sales orders first.");
+      actionFeedback.fail(t("sales.invoices.selectConfirmedFirst"));
       return;
     }
     try {
-      actionFeedback.begin(`Creating ${selectedSalesOrderIds.length.toLocaleString("en-US")} invoice(s)...`);
+      actionFeedback.begin(t("sales.invoices.creating", { count: selectedSalesOrderIds.length.toLocaleString("en-US") }));
       const ordersToConvert = await Promise.all(
         salesOrders.filter((order) => selectedSalesOrderIds.includes(order.id)).map((order) => fetchSalesOrderById(order.id)),
       );
@@ -680,15 +682,15 @@ export function SalesPage({
         setSelectedInvoiceId(created[0].id);
         setInvoiceDraft(cloneInvoice(created[0]));
       }
-      actionFeedback.succeed(`${created.length.toLocaleString("en-US")} invoice(s) created.`);
+      actionFeedback.succeed(t("sales.invoices.created", { count: created.length.toLocaleString("en-US") }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Invoice create failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.invoices.createFailed"));
     }
   }
 
   async function handleMergeInvoicesFromSelection() {
     if (!selectedSalesOrderIds.length) {
-      actionFeedback.fail("Select confirmed sales orders first.");
+      actionFeedback.fail(t("sales.invoices.selectConfirmedFirst"));
       return;
     }
 
@@ -696,7 +698,7 @@ export function SalesPage({
       salesOrders.filter((order) => selectedSalesOrderIds.includes(order.id)).map((order) => fetchSalesOrderById(order.id)),
     );
     if (!selectedOrders.length) {
-      actionFeedback.fail("Selected sales orders could not be resolved.");
+      actionFeedback.fail(t("sales.invoices.selectedOrdersUnresolved"));
       return;
     }
 
@@ -708,30 +710,30 @@ export function SalesPage({
         order.seller_company !== first.seller_company,
     );
     if (incompatible) {
-      actionFeedback.fail("Merged invoice requires same customer, same currency, and same seller company.");
+      actionFeedback.fail(t("sales.invoices.mergeRequiresSameCustomerCurrencySeller"));
       return;
     }
 
     try {
-      actionFeedback.begin(`Merging ${selectedOrders.length.toLocaleString("en-US")} sales order(s) into one invoice...`);
+      actionFeedback.begin(t("sales.invoices.merging", { count: selectedOrders.length.toLocaleString("en-US") }));
       const merged = await upsertInvoice(buildMergedInvoiceFromSalesOrders(selectedOrders));
       const refreshed = await fetchInvoiceSummaries();
       setInvoices(refreshed);
       setSelectedSalesOrderIds([]);
       setSelectedInvoiceId(merged.id);
       setInvoiceDraft(cloneInvoice(merged));
-      actionFeedback.succeed(`Merged invoice ${merged.id} created from ${selectedOrders.length.toLocaleString("en-US")} sales order(s).`);
+      actionFeedback.succeed(t("sales.invoices.mergedCreated", { invoiceNo: merged.id, count: selectedOrders.length.toLocaleString("en-US") }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Merged invoice create failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.invoices.mergeFailed"));
     }
   }
 
   const invoiceColumns = [
-    { key: "invoice", header: "Invoice No", render: (row: LocalInvoice) => row.id, sortValue: (row: LocalInvoice) => row.id },
-    { key: "salesOrder", header: "Sales Order", render: (row: LocalInvoice) => row.sales_order_no, sortValue: (row: LocalInvoice) => row.sales_order_no },
+    { key: "invoice", header: t("sales.invoices.invoiceNo"), render: (row: LocalInvoice) => row.id, sortValue: (row: LocalInvoice) => row.id },
+    { key: "salesOrder", header: t("sales.invoices.salesOrder"), render: (row: LocalInvoice) => row.sales_order_no, sortValue: (row: LocalInvoice) => row.sales_order_no },
     {
       key: "brands",
-      header: "Brand",
+      header: t("sales.common.brand"),
       render: (row: LocalInvoice) => {
         const brandSummary = buildInvoiceBrandSummary(row.lines);
         if (!brandSummary.labels.length) return "-";
@@ -748,7 +750,7 @@ export function SalesPage({
     },
     {
       key: "customer",
-      header: "Customer",
+      header: t("sales.common.customer"),
       render: (row: LocalInvoice) => (
         <span title={row.customer_name || "-"}>
           {findCustomerByNameInList(customers, row.customer_name)?.display_name?.trim() || buildEntityAlias(row.customer_name)}
@@ -758,18 +760,18 @@ export function SalesPage({
     },
     {
       key: "seller",
-      header: "Seller Company",
+      header: t("sales.invoices.sellerCompany"),
       render: (row: LocalInvoice) => <span title={row.seller_company || "-"}>{buildEntityAlias(row.seller_company)}</span>,
       sortValue: (row: LocalInvoice) => buildEntityAlias(row.seller_company),
     },
-    { key: "date", header: "Date", render: (row: LocalInvoice) => row.quote_date || "-", sortValue: (row: LocalInvoice) => row.quote_date || "" },
-    { key: "amount", header: "Total Amount", render: (row: LocalInvoice) => `${row.total_amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}`, sortValue: (row: LocalInvoice) => row.total_amount },
-    { key: "profit", header: "Profit", render: (row: LocalInvoice) => `${row.profit_total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}`, sortValue: (row: LocalInvoice) => row.profit_total },
-    { key: "margin", header: "Margin %", render: (row: LocalInvoice) => `${row.margin_percent.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`, sortValue: (row: LocalInvoice) => row.margin_percent },
-    { key: "status", header: "Status", render: (row: LocalInvoice) => row.status, sortValue: (row: LocalInvoice) => row.status },
+    { key: "date", header: t("sales.common.date"), render: (row: LocalInvoice) => row.quote_date || "-", sortValue: (row: LocalInvoice) => row.quote_date || "" },
+    { key: "amount", header: t("sales.invoices.totalAmount"), render: (row: LocalInvoice) => `${row.total_amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}`, sortValue: (row: LocalInvoice) => row.total_amount },
+    { key: "profit", header: t("sales.invoices.profit"), render: (row: LocalInvoice) => `${row.profit_total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}`, sortValue: (row: LocalInvoice) => row.profit_total },
+    { key: "margin", header: t("sales.invoices.marginPercent"), render: (row: LocalInvoice) => `${row.margin_percent.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`, sortValue: (row: LocalInvoice) => row.margin_percent },
+    { key: "status", header: t("sales.invoices.status"), render: (row: LocalInvoice) => t(`sales.statuses.${row.status}`), sortValue: (row: LocalInvoice) => row.status },
     {
       key: "actions",
-      header: "Actions",
+      header: t("common.actions"),
       render: (row: LocalInvoice) => (
         <div className="inline-actions">
           <Button
@@ -790,7 +792,7 @@ export function SalesPage({
               void handleDeleteInvoice(row);
             }}
           >
-            Delete
+            {t("common.delete")}
           </Button>
         </div>
       ),
@@ -798,17 +800,17 @@ export function SalesPage({
   ];
 
   const paymentReceivedColumns = [
-    { key: "payment", header: "Payment No", render: (row: LocalPaymentReceived) => row.id },
-    { key: "invoice", header: "Invoice", render: (row: LocalPaymentReceived) => row.invoice_no || "-" },
-    { key: "customer", header: "Customer", render: (row: LocalPaymentReceived) => row.customer_name || "-" },
-    { key: "date", header: "Date", render: (row: LocalPaymentReceived) => row.received_date || "-" },
-    { key: "method", header: "Method", render: (row: LocalPaymentReceived) => row.method || "-" },
-    { key: "reference", header: "Reference", render: (row: LocalPaymentReceived) => row.reference_no || "-" },
-    { key: "amount", header: "Amount", render: (row: LocalPaymentReceived) => formatMoney(row.amount, row.currency) },
-    { key: "status", header: "Status", render: (row: LocalPaymentReceived) => row.status },
+    { key: "payment", header: t("sales.payments.paymentNo"), render: (row: LocalPaymentReceived) => row.id },
+    { key: "invoice", header: t("sales.payments.invoice"), render: (row: LocalPaymentReceived) => row.invoice_no || "-" },
+    { key: "customer", header: t("sales.common.customer"), render: (row: LocalPaymentReceived) => row.customer_name || "-" },
+    { key: "date", header: t("sales.common.date"), render: (row: LocalPaymentReceived) => row.received_date || "-" },
+    { key: "method", header: t("sales.payments.method"), render: (row: LocalPaymentReceived) => row.method || "-" },
+    { key: "reference", header: t("sales.payments.referenceNo"), render: (row: LocalPaymentReceived) => row.reference_no || "-" },
+    { key: "amount", header: t("sales.payments.amount"), render: (row: LocalPaymentReceived) => formatMoney(row.amount, row.currency) },
+    { key: "status", header: t("sales.payments.status"), render: (row: LocalPaymentReceived) => t(`sales.statuses.${row.status}`) },
     {
       key: "actions",
-      header: "Delete",
+      header: t("common.delete"),
       render: (row: LocalPaymentReceived) => (
         <Button
           variant="secondary"
@@ -818,7 +820,7 @@ export function SalesPage({
             void handleDeletePaymentReceived(row);
           }}
         >
-          Delete
+          {t("common.delete")}
         </Button>
       ),
     },
@@ -838,10 +840,10 @@ export function SalesPage({
       {activeTab === "Price Lists" ? <PriceListsPage /> : null}
       {activeTab === "Customers" ? <CustomersPage /> : null}
       {activeTab === "Invoices" ? (
-        <SectionCard title="Invoices">
+        <SectionCard title={t("nav.invoices")}>
           {invoiceReadyOrders.length ? (
             <div className="invoice-bulk-panel">
-              <strong>Convert Confirmed Sales Orders</strong>
+              <strong>{t("sales.invoices.convertConfirmedSalesOrders")}</strong>
               <div className="invoice-bulk-list">
                 {invoiceReadyOrders.map((order) => (
                   <label key={order.id} className="checkbox-field">
@@ -859,25 +861,25 @@ export function SalesPage({
                 ))}
               </div>
               <div className="toolbar toolbar--wrap">
-                <Button onClick={handleCreateInvoicesFromSelection}>Create Invoice(s)</Button>
+                <Button onClick={handleCreateInvoicesFromSelection}>{t("sales.invoices.createInvoices")}</Button>
                 <Button variant="secondary" onClick={handleMergeInvoicesFromSelection}>
-                  Merge Into One Invoice
+                  {t("sales.invoices.mergeIntoOneInvoice")}
                 </Button>
                 <Button variant="secondary" onClick={() => handleAddPaymentReceived()}>
-                  + Add Payment Received
+                  {t("sales.invoices.addPaymentReceived")}
                 </Button>
               </div>
             </div>
           ) : null}
           <div className="meta-row">
-            <span>{invoices.length.toLocaleString("en-US")} invoices loaded</span>
-            <span>Created from confirmed sales orders after purchase orders are generated.</span>
+            <span>{t("sales.invoices.invoicesLoaded", { count: invoices.length.toLocaleString("en-US") })}</span>
+            <span>{t("sales.invoices.createdFromConfirmedSalesOrders")}</span>
           </div>
           {invoicesView === "list" ? (
             <DataTable
               rows={invoices}
               columns={invoiceColumns}
-              emptyText="No invoices yet. Confirm a sales order and convert it to invoice."
+              emptyText={t("sales.invoices.noInvoicesYet")}
               onRowClick={(row) => {
                 setSelectedInvoiceId(row.id);
                 setInvoiceDraft(null);
@@ -898,66 +900,66 @@ export function SalesPage({
                       onSelectedInvoiceChange?.("");
                     }}
                   >
-                    Back to List
+                    {t("common.back")}
                   </Button>
                 </div>
                 <div className="invoice-meta-grid">
-                  <Input label="Invoice No" value={invoiceDraft.id} onChange={(value) => updateInvoiceDraft("id", value)} />
-                  <Input label="Sales Order" value={invoiceDraft.sales_order_no} onChange={(value) => updateInvoiceDraft("sales_order_no", value)} />
+                  <Input label={t("sales.invoices.invoiceNo")} value={invoiceDraft.id} onChange={(value) => updateInvoiceDraft("id", value)} />
+                  <Input label={t("sales.invoices.salesOrder")} value={invoiceDraft.sales_order_no} onChange={(value) => updateInvoiceDraft("sales_order_no", value)} />
                   <Select
-                    label="Warehouse"
+                    label={t("sales.invoices.warehouse")}
                     value={invoiceDraft.warehouse_id || ""}
                     options={[
-                      { value: "", label: "Select Warehouse" },
+                      { value: "", label: t("sales.invoices.selectWarehouse") },
                       ...warehouses.map((row) => ({ value: row.id, label: `${row.warehouse_code} · ${row.warehouse_name}`.trim() })),
                     ]}
                     onChange={updateInvoiceWarehouse}
                   />
-                  <Input label="Customer" value={invoiceDraft.customer_name} onChange={(value) => updateInvoiceDraft("customer_name", value)} />
-                  <Input label="Invoice Date" type="date" value={invoiceDraft.quote_date} onChange={(value) => updateInvoiceDraft("quote_date", value)} />
-                  <Input label="Due Date" type="date" value={invoiceDraft.due_date} onChange={(value) => updateInvoiceDraft("due_date", value)} />
+                  <Input label={t("sales.common.customer")} value={invoiceDraft.customer_name} onChange={(value) => updateInvoiceDraft("customer_name", value)} />
+                  <Input label={t("sales.invoices.invoiceDate")} type="date" value={invoiceDraft.quote_date} onChange={(value) => updateInvoiceDraft("quote_date", value)} />
+                  <Input label={t("sales.invoices.dueDate")} type="date" value={invoiceDraft.due_date} onChange={(value) => updateInvoiceDraft("due_date", value)} />
                   <Select
-                    label="Status"
+                    label={t("sales.invoices.status")}
                     value={invoiceDraft.status}
                     options={[
-                      { value: "draft", label: "Draft" },
-                      { value: "confirmed", label: "Confirmed" },
-                      { value: "paid", label: "Paid" },
-                      { value: "void", label: "Void" },
+                      { value: "draft", label: t("sales.invoices.statusDraft") },
+                      { value: "confirmed", label: t("sales.invoices.statusConfirmed") },
+                      { value: "paid", label: t("sales.invoices.statusPaid") },
+                      { value: "void", label: t("sales.invoices.statusVoid") },
                     ]}
                     onChange={(value) => updateInvoiceDraft("status", value as LocalInvoice["status"])}
                   />
                   <Select
-                    label="Terms"
+                    label={t("sales.invoices.terms")}
                     value={invoiceDraft.payment_terms}
                     options={[
-                      { value: "Cash in Advance", label: "Cash in Advance" },
-                      { value: "Due on Receipt", label: "Due on Receipt" },
-                      { value: "Net 7", label: "Net 7" },
-                      { value: "Net 15", label: "Net 15" },
-                      { value: "Net 30", label: "Net 30" },
-                      { value: "Net 45", label: "Net 45" },
-                      { value: "Net 60", label: "Net 60" },
+                      { value: "Cash in Advance", label: t("sales.invoices.termCashInAdvance") },
+                      { value: "Due on Receipt", label: t("sales.invoices.termDueOnReceipt") },
+                      { value: "Net 7", label: t("sales.invoices.termNet7") },
+                      { value: "Net 15", label: t("sales.invoices.termNet15") },
+                      { value: "Net 30", label: t("sales.invoices.termNet30") },
+                      { value: "Net 45", label: t("sales.invoices.termNet45") },
+                      { value: "Net 60", label: t("sales.invoices.termNet60") },
                     ]}
                     onChange={(value) => updateInvoiceDraft("payment_terms", value)}
                   />
-                  <Input label="Contract Nr" value={invoiceDraft.contract_nr} onChange={(value) => updateInvoiceDraft("contract_nr", value)} />
-                  <Input label="Packing Details" value={invoiceDraft.packing_details} onChange={(value) => updateInvoiceDraft("packing_details", value)} />
-                  <Input label="Discount" type="number" value={String(invoiceDraft.discount_amount)} onChange={(value) => setInvoiceDraft((current) => (current ? recomputeInvoiceTotals({ ...current, discount_amount: Number(value || 0) }) : current))} />
-                  <Input label="Shipping Handling" type="number" value={String(invoiceDraft.shipping_cost)} onChange={(value) => setInvoiceDraft((current) => (current ? recomputeInvoiceTotals({ ...current, shipping_cost: Number(value || 0) }) : current))} />
-                  <Input label="Sub Total" type="number" value={String(invoiceDraft.subtotal)} onChange={() => undefined} disabled />
-                  <Input label="Currency" value={invoiceDraft.currency} onChange={(value) => updateInvoiceDraft("currency", value)} />
+                  <Input label={t("sales.invoices.contractNr")} value={invoiceDraft.contract_nr} onChange={(value) => updateInvoiceDraft("contract_nr", value)} />
+                  <Input label={t("sales.invoices.packingDetails")} value={invoiceDraft.packing_details} onChange={(value) => updateInvoiceDraft("packing_details", value)} />
+                  <Input label={t("sales.invoices.discount")} type="number" value={String(invoiceDraft.discount_amount)} onChange={(value) => setInvoiceDraft((current) => (current ? recomputeInvoiceTotals({ ...current, discount_amount: Number(value || 0) }) : current))} />
+                  <Input label={t("sales.invoices.shippingHandling")} type="number" value={String(invoiceDraft.shipping_cost)} onChange={(value) => setInvoiceDraft((current) => (current ? recomputeInvoiceTotals({ ...current, shipping_cost: Number(value || 0) }) : current))} />
+                  <Input label={t("sales.invoices.subTotal")} type="number" value={String(invoiceDraft.subtotal)} onChange={() => undefined} disabled />
+                  <Input label={t("sales.invoices.currency")} value={invoiceDraft.currency} onChange={(value) => updateInvoiceDraft("currency", value)} />
                 </div>
                 <table className="simple-edit-table">
                   <thead>
                     <tr>
-                      <th>Code</th>
-                      <th>Description</th>
-                      <th>Qty</th>
-                      <th>Buy</th>
-                      <th>Sell</th>
-                      <th>Line Total</th>
-                      <th>Notes</th>
+                      <th>{t("sales.invoices.table.code")}</th>
+                      <th>{t("sales.invoices.table.description")}</th>
+                      <th>{t("sales.invoices.table.qty")}</th>
+                      <th>{t("sales.invoices.table.buy")}</th>
+                      <th>{t("sales.invoices.table.sell")}</th>
+                      <th>{t("sales.invoices.table.lineTotal")}</th>
+                      <th>{t("sales.invoices.table.notes")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1056,71 +1058,71 @@ export function SalesPage({
                 </table>
                 {invoiceDiscontinuedLineCount > 0 ? (
                   <div className="warning-text">
-                    {invoiceDiscontinuedLineCount.toLocaleString("en-US")} discontinued item(s) detected in this invoice. Review before confirmation or sending.
+                    {t("sales.invoices.discontinuedDetected", { count: invoiceDiscontinuedLineCount.toLocaleString("en-US") })}
                   </div>
                 ) : null}
                 <div className="quote-summary-card">
                   <div className="quote-summary-row">
-                    <span>Sub Total</span>
+                    <span>{t("sales.invoices.summary.subTotal")}</span>
                     <strong>{formatMoney(invoiceDraft.subtotal, invoiceDraft.currency)}</strong>
                   </div>
                   <div className="quote-summary-row">
-                    <span>Discount</span>
+                    <span>{t("sales.invoices.summary.discount")}</span>
                     <strong>{formatMoney(invoiceDraft.discount_amount, invoiceDraft.currency)}</strong>
                   </div>
                   <div className="quote-summary-row">
-                    <span>Shipping Handling</span>
+                    <span>{t("sales.invoices.summary.shippingHandling")}</span>
                     <strong>{formatMoney(invoiceDraft.shipping_cost, invoiceDraft.currency)}</strong>
                   </div>
                   <div className="quote-summary-row quote-summary-row--total">
-                    <span>Total Amount</span>
+                    <span>{t("sales.invoices.summary.totalAmount")}</span>
                     <strong>{formatMoney(invoiceDraft.total_amount, invoiceDraft.currency)}</strong>
                   </div>
                   <div className="quote-summary-internal">
                     <div className="quote-summary-mini">
-                      <span>Purchase Total</span>
+                      <span>{t("sales.invoices.summary.purchaseTotal")}</span>
                       <strong>{formatMoney(invoiceDraft.purchase_total, invoiceDraft.currency)}</strong>
                     </div>
                     <div className="quote-summary-mini">
-                      <span>Profit</span>
+                      <span>{t("sales.invoices.summary.profit")}</span>
                       <strong>{formatMoney(invoiceDraft.profit_total, invoiceDraft.currency)}</strong>
                     </div>
                     <div className="quote-summary-mini">
-                      <span>Margin %</span>
+                      <span>{t("sales.invoices.summary.marginPercent")}</span>
                       <strong>{invoiceDraft.margin_percent.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</strong>
                     </div>
                   </div>
                 </div>
                 <div className="field field--full">
-                  <label className="field__label">Notes</label>
+                  <label className="field__label">{t("sales.invoices.notes")}</label>
                   <textarea className="field__input field__input--textarea" value={invoiceDraft.notes} onChange={(event) => updateInvoiceDraft("notes", event.target.value)} />
                 </div>
                 <div className="toolbar toolbar--wrap">
                   <label className="checkbox-field quote-toolbar-checkbox">
                     <input type="checkbox" checked={invoiceResyncOnlyFillBlanks} onChange={(event) => setInvoiceResyncOnlyFillBlanks(event.target.checked)} />
-                    <span className="field__label">Only Fill Blanks</span>
+                    <span className="field__label">{t("sales.invoices.onlyFillBlanks")}</span>
                   </label>
                   <label className="checkbox-field quote-toolbar-checkbox">
                     <input type="checkbox" checked={invoiceResyncKeepPrices} onChange={(event) => setInvoiceResyncKeepPrices(event.target.checked)} />
-                    <span className="field__label">Keep Prices</span>
+                    <span className="field__label">{t("sales.invoices.keepPrices")}</span>
                   </label>
-                  <Button variant="secondary" onClick={() => void handleResyncInvoiceFromCatalog()} busy={resyncingInvoice} busyLabel="Re-syncing...">
-                    Re-sync from Catalog
+                  <Button variant="secondary" onClick={() => void handleResyncInvoiceFromCatalog()} busy={resyncingInvoice} busyLabel={t("sales.invoices.resyncing")}>
+                    {t("sales.invoices.resyncFromCatalog")}
                   </Button>
-                  <Button onClick={saveInvoiceDraft}>Save Invoice</Button>
+                  <Button onClick={saveInvoiceDraft}>{t("sales.invoices.saveInvoice")}</Button>
                   <Button
                     variant="secondary"
                     onClick={() => {
                       setInvoiceDraft((current) => (current ? { ...current, status: "confirmed" } : current));
                     }}
                   >
-                    Mark Confirmed
+                    {t("sales.invoices.markConfirmed")}
                   </Button>
                   <Button variant="secondary" onClick={() => handlePrintInvoice(invoiceDraft)}>
                     PDF / Print
                   </Button>
                   <Button variant="secondary" onClick={() => handleAddPaymentReceived(invoiceDraft)}>
-                    Add Payment
+                    {t("sales.invoices.addPayment")}
                   </Button>
                 </div>
               </div>
@@ -1129,18 +1131,18 @@ export function SalesPage({
         </SectionCard>
       ) : null}
       {activeTab === "Payments Received" ? (
-        <SectionCard title="Payments Received">
+        <SectionCard title={t("nav.paymentsReceived")}>
           <div className="meta-row">
-            <span>{paymentsReceived.length.toLocaleString("en-US")} payments loaded</span>
-            <span>Record collections and tie them to invoices.</span>
+            <span>{t("sales.payments.paymentsLoaded", { count: paymentsReceived.length.toLocaleString("en-US") })}</span>
+            <span>{t("sales.payments.description")}</span>
           </div>
           <div className="toolbar toolbar--wrap">
-            <Button onClick={() => handleAddPaymentReceived()}>+ Add Payment Received</Button>
+            <Button onClick={() => handleAddPaymentReceived()}>+ {t("sales.invoices.addPaymentReceived")}</Button>
           </div>
           <DataTable
             rows={paymentsReceived}
             columns={paymentReceivedColumns}
-            emptyText="No received payments yet."
+            emptyText={t("sales.payments.noReceivedPaymentsYet")}
             onRowClick={(row) => {
               setSelectedPaymentReceivedId(row.id);
               setPaymentReceivedDraft({ ...row });
@@ -1151,9 +1153,9 @@ export function SalesPage({
             <div className="invoice-editor-block">
               <div className="invoice-edit-shell">
                 <div className="invoice-meta-grid">
-                  <Input label="Payment No" value={paymentReceivedDraft.id} onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, id: value } : current))} />
+                  <Input label={t("sales.payments.paymentNo")} value={paymentReceivedDraft.id} onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, id: value } : current))} />
                   <label className="field">
-                    <span className="field__label">Invoice</span>
+                    <span className="field__label">{t("sales.payments.invoice")}</span>
                     <select
                       className="field__input"
                       value={paymentReceivedDraft.invoice_id}
@@ -1172,8 +1174,8 @@ export function SalesPage({
                             : current,
                         );
                       }}
-                    >
-                      <option value="">Manual / Unlinked</option>
+                      >
+                      <option value="">{t("sales.payments.manualUnlinked")}</option>
                       {invoices.map((invoice) => (
                         <option key={invoice.id} value={invoice.id}>
                           {invoice.id} - {invoice.customer_name}
@@ -1181,42 +1183,42 @@ export function SalesPage({
                       ))}
                     </select>
                   </label>
-                  <Input label="Invoice No" value={paymentReceivedDraft.invoice_no} onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, invoice_no: value } : current))} />
-                  <Input label="Customer" value={paymentReceivedDraft.customer_name} onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, customer_name: value } : current))} />
-                  <Input label="Received Date" type="date" value={paymentReceivedDraft.received_date} onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, received_date: value } : current))} />
-                  <Input label="Amount" type="number" value={String(paymentReceivedDraft.amount)} onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, amount: Number(value || 0) } : current))} />
+                  <Input label={t("sales.payments.invoiceNo")} value={paymentReceivedDraft.invoice_no} onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, invoice_no: value } : current))} />
+                  <Input label={t("sales.payments.customer")} value={paymentReceivedDraft.customer_name} onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, customer_name: value } : current))} />
+                  <Input label={t("sales.payments.receivedDate")} type="date" value={paymentReceivedDraft.received_date} onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, received_date: value } : current))} />
+                  <Input label={t("sales.payments.amount")} type="number" value={String(paymentReceivedDraft.amount)} onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, amount: Number(value || 0) } : current))} />
                   <Select
-                    label="Method"
+                    label={t("sales.payments.method")}
                     value={paymentReceivedDraft.method}
                     options={[
-                      { value: "Bank Transfer", label: "Bank Transfer" },
-                      { value: "Cash", label: "Cash" },
-                      { value: "Credit Card", label: "Credit Card" },
-                      { value: "Cheque", label: "Cheque" },
+                      { value: "Bank Transfer", label: t("sales.payments.bankTransfer") },
+                      { value: "Cash", label: t("sales.payments.cash") },
+                      { value: "Credit Card", label: t("sales.payments.creditCard") },
+                      { value: "Cheque", label: t("sales.payments.cheque") },
                     ]}
                     onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, method: value } : current))}
                   />
-                  <Input label="Reference No" value={paymentReceivedDraft.reference_no} onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, reference_no: value } : current))} />
+                  <Input label={t("sales.payments.referenceNo")} value={paymentReceivedDraft.reference_no} onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, reference_no: value } : current))} />
                   <Select
-                    label="Status"
+                    label={t("sales.payments.status")}
                     value={paymentReceivedDraft.status}
                     options={[
-                      { value: "draft", label: "Draft" },
-                      { value: "confirmed", label: "Confirmed" },
-                      { value: "void", label: "Void" },
+                      { value: "draft", label: t("sales.payments.statusDraft") },
+                      { value: "confirmed", label: t("sales.payments.statusConfirmed") },
+                      { value: "void", label: t("sales.payments.statusVoid") },
                     ]}
                     onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, status: value as LocalPaymentReceived["status"] } : current))}
                   />
-                  <Input label="Currency" value={paymentReceivedDraft.currency} onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, currency: value } : current))} />
+                  <Input label={t("sales.payments.currency")} value={paymentReceivedDraft.currency} onChange={(value) => setPaymentReceivedDraft((current) => (current ? { ...current, currency: value } : current))} />
                 </div>
                 <div className="field field--full">
-                  <label className="field__label">Notes</label>
+                  <label className="field__label">{t("sales.payments.notes")}</label>
                   <textarea className="field__input field__input--textarea" value={paymentReceivedDraft.notes} onChange={(event) => setPaymentReceivedDraft((current) => (current ? { ...current, notes: event.target.value } : current))} />
                 </div>
                 <div className="toolbar toolbar--wrap">
-                  <Button onClick={savePaymentReceivedDraft}>Save Payment</Button>
+                  <Button onClick={savePaymentReceivedDraft}>{t("sales.payments.savePayment")}</Button>
                   <Button variant="secondary" onClick={() => setPaymentReceivedDraft((current) => (current ? { ...current, status: "confirmed" } : current))}>
-                    Mark Confirmed
+                    {t("sales.payments.markConfirmed")}
                   </Button>
                 </div>
               </div>

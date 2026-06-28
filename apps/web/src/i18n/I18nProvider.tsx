@@ -24,7 +24,7 @@ type I18nContextValue = {
   locale: LocaleCode;
   localeOptions: Array<{ value: LocaleCode; label: string }>;
   setLocale: (nextLocale: LocaleCode) => void;
-  t: (path: string) => string;
+  t: (path: string, params?: Record<string, string | number>) => string;
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -81,6 +81,42 @@ function resolveMessage(tree: MessageTree, path: string) {
   return group[rest.join(".")];
 }
 
+function interpolate(template: string, params: Record<string, string | number>) {
+  return Object.entries(params).reduce((result, [key, value]) => result.replaceAll(`{${key}}`, String(value)), template);
+}
+
+function humanizeMissingPath(path: string) {
+  const acronyms: Record<string, string> = {
+    csv: "CSV",
+    id: "ID",
+    pdf: "PDF",
+    po: "PO",
+    sku: "SKU",
+    tsv: "TSV",
+  };
+
+  const readable = path
+    .split(".")
+    .slice(1)
+    .join(" ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!readable) return path;
+
+  return readable
+    .split(" ")
+    .map((token, index) => {
+      const lower = token.toLowerCase();
+      if (acronyms[lower]) return acronyms[lower];
+      if (index === 0) return token.charAt(0).toUpperCase() + token.slice(1);
+      return token;
+    })
+    .join(" ");
+}
+
 export function resolveLocalePreference({
   preferredLocale,
   storedLocale,
@@ -97,12 +133,12 @@ export function resolveLocalePreference({
 function createTranslator(locale: LocaleCode) {
   const currentMessages = messagesByLocale[locale];
   const fallbackMessages = messagesByLocale.en;
-  return (path: string) => {
+  return (path: string, params?: Record<string, string | number>) => {
     const current = resolveMessage(currentMessages, path);
-    if (typeof current === "string") return current;
+    if (typeof current === "string") return params ? interpolate(current, params) : current;
     const fallback = resolveMessage(fallbackMessages, path);
-    if (typeof fallback === "string") return fallback;
-    return path;
+    if (typeof fallback === "string") return params ? interpolate(fallback, params) : fallback;
+    return humanizeMissingPath(path);
   };
 }
 

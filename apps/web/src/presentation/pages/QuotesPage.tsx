@@ -43,6 +43,9 @@ import { DataTable } from "../components/common/DataTable";
 import { DraggableSurface } from "../components/common/DraggableSurface";
 import { Input } from "../components/common/Input";
 import { BrandPill } from "../components/common/BrandPill";
+import { useI18n } from "../../i18n/I18nProvider";
+
+type TranslateFn = (path: string, params?: Record<string, string | number>) => string;
 
 type QuotesPageProps = {
   selectedSalesOrderId?: string;
@@ -427,11 +430,11 @@ function formatAvailabilityQty(value: number) {
   return Number.isInteger(value) ? String(value) : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
-function renderLifecycleBadge(row: Pick<QuoteBuilderLine, "lifecycle_status" | "lifecycle_warning">) {
+function renderLifecycleBadge(t: TranslateFn, row: Pick<QuoteBuilderLine, "lifecycle_status" | "lifecycle_warning">) {
   if (row.lifecycle_status !== "discontinued") return null;
   return (
     <div>
-      <span className="mark-badge mark-badge--danger">Discontinued</span>
+      <span className="mark-badge mark-badge--danger">{t("sales.warnings.discontinued")}</span>
       {row.lifecycle_warning ? <div className="warning-text">{row.lifecycle_warning}</div> : null}
     </div>
   );
@@ -452,6 +455,7 @@ function findInventoryAvailability(
 }
 
 function renderInventoryAvailabilityBadge(
+  t: TranslateFn,
   lookup: Map<string, InventoryAvailabilitySummary>,
   input: {
     brand: string;
@@ -462,24 +466,30 @@ function renderInventoryAvailabilityBadge(
 ) {
   const availability = findInventoryAvailability(lookup, input.brand, input.resolvedCode, input.requestedCode);
   if (!availability || availability.available_qty <= 0) {
-    return <span className="mark-badge mark-badge--danger">No Stock</span>;
+    return <span className="mark-badge mark-badge--danger">{t("sales.warnings.noStock")}</span>;
   }
   if (availability.available_qty >= input.qty) {
     return (
       <span
         className="mark-badge mark-badge--success"
-        title={`${formatAvailabilityQty(availability.available_qty)} available across ${availability.warehouse_count} warehouse(s)`}
+        title={t("sales.warnings.availableAcrossWarehouses", {
+          qty: formatAvailabilityQty(availability.available_qty),
+          count: availability.warehouse_count,
+        })}
       >
-        Avail {formatAvailabilityQty(availability.available_qty)}
+        {t("sales.warnings.available", { qty: formatAvailabilityQty(availability.available_qty) })}
       </span>
     );
   }
   return (
     <span
       className="mark-badge mark-badge--accent"
-      title={`${formatAvailabilityQty(availability.available_qty)} available across ${availability.warehouse_count} warehouse(s)`}
+      title={t("sales.warnings.availableAcrossWarehouses", {
+        qty: formatAvailabilityQty(availability.available_qty),
+        count: availability.warehouse_count,
+      })}
     >
-      Short {formatAvailabilityQty(Math.max(0, input.qty - availability.available_qty))}
+      {t("sales.warnings.short", { qty: formatAvailabilityQty(Math.max(0, input.qty - availability.available_qty)) })}
     </span>
   );
 }
@@ -505,17 +515,18 @@ function mergeCatalogLineIntoSalesDraft(currentLines: QuoteBuilderLine[], nextLi
   );
 }
 
-function getQuoteBuilderLineIssues(line: QuoteBuilderLine) {
+function getQuoteBuilderLineIssues(t: TranslateFn, line: QuoteBuilderLine) {
   const issues: string[] = [];
-  if (line.codeChanged) issues.push("Replacement");
-  if (line.lifecycle_status === "discontinued") issues.push("Discontinued");
-  if (!line.found) issues.push("Not matched");
-  if (!line.description?.trim()) issues.push("Missing description");
-  if ((line.sell_price ?? 0) <= 0) issues.push("Missing sell price");
+  if (line.codeChanged) issues.push(t("sales.warnings.replacement"));
+  if (line.lifecycle_status === "discontinued") issues.push(t("sales.warnings.discontinued"));
+  if (!line.found) issues.push(t("sales.warnings.notMatched"));
+  if (!line.description?.trim()) issues.push(t("sales.warnings.missingDescription"));
+  if ((line.sell_price ?? 0) <= 0) issues.push(t("sales.warnings.missingSellPrice"));
   return issues;
 }
 
 function mapDetailLineToBuilderLine(
+  t: TranslateFn,
   line: QuoteDetail["lines"][number],
   currencyType: "A" | "B" | "C" | "Other",
   pricingMode: CustomerPricingMode,
@@ -581,7 +592,10 @@ function mapDetailLineToBuilderLine(
     codeChangeWarning:
       String(line.old_code || "").trim() &&
       normalizePartCode(String(line.old_code || "")) !== normalizePartCode(String(line.product_code || ""))
-        ? `Old Code ${String(line.old_code || "").trim()} => New Code ${String(line.product_code || "").trim()}.`
+        ? t("sales.warnings.changedCode", {
+            oldCode: String(line.old_code || "").trim(),
+            newCode: String(line.product_code || "").trim(),
+          })
         : "",
     supplierOptions,
     selectedSupplierKey: `${option.supplier_name}-0`,
@@ -672,6 +686,7 @@ export function QuotesPage({
   salesOrdersNavTick = 0,
 }: QuotesPageProps) {
   const actionFeedback = useActionFeedback();
+  const { t } = useI18n();
   const initialWorkspaceCache = typeof window === "undefined" ? null : readSalesOrderWorkspaceCache();
   const initialCachedQuoteId =
     initialWorkspaceCache?.workbenchMode === "new" && !initialWorkspaceCache?.selectedLocalSalesOrderId
@@ -884,7 +899,7 @@ export function QuotesPage({
       }
       setSalesOrdersView("detail");
       setPdfView(false);
-      setBuilderStatus(`Adding ${pendingItem.product_code} from catalog...`);
+      setBuilderStatus(t("sales.orders.addingFromCatalog", { productCode: pendingItem.product_code }));
       try {
         const line = await buildBuilderLine(
           {
@@ -907,12 +922,12 @@ export function QuotesPage({
           codeChangeWarning: line.codeChangeWarning || pendingItem.replacement_warning || "",
         };
         setQuoteBuilderLines((current) => mergeCatalogLineIntoSalesDraft(current, enrichedLine));
-        setBuilderStatus(`${pendingItem.product_code} added from catalog.`);
-        actionFeedback.succeed(`${pendingItem.product_code} added to Sales Order Workbench.`);
+        setBuilderStatus(t("sales.orders.addedFromCatalog", { productCode: pendingItem.product_code }));
+        actionFeedback.succeed(t("sales.orders.addedToWorkbench", { productCode: pendingItem.product_code }));
       } catch (caught) {
         if (cancelled) return;
-        setBuilderStatus(`Failed to add ${pendingItem.product_code} from catalog.`);
-        actionFeedback.fail(caught instanceof Error ? caught.message : "Catalog item add failed");
+        setBuilderStatus(t("sales.orders.failedToAddFromCatalog", { productCode: pendingItem.product_code }));
+        actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.catalogItemAddFailed"));
       }
     }
 
@@ -988,7 +1003,7 @@ export function QuotesPage({
       } catch (caught) {
         if (!cancelled) {
           setQuotes([]);
-          setError(caught instanceof Error ? caught.message : "Quotes request failed");
+          setError(caught instanceof Error ? caught.message : t("sales.orders.quotesRequestFailed"));
         }
       } finally {
         if (!cancelled) setLoadingQuotes(false);
@@ -1006,7 +1021,7 @@ export function QuotesPage({
     if (error) {
       actionFeedback.fail(error);
     } else {
-      actionFeedback.succeed(`${quotes.length.toLocaleString("en-US")} sales orders loaded.`);
+      actionFeedback.succeed(t("sales.orders.salesOrdersLoaded", { count: quotes.length.toLocaleString("en-US") }));
     }
     setSearchingQuotes(false);
   }, [searchingQuotes, loadingQuotes, error, quotes.length, actionFeedback]);
@@ -1115,6 +1130,7 @@ export function QuotesPage({
           setQuoteBuilderLines(
             enrichedLines.map((line, index) =>
               mapDetailLineToBuilderLine(
+                t,
                 line,
                 customerType,
                 customerPricingMode,
@@ -1123,12 +1139,12 @@ export function QuotesPage({
               ),
             ),
           );
-          setBuilderStatus(`${enrichedLines.length.toLocaleString("en-US")} lines loaded into Sales Order Workbench.`);
+          setBuilderStatus(t("sales.orders.linesLoadedInWorkbench", { count: enrichedLines.length.toLocaleString("en-US") }));
         }
       } catch (caught) {
         if (!cancelled) {
           setDetail({ quote: null, lines: [] });
-          setError(caught instanceof Error ? caught.message : "Quote detail request failed");
+          setError(caught instanceof Error ? caught.message : t("sales.orders.quoteDetailRequestFailed"));
         }
       } finally {
         if (!cancelled) setLoadingDetail(false);
@@ -1374,13 +1390,13 @@ export function QuotesPage({
     });
     if (customerName.trim()) names.add(customerName.trim());
     return [
-      { value: "", label: "Select customer" },
+      { value: "", label: t("common.select") },
       ...Array.from(names)
         .sort((a, b) => a.localeCompare(b))
         .map((name) => ({ value: name, label: name })),
-      { value: "__manual__", label: "Manual entry..." },
+      { value: "__manual__", label: t("common.manualEntry") },
     ];
-  }, [customers, quotes, localSalesOrders, customerName]);
+  }, [customers, quotes, localSalesOrders, customerName, t]);
 
   const customerContractMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -1404,8 +1420,8 @@ export function QuotesPage({
 
   const companyOptions = useMemo(() => {
     const rows = companyProfiles.map((item) => ({ value: item.companyName, label: item.companyName }));
-    return rows.length ? rows : [{ value: "", label: "No company profile saved yet" }];
-  }, [companyProfiles]);
+    return rows.length ? rows : [{ value: "", label: t("sales.orders.noCompanyProfileSavedYet") }];
+  }, [companyProfiles, t]);
 
   const inferredContextBrand = useMemo(() => {
     const brands = new Set<string>();
@@ -1555,7 +1571,7 @@ export function QuotesPage({
     setPaymentTerms(detailOrder.payment_terms || "");
     setPackingDetails(detailOrder.packing_details || "");
     setQuoteNotes(detailOrder.notes || "");
-    actionFeedback.begin(`Loading ${detailOrder.sales_order_no}...`);
+    actionFeedback.begin(t("sales.orders.loadingOrder", { salesOrderNo: detailOrder.sales_order_no }));
     const clonedLines = (detailOrder.lines || []).map((line) => ({ ...line }));
     if (detailOrder.source_channel === "portal" && detailOrder.portal_submitted_at && !detailOrder.portal_seen_at) {
       try {
@@ -1568,9 +1584,9 @@ export function QuotesPage({
       }
     }
     setQuoteBuilderLines(clonedLines);
-    setBuilderStatus(`Loaded ${detailOrder.sales_order_no} (${detailOrder.status}).`);
+    setBuilderStatus(t("sales.orders.loadedOrder", { salesOrderNo: detailOrder.sales_order_no, status: detailOrder.status }));
     onSelectedSalesOrderChange?.(detailOrder.id);
-    actionFeedback.succeed(`${detailOrder.sales_order_no} loaded.`);
+    actionFeedback.succeed(t("sales.orders.loadedOrderToast", { salesOrderNo: detailOrder.sales_order_no }));
   }
 
   useEffect(() => {
@@ -1582,12 +1598,12 @@ export function QuotesPage({
 
   async function handleResyncFromCatalog() {
     if (!quoteBuilderLines.length) {
-      actionFeedback.fail("No sales order lines to re-sync.");
+      actionFeedback.fail(t("sales.orders.noLinesToResync"));
       return;
     }
     try {
       setResyncingCatalog(true);
-      actionFeedback.begin(`Re-syncing ${quoteNo || "sales order"} from catalog...`);
+      actionFeedback.begin(t("sales.orders.resyncingOrder", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
       const syncedLines = await resyncSalesOrderLinesFromCatalog(quoteBuilderLines, {
         customerType,
         customerPricingMode,
@@ -1632,12 +1648,12 @@ export function QuotesPage({
 
       setBuilderStatus(
         resyncOnlyFillBlanks
-          ? "Catalog re-sync complete. Only blank catalog fields were updated."
-          : "Catalog re-sync complete.",
+          ? t("sales.orders.resyncCompleteBlanksOnly")
+          : t("sales.orders.resyncComplete"),
       );
-      actionFeedback.succeed("Sales order re-synced from catalog.");
+      actionFeedback.succeed(t("sales.orders.resyncedFromCatalog"));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Catalog re-sync failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.resyncFailed"));
     } finally {
       setResyncingCatalog(false);
     }
@@ -1762,7 +1778,7 @@ export function QuotesPage({
 
   async function persistSalesOrderDraft() {
     if (!quoteBuilderLines.length) {
-      actionFeedback.fail("Add sales order lines before saving draft.");
+      actionFeedback.fail(t("sales.orders.addLinesBeforeSavingDraft"));
       return null;
     }
     const saved = await upsertSalesOrder(buildSalesOrderPayload("draft"));
@@ -1773,7 +1789,7 @@ export function QuotesPage({
     setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(saved));
     await refreshLocalSalesOrders(saved.id);
     setQuoteNo(saved.sales_order_no);
-    setBuilderStatus(`Draft saved as ${saved.sales_order_no}.`);
+    setBuilderStatus(t("sales.orders.draftSavedAs", { salesOrderNo: saved.sales_order_no }));
     return saved;
   }
 
@@ -1782,18 +1798,18 @@ export function QuotesPage({
       await nextAction();
       return;
     }
-    if (!window.confirm(`Unsaved changes detected in ${currentDraftDisplayLabel}. Click OK to save before leaving, or Cancel to stay on this screen.`)) {
+    if (!window.confirm(t("sales.orders.unsavedChangesPrompt", { draftLabel: currentDraftDisplayLabel }))) {
       return;
     }
     try {
       setSavingDraft(true);
-      actionFeedback.begin(`Saving draft ${currentDraftDisplayLabel} before leaving...`);
+      actionFeedback.begin(t("sales.orders.savingDraftBeforeLeaving", { draftLabel: currentDraftDisplayLabel }));
       const saved = await persistSalesOrderDraft();
       if (!saved) return;
-      actionFeedback.succeed(`Draft ${saved.sales_order_no} saved.`);
+      actionFeedback.succeed(t("sales.orders.draftSaved", { salesOrderNo: saved.sales_order_no }));
       await nextAction();
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Save draft failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.saveDraftFailed"));
     } finally {
       setSavingDraft(false);
     }
@@ -1804,23 +1820,23 @@ export function QuotesPage({
       { key: "line", header: "#", render: (row: QuoteBuilderLine) => row.lineId.split("-").slice(-1)[0] },
       {
         key: "resolved",
-        header: "Code",
+        header: t("sales.orders.code"),
         render: (row: QuoteBuilderLine) => (
           <div>
             <div>{row.resolvedCode}</div>
             {row.codeChanged ? <div className="warning-text">{row.codeChangeWarning}</div> : null}
-            {renderLifecycleBadge(row)}
+            {renderLifecycleBadge(t, row)}
           </div>
         ),
       },
-      { key: "brand", header: "Brand", render: (row: QuoteBuilderLine) => <BrandPill brand={row.brand} compact /> },
-      { key: "name", header: "Description", render: (row: QuoteBuilderLine) => row.description || "-" },
+      { key: "brand", header: t("sales.orders.brand"), render: (row: QuoteBuilderLine) => <BrandPill brand={row.brand} compact /> },
+      { key: "name", header: t("sales.orders.description"), render: (row: QuoteBuilderLine) => row.description || "-" },
       ...(effectiveWorkbenchColumnVisibility.origin
-        ? [{ key: "origin", header: "Origin", render: (row: QuoteBuilderLine) => row.origin || "-" }]
+        ? [{ key: "origin", header: t("sales.orders.origin"), render: (row: QuoteBuilderLine) => row.origin || "-" }]
         : []),
       {
         key: "qty",
-        header: "Qty",
+        header: t("sales.orders.qty"),
         render: (row: QuoteBuilderLine) =>
           pdfView ? (
             row.qty
@@ -1845,9 +1861,9 @@ export function QuotesPage({
     if (!pdfView && effectiveWorkbenchColumnVisibility.stock) {
       columns.push({
         key: "stock",
-        header: "Stock",
+        header: t("sales.orders.stock"),
         render: (row: QuoteBuilderLine) =>
-          renderInventoryAvailabilityBadge(inventoryAvailabilityLookup, {
+          renderInventoryAvailabilityBadge(t, inventoryAvailabilityLookup, {
             brand: row.brand,
             qty: row.qty,
             resolvedCode: row.resolvedCode,
@@ -1857,7 +1873,7 @@ export function QuotesPage({
       if (effectiveWorkbenchColumnVisibility.supplierOption) {
         columns.push({
           key: "supplierOption",
-          header: "Purchase Option",
+          header: t("sales.orders.purchaseOption"),
           render: (row: QuoteBuilderLine) => (
             <select
               className="inline-edit-input"
@@ -1893,7 +1909,7 @@ export function QuotesPage({
                 const optionKey = `${option.supplier_name}-${index}`;
                 return (
                   <option key={optionKey} value={optionKey}>
-                    {option.supplier_name} | Buy {option.buy_price ?? "-"} | Sell {option.sell_price ?? "-"}
+                    {option.supplier_name} | {t("sales.orders.buy")} {option.buy_price ?? "-"} | {t("sales.orders.sell")} {option.sell_price ?? "-"}
                   </option>
                 );
               })}
@@ -1902,19 +1918,19 @@ export function QuotesPage({
         });
       }
       if (effectiveWorkbenchColumnVisibility.supplier) {
-        columns.push({ key: "supplier", header: "Supplier", render: (row: QuoteBuilderLine) => row.supplier_name || "-" });
+        columns.push({ key: "supplier", header: t("sales.orders.supplier"), render: (row: QuoteBuilderLine) => row.supplier_name || "-" });
       }
       if (effectiveWorkbenchColumnVisibility.buy) {
-        columns.push({ key: "buy", header: "Buy", render: (row: QuoteBuilderLine) => formatMoney(row.buy_price, currency) });
+        columns.push({ key: "buy", header: t("sales.orders.buy"), render: (row: QuoteBuilderLine) => formatMoney(row.buy_price, currency) });
       }
       if (effectiveWorkbenchColumnVisibility.buyTotal) {
-        columns.push({ key: "buyTotal", header: "Buy Total", render: (row: QuoteBuilderLine) => formatMoney(roundMoney(toNumber(row.buy_price) * row.qty), currency) });
+        columns.push({ key: "buyTotal", header: t("sales.orders.buyTotal"), render: (row: QuoteBuilderLine) => formatMoney(roundMoney(toNumber(row.buy_price) * row.qty), currency) });
       }
     }
 
     columns.push({
       key: "sell",
-      header: pdfView ? "Unit Price" : "Sell",
+      header: pdfView ? t("sales.orders.unitPrice") : t("sales.orders.sell"),
       render: (row: QuoteBuilderLine) =>
         pdfView ? (
           formatMoney(row.sell_price, currency)
@@ -1943,19 +1959,19 @@ export function QuotesPage({
           />
         ),
     });
-    columns.push({ key: "sellTotal", header: "Line Total", render: (row: QuoteBuilderLine) => formatMoney(roundMoney(toNumber(row.sell_price) * row.qty), currency) });
+    columns.push({ key: "sellTotal", header: t("sales.orders.lineTotal"), render: (row: QuoteBuilderLine) => formatMoney(roundMoney(toNumber(row.sell_price) * row.qty), currency) });
 
     if (!pdfView && effectiveWorkbenchColumnVisibility.profit) {
       columns.push({
         key: "profit",
-        header: "Profit",
+        header: t("sales.orders.profit"),
         render: (row: QuoteBuilderLine) => formatMoney(roundMoney((toNumber(row.sell_price) - toNumber(row.buy_price)) * row.qty), currency),
       });
     }
     if (!pdfView && effectiveWorkbenchColumnVisibility.margin) {
       columns.push({
         key: "margin",
-        header: "Margin %",
+        header: t("sales.orders.marginPercent"),
         render: (row: QuoteBuilderLine) => {
           const sellTotal = toNumber(row.sell_price) * row.qty;
           const profit = (toNumber(row.sell_price) - toNumber(row.buy_price)) * row.qty;
@@ -1964,42 +1980,42 @@ export function QuotesPage({
       });
     }
     if (!pdfView && effectiveWorkbenchColumnVisibility.date) {
-      columns.push({ key: "date", header: "Price Date", render: (row: QuoteBuilderLine) => formatDate(row.price_date) });
+      columns.push({ key: "date", header: t("sales.orders.priceDate"), render: (row: QuoteBuilderLine) => formatDate(row.price_date) });
     }
 
     columns.push({
       key: "actions",
-      header: "Actions",
+      header: t("common.actions"),
       render: (row: QuoteBuilderLine) => (
         <div className="inline-actions">
           <Button variant="secondary" className="button--compact danger-button" onClick={() => setQuoteBuilderLines((current) => current.filter((item) => item.lineId !== row.lineId))}>
-            Delete
+            {t("common.delete")}
           </Button>
         </div>
       ),
     });
 
     return columns;
-  }, [currency, customerType, pdfView, effectiveMarginA, effectiveMarginB, inventoryAvailabilityLookup, effectiveWorkbenchColumnVisibility]);
+  }, [currency, customerType, pdfView, effectiveMarginA, effectiveMarginB, inventoryAvailabilityLookup, effectiveWorkbenchColumnVisibility, t]);
 
   const attentionColumns = useMemo(
     () => [
-      { key: "code", header: "Code", render: (row: QuoteBuilderLine) => row.resolvedCode || row.requestedCode || "-" },
-      { key: "brand", header: "Brand", render: (row: QuoteBuilderLine) => <BrandPill brand={row.brand} compact /> },
-      { key: "description", header: "Description", render: (row: QuoteBuilderLine) => row.description || "-" },
-      { key: "qty", header: "Qty", render: (row: QuoteBuilderLine) => row.qty },
+      { key: "code", header: t("sales.orders.code"), render: (row: QuoteBuilderLine) => row.resolvedCode || row.requestedCode || "-" },
+      { key: "brand", header: t("sales.orders.brand"), render: (row: QuoteBuilderLine) => <BrandPill brand={row.brand} compact /> },
+      { key: "description", header: t("sales.orders.description"), render: (row: QuoteBuilderLine) => row.description || "-" },
+      { key: "qty", header: t("sales.orders.qty"), render: (row: QuoteBuilderLine) => row.qty },
       {
         key: "issues",
-        header: "Issue",
+        header: t("sales.orders.issue"),
         render: (row: QuoteBuilderLine) => (
           <div className="document-marks document-marks--compact">
-            {getQuoteBuilderLineIssues(row).map((issue) => (
+            {getQuoteBuilderLineIssues(t, row).map((issue) => (
               <span
                 key={`${row.lineId}-${issue}`}
                 className={`mark-badge ${
-                  issue === "Discontinued"
+                  issue === t("sales.warnings.discontinued")
                     ? "mark-badge--danger"
-                    : issue === "Replacement"
+                    : issue === t("sales.warnings.replacement")
                       ? "mark-badge--accent"
                       : "mark-badge--info"
                 }`}
@@ -2010,9 +2026,9 @@ export function QuotesPage({
           </div>
         ),
       },
-      { key: "sell", header: "Sell", render: (row: QuoteBuilderLine) => formatMoney(row.sell_price, currency) },
+      { key: "sell", header: t("sales.orders.sell"), render: (row: QuoteBuilderLine) => formatMoney(row.sell_price, currency) },
     ],
-    [currency],
+    [currency, t],
   );
 
   async function buildBuilderLine(
@@ -2092,7 +2108,10 @@ export function QuotesPage({
       found: resolved.found === true,
       codeChanged: Boolean(referenceMatch),
       codeChangeWarning: referenceMatch
-        ? `Old Code ${referenceMatch.old_code} => New Code ${referenceMatch.new_code}.${referenceMatch.reason ? ` ${referenceMatch.reason}` : ""}`
+        ? `${t("sales.warnings.changedCode", {
+            oldCode: referenceMatch.old_code,
+            newCode: referenceMatch.new_code,
+          })}${referenceMatch.reason ? ` ${referenceMatch.reason}` : ""}`
         : "",
       lifecycle_status: resolved.lifecycle_status ?? "active",
       lifecycle_note: resolved.lifecycle_note ?? null,
@@ -2150,36 +2169,36 @@ export function QuotesPage({
     const brand = getSelectedBrandValue(quoteBrandSelection, quoteBrand);
     const qty = Math.max(1, Number(quoteQty || "1") || 1);
     if (!code) {
-      setBuilderStatus("Enter a product code first.");
+      setBuilderStatus(t("sales.orders.enterProductCodeFirst"));
       return;
     }
     if (!brand) {
-      const message = "Select a brand first. Sales order resolve is restricted to brand-based search.";
+      const message = t("sales.orders.selectBrandFirst");
       setBuilderStatus(message);
       actionFeedback.fail(message);
       return;
     }
 
     try {
-      setBuilderStatus("Resolving quote line...");
+      setBuilderStatus(t("sales.orders.resolvingQuoteLine"));
       setResolvingLine(true);
-      actionFeedback.begin(`Resolving quote line for ${code}...`);
+      actionFeedback.begin(t("sales.orders.resolvingQuoteLineFor", { code }));
       const line = await buildBuilderLine({ code, brand, qty });
       setQuoteBuilderLines((current) => [line, ...current]);
       setBuilderStatus(
         line.found
           ? line.lifecycle_status === "discontinued"
-            ? `Resolved ${code}. Warning: ${line.resolvedCode} is discontinued.`
-            : `Resolved ${code} successfully.`
-          : `No system match for ${code}.`,
+            ? t("sales.orders.resolvedWithDiscontinued", { code, resolvedCode: line.resolvedCode })
+            : t("sales.orders.resolvedSuccessfully", { code })
+          : t("sales.orders.noSystemMatch", { code }),
       );
-      line.found ? actionFeedback.succeed(`Resolved ${code} successfully.`) : actionFeedback.fail(`No system match for ${code}.`);
+      line.found ? actionFeedback.succeed(t("sales.orders.resolvedSuccessfully", { code })) : actionFeedback.fail(t("sales.orders.noSystemMatch", { code }));
       setQuoteCode("");
       setQuoteBrand("");
       setQuoteBrandSelection("");
       setQuoteQty("1");
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Quote resolve failed";
+      const message = caught instanceof Error ? caught.message : t("sales.orders.quoteResolveFailed");
       setBuilderStatus(message);
       actionFeedback.fail(message);
     } finally {
@@ -2190,13 +2209,13 @@ export function QuotesPage({
   async function handleImportQuoteFile(file: File) {
     try {
       if (!/\.csv$|\.txt$|\.tsv$/i.test(file.name)) {
-        throw new Error("Upload CSV/TSV exported from Excel. Native .xlsx import is not enabled yet.");
+        throw new Error(t("sales.orders.importCsvTsvOnly"));
       }
       setImportingLines(true);
-      actionFeedback.begin(`Importing quote file ${file.name}...`);
+      actionFeedback.begin(t("sales.orders.importingQuoteFile", { fileName: file.name }));
       const rows = parseQuoteImportRows(await file.text());
       if (!rows.length) {
-        throw new Error("No quote rows found in import file.");
+        throw new Error(t("sales.orders.noQuoteRowsFound"));
       }
       const selectedBrand = getSelectedBrandValue(quoteBrandSelection, quoteBrand);
       const fallbackBrand = selectedBrand || inferredContextBrand || inferBrandFromFilename(file.name, brandOptions);
@@ -2206,25 +2225,26 @@ export function QuotesPage({
       }));
       const missingBrandCount = normalizedRows.filter((row) => !row.brand.trim()).length;
       if (missingBrandCount) {
-        throw new Error("Brand is required for import. Include a Brand column, choose a brand below, or use a file name that clearly contains a single brand.");
+        throw new Error(t("sales.orders.importBrandRequired"));
       }
-      setBuilderStatus(`Importing and pricing ${normalizedRows.length.toLocaleString("en-US")} lines...`);
+      setBuilderStatus(t("sales.orders.importingAndPricing", { count: normalizedRows.length.toLocaleString("en-US") }));
       let importedDiscontinuedCount = 0;
       const hydratedLines = await buildImportLines(normalizedRows, (resolvedLines, progress) => {
         importedDiscontinuedCount += resolvedLines.filter((line) => line.lifecycle_status === "discontinued").length;
         setQuoteBuilderLines((current) => [...current, ...resolvedLines]);
-        setBuilderStatus(
-          `Imported ${progress.processedRows.toLocaleString("en-US")} / ${progress.totalRows.toLocaleString("en-US")} lines...`,
-        );
+        setBuilderStatus(t("sales.orders.importProgress", { processed: progress.processedRows.toLocaleString("en-US"), total: progress.totalRows.toLocaleString("en-US") }));
       });
       setBuilderStatus(
         importedDiscontinuedCount
-          ? `Pricing ready for ${hydratedLines.length.toLocaleString("en-US")} imported lines. ${importedDiscontinuedCount.toLocaleString("en-US")} item(s) are discontinued.`
-          : `Pricing ready for ${hydratedLines.length.toLocaleString("en-US")} imported lines.`,
+          ? t("sales.orders.importPricingReadyWithDiscontinued", {
+              count: hydratedLines.length.toLocaleString("en-US"),
+              discontinuedCount: importedDiscontinuedCount.toLocaleString("en-US"),
+            })
+          : t("sales.orders.importPricingReady", { count: hydratedLines.length.toLocaleString("en-US") }),
       );
-      actionFeedback.succeed(`${hydratedLines.length.toLocaleString("en-US")} quote lines imported with pricing.`);
+      actionFeedback.succeed(t("sales.orders.importedLinesWithPricing", { count: hydratedLines.length.toLocaleString("en-US") }));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Sales order import failed";
+      const message = caught instanceof Error ? caught.message : t("sales.orders.salesOrderImportFailed");
       setBuilderStatus(message);
       actionFeedback.fail(message);
     } finally {
@@ -2367,7 +2387,7 @@ export function QuotesPage({
 
   function clearDraft() {
     if (!quoteBuilderLines.length && !customerName && !quoteNo && !quoteNotes) {
-      actionFeedback.fail("Draft is already empty.");
+      actionFeedback.fail(t("sales.orders.draftAlreadyEmpty"));
       return;
     }
     setQuoteBuilderLines([]);
@@ -2392,8 +2412,8 @@ export function QuotesPage({
     setPackingDetails("");
     setQuoteNotes("");
     setSelectedLocalSalesOrderId("");
-    setBuilderStatus("Draft cleared.");
-    actionFeedback.succeed("Draft sales order cleared.");
+    setBuilderStatus(t("sales.orders.draftCleared"));
+    actionFeedback.succeed(t("sales.orders.draftSalesOrderCleared"));
   }
 
   function resetSalesOrderEditor() {
@@ -2424,13 +2444,13 @@ export function QuotesPage({
     setPackingDetails("");
     setQuoteNotes("");
     setPdfView(false);
-    setBuilderStatus("New sales order draft ready.");
+    setBuilderStatus(t("sales.orders.newSalesOrderDraftReady"));
   }
 
   function startNewSalesOrder() {
     void confirmSalesOrderNavigation(async () => {
       resetSalesOrderEditor();
-      actionFeedback.succeed("New sales order draft ready.");
+      actionFeedback.succeed(t("sales.orders.newSalesOrderDraftReady"));
     });
   }
 
@@ -2474,7 +2494,7 @@ export function QuotesPage({
   async function handleDeleteSalesOrders(orderIds: string[]) {
     const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)));
     if (!uniqueIds.length) {
-      actionFeedback.fail("No sales orders selected.");
+      actionFeedback.fail(t("sales.orders.noSalesOrdersSelected"));
       return;
     }
 
@@ -2485,16 +2505,16 @@ export function QuotesPage({
     });
 
     if (blocked.length) {
-      actionFeedback.fail(`Delete blocked. ${blocked.length.toLocaleString("en-US")} selected sales order(s) already have purchase orders or invoices.`);
+      actionFeedback.fail(t("sales.orders.deleteBlocked", { count: blocked.length.toLocaleString("en-US") }));
       return;
     }
 
-    if (!window.confirm(`Delete ${uniqueIds.length.toLocaleString("en-US")} sales order(s)? This cannot be undone.`)) {
+    if (!window.confirm(t("sales.orders.deleteConfirm", { count: uniqueIds.length.toLocaleString("en-US") }))) {
       return;
     }
 
     try {
-      actionFeedback.begin(`Deleting ${uniqueIds.length.toLocaleString("en-US")} sales order(s)...`);
+      actionFeedback.begin(t("sales.orders.deleting", { count: uniqueIds.length.toLocaleString("en-US") }));
       await Promise.all(uniqueIds.map((orderId) => deleteSalesOrder(orderId)));
       await refreshLocalSalesOrders();
       setSelectedLocalSalesOrderIds((current) => current.filter((orderId) => !uniqueIds.includes(orderId)));
@@ -2502,16 +2522,16 @@ export function QuotesPage({
         setSelectedLocalSalesOrderId("");
         closeSalesOrderEditor();
       }
-      actionFeedback.succeed(`${uniqueIds.length.toLocaleString("en-US")} sales order(s) deleted.`);
+      actionFeedback.succeed(t("sales.orders.deleted", { count: uniqueIds.length.toLocaleString("en-US") }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Sales order delete failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.deleteFailed"));
     }
   }
 
   async function handleConvertSalesOrdersToInvoices(orderIds: string[]) {
     const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)));
     if (!uniqueIds.length) {
-      actionFeedback.fail("No sales orders selected.");
+      actionFeedback.fail(t("sales.orders.noSalesOrdersSelected"));
       return;
     }
 
@@ -2520,12 +2540,12 @@ export function QuotesPage({
     );
     const invoiceReadyOrders = selectedOrders.filter((order) => order.status === "confirmed");
     if (!invoiceReadyOrders.length) {
-      actionFeedback.fail("Only confirmed sales orders can be converted to invoices.");
+      actionFeedback.fail(t("sales.orders.onlyConfirmedCanConvert"));
       return;
     }
 
     try {
-      actionFeedback.begin(`Converting ${invoiceReadyOrders.length.toLocaleString("en-US")} sales order(s) to invoices...`);
+      actionFeedback.begin(t("sales.orders.convertingToInvoices", { count: invoiceReadyOrders.length.toLocaleString("en-US") }));
       await Promise.all(invoiceReadyOrders.map((order) => upsertInvoice(buildInvoiceFromSalesOrder(order))));
       await Promise.all(
         invoiceReadyOrders
@@ -2534,10 +2554,13 @@ export function QuotesPage({
       );
       await refreshLocalSalesOrders();
       actionFeedback.succeed(
-        `${invoiceReadyOrders.length.toLocaleString("en-US")} invoice(s) created.${invoiceReadyOrders.length !== selectedOrders.length ? ` ${selectedOrders.length - invoiceReadyOrders.length} non-confirmed order(s) skipped.` : ""}`,
+        t("sales.orders.invoicesCreated", {
+          count: invoiceReadyOrders.length.toLocaleString("en-US"),
+          skipped: invoiceReadyOrders.length !== selectedOrders.length ? selectedOrders.length - invoiceReadyOrders.length : 0,
+        }),
       );
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Bulk invoice conversion failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.bulkInvoiceConversionFailed"));
     }
   }
 
@@ -2596,10 +2619,10 @@ export function QuotesPage({
   const attentionLines = useMemo(
     () =>
       quoteBuilderLines.filter((line) => {
-        const issues = getQuoteBuilderLineIssues(line);
+        const issues = getQuoteBuilderLineIssues(t, line);
         return issues.length > 0;
       }),
-    [quoteBuilderLines],
+    [quoteBuilderLines, t],
   );
 
   const savedSalesOrderColumns = useMemo(
@@ -2618,33 +2641,33 @@ export function QuotesPage({
       },
       {
         key: "customer",
-        header: "Customer",
-        render: (row: LocalSalesOrder) => <strong title={row.customer_name || "Unnamed customer"}>{getAdminCustomerLabel(row.customer_name)}</strong>,
+        header: t("sales.common.customer"),
+        render: (row: LocalSalesOrder) => <strong title={row.customer_name || t("sales.orders.unnamedCustomer")}>{getAdminCustomerLabel(row.customer_name)}</strong>,
         sortValue: (row: LocalSalesOrder) => getAdminCustomerLabel(row.customer_name),
       },
       {
         key: "salesOrderNo",
-        header: "Sales Order",
+        header: t("sales.orders.salesOrder"),
         render: (row: LocalSalesOrder) => row.sales_order_no,
         sortValue: (row: LocalSalesOrder) => row.sales_order_no,
       },
       {
         key: "status",
-        header: "Status",
+        header: t("sales.orders.status"),
         render: (row: LocalSalesOrder) => {
           const poCount = salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(row.id) || 0;
           const invoiceCount = salesOrderDocumentState.invoiceCountBySalesOrderId.get(row.id) || 0;
           return (
             <span className="document-marks document-marks--compact">
-              <span className={`mark-badge ${row.status === "confirmed" ? "mark-badge--success" : ""}`}>{row.status.toUpperCase()}</span>
+              <span className={`mark-badge ${row.status === "confirmed" ? "mark-badge--success" : ""}`}>{t(`sales.statuses.${row.status}`)}</span>
               <span className={`mark-badge ${row.source_channel === "portal" ? "mark-badge--accent" : "mark-badge--info"}`}>
-                {row.source_channel === "portal" ? "Portal" : "Internal"}
+                {row.source_channel === "portal" ? t("sales.orders.portal") : t("sales.orders.internal")}
               </span>
               {isDraftPortalAlert(row, poCount, invoiceCount) ? (
-                <span className="mark-badge mark-badge--accent">New Order</span>
+                <span className="mark-badge mark-badge--accent">{t("sales.orders.newOrder")}</span>
               ) : null}
-              {poCount > 0 ? <span className="mark-badge mark-badge--info">{poCount} PO</span> : null}
-              {invoiceCount > 0 ? <span className="mark-badge mark-badge--accent">{invoiceCount} Invoice</span> : null}
+              {poCount > 0 ? <span className="mark-badge mark-badge--info">{t("sales.orders.poShort", { count: poCount })}</span> : null}
+              {invoiceCount > 0 ? <span className="mark-badge mark-badge--accent">{t("sales.orders.invoiceShort", { count: invoiceCount })}</span> : null}
             </span>
           );
         },
@@ -2652,7 +2675,7 @@ export function QuotesPage({
       },
       {
         key: "brands",
-        header: "Brands",
+        header: t("sales.orders.brands"),
         render: (row: LocalSalesOrder) => {
           const brands = salesOrderBrandsById[row.id] || [];
           if (!brands.length) return "-";
@@ -2669,25 +2692,25 @@ export function QuotesPage({
       },
       {
         key: "sellerCompany",
-        header: "Seller Company",
+        header: t("sales.orders.sellerCompany"),
         render: (row: LocalSalesOrder) => <span title={row.seller_company || "-"}>{buildEntityAlias(row.seller_company)}</span>,
         sortValue: (row: LocalSalesOrder) => buildEntityAlias(row.seller_company),
       },
       {
         key: "date",
-        header: "Date",
+        header: t("sales.common.date"),
         render: (row: LocalSalesOrder) => formatDate(row.quote_date),
         sortValue: (row: LocalSalesOrder) => row.quote_date,
       },
       {
         key: "amount",
-        header: "Amount",
+        header: t("sales.orders.amount"),
         render: (row: LocalSalesOrder) => formatMoney(row.sales_total, row.currency || "EUR"),
         sortValue: (row: LocalSalesOrder) => row.sales_total,
       },
       {
         key: "actions",
-        header: "Delete",
+        header: t("common.delete"),
         render: (row: LocalSalesOrder) => (
           <Button
             variant="secondary"
@@ -2697,23 +2720,23 @@ export function QuotesPage({
               void handleDeleteSalesOrders([row.id]);
             }}
           >
-            Delete
+            {t("common.delete")}
           </Button>
         ),
       },
     ],
-    [selectedLocalSalesOrderIds, salesOrderBrandsById, salesOrderDocumentState],
+    [selectedLocalSalesOrderIds, salesOrderBrandsById, salesOrderDocumentState, t],
   );
 
   async function handleSaveDraft() {
     try {
       setSavingDraft(true);
-      actionFeedback.begin(`Saving draft ${quoteNo || "sales order"}...`);
+      actionFeedback.begin(t("sales.orders.savingDraftOrder", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
       const saved = await persistSalesOrderDraft();
       if (!saved) return;
-      actionFeedback.succeed(`Draft saved as ${saved.sales_order_no}.`);
+      actionFeedback.succeed(t("sales.orders.draftSavedAs", { salesOrderNo: saved.sales_order_no }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Save draft failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.saveDraftFailed"));
     } finally {
       setSavingDraft(false);
     }
@@ -2721,20 +2744,20 @@ export function QuotesPage({
 
   async function handleMarkConfirmed() {
     if (!quoteBuilderLines.length) {
-      actionFeedback.fail("Add sales order lines before confirming.");
+      actionFeedback.fail(t("sales.orders.addLinesBeforeConfirming"));
       return;
     }
     if (
       discontinuedLineCount > 0 &&
       !window.confirm(
-        `${discontinuedLineCount.toLocaleString("en-US")} discontinued item(s) are still in this sales order. Continue and confirm anyway?`,
+        t("sales.orders.confirmWithDiscontinued", { count: discontinuedLineCount.toLocaleString("en-US") }),
       )
     ) {
       return;
     }
     try {
       setConfirmingOrder(true);
-      actionFeedback.begin(`Confirming ${quoteNo || "sales order"} and creating purchase orders...`);
+      actionFeedback.begin(t("sales.orders.confirmingAndCreatingPurchaseOrders", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
       const order = buildSalesOrderPayload("confirmed");
       const saved = await upsertSalesOrder(order);
       const purchaseOrders = buildPurchaseOrdersFromSalesOrder(saved);
@@ -2749,10 +2772,10 @@ export function QuotesPage({
       setPendingConfirmedOrder(effectiveOrder);
       setInvoicePromptOpen(true);
       setQuoteNo(effectiveOrder.sales_order_no);
-      setBuilderStatus(`${effectiveOrder.sales_order_no} confirmed. ${purchaseOrders.length.toLocaleString("en-US")} purchase orders created by supplier.`);
-      actionFeedback.succeed(`${effectiveOrder.sales_order_no} confirmed. ${purchaseOrders.length.toLocaleString("en-US")} supplier purchase orders created.`);
+      setBuilderStatus(t("sales.orders.confirmedWithPurchaseOrders", { salesOrderNo: effectiveOrder.sales_order_no, count: purchaseOrders.length.toLocaleString("en-US") }));
+      actionFeedback.succeed(t("sales.orders.confirmedWithPurchaseOrdersToast", { salesOrderNo: effectiveOrder.sales_order_no, count: purchaseOrders.length.toLocaleString("en-US") }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Mark as confirmed failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.markConfirmedFailed"));
     } finally {
       setConfirmingOrder(false);
     }
@@ -2760,23 +2783,23 @@ export function QuotesPage({
 
   async function handleConvertConfirmedToInvoice() {
     if (!pendingConfirmedOrder) {
-      actionFeedback.fail("No confirmed sales order is waiting for invoice conversion.");
+      actionFeedback.fail(t("sales.orders.noConfirmedOrderForInvoice"));
       return;
     }
     try {
       setCreatingInvoice(true);
-      actionFeedback.begin(`Creating invoice from ${pendingConfirmedOrder.sales_order_no}...`);
+      actionFeedback.begin(t("sales.orders.creatingInvoiceFrom", { salesOrderNo: pendingConfirmedOrder.sales_order_no }));
       const invoice = await upsertInvoice(buildInvoiceFromSalesOrder(pendingConfirmedOrder));
       if (pendingConfirmedOrder.source_channel === "portal" && pendingConfirmedOrder.portal_submitted_at) {
         await markSalesOrderPortalSeen(pendingConfirmedOrder.id);
       }
       await refreshLocalSalesOrders(pendingConfirmedOrder.id);
-      setBuilderStatus(`${pendingConfirmedOrder.sales_order_no} confirmed. Invoice ${invoice.id} created.`);
-      actionFeedback.succeed(`Invoice ${invoice.id} created from ${pendingConfirmedOrder.sales_order_no}.`);
+      setBuilderStatus(t("sales.orders.invoiceCreatedFromOrder", { salesOrderNo: pendingConfirmedOrder.sales_order_no, invoiceNo: invoice.id }));
+      actionFeedback.succeed(t("sales.orders.invoiceCreatedFromOrderToast", { salesOrderNo: pendingConfirmedOrder.sales_order_no, invoiceNo: invoice.id }));
       setInvoicePromptOpen(false);
       setPendingConfirmedOrder(null);
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Convert to invoice failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.convertToInvoiceFailed"));
     } finally {
       setCreatingInvoice(false);
     }
@@ -2788,24 +2811,24 @@ export function QuotesPage({
       <aside className="quote-list-panel quote-list-panel--full">
         <div className="quote-list-panel__header">
           <div>
-            <h2>Sales Orders</h2>
-            <p>Shared sales orders and recent revisions.</p>
+            <h2>{t("sales.orders.listTitle")}</h2>
+            <p>{t("sales.orders.listSubtitle")}</p>
           </div>
           <div className="toolbar toolbar--wrap">
             <Button variant="secondary" onClick={startNewSalesOrder}>
-              New Sales Order
+              {t("sales.orders.newSalesOrder")}
             </Button>
           </div>
           <div className="toolbar toolbar--wrap">
             <Select
-              label="Status"
+              label={t("sales.orders.filterStatus")}
               value={salesOrderFilter}
               options={[
-                { value: "all", label: "All" },
-                { value: "draft", label: "Draft" },
-                { value: "confirmed", label: "Confirmed" },
-                { value: "purchased", label: "Purchased" },
-                { value: "invoiced", label: "Invoiced" },
+                { value: "all", label: t("sales.statuses.all") },
+                { value: "draft", label: t("sales.statuses.draft") },
+                { value: "confirmed", label: t("sales.statuses.confirmed") },
+                { value: "purchased", label: t("sales.statuses.purchased") },
+                { value: "invoiced", label: t("sales.statuses.invoiced") },
               ]}
               onChange={(value) => setSalesOrderFilter(value as "all" | "draft" | "confirmed" | "purchased" | "invoiced")}
             />
@@ -2814,23 +2837,23 @@ export function QuotesPage({
             <Input
               value={search}
               onChange={setSearch}
-              placeholder="Search sales orders"
+              placeholder={t("sales.orders.searchPlaceholder")}
               onEnter={() => {
                 setSearchingQuotes(true);
-                actionFeedback.begin(`Searching sales orders for ${search.trim() || "all sales orders"}...`);
+                actionFeedback.begin(t("sales.orders.searchingFor", { term: search.trim() || t("sales.orders.allSalesOrders") }));
                 setSubmittedSearch(search);
               }}
             />
             <Button
               onClick={() => {
                 setSearchingQuotes(true);
-                actionFeedback.begin(`Searching sales orders for ${search.trim() || "all sales orders"}...`);
+                actionFeedback.begin(t("sales.orders.searchingFor", { term: search.trim() || t("sales.orders.allSalesOrders") }));
                 setSubmittedSearch(search);
               }}
               busy={searchingQuotes}
-              busyLabel="Searching..."
+              busyLabel={t("sales.orders.searching")}
             >
-              Search
+              {t("common.search")}
             </Button>
           </div>
         </div>
@@ -2839,18 +2862,18 @@ export function QuotesPage({
           {!!filteredLocalSalesOrders.length ? (
             <div className="quote-list-section">
               <div className="quote-list-section__header">
-                <div className="quote-list-section__title">Sales Orders</div>
+                <div className="quote-list-section__title">{t("sales.orders.listTitle")}</div>
                 <div className="toolbar toolbar--wrap">
                   <Button variant="secondary" className="button--compact" onClick={() => setSalesOrderActionsOpen((current) => !current)}>
-                    {salesOrderActionsOpen ? "Hide Actions" : "Actions"}
+                    {salesOrderActionsOpen ? t("sales.orders.hideActions") : t("common.actions")}
                   </Button>
                 </div>
               </div>
               {salesOrderActionsOpen ? (
                 <div className="action-menu-card">
                   <div className="meta-row">
-                    <span>{selectedLocalSalesOrderIds.length.toLocaleString("en-US")} selected</span>
-                    <span>Sales uses invoice conversion. Delete is blocked when PO or invoice already exists.</span>
+                    <span>{t("sales.orders.selectedCount", { count: selectedLocalSalesOrderIds.length.toLocaleString("en-US") })}</span>
+                    <span>{t("sales.orders.actionGuardrail")}</span>
                   </div>
                   <div className="toolbar toolbar--wrap">
                     <Button
@@ -2862,21 +2885,21 @@ export function QuotesPage({
                         )
                       }
                     >
-                      {selectedLocalSalesOrderIds.length === filteredLocalSalesOrders.length ? "Clear Selection" : "Select Filtered"}
+                      {selectedLocalSalesOrderIds.length === filteredLocalSalesOrders.length ? t("sales.orders.clearSelection") : t("sales.orders.selectFiltered")}
                     </Button>
                     <Button
                       variant="secondary"
                       className="button--compact danger-button"
                       onClick={() => void handleDeleteSalesOrders(selectedLocalSalesOrderIds)}
                     >
-                      Bulk Delete
+                      {t("sales.orders.bulkDelete")}
                     </Button>
                     <Button
                       variant="secondary"
                       className="button--compact"
                       onClick={() => void handleConvertSalesOrdersToInvoices(selectedLocalSalesOrderIds)}
                     >
-                      Bulk Convert Invoice
+                      {t("sales.orders.bulkConvertInvoice")}
                     </Button>
                     {currentLocalSalesOrder ? (
                       <>
@@ -2885,14 +2908,14 @@ export function QuotesPage({
                           className="button--compact danger-button"
                           onClick={() => void handleDeleteSalesOrders([currentLocalSalesOrder.id])}
                         >
-                          Delete Current
+                          {t("sales.orders.deleteCurrent")}
                         </Button>
                         <Button
                           variant="secondary"
                           className="button--compact"
                           onClick={() => void handleConvertSalesOrdersToInvoices([currentLocalSalesOrder.id])}
                         >
-                          Convert Current Invoice
+                          {t("sales.orders.convertCurrentInvoice")}
                         </Button>
                       </>
                     ) : null}
@@ -2902,7 +2925,7 @@ export function QuotesPage({
               <DataTable
                 rows={filteredLocalSalesOrders}
                 columns={savedSalesOrderColumns}
-                emptyText="No saved sales orders found."
+                emptyText={t("sales.orders.noSavedOrders")}
                 onRowClick={(row) =>
                   void confirmSalesOrderNavigation(async () => {
                     setSalesOrdersView("detail");
@@ -2913,7 +2936,7 @@ export function QuotesPage({
               />
             </div>
           ) : null}
-          {loadingQuotes ? <div className="empty-state">Loading sales orders...</div> : null}
+          {loadingQuotes ? <div className="empty-state">{t("sales.orders.loading")}</div> : null}
           {!loadingQuotes && error ? <div className="empty-state error-text">{error}</div> : null}
         </div>
       </aside>
@@ -2923,17 +2946,17 @@ export function QuotesPage({
       <section className="quote-editor-panel">
         <div className="quote-editor-panel__header">
           <div>
-            <span className="settings-label">Sales Order</span>
-            <h2>{quoteNo || String(detail.quote?.quote_no || (workbenchMode === "new" ? "New Sales Order" : "Draft Sales Order"))}</h2>
+            <span className="settings-label">{t("sales.orders.detailLabel")}</span>
+            <h2>{quoteNo || String(detail.quote?.quote_no || (workbenchMode === "new" ? t("sales.orders.newSalesOrderTitle") : t("sales.orders.draftSalesOrderTitle")))}</h2>
             <p>
               {workbenchMode === "new"
-                ? "Create a new manual sales order. Purchase options stay selectable per line."
-                : customerName || String(detail.quote?.customer_name || "Open an existing sales order or start a new one.")}
+                ? t("sales.orders.createManualDescription")
+                : customerName || String(detail.quote?.customer_name || t("sales.orders.openOrStartDescription"))}
             </p>
             {currentLocalSalesOrder ? (
               <div className="document-marks document-marks--header">
                 <div className={`status-badge ${currentLocalSalesOrder.status === "confirmed" ? "status-badge--success" : ""}`}>
-                  {currentLocalSalesOrder.status.toUpperCase()}
+                  {t(`sales.statuses.${currentLocalSalesOrder.status}`)}
                 </div>
                 {currentLocalSalesOrder.source_channel === "portal" && currentLocalSalesOrder.portal_submitted_at ? (
                   <span className="mark-badge mark-badge--accent">
@@ -2942,18 +2965,18 @@ export function QuotesPage({
                       salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0,
                       salesOrderDocumentState.invoiceCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0,
                     )
-                      ? "New Portal Order"
-                      : "Portal Order"}
+                      ? t("sales.orders.newPortalOrder")
+                      : t("sales.orders.portalOrder")}
                   </span>
                 ) : null}
                 {(salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0) > 0 ? (
                   <span className="mark-badge mark-badge--info">
-                    PO {(salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0).toLocaleString("en-US")} created
+                    {t("sales.orders.poCreated", { count: (salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0).toLocaleString("en-US") })}
                   </span>
                 ) : null}
                 {(salesOrderDocumentState.invoiceCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0) > 0 ? (
                   <span className="mark-badge mark-badge--accent">
-                    Invoice {(salesOrderDocumentState.invoiceCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0).toLocaleString("en-US")} created
+                    {t("sales.orders.invoiceCreated", { count: (salesOrderDocumentState.invoiceCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0).toLocaleString("en-US") })}
                   </span>
                 ) : null}
               </div>
@@ -2962,12 +2985,12 @@ export function QuotesPage({
           <div className="toolbar toolbar--wrap">
             <div className="quote-toolbar-brand">
               <Select
-                label="Brand Context"
+                label={t("sales.orders.brandContext")}
                 value={quoteBrandSelection}
                 options={[
-                  { value: "", label: "Select brand" },
+                  { value: "", label: t("common.select") },
                   ...brandOptions,
-                  { value: "__manual__", label: "Manual entry..." },
+                  { value: "__manual__", label: t("common.manualEntry") },
                 ]}
                 onChange={(value) => {
                   setQuoteBrandSelection(value);
@@ -2976,7 +2999,7 @@ export function QuotesPage({
                 }}
               />
               {quoteBrandSelection === "__manual__" ? (
-                <Input value={quoteBrand} onChange={setQuoteBrand} placeholder="Manual brand" />
+                <Input value={quoteBrand} onChange={setQuoteBrand} placeholder={t("sales.orders.manualBrand")} />
               ) : null}
             </div>
             <input
@@ -2989,7 +3012,7 @@ export function QuotesPage({
                 if (file) void handleImportQuoteFile(file);
               }}
             />
-            <Button variant="secondary" onClick={() => importRef.current?.click()} busy={importingLines} busyLabel="Importing...">
+            <Button variant="secondary" onClick={() => importRef.current?.click()} busy={importingLines} busyLabel={t("sales.orders.importing")}>
               Import CSV
             </Button>
             <Button variant="secondary" onClick={downloadQuoteTemplate}>
@@ -3005,28 +3028,28 @@ export function QuotesPage({
               <>
                 <label className="checkbox-field quote-toolbar-checkbox">
                   <input type="checkbox" checked={resyncOnlyFillBlanks} onChange={(event) => setResyncOnlyFillBlanks(event.target.checked)} />
-                  <span className="field__label">Only Fill Blanks</span>
+                  <span className="field__label">{t("sales.orders.onlyFillBlanks")}</span>
                 </label>
                 <label className="checkbox-field quote-toolbar-checkbox">
                   <input type="checkbox" checked={resyncKeepPrices} onChange={(event) => setResyncKeepPrices(event.target.checked)} />
-                  <span className="field__label">Keep Prices</span>
+                  <span className="field__label">{t("sales.orders.keepPrices")}</span>
                 </label>
-                <Button variant="secondary" onClick={() => void handleResyncFromCatalog()} busy={resyncingCatalog} busyLabel="Re-syncing...">
-                  Re-sync from Catalog
+                <Button variant="secondary" onClick={() => void handleResyncFromCatalog()} busy={resyncingCatalog} busyLabel={t("sales.orders.resyncing")}>
+                  {t("sales.orders.resyncFromCatalog")}
                 </Button>
               </>
             ) : null}
-            <Button variant="secondary" onClick={() => void handleSaveDraft()} busy={savingDraft} busyLabel="Saving Draft...">
-              Save Draft
+            <Button variant="secondary" onClick={() => void handleSaveDraft()} busy={savingDraft} busyLabel={t("sales.orders.savingDraft")}>
+              {t("sales.orders.saveDraft")}
             </Button>
-            <Button onClick={() => void handleMarkConfirmed()} busy={confirmingOrder} busyLabel="Confirming...">
-              Mark as Confirmed
+            <Button onClick={() => void handleMarkConfirmed()} busy={confirmingOrder} busyLabel={t("sales.orders.confirming")}>
+              {t("sales.orders.markConfirmed")}
             </Button>
             <Button variant="secondary" className="danger-button" onClick={clearDraft}>
-              Clear Draft
+              {t("sales.orders.clearDraft")}
             </Button>
             <Button variant="secondary" onClick={closeSalesOrderEditor}>
-              Exit
+              {t("sales.orders.exit")}
             </Button>
           </div>
         </div>
@@ -3034,8 +3057,8 @@ export function QuotesPage({
         <div className="section-card quote-workbench-card">
           <div className="section-card__header section-card__header--row">
             <div>
-              <h2>Sales Order Workbench</h2>
-              <p>Purchase options stay visible internally. Use PDF View to preview the customer-facing version.</p>
+              <h2>{t("sales.orders.workbenchTitle")}</h2>
+              <p>{t("sales.orders.workbenchDescription")}</p>
             </div>
             <div className="workbench-controls">
               <label className="quote-pdf-toggle">
@@ -3051,7 +3074,7 @@ export function QuotesPage({
                   <div className="invoice-edit-topbar">
                     <div className="invoice-customer-field">
                       <Select
-                        label="Customer"
+                        label={t("sales.orders.customer")}
                         value={customerSelection}
                         options={customerOptions}
                         onChange={(value) => {
@@ -3070,9 +3093,9 @@ export function QuotesPage({
                         }}
                       />
                     </div>
-                    {otherMarginActive ? <span className="mark-badge mark-badge--accent">Other Margin {customerMarginOverride}%</span> : null}
+                    {otherMarginActive ? <span className="mark-badge mark-badge--accent">{t("sales.orders.otherMarginActive", { margin: customerMarginOverride ?? 0 })}</span> : null}
                     <Select
-                      label="Currency"
+                      label={t("sales.orders.currency")}
                       value={currency}
                       fieldClassName="field--mini invoice-currency-field"
                       options={[
@@ -3086,7 +3109,7 @@ export function QuotesPage({
 
                   {customerSelection === "__manual__" ? (
                     <label className="field invoice-manual-customer">
-                      <span className="field__label">Manual Customer</span>
+                      <span className="field__label">{t("sales.orders.manualCustomer")}</span>
                       <input
                         className="field__input"
                         value={manualCustomerName}
@@ -3094,43 +3117,43 @@ export function QuotesPage({
                           setManualCustomerName(event.target.value);
                           setCustomerName(event.target.value);
                         }}
-                        placeholder='LLC "Yural"'
+                        placeholder={t("sales.orders.manualCustomerPlaceholder")}
                       />
                     </label>
                   ) : null}
 
                   <div className="invoice-address-grid">
                     <div className="invoice-address-card">
-                      <div className="invoice-address-card__title">Billing Address</div>
+                      <div className="invoice-address-card__title">{t("sales.orders.billingAddress")}</div>
                       <div className="invoice-address-card__body">{buildCustomerAddressBlock(selectedCustomerProfile, resolvedCustomerName || "-")}</div>
                     </div>
                     <div className="invoice-address-card">
-                      <div className="invoice-address-card__title">Shipping Address</div>
+                      <div className="invoice-address-card__title">{t("sales.orders.shippingAddress")}</div>
                       <div className="invoice-address-card__body">{buildCustomerShippingBlock(selectedCustomerProfile, resolvedCustomerName || "-")}</div>
                     </div>
-                    <div className="invoice-company-pill">{sellerCompany || "No seller company selected"}</div>
+                    <div className="invoice-company-pill">{sellerCompany || t("sales.orders.noSellerCompanySelected")}</div>
                   </div>
 
                   <div className="invoice-meta-grid">
                     <label className="field">
-                      <span className="field__label">Sales Order#</span>
-                      <input className="field__input" value={quoteNo} onChange={(event) => setQuoteNo(event.target.value)} placeholder="FU26-Y43921" />
+                      <span className="field__label">{t("sales.orders.salesOrderNo")}</span>
+                      <input className="field__input" value={quoteNo} onChange={(event) => setQuoteNo(event.target.value)} placeholder={t("sales.orders.salesOrderNoPlaceholder")} />
                     </label>
                     <label className="field">
-                      <span className="field__label">Order Number</span>
-                      <input className="field__input" value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Customer order number" />
+                      <span className="field__label">{t("sales.orders.orderNumber")}</span>
+                      <input className="field__input" value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder={t("sales.orders.orderNumberPlaceholder")} />
                     </label>
                     <label className="field field--date-compact">
-                      <span className="field__label">Invoice Date</span>
+                      <span className="field__label">{t("sales.orders.invoiceDate")}</span>
                       <input className="field__input" type="date" value={quoteDate} onChange={(event) => setQuoteDate(event.target.value)} />
                     </label>
                     <Select
-                      label="Terms"
+                      label={t("sales.orders.terms")}
                       value={paymentTermsSelection}
                       options={[
-                        { value: "", label: "Select payment terms" },
+                        { value: "", label: t("sales.orders.selectPaymentTerms") },
                         ...PAYMENT_TERM_OPTIONS.map((item) => ({ value: item, label: item })),
-                        { value: "__manual__", label: "Manual entry..." },
+                        { value: "__manual__", label: t("common.manualEntry") },
                       ]}
                       onChange={(value) => {
                         setPaymentTermsSelection(value);
@@ -3139,32 +3162,32 @@ export function QuotesPage({
                       }}
                     />
                     <label className="field field--date-compact">
-                      <span className="field__label">Due Date</span>
+                      <span className="field__label">{t("sales.orders.dueDate")}</span>
                       <input className="field__input" type="date" value={quoteDate} onChange={(event) => setQuoteDate(event.target.value)} />
                     </label>
                     <label className="field">
-                      <span className="field__label">Contract Nr</span>
-                      <input className="field__input" value={sellerInfo} onChange={(event) => setSellerInfo(event.target.value)} placeholder="Customer contract no" />
+                      <span className="field__label">{t("sales.orders.contractNr")}</span>
+                      <input className="field__input" value={sellerInfo} onChange={(event) => setSellerInfo(event.target.value)} placeholder={t("sales.orders.contractNrPlaceholder")} />
                     </label>
                   </div>
 
                   <div className="invoice-internal-panel">
-                    <div className="quote-form-panel__title">Internal Purchase Controls</div>
+                    <div className="quote-form-panel__title">{t("sales.orders.internalPurchaseControls")}</div>
                     <div className="quote-compact-grid">
-                      <Select label="Seller Company" value={sellerCompany} options={companyOptions} onChange={setSellerCompany} />
+                      <Select label={t("sales.orders.sellerCompany")} value={sellerCompany} options={companyOptions} onChange={setSellerCompany} />
                       <Select
-                        label="Purchase Mode"
+                        label={t("sales.orders.purchaseMode")}
                         value={supplierMode}
                         options={[
-                          { value: "Best price", label: "Best price" },
-                          { value: "Manual comparison", label: "Manual comparison" },
+                          { value: "Best price", label: t("sales.orders.bestPrice") },
+                          { value: "Manual comparison", label: t("sales.orders.manualComparison") },
                         ]}
                         onChange={setSupplierMode}
                       />
                       <label className="field">
-                        <span className="field__label">Purchase Company</span>
+                        <span className="field__label">{t("sales.orders.purchaseCompany")}</span>
                         <select className="field__input" value={buyerInfo} onChange={(event) => setBuyerInfo(event.target.value)}>
-                          <option value="">Select purchase company</option>
+                          <option value="">{t("sales.orders.selectPurchaseCompany")}</option>
                           {companyOptions.map((option) => (
                             <option key={`buyer-${option.value}`} value={option.value}>
                               {option.label}
@@ -3173,24 +3196,24 @@ export function QuotesPage({
                         </select>
                       </label>
                       <Select
-                        label="Customer Type"
+                        label={t("sales.orders.customerType")}
                         value={customerType}
                         options={[
-                          { value: "A", label: "A Price List" },
-                          { value: "B", label: "B Price List" },
-                          { value: "C", label: "C Price List" },
-                          { value: "Other", label: "Other Margin" },
+                          { value: "A", label: t("sales.orders.aPriceList") },
+                          { value: "B", label: t("sales.orders.bPriceList") },
+                          { value: "C", label: t("sales.orders.cPriceList") },
+                          { value: "Other", label: t("sales.orders.otherMargin") },
                         ]}
                         onChange={(value) => setCustomerType(value as "A" | "B" | "C" | "Other")}
                       />
-                      {otherMarginActive ? <div className="field"><span className="field__label">Custom Margin</span><span className="mark-badge mark-badge--accent">{customerMarginOverride}% active</span></div> : null}
+                      {otherMarginActive ? <div className="field"><span className="field__label">{t("sales.orders.customMargin")}</span><span className="mark-badge mark-badge--accent">{t("sales.orders.customMarginActive", { margin: customerMarginOverride ?? 0 })}</span></div> : null}
                       <Select
-                        label="Delivery Terms"
+                        label={t("sales.orders.deliveryTerms")}
                         value={deliveryTermSelection}
                         options={[
-                          { value: "", label: "Select delivery terms" },
+                          { value: "", label: t("sales.orders.selectDeliveryTerms") },
                           ...DELIVERY_TERM_OPTIONS.map((item) => ({ value: item, label: item })),
-                          { value: "__manual__", label: "Manual entry..." },
+                          { value: "__manual__", label: t("common.manualEntry") },
                         ]}
                         onChange={(value) => {
                           setDeliveryTermSelection(value);
@@ -3200,19 +3223,19 @@ export function QuotesPage({
                       />
                       {deliveryTermSelection === "__manual__" ? (
                         <label className="field">
-                          <span className="field__label">Manual Delivery Terms</span>
-                          <input className="field__input" value={deliveryTerm} onChange={(event) => setDeliveryTerm(event.target.value)} placeholder="Custom delivery term" />
+                          <span className="field__label">{t("sales.orders.manualDeliveryTerms")}</span>
+                          <input className="field__input" value={deliveryTerm} onChange={(event) => setDeliveryTerm(event.target.value)} placeholder={t("sales.orders.customDeliveryTermPlaceholder")} />
                         </label>
                       ) : null}
                       {paymentTermsSelection === "__manual__" ? (
                         <label className="field">
-                          <span className="field__label">Manual Payment Terms</span>
-                          <input className="field__input" value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)} placeholder="Custom payment terms" />
+                          <span className="field__label">{t("sales.orders.manualPaymentTerms")}</span>
+                          <input className="field__input" value={paymentTerms} onChange={(event) => setPaymentTerms(event.target.value)} placeholder={t("sales.orders.customPaymentTermsPlaceholder")} />
                         </label>
                       ) : null}
                       <label className="field">
-                        <span className="field__label">Packing</span>
-                        <input className="field__input" value={packingDetails} onChange={(event) => setPackingDetails(event.target.value)} placeholder="Pallet / package info" />
+                        <span className="field__label">{t("sales.orders.packing")}</span>
+                        <input className="field__input" value={packingDetails} onChange={(event) => setPackingDetails(event.target.value)} placeholder={t("sales.orders.packingPlaceholder")} />
                       </label>
                     </div>
                   </div>
@@ -3221,31 +3244,31 @@ export function QuotesPage({
             </div>
 
             <div className="meta-row">
-              <span>{quoteBuilderLines.length.toLocaleString("en-US")} sales order draft lines</span>
+              <span>{t("sales.orders.draftLinesCount", { count: quoteBuilderLines.length.toLocaleString("en-US") })}</span>
               {builderStatus ? <span className={builderStatus.includes("No system") || builderStatus.includes("failed") ? "error-text" : "success-text"}>{builderStatus}</span> : null}
             </div>
             {discontinuedLineCount > 0 ? (
               <div className="warning-text">
-                {discontinuedLineCount.toLocaleString("en-US")} discontinued item(s) detected in this sales order. Review before confirmation.
+                {t("sales.orders.discontinuedDetected", { count: discontinuedLineCount.toLocaleString("en-US") })}
               </div>
             ) : null}
             {attentionLines.length ? (
               <div className="attention-panel">
                 <div className="attention-panel__header">
                   <div>
-                    <strong>Warning Items</strong>
+                    <strong>{t("sales.orders.warningItems")}</strong>
                     <div className="info-text">
-                      {attentionLines.length.toLocaleString("en-US")} line(s) need review. This panel isolates discontinued, replacement, unmatched, and no-price rows.
+                      {t("sales.orders.warningItemsDescription", { count: attentionLines.length.toLocaleString("en-US") })}
                     </div>
                   </div>
                 </div>
-                <DataTable rows={attentionLines} columns={attentionColumns} emptyText="No warning items." />
+                <DataTable rows={attentionLines} columns={attentionColumns} emptyText={t("sales.orders.noWarningItems")} />
               </div>
             ) : null}
             <DataTable
               rows={quoteBuilderLines}
               columns={builderColumns}
-              emptyText="No sales order lines yet. Add a product code or import a sales order file."
+              emptyText={t("sales.orders.noSalesOrderLines")}
               onRowClick={(row) => setQuoteLinePreview(row)}
             />
           </div>
@@ -3256,27 +3279,27 @@ export function QuotesPage({
             <div className="quote-bottom-layout">
               <div className="quote-bottom-left">
                 <label className="field quote-notes-block">
-                  <span className="field__label">Notes</span>
+                  <span className="field__label">{t("sales.orders.notes")}</span>
                   <textarea
                     className="field__input quote-notes-input"
                     value={quoteNotes}
                     onChange={(event) => setQuoteNotes(event.target.value)}
-                    placeholder="Customer notes or final remarks"
+                    placeholder={t("sales.orders.customerNotesPlaceholder")}
                     rows={4}
                   />
                 </label>
 
                 <div className="quote-add-row-panel">
-                  <div className="quote-add-row-panel__title">Add New Row</div>
+                  <div className="quote-add-row-panel__title">{t("sales.orders.addNewRow")}</div>
                   <div className="quote-line-toolbar quote-line-toolbar--bottom">
-                    <Input value={quoteCode} onChange={setQuoteCode} placeholder="Part No or name" />
+                    <Input value={quoteCode} onChange={setQuoteCode} placeholder={t("sales.orders.partNoOrName")} />
                     <Select
                       label=""
                       value={quoteBrandSelection}
                       options={[
-                        { value: "", label: "Select brand" },
+                        { value: "", label: t("sales.orders.selectBrand") },
                         ...brandOptions,
-                        { value: "__manual__", label: "Manual entry..." },
+                        { value: "__manual__", label: t("common.manualEntry") },
                       ]}
                       onChange={(value) => {
                         setQuoteBrandSelection(value);
@@ -3284,13 +3307,13 @@ export function QuotesPage({
                         if (!value) setQuoteBrand("");
                       }}
                     />
-                    {quoteBrandSelection === "__manual__" ? <Input value={quoteBrand} onChange={setQuoteBrand} placeholder="Manual brand" /> : null}
-                    <Input value={quoteQty} onChange={setQuoteQty} placeholder="Qty" />
-                    <Button onClick={() => void handleResolveQuoteLine()} busy={resolvingLine} busyLabel="Resolving...">
-                      Add New Row
+                    {quoteBrandSelection === "__manual__" ? <Input value={quoteBrand} onChange={setQuoteBrand} placeholder={t("sales.orders.manualBrand")} /> : null}
+                    <Input value={quoteQty} onChange={setQuoteQty} placeholder={t("sales.orders.qty")} />
+                    <Button onClick={() => void handleResolveQuoteLine()} busy={resolvingLine} busyLabel={t("sales.orders.resolving")}>
+                      {t("sales.orders.addNewRow")}
                     </Button>
-                    <Button variant="secondary" onClick={() => importRef.current?.click()} busy={importingLines} busyLabel="Importing...">
-                      Add Items in Bulk
+                    <Button variant="secondary" onClick={() => importRef.current?.click()} busy={importingLines} busyLabel={t("sales.orders.importing")}>
+                      {t("sales.orders.addItemsInBulk")}
                     </Button>
                   </div>
                 </div>
@@ -3299,37 +3322,37 @@ export function QuotesPage({
               <div className="quote-bottom-right">
                 <div className="quote-summary-card">
                   <div className="quote-summary-row">
-                    <span>Sub Total</span>
+                    <span>{t("sales.orders.subTotal")}</span>
                     <strong>{formatMoney(draftTotals.subtotal, currency)}</strong>
                   </div>
                   <div className="quote-summary-row">
-                    <span>Discount</span>
+                    <span>{t("sales.orders.discount")}</span>
                     <div className="quote-summary-input-wrap">
                       <input className="field__input quote-total-input" value={discountAmount} onChange={(event) => setDiscountAmount(event.target.value)} placeholder="0.00" />
                     </div>
                   </div>
                   <div className="quote-summary-row">
-                    <span>Shipping</span>
+                    <span>{t("sales.orders.shipping")}</span>
                     <div className="quote-summary-input-wrap">
                       <input className="field__input quote-total-input" value={shippingCost} onChange={(event) => setShippingCost(event.target.value)} placeholder="0.00" />
                     </div>
                   </div>
                   <div className="quote-summary-row quote-summary-row--total">
-                    <span>Total Amount</span>
+                    <span>{t("sales.orders.totalAmount")}</span>
                     <strong>{formatMoney(draftTotals.totalAmount, currency)}</strong>
                   </div>
 
                   <div className="quote-summary-internal">
                     <div className="quote-summary-mini">
-                      <span>Purchase Total</span>
+                      <span>{t("sales.orders.purchaseTotal")}</span>
                       <strong>{formatMoney(draftTotals.purchase, currency)}</strong>
                     </div>
                     <div className="quote-summary-mini">
-                      <span>Profit</span>
+                      <span>{t("sales.orders.profit")}</span>
                       <strong>{formatMoney(draftTotals.profit, currency)}</strong>
                     </div>
                     <div className="quote-summary-mini">
-                      <span>Margin %</span>
+                      <span>{t("sales.orders.marginPercent")}</span>
                       <strong>{draftTotals.margin}%</strong>
                     </div>
                   </div>
@@ -3345,13 +3368,14 @@ export function QuotesPage({
         <div className="modal-backdrop">
           <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
             <div className="modal-card__header draggable-surface__handle">
-              <h3>Convert to Invoice?</h3>
-              <p>
-                {pendingConfirmedOrder.sales_order_no} confirmed and supplier purchase orders created. Do you want to create the sales invoice now?
-              </p>
+              <h3>{t("sales.orders.convertToInvoiceQuestion")}</h3>
+              <p>{t("sales.orders.convertToInvoiceDescription", { salesOrderNo: pendingConfirmedOrder.sales_order_no })}</p>
             </div>
             <div className="modal-hint">
-              Customer: {pendingConfirmedOrder.customer_name || "-"} | Total Amount: {formatMoney(pendingConfirmedOrder.sales_total, pendingConfirmedOrder.currency)}
+              {t("sales.orders.modalCustomerAmount", {
+                customer: pendingConfirmedOrder.customer_name || "-",
+                amount: formatMoney(pendingConfirmedOrder.sales_total, pendingConfirmedOrder.currency),
+              })}
             </div>
             <div className="modal-actions">
               <Button
@@ -3359,14 +3383,14 @@ export function QuotesPage({
                 onClick={() => {
                   setInvoicePromptOpen(false);
                   setPendingConfirmedOrder(null);
-                  actionFeedback.succeed("Purchase orders created. Invoice conversion postponed.");
+                  actionFeedback.succeed(t("sales.orders.invoiceConversionPostponed"));
                 }}
                 disabled={creatingInvoice}
               >
-                Later
+                {t("sales.orders.later")}
               </Button>
-              <Button onClick={() => void handleConvertConfirmedToInvoice()} busy={creatingInvoice} busyLabel="Creating Invoice...">
-                Convert to Invoice
+              <Button onClick={() => void handleConvertConfirmedToInvoice()} busy={creatingInvoice} busyLabel={t("sales.orders.creatingInvoice")}>
+                {t("sales.orders.convertToInvoice")}
               </Button>
             </div>
           </DraggableSurface>
@@ -3378,15 +3402,19 @@ export function QuotesPage({
           <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle" onClick={(event) => event.stopPropagation()}>
             <div className="modal-card__header draggable-surface__handle">
               <h3>{quoteLinePreview.resolvedCode || quoteLinePreview.requestedCode || "-"}</h3>
-              <p>Sales order line preview</p>
+              <p>{t("sales.orders.linePreview")}</p>
             </div>
             <div className="document-marks document-marks--compact">
-              <span className="mark-badge">{quoteLinePreview.brand || "No brand"}</span>
-              {getQuoteBuilderLineIssues(quoteLinePreview).map((issue) => (
+              <span className="mark-badge">{quoteLinePreview.brand || t("sales.orders.noBrand")}</span>
+              {getQuoteBuilderLineIssues(t, quoteLinePreview).map((issue) => (
                 <span
                   key={`${quoteLinePreview.lineId}-${issue}`}
                   className={`mark-badge ${
-                    issue === "Discontinued" ? "mark-badge--danger" : issue === "Replacement" ? "mark-badge--accent" : "mark-badge--info"
+                    issue === t("sales.warnings.discontinued")
+                      ? "mark-badge--danger"
+                      : issue === t("sales.warnings.replacement")
+                        ? "mark-badge--accent"
+                        : "mark-badge--info"
                   }`}
                 >
                   {issue}
@@ -3394,21 +3422,21 @@ export function QuotesPage({
               ))}
             </div>
             <div className="workbench-detail-list">
-              <div><span>Description</span><strong>{quoteLinePreview.description || "-"}</strong></div>
-              <div><span>Requested Code</span><strong>{quoteLinePreview.requestedCode || "-"}</strong></div>
-              <div><span>Quantity</span><strong>{quoteLinePreview.qty}</strong></div>
-              <div><span>Origin</span><strong>{quoteLinePreview.origin || "-"}</strong></div>
-              <div><span>Weight</span><strong>{quoteLinePreview.weight_kg ?? "-"}</strong></div>
-              <div><span>Supplier</span><strong>{quoteLinePreview.supplier_name || "-"}</strong></div>
-              <div><span>Buy</span><strong>{formatMoney(quoteLinePreview.buy_price, currency)}</strong></div>
-              <div><span>Sell</span><strong>{formatMoney(quoteLinePreview.sell_price, currency)}</strong></div>
-              <div><span>Price Date</span><strong>{formatDate(quoteLinePreview.price_date)}</strong></div>
+              <div><span>{t("sales.orders.description")}</span><strong>{quoteLinePreview.description || "-"}</strong></div>
+              <div><span>{t("sales.orders.requestedCode")}</span><strong>{quoteLinePreview.requestedCode || "-"}</strong></div>
+              <div><span>{t("sales.orders.quantity")}</span><strong>{quoteLinePreview.qty}</strong></div>
+              <div><span>{t("sales.orders.origin")}</span><strong>{quoteLinePreview.origin || "-"}</strong></div>
+              <div><span>{t("sales.orders.weight")}</span><strong>{quoteLinePreview.weight_kg ?? "-"}</strong></div>
+              <div><span>{t("sales.orders.supplier")}</span><strong>{quoteLinePreview.supplier_name || "-"}</strong></div>
+              <div><span>{t("sales.orders.buy")}</span><strong>{formatMoney(quoteLinePreview.buy_price, currency)}</strong></div>
+              <div><span>{t("sales.orders.sell")}</span><strong>{formatMoney(quoteLinePreview.sell_price, currency)}</strong></div>
+              <div><span>{t("sales.orders.priceDate")}</span><strong>{formatDate(quoteLinePreview.price_date)}</strong></div>
             </div>
             {quoteLinePreview.codeChanged ? <div className="warning-text">{quoteLinePreview.codeChangeWarning}</div> : null}
             {quoteLinePreview.notes ? <div className="info-text">{quoteLinePreview.notes}</div> : null}
             <div className="modal-actions">
               <Button variant="secondary" onClick={() => setQuoteLinePreview(null)}>
-                Close
+                {t("common.close")}
               </Button>
             </div>
           </DraggableSurface>
