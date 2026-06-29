@@ -22,6 +22,7 @@ import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
 import { includesLooseText } from "../../domain/shared/normalize";
 import { buildEntityAlias } from "../../shared/entityAlias";
 import { canAccessSystemModules } from "../../shared/roles";
+import { useI18n } from "../../i18n/I18nProvider";
 
 type DashboardPageProps = {
   role?: string;
@@ -31,6 +32,8 @@ type DashboardPageProps = {
 
 export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab }: DashboardPageProps) {
   const actionFeedback = useActionFeedback();
+  const { locale, t } = useI18n();
+  const numberLocale = locale === "tr" ? "tr-TR" : "en-US";
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [latestQuotes, setLatestQuotes] = useState<DashboardSalesOrderSummary[]>([]);
   const [loadingLatestQuotes, setLoadingLatestQuotes] = useState(false);
@@ -38,16 +41,16 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
   const [loadingBrandSummary, setLoadingBrandSummary] = useState(false);
   const [loadingSuppliers, setLoadingSuppliers] = useState(false);
-  const [snapshotError, setSnapshotError] = useState("");
-  const [latestQuotesError, setLatestQuotesError] = useState("");
-  const [brandSummaryError, setBrandSummaryError] = useState("");
+  const [snapshotErrorKey, setSnapshotErrorKey] = useState<string | null>(null);
+  const [latestQuotesErrorKey, setLatestQuotesErrorKey] = useState<string | null>(null);
+  const [brandSummaryErrorKey, setBrandSummaryErrorKey] = useState<string | null>(null);
   const [inventoryPulse, setInventoryPulse] = useState({
     warehouses: 0,
     stockedItems: 0,
     onHandQty: 0,
     stockValue: 0,
   });
-  const [inventoryPulseError, setInventoryPulseError] = useState("");
+  const [inventoryPulseErrorKey, setInventoryPulseErrorKey] = useState<string | null>(null);
   const [brandSummarySearch, setBrandSummarySearch] = useState("");
   const [brandSummarySupplier, setBrandSummarySupplier] = useState("");
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriodKey>("thisMonth");
@@ -63,13 +66,14 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
     let cancelled = false;
 
     async function run() {
-      setSnapshotError("");
+      setSnapshotErrorKey(null);
       try {
         const result = showSystemPanels ? await fetchDashboardSnapshot() : await fetchCustomerOpsDashboardSnapshot();
         if (!cancelled) setSnapshot(result);
       } catch (caught) {
         if (!cancelled) {
-          setSnapshotError(caught instanceof Error ? caught.message : "Dashboard load failed");
+          console.error(caught);
+          setSnapshotErrorKey("dashboard.errors.snapshotLoadFailed");
         }
       }
     }
@@ -85,7 +89,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
     let cancelled = false;
 
     async function run() {
-      setInventoryPulseError("");
+      setInventoryPulseErrorKey(null);
       try {
         const [warehouseRows, stockRows] = await Promise.all([fetchWarehouses(), fetchWarehouseStockItems()]);
         if (cancelled) return;
@@ -97,7 +101,8 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
         });
       } catch (caught) {
         if (!cancelled) {
-          setInventoryPulseError(caught instanceof Error ? caught.message : "Inventory pulse load failed");
+          console.error(caught);
+          setInventoryPulseErrorKey("dashboard.pulse.loadFailed");
         }
       }
     }
@@ -114,14 +119,15 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
 
     async function run() {
       setLoadingLatestQuotes(true);
-      setLatestQuotesError("");
+      setLatestQuotesErrorKey(null);
       try {
         const result = await fetchDashboardLatestQuotes();
         if (!cancelled) setLatestQuotes(result);
       } catch (caught) {
         if (!cancelled) {
           setLatestQuotes([]);
-          setLatestQuotesError(caught instanceof Error ? caught.message : "Latest sales orders load failed");
+          console.error(caught);
+          setLatestQuotesErrorKey("dashboard.latestSalesOrders.loadFailed");
         }
       } finally {
         if (!cancelled) setLoadingLatestQuotes(false);
@@ -139,7 +145,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
 
     async function run() {
       setLoadingSuppliers(true);
-      setBrandSummaryError("");
+      setBrandSummaryErrorKey(null);
       try {
         const result = await fetchCloudSuppliers();
         if (!cancelled) {
@@ -148,7 +154,8 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
       } catch (caught) {
         if (!cancelled) {
           setSuppliers([]);
-          setBrandSummaryError(caught instanceof Error ? caught.message : "Supplier list load failed");
+          console.error(caught);
+          setBrandSummaryErrorKey("dashboard.brandSummary.supplierLoadFailed");
         }
       } finally {
         if (!cancelled) setLoadingSuppliers(false);
@@ -171,7 +178,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
         return;
       }
       setLoadingBrandSummary(true);
-      setBrandSummaryError("");
+      setBrandSummaryErrorKey(null);
       try {
         const result = brandSummarySupplier
           ? await fetchCloudSupplierBrandSummary(brandSummarySupplier)
@@ -180,7 +187,8 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
       } catch (caught) {
         if (!cancelled) {
           setBrandSummary([]);
-          setBrandSummaryError(caught instanceof Error ? caught.message : "Brand summary load failed");
+          console.error(caught);
+          setBrandSummaryErrorKey("dashboard.brandSummary.loadFailed");
         }
       } finally {
         if (!cancelled) setLoadingBrandSummary(false);
@@ -194,9 +202,9 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
   }, [brandSummarySupplier, suppliers, showSystemPanels]);
 
   async function reloadDashboard() {
-    setSnapshotError("");
-    setLatestQuotesError("");
-    setBrandSummaryError("");
+    setSnapshotErrorKey(null);
+    setLatestQuotesErrorKey(null);
+    setBrandSummaryErrorKey(null);
     try {
       const [snapshotResult, latestQuotesResult] = await Promise.all([
         fetchDashboardSnapshot(),
@@ -209,20 +217,22 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
         : await fetchCloudSupplierBrandSummaryAll(suppliers);
       setBrandSummary(brandSummaryResult);
     } catch (caught) {
-      setSnapshotError(caught instanceof Error ? caught.message : "Dashboard load failed");
+      console.error(caught);
+      setSnapshotErrorKey("dashboard.errors.reloadFailed");
     }
   }
 
   async function handleDeleteBrandSummary(supplierId: string, brand: string) {
-    if (!confirm(`Delete all active supplier prices for ${brand}?`)) return;
+    if (!confirm(t("dashboard.brandSummary.deleteConfirm", { brand }))) return;
     try {
-      actionFeedback.begin(`Deleting supplier brand summary for ${brand}...`);
+      actionFeedback.begin(t("dashboard.brandSummary.deleting", { brand }));
       await deleteSupplierBrandSummaryRow({ supplierId, brand });
       await reloadDashboard();
-      actionFeedback.succeed(`Supplier brand summary deleted for ${brand}.`);
+      actionFeedback.succeed(t("dashboard.brandSummary.deleted", { brand }));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Supplier brand delete failed";
-      setBrandSummaryError(message);
+      console.error(caught);
+      const message = t("dashboard.brandSummary.deleteFailed");
+      setBrandSummaryErrorKey("dashboard.brandSummary.deleteFailed");
       actionFeedback.fail(message);
     }
   }
@@ -236,11 +246,35 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
   const issues = snapshot?.issues ?? {};
   const selectedRevenue = revenue?.periods?.[revenuePeriod] ?? null;
 
+  function formatCount(value: number) {
+    return value.toLocaleString(numberLocale);
+  }
+
+  function formatOrderStatus(value: string | null | undefined) {
+    const normalized = String(value || "").trim().toLowerCase();
+    switch (normalized) {
+      case "draft":
+        return t("statuses.draft");
+      case "confirmed":
+        return t("statuses.confirmed");
+      case "purchased":
+        return t("statuses.purchased");
+      case "invoiced":
+        return t("statuses.invoiced");
+      case "paid":
+        return t("statuses.paid");
+      case "void":
+        return t("statuses.void");
+      default:
+        return value || "-";
+    }
+  }
+
   const supplierOptions = suppliers.map((supplier) => ({
     value: supplier.supplier_id,
     label: supplier.name,
   }));
-  const brandSummarySupplierOptions = [{ value: "", label: "All Suppliers" }, ...supplierOptions];
+  const brandSummarySupplierOptions = [{ value: "", label: t("dashboard.brandSummary.allSuppliers") }, ...supplierOptions];
 
   const filteredBrandSummary = brandSummary.filter((row) => {
     const search = brandSummarySearch.trim().toLowerCase();
@@ -253,7 +287,14 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
 
   function handleExportBrandSummary() {
     const rows = [
-      ["Brand", "Supplier", "Part Count", "Line Count", "Latest Price Date", "Oldest Price Date"],
+      [
+        t("dashboard.brandSummary.brand"),
+        t("dashboard.brandSummary.supplier"),
+        t("dashboard.brandSummary.parts"),
+        t("dashboard.brandSummary.lines"),
+        t("dashboard.brandSummary.latestPriceDate"),
+        t("dashboard.brandSummary.oldestPriceDate"),
+      ],
       ...filteredBrandSummary.map((row) => [
         row.brand,
         row.supplier_name,
@@ -264,11 +305,11 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
       ]),
     ];
     downloadCsv("brand-summary.csv", toCsv(rows));
-    actionFeedback.succeed("Brand summary CSV downloaded.");
+    actionFeedback.succeed(t("dashboard.brandSummary.csvDownloaded"));
   }
 
   function formatMoney(value: number) {
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat(numberLocale, {
       style: "currency",
       currency: "EUR",
       maximumFractionDigits: 0,
@@ -276,45 +317,45 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
   }
 
   const revenuePeriodOptions = [
-    { value: "thisMonth", label: "This Month" },
-    { value: "thisQuarter", label: "Quarter" },
-    { value: "thisYear", label: "This Year" },
-    { value: "previousYear", label: "Previous Year" },
+    { value: "thisMonth", label: t("dashboard.revenueAnalysis.period.thisMonth") },
+    { value: "thisQuarter", label: t("dashboard.revenueAnalysis.period.thisQuarter") },
+    { value: "thisYear", label: t("dashboard.revenueAnalysis.period.thisYear") },
+    { value: "previousYear", label: t("dashboard.revenueAnalysis.period.previousYear") },
   ] satisfies Array<{ value: RevenuePeriodKey; label: string }>;
 
   return (
     <div className="dashboard">
       <div className="stats-grid">
-        {showSystemPanels ? <StatCard label="Catalog Products" value={catalogCount.toLocaleString("en-US")} subtext="Live cloud catalog" tone="success" /> : null}
-        {showSystemPanels ? <StatCard label="Brands" value={brandCount.toLocaleString("en-US")} subtext="Available in workspace" tone="warning" /> : null}
-        {showSystemPanels ? <StatCard label="Suppliers" value={supplierCount.toLocaleString("en-US")} subtext="Live supplier accounts" tone="success" /> : null}
-        <StatCard label="Quotes" value={quoteCount.toLocaleString("en-US")} subtext="Recent cloud sales orders" tone="neutral" />
+        {showSystemPanels ? <StatCard label={t("dashboard.stats.catalogProducts")} value={formatCount(catalogCount)} subtext={t("dashboard.stats.catalogProductsSubtitle")} tone="success" /> : null}
+        {showSystemPanels ? <StatCard label={t("dashboard.stats.brands")} value={formatCount(brandCount)} subtext={t("dashboard.stats.brandsSubtitle")} tone="warning" /> : null}
+        {showSystemPanels ? <StatCard label={t("dashboard.stats.suppliers")} value={formatCount(supplierCount)} subtext={t("dashboard.stats.suppliersSubtitle")} tone="success" /> : null}
+        <StatCard label={t("dashboard.stats.quotes")} value={formatCount(quoteCount)} subtext={t("dashboard.stats.quotesSubtitle")} tone="neutral" />
       </div>
 
       {showSystemPanels ? (
-        <SectionCard title="Inventory Pulse">
-          {inventoryPulseError ? <div className="error-text">{inventoryPulseError}</div> : null}
+        <SectionCard title={t("dashboard.pulse.title")}>
+          {inventoryPulseErrorKey ? <div className="error-text">{t(inventoryPulseErrorKey)}</div> : null}
           <div className="stats-grid stats-grid--compact">
-            <StatCard label="Active Warehouses" value={inventoryPulse.warehouses.toLocaleString("en-US")} subtext="Warehouses currently open" tone="success" onClick={() => onOpenInventoryTab?.("Warehouses")} />
-            <StatCard label="Stocked Items" value={inventoryPulse.stockedItems.toLocaleString("en-US")} subtext="SKU rows with live stock" tone="neutral" onClick={() => onOpenInventoryTab?.("On Hand")} />
-            <StatCard label="On Hand Qty" value={inventoryPulse.onHandQty.toLocaleString("en-US")} subtext="Current quantity across warehouses" tone="success" onClick={() => onOpenInventoryTab?.("On Hand")} />
-            <StatCard label="Stock Value" value={formatMoney(inventoryPulse.stockValue)} subtext="Approximate warehouse inventory value" tone="warning" onClick={() => onOpenInventoryTab?.("On Hand")} />
+            <StatCard label={t("dashboard.pulse.activeWarehouses")} value={formatCount(inventoryPulse.warehouses)} subtext={t("dashboard.pulse.activeWarehousesSubtitle")} tone="success" onClick={() => onOpenInventoryTab?.("Warehouses")} />
+            <StatCard label={t("dashboard.pulse.stockedItems")} value={formatCount(inventoryPulse.stockedItems)} subtext={t("dashboard.pulse.stockedItemsSubtitle")} tone="neutral" onClick={() => onOpenInventoryTab?.("On Hand")} />
+            <StatCard label={t("dashboard.pulse.onHandQty")} value={formatCount(inventoryPulse.onHandQty)} subtext={t("dashboard.pulse.onHandQtySubtitle")} tone="success" onClick={() => onOpenInventoryTab?.("On Hand")} />
+            <StatCard label={t("dashboard.pulse.stockValue")} value={formatMoney(inventoryPulse.stockValue)} subtext={t("dashboard.pulse.stockValueSubtitle")} tone="warning" onClick={() => onOpenInventoryTab?.("On Hand")} />
           </div>
         </SectionCard>
       ) : null}
 
       {newPortalOrders > 0 ? (
-        <SectionCard title="New Order Came">
+        <SectionCard title={t("dashboard.alert.title")}>
           <div className="dashboard-alert dashboard-alert--warning">
-            <strong>{newPortalOrders.toLocaleString("en-US")} new portal order</strong>
-            <span>Customer confirmed order is waiting in Sales Orders.</span>
+            <strong>{newPortalOrders === 1 ? t("dashboard.alert.singular", { count: formatCount(newPortalOrders) }) : t("dashboard.alert.plural", { count: formatCount(newPortalOrders) })}</strong>
+            <span>{t("dashboard.alert.body")}</span>
           </div>
         </SectionCard>
       ) : null}
 
       <div className="dashboard-grid">
-        <SectionCard title="Latest Sales Orders">
-          {latestQuotesError ? <div className="error-text">{latestQuotesError}</div> : null}
+        <SectionCard title={t("dashboard.latestSalesOrders.title")}>
+          {latestQuotesErrorKey ? <div className="error-text">{t(latestQuotesErrorKey)}</div> : null}
           <div className="list-stack">
             {latestQuotes.map((quote) => (
               <div key={quote.id} className="list-row list-row--dashboard">
@@ -329,116 +370,116 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
                 </span>
                 <span className="dashboard-order-meta">
                   {isDraftPortalAlert(quote) ? (
-                    <span className="mark-badge mark-badge--accent">New Order</span>
+                    <span className="mark-badge mark-badge--accent">{t("dashboard.latestSalesOrders.newOrderBadge")}</span>
                   ) : null}
-                  <span>{quote.status || "-"}</span>
+                  <span>{formatOrderStatus(quote.status)}</span>
                 </span>
                 <Button variant="secondary" className="button--compact" onClick={() => onOpenSalesOrder?.(quote.id)}>
-                  Open
+                  {t("dashboard.latestSalesOrders.open")}
                 </Button>
               </div>
             ))}
-            {!latestQuotes.length && !latestQuotesError ? (
-              <div className="chart-placeholder">{loadingLatestQuotes ? "Loading latest sales orders..." : "No sales orders yet"}</div>
+            {!latestQuotes.length && !latestQuotesErrorKey ? (
+              <div className="chart-placeholder">{loadingLatestQuotes ? t("dashboard.latestSalesOrders.loading") : t("dashboard.latestSalesOrders.empty")}</div>
             ) : null}
           </div>
         </SectionCard>
-        <SectionCard title="Revenue Analysis">
+        <SectionCard title={t("dashboard.revenueAnalysis.title")}>
           <div className="toolbar toolbar--wrap">
             <Select value={revenuePeriod} options={revenuePeriodOptions} onChange={(value) => setRevenuePeriod(value as RevenuePeriodKey)} />
           </div>
           {selectedRevenue ? (
             <>
-            <div className="stats-grid stats-grid--compact">
+              <div className="stats-grid stats-grid--compact">
               <StatCard
-                label="Sales Amount"
+                label={t("dashboard.revenueAnalysis.salesAmount")}
                 value={formatMoney(selectedRevenue.sales.total)}
-                subtext={`${selectedRevenue.sales.count.toLocaleString("en-US")} sales orders`}
+                subtext={t("dashboard.revenueAnalysis.salesOrdersSubtitle", { count: formatCount(selectedRevenue.sales.count) })}
                 tone="success"
               />
               <StatCard
-                label="Purchase Amount"
+                label={t("dashboard.revenueAnalysis.purchaseAmount")}
                 value={formatMoney(selectedRevenue.purchases.total)}
-                subtext={`${selectedRevenue.purchases.count.toLocaleString("en-US")} purchase orders`}
+                subtext={t("dashboard.revenueAnalysis.purchaseOrdersSubtitle", { count: formatCount(selectedRevenue.purchases.count) })}
                 tone="neutral"
               />
               <StatCard
-                label="Net Spread"
+                label={t("dashboard.revenueAnalysis.netSpread")}
                 value={formatMoney(selectedRevenue.sales.total - selectedRevenue.purchases.total)}
-                subtext="Sales less purchase amount"
+                subtext={t("dashboard.revenueAnalysis.netSpreadSubtitle")}
                 tone="warning"
               />
-            </div>
-            <div className="dashboard-grid dashboard-grid--compact">
-              <SectionCard title="By Seller">
-                {selectedRevenue.sellerTotals.length ? (
-                  <div className="table-wrap">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Seller</th>
-                          <th>Orders</th>
-                          <th>Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedRevenue.sellerTotals.slice(0, 6).map((row) => (
-                          <tr key={row.name}>
-                            <td title={row.name}>{buildEntityAlias(row.name)}</td>
-                            <td>{row.count.toLocaleString("en-US")}</td>
-                            <td>{formatMoney(row.total)}</td>
+              </div>
+              <div className="dashboard-grid dashboard-grid--compact">
+                <SectionCard title={t("dashboard.revenueAnalysis.bySeller.title")}>
+                  {selectedRevenue.sellerTotals.length ? (
+                    <div className="table-wrap">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>{t("dashboard.revenueAnalysis.bySeller.seller")}</th>
+                            <th>{t("dashboard.revenueAnalysis.bySeller.orders")}</th>
+                            <th>{t("dashboard.revenueAnalysis.bySeller.amount")}</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="chart-placeholder">No seller turnover in this period</div>
-                )}
-              </SectionCard>
-              <SectionCard title="By Purchase Company">
-                {selectedRevenue.purchaseCompanyTotals.length ? (
-                  <div className="table-wrap">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Purchase Company</th>
-                          <th>Orders</th>
-                          <th>Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedRevenue.purchaseCompanyTotals.slice(0, 6).map((row) => (
-                          <tr key={row.name}>
-                            <td title={row.name}>{buildEntityAlias(row.name)}</td>
-                            <td>{row.count.toLocaleString("en-US")}</td>
-                            <td>{formatMoney(row.total)}</td>
+                        </thead>
+                        <tbody>
+                          {selectedRevenue.sellerTotals.slice(0, 6).map((row) => (
+                            <tr key={row.name}>
+                              <td title={row.name}>{buildEntityAlias(row.name)}</td>
+                              <td>{formatCount(row.count)}</td>
+                              <td>{formatMoney(row.total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="chart-placeholder">{t("dashboard.revenueAnalysis.bySeller.empty")}</div>
+                  )}
+                </SectionCard>
+                <SectionCard title={t("dashboard.revenueAnalysis.byPurchaseCompany.title")}>
+                  {selectedRevenue.purchaseCompanyTotals.length ? (
+                    <div className="table-wrap">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>{t("dashboard.revenueAnalysis.byPurchaseCompany.purchaseCompany")}</th>
+                            <th>{t("dashboard.revenueAnalysis.byPurchaseCompany.orders")}</th>
+                            <th>{t("dashboard.revenueAnalysis.byPurchaseCompany.amount")}</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="chart-placeholder">No purchase turnover in this period</div>
-                )}
-              </SectionCard>
-            </div>
+                        </thead>
+                        <tbody>
+                          {selectedRevenue.purchaseCompanyTotals.slice(0, 6).map((row) => (
+                            <tr key={row.name}>
+                              <td title={row.name}>{buildEntityAlias(row.name)}</td>
+                              <td>{formatCount(row.count)}</td>
+                              <td>{formatMoney(row.total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="chart-placeholder">{t("dashboard.revenueAnalysis.byPurchaseCompany.empty")}</div>
+                  )}
+                </SectionCard>
+              </div>
             </>
-          ) : !snapshotError && !issues.revenue ? (
-            <div className="chart-placeholder">Loading revenue analysis...</div>
+          ) : !snapshotErrorKey && !issues.revenue ? (
+            <div className="chart-placeholder">{t("dashboard.revenueAnalysis.loading")}</div>
           ) : issues.revenue ? (
-            <div className="error-text">{issues.revenue}</div>
-          ) : snapshotError ? (
-            <div className="error-text">{snapshotError}</div>
+            <div className="error-text">{t("dashboard.revenueAnalysis.unavailable")}</div>
+          ) : snapshotErrorKey ? (
+            <div className="error-text">{t(snapshotErrorKey)}</div>
           ) : null}
         </SectionCard>
         {showSystemPanels ? (
-        <SectionCard title="Brand Summary">
+          <SectionCard title={t("dashboard.brandSummary.title")}>
           <div className="toolbar toolbar--wrap dashboard-toolbar">
             <Select value={brandSummarySupplier} options={brandSummarySupplierOptions} onChange={setBrandSummarySupplier} />
-            <Input value={brandSummarySearch} placeholder="Search brand or supplier" onChange={setBrandSummarySearch} />
+            <Input value={brandSummarySearch} placeholder={t("dashboard.brandSummary.searchPlaceholder")} onChange={setBrandSummarySearch} />
             <Button variant="secondary" className="button--compact" onClick={handleExportBrandSummary} disabled={!filteredBrandSummary.length}>
-              Export CSV
+              {t("dashboard.brandSummary.exportCsv")}
             </Button>
           </div>
           {filteredBrandSummary.length ? (
@@ -446,12 +487,12 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Brand</th>
-                    <th>Supplier</th>
-                    <th>Parts</th>
-                    <th>Lines</th>
-                    <th>Latest Price</th>
-                    <th>Action</th>
+                    <th>{t("dashboard.brandSummary.brand")}</th>
+                    <th>{t("dashboard.brandSummary.supplier")}</th>
+                    <th>{t("dashboard.brandSummary.parts")}</th>
+                    <th>{t("dashboard.brandSummary.lines")}</th>
+                    <th>{t("dashboard.brandSummary.latestPrice")}</th>
+                    <th>{t("dashboard.brandSummary.action")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -459,12 +500,12 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
                     <tr key={`${row.supplier_id}-${row.brand}`}>
                       <td><BrandPill brand={row.brand} compact /></td>
                       <td>{row.supplier_name}</td>
-                      <td>{row.part_count.toLocaleString("en-US")}</td>
-                      <td>{row.line_count.toLocaleString("en-US")}</td>
+                      <td>{formatCount(row.part_count)}</td>
+                      <td>{formatCount(row.line_count)}</td>
                       <td>{row.latest_price_date || "-"}</td>
                       <td>
                         <Button variant="secondary" className="button--compact" onClick={() => void handleDeleteBrandSummary(row.supplier_id, row.brand)}>
-                          Delete
+                          {t("dashboard.brandSummary.delete")}
                         </Button>
                       </td>
                     </tr>
@@ -472,16 +513,16 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
                 </tbody>
               </table>
             </div>
-          ) : !brandSummaryError ? (
+          ) : !brandSummaryErrorKey ? (
             <div className="chart-placeholder">
-              {loadingSuppliers || loadingBrandSummary ? "Loading brand summary..." : brandSummary.length ? "No rows match current filters" : "No brand summary yet"}
+              {loadingSuppliers || loadingBrandSummary ? t("dashboard.brandSummary.loading") : brandSummary.length ? t("dashboard.brandSummary.noRowsMatchCurrentFilters") : t("dashboard.brandSummary.noBrandSummaryYet")}
             </div>
           ) : (
-            <div className="error-text">{brandSummaryError}</div>
+            <div className="error-text">{t(brandSummaryErrorKey)}</div>
           )}
-        </SectionCard>
+          </SectionCard>
         ) : null}
-        <SectionCard title="Sales by Brand">
+        <SectionCard title={t("dashboard.salesByBrand.title")}>
           <div className="toolbar toolbar--wrap dashboard-toolbar">
             <Select value={revenuePeriod} options={revenuePeriodOptions} onChange={(value) => setRevenuePeriod(value as RevenuePeriodKey)} />
           </div>
@@ -490,28 +531,28 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Brand</th>
-                    <th>Sales Lines</th>
-                    <th>Amount</th>
+                    <th>{t("dashboard.salesByBrand.brand")}</th>
+                    <th>{t("dashboard.salesByBrand.salesLines")}</th>
+                    <th>{t("dashboard.salesByBrand.amount")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selectedRevenue.brandTotals.slice(0, 24).map((row) => (
                     <tr key={row.name}>
                       <td><BrandPill brand={row.name} compact /></td>
-                      <td>{row.count.toLocaleString("en-US")}</td>
+                      <td>{formatCount(row.count)}</td>
                       <td>{formatMoney(row.total)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          ) : !snapshotError && !issues.revenue ? (
-            <div className="chart-placeholder">No brand sales in this period</div>
+          ) : !snapshotErrorKey && !issues.revenue ? (
+            <div className="chart-placeholder">{t("dashboard.salesByBrand.empty")}</div>
           ) : issues.revenue ? (
-            <div className="error-text">{issues.revenue}</div>
-          ) : snapshotError ? (
-            <div className="error-text">{snapshotError}</div>
+            <div className="error-text">{t("dashboard.revenueAnalysis.unavailable")}</div>
+          ) : snapshotErrorKey ? (
+            <div className="error-text">{t(snapshotErrorKey)}</div>
           ) : null}
         </SectionCard>
       </div>
