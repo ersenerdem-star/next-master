@@ -36,6 +36,7 @@ import { Select } from "../components/common/Select";
 import { BrandPill } from "../components/common/BrandPill";
 import { includesLooseText } from "../../domain/shared/normalize";
 import { isUuid } from "../../infrastructure/api/organizationApi";
+import { useI18n } from "../../i18n/I18nProvider";
 
 type InventoryTab = "Warehouses" | "Purchase Receives" | "Stock Movements" | "On Hand" | "Transfers";
 
@@ -111,7 +112,19 @@ function transferLineKey(line: {
 }
 
 export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: selectedWarehouseIdProp = "", stockSearch: stockSearchProp = "" }: InventoryPageProps) {
+  const { locale, t } = useI18n();
   const actionFeedback = useActionFeedback();
+  const numberLocale = locale === "tr" ? "tr-TR" : "en-US";
+  const formatCount = (value: number) => value.toLocaleString(numberLocale);
+  const warehouseKindLabel = (value?: string | null) => (value === "outsourced" ? t("inventory.values.outsourced") : t("inventory.values.internal"));
+  const fulfillmentLabel = (value?: string | null) => (value === "dropship" ? t("inventory.values.dropship") : t("inventory.values.stocked"));
+  const warehouseStatusLabel = (value?: boolean | null) => (value ? t("inventory.values.active") : t("inventory.values.closed"));
+  const apiStatusLabel = (value?: string | null) => (value === "disabled" ? t("inventory.values.disabled") : t("inventory.values.active"));
+  const apiOrderLabel = (value?: boolean | null) => (value ? t("inventory.values.open") : t("inventory.values.closed"));
+  const translateStatus = (value?: string | null) => {
+    if (!value) return "-";
+    return t(`inventory.statuses.${value}`);
+  };
   const [activeTab, setActiveTab] = useState<InventoryTab>(initialTab);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<LocalPurchaseOrder[]>([]);
@@ -278,7 +291,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
         }
       } catch (caught) {
         if (!cancelled) {
-          actionFeedback.fail(caught instanceof Error ? caught.message : "Inventory load failed");
+          actionFeedback.fail(caught instanceof Error ? caught.message : t("inventory.errors.loadFailed"));
         }
       }
     }
@@ -287,7 +300,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     return () => {
       cancelled = true;
     };
-  }, [actionFeedback]);
+  }, [actionFeedback, t]);
 
   useEffect(() => {
     if (initialTab) setActiveTab(initialTab);
@@ -325,7 +338,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
         setPurchaseReceives(receives);
       } catch (caught) {
         if (!cancelled) {
-          actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase receive load failed");
+          actionFeedback.fail(caught instanceof Error ? caught.message : t("inventory.errors.purchaseReceivesLoadFailed"));
         }
       }
     }
@@ -334,7 +347,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     return () => {
       cancelled = true;
     };
-  }, [actionFeedback, activeTab]);
+  }, [actionFeedback, activeTab, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -346,7 +359,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
         if (!cancelled) setMovementRows(rows);
       } catch (caught) {
         if (!cancelled) {
-          actionFeedback.fail(caught instanceof Error ? caught.message : "Inventory movements load failed");
+          actionFeedback.fail(caught instanceof Error ? caught.message : t("inventory.errors.movementsLoadFailed"));
         }
       } finally {
         if (!cancelled) setLoadingMovements(false);
@@ -358,7 +371,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     return () => {
       cancelled = true;
     };
-  }, [actionFeedback, activeTab, movementWarehouseId]);
+  }, [actionFeedback, activeTab, movementWarehouseId, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -375,7 +388,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
         if (!cancelled) setOnHandRows(rows);
       } catch (caught) {
         if (!cancelled) {
-          actionFeedback.fail(caught instanceof Error ? caught.message : "On hand inventory load failed");
+          actionFeedback.fail(caught instanceof Error ? caught.message : t("inventory.errors.onHandLoadFailed"));
         }
       } finally {
         if (!cancelled) setLoadingOnHand(false);
@@ -386,7 +399,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     return () => {
       cancelled = true;
     };
-  }, [actionFeedback, activeTab, warehouses]);
+  }, [actionFeedback, activeTab, warehouses, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -398,7 +411,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
         if (!cancelled) setOnHandStockRows(rows);
       } catch (caught) {
         if (!cancelled) {
-          actionFeedback.fail(caught instanceof Error ? caught.message : "On hand stock detail load failed");
+          actionFeedback.fail(caught instanceof Error ? caught.message : t("inventory.errors.onHandStockLoadFailed"));
         }
       } finally {
         if (!cancelled) setLoadingOnHandStock(false);
@@ -410,57 +423,52 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     return () => {
       cancelled = true;
     };
-  }, [actionFeedback, activeTab, onHandWarehouseId]);
+  }, [actionFeedback, activeTab, onHandWarehouseId, t]);
 
   const warehouseColumns = useMemo(
     () => [
-      { key: "code", header: "Code", render: (row: Warehouse) => row.warehouse_code || "-" },
-      { key: "name", header: "Warehouse", render: (row: Warehouse) => row.warehouse_name || "-" },
-      { key: "type", header: "Type", render: (row: Warehouse) => (row.warehouse_kind === "outsourced" ? "Outsourced" : "Internal") },
-      { key: "fulfillment", header: "Fulfillment", render: (row: Warehouse) => (row.fulfillment_model === "dropship" ? "Dropship" : "Stocked") },
-      { key: "region", header: "Region", render: (row: Warehouse) => row.region || "-" },
-      { key: "status", header: "Status", render: (row: Warehouse) => (row.is_active ? "Active" : "Closed") },
+      { key: "code", header: t("inventory.table.code"), render: (row: Warehouse) => row.warehouse_code || "-" },
+      { key: "name", header: t("inventory.table.warehouse"), render: (row: Warehouse) => row.warehouse_name || "-" },
+      { key: "type", header: t("inventory.table.type"), render: (row: Warehouse) => warehouseKindLabel(row.warehouse_kind) },
+      { key: "fulfillment", header: t("inventory.table.fulfillment"), render: (row: Warehouse) => fulfillmentLabel(row.fulfillment_model) },
+      { key: "region", header: t("inventory.table.region"), render: (row: Warehouse) => row.region || "-" },
+      { key: "status", header: t("inventory.table.status"), render: (row: Warehouse) => warehouseStatusLabel(row.is_active) },
     ],
-    [],
+    [t],
   );
 
   const warehouseKindOptions = useMemo(
     () => [
-      { value: "internal", label: "Internal Warehouse" },
-      { value: "outsourced", label: "Outsourced Warehouse" },
+      { value: "internal", label: t("inventory.values.internalWarehouse") },
+      { value: "outsourced", label: t("inventory.values.outsourcedWarehouse") },
     ],
-    [],
+    [t],
   );
 
   const externalAuthTypeOptions = useMemo(
     () => [
-      { value: "none", label: "No Auth" },
-      { value: "bearer_env", label: "Bearer Token from Env" },
+      { value: "none", label: t("inventory.values.noAuth") },
+      { value: "bearer_env", label: t("inventory.values.bearerTokenFromEnv") },
     ],
-    [],
+    [t],
   );
 
   const fulfillmentModelOptions = useMemo(
     () => [
-      { value: "stocked", label: "Stocked Fulfillment" },
-      { value: "dropship", label: "Dropship Fulfillment" },
+      { value: "stocked", label: t("inventory.values.stockedFulfillment") },
+      { value: "dropship", label: t("inventory.values.dropshipFulfillment") },
     ],
-    [],
-  );
-
-  const warehouseOptions = useMemo(
-    () => [{ value: "", label: "Select warehouse" }, ...warehouses.map((row) => ({ value: row.id, label: `${row.warehouse_code} · ${row.warehouse_name}` }))],
-    [warehouses],
+    [t],
   );
 
   const stockedWarehouseOptions = useMemo(
-    () => [{ value: "", label: "Select warehouse" }, ...warehouses.filter((row) => row.fulfillment_model !== "dropship").map((row) => ({ value: row.id, label: `${row.warehouse_code} · ${row.warehouse_name}` }))],
-    [warehouses],
+    () => [{ value: "", label: t("inventory.selects.selectWarehouse") }, ...warehouses.filter((row) => row.fulfillment_model !== "dropship").map((row) => ({ value: row.id, label: `${row.warehouse_code} · ${row.warehouse_name}` }))],
+    [warehouses, t],
   );
 
   const warehouseFilterOptions = useMemo(
-    () => [{ value: "", label: "All Warehouses" }, ...warehouses.map((row) => ({ value: row.id, label: `${row.warehouse_code} · ${row.warehouse_name}` }))],
-    [warehouses],
+    () => [{ value: "", label: t("inventory.selects.allWarehouses") }, ...warehouses.map((row) => ({ value: row.id, label: `${row.warehouse_code} · ${row.warehouse_name}` }))],
+    [warehouses, t],
   );
 
   const shareableWarehouses = useMemo(
@@ -470,15 +478,15 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
 
   const warehouseApiClientColumns = useMemo(
     () => [
-      { key: "client", header: "Client", render: (row: WarehouseApiClient) => row.client_name || "-" },
-      { key: "partner", header: "Partner", render: (row: WarehouseApiClient) => row.partner_name || "-" },
-      { key: "warehouses", header: "Warehouses", render: (row: WarehouseApiClient) => row.warehouse_labels.length || 0 },
-      { key: "order", header: "Order API", render: (row: WarehouseApiClient) => (row.allow_order_submit ? "Open" : "Closed") },
-      { key: "status", header: "Status", render: (row: WarehouseApiClient) => (row.status === "disabled" ? "Disabled" : "Active") },
-      { key: "key", header: "Key Prefix", render: (row: WarehouseApiClient) => row.api_key_prefix || "-" },
-      { key: "last", header: "Last Used", render: (row: WarehouseApiClient) => formatDate(row.last_used_at) },
+      { key: "client", header: t("inventory.table.client"), render: (row: WarehouseApiClient) => row.client_name || "-" },
+      { key: "partner", header: t("inventory.table.partner"), render: (row: WarehouseApiClient) => row.partner_name || "-" },
+      { key: "warehouses", header: t("inventory.table.warehouses"), render: (row: WarehouseApiClient) => row.warehouse_labels.length || 0 },
+      { key: "order", header: t("inventory.table.orderApi"), render: (row: WarehouseApiClient) => apiOrderLabel(row.allow_order_submit) },
+      { key: "status", header: t("inventory.table.status"), render: (row: WarehouseApiClient) => apiStatusLabel(row.status) },
+      { key: "key", header: t("inventory.table.keyPrefix"), render: (row: WarehouseApiClient) => row.api_key_prefix || "-" },
+      { key: "last", header: t("inventory.table.lastUsed"), render: (row: WarehouseApiClient) => formatDate(row.last_used_at) },
     ],
-    [],
+    [t],
   );
 
   const selectedReceiveWarehouse = useMemo(
@@ -564,7 +572,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
         setStockTransfers(transferRows);
       } catch (caught) {
         if (!cancelled) {
-          actionFeedback.fail(caught instanceof Error ? caught.message : "Transfer inventory load failed");
+          actionFeedback.fail(caught instanceof Error ? caught.message : t("inventory.errors.transferLoadFailed"));
         }
       }
     }
@@ -573,36 +581,36 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     return () => {
       cancelled = true;
     };
-  }, [actionFeedback, activeTab, transferSourceId]);
+  }, [actionFeedback, activeTab, transferSourceId, t]);
 
   const movementColumns = useMemo(
     () => [
-      { key: "date", header: "Date", render: (row: InventoryMovement) => formatDate(row.moved_at) },
-      { key: "warehouse", header: "Warehouse", render: (row: InventoryMovement) => row.warehouse_name || row.warehouse_code || "-" },
-      { key: "type", header: "Type", render: (row: InventoryMovement) => row.movement_type },
-      { key: "document", header: "Document", render: (row: InventoryMovement) => row.document_no || row.document_type || "-" },
-      { key: "party", header: "Related Party", render: (row: InventoryMovement) => row.related_party || "-" },
-      { key: "brand", header: "Brand", render: (row: InventoryMovement) => <BrandPill brand={row.brand} compact /> },
-      { key: "code", header: "Code", render: (row: InventoryMovement) => row.product_code || row.old_code || "-" },
-      { key: "description", header: "Description", render: (row: InventoryMovement) => row.description || "-" },
-      { key: "qtyin", header: "Qty In", render: (row: InventoryMovement) => row.qty_in.toLocaleString("en-US") },
-      { key: "qtyout", header: "Qty Out", render: (row: InventoryMovement) => row.qty_out.toLocaleString("en-US") },
-      { key: "cost", header: "Total Cost", render: (row: InventoryMovement) => formatMoney(row.total_cost) },
+      { key: "date", header: t("inventory.table.date"), render: (row: InventoryMovement) => formatDate(row.moved_at) },
+      { key: "warehouse", header: t("inventory.table.warehouse"), render: (row: InventoryMovement) => row.warehouse_name || row.warehouse_code || "-" },
+      { key: "type", header: t("inventory.table.type"), render: (row: InventoryMovement) => row.movement_type },
+      { key: "document", header: t("inventory.table.document"), render: (row: InventoryMovement) => row.document_no || row.document_type || "-" },
+      { key: "party", header: t("inventory.table.relatedParty"), render: (row: InventoryMovement) => row.related_party || "-" },
+      { key: "brand", header: t("inventory.table.brand"), render: (row: InventoryMovement) => <BrandPill brand={row.brand} compact /> },
+      { key: "code", header: t("inventory.table.code"), render: (row: InventoryMovement) => row.product_code || row.old_code || "-" },
+      { key: "description", header: t("inventory.table.description"), render: (row: InventoryMovement) => row.description || "-" },
+      { key: "qtyin", header: t("inventory.table.qtyIn"), render: (row: InventoryMovement) => formatCount(row.qty_in) },
+      { key: "qtyout", header: t("inventory.table.qtyOut"), render: (row: InventoryMovement) => formatCount(row.qty_out) },
+      { key: "cost", header: t("inventory.table.totalCost"), render: (row: InventoryMovement) => formatMoney(row.total_cost) },
     ],
-    [],
+    [t, numberLocale],
   );
 
   const onHandColumns = useMemo(
     () => [
-      { key: "code", header: "Code", render: (row: WarehouseOnHandRow) => row.warehouse_code || "-" },
-      { key: "name", header: "Warehouse", render: (row: WarehouseOnHandRow) => row.warehouse_name || "-" },
-      { key: "region", header: "Region", render: (row: WarehouseOnHandRow) => row.region || "-" },
-      { key: "sku", header: "SKU Count", render: (row: WarehouseOnHandRow) => row.sku_count.toLocaleString("en-US") },
-      { key: "onhand", header: "On Hand", render: (row: WarehouseOnHandRow) => row.on_hand_qty.toLocaleString("en-US") },
-      { key: "reserved", header: "Reserved", render: (row: WarehouseOnHandRow) => row.reserved_qty.toLocaleString("en-US") },
-      { key: "available", header: "Available", render: (row: WarehouseOnHandRow) => row.available_qty.toLocaleString("en-US") },
+      { key: "code", header: t("inventory.table.code"), render: (row: WarehouseOnHandRow) => row.warehouse_code || "-" },
+      { key: "name", header: t("inventory.table.warehouse"), render: (row: WarehouseOnHandRow) => row.warehouse_name || "-" },
+      { key: "region", header: t("inventory.table.region"), render: (row: WarehouseOnHandRow) => row.region || "-" },
+      { key: "sku", header: t("inventory.table.skuCount"), render: (row: WarehouseOnHandRow) => formatCount(row.sku_count) },
+      { key: "onhand", header: t("inventory.table.onHand"), render: (row: WarehouseOnHandRow) => formatCount(row.on_hand_qty) },
+      { key: "reserved", header: t("inventory.table.reserved"), render: (row: WarehouseOnHandRow) => formatCount(row.reserved_qty) },
+      { key: "available", header: t("inventory.table.available"), render: (row: WarehouseOnHandRow) => formatCount(row.available_qty) },
     ],
-    [],
+    [t, numberLocale],
   );
 
   const visibleOnHandRows = useMemo(
@@ -629,15 +637,15 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
 
   const transferHistoryColumns = useMemo(
     () => [
-      { key: "date", header: "Date", render: (row: StockTransfer) => formatDate(row.transfer_date) },
-      { key: "transfer", header: "Transfer No", render: (row: StockTransfer) => row.transfer_no || row.id },
-      { key: "source", header: "Source", render: (row: StockTransfer) => row.source_warehouse_name || row.source_warehouse_code || "-" },
-      { key: "target", header: "Target", render: (row: StockTransfer) => row.target_warehouse_name || row.target_warehouse_code || "-" },
-      { key: "qty", header: "Qty", render: (row: StockTransfer) => row.total_qty.toLocaleString("en-US") },
-      { key: "amount", header: "Value", render: (row: StockTransfer) => formatMoney(row.total_amount) },
-      { key: "status", header: "Status", render: (row: StockTransfer) => row.status.toUpperCase() },
+      { key: "date", header: t("inventory.table.date"), render: (row: StockTransfer) => formatDate(row.transfer_date) },
+      { key: "transfer", header: t("inventory.table.transferNo"), render: (row: StockTransfer) => row.transfer_no || row.id },
+      { key: "source", header: t("inventory.table.source"), render: (row: StockTransfer) => row.source_warehouse_name || row.source_warehouse_code || "-" },
+      { key: "target", header: t("inventory.table.target"), render: (row: StockTransfer) => row.target_warehouse_name || row.target_warehouse_code || "-" },
+      { key: "qty", header: t("inventory.table.qty"), render: (row: StockTransfer) => formatCount(row.total_qty) },
+      { key: "amount", header: t("inventory.table.value"), render: (row: StockTransfer) => formatMoney(row.total_amount) },
+      { key: "status", header: t("inventory.table.status"), render: (row: StockTransfer) => translateStatus(row.status) },
     ],
-    [],
+    [t, numberLocale],
   );
 
   const receiveDraftTotals = useMemo(() => {
@@ -658,17 +666,17 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
 
   const onHandStockColumns = useMemo(
     () => [
-      { key: "brand", header: "Brand", render: (row: WarehouseStockItem) => <BrandPill brand={row.brand} compact /> },
-      { key: "code", header: "Code", render: (row: WarehouseStockItem) => row.product_code || row.old_code || "-" },
-      { key: "description", header: "Description", render: (row: WarehouseStockItem) => row.description || "-" },
-      { key: "origin", header: "Origin", render: (row: WarehouseStockItem) => row.origin || "-" },
-      { key: "onhand", header: "On Hand", render: (row: WarehouseStockItem) => row.on_hand_qty.toLocaleString("en-US") },
-      { key: "available", header: "Available", render: (row: WarehouseStockItem) => row.available_qty.toLocaleString("en-US") },
-      { key: "avgcost", header: "Avg Cost", render: (row: WarehouseStockItem) => formatMoney(row.average_cost) },
-      { key: "value", header: "Stock Value", render: (row: WarehouseStockItem) => formatMoney(row.stock_value) },
-      { key: "last", header: "Last Move", render: (row: WarehouseStockItem) => formatDate(row.last_moved_at) },
+      { key: "brand", header: t("inventory.table.brand"), render: (row: WarehouseStockItem) => <BrandPill brand={row.brand} compact /> },
+      { key: "code", header: t("inventory.table.code"), render: (row: WarehouseStockItem) => row.product_code || row.old_code || "-" },
+      { key: "description", header: t("inventory.table.description"), render: (row: WarehouseStockItem) => row.description || "-" },
+      { key: "origin", header: t("inventory.table.origin"), render: (row: WarehouseStockItem) => row.origin || "-" },
+      { key: "onhand", header: t("inventory.table.onHand"), render: (row: WarehouseStockItem) => formatCount(row.on_hand_qty) },
+      { key: "available", header: t("inventory.table.available"), render: (row: WarehouseStockItem) => formatCount(row.available_qty) },
+      { key: "avgcost", header: t("inventory.table.avgCost"), render: (row: WarehouseStockItem) => formatMoney(row.average_cost) },
+      { key: "value", header: t("inventory.table.stockValue"), render: (row: WarehouseStockItem) => formatMoney(row.stock_value) },
+      { key: "last", header: t("inventory.table.lastMove"), render: (row: WarehouseStockItem) => formatDate(row.last_moved_at) },
     ],
-    [],
+    [t, numberLocale],
   );
 
   function selectWarehouse(row: Warehouse) {
@@ -687,12 +695,12 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
   async function handleSave() {
     if (!draft) return;
     if (!draft.warehouse_code.trim() || !draft.warehouse_name.trim()) {
-      actionFeedback.fail("Warehouse code and warehouse name are required.");
+      actionFeedback.fail(t("inventory.errors.warehouseCodeAndNameRequired"));
       return;
     }
     try {
       setSaving(true);
-      actionFeedback.begin(`Saving warehouse ${draft.warehouse_name || draft.warehouse_code}...`);
+      actionFeedback.begin(t("inventory.status.savingWarehouse", { warehouse: draft.warehouse_name || draft.warehouse_code }));
       const saved = await upsertWarehouse(draft);
       const rows = await reloadWarehouses();
       setSelectedWarehouseId(saved.id);
@@ -702,9 +710,9 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
       setTransferSourceId((current) => current || saved.id);
       setTransferTargetId((current) => current || saved.id);
       await reloadOnHand(rows);
-      actionFeedback.succeed(`Warehouse ${saved.warehouse_name} saved.`);
+      actionFeedback.succeed(t("inventory.status.warehouseSaved", { warehouse: saved.warehouse_name || saved.warehouse_code }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Warehouse save failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("inventory.errors.warehouseSaveFailed"));
     } finally {
       setSaving(false);
     }
@@ -712,12 +720,12 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
 
   async function handleSyncWarehouse() {
     if (!draft || !isUuid(draft.id)) {
-      actionFeedback.fail("Save the warehouse first before running API sync.");
+      actionFeedback.fail(t("inventory.errors.saveWarehouseFirstBeforeSync"));
       return;
     }
     try {
       setSyncingWarehouse(true);
-      actionFeedback.begin(`Syncing outsourced warehouse ${draft.warehouse_name || draft.warehouse_code}...`);
+      actionFeedback.begin(t("inventory.status.syncingOutsourcedWarehouse", { warehouse: draft.warehouse_name || draft.warehouse_code }));
       const result = await syncWarehouseExternalStock(draft.id);
       const warehouseRows = await reloadWarehouses();
       const [onHand, movementRows, onHandStockRows] = await Promise.all([
@@ -732,10 +740,13 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
       setMovementRows(movementRows);
       setOnHandStockRows(onHandStockRows);
       actionFeedback.succeed(
-        `Warehouse API sync complete. ${result.summary.adjustmentCount.toLocaleString("en-US")} adjustment movement(s) posted from ${result.summary.acceptedItemCount.toLocaleString("en-US")} accepted item(s).`,
+        t("inventory.status.warehouseSyncComplete", {
+          adjustments: formatCount(result.summary.adjustmentCount),
+          accepted: formatCount(result.summary.acceptedItemCount),
+        }),
       );
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Warehouse API sync failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("inventory.errors.warehouseSyncFailed"));
     } finally {
       setSyncingWarehouse(false);
     }
@@ -782,16 +793,16 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
   async function handleSaveWarehouseApiClient() {
     if (!warehouseApiDraft) return;
     if (!warehouseApiDraft.client_name.trim() || !warehouseApiDraft.partner_name.trim()) {
-      actionFeedback.fail("Client name and partner name are required.");
+      actionFeedback.fail(t("inventory.errors.clientNameAndPartnerNameRequired"));
       return;
     }
     if (!warehouseApiDraft.warehouse_ids.length) {
-      actionFeedback.fail("Select at least one stocked warehouse.");
+      actionFeedback.fail(t("inventory.errors.selectAtLeastOneStockedWarehouse"));
       return;
     }
     try {
       setSavingWarehouseApiClient(true);
-      actionFeedback.begin(`Saving API client ${warehouseApiDraft.client_name || warehouseApiDraft.partner_name}...`);
+      actionFeedback.begin(t("inventory.status.savingApiClient", { client: warehouseApiDraft.client_name || warehouseApiDraft.partner_name }));
       const result = await upsertWarehouseApiClient({
         id: warehouseApiDraft.id || undefined,
         client_name: warehouseApiDraft.client_name,
@@ -810,9 +821,9 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
       const saved = result.client || clients.find((row) => row.id === warehouseApiDraft.id) || null;
       if (saved) setWarehouseApiDraft(saved);
       setLatestWarehouseApiSecret(result.secret);
-      actionFeedback.succeed(`Warehouse API client ${saved?.client_name || warehouseApiDraft.client_name} saved.`);
+      actionFeedback.succeed(t("inventory.status.apiClientSaved", { client: saved?.client_name || warehouseApiDraft.client_name }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Warehouse API client save failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("inventory.errors.apiClientSaveFailed"));
     } finally {
       setSavingWarehouseApiClient(false);
     }
@@ -820,20 +831,20 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
 
   async function handleRotateWarehouseApiClient() {
     if (!warehouseApiDraft?.id || !isUuid(warehouseApiDraft.id)) {
-      actionFeedback.fail("Save the API client first before rotating its key.");
+      actionFeedback.fail(t("inventory.errors.saveApiClientFirstBeforeRotate"));
       return;
     }
     try {
       setRotatingWarehouseApiClient(true);
-      actionFeedback.begin(`Rotating API key for ${warehouseApiDraft.client_name || warehouseApiDraft.partner_name}...`);
+      actionFeedback.begin(t("inventory.status.rotatingApiKey", { client: warehouseApiDraft.client_name || warehouseApiDraft.partner_name }));
       const result = await rotateWarehouseApiClientToken(warehouseApiDraft.id);
       const clients = await reloadWarehouseApiClients();
       const saved = result.client || clients.find((row) => row.id === warehouseApiDraft.id) || null;
       if (saved) setWarehouseApiDraft(saved);
       setLatestWarehouseApiSecret(result.secret);
-      actionFeedback.succeed("Warehouse API key rotated.");
+      actionFeedback.succeed(t("inventory.status.apiKeyRotated"));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Warehouse API key rotation failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("inventory.errors.apiKeyRotationFailed"));
     } finally {
       setRotatingWarehouseApiClient(false);
     }
@@ -844,18 +855,18 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
       handleCloseWarehouseApiEditor();
       return;
     }
-    if (!window.confirm(`Delete API client ${warehouseApiDraft.client_name || warehouseApiDraft.partner_name}?`)) return;
+    if (!window.confirm(t("inventory.confirm.deleteApiClient", { client: warehouseApiDraft.client_name || warehouseApiDraft.partner_name }))) return;
     try {
       setSavingWarehouseApiClient(true);
-      actionFeedback.begin(`Deleting API client ${warehouseApiDraft.client_name || warehouseApiDraft.partner_name}...`);
+      actionFeedback.begin(t("inventory.status.deletingApiClient", { client: warehouseApiDraft.client_name || warehouseApiDraft.partner_name }));
       await deleteWarehouseApiClient(warehouseApiDraft.id);
       await reloadWarehouseApiClients();
       setWarehouseApiDraft(null);
       setLatestWarehouseApiSecret(null);
       setShowWarehouseApiEditor(false);
-      actionFeedback.succeed("Warehouse API client deleted.");
+      actionFeedback.succeed(t("inventory.status.apiClientDeleted"));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Warehouse API client delete failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("inventory.errors.apiClientDeleteFailed"));
     } finally {
       setSavingWarehouseApiClient(false);
     }
@@ -885,7 +896,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     if (!receiveDraft || !selectedReceive) return;
     try {
       setPostingReceive(true);
-      actionFeedback.begin(`Posting purchase receive for ${receiveDraft.purchase_order_no}...`);
+      actionFeedback.begin(t("inventory.status.postingPurchaseReceive", { purchaseOrder: receiveDraft.purchase_order_no }));
       await postPurchaseReceive(receiveDraft, selectedReceive);
       const [orders, receives, movements] = await Promise.all([
         reloadPurchaseOrders(),
@@ -899,9 +910,9 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
       }
       setPurchaseReceives(receives);
       setMovementRows(movements);
-      actionFeedback.succeed(`Purchase receive for ${receiveDraft.purchase_order_no} posted to stock.`);
+      actionFeedback.succeed(t("inventory.status.purchaseReceivePosted", { purchaseOrder: receiveDraft.purchase_order_no }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase receive post failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("inventory.errors.purchaseReceivePostFailed"));
     } finally {
       setPostingReceive(false);
     }
@@ -966,7 +977,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     if (!transferDraft) return;
     try {
       setPostingTransfer(true);
-      actionFeedback.begin(`Posting stock transfer ${transferDraft.transfer_no}...`);
+      actionFeedback.begin(t("inventory.status.postingStockTransfer", { transfer: transferDraft.transfer_no }));
       await postStockTransfer(transferDraft);
       const warehouseRows = warehouses.length ? warehouses : await reloadWarehouses();
       const [stockRows, transferRows, movementRows, onHand] = await Promise.all([
@@ -982,9 +993,9 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
       setOnHandRows(onHand);
       setOnHandStockRows(onHandStock);
       setTransferDraft(createStockTransferDraft(selectedTransferSourceWarehouse, selectedTransferTargetWarehouse));
-      actionFeedback.succeed(`Stock transfer ${transferDraft.transfer_no} posted.`);
+      actionFeedback.succeed(t("inventory.status.stockTransferPosted", { transfer: transferDraft.transfer_no }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Stock transfer post failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : t("inventory.errors.stockTransferPostFailed"));
     } finally {
       setPostingTransfer(false);
     }
@@ -994,15 +1005,15 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
     <div className="page-stack">
       {activeTab === "Warehouses" ? (
         <div className="page-stack">
-          <SectionCard title="Warehouses">
+          <SectionCard title={t("inventory.sections.warehouses")}>
             <div className="toolbar">
               <Button className="button--compact" onClick={handleNewWarehouse}>
-                + Add Warehouse
+                {t("inventory.actions.addWarehouse")}
               </Button>
             </div>
             <div className="meta-row">
-              <span>{warehouses.length.toLocaleString("en-US")} warehouses</span>
-              <span>{loadingOnHand ? "Loading live warehouse counts..." : "Open a warehouse to edit setup and review current item count."}</span>
+              <span>{t("inventory.status.warehouseCount", { count: formatCount(warehouses.length) })}</span>
+              <span>{loadingOnHand ? t("inventory.status.loadingWarehouseCounts") : t("inventory.status.openWarehouseHint")}</span>
             </div>
             {warehouses.length ? (
               <div className="warehouse-list-grid">
@@ -1021,62 +1032,62 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                         <div className="warehouse-card__code">{warehouse.warehouse_code || "-"}</div>
                       </div>
                       <span className={`mark-badge ${warehouses.find((item) => item.id === warehouse.warehouse_id)?.is_active ? "mark-badge--success" : ""}`}>
-                        {warehouses.find((item) => item.id === warehouse.warehouse_id)?.is_active ? "ACTIVE" : "CLOSED"}
+                        {warehouses.find((item) => item.id === warehouse.warehouse_id)?.is_active ? t("inventory.values.activeUpper") : t("inventory.values.closedUpper")}
                       </span>
                     </div>
                     <div className="warehouse-card__meta">
                       <span>{warehouse.region || "-"}</span>
-                      <span>{(warehouses.find((item) => item.id === warehouse.warehouse_id)?.warehouse_kind || "internal") === "outsourced" ? "OUTSOURCED" : "INTERNAL"}</span>
-                      <span>{(warehouses.find((item) => item.id === warehouse.warehouse_id)?.fulfillment_model || "stocked") === "dropship" ? "DROPSHIP" : "STOCKED"}</span>
+                      <span>{(warehouses.find((item) => item.id === warehouse.warehouse_id)?.warehouse_kind || "internal") === "outsourced" ? t("inventory.values.outsourcedUpper") : t("inventory.values.internalUpper")}</span>
+                      <span>{(warehouses.find((item) => item.id === warehouse.warehouse_id)?.fulfillment_model || "stocked") === "dropship" ? t("inventory.values.dropshipUpper") : t("inventory.values.stockedUpper")}</span>
                     </div>
                     <div className="warehouse-card__stats">
-                      <span>{warehouse.sku_count.toLocaleString("en-US")} items</span>
-                      <span>{warehouse.on_hand_qty.toLocaleString("en-US")} on hand</span>
+                      <span>{t("inventory.status.itemsCount", { count: formatCount(warehouse.sku_count) })}</span>
+                      <span>{t("inventory.status.onHandCount", { count: formatCount(warehouse.on_hand_qty) })}</span>
                     </div>
                   </button>
                 ))}
               </div>
             ) : (
-              <div className="empty-state">No warehouses yet.</div>
+              <div className="empty-state">{t("inventory.empty.noWarehouses")}</div>
             )}
           </SectionCard>
 
           {showWarehouseEditor && draft ? (
-            <SectionCard title="Warehouse Setup">
+            <SectionCard title={t("inventory.sections.warehouseSetup")}>
               <div className="toolbar">
                 <Button variant="secondary" onClick={handleCloseWarehouseEditor}>
-                  Exit
+                  {t("inventory.actions.exit")}
                 </Button>
                 {draft.warehouse_kind === "outsourced" && draft.fulfillment_model !== "dropship" ? (
-                  <Button variant="secondary" onClick={() => void handleSyncWarehouse()} busy={syncingWarehouse} busyLabel="Syncing...">
-                    Sync API Stock
+                  <Button variant="secondary" onClick={() => void handleSyncWarehouse()} busy={syncingWarehouse} busyLabel={t("inventory.actions.syncing")}>
+                    {t("inventory.actions.syncApiStock")}
                   </Button>
                 ) : null}
-                <Button onClick={() => void handleSave()} busy={saving} busyLabel="Saving...">
-                  Save
+                <Button onClick={() => void handleSave()} busy={saving} busyLabel={t("inventory.actions.saving")}>
+                  {t("inventory.actions.save")}
                 </Button>
               </div>
               <div className="customers-edit-card customers-edit-card--narrow">
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Warehouse Code</div>
+                  <div className="customers-form-row__label">{t("inventory.labels.warehouseCode")}</div>
                   <div className="customers-field-wrap customers-field-wrap--medium">
                     <Input value={draft.warehouse_code} onChange={(value) => setDraft((current) => (current ? { ...current, warehouse_code: value } : current))} />
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Warehouse Name</div>
+                  <div className="customers-form-row__label">{t("inventory.labels.warehouseName")}</div>
                   <div className="customers-field-wrap customers-field-wrap--wide">
                     <Input value={draft.warehouse_name} onChange={(value) => setDraft((current) => (current ? { ...current, warehouse_name: value } : current))} />
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Region</div>
+                  <div className="customers-form-row__label">{t("inventory.labels.region")}</div>
                   <div className="customers-field-wrap customers-field-wrap--wide">
                     <Input value={draft.region} onChange={(value) => setDraft((current) => (current ? { ...current, region: value } : current))} />
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Warehouse Type</div>
+                  <div className="customers-form-row__label">{t("inventory.labels.warehouseType")}</div>
                   <div className="customers-field-wrap customers-field-wrap--medium">
                     <Select
                       value={draft.warehouse_kind}
@@ -1097,7 +1108,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Fulfillment Model</div>
+                  <div className="customers-form-row__label">{t("inventory.labels.fulfillmentModel")}</div>
                   <div className="customers-field-wrap customers-field-wrap--medium">
                     <Select
                       value={draft.fulfillment_model}
@@ -1118,7 +1129,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                   </div>
                 </div>
                 <div className="customers-form-row customers-form-row--top">
-                  <div className="customers-form-row__label">Address</div>
+                  <div className="customers-form-row__label">{t("inventory.labels.address")}</div>
                   <div className="customers-field-wrap customers-field-wrap--full">
                     <label className="field customer-field">
                       <textarea className="field__input field__input--textarea" value={draft.address} onChange={(event) => setDraft((current) => (current ? { ...current, address: event.target.value } : current))} />
@@ -1126,53 +1137,53 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Status</div>
+                  <div className="customers-form-row__label">{t("inventory.labels.status")}</div>
                   <div className="customers-field-wrap customers-field-wrap--medium">
                     <label className="field customer-field">
                       <select className="field__input" value={draft.is_active ? "active" : "closed"} onChange={(event) => setDraft((current) => (current ? { ...current, is_active: event.target.value === "active" } : current))}>
-                        <option value="active">Active</option>
-                        <option value="closed">Closed</option>
+                        <option value="active">{t("inventory.values.active")}</option>
+                        <option value="closed">{t("inventory.values.closed")}</option>
                       </select>
                     </label>
                   </div>
                 </div>
                 {draft.fulfillment_model === "dropship" ? (
                   <div className="warning-text">
-                    Dropship warehouses do not keep stock. Purchase receives, stock transfers, and API stock sync are disabled for this warehouse.
+                    {t("inventory.warnings.dropshipNoStock")}
                   </div>
                 ) : null}
                 {draft.warehouse_kind === "outsourced" ? (
                   <>
                     <div className="customers-form-row">
-                      <div className="customers-form-row__label">Outsource Partner</div>
+                      <div className="customers-form-row__label">{t("inventory.labels.outsourcePartner")}</div>
                       <div className="customers-field-wrap customers-field-wrap--wide">
                         <Input value={draft.outsource_partner_name} onChange={(value) => setDraft((current) => (current ? { ...current, outsource_partner_name: value } : current))} />
                       </div>
                     </div>
                     <div className="customers-form-row">
-                      <div className="customers-form-row__label">API Provider</div>
+                      <div className="customers-form-row__label">{t("inventory.labels.apiProvider")}</div>
                       <div className="customers-field-wrap customers-field-wrap--wide">
-                        <Input value={draft.external_api_provider} placeholder="Vendor name or API label" onChange={(value) => setDraft((current) => (current ? { ...current, external_api_provider: value } : current))} />
+                        <Input value={draft.external_api_provider} placeholder={t("inventory.placeholders.apiProvider")} onChange={(value) => setDraft((current) => (current ? { ...current, external_api_provider: value } : current))} />
                       </div>
                     </div>
                     <div className="customers-form-row">
-                      <div className="customers-form-row__label">API URL</div>
+                      <div className="customers-form-row__label">{t("inventory.labels.apiUrl")}</div>
                       <div className="customers-field-wrap customers-field-wrap--full">
-                        <Input
-                          value={draft.external_api_url}
-                          placeholder="https://partner.example/api/stock?location={{location_code}}"
-                          onChange={(value) => setDraft((current) => (current ? { ...current, external_api_url: value } : current))}
-                        />
+	                        <Input
+	                          value={draft.external_api_url}
+	                          placeholder={t("inventory.placeholders.apiUrl")}
+	                          onChange={(value) => setDraft((current) => (current ? { ...current, external_api_url: value } : current))}
+	                        />
                       </div>
                     </div>
                     <div className="customers-form-row">
-                      <div className="customers-form-row__label">Location Code</div>
+                      <div className="customers-form-row__label">{t("inventory.labels.locationCode")}</div>
                       <div className="customers-field-wrap customers-field-wrap--medium">
                         <Input value={draft.external_location_code} onChange={(value) => setDraft((current) => (current ? { ...current, external_location_code: value } : current))} />
                       </div>
                     </div>
                     <div className="customers-form-row">
-                      <div className="customers-form-row__label">Auth Type</div>
+                      <div className="customers-form-row__label">{t("inventory.labels.authType")}</div>
                       <div className="customers-field-wrap customers-field-wrap--medium">
                         <Select
                           value={draft.external_auth_type}
@@ -1194,15 +1205,15 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                     </div>
                     {draft.external_auth_type === "bearer_env" ? (
                       <div className="customers-form-row">
-                        <div className="customers-form-row__label">Token Env Name</div>
+                        <div className="customers-form-row__label">{t("inventory.labels.tokenEnvName")}</div>
                         <div className="customers-field-wrap customers-field-wrap--medium">
-                          <Input value={draft.external_api_token_env} placeholder="OUTSOURCE_WAREHOUSE_API_TOKEN" onChange={(value) => setDraft((current) => (current ? { ...current, external_api_token_env: value } : current))} />
+	                          <Input value={draft.external_api_token_env} placeholder={t("inventory.placeholders.tokenEnvName")} onChange={(value) => setDraft((current) => (current ? { ...current, external_api_token_env: value } : current))} />
                         </div>
                       </div>
                     ) : null}
                     {draft.fulfillment_model !== "dropship" ? (
                       <div className="customers-form-row">
-                        <div className="customers-form-row__label">Sync Mode</div>
+                        <div className="customers-form-row__label">{t("inventory.labels.syncMode")}</div>
                         <div className="customers-field-wrap customers-field-wrap--medium">
                           <label className="field customer-field">
                             <select
@@ -1216,8 +1227,8 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                                 )
                               }
                             >
-                              <option value="enabled">Manual API Sync Enabled</option>
-                              <option value="disabled">Disabled</option>
+                              <option value="enabled">{t("inventory.values.manualApiSyncEnabled")}</option>
+                              <option value="disabled">{t("inventory.values.disabled")}</option>
                             </select>
                           </label>
                         </div>
@@ -1225,21 +1236,21 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                     ) : null}
                     <div className="settings-grid settings-stats-grid">
                       <div className="settings-item">
-                        <span className="settings-label">Last Sync</span>
+                        <span className="settings-label">{t("inventory.labels.lastSync")}</span>
                         <strong>{draft.external_last_sync_at ? formatDate(draft.external_last_sync_at) : "-"}</strong>
                       </div>
                       <div className="settings-item">
-                        <span className="settings-label">Sync Status</span>
-                        <strong>{draft.external_last_sync_status || "Not synced"}</strong>
+                        <span className="settings-label">{t("inventory.labels.syncStatus")}</span>
+                        <strong>{draft.external_last_sync_status || t("inventory.values.notSynced")}</strong>
                       </div>
                       <div className="settings-item">
-                        <span className="settings-label">Sync Message</span>
-                        <strong>{draft.external_last_sync_message || "Waiting for first sync"}</strong>
+                        <span className="settings-label">{t("inventory.labels.syncMessage")}</span>
+                        <strong>{draft.external_last_sync_message || t("inventory.values.waitingForFirstSync")}</strong>
                       </div>
                     </div>
                     <div className="meta-row">
-                      <span>Expected API payload: array or items/data/rows/stock list.</span>
-                      <span>Fields supported: brand, product_code/code/sku, qty_on_hand/qty/stock, optional old_code, description, origin, unit_cost.</span>
+                      <span>{t("inventory.api.expectedPayload")}</span>
+                      <span>{t("inventory.api.supportedFields")}</span>
                     </div>
                   </>
                 ) : null}
@@ -1247,87 +1258,87 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
             </SectionCard>
           ) : null}
 
-          <SectionCard title="Partner API Clients">
+          <SectionCard title={t("inventory.sections.partnerApiClients")}>
             <div className="toolbar">
               <Button className="button--compact" onClick={handleNewWarehouseApiClient}>
-                + Add API Client
+                {t("inventory.actions.addApiClient")}
               </Button>
             </div>
             <div className="meta-row">
-              <span>{warehouseApiClients.length.toLocaleString("en-US")} API client(s)</span>
-              <span>{warehouseApiBaseUrl || "Save a client to generate stock feed credentials."}</span>
+              <span>{t("inventory.status.apiClientCount", { count: formatCount(warehouseApiClients.length) })}</span>
+              <span>{warehouseApiBaseUrl || t("inventory.status.saveClientToGenerateCredentials")}</span>
             </div>
-            <DataTable rows={warehouseApiClients} columns={warehouseApiClientColumns} emptyText="No partner API clients yet." onRowClick={handleSelectWarehouseApiClient} />
+            <DataTable rows={warehouseApiClients} columns={warehouseApiClientColumns} emptyText={t("inventory.empty.noPartnerApiClients")} onRowClick={handleSelectWarehouseApiClient} />
 
             {showWarehouseApiEditor && warehouseApiDraft ? (
               <div className="customers-edit-card customers-edit-card--narrow warehouse-api-editor">
                 <div className="toolbar">
-                  <Button variant="secondary" onClick={handleCloseWarehouseApiEditor}>
-                    Exit
-                  </Button>
-                  {warehouseApiDraft.id ? (
-                    <Button variant="secondary" onClick={() => void handleRotateWarehouseApiClient()} busy={rotatingWarehouseApiClient} busyLabel="Rotating...">
-                      Rotate API Key
-                    </Button>
-                  ) : null}
-                  {warehouseApiDraft.id ? (
-                    <Button variant="secondary" onClick={() => void handleDeleteWarehouseApiClient()} busy={savingWarehouseApiClient} busyLabel="Deleting...">
-                      Delete
-                    </Button>
-                  ) : null}
-                  <Button onClick={() => void handleSaveWarehouseApiClient()} busy={savingWarehouseApiClient} busyLabel="Saving...">
-                    Save
-                  </Button>
+	                  <Button variant="secondary" onClick={handleCloseWarehouseApiEditor}>
+	                    {t("inventory.actions.exit")}
+	                  </Button>
+	                  {warehouseApiDraft.id ? (
+	                    <Button variant="secondary" onClick={() => void handleRotateWarehouseApiClient()} busy={rotatingWarehouseApiClient} busyLabel={t("inventory.actions.rotating")}>
+	                      {t("inventory.actions.rotateApiKey")}
+	                    </Button>
+	                  ) : null}
+	                  {warehouseApiDraft.id ? (
+	                    <Button variant="secondary" onClick={() => void handleDeleteWarehouseApiClient()} busy={savingWarehouseApiClient} busyLabel={t("inventory.actions.deleting")}>
+	                      {t("inventory.actions.delete")}
+	                    </Button>
+	                  ) : null}
+	                  <Button onClick={() => void handleSaveWarehouseApiClient()} busy={savingWarehouseApiClient} busyLabel={t("inventory.actions.saving")}>
+	                    {t("inventory.actions.save")}
+	                  </Button>
                 </div>
 
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Client Name</div>
+	                  <div className="customers-form-row__label">{t("inventory.labels.clientName")}</div>
                   <div className="customers-field-wrap customers-field-wrap--wide">
                     <Input value={warehouseApiDraft.client_name} onChange={(value) => setWarehouseApiDraft((current) => (current ? { ...current, client_name: value } : current))} />
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Partner Name</div>
+	                  <div className="customers-form-row__label">{t("inventory.labels.partnerName")}</div>
                   <div className="customers-field-wrap customers-field-wrap--wide">
                     <Input value={warehouseApiDraft.partner_name} onChange={(value) => setWarehouseApiDraft((current) => (current ? { ...current, partner_name: value } : current))} />
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Status</div>
+	                  <div className="customers-form-row__label">{t("inventory.labels.status")}</div>
                   <div className="customers-field-wrap customers-field-wrap--medium">
                     <Select
-                      value={warehouseApiDraft.status}
-                      options={[
-                        { value: "active", label: "Active" },
-                        { value: "disabled", label: "Disabled" },
-                      ]}
+	                      value={warehouseApiDraft.status}
+	                      options={[
+	                        { value: "active", label: t("inventory.values.active") },
+	                        { value: "disabled", label: t("inventory.values.disabled") },
+	                      ]}
                       onChange={(value) => setWarehouseApiDraft((current) => (current ? { ...current, status: value === "disabled" ? "disabled" : "active" } : current))}
                     />
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Expires At</div>
+	                  <div className="customers-form-row__label">{t("inventory.labels.expiresAt")}</div>
                   <div className="customers-field-wrap customers-field-wrap--medium">
                     <Input type="date" value={warehouseApiDraft.expires_at ? warehouseApiDraft.expires_at.slice(0, 10) : ""} onChange={(value) => setWarehouseApiDraft((current) => (current ? { ...current, expires_at: value ? `${value}T23:59:59.000Z` : "" } : current))} />
                   </div>
                 </div>
 
                 <div className="customers-form-row customers-form-row--top">
-                  <div className="customers-form-row__label">Allowlisted IPs</div>
+	                  <div className="customers-form-row__label">{t("inventory.labels.allowlistedIps")}</div>
                   <div className="customers-field-wrap customers-field-wrap--full">
                     <label className="field customer-field">
                       <textarea
                         className="field__input field__input--textarea"
                         value={warehouseApiDraft.allowed_ip_list}
                         onChange={(event) => setWarehouseApiDraft((current) => (current ? { ...current, allowed_ip_list: event.target.value } : current))}
-                        placeholder={"203.0.113.10\n203.0.113.0/24"}
+                        placeholder={t("inventory.placeholders.allowlistedIps")}
                       />
                     </label>
                   </div>
                 </div>
 
                 <div className="customers-form-row customers-form-row--top">
-                  <div className="customers-form-row__label">Allowed Warehouses</div>
+	                  <div className="customers-form-row__label">{t("inventory.labels.allowedWarehouses")}</div>
                   <div className="customers-field-wrap customers-field-wrap--full">
                     <div className="warehouse-api-checkboxes">
                       {shareableWarehouses.map((warehouse) => (
@@ -1351,7 +1362,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                       checked={warehouseApiDraft.require_hmac}
                       onChange={(event) => setWarehouseApiDraft((current) => (current ? { ...current, require_hmac: event.target.checked } : current))}
                     />
-                    <span>Require HMAC signed requests</span>
+	                    <span>{t("inventory.labels.requireHmac")}</span>
                   </label>
                   <label className="checkbox-field warehouse-api-checkbox">
                     <input
@@ -1359,7 +1370,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                       checked={warehouseApiDraft.allow_order_submit}
                       onChange={(event) => setWarehouseApiDraft((current) => (current ? { ...current, allow_order_submit: event.target.checked } : current))}
                     />
-                    <span>Open separate order submit endpoint</span>
+	                    <span>{t("inventory.labels.openOrderSubmitEndpoint")}</span>
                   </label>
                   <label className="checkbox-field warehouse-api-checkbox">
                     <input
@@ -1367,7 +1378,7 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                       checked={warehouseApiDraft.include_zero_stock}
                       onChange={(event) => setWarehouseApiDraft((current) => (current ? { ...current, include_zero_stock: event.target.checked } : current))}
                     />
-                    <span>Include zero-stock rows in API response</span>
+	                    <span>{t("inventory.labels.includeZeroStockRows")}</span>
                   </label>
                   <label className="checkbox-field warehouse-api-checkbox">
                     <input
@@ -1375,12 +1386,12 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                       checked={warehouseApiDraft.expose_unit_cost}
                       onChange={(event) => setWarehouseApiDraft((current) => (current ? { ...current, expose_unit_cost: event.target.checked } : current))}
                     />
-                    <span>Expose unit cost and stock value</span>
+	                    <span>{t("inventory.labels.exposeUnitCost")}</span>
                   </label>
                 </div>
 
                 <div className="customers-form-row customers-form-row--top">
-                  <div className="customers-form-row__label">Notes</div>
+	                  <div className="customers-form-row__label">{t("inventory.labels.notes")}</div>
                   <div className="customers-field-wrap customers-field-wrap--full">
                     <label className="field customer-field">
                       <textarea className="field__input field__input--textarea" value={warehouseApiDraft.notes} onChange={(event) => setWarehouseApiDraft((current) => (current ? { ...current, notes: event.target.value } : current))} />
@@ -1390,38 +1401,38 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
 
                 <div className="settings-grid settings-stats-grid">
                   <div className="settings-item">
-                    <span className="settings-label">Feed URL</span>
+	                    <span className="settings-label">{t("inventory.labels.feedUrl")}</span>
                     <strong>{warehouseApiBaseUrl || "-"}</strong>
                   </div>
                   <div className="settings-item">
-                    <span className="settings-label">Order URL</span>
+	                    <span className="settings-label">{t("inventory.labels.orderUrl")}</span>
                     <strong>{warehouseApiBaseUrl ? warehouseApiBaseUrl.replace("/warehouse-stock-feed", "/warehouse-order-submit") : "-"}</strong>
                   </div>
                   <div className="settings-item">
-                    <span className="settings-label">Auth Header</span>
+	                    <span className="settings-label">{t("inventory.labels.authHeader")}</span>
                     <strong>{warehouseApiHeaderName}</strong>
                   </div>
                   <div className="settings-item">
-                    <span className="settings-label">Key Prefix</span>
-                    <strong>{warehouseApiDraft.api_key_prefix || "Generated on first save"}</strong>
+	                    <span className="settings-label">{t("inventory.labels.keyPrefix")}</span>
+	                    <strong>{warehouseApiDraft.api_key_prefix || t("inventory.values.generatedOnFirstSave")}</strong>
                   </div>
                   <div className="settings-item">
-                    <span className="settings-label">Last Used</span>
+	                    <span className="settings-label">{t("inventory.labels.lastUsed")}</span>
                     <strong>{warehouseApiDraft.last_used_at ? formatDate(warehouseApiDraft.last_used_at) : "-"}</strong>
                   </div>
                 </div>
 
                 {latestWarehouseApiSecret ? (
                   <div className="warehouse-api-token">
-                    <strong>Copy this API key now.</strong>
+	                    <strong>{t("inventory.api.copyApiKeyNow")}</strong>
                     <div className="warehouse-api-token__value">{latestWarehouseApiSecret.api_key}</div>
                     <div className="meta-row">
-                      <span>Header: {latestWarehouseApiSecret.header_name}</span>
-                      <span>Example: {latestWarehouseApiSecret.sample_url}</span>
+	                      <span>{t("inventory.api.header", { header: latestWarehouseApiSecret.header_name })}</span>
+	                      <span>{t("inventory.api.example", { url: latestWarehouseApiSecret.sample_url })}</span>
                     </div>
                     <div className="meta-row">
-                      <span>Use this same API key as the HMAC secret for signed requests.</span>
-                      <span>Send `x-timestamp` and `x-signature` headers.</span>
+	                      <span>{t("inventory.api.useKeyAsHmacSecret")}</span>
+	                      <span>{t("inventory.api.sendSignatureHeaders")}</span>
                     </div>
                   </div>
                 ) : null}
@@ -1435,10 +1446,10 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
         <div className="customers-shell">
           <aside className="customers-sidebar">
             <div className="customers-sidebar__header">
-              <h3>Purchase Receives</h3>
+	              <h3>{t("inventory.sections.purchaseReceives")}</h3>
             </div>
             <div className="customers-list">
-              {loadingOrders || loadingReceives ? <div className="empty-state">Loading purchase receives...</div> : null}
+	              {loadingOrders || loadingReceives ? <div className="empty-state">{t("inventory.status.loadingPurchaseReceives")}</div> : null}
               {!loadingOrders && !loadingReceives && receiveCandidates.length ? (
                 receiveCandidates.map((purchaseOrder) => {
                   const summaryDraft = buildPurchaseReceiveDraft(purchaseOrder, null, purchaseReceives);
@@ -1450,78 +1461,78 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                       onClick={() => setSelectedReceiveId(purchaseOrder.id)}
                     >
                       <strong>{purchaseOrder.id}</strong>
-                      <span>{purchaseOrder.supplier_name} · {purchaseOrder.status}</span>
-                      <span>{remainingQty.toLocaleString("en-US")} qty remaining</span>
+	                      <span>{purchaseOrder.supplier_name} · {translateStatus(purchaseOrder.status)}</span>
+	                      <span>{t("inventory.status.qtyRemaining", { count: formatCount(remainingQty) })}</span>
                     </button>
                   );
                 })
               ) : null}
-              {!loadingOrders && !loadingReceives && !receiveCandidates.length ? <div className="empty-state">No purchase orders ready for receiving.</div> : null}
+	              {!loadingOrders && !loadingReceives && !receiveCandidates.length ? <div className="empty-state">{t("inventory.empty.noPurchaseOrdersReady")}</div> : null}
             </div>
           </aside>
 
           <section className="customers-editor">
             <div className="customers-editor__header">
-              <h2>Receive Into Warehouse</h2>
+	              <h2>{t("inventory.sections.receiveIntoWarehouse")}</h2>
               <div className="toolbar">
                 <Select value={receiveWarehouseId} options={stockedWarehouseOptions} onChange={setReceiveWarehouseId} />
-                <Button onClick={() => void handlePostReceive()} busy={postingReceive} busyLabel="Posting...">
-                  Put to Stock
-                </Button>
+	                <Button onClick={() => void handlePostReceive()} busy={postingReceive} busyLabel={t("inventory.actions.posting")}>
+	                  {t("inventory.actions.putToStock")}
+	                </Button>
               </div>
             </div>
             {selectedReceive && receiveDraft ? (
               <div className="page-stack">
-                <div className="settings-grid settings-stats-grid">
-                  <div className="settings-item">
-                    <span className="settings-label">Purchase Order</span>
-                    <strong>{selectedReceive.id}</strong>
-                  </div>
-                  <div className="settings-item">
-                    <span className="settings-label">Supplier</span>
-                    <strong>{selectedReceive.supplier_name}</strong>
-                  </div>
-                  <div className="settings-item">
-                    <span className="settings-label">Target Warehouse</span>
-                    <strong>{selectedReceiveWarehouse?.warehouse_name || "-"}</strong>
-                  </div>
-                  <div className="settings-item">
-                    <span className="settings-label">Currency</span>
-                    <strong>{selectedReceive.currency}</strong>
-                  </div>
-                  <div className="settings-item">
-                    <span className="settings-label">Receive Qty</span>
-                    <strong>{receiveDraftTotals.qty.toLocaleString("en-US")}</strong>
-                  </div>
-                  <div className="settings-item">
-                    <span className="settings-label">Receive Amount</span>
-                    <strong>{formatMoney(receiveDraftTotals.amount)}</strong>
-                  </div>
-                </div>
+	                <div className="settings-grid settings-stats-grid">
+	                  <div className="settings-item">
+	                    <span className="settings-label">{t("inventory.labels.purchaseOrder")}</span>
+	                    <strong>{selectedReceive.id}</strong>
+	                  </div>
+	                  <div className="settings-item">
+	                    <span className="settings-label">{t("inventory.labels.supplier")}</span>
+	                    <strong>{selectedReceive.supplier_name}</strong>
+	                  </div>
+	                  <div className="settings-item">
+	                    <span className="settings-label">{t("inventory.labels.targetWarehouse")}</span>
+	                    <strong>{selectedReceiveWarehouse?.warehouse_name || "-"}</strong>
+	                  </div>
+	                  <div className="settings-item">
+	                    <span className="settings-label">{t("inventory.labels.currency")}</span>
+	                    <strong>{selectedReceive.currency}</strong>
+	                  </div>
+	                  <div className="settings-item">
+	                    <span className="settings-label">{t("inventory.labels.receiveQty")}</span>
+	                    <strong>{formatCount(receiveDraftTotals.qty)}</strong>
+	                  </div>
+	                  <div className="settings-item">
+	                    <span className="settings-label">{t("inventory.labels.receiveAmount")}</span>
+	                    <strong>{formatMoney(receiveDraftTotals.amount)}</strong>
+	                  </div>
+	                </div>
 
-                <SectionCard title="Receive Lines">
-                  <div className="table-wrap">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Code</th>
-                          <th>Brand</th>
-                          <th>Description</th>
-                          <th>Ordered</th>
-                          <th>Remaining</th>
-                          <th>Receive Now</th>
-                          <th>Unit Cost</th>
-                          <th>Line Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {receiveDraft.lines.map((line) => (
-                          <tr key={line.key}>
-                            <td>{line.product_code || line.old_code || "-"}</td>
-                            <td>{line.brand || "-"}</td>
-                            <td>{line.description || "-"}</td>
-                            <td>{line.qty_ordered.toLocaleString("en-US")}</td>
-                            <td>{line.qty_remaining_before.toLocaleString("en-US")}</td>
+	                <SectionCard title={t("inventory.sections.receiveLines")}>
+	                  <div className="table-wrap">
+	                    <table className="data-table">
+	                      <thead>
+	                        <tr>
+	                          <th>{t("inventory.table.code")}</th>
+	                          <th>{t("inventory.table.brand")}</th>
+	                          <th>{t("inventory.table.description")}</th>
+	                          <th>{t("inventory.table.ordered")}</th>
+	                          <th>{t("inventory.table.remaining")}</th>
+	                          <th>{t("inventory.table.receiveNow")}</th>
+	                          <th>{t("inventory.table.unitCost")}</th>
+	                          <th>{t("inventory.table.lineTotal")}</th>
+	                        </tr>
+	                      </thead>
+	                      <tbody>
+	                        {receiveDraft.lines.map((line) => (
+	                          <tr key={line.key}>
+	                            <td>{line.product_code || line.old_code || "-"}</td>
+	                            <td>{line.brand || "-"}</td>
+	                            <td>{line.description || "-"}</td>
+	                            <td>{formatCount(line.qty_ordered)}</td>
+	                            <td>{formatCount(line.qty_remaining_before)}</td>
                             <td>
                               <label className="field">
                                 <input
@@ -1544,9 +1555,9 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                   </div>
                 </SectionCard>
 
-                <SectionCard title="Receive Posting">
-                  <div className="customers-form-row customers-form-row--top">
-                    <div className="customers-form-row__label">Notes</div>
+	                <SectionCard title={t("inventory.sections.receivePosting")}>
+	                  <div className="customers-form-row customers-form-row--top">
+	                    <div className="customers-form-row__label">{t("inventory.labels.notes")}</div>
                     <div className="customers-field-wrap customers-field-wrap--full">
                       <label className="field customer-field">
                         <textarea
@@ -1561,165 +1572,165 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                   </div>
                 </SectionCard>
 
-                <SectionCard title="Receive History">
-                  <DataTable
-                    rows={selectedOrderReceives}
-                    columns={[
-                      { key: "id", header: "Receive No", render: (row: PurchaseReceive) => row.id },
-                      { key: "date", header: "Date", render: (row: PurchaseReceive) => formatDate(row.received_date) },
-                      { key: "warehouse", header: "Warehouse", render: (row: PurchaseReceive) => row.warehouse_name || row.warehouse_code || "-" },
-                      { key: "qty", header: "Qty", render: (row: PurchaseReceive) => row.total_qty.toLocaleString("en-US") },
-                      { key: "amount", header: "Amount", render: (row: PurchaseReceive) => formatMoney(row.total_amount) },
-                      { key: "status", header: "Status", render: (row: PurchaseReceive) => row.status.toUpperCase() },
-                    ]}
-                    emptyText="No posted receives yet."
-                  />
-                </SectionCard>
-              </div>
-            ) : (
-              <SectionCard title="Purchase Receives">
-                <div className="empty-state">No purchase order selected.</div>
-              </SectionCard>
-            )}
+	                <SectionCard title={t("inventory.sections.receiveHistory")}>
+	                  <DataTable
+	                    rows={selectedOrderReceives}
+	                    columns={[
+	                      { key: "id", header: t("inventory.table.receiveNo"), render: (row: PurchaseReceive) => row.id },
+	                      { key: "date", header: t("inventory.table.date"), render: (row: PurchaseReceive) => formatDate(row.received_date) },
+	                      { key: "warehouse", header: t("inventory.table.warehouse"), render: (row: PurchaseReceive) => row.warehouse_name || row.warehouse_code || "-" },
+	                      { key: "qty", header: t("inventory.table.qty"), render: (row: PurchaseReceive) => formatCount(row.total_qty) },
+	                      { key: "amount", header: t("inventory.table.amount"), render: (row: PurchaseReceive) => formatMoney(row.total_amount) },
+	                      { key: "status", header: t("inventory.table.status"), render: (row: PurchaseReceive) => translateStatus(row.status) },
+	                    ]}
+	                    emptyText={t("inventory.empty.noPostedReceives")}
+	                  />
+	                </SectionCard>
+	              </div>
+	            ) : (
+	              <SectionCard title={t("inventory.sections.purchaseReceives")}>
+	                <div className="empty-state">{t("inventory.empty.noPurchaseOrderSelected")}</div>
+	              </SectionCard>
+	            )}
           </section>
         </div>
       ) : null}
 
       {activeTab === "Stock Movements" ? (
         <div className="page-stack">
-          <SectionCard title="Stock Movements">
-            <div className="toolbar toolbar--wrap">
-              <Select value={movementWarehouseId} options={warehouseFilterOptions} onChange={setMovementWarehouseId} />
-            </div>
-            <div className="meta-row">
-              <span>{movementRows.length.toLocaleString("en-US")} movement rows</span>
-              <span>{loadingMovements ? "Refreshing movement ledger..." : "Live stock ledger created by posted purchase receives."}</span>
-            </div>
-            <DataTable rows={movementRows} columns={movementColumns} emptyText="No stock movement rows yet." />
-          </SectionCard>
+	          <SectionCard title={t("inventory.sections.stockMovements")}>
+	            <div className="toolbar toolbar--wrap">
+	              <Select value={movementWarehouseId} options={warehouseFilterOptions} onChange={setMovementWarehouseId} />
+	            </div>
+	            <div className="meta-row">
+	              <span>{t("inventory.status.movementRows", { count: formatCount(movementRows.length) })}</span>
+	              <span>{loadingMovements ? t("inventory.status.refreshingMovementLedger") : t("inventory.status.liveStockLedger")}</span>
+	            </div>
+	            <DataTable rows={movementRows} columns={movementColumns} emptyText={t("inventory.empty.noStockMovementRows")} />
+	          </SectionCard>
         </div>
       ) : null}
 
       {activeTab === "On Hand" ? (
         <div className="page-stack">
-          <SectionCard title="On Hand">
-            <div className="toolbar toolbar--wrap">
-              <Select value={onHandWarehouseId} options={warehouseFilterOptions} onChange={setOnHandWarehouseId} />
-            </div>
-            <div className="meta-row">
-              <span>{visibleOnHandRows.length.toLocaleString("en-US")} warehouse snapshots</span>
-              <span>{loadingOnHand ? "Rebuilding on hand quantities..." : "Current on hand is computed from posted warehouse movements."}</span>
-            </div>
-            <DataTable rows={visibleOnHandRows} columns={onHandColumns} emptyText="No warehouse inventory snapshot yet." />
-          </SectionCard>
-          <SectionCard title="Warehouse Stock Detail">
-            <div className="toolbar toolbar--wrap">
-              <Input value={onHandStockSearch} onChange={setOnHandStockSearch} placeholder="Search code, description, brand" />
-            </div>
-            <div className="meta-row">
-              <span>{visibleOnHandStockRows.length.toLocaleString("en-US")} stock rows</span>
-              <span>
-                {loadingOnHandStock
-                  ? "Refreshing item-level stock detail..."
-                  : onHandWarehouseId
-                    ? "Item-level stock detail for the selected warehouse."
-                    : "Select a warehouse above to narrow the stock detail."}
-              </span>
-            </div>
-            <DataTable rows={visibleOnHandStockRows} columns={onHandStockColumns} emptyText="No item-level stock detail for the current selection." />
-          </SectionCard>
+	          <SectionCard title={t("inventory.sections.onHand")}>
+	            <div className="toolbar toolbar--wrap">
+	              <Select value={onHandWarehouseId} options={warehouseFilterOptions} onChange={setOnHandWarehouseId} />
+	            </div>
+	            <div className="meta-row">
+	              <span>{t("inventory.status.warehouseSnapshots", { count: formatCount(visibleOnHandRows.length) })}</span>
+	              <span>{loadingOnHand ? t("inventory.status.rebuildingOnHandQuantities") : t("inventory.status.currentOnHandComputed")}</span>
+	            </div>
+	            <DataTable rows={visibleOnHandRows} columns={onHandColumns} emptyText={t("inventory.empty.noWarehouseInventorySnapshot")} />
+	          </SectionCard>
+	          <SectionCard title={t("inventory.sections.warehouseStockDetail")}>
+	            <div className="toolbar toolbar--wrap">
+	              <Input value={onHandStockSearch} onChange={setOnHandStockSearch} placeholder={t("inventory.placeholders.stockSearch")} />
+	            </div>
+	            <div className="meta-row">
+	              <span>{t("inventory.status.stockRows", { count: formatCount(visibleOnHandStockRows.length) })}</span>
+	              <span>
+	                {loadingOnHandStock
+	                  ? t("inventory.status.refreshingItemLevelStockDetail")
+	                  : onHandWarehouseId
+	                    ? t("inventory.status.itemLevelStockDetailForSelectedWarehouse")
+	                    : t("inventory.status.selectWarehouseAboveToNarrowDetail")}
+	              </span>
+	            </div>
+	            <DataTable rows={visibleOnHandStockRows} columns={onHandStockColumns} emptyText={t("inventory.empty.noItemLevelStockDetail")} />
+	          </SectionCard>
         </div>
       ) : null}
 
       {activeTab === "Transfers" ? (
         <div className="page-stack">
-          <SectionCard title="Transfers">
-            <div className="page-stack">
-              <div className="settings-grid">
-                <Select label="Source Warehouse" value={transferSourceId} options={stockedWarehouseOptions} onChange={setTransferSourceId} />
-                <Select label="Target Warehouse" value={transferTargetId} options={stockedWarehouseOptions} onChange={setTransferTargetId} />
-              </div>
+	          <SectionCard title={t("inventory.sections.transfers")}>
+	            <div className="page-stack">
+	              <div className="settings-grid">
+	                <Select label={t("inventory.labels.sourceWarehouse")} value={transferSourceId} options={stockedWarehouseOptions} onChange={setTransferSourceId} />
+	                <Select label={t("inventory.labels.targetWarehouse")} value={transferTargetId} options={stockedWarehouseOptions} onChange={setTransferTargetId} />
+	              </div>
 
-              <div className="toolbar toolbar--wrap">
-                <Input label="Search Source Stock" value={transferSearch} onChange={setTransferSearch} placeholder="Code, description, brand" />
-                <Button variant="secondary" onClick={handleClearTransferDraft}>
-                  Clear Draft
-                </Button>
-                <Button onClick={() => void handlePostTransfer()} busy={postingTransfer} busyLabel="Posting...">
-                  Post Transfer
-                </Button>
-              </div>
+	              <div className="toolbar toolbar--wrap">
+	                <Input label={t("inventory.labels.searchSourceStock")} value={transferSearch} onChange={setTransferSearch} placeholder={t("inventory.placeholders.stockSearch")} />
+	                <Button variant="secondary" onClick={handleClearTransferDraft}>
+	                  {t("inventory.actions.clearDraft")}
+	                </Button>
+	                <Button onClick={() => void handlePostTransfer()} busy={postingTransfer} busyLabel={t("inventory.actions.posting")}>
+	                  {t("inventory.actions.postTransfer")}
+	                </Button>
+	              </div>
 
-              <div className="settings-grid settings-stats-grid">
-                <div className="settings-item">
-                  <span className="settings-label">Transfer No</span>
-                  <strong>{transferDraft?.transfer_no || "-"}</strong>
-                </div>
-                <div className="settings-item">
-                  <span className="settings-label">Draft Lines</span>
-                  <strong>{transferDraft?.lines.length.toLocaleString("en-US") || "0"}</strong>
-                </div>
-                <div className="settings-item">
-                  <span className="settings-label">Transfer Qty</span>
-                  <strong>{transferDraftTotals.qty.toLocaleString("en-US")}</strong>
-                </div>
-                <div className="settings-item">
-                  <span className="settings-label">Transfer Value</span>
-                  <strong>{formatMoney(transferDraftTotals.amount)}</strong>
-                </div>
-              </div>
+	              <div className="settings-grid settings-stats-grid">
+	                <div className="settings-item">
+	                  <span className="settings-label">{t("inventory.labels.transferNo")}</span>
+	                  <strong>{transferDraft?.transfer_no || "-"}</strong>
+	                </div>
+	                <div className="settings-item">
+	                  <span className="settings-label">{t("inventory.labels.draftLines")}</span>
+	                  <strong>{transferDraft ? formatCount(transferDraft.lines.length) : "0"}</strong>
+	                </div>
+	                <div className="settings-item">
+	                  <span className="settings-label">{t("inventory.labels.transferQty")}</span>
+	                  <strong>{formatCount(transferDraftTotals.qty)}</strong>
+	                </div>
+	                <div className="settings-item">
+	                  <span className="settings-label">{t("inventory.labels.transferValue")}</span>
+	                  <strong>{formatMoney(transferDraftTotals.amount)}</strong>
+	                </div>
+	              </div>
 
-              <SectionCard title="Source Stock">
-                <div className="meta-row">
-                  <span>{filteredTransferStockRows.length.toLocaleString("en-US")} source stock rows</span>
-                  <span>{loadingTransferStock ? "Refreshing source warehouse stock..." : "Select a source row to add it into the transfer draft."}</span>
-                </div>
-                <DataTable
-                  rows={filteredTransferStockRows}
-                  columns={[
-                    { key: "brand", header: "Brand", render: (row: WarehouseStockItem) => <BrandPill brand={row.brand} compact /> },
-                    { key: "code", header: "Code", render: (row: WarehouseStockItem) => row.product_code || row.old_code || "-" },
-                    { key: "description", header: "Description", render: (row: WarehouseStockItem) => row.description || "-" },
-                    { key: "origin", header: "Origin", render: (row: WarehouseStockItem) => row.origin || "-" },
-                    { key: "qty", header: "Available Qty", render: (row: WarehouseStockItem) => row.available_qty.toLocaleString("en-US") },
-                    { key: "cost", header: "Avg Cost", render: (row: WarehouseStockItem) => formatMoney(row.average_cost) },
-                    {
-                      key: "action",
-                      header: "Action",
-                      render: (row: WarehouseStockItem) => (
-                        <Button className="button--compact" variant="secondary" onClick={() => handleAddTransferItem(row)}>
-                          Add
-                        </Button>
-                      ),
-                    },
-                  ]}
-                  emptyText="No available stock in the selected source warehouse."
-                />
-              </SectionCard>
+	              <SectionCard title={t("inventory.sections.sourceStock")}>
+	                <div className="meta-row">
+	                  <span>{t("inventory.status.sourceStockRows", { count: formatCount(filteredTransferStockRows.length) })}</span>
+	                  <span>{loadingTransferStock ? t("inventory.status.refreshingSourceWarehouseStock") : t("inventory.status.selectSourceRowToAdd")}</span>
+	                </div>
+	                <DataTable
+	                  rows={filteredTransferStockRows}
+	                  columns={[
+	                    { key: "brand", header: t("inventory.table.brand"), render: (row: WarehouseStockItem) => <BrandPill brand={row.brand} compact /> },
+	                    { key: "code", header: t("inventory.table.code"), render: (row: WarehouseStockItem) => row.product_code || row.old_code || "-" },
+	                    { key: "description", header: t("inventory.table.description"), render: (row: WarehouseStockItem) => row.description || "-" },
+	                    { key: "origin", header: t("inventory.table.origin"), render: (row: WarehouseStockItem) => row.origin || "-" },
+	                    { key: "qty", header: t("inventory.table.availableQty"), render: (row: WarehouseStockItem) => formatCount(row.available_qty) },
+	                    { key: "cost", header: t("inventory.table.avgCost"), render: (row: WarehouseStockItem) => formatMoney(row.average_cost) },
+	                    {
+	                      key: "action",
+	                      header: t("inventory.table.action"),
+	                      render: (row: WarehouseStockItem) => (
+	                        <Button className="button--compact" variant="secondary" onClick={() => handleAddTransferItem(row)}>
+	                          {t("inventory.actions.add")}
+	                        </Button>
+	                      ),
+	                    },
+	                  ]}
+	                  emptyText={t("inventory.empty.noAvailableStockInSourceWarehouse")}
+	                />
+	              </SectionCard>
 
-              <SectionCard title="Transfer Draft">
-                {transferDraft?.lines.length ? (
-                  <div className="table-wrap">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Code</th>
-                          <th>Brand</th>
-                          <th>Description</th>
-                          <th>Available</th>
-                          <th>Transfer Qty</th>
-                          <th>Unit Cost</th>
-                          <th>Line Total</th>
-                          <th>Action</th>
-                        </tr>
-                      </thead>
+	              <SectionCard title={t("inventory.sections.transferDraft")}>
+	                {transferDraft?.lines.length ? (
+	                  <div className="table-wrap">
+	                    <table className="data-table">
+	                      <thead>
+	                        <tr>
+	                          <th>{t("inventory.table.code")}</th>
+	                          <th>{t("inventory.table.brand")}</th>
+	                          <th>{t("inventory.table.description")}</th>
+	                          <th>{t("inventory.table.available")}</th>
+	                          <th>{t("inventory.table.transferQty")}</th>
+	                          <th>{t("inventory.table.unitCost")}</th>
+	                          <th>{t("inventory.table.lineTotal")}</th>
+	                          <th>{t("inventory.table.action")}</th>
+	                        </tr>
+	                      </thead>
                       <tbody>
                         {transferDraft.lines.map((line) => (
                           <tr key={line.key}>
                             <td>{line.product_code || line.old_code || "-"}</td>
                             <td>{line.brand || "-"}</td>
                             <td>{line.description || "-"}</td>
-                            <td>{line.available_qty.toLocaleString("en-US")}</td>
+	                            <td>{formatCount(line.available_qty)}</td>
                             <td>
                               <label className="field">
                                 <input
@@ -1735,24 +1746,24 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                             </td>
                             <td>{formatMoney(line.unit_cost)}</td>
                             <td>{formatMoney(line.line_total)}</td>
-                            <td>
-                              <Button className="button--compact" variant="secondary" onClick={() => handleRemoveTransferLine(line.key)}>
-                                Remove
-                              </Button>
-                            </td>
+	                            <td>
+	                              <Button className="button--compact" variant="secondary" onClick={() => handleRemoveTransferLine(line.key)}>
+	                                {t("inventory.actions.remove")}
+	                              </Button>
+	                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
                 ) : (
-                  <div className="empty-state">No transfer lines yet.</div>
-                )}
-              </SectionCard>
+	                  <div className="empty-state">{t("inventory.empty.noTransferLinesYet")}</div>
+	                )}
+	              </SectionCard>
 
-              <SectionCard title="Transfer Posting">
-                <div className="customers-form-row">
-                  <div className="customers-form-row__label">Transfer Date</div>
+	              <SectionCard title={t("inventory.sections.transferPosting")}>
+	                <div className="customers-form-row">
+	                  <div className="customers-form-row__label">{t("inventory.labels.transferDate")}</div>
                   <div className="customers-field-wrap customers-field-wrap--medium">
                     <Input
                       type="date"
@@ -1760,9 +1771,9 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                       onChange={(value) => setTransferDraft((current) => (current ? { ...current, transfer_date: value } : current))}
                     />
                   </div>
-                </div>
-                <div className="customers-form-row customers-form-row--top">
-                  <div className="customers-form-row__label">Notes</div>
+	                </div>
+	                <div className="customers-form-row customers-form-row--top">
+	                  <div className="customers-form-row__label">{t("inventory.labels.notes")}</div>
                   <div className="customers-field-wrap customers-field-wrap--full">
                     <label className="field customer-field">
                       <textarea
@@ -1775,13 +1786,13 @@ export function InventoryPage({ initialTab = "Warehouses", selectedWarehouseId: 
                 </div>
               </SectionCard>
 
-              <SectionCard title="Transfer History">
-                <div className="meta-row">
-                  <span>{stockTransfers.length.toLocaleString("en-US")} transfer records</span>
-                  <span>{loadingTransfers ? "Refreshing transfer history..." : "Posted transfers create paired outbound and inbound warehouse movements."}</span>
-                </div>
-                <DataTable rows={stockTransfers} columns={transferHistoryColumns} emptyText="No stock transfers posted yet." />
-              </SectionCard>
+	              <SectionCard title={t("inventory.sections.transferHistory")}>
+	                <div className="meta-row">
+	                  <span>{t("inventory.status.transferRecords", { count: formatCount(stockTransfers.length) })}</span>
+	                  <span>{loadingTransfers ? t("inventory.status.refreshingTransferHistory") : t("inventory.status.postedTransfersCreateMovements")}</span>
+	                </div>
+	                <DataTable rows={stockTransfers} columns={transferHistoryColumns} emptyText={t("inventory.empty.noStockTransfersPosted")} />
+	              </SectionCard>
             </div>
           </SectionCard>
         </div>

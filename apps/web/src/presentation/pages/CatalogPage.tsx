@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CATALOG_MARKET_SEGMENT_OPTIONS, formatCatalogMarketSegmentLabel, normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
+import { CATALOG_MARKET_SEGMENT_OPTIONS, normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { syncBrandCatalog } from "../../infrastructure/api/adminApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
@@ -23,6 +23,7 @@ import { downloadCsv, normalizeNumber, normalizeText, parseCsv, toCsv } from "..
 import { downloadCatalogLifecycleTemplate, downloadCatalogTemplate } from "../../shared/importTemplates";
 import { dispatchAppNavigation, PENDING_CATALOG_PURCHASE_ITEM_KEY, PENDING_CATALOG_SALES_ITEM_KEY, storeCatalogTransfer } from "../../shared/catalogTransfer";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
+import { useI18n } from "../../i18n/I18nProvider";
 
 const CATALOG_CACHE_KEY = "next-master-catalog-cache";
 const CATALOG_CACHE_WRITE_DELAY_MS = 250;
@@ -145,6 +146,7 @@ function buildCatalogRowDraft(row: CatalogRow, existing?: CatalogRowDraft | null
 }
 
 export function CatalogPage() {
+  const { locale, t } = useI18n();
   const actionFeedback = useActionFeedback();
   const selectedCatalogPopupRef = useRef<HTMLDivElement | null>(null);
   const catalogCacheHydratedRef = useRef(false);
@@ -206,10 +208,24 @@ export function CatalogPage() {
     original_number: "",
     reason: "",
   });
+  const numberLocale = locale === "tr" ? "tr-TR" : "en-US";
+  const formatCount = (value: number) => value.toLocaleString(numberLocale);
+  const getSegmentLabel = (value: string | null | undefined) => {
+    const normalized = normalizeCatalogMarketSegment(value);
+    return normalized ? t(`catalog.segments.${normalized}`) : t("catalog.segments.unassigned");
+  };
+  const segmentOptions = CATALOG_MARKET_SEGMENT_OPTIONS.map((option) => ({
+    value: option.value,
+    label: getSegmentLabel(option.value),
+  }));
   const lifecycleOptions = [
-    { value: "active", label: "Active" },
-    { value: "discontinued", label: "Discontinued" },
+    { value: "active", label: t("catalog.lifecycle.active") },
+    { value: "discontinued", label: t("catalog.lifecycle.discontinued") },
   ];
+  const getLifecycleLabel = (value: string | null | undefined) =>
+    normalizeCatalogLifecycleStatus(value) === "discontinued" ? t("catalog.lifecycle.discontinued") : t("catalog.lifecycle.active");
+  const getExportFormatLabel = (format: CatalogExportFormat) =>
+    format === "xlsx" ? t("catalog.export.formats.excel") : t("catalog.export.formats.csv");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -275,10 +291,10 @@ export function CatalogPage() {
     setSubmittedCatalogSegment(cached.submittedCatalogSegment || cached.catalogSegment || "");
     setSelectedCatalogProductId(cached.selectedCatalogProductId || "");
     if (!isOnline) {
-      setStatus("Offline mode active. Showing cached catalog data.");
+      setStatus(t("catalog.status.offlineCachedData"));
       setError("");
     }
-  }, [isOnline]);
+  }, [isOnline, t]);
 
   useEffect(() => {
     if (!CATALOG_MARKET_SEGMENT_OPTIONS.length) return;
@@ -308,8 +324,8 @@ export function CatalogPage() {
           if (submittedSearch.trim() || submittedCatalogBrand || submittedCatalogSegment) {
             setStatus(
               offlineRows.length
-                ? `Offline mode active. Showing ${offlineRows.length.toLocaleString("en-US")} cached catalog row(s).`
-                : "Offline mode active. No cached catalog rows match this filter.",
+                ? t("catalog.status.offlineCachedRows", { count: formatCount(offlineRows.length) })
+                : t("catalog.status.offlineNoCachedRows"),
             );
           }
         }
@@ -347,8 +363,8 @@ export function CatalogPage() {
         if (!cancelled) setRows(result);
       } catch (caught) {
         if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : "Catalog request failed");
-          setStatus("Catalog request failed. Keeping the last visible result set.");
+          setError(caught instanceof Error ? caught.message : t("catalog.errors.requestFailed"));
+          setStatus(t("catalog.status.requestFailedKeepingResults"));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -359,20 +375,20 @@ export function CatalogPage() {
     return () => {
       cancelled = true;
     };
-  }, [isOnline, submittedSearch, submittedCatalogBrand, submittedCatalogSegment, previewSelection]);
+  }, [isOnline, submittedSearch, submittedCatalogBrand, submittedCatalogSegment, previewSelection, t, numberLocale]);
 
   useEffect(() => {
     if (!searchingCatalog || loading) return;
     const rawTotal = rows[0]?.total_count ?? rows.length;
     const nextTotal = Math.abs(rawTotal) || rows.length;
-    const totalLabel = `${nextTotal.toLocaleString("en-US")}${rawTotal < 0 ? "+" : ""}`;
+    const totalLabel = `${formatCount(nextTotal)}${rawTotal < 0 ? "+" : ""}`;
     if (error) {
       actionFeedback.fail(error);
     } else {
-      actionFeedback.succeed(`${totalLabel} catalog rows loaded.`);
+      actionFeedback.succeed(t("catalog.status.rowsLoaded", { count: totalLabel }));
     }
     setSearchingCatalog(false);
-  }, [searchingCatalog, loading, error, rows, actionFeedback]);
+  }, [searchingCatalog, loading, error, rows, actionFeedback, numberLocale, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -530,16 +546,26 @@ export function CatalogPage() {
   const hasSubmittedBrand = Boolean(submittedCatalogBrand);
   const hasSubmittedSegment = Boolean(submittedCatalogSegment);
   const catalogCountLabel = loading
-    ? "Loading catalog..."
+    ? t("catalog.search.countLoading")
     : !hasSubmittedSearch && !hasSubmittedBrand && !hasSubmittedSegment
-      ? "Select a brand, segment, or search to load catalog."
+      ? t("catalog.search.countPrompt")
     : hasSubmittedBrand && !hasSubmittedSearch && !hasSubmittedSegment
-        ? `${submittedCatalogBrand}: ${visibleTotal.toLocaleString("en-US")}${hasApproximateTotal ? "+" : ""} items`
+        ? t("catalog.search.countBrand", {
+            brand: submittedCatalogBrand,
+            count: `${formatCount(visibleTotal)}${hasApproximateTotal ? "+" : ""}`,
+          })
         : hasSubmittedSegment && !hasSubmittedBrand && !hasSubmittedSearch
-          ? `${formatCatalogMarketSegmentLabel(submittedCatalogSegment)}: ${visibleTotal.toLocaleString("en-US")}${hasApproximateTotal ? "+" : ""} items`
+          ? t("catalog.search.countSegment", {
+              segment: getSegmentLabel(submittedCatalogSegment),
+              count: `${formatCount(visibleTotal)}${hasApproximateTotal ? "+" : ""}`,
+            })
         : hasSubmittedBrand
-          ? `${visibleTotal.toLocaleString("en-US")} matches in ${submittedCatalogBrand}${hasSubmittedSegment ? ` / ${formatCatalogMarketSegmentLabel(submittedCatalogSegment)}` : ""}`
-          : `${visibleTotal.toLocaleString("en-US")} catalog rows`;
+          ? t("catalog.search.countMatchesBrand", {
+              count: formatCount(visibleTotal),
+              brand: submittedCatalogBrand,
+              segment: hasSubmittedSegment ? ` / ${getSegmentLabel(submittedCatalogSegment)}` : "",
+            })
+          : t("catalog.search.countRows", { count: formatCount(visibleTotal) });
   const originalNumberBrandMatches = useMemo(() => {
     if (!submittedSearch.trim() || !rows.length) return [];
     return Array.from(
@@ -553,12 +579,12 @@ export function CatalogPage() {
   }, [rows, submittedSearch]);
   const brandOptions = [
     ...brands.map((item) => ({ value: item.name, label: item.name })),
-    { value: "__new__", label: "New brand..." },
+    { value: "__new__", label: t("catalog.common.newBrand") },
   ];
   const editableBrandOptions = brands.map((item) => ({ value: item.name, label: item.name }));
   const createBrandOptions = [
     ...editableBrandOptions,
-    { value: "__new__", label: "New brand..." },
+    { value: "__new__", label: t("catalog.common.newBrand") },
   ];
   const selectedCatalogRow = useMemo(
     () => rows.find((row) => row.product_id === selectedCatalogProductId) || null,
@@ -581,7 +607,7 @@ export function CatalogPage() {
         if (!cancelled) setSelectedCatalogMedia([]);
         return;
       }
-      const fallbackItems = selectedCatalogRow.image_url ? [{ src: selectedCatalogRow.image_url, label: "Product" }] : [];
+      const fallbackItems = selectedCatalogRow.image_url ? [{ src: selectedCatalogRow.image_url, label: t("catalog.common.product") }] : [];
       if (!cancelled) setSelectedCatalogMedia(fallbackItems);
       try {
         const items = await fetchCatalogProductMedia({
@@ -615,7 +641,7 @@ export function CatalogPage() {
     setStatus("");
     setError("");
     setSearchingCatalog(false);
-    actionFeedback.succeed("Catalog filters cleared.");
+    actionFeedback.succeed(t("catalog.status.filtersCleared"));
   }
 
   function applyCatalogFilters(nextSearch: string, nextBrand: string, nextSegment = catalogSegment, announce = true) {
@@ -624,7 +650,11 @@ export function CatalogPage() {
     setSelectedCatalogProductId("");
     if (announce) {
       actionFeedback.begin(
-        `${isOnline ? "Searching" : "Filtering cached"} catalog for ${nextBrand || "all brands"} / ${formatCatalogMarketSegmentLabel(nextSegment)} / ${nextSearch.trim() || "all items"}...`,
+        t(isOnline ? "catalog.status.searchingCatalog" : "catalog.status.filteringCached", {
+          brand: nextBrand || t("catalog.search.allBrandsLabel"),
+          segment: getSegmentLabel(nextSegment),
+          item: nextSearch.trim() || t("catalog.search.allItemsLabel"),
+        }),
       );
     }
     setSubmittedSearch(nextSearch);
@@ -649,7 +679,7 @@ export function CatalogPage() {
       replacement_warning: selectedCatalogDraft.replacement_warning || "",
     });
     dispatchAppNavigation({ page: "Sales" });
-    actionFeedback.succeed(`${selectedCatalogDraft.product_code} sent to Sales Order Workbench.`);
+    actionFeedback.succeed(t("catalog.status.sentToSalesOrder", { code: selectedCatalogDraft.product_code }));
   }
 
   function queueCatalogItemForPurchaseOrder() {
@@ -669,7 +699,7 @@ export function CatalogPage() {
       replacement_warning: selectedCatalogDraft.replacement_warning || "",
     });
     dispatchAppNavigation({ page: "Purchases" });
-    actionFeedback.succeed(`${selectedCatalogDraft.product_code} sent to Purchase Order draft.`);
+    actionFeedback.succeed(t("catalog.status.sentToPurchaseDraft", { code: selectedCatalogDraft.product_code }));
   }
 
   function patchCatalogDraft(row: CatalogRow, patch: Partial<CatalogRowDraft>) {
@@ -684,7 +714,7 @@ export function CatalogPage() {
 
   async function saveCatalogRow(row: CatalogRow) {
     if (!isOnline) {
-      setError("Connect to the internet to save catalog changes.");
+      setError(t("catalog.errors.connectToSave"));
       return;
     }
     const draft = drafts[row.product_id] || buildCatalogRowDraft(row);
@@ -692,7 +722,7 @@ export function CatalogPage() {
       setError("");
       setStatus("");
       setRowActionKey(`save:${row.product_id}`);
-      actionFeedback.begin(`Saving catalog row ${draft.product_code}...`);
+      actionFeedback.begin(t("catalog.status.savingRow", { code: draft.product_code }));
         await updateCloudCatalogRow(row.product_id, {
           product_code: draft.product_code,
           brand: draft.brand,
@@ -707,10 +737,10 @@ export function CatalogPage() {
           lifecycle_note: draft.lifecycle_note || null,
         });
       await reloadCatalog(submittedSearch, submittedCatalogBrand, submittedCatalogSegment);
-      setStatus(`Catalog row ${draft.product_code} saved.`);
-      actionFeedback.succeed(`Catalog row ${draft.product_code} saved.`);
+      setStatus(t("catalog.status.rowSaved", { code: draft.product_code }));
+      actionFeedback.succeed(t("catalog.status.rowSaved", { code: draft.product_code }));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Catalog update failed";
+      const message = caught instanceof Error ? caught.message : t("catalog.errors.updateFailed");
       setError(message);
       actionFeedback.fail(message);
     } finally {
@@ -720,22 +750,22 @@ export function CatalogPage() {
 
   async function deleteCatalogRow(row: CatalogRow) {
     if (!isOnline) {
-      setError("Connect to the internet to delete catalog rows.");
+      setError(t("catalog.errors.connectToDelete"));
       return;
     }
-    if (!confirm(`Delete ${row.product_code} from catalog?`)) return;
+    if (!confirm(t("catalog.confirm.deleteRow", { code: row.product_code }))) return;
     try {
       setError("");
       setStatus("");
       setRowActionKey(`delete:${row.product_id}`);
-      actionFeedback.begin(`Deleting catalog row ${row.product_code}...`);
+      actionFeedback.begin(t("catalog.status.deletingRow", { code: row.product_code }));
       await deleteCloudCatalogRow(row.product_id);
       await reloadCatalog(submittedSearch, submittedCatalogBrand, submittedCatalogSegment);
       setSelectedCatalogProductId("");
-      setStatus(`Catalog row ${row.product_code} deleted.`);
-      actionFeedback.succeed(`Catalog row ${row.product_code} deleted.`);
+      setStatus(t("catalog.status.rowDeleted", { code: row.product_code }));
+      actionFeedback.succeed(t("catalog.status.rowDeleted", { code: row.product_code }));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Catalog delete failed";
+      const message = caught instanceof Error ? caught.message : t("catalog.errors.deleteFailed");
       setError(message);
       actionFeedback.fail(message);
     } finally {
@@ -745,7 +775,7 @@ export function CatalogPage() {
 
   function openReferenceDialogForRow(row: CatalogRow) {
     if (!isOnline) {
-      setError("Connect to the internet to create or edit code references.");
+      setError(t("catalog.errors.connectToReferences"));
       return;
     }
     const coverageKey = `${row.brand.trim().toLowerCase()}::${normalizePartCode(row.product_code)}`;
@@ -756,7 +786,7 @@ export function CatalogPage() {
       old_code: "",
       new_code: draft.product_code || row.product_code || "",
       original_number: draft.oem_no || row.oem_no || "",
-      reason: hasReference ? "Update existing replacement mapping" : "Supplier changed / replacement code",
+      reason: hasReference ? t("catalog.reference.reasonExisting") : t("catalog.reference.reasonReplacement"),
     });
     setError("");
     setStatus("");
@@ -769,7 +799,7 @@ export function CatalogPage() {
       const linked = usage.matchesOldCode[0];
       return (
         <div className="warning-text">
-          This old customer code already has a mapping to <strong>{linked.new_code}</strong>.
+          {t("catalog.reference.oldCodeMappedPrefix")} <strong>{linked.new_code}</strong>.
         </div>
       );
     }
@@ -777,7 +807,7 @@ export function CatalogPage() {
       const linked = usage.matchesNewCode[0];
       return (
         <div className="warning-text">
-          This code is already used as a current valid code. Old code for it is <strong>{linked.old_code}</strong>.
+          {t("catalog.reference.currentCodeAlreadyUsedPrefix")} <strong>{linked.old_code}</strong>.
         </div>
       );
     }
@@ -788,7 +818,7 @@ export function CatalogPage() {
     () => [
       {
         key: "image",
-        header: "Image",
+        header: t("catalog.table.image"),
         render: (row: CatalogRow) => (
           <ProductVisual
             imageUrl={row.image_url}
@@ -809,7 +839,7 @@ export function CatalogPage() {
       },
       {
         key: "code",
-        header: "Code",
+        header: t("catalog.common.code"),
         render: (row: CatalogRow) => (
           <div className="catalog-cell catalog-cell--code">
             <strong className="catalog-code">{drafts[row.product_id]?.product_code ?? row.product_code}</strong>
@@ -818,7 +848,7 @@ export function CatalogPage() {
       },
       {
         key: "brand",
-        header: "Brand",
+        header: t("catalog.common.brand"),
         render: (row: CatalogRow) => (
           <div className="catalog-cell">
             <span className="catalog-brand-badge">{drafts[row.product_id]?.brand ?? row.brand}</span>
@@ -827,29 +857,29 @@ export function CatalogPage() {
       },
       {
         key: "segment",
-        header: "Segment",
+        header: t("catalog.common.segment"),
         render: (row: CatalogRow) => (
           <div className="catalog-cell">
             <span className="catalog-segment-badge">
-              {formatCatalogMarketSegmentLabel(drafts[row.product_id]?.market_segment ?? row.market_segment)}
+              {getSegmentLabel(drafts[row.product_id]?.market_segment ?? row.market_segment)}
             </span>
           </div>
         ),
       },
       {
         key: "name",
-        header: "Name",
+        header: t("catalog.common.name"),
         render: (row: CatalogRow) => (
           <div className="catalog-cell catalog-cell--stack">
             <strong className="catalog-name">{drafts[row.product_id]?.description ?? row.description ?? "-"}</strong>
-            {row.replacement_warning ? <span className="catalog-inline-flag">Replacement mapped</span> : null}
+            {row.replacement_warning ? <span className="catalog-inline-flag">{t("catalog.table.replacementMapped")}</span> : null}
             {row.lifecycle_status === "discontinued" && row.lifecycle_note ? <span className="catalog-inline-flag catalog-inline-flag--danger">{row.lifecycle_note}</span> : null}
           </div>
         ),
       },
       {
         key: "oem",
-        header: "OEM",
+        header: t("catalog.common.oem"),
         render: (row: CatalogRow) => (
           <div className="catalog-cell catalog-cell--stack">
             <span className="catalog-mono catalog-clip">{drafts[row.product_id]?.oem_no ?? row.oem_no ?? "-"}</span>
@@ -858,7 +888,7 @@ export function CatalogPage() {
       },
       {
         key: "vehicle",
-        header: "Vehicle",
+        header: t("catalog.common.vehicle"),
         render: (row: CatalogRow) => (
           <div className="catalog-cell catalog-cell--stack">
             <VehicleBadges value={drafts[row.product_id]?.vehicle ?? row.vehicle ?? ""} limit={3} expandable />
@@ -867,7 +897,7 @@ export function CatalogPage() {
       },
       {
         key: "hs",
-        header: "HS",
+        header: t("catalog.common.hs"),
         render: (row: CatalogRow) => (
           <div className="catalog-cell">
             <span className="catalog-mono">{drafts[row.product_id]?.hs_code ?? row.hs_code ?? "-"}</span>
@@ -876,7 +906,7 @@ export function CatalogPage() {
       },
       {
         key: "origin",
-        header: "Origin",
+        header: t("catalog.common.origin"),
         render: (row: CatalogRow) => (
           <div className="catalog-cell">
             <span className="catalog-origin-chip">{drafts[row.product_id]?.origin ?? row.origin ?? "-"}</span>
@@ -885,7 +915,7 @@ export function CatalogPage() {
       },
       {
         key: "weight",
-        header: "Weight",
+        header: t("catalog.common.weight"),
         render: (row: CatalogRow) => (
           <div className="catalog-cell">
             <span className="catalog-mono">{String(drafts[row.product_id]?.weight_kg ?? row.weight_kg ?? "-")}</span>
@@ -894,18 +924,18 @@ export function CatalogPage() {
       },
       {
         key: "lifecycle",
-        header: "Lifecycle",
+        header: t("catalog.common.lifecycle"),
         render: (row: CatalogRow) => (
           <div className="catalog-cell">
             <span className={`catalog-state-badge ${(drafts[row.product_id]?.lifecycle_status ?? row.lifecycle_status ?? "active") === "discontinued" ? "is-danger" : "is-live"}`}>
-              {drafts[row.product_id]?.lifecycle_status ?? row.lifecycle_status ?? "active"}
+              {getLifecycleLabel(drafts[row.product_id]?.lifecycle_status ?? row.lifecycle_status ?? "active")}
             </span>
           </div>
         ),
       },
       {
         key: "lifecycleNote",
-        header: "Lifecycle Note",
+        header: t("catalog.common.lifecycleNote"),
         render: (row: CatalogRow) => (
           <div className="catalog-cell catalog-cell--stack">
             <span className="catalog-clip">{drafts[row.product_id]?.lifecycle_note ?? row.lifecycle_note ?? "-"}</span>
@@ -914,16 +944,16 @@ export function CatalogPage() {
       },
       {
         key: "ref",
-        header: "Ref",
+        header: t("catalog.table.ref"),
         render: (row: CatalogRow) => {
           const key = `${row.brand.trim().toLowerCase()}::${normalizePartCode(row.product_code)}`;
           const count = referenceCoverage[key] || 0;
-          return <span className={count ? "status-badge status-badge--success" : "status-badge"}>{count ? `Mapped (${count})` : "-"}</span>;
+          return <span className={count ? "status-badge status-badge--success" : "status-badge"}>{count ? t("catalog.table.mappedCount", { count }) : "-"}</span>;
         },
       },
       {
         key: "actions",
-        header: "Actions",
+        header: t("catalog.table.actions"),
         render: (row: CatalogRow) => (
           <div className="inline-actions">
             <Button
@@ -931,13 +961,13 @@ export function CatalogPage() {
               className="button--compact"
               onClick={() => setSelectedCatalogProductId((current) => (current === row.product_id ? "" : row.product_id))}
             >
-              {selectedCatalogProductId === row.product_id ? "Close" : "Inspect"}
+              {selectedCatalogProductId === row.product_id ? t("catalog.actions.close") : t("catalog.actions.inspect")}
             </Button>
           </div>
         ),
       },
     ],
-    [drafts, referenceCoverage, selectedCatalogProductId],
+    [drafts, referenceCoverage, selectedCatalogProductId, t, locale],
   );
 
   async function reloadCatalog(nextSearch = submittedSearch, nextBrand = submittedCatalogBrand, nextSegment = submittedCatalogSegment) {
@@ -946,7 +976,7 @@ export function CatalogPage() {
       const cachedRows = cached?.rows || [];
       setRows(filterCachedCatalogRows(cachedRows, nextSearch, nextBrand, nextSegment));
       setError("");
-      setStatus("Offline mode active. Showing cached catalog data.");
+      setStatus(t("catalog.status.offlineCachedData"));
       return;
     }
     setLoading(true);
@@ -981,8 +1011,8 @@ export function CatalogPage() {
       });
       setRows(result);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Catalog request failed");
-      setStatus("Catalog request failed. Keeping the last visible result set.");
+      setError(caught instanceof Error ? caught.message : t("catalog.errors.requestFailed"));
+      setStatus(t("catalog.status.requestFailedKeepingResults"));
     } finally {
       setLoading(false);
     }
@@ -990,7 +1020,7 @@ export function CatalogPage() {
 
   async function handleCatalogImport(file: File) {
     if (!isOnline) {
-      setError("Connect to the internet to import catalog data.");
+      setError(t("catalog.errors.connectToImport"));
       return;
     }
     setLoading(true);
@@ -1043,13 +1073,13 @@ export function CatalogPage() {
           : "");
 
       if (!activeImportBrand) {
-        throw new Error("Catalog import requires a single brand selection or a single brand in the file");
+        throw new Error(t("catalog.errors.importBrandRequired"));
       }
       if (!activeImportSegment) {
-        throw new Error("Catalog import requires a market segment selection or a single segment in the file");
+        throw new Error(t("catalog.errors.importSegmentRequired"));
       }
 
-      actionFeedback.begin(`Importing catalog CSV for ${activeImportBrand}...`);
+      actionFeedback.begin(t("catalog.status.importingForBrand", { brand: activeImportBrand }));
 
       const payload = dataRows
         .map((row) => ({
@@ -1069,7 +1099,7 @@ export function CatalogPage() {
         .filter((row) => row.product_code);
 
       if (!payload.length) {
-        throw new Error("CSV did not contain any valid catalog rows");
+        throw new Error(t("catalog.errors.noValidImportRows"));
       }
 
       const importedCodes = Array.from(
@@ -1113,10 +1143,10 @@ export function CatalogPage() {
       setDrafts({});
       setShowImportDialog(false);
       setImportFile(null);
-      setStatus(`Catalog import completed for ${activeImportBrand}. Showing imported codes for review.`);
-      actionFeedback.succeed(`Catalog import completed for ${activeImportBrand}.`);
+      setStatus(t("catalog.status.importCompletedReview", { brand: activeImportBrand }));
+      actionFeedback.succeed(t("catalog.status.importCompleted", { brand: activeImportBrand }));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Catalog import failed";
+      const message = caught instanceof Error ? caught.message : t("catalog.errors.importFailed");
       setError(message);
       actionFeedback.fail(message);
     } finally {
@@ -1140,19 +1170,19 @@ export function CatalogPage() {
 
   async function handleCatalogExport() {
     if (!isOnline) {
-      setError("Connect to the internet to export catalog data.");
+      setError(t("catalog.errors.connectToExport"));
       return;
     }
     if (!exportBrand) {
-      setError("Catalog export requires a brand selection");
+      setError(t("catalog.errors.exportBrandRequired"));
       return;
     }
 
     setExportingCatalog(true);
     setError("");
     setStatus("");
-    const exportLabel = exportFormat === "xlsx" ? "Excel" : "CSV";
-    actionFeedback.begin(`Preparing catalog ${exportLabel} export for ${exportBrand}...`);
+    const exportLabel = getExportFormatLabel(exportFormat);
+    actionFeedback.begin(t("catalog.status.preparingExport", { format: exportLabel, brand: exportBrand }));
 
     try {
       const exportData = await fetchCatalogExportRows({ brandName: exportBrand, marketSegment: catalogSegment || undefined });
@@ -1180,10 +1210,10 @@ export function CatalogPage() {
         downloadCsv(buildCatalogExportName("csv"), toCsv(exportRows));
       }
       setShowExportDialog(false);
-      setStatus(`Catalog ${exportLabel} downloaded for ${exportBrand}.`);
-      actionFeedback.succeed(`Catalog ${exportLabel} downloaded for ${exportBrand}.`);
+      setStatus(t("catalog.status.exportDownloaded", { format: exportLabel, brand: exportBrand }));
+      actionFeedback.succeed(t("catalog.status.exportDownloaded", { format: exportLabel, brand: exportBrand }));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Catalog export failed";
+      const message = caught instanceof Error ? caught.message : t("catalog.errors.exportFailed");
       setError(message);
       actionFeedback.fail(message);
     } finally {
@@ -1193,13 +1223,13 @@ export function CatalogPage() {
 
   async function handleSyncSelectedBrand() {
     if (!isOnline) {
-      const message = "Connect to the internet to re-synch brand catalog data.";
+      const message = t("catalog.errors.connectToSync");
       setError(message);
       actionFeedback.fail(message);
       return;
     }
     if (!catalogBrand.trim()) {
-      const message = "Select a brand first.";
+      const message = t("catalog.errors.selectBrandFirst");
       setError(message);
       actionFeedback.fail(message);
       return;
@@ -1208,22 +1238,37 @@ export function CatalogPage() {
     setSyncingBrandCatalog(true);
     setError("");
     setStatus("");
-    actionFeedback.begin(`Re-Synching ${catalogBrand}...`);
+    actionFeedback.begin(t("catalog.status.resyncingBrand", { brand: catalogBrand }));
 
     try {
       const result = await syncBrandCatalog(catalogBrand, true);
       const sourceNote = result.fallbackUsed
-        ? ` Preferred source: ${result.preferredProviderLabel}. Current inline sync fallback: ${result.executionProviderLabel}.`
-        : ` Source: ${result.executionProviderLabel}.`;
+        ? t("catalog.status.syncFallbackSource", {
+            preferred: result.preferredProviderLabel,
+            current: result.executionProviderLabel,
+          })
+        : t("catalog.status.syncSource", { source: result.executionProviderLabel });
       setStatus(
-        `${result.targetBrandName}: ${result.resolvedRows.toLocaleString("en-US")} synced, ${result.newRowsInListing.toLocaleString("en-US")} new, ${result.discontinuedRows.toLocaleString("en-US")} discontinued, ${result.replacementRows.toLocaleString("en-US")} replacements, ${result.errorRows.toLocaleString("en-US")} errors.${sourceNote}`,
+        t("catalog.status.syncSummary", {
+          brand: result.targetBrandName,
+          synced: formatCount(result.resolvedRows),
+          newRows: formatCount(result.newRowsInListing),
+          discontinued: formatCount(result.discontinuedRows),
+          replacements: formatCount(result.replacementRows),
+          errors: formatCount(result.errorRows),
+          sourceNote,
+        }),
       );
       actionFeedback.succeed(
-        `${result.targetBrandName}: ${result.resolvedRows.toLocaleString("en-US")} catalog rows synced, ${result.replacementRows.toLocaleString("en-US")} replacement links processed.`,
+        t("catalog.status.syncComplete", {
+          brand: result.targetBrandName,
+          rows: formatCount(result.resolvedRows),
+          replacements: formatCount(result.replacementRows),
+        }),
       );
       applyCatalogFilters(search, catalogBrand, catalogSegment, false);
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Brand catalog sync failed";
+      const message = caught instanceof Error ? caught.message : t("catalog.errors.syncFailed");
       setError(message);
       actionFeedback.fail(message);
     } finally {
@@ -1236,14 +1281,14 @@ export function CatalogPage() {
       <section className="section-card search-focus-card search-focus-card--admin catalog-workbench">
         <div className="section-card__header section-card__header--row">
           <div>
-            <span className="search-focus-card__eyebrow">Admin Search</span>
-            <h2 className="search-focus-card__title">Catalog Search</h2>
-            <p>Connected to live catalog data.</p>
+            <span className="search-focus-card__eyebrow">{t("catalog.search.eyebrow")}</span>
+            <h2 className="search-focus-card__title">{t("catalog.search.title")}</h2>
+            <p>{t("catalog.search.description")}</p>
           </div>
           <div className="toolbar toolbar--wrap catalog-command-bar">
             <Select
               value={catalogBrand}
-              options={[{ value: "", label: "All Brands" }, ...editableBrandOptions]}
+              options={[{ value: "", label: t("catalog.search.allBrands") }, ...editableBrandOptions]}
               onChange={(value) => {
                 setCatalogBrand(value);
                 if (value || search.trim() || catalogSegment) {
@@ -1255,7 +1300,7 @@ export function CatalogPage() {
             />
             <Select
               value={catalogSegment}
-              options={[{ value: "", label: "All Segments" }, ...CATALOG_MARKET_SEGMENT_OPTIONS]}
+              options={[{ value: "", label: t("catalog.search.allSegments") }, ...segmentOptions]}
               onChange={(value) => {
                 setCatalogSegment(value);
                 if (value || search.trim() || catalogBrand) {
@@ -1265,24 +1310,24 @@ export function CatalogPage() {
                 clearCatalogSearch();
               }}
             />
-            <Input value={search} onChange={setSearch} placeholder="Search catalog" onEnter={() => applyCatalogFilters(search, catalogBrand, catalogSegment)} />
+            <Input value={search} onChange={setSearch} placeholder={t("catalog.search.placeholder")} onEnter={() => applyCatalogFilters(search, catalogBrand, catalogSegment)} />
             <Button
               onClick={() => {
                 applyCatalogFilters(search, catalogBrand, catalogSegment);
               }}
               busy={searchingCatalog}
-              busyLabel={isOnline ? "Searching..." : "Filtering..."}
+              busyLabel={isOnline ? t("catalog.actions.searching") : t("catalog.actions.filtering")}
             >
-              Search
+              {t("catalog.actions.search")}
             </Button>
             <Button variant="secondary" onClick={clearCatalogSearch} disabled={!search && !submittedSearch && !catalogBrand && !submittedCatalogBrand && !catalogSegment && !submittedCatalogSegment && !rows.length}>
-              Clear Search
+              {t("catalog.actions.clearSearch")}
             </Button>
-            <Button variant="secondary" onClick={() => openCatalogExport("csv")} disabled={!brands.length || !isOnline} busy={exportingCatalog && exportFormat === "csv"} busyLabel="Preparing...">
-              Export CSV
+            <Button variant="secondary" onClick={() => openCatalogExport("csv")} disabled={!brands.length || !isOnline} busy={exportingCatalog && exportFormat === "csv"} busyLabel={t("catalog.actions.preparing")}>
+              {t("catalog.actions.exportCsv")}
             </Button>
-            <Button variant="secondary" onClick={() => openCatalogExport("xlsx")} disabled={!brands.length || !isOnline} busy={exportingCatalog && exportFormat === "xlsx"} busyLabel="Preparing...">
-              Export Excel
+            <Button variant="secondary" onClick={() => openCatalogExport("xlsx")} disabled={!brands.length || !isOnline} busy={exportingCatalog && exportFormat === "xlsx"} busyLabel={t("catalog.actions.preparing")}>
+              {t("catalog.actions.exportExcel")}
             </Button>
             <Button
               variant="secondary"
@@ -1292,7 +1337,7 @@ export function CatalogPage() {
               }}
               disabled={!isOnline}
             >
-              Add New Item
+              {t("catalog.actions.addNewItem")}
             </Button>
             <Button
               variant="secondary"
@@ -1302,11 +1347,11 @@ export function CatalogPage() {
               }}
               disabled={!isOnline}
             >
-              Import CSV
+              {t("catalog.actions.importCsv")}
             </Button>
             {catalogBrand ? (
-              <Button variant="secondary" onClick={() => void handleSyncSelectedBrand()} disabled={!isOnline} busy={syncingBrandCatalog} busyLabel="Re-Synching...">
-                Re-Synch
+              <Button variant="secondary" onClick={() => void handleSyncSelectedBrand()} disabled={!isOnline} busy={syncingBrandCatalog} busyLabel={t("catalog.actions.resyncing")}>
+                {t("catalog.actions.resync")}
               </Button>
             ) : null}
           </div>
@@ -1316,13 +1361,13 @@ export function CatalogPage() {
             <span>{catalogCountLabel}</span>
             {originalNumberBrandMatches.length ? (
               <span>
-                Original No Brands: <strong>{originalNumberBrandMatches.join(", ")}</strong>
+                {t("catalog.search.originalNoBrands")}: <strong>{originalNumberBrandMatches.join(", ")}</strong>
               </span>
             ) : null}
             {status ? <span className="success-text">{status}</span> : null}
             {error ? <span className="error-text">{error}</span> : null}
           </div>
-          {!isOnline ? <div className="warning-text">Offline mode active. Search works only on cached catalog data. Save, import, export, delete, and re-synch require internet.</div> : null}
+          {!isOnline ? <div className="warning-text">{t("catalog.search.offlineWarning")}</div> : null}
           <div className="workbench-main-layout catalog-workbench-layout">
             <div className="workbench-main-layout__table">
               <DataTable
@@ -1330,7 +1375,7 @@ export function CatalogPage() {
                 className="data-table--catalog"
                 rows={rows}
                 columns={columns}
-                emptyText={loading ? "Loading..." : !submittedSearch.trim() && !submittedCatalogBrand && !submittedCatalogSegment ? "Select a brand, segment, or search to load catalog." : "No products found"}
+                emptyText={loading ? t("catalog.empty.loading") : !submittedSearch.trim() && !submittedCatalogBrand && !submittedCatalogSegment ? t("catalog.empty.prompt") : t("catalog.empty.noProducts")}
                 onRowClick={(row) => setSelectedCatalogProductId((current) => (current === row.product_id ? "" : row.product_id))}
                 rowClassName={(row) => (row.product_id === selectedCatalogProductId ? "data-table__row--active" : "")}
               />
@@ -1343,9 +1388,9 @@ export function CatalogPage() {
         <DraggableSurface className="catalog-selected-popup" ref={selectedCatalogPopupRef} dragHandleSelector=".draggable-surface__handle">
         <div className="workbench-detail-panel workbench-detail-panel--catalog">
             <div className="toolbar toolbar--wrap workbench-detail-panel__dragbar draggable-surface__handle">
-              <span className="workbench-detail-panel__eyebrow">Selected Item</span>
+              <span className="workbench-detail-panel__eyebrow">{t("catalog.detail.selectedItem")}</span>
               <Button variant="secondary" className="button--compact" onClick={() => setSelectedCatalogProductId("")}>
-                Close
+                {t("catalog.actions.close")}
               </Button>
             </div>
             <div className="workbench-detail-panel__media">
@@ -1369,77 +1414,77 @@ export function CatalogPage() {
             </div>
             <div className="workbench-detail-panel__title">{selectedCatalogDraft.product_code}</div>
             <div className="document-marks document-marks--compact">
-              <span className="mark-badge">{selectedCatalogDraft.brand || "No brand"}</span>
-              <span className="mark-badge">{formatCatalogMarketSegmentLabel(selectedCatalogDraft.market_segment)}</span>
-              {selectedCatalogDraft.replacement_warning ? <span className="mark-badge mark-badge--accent">Replacement</span> : null}
+              <span className="mark-badge">{selectedCatalogDraft.brand || t("catalog.detail.noBrand")}</span>
+              <span className="mark-badge">{getSegmentLabel(selectedCatalogDraft.market_segment)}</span>
+              {selectedCatalogDraft.replacement_warning ? <span className="mark-badge mark-badge--accent">{t("catalog.detail.replacement")}</span> : null}
               <span className={`mark-badge ${selectedCatalogDraft.lifecycle_status === "discontinued" ? "mark-badge--danger" : "mark-badge--success"}`}>
-                {selectedCatalogDraft.lifecycle_status || "active"}
+                {getLifecycleLabel(selectedCatalogDraft.lifecycle_status || "active")}
               </span>
             </div>
             <div className="catalog-detail-editor">
               <Input
-                label="Code"
+                label={t("catalog.common.code")}
                 value={selectedCatalogDraft.product_code || ""}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { product_code: value })}
               />
               <Select
-                label="Brand"
+                label={t("catalog.common.brand")}
                 value={selectedCatalogDraft.brand || selectedCatalogRow.brand || ""}
                 options={editableBrandOptions}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { brand: value })}
               />
               <Select
-                label="Market Segment"
+                label={t("catalog.common.marketSegment")}
                 value={selectedCatalogDraft.market_segment || selectedCatalogRow.market_segment || ""}
-                options={CATALOG_MARKET_SEGMENT_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                options={segmentOptions}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { market_segment: normalizeCatalogMarketSegment(value) })}
               />
               <Select
-                label="Lifecycle"
+                label={t("catalog.common.lifecycle")}
                 value={selectedCatalogDraft.lifecycle_status || "active"}
                 options={lifecycleOptions.map((option) => ({ value: option.value, label: option.label }))}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { lifecycle_status: normalizeCatalogLifecycleStatus(value) })}
               />
               <Input
-                label="Weight"
+                label={t("catalog.common.weight")}
                 value={String(selectedCatalogDraft.weight_kg ?? "")}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { weight_kg: value })}
               />
               <Input
-                label="Description"
+                label={t("catalog.common.description")}
                 value={selectedCatalogDraft.description || ""}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { description: value })}
               />
               <Input
-                label="OEM"
+                label={t("catalog.common.oem")}
                 value={selectedCatalogDraft.oem_no || ""}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { oem_no: value })}
               />
               <Input
-                label="Vehicle"
+                label={t("catalog.common.vehicle")}
                 value={selectedCatalogDraft.vehicle || ""}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { vehicle: value })}
               />
               <Input
-                label="Lifecycle Note"
+                label={t("catalog.common.lifecycleNote")}
                 value={selectedCatalogDraft.lifecycle_note || ""}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { lifecycle_note: value })}
               />
               <Input
-                label="HS"
+                label={t("catalog.common.hs")}
                 value={selectedCatalogDraft.hs_code || ""}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { hs_code: value })}
               />
               <Input
-                label="Origin"
+                label={t("catalog.common.origin")}
                 value={selectedCatalogDraft.origin || ""}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { origin: value })}
               />
             </div>
             <div className="workbench-detail-list">
-              <div><span>Description</span><strong>{selectedCatalogDraft.description || "-"}</strong></div>
+              <div><span>{t("catalog.common.description")}</span><strong>{selectedCatalogDraft.description || "-"}</strong></div>
               <div>
-                <span>OEM</span>
+                <span>{t("catalog.common.oem")}</span>
                 <strong className="catalog-detail-list-text">
                   {visibleSelectedCatalogOemValues.length ? visibleSelectedCatalogOemValues.join(", ") : "-"}
                   {selectedCatalogOemValues.length > 5 ? (
@@ -1448,23 +1493,23 @@ export function CatalogPage() {
                       className="catalog-detail-expand"
                       onClick={() => setShowFullSelectedOem((current) => !current)}
                     >
-                      {showFullSelectedOem ? "Less" : "..."}
+                      {showFullSelectedOem ? t("catalog.actions.less") : "..."}
                     </button>
                   ) : null}
                 </strong>
               </div>
-              <div><span>Segment</span><strong>{formatCatalogMarketSegmentLabel(selectedCatalogDraft.market_segment)}</strong></div>
+              <div><span>{t("catalog.common.segment")}</span><strong>{getSegmentLabel(selectedCatalogDraft.market_segment)}</strong></div>
               <div>
-                <span>Vehicle</span>
+                <span>{t("catalog.common.vehicle")}</span>
                 <strong className="catalog-detail-list-text">
                   <VehicleBadges value={selectedCatalogDraft.vehicle || ""} limit={5} expandable />
                 </strong>
               </div>
-              <div><span>HS</span><strong>{selectedCatalogDraft.hs_code || "-"}</strong></div>
-              <div><span>Origin</span><strong>{selectedCatalogDraft.origin || "-"}</strong></div>
-              <div><span>Weight</span><strong>{selectedCatalogDraft.weight_kg ?? "-"}</strong></div>
-              <div><span>Reference Links</span><strong>{referenceCoverage[`${selectedCatalogRow.brand.trim().toLowerCase()}::${normalizePartCode(selectedCatalogRow.product_code)}`] || 0}</strong></div>
-              {selectedCatalogDraft.replacement_warning ? <div><span>Replacement</span><strong>{selectedCatalogDraft.replacement_warning}</strong></div> : null}
+              <div><span>{t("catalog.common.hs")}</span><strong>{selectedCatalogDraft.hs_code || "-"}</strong></div>
+              <div><span>{t("catalog.common.origin")}</span><strong>{selectedCatalogDraft.origin || "-"}</strong></div>
+              <div><span>{t("catalog.common.weight")}</span><strong>{selectedCatalogDraft.weight_kg ?? "-"}</strong></div>
+              <div><span>{t("catalog.detail.referenceLinks")}</span><strong>{referenceCoverage[`${selectedCatalogRow.brand.trim().toLowerCase()}::${normalizePartCode(selectedCatalogRow.product_code)}`] || 0}</strong></div>
+              {selectedCatalogDraft.replacement_warning ? <div><span>{t("catalog.detail.replacement")}</span><strong>{selectedCatalogDraft.replacement_warning}</strong></div> : null}
             </div>
             <div className="toolbar toolbar--wrap">
               <Button
@@ -1472,9 +1517,9 @@ export function CatalogPage() {
                 onClick={() => void saveCatalogRow(selectedCatalogRow)}
                 disabled={!isOnline || !selectedCatalogDraft.market_segment}
                 busy={rowActionKey === `save:${selectedCatalogRow.product_id}`}
-                busyLabel="Saving..."
+                busyLabel={t("catalog.actions.saving")}
               >
-                Save Changes
+                {t("catalog.actions.saveChanges")}
               </Button>
               <Button
                 variant="secondary"
@@ -1482,21 +1527,21 @@ export function CatalogPage() {
                 onClick={() => void deleteCatalogRow(selectedCatalogRow)}
                 disabled={!isOnline}
                 busy={rowActionKey === `delete:${selectedCatalogRow.product_id}`}
-                busyLabel="Deleting..."
+                busyLabel={t("catalog.actions.deleting")}
               >
-                Delete Item
+                {t("catalog.actions.deleteItem")}
               </Button>
               <Button variant="secondary" onClick={() => openReferenceDialogForRow(selectedCatalogRow)} disabled={!isOnline}>
                 {(() => {
                   const coverageKey = `${selectedCatalogRow.brand.trim().toLowerCase()}::${normalizePartCode(selectedCatalogRow.product_code)}`;
-                  return (referenceCoverage[coverageKey] || 0) > 0 ? "Edit Reference" : "Add Reference";
+                  return (referenceCoverage[coverageKey] || 0) > 0 ? t("catalog.actions.editReference") : t("catalog.actions.addReference");
                 })()}
               </Button>
               <Button variant="secondary" onClick={queueCatalogItemForSalesOrder}>
-                Add to Sales Order
+                {t("catalog.actions.addToSalesOrder")}
               </Button>
               <Button variant="secondary" onClick={queueCatalogItemForPurchaseOrder}>
-                Add to Purchase Draft
+                {t("catalog.actions.addToPurchaseDraft")}
               </Button>
             </div>
             {selectedCatalogDraft.lifecycle_note ? <div className="info-text">{selectedCatalogDraft.lifecycle_note}</div> : null}
@@ -1507,15 +1552,15 @@ export function CatalogPage() {
       {showImportDialog ? (
         <div className="modal-backdrop">
           <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
-            <div className="modal-card__header draggable-surface__handle">
-              <div>
-                <h3>Catalog CSV Import</h3>
-                <p>Fill all required fields before starting the import.</p>
-              </div>
-            </div>
+	            <div className="modal-card__header draggable-surface__handle">
+	              <div>
+	                <h3>{t("catalog.import.title")}</h3>
+	                <p>{t("catalog.import.description")}</p>
+	              </div>
+	            </div>
             <div className="modal-form-grid">
               <Select
-                label="Brand"
+	                label={t("catalog.common.brand")}
                 value={importBrand}
                 options={brandOptions}
                 onChange={(value) => {
@@ -1528,20 +1573,20 @@ export function CatalogPage() {
                 }}
               />
               <Select
-                label="Market Segment"
-                value={importCatalogSegment}
-                options={[{ value: "", label: "Select segment..." }, ...CATALOG_MARKET_SEGMENT_OPTIONS]}
+	                label={t("catalog.common.marketSegment")}
+	                value={importCatalogSegment}
+	                options={[{ value: "", label: t("catalog.import.selectSegment") }, ...segmentOptions]}
                 onChange={setImportCatalogSegment}
               />
               <Input
-                label="Brand Name"
+	                label={t("catalog.common.brandName")}
                 value={importBrandName}
                 onChange={setImportBrandName}
                 disabled={importBrand !== "__new__"}
               />
-              <Input label="Target" value="Cloud catalog import" onChange={() => undefined} disabled />
-              <label className="field">
-                <span className="field__label">File</span>
+	              <Input label={t("catalog.import.target")} value={t("catalog.import.cloudTarget")} onChange={() => undefined} disabled />
+	              <label className="field">
+	                <span className="field__label">{t("catalog.common.file")}</span>
                 <input
                   className="field__input"
                   type="file"
@@ -1551,30 +1596,30 @@ export function CatalogPage() {
                   }}
                 />
               </label>
-              <Input label="Selected file" value={importFile?.name ?? ""} onChange={() => undefined} disabled />
-            </div>
-            <div className="modal-hint">Brand, segment, target, and file are required for every catalog CSV import. For discontinued/EOL updates, use the lifecycle template instead of full export.</div>
+	              <Input label={t("catalog.common.selectedFile")} value={importFile?.name ?? ""} onChange={() => undefined} disabled />
+	            </div>
+	            <div className="modal-hint">{t("catalog.import.hint")}</div>
             <div className="toolbar">
               <Button
                 variant="secondary"
                 className="button--compact"
-                onClick={() => {
-                  downloadCatalogTemplate();
-                  actionFeedback.succeed("Catalog sample template downloaded.");
-                }}
-              >
-                Download Sample Template
-              </Button>
+	                onClick={() => {
+	                  downloadCatalogTemplate();
+	                  actionFeedback.succeed(t("catalog.import.sampleTemplateDownloaded"));
+	                }}
+	              >
+	                {t("catalog.import.downloadSampleTemplate")}
+	              </Button>
               <Button
                 variant="secondary"
                 className="button--compact"
-                onClick={() => {
-                  downloadCatalogLifecycleTemplate();
-                  actionFeedback.succeed("Catalog lifecycle template downloaded.");
-                }}
-              >
-                Download Lifecycle Template
-              </Button>
+	                onClick={() => {
+	                  downloadCatalogLifecycleTemplate();
+	                  actionFeedback.succeed(t("catalog.import.lifecycleTemplateDownloaded"));
+	                }}
+	              >
+	                {t("catalog.import.downloadLifecycleTemplate")}
+	              </Button>
             </div>
             <div className="modal-actions">
               <Button
@@ -1587,18 +1632,18 @@ export function CatalogPage() {
                   setImportCatalogSegment("");
                 }}
               >
-                Cancel Import
-              </Button>
+	                {t("catalog.actions.cancelImport")}
+	              </Button>
               <Button
                 onClick={() => {
                   if (importFile) void handleCatalogImport(importFile);
                 }}
-                disabled={!importFile || loading || (importBrand === "__new__" && !importBrandName.trim())}
-                busy={importingCatalog}
-                busyLabel="Importing..."
-              >
-                Import
-              </Button>
+	                disabled={!importFile || loading || (importBrand === "__new__" && !importBrandName.trim())}
+	                busy={importingCatalog}
+	                busyLabel={t("catalog.actions.importing")}
+	              >
+	                {t("catalog.actions.import")}
+	              </Button>
             </div>
           </DraggableSurface>
         </div>
@@ -1607,17 +1652,17 @@ export function CatalogPage() {
       {showExportDialog ? (
         <div className="modal-backdrop">
           <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
-            <div className="modal-card__header draggable-surface__handle">
-              <div>
-                <h3>Catalog {exportFormat === "xlsx" ? "Excel" : "CSV"} Export</h3>
-                <p>Select a brand to download its full catalog list as {exportFormat === "xlsx" ? "Excel" : "CSV"}.</p>
-              </div>
-            </div>
-            <div className="modal-form-grid">
-              <Select label="Brand" value={exportBrand} options={editableBrandOptions} onChange={setExportBrand} />
-              <Input label="Scope" value="All items for selected brand" onChange={() => undefined} disabled />
-            </div>
-            <div className="modal-hint">This export ignores the current search box and downloads the current catalog scope for the selected brand.</div>
+	            <div className="modal-card__header draggable-surface__handle">
+	              <div>
+	                <h3>{t("catalog.export.title", { format: getExportFormatLabel(exportFormat) })}</h3>
+	                <p>{t("catalog.export.description", { format: getExportFormatLabel(exportFormat) })}</p>
+	              </div>
+	            </div>
+	            <div className="modal-form-grid">
+	              <Select label={t("catalog.common.brand")} value={exportBrand} options={editableBrandOptions} onChange={setExportBrand} />
+	              <Input label={t("catalog.export.scope")} value={t("catalog.export.allItemsForBrand")} onChange={() => undefined} disabled />
+	            </div>
+	            <div className="modal-hint">{t("catalog.export.hint")}</div>
             <div className="modal-actions">
               <Button
                 variant="secondary"
@@ -1626,11 +1671,11 @@ export function CatalogPage() {
                   setExportBrand("");
                 }}
               >
-                Cancel
-              </Button>
-              <Button onClick={() => void handleCatalogExport()} disabled={!exportBrand} busy={exportingCatalog} busyLabel="Preparing...">
-                Export {exportFormat === "xlsx" ? "Excel" : "CSV"}
-              </Button>
+	                {t("catalog.actions.cancel")}
+	              </Button>
+	              <Button onClick={() => void handleCatalogExport()} disabled={!exportBrand} busy={exportingCatalog} busyLabel={t("catalog.actions.preparing")}>
+	                {t("catalog.export.exportFormat", { format: getExportFormatLabel(exportFormat) })}
+	              </Button>
             </div>
           </DraggableSurface>
         </div>
@@ -1639,16 +1684,16 @@ export function CatalogPage() {
       {showCreateDialog ? (
         <div className="modal-backdrop">
           <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
-            <div className="modal-card__header draggable-surface__handle">
-              <div>
-                <h3>Add New Item</h3>
-                <p>Create a new catalog product under Items.</p>
-              </div>
-            </div>
-            <div className="modal-form-grid">
-              <Input label="Product Code" value={createDraft.product_code} onChange={(value) => setCreateDraft((current) => ({ ...current, product_code: value }))} />
-              <Select
-                label="Brand"
+	            <div className="modal-card__header draggable-surface__handle">
+	              <div>
+	                <h3>{t("catalog.create.title")}</h3>
+	                <p>{t("catalog.create.description")}</p>
+	              </div>
+	            </div>
+	            <div className="modal-form-grid">
+	              <Input label={t("catalog.common.productCode")} value={createDraft.product_code} onChange={(value) => setCreateDraft((current) => ({ ...current, product_code: value }))} />
+	              <Select
+	                label={t("catalog.common.brand")}
                 value={createDraft.brand}
                 options={createBrandOptions}
                 onChange={(value) =>
@@ -1659,48 +1704,48 @@ export function CatalogPage() {
                   }))
                 }
               />
-              <Select
-                label="Market Segment"
-                value={createDraft.market_segment}
-                options={CATALOG_MARKET_SEGMENT_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+	              <Select
+	                label={t("catalog.common.marketSegment")}
+	                value={createDraft.market_segment}
+	                options={segmentOptions}
                 onChange={(value) => setCreateDraft((current) => ({ ...current, market_segment: value }))}
               />
               <Input
-                label="Brand Name"
+	                label={t("catalog.common.brandName")}
                 value={createDraft.brand_name}
                 onChange={(value) => setCreateDraft((current) => ({ ...current, brand_name: value }))}
                 disabled={createDraft.brand !== "__new__"}
               />
-              <Input label="Product Name" value={createDraft.description} onChange={(value) => setCreateDraft((current) => ({ ...current, description: value }))} />
-              <Input label="OEM" value={createDraft.oem_no} onChange={(value) => setCreateDraft((current) => ({ ...current, oem_no: value }))} />
-              <Input label="Vehicle" value={createDraft.vehicle} onChange={(value) => setCreateDraft((current) => ({ ...current, vehicle: value }))} />
-              <Input label="HS Code" value={createDraft.hs_code} onChange={(value) => setCreateDraft((current) => ({ ...current, hs_code: value }))} />
-              <Input label="Origin" value={createDraft.origin} onChange={(value) => setCreateDraft((current) => ({ ...current, origin: value }))} />
-              <Input label="Weight" value={createDraft.weight_kg} onChange={(value) => setCreateDraft((current) => ({ ...current, weight_kg: value }))} />
-              <Select
-                label="Lifecycle"
+	              <Input label={t("catalog.common.productName")} value={createDraft.description} onChange={(value) => setCreateDraft((current) => ({ ...current, description: value }))} />
+	              <Input label={t("catalog.common.oem")} value={createDraft.oem_no} onChange={(value) => setCreateDraft((current) => ({ ...current, oem_no: value }))} />
+	              <Input label={t("catalog.common.vehicle")} value={createDraft.vehicle} onChange={(value) => setCreateDraft((current) => ({ ...current, vehicle: value }))} />
+	              <Input label={t("catalog.common.hsCode")} value={createDraft.hs_code} onChange={(value) => setCreateDraft((current) => ({ ...current, hs_code: value }))} />
+	              <Input label={t("catalog.common.origin")} value={createDraft.origin} onChange={(value) => setCreateDraft((current) => ({ ...current, origin: value }))} />
+	              <Input label={t("catalog.common.weight")} value={createDraft.weight_kg} onChange={(value) => setCreateDraft((current) => ({ ...current, weight_kg: value }))} />
+	              <Select
+	                label={t("catalog.common.lifecycle")}
                 value={createDraft.lifecycle_status}
                 options={lifecycleOptions}
                 onChange={(value) => setCreateDraft((current) => ({ ...current, lifecycle_status: value }))}
               />
-              <Input label="Lifecycle Note" value={createDraft.lifecycle_note} onChange={(value) => setCreateDraft((current) => ({ ...current, lifecycle_note: value }))} />
-            </div>
-            <div className="modal-hint">Product code, brand, and market segment are required. The item will be created directly in cloud catalog.</div>
+	              <Input label={t("catalog.common.lifecycleNote")} value={createDraft.lifecycle_note} onChange={(value) => setCreateDraft((current) => ({ ...current, lifecycle_note: value }))} />
+	            </div>
+	            <div className="modal-hint">{t("catalog.create.hint")}</div>
             <div className="modal-actions">
               <Button variant="secondary" onClick={() => setShowCreateDialog(false)}>
-                Cancel
+	                {t("catalog.actions.cancel")}
               </Button>
               <Button
                 onClick={async () => {
-                  if (!isOnline) {
-                    setError("Connect to the internet to create catalog items.");
-                    return;
-                  }
+	                  if (!isOnline) {
+	                    setError(t("catalog.errors.connectToCreate"));
+	                    return;
+	                  }
                   try {
                     setError("");
-                    setStatus("");
-                    setCreatingItem(true);
-                    actionFeedback.begin(`Creating item ${createDraft.product_code.trim()}...`);
+	                    setStatus("");
+	                    setCreatingItem(true);
+	                    actionFeedback.begin(t("catalog.status.creatingItem", { code: createDraft.product_code.trim() }));
                     const activeBrand = createDraft.brand === "__new__" ? createDraft.brand_name.trim() : createDraft.brand;
                     await createCloudCatalogRow({
                       product_code: createDraft.product_code.trim(),
@@ -1733,10 +1778,10 @@ export function CatalogPage() {
                     setBrands(refreshedBrands);
                     setShowCreateDialog(false);
                     await reloadCatalog(submittedSearch, submittedCatalogBrand, submittedCatalogSegment);
-                    setStatus("Catalog item created successfully.");
-                    actionFeedback.succeed(`Catalog item ${createDraft.product_code.trim()} created.`);
-                  } catch (caught) {
-                    const message = caught instanceof Error ? caught.message : "Catalog create failed";
+	                    setStatus(t("catalog.status.itemCreated"));
+	                    actionFeedback.succeed(t("catalog.status.itemCreatedWithCode", { code: createDraft.product_code.trim() }));
+	                  } catch (caught) {
+	                    const message = caught instanceof Error ? caught.message : t("catalog.errors.createFailed");
                     setError(message);
                     actionFeedback.fail(message);
                   } finally {
@@ -1750,11 +1795,11 @@ export function CatalogPage() {
                   !createDraft.market_segment ||
                   (createDraft.brand === "__new__" && !createDraft.brand_name.trim())
                 }
-                busy={creatingItem}
-                busyLabel="Creating..."
-              >
-                Create Item
-              </Button>
+	                busy={creatingItem}
+	                busyLabel={t("catalog.actions.creating")}
+	              >
+	                {t("catalog.actions.createItem")}
+	              </Button>
             </div>
           </DraggableSurface>
         </div>
@@ -1763,49 +1808,49 @@ export function CatalogPage() {
       {showReferenceDialog ? (
         <div className="modal-backdrop">
           <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
-            <div className="modal-card__header draggable-surface__handle">
-              <div>
-                <h3>Add Code Reference</h3>
-                <p>Create a mapping from the customer's old code to this current valid catalog code.</p>
-              </div>
-            </div>
-            <div className="modal-form-grid">
-              <Select
-                label="Brand"
+	            <div className="modal-card__header draggable-surface__handle">
+	              <div>
+	                <h3>{t("catalog.reference.title")}</h3>
+	                <p>{t("catalog.reference.description")}</p>
+	              </div>
+	            </div>
+	            <div className="modal-form-grid">
+	              <Select
+	                label={t("catalog.common.brand")}
                 value={referenceDraft.brand}
                 options={editableBrandOptions}
                 onChange={(value) => setReferenceDraft((current) => ({ ...current, brand: value }))}
               />
-              <Input
-                label="Old Code"
+	              <Input
+	                label={t("catalog.reference.oldCode")}
                 value={referenceDraft.old_code}
                 onChange={(value) => setReferenceDraft((current) => ({ ...current, old_code: value }))}
               />
-              <Input label="New Code" value={referenceDraft.new_code} onChange={() => undefined} disabled />
-              <Input
-                label="Original Number"
+	              <Input label={t("catalog.reference.newCode")} value={referenceDraft.new_code} onChange={() => undefined} disabled />
+	              <Input
+	                label={t("catalog.reference.originalNumber")}
                 value={referenceDraft.original_number}
                 onChange={(value) => setReferenceDraft((current) => ({ ...current, original_number: value }))}
               />
-              <Input label="Reason" value={referenceDraft.reason} onChange={(value) => setReferenceDraft((current) => ({ ...current, reason: value }))} />
-            </div>
-            {renderReferenceOldCodeHint(referenceOldCodeUsage)}
-            <div className="modal-hint">Old Code = the obsolete number still asked by customers. New Code = the current active catalog number.</div>
-            <div className="modal-actions">
-              <Button variant="secondary" onClick={() => setShowReferenceDialog(false)}>
-                Cancel
-              </Button>
+	              <Input label={t("catalog.reference.reason")} value={referenceDraft.reason} onChange={(value) => setReferenceDraft((current) => ({ ...current, reason: value }))} />
+	            </div>
+	            {renderReferenceOldCodeHint(referenceOldCodeUsage)}
+	            <div className="modal-hint">{t("catalog.reference.hint")}</div>
+	            <div className="modal-actions">
+	              <Button variant="secondary" onClick={() => setShowReferenceDialog(false)}>
+	                {t("catalog.actions.cancel")}
+	              </Button>
               <Button
-                onClick={async () => {
-                  if (!isOnline) {
-                    setError("Connect to the internet to save code references.");
-                    return;
-                  }
+	                onClick={async () => {
+	                  if (!isOnline) {
+	                    setError(t("catalog.errors.connectToSaveReference"));
+	                    return;
+	                  }
                   try {
                     setError("");
-                    setStatus("");
-                    setSavingReference(true);
-                    actionFeedback.begin(`Saving code reference for ${referenceDraft.old_code.trim()}...`);
+	                    setStatus("");
+	                    setSavingReference(true);
+	                    actionFeedback.begin(t("catalog.status.savingReference", { code: referenceDraft.old_code.trim() }));
                     await createCodeReference({
                       brand: referenceDraft.brand,
                       old_code: referenceDraft.old_code.trim(),
@@ -1821,15 +1866,18 @@ export function CatalogPage() {
                       };
                     });
                     setStatus(
-                      `Code reference saved. Quotes will warn for old code ${referenceDraft.old_code.trim()} and use ${referenceDraft.new_code.trim()}.`,
-                    );
-                    setShowReferenceDialog(false);
-                    actionFeedback.succeed(`Code reference saved for old code ${referenceDraft.old_code.trim()}.`);
-                  } catch (caught) {
-                    const message = caught instanceof Error ? caught.message : "Code reference create failed";
-                    if (message.includes("item_code_references_organization_id_brand_id_normalized_ol_key")) {
-                      setError("This old customer code already has a mapping for this brand. Use the existing reference instead of creating a duplicate.");
-                    } else {
+	                      t("catalog.status.referenceSaved", {
+	                        oldCode: referenceDraft.old_code.trim(),
+	                        newCode: referenceDraft.new_code.trim(),
+	                      }),
+	                    );
+	                    setShowReferenceDialog(false);
+	                    actionFeedback.succeed(t("catalog.status.referenceSavedForOldCode", { code: referenceDraft.old_code.trim() }));
+	                  } catch (caught) {
+	                    const message = caught instanceof Error ? caught.message : t("catalog.errors.referenceCreateFailed");
+	                    if (message.includes("item_code_references_organization_id_brand_id_normalized_ol_key")) {
+	                      setError(t("catalog.errors.duplicateReference"));
+	                    } else {
                       setError(message);
                     }
                     actionFeedback.fail(message);
@@ -1837,12 +1885,12 @@ export function CatalogPage() {
                     setSavingReference(false);
                   }
                 }}
-                disabled={!isOnline || !referenceDraft.brand || !referenceDraft.old_code.trim() || !referenceDraft.new_code.trim()}
-                busy={savingReference}
-                busyLabel="Saving..."
-              >
-                Save Reference
-              </Button>
+	                disabled={!isOnline || !referenceDraft.brand || !referenceDraft.old_code.trim() || !referenceDraft.new_code.trim()}
+	                busy={savingReference}
+	                busyLabel={t("catalog.actions.saving")}
+	              >
+	                {t("catalog.actions.saveReference")}
+	              </Button>
             </div>
           </DraggableSurface>
         </div>
@@ -1854,16 +1902,16 @@ export function CatalogPage() {
             <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>{previewImage.code}</h3>
-                <p>{previewImage.name || "Catalog image preview"}</p>
+	                <p>{previewImage.name || t("catalog.preview.imageFallback")}</p>
               </div>
             </div>
             <div className="image-preview-wrap">
               <img src={previewImage.src} alt={previewImage.code} className="image-preview" />
             </div>
             <div className="modal-actions">
-              <Button variant="secondary" onClick={() => setPreviewImage(null)}>
-                Close
-              </Button>
+	              <Button variant="secondary" onClick={() => setPreviewImage(null)}>
+	                {t("catalog.actions.close")}
+	              </Button>
             </div>
           </DraggableSurface>
         </div>
