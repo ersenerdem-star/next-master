@@ -8,7 +8,7 @@ create or replace function public.cloud_customer_price_list_export_page_fast(
   input_price_list_type text default 'A',
   input_margin numeric default 0.10,
   input_page integer default 1,
-  input_page_size integer default 5000
+  input_page_size integer default 1000
 )
 returns table (
   product_code text,
@@ -37,8 +37,8 @@ as $$
           then upper(trim(coalesce(input_price_list_type, 'A')))
         else null
       end as price_list_type,
-      least(greatest(input_page_size, 1), 5000) as page_size,
-      greatest(0, (greatest(input_page, 1) - 1) * least(greatest(input_page_size, 1), 5000)) as row_offset
+      least(greatest(input_page_size, 1), 1000) as page_size,
+      greatest(0, (greatest(input_page, 1) - 1) * least(greatest(input_page_size, 1), 1000)) as row_offset
   ),
   page_rollups as materialized (
     select

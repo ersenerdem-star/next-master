@@ -188,7 +188,7 @@ export async function fetchCustomerPriceListExportRows(input: {
   pageSize?: number;
 }) {
   const rows: CustomerPriceListExportRow[] = [];
-  const pageSize = Math.min(Math.max(input.pageSize || 5000, 1), 5000);
+  const pageSize = Math.min(Math.max(input.pageSize || 1000, 1), 1000);
   const maxPages = 200;
   let page = 1;
 

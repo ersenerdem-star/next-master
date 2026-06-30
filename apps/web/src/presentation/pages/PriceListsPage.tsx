@@ -106,7 +106,7 @@ export function PriceListsPage() {
         brandId: selectedDownloadBrand.id,
         priceListType: downloadListType,
         marginPercent,
-        pageSize: 5000,
+        pageSize: 1000,
       });
       const sheetRows: Array<Array<string | number | null>> = [["New_Code", "Old_Codes", "Brand", "Product_Name", "OEM_No", "HS_Code", "Origin", "Weight_kg", "Price_List_Type", "Sales_Price_EUR", "Notes"]];
 
