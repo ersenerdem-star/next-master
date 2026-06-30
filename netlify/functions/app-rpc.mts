@@ -1,5 +1,5 @@
 import type { Config, Context } from "@netlify/functions";
-import { buildRestUrl, json, readJson, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
+import { buildRestUrl, getJson, json, readJson, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
 import { resolveCaller } from "./_shared/app-auth.mts";
 import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./_shared/catalog-standardization.mts";
 import { normalizeCatalogMarketSegment } from "./_shared/catalog/catalog-segments.mts";
@@ -16,6 +16,7 @@ const ALLOWED_RPCS = new Set([
   "cloud_master_page_fast",
   "cloud_master_priced_export_page_fast",
   "cloud_master_priced_page_fast",
+  "get_latest_supplier_price_rollup_refresh_run",
   "queue_supplier_price_rollups_refresh",
   "search_catalog_products",
   "cloud_quote_supplier_options",
@@ -37,6 +38,7 @@ const SUPERADMIN_RPCS = new Set([
   "cloud_supplier_brand_summary",
   "cloud_supplier_price_page",
   "deactivate_supplier_prices_by_filter",
+  "get_latest_supplier_price_rollup_refresh_run",
   "list_cloud_suppliers",
   "queue_supplier_price_rollups_refresh",
   "search_catalog_products",
@@ -985,6 +987,24 @@ export default async (req: Request, context: Context) => {
 
       context.waitUntil(task);
       return json({ ok: true, data: { queued: true, status: "queued", organization_id: caller.organizationId } });
+    }
+
+    if (name === "get_latest_supplier_price_rollup_refresh_run") {
+      const startedAfter = String(args.started_after || "").trim();
+      const latestRuns = await getJson<Array<Record<string, unknown>>>(
+        buildRestUrl(supabaseUrl, "supplier_price_rollup_refresh_runs", {
+          select: "id,organization_id,started_at,finished_at,duration_ms,status,error_message,supplier_price_rollups_count",
+          organization_id: `eq.${caller.organizationId}`,
+          ...(startedAfter ? { started_at: `gte.${startedAfter}` } : {}),
+          order: "started_at.desc",
+          limit: "1",
+        }),
+        {
+          headers: serviceRoleHeaders(serviceRoleKey),
+        },
+      );
+
+      return json({ ok: true, data: latestRuns[0] || null });
     }
 
     if (name === "cloud_catalog_page" || name === "search_catalog_products") {
