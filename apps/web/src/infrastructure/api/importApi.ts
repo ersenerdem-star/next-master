@@ -35,7 +35,13 @@ export type SupplierImportResult = {
   rollupRefreshRun: SupplierPriceRollupRefreshRun | null;
 };
 
-const SUPPLIER_IMPORT_CHUNK_SIZE = 100;
+type SupplierImportChunkResult = {
+  processed?: number;
+  catalog_synced?: number;
+};
+
+const SUPPLIER_IMPORT_MAX_BATCH_ROWS = 100;
+const SUPPLIER_IMPORT_TARGET_BATCH_BYTES = 48000;
 const SUPPLIER_IMPORT_CHUNK_RETRY_LIMIT = 2;
 const SUPPLIER_IMPORT_CHUNK_RETRY_BACKOFF_MS = 1000;
 const SUPPLIER_IMPORT_POLL_INTERVAL_MS = 1500;
@@ -45,6 +51,41 @@ const SUPPLIER_IMPORT_LOOKBACK_MS = 10000;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function estimateJsonBytes(value: unknown) {
+  return new TextEncoder().encode(JSON.stringify(value)).length;
+}
+
+function buildAdaptiveSupplierImportBatches(payload: Array<Record<string, unknown>>) {
+  const batches: Array<{ rows: Array<Record<string, unknown>>; startRowIndex: number }> = [];
+  let currentRows: Array<Record<string, unknown>> = [];
+  let currentBytes = 2;
+  let currentStartRowIndex = 0;
+
+  function flushCurrentBatch() {
+    if (!currentRows.length) return;
+    batches.push({ rows: currentRows, startRowIndex: currentStartRowIndex });
+    currentRows = [];
+    currentBytes = 2;
+  }
+
+  payload.forEach((row, rowIndex) => {
+    const rowBytes = Math.max(estimateJsonBytes(row), 1);
+    const wouldExceedRowCount = currentRows.length >= SUPPLIER_IMPORT_MAX_BATCH_ROWS;
+    const wouldExceedByteTarget = currentRows.length > 0 && currentBytes + rowBytes + 1 > SUPPLIER_IMPORT_TARGET_BATCH_BYTES;
+
+    if (wouldExceedRowCount || wouldExceedByteTarget) {
+      flushCurrentBatch();
+      currentStartRowIndex = rowIndex;
+    }
+
+    currentRows.push(row);
+    currentBytes += rowBytes + 1;
+  });
+
+  flushCurrentBatch();
+  return batches;
 }
 
 function isTimeoutLikeMessage(message: string) {
@@ -170,7 +211,7 @@ async function importSupplierPriceChunkWithRetry(input: {
   chunkNumber: number;
   totalChunks: number;
   processedRowsBeforeFailure: number;
-}) {
+}): Promise<SupplierImportChunkResult> {
   let lastError: Error | null = null;
   const context = `Supplier upload batch ${input.chunkNumber}/${input.totalChunks}`;
 
@@ -197,6 +238,43 @@ async function importSupplierPriceChunkWithRetry(input: {
   );
 }
 
+async function importSupplierPriceChunkWithAdaptiveRetry(input: {
+  chunk: Array<Record<string, unknown>>;
+  chunkNumber: number;
+  totalChunks: number;
+  processedRowsBeforeFailure: number;
+}): Promise<SupplierImportChunkResult> {
+  try {
+    return await importSupplierPriceChunkWithRetry(input);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "");
+    if (!isTimeoutLikeMessage(message) || input.chunk.length <= 1) {
+      throw error;
+    }
+
+    const midpoint = Math.max(1, Math.floor(input.chunk.length / 2));
+    const firstHalf = input.chunk.slice(0, midpoint);
+    const secondHalf = input.chunk.slice(midpoint);
+    const firstResult: SupplierImportChunkResult = await importSupplierPriceChunkWithAdaptiveRetry({
+      chunk: firstHalf,
+      chunkNumber: input.chunkNumber,
+      totalChunks: input.totalChunks,
+      processedRowsBeforeFailure: input.processedRowsBeforeFailure,
+    });
+    const secondResult: SupplierImportChunkResult = await importSupplierPriceChunkWithAdaptiveRetry({
+      chunk: secondHalf,
+      chunkNumber: input.chunkNumber,
+      totalChunks: input.totalChunks,
+      processedRowsBeforeFailure: input.processedRowsBeforeFailure + midpoint,
+    });
+
+    return {
+      processed: Number(firstResult?.processed || firstHalf.length) + Number(secondResult?.processed || secondHalf.length),
+      catalog_synced: Number(firstResult?.catalog_synced || 0) + Number(secondResult?.catalog_synced || 0),
+    };
+  }
+}
+
 export async function bulkImportSupplierPrices(
   payload: Array<Record<string, unknown>>,
   options?: {
@@ -218,7 +296,8 @@ export async function bulkImportSupplierPrices(
     };
   }
 
-  const totalChunks = Math.max(1, Math.ceil(totalRows / SUPPLIER_IMPORT_CHUNK_SIZE));
+  const batches = buildAdaptiveSupplierImportBatches(payload);
+  const totalChunks = Math.max(1, batches.length);
   options?.onStatus?.({
     phase: "upload_progressing",
     progress: {
@@ -229,21 +308,22 @@ export async function bulkImportSupplierPrices(
     },
   });
 
-  for (let index = 0; index < totalRows; index += SUPPLIER_IMPORT_CHUNK_SIZE) {
-    const chunk = payload.slice(index, index + SUPPLIER_IMPORT_CHUNK_SIZE);
-    const chunkNumber = Math.floor(index / SUPPLIER_IMPORT_CHUNK_SIZE) + 1;
+  for (let index = 0; index < batches.length; index += 1) {
+    const batch = batches[index];
+    const chunk = batch.rows;
+    const chunkNumber = index + 1;
     const progress = {
       processedChunks: chunkNumber,
       totalChunks,
-      processedRows: Math.min(index + chunk.length, totalRows),
+      processedRows: Math.min(batch.startRowIndex + chunk.length, totalRows),
       totalRows,
     };
 
-    const data = await importSupplierPriceChunkWithRetry({
+    const data = await importSupplierPriceChunkWithAdaptiveRetry({
       chunk,
       chunkNumber,
       totalChunks,
-      processedRowsBeforeFailure: index,
+      processedRowsBeforeFailure: batch.startRowIndex,
     });
 
     processed += Number((data as { processed?: number } | null)?.processed || chunk.length);
