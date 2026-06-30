@@ -214,6 +214,8 @@ export function CustomersPage() {
     return String(year);
   }, [locale, statementAnchorDate, statementPeriodType, t]);
 
+  const legacyCPriceList = draft?.price_list_type === "C";
+
   function updateDraft(patch: Partial<LocalCustomer>) {
     setDraft((current) => (current ? { ...current, ...patch } : current));
   }
@@ -244,6 +246,10 @@ export function CustomersPage() {
     }
     if (!draft.price_list_type) {
       actionFeedback.fail(t("sales.customers.priceListRequired"));
+      return;
+    }
+    if (draft.price_list_type === "C") {
+      actionFeedback.fail(t("sales.customers.legacyCPriceListWarning"));
       return;
     }
     if (draft.price_list_type === "Other" && draft.price_list_margin_percent == null) {
@@ -335,7 +341,7 @@ export function CustomersPage() {
             <Button variant="secondary" className="danger-button" onClick={() => void handleDelete()}>
               {t("common.delete")}
             </Button>
-            <Button onClick={() => void handleSave()} busy={saving} busyLabel={t("common.saving")}>
+            <Button onClick={() => void handleSave()} busy={saving} busyLabel={t("common.saving")} disabled={legacyCPriceList}>
               {t("sales.customers.save")}
             </Button>
           </div>
@@ -509,28 +515,33 @@ export function CustomersPage() {
                   <div className="customers-form-row">
                     <div className="customers-form-row__label">{t("sales.customers.priceList")}</div>
                     <div className="customers-field-wrap customers-field-wrap--wide">
-                      <label className="field customer-field">
-                        <select
-                          className="field__input"
-                          value={draft.price_list_type}
-                          onChange={(event) => {
-                            const nextType = event.target.value as LocalCustomer["price_list_type"];
-                            updateDraft({
-                              price_list_type: nextType,
-                              portal_c_price_mode: nextType === "C" ? "standard" : draft.portal_c_price_mode,
-                            });
-                          }}
-                        >
-                          <option value="">{t("sales.customers.selectPriceList")}</option>
-                          <option value="A">{t("sales.customers.priceLists.a")}</option>
-                          <option value="B">{t("sales.customers.priceLists.b")}</option>
-                          <option value="C">{t("sales.customers.priceLists.c")}</option>
-                          <option value="Other">{t("sales.customers.priceLists.other")}</option>
-                        </select>
-                      </label>
+                      {legacyCPriceList ? (
+                        <Input value={t("sales.customers.legacyCPriceList")} onChange={() => undefined} disabled />
+                      ) : (
+                        <label className="field customer-field">
+                          <select
+                            className="field__input"
+                            value={draft.price_list_type}
+                            onChange={(event) => {
+                              const nextType = event.target.value as LocalCustomer["price_list_type"];
+                              updateDraft({
+                                price_list_type: nextType,
+                                portal_c_price_mode: nextType === "C" ? "standard" : draft.portal_c_price_mode,
+                              });
+                            }}
+                          >
+                            <option value="">{t("sales.customers.selectPriceList")}</option>
+                            <option value="A">{t("sales.customers.priceLists.a")}</option>
+                            <option value="B">{t("sales.customers.priceLists.b")}</option>
+                            <option value="Other">{t("sales.customers.priceLists.other")}</option>
+                          </select>
+                        </label>
+                      )}
                     </div>
                   </div>
-                  {draft.price_list_type && draft.price_list_type !== "C" ? (
+                  {legacyCPriceList ? (
+                    <div className="warning-text">{t("sales.customers.legacyCPriceListWarning")}</div>
+                  ) : draft.price_list_type ? (
                     <div className="customers-form-row">
                       <div className="customers-form-row__label">{t("sales.customers.cPriceRule")}</div>
                       <div className="customers-field-wrap customers-field-wrap--wide">
