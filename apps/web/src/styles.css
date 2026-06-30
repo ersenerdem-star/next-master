@@ -4697,6 +4697,70 @@ select {
   cursor: pointer;
 }
 
+.version-update-banner {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: min(560px, calc(100vw - 32px));
+  padding: 14px 16px;
+  border: 1px solid rgba(180, 83, 9, 0.36);
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #78350f;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
+}
+
+.version-update-banner--muted {
+  border-color: rgba(71, 85, 105, 0.28);
+  background: #f8fafc;
+  color: #334155;
+}
+
+.version-update-banner__body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.version-update-banner__body strong {
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.version-update-banner__button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #ffffff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.version-update-banner__button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+@media (max-width: 640px) {
+  .version-update-banner {
+    right: 12px;
+    bottom: calc(86px + env(safe-area-inset-bottom));
+    left: 12px;
+    width: auto;
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 /* Shell refresh v2: premium industrial workspace */
 :root {
   font-family: "IBM Plex Sans", "IBM Plex Sans Arabic", "Noto Sans Arabic", "Aptos", "Segoe UI", sans-serif;
