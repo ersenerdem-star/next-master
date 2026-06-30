@@ -15,6 +15,20 @@ export type BrandMarginPriceSummary = {
   notes: string;
 };
 
+export type CustomerPriceListExportRow = {
+  product_code: string;
+  brand: string;
+  description: string;
+  oem_no: string;
+  hs_code: string;
+  origin: string;
+  weight_kg: number | null;
+  price_list_type: "A" | "B";
+  sales_price: number | null;
+  price_date: string | null;
+  notes: string;
+};
+
 type SupplierPriceSummaryRow = {
   normalized_code: string | null;
   supplier_id: string | null;
@@ -165,6 +179,59 @@ export async function fetchBrandMarginPriceSummaries(input: {
   }
 
   return output;
+}
+
+export async function fetchCustomerPriceListExportRows(input: {
+  brandId: string;
+  priceListType: "A" | "B";
+  marginPercent: number;
+  pageSize?: number;
+}) {
+  const rows: CustomerPriceListExportRow[] = [];
+  const pageSize = Math.min(Math.max(input.pageSize || 5000, 1), 5000);
+  const maxPages = 200;
+  let page = 1;
+
+  while (page <= maxPages) {
+    const { data, error } = await supabaseClient.rpc("cloud_customer_price_list_export_page_fast", {
+      input_brand_id: input.brandId,
+      input_price_list_type: input.priceListType,
+      input_margin: input.marginPercent,
+      input_page: page,
+      input_page_size: pageSize,
+    });
+
+    if (error) {
+      throw new Error(error.message || "Failed to load customer price list export");
+    }
+
+    const batch: CustomerPriceListExportRow[] = ((data || []) as Array<Record<string, unknown>>).map((row) => {
+      const priceListType: CustomerPriceListExportRow["price_list_type"] = String(row.price_list_type || input.priceListType).toUpperCase() === "B" ? "B" : "A";
+      return {
+        product_code: String(row.product_code || ""),
+        brand: String(row.brand || ""),
+        description: String(row.description || ""),
+        oem_no: String(row.oem_no || ""),
+        hs_code: String(row.hs_code || ""),
+        origin: String(row.origin || ""),
+        weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
+        price_list_type: priceListType,
+        sales_price: row.sales_price == null ? null : Number(row.sales_price),
+        price_date: row.price_date == null ? null : String(row.price_date),
+        notes: String(row.notes || ""),
+      };
+    });
+
+    rows.push(...batch.filter((row) => row.product_code));
+    if (batch.length < pageSize) break;
+    page += 1;
+  }
+
+  if (page > maxPages) {
+    throw new Error("Customer price list export exceeded the safety page limit. Narrow the brand or use a smaller export scope.");
+  }
+
+  return rows;
 }
 
 async function ensurePriceList(listType: "A" | "B" | "C", options?: { isManual?: boolean; name?: string }) {
