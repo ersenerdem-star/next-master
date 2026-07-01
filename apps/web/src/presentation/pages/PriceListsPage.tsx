@@ -9,6 +9,7 @@ import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { useI18n } from "../../i18n/I18nProvider";
+import { formatBrandAwareProductCode } from "../../shared/productCodeDisplay";
 
 export function PriceListsPage() {
   const { t } = useI18n();
@@ -112,7 +113,7 @@ export function PriceListsPage() {
 
       sheetRows.push(
         ...catalogRows.map((row) => [
-          row.product_code,
+          formatBrandAwareProductCode(row.product_code, row.brand || brandName),
           "",
           row.brand || brandName,
           row.description || "",

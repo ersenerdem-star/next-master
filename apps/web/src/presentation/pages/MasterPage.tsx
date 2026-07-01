@@ -20,6 +20,7 @@ import {
   SupplierComparisonCell,
   formatMasterNumber,
 } from "../components/master/MasterIntelligenceComponents";
+import { formatBrandAwareProductCode } from "../../shared/productCodeDisplay";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 
 const scopeOptions = [
@@ -321,7 +322,7 @@ export function MasterPage() {
       const rowsForSheet = [
         headers,
         ...exportRows.map((row) => [
-          row.product_code,
+          formatBrandAwareProductCode(row.product_code, row.brand),
           row.brand || "",
           row.description || "",
           row.oem_no || "",

@@ -19,6 +19,7 @@ import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { BrandPill } from "../components/common/BrandPill";
 import { downloadCsv, normalizeNumber, normalizeText, parseCsv, toCsv } from "../../shared/csv";
+import { formatBrandAwareProductCode } from "../../shared/productCodeDisplay";
 import { downloadSupplierTemplate } from "../../shared/importTemplates";
 
 const freshnessOptions = [
@@ -227,7 +228,7 @@ export function SuppliersPage() {
         render: (row: SupplierPriceRow) =>
           row.supplier_name || suppliers.find((item) => item.supplier_id === selectedSupplierId)?.name || "-",
       },
-      { key: "code", header: "Code", render: (row: SupplierPriceRow) => row.product_code },
+      { key: "code", header: "Code", render: (row: SupplierPriceRow) => formatBrandAwareProductCode(row.product_code, row.brand || row.supplier_name || "") },
       { key: "brand", header: "Brand", render: (row: SupplierPriceRow) => <BrandPill brand={row.brand} compact /> },
       {
         key: "name",
@@ -538,7 +539,7 @@ export function SuppliersPage() {
       ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Lead_Time_Days", "Notes"],
       ...rows.map((row) => [
         row.supplier_name || suppliers.find((supplier) => supplier.supplier_id === selectedSupplierId)?.name || "",
-        row.product_code,
+        formatBrandAwareProductCode(row.product_code, row.brand || row.supplier_name || ""),
         row.brand || "",
         row.is_placeholder ? "No price found for this supplier" : row.description || "",
         row.oem_no || "",

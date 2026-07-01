@@ -20,6 +20,7 @@ import { VehicleBadges } from "../components/common/VehicleBadges";
 import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 import { openAccountStatementPrintWindow } from "../../shared/accountStatementPrint";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
+import { formatBrandAwareProductCode } from "../../shared/productCodeDisplay";
 import { matchesOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import {
@@ -1857,7 +1858,7 @@ export function PortalPage() {
       const rows: Array<Array<string | number | null>> = [
         ["Part_No", "Description", `Price_${result.currency}`, "Price_Date", "Lifecycle"],
         ...result.rows.map((row) => [
-          row.product_code,
+          formatBrandAwareProductCode(row.product_code, row.brand || portalPriceListBrand),
           row.description || "",
           row.sales_price ?? "",
           row.price_date || "",
