@@ -188,11 +188,7 @@ async function clearAppOwnedCaches() {
   if ("caches" in window) {
     try {
       const names = await window.caches.keys();
-      await Promise.all(
-        names
-          .filter((name) => name.includes("next-master") || name.includes("quote-desk"))
-          .map((name) => window.caches.delete(name)),
-      );
+      await Promise.all(names.map((name) => window.caches.delete(name)));
     } catch {
       // Cache cleanup must not prevent the hard reload path.
     }
@@ -200,9 +196,9 @@ async function clearAppOwnedCaches() {
   if ("serviceWorker" in navigator) {
     try {
       const registrations = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(registrations.map((registration) => registration.update().catch(() => undefined)));
+      await Promise.all(registrations.map((registration) => registration.unregister().catch(() => undefined)));
     } catch {
-      // Service worker update is best-effort; no worker is registered by this patch.
+      // Service worker cleanup is best-effort; stale PWA workers must not prevent reload.
     }
   }
 }
