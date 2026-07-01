@@ -8,6 +8,7 @@ import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 const ALLOWED_RPCS = new Set([
   "admin_list_org_users",
+  "begin_supplier_price_import",
   "bulk_import_catalog",
   "bulk_import_supplier_prices",
   "cloud_catalog_page",
@@ -24,24 +25,31 @@ const ALLOWED_RPCS = new Set([
   "cloud_supplier_brand_summary",
   "cloud_supplier_price_page",
   "deactivate_supplier_prices_by_filter",
+  "fail_supplier_price_import",
+  "finalize_supplier_price_import",
   "get_cloud_quote",
   "list_cloud_quotes",
   "list_cloud_suppliers",
+  "stage_supplier_price_import_chunk",
   "touch_user_presence",
 ]);
 
 const SUPERADMIN_RPCS = new Set([
   "admin_list_org_users",
+  "begin_supplier_price_import",
   "bulk_import_catalog",
   "bulk_import_supplier_prices",
   "cloud_catalog_page",
   "cloud_supplier_brand_summary",
   "cloud_supplier_price_page",
   "deactivate_supplier_prices_by_filter",
+  "fail_supplier_price_import",
+  "finalize_supplier_price_import",
   "get_latest_supplier_price_rollup_refresh_run",
   "list_cloud_suppliers",
   "queue_supplier_price_rollups_refresh",
   "search_catalog_products",
+  "stage_supplier_price_import_chunk",
 ]);
 
 const OPERATIONS_RPCS = new Set([

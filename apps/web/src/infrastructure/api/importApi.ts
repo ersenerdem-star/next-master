@@ -9,6 +9,8 @@ export type SupplierImportProgress = {
   totalRows: number;
 };
 
+export type SupplierImportMode = "replace" | "merge";
+
 export type SupplierPriceRollupRefreshRun = {
   id: string;
   organization_id: string;
@@ -23,6 +25,7 @@ export type SupplierPriceRollupRefreshRun = {
 export type SupplierImportStatus =
   | { phase: "upload_progressing"; progress: SupplierImportProgress }
   | { phase: "upload_completed"; progress: SupplierImportProgress }
+  | { phase: "finalizing" }
   | { phase: "rollup_refresh_queued" }
   | { phase: "rollup_refresh_completed" }
   | { phase: "rollup_refresh_failed_retrying" };
@@ -38,6 +41,21 @@ export type SupplierImportResult = {
 type SupplierImportChunkResult = {
   processed?: number;
   catalog_synced?: number;
+  staged_rows?: number;
+};
+
+type SupplierImportRunResult = {
+  run_id: string;
+  supplier_id: string;
+  brand_id: string;
+  mode: SupplierImportMode;
+  status: string;
+};
+
+type SupplierImportFinalizeResult = {
+  processed?: number;
+  catalog_synced?: number;
+  deactivated?: number;
 };
 
 const SUPPLIER_IMPORT_MAX_BATCH_ROWS = 100;
@@ -129,6 +147,8 @@ export function describeSupplierImportStatus(status: SupplierImportStatus) {
       return "Upload progressing…";
     case "upload_completed":
       return "Upload completed.";
+    case "finalizing":
+      return "Finalizing supplier import.";
     case "rollup_refresh_queued":
       return "Rollup refresh queued.";
     case "rollup_refresh_completed":
@@ -211,6 +231,7 @@ async function importSupplierPriceChunkWithRetry(input: {
   chunkNumber: number;
   totalChunks: number;
   processedRowsBeforeFailure: number;
+  runId?: string | null;
 }): Promise<SupplierImportChunkResult> {
   let lastError: Error | null = null;
   const context = `Supplier upload batch ${input.chunkNumber}/${input.totalChunks}`;
@@ -218,8 +239,8 @@ async function importSupplierPriceChunkWithRetry(input: {
   for (let attempt = 0; attempt <= SUPPLIER_IMPORT_CHUNK_RETRY_LIMIT; attempt += 1) {
     try {
       return await callImportRpc<{ processed?: number; catalog_synced?: number }>(
-        "bulk_import_supplier_prices",
-        { payload: input.chunk },
+        input.runId ? "stage_supplier_price_import_chunk" : "bulk_import_supplier_prices",
+        input.runId ? { input_run_id: input.runId, payload: input.chunk } : { payload: input.chunk },
         context,
       );
     } catch (error) {
@@ -243,6 +264,7 @@ async function importSupplierPriceChunkWithAdaptiveRetry(input: {
   chunkNumber: number;
   totalChunks: number;
   processedRowsBeforeFailure: number;
+  runId?: string | null;
 }): Promise<SupplierImportChunkResult> {
   try {
     return await importSupplierPriceChunkWithRetry(input);
@@ -260,12 +282,14 @@ async function importSupplierPriceChunkWithAdaptiveRetry(input: {
       chunkNumber: input.chunkNumber,
       totalChunks: input.totalChunks,
       processedRowsBeforeFailure: input.processedRowsBeforeFailure,
+      runId: input.runId,
     });
     const secondResult: SupplierImportChunkResult = await importSupplierPriceChunkWithAdaptiveRetry({
       chunk: secondHalf,
       chunkNumber: input.chunkNumber,
       totalChunks: input.totalChunks,
       processedRowsBeforeFailure: input.processedRowsBeforeFailure + midpoint,
+      runId: input.runId,
     });
 
     return {
@@ -275,9 +299,44 @@ async function importSupplierPriceChunkWithAdaptiveRetry(input: {
   }
 }
 
+async function beginSupplierPriceImport(input: {
+  supplierName: string;
+  brandName: string;
+  mode: SupplierImportMode;
+}) {
+  return callImportRpc<SupplierImportRunResult>(
+    "begin_supplier_price_import",
+    {
+      input_supplier_name: input.supplierName,
+      input_brand: input.brandName,
+      input_mode: input.mode,
+    },
+    "Supplier import start",
+  );
+}
+
+async function finalizeSupplierPriceImport(runId: string) {
+  return callImportRpc<SupplierImportFinalizeResult>(
+    "finalize_supplier_price_import",
+    { input_run_id: runId },
+    "Supplier import finalization",
+  );
+}
+
+async function failSupplierPriceImport(runId: string, message: string) {
+  return callImportRpc(
+    "fail_supplier_price_import",
+    { input_run_id: runId, input_error_message: message },
+    "Supplier import failure recording",
+  );
+}
+
 export async function bulkImportSupplierPrices(
   payload: Array<Record<string, unknown>>,
   options?: {
+    mode?: SupplierImportMode;
+    supplierName?: string;
+    brandName?: string;
     onProgress?: (input: { processedChunks: number; totalChunks: number; processedRows: number; totalRows: number }) => void;
     onStatus?: (status: SupplierImportStatus) => void;
   },
@@ -298,6 +357,23 @@ export async function bulkImportSupplierPrices(
 
   const batches = buildAdaptiveSupplierImportBatches(payload);
   const totalChunks = Math.max(1, batches.length);
+  const shouldUseStagedImport = options?.mode === "replace" || options?.mode === "merge";
+  let runId: string | null = null;
+
+  if (shouldUseStagedImport) {
+    const supplierName = String(options?.supplierName || "").trim();
+    const brandName = String(options?.brandName || "").trim();
+    if (!supplierName || !brandName || !options?.mode) {
+      throw new Error("Supplier, brand, and import mode are required for supplier list import.");
+    }
+    const importRun = await beginSupplierPriceImport({
+      supplierName,
+      brandName,
+      mode: options.mode,
+    });
+    runId = importRun.run_id;
+  }
+
   options?.onStatus?.({
     phase: "upload_progressing",
     progress: {
@@ -308,46 +384,62 @@ export async function bulkImportSupplierPrices(
     },
   });
 
-  for (let index = 0; index < batches.length; index += 1) {
-    const batch = batches[index];
-    const chunk = batch.rows;
-    const chunkNumber = index + 1;
-    const progress = {
-      processedChunks: chunkNumber,
-      totalChunks,
-      processedRows: Math.min(batch.startRowIndex + chunk.length, totalRows),
-      totalRows,
-    };
+  try {
+    for (let index = 0; index < batches.length; index += 1) {
+      const batch = batches[index];
+      const chunk = batch.rows;
+      const chunkNumber = index + 1;
+      const progress = {
+        processedChunks: chunkNumber,
+        totalChunks,
+        processedRows: Math.min(batch.startRowIndex + chunk.length, totalRows),
+        totalRows,
+      };
 
-    const data = await importSupplierPriceChunkWithAdaptiveRetry({
-      chunk,
-      chunkNumber,
-      totalChunks,
-      processedRowsBeforeFailure: batch.startRowIndex,
+      const data = await importSupplierPriceChunkWithAdaptiveRetry({
+        chunk,
+        chunkNumber,
+        totalChunks,
+        processedRowsBeforeFailure: batch.startRowIndex,
+        runId,
+      });
+
+      processed += Number((data as { processed?: number } | null)?.processed || chunk.length);
+      catalogSynced += Number((data as { catalog_synced?: number } | null)?.catalog_synced || 0);
+      options?.onProgress?.(progress);
+    }
+
+    options?.onStatus?.({
+      phase: "upload_completed",
+      progress: {
+        processedChunks: totalChunks,
+        totalChunks,
+        processedRows: totalRows,
+        totalRows,
+      },
     });
 
-    processed += Number((data as { processed?: number } | null)?.processed || chunk.length);
-    catalogSynced += Number((data as { catalog_synced?: number } | null)?.catalog_synced || 0);
-    options?.onProgress?.(progress);
-  }
+    if (runId) {
+      options?.onStatus?.({ phase: "finalizing" });
+      const finalized = await finalizeSupplierPriceImport(runId);
+      processed = Number(finalized?.processed ?? processed);
+      catalogSynced = Number(finalized?.catalog_synced ?? catalogSynced);
+    }
 
-  options?.onStatus?.({
-    phase: "upload_completed",
-    progress: {
-      processedChunks: totalChunks,
-      totalChunks,
-      processedRows: totalRows,
+    const rollupRefreshRun = await queueAndWaitForSupplierPriceRollupRefresh(options?.onStatus);
+
+    return {
+      processed,
+      catalogSynced,
       totalRows,
-    },
-  });
-
-  const rollupRefreshRun = await queueAndWaitForSupplierPriceRollupRefresh(options?.onStatus);
-
-  return {
-    processed,
-    catalogSynced,
-    totalRows,
-    totalChunks,
-    rollupRefreshRun,
-  };
+      totalChunks,
+      rollupRefreshRun,
+    };
+  } catch (error) {
+    if (runId) {
+      const message = error instanceof Error ? error.message : String(error || "Supplier import failed");
+      await failSupplierPriceImport(runId, message).catch(() => undefined);
+    }
+    throw error;
+  }
 }

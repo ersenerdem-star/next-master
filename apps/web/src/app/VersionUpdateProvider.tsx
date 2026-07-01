@@ -59,12 +59,16 @@ const SENSITIVE_API_PATHS = new Set([
   "/api/warehouse-order-submit",
 ]);
 const SENSITIVE_APP_RPC_NAMES = new Set([
+  "begin_supplier_price_import",
   "bulk_import_catalog",
   "bulk_import_supplier_prices",
   "cloud_master_export",
   "cloud_master_priced_export_page_fast",
   "deactivate_supplier_prices_by_filter",
+  "fail_supplier_price_import",
+  "finalize_supplier_price_import",
   "queue_supplier_price_rollups_refresh",
+  "stage_supplier_price_import_chunk",
 ]);
 const SENSITIVE_APP_ADMIN_ACTIONS = new Set([
   "clearPassword",
