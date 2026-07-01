@@ -1,6 +1,8 @@
 import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "../../domain/shared/catalogFormatting";
 import { normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
 import { callAppRpc } from "./appRpcApi";
+import { supabaseClient } from "./supabaseClient";
+import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 
 export type SupplierImportProgress = {
   processedChunks: number;
@@ -27,6 +29,7 @@ export type SupplierImportStatus =
   | { phase: "upload_completed"; progress: SupplierImportProgress }
   | { phase: "finalizing" }
   | { phase: "rollup_refresh_queued" }
+  | { phase: "rollup_refresh_pending" }
   | { phase: "rollup_refresh_completed" }
   | { phase: "rollup_refresh_failed_retrying" };
 
@@ -36,6 +39,8 @@ export type SupplierImportResult = {
   totalRows: number;
   totalChunks: number;
   rollupRefreshRun: SupplierPriceRollupRefreshRun | null;
+  rollupRefreshPending: boolean;
+  rollupRefreshMessage: string | null;
 };
 
 type SupplierImportChunkResult = {
@@ -58,13 +63,26 @@ type SupplierImportFinalizeResult = {
   deactivated?: number;
 };
 
+type SupplierPriceImportRun = {
+  status: "running" | "finalizing" | "succeeded" | "failed" | string;
+  error_message: string | null;
+  processed_rows: number | null;
+  catalog_synced: number | null;
+};
+
+type SupplierRollupRefreshOutcome = {
+  run: SupplierPriceRollupRefreshRun | null;
+  pending: boolean;
+  message: string | null;
+};
+
 const SUPPLIER_IMPORT_MAX_BATCH_ROWS = 100;
 const SUPPLIER_IMPORT_TARGET_BATCH_BYTES = 48000;
 const SUPPLIER_IMPORT_CHUNK_RETRY_LIMIT = 2;
 const SUPPLIER_IMPORT_CHUNK_RETRY_BACKOFF_MS = 1000;
 const SUPPLIER_IMPORT_POLL_INTERVAL_MS = 1500;
-const SUPPLIER_IMPORT_POLL_TIMEOUT_MS = 120000;
-const SUPPLIER_IMPORT_REFRESH_RETRY_LIMIT = 2;
+const SUPPLIER_IMPORT_FINALIZE_CONFIRM_RETRY_LIMIT = 5;
+const SUPPLIER_IMPORT_REFRESH_CONFIRM_RETRY_LIMIT = 3;
 const SUPPLIER_IMPORT_LOOKBACK_MS = 10000;
 
 function sleep(ms: number) {
@@ -141,6 +159,55 @@ async function callImportRpc<T>(name: string, args: Record<string, unknown>, con
   }
 }
 
+async function fetchSupplierPriceImportRun(runId: string) {
+  const { data, error } = await supabaseClient
+    .from("supplier_price_import_runs")
+    .select("status,error_message,processed_rows,catalog_synced")
+    .eq("id", runId)
+    .limit(1);
+
+  if (error) {
+    throw new Error(sanitizeUserFacingMessage(error.message, "Supplier import status could not be confirmed."));
+  }
+
+  const rows = (data || []) as SupplierPriceImportRun[];
+  return rows[0] || null;
+}
+
+async function confirmSupplierPriceImportRun(runId: string) {
+  let latestRun: SupplierPriceImportRun | null = null;
+
+  for (let attempt = 0; attempt < SUPPLIER_IMPORT_FINALIZE_CONFIRM_RETRY_LIMIT; attempt += 1) {
+    latestRun = await fetchSupplierPriceImportRun(runId);
+    if (!latestRun || latestRun.status === "running" || latestRun.status === "finalizing") {
+      await sleep(SUPPLIER_IMPORT_POLL_INTERVAL_MS);
+      continue;
+    }
+    return latestRun;
+  }
+
+  return latestRun;
+}
+
+async function confirmSupplierPriceRollupRun(startedAfter: string) {
+  let latestRun: SupplierPriceRollupRefreshRun | null = null;
+
+  for (let attempt = 0; attempt < SUPPLIER_IMPORT_REFRESH_CONFIRM_RETRY_LIMIT; attempt += 1) {
+    latestRun = await callImportRpc<SupplierPriceRollupRefreshRun | null>(
+      "get_latest_supplier_price_rollup_refresh_run",
+      { started_after: startedAfter },
+      "Rollup refresh status check",
+    );
+    if (!latestRun || latestRun.status === "running") {
+      await sleep(SUPPLIER_IMPORT_POLL_INTERVAL_MS);
+      continue;
+    }
+    return latestRun;
+  }
+
+  return latestRun;
+}
+
 export function describeSupplierImportStatus(status: SupplierImportStatus) {
   switch (status.phase) {
     case "upload_progressing":
@@ -151,6 +218,8 @@ export function describeSupplierImportStatus(status: SupplierImportStatus) {
       return "Finalizing supplier import.";
     case "rollup_refresh_queued":
       return "Rollup refresh queued.";
+    case "rollup_refresh_pending":
+      return "Rollup refresh is still processing in the background.";
     case "rollup_refresh_completed":
       return "Rollup refresh completed.";
     case "rollup_refresh_failed_retrying":
@@ -177,53 +246,60 @@ export async function bulkImportCatalog(payload: Array<Record<string, unknown>>)
 async function waitForSupplierPriceRollupRefresh(
   startedAfter: string,
 ) {
-  const deadline = Date.now() + SUPPLIER_IMPORT_POLL_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    const latestRun = await callImportRpc<SupplierPriceRollupRefreshRun | null>(
-      "get_latest_supplier_price_rollup_refresh_run",
-      { started_after: startedAfter },
-      "Rollup refresh status check",
-    );
-    if (latestRun && latestRun.status !== "running") {
-      return latestRun;
-    }
-    await sleep(SUPPLIER_IMPORT_POLL_INTERVAL_MS);
+  const latestRun = await confirmSupplierPriceRollupRun(startedAfter);
+  if (latestRun && latestRun.status !== "running") {
+    return latestRun;
   }
 
-  throw new Error("Rollup refresh timed out. Please try again.");
+  return null;
 }
 
-async function queueAndWaitForSupplierPriceRollupRefresh(
+async function queueAndCheckSupplierPriceRollupRefresh(
   onStatus?: (status: SupplierImportStatus) => void,
-): Promise<SupplierPriceRollupRefreshRun> {
-  let lastError: Error | null = null;
+): Promise<SupplierRollupRefreshOutcome> {
+  const startedAfter = new Date(Date.now() - SUPPLIER_IMPORT_LOOKBACK_MS).toISOString();
 
-  for (let attempt = 1; attempt <= SUPPLIER_IMPORT_REFRESH_RETRY_LIMIT; attempt += 1) {
-    const startedAfter = new Date(Date.now() - SUPPLIER_IMPORT_LOOKBACK_MS).toISOString();
-
-    try {
-      await callImportRpc("queue_supplier_price_rollups_refresh", {}, "Rollup refresh queue");
-      onStatus?.({ phase: "rollup_refresh_queued" });
-
-      const refreshRun = await waitForSupplierPriceRollupRefresh(startedAfter);
-      if (refreshRun.status === "succeeded") {
-        onStatus?.({ phase: "rollup_refresh_completed" });
-        return refreshRun;
-      }
-
-      lastError = new Error(refreshRun.error_message || "Rollup refresh failed.");
-    } catch (error) {
-      lastError = error instanceof Error ? error : contextualizeImportError(error, "Rollup refresh");
-    }
-
-    if (attempt < SUPPLIER_IMPORT_REFRESH_RETRY_LIMIT) {
-      onStatus?.({ phase: "rollup_refresh_failed_retrying" });
-      await sleep(1000);
-      continue;
-    }
+  try {
+    await callImportRpc("queue_supplier_price_rollups_refresh", {}, "Rollup refresh queue");
+    onStatus?.({ phase: "rollup_refresh_queued" });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "");
+    return {
+      run: null,
+      pending: true,
+      message: message || "Rollup refresh is still processing in the background.",
+    };
   }
 
-  throw lastError || new Error("Rollup refresh failed. Please try again.");
+  try {
+    const refreshRun = await waitForSupplierPriceRollupRefresh(startedAfter);
+    if (refreshRun?.status === "succeeded") {
+      onStatus?.({ phase: "rollup_refresh_completed" });
+      return { run: refreshRun, pending: false, message: null };
+    }
+
+    if (refreshRun && refreshRun.status === "failed") {
+      return {
+        run: refreshRun,
+        pending: false,
+        message: refreshRun.error_message || "Rollup refresh failed.",
+      };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "");
+    return {
+      run: null,
+      pending: true,
+      message: message || "Rollup refresh is still processing in the background.",
+    };
+  }
+
+  onStatus?.({ phase: "rollup_refresh_pending" });
+  return {
+    run: null,
+    pending: true,
+    message: "Rollup refresh is still processing in the background.",
+  };
 }
 
 async function importSupplierPriceChunkWithRetry(input: {
@@ -352,6 +428,8 @@ export async function bulkImportSupplierPrices(
       totalRows: 0,
       totalChunks: 0,
       rollupRefreshRun: null,
+      rollupRefreshPending: false,
+      rollupRefreshMessage: null,
     };
   }
 
@@ -383,6 +461,8 @@ export async function bulkImportSupplierPrices(
       totalRows,
     },
   });
+
+  let finalizedImport = false;
 
   try {
     for (let index = 0; index < batches.length; index += 1) {
@@ -421,20 +501,27 @@ export async function bulkImportSupplierPrices(
 
     if (runId) {
       options?.onStatus?.({ phase: "finalizing" });
-      const finalized = await finalizeSupplierPriceImport(runId);
-      processed = Number(finalized?.processed ?? processed);
-      catalogSynced = Number(finalized?.catalog_synced ?? catalogSynced);
+      try {
+        const finalized = await finalizeSupplierPriceImport(runId);
+        processed = Number(finalized?.processed ?? processed);
+        catalogSynced = Number(finalized?.catalog_synced ?? catalogSynced);
+        finalizedImport = true;
+      } catch (error) {
+        const confirmedRun = await confirmSupplierPriceImportRun(runId);
+        if (confirmedRun?.status === "succeeded") {
+          processed = Number(confirmedRun.processed_rows ?? processed);
+          catalogSynced = Number(confirmedRun.catalog_synced ?? catalogSynced);
+          finalizedImport = true;
+        } else if (confirmedRun?.status === "failed") {
+          throw new Error(
+            confirmedRun.error_message ||
+              (error instanceof Error ? error.message : "Supplier import finalization failed. Please try again."),
+          );
+        } else {
+          throw error;
+        }
+      }
     }
-
-    const rollupRefreshRun = await queueAndWaitForSupplierPriceRollupRefresh(options?.onStatus);
-
-    return {
-      processed,
-      catalogSynced,
-      totalRows,
-      totalChunks,
-      rollupRefreshRun,
-    };
   } catch (error) {
     if (runId) {
       const message = error instanceof Error ? error.message : String(error || "Supplier import failed");
@@ -442,4 +529,27 @@ export async function bulkImportSupplierPrices(
     }
     throw error;
   }
+
+  let rollupRefresh: SupplierRollupRefreshOutcome = { run: null, pending: false, message: null };
+  if (finalizedImport || !runId) {
+    try {
+      rollupRefresh = await queueAndCheckSupplierPriceRollupRefresh(options?.onStatus);
+    } catch (error) {
+      rollupRefresh = {
+        run: null,
+        pending: true,
+        message: error instanceof Error ? error.message : String(error || "Rollup refresh is still processing in the background."),
+      };
+    }
+  }
+
+  return {
+    processed,
+    catalogSynced,
+    totalRows,
+    totalChunks,
+    rollupRefreshRun: rollupRefresh?.run ?? null,
+    rollupRefreshPending: rollupRefresh?.pending ?? false,
+    rollupRefreshMessage: rollupRefresh?.message ?? null,
+  };
 }

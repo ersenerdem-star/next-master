@@ -76,6 +76,7 @@ export function SuppliersPage() {
   const [loadingRows, setLoadingRows] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [warning, setWarning] = useState("");
   const [importingSupplier, setImportingSupplier] = useState(false);
   const [savingManualPrice, setSavingManualPrice] = useState(false);
   const [resolvingCatalogMatch, setResolvingCatalogMatch] = useState(false);
@@ -345,6 +346,7 @@ export function SuppliersPage() {
     setLoadingRows(true);
     setError("");
     setStatus("");
+    setWarning("");
     setImportingSupplier(true);
     actionFeedback.begin(`Importing supplier CSV for ${activeSupplierName} / ${activeImportBrand}...`);
     try {
@@ -421,13 +423,18 @@ export function SuppliersPage() {
       await reloadSupplierRows(submittedSearch, freshness, matchedSupplier?.supplier_id || selectedSupplierId);
       setShowImportDialog(false);
       setImportFile(null);
-      setStatus(
-        `Supplier import completed for ${activeSupplierName} / ${activeImportBrand}. ${importResult.processed} rows processed in ${importResult.totalChunks} batches.`,
+      const completionMessage = `Supplier import completed for ${activeSupplierName} / ${activeImportBrand}. ${importResult.processed} rows processed in ${importResult.totalChunks} batches.`;
+      setStatus(completionMessage);
+      setWarning(
+        importResult.rollupRefreshPending
+          ? importResult.rollupRefreshMessage || "Rollup refresh is still processing in the background."
+          : importResult.rollupRefreshMessage || "",
       );
       actionFeedback.succeed(`Supplier import completed for ${activeSupplierName} / ${activeImportBrand}.`);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Supplier import failed";
       setError(message);
+      setWarning("");
       actionFeedback.fail(message);
     } finally {
       setLoadingRows(false);
@@ -618,6 +625,7 @@ export function SuppliersPage() {
                   : `${total.toLocaleString("en-US")} supplier rows`}
             </span>
             {status ? <span className="success-text">{status}</span> : null}
+            {warning ? <span className="warning-text">{warning}</span> : null}
             {error ? <span className="error-text">{error}</span> : null}
           </div>
           <DataTable rows={rows} columns={columns} emptyText={loadingRows ? "Loading..." : "No supplier rows found"} />
