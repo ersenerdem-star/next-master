@@ -392,6 +392,9 @@ export function SuppliersPage() {
       }
 
       const importResult = await bulkImportSupplierPrices(payload, {
+        mode: importMode === "merge" ? "merge" : "replace",
+        supplierName: activeSupplierName,
+        brandName: activeImportBrand,
         onProgress: ({ processedChunks, totalChunks, processedRows, totalRows }) => {
           setStatus(
             `Supplier import running for ${activeSupplierName} / ${activeImportBrand}: ${processedRows}/${totalRows} rows (${processedChunks}/${totalChunks} batches).`,
