@@ -22,6 +22,8 @@ const ALLOWED_RPCS = new Set([
   "delete_invoice_guarded",
   "delete_payment_made_guarded",
   "delete_payment_received_guarded",
+  "delete_purchase_order_guarded",
+  "delete_sales_order_guarded",
   "get_latest_supplier_price_rollup_refresh_run",
   "queue_supplier_price_rollups_refresh",
   "post_invoice_stock_movements",
@@ -45,6 +47,8 @@ const ALLOWED_RPCS = new Set([
   "save_invoice_atomic",
   "save_payment_made_atomic",
   "save_payment_received_atomic",
+  "save_purchase_order_atomic",
+  "save_sales_order_atomic",
   "cancel_customer_price_list_replace",
   "stage_customer_price_list_replace_chunk",
   "stage_supplier_price_import_chunk",
@@ -97,8 +101,12 @@ const OPERATIONS_RPCS = new Set([
 const CUSTOMER_STAFF_RPCS = new Set([
   "cloud_quote_supplier_options",
   "cloud_resolve_quote_line",
+  "delete_purchase_order_guarded",
+  "delete_sales_order_guarded",
   "get_cloud_quote",
   "list_cloud_quotes",
+  "save_purchase_order_atomic",
+  "save_sales_order_atomic",
   "touch_user_presence",
 ]);
 

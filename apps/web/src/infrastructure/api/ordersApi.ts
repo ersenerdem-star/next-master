@@ -839,27 +839,15 @@ export async function fetchSalesOrderById(salesOrderId: string): Promise<LocalSa
 }
 
 export async function upsertSalesOrder(order: LocalSalesOrder): Promise<LocalSalesOrder> {
-  const organizationId = await getCurrentOrgId();
-  const payload = mapSalesOrderPayload(order, organizationId);
-  const { data, error } = await supabaseClient
-    .from("sales_orders")
-    .upsert(payload, { onConflict: "id" })
-    .select(SALES_ORDER_COLUMNS)
-    .single();
-
-  if (error) throw new Error(error.message || "Sales order save failed");
-  return mapSalesOrderRow(data as unknown as Record<string, unknown>);
+  const result = await callAppRpc<{ sales_order?: Record<string, unknown> }>("save_sales_order_atomic", {
+    payload: mapSalesOrderPayload(order, ""),
+  });
+  if (!result?.sales_order) throw new Error("Sales order save failed");
+  return mapSalesOrderRow(result.sales_order);
 }
 
 export async function deleteSalesOrder(salesOrderId: string): Promise<void> {
-  const organizationId = await getCurrentOrgId();
-  const { error } = await supabaseClient
-    .from("sales_orders")
-    .delete()
-    .eq("organization_id", organizationId)
-    .eq("id", salesOrderId);
-
-  if (error) throw new Error(error.message || "Sales order delete failed");
+  await callAppRpc("delete_sales_order_guarded", { id: salesOrderId });
 }
 
 export async function markSalesOrderPortalSeen(orderId: string): Promise<LocalSalesOrder | null> {
@@ -895,22 +883,20 @@ export async function fetchPurchaseOrderById(purchaseOrderId: string): Promise<L
 
 export async function replacePurchaseOrdersForSalesOrder(salesOrderId: string, purchaseOrders: LocalPurchaseOrder[]) {
   const organizationId = await getCurrentOrgId();
-  const { error: deleteError } = await supabaseClient
+  const { data: existingRows, error: existingError } = await supabaseClient
     .from("purchase_orders")
-    .delete()
+    .select("id")
     .eq("organization_id", organizationId)
     .eq("sales_order_id", salesOrderId);
+  if (existingError) throw new Error(existingError.message || "Purchase order replace failed");
 
-  if (deleteError) throw new Error(deleteError.message || "Purchase order replace failed");
+  await Promise.all(
+    ((existingRows || []) as Array<Record<string, unknown>>).map((row) => callAppRpc("delete_purchase_order_guarded", { id: String(row.id || "") })),
+  );
+
   if (!purchaseOrders.length) return [];
 
-  const { data, error } = await supabaseClient
-    .from("purchase_orders")
-    .insert(purchaseOrders.map((row) => mapPurchaseOrderPayload(row, organizationId)))
-    .select(PURCHASE_ORDER_COLUMNS);
-
-  if (error) throw new Error(error.message || "Purchase order save failed");
-  return ((data || []) as unknown as Record<string, unknown>[]).map(mapPurchaseOrderRow);
+  return Promise.all(purchaseOrders.map((row) => upsertPurchaseOrder(row)));
 }
 
 export async function fetchInvoices(): Promise<LocalInvoice[]> {
@@ -957,27 +943,15 @@ export async function deleteInvoice(invoiceId: string): Promise<void> {
 }
 
 export async function upsertPurchaseOrder(order: LocalPurchaseOrder): Promise<LocalPurchaseOrder> {
-  const organizationId = await getCurrentOrgId();
-  const payload = mapPurchaseOrderPayload(order, organizationId);
-  const { data, error } = await supabaseClient
-    .from("purchase_orders")
-    .upsert(payload, { onConflict: "id" })
-    .select(PURCHASE_ORDER_COLUMNS)
-    .single();
-
-  if (error) throw new Error(error.message || "Purchase order save failed");
-  return mapPurchaseOrderRow(data as unknown as Record<string, unknown>);
+  const result = await callAppRpc<{ purchase_order?: Record<string, unknown> }>("save_purchase_order_atomic", {
+    payload: mapPurchaseOrderPayload(order, ""),
+  });
+  if (!result?.purchase_order) throw new Error("Purchase order save failed");
+  return mapPurchaseOrderRow(result.purchase_order);
 }
 
 export async function deletePurchaseOrder(purchaseOrderId: string): Promise<void> {
-  const organizationId = await getCurrentOrgId();
-  const { error } = await supabaseClient
-    .from("purchase_orders")
-    .delete()
-    .eq("organization_id", organizationId)
-    .eq("id", purchaseOrderId);
-
-  if (error) throw new Error(error.message || "Purchase order delete failed");
+  await callAppRpc("delete_purchase_order_guarded", { id: purchaseOrderId });
 }
 
 export async function fetchBills(): Promise<LocalBill[]> {
