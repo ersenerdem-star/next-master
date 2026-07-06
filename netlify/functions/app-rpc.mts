@@ -20,6 +20,7 @@ const ALLOWED_RPCS = new Set([
   "cloud_master_priced_page_fast",
   "get_latest_supplier_price_rollup_refresh_run",
   "queue_supplier_price_rollups_refresh",
+  "post_invoice_stock_movements",
   "search_catalog_products",
   "cloud_quote_supplier_options",
   "cloud_resolve_quote_line",
@@ -35,6 +36,7 @@ const ALLOWED_RPCS = new Set([
   "list_cloud_quotes",
   "list_cloud_suppliers",
   "post_purchase_receive_atomic",
+  "reverse_invoice_stock_movements",
   "cancel_customer_price_list_replace",
   "stage_customer_price_list_replace_chunk",
   "stage_supplier_price_import_chunk",
@@ -71,6 +73,8 @@ const OPERATIONS_RPCS = new Set([
   "fail_customer_price_list_replace",
   "finalize_customer_price_list_replace",
   "post_purchase_receive_atomic",
+  "post_invoice_stock_movements",
+  "reverse_invoice_stock_movements",
   "stage_customer_price_list_replace_chunk",
 ]);
 
