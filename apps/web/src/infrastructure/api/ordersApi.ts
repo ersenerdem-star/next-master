@@ -943,49 +943,17 @@ export async function fetchInvoicesByCustomerNames(names: string[]): Promise<Loc
 }
 
 export async function upsertInvoice(invoice: LocalInvoice, previousId?: string): Promise<LocalInvoice> {
-  const organizationId = await getCurrentOrgId();
-  if (previousId && previousId !== invoice.id) {
-    const { error: deleteError } = await supabaseClient
-      .from("invoices")
-      .delete()
-      .eq("organization_id", organizationId)
-      .eq("id", previousId);
-
-    if (deleteError) throw new Error(deleteError.message || "Previous invoice cleanup failed");
-  }
-
   const resolvedInvoice = await resolveInvoiceWarehouseDefaults(invoice);
-  const payload = mapInvoicePayload(resolvedInvoice, organizationId);
-  const { data, error } = await supabaseClient
-    .from("invoices")
-    .upsert(payload, { onConflict: "id" })
-    .select(INVOICE_COLUMNS)
-    .single();
-
-  if (error) throw new Error(error.message || "Invoice save failed");
-  return mapInvoiceRow(data as unknown as Record<string, unknown>);
+  const result = await callAppRpc<{ invoice?: Record<string, unknown> }>("save_invoice_atomic", {
+    payload: mapInvoicePayload(resolvedInvoice, ""),
+    previous_id: previousId || null,
+  });
+  if (!result?.invoice) throw new Error("Invoice save failed");
+  return mapInvoiceRow(result.invoice);
 }
 
 export async function deleteInvoice(invoiceId: string): Promise<void> {
-  const organizationId = await getCurrentOrgId();
-  const { data: paymentRows, error: paymentError } = await supabaseClient
-    .from("payments_received")
-    .select("id")
-    .eq("organization_id", organizationId)
-    .eq("invoice_id", invoiceId)
-    .limit(1);
-  if (paymentError) throw new Error(paymentError.message || "Invoice delete check failed");
-  if ((paymentRows || []).length) {
-    throw new Error("Delete linked payments first, then delete the invoice.");
-  }
-
-  const { error } = await supabaseClient
-    .from("invoices")
-    .delete()
-    .eq("organization_id", organizationId)
-    .eq("id", invoiceId);
-
-  if (error) throw new Error(error.message || "Invoice delete failed");
+  await callAppRpc("delete_invoice_guarded", { id: invoiceId });
 }
 
 export async function upsertPurchaseOrder(order: LocalPurchaseOrder): Promise<LocalPurchaseOrder> {
@@ -1049,21 +1017,12 @@ export async function fetchBillsBySupplierNames(names: string[]): Promise<LocalB
 }
 
 export async function upsertBill(bill: LocalBill, previousId?: string): Promise<LocalBill> {
-  const organizationId = await getCurrentOrgId();
-  if (previousId && previousId !== bill.id) {
-    const { error: deleteError } = await supabaseClient.from("bills").delete().eq("organization_id", organizationId).eq("id", previousId);
-    if (deleteError) throw new Error(deleteError.message || "Previous bill cleanup failed");
-  }
-
-  const payload = mapBillPayload(bill, organizationId);
-  const { data, error } = await supabaseClient
-    .from("bills")
-    .upsert(payload, { onConflict: "id" })
-    .select(BILL_COLUMNS)
-    .single();
-
-  if (error) throw new Error(error.message || "Bill save failed");
-  return mapBillRow(data as unknown as Record<string, unknown>);
+  const result = await callAppRpc<{ bill?: Record<string, unknown> }>("save_bill_atomic", {
+    payload: mapBillPayload(bill, ""),
+    previous_id: previousId || null,
+  });
+  if (!result?.bill) throw new Error("Bill save failed");
+  return mapBillRow(result.bill);
 }
 
 export async function buildAndUpsertBillFromPurchaseOrder(order: LocalPurchaseOrder): Promise<LocalBill> {
@@ -1091,25 +1050,7 @@ export async function buildAndUpsertMergedBillFromPurchaseOrders(orders: LocalPu
 }
 
 export async function deleteBill(billId: string): Promise<void> {
-  const organizationId = await getCurrentOrgId();
-  const { data: paymentRows, error: paymentError } = await supabaseClient
-    .from("payments_made")
-    .select("id")
-    .eq("organization_id", organizationId)
-    .eq("bill_id", billId)
-    .limit(1);
-  if (paymentError) throw new Error(paymentError.message || "Bill delete check failed");
-  if ((paymentRows || []).length) {
-    throw new Error("Delete linked payments first, then delete the bill.");
-  }
-
-  const { error } = await supabaseClient
-    .from("bills")
-    .delete()
-    .eq("organization_id", organizationId)
-    .eq("id", billId);
-
-  if (error) throw new Error(error.message || "Bill delete failed");
+  await callAppRpc("delete_bill_guarded", { id: billId });
 }
 
 export async function fetchPaymentsReceived(): Promise<LocalPaymentReceived[]> {
