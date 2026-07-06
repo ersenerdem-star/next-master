@@ -11,6 +11,7 @@ import type {
 import { supabaseClient } from "./supabaseClient";
 import { getCurrentOrgId } from "./organizationApi";
 import { fetchWarehouses } from "./warehousesApi";
+import { callAppRpc } from "./appRpcApi";
 
 const SALES_ORDER_COLUMNS = [
   "id",
@@ -1123,26 +1124,7 @@ export async function fetchPaymentsReceived(): Promise<LocalPaymentReceived[]> {
 }
 
 export async function deletePaymentReceived(paymentId: string): Promise<void> {
-  const organizationId = await getCurrentOrgId();
-  const { data: paymentRows, error: paymentError } = await supabaseClient
-    .from("payments_received")
-    .select(PAYMENT_RECEIVED_COLUMNS)
-    .eq("organization_id", organizationId)
-    .eq("id", paymentId)
-    .limit(1);
-  if (paymentError) throw new Error(paymentError.message || "Payment received delete failed");
-  const payment = paymentRows?.[0] as unknown as Record<string, unknown> | undefined;
-
-  const { error } = await supabaseClient
-    .from("payments_received")
-    .delete()
-    .eq("organization_id", organizationId)
-    .eq("id", paymentId);
-
-  if (error) throw new Error(error.message || "Payment received delete failed");
-  if (payment?.invoice_id) {
-    await syncInvoicePaidStatus(organizationId, String(payment.invoice_id));
-  }
+  await callAppRpc("delete_payment_received_guarded", { id: paymentId });
 }
 
 export async function fetchPaymentsReceivedByCustomerNames(names: string[]): Promise<LocalPaymentReceived[]> {
@@ -1161,26 +1143,12 @@ export async function fetchPaymentsReceivedByCustomerNames(names: string[]): Pro
 }
 
 export async function upsertPaymentReceived(payment: LocalPaymentReceived, previousId?: string): Promise<LocalPaymentReceived> {
-  const organizationId = await getCurrentOrgId();
-  if (previousId && previousId !== payment.id) {
-    const { error: deleteError } = await supabaseClient
-      .from("payments_received")
-      .delete()
-      .eq("organization_id", organizationId)
-      .eq("id", previousId);
-    if (deleteError) throw new Error(deleteError.message || "Previous received payment cleanup failed");
-  }
-
-  const { data, error } = await supabaseClient
-    .from("payments_received")
-    .upsert(mapPaymentReceivedPayload(payment, organizationId), { onConflict: "id" })
-    .select(PAYMENT_RECEIVED_COLUMNS)
-    .single();
-  if (error) throw new Error(error.message || "Payment received save failed");
-
-  const saved = mapPaymentReceivedRow(data as unknown as Record<string, unknown>);
-  await syncInvoicePaidStatus(organizationId, saved.invoice_id);
-  return saved;
+  const result = await callAppRpc<{ payment?: Record<string, unknown> }>("save_payment_received_atomic", {
+    payload: mapPaymentReceivedPayload(payment, ""),
+    previous_id: previousId || null,
+  });
+  if (!result?.payment) throw new Error("Payment received save failed");
+  return mapPaymentReceivedRow(result.payment);
 }
 
 export async function fetchPaymentsMade(): Promise<LocalPaymentMade[]> {
@@ -1195,26 +1163,7 @@ export async function fetchPaymentsMade(): Promise<LocalPaymentMade[]> {
 }
 
 export async function deletePaymentMade(paymentId: string): Promise<void> {
-  const organizationId = await getCurrentOrgId();
-  const { data: paymentRows, error: paymentError } = await supabaseClient
-    .from("payments_made")
-    .select(PAYMENT_MADE_COLUMNS)
-    .eq("organization_id", organizationId)
-    .eq("id", paymentId)
-    .limit(1);
-  if (paymentError) throw new Error(paymentError.message || "Payment made delete failed");
-  const payment = paymentRows?.[0] as unknown as Record<string, unknown> | undefined;
-
-  const { error } = await supabaseClient
-    .from("payments_made")
-    .delete()
-    .eq("organization_id", organizationId)
-    .eq("id", paymentId);
-
-  if (error) throw new Error(error.message || "Payment made delete failed");
-  if (payment?.bill_id) {
-    await syncBillPaidStatus(organizationId, String(payment.bill_id));
-  }
+  await callAppRpc("delete_payment_made_guarded", { id: paymentId });
 }
 
 export async function fetchPaymentsMadeBySupplierNames(names: string[]): Promise<LocalPaymentMade[]> {
@@ -1233,24 +1182,10 @@ export async function fetchPaymentsMadeBySupplierNames(names: string[]): Promise
 }
 
 export async function upsertPaymentMade(payment: LocalPaymentMade, previousId?: string): Promise<LocalPaymentMade> {
-  const organizationId = await getCurrentOrgId();
-  if (previousId && previousId !== payment.id) {
-    const { error: deleteError } = await supabaseClient
-      .from("payments_made")
-      .delete()
-      .eq("organization_id", organizationId)
-      .eq("id", previousId);
-    if (deleteError) throw new Error(deleteError.message || "Previous payment made cleanup failed");
-  }
-
-  const { data, error } = await supabaseClient
-    .from("payments_made")
-    .upsert(mapPaymentMadePayload(payment, organizationId), { onConflict: "id" })
-    .select(PAYMENT_MADE_COLUMNS)
-    .single();
-  if (error) throw new Error(error.message || "Payment made save failed");
-
-  const saved = mapPaymentMadeRow(data as unknown as Record<string, unknown>);
-  await syncBillPaidStatus(organizationId, saved.bill_id);
-  return saved;
+  const result = await callAppRpc<{ payment?: Record<string, unknown> }>("save_payment_made_atomic", {
+    payload: mapPaymentMadePayload(payment, ""),
+    previous_id: previousId || null,
+  });
+  if (!result?.payment) throw new Error("Payment made save failed");
+  return mapPaymentMadeRow(result.payment);
 }
