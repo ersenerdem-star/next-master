@@ -34,6 +34,7 @@ const ALLOWED_RPCS = new Set([
   "get_cloud_quote",
   "list_cloud_quotes",
   "list_cloud_suppliers",
+  "post_purchase_receive_atomic",
   "cancel_customer_price_list_replace",
   "stage_customer_price_list_replace_chunk",
   "stage_supplier_price_import_chunk",
@@ -69,6 +70,7 @@ const OPERATIONS_RPCS = new Set([
   "cancel_customer_price_list_replace",
   "fail_customer_price_list_replace",
   "finalize_customer_price_list_replace",
+  "post_purchase_receive_atomic",
   "stage_customer_price_list_replace_chunk",
 ]);
 

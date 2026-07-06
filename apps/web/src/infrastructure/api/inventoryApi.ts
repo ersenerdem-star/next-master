@@ -2,9 +2,9 @@ import type { LocalPurchaseOrder } from "../../types/orders";
 import type { InventoryMovement, PurchaseReceive, PurchaseReceiveLine, StockTransfer, StockTransferLine, WarehouseOnHandRow, WarehouseStockItem } from "../../types/inventory";
 import type { Warehouse } from "../../types/warehouses";
 import { normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
+import { callAppRpc } from "./appRpcApi";
 import { supabaseClient } from "./supabaseClient";
 import { getCurrentOrgId } from "./organizationApi";
-import { upsertPurchaseOrder } from "./ordersApi";
 import { fetchWarehouses } from "./warehousesApi";
 
 const PURCHASE_RECEIVE_COLUMNS = [
@@ -492,118 +492,38 @@ export function buildPurchaseReceiveDraft(
 }
 
 export async function postPurchaseReceive(input: PurchaseReceiveDraft, order: LocalPurchaseOrder): Promise<PurchaseReceive> {
-  const organizationId = await getCurrentOrgId();
-  const warehouseRows = await fetchWarehouses();
-  const selectedWarehouse = warehouseRows.find((row) => row.id === input.warehouse_id) || null;
-  const postedLines = input.lines
-    .map((line) => ({
-      ...line,
-      qty_received: roundQty(toNumber(line.qty_received)),
-      line_total: roundQty(toNumber(line.qty_received) * toNumber(line.unit_cost)),
-    }))
-    .filter((line) => line.qty_received > 0);
-
-  if (!input.warehouse_id) throw new Error("Select a warehouse first.");
-  if (selectedWarehouse?.fulfillment_model === "dropship") {
-    throw new Error("Dropship warehouses do not accept stock receives. Use a stocked warehouse.");
-  }
-  if (!postedLines.length) throw new Error("Enter at least one received quantity.");
-
-  const payload = {
-    organization_id: organizationId,
-    purchase_order_id: input.purchase_order_id,
-    purchase_order_no: input.purchase_order_no,
-    supplier_name: input.supplier_name,
-    warehouse_id: input.warehouse_id,
-    warehouse_code: input.warehouse_code,
-    warehouse_name: input.warehouse_name,
-    status: "posted",
-    received_date: input.received_date,
-    notes: input.notes,
-    total_qty: roundQty(postedLines.reduce((sum, line) => sum + line.qty_received, 0)),
-    total_amount: roundQty(postedLines.reduce((sum, line) => sum + line.line_total, 0)),
-    lines: postedLines,
-    created_at: nowIso(),
-    updated_at: nowIso(),
-  };
-
-  const { data, error } = await supabaseClient
-    .from("purchase_receives")
-    .insert(payload)
-    .select(PURCHASE_RECEIVE_COLUMNS)
-    .single();
-
-  if (error) throw new Error(error.message || "Purchase receive post failed");
-  const postedReceiveRow = data as unknown as Record<string, unknown>;
-  const postedReceiveId = String(postedReceiveRow.id || "");
-
-  const movementPayload = postedLines.map((line) => ({
-    organization_id: organizationId,
-    warehouse_id: input.warehouse_id,
-    warehouse_code: input.warehouse_code,
-    warehouse_name: input.warehouse_name,
-    movement_type: "purchase_receive",
-    document_type: "Purchase Receive",
-    document_id: postedReceiveId,
-    document_no: postedReceiveId,
-    related_party: input.supplier_name,
-    product_code: line.product_code,
-    old_code: line.old_code,
-    brand: line.brand,
-    description: line.description,
-    qty_in: line.qty_received,
-    qty_out: 0,
-    unit_cost: line.unit_cost,
-    total_cost: line.line_total,
-    origin: line.origin,
-    notes: line.notes || input.notes || "",
-    moved_at: `${input.received_date}T00:00:00.000Z`,
-    created_at: nowIso(),
-    updated_at: nowIso(),
+  const receiveLines = input.lines.map((line) => ({
+    ...line,
+    qty_received: roundQty(toNumber(line.qty_received)),
+    line_total: roundQty(toNumber(line.qty_received) * toNumber(line.unit_cost)),
   }));
 
-  const { error: movementError } = await supabaseClient.from("inventory_movements").insert(movementPayload);
-  if (movementError) throw new Error(movementError.message || "Inventory movement post failed");
+  const data = await callAppRpc<{
+    receive?: Record<string, unknown>;
+    movement_count?: number;
+    purchase_order?: Record<string, unknown>;
+  }>("post_purchase_receive_atomic", {
+    payload: {
+      purchase_order_id: input.purchase_order_id || order.id,
+      warehouse_id: input.warehouse_id,
+      received_date: input.received_date,
+      notes: input.notes,
+      lines: receiveLines.map((line) => ({
+        product_code: line.product_code,
+        old_code: line.old_code,
+        brand: line.brand,
+        description: line.description,
+        qty_received: line.qty_received,
+        unit_cost: line.unit_cost,
+        origin: line.origin,
+        notes: line.notes,
+      })),
+    },
+  });
   clearInventoryAvailabilityCache();
 
-  const receives = await fetchPurchaseReceives();
-  const finalDraft = buildPurchaseReceiveDraft(
-    order,
-    {
-      id: input.warehouse_id,
-      warehouse_code: input.warehouse_code,
-      warehouse_name: input.warehouse_name,
-      region: "",
-      address: "",
-      warehouse_kind: "internal",
-      fulfillment_model: "stocked",
-      outsource_partner_name: "",
-      external_sync_enabled: false,
-      external_api_provider: "",
-      external_api_url: "",
-      external_location_code: "",
-      external_auth_type: "none",
-      external_api_token_env: "",
-      external_last_sync_at: "",
-      external_last_sync_status: "",
-      external_last_sync_message: "",
-      is_active: true,
-      created_at: "",
-      updated_at: "",
-    },
-    receives,
-  );
-  const fullyReceived = finalDraft.lines.every((line) => line.qty_remaining_before <= 0);
-
-  if (fullyReceived) {
-    await upsertPurchaseOrder({
-      ...order,
-      status: "closed",
-      updated_at: nowIso(),
-    });
-  }
-
-  return mapPurchaseReceiveRow(postedReceiveRow);
+  if (!data?.receive) throw new Error("Purchase receive post failed");
+  return mapPurchaseReceiveRow(data.receive);
 }
 
 export type StockTransferDraftLine = StockTransferLine & {
