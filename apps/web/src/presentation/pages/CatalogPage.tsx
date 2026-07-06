@@ -3,7 +3,16 @@ import { CATALOG_MARKET_SEGMENT_OPTIONS, normalizeCatalogMarketSegment } from ".
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { syncBrandCatalog } from "../../infrastructure/api/adminApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
-import { createCloudCatalogRow, deleteCloudCatalogRow, fetchCatalogExportRows, fetchCatalogRowsByCodes, fetchCloudCatalog, updateCloudCatalogRow } from "../../infrastructure/api/catalogApi";
+import {
+  CatalogDeleteBlockedError,
+  createCloudCatalogRow,
+  deleteCloudCatalogRow,
+  fetchCatalogExportRows,
+  fetchCatalogRowsByCodes,
+  fetchCloudCatalog,
+  updateCloudCatalogRow,
+  type CatalogDeleteReferenceSummary,
+} from "../../infrastructure/api/catalogApi";
 import { fetchCatalogProductMedia } from "../../infrastructure/api/catalogMediaApi";
 import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenceUsage } from "../../infrastructure/api/codeReferencesApi";
 import { bulkImportCatalog } from "../../infrastructure/api/importApi";
@@ -177,6 +186,7 @@ export function CatalogPage() {
   const [searchingCatalog, setSearchingCatalog] = useState(false);
   const [exportingCatalog, setExportingCatalog] = useState(false);
   const [rowActionKey, setRowActionKey] = useState("");
+  const [deleteBlockSummary, setDeleteBlockSummary] = useState<CatalogDeleteReferenceSummary[] | null>(null);
   const [importingCatalog, setImportingCatalog] = useState(false);
   const [syncingBrandCatalog, setSyncingBrandCatalog] = useState(false);
   const [creatingItem, setCreatingItem] = useState(false);
@@ -226,6 +236,10 @@ export function CatalogPage() {
     normalizeCatalogLifecycleStatus(value) === "discontinued" ? t("catalog.lifecycle.discontinued") : t("catalog.lifecycle.active");
   const getExportFormatLabel = (format: CatalogExportFormat) =>
     format === "xlsx" ? t("catalog.export.formats.excel") : t("catalog.export.formats.csv");
+
+  useEffect(() => {
+    setDeleteBlockSummary(null);
+  }, [selectedCatalogProductId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -757,6 +771,7 @@ export function CatalogPage() {
     try {
       setError("");
       setStatus("");
+      setDeleteBlockSummary(null);
       setRowActionKey(`delete:${row.product_id}`);
       actionFeedback.begin(t("catalog.status.deletingRow", { code: row.product_code }));
       await deleteCloudCatalogRow(row.product_id);
@@ -765,7 +780,47 @@ export function CatalogPage() {
       setStatus(t("catalog.status.rowDeleted", { code: row.product_code }));
       actionFeedback.succeed(t("catalog.status.rowDeleted", { code: row.product_code }));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : t("catalog.errors.deleteFailed");
+      if (caught instanceof CatalogDeleteBlockedError) {
+        setDeleteBlockSummary(caught.references);
+        const message = t("catalog.errors.deleteBlocked");
+        setError(message);
+        actionFeedback.fail(message);
+      } else {
+        const message = caught instanceof Error ? caught.message : t("catalog.errors.deleteFailed");
+        setError(message);
+        actionFeedback.fail(message);
+      }
+    } finally {
+      setRowActionKey("");
+    }
+  }
+
+  async function deactivateCatalogRow(row: CatalogRow) {
+    const draft = drafts[row.product_id] || buildCatalogRowDraft(row);
+    try {
+      setError("");
+      setStatus("");
+      setRowActionKey(`deactivate:${row.product_id}`);
+      actionFeedback.begin(t("catalog.status.deactivatingRow", { code: row.product_code }));
+      await updateCloudCatalogRow(row.product_id, {
+        product_code: draft.product_code,
+        brand: draft.brand,
+        description: draft.description || null,
+        oem_no: draft.oem_no || null,
+        vehicle: draft.vehicle || null,
+        hs_code: draft.hs_code || null,
+        origin: draft.origin || null,
+        market_segment: normalizeCatalogMarketSegment(draft.market_segment),
+        weight_kg: parseWeightInput(draft.weight_kg),
+        lifecycle_status: "discontinued",
+        lifecycle_note: draft.lifecycle_note || null,
+      });
+      await reloadCatalog(submittedSearch, submittedCatalogBrand, submittedCatalogSegment);
+      setStatus(t("catalog.status.rowDeactivated", { code: row.product_code }));
+      actionFeedback.succeed(t("catalog.status.rowDeactivated", { code: row.product_code }));
+      setDeleteBlockSummary(null);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : t("catalog.errors.updateFailed");
       setError(message);
       actionFeedback.fail(message);
     } finally {
@@ -1531,6 +1586,17 @@ export function CatalogPage() {
               >
                 {t("catalog.actions.deleteItem")}
               </Button>
+              {deleteBlockSummary?.length && selectedCatalogRow.lifecycle_status !== "discontinued" ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => void deactivateCatalogRow(selectedCatalogRow)}
+                  disabled={!isOnline}
+                  busy={rowActionKey === `deactivate:${selectedCatalogRow.product_id}`}
+                  busyLabel={t("catalog.actions.deactivating")}
+                >
+                  {t("catalog.actions.deactivateInstead")}
+                </Button>
+              ) : null}
               <Button variant="secondary" onClick={() => openReferenceDialogForRow(selectedCatalogRow)} disabled={!isOnline}>
                 {(() => {
                   const coverageKey = `${selectedCatalogRow.brand.trim().toLowerCase()}::${normalizePartCode(selectedCatalogRow.product_code)}`;
@@ -1544,6 +1610,19 @@ export function CatalogPage() {
                 {t("catalog.actions.addToPurchaseDraft")}
               </Button>
             </div>
+            {deleteBlockSummary?.length ? (
+              <div className="info-text">
+                <strong>{t("catalog.detail.deleteBlockedTitle")}</strong>
+                <ul>
+                  {deleteBlockSummary.map((item) => (
+                    <li key={item.key}>
+                      {item.label} ({item.count})
+                    </li>
+                  ))}
+                </ul>
+                <div>{t("catalog.detail.deleteBlockedHint")}</div>
+              </div>
+            ) : null}
             {selectedCatalogDraft.lifecycle_note ? <div className="info-text">{selectedCatalogDraft.lifecycle_note}</div> : null}
           </div>
         </DraggableSurface>

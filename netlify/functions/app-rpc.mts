@@ -9,6 +9,7 @@ import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 const ALLOWED_RPCS = new Set([
   "admin_list_org_users",
   "begin_supplier_price_import",
+  "begin_customer_price_list_replace",
   "bulk_import_catalog",
   "bulk_import_supplier_prices",
   "cloud_catalog_page",
@@ -24,12 +25,17 @@ const ALLOWED_RPCS = new Set([
   "cloud_resolve_quote_line",
   "cloud_supplier_brand_summary",
   "cloud_supplier_price_page",
+  "delete_catalog_product_guarded",
   "deactivate_supplier_prices_by_filter",
   "fail_supplier_price_import",
+  "fail_customer_price_list_replace",
   "finalize_supplier_price_import",
+  "finalize_customer_price_list_replace",
   "get_cloud_quote",
   "list_cloud_quotes",
   "list_cloud_suppliers",
+  "cancel_customer_price_list_replace",
+  "stage_customer_price_list_replace_chunk",
   "stage_supplier_price_import_chunk",
   "touch_user_presence",
 ]);
@@ -42,6 +48,7 @@ const SUPERADMIN_RPCS = new Set([
   "cloud_catalog_page",
   "cloud_supplier_brand_summary",
   "cloud_supplier_price_page",
+  "delete_catalog_product_guarded",
   "deactivate_supplier_prices_by_filter",
   "fail_supplier_price_import",
   "finalize_supplier_price_import",
@@ -53,11 +60,16 @@ const SUPERADMIN_RPCS = new Set([
 ]);
 
 const OPERATIONS_RPCS = new Set([
+  "begin_customer_price_list_replace",
   "cloud_master_export",
   "cloud_master_page",
   "cloud_master_page_fast",
   "cloud_master_priced_export_page_fast",
   "cloud_master_priced_page_fast",
+  "cancel_customer_price_list_replace",
+  "fail_customer_price_list_replace",
+  "finalize_customer_price_list_replace",
+  "stage_customer_price_list_replace_chunk",
 ]);
 
 const CUSTOMER_STAFF_RPCS = new Set([

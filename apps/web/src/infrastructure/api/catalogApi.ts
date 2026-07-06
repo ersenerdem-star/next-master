@@ -1,6 +1,6 @@
 import type { CatalogRow } from "../../types/catalog";
 import { normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
-import { normalizeCatalogDescription, normalizeCatalogDisplayCode, normalizeCatalogOrigin } from "../../domain/shared/catalogFormatting";
+import { normalizeCatalogDescription, normalizeCatalogOrigin } from "../../domain/shared/catalogFormatting";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import {
   buildLooseOriginalNumberPattern,
@@ -296,8 +296,58 @@ export async function createCloudCatalogRow(input: {
 }
 
 export async function deleteCloudCatalogRow(productId: string) {
-  const { error } = await supabaseClient.from("catalog_products").delete().eq("id", productId);
-  if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Catalog delete failed"));
+  const data = await callAppRpc<{
+    deleted?: boolean;
+    reason?: string;
+    product_id?: string;
+    product_code?: string;
+    brand?: string;
+    reference_summary?: Array<{ key?: string; label?: string; count?: number }>;
+  }>("delete_catalog_product_guarded", {
+    product_id: productId,
+  });
+
+  if (!data?.deleted) {
+    throw new CatalogDeleteBlockedError({
+      productId: String(data?.product_id || productId),
+      productCode: String(data?.product_code || ""),
+      brand: String(data?.brand || ""),
+      references: Array.isArray(data?.reference_summary)
+        ? data.reference_summary.map((row) => ({
+            key: String(row.key || ""),
+            label: String(row.label || ""),
+            count: Number(row.count || 0),
+          }))
+        : [],
+    });
+  }
+}
+
+export type CatalogDeleteReferenceSummary = {
+  key: string;
+  label: string;
+  count: number;
+};
+
+export class CatalogDeleteBlockedError extends Error {
+  productId: string;
+  productCode: string;
+  brand: string;
+  references: CatalogDeleteReferenceSummary[];
+
+  constructor(input: {
+    productId: string;
+    productCode: string;
+    brand: string;
+    references: CatalogDeleteReferenceSummary[];
+  }) {
+    super("Catalog delete blocked");
+    this.name = "CatalogDeleteBlockedError";
+    this.productId = input.productId;
+    this.productCode = input.productCode;
+    this.brand = input.brand;
+    this.references = input.references;
+  }
 }
 
 export async function fetchCatalogExportRows(input: { brandName: string; search?: string; marketSegment?: string }) {
