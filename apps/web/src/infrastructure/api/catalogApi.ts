@@ -1,6 +1,6 @@
 import type { CatalogRow } from "../../types/catalog";
 import { normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
-import { normalizeCatalogDescription, normalizeCatalogOrigin } from "../../domain/shared/catalogFormatting";
+import { normalizeCatalogDisplayCode, normalizeCatalogDescription, normalizeCatalogOrigin } from "../../domain/shared/catalogFormatting";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import {
   buildLooseOriginalNumberPattern,
