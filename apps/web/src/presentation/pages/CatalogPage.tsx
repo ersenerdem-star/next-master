@@ -15,7 +15,7 @@ import {
 } from "../../infrastructure/api/catalogApi";
 import { fetchCatalogProductMedia } from "../../infrastructure/api/catalogMediaApi";
 import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenceUsage } from "../../infrastructure/api/codeReferencesApi";
-import { bulkImportCatalog } from "../../infrastructure/api/importApi";
+import { bulkImportCatalog, type CatalogImportResult } from "../../infrastructure/api/importApi";
 import { matchesOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import type { BrandOption } from "../../types/brand";
 import type { CatalogRow } from "../../types/catalog";
@@ -188,6 +188,7 @@ export function CatalogPage() {
   const [rowActionKey, setRowActionKey] = useState("");
   const [deleteBlockSummary, setDeleteBlockSummary] = useState<CatalogDeleteReferenceSummary[] | null>(null);
   const [importingCatalog, setImportingCatalog] = useState(false);
+  const [catalogImportSummary, setCatalogImportSummary] = useState<CatalogImportResult | null>(null);
   const [syncingBrandCatalog, setSyncingBrandCatalog] = useState(false);
   const [creatingItem, setCreatingItem] = useState(false);
   const [savingReference, setSavingReference] = useState(false);
@@ -1081,6 +1082,7 @@ export function CatalogPage() {
     setLoading(true);
     setError("");
     setStatus("");
+    setCatalogImportSummary(null);
     setImportingCatalog(true);
     try {
       const text = await file.text();
@@ -1151,7 +1153,7 @@ export function CatalogPage() {
           lifecycle_status: normalizeCatalogLifecycleStatus(normalizeText(row[lifecycleStatusIndex])),
           lifecycle_note: normalizeText(row[lifecycleNoteIndex]),
         }))
-        .filter((row) => row.product_code);
+        .filter((row) => Object.values(row).some((value) => value != null && String(value).trim().length > 0));
 
       if (!payload.length) {
         throw new Error(t("catalog.errors.noValidImportRows"));
@@ -1165,7 +1167,30 @@ export function CatalogPage() {
         ),
       );
 
-      await bulkImportCatalog(payload);
+      const importResult = await bulkImportCatalog(payload, {
+        brandName: activeImportBrand,
+        marketSegment: activeImportSegment,
+        onProgress: ({ processedChunks, totalChunks, processedRows, totalRows }) => {
+          setStatus(
+            `Catalog import running for ${activeImportBrand}: ${processedRows}/${totalRows} rows (${processedChunks}/${totalChunks} batches).`,
+          );
+        },
+      });
+      setCatalogImportSummary(importResult);
+
+      const summaryText = `Catalog import ${importResult.finalized ? "finalized" : "validated"} for ${activeImportBrand}. ` +
+        `${importResult.insertCount.toLocaleString("en-US")} inserted, ${importResult.updateCount.toLocaleString("en-US")} updated, ` +
+        `${importResult.skipCount.toLocaleString("en-US")} skipped, ${importResult.errorCount.toLocaleString("en-US")} errors, ` +
+        `${importResult.conflictCount.toLocaleString("en-US")} conflicts.`;
+
+      if (!importResult.finalized) {
+        const blockedMessage = importResult.message || "Catalog import validation failed. Finalize is blocked.";
+        setError(blockedMessage);
+        setStatus(`${summaryText} Finalize blocked.`);
+        actionFeedback.fail(blockedMessage);
+        return;
+      }
+
       const refreshedBrands = await fetchCloudBrands();
       setBrands(refreshedBrands);
       const matchedBrand = refreshedBrands.find((item) => item.name.trim().toLowerCase() === activeImportBrand.trim().toLowerCase());
@@ -1198,8 +1223,8 @@ export function CatalogPage() {
       setDrafts({});
       setShowImportDialog(false);
       setImportFile(null);
-      setStatus(t("catalog.status.importCompletedReview", { brand: activeImportBrand }));
-      actionFeedback.succeed(t("catalog.status.importCompleted", { brand: activeImportBrand }));
+      setStatus(`${summaryText} Showing imported codes for review.`);
+      actionFeedback.succeed(`Catalog import finalized for ${activeImportBrand}.`);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : t("catalog.errors.importFailed");
       setError(message);
@@ -1398,6 +1423,7 @@ export function CatalogPage() {
               variant="secondary"
               onClick={() => {
                 setImportCatalogSegment(catalogSegment);
+                setCatalogImportSummary(null);
                 setShowImportDialog(true);
               }}
               disabled={!isOnline}
@@ -1671,6 +1697,7 @@ export function CatalogPage() {
                   type="file"
                   accept=".csv,text/csv"
                   onChange={(event) => {
+                    setCatalogImportSummary(null);
                     setImportFile(event.target.files?.[0] ?? null);
                   }}
                 />
@@ -1709,6 +1736,7 @@ export function CatalogPage() {
                   setImportBrand("");
                   setImportBrandName("");
                   setImportCatalogSegment("");
+                  setCatalogImportSummary(null);
                 }}
               >
 	                {t("catalog.actions.cancelImport")}
@@ -1724,6 +1752,24 @@ export function CatalogPage() {
 	                {t("catalog.actions.import")}
 	              </Button>
             </div>
+            {catalogImportSummary ? (
+              <div className="info-text">
+                <strong>{catalogImportSummary.finalized ? "Finalize summary" : "Validation summary"}</strong>
+                <ul>
+                  <li>Total rows: {formatCount(catalogImportSummary.totalRows)}</li>
+                  <li>Insert: {formatCount(catalogImportSummary.insertCount)}</li>
+                  <li>Update: {formatCount(catalogImportSummary.updateCount)}</li>
+                  <li>Skip: {formatCount(catalogImportSummary.skipCount)}</li>
+                  <li>Error: {formatCount(catalogImportSummary.errorCount)}</li>
+                  <li>Conflict: {formatCount(catalogImportSummary.conflictCount)}</li>
+                </ul>
+                <div>
+                  {catalogImportSummary.finalized
+                    ? "Catalog import finalized successfully."
+                    : catalogImportSummary.message || "Validation errors detected. Finalize is blocked."}
+                </div>
+              </div>
+            ) : null}
           </DraggableSurface>
         </div>
       ) : null}

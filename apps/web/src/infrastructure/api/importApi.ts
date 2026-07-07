@@ -1,8 +1,9 @@
-import { normalizeCatalogDescription, normalizeCatalogDisplayCode } from "../../domain/shared/catalogFormatting";
+import { normalizeCatalogDescription } from "../../domain/shared/catalogFormatting";
 import { normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
 import { callAppRpc } from "./appRpcApi";
 import { supabaseClient } from "./supabaseClient";
 import { sanitizeUserFacingMessage } from "../../shared/userMessage";
+import { formatCanonicalProductCode } from "../../shared/productCodeDisplay";
 
 export type SupplierImportProgress = {
   processedChunks: number;
@@ -43,6 +44,22 @@ export type SupplierImportResult = {
   rollupRefreshMessage: string | null;
 };
 
+export type CatalogImportResult = {
+  runId: string | null;
+  totalRows: number;
+  totalChunks: number;
+  stagedRows: number;
+  insertCount: number;
+  updateCount: number;
+  skipCount: number;
+  errorCount: number;
+  duplicateCount: number;
+  conflictCount: number;
+  validationStatus: "validated" | "validation_failed" | "finalized";
+  finalized: boolean;
+  message: string | null;
+};
+
 type SupplierImportChunkResult = {
   processed?: number;
   catalog_synced?: number;
@@ -70,6 +87,38 @@ type SupplierPriceImportRun = {
   catalog_synced: number | null;
 };
 
+type CatalogImportChunkResult = {
+  staged_count?: number;
+  error_count?: number;
+  total_count?: number;
+};
+
+type CatalogImportRunResult = {
+  run_id: string;
+  status: string;
+};
+
+type CatalogImportValidationResult = {
+  run_id: string;
+  status: "validated" | "validation_failed" | string;
+  total_count: number;
+  insert_count: number;
+  update_count: number;
+  skip_count: number;
+  error_count: number;
+  duplicate_count: number;
+  conflict_count: number;
+};
+
+type CatalogImportFinalizeResult = {
+  run_id: string;
+  status: string;
+  inserted_count: number;
+  updated_count: number;
+  skipped_count: number;
+  error_count: number;
+};
+
 type SupplierRollupRefreshOutcome = {
   run: SupplierPriceRollupRefreshRun | null;
   pending: boolean;
@@ -84,6 +133,12 @@ const SUPPLIER_IMPORT_POLL_INTERVAL_MS = 1500;
 const SUPPLIER_IMPORT_FINALIZE_CONFIRM_RETRY_LIMIT = 5;
 const SUPPLIER_IMPORT_REFRESH_CONFIRM_RETRY_LIMIT = 3;
 const SUPPLIER_IMPORT_LOOKBACK_MS = 10000;
+const CATALOG_IMPORT_MAX_BATCH_ROWS = 100;
+const CATALOG_IMPORT_TARGET_BATCH_BYTES = 48000;
+const CATALOG_IMPORT_CHUNK_RETRY_LIMIT = 2;
+const CATALOG_IMPORT_CHUNK_RETRY_BACKOFF_MS = 1000;
+const CATALOG_IMPORT_POLL_INTERVAL_MS = 1500;
+const CATALOG_IMPORT_FINALIZE_CONFIRM_RETRY_LIMIT = 5;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -122,6 +177,11 @@ function buildAdaptiveSupplierImportBatches(payload: Array<Record<string, unknow
 
   flushCurrentBatch();
   return batches;
+}
+
+function normalizeCatalogImportProductCode(row: Record<string, unknown>, fallbackBrand = "") {
+  const brand = String(row.brand ?? row.Brand ?? row.brand_name ?? fallbackBrand ?? "");
+  return formatCanonicalProductCode(String(row.product_code || ""), brand);
 }
 
 function isTimeoutLikeMessage(message: string) {
@@ -229,18 +289,268 @@ export function describeSupplierImportStatus(status: SupplierImportStatus) {
   }
 }
 
-export async function bulkImportCatalog(payload: Array<Record<string, unknown>>) {
-  const normalizedPayload = payload.map((row) => ({
+function buildAdaptiveCatalogImportBatches(payload: Array<Record<string, unknown>>) {
+  const batches: Array<{ rows: Array<Record<string, unknown>>; startRowIndex: number }> = [];
+  let currentRows: Array<Record<string, unknown>> = [];
+  let currentBytes = 2;
+  let currentStartRowIndex = 0;
+
+  function flushCurrentBatch() {
+    if (!currentRows.length) return;
+    batches.push({ rows: currentRows, startRowIndex: currentStartRowIndex });
+    currentRows = [];
+    currentBytes = 2;
+  }
+
+  payload.forEach((row, rowIndex) => {
+    const rowBytes = Math.max(estimateJsonBytes(row), 1);
+    const wouldExceedRowCount = currentRows.length >= CATALOG_IMPORT_MAX_BATCH_ROWS;
+    const wouldExceedByteTarget = currentRows.length > 0 && currentBytes + rowBytes + 1 > CATALOG_IMPORT_TARGET_BATCH_BYTES;
+
+    if (wouldExceedRowCount || wouldExceedByteTarget) {
+      flushCurrentBatch();
+      currentStartRowIndex = rowIndex;
+    }
+
+    currentRows.push(row);
+    currentBytes += rowBytes + 1;
+  });
+
+  flushCurrentBatch();
+  return batches;
+}
+
+async function importCatalogChunkWithRetry(input: {
+  chunk: Array<Record<string, unknown>>;
+  chunkNumber: number;
+  totalChunks: number;
+  processedRowsBeforeFailure: number;
+  runId: string;
+}): Promise<CatalogImportChunkResult> {
+  let lastError: Error | null = null;
+  const context = `Catalog upload batch ${input.chunkNumber}/${input.totalChunks}`;
+
+  for (let attempt = 0; attempt <= CATALOG_IMPORT_CHUNK_RETRY_LIMIT; attempt += 1) {
+    try {
+      return await callImportRpc<CatalogImportChunkResult>(
+        "stage_catalog_import_chunk",
+        { input_run_id: input.runId, payload: input.chunk },
+        context,
+      );
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error || ""));
+      if (!isTimeoutLikeMessage(lastError.message) || attempt >= CATALOG_IMPORT_CHUNK_RETRY_LIMIT) {
+        break;
+      }
+      await sleep(CATALOG_IMPORT_CHUNK_RETRY_BACKOFF_MS * (attempt + 1));
+    }
+  }
+
+  const reason = lastError?.message ? ` ${lastError.message}` : "";
+  throw new Error(
+    `${context} failed after ${CATALOG_IMPORT_CHUNK_RETRY_LIMIT + 1} attempts. ` +
+      `${input.processedRowsBeforeFailure} rows were processed before this failed chunk.${reason}`,
+  );
+}
+
+async function importCatalogChunkWithAdaptiveRetry(input: {
+  chunk: Array<Record<string, unknown>>;
+  chunkNumber: number;
+  totalChunks: number;
+  processedRowsBeforeFailure: number;
+  runId: string;
+}): Promise<CatalogImportChunkResult> {
+  try {
+    return await importCatalogChunkWithRetry(input);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "");
+    if (!isTimeoutLikeMessage(message) || input.chunk.length <= 1) {
+      throw error;
+    }
+
+    const midpoint = Math.max(1, Math.floor(input.chunk.length / 2));
+    const firstHalf = input.chunk.slice(0, midpoint);
+    const secondHalf = input.chunk.slice(midpoint);
+    const firstResult: CatalogImportChunkResult = await importCatalogChunkWithAdaptiveRetry({
+      chunk: firstHalf,
+      chunkNumber: input.chunkNumber,
+      totalChunks: input.totalChunks,
+      processedRowsBeforeFailure: input.processedRowsBeforeFailure,
+      runId: input.runId,
+    });
+    const secondResult: CatalogImportChunkResult = await importCatalogChunkWithAdaptiveRetry({
+      chunk: secondHalf,
+      chunkNumber: input.chunkNumber,
+      totalChunks: input.totalChunks,
+      processedRowsBeforeFailure: input.processedRowsBeforeFailure + midpoint,
+      runId: input.runId,
+    });
+
+    return {
+      staged_count: Number(firstResult?.staged_count || firstHalf.length) + Number(secondResult?.staged_count || secondHalf.length),
+      error_count: Number(firstResult?.error_count || 0) + Number(secondResult?.error_count || 0),
+      total_count: Number(firstResult?.total_count || firstHalf.length) + Number(secondResult?.total_count || secondHalf.length),
+    };
+  }
+}
+
+async function beginCatalogImport(input: { brandName?: string; marketSegment?: string }) {
+  return callImportRpc<CatalogImportRunResult>(
+    "begin_catalog_import",
+    {
+      input_scope: {
+        source: "catalog_csv",
+        brand: input.brandName || null,
+        market_segment: input.marketSegment || null,
+      },
+      input_mode: "upsert",
+    },
+    "Catalog import start",
+  );
+}
+
+async function validateCatalogImport(runId: string) {
+  return callImportRpc<CatalogImportValidationResult>(
+    "validate_catalog_import",
+    { input_run_id: runId },
+    "Catalog import validation",
+  );
+}
+
+async function finalizeCatalogImport(runId: string) {
+  return callImportRpc<CatalogImportFinalizeResult>(
+    "finalize_catalog_import",
+    { input_run_id: runId },
+    "Catalog import finalization",
+  );
+}
+
+async function failCatalogImport(runId: string, message: string) {
+  return callImportRpc(
+    "fail_catalog_import",
+    { input_run_id: runId, message },
+    "Catalog import failure recording",
+  );
+}
+
+export async function bulkImportCatalog(
+  payload: Array<Record<string, unknown>>,
+  options?: {
+    brandName?: string;
+    marketSegment?: string;
+    onProgress?: (input: { processedChunks: number; totalChunks: number; processedRows: number; totalRows: number }) => void;
+  },
+): Promise<CatalogImportResult> {
+  const totalRows = payload.length;
+
+  if (!totalRows) {
+    return {
+      runId: null,
+      totalRows: 0,
+      totalChunks: 0,
+      stagedRows: 0,
+      insertCount: 0,
+      updateCount: 0,
+      skipCount: 0,
+      errorCount: 0,
+      duplicateCount: 0,
+      conflictCount: 0,
+      validationStatus: "validated",
+      finalized: false,
+      message: "Catalog import did not contain any rows.",
+    };
+  }
+
+  const normalizedPayload = payload.map((row, rowIndex) => ({
     ...row,
-    product_code: normalizeCatalogDisplayCode(
-      String(row.product_code || ""),
-      String(row.brand || row.Brand || row.brand_name || ""),
-    ),
+    row_index: Number.isFinite(Number(row.row_index)) ? Number(row.row_index) : rowIndex,
+    product_code: normalizeCatalogImportProductCode(row, options?.brandName),
     description: row.description == null ? null : normalizeCatalogDescription(String(row.description || "")),
     vehicle: row.vehicle == null ? null : String(row.vehicle || "").trim() || null,
     market_segment: normalizeCatalogMarketSegment(String(row.market_segment || "")),
   }));
-  await callAppRpc("bulk_import_catalog", { payload: normalizedPayload });
+  const batches = buildAdaptiveCatalogImportBatches(normalizedPayload);
+  const totalChunks = Math.max(1, batches.length);
+  const importRun = await beginCatalogImport({
+    brandName: options?.brandName,
+    marketSegment: options?.marketSegment,
+  });
+  const runId = importRun.run_id;
+  let stagedRows = 0;
+
+  try {
+    for (let index = 0; index < batches.length; index += 1) {
+      const batch = batches[index];
+      const chunk = batch.rows;
+      const chunkNumber = index + 1;
+      const progress = {
+        processedChunks: chunkNumber,
+        totalChunks,
+        processedRows: Math.min(batch.startRowIndex + chunk.length, totalRows),
+        totalRows,
+      };
+
+      const data = await importCatalogChunkWithAdaptiveRetry({
+        chunk,
+        chunkNumber,
+        totalChunks,
+        processedRowsBeforeFailure: batch.startRowIndex,
+        runId,
+      });
+
+      stagedRows += Number((data as { staged_count?: number } | null)?.staged_count || chunk.length);
+      options?.onProgress?.(progress);
+    }
+
+    const validation = await validateCatalogImport(runId);
+    const validationStatus = validation.status === "validated" ? "validated" : "validation_failed";
+    const validationMessage =
+      validationStatus === "validated"
+        ? null
+        : validation.error_count > 0
+          ? "Catalog import validation failed. Fix the blocked rows and try again."
+          : "Catalog import could not be validated.";
+
+    if (validationStatus === "validation_failed") {
+      return {
+        runId,
+        totalRows,
+        totalChunks,
+        stagedRows,
+        insertCount: Number(validation.insert_count || 0),
+        updateCount: Number(validation.update_count || 0),
+        skipCount: Number(validation.skip_count || 0),
+        errorCount: Number(validation.error_count || 0),
+        duplicateCount: Number(validation.duplicate_count || 0),
+        conflictCount: Number(validation.conflict_count || 0),
+        validationStatus,
+        finalized: false,
+        message: validationMessage,
+      };
+    }
+
+    const finalized = await finalizeCatalogImport(runId);
+
+    return {
+      runId,
+      totalRows,
+      totalChunks,
+      stagedRows,
+      insertCount: Number(finalized.inserted_count || 0),
+      updateCount: Number(finalized.updated_count || 0),
+      skipCount: Number(finalized.skipped_count || 0),
+      errorCount: Number(finalized.error_count || 0),
+      duplicateCount: Number(validation.duplicate_count || 0),
+      conflictCount: Number(validation.conflict_count || 0),
+      validationStatus: "finalized",
+      finalized: true,
+      message: "Catalog import finalized successfully.",
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "Catalog import failed");
+    await failCatalogImport(runId, message).catch(() => undefined);
+    throw error;
+  }
 }
 
 async function waitForSupplierPriceRollupRefresh(

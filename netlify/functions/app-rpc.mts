@@ -8,6 +8,7 @@ import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 const ALLOWED_RPCS = new Set([
   "admin_list_org_users",
+  "begin_catalog_import",
   "begin_supplier_price_import",
   "begin_customer_price_list_replace",
   "bulk_import_catalog",
@@ -34,8 +35,10 @@ const ALLOWED_RPCS = new Set([
   "cloud_supplier_price_page",
   "delete_catalog_product_guarded",
   "deactivate_supplier_prices_by_filter",
+  "fail_catalog_import",
   "fail_supplier_price_import",
   "fail_customer_price_list_replace",
+  "finalize_catalog_import",
   "finalize_supplier_price_import",
   "finalize_customer_price_list_replace",
   "get_cloud_quote",
@@ -49,9 +52,12 @@ const ALLOWED_RPCS = new Set([
   "save_payment_received_atomic",
   "save_purchase_order_atomic",
   "save_sales_order_atomic",
+  "cancel_catalog_import",
   "cancel_customer_price_list_replace",
+  "stage_catalog_import_chunk",
   "stage_customer_price_list_replace_chunk",
   "stage_supplier_price_import_chunk",
+  "validate_catalog_import",
   "touch_user_presence",
 ]);
 
@@ -70,6 +76,7 @@ const SUPERADMIN_RPCS = new Set([
 ]);
 
 const OPERATIONS_RPCS = new Set([
+  "begin_catalog_import",
   "begin_customer_price_list_replace",
   "begin_supplier_price_import",
   "bulk_import_supplier_prices",
@@ -78,11 +85,14 @@ const OPERATIONS_RPCS = new Set([
   "cloud_master_page_fast",
   "cloud_master_priced_export_page_fast",
   "cloud_master_priced_page_fast",
+  "cancel_catalog_import",
   "cancel_customer_price_list_replace",
   "delete_bill_guarded",
   "delete_invoice_guarded",
+  "fail_catalog_import",
   "fail_customer_price_list_replace",
   "fail_supplier_price_import",
+  "finalize_catalog_import",
   "finalize_customer_price_list_replace",
   "finalize_supplier_price_import",
   "delete_payment_made_guarded",
@@ -94,6 +104,8 @@ const OPERATIONS_RPCS = new Set([
   "save_invoice_atomic",
   "save_payment_made_atomic",
   "save_payment_received_atomic",
+  "stage_catalog_import_chunk",
+  "validate_catalog_import",
   "stage_supplier_price_import_chunk",
   "stage_customer_price_list_replace_chunk",
 ]);
