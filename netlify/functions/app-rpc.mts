@@ -57,25 +57,22 @@ const ALLOWED_RPCS = new Set([
 
 const SUPERADMIN_RPCS = new Set([
   "admin_list_org_users",
-  "begin_supplier_price_import",
   "bulk_import_catalog",
-  "bulk_import_supplier_prices",
   "cloud_catalog_page",
   "cloud_supplier_brand_summary",
   "cloud_supplier_price_page",
   "delete_catalog_product_guarded",
   "deactivate_supplier_prices_by_filter",
-  "fail_supplier_price_import",
-  "finalize_supplier_price_import",
   "get_latest_supplier_price_rollup_refresh_run",
   "list_cloud_suppliers",
   "queue_supplier_price_rollups_refresh",
   "search_catalog_products",
-  "stage_supplier_price_import_chunk",
 ]);
 
 const OPERATIONS_RPCS = new Set([
   "begin_customer_price_list_replace",
+  "begin_supplier_price_import",
+  "bulk_import_supplier_prices",
   "cloud_master_export",
   "cloud_master_page",
   "cloud_master_page_fast",
@@ -85,7 +82,9 @@ const OPERATIONS_RPCS = new Set([
   "delete_bill_guarded",
   "delete_invoice_guarded",
   "fail_customer_price_list_replace",
+  "fail_supplier_price_import",
   "finalize_customer_price_list_replace",
+  "finalize_supplier_price_import",
   "delete_payment_made_guarded",
   "delete_payment_received_guarded",
   "post_purchase_receive_atomic",
@@ -95,6 +94,7 @@ const OPERATIONS_RPCS = new Set([
   "save_invoice_atomic",
   "save_payment_made_atomic",
   "save_payment_received_atomic",
+  "stage_supplier_price_import_chunk",
   "stage_customer_price_list_replace_chunk",
 ]);
 
