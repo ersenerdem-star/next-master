@@ -427,9 +427,10 @@ export function SuppliersPage() {
       const completionMessage = `Supplier import completed for ${activeSupplierName} / ${activeImportBrand}. ${importResult.processed} rows processed in ${importResult.totalChunks} batches.`;
       setStatus(completionMessage);
       setWarning(
-        importResult.rollupRefreshPending
-          ? importResult.rollupRefreshMessage || "Rollup refresh is still processing in the background."
-          : importResult.rollupRefreshMessage || "",
+        [importResult.catalogSyncMessage, importResult.rollupRefreshMessage]
+          .filter((item): item is string => Boolean(item))
+          .join(" ")
+          .trim(),
       );
       actionFeedback.succeed(`Supplier import completed for ${activeSupplierName} / ${activeImportBrand}.`);
     } catch (caught) {

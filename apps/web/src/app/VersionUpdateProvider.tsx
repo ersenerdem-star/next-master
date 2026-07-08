@@ -67,6 +67,7 @@ const SENSITIVE_APP_RPC_NAMES = new Set([
   "deactivate_supplier_prices_by_filter",
   "fail_supplier_price_import",
   "finalize_supplier_price_import",
+  "queue_supplier_price_catalog_sync",
   "queue_supplier_price_rollups_refresh",
   "stage_supplier_price_import_chunk",
 ]);

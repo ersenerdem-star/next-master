@@ -39,6 +39,9 @@ export type SupplierImportResult = {
   catalogSynced: number;
   totalRows: number;
   totalChunks: number;
+  catalogSyncStatus: "pending" | "running" | "succeeded" | "failed";
+  catalogSyncPending: boolean;
+  catalogSyncMessage: string | null;
   rollupRefreshRun: SupplierPriceRollupRefreshRun | null;
   rollupRefreshPending: boolean;
   rollupRefreshMessage: string | null;
@@ -78,13 +81,17 @@ type SupplierImportFinalizeResult = {
   processed?: number;
   catalog_synced?: number;
   deactivated?: number;
+  catalog_sync_status?: "pending" | "running" | "succeeded" | "failed" | string;
+  catalog_sync_error_message?: string | null;
 };
 
-type SupplierPriceImportRun = {
+type SupplierPriceImportRunState = {
   status: "running" | "finalizing" | "succeeded" | "failed" | string;
   error_message: string | null;
   processed_rows: number | null;
   catalog_synced: number | null;
+  catalog_sync_status: "pending" | "running" | "succeeded" | "failed" | string | null;
+  catalog_sync_error_message: string | null;
 };
 
 type CatalogImportChunkResult = {
@@ -222,7 +229,7 @@ async function callImportRpc<T>(name: string, args: Record<string, unknown>, con
 async function fetchSupplierPriceImportRun(runId: string) {
   const { data, error } = await supabaseClient
     .from("supplier_price_import_runs")
-    .select("status,error_message,processed_rows,catalog_synced")
+    .select("status,error_message,processed_rows,catalog_synced,catalog_sync_status,catalog_sync_error_message")
     .eq("id", runId)
     .limit(1);
 
@@ -230,16 +237,32 @@ async function fetchSupplierPriceImportRun(runId: string) {
     throw new Error(sanitizeUserFacingMessage(error.message, "Supplier import status could not be confirmed."));
   }
 
-  const rows = (data || []) as SupplierPriceImportRun[];
+  const rows = (data || []) as SupplierPriceImportRunState[];
   return rows[0] || null;
 }
 
 async function confirmSupplierPriceImportRun(runId: string) {
-  let latestRun: SupplierPriceImportRun | null = null;
+  let latestRun: SupplierPriceImportRunState | null = null;
 
   for (let attempt = 0; attempt < SUPPLIER_IMPORT_FINALIZE_CONFIRM_RETRY_LIMIT; attempt += 1) {
     latestRun = await fetchSupplierPriceImportRun(runId);
     if (!latestRun || latestRun.status === "running" || latestRun.status === "finalizing") {
+      await sleep(SUPPLIER_IMPORT_POLL_INTERVAL_MS);
+      continue;
+    }
+    return latestRun;
+  }
+
+  return latestRun;
+}
+
+async function confirmSupplierPriceCatalogSyncRun(runId: string) {
+  let latestRun: SupplierPriceImportRunState | null = null;
+
+  for (let attempt = 0; attempt < SUPPLIER_IMPORT_REFRESH_CONFIRM_RETRY_LIMIT; attempt += 1) {
+    latestRun = await fetchSupplierPriceImportRun(runId);
+    const syncStatus = String(latestRun?.catalog_sync_status || "pending");
+    if (!latestRun || syncStatus === "pending" || syncStatus === "running") {
       await sleep(SUPPLIER_IMPORT_POLL_INTERVAL_MS);
       continue;
     }
@@ -612,6 +635,14 @@ async function queueAndCheckSupplierPriceRollupRefresh(
   };
 }
 
+async function queueSupplierPriceCatalogSync(runId: string) {
+  return callImportRpc<{ queued?: boolean; status?: string; catalog_sync_status?: string; run_id?: string }>(
+    "queue_supplier_price_catalog_sync",
+    { input_run_id: runId },
+    "Catalog sync queue",
+  );
+}
+
 async function importSupplierPriceChunkWithRetry(input: {
   chunk: Array<Record<string, unknown>>;
   chunkNumber: number;
@@ -729,6 +760,9 @@ export async function bulkImportSupplierPrices(
 ): Promise<SupplierImportResult> {
   let processed = 0;
   let catalogSynced = 0;
+  let catalogSyncStatus: SupplierImportResult["catalogSyncStatus"] = "pending";
+  let catalogSyncPending = true;
+  let catalogSyncMessage: string | null = "Catalog sync is processing in the background.";
   const totalRows = payload.length;
 
   if (!totalRows) {
@@ -737,6 +771,9 @@ export async function bulkImportSupplierPrices(
       catalogSynced: 0,
       totalRows: 0,
       totalChunks: 0,
+      catalogSyncStatus: "succeeded",
+      catalogSyncPending: false,
+      catalogSyncMessage: null,
       rollupRefreshRun: null,
       rollupRefreshPending: false,
       rollupRefreshMessage: null,
@@ -816,12 +853,20 @@ export async function bulkImportSupplierPrices(
         processed = Number(finalized?.processed ?? processed);
         catalogSynced = Number(finalized?.catalog_synced ?? catalogSynced);
         finalizedImport = true;
+        catalogSyncStatus = String(finalized?.catalog_sync_status || "pending") as SupplierImportResult["catalogSyncStatus"];
+        catalogSyncPending = catalogSyncStatus === "pending" || catalogSyncStatus === "running";
+        catalogSyncMessage = catalogSyncPending ? "Catalog sync is processing in the background." : null;
       } catch (error) {
         const confirmedRun = await confirmSupplierPriceImportRun(runId);
         if (confirmedRun?.status === "succeeded") {
           processed = Number(confirmedRun.processed_rows ?? processed);
           catalogSynced = Number(confirmedRun.catalog_synced ?? catalogSynced);
           finalizedImport = true;
+          catalogSyncStatus = String(confirmedRun.catalog_sync_status || "pending") as SupplierImportResult["catalogSyncStatus"];
+          catalogSyncPending = catalogSyncStatus === "pending" || catalogSyncStatus === "running";
+          catalogSyncMessage = catalogSyncPending
+            ? "Catalog sync is processing in the background."
+            : confirmedRun.catalog_sync_error_message || null;
         } else if (confirmedRun?.status === "failed") {
           throw new Error(
             confirmedRun.error_message ||
@@ -829,6 +874,32 @@ export async function bulkImportSupplierPrices(
           );
         } else {
           throw error;
+        }
+      }
+
+      if (finalizedImport) {
+        try {
+          const catalogSyncQueued = await queueSupplierPriceCatalogSync(runId);
+          const confirmedCatalogSync = await confirmSupplierPriceCatalogSyncRun(runId);
+          const latestCatalogSyncStatus = String(confirmedCatalogSync?.catalog_sync_status || catalogSyncQueued?.catalog_sync_status || "pending") as SupplierImportResult["catalogSyncStatus"];
+          catalogSyncStatus = latestCatalogSyncStatus;
+          if (latestCatalogSyncStatus === "succeeded") {
+            catalogSyncPending = false;
+            catalogSyncMessage = null;
+            catalogSynced = Number(confirmedCatalogSync?.catalog_synced ?? catalogSynced);
+          } else if (latestCatalogSyncStatus === "failed") {
+            catalogSyncPending = false;
+            catalogSyncMessage =
+              confirmedCatalogSync?.catalog_sync_error_message ||
+              "Catalog sync failed in the background. Retry catalog synchronization from the supplier import run.";
+          } else {
+            catalogSyncPending = true;
+            catalogSyncMessage = "Catalog sync is processing in the background.";
+          }
+        } catch (error) {
+          catalogSyncStatus = "pending";
+          catalogSyncPending = true;
+          catalogSyncMessage = error instanceof Error ? error.message : "Catalog sync is processing in the background.";
         }
       }
     }
@@ -858,6 +929,9 @@ export async function bulkImportSupplierPrices(
     catalogSynced,
     totalRows,
     totalChunks,
+    catalogSyncStatus,
+    catalogSyncPending,
+    catalogSyncMessage,
     rollupRefreshRun: rollupRefresh?.run ?? null,
     rollupRefreshPending: rollupRefresh?.pending ?? false,
     rollupRefreshMessage: rollupRefresh?.message ?? null,

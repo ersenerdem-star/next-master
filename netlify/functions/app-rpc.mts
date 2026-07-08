@@ -26,6 +26,7 @@ const ALLOWED_RPCS = new Set([
   "delete_purchase_order_guarded",
   "delete_sales_order_guarded",
   "get_latest_supplier_price_rollup_refresh_run",
+  "queue_supplier_price_catalog_sync",
   "queue_supplier_price_rollups_refresh",
   "post_invoice_stock_movements",
   "search_catalog_products",
@@ -100,6 +101,7 @@ const OPERATIONS_RPCS = new Set([
   "post_purchase_receive_atomic",
   "post_invoice_stock_movements",
   "reverse_invoice_stock_movements",
+  "queue_supplier_price_catalog_sync",
   "save_bill_atomic",
   "save_invoice_atomic",
   "save_payment_made_atomic",
@@ -1049,6 +1051,37 @@ export default async (req: Request, context: Context) => {
 
       context.waitUntil(task);
       return json({ ok: true, data: { queued: true, status: "queued", organization_id: caller.organizationId } });
+    }
+
+    if (name === "queue_supplier_price_catalog_sync") {
+      const runId = String(args.input_run_id || "").trim();
+      const task = (async () => {
+        await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/sync_supplier_price_catalog_from_import`, {
+          method: "POST",
+          headers: {
+            apikey: supabaseAnonKey,
+            Authorization: authorizationHeader,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            input_run_id: runId,
+          }),
+        });
+      })().catch((error) => {
+        console.error("supplier price catalog sync failed", error);
+      });
+
+      context.waitUntil(task);
+      return json({
+        ok: true,
+        data: {
+          queued: true,
+          status: "queued",
+          catalog_sync_status: "pending",
+          run_id: runId || null,
+          organization_id: caller.organizationId,
+        },
+      });
     }
 
     if (name === "get_latest_supplier_price_rollup_refresh_run") {
