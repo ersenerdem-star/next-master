@@ -27,6 +27,7 @@ import { fetchWarehouseStockItems } from "../../infrastructure/api/inventoryApi"
 import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
 import { includesLooseText } from "../../domain/shared/normalize";
 import { buildEntityAlias } from "../../shared/entityAlias";
+import { getOperationDefinition, isRegisteredOperation } from "../../shared/operationsRegistry";
 import { isImportFailedStatus, mapImportStatusToTone, type ImportEngineStatus } from "../../shared/importEngine";
 import { canAccessSystemModules } from "../../shared/roles";
 import { useI18n } from "../../i18n/I18nProvider";
@@ -277,6 +278,14 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
 
   function statusTone(status: string | null | undefined) {
     return mapImportStatusToTone(toImportEngineStatus(status));
+  }
+
+  function supportsRegisteredRetry(operationType: string) {
+    if (!isRegisteredOperation(operationType)) {
+      return true;
+    }
+
+    return getOperationDefinition(operationType)?.supports_retry ?? true;
   }
 
   function isOperationsFailedStatus(status: string | null | undefined) {
@@ -539,9 +548,9 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
                     {filteredOperationsRows.map((row) => {
                       const rowKey = `${row.supplier_id}-${row.brand}`;
                       const retryEnabled =
-                        isOperationsFailedStatus(row.supplier_import_status) ||
-                        isOperationsFailedStatus(row.catalog_sync_status) ||
-                        isOperationsFailedStatus(row.rollup_refresh_status);
+                        (supportsRegisteredRetry("supplier_import") && isOperationsFailedStatus(row.supplier_import_status)) ||
+                        (supportsRegisteredRetry("supplier_catalog_sync") && isOperationsFailedStatus(row.catalog_sync_status)) ||
+                        (supportsRegisteredRetry("supplier_rollup_refresh") && isOperationsFailedStatus(row.rollup_refresh_status));
                       return (
                         <tr key={rowKey}>
                           <td>
