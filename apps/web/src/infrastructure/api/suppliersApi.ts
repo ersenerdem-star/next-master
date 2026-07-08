@@ -1,6 +1,14 @@
 import { callAppRpc } from "./appRpcApi";
+import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
-import type { SupplierBrandSummaryRow, SupplierPriceRow, SupplierSummary } from "../../types/suppliers";
+import type {
+  SupplierBrandSummaryRow,
+  SupplierOperationsReadyStatus,
+  SupplierOperationsStatus,
+  SupplierOperationsStatusRow,
+  SupplierPriceRow,
+  SupplierSummary,
+} from "../../types/suppliers";
 import { buildLooseOriginalNumberPattern, normalizeOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 
 type SupplierSearchMode = "strict" | "loose";
@@ -34,6 +42,252 @@ function buildSupplierSearchOr(search: string, normalizedSearch: string, mode: S
     );
   }
   return clauses.join(",");
+}
+
+type SupplierPriceImportRunRow = {
+  id: string;
+  supplier_id: string;
+  brand_id: string;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  error_message: string | null;
+  staged_rows: number;
+  processed_rows: number | null;
+  catalog_synced: number | null;
+  catalog_sync_status: string | null;
+  catalog_sync_error_message: string | null;
+};
+
+type SupplierPriceRollupRefreshRun = {
+  id: string;
+  organization_id: string | null;
+  started_at: string;
+  finished_at: string | null;
+  duration_ms: number | null;
+  status: string;
+  error_message: string | null;
+  supplier_price_rollups_count: number | null;
+};
+
+function normalizeOperationsStatus(value: string | null | undefined, fallback: SupplierOperationsStatus = "idle"): SupplierOperationsStatus {
+  const normalized = String(value || "").trim().toLowerCase();
+  switch (normalized) {
+    case "running":
+    case "finalizing":
+      return "running";
+    case "failed":
+      return "failed";
+    case "finalized":
+    case "succeeded":
+      return "completed";
+    case "pending":
+      return "pending";
+    case "idle":
+      return "idle";
+    default:
+      return fallback;
+  }
+}
+
+function durationBetween(startedAt: string | null | undefined, finishedAt: string | null | undefined) {
+  const start = startedAt ? new Date(startedAt).getTime() : NaN;
+  const finish = finishedAt ? new Date(finishedAt).getTime() : NaN;
+  if (!Number.isFinite(start)) return null;
+  const resolvedFinish = Number.isFinite(finish) ? finish : Date.now();
+  return Math.max(0, resolvedFinish - start);
+}
+
+function latestTimestamp(left: string | null | undefined, right: string | null | undefined) {
+  const leftTime = left ? new Date(left).getTime() : NaN;
+  const rightTime = right ? new Date(right).getTime() : NaN;
+  if (!Number.isFinite(leftTime) && !Number.isFinite(rightTime)) return null;
+  if (!Number.isFinite(rightTime)) return left || null;
+  if (!Number.isFinite(leftTime)) return right || null;
+  return rightTime >= leftTime ? right || null : left || null;
+}
+
+function latestTimestampSource(
+  left: { at: string | null | undefined; source: string },
+  right: { at: string | null | undefined; source: string },
+): { at: string | null; source: "supplier import" | "rollup refresh" | null } {
+  const leftTime = left.at ? new Date(left.at).getTime() : NaN;
+  const rightTime = right.at ? new Date(right.at).getTime() : NaN;
+  if (!Number.isFinite(leftTime) && !Number.isFinite(rightTime)) {
+    return { at: null, source: null };
+  }
+  if (!Number.isFinite(rightTime)) return { at: left.at || null, source: left.source as "supplier import" | "rollup refresh" | null };
+  if (!Number.isFinite(leftTime)) return { at: right.at || null, source: right.source as "supplier import" | "rollup refresh" | null };
+  return rightTime >= leftTime
+    ? { at: right.at || null, source: right.source as "supplier import" | "rollup refresh" | null }
+    : { at: left.at || null, source: left.source as "supplier import" | "rollup refresh" | null };
+}
+
+async function fetchLatestSupplierImportRuns(inputOrganizationId: string) {
+  const { data, error } = await supabaseClient
+    .from("supplier_price_import_runs")
+    .select(
+      "id,supplier_id,brand_id,status,started_at,finished_at,error_message,staged_rows,processed_rows,catalog_synced,catalog_sync_status,catalog_sync_error_message",
+    )
+    .eq("organization_id", inputOrganizationId)
+    .order("started_at", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message || "Supplier import status load failed");
+  }
+
+  return (data || []) as SupplierPriceImportRunRow[];
+}
+
+async function fetchLatestSupplierPriceRollupRefreshRun(inputStartedAfter = "") {
+  const data = await callAppRpc<SupplierPriceRollupRefreshRun | null>("get_latest_supplier_price_rollup_refresh_run", {
+    started_after: inputStartedAfter,
+  });
+  return data || null;
+}
+
+export async function queueSupplierPriceCatalogSync(runId: string) {
+  return callAppRpc<{ queued?: boolean; status?: string; catalog_sync_status?: string; run_id?: string }>(
+    "queue_supplier_price_catalog_sync",
+    { input_run_id: runId },
+  );
+}
+
+export async function queueSupplierPriceRollupRefresh() {
+  return callAppRpc<{ queued?: boolean; status?: string; run_id?: string }>("queue_supplier_price_rollups_refresh", {});
+}
+
+export async function retrySupplierPriceImportFinalize(runId: string) {
+  const batchSize = 2000;
+  let latest: { status?: string; has_more?: boolean } | null = null;
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    latest = await callAppRpc<{ status?: string; has_more?: boolean }>("finalize_supplier_price_import_batch", {
+      input_run_id: runId,
+      input_batch_size: batchSize,
+    });
+
+    const status = String(latest?.status || "");
+    if (status === "finalized" || status === "succeeded" || latest?.has_more === false) {
+      return latest;
+    }
+  }
+
+  throw new Error("Supplier import finalization is still processing. Please retry.");
+}
+
+export async function fetchCloudSupplierOperationsStatusAll(inputSuppliers?: SupplierSummary[]): Promise<SupplierOperationsStatusRow[]> {
+  const suppliers = inputSuppliers?.length ? inputSuppliers : await fetchCloudSuppliers();
+  const brandSummaryRows = suppliers.length ? await fetchCloudSupplierBrandSummaryAll(suppliers) : [];
+  if (!brandSummaryRows.length) {
+    return [];
+  }
+
+  const organizationId = await getCurrentOrgId();
+  const [importRuns, rollupRun] = await Promise.all([
+    fetchLatestSupplierImportRuns(organizationId),
+    fetchLatestSupplierPriceRollupRefreshRun(),
+  ]);
+  const { data: brandRows, error: brandRowsError } = await supabaseClient
+    .from("brands")
+    .select("id,name")
+    .eq("organization_id", organizationId);
+
+  if (brandRowsError) {
+    throw new Error(brandRowsError.message || "Brand load failed");
+  }
+
+  const brandIdByName = new Map<string, string>();
+  for (const row of (brandRows || []) as Array<{ id?: string | null; name?: string | null }>) {
+    const name = String(row.name || "").trim().toLowerCase();
+    const id = String(row.id || "").trim();
+    if (name && id && !brandIdByName.has(name)) {
+      brandIdByName.set(name, id);
+    }
+  }
+
+  const latestImportByScope = new Map<string, SupplierPriceImportRunRow>();
+  for (const run of importRuns) {
+    const key = `${run.supplier_id}:${run.brand_id}`;
+    if (!latestImportByScope.has(key)) {
+      latestImportByScope.set(key, run);
+    }
+  }
+
+  const rollupStatus = normalizeOperationsStatus(rollupRun?.status, rollupRun ? "pending" : "pending");
+  const rollupDurationMs = typeof rollupRun?.duration_ms === "number" && Number.isFinite(rollupRun.duration_ms) ? rollupRun.duration_ms : null;
+
+  const mappedRows = brandSummaryRows.map((row) => {
+    const brandId = brandIdByName.get(row.brand.trim().toLowerCase()) || null;
+    const scopeKey = brandId ? `${row.supplier_id}:${brandId}` : null;
+    const importRun = scopeKey ? latestImportByScope.get(scopeKey) : null;
+    const importStatus = normalizeOperationsStatus(importRun?.status, importRun ? "running" : "idle");
+    const catalogSyncStatus = normalizeOperationsStatus(importRun?.catalog_sync_status, importRun ? "pending" : "pending");
+    const supplierImportCompleted = importStatus === "completed";
+    const catalogSyncCompleted = catalogSyncStatus === "completed";
+    const rollupCompleted = rollupStatus === "completed";
+    const customerPriceStatus: SupplierOperationsReadyStatus =
+      supplierImportCompleted && catalogSyncCompleted && rollupCompleted ? "ready" : "waiting";
+    const lastSuccessfulImportAt = importStatus === "completed" ? importRun?.finished_at || importRun?.started_at || null : null;
+    const lastSuccessfulRollupAt = rollupStatus === "completed" ? rollupRun?.finished_at || rollupRun?.started_at || null : null;
+    const lastSuccessfulSource = latestTimestampSource(
+      { at: lastSuccessfulImportAt, source: "supplier import" },
+      { at: lastSuccessfulRollupAt, source: "rollup refresh" },
+    );
+    const lastSuccessfulRefreshAt = latestTimestamp(lastSuccessfulImportAt, lastSuccessfulRollupAt);
+    const customerPriceWaitingMessage = customerPriceStatus === "ready"
+      ? null
+      : !supplierImportCompleted
+        ? "Waiting for supplier import to complete."
+        : !catalogSyncCompleted
+          ? "Waiting for catalog sync to complete."
+          : !rollupCompleted
+            ? "Waiting for rollup refresh to complete."
+            : "Waiting for the latest refresh to settle.";
+
+    return {
+      ...row,
+      brand_id: brandId,
+      supplier_import_run_id: importRun?.id || null,
+      supplier_import_status: importStatus,
+      supplier_import_started_at: importRun?.started_at || null,
+      supplier_import_finished_at: importRun?.finished_at || null,
+      supplier_import_duration_ms: durationBetween(importRun?.started_at || null, importRun?.finished_at || null),
+      supplier_import_staged_rows: Number(importRun?.staged_rows || 0),
+      supplier_import_processed_rows: Number(importRun?.processed_rows ?? importRun?.staged_rows ?? 0),
+      supplier_import_error_message: importStatus === "failed" ? importRun?.error_message || "Supplier import failed." : null,
+      catalog_sync_status: catalogSyncStatus,
+      catalog_sync_error_message: catalogSyncStatus === "failed" ? importRun?.catalog_sync_error_message || "Catalog sync failed." : null,
+      rollup_refresh_run_id: rollupRun?.id || null,
+      rollup_refresh_status: rollupStatus,
+      rollup_refresh_started_at: rollupRun?.started_at || null,
+      rollup_refresh_finished_at: rollupRun?.finished_at || null,
+      rollup_refresh_duration_ms: rollupDurationMs,
+      rollup_refresh_error_message: rollupStatus === "failed" ? rollupRun?.error_message || "Rollup refresh failed." : null,
+      customer_price_status: customerPriceStatus,
+      customer_price_waiting_message: customerPriceWaitingMessage,
+      last_successful_refresh_at: lastSuccessfulRefreshAt,
+      last_successful_refresh_source: lastSuccessfulSource.source,
+    };
+  });
+
+  return mappedRows.sort((left, right) => {
+    const severity = (row: SupplierOperationsStatusRow) => {
+      if (row.supplier_import_status === "failed" || row.catalog_sync_status === "failed" || row.rollup_refresh_status === "failed") return 0;
+      if (row.supplier_import_status === "running" || row.catalog_sync_status === "running" || row.rollup_refresh_status === "running") return 1;
+      if (row.supplier_import_status === "pending" || row.catalog_sync_status === "pending" || row.rollup_refresh_status === "pending") return 2;
+      if (row.customer_price_status === "waiting") return 3;
+      if (row.supplier_import_status === "idle") return 4;
+      return 5;
+    };
+
+    const leftSeverity = severity(left);
+    const rightSeverity = severity(right);
+    if (leftSeverity !== rightSeverity) return leftSeverity - rightSeverity;
+    const supplierCompare = left.supplier_name.localeCompare(right.supplier_name);
+    if (supplierCompare !== 0) return supplierCompare;
+    return left.brand.localeCompare(right.brand);
+  });
 }
 
 export async function fetchCloudSuppliers(): Promise<SupplierSummary[]> {
