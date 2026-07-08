@@ -85,6 +85,16 @@ type SupplierImportFinalizeResult = {
   catalog_sync_error_message?: string | null;
 };
 
+type SupplierImportBatchFinalizeResult = SupplierImportFinalizeResult & {
+  status?: "finalizing" | "finalized" | "succeeded" | "failed" | string;
+  staged_rows?: number;
+  batch_processed?: number;
+  batch_deactivated?: number;
+  source_total?: number;
+  finalize_phase?: "merge" | "cleanup" | "done" | string;
+  has_more?: boolean;
+};
+
 type SupplierPriceImportRunState = {
   status: "running" | "finalizing" | "succeeded" | "failed" | string;
   error_message: string | null;
@@ -140,6 +150,8 @@ const SUPPLIER_IMPORT_POLL_INTERVAL_MS = 1500;
 const SUPPLIER_IMPORT_FINALIZE_CONFIRM_RETRY_LIMIT = 5;
 const SUPPLIER_IMPORT_REFRESH_CONFIRM_RETRY_LIMIT = 3;
 const SUPPLIER_IMPORT_LOOKBACK_MS = 10000;
+const SUPPLIER_IMPORT_FINALIZE_BATCH_SIZE = 2000;
+const SUPPLIER_IMPORT_FINALIZE_BATCH_LIMIT = 100;
 const CATALOG_IMPORT_MAX_BATCH_ROWS = 100;
 const CATALOG_IMPORT_TARGET_BATCH_BYTES = 48000;
 const CATALOG_IMPORT_CHUNK_RETRY_LIMIT = 2;
@@ -733,11 +745,22 @@ async function beginSupplierPriceImport(input: {
 }
 
 async function finalizeSupplierPriceImport(runId: string) {
-  return callImportRpc<SupplierImportFinalizeResult>(
-    "finalize_supplier_price_import",
-    { input_run_id: runId },
-    "Supplier import finalization",
-  );
+  let latest: SupplierImportBatchFinalizeResult | null = null;
+
+  for (let attempt = 0; attempt < SUPPLIER_IMPORT_FINALIZE_BATCH_LIMIT; attempt += 1) {
+    latest = await callImportRpc<SupplierImportBatchFinalizeResult>(
+      "finalize_supplier_price_import_batch",
+      { input_run_id: runId, input_batch_size: SUPPLIER_IMPORT_FINALIZE_BATCH_SIZE },
+      "Supplier import finalization",
+    );
+
+    const status = String(latest?.status || "");
+    if (status === "finalized" || status === "succeeded" || latest?.has_more === false) {
+      return latest;
+    }
+  }
+
+  throw new Error("Supplier import finalization is still processing. Retry finalize to continue from the staged run.");
 }
 
 async function failSupplierPriceImport(runId: string, message: string) {
@@ -858,7 +881,7 @@ export async function bulkImportSupplierPrices(
         catalogSyncMessage = catalogSyncPending ? "Catalog sync is processing in the background." : null;
       } catch (error) {
         const confirmedRun = await confirmSupplierPriceImportRun(runId);
-        if (confirmedRun?.status === "succeeded") {
+        if (confirmedRun?.status === "succeeded" || confirmedRun?.status === "finalized") {
           processed = Number(confirmedRun.processed_rows ?? processed);
           catalogSynced = Number(confirmedRun.catalog_synced ?? catalogSynced);
           finalizedImport = true;
