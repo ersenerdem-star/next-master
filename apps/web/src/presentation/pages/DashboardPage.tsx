@@ -27,6 +27,7 @@ import { fetchWarehouseStockItems } from "../../infrastructure/api/inventoryApi"
 import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
 import { includesLooseText } from "../../domain/shared/normalize";
 import { buildEntityAlias } from "../../shared/entityAlias";
+import { isImportFailedStatus, mapImportStatusToTone, type ImportEngineStatus } from "../../shared/importEngine";
 import { canAccessSystemModules } from "../../shared/roles";
 import { useI18n } from "../../i18n/I18nProvider";
 
@@ -257,22 +258,29 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
     return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
   }
 
-  function statusTone(status: string | null | undefined) {
+  function toImportEngineStatus(status: string | null | undefined): ImportEngineStatus {
     const normalized = String(status || "").toLowerCase();
     switch (normalized) {
       case "completed":
-      case "ready":
-        return "success";
+        return "completed";
       case "running":
-        return "info";
+        return "finalizing";
       case "pending":
       case "waiting":
-        return "accent";
+        return "validated";
       case "failed":
-        return "danger";
+        return "failed";
       default:
-        return "muted";
+        return "idle";
     }
+  }
+
+  function statusTone(status: string | null | undefined) {
+    return mapImportStatusToTone(toImportEngineStatus(status));
+  }
+
+  function isOperationsFailedStatus(status: string | null | undefined) {
+    return isImportFailedStatus(toImportEngineStatus(status));
   }
 
   async function handleRetryRow(row: SupplierOperationsStatusRow) {
@@ -531,9 +539,9 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
                     {filteredOperationsRows.map((row) => {
                       const rowKey = `${row.supplier_id}-${row.brand}`;
                       const retryEnabled =
-                        row.supplier_import_status === "failed" ||
-                        row.catalog_sync_status === "failed" ||
-                        row.rollup_refresh_status === "failed";
+                        isOperationsFailedStatus(row.supplier_import_status) ||
+                        isOperationsFailedStatus(row.catalog_sync_status) ||
+                        isOperationsFailedStatus(row.rollup_refresh_status);
                       return (
                         <tr key={rowKey}>
                           <td>
