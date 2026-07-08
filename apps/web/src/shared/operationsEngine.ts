@@ -54,6 +54,7 @@ export interface OperationSummary {
   updatedAt: string | null;
   finishedAt: string | null;
   retryCount: number;
+  retryAvailable: boolean;
   lastWarning?: OperationWarning | null;
   lastError?: OperationError | null;
 }
@@ -89,11 +90,8 @@ export function isOperationFailed(status: OperationStatus) {
 
 export function canRetryOperation(input: OperationStatus | Pick<OperationSummary, "status" | "readiness">) {
   const status = typeof input === "string" ? input : input.status;
-  const readiness = typeof input === "string" ? null : input.readiness;
 
-  if (status === "failed") return true;
-  if (status === "warning" && readiness !== "ready") return true;
-  return false;
+  return status === "failed" || status === "warning";
 }
 
 export function getOperationTone(status: OperationStatus): OperationTone {
