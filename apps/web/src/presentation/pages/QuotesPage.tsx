@@ -22,6 +22,7 @@ import { fetchCloudQuoteDetail, fetchCloudQuotes } from "../../infrastructure/ap
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, inventoryAvailabilityLookupKey, type InventoryAvailabilitySummary } from "../../infrastructure/api/inventoryApi";
 import { canonicalizeBrandName, matchesOriginalNumberSearch, normalizeBrandKey, normalizeBrandName, normalizePartCode, normalizeSearchText } from "../../domain/shared/normalize";
+import { buildBrandResolutionLookup, resolveCanonicalBrandName } from "../../shared/brandResolver";
 import { parseCsv } from "../../shared/csv";
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import { consumeCatalogTransfer, PENDING_CATALOG_SALES_ITEM_KEY } from "../../shared/catalogTransfer";
@@ -366,15 +367,7 @@ function inferBrandFromFilename(fileName: string, brands: Array<{ value: string;
 }
 
 function buildBrandLookup(brands: Array<{ value: string; label: string }>) {
-  const lookup = new Map<string, string>();
-  brands.forEach((brand) => {
-    const normalizedName = normalizeBrandName(brand.value || brand.label || "");
-    const key = normalizeBrandKey(normalizedName);
-    if (key && !lookup.has(key)) {
-      lookup.set(key, normalizedName);
-    }
-  });
-  return lookup;
+  return buildBrandResolutionLookup(brands);
 }
 
 async function getActiveBrandOptions(currentBrandOptions: Array<{ value: string; label: string }>) {
@@ -2247,19 +2240,23 @@ export function QuotesPage({
       if (missingBrandCount) {
         throw new Error(t("sales.orders.importBrandRequired"));
       }
+      const resolvedRows = normalizedRows.map((row) => ({
+        ...row,
+        brandResolution: resolveCanonicalBrandName(row.brand, brandLookup),
+      }));
       const unknownBrands = Array.from(
         new Set(
-          normalizedRows
-            .map((row) => row.brand)
-            .filter((brand) => !brandLookup.has(normalizeBrandKey(brand))),
+          resolvedRows
+            .filter((row) => !row.brandResolution.found)
+            .map((row) => row.brandResolution.resolvedName || row.brand),
         ),
       );
       if (unknownBrands.length) {
         throw new Error(`Brand not found: ${unknownBrands.join(", ")}. Please check before upload.`);
       }
-      const canonicalRows = normalizedRows.map((row) => ({
+      const canonicalRows = resolvedRows.map(({ brandResolution, ...row }) => ({
         ...row,
-        brand: brandLookup.get(normalizeBrandKey(row.brand)) || row.brand,
+        brand: brandResolution.canonicalName,
       }));
       setBuilderStatus(t("sales.orders.importingAndPricing", { count: canonicalRows.length.toLocaleString("en-US") }));
       let importedDiscontinuedCount = 0;
