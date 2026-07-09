@@ -21,7 +21,7 @@ import { resolveQuoteLine } from "../../infrastructure/api/quoteResolverApi";
 import { fetchCloudQuoteDetail, fetchCloudQuotes } from "../../infrastructure/api/quotesApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, inventoryAvailabilityLookupKey, type InventoryAvailabilitySummary } from "../../infrastructure/api/inventoryApi";
-import { canonicalizeBrandName, matchesOriginalNumberSearch, normalizeBrandKey, normalizePartCode, normalizeSearchText } from "../../domain/shared/normalize";
+import { canonicalizeBrandName, matchesOriginalNumberSearch, normalizeBrandKey, normalizeBrandName, normalizePartCode, normalizeSearchText } from "../../domain/shared/normalize";
 import { parseCsv } from "../../shared/csv";
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import { consumeCatalogTransfer, PENDING_CATALOG_SALES_ITEM_KEY } from "../../shared/catalogTransfer";
@@ -363,6 +363,24 @@ function inferBrandFromFilename(fileName: string, brands: Array<{ value: string;
   if (!lower) return "";
   const matches = brands.filter((brand) => brand.value && lower.includes(brand.value.trim().toLowerCase()));
   return matches.length === 1 ? matches[0].value : "";
+}
+
+function buildBrandLookup(brands: Array<{ value: string; label: string }>) {
+  const lookup = new Map<string, string>();
+  brands.forEach((brand) => {
+    const normalizedName = normalizeBrandName(brand.value || brand.label || "");
+    const key = normalizeBrandKey(normalizedName);
+    if (key && !lookup.has(key)) {
+      lookup.set(key, normalizedName);
+    }
+  });
+  return lookup;
+}
+
+async function getActiveBrandOptions(currentBrandOptions: Array<{ value: string; label: string }>) {
+  if (currentBrandOptions.length) return currentBrandOptions;
+  const rows = await fetchCloudBrands();
+  return rows.map((item) => ({ value: item.name, label: item.name }));
 }
 
 function buildPendingImportLine(row: QuoteImportRow): QuoteBuilderLine {
@@ -2217,19 +2235,35 @@ export function QuotesPage({
       if (!rows.length) {
         throw new Error(t("sales.orders.noQuoteRowsFound"));
       }
+      const activeBrandOptions = await getActiveBrandOptions(brandOptions);
+      const brandLookup = buildBrandLookup(activeBrandOptions);
       const selectedBrand = getSelectedBrandValue(quoteBrandSelection, quoteBrand);
-      const fallbackBrand = selectedBrand || inferredContextBrand || inferBrandFromFilename(file.name, brandOptions);
+      const fallbackBrand = selectedBrand || inferredContextBrand || inferBrandFromFilename(file.name, activeBrandOptions);
       const normalizedRows = rows.map((row) => ({
         ...row,
-        brand: row.brand.trim() || fallbackBrand,
+        brand: normalizeBrandName(row.brand || fallbackBrand),
       }));
       const missingBrandCount = normalizedRows.filter((row) => !row.brand.trim()).length;
       if (missingBrandCount) {
         throw new Error(t("sales.orders.importBrandRequired"));
       }
-      setBuilderStatus(t("sales.orders.importingAndPricing", { count: normalizedRows.length.toLocaleString("en-US") }));
+      const unknownBrands = Array.from(
+        new Set(
+          normalizedRows
+            .map((row) => row.brand)
+            .filter((brand) => !brandLookup.has(normalizeBrandKey(brand))),
+        ),
+      );
+      if (unknownBrands.length) {
+        throw new Error(`Brand not found: ${unknownBrands.join(", ")}. Please check before upload.`);
+      }
+      const canonicalRows = normalizedRows.map((row) => ({
+        ...row,
+        brand: brandLookup.get(normalizeBrandKey(row.brand)) || row.brand,
+      }));
+      setBuilderStatus(t("sales.orders.importingAndPricing", { count: canonicalRows.length.toLocaleString("en-US") }));
       let importedDiscontinuedCount = 0;
-      const hydratedLines = await buildImportLines(normalizedRows, (resolvedLines, progress) => {
+      const hydratedLines = await buildImportLines(canonicalRows, (resolvedLines, progress) => {
         importedDiscontinuedCount += resolvedLines.filter((line) => line.lifecycle_status === "discontinued").length;
         setQuoteBuilderLines((current) => [...current, ...resolvedLines]);
         setBuilderStatus(t("sales.orders.importProgress", { processed: progress.processedRows.toLocaleString("en-US"), total: progress.totalRows.toLocaleString("en-US") }));
