@@ -1,4 +1,4 @@
-import { normalizePartCode } from "../../domain/shared/normalize";
+import { normalizeBrandName, normalizePartCode } from "../../domain/shared/normalize";
 import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
 
@@ -59,7 +59,7 @@ function roundMoney(value: number) {
 }
 
 async function resolveBrandRow(organizationId: string, brandName: string) {
-  const trimmed = brandName.trim();
+  const trimmed = normalizeBrandName(brandName);
   if (!trimmed) {
     throw new Error("Brand is required");
   }
@@ -278,7 +278,7 @@ export async function updateMarginPriceList(listType: "A" | "B", marginPercent: 
 }
 
 async function ensureBrand(orgId: string, brandName: string) {
-  const trimmed = brandName.trim();
+  const trimmed = normalizeBrandName(brandName);
   if (!trimmed) {
     throw new Error("Brand is required");
   }

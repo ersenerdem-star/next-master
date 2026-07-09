@@ -39,14 +39,23 @@ const BRAND_ALIAS_MAP: Record<string, string> = {
   knorrbremse: "Knorr-Bremse",
 };
 
+export function normalizeBrandName(value: string): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return raw
+    .replace(/\s+/g, " ")
+    .replace(/\s*([/-])\s*/g, "$1")
+    .trim();
+}
+
 export function normalizeBrandKey(value: string): string {
   return normalizeSearchText(value);
 }
 
 export function canonicalizeBrandName(value: string): string {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  return BRAND_ALIAS_MAP[normalizeBrandKey(raw)] || raw;
+  const normalized = normalizeBrandName(value);
+  if (!normalized) return "";
+  return BRAND_ALIAS_MAP[normalizeBrandKey(normalized)] || normalized;
 }
 
 export function isCodeLikeSearch(value: string): boolean {

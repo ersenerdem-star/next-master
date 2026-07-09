@@ -1,4 +1,4 @@
-import { canonicalizeBrandName, includesLooseText, normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
+import { canonicalizeBrandName, includesLooseText, normalizeBrandKey, normalizeBrandName, normalizePartCode } from "../../domain/shared/normalize";
 import type { CodeReferenceMatch, CodeReferenceRow, CodeReferenceUsage } from "../../types/codeReferences";
 import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
@@ -34,20 +34,21 @@ function mapCodeReferenceError(message: string) {
 
 async function resolveBrandRow(brandName: string) {
   const organizationId = await getCurrentOrgId();
-  const requestedBrandKey = normalizeBrandKey(brandName);
+  const requestedBrandName = normalizeBrandName(brandName);
+  const requestedBrandKey = normalizeBrandKey(requestedBrandName);
   const { data, error } = await supabaseClient
     .from("brands")
     .select("id,name")
     .eq("organization_id", organizationId);
 
   if (error) throw new Error(sanitizeUserFacingMessage(error.message, "Brand lookup failed"));
-  const match = ((data || []) as Array<{ id: string; name: string }>).find((row) => normalizeBrandKey(String(row.name || "")) === requestedBrandKey);
-  if (!match?.id) throw new Error(`Brand not found: ${brandName}`);
+  const match = ((data || []) as Array<{ id: string; name: string }>).find((row) => normalizeBrandKey(normalizeBrandName(String(row.name || ""))) === requestedBrandKey);
+  if (!match?.id) throw new Error(`Brand not found: ${requestedBrandName || brandName}`);
   return { id: match.id as string, name: match.name as string };
 }
 
 async function resolveOrCreateBrandRow(brandName: string) {
-  const trimmed = canonicalizeBrandName(brandName);
+  const trimmed = normalizeBrandName(brandName);
   if (!trimmed) throw new Error("Brand is required");
 
   const existing = await resolveBrandRow(trimmed).catch(() => null);

@@ -5,6 +5,7 @@ import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import {
   buildLooseOriginalNumberPattern,
   matchesOriginalNumberSearch,
+  normalizeBrandName,
   normalizeOriginalNumberSearch,
   normalizePartCode,
   sanitizeCatalogOemNumbers,
@@ -141,18 +142,18 @@ async function fetchCatalogFallbackRows(input: {
 }
 
 async function resolveBrandId(brandName: string) {
-  const normalizedBrand = brandName.trim();
+  const normalizedBrand = normalizeBrandName(brandName);
   if (!normalizedBrand) {
     throw new Error("Brand is required");
   }
   const brands = await fetchCloudBrands();
-  const match = brands.find((item) => item.name.trim().toLowerCase() === normalizedBrand.toLowerCase());
+  const match = brands.find((item) => normalizeBrandName(item.name).toLowerCase() === normalizedBrand.toLowerCase());
   if (!match?.id) throw new Error(`Brand not found: ${normalizedBrand}`);
   return match.id;
 }
 
 async function resolveOrCreateBrandId(brandName: string) {
-  const normalizedBrand = brandName.trim();
+  const normalizedBrand = normalizeBrandName(brandName);
   if (!normalizedBrand) {
     throw new Error("Brand is required");
   }
@@ -193,7 +194,7 @@ export async function fetchCloudCatalog(input: {
 }): Promise<CatalogRow[]> {
   const data = await callAppRpc<Array<Record<string, unknown>>>("cloud_catalog_page", {
     input_search: input.search,
-    input_brand: input.brandName?.trim() || "",
+    input_brand: normalizeBrandName(input.brandName || ""),
     input_market_segment: normalizeCatalogMarketSegment(input.marketSegment) || "",
     input_page: input.page ?? 1,
     input_page_size: input.pageSize ?? 50,
@@ -352,7 +353,7 @@ export class CatalogDeleteBlockedError extends Error {
 
 export async function fetchCatalogExportRows(input: { brandName: string; search?: string; marketSegment?: string }) {
   const organizationId = await getCurrentOrgId();
-  const brandName = input.brandName.trim();
+  const brandName = normalizeBrandName(input.brandName);
   if (!brandName) {
     throw new Error("Brand is required for catalog export");
   }
@@ -461,7 +462,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
 
 export async function fetchCatalogRowsByCodes(input: { brandName: string; codes: string[]; marketSegment?: string }): Promise<CatalogRow[]> {
   const organizationId = await getCurrentOrgId();
-  const brandName = input.brandName.trim();
+  const brandName = normalizeBrandName(input.brandName);
   const normalizedCodes = Array.from(
     new Set(
       input.codes

@@ -9,7 +9,7 @@ import type {
   SupplierPriceRow,
   SupplierSummary,
 } from "../../types/suppliers";
-import { buildLooseOriginalNumberPattern, normalizeOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
+import { buildLooseOriginalNumberPattern, normalizeBrandName, normalizeOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 
 type SupplierSearchMode = "strict" | "loose";
 
@@ -423,7 +423,7 @@ export async function fetchCloudSupplierPricesAcrossSuppliers(input: {
 export async function deleteSupplierBrandSummaryRow(input: { supplierId: string; brand: string }) {
   const data = await callAppRpc<number>("deactivate_supplier_prices_by_filter", {
     input_supplier_id: input.supplierId,
-    input_brand: input.brand,
+    input_brand: normalizeBrandName(input.brand),
     input_price_date: null,
     input_search: "",
   });
@@ -435,7 +435,7 @@ export async function fetchSupplierExportRows(input: { supplierId: string; brand
   if (!input.supplierId) {
     throw new Error("Supplier is required for supplier export");
   }
-  const brandName = input.brandName.trim();
+  const brandName = normalizeBrandName(input.brandName);
   if (!brandName) {
     throw new Error("Brand is required for supplier export");
   }

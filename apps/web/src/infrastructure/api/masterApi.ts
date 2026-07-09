@@ -1,7 +1,7 @@
 import { callAppRpc } from "./appRpcApi";
 import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
-import { buildLooseOriginalNumberPattern, normalizeOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
+import { buildLooseOriginalNumberPattern, normalizeBrandName, normalizeOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import type { MasterRow } from "../../types/master";
 import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 
@@ -118,7 +118,7 @@ function buildMasterSearchOr(rawSearch: string, normalizedSearch: string, mode: 
 }
 
 async function resolveBrand(organizationId: string, brandName: string): Promise<BrandLookup> {
-  const normalizedBrand = brandName.trim();
+  const normalizedBrand = normalizeBrandName(brandName);
   if (!normalizedBrand) {
     throw new Error("Brand is required");
   }
