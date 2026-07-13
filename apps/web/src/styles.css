@@ -2215,6 +2215,70 @@ select {
     grid-column: 1 / -1;
   }
 }
+
+.sales-product-review-panel {
+  border-color: rgba(220, 38, 38, 0.24);
+  background: #fffafa;
+}
+
+.sales-line-conflict-badge {
+  margin-top: 4px;
+  padding: 4px 7px;
+  font-size: 10px;
+}
+
+.sales-product-review-list {
+  display: grid;
+  gap: 8px;
+}
+
+.sales-product-review-row {
+  display: grid;
+  grid-template-columns: 28px minmax(130px, 0.7fr) minmax(180px, 1.3fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(220, 38, 38, 0.14);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.sales-product-review-row__index {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.sales-product-review-row > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sales-product-review-row > div span,
+.sales-product-review-row__fields {
+  color: #64748b;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .sales-product-review-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .sales-product-review-row__fields,
+  .sales-product-review-row > .button {
+    grid-column: 2;
+  }
+}
 .quote-workbench-card {
   margin-top: 16px;
 }

@@ -533,8 +533,7 @@ function mergeCatalogLineIntoSalesDraft(currentLines: QuoteBuilderLine[], nextLi
 function getQuoteBuilderLineIssues(t: TranslateFn, line: QuoteBuilderLine) {
   const issues: string[] = [];
   if (line.has_product_conflict) {
-    const fields = (line.product_conflict_fields || []).map((field) => field.replace(/_/g, " ")).join(", ");
-    issues.push(`${t("sales.warnings.productDataConflict")}${fields ? `: ${fields}` : ""}`);
+    issues.push(t("sales.warnings.productDataConflict"));
   }
   if (line.codeChanged) issues.push(t("sales.warnings.replacement"));
   if (line.lifecycle_status === "discontinued") issues.push(t("sales.warnings.discontinued"));
@@ -759,6 +758,7 @@ export function QuotesPage({
   const [printingDraft, setPrintingDraft] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [confirmingOrder, setConfirmingOrder] = useState(false);
+  const [showProductConflictReview, setShowProductConflictReview] = useState(false);
   const [resyncingCatalog, setResyncingCatalog] = useState(false);
   const [resyncOnlyFillBlanks, setResyncOnlyFillBlanks] = useState(true);
   const [resyncKeepPrices, setResyncKeepPrices] = useState(true);
@@ -1859,9 +1859,9 @@ export function QuotesPage({
             <div>{row.resolvedCode}</div>
             {row.codeChanged ? <div className="warning-text">{row.codeChangeWarning}</div> : null}
             {row.has_product_conflict ? (
-              <div className="warning-text">
-                {t("sales.warnings.productDataConflict")}: {(row.product_conflict_fields || []).map((field) => field.replace(/_/g, " ")).join(", ")}
-              </div>
+              <span className="mark-badge mark-badge--danger sales-line-conflict-badge" title={t("sales.warnings.productDataConflict")}>
+                {t("sales.orders.productReviewBadge")}
+              </span>
             ) : null}
             {renderLifecycleBadge(t, row)}
           </div>
@@ -2047,7 +2047,7 @@ export function QuotesPage({
         header: t("sales.orders.issue"),
         render: (row: QuoteBuilderLine) => (
           <div className="document-marks document-marks--compact">
-            {getQuoteBuilderLineIssues(t, row).map((issue) => (
+            {getQuoteBuilderLineIssues(t, row).filter((issue) => issue !== t("sales.warnings.productDataConflict")).map((issue) => (
               <span
                 key={`${row.lineId}-${issue}`}
                 className={`mark-badge ${
@@ -2679,7 +2679,7 @@ export function QuotesPage({
   const attentionLines = useMemo(
     () =>
       quoteBuilderLines.filter((line) => {
-        const issues = getQuoteBuilderLineIssues(t, line);
+        const issues = getQuoteBuilderLineIssues(t, line).filter((issue) => issue !== t("sales.warnings.productDataConflict"));
         return issues.length > 0;
       }),
     [quoteBuilderLines, t],
@@ -3322,6 +3322,47 @@ export function QuotesPage({
                 {t("sales.orders.discontinuedDetected", { count: discontinuedLineCount.toLocaleString("en-US") })}
               </div>
             ) : null}
+            {productConflictLines.length ? (
+              <div className="attention-panel sales-product-review-panel">
+                <div className="attention-panel__header">
+                  <div>
+                    <strong>
+                      {t("sales.orders.productReviewSummary", {
+                        affected: productConflictLines.length.toLocaleString("en-US"),
+                        total: quoteBuilderLines.length.toLocaleString("en-US"),
+                      })}
+                    </strong>
+                    <div className="info-text">{t("sales.orders.productReviewSummaryHint")}</div>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    className="button--compact"
+                    onClick={() => setShowProductConflictReview((current) => !current)}
+                  >
+                    {showProductConflictReview ? t("sales.orders.hideProductReview") : t("sales.orders.showProductReview")}
+                  </Button>
+                </div>
+                {showProductConflictReview ? (
+                  <div className="sales-product-review-list">
+                    {productConflictLines.map((line, index) => (
+                      <div className="sales-product-review-row" key={line.lineId}>
+                        <span className="sales-product-review-row__index">{index + 1}</span>
+                        <div>
+                          <strong>{line.resolvedCode || line.requestedCode || "-"}</strong>
+                          <span>{line.brand || t("sales.orders.noBrand")}</span>
+                        </div>
+                        <span className="sales-product-review-row__fields">
+                          {t("sales.orders.productReviewFields")}: {(line.product_conflict_fields || []).map((field) => field.replace(/_/g, " ")).join(", ") || "-"}
+                        </span>
+                        <Button variant="secondary" className="button--compact" onClick={() => setQuoteLinePreview(line)}>
+                          {t("sales.orders.reviewLine")}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {attentionLines.length ? (
               <div className="attention-panel">
                 <div className="attention-panel__header">
@@ -3501,6 +3542,12 @@ export function QuotesPage({
               <div><span>{t("sales.orders.buy")}</span><strong>{formatMoney(quoteLinePreview.buy_price, currency)}</strong></div>
               <div><span>{t("sales.orders.sell")}</span><strong>{formatMoney(quoteLinePreview.sell_price, currency)}</strong></div>
               <div><span>{t("sales.orders.priceDate")}</span><strong>{formatDate(quoteLinePreview.price_date)}</strong></div>
+              {quoteLinePreview.has_product_conflict ? (
+                <div>
+                  <span>{t("sales.orders.productReviewFields")}</span>
+                  <strong>{(quoteLinePreview.product_conflict_fields || []).map((field) => field.replace(/_/g, " ")).join(", ") || "-"}</strong>
+                </div>
+              ) : null}
             </div>
             {quoteLinePreview.codeChanged ? <div className="warning-text">{quoteLinePreview.codeChangeWarning}</div> : null}
             {quoteLinePreview.notes ? <div className="info-text">{quoteLinePreview.notes}</div> : null}
