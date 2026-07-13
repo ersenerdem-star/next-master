@@ -522,12 +522,20 @@ function mergeCatalogLineIntoSalesDraft(currentLines: QuoteBuilderLine[], nextLi
           weight_kg: line.weight_kg ?? nextLine.weight_kg,
           lifecycle_status: nextLine.lifecycle_status ?? line.lifecycle_status,
           lifecycle_note: line.lifecycle_note ?? nextLine.lifecycle_note,
+          has_product_conflict: nextLine.has_product_conflict ?? line.has_product_conflict,
+          product_conflict_fields: nextLine.product_conflict_fields?.length
+            ? nextLine.product_conflict_fields
+            : line.product_conflict_fields,
         },
   );
 }
 
 function getQuoteBuilderLineIssues(t: TranslateFn, line: QuoteBuilderLine) {
   const issues: string[] = [];
+  if (line.has_product_conflict) {
+    const fields = (line.product_conflict_fields || []).map((field) => field.replace(/_/g, " ")).join(", ");
+    issues.push(`${t("sales.warnings.productDataConflict")}${fields ? `: ${fields}` : ""}`);
+  }
   if (line.codeChanged) issues.push(t("sales.warnings.replacement"));
   if (line.lifecycle_status === "discontinued") issues.push(t("sales.warnings.discontinued"));
   if (!line.found) issues.push(t("sales.warnings.notMatched"));
@@ -608,6 +616,8 @@ function mapDetailLineToBuilderLine(
             newCode: String(line.product_code || "").trim(),
           })
         : "",
+    has_product_conflict: Boolean(line.has_product_conflict),
+    product_conflict_fields: Array.isArray(line.product_conflict_fields) ? line.product_conflict_fields : [],
     supplierOptions,
     selectedSupplierKey: `${option.supplier_name}-0`,
   };
@@ -1102,6 +1112,8 @@ export function QuotesPage({
                 sell_price: resolved.sell_price,
                 price_date: resolved.price_date,
                 notes: resolved.notes,
+                has_product_conflict: resolved.has_product_conflict,
+                product_conflict_fields: resolved.product_conflict_fields,
                 supplierOptions,
               };
             } catch {
@@ -1119,6 +1131,10 @@ export function QuotesPage({
           supplier_name: line.supplier_name || resolvedPatches[index]?.supplier_name || line.supplier_name,
           buy_price: line.buy_price ?? resolvedPatches[index]?.buy_price ?? null,
           sell_price: line.sell_price ?? resolvedPatches[index]?.sell_price ?? null,
+          has_product_conflict: resolvedPatches[index]?.has_product_conflict ?? line.has_product_conflict,
+          product_conflict_fields: resolvedPatches[index]?.product_conflict_fields?.length
+            ? resolvedPatches[index]?.product_conflict_fields
+            : line.product_conflict_fields,
           c_sell_price: getCPriceForRow(cPriceMap, {
             brand: line.brand_text || "",
             product_code: line.product_code || "",
@@ -1180,6 +1196,10 @@ export function QuotesPage({
   }, [quoteBuilderLines, shippingCost, discountAmount]);
   const discontinuedLineCount = useMemo(
     () => quoteBuilderLines.filter((line) => line.lifecycle_status === "discontinued").length,
+    [quoteBuilderLines],
+  );
+  const productConflictLines = useMemo(
+    () => quoteBuilderLines.filter((line) => line.has_product_conflict),
     [quoteBuilderLines],
   );
   const effectiveWorkbenchColumnVisibility = DEFAULT_QUOTE_WORKBENCH_COLUMNS;
@@ -1730,6 +1750,8 @@ export function QuotesPage({
         sell_price: line.sell_price ?? null,
         price_date: line.price_date || "",
         notes: line.notes || "",
+        has_product_conflict: Boolean(line.has_product_conflict),
+        product_conflict_fields: line.product_conflict_fields || [],
       })),
     });
   }
@@ -1836,6 +1858,11 @@ export function QuotesPage({
           <div>
             <div>{row.resolvedCode}</div>
             {row.codeChanged ? <div className="warning-text">{row.codeChangeWarning}</div> : null}
+            {row.has_product_conflict ? (
+              <div className="warning-text">
+                {t("sales.warnings.productDataConflict")}: {(row.product_conflict_fields || []).map((field) => field.replace(/_/g, " ")).join(", ")}
+              </div>
+            ) : null}
             {renderLifecycleBadge(t, row)}
           </div>
         ),
@@ -2024,7 +2051,7 @@ export function QuotesPage({
               <span
                 key={`${row.lineId}-${issue}`}
                 className={`mark-badge ${
-                  issue === t("sales.warnings.discontinued")
+                  issue === t("sales.warnings.discontinued") || issue.startsWith(t("sales.warnings.productDataConflict"))
                     ? "mark-badge--danger"
                     : issue === t("sales.warnings.replacement")
                       ? "mark-badge--accent"
@@ -2127,6 +2154,8 @@ export function QuotesPage({
       lifecycle_status: resolved.lifecycle_status ?? "active",
       lifecycle_note: resolved.lifecycle_note ?? null,
       lifecycle_warning: resolved.lifecycle_warning ?? null,
+      has_product_conflict: resolved.has_product_conflict === true,
+      product_conflict_fields: Array.isArray(resolved.product_conflict_fields) ? resolved.product_conflict_fields : [],
       supplierOptions: effectiveSupplierOptions,
       selectedSupplierKey: selectedKey,
     } satisfies QuoteBuilderLine;
@@ -2786,6 +2815,16 @@ export function QuotesPage({
     ) {
       return;
     }
+    if (
+      productConflictLines.length > 0 &&
+      !window.confirm(
+        t("sales.orders.confirmWithProductDataConflicts", {
+          count: productConflictLines.length.toLocaleString("en-US"),
+        }),
+      )
+    ) {
+      return;
+    }
     try {
       setConfirmingOrder(true);
       actionFeedback.begin(t("sales.orders.confirmingAndCreatingPurchaseOrders", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
@@ -3441,7 +3480,7 @@ export function QuotesPage({
                 <span
                   key={`${quoteLinePreview.lineId}-${issue}`}
                   className={`mark-badge ${
-                    issue === t("sales.warnings.discontinued")
+                    issue === t("sales.warnings.discontinued") || issue.startsWith(t("sales.warnings.productDataConflict"))
                       ? "mark-badge--danger"
                       : issue === t("sales.warnings.replacement")
                         ? "mark-badge--accent"

@@ -38,6 +38,8 @@ export type QuoteLine = {
   lifecycle_status?: "active" | "discontinued" | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
+  has_product_conflict?: boolean;
+  product_conflict_fields?: string[];
 };
 
 export type QuoteDetail = {

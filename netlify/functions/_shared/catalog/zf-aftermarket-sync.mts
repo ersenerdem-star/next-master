@@ -298,17 +298,64 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
 
   const batchSize = 250;
   const processedBatches = [];
+  let guardedAppliedRows = 0;
+  let guardedUnchangedRows = 0;
+  let guardedConflictCount = 0;
+  const guardedAffectedProductIds = new Set<string>();
   if (catalogPayload.length) {
     for (let index = 0; index < catalogPayload.length; index += batchSize) {
       const batch = catalogPayload.slice(index, index + batchSize);
-      const response = await fetch(`${input.supabaseUrl}/rest/v1/catalog_products?on_conflict=organization_id,brand_id,normalized_code`, {
-        method: "POST",
-        headers: {
-          ...headers,
-          Prefer: "resolution=merge-duplicates,return=minimal",
-        },
-        body: JSON.stringify(
-          batch.map((row) => ({
+      const existingBatch = batch.filter((row) => existingByCode.has(normalizeCode(row.product_code)));
+      const newBatch = batch.filter((row) => !existingByCode.has(normalizeCode(row.product_code)));
+
+      if (existingBatch.length) {
+        const guardResponse = await fetch(`${input.supabaseUrl}/rest/v1/rpc/apply_catalog_product_enrichment_guarded`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            input_rows: existingBatch.map((row) => ({
+              organization_id: row.organization_id,
+              brand_id: row.brand_id,
+              product_code: row.product_code,
+              ean: supportsEanColumn ? emptyToNull(row.ean) : null,
+              description: emptyToNull(row.description),
+              oem_no: emptyToNull(row.oem_no),
+              vehicle: emptyToNull(row.vehicle),
+              hs_code: emptyToNull(row.hs_code),
+              origin: emptyToNull(row.origin),
+              weight_kg: row.weight_kg == null || Number.isNaN(Number(row.weight_kg)) ? null : Number(row.weight_kg),
+              image_url: supportsImageColumn ? emptyToNull(row.image_url) : null,
+              lifecycle_status: emptyToNull(row.lifecycle_status) || "active",
+              lifecycle_note: emptyToNull(row.lifecycle_note),
+              source_reference: emptyToNull(row.source_url),
+            })),
+            input_source_type: "zf_aftermarket_official",
+            input_source_reference: "https://aftermarket.zf.com/en/catalog/",
+          }),
+        });
+        const guardText = await guardResponse.text();
+        if (!guardResponse.ok) {
+          throw new Error(`guarded catalog enrichment failed: ${guardResponse.status} ${guardText}`);
+        }
+        const guardResult = guardText ? JSON.parse(guardText) : {};
+        guardedAppliedRows += Number(guardResult.applied_count || 0);
+        guardedUnchangedRows += Number(guardResult.unchanged_count || 0);
+        guardedConflictCount += Number(guardResult.conflict_count || 0);
+        for (const productId of Array.isArray(guardResult.affected_product_ids) ? guardResult.affected_product_ids : []) {
+          if (productId) guardedAffectedProductIds.add(String(productId));
+        }
+        processedBatches.push({ type: "catalog_guarded", batch: index / batchSize + 1, rows: existingBatch.length, status: guardResponse.status });
+      }
+
+      if (newBatch.length) {
+        const response = await fetch(`${input.supabaseUrl}/rest/v1/catalog_products?on_conflict=organization_id,brand_id,normalized_code`, {
+          method: "POST",
+          headers: {
+            ...headers,
+            Prefer: "resolution=merge-duplicates,return=minimal",
+          },
+          body: JSON.stringify(
+            newBatch.map((row) => ({
             organization_id: row.organization_id,
             brand_id: row.brand_id,
             product_code: row.product_code,
@@ -323,14 +370,15 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
             lifecycle_status: emptyToNull(row.lifecycle_status) || "active",
             lifecycle_note: emptyToNull(row.lifecycle_note),
             updated_at: new Date().toISOString(),
-          })),
-        ),
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`catalog_products upsert failed: ${response.status} ${text}`);
+            })),
+          ),
+        });
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`catalog_products insert failed: ${response.status} ${text}`);
+        }
+        processedBatches.push({ type: "catalog_insert", batch: index / batchSize + 1, rows: newBatch.length, status: response.status });
       }
-      processedBatches.push({ type: "catalog", batch: index / batchSize + 1, rows: batch.length, status: response.status });
     }
   }
 
@@ -386,6 +434,10 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
     supportsEanColumn,
     processedBatches,
     processedReplacementBatches,
+    guardedAppliedRows,
+    guardedUnchangedRows,
+    guardedConflictCount,
+    guardedAffectedProductIds: [...guardedAffectedProductIds].slice(0, 50),
     oemRows,
     vehicleRows,
     imageRows,
@@ -755,6 +807,7 @@ function mergeCatalogRow({ target, existing, searchItem, detail }: any) {
     organization_id: target.organization_id,
     brand_id: target.brand_id,
     product_code: productCode,
+    source_url: detail.source_url || searchItem?.source_url || "",
     ean: normalizeCatalogEan(detail.ean || existing?.ean || ""),
     description:
       pickCatalogDescription([detail.description, searchItem?.description, existing?.description, detail?.name, searchItem?.name], productCode) || "",

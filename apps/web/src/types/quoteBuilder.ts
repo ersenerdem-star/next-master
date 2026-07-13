@@ -31,6 +31,8 @@ export type QuoteResolveResult = {
   lifecycle_status?: CatalogLifecycleStatus | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
+  has_product_conflict?: boolean;
+  product_conflict_fields?: string[];
 };
 
 export type QuoteBuilderLine = {
@@ -58,6 +60,8 @@ export type QuoteBuilderLine = {
   lifecycle_status?: CatalogLifecycleStatus | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
+  has_product_conflict?: boolean;
+  product_conflict_fields?: string[];
   supplierOptions: QuoteSupplierOption[];
   selectedSupplierKey: string;
 };
