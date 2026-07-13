@@ -47,6 +47,16 @@ export const OPERATIONS_REGISTRY = [
     owner: "Reporting",
   },
   {
+    operation_type: "catalog_integrity_sync",
+    domain: "Catalog",
+    display_key: "operations.catalogIntegritySync.display",
+    description_key: "operations.catalogIntegritySync.description",
+    supports_retry: true,
+    supports_cancel: false,
+    readiness_rule: "operations",
+    owner: "Catalog",
+  },
+  {
     operation_type: "catalog_import",
     domain: "Catalog",
     display_key: "operations.catalogImport.display",

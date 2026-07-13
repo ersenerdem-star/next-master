@@ -1,4 +1,4 @@
-import type { CatalogRow } from "../../types/catalog";
+import type { CatalogIntegrityFilter, CatalogIntegritySummary, CatalogIntegrityStatus, CatalogRow } from "../../types/catalog";
 import { normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
 import { normalizeCatalogDisplayCode, normalizeCatalogDescription, normalizeCatalogOrigin } from "../../domain/shared/catalogFormatting";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
@@ -219,6 +219,71 @@ export async function fetchCloudCatalog(input: {
     replacement_reason: String(row.replacement_reason || "") || null,
     replacement_warning: String(row.replacement_warning || "") || null,
   }));
+}
+
+export async function fetchCloudCatalogIntegrity(input: {
+  search: string;
+  brandName?: string;
+  marketSegment?: string;
+  integrityFilter?: CatalogIntegrityFilter;
+  page?: number;
+  pageSize?: number;
+}): Promise<CatalogRow[]> {
+  const data = await callAppRpc<Array<Record<string, unknown>>>("cloud_catalog_integrity_page", {
+    input_search: input.search,
+    input_brand: normalizeBrandName(input.brandName || ""),
+    input_market_segment: normalizeCatalogMarketSegment(input.marketSegment) || "",
+    input_integrity_filter: input.integrityFilter || "",
+    input_page: input.page ?? 1,
+    input_page_size: input.pageSize ?? 50,
+  });
+
+  return (data ?? []).map((row) => ({
+    total_count: Number(row.total_count ?? 0),
+    product_id: String(row.product_id || ""),
+    product_code: String(row.product_code || ""),
+    brand: String(row.brand || ""),
+    image_url: String(row.image_url || ""),
+    description: String(row.description || ""),
+    oem_no: sanitizeCatalogOemNumbers(String(row.oem_no || "")),
+    vehicle: String(row.vehicle || ""),
+    hs_code: String(row.hs_code || ""),
+    origin: String(row.origin || ""),
+    market_segment: normalizeCatalogMarketSegment(String(row.market_segment || "")),
+    weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
+    ean: String(row.ean || ""),
+    lifecycle_status: normalizeCatalogLifecycleStatus(String(row.lifecycle_status || "")),
+    lifecycle_note: String(row.lifecycle_note || ""),
+    integrity_status: String(row.integrity_status || "unknown") as CatalogIntegrityStatus,
+    critical_missing_fields: Array.isArray(row.critical_missing_fields) ? row.critical_missing_fields.map(String) : [],
+    optional_missing_fields: Array.isArray(row.optional_missing_fields) ? row.optional_missing_fields.map(String) : [],
+    conflict_fields: Array.isArray(row.conflict_fields) ? row.conflict_fields.map(String) : [],
+    pending_conflict_count: Number(row.pending_conflict_count || 0),
+    last_evaluated_at: row.last_evaluated_at ? String(row.last_evaluated_at) : null,
+    integrity_last_error: row.integrity_last_error ? String(row.integrity_last_error) : null,
+  }));
+}
+
+export async function fetchCatalogIntegritySummary(): Promise<CatalogIntegritySummary> {
+  const data = await callAppRpc<Record<string, unknown>>("get_catalog_integrity_summary");
+  return {
+    total_products: Number(data?.total_products || 0),
+    projected_products: Number(data?.projected_products || 0),
+    clear_count: Number(data?.clear_count || 0),
+    incomplete_count: Number(data?.incomplete_count || 0),
+    conflict_count: Number(data?.conflict_count || 0),
+    pending_count: Number(data?.pending_count || 0),
+    failed_count: Number(data?.failed_count || 0),
+    last_evaluated_at: data?.last_evaluated_at ? String(data.last_evaluated_at) : null,
+    backfill_status: String(data?.backfill_status || "queued") as CatalogIntegritySummary["backfill_status"],
+    backfill_queued_products: Number(data?.backfill_queued_products || 0),
+    backfill_updated_at: data?.backfill_updated_at ? String(data.backfill_updated_at) : null,
+    backfill_error: data?.backfill_error ? String(data.backfill_error) : null,
+  };
+}
+
+export async function fetchCatalogProductIntegrity(productId: string) {
+  return callAppRpc<Record<string, unknown>>("get_catalog_product_integrity", { input_product_id: productId });
 }
 
 export async function updateCloudCatalogRow(
