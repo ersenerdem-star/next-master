@@ -9,7 +9,8 @@ import {
   deleteCloudCatalogRow,
   fetchCatalogExportRows,
   fetchCatalogRowsByCodes,
-  fetchCloudCatalog,
+  fetchCloudCatalogIntegrity,
+  fetchCatalogIntegritySummary,
   updateCloudCatalogRow,
   type CatalogDeleteReferenceSummary,
 } from "../../infrastructure/api/catalogApi";
@@ -18,7 +19,7 @@ import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenc
 import { bulkImportCatalog, type CatalogImportResult } from "../../infrastructure/api/importApi";
 import { matchesOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import type { BrandOption } from "../../types/brand";
-import type { CatalogRow } from "../../types/catalog";
+import type { CatalogIntegrityFilter, CatalogIntegrityStatus, CatalogIntegritySummary, CatalogRow } from "../../types/catalog";
 import type { CodeReferenceUsage } from "../../types/codeReferences";
 import { Button } from "../components/common/Button";
 import { DraggableSurface } from "../components/common/DraggableSurface";
@@ -176,6 +177,10 @@ export function CatalogPage() {
   const [submittedCatalogBrand, setSubmittedCatalogBrand] = useState("");
   const [catalogSegment, setCatalogSegment] = useState("");
   const [submittedCatalogSegment, setSubmittedCatalogSegment] = useState("");
+  const [integrityFilter, setIntegrityFilter] = useState<CatalogIntegrityFilter>("");
+  const [submittedIntegrityFilter, setSubmittedIntegrityFilter] = useState<CatalogIntegrityFilter>("");
+  const [integritySummary, setIntegritySummary] = useState<CatalogIntegritySummary | null>(null);
+  const [integritySummaryLoading, setIntegritySummaryLoading] = useState(false);
   const [previewSelection, setPreviewSelection] = useState<{ brand: string; codes: string[] } | null>(null);
   const [rows, setRows] = useState<CatalogRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, CatalogRowDraft>>({});
@@ -237,6 +242,39 @@ export function CatalogPage() {
     normalizeCatalogLifecycleStatus(value) === "discontinued" ? t("catalog.lifecycle.discontinued") : t("catalog.lifecycle.active");
   const getExportFormatLabel = (format: CatalogExportFormat) =>
     format === "xlsx" ? t("catalog.export.formats.excel") : t("catalog.export.formats.csv");
+  const integrityFilterOptions = [
+    { value: "", label: t("catalog.integrity.filters.all") },
+    { value: "conflict", label: t("catalog.integrity.filters.conflict") },
+    { value: "incomplete", label: t("catalog.integrity.filters.incomplete") },
+    { value: "missing_ean", label: t("catalog.integrity.filters.missingEan") },
+    { value: "pending", label: t("catalog.integrity.filters.pending") },
+    { value: "failed", label: t("catalog.integrity.filters.failed") },
+  ];
+  const getIntegrityLabel = (status: CatalogIntegrityStatus | undefined) => {
+    if (status === "conflict") return t("catalog.integrity.states.conflict");
+    if (status === "incomplete") return t("catalog.integrity.states.incomplete");
+    if (status === "failed") return t("catalog.integrity.states.failed");
+    if (status === "clear") return t("catalog.integrity.states.clear");
+    return t("catalog.integrity.states.pending");
+  };
+  const getIntegrityTone = (status: CatalogIntegrityStatus | undefined) => {
+    if (status === "conflict" || status === "failed") return "is-danger";
+    if (status === "incomplete") return "is-warning";
+    if (status === "clear") return "is-live";
+    return "is-info";
+  };
+
+  async function refreshIntegritySummary() {
+    if (!isOnline) return;
+    setIntegritySummaryLoading(true);
+    try {
+      setIntegritySummary(await fetchCatalogIntegritySummary());
+    } catch {
+      // Catalog search remains usable if the operations projection is temporarily unavailable.
+    } finally {
+      setIntegritySummaryLoading(false);
+    }
+  }
 
   useEffect(() => {
     setDeleteBlockSummary(null);
@@ -278,6 +316,13 @@ export function CatalogPage() {
     return () => {
       cancelled = true;
     };
+  }, [isOnline]);
+
+  useEffect(() => {
+    if (!isOnline) return;
+    void refreshIntegritySummary();
+    const interval = window.setInterval(() => void refreshIntegritySummary(), 60_000);
+    return () => window.clearInterval(interval);
   }, [isOnline]);
 
   useEffect(() => {
@@ -347,7 +392,7 @@ export function CatalogPage() {
         return;
       }
 
-      if (!submittedSearch.trim() && !submittedCatalogBrand && !submittedCatalogSegment) {
+      if (!submittedSearch.trim() && !submittedCatalogBrand && !submittedCatalogSegment && !submittedIntegrityFilter) {
         if (!cancelled) {
           setRows([]);
           setLoading(false);
@@ -368,10 +413,11 @@ export function CatalogPage() {
                 codes: previewSelection.codes,
                 marketSegment: submittedCatalogSegment,
               })
-            : await fetchCloudCatalog({
+            : await fetchCloudCatalogIntegrity({
                 search: submittedSearch,
                 brandName: submittedCatalogBrand,
                 marketSegment: submittedCatalogSegment,
+                integrityFilter: submittedIntegrityFilter,
                 page: 1,
                 pageSize: 50,
               });
@@ -390,7 +436,7 @@ export function CatalogPage() {
     return () => {
       cancelled = true;
     };
-  }, [isOnline, submittedSearch, submittedCatalogBrand, submittedCatalogSegment, previewSelection, t, numberLocale]);
+  }, [isOnline, submittedSearch, submittedCatalogBrand, submittedCatalogSegment, submittedIntegrityFilter, previewSelection, t, numberLocale]);
 
   useEffect(() => {
     if (!searchingCatalog || loading) return;
@@ -560,10 +606,13 @@ export function CatalogPage() {
   const hasSubmittedSearch = Boolean(trimmedSubmittedSearch);
   const hasSubmittedBrand = Boolean(submittedCatalogBrand);
   const hasSubmittedSegment = Boolean(submittedCatalogSegment);
+  const hasSubmittedIntegrity = Boolean(submittedIntegrityFilter);
   const catalogCountLabel = loading
     ? t("catalog.search.countLoading")
-    : !hasSubmittedSearch && !hasSubmittedBrand && !hasSubmittedSegment
+    : !hasSubmittedSearch && !hasSubmittedBrand && !hasSubmittedSegment && !hasSubmittedIntegrity
       ? t("catalog.search.countPrompt")
+    : hasSubmittedIntegrity && !hasSubmittedSearch && !hasSubmittedBrand && !hasSubmittedSegment
+      ? t("catalog.search.countRows", { count: formatCount(visibleTotal) })
     : hasSubmittedBrand && !hasSubmittedSearch && !hasSubmittedSegment
         ? t("catalog.search.countBrand", {
             brand: submittedCatalogBrand,
@@ -649,6 +698,8 @@ export function CatalogPage() {
     setSubmittedCatalogBrand("");
     setCatalogSegment("");
     setSubmittedCatalogSegment("");
+    setIntegrityFilter("");
+    setSubmittedIntegrityFilter("");
     setRows([]);
     setDrafts({});
     setPreviewSelection(null);
@@ -659,7 +710,13 @@ export function CatalogPage() {
     actionFeedback.succeed(t("catalog.status.filtersCleared"));
   }
 
-  function applyCatalogFilters(nextSearch: string, nextBrand: string, nextSegment = catalogSegment, announce = true) {
+  function applyCatalogFilters(
+    nextSearch: string,
+    nextBrand: string,
+    nextSegment = catalogSegment,
+    announce = true,
+    nextIntegrityFilter: CatalogIntegrityFilter = integrityFilter,
+  ) {
     setSearchingCatalog(true);
     setPreviewSelection(null);
     setSelectedCatalogProductId("");
@@ -675,6 +732,7 @@ export function CatalogPage() {
     setSubmittedSearch(nextSearch);
     setSubmittedCatalogBrand(nextBrand);
     setSubmittedCatalogSegment(normalizeCatalogMarketSegment(nextSegment) || "");
+    setSubmittedIntegrityFilter(nextIntegrityFilter);
   }
 
   function queueCatalogItemForSalesOrder() {
@@ -1008,6 +1066,15 @@ export function CatalogPage() {
         },
       },
       {
+        key: "integrity",
+        header: t("catalog.integrity.column"),
+        render: (row: CatalogRow) => (
+          <span className={`catalog-state-badge ${getIntegrityTone(row.integrity_status)}`}>
+            {getIntegrityLabel(row.integrity_status)}
+          </span>
+        ),
+      },
+      {
         key: "actions",
         header: t("catalog.table.actions"),
         render: (row: CatalogRow) => (
@@ -1058,10 +1125,11 @@ export function CatalogPage() {
         }
       }
 
-      const result = await fetchCloudCatalog({
+      const result = await fetchCloudCatalogIntegrity({
         search: nextSearch,
         brandName: nextBrand,
         marketSegment: nextSegment,
+        integrityFilter: submittedIntegrityFilter,
         page: 1,
         pageSize: 50,
       });
@@ -1390,6 +1458,19 @@ export function CatalogPage() {
                 clearCatalogSearch();
               }}
             />
+            <Select
+              value={integrityFilter}
+              options={integrityFilterOptions}
+              onChange={(value) => {
+                const nextFilter = value as CatalogIntegrityFilter;
+                setIntegrityFilter(nextFilter);
+                if (nextFilter || search.trim() || catalogBrand || catalogSegment) {
+                  applyCatalogFilters(search, catalogBrand, catalogSegment, true, nextFilter);
+                  return;
+                }
+                clearCatalogSearch();
+              }}
+            />
             <Input value={search} onChange={setSearch} placeholder={t("catalog.search.placeholder")} onEnter={() => applyCatalogFilters(search, catalogBrand, catalogSegment)} />
             <Button
               onClick={() => {
@@ -1400,7 +1481,7 @@ export function CatalogPage() {
             >
               {t("catalog.actions.search")}
             </Button>
-            <Button variant="secondary" onClick={clearCatalogSearch} disabled={!search && !submittedSearch && !catalogBrand && !submittedCatalogBrand && !catalogSegment && !submittedCatalogSegment && !rows.length}>
+            <Button variant="secondary" onClick={clearCatalogSearch} disabled={!search && !submittedSearch && !catalogBrand && !submittedCatalogBrand && !catalogSegment && !submittedCatalogSegment && !integrityFilter && !submittedIntegrityFilter && !rows.length}>
               {t("catalog.actions.clearSearch")}
             </Button>
             <Button variant="secondary" onClick={() => openCatalogExport("csv")} disabled={!brands.length || !isOnline} busy={exportingCatalog && exportFormat === "csv"} busyLabel={t("catalog.actions.preparing")}>
@@ -1438,8 +1519,26 @@ export function CatalogPage() {
           </div>
         </div>
         <div className="section-card__body section-card__body--catalog">
+          <div className="catalog-integrity-heading">
+            <div>
+              <strong>{t("catalog.integrity.title")}</strong>
+              <span>{t("catalog.integrity.clearDefinition")}</span>
+            </div>
+            <Button variant="secondary" className="button--compact" onClick={() => void refreshIntegritySummary()} busy={integritySummaryLoading}>
+              {t("catalog.integrity.refresh")}
+            </Button>
+          </div>
+          <div className="metric-strip catalog-integrity-summary">
+            <div className="metric-tile metric-tile--info"><span className="metric-tile__label">{t("catalog.integrity.total")}</span><strong className="metric-tile__value">{formatCount(integritySummary?.total_products || 0)}</strong></div>
+            <div className="metric-tile metric-tile--success"><span className="metric-tile__label">{t("catalog.integrity.clear")}</span><strong className="metric-tile__value">{formatCount(integritySummary?.clear_count || 0)}</strong></div>
+            <div className="metric-tile metric-tile--warning"><span className="metric-tile__label">{t("catalog.integrity.incomplete")}</span><strong className="metric-tile__value">{formatCount(integritySummary?.incomplete_count || 0)}</strong></div>
+            <div className="metric-tile metric-tile--danger"><span className="metric-tile__label">{t("catalog.integrity.conflict")}</span><strong className="metric-tile__value">{formatCount(integritySummary?.conflict_count || 0)}</strong></div>
+            <div className="metric-tile metric-tile--info"><span className="metric-tile__label">{t("catalog.integrity.pending")}</span><strong className="metric-tile__value">{formatCount(integritySummary?.pending_count || 0)}</strong></div>
+            <div className="metric-tile metric-tile--danger"><span className="metric-tile__label">{t("catalog.integrity.failed")}</span><strong className="metric-tile__value">{formatCount(integritySummary?.failed_count || 0)}</strong></div>
+          </div>
           <div className="meta-row catalog-meta-strip">
             <span>{catalogCountLabel}</span>
+            {integritySummary?.last_evaluated_at ? <span>{t("catalog.integrity.lastEvaluation")}: <strong>{new Date(integritySummary.last_evaluated_at).toLocaleString(locale)}</strong></span> : null}
             {originalNumberBrandMatches.length ? (
               <span>
                 {t("catalog.search.originalNoBrands")}: <strong>{originalNumberBrandMatches.join(", ")}</strong>
@@ -1456,7 +1555,7 @@ export function CatalogPage() {
                 className="data-table--catalog"
                 rows={rows}
                 columns={columns}
-                emptyText={loading ? t("catalog.empty.loading") : !submittedSearch.trim() && !submittedCatalogBrand && !submittedCatalogSegment ? t("catalog.empty.prompt") : t("catalog.empty.noProducts")}
+                emptyText={loading ? t("catalog.empty.loading") : !submittedSearch.trim() && !submittedCatalogBrand && !submittedCatalogSegment && !submittedIntegrityFilter ? t("catalog.empty.prompt") : t("catalog.empty.noProducts")}
                 onRowClick={(row) => setSelectedCatalogProductId((current) => (current === row.product_id ? "" : row.product_id))}
                 rowClassName={(row) => (row.product_id === selectedCatalogProductId ? "data-table__row--active" : "")}
               />
@@ -1492,6 +1591,15 @@ export function CatalogPage() {
                     : null
                 }
               />
+            </div>
+            <div className="catalog-integrity-detail">
+              <span className={`catalog-state-badge ${getIntegrityTone(selectedCatalogRow.integrity_status)}`}>
+                {getIntegrityLabel(selectedCatalogRow.integrity_status)}
+              </span>
+              {selectedCatalogRow.conflict_fields?.length ? <span>{t("catalog.integrity.affectedFields")}: {selectedCatalogRow.conflict_fields.join(", ")}</span> : null}
+              {selectedCatalogRow.critical_missing_fields?.length ? <span>{t("catalog.integrity.missingFields")}: {selectedCatalogRow.critical_missing_fields.join(", ")}</span> : null}
+              {selectedCatalogRow.optional_missing_fields?.includes("ean") ? <span>{t("catalog.integrity.missingEan")}</span> : null}
+              {selectedCatalogRow.integrity_last_error ? <span className="error-text">{selectedCatalogRow.integrity_last_error}</span> : null}
             </div>
             <div className="workbench-detail-panel__title">{selectedCatalogDraft.product_code}</div>
             <div className="document-marks document-marks--compact">

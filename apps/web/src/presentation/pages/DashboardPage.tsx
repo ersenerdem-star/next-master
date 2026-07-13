@@ -31,6 +31,8 @@ import { getOperationDefinition, isRegisteredOperation } from "../../shared/oper
 import { isImportFailedStatus, mapImportStatusToTone, type ImportEngineStatus } from "../../shared/importEngine";
 import { canAccessSystemModules } from "../../shared/roles";
 import { useI18n } from "../../i18n/I18nProvider";
+import { fetchCatalogIntegritySummary } from "../../infrastructure/api/catalogApi";
+import type { CatalogIntegritySummary } from "../../types/catalog";
 
 type DashboardPageProps = {
   role?: string;
@@ -46,6 +48,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
   const [latestQuotes, setLatestQuotes] = useState<DashboardSalesOrderSummary[]>([]);
   const [loadingLatestQuotes, setLoadingLatestQuotes] = useState(false);
   const [operationsRows, setOperationsRows] = useState<SupplierOperationsStatusRow[]>([]);
+  const [catalogIntegrity, setCatalogIntegrity] = useState<CatalogIntegritySummary | null>(null);
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
   const [loadingOperations, setLoadingOperations] = useState(false);
   const [snapshotErrorKey, setSnapshotErrorKey] = useState<string | null>(null);
@@ -158,6 +161,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
       const result = await fetchCloudSupplierOperationsStatusAll(refreshedSuppliers);
       setSuppliers(refreshedSuppliers);
       setOperationsRows(result);
+      setCatalogIntegrity(await fetchCatalogIntegritySummary().catch(() => null));
     } catch (caught) {
       console.error(caught);
       setOperationsErrorKey("dashboard.operationsStatus.loadFailed");
@@ -291,6 +295,12 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
   function isOperationsFailedStatus(status: string | null | undefined) {
     return isImportFailedStatus(toImportEngineStatus(status));
   }
+
+  const catalogIntegrityOperationStatus = catalogIntegrity?.backfill_status === "failed" || (catalogIntegrity?.failed_count || 0) > 0
+    ? "failed"
+    : !catalogIntegrity || catalogIntegrity.backfill_status !== "completed" || catalogIntegrity.pending_count > 0
+      ? "running"
+      : "completed";
 
   async function handleRetryRow(row: SupplierOperationsStatusRow) {
     try {
@@ -520,6 +530,33 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
               </Button>
             }
           >
+            {catalogIntegrity ? (
+              <div className="operations-catalog-integrity">
+                <div>
+                  <strong>{t("dashboard.operationsStatus.catalogIntegrity")}</strong>
+                  <span className="operations-subtle">
+                    {t("dashboard.operationsStatus.catalogIntegrityProgress", {
+                      processed: formatCount(catalogIntegrity.projected_products),
+                      total: formatCount(catalogIntegrity.total_products),
+                    })}
+                  </span>
+                </div>
+                <span className={`mark-badge mark-badge--${statusTone(catalogIntegrityOperationStatus)}`}>
+                  {t(`statuses.${catalogIntegrityOperationStatus}`)}
+                </span>
+                <span className="operations-subtle">
+                  {t("dashboard.operationsStatus.catalogIntegrityConditions", {
+                    conflict: formatCount(catalogIntegrity.conflict_count),
+                    incomplete: formatCount(catalogIntegrity.incomplete_count),
+                    pending: formatCount(catalogIntegrity.pending_count),
+                    failed: formatCount(catalogIntegrity.failed_count),
+                  })}
+                </span>
+                <span className="operations-subtle">
+                  {t("dashboard.operationsStatus.lastEvaluation")}: {formatDateTime(catalogIntegrity.last_evaluated_at)}
+                </span>
+              </div>
+            ) : null}
             <div className="toolbar toolbar--wrap dashboard-toolbar">
               <Select value={operationsSupplier} options={operationsSupplierOptions} onChange={setOperationsSupplier} />
               <Input value={operationsSearch} placeholder={t("dashboard.operationsStatus.searchPlaceholder")} onChange={setOperationsSearch} />
