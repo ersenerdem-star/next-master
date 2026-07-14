@@ -298,6 +298,10 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
 
   const catalogIntegrityOperationStatus = catalogIntegrity?.backfill_status === "failed" || (catalogIntegrity?.failed_count || 0) > 0
     ? "failed"
+    : catalogIntegrity?.initialization_state === "not_initialized"
+      ? "idle"
+      : catalogIntegrity?.initialization_state === "partial"
+        ? "waiting"
     : !catalogIntegrity || catalogIntegrity.backfill_status !== "completed" || catalogIntegrity.pending_count > 0
       ? "running"
       : "completed";
@@ -535,10 +539,14 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
                 <div>
                   <strong>{t("dashboard.operationsStatus.catalogIntegrity")}</strong>
                   <span className="operations-subtle">
-                    {t("dashboard.operationsStatus.catalogIntegrityProgress", {
-                      processed: formatCount(catalogIntegrity.projected_products),
-                      total: formatCount(catalogIntegrity.total_products),
-                    })}
+                    {catalogIntegrity.initialization_state === "not_initialized"
+                      ? t("catalog.integrity.notInitialized")
+                      : catalogIntegrity.initialization_state === "partial"
+                        ? t("catalog.integrity.partial")
+                        : t("dashboard.operationsStatus.catalogIntegrityProgress", {
+                            processed: formatCount(catalogIntegrity.projected_products),
+                            total: catalogIntegrity.total_products == null ? "—" : formatCount(catalogIntegrity.total_products),
+                          })}
                   </span>
                 </div>
                 <span className={`mark-badge mark-badge--${statusTone(catalogIntegrityOperationStatus)}`}>

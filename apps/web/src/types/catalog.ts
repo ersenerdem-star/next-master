@@ -35,8 +35,10 @@ export type CatalogIntegrityStatus = "unknown" | "queued" | "evaluating" | "clea
 
 export type CatalogIntegrityFilter = "" | "conflict" | "incomplete" | "missing_ean" | "pending" | "failed";
 
+export type CatalogIntegrityInitializationState = "not_initialized" | "partial" | "running" | "completed" | "failed";
+
 export type CatalogIntegritySummary = {
-  total_products: number;
+  total_products: number | null;
   projected_products: number;
   clear_count: number;
   incomplete_count: number;
@@ -48,4 +50,5 @@ export type CatalogIntegritySummary = {
   backfill_queued_products: number;
   backfill_updated_at: string | null;
   backfill_error: string | null;
+  initialization_state: CatalogIntegrityInitializationState;
 };

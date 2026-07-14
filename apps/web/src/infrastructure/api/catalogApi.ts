@@ -15,6 +15,7 @@ import { clearCloudBrandsCache, fetchCloudBrands } from "./brandsApi";
 import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
 import { sanitizeUserFacingMessage } from "../../shared/userMessage";
+import { mapCatalogIntegritySummary } from "../../shared/catalogIntegritySummary";
 
 const CATALOG_SELECT_WITH_IMAGE =
   "id,product_code,image_url,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note";
@@ -268,20 +269,7 @@ export async function fetchCloudCatalogIntegrity(input: {
 
 export async function fetchCatalogIntegritySummary(): Promise<CatalogIntegritySummary> {
   const data = await callAppRpc<Record<string, unknown>>("get_catalog_integrity_summary");
-  return {
-    total_products: Number(data?.total_products || 0),
-    projected_products: Number(data?.projected_products || 0),
-    clear_count: Number(data?.clear_count || 0),
-    incomplete_count: Number(data?.incomplete_count || 0),
-    conflict_count: Number(data?.conflict_count || 0),
-    pending_count: Number(data?.pending_count || 0),
-    failed_count: Number(data?.failed_count || 0),
-    last_evaluated_at: data?.last_evaluated_at ? String(data.last_evaluated_at) : null,
-    backfill_status: String(data?.backfill_status || "queued") as CatalogIntegritySummary["backfill_status"],
-    backfill_queued_products: Number(data?.backfill_queued_products || 0),
-    backfill_updated_at: data?.backfill_updated_at ? String(data.backfill_updated_at) : null,
-    backfill_error: data?.backfill_error ? String(data.backfill_error) : null,
-  };
+  return mapCatalogIntegritySummary(data);
 }
 
 export async function fetchCatalogProductIntegrity(productId: string) {

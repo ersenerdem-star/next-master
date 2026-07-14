@@ -34,6 +34,7 @@ import { downloadCatalogLifecycleTemplate, downloadCatalogTemplate } from "../..
 import { dispatchAppNavigation, PENDING_CATALOG_PURCHASE_ITEM_KEY, PENDING_CATALOG_SALES_ITEM_KEY, storeCatalogTransfer } from "../../shared/catalogTransfer";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { useI18n } from "../../i18n/I18nProvider";
+import { shouldDisplayCatalogIntegrityCounts } from "../../shared/catalogIntegritySummary";
 
 const CATALOG_CACHE_KEY = "next-master-catalog-cache";
 const CATALOG_CACHE_WRITE_DELAY_MS = 250;
@@ -228,6 +229,8 @@ export function CatalogPage() {
   });
   const numberLocale = locale === "tr" ? "tr-TR" : "en-US";
   const formatCount = (value: number) => value.toLocaleString(numberLocale);
+  const displayIntegrityCounts = integritySummary ? shouldDisplayCatalogIntegrityCounts(integritySummary.initialization_state) : false;
+  const formatIntegrityCount = (value: number | null | undefined) => displayIntegrityCounts && value != null ? formatCount(value) : "—";
   const getSegmentLabel = (value: string | null | undefined) => {
     const normalized = normalizeCatalogMarketSegment(value);
     return normalized ? t(`catalog.segments.${normalized}`) : t("catalog.segments.unassigned");
@@ -1535,13 +1538,24 @@ export function CatalogPage() {
               {t("catalog.integrity.refresh")}
             </Button>
           </div>
+          {integritySummary?.initialization_state === "not_initialized" ? <div className="warning-text">{t("catalog.integrity.notInitialized")}</div> : null}
+          {integritySummary?.initialization_state === "partial" ? <div className="warning-text">{t("catalog.integrity.partial")}</div> : null}
+          {integritySummary?.initialization_state === "running" ? (
+            <div className="operations-subtle">
+              {t("catalog.integrity.runningProgress", {
+                processed: formatCount(integritySummary.projected_products),
+                total: integritySummary.total_products == null ? "—" : formatCount(integritySummary.total_products),
+              })}
+            </div>
+          ) : null}
+          {integritySummary?.initialization_state === "failed" ? <div className="error-text">{integritySummary.backfill_error || t("catalog.integrity.syncFailed")}</div> : null}
           <div className="metric-strip catalog-integrity-summary">
-            <div className="metric-tile metric-tile--info"><span className="metric-tile__label">{t("catalog.integrity.total")}</span><strong className="metric-tile__value">{formatCount(integritySummary?.total_products || 0)}</strong></div>
-            <div className="metric-tile metric-tile--success"><span className="metric-tile__label">{t("catalog.integrity.clear")}</span><strong className="metric-tile__value">{formatCount(integritySummary?.clear_count || 0)}</strong></div>
-            <div className="metric-tile metric-tile--warning"><span className="metric-tile__label">{t("catalog.integrity.incomplete")}</span><strong className="metric-tile__value">{formatCount(integritySummary?.incomplete_count || 0)}</strong></div>
-            <div className="metric-tile metric-tile--danger"><span className="metric-tile__label">{t("catalog.integrity.conflict")}</span><strong className="metric-tile__value">{formatCount(integritySummary?.conflict_count || 0)}</strong></div>
-            <div className="metric-tile metric-tile--info"><span className="metric-tile__label">{t("catalog.integrity.pending")}</span><strong className="metric-tile__value">{formatCount(integritySummary?.pending_count || 0)}</strong></div>
-            <div className="metric-tile metric-tile--danger"><span className="metric-tile__label">{t("catalog.integrity.failed")}</span><strong className="metric-tile__value">{formatCount(integritySummary?.failed_count || 0)}</strong></div>
+            <div className="metric-tile metric-tile--info"><span className="metric-tile__label">{t("catalog.integrity.total")}</span><strong className="metric-tile__value">{formatIntegrityCount(integritySummary?.total_products)}</strong></div>
+            <div className="metric-tile metric-tile--success"><span className="metric-tile__label">{t("catalog.integrity.clear")}</span><strong className="metric-tile__value">{formatIntegrityCount(integritySummary?.clear_count)}</strong></div>
+            <div className="metric-tile metric-tile--warning"><span className="metric-tile__label">{t("catalog.integrity.incomplete")}</span><strong className="metric-tile__value">{formatIntegrityCount(integritySummary?.incomplete_count)}</strong></div>
+            <div className="metric-tile metric-tile--danger"><span className="metric-tile__label">{t("catalog.integrity.conflict")}</span><strong className="metric-tile__value">{formatIntegrityCount(integritySummary?.conflict_count)}</strong></div>
+            <div className="metric-tile metric-tile--info"><span className="metric-tile__label">{t("catalog.integrity.pending")}</span><strong className="metric-tile__value">{formatIntegrityCount(integritySummary?.pending_count)}</strong></div>
+            <div className="metric-tile metric-tile--danger"><span className="metric-tile__label">{t("catalog.integrity.failed")}</span><strong className="metric-tile__value">{formatIntegrityCount(integritySummary?.failed_count)}</strong></div>
           </div>
           <div className="meta-row catalog-meta-strip">
             <span>{catalogCountLabel}</span>
