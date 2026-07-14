@@ -22,6 +22,7 @@ import {
 } from "../components/master/MasterIntelligenceComponents";
 import { formatBrandAwareProductCode } from "../../shared/productCodeDisplay";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
+import { CompactFilterBar, PageHeader, PageShell } from "../components/common/VisualPrimitives";
 
 const scopeOptions = [
   { value: "priced", label: "Priced items" },
@@ -376,25 +377,25 @@ export function MasterPage() {
   }
 
   return (
-    <div className="page-stack procurement-master-page">
-      <section className="procurement-page-header">
-        <div>
-          <span className="procurement-page-header__eyebrow">Procurement Intelligence</span>
-          <h2>Supplier Comparison</h2>
-          <p>Best supplier, second supplier, price gap and sales price intelligence</p>
-        </div>
-        <Button
-          variant="secondary"
-          className="button--compact procurement-export-button"
-          onClick={() => void handleMasterExport()}
-          busy={exportingMaster}
-          busyLabel="Preparing..."
-        >
-          Export XLSX
-        </Button>
-      </section>
+    <PageShell className="procurement-master-page">
+      <PageHeader
+        eyebrow="Procurement Intelligence"
+        title="Supplier Comparison"
+        subtitle="Best supplier, second supplier, price gap and sales price intelligence"
+        actions={
+          <Button
+            variant="secondary"
+            className="button--compact procurement-export-button"
+            onClick={() => void handleMasterExport()}
+            busy={exportingMaster}
+            busyLabel="Preparing..."
+          >
+            Export XLSX
+          </Button>
+        }
+      />
 
-      <section className="smart-filter-bar" aria-label="Supplier comparison filters">
+      <CompactFilterBar className="smart-filter-bar">
         <div className="smart-filter-bar__controls">
           <Input
             label="Search product/OEM/description"
@@ -414,7 +415,7 @@ export function MasterPage() {
         <div className="active-filter-chip-row" aria-label="Active filters">
           {activeFilterChips.length ? activeFilterChips.map((chip) => <span key={chip} className="active-filter-chip">{chip}</span>) : <span className="active-filter-chip active-filter-chip--empty">No active filters</span>}
         </div>
-      </section>
+      </CompactFilterBar>
 
       <section className="metric-strip" aria-label="Supplier comparison summary">
         <MetricTile label="Rows Shown" value={summary.rowsShown.toLocaleString("en-US")} detail={loadingRows ? "Loading latest page" : "Current page"} tone="neutral" />
@@ -458,6 +459,6 @@ export function MasterPage() {
           )}
         </div>
       </section>
-    </div>
+    </PageShell>
   );
 }

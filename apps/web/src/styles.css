@@ -5010,6 +5010,49 @@ select {
   }
 }
 
+.procurement-master-page {
+  gap: 12px;
+}
+
+.procurement-master-page .smart-filter-bar {
+  display: block;
+  padding: 12px;
+}
+
+.procurement-master-page .metric-strip {
+  gap: 8px;
+}
+
+.procurement-master-page .metric-tile {
+  min-height: 86px;
+  padding: 10px 12px;
+  box-shadow: none;
+}
+
+.procurement-master-page .metric-tile__value {
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.procurement-table-card {
+  min-width: 0;
+}
+
+.procurement-table-card .decision-table-wrap {
+  max-height: min(64vh, 680px);
+}
+
+.decision-table th:nth-child(3),
+.decision-table td:nth-child(3),
+.decision-table th:nth-child(4),
+.decision-table td:nth-child(4),
+.decision-table th:nth-child(5),
+.decision-table td:nth-child(5),
+.decision-table th:nth-child(6),
+.decision-table td:nth-child(6) {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Shell refresh v2: premium industrial workspace */
 :root {
   font-family: "IBM Plex Sans", "IBM Plex Sans Arabic", "Noto Sans Arabic", "Aptos", "Segoe UI", sans-serif;
