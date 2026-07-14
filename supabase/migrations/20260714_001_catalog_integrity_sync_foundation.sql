@@ -141,7 +141,12 @@ declare
   v_failed_delta integer := 0;
   v_last_evaluated_at timestamptz;
 begin
-  v_organization_id := coalesce(new.organization_id, old.organization_id);
+  if tg_op = 'DELETE' then
+    v_organization_id := old.organization_id;
+  else
+    v_organization_id := new.organization_id;
+  end if;
+
   perform public.ensure_catalog_integrity_summary(v_organization_id);
 
   if tg_op = 'INSERT' then
@@ -210,7 +215,12 @@ declare
   v_organization_id uuid;
   v_delta integer := 0;
 begin
-  v_organization_id := coalesce(new.organization_id, old.organization_id);
+  if tg_op = 'DELETE' then
+    v_organization_id := old.organization_id;
+  else
+    v_organization_id := new.organization_id;
+  end if;
+
   perform public.ensure_catalog_integrity_summary(v_organization_id);
 
   if tg_op = 'INSERT' then
