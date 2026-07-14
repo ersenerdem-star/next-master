@@ -5796,6 +5796,7 @@ textarea {
 }
 
 .dashboard-executive-summary {
+  order: 1;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin: 0;
@@ -5806,6 +5807,7 @@ textarea {
 }
 
 .dashboard-content-grid {
+  order: 3;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
@@ -5840,7 +5842,12 @@ textarea {
   margin: 0;
 }
 
+.dashboard-operations-pulse {
+  order: 4;
+}
+
 .dashboard-needs-attention {
+  order: 2;
   border-left: 3px solid #f59e0b;
 }
 
