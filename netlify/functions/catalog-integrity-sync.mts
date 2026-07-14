@@ -12,6 +12,13 @@ const BACKFILL_CHUNK_SIZE = 1000;
 const EVALUATION_BATCH_SIZE = 100;
 const MAX_BATCHES_PER_INVOCATION = 4;
 
+type ServiceRpcCaller = <T>(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  name: string,
+  args: Record<string, unknown>,
+) => Promise<T>;
+
 async function callServiceRpc<T>(supabaseUrl: string, serviceRoleKey: string, name: string, args: Record<string, unknown>) {
   return sendJson<T>(`${supabaseUrl}/rest/v1/rpc/${name}`, {
     method: "POST",
@@ -21,20 +28,29 @@ async function callServiceRpc<T>(supabaseUrl: string, serviceRoleKey: string, na
   });
 }
 
-async function processCatalogIntegrity(supabaseUrl: string, serviceRoleKey: string, workerId: string) {
-  const backfill = await callServiceRpc<Record<string, unknown>>(
-    supabaseUrl,
-    serviceRoleKey,
-    "enqueue_catalog_integrity_backfill_batch",
-    { input_chunk_size: BACKFILL_CHUNK_SIZE },
-  );
+export async function processCatalogIntegrity(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  workerId: string,
+  callRpc: ServiceRpcCaller = callServiceRpc,
+) {
+  const backfillEnabled = process.env.CATALOG_INTEGRITY_BACKFILL_ENABLED === "true";
+  const backfill = backfillEnabled
+    ? await callRpc<Record<string, unknown>>(
+        supabaseUrl,
+        serviceRoleKey,
+        "enqueue_catalog_integrity_backfill_batch",
+        { input_chunk_size: BACKFILL_CHUNK_SIZE },
+      )
+    : null;
+  const backfillStatus = backfillEnabled ? "backfill_enqueued" : "backfill_disabled";
 
   let evaluatedCount = 0;
   let claimedCount = 0;
   let failedBatchCount = 0;
 
   for (let batchIndex = 0; batchIndex < MAX_BATCHES_PER_INVOCATION; batchIndex += 1) {
-    const claims = await callServiceRpc<IntegrityClaim[]>(
+    const claims = await callRpc<IntegrityClaim[]>(
       supabaseUrl,
       serviceRoleKey,
       "claim_catalog_integrity_batch",
@@ -45,7 +61,7 @@ async function processCatalogIntegrity(supabaseUrl: string, serviceRoleKey: stri
     claimedCount += claims.length;
 
     try {
-      const result = await callServiceRpc<{ evaluated_count?: number }>(
+      const result = await callRpc<{ evaluated_count?: number }>(
         supabaseUrl,
         serviceRoleKey,
         "evaluate_catalog_integrity_batch",
@@ -55,7 +71,7 @@ async function processCatalogIntegrity(supabaseUrl: string, serviceRoleKey: stri
     } catch (error) {
       failedBatchCount += 1;
       const message = error instanceof Error ? error.message : String(error || "Catalog integrity evaluation failed");
-      await callServiceRpc(
+      await callRpc(
         supabaseUrl,
         serviceRoleKey,
         "fail_catalog_integrity_batch",
@@ -72,11 +88,20 @@ async function processCatalogIntegrity(supabaseUrl: string, serviceRoleKey: stri
 
   console.info("catalog integrity sync completed", {
     workerId,
+    backfillStatus,
     backfill,
     claimedCount,
     evaluatedCount,
     failedBatchCount,
   });
+
+  return {
+    backfill_status: backfillStatus,
+    backfill,
+    claimed_count: claimedCount,
+    evaluated_count: evaluatedCount,
+    failed_batch_count: failedBatchCount,
+  };
 }
 
 export default async (_req: Request, context: Context) => {
@@ -87,6 +112,7 @@ export default async (_req: Request, context: Context) => {
   }
 
   const workerId = `netlify:${context.requestId || crypto.randomUUID()}`;
+  const backfillEnabled = process.env.CATALOG_INTEGRITY_BACKFILL_ENABLED === "true";
   const task = processCatalogIntegrity(supabaseUrl, serviceRoleKey, workerId).catch((error) => {
     console.error("catalog integrity sync failed", error);
   });
@@ -97,6 +123,7 @@ export default async (_req: Request, context: Context) => {
     data: {
       queued: true,
       worker_id: workerId,
+      backfill_status: backfillEnabled ? "backfill_enabled" : "backfill_disabled",
       backfill_chunk_size: BACKFILL_CHUNK_SIZE,
       evaluation_batch_size: EVALUATION_BATCH_SIZE,
       max_batches: MAX_BATCHES_PER_INVOCATION,
