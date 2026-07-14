@@ -62,9 +62,29 @@ create table if not exists public.catalog_integrity_backfill_state (
   last_error text
 );
 
+create table if not exists public.catalog_integrity_summary (
+  organization_id uuid primary key references public.organizations(id) on delete cascade,
+  total_products bigint not null default 0 check (total_products >= 0),
+  projected_products bigint not null default 0 check (projected_products >= 0),
+  clear_count bigint not null default 0 check (clear_count >= 0),
+  incomplete_count bigint not null default 0 check (incomplete_count >= 0),
+  conflict_count bigint not null default 0 check (conflict_count >= 0),
+  pending_count bigint not null default 0 check (pending_count >= 0),
+  failed_count bigint not null default 0 check (failed_count >= 0),
+  last_evaluated_at timestamptz,
+  backfill_status text not null default 'queued' check (backfill_status in ('queued', 'running', 'completed', 'failed')),
+  backfill_total_products bigint,
+  backfill_queued_products bigint not null default 0 check (backfill_queued_products >= 0),
+  backfill_updated_at timestamptz,
+  backfill_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.catalog_product_integrity enable row level security;
 alter table public.catalog_integrity_queue enable row level security;
 alter table public.catalog_integrity_backfill_state enable row level security;
+alter table public.catalog_integrity_summary enable row level security;
 
 drop policy if exists catalog_product_integrity_select_org on public.catalog_product_integrity;
 create policy catalog_product_integrity_select_org
@@ -75,10 +95,150 @@ using (
   and organization_id = public.current_profile_org_id()
 );
 
+drop policy if exists catalog_integrity_summary_select_org on public.catalog_integrity_summary;
+create policy catalog_integrity_summary_select_org
+on public.catalog_integrity_summary
+for select
+using (
+  auth.uid() is not null
+  and organization_id = public.current_profile_org_id()
+);
+
 grant select on public.catalog_product_integrity to authenticated;
+grant select on public.catalog_integrity_summary to authenticated;
 grant select, insert, update, delete on public.catalog_product_integrity to service_role;
 grant select, insert, update, delete on public.catalog_integrity_queue to service_role;
 grant select, insert, update, delete on public.catalog_integrity_backfill_state to service_role;
+grant select, insert, update, delete on public.catalog_integrity_summary to service_role;
+
+create or replace function public.ensure_catalog_integrity_summary(input_organization_id uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  insert into public.catalog_integrity_summary (organization_id)
+  select input_organization_id
+  where input_organization_id is not null
+  on conflict (organization_id) do nothing;
+$$;
+
+revoke all on function public.ensure_catalog_integrity_summary(uuid) from public;
+
+create or replace function public.apply_catalog_integrity_summary_delta()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_organization_id uuid;
+  v_projected_delta integer := 0;
+  v_clear_delta integer := 0;
+  v_incomplete_delta integer := 0;
+  v_conflict_delta integer := 0;
+  v_pending_delta integer := 0;
+  v_failed_delta integer := 0;
+  v_last_evaluated_at timestamptz;
+begin
+  v_organization_id := coalesce(new.organization_id, old.organization_id);
+  perform public.ensure_catalog_integrity_summary(v_organization_id);
+
+  if tg_op = 'INSERT' then
+    v_projected_delta := 1;
+    v_last_evaluated_at := new.last_evaluated_at;
+    v_clear_delta := case when new.status = 'clear' then 1 else 0 end;
+    v_incomplete_delta := case when new.status = 'incomplete' then 1 else 0 end;
+    v_conflict_delta := case when new.status = 'conflict' then 1 else 0 end;
+    v_pending_delta := case when new.status in ('unknown', 'queued', 'evaluating') then 1 else 0 end;
+    v_failed_delta := case when new.status = 'failed' then 1 else 0 end;
+  elsif tg_op = 'UPDATE' then
+    v_last_evaluated_at := new.last_evaluated_at;
+    if old.status is distinct from new.status then
+      v_clear_delta := case when new.status = 'clear' then 1 else 0 end - case when old.status = 'clear' then 1 else 0 end;
+      v_incomplete_delta := case when new.status = 'incomplete' then 1 else 0 end - case when old.status = 'incomplete' then 1 else 0 end;
+      v_conflict_delta := case when new.status = 'conflict' then 1 else 0 end - case when old.status = 'conflict' then 1 else 0 end;
+      v_pending_delta := case when new.status in ('unknown', 'queued', 'evaluating') then 1 else 0 end - case when old.status in ('unknown', 'queued', 'evaluating') then 1 else 0 end;
+      v_failed_delta := case when new.status = 'failed' then 1 else 0 end - case when old.status = 'failed' then 1 else 0 end;
+    end if;
+  elsif tg_op = 'DELETE' then
+    v_projected_delta := -1;
+    v_clear_delta := case when old.status = 'clear' then -1 else 0 end;
+    v_incomplete_delta := case when old.status = 'incomplete' then -1 else 0 end;
+    v_conflict_delta := case when old.status = 'conflict' then -1 else 0 end;
+    v_pending_delta := case when old.status in ('unknown', 'queued', 'evaluating') then -1 else 0 end;
+    v_failed_delta := case when old.status = 'failed' then -1 else 0 end;
+  end if;
+
+  update public.catalog_integrity_summary
+  set projected_products = greatest(0, projected_products + v_projected_delta),
+      clear_count = greatest(0, clear_count + v_clear_delta),
+      incomplete_count = greatest(0, incomplete_count + v_incomplete_delta),
+      conflict_count = greatest(0, conflict_count + v_conflict_delta),
+      pending_count = greatest(0, pending_count + v_pending_delta),
+      failed_count = greatest(0, failed_count + v_failed_delta),
+      last_evaluated_at = case
+        when v_last_evaluated_at is null then last_evaluated_at
+        else greatest(coalesce(last_evaluated_at, v_last_evaluated_at), v_last_evaluated_at)
+      end,
+      updated_at = now()
+  where organization_id = v_organization_id;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.apply_catalog_integrity_summary_delta() from public;
+
+drop trigger if exists trg_catalog_product_integrity_summary_delta on public.catalog_product_integrity;
+create trigger trg_catalog_product_integrity_summary_delta
+after insert or update of status, last_evaluated_at or delete
+on public.catalog_product_integrity
+for each row
+execute function public.apply_catalog_integrity_summary_delta();
+
+create or replace function public.apply_catalog_product_summary_total_delta()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_organization_id uuid;
+  v_delta integer := 0;
+begin
+  v_organization_id := coalesce(new.organization_id, old.organization_id);
+  perform public.ensure_catalog_integrity_summary(v_organization_id);
+
+  if tg_op = 'INSERT' then
+    v_delta := 1;
+  elsif tg_op = 'DELETE' then
+    v_delta := -1;
+  end if;
+
+  update public.catalog_integrity_summary
+  set total_products = greatest(0, total_products + v_delta),
+      updated_at = now()
+  where organization_id = v_organization_id;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.apply_catalog_product_summary_total_delta() from public;
+
+drop trigger if exists trg_catalog_products_integrity_summary_total on public.catalog_products;
+create trigger trg_catalog_products_integrity_summary_total
+after insert or delete
+on public.catalog_products
+for each row
+execute function public.apply_catalog_product_summary_total_delta();
 
 create or replace function public.enqueue_catalog_integrity_product(
   input_organization_id uuid,
@@ -309,6 +469,11 @@ begin
   from public.organizations o
   on conflict (organization_id) do nothing;
 
+  insert into public.catalog_integrity_summary (organization_id, backfill_status, updated_at)
+  select o.id, 'queued', now()
+  from public.organizations o
+  on conflict (organization_id) do nothing;
+
   select s.*
   into v_state
   from public.catalog_integrity_backfill_state s
@@ -326,6 +491,12 @@ begin
     into v_state.total_products
     from public.catalog_products cp
     where cp.organization_id = v_state.organization_id;
+
+    update public.catalog_integrity_summary
+    set total_products = v_state.total_products,
+        backfill_total_products = v_state.total_products,
+        updated_at = now()
+    where organization_id = v_state.organization_id;
   end if;
 
   with batch as (
@@ -389,6 +560,16 @@ begin
       updated_at = now()
   where organization_id = v_state.organization_id;
 
+  update public.catalog_integrity_summary
+  set total_products = coalesce(v_state.total_products, total_products),
+      backfill_status = case when v_complete then 'completed' else 'running' end,
+      backfill_total_products = v_state.total_products,
+      backfill_queued_products = backfill_queued_products + v_queued,
+      backfill_updated_at = now(),
+      backfill_error = null,
+      updated_at = now()
+  where organization_id = v_state.organization_id;
+
   return jsonb_build_object(
     'complete', v_complete,
     'organization_id', v_state.organization_id,
@@ -400,6 +581,13 @@ exception when others then
   if v_state.organization_id is not null then
     update public.catalog_integrity_backfill_state
     set status = 'failed', last_error = sqlerrm, updated_at = now()
+    where organization_id = v_state.organization_id;
+
+    update public.catalog_integrity_summary
+    set backfill_status = 'failed',
+        backfill_error = sqlerrm,
+        backfill_updated_at = now(),
+        updated_at = now()
     where organization_id = v_state.organization_id;
   end if;
   raise;
@@ -703,38 +891,24 @@ set search_path = public
 as $$
   with org as (
     select public.current_profile_org_id() as organization_id
-  ), counts as (
-    select
-      count(*)::bigint as total_products,
-      count(*) filter (where i.status = 'clear')::bigint as clear_count,
-      count(*) filter (where i.status = 'incomplete')::bigint as incomplete_count,
-      count(*) filter (where i.status = 'conflict')::bigint as conflict_count,
-      count(*) filter (where i.status in ('unknown', 'queued', 'evaluating'))::bigint as pending_count,
-      count(*) filter (where i.status = 'failed')::bigint as failed_count,
-      max(i.last_evaluated_at) as last_evaluated_at
-    from public.catalog_product_integrity i
-    join org on org.organization_id = i.organization_id
-  ), backfill as (
-    select s.status, s.total_products, s.queued_products, s.updated_at, s.last_error
-    from public.catalog_integrity_backfill_state s
-    join org on org.organization_id = s.organization_id
   )
   select jsonb_build_object(
-    'total_products', coalesce(backfill.total_products, counts.total_products, 0),
-    'projected_products', coalesce(counts.total_products, 0),
-    'clear_count', coalesce(counts.clear_count, 0),
-    'incomplete_count', coalesce(counts.incomplete_count, 0),
-    'conflict_count', coalesce(counts.conflict_count, 0),
-    'pending_count', coalesce(counts.pending_count, 0),
-    'failed_count', coalesce(counts.failed_count, 0),
-    'last_evaluated_at', counts.last_evaluated_at,
-    'backfill_status', coalesce(backfill.status, 'queued'),
-    'backfill_queued_products', coalesce(backfill.queued_products, 0),
-    'backfill_updated_at', backfill.updated_at,
-    'backfill_error', backfill.last_error
+    'total_products', coalesce(s.total_products, 0),
+    'projected_products', coalesce(s.projected_products, 0),
+    'clear_count', coalesce(s.clear_count, 0),
+    'incomplete_count', coalesce(s.incomplete_count, 0),
+    'conflict_count', coalesce(s.conflict_count, 0),
+    'pending_count', coalesce(s.pending_count, 0),
+    'failed_count', coalesce(s.failed_count, 0),
+    'last_evaluated_at', s.last_evaluated_at,
+    'backfill_status', coalesce(s.backfill_status, 'queued'),
+    'backfill_queued_products', coalesce(s.backfill_queued_products, 0),
+    'backfill_updated_at', s.backfill_updated_at,
+    'backfill_error', s.backfill_error
   )
-  from counts
-  left join backfill on true;
+  from org
+  left join public.catalog_integrity_summary s
+    on s.organization_id = org.organization_id;
 $$;
 
 revoke all on function public.get_catalog_integrity_summary() from public;
