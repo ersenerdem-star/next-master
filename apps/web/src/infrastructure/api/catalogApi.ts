@@ -201,6 +201,7 @@ export async function fetchCloudCatalog(input: {
   });
   return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
     total_count: row.total_count == null ? null : Number(row.total_count),
+    has_more: Boolean(row.has_more),
     product_id: String(row.product_id || ""),
     product_code: String(row.product_code || ""),
     brand: String(row.brand || ""),
@@ -240,6 +241,7 @@ export async function fetchCloudCatalogIntegrity(input: {
 
   return (data ?? []).map((row) => ({
     total_count: row.total_count == null ? null : Number(row.total_count),
+    has_more: Boolean(row.has_more),
     product_id: String(row.product_id || ""),
     product_code: String(row.product_code || ""),
     brand: String(row.brand || ""),

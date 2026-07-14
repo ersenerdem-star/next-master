@@ -195,6 +195,38 @@ on public.catalog_products
 for each row
 execute function public.queue_catalog_product_integrity_change();
 
+do $$
+declare
+  v_constraint_name text;
+begin
+  select c.conname
+  into v_constraint_name
+  from pg_constraint c
+  where c.conrelid = 'public.product_attribute_conflicts'::regclass
+    and c.confrelid = 'public.catalog_products'::regclass
+    and c.contype = 'f'
+    and c.conkey = array[
+      (
+        select a.attnum
+        from pg_attribute a
+        where a.attrelid = 'public.product_attribute_conflicts'::regclass
+          and a.attname = 'product_id'
+      )
+    ]::smallint[]
+  limit 1;
+
+  if v_constraint_name is not null then
+    execute format('alter table public.product_attribute_conflicts drop constraint %I', v_constraint_name);
+  end if;
+
+  alter table public.product_attribute_conflicts
+    add constraint product_attribute_conflicts_product_id_fkey
+    foreign key (product_id)
+    references public.catalog_products(id)
+    on delete cascade;
+end;
+$$;
+
 create or replace function public.queue_product_conflict_integrity_change()
 returns trigger
 language plpgsql
@@ -213,6 +245,15 @@ begin
   if tg_op = 'DELETE' then
     v_organization_id := old.organization_id;
     v_product_id := old.product_id;
+
+    if not exists (
+      select 1
+      from public.catalog_products cp
+      where cp.organization_id = v_organization_id
+        and cp.id = v_product_id
+    ) then
+      return old;
+    end if;
   else
     v_organization_id := new.organization_id;
     v_product_id := new.product_id;
@@ -728,6 +769,8 @@ $$;
 revoke all on function public.get_catalog_product_integrity(uuid) from public;
 grant execute on function public.get_catalog_product_integrity(uuid) to authenticated;
 
+drop function if exists public.cloud_catalog_integrity_page(text, text, text, text, integer, integer);
+
 create or replace function public.cloud_catalog_integrity_page(
   input_search text default '',
   input_brand text default '',
@@ -738,6 +781,7 @@ create or replace function public.cloud_catalog_integrity_page(
 )
 returns table (
   total_count bigint,
+  has_more boolean,
   product_id uuid,
   product_code text,
   brand text,
@@ -824,34 +868,52 @@ as $$
         or (p.integrity_filter = 'pending' and coalesce(i.status, 'unknown') in ('unknown', 'queued', 'evaluating'))
         or (p.integrity_filter = 'failed' and i.status = 'failed')
       )
+  ), page_rows as (
+    select *
+    from filtered
+    order by product_code
+    offset (select row_offset from params)
+    limit (select page_size + 1 from params)
+  ), page_marked as (
+    select
+      page_rows.*,
+      row_number() over (order by product_code) as page_row_number
+    from page_rows
+  ), page_has_more as (
+    select exists (
+      select 1
+      from page_marked
+      where page_row_number > (select page_size from params)
+    ) as has_more
   )
   select
     null::bigint as total_count,
-    filtered.id,
-    filtered.product_code,
-    filtered.brand,
-    filtered.image_url,
-    filtered.market_segment,
-    filtered.description,
-    filtered.oem_no,
-    filtered.vehicle,
-    filtered.hs_code,
-    filtered.origin,
-    filtered.weight_kg,
-    filtered.ean,
-    filtered.lifecycle_status,
-    filtered.lifecycle_note,
-    filtered.integrity_status,
-    filtered.critical_missing_fields,
-    filtered.optional_missing_fields,
-    filtered.conflict_fields,
-    filtered.pending_conflict_count,
-    filtered.last_evaluated_at,
-    filtered.integrity_last_error
-  from filtered
-  order by filtered.product_code
-  offset (select row_offset from params)
-  limit (select page_size from params);
+    page_has_more.has_more,
+    page_marked.id,
+    page_marked.product_code,
+    page_marked.brand,
+    page_marked.image_url,
+    page_marked.market_segment,
+    page_marked.description,
+    page_marked.oem_no,
+    page_marked.vehicle,
+    page_marked.hs_code,
+    page_marked.origin,
+    page_marked.weight_kg,
+    page_marked.ean,
+    page_marked.lifecycle_status,
+    page_marked.lifecycle_note,
+    page_marked.integrity_status,
+    page_marked.critical_missing_fields,
+    page_marked.optional_missing_fields,
+    page_marked.conflict_fields,
+    page_marked.pending_conflict_count,
+    page_marked.last_evaluated_at,
+    page_marked.integrity_last_error
+  from page_marked
+  cross join page_has_more
+  where page_marked.page_row_number <= (select page_size from params)
+  order by page_marked.product_code;
 $$;
 
 revoke all on function public.cloud_catalog_integrity_page(text, text, text, text, integer, integer) from public;

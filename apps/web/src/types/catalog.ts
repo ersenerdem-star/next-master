@@ -3,6 +3,7 @@ import type { CatalogMarketSegment } from "../domain/shared/catalogSegments";
 
 export type CatalogRow = {
   total_count: number | null;
+  has_more?: boolean;
   product_id: string;
   product_code: string;
   brand: string;

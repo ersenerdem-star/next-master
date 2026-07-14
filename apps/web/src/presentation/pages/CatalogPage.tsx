@@ -37,6 +37,7 @@ import { useI18n } from "../../i18n/I18nProvider";
 
 const CATALOG_CACHE_KEY = "next-master-catalog-cache";
 const CATALOG_CACHE_WRITE_DELAY_MS = 250;
+const CATALOG_PAGE_SIZE = 50;
 
 type CatalogRowDraft = Omit<CatalogRow, "weight_kg"> & {
   weight_kg: number | string | null;
@@ -179,6 +180,7 @@ export function CatalogPage() {
   const [submittedCatalogSegment, setSubmittedCatalogSegment] = useState("");
   const [integrityFilter, setIntegrityFilter] = useState<CatalogIntegrityFilter>("");
   const [submittedIntegrityFilter, setSubmittedIntegrityFilter] = useState<CatalogIntegrityFilter>("");
+  const [catalogPage, setCatalogPage] = useState(1);
   const [integritySummary, setIntegritySummary] = useState<CatalogIntegritySummary | null>(null);
   const [integritySummaryLoading, setIntegritySummaryLoading] = useState(false);
   const [previewSelection, setPreviewSelection] = useState<{ brand: string; codes: string[] } | null>(null);
@@ -418,8 +420,8 @@ export function CatalogPage() {
                 brandName: submittedCatalogBrand,
                 marketSegment: submittedCatalogSegment,
                 integrityFilter: submittedIntegrityFilter,
-                page: 1,
-                pageSize: 50,
+                page: catalogPage,
+                pageSize: CATALOG_PAGE_SIZE,
               });
         if (!cancelled) setRows(result);
       } catch (caught) {
@@ -436,11 +438,11 @@ export function CatalogPage() {
     return () => {
       cancelled = true;
     };
-  }, [isOnline, submittedSearch, submittedCatalogBrand, submittedCatalogSegment, submittedIntegrityFilter, previewSelection, t, numberLocale]);
+  }, [isOnline, submittedSearch, submittedCatalogBrand, submittedCatalogSegment, submittedIntegrityFilter, catalogPage, previewSelection, t, numberLocale]);
 
   useEffect(() => {
     if (!searchingCatalog || loading) return;
-    const rawTotal = rows[0]?.total_count ?? rows.length;
+    const rawTotal = rows[0]?.total_count ?? (rows.some((row) => row.has_more) || catalogPage > 1 ? -((catalogPage - 1) * CATALOG_PAGE_SIZE + rows.length) : rows.length);
     const nextTotal = Math.abs(rawTotal) || rows.length;
     const totalLabel = `${formatCount(nextTotal)}${rawTotal < 0 ? "+" : ""}`;
     if (error) {
@@ -449,7 +451,7 @@ export function CatalogPage() {
       actionFeedback.succeed(t("catalog.status.rowsLoaded", { count: totalLabel }));
     }
     setSearchingCatalog(false);
-  }, [searchingCatalog, loading, error, rows, actionFeedback, numberLocale, t]);
+  }, [searchingCatalog, loading, error, rows, catalogPage, actionFeedback, numberLocale, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -599,7 +601,10 @@ export function CatalogPage() {
     };
   }, [brands, rows, drafts, search, submittedSearch, catalogBrand, submittedCatalogBrand, catalogSegment, submittedCatalogSegment, selectedCatalogProductId]);
 
-  const total = rows[0]?.total_count ?? rows.length;
+  const hasMoreCatalogRows = rows.some((row) => row.has_more);
+  const canPageCatalogBack = catalogPage > 1 && !loading;
+  const canPageCatalogForward = hasMoreCatalogRows && !loading;
+  const total = rows[0]?.total_count ?? (hasMoreCatalogRows || catalogPage > 1 ? -((catalogPage - 1) * CATALOG_PAGE_SIZE + rows.length) : rows.length);
   const hasApproximateTotal = total < 0;
   const visibleTotal = Math.abs(total);
   const trimmedSubmittedSearch = submittedSearch.trim();
@@ -612,7 +617,7 @@ export function CatalogPage() {
     : !hasSubmittedSearch && !hasSubmittedBrand && !hasSubmittedSegment && !hasSubmittedIntegrity
       ? t("catalog.search.countPrompt")
     : hasSubmittedIntegrity && !hasSubmittedSearch && !hasSubmittedBrand && !hasSubmittedSegment
-      ? t("catalog.search.countRows", { count: formatCount(visibleTotal) })
+      ? t("catalog.search.countRows", { count: `${formatCount(visibleTotal)}${hasApproximateTotal ? "+" : ""}` })
     : hasSubmittedBrand && !hasSubmittedSearch && !hasSubmittedSegment
         ? t("catalog.search.countBrand", {
             brand: submittedCatalogBrand,
@@ -625,11 +630,11 @@ export function CatalogPage() {
             })
         : hasSubmittedBrand
           ? t("catalog.search.countMatchesBrand", {
-              count: formatCount(visibleTotal),
+              count: `${formatCount(visibleTotal)}${hasApproximateTotal ? "+" : ""}`,
               brand: submittedCatalogBrand,
               segment: hasSubmittedSegment ? ` / ${getSegmentLabel(submittedCatalogSegment)}` : "",
             })
-          : t("catalog.search.countRows", { count: formatCount(visibleTotal) });
+          : t("catalog.search.countRows", { count: `${formatCount(visibleTotal)}${hasApproximateTotal ? "+" : ""}` });
   const originalNumberBrandMatches = useMemo(() => {
     if (!submittedSearch.trim() || !rows.length) return [];
     return Array.from(
@@ -703,6 +708,7 @@ export function CatalogPage() {
     setRows([]);
     setDrafts({});
     setPreviewSelection(null);
+    setCatalogPage(1);
     setSelectedCatalogProductId("");
     setStatus("");
     setError("");
@@ -720,6 +726,7 @@ export function CatalogPage() {
     setSearchingCatalog(true);
     setPreviewSelection(null);
     setSelectedCatalogProductId("");
+    setCatalogPage(1);
     if (announce) {
       actionFeedback.begin(
         t(isOnline ? "catalog.status.searchingCatalog" : "catalog.status.filteringCached", {
@@ -1130,8 +1137,8 @@ export function CatalogPage() {
         brandName: nextBrand,
         marketSegment: nextSegment,
         integrityFilter: submittedIntegrityFilter,
-        page: 1,
-        pageSize: 50,
+        page: catalogPage,
+        pageSize: CATALOG_PAGE_SIZE,
       });
       setRows(result);
     } catch (caught) {
@@ -1538,6 +1545,17 @@ export function CatalogPage() {
           </div>
           <div className="meta-row catalog-meta-strip">
             <span>{catalogCountLabel}</span>
+            {(hasSubmittedSearch || hasSubmittedBrand || hasSubmittedSegment || hasSubmittedIntegrity) && rows.length ? (
+              <span className="toolbar toolbar--compact">
+                <Button variant="secondary" className="button--compact" onClick={() => setCatalogPage((page) => Math.max(1, page - 1))} disabled={!canPageCatalogBack}>
+                  {t("catalog.search.previousPage")}
+                </Button>
+                <span>{t("catalog.search.page", { page: String(catalogPage) })}</span>
+                <Button variant="secondary" className="button--compact" onClick={() => setCatalogPage((page) => page + 1)} disabled={!canPageCatalogForward}>
+                  {t("catalog.search.nextPage")}
+                </Button>
+              </span>
+            ) : null}
             {integritySummary?.last_evaluated_at ? <span>{t("catalog.integrity.lastEvaluation")}: <strong>{new Date(integritySummary.last_evaluated_at).toLocaleString(locale)}</strong></span> : null}
             {originalNumberBrandMatches.length ? (
               <span>
