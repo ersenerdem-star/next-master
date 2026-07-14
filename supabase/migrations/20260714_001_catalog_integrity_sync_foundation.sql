@@ -43,7 +43,7 @@ create table if not exists public.catalog_integrity_queue (
 );
 
 create index if not exists idx_catalog_integrity_queue_claim
-  on public.catalog_integrity_queue (status, next_attempt_at, priority desc, updated_at, product_id)
+  on public.catalog_integrity_queue (priority desc, next_attempt_at, updated_at, product_id)
   where status = 'queued';
 
 create index if not exists idx_catalog_integrity_queue_stale_lock
@@ -167,6 +167,15 @@ security definer
 set search_path = public
 as $$
 begin
+  if tg_op = 'UPDATE'
+     and old.description is not distinct from new.description
+     and old.origin is not distinct from new.origin
+     and old.hs_code is not distinct from new.hs_code
+     and old.weight_kg is not distinct from new.weight_kg
+     and old.ean is not distinct from new.ean then
+    return new;
+  end if;
+
   perform public.enqueue_catalog_integrity_product(
     new.organization_id,
     new.id,
@@ -176,6 +185,8 @@ begin
   return new;
 end;
 $$;
+
+revoke all on function public.queue_catalog_product_integrity_change() from public;
 
 drop trigger if exists trg_catalog_products_queue_integrity on public.catalog_products;
 create trigger trg_catalog_products_queue_integrity
@@ -194,6 +205,11 @@ declare
   v_organization_id uuid;
   v_product_id uuid;
 begin
+  if tg_op = 'UPDATE'
+     and old.status is not distinct from new.status then
+    return new;
+  end if;
+
   if tg_op = 'DELETE' then
     v_organization_id := old.organization_id;
     v_product_id := old.product_id;
@@ -218,6 +234,8 @@ begin
   return new;
 end;
 $$;
+
+revoke all on function public.queue_product_conflict_integrity_change() from public;
 
 drop trigger if exists trg_product_attribute_conflicts_queue_integrity on public.product_attribute_conflicts;
 create trigger trg_product_attribute_conflicts_queue_integrity
@@ -806,35 +824,32 @@ as $$
         or (p.integrity_filter = 'pending' and coalesce(i.status, 'unknown') in ('unknown', 'queued', 'evaluating'))
         or (p.integrity_filter = 'failed' and i.status = 'failed')
       )
-  ), counted as (
-    select filtered.*, count(*) over () as total_count
-    from filtered
   )
   select
-    counted.total_count,
-    counted.id,
-    counted.product_code,
-    counted.brand,
-    counted.image_url,
-    counted.market_segment,
-    counted.description,
-    counted.oem_no,
-    counted.vehicle,
-    counted.hs_code,
-    counted.origin,
-    counted.weight_kg,
-    counted.ean,
-    counted.lifecycle_status,
-    counted.lifecycle_note,
-    counted.integrity_status,
-    counted.critical_missing_fields,
-    counted.optional_missing_fields,
-    counted.conflict_fields,
-    counted.pending_conflict_count,
-    counted.last_evaluated_at,
-    counted.integrity_last_error
-  from counted
-  order by counted.product_code
+    null::bigint as total_count,
+    filtered.id,
+    filtered.product_code,
+    filtered.brand,
+    filtered.image_url,
+    filtered.market_segment,
+    filtered.description,
+    filtered.oem_no,
+    filtered.vehicle,
+    filtered.hs_code,
+    filtered.origin,
+    filtered.weight_kg,
+    filtered.ean,
+    filtered.lifecycle_status,
+    filtered.lifecycle_note,
+    filtered.integrity_status,
+    filtered.critical_missing_fields,
+    filtered.optional_missing_fields,
+    filtered.conflict_fields,
+    filtered.pending_conflict_count,
+    filtered.last_evaluated_at,
+    filtered.integrity_last_error
+  from filtered
+  order by filtered.product_code
   offset (select row_offset from params)
   limit (select page_size from params);
 $$;

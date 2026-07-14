@@ -2,7 +2,7 @@ import type { CatalogLifecycleStatus } from "../domain/shared/lifecycle";
 import type { CatalogMarketSegment } from "../domain/shared/catalogSegments";
 
 export type CatalogRow = {
-  total_count: number;
+  total_count: number | null;
   product_id: string;
   product_code: string;
   brand: string;

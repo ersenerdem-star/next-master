@@ -599,7 +599,7 @@ export function CatalogPage() {
     };
   }, [brands, rows, drafts, search, submittedSearch, catalogBrand, submittedCatalogBrand, catalogSegment, submittedCatalogSegment, selectedCatalogProductId]);
 
-  const total = rows[0]?.total_count ?? 0;
+  const total = rows[0]?.total_count ?? rows.length;
   const hasApproximateTotal = total < 0;
   const visibleTotal = Math.abs(total);
   const trimmedSubmittedSearch = submittedSearch.trim();

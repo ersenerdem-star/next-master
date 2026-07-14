@@ -200,7 +200,7 @@ export async function fetchCloudCatalog(input: {
     input_page_size: input.pageSize ?? 50,
   });
   return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
-    total_count: Number(row.total_count ?? 0),
+    total_count: row.total_count == null ? null : Number(row.total_count),
     product_id: String(row.product_id || ""),
     product_code: String(row.product_code || ""),
     brand: String(row.brand || ""),
@@ -239,7 +239,7 @@ export async function fetchCloudCatalogIntegrity(input: {
   });
 
   return (data ?? []).map((row) => ({
-    total_count: Number(row.total_count ?? 0),
+    total_count: row.total_count == null ? null : Number(row.total_count),
     product_id: String(row.product_id || ""),
     product_code: String(row.product_code || ""),
     brand: String(row.brand || ""),
