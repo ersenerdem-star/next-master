@@ -35,6 +35,7 @@ import { dispatchAppNavigation, PENDING_CATALOG_PURCHASE_ITEM_KEY, PENDING_CATAL
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { useI18n } from "../../i18n/I18nProvider";
 import { shouldDisplayCatalogIntegrityCounts } from "../../shared/catalogIntegritySummary";
+import { CompactFilterBar, PageActions, PageHeader, PageShell } from "../components/common/VisualPrimitives";
 
 const CATALOG_CACHE_KEY = "next-master-catalog-cache";
 const CATALOG_CACHE_WRITE_DELAY_MS = 250;
@@ -1435,15 +1436,25 @@ export function CatalogPage() {
   }
 
   return (
-    <div className="page-stack">
-      <section className="section-card search-focus-card search-focus-card--admin catalog-workbench">
-        <div className="section-card__header section-card__header--row">
-          <div>
-            <span className="search-focus-card__eyebrow">{t("catalog.search.eyebrow")}</span>
-            <h2 className="search-focus-card__title">{t("catalog.search.title")}</h2>
-            <p>{t("catalog.search.description")}</p>
-          </div>
-          <div className="toolbar toolbar--wrap catalog-command-bar">
+    <PageShell className="catalog-page">
+      <PageHeader
+        eyebrow={t("catalog.search.eyebrow")}
+        title={t("catalog.search.title")}
+        subtitle={t("catalog.search.description")}
+        actions={
+          <Button
+            onClick={() => {
+              setCreateDraft((current) => ({ ...current, market_segment: catalogSegment }));
+              setShowCreateDialog(true);
+            }}
+            disabled={!isOnline}
+          >
+            {t("catalog.actions.addNewItem")}
+          </Button>
+        }
+      />
+
+      <CompactFilterBar className="catalog-filter-bar">
             <Select
               value={catalogBrand}
               options={[{ value: "", label: t("catalog.search.allBrands") }, ...editableBrandOptions]}
@@ -1494,21 +1505,16 @@ export function CatalogPage() {
             <Button variant="secondary" onClick={clearCatalogSearch} disabled={!search && !submittedSearch && !catalogBrand && !submittedCatalogBrand && !catalogSegment && !submittedCatalogSegment && !integrityFilter && !submittedIntegrityFilter && !rows.length}>
               {t("catalog.actions.clearSearch")}
             </Button>
+      </CompactFilterBar>
+
+      <details className="catalog-secondary-actions">
+        <summary>{t("common.actions")}</summary>
+        <PageActions>
             <Button variant="secondary" onClick={() => openCatalogExport("csv")} disabled={!brands.length || !isOnline} busy={exportingCatalog && exportFormat === "csv"} busyLabel={t("catalog.actions.preparing")}>
               {t("catalog.actions.exportCsv")}
             </Button>
             <Button variant="secondary" onClick={() => openCatalogExport("xlsx")} disabled={!brands.length || !isOnline} busy={exportingCatalog && exportFormat === "xlsx"} busyLabel={t("catalog.actions.preparing")}>
               {t("catalog.actions.exportExcel")}
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setCreateDraft((current) => ({ ...current, market_segment: catalogSegment }));
-                setShowCreateDialog(true);
-              }}
-              disabled={!isOnline}
-            >
-              {t("catalog.actions.addNewItem")}
             </Button>
             <Button
               variant="secondary"
@@ -1526,8 +1532,10 @@ export function CatalogPage() {
                 {t("catalog.actions.resync")}
               </Button>
             ) : null}
-          </div>
-        </div>
+        </PageActions>
+      </details>
+
+      <section className="section-card catalog-workbench catalog-results-card">
         <div className="section-card__body section-card__body--catalog">
           <div className="catalog-integrity-heading">
             <div>
@@ -2181,6 +2189,6 @@ export function CatalogPage() {
           </DraggableSurface>
         </div>
       ) : null}
-    </div>
+    </PageShell>
   );
 }

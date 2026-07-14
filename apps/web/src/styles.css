@@ -7139,3 +7139,112 @@ select.field__input {
     flex-wrap: wrap;
   }
 }
+
+/* UI-001: Catalog work surface consolidation. */
+.catalog-page {
+  gap: 12px;
+}
+
+.catalog-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(150px, 0.7fr) minmax(170px, 0.8fr) minmax(260px, 1.5fr) auto auto;
+  align-items: end;
+}
+
+.catalog-filter-bar .field {
+  margin: 0;
+}
+
+.catalog-secondary-actions {
+  align-self: flex-end;
+  margin-top: -4px;
+}
+
+.catalog-secondary-actions > summary {
+  cursor: pointer;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.catalog-secondary-actions[open] {
+  width: 100%;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-surface-muted);
+  padding: 10px 12px;
+}
+
+.catalog-secondary-actions[open] > summary {
+  margin-bottom: 10px;
+}
+
+.catalog-results-card {
+  overflow: hidden;
+}
+
+.catalog-results-card .section-card__body--catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+
+.catalog-results-card .catalog-integrity-heading {
+  margin: 0;
+}
+
+.catalog-results-card .catalog-integrity-summary {
+  gap: 8px;
+  border: 0;
+  box-shadow: none;
+}
+
+.catalog-results-card .catalog-integrity-summary .metric-tile {
+  min-height: 74px;
+  padding: 9px 10px;
+  box-shadow: none;
+}
+
+.catalog-results-card .catalog-integrity-summary .metric-tile__value {
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.catalog-results-card .catalog-meta-strip {
+  margin: 0;
+  border-radius: var(--ui-radius-md);
+  padding: 8px 10px;
+}
+
+.catalog-results-card .catalog-workbench-layout {
+  min-width: 0;
+  margin: 0;
+}
+
+.catalog-results-card .table-wrap--catalog {
+  max-height: min(62vh, 700px);
+}
+
+.catalog-results-card .data-table--catalog th,
+.catalog-results-card .data-table--catalog td {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+@media (max-width: 1220px) {
+  .catalog-filter-bar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .catalog-filter-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-filter-bar .button {
+    width: 100%;
+  }
+}
