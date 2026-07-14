@@ -871,13 +871,13 @@ as $$
   ), page_rows as (
     select *
     from filtered
-    order by product_code
+    order by product_code, id
     offset (select row_offset from params)
     limit (select page_size + 1 from params)
   ), page_marked as (
     select
       page_rows.*,
-      row_number() over (order by product_code) as page_row_number
+      row_number() over (order by product_code, id) as page_row_number
     from page_rows
   ), page_has_more as (
     select exists (
@@ -913,7 +913,7 @@ as $$
   from page_marked
   cross join page_has_more
   where page_marked.page_row_number <= (select page_size from params)
-  order by page_marked.product_code;
+  order by page_marked.product_code, page_marked.id;
 $$;
 
 revoke all on function public.cloud_catalog_integrity_page(text, text, text, text, integer, integer) from public;
