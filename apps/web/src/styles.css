@@ -4907,6 +4907,109 @@ select {
   }
 }
 
+.sales-workbench {
+  gap: 12px;
+}
+
+.sales-workbench .quote-list-panel,
+.sales-workbench .quote-editor-panel {
+  min-width: 0;
+  max-width: 100%;
+  border-radius: var(--ui-radius-md);
+  box-shadow: var(--ui-shadow);
+}
+
+.sales-list-header,
+.sales-editor-header {
+  padding: 16px;
+}
+
+.sales-list-header .page-header {
+  margin-bottom: 12px;
+}
+
+.sales-list-filters {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.45fr) minmax(260px, 1fr) auto;
+  align-items: end;
+  box-shadow: none;
+}
+
+.sales-list-filters .field {
+  margin: 0;
+}
+
+.sales-editor-header {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(520px, 1.7fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.sales-editor-actions {
+  justify-content: flex-end;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.sales-editor-actions .field {
+  margin: 0;
+}
+
+.quote-editor-panel > .section-card,
+.quote-editor-panel > .section-card + .section-card {
+  margin: 0 12px 12px;
+}
+
+.quote-workbench-card .section-card__header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.sales-lines-table {
+  max-height: min(56vh, 620px);
+}
+
+.sales-lines-table .data-table {
+  min-width: 1320px;
+}
+
+.sales-workbench .quote-summary-card {
+  border-radius: var(--ui-radius-md);
+  box-shadow: none;
+}
+
+.sales-workbench .quote-summary-row strong,
+.sales-workbench .quote-summary-mini strong,
+.sales-workbench .data-table td {
+  font-variant-numeric: tabular-nums;
+}
+
+.sales-workbench .quote-summary-row strong,
+.sales-workbench .quote-summary-mini strong {
+  white-space: nowrap;
+}
+
+.sales-workbench .attention-panel {
+  border-radius: var(--ui-radius-md);
+}
+
+@media (max-width: 1180px) {
+  .sales-editor-header {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-editor-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 780px) {
+  .sales-list-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Shell refresh v2: premium industrial workspace */
 :root {
   font-family: "IBM Plex Sans", "IBM Plex Sans Arabic", "Noto Sans Arabic", "Aptos", "Segoe UI", sans-serif;

@@ -45,6 +45,7 @@ import { DraggableSurface } from "../components/common/DraggableSurface";
 import { Input } from "../components/common/Input";
 import { BrandPill } from "../components/common/BrandPill";
 import { useI18n } from "../../i18n/I18nProvider";
+import { CompactFilterBar, PageHeader, PageShell } from "../components/common/VisualPrimitives";
 
 type TranslateFn = (path: string, params?: Record<string, string | number>) => string;
 
@@ -2876,20 +2877,20 @@ export function QuotesPage({
   }
 
   return (
-    <div className={`quotes-workspace${salesOrdersView === "list" ? " quotes-workspace--list-only" : " quotes-workspace--detail-only"}`}>
+    <PageShell className={`quotes-workspace sales-workbench${salesOrdersView === "list" ? " quotes-workspace--list-only" : " quotes-workspace--detail-only"}`}>
       {salesOrdersView === "list" ? (
       <aside className="quote-list-panel quote-list-panel--full">
-        <div className="quote-list-panel__header">
-          <div>
-            <h2>{t("sales.orders.listTitle")}</h2>
-            <p>{t("sales.orders.listSubtitle")}</p>
-          </div>
-          <div className="toolbar toolbar--wrap">
+        <div className="quote-list-panel__header sales-list-header">
+          <PageHeader
+            title={t("sales.orders.listTitle")}
+            subtitle={t("sales.orders.listSubtitle")}
+            actions={
             <Button variant="secondary" onClick={startNewSalesOrder}>
               {t("sales.orders.newSalesOrder")}
             </Button>
-          </div>
-          <div className="toolbar toolbar--wrap">
+            }
+          />
+          <CompactFilterBar className="sales-list-filters">
             <Select
               label={t("sales.orders.filterStatus")}
               value={salesOrderFilter}
@@ -2902,8 +2903,6 @@ export function QuotesPage({
               ]}
               onChange={(value) => setSalesOrderFilter(value as "all" | "draft" | "confirmed" | "purchased" | "invoiced")}
             />
-          </div>
-          <div className="toolbar toolbar--wrap">
             <Input
               value={search}
               onChange={setSearch}
@@ -2925,7 +2924,7 @@ export function QuotesPage({
             >
               {t("common.search")}
             </Button>
-          </div>
+          </CompactFilterBar>
         </div>
 
         <div className="quote-list-panel__body">
@@ -3014,7 +3013,7 @@ export function QuotesPage({
 
       {salesOrdersView === "detail" ? (
       <section className="quote-editor-panel">
-        <div className="quote-editor-panel__header">
+        <div className="quote-editor-panel__header sales-editor-header">
           <div>
             <span className="settings-label">{t("sales.orders.detailLabel")}</span>
             <h2>{quoteNo || String(detail.quote?.quote_no || (workbenchMode === "new" ? t("sales.orders.newSalesOrderTitle") : t("sales.orders.draftSalesOrderTitle")))}</h2>
@@ -3052,7 +3051,7 @@ export function QuotesPage({
               </div>
             ) : null}
           </div>
-          <div className="toolbar toolbar--wrap">
+          <div className="toolbar toolbar--wrap sales-editor-actions">
             <div className="quote-toolbar-brand">
               <Select
                 label={t("sales.orders.brandContext")}
@@ -3379,6 +3378,7 @@ export function QuotesPage({
             <DataTable
               rows={quoteBuilderLines}
               columns={builderColumns}
+              wrapClassName="sales-lines-table"
               emptyText={t("sales.orders.noSalesOrderLines")}
               onRowClick={(row) => setQuoteLinePreview(row)}
             />
@@ -3559,6 +3559,6 @@ export function QuotesPage({
           </DraggableSurface>
         </div>
       ) : null}
-    </div>
+    </PageShell>
   );
 }
