@@ -112,6 +112,11 @@ export const trMessages = {
     operationalCockpit: "Operasyon kokpiti",
   },
   dashboard: {
+    "overview.title": "Genel Bakış",
+    "overview.subtitle": "Ticari hareketler, öncelikler ve operasyonel hazırlık",
+    "overview.summary": "Yönetici özeti",
+    "overview.commercialSignals": "Ticari Sinyaller",
+    "overview.operations": "Operasyonlar",
     "errors.snapshotLoadFailed": "Pano yüklenemedi.",
     "errors.reloadFailed": "Pano yenilenemedi.",
     "pulse.loadFailed": "Stok nabzı yüklenemedi.",

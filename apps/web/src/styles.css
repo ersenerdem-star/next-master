@@ -5645,6 +5645,92 @@ textarea {
   }
 }
 
+.dashboard-page {
+  gap: 14px;
+}
+
+.dashboard-executive-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.dashboard-executive-summary .stat-card {
+  min-height: 112px;
+}
+
+.dashboard-content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.dashboard-section-heading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.dashboard-section-heading::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--ui-border);
+}
+
+.dashboard-section-heading--commercial { order: 1; }
+.dashboard-latest-orders { order: 2; }
+.dashboard-revenue-analysis { order: 3; }
+.dashboard-sales-by-brand { order: 4; }
+.dashboard-section-heading--operations { order: 5; }
+.dashboard-operations-status { order: 6; grid-column: 1 / -1; }
+
+.dashboard-operations-pulse .stats-grid {
+  margin: 0;
+}
+
+.dashboard-needs-attention {
+  border-left: 3px solid #f59e0b;
+}
+
+.dashboard-page .section-card__body .section-card {
+  border-radius: var(--ui-radius-md);
+  box-shadow: none;
+}
+
+.dashboard-page .list-row--dashboard {
+  min-width: 0;
+}
+
+.dashboard-page .table-wrap--tall {
+  max-height: 420px;
+}
+
+@media (max-width: 1180px) {
+  .dashboard-executive-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-content-grid > * {
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-executive-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 768px) {
   .app-shell,
   .portal-layout {

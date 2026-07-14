@@ -129,6 +129,11 @@ export const enMessages = {
     operationalCockpit: "Operational cockpit",
   },
   dashboard: {
+    "overview.title": "Overview",
+    "overview.subtitle": "Commercial activity, priorities and operational readiness",
+    "overview.summary": "Executive summary",
+    "overview.commercialSignals": "Commercial Signals",
+    "overview.operations": "Operations",
     "errors.snapshotLoadFailed": "Dashboard load failed.",
     "errors.reloadFailed": "Dashboard refresh failed.",
     "pulse.loadFailed": "Inventory pulse load failed.",

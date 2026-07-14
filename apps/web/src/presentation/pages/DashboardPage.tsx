@@ -33,6 +33,7 @@ import { canAccessSystemModules } from "../../shared/roles";
 import { useI18n } from "../../i18n/I18nProvider";
 import { fetchCatalogIntegritySummary } from "../../infrastructure/api/catalogApi";
 import type { CatalogIntegritySummary } from "../../types/catalog";
+import { PageHeader, PageShell } from "../components/common/VisualPrimitives";
 
 type DashboardPageProps = {
   role?: string;
@@ -376,8 +377,10 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
   ] satisfies Array<{ value: RevenuePeriodKey; label: string }>;
 
   return (
-    <div className="dashboard">
-      <div className="stats-grid">
+    <PageShell className="dashboard dashboard-page">
+      <PageHeader title={t("dashboard.overview.title")} subtitle={t("dashboard.overview.subtitle")} />
+
+      <div className="stats-grid dashboard-executive-summary" aria-label={t("dashboard.overview.summary")}>
         {showSystemPanels ? <StatCard label={t("dashboard.stats.catalogProducts")} value={formatCount(catalogCount)} subtext={t("dashboard.stats.catalogProductsSubtitle")} tone="success" /> : null}
         {showSystemPanels ? <StatCard label={t("dashboard.stats.brands")} value={formatCount(brandCount)} subtext={t("dashboard.stats.brandsSubtitle")} tone="warning" /> : null}
         {showSystemPanels ? <StatCard label={t("dashboard.stats.suppliers")} value={formatCount(supplierCount)} subtext={t("dashboard.stats.suppliersSubtitle")} tone="success" /> : null}
@@ -385,7 +388,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
       </div>
 
       {showSystemPanels ? (
-        <SectionCard title={t("dashboard.pulse.title")}>
+        <SectionCard title={t("dashboard.pulse.title")} className="dashboard-operations-pulse">
           {inventoryPulseErrorKey ? <div className="error-text">{t(inventoryPulseErrorKey)}</div> : null}
           <div className="stats-grid stats-grid--compact">
             <StatCard label={t("dashboard.pulse.activeWarehouses")} value={formatCount(inventoryPulse.warehouses)} subtext={t("dashboard.pulse.activeWarehousesSubtitle")} tone="success" onClick={() => onOpenInventoryTab?.("Warehouses")} />
@@ -397,7 +400,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
       ) : null}
 
       {newPortalOrders > 0 ? (
-        <SectionCard title={t("dashboard.alert.title")}>
+        <SectionCard title={t("dashboard.alert.title")} className="dashboard-needs-attention">
           <div className="dashboard-alert dashboard-alert--warning">
             <strong>{newPortalOrders === 1 ? t("dashboard.alert.singular", { count: formatCount(newPortalOrders) }) : t("dashboard.alert.plural", { count: formatCount(newPortalOrders) })}</strong>
             <span>{t("dashboard.alert.body")}</span>
@@ -405,8 +408,11 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
         </SectionCard>
       ) : null}
 
-      <div className="dashboard-grid">
-        <SectionCard title={t("dashboard.latestSalesOrders.title")}>
+      <div className="dashboard-grid dashboard-content-grid">
+        <div className="dashboard-section-heading dashboard-section-heading--commercial">
+          <span>{t("dashboard.overview.commercialSignals")}</span>
+        </div>
+        <SectionCard title={t("dashboard.latestSalesOrders.title")} className="dashboard-latest-orders">
           {latestQuotesErrorKey ? <div className="error-text">{t(latestQuotesErrorKey)}</div> : null}
           <div className="list-stack">
             {latestQuotes.map((quote) => (
@@ -436,7 +442,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
             ) : null}
           </div>
         </SectionCard>
-        <SectionCard title={t("dashboard.revenueAnalysis.title")}>
+        <SectionCard title={t("dashboard.revenueAnalysis.title")} className="dashboard-revenue-analysis">
           <div className="toolbar toolbar--wrap">
             <Select value={revenuePeriod} options={revenuePeriodOptions} onChange={(value) => setRevenuePeriod(value as RevenuePeriodKey)} />
           </div>
@@ -528,6 +534,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
         {showSystemPanels ? (
           <SectionCard
             title={t("dashboard.operationsStatus.title")}
+            className="dashboard-operations-status"
             actions={
               <Button variant="secondary" className="button--compact" onClick={() => void reloadOperationsStatus()} busy={loadingOperations} busyLabel={t("dashboard.operationsStatus.refreshing")}>
                 {t("dashboard.operationsStatus.refresh")}
@@ -690,7 +697,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
             ) : null}
           </SectionCard>
         ) : null}
-        <SectionCard title={t("dashboard.salesByBrand.title")}>
+        <SectionCard title={t("dashboard.salesByBrand.title")} className="dashboard-sales-by-brand">
           <div className="toolbar toolbar--wrap dashboard-toolbar">
             <Select value={revenuePeriod} options={revenuePeriodOptions} onChange={(value) => setRevenuePeriod(value as RevenuePeriodKey)} />
           </div>
@@ -723,7 +730,10 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
             <div className="error-text">{t(snapshotErrorKey)}</div>
           ) : null}
         </SectionCard>
+        <div className="dashboard-section-heading dashboard-section-heading--operations">
+          <span>{t("dashboard.overview.operations")}</span>
+        </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
