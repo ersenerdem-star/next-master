@@ -71,14 +71,14 @@ export function DataTable<T>({
 
   if (!rows.length) {
     return (
-      <div className={`table-wrap${wrapClassName ? ` ${wrapClassName}` : ""}`}>
+      <div className={`table-wrap data-table-shell${wrapClassName ? ` ${wrapClassName}` : ""}`}>
         <div className="empty-state">{emptyText}</div>
       </div>
     );
   }
 
   return (
-    <div className={`table-wrap${wrapClassName ? ` ${wrapClassName}` : ""}`}>
+    <div className={`table-wrap data-table-shell${wrapClassName ? ` ${wrapClassName}` : ""}`}>
       <table className={`data-table${className ? ` ${className}` : ""}`}>
         <thead>
           <tr>
