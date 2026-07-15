@@ -21,14 +21,9 @@ import { BrandPill } from "../components/common/BrandPill";
 import { downloadCsv, normalizeNumber, normalizeText, parseCsv, toCsv } from "../../shared/csv";
 import { formatBrandAwareProductCode } from "../../shared/productCodeDisplay";
 import { downloadSupplierTemplate } from "../../shared/importTemplates";
+import { useI18n } from "../../i18n/I18nProvider";
 
-const freshnessOptions = [
-  { value: "all", label: "All prices" },
-  { value: "fresh", label: "Fresh" },
-  { value: "aging", label: "Aging" },
-  { value: "stale", label: "Stale" },
-  { value: "unknown", label: "Unknown" },
-];
+const freshnessValues = ["all", "fresh", "aging", "stale", "unknown"] as const;
 
 const SUPPLIER_IMPORT_COLUMNS = [
   "Product_Code",
@@ -57,6 +52,8 @@ const SUPPLIER_IMPORT_HEADER_ALIASES: Record<(typeof SUPPLIER_IMPORT_COLUMNS)[nu
 const SUPPLIER_IMPORT_REQUIRED_COLUMNS = ["Product_Code", "Buy_Price_EUR"] as const;
 
 export function SuppliersPage() {
+  const { t } = useI18n();
+  const p = (key: string, params?: Record<string, string | number>) => t(`purchases.${key}`, params);
   const actionFeedback = useActionFeedback();
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [importBrand, setImportBrand] = useState("");
@@ -130,7 +127,7 @@ export function SuppliersPage() {
         setImportSupplierName((current) => current || result[0]?.name || "");
       } catch (caught) {
         if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : "Supplier request failed");
+          setError(caught instanceof Error ? caught.message : p("suppliers.errors.requestFailed"));
         }
       } finally {
         if (!cancelled) setLoadingSuppliers(false);
@@ -173,7 +170,7 @@ export function SuppliersPage() {
       } catch (caught) {
         if (!cancelled) {
           setRows([]);
-          setError(caught instanceof Error ? caught.message : "Supplier lines request failed");
+          setError(caught instanceof Error ? caught.message : p("suppliers.errors.linesRequestFailed"));
         }
       } finally {
         if (!cancelled) setLoadingRows(false);
@@ -192,7 +189,7 @@ export function SuppliersPage() {
     if (error) {
       actionFeedback.fail(error);
     } else {
-      actionFeedback.succeed(`${nextTotal.toLocaleString("en-US")} supplier rows loaded.`);
+      actionFeedback.succeed(p("suppliers.feedback.rowsLoaded", { count: nextTotal.toLocaleString("en-US") }));
     }
     setSearchingSuppliers(false);
   }, [searchingSuppliers, loadingRows, error, rows, actionFeedback, selectedSupplierId]);
@@ -200,7 +197,7 @@ export function SuppliersPage() {
   const total = selectedSupplierId ? rows[0]?.total_count ?? 0 : rows.length;
 
   const supplierOptions = [
-    { value: "", label: "All suppliers" },
+    { value: "", label: p("suppliers.filters.allSuppliers") },
     ...suppliers.map((supplier) => ({
       value: supplier.supplier_id,
       label: `${supplier.name} (${supplier.line_count.toLocaleString("en-US")})`,
@@ -208,40 +205,41 @@ export function SuppliersPage() {
   ];
   const brandOptions = [
     ...brands.map((item) => ({ value: item.name, label: item.name })),
-    { value: "__new__", label: "New brand..." },
+    { value: "__new__", label: p("suppliers.filters.newBrand") },
   ];
+  const freshnessOptions = freshnessValues.map((value) => ({ value, label: p(`suppliers.freshness.${value}`) }));
   const importModeOptions = [
-    { value: "replace", label: "Replace selected supplier list" },
-    { value: "merge", label: "Merge into selected supplier list" },
+    { value: "replace", label: p("suppliers.importModes.replace") },
+    { value: "merge", label: p("suppliers.importModes.merge") },
   ];
   const selectableSupplierOptions = suppliers.map((supplier) => ({
     value: supplier.supplier_id,
     label: `${supplier.name} (${supplier.line_count.toLocaleString("en-US")})`,
   }));
-  const importSupplierOptions = [...selectableSupplierOptions, { value: "__new__", label: "New supplier..." }];
+  const importSupplierOptions = [...selectableSupplierOptions, { value: "__new__", label: p("suppliers.filters.newSupplier") }];
 
   const columns = useMemo(
     () => [
       {
         key: "supplier",
-        header: "Supplier",
+        header: p("columns.supplier"),
         render: (row: SupplierPriceRow) =>
           row.supplier_name || suppliers.find((item) => item.supplier_id === selectedSupplierId)?.name || "-",
       },
-      { key: "code", header: "Code", render: (row: SupplierPriceRow) => formatBrandAwareProductCode(row.product_code, row.brand || row.supplier_name || "") },
-      { key: "brand", header: "Brand", render: (row: SupplierPriceRow) => <BrandPill brand={row.brand} compact /> },
+      { key: "code", header: p("columns.code"), render: (row: SupplierPriceRow) => formatBrandAwareProductCode(row.product_code, row.brand || row.supplier_name || "") },
+      { key: "brand", header: p("columns.brand"), render: (row: SupplierPriceRow) => <BrandPill brand={row.brand} compact /> },
       {
         key: "name",
-        header: "Name",
-        render: (row: SupplierPriceRow) => (row.is_placeholder ? "No price found for this supplier" : row.description || "-"),
+        header: p("columns.name"),
+        render: (row: SupplierPriceRow) => (row.is_placeholder ? p("suppliers.empty.noPriceForSupplier") : row.description || "-"),
       },
       { key: "oem", header: "OEM", render: (row: SupplierPriceRow) => row.oem_no || "-" },
-      { key: "price", header: "Buy", render: (row: SupplierPriceRow) => row.buy_price ?? "-" },
-      { key: "currency", header: "Currency", render: (row: SupplierPriceRow) => row.currency || "-" },
-      { key: "date", header: "Price Date", render: (row: SupplierPriceRow) => row.price_date || "-" },
-      { key: "freshness", header: "Freshness", render: (row: SupplierPriceRow) => row.freshness || "-" },
+      { key: "price", header: p("columns.buy"), render: (row: SupplierPriceRow) => row.buy_price ?? "-" },
+      { key: "currency", header: p("columns.currency"), render: (row: SupplierPriceRow) => row.currency || "-" },
+      { key: "date", header: p("columns.priceDate"), render: (row: SupplierPriceRow) => row.price_date || "-" },
+      { key: "freshness", header: p("columns.freshness"), render: (row: SupplierPriceRow) => (row.freshness ? p(`suppliers.freshness.${row.freshness}`) : "-") },
     ],
-    [selectedSupplierId, suppliers],
+    [selectedSupplierId, suppliers, t],
   );
 
   useEffect(() => {
@@ -322,7 +320,7 @@ export function SuppliersPage() {
       setRows(result);
     } catch (caught) {
       setRows([]);
-      setError(caught instanceof Error ? caught.message : "Supplier lines request failed");
+      setError(caught instanceof Error ? caught.message : p("suppliers.errors.linesRequestFailed"));
     } finally {
       setLoadingRows(false);
     }
@@ -336,11 +334,11 @@ export function SuppliersPage() {
     const activeImportBrand = importBrand === "__new__" ? importBrandName.trim() : importBrand;
 
     if (!activeSupplierName) {
-      setError("Select an existing supplier or enter a new supplier name before import");
+      setError(p("suppliers.errors.supplierRequiredForImport"));
       return;
     }
     if (!activeImportBrand) {
-      setError("Supplier import requires a brand selection");
+      setError(p("suppliers.errors.brandRequiredForImport"));
       return;
     }
 
@@ -349,7 +347,7 @@ export function SuppliersPage() {
     setStatus("");
     setWarning("");
     setImportingSupplier(true);
-    actionFeedback.begin(`Importing supplier CSV for ${activeSupplierName} / ${activeImportBrand}...`);
+    actionFeedback.begin(p("suppliers.feedback.importingCsv", { supplier: activeSupplierName, brand: activeImportBrand }));
     try {
       const text = await file.text();
       const parsedRows = parseCsv(text);
@@ -369,7 +367,10 @@ export function SuppliersPage() {
       );
       if (missingRequiredHeaders.length) {
         throw new Error(
-          `Supplier CSV headers are invalid. Missing: ${missingRequiredHeaders.join(", ")}. Use template columns: ${SUPPLIER_IMPORT_COLUMNS.join(", ")}`,
+          p("suppliers.errors.invalidCsvHeaders", {
+            missing: missingRequiredHeaders.join(", "),
+            columns: SUPPLIER_IMPORT_COLUMNS.join(", "),
+          }),
         );
       }
 
@@ -391,7 +392,7 @@ export function SuppliersPage() {
         .filter((row) => row.product_code && row.buy_price !== null);
 
       if (!payload.length) {
-        throw new Error("CSV did not contain any valid supplier price rows");
+        throw new Error(p("suppliers.errors.noValidRows"));
       }
 
       const importResult = await bulkImportSupplierPrices(payload, {
@@ -400,7 +401,14 @@ export function SuppliersPage() {
         brandName: activeImportBrand,
         onProgress: ({ processedChunks, totalChunks, processedRows, totalRows }) => {
           setStatus(
-            `Supplier import running for ${activeSupplierName} / ${activeImportBrand}: ${processedRows}/${totalRows} rows (${processedChunks}/${totalChunks} batches).`,
+          p("suppliers.feedback.importProgress", {
+            supplier: activeSupplierName,
+            brand: activeImportBrand,
+            processedRows,
+            totalRows,
+            processedChunks,
+            totalChunks,
+          }),
           );
         },
       });
@@ -424,7 +432,12 @@ export function SuppliersPage() {
       await reloadSupplierRows(submittedSearch, freshness, matchedSupplier?.supplier_id || selectedSupplierId);
       setShowImportDialog(false);
       setImportFile(null);
-      const completionMessage = `Supplier import completed for ${activeSupplierName} / ${activeImportBrand}. ${importResult.processed} rows processed in ${importResult.totalChunks} batches.`;
+      const completionMessage = p("suppliers.feedback.importCompletedDetailed", {
+        supplier: activeSupplierName,
+        brand: activeImportBrand,
+        processed: importResult.processed,
+        totalChunks: importResult.totalChunks,
+      });
       setStatus(completionMessage);
       setWarning(
         [importResult.catalogSyncMessage, importResult.rollupRefreshMessage]
@@ -432,9 +445,9 @@ export function SuppliersPage() {
           .join(" ")
           .trim(),
       );
-      actionFeedback.succeed(`Supplier import completed for ${activeSupplierName} / ${activeImportBrand}.`);
+      actionFeedback.succeed(p("suppliers.feedback.importCompleted", { supplier: activeSupplierName, brand: activeImportBrand }));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Supplier import failed";
+      const message = caught instanceof Error ? caught.message : p("suppliers.errors.importFailed");
       setError(message);
       setWarning("");
       actionFeedback.fail(message);
@@ -452,19 +465,19 @@ export function SuppliersPage() {
     const buyPrice = normalizeNumber(manualPriceDraft.buy_price);
 
     if (!supplier?.name) {
-      setError("Supplier is required");
+      setError(p("suppliers.errors.supplierRequired"));
       return;
     }
     if (!activeBrand) {
-      setError("Brand is required");
+      setError(p("suppliers.errors.brandRequired"));
       return;
     }
     if (!productCode) {
-      setError("Product code is required");
+      setError(p("suppliers.errors.productCodeRequired"));
       return;
     }
     if (buyPrice === null) {
-      setError("Buy price is required");
+      setError(p("suppliers.errors.buyPriceRequired"));
       return;
     }
 
@@ -472,7 +485,7 @@ export function SuppliersPage() {
       setSavingManualPrice(true);
       setError("");
       setStatus("");
-      actionFeedback.begin(`Saving supplier price for ${productCode}...`);
+      actionFeedback.begin(p("suppliers.feedback.savingSupplierPrice", { code: productCode }));
       await bulkImportSupplierPrices([
         {
           supplier_name: supplier.name,
@@ -509,10 +522,10 @@ export function SuppliersPage() {
         lead_time_days: "",
         notes: "",
       });
-      setStatus(`Supplier price saved for ${productCode}.`);
-      actionFeedback.succeed(`Supplier price saved for ${productCode}.`);
+      setStatus(p("suppliers.feedback.supplierPriceSaved", { code: productCode }));
+      actionFeedback.succeed(p("suppliers.feedback.supplierPriceSaved", { code: productCode }));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Manual supplier price save failed";
+      const message = caught instanceof Error ? caught.message : p("suppliers.errors.manualPriceSaveFailed");
       setError(message);
       actionFeedback.fail(message);
     } finally {
@@ -523,26 +536,26 @@ export function SuppliersPage() {
   function handleSupplierSearchSubmit() {
     const nextSearch = search.trim();
     if (!selectedSupplierId && !nextSearch) {
-      const message = "All suppliers search requires a part number, OEM, or name.";
+      const message = p("suppliers.errors.allSuppliersSearchRequiresQuery");
       setError(message);
       actionFeedback.fail(message);
       return;
     }
     setSearchingSuppliers(true);
-    actionFeedback.begin(`Searching supplier rows for ${nextSearch || "all items"}...`);
+    actionFeedback.begin(p("suppliers.feedback.searchingRows", { query: nextSearch || p("suppliers.values.allItems") }));
     setSubmittedSearch(search);
   }
 
   function handleSupplierExport() {
     setExportingSuppliers(true);
-    actionFeedback.begin("Preparing supplier CSV export...");
+    actionFeedback.begin(p("suppliers.feedback.preparingCsvExport"));
     const exportRows = [
       ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Lead_Time_Days", "Notes"],
       ...rows.map((row) => [
         row.supplier_name || suppliers.find((supplier) => supplier.supplier_id === selectedSupplierId)?.name || "",
         formatBrandAwareProductCode(row.product_code, row.brand || row.supplier_name || ""),
         row.brand || "",
-        row.is_placeholder ? "No price found for this supplier" : row.description || "",
+        row.is_placeholder ? p("suppliers.empty.noPriceForSupplier") : row.description || "",
         row.oem_no || "",
         row.buy_price ?? "",
         row.price_date || "",
@@ -552,7 +565,7 @@ export function SuppliersPage() {
       ]),
     ];
     downloadCsv("supplier-export.csv", toCsv(exportRows));
-    actionFeedback.succeed("Supplier CSV downloaded.");
+    actionFeedback.succeed(p("suppliers.feedback.csvDownloaded"));
     setExportingSuppliers(false);
   }
 
@@ -561,33 +574,33 @@ export function SuppliersPage() {
       <section className="section-card">
         <div className="section-card__header section-card__header--row">
           <div>
-            <h2>Suppliers</h2>
-            <p>Live supplier price feed from Supabase RPCs.</p>
+            <h2>{p("suppliers.title")}</h2>
+            <p>{p("suppliers.subtitle")}</p>
           </div>
           <div className="toolbar toolbar--wrap">
             <Select
-              label="Supplier"
+              label={p("fields.supplier")}
               value={selectedSupplierId}
               options={supplierOptions}
               onChange={setSelectedSupplierId}
             />
             <Input
-              label="Search"
+              label={t("common.search")}
               value={search}
               onChange={setSearch}
-              placeholder="Product code, OEM, name"
+              placeholder={p("suppliers.placeholders.search")}
               onEnter={handleSupplierSearchSubmit}
             />
-            <Select label="Freshness" value={freshness} options={freshnessOptions} onChange={setFreshness} />
+            <Select label={p("fields.freshness")} value={freshness} options={freshnessOptions} onChange={setFreshness} />
             <Button
               onClick={handleSupplierSearchSubmit}
               busy={searchingSuppliers}
-              busyLabel="Searching..."
+              busyLabel={p("busy.searching")}
             >
-              Search
+              {t("common.search")}
             </Button>
-            <Button variant="secondary" onClick={handleSupplierExport} disabled={!rows.length} busy={exportingSuppliers} busyLabel="Preparing...">
-              Export CSV
+            <Button variant="secondary" onClick={handleSupplierExport} disabled={!rows.length} busy={exportingSuppliers} busyLabel={p("busy.preparing")}>
+              {p("actions.exportCsv")}
             </Button>
             <Button
               variant="secondary"
@@ -601,19 +614,19 @@ export function SuppliersPage() {
                 setShowManualPriceDialog(true);
               }}
             >
-              Add Manual Price
+              {p("suppliers.actions.addManualPrice")}
             </Button>
             <Button variant="secondary" onClick={() => setShowImportDialog(true)}>
-              Import CSV
+              {p("suppliers.actions.importCsv")}
             </Button>
             <Button
               variant="secondary"
               onClick={() => {
                 downloadSupplierTemplate();
-                actionFeedback.succeed("Supplier import template downloaded.");
+                actionFeedback.succeed(p("suppliers.feedback.templateDownloaded"));
               }}
             >
-              Download Template
+              {p("suppliers.actions.downloadTemplate")}
             </Button>
           </div>
         </div>
@@ -621,16 +634,16 @@ export function SuppliersPage() {
           <div className="meta-row">
             <span>
             {loadingSuppliers
-                ? "Loading suppliers..."
+                ? p("suppliers.loading.suppliers")
                 : loadingRows
-                  ? "Loading supplier rows..."
-                  : `${total.toLocaleString("en-US")} supplier rows`}
+                  ? p("suppliers.loading.rows")
+                  : p("suppliers.meta.rows", { count: total.toLocaleString("en-US") })}
             </span>
             {status ? <span className="success-text">{status}</span> : null}
             {warning ? <span className="warning-text">{warning}</span> : null}
             {error ? <span className="error-text">{error}</span> : null}
           </div>
-          <DataTable rows={rows} columns={columns} emptyText={loadingRows ? "Loading..." : "No supplier rows found"} />
+          <DataTable rows={rows} columns={columns} emptyText={loadingRows ? t("common.loadingPage") : p("suppliers.empty.noRows")} />
         </div>
       </section>
 
@@ -639,13 +652,13 @@ export function SuppliersPage() {
           <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
             <div className="modal-card__header draggable-surface__handle">
               <div>
-                <h3>Supplier CSV Import</h3>
-                <p>All fields in this screen must be completed before import.</p>
+                <h3>{p("suppliers.import.title")}</h3>
+                <p>{p("suppliers.import.subtitle")}</p>
               </div>
             </div>
             <div className="modal-form-grid">
               <Select
-                label="Supplier"
+                label={p("fields.supplier")}
                 value={importSupplierId}
                 options={importSupplierOptions}
                 onChange={(value) => {
@@ -659,13 +672,13 @@ export function SuppliersPage() {
                 }}
               />
               <Input
-                label="Supplier Name"
+                label={p("fields.supplierName")}
                 value={importSupplierName}
                 onChange={setImportSupplierName}
                 disabled={importSupplierId !== "__new__"}
               />
               <Select
-                label="Brand"
+                label={p("fields.brand")}
                 value={importBrand}
                 options={brandOptions}
                 onChange={(value) => {
@@ -678,15 +691,15 @@ export function SuppliersPage() {
                 }}
               />
               <Input
-                label="Brand Name"
+                label={p("fields.brandName")}
                 value={importBrandName}
                 onChange={setImportBrandName}
                 disabled={importBrand !== "__new__"}
               />
-              <Select label="Import Mode" value={importMode} options={importModeOptions} onChange={setImportMode} />
-              <Input label="Target" value="Cloud supplier import" onChange={() => undefined} disabled />
+              <Select label={p("fields.importMode")} value={importMode} options={importModeOptions} onChange={setImportMode} />
+              <Input label={p("fields.target")} value={p("suppliers.import.cloudTarget")} onChange={() => undefined} disabled />
               <label className="field">
-                <span className="field__label">File</span>
+                <span className="field__label">{p("fields.file")}</span>
                 <input
                   className="field__input"
                   type="file"
@@ -696,20 +709,20 @@ export function SuppliersPage() {
                   }}
                 />
               </label>
-              <Input label="Selected file" value={importFile?.name ?? ""} onChange={() => undefined} disabled />
+              <Input label={p("fields.selectedFile")} value={importFile?.name ?? ""} onChange={() => undefined} disabled />
             </div>
-            <div className="modal-hint">Supplier, supplier name, brand, import mode, target, and file are required.</div>
-            <div className="modal-hint">Expected columns: {SUPPLIER_IMPORT_COLUMNS.join(", ")}</div>
+            <div className="modal-hint">{p("suppliers.import.requiredHint")}</div>
+            <div className="modal-hint">{p("suppliers.import.expectedColumns", { columns: SUPPLIER_IMPORT_COLUMNS.join(", ") })}</div>
             <div className="toolbar">
               <Button
                 variant="secondary"
                 className="button--compact"
                 onClick={() => {
                   downloadSupplierTemplate();
-                  actionFeedback.succeed("Supplier sample template downloaded.");
+                  actionFeedback.succeed(p("suppliers.feedback.sampleTemplateDownloaded"));
                 }}
               >
-                Download Sample Template
+                {p("suppliers.actions.downloadSampleTemplate")}
               </Button>
             </div>
             <div className="modal-actions">
@@ -726,7 +739,7 @@ export function SuppliersPage() {
                   setImportBrandName("");
                 }}
               >
-                Cancel Import
+                {p("suppliers.actions.cancelImport")}
               </Button>
               <Button
                 onClick={() => {
@@ -742,9 +755,9 @@ export function SuppliersPage() {
                   loadingRows
                 }
                 busy={importingSupplier}
-                busyLabel="Importing..."
+                busyLabel={p("busy.importing")}
               >
-                Import
+                {p("suppliers.actions.import")}
               </Button>
             </div>
           </DraggableSurface>
@@ -756,62 +769,62 @@ export function SuppliersPage() {
           <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
             <div className="modal-card__header draggable-surface__handle">
               <div>
-                <h3>Manual Supplier Price</h3>
-                <p>Add or update one supplier price row for a specific part number.</p>
+                <h3>{p("suppliers.manual.title")}</h3>
+                <p>{p("suppliers.manual.subtitle")}</p>
               </div>
             </div>
             <div className="modal-form-grid">
               <Select
-                label="Supplier"
+                label={p("fields.supplier")}
                 value={manualPriceDraft.supplier_id}
                 options={selectableSupplierOptions}
                 onChange={(value) => setManualPriceDraft((current) => ({ ...current, supplier_id: value }))}
               />
               <Select
-                label="Brand"
+                label={p("fields.brand")}
                 value={manualPriceDraft.brand}
                 options={brands.map((item) => ({ value: item.name, label: item.name }))}
                 onChange={(value) => setManualPriceDraft((current) => ({ ...current, brand: value }))}
               />
               <Input
-                label="Product Code"
+                label={p("fields.productCode")}
                 value={manualPriceDraft.product_code}
                 onChange={(value) => setManualPriceDraft((current) => ({ ...current, product_code: value }))}
               />
               <Input
-                label="Buy Price EUR"
+                label={p("fields.buyPriceEur")}
                 value={manualPriceDraft.buy_price}
                 onChange={(value) => setManualPriceDraft((current) => ({ ...current, buy_price: value }))}
                 onEnter={() => void handleManualPriceSave()}
               />
               <Input
-                label="Description"
+                label={p("fields.description")}
                 value={manualPriceDraft.description}
                 onChange={(value) => setManualPriceDraft((current) => ({ ...current, description: value }))}
               />
               <Input
-                label="OEM No"
+                label={p("fields.oemNo")}
                 value={manualPriceDraft.oem_no}
                 onChange={(value) => setManualPriceDraft((current) => ({ ...current, oem_no: value }))}
               />
               <Input
-                label="Price Date"
+                label={p("fields.priceDate")}
                 type="date"
                 value={manualPriceDraft.price_date}
                 onChange={(value) => setManualPriceDraft((current) => ({ ...current, price_date: value }))}
               />
               <Input
-                label="MOQ"
+                label={p("fields.moq")}
                 value={manualPriceDraft.moq}
                 onChange={(value) => setManualPriceDraft((current) => ({ ...current, moq: value }))}
               />
               <Input
-                label="Lead Time Days"
+                label={p("fields.leadTimeDays")}
                 value={manualPriceDraft.lead_time_days}
                 onChange={(value) => setManualPriceDraft((current) => ({ ...current, lead_time_days: value }))}
               />
               <Input
-                label="Notes"
+                label={p("fields.notes")}
                 value={manualPriceDraft.notes}
                 onChange={(value) => setManualPriceDraft((current) => ({ ...current, notes: value }))}
               />
@@ -819,13 +832,19 @@ export function SuppliersPage() {
             {manualPriceDraft.brand.trim() && manualPriceDraft.product_code.trim() ? (
               <div className="modal-hint">
                 {resolvingCatalogMatch
-                  ? "Checking catalog match..."
+                  ? p("suppliers.manual.checkingCatalogMatch")
                   : catalogMatch
-                    ? `Catalog match found: ${catalogMatch.description || "-"} | OEM: ${catalogMatch.oem_no || "-"} | HS: ${catalogMatch.hs_code || "-"} | Origin: ${catalogMatch.origin || "-"} | Weight: ${catalogMatch.weight_kg ?? "-"}`
-                    : "No catalog match found for this brand / part number."}
+                    ? p("suppliers.manual.catalogMatchFound", {
+                        description: catalogMatch.description || "-",
+                        oem: catalogMatch.oem_no || "-",
+                        hs: catalogMatch.hs_code || "-",
+                        origin: catalogMatch.origin || "-",
+                        weight: catalogMatch.weight_kg ?? "-",
+                      })
+                    : p("suppliers.manual.noCatalogMatch")}
               </div>
             ) : null}
-            <div className="modal-hint">This uses the same supplier import pipeline, but only for one part number.</div>
+            <div className="modal-hint">{p("suppliers.manual.pipelineHint")}</div>
             <div className="modal-actions">
               <Button
                 variant="secondary"
@@ -833,15 +852,15 @@ export function SuppliersPage() {
                   setShowManualPriceDialog(false);
                 }}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 onClick={() => void handleManualPriceSave()}
                 disabled={!manualPriceDraft.supplier_id || !manualPriceDraft.brand.trim() || !manualPriceDraft.product_code.trim() || !manualPriceDraft.buy_price.trim()}
                 busy={savingManualPrice}
-                busyLabel="Saving..."
+                busyLabel={t("common.saving")}
               >
-                Save Price
+                {p("suppliers.actions.savePrice")}
               </Button>
             </div>
           </DraggableSurface>

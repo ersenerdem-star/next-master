@@ -23,13 +23,11 @@ import {
 import { formatBrandAwareProductCode } from "../../shared/productCodeDisplay";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { CompactFilterBar, PageHeader, PageShell } from "../components/common/VisualPrimitives";
-
-const scopeOptions = [
-  { value: "priced", label: "Priced items" },
-  { value: "catalog", label: "Catalog items" },
-];
+import { useI18n } from "../../i18n/I18nProvider";
 
 export function MasterPage() {
+  const { t } = useI18n();
+  const r = (key: string, params?: Record<string, string | number>) => t(`reports.${key}`, params);
   const actionFeedback = useActionFeedback();
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [brandId, setBrandId] = useState("");
@@ -69,7 +67,7 @@ export function MasterPage() {
         setBrandId((current) => current || result[0]?.id || "");
       } catch (caught) {
         if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : "Brand request failed");
+          setError(caught instanceof Error ? caught.message : r("master.errors.brandRequestFailed"));
         }
       } finally {
         if (!cancelled) setLoadingBrands(false);
@@ -136,7 +134,7 @@ export function MasterPage() {
       } catch (caught) {
         if (!cancelled) {
           setRows([]);
-          setError(caught instanceof Error ? caught.message : "Master request failed");
+          setError(caught instanceof Error ? caught.message : r("master.errors.requestFailed"));
         }
       } finally {
         if (!cancelled) setLoadingRows(false);
@@ -155,7 +153,7 @@ export function MasterPage() {
     if (error) {
       actionFeedback.fail(error);
     } else {
-      actionFeedback.succeed(`${nextTotal.toLocaleString("en-US")} master rows loaded.`);
+      actionFeedback.succeed(r("master.feedback.rowsLoaded", { count: nextTotal.toLocaleString("en-US") }));
     }
     setSearching(false);
   }, [searching, loadingRows, error, rows, actionFeedback]);
@@ -183,43 +181,50 @@ export function MasterPage() {
     };
   }, [rows]);
 
+  const scopeOptions = useMemo(
+    () => [
+      { value: "priced", label: r("master.scope.priced") },
+      { value: "catalog", label: r("master.scope.catalog") },
+    ],
+    [t],
+  );
   const brandOptions = [
-    { value: "", label: "Select brand" },
+    { value: "", label: r("master.filters.selectBrand") },
     ...brands.map((item) => ({ value: item.id, label: item.name })),
   ];
   const scopeLabel = scopeOptions.find((item) => item.value === scope)?.label || scope;
   const activeFilterChips = [
-    brandName ? `Brand: ${brandName}` : "",
-    submittedSearch.trim() ? `Search: ${submittedSearch.trim()}` : "",
-    scope ? `Scope: ${scopeLabel}` : "",
+    brandName ? r("master.filters.brandChip", { brand: brandName }) : "",
+    submittedSearch.trim() ? r("master.filters.searchChip", { search: submittedSearch.trim() }) : "",
+    scope ? r("master.filters.scopeChip", { scope: scopeLabel }) : "",
   ].filter(Boolean);
 
   const columns = useMemo(
     () => [
       {
         key: "product",
-        header: "Product",
+        header: r("master.columns.product"),
         render: (row: MasterRow) => <ProductIdentityCell row={row} />,
         sortValue: (row: MasterRow) => row.product_code,
       },
       {
         key: "decision",
-        header: "Supplier Decision",
+        header: r("master.columns.supplierDecision"),
         render: (row: MasterRow) => <SupplierComparisonCell row={row} />,
         sortValue: (row: MasterRow) => row.cheapest_supplier || "",
       },
       {
         key: "bestPrice",
-        header: "Best Price",
+        header: r("master.columns.bestPrice"),
         render: (row: MasterRow) => <MoneyCell value={row.cheapest_price} />,
         sortValue: (row: MasterRow) => row.cheapest_price ?? 0,
       },
       {
         key: "second",
-        header: "2nd Supplier / Price",
+        header: r("master.columns.secondSupplierPrice"),
         render: (row: MasterRow) => (
           <div className="second-supplier-cell">
-            <span className="second-supplier-cell__name">{row.second_supplier_name || "No second supplier"}</span>
+            <span className="second-supplier-cell__name">{row.second_supplier_name || r("master.values.noSecondSupplier")}</span>
             <MoneyCell value={row.second_price} muted={row.second_price == null} />
           </div>
         ),
@@ -227,7 +232,7 @@ export function MasterPage() {
       },
       {
         key: "gap",
-        header: "Gap",
+        header: r("master.columns.gap"),
         render: (row: MasterRow) => {
           const isHighGap = Number(row.price_gap_percent ?? 0) >= HIGH_GAP_PERCENT;
           const hasGap = row.price_gap != null || row.price_gap_percent != null;
@@ -235,7 +240,7 @@ export function MasterPage() {
             <div className="gap-cell">
               <MoneyCell value={row.price_gap} muted={!hasGap} />
               <PercentCell value={row.price_gap_percent} muted={!hasGap} />
-              {hasGap ? <RiskBadge label={isHighGap ? "High gap" : "Competitive"} tone={isHighGap ? "info" : "success"} /> : <RiskBadge label="No gap" tone="neutral" />}
+              {hasGap ? <RiskBadge label={isHighGap ? r("master.badges.highGap") : r("master.badges.competitive")} tone={isHighGap ? "info" : "success"} /> : <RiskBadge label={r("master.badges.noGap")} tone="neutral" />}
             </div>
           );
         },
@@ -243,7 +248,7 @@ export function MasterPage() {
       },
       {
         key: "sales",
-        header: "Sales Prices A/B/C",
+        header: r("master.columns.salesPrices"),
         render: (row: MasterRow) => (
           <div className="sales-price-stack">
             <span><strong>A</strong><MoneyCell value={row.sales_a} /></span>
@@ -254,22 +259,22 @@ export function MasterPage() {
       },
       {
         key: "meta",
-        header: "Meta",
+        header: r("master.columns.meta"),
         render: (row: MasterRow) => (
           <div className="master-meta-cell">
-            <span>{row.origin || "No origin"}</span>
-            <span>{row.weight_kg == null ? "No weight" : `${formatMasterNumber(row.weight_kg, 3)} kg`}</span>
-            <span>{row.hs_code ? `HS ${row.hs_code}` : "No HS"}</span>
+            <span>{row.origin || r("master.values.noOrigin")}</span>
+            <span>{row.weight_kg == null ? r("master.values.noWeight") : `${formatMasterNumber(row.weight_kg, 3)} kg`}</span>
+            <span>{row.hs_code ? `HS ${row.hs_code}` : r("master.values.noHs")}</span>
           </div>
         ),
       },
     ],
-    [],
+    [t],
   );
 
   async function loadMasterExportRows() {
     if (!brandName) {
-      throw new Error("Select a brand first.");
+      throw new Error(r("master.errors.selectBrandFirst"));
     }
     const maxRows = scope === "priced" ? CLOUD_MASTER_PRICED_EXPORT_MAX_ROWS : CLOUD_MASTER_EXPORT_MAX_ROWS;
     const exportRows = await fetchAllCloudMaster({
@@ -290,11 +295,11 @@ export function MasterPage() {
       setError("");
       setExportNotice("");
       setExportingMaster(true);
-      actionFeedback.begin("Preparing master export...");
+      actionFeedback.begin(r("master.feedback.preparingExport"));
       const exportRows = await loadMasterExportRows();
       if (!exportRows.length) {
-        setError("No master rows found for the current filters.");
-        actionFeedback.fail("No master rows found for the current filters.");
+        setError(r("master.errors.noRowsForExport"));
+        actionFeedback.fail(r("master.errors.noRowsForExport"));
         return;
       }
 
@@ -349,18 +354,18 @@ export function MasterPage() {
       const fileBrand = (brandName || "all-brands").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
       downloadBlob(
         `${fileBrand}-${stamp}-master.xlsx`,
-        buildXlsxBlob(`${brandName || "All"} Master`, rowsForSheet, [6, 8, 10, 11, 12, 14, 15, 16, 17]),
+        buildXlsxBlob(`${brandName || r("values.all")} ${r("master.export.sheetSuffix")}`, rowsForSheet, [6, 8, 10, 11, 12, 14, 15, 16, 17]),
       );
       const maxRows = scope === "priced" ? CLOUD_MASTER_PRICED_EXPORT_MAX_ROWS : CLOUD_MASTER_EXPORT_MAX_ROWS;
       if (exportRows.length >= maxRows) {
-        const notice = `Export limited to first ${maxRows.toLocaleString("en-US")} rows. Narrow the search or brand scope for a smaller file.`;
+        const notice = r("master.feedback.exportLimited", { count: maxRows.toLocaleString("en-US") });
         setExportNotice(notice);
         actionFeedback.succeed(notice);
       } else {
-        actionFeedback.succeed("Master export downloaded.");
+        actionFeedback.succeed(r("master.feedback.exportDownloaded"));
       }
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Master export failed";
+      const message = caught instanceof Error ? caught.message : r("master.errors.exportFailed");
       setError(message);
       setExportNotice("");
       actionFeedback.fail(message);
@@ -372,25 +377,25 @@ export function MasterPage() {
   function handleSearch() {
     setExportNotice("");
     setSearching(true);
-    actionFeedback.begin(`Searching supplier comparison for ${search.trim() || brandName || "all items"}...`);
+    actionFeedback.begin(r("master.feedback.searching", { target: search.trim() || brandName || r("values.allItems") }));
     setSubmittedSearch(search);
   }
 
   return (
     <PageShell className="procurement-master-page">
       <PageHeader
-        eyebrow="Procurement Intelligence"
-        title="Supplier Comparison"
-        subtitle="Best supplier, second supplier, price gap and sales price intelligence"
+        eyebrow={r("procurement.eyebrow")}
+        title={r("master.title")}
+        subtitle={r("master.subtitle")}
         actions={
           <Button
             variant="secondary"
             className="button--compact procurement-export-button"
             onClick={() => void handleMasterExport()}
             busy={exportingMaster}
-            busyLabel="Preparing..."
+            busyLabel={r("busy.preparing")}
           >
-            Export XLSX
+            {r("actions.exportXlsx")}
           </Button>
         }
       />
@@ -398,44 +403,46 @@ export function MasterPage() {
       <CompactFilterBar className="smart-filter-bar">
         <div className="smart-filter-bar__controls">
           <Input
-            label="Search product/OEM/description"
+            label={r("master.fields.search")}
             value={search}
             onChange={setSearch}
-            placeholder="Code, OEM, name"
+            placeholder={r("master.placeholders.search")}
             onEnter={handleSearch}
           />
           <div className="smart-filter-bar__selects">
-            <Select label="Brand" value={brandId} options={brandOptions} onChange={setBrandId} />
-            <Select label="Scope" value={scope} options={scopeOptions} onChange={setScope} />
+            <Select label={r("fields.brand")} value={brandId} options={brandOptions} onChange={setBrandId} />
+            <Select label={r("master.fields.scope")} value={scope} options={scopeOptions} onChange={setScope} />
           </div>
-          <Button onClick={handleSearch} busy={searching} busyLabel="Searching...">
-            Search
+          <Button onClick={handleSearch} busy={searching} busyLabel={r("busy.searching")}>
+            {r("actions.search")}
           </Button>
         </div>
-        <div className="active-filter-chip-row" aria-label="Active filters">
-          {activeFilterChips.length ? activeFilterChips.map((chip) => <span key={chip} className="active-filter-chip">{chip}</span>) : <span className="active-filter-chip active-filter-chip--empty">No active filters</span>}
+        <div className="active-filter-chip-row" aria-label={r("master.filters.activeFilters")}>
+          {activeFilterChips.length ? activeFilterChips.map((chip) => <span key={chip} className="active-filter-chip">{chip}</span>) : <span className="active-filter-chip active-filter-chip--empty">{r("master.filters.noActiveFilters")}</span>}
         </div>
       </CompactFilterBar>
 
-      <section className="metric-strip" aria-label="Supplier comparison summary">
-        <MetricTile label="Rows Shown" value={summary.rowsShown.toLocaleString("en-US")} detail={loadingRows ? "Loading latest page" : "Current page"} tone="neutral" />
-        <MetricTile label="Total Items" value={total ? total.toLocaleString("en-US") : "-"} detail="Filtered result set" tone="neutral" />
-        <MetricTile label="With 2nd Supplier" value={summary.withSecondSupplier.toLocaleString("en-US")} detail="Comparison ready" tone="success" />
-        <MetricTile label="High Gap Items" value={summary.highGap.toLocaleString("en-US")} detail={`Gap >= ${HIGH_GAP_PERCENT}%`} tone={summary.highGap ? "info" : "neutral"} />
-        <MetricTile label="Single Supplier" value={summary.singleSupplier.toLocaleString("en-US")} detail="No second supplier" tone={summary.singleSupplier ? "warning" : "success"} />
-        <MetricTile label="Average Gap" value={avgGapPercent == null ? "-" : `${formatMasterNumber(avgGapPercent, 2)}%`} detail="Rows with gap data" tone="neutral" />
+      <section className="metric-strip" aria-label={r("master.summary.aria")}>
+        <MetricTile label={r("master.summary.rowsShown")} value={summary.rowsShown.toLocaleString("en-US")} detail={loadingRows ? r("master.summary.loadingLatestPage") : r("master.summary.currentPage")} tone="neutral" />
+        <MetricTile label={r("master.summary.totalItems")} value={total ? total.toLocaleString("en-US") : "-"} detail={r("master.summary.filteredResultSet")} tone="neutral" />
+        <MetricTile label={r("master.summary.withSecondSupplier")} value={summary.withSecondSupplier.toLocaleString("en-US")} detail={r("master.summary.comparisonReady")} tone="success" />
+        <MetricTile label={r("master.summary.highGapItems")} value={summary.highGap.toLocaleString("en-US")} detail={r("master.summary.gapThreshold", { percent: HIGH_GAP_PERCENT })} tone={summary.highGap ? "info" : "neutral"} />
+        <MetricTile label={r("master.summary.singleSupplier")} value={summary.singleSupplier.toLocaleString("en-US")} detail={r("master.values.noSecondSupplier")} tone={summary.singleSupplier ? "warning" : "success"} />
+        <MetricTile label={r("master.summary.averageGap")} value={avgGapPercent == null ? "-" : `${formatMasterNumber(avgGapPercent, 2)}%`} detail={r("master.summary.rowsWithGapData")} tone="neutral" />
       </section>
 
       <section className="section-card procurement-table-card">
         <div className="section-card__header section-card__header--row">
           <div>
-            <h2>Decision Table</h2>
+            <h2>{r("master.decisionTable.title")}</h2>
             <p>
               {loadingBrands
-                ? "Loading brand context..."
+                ? r("master.loading.brandContext")
                 : loadingRows
-                  ? "Refreshing supplier intelligence..."
-                  : `${summary.rowsShown.toLocaleString("en-US")} rows shown${total ? ` from ${total.toLocaleString("en-US")} total` : ""}`}
+                  ? r("master.loading.refreshingSupplierIntelligence")
+                  : total
+                    ? r("master.meta.rowsShownFromTotal", { shown: summary.rowsShown.toLocaleString("en-US"), total: total.toLocaleString("en-US") })
+                    : r("master.meta.rowsShown", { shown: summary.rowsShown.toLocaleString("en-US") })}
             </p>
           </div>
           {error ? <div className="procurement-error-state">{error}</div> : null}
@@ -444,7 +451,7 @@ export function MasterPage() {
         <div className="section-card__body">
           {loadingRows ? (
             <div className="procurement-loading-state" role="status">
-              <span className="procurement-loading-state__label">Building supplier comparison</span>
+              <span className="procurement-loading-state__label">{r("master.loading.buildingSupplierComparison")}</span>
               <span className="procurement-loading-state__bar" />
               <span className="procurement-loading-state__bar procurement-loading-state__bar--short" />
             </div>
@@ -454,7 +461,7 @@ export function MasterPage() {
               columns={columns}
               className="decision-table"
               wrapClassName="decision-table-wrap"
-              emptyText={!brandId ? "Select a brand or search to compare supplier prices." : "No supplier comparisons found for the current filters."}
+              emptyText={!brandId ? r("master.empty.selectBrandOrSearch") : r("master.empty.noComparisons")}
             />
           )}
         </div>

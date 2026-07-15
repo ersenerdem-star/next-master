@@ -16,6 +16,7 @@ import { Input } from "../components/common/Input";
 import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
 import { BrandPill } from "../components/common/BrandPill";
+import { useI18n } from "../../i18n/I18nProvider";
 
 type AnalyticsTab = "Turnover" | "Aging" | "Forecast" | "Pending Procurement" | "Vendor Balance" | "Customer Balance";
 
@@ -212,13 +213,15 @@ function buildInvoiceCoverageMap(invoices: LocalInvoice[]) {
 }
 
 export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWarehouse, onOpenInventoryItem }: InventoryAnalyticsPageProps) {
+  const { t } = useI18n();
+  const r = (key: string, params?: Record<string, string | number>) => t(`reports.${key}`, params);
   const actionFeedback = useActionFeedback();
   const [activeTab, setActiveTab] = useState<AnalyticsTab>("Turnover");
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [brands, setBrands] = useState<Array<{ value: string; label: string }>>([{ value: "", label: "All Brands" }]);
-  const [warehouses, setWarehouses] = useState<Array<{ value: string; label: string }>>([{ value: "", label: "All Warehouses" }]);
+  const [brands, setBrands] = useState<Array<{ value: string; label: string }>>([]);
+  const [warehouses, setWarehouses] = useState<Array<{ value: string; label: string }>>([]);
   const [filters, setFilters] = useState<AnalyticsFilters>({
     brand: "",
     warehouseId: "",
@@ -241,10 +244,10 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
       try {
         const [brandRows, warehouseRows] = await Promise.all([fetchCloudBrands(), fetchWarehouses()]);
         if (cancelled) return;
-        setBrands([{ value: "", label: "All Brands" }, ...brandRows.map((row) => ({ value: row.name, label: row.name }))]);
-        setWarehouses([{ value: "", label: "All Warehouses" }, ...warehouseRows.map((row: Warehouse) => ({ value: row.id, label: `${row.warehouse_code} · ${row.warehouse_name}` }))]);
+        setBrands([{ value: "", label: r("filters.allBrands") }, ...brandRows.map((row) => ({ value: row.name, label: row.name }))]);
+        setWarehouses([{ value: "", label: r("inventoryAnalytics.filters.allWarehouses") }, ...warehouseRows.map((row: Warehouse) => ({ value: row.id, label: `${row.warehouse_code} · ${row.warehouse_name}` }))]);
       } catch (caught) {
-        if (!cancelled) actionFeedback.fail(caught instanceof Error ? caught.message : "Analytics filters load failed");
+        if (!cancelled) actionFeedback.fail(caught instanceof Error ? caught.message : r("inventoryAnalytics.errors.filtersLoadFailed"));
       }
     }
 
@@ -252,19 +255,19 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
     return () => {
       cancelled = true;
     };
-  }, [actionFeedback]);
+  }, [actionFeedback, t]);
 
   async function handleLoad() {
     const canLoadWithoutScope = activeTab === "Vendor Balance" || activeTab === "Customer Balance" || activeTab === "Pending Procurement";
     if (!canLoadWithoutScope && !filters.brand && !filters.warehouseId && !filters.codeSearch.trim()) {
-      actionFeedback.fail("Select a brand, warehouse, or enter a code first.");
+      actionFeedback.fail(r("inventoryAnalytics.errors.scopeRequired"));
       return;
     }
 
     try {
       setLoading(true);
       setLoaded(true);
-      actionFeedback.begin("Loading inventory analytics...");
+      actionFeedback.begin(r("inventoryAnalytics.feedback.loading"));
       const [stockRows, movementRows, receiveRows, salesOrderRows, purchaseOrderRows, invoiceRows] = await Promise.all([
         fetchWarehouseStockItems(filters.warehouseId || undefined),
         fetchInventoryMovements(filters.warehouseId || undefined),
@@ -279,7 +282,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
       setSalesOrders(salesOrderRows);
       setPurchaseOrders(purchaseOrderRows);
       setInvoices(invoiceRows);
-      actionFeedback.succeed("Inventory analytics loaded.");
+      actionFeedback.succeed(r("inventoryAnalytics.feedback.loaded"));
     } catch (caught) {
       setStockItems([]);
       setMovements([]);
@@ -287,7 +290,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
       setSalesOrders([]);
       setPurchaseOrders([]);
       setInvoices([]);
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Inventory analytics load failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : r("inventoryAnalytics.errors.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -623,67 +626,80 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
       .sort((a, b) => a.customer_name.localeCompare(b.customer_name) || a.sales_order_no.localeCompare(b.sales_order_no) || a.product_code.localeCompare(b.product_code));
   }, [filters.brand, filters.codeSearch, filters.dateFrom, filters.dateTo, invoices, salesOrders]);
 
+  const defaultBrandOptions = useMemo(() => [{ value: "", label: r("filters.allBrands") }], [t]);
+  const defaultWarehouseOptions = useMemo(() => [{ value: "", label: r("inventoryAnalytics.filters.allWarehouses") }], [t]);
+
+  function analyticsTabLabel(tab: AnalyticsTab) {
+    const key = tab.replace(/\s+/g, "").replace(/^./, (char) => char.toLowerCase());
+    return r(`inventoryAnalytics.tabs.${key}`);
+  }
+
+  function forecastStatusLabel(status: ForecastRow["status"]) {
+    const key = status.replace(/\s+/g, "").replace(/^./, (char) => char.toLowerCase());
+    return r(`inventoryAnalytics.forecastStatus.${key}`);
+  }
+
   const turnoverColumns = useMemo(
     () => [
-      { key: "brand", header: "Brand", render: (row: TurnoverRow) => <BrandPill brand={row.brand} compact /> },
-      { key: "code", header: "Code", render: (row: TurnoverRow) => row.product_code || "-" },
-      { key: "description", header: "Description", render: (row: TurnoverRow) => row.description || "-" },
-      { key: "stock", header: "On Hand", render: (row: TurnoverRow) => row.on_hand_qty.toLocaleString("en-US") },
-      { key: "value", header: "Stock Value", render: (row: TurnoverRow) => formatMoney(row.stock_value) },
-      { key: "soldqty", header: "Sold Qty", render: (row: TurnoverRow) => row.sold_qty.toLocaleString("en-US") },
-      { key: "soldamount", header: "Sold Amount", render: (row: TurnoverRow) => formatMoney(row.sold_amount) },
-      { key: "turnover", header: "Turnover x", render: (row: TurnoverRow) => row.turnover_ratio.toFixed(2) },
-      { key: "cover", header: "Days Cover", render: (row: TurnoverRow) => (row.days_cover === null ? "-" : row.days_cover.toFixed(1)) },
+      { key: "brand", header: r("columns.brand"), render: (row: TurnoverRow) => <BrandPill brand={row.brand} compact /> },
+      { key: "code", header: r("columns.code"), render: (row: TurnoverRow) => row.product_code || "-" },
+      { key: "description", header: r("columns.description"), render: (row: TurnoverRow) => row.description || "-" },
+      { key: "stock", header: r("columns.onHand"), render: (row: TurnoverRow) => row.on_hand_qty.toLocaleString("en-US") },
+      { key: "value", header: r("columns.stockValue"), render: (row: TurnoverRow) => formatMoney(row.stock_value) },
+      { key: "soldqty", header: r("columns.soldQty"), render: (row: TurnoverRow) => row.sold_qty.toLocaleString("en-US") },
+      { key: "soldamount", header: r("columns.soldAmount"), render: (row: TurnoverRow) => formatMoney(row.sold_amount) },
+      { key: "turnover", header: r("columns.turnoverX"), render: (row: TurnoverRow) => row.turnover_ratio.toFixed(2) },
+      { key: "cover", header: r("columns.daysCover"), render: (row: TurnoverRow) => (row.days_cover === null ? "-" : row.days_cover.toFixed(1)) },
       {
         key: "action",
-        header: "Action",
+        header: r("columns.action"),
         render: (row: TurnoverRow) => (
           <Button className="button--compact" variant="secondary" onClick={() => onOpenInventoryItem?.(row.product_code, filters.warehouseId || undefined)}>
-            Open Stock
+            {r("actions.openStock")}
           </Button>
         ),
       },
     ],
-    [filters.warehouseId, onOpenInventoryItem],
+    [filters.warehouseId, onOpenInventoryItem, t],
   );
 
   const agingColumns = useMemo(
     () => [
-      { key: "warehouse", header: "Warehouse", render: (row: AgingRow) => row.warehouse_name || "-" },
-      { key: "brand", header: "Brand", render: (row: AgingRow) => <BrandPill brand={row.brand} compact /> },
-      { key: "code", header: "Code", render: (row: AgingRow) => row.product_code || "-" },
-      { key: "description", header: "Description", render: (row: AgingRow) => row.description || "-" },
-      { key: "stock", header: "On Hand", render: (row: AgingRow) => row.on_hand_qty.toLocaleString("en-US") },
-      { key: "value", header: "Stock Value", render: (row: AgingRow) => formatMoney(row.stock_value) },
-      { key: "days", header: "Days Idle", render: (row: AgingRow) => row.days_idle.toLocaleString("en-US") },
-      { key: "bucket", header: "Bucket", render: (row: AgingRow) => row.age_bucket },
-      { key: "last", header: "Last Move", render: (row: AgingRow) => formatDate(row.last_moved_at) },
+      { key: "warehouse", header: r("columns.warehouse"), render: (row: AgingRow) => row.warehouse_name || "-" },
+      { key: "brand", header: r("columns.brand"), render: (row: AgingRow) => <BrandPill brand={row.brand} compact /> },
+      { key: "code", header: r("columns.code"), render: (row: AgingRow) => row.product_code || "-" },
+      { key: "description", header: r("columns.description"), render: (row: AgingRow) => row.description || "-" },
+      { key: "stock", header: r("columns.onHand"), render: (row: AgingRow) => row.on_hand_qty.toLocaleString("en-US") },
+      { key: "value", header: r("columns.stockValue"), render: (row: AgingRow) => formatMoney(row.stock_value) },
+      { key: "days", header: r("columns.daysIdle"), render: (row: AgingRow) => row.days_idle.toLocaleString("en-US") },
+      { key: "bucket", header: r("columns.bucket"), render: (row: AgingRow) => row.age_bucket },
+      { key: "last", header: r("columns.lastMove"), render: (row: AgingRow) => formatDate(row.last_moved_at) },
       {
         key: "action",
-        header: "Action",
+        header: r("columns.action"),
         render: (row: AgingRow) => (
           <Button className="button--compact" variant="secondary" onClick={() => onOpenInventoryWarehouse?.(row.warehouse_id)}>
-            Open Warehouse
+            {r("actions.openWarehouse")}
           </Button>
         ),
       },
     ],
-    [onOpenInventoryWarehouse],
+    [onOpenInventoryWarehouse, t],
   );
 
   const forecastColumns = useMemo(
     () => [
-      { key: "brand", header: "Brand", render: (row: ForecastRow) => <BrandPill brand={row.brand} compact /> },
-      { key: "code", header: "Code", render: (row: ForecastRow) => row.product_code || "-" },
-      { key: "description", header: "Description", render: (row: ForecastRow) => row.description || "-" },
-      { key: "stock", header: "On Hand", render: (row: ForecastRow) => row.on_hand_qty.toLocaleString("en-US") },
-      { key: "monthly", header: "Monthly Demand", render: (row: ForecastRow) => row.monthly_demand_qty.toLocaleString("en-US") },
-      { key: "cover", header: "Months Cover", render: (row: ForecastRow) => (row.months_cover === null ? "-" : row.months_cover.toFixed(2)) },
-      { key: "recommended", header: "Recommended", render: (row: ForecastRow) => row.recommended_qty.toLocaleString("en-US") },
-      { key: "reorder", header: "Reorder Qty", render: (row: ForecastRow) => row.reorder_qty.toLocaleString("en-US") },
+      { key: "brand", header: r("columns.brand"), render: (row: ForecastRow) => <BrandPill brand={row.brand} compact /> },
+      { key: "code", header: r("columns.code"), render: (row: ForecastRow) => row.product_code || "-" },
+      { key: "description", header: r("columns.description"), render: (row: ForecastRow) => row.description || "-" },
+      { key: "stock", header: r("columns.onHand"), render: (row: ForecastRow) => row.on_hand_qty.toLocaleString("en-US") },
+      { key: "monthly", header: r("columns.monthlyDemand"), render: (row: ForecastRow) => row.monthly_demand_qty.toLocaleString("en-US") },
+      { key: "cover", header: r("columns.monthsCover"), render: (row: ForecastRow) => (row.months_cover === null ? "-" : row.months_cover.toFixed(2)) },
+      { key: "recommended", header: r("columns.recommended"), render: (row: ForecastRow) => row.recommended_qty.toLocaleString("en-US") },
+      { key: "reorder", header: r("columns.reorderQty"), render: (row: ForecastRow) => row.reorder_qty.toLocaleString("en-US") },
       {
         key: "status",
-        header: "Status",
+        header: r("columns.status"),
         render: (row: ForecastRow) => (
           <span
             className={`mark-badge ${
@@ -696,115 +712,115 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
                     : ""
             }`}
           >
-            {row.status}
+            {forecastStatusLabel(row.status)}
           </span>
         ),
       },
       {
         key: "action",
-        header: "Action",
+        header: r("columns.action"),
         render: (row: ForecastRow) => (
           <Button className="button--compact" variant="secondary" onClick={() => onOpenInventoryItem?.(row.product_code, filters.warehouseId || undefined)}>
-            Open Stock
+            {r("actions.openStock")}
           </Button>
         ),
       },
     ],
-    [filters.warehouseId, onOpenInventoryItem],
+    [filters.warehouseId, onOpenInventoryItem, t],
   );
 
   const pendingColumns = useMemo(
     () => [
-      { key: "order", header: "Sales Order", render: (row: PendingProcurementRow) => row.sales_order_no || "-" },
+      { key: "order", header: r("columns.salesOrder"), render: (row: PendingProcurementRow) => row.sales_order_no || "-" },
       {
         key: "customer",
-        header: "Customer",
+        header: r("columns.customer"),
         render: (row: PendingProcurementRow) => <span title={row.customer_name || "-"}>{buildEntityAlias(row.customer_name)}</span>,
       },
-      { key: "date", header: "Date", render: (row: PendingProcurementRow) => row.order_date || "-" },
-      { key: "source", header: "Source", render: (row: PendingProcurementRow) => row.source_channel || "-" },
-      { key: "brand", header: "Brand", render: (row: PendingProcurementRow) => <BrandPill brand={row.brand} compact /> },
-      { key: "code", header: "Code", render: (row: PendingProcurementRow) => row.product_code || "-" },
-      { key: "description", header: "Description", render: (row: PendingProcurementRow) => row.description || "-" },
-      { key: "ordered", header: "Ordered", render: (row: PendingProcurementRow) => row.qty_ordered.toLocaleString("en-US") },
-      { key: "purchased", header: "Purchased", render: (row: PendingProcurementRow) => row.qty_purchased.toLocaleString("en-US") },
-      { key: "pending", header: "Pending", render: (row: PendingProcurementRow) => row.qty_pending.toLocaleString("en-US") },
+      { key: "date", header: r("columns.date"), render: (row: PendingProcurementRow) => row.order_date || "-" },
+      { key: "source", header: r("columns.source"), render: (row: PendingProcurementRow) => row.source_channel || "-" },
+      { key: "brand", header: r("columns.brand"), render: (row: PendingProcurementRow) => <BrandPill brand={row.brand} compact /> },
+      { key: "code", header: r("columns.code"), render: (row: PendingProcurementRow) => row.product_code || "-" },
+      { key: "description", header: r("columns.description"), render: (row: PendingProcurementRow) => row.description || "-" },
+      { key: "ordered", header: r("columns.ordered"), render: (row: PendingProcurementRow) => row.qty_ordered.toLocaleString("en-US") },
+      { key: "purchased", header: r("columns.purchased"), render: (row: PendingProcurementRow) => row.qty_purchased.toLocaleString("en-US") },
+      { key: "pending", header: r("columns.pending"), render: (row: PendingProcurementRow) => row.qty_pending.toLocaleString("en-US") },
       {
         key: "action",
-        header: "Action",
+        header: r("columns.action"),
         render: (row: PendingProcurementRow) => (
           <Button className="button--compact" variant="secondary" onClick={() => onOpenSalesOrder?.(row.sales_order_id)}>
-            Open Sales Order
+            {r("actions.openSalesOrder")}
           </Button>
         ),
       },
     ],
-    [onOpenSalesOrder],
+    [onOpenSalesOrder, t],
   );
 
   const vendorBalanceColumns = useMemo(
     () => [
       {
         key: "supplier",
-        header: "Vendor",
+        header: r("columns.vendor"),
         render: (row: VendorBalanceRow) => <span title={row.supplier_name || "-"}>{buildEntityAlias(row.supplier_name)}</span>,
       },
-      { key: "po", header: "Purchase Order", render: (row: VendorBalanceRow) => row.purchase_order_no || "-" },
-      { key: "salesorder", header: "Sales Order", render: (row: VendorBalanceRow) => row.sales_order_no || "-" },
+      { key: "po", header: r("columns.purchaseOrder"), render: (row: VendorBalanceRow) => row.purchase_order_no || "-" },
+      { key: "salesorder", header: r("columns.salesOrder"), render: (row: VendorBalanceRow) => row.sales_order_no || "-" },
       {
         key: "customer",
-        header: "Customer",
+        header: r("columns.customer"),
         render: (row: VendorBalanceRow) => <span title={row.customer_name || "-"}>{buildEntityAlias(row.customer_name)}</span>,
       },
-      { key: "date", header: "PO Date", render: (row: VendorBalanceRow) => row.order_date || "-" },
-      { key: "brand", header: "Brand", render: (row: VendorBalanceRow) => <BrandPill brand={row.brand} compact /> },
-      { key: "code", header: "Code", render: (row: VendorBalanceRow) => row.product_code || "-" },
-      { key: "description", header: "Description", render: (row: VendorBalanceRow) => row.description || "-" },
-      { key: "ordered", header: "Ordered", render: (row: VendorBalanceRow) => row.qty_ordered.toLocaleString("en-US") },
-      { key: "received", header: "Received", render: (row: VendorBalanceRow) => row.qty_received.toLocaleString("en-US") },
-      { key: "remaining", header: "Vendor Balance", render: (row: VendorBalanceRow) => row.qty_remaining.toLocaleString("en-US") },
-      { key: "amount", header: "Open Cost", render: (row: VendorBalanceRow) => formatMoney(row.amount_remaining) },
+      { key: "date", header: r("columns.poDate"), render: (row: VendorBalanceRow) => row.order_date || "-" },
+      { key: "brand", header: r("columns.brand"), render: (row: VendorBalanceRow) => <BrandPill brand={row.brand} compact /> },
+      { key: "code", header: r("columns.code"), render: (row: VendorBalanceRow) => row.product_code || "-" },
+      { key: "description", header: r("columns.description"), render: (row: VendorBalanceRow) => row.description || "-" },
+      { key: "ordered", header: r("columns.ordered"), render: (row: VendorBalanceRow) => row.qty_ordered.toLocaleString("en-US") },
+      { key: "received", header: r("columns.received"), render: (row: VendorBalanceRow) => row.qty_received.toLocaleString("en-US") },
+      { key: "remaining", header: r("columns.vendorBalance"), render: (row: VendorBalanceRow) => row.qty_remaining.toLocaleString("en-US") },
+      { key: "amount", header: r("columns.openCost"), render: (row: VendorBalanceRow) => formatMoney(row.amount_remaining) },
       {
         key: "action",
-        header: "Action",
+        header: r("columns.action"),
         render: (row: VendorBalanceRow) => (
           <Button className="button--compact" variant="secondary" onClick={() => onOpenSalesOrder?.(row.sales_order_id)}>
-            Open Sales Order
+            {r("actions.openSalesOrder")}
           </Button>
         ),
       },
     ],
-    [onOpenSalesOrder],
+    [onOpenSalesOrder, t],
   );
 
   const customerBalanceColumns = useMemo(
     () => [
-      { key: "order", header: "Sales Order", render: (row: CustomerBalanceRow) => row.sales_order_no || "-" },
+      { key: "order", header: r("columns.salesOrder"), render: (row: CustomerBalanceRow) => row.sales_order_no || "-" },
       {
         key: "customer",
-        header: "Customer",
+        header: r("columns.customer"),
         render: (row: CustomerBalanceRow) => <span title={row.customer_name || "-"}>{buildEntityAlias(row.customer_name)}</span>,
       },
-      { key: "date", header: "SO Date", render: (row: CustomerBalanceRow) => row.order_date || "-" },
-      { key: "source", header: "Source", render: (row: CustomerBalanceRow) => row.source_channel || "-" },
-      { key: "brand", header: "Brand", render: (row: CustomerBalanceRow) => <BrandPill brand={row.brand} compact /> },
-      { key: "code", header: "Code", render: (row: CustomerBalanceRow) => row.product_code || "-" },
-      { key: "description", header: "Description", render: (row: CustomerBalanceRow) => row.description || "-" },
-      { key: "ordered", header: "Ordered", render: (row: CustomerBalanceRow) => row.qty_ordered.toLocaleString("en-US") },
-      { key: "invoiced", header: "Invoiced", render: (row: CustomerBalanceRow) => row.qty_invoiced.toLocaleString("en-US") },
-      { key: "remaining", header: "Customer Balance", render: (row: CustomerBalanceRow) => row.qty_remaining.toLocaleString("en-US") },
-      { key: "amount", header: "Open Sales", render: (row: CustomerBalanceRow) => formatMoney(row.amount_remaining) },
+      { key: "date", header: r("columns.soDate"), render: (row: CustomerBalanceRow) => row.order_date || "-" },
+      { key: "source", header: r("columns.source"), render: (row: CustomerBalanceRow) => row.source_channel || "-" },
+      { key: "brand", header: r("columns.brand"), render: (row: CustomerBalanceRow) => <BrandPill brand={row.brand} compact /> },
+      { key: "code", header: r("columns.code"), render: (row: CustomerBalanceRow) => row.product_code || "-" },
+      { key: "description", header: r("columns.description"), render: (row: CustomerBalanceRow) => row.description || "-" },
+      { key: "ordered", header: r("columns.ordered"), render: (row: CustomerBalanceRow) => row.qty_ordered.toLocaleString("en-US") },
+      { key: "invoiced", header: r("columns.invoiced"), render: (row: CustomerBalanceRow) => row.qty_invoiced.toLocaleString("en-US") },
+      { key: "remaining", header: r("columns.customerBalance"), render: (row: CustomerBalanceRow) => row.qty_remaining.toLocaleString("en-US") },
+      { key: "amount", header: r("columns.openSales"), render: (row: CustomerBalanceRow) => formatMoney(row.amount_remaining) },
       {
         key: "action",
-        header: "Action",
+        header: r("columns.action"),
         render: (row: CustomerBalanceRow) => (
           <Button className="button--compact" variant="secondary" onClick={() => onOpenSalesOrder?.(row.sales_order_id)}>
-            Open Sales Order
+            {r("actions.openSalesOrder")}
           </Button>
         ),
       },
     ],
-    [onOpenSalesOrder],
+    [onOpenSalesOrder, t],
   );
 
   const activeRows = useMemo(() => {
@@ -820,7 +836,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
     const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
     try {
       setExporting(true);
-      actionFeedback.begin(`Preparing ${activeTab} export...`);
+      actionFeedback.begin(r("inventoryAnalytics.feedback.preparingExport", { tab: analyticsTabLabel(activeTab) }));
       let rows: Array<Array<string | number>> = [];
       let numericColumns: number[] = [];
 
@@ -889,60 +905,60 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
         numericColumns = [7, 8, 9, 10];
       }
 
-      const blob = buildXlsxBlob(activeTab.slice(0, 31), rows, numericColumns);
+      const blob = buildXlsxBlob(analyticsTabLabel(activeTab).slice(0, 31), rows, numericColumns);
       downloadBlob(`inventory-${activeTab.toLowerCase().replace(/\s+/g, "-")}-${stamp}.xlsx`, blob);
-      actionFeedback.succeed(`${activeTab} exported.`);
+      actionFeedback.succeed(r("inventoryAnalytics.feedback.exported", { tab: analyticsTabLabel(activeTab) }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : `${activeTab} export failed`);
+      actionFeedback.fail(caught instanceof Error ? caught.message : r("inventoryAnalytics.errors.exportFailed", { tab: analyticsTabLabel(activeTab) }));
     } finally {
       setExporting(false);
     }
   }
 
   return (
-    <SectionCard title="Inventory Analytics">
+    <SectionCard title={r("inventoryAnalytics.title")}>
       <div className="toolbar toolbar--wrap">
-        <Select label="Brand" value={filters.brand} options={brands} onChange={(value) => setFilters((current) => ({ ...current, brand: value }))} />
-        <Select label="Warehouse" value={filters.warehouseId} options={warehouses} onChange={(value) => setFilters((current) => ({ ...current, warehouseId: value }))} />
+        <Select label={r("fields.brand")} value={filters.brand} options={brands.length ? brands : defaultBrandOptions} onChange={(value) => setFilters((current) => ({ ...current, brand: value }))} />
+        <Select label={r("fields.warehouse")} value={filters.warehouseId} options={warehouses.length ? warehouses : defaultWarehouseOptions} onChange={(value) => setFilters((current) => ({ ...current, warehouseId: value }))} />
         <Input
-          label="Code / Description"
+          label={r("inventoryAnalytics.fields.codeDescription")}
           value={filters.codeSearch}
           onChange={(value) => setFilters((current) => ({ ...current, codeSearch: value }))}
-          placeholder="Enter code or description"
+          placeholder={r("inventoryAnalytics.placeholders.codeDescription")}
           onEnter={() => void handleLoad()}
         />
-        <Input label="Date From" type="date" value={filters.dateFrom} onChange={(value) => setFilters((current) => ({ ...current, dateFrom: value }))} />
-        <Input label="Date To" type="date" value={filters.dateTo} onChange={(value) => setFilters((current) => ({ ...current, dateTo: value }))} />
-        <Input label="Forecast Months" type="number" value={filters.forecastMonths} onChange={(value) => setFilters((current) => ({ ...current, forecastMonths: value }))} />
-        <Button onClick={() => void handleLoad()} busy={loading} busyLabel="Loading...">
-          Load Analytics
+        <Input label={r("fields.dateFrom")} type="date" value={filters.dateFrom} onChange={(value) => setFilters((current) => ({ ...current, dateFrom: value }))} />
+        <Input label={r("fields.dateTo")} type="date" value={filters.dateTo} onChange={(value) => setFilters((current) => ({ ...current, dateTo: value }))} />
+        <Input label={r("inventoryAnalytics.fields.forecastMonths")} type="number" value={filters.forecastMonths} onChange={(value) => setFilters((current) => ({ ...current, forecastMonths: value }))} />
+        <Button onClick={() => void handleLoad()} busy={loading} busyLabel={r("busy.loading")}>
+          {r("actions.loadAnalytics")}
         </Button>
-        <Button variant="secondary" onClick={() => void handleExport()} disabled={!loaded || !activeRows.length} busy={exporting} busyLabel="Exporting...">
-          Export Excel
+        <Button variant="secondary" onClick={() => void handleExport()} disabled={!loaded || !activeRows.length} busy={exporting} busyLabel={r("busy.exporting")}>
+          {r("actions.exportExcel")}
         </Button>
       </div>
 
       <div className="meta-row">
-        <span>{loaded ? `${activeRows.length.toLocaleString("en-US")} rows ready` : "Select a filter and load analytics."}</span>
-        <span>{loaded ? `Period basis: ${periodDays.toLocaleString("en-US")} days` : "Reports only run when you explicitly load them."}</span>
+        <span>{loaded ? r("inventoryAnalytics.meta.rowsReady", { count: activeRows.length.toLocaleString("en-US") }) : r("inventoryAnalytics.meta.selectFilter")}</span>
+        <span>{loaded ? r("inventoryAnalytics.meta.periodBasis", { days: periodDays.toLocaleString("en-US") }) : r("inventoryAnalytics.meta.explicitLoadOnly")}</span>
       </div>
 
       {loaded ? (
         <div className="settings-grid settings-stats-grid">
           <div className="settings-item">
-            <span className="settings-label">Posted Receives</span>
+            <span className="settings-label">{r("inventoryAnalytics.pulse.postedReceives")}</span>
             <strong>{analyticsPulse.receiveCount.toLocaleString("en-US")}</strong>
           </div>
           <div className="settings-item">
-            <span className="settings-label">Receive Value</span>
+            <span className="settings-label">{r("inventoryAnalytics.pulse.receiveValue")}</span>
             <strong>{formatMoney(analyticsPulse.receiveValue)}</strong>
           </div>
           <div className="settings-item">
-            <span className="settings-label">Transfers</span>
+            <span className="settings-label">{r("inventoryAnalytics.pulse.transfers")}</span>
             <strong>{analyticsPulse.transferCount.toLocaleString("en-US")}</strong>
           </div>
           <div className="settings-item">
-            <span className="settings-label">Transfer Value</span>
+            <span className="settings-label">{r("inventoryAnalytics.pulse.transferValue")}</span>
             <strong>{formatMoney(analyticsPulse.transferValue)}</strong>
           </div>
         </div>
@@ -951,7 +967,7 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
       <div className="module-tabs">
         {(["Turnover", "Aging", "Forecast", "Pending Procurement", "Vendor Balance", "Customer Balance"] as AnalyticsTab[]).map((tab) => (
           <button key={tab} className={`module-tab${activeTab === tab ? " active" : ""}`} onClick={() => setActiveTab(tab)}>
-            {tab}
+            {analyticsTabLabel(tab)}
           </button>
         ))}
       </div>
@@ -962,23 +978,23 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
             <>
               <div className="settings-grid settings-stats-grid">
                 <div className="settings-item">
-                  <span className="settings-label">Tracked Items</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.trackedItems")}</span>
                   <strong>{turnoverRows.length.toLocaleString("en-US")}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Stock Value</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.stockValue")}</span>
                   <strong>{formatMoney(turnoverRows.reduce((sum, row) => sum + row.stock_value, 0))}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Sold Amount</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.soldAmount")}</span>
                   <strong>{formatMoney(turnoverRows.reduce((sum, row) => sum + row.sold_amount, 0))}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Sold Qty</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.soldQty")}</span>
                   <strong>{turnoverRows.reduce((sum, row) => sum + row.sold_qty, 0).toLocaleString("en-US")}</strong>
                 </div>
               </div>
-              <DataTable rows={turnoverRows} columns={turnoverColumns} emptyText="No turnover rows for the selected filters." />
+              <DataTable rows={turnoverRows} columns={turnoverColumns} emptyText={r("inventoryAnalytics.empty.noTurnoverRows")} />
             </>
           ) : null}
 
@@ -986,23 +1002,23 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
             <>
               <div className="settings-grid settings-stats-grid">
                 <div className="settings-item">
-                  <span className="settings-label">Aged SKUs</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.agedSkus")}</span>
                   <strong>{agingRows.length.toLocaleString("en-US")}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">90+ Days</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.days90Plus")}</span>
                   <strong>{agingRows.filter((row) => row.days_idle > 90).length.toLocaleString("en-US")}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Aged Value</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.agedValue")}</span>
                   <strong>{formatMoney(agingRows.filter((row) => row.days_idle > 90).reduce((sum, row) => sum + row.stock_value, 0))}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Oldest Idle</span>
-                  <strong>{agingRows[0]?.days_idle?.toLocaleString("en-US") || "0"} days</strong>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.oldestIdle")}</span>
+                  <strong>{r("inventoryAnalytics.values.days", { days: agingRows[0]?.days_idle?.toLocaleString("en-US") || "0" })}</strong>
                 </div>
               </div>
-              <DataTable rows={agingRows} columns={agingColumns} emptyText="No aging rows for the selected filters." />
+              <DataTable rows={agingRows} columns={agingColumns} emptyText={r("inventoryAnalytics.empty.noAgingRows")} />
             </>
           ) : null}
 
@@ -1010,23 +1026,23 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
             <>
               <div className="settings-grid settings-stats-grid">
                 <div className="settings-item">
-                  <span className="settings-label">Reorder Items</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.reorderItems")}</span>
                   <strong>{forecastRows.filter((row) => row.status === "Reorder").length.toLocaleString("en-US")}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Reorder Qty</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.reorderQty")}</span>
                   <strong>{forecastRows.reduce((sum, row) => sum + row.reorder_qty, 0).toLocaleString("en-US")}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Overstock Items</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.overstockItems")}</span>
                   <strong>{forecastRows.filter((row) => row.status === "Overstock").length.toLocaleString("en-US")}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">No Demand</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.noDemand")}</span>
                   <strong>{forecastRows.filter((row) => row.status === "No Demand").length.toLocaleString("en-US")}</strong>
                 </div>
               </div>
-              <DataTable rows={forecastRows} columns={forecastColumns} emptyText="No forecast rows for the selected filters." />
+              <DataTable rows={forecastRows} columns={forecastColumns} emptyText={r("inventoryAnalytics.empty.noForecastRows")} />
             </>
           ) : null}
 
@@ -1034,23 +1050,23 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
             <>
               <div className="settings-grid settings-stats-grid">
                 <div className="settings-item">
-                  <span className="settings-label">Pending Lines</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.pendingLines")}</span>
                   <strong>{pendingProcurementRows.length.toLocaleString("en-US")}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Pending Qty</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.pendingQty")}</span>
                   <strong>{pendingProcurementRows.reduce((sum, row) => sum + row.qty_pending, 0).toLocaleString("en-US")}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Portal Orders</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.portalOrders")}</span>
                   <strong>{pendingProcurementRows.filter((row) => row.source_channel === "portal").length.toLocaleString("en-US")}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Customers Affected</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.customersAffected")}</span>
                   <strong>{new Set(pendingProcurementRows.map((row) => row.customer_name)).size.toLocaleString("en-US")}</strong>
                 </div>
               </div>
-              <DataTable rows={pendingProcurementRows} columns={pendingColumns} emptyText="No pending procurement lines for the selected filters." />
+              <DataTable rows={pendingProcurementRows} columns={pendingColumns} emptyText={r("inventoryAnalytics.empty.noPendingProcurementRows")} />
             </>
           ) : null}
 
@@ -1058,23 +1074,23 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
             <>
               <div className="settings-grid settings-stats-grid">
                 <div className="settings-item">
-                  <span className="settings-label">Open Vendor Lines</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.openVendorLines")}</span>
                   <strong>{vendorBalanceRows.length.toLocaleString("en-US")}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Vendor Balance Qty</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.vendorBalanceQty")}</span>
                   <strong>{vendorBalanceRows.reduce((sum, row) => sum + row.qty_remaining, 0).toLocaleString("en-US")}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Open Cost</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.openCost")}</span>
                   <strong>{formatMoney(vendorBalanceRows.reduce((sum, row) => sum + row.amount_remaining, 0))}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Vendors Affected</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.vendorsAffected")}</span>
                   <strong>{new Set(vendorBalanceRows.map((row) => row.supplier_name)).size.toLocaleString("en-US")}</strong>
                 </div>
               </div>
-              <DataTable rows={vendorBalanceRows} columns={vendorBalanceColumns} emptyText="No open vendor balance lines for the selected filters." />
+              <DataTable rows={vendorBalanceRows} columns={vendorBalanceColumns} emptyText={r("inventoryAnalytics.empty.noVendorBalanceRows")} />
             </>
           ) : null}
 
@@ -1082,28 +1098,28 @@ export function InventoryAnalyticsPage({ onOpenSalesOrder, onOpenInventoryWareho
             <>
               <div className="settings-grid settings-stats-grid">
                 <div className="settings-item">
-                  <span className="settings-label">Open Customer Lines</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.openCustomerLines")}</span>
                   <strong>{customerBalanceRows.length.toLocaleString("en-US")}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Customer Balance Qty</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.customerBalanceQty")}</span>
                   <strong>{customerBalanceRows.reduce((sum, row) => sum + row.qty_remaining, 0).toLocaleString("en-US")}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Open Sales</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.openSales")}</span>
                   <strong>{formatMoney(customerBalanceRows.reduce((sum, row) => sum + row.amount_remaining, 0))}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Customers Affected</span>
+                  <span className="settings-label">{r("inventoryAnalytics.metrics.customersAffected")}</span>
                   <strong>{new Set(customerBalanceRows.map((row) => row.customer_name)).size.toLocaleString("en-US")}</strong>
                 </div>
               </div>
-              <DataTable rows={customerBalanceRows} columns={customerBalanceColumns} emptyText="No open customer balance lines for the selected filters." />
+              <DataTable rows={customerBalanceRows} columns={customerBalanceColumns} emptyText={r("inventoryAnalytics.empty.noCustomerBalanceRows")} />
             </>
           ) : null}
         </>
       ) : (
-        <div className="empty-state">Select filters and load analytics.</div>
+        <div className="empty-state">{r("inventoryAnalytics.empty.loadPrompt")}</div>
       )}
     </SectionCard>
   );

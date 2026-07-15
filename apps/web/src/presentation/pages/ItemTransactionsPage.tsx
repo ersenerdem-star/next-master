@@ -14,6 +14,7 @@ import { Input } from "../components/common/Input";
 import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
 import { BrandPill } from "../components/common/BrandPill";
+import { useI18n } from "../../i18n/I18nProvider";
 
 type ItemTransactionRow = {
   document_id: string;
@@ -189,6 +190,8 @@ export function ItemTransactionsPage({
   onOpenInvoice,
   onOpenBill,
 }: ItemTransactionsPageProps) {
+  const { t } = useI18n();
+  const r = (key: string, params?: Record<string, string | number>) => t(`reports.${key}`, params);
   const actionFeedback = useActionFeedback();
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -210,10 +213,10 @@ export function ItemTransactionsPage({
       try {
         const brands = await fetchCloudBrands();
         if (cancelled) return;
-        setBrandOptions([{ value: "", label: "All Brands" }, ...brands.map((item) => ({ value: item.name, label: item.name }))]);
+        setBrandOptions([{ value: "", label: r("filters.allBrands") }, ...brands.map((item) => ({ value: item.name, label: item.name }))]);
       } catch (caught) {
         if (!cancelled) {
-          actionFeedback.fail(caught instanceof Error ? caught.message : "Item transactions load failed");
+          actionFeedback.fail(caught instanceof Error ? caught.message : r("itemTransactions.errors.loadFailed"));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -224,18 +227,18 @@ export function ItemTransactionsPage({
     return () => {
       cancelled = true;
     };
-  }, [actionFeedback]);
+  }, [actionFeedback, t]);
 
   async function handleLoad() {
     if (!brand && !codeSearch.trim()) {
-      actionFeedback.fail("Select a brand or enter a code first.");
+      actionFeedback.fail(r("itemTransactions.errors.brandOrCodeRequired"));
       return;
     }
 
     try {
       setLoading(true);
       setLoaded(true);
-      actionFeedback.begin("Loading item transactions...");
+      actionFeedback.begin(r("itemTransactions.feedback.loading"));
       const [salesOrders, purchaseOrders, invoices, bills, movements] = await Promise.all([
         fetchSalesOrders(),
         fetchPurchaseOrders(),
@@ -250,11 +253,11 @@ export function ItemTransactionsPage({
         ...billRows(bills),
       ]);
       setInventoryRows(inventoryMovementRows(movements));
-      actionFeedback.succeed("Item transactions loaded.");
+      actionFeedback.succeed(r("itemTransactions.feedback.loaded"));
     } catch (caught) {
       setRows([]);
       setInventoryRows([]);
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Item transactions load failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : r("itemTransactions.errors.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -346,50 +349,61 @@ export function ItemTransactionsPage({
   const inboundAmount = useMemo(() => roundMoney(summaryRows.reduce((sum, row) => sum + row.inbound_amount, 0)), [summaryRows]);
   const outboundAmount = useMemo(() => roundMoney(summaryRows.reduce((sum, row) => sum + row.outbound_amount, 0)), [summaryRows]);
   const netQty = useMemo(() => summaryRows.reduce((sum, row) => sum + row.net_qty, 0), [summaryRows]);
+  const defaultBrandOptions = useMemo(() => [{ value: "", label: r("filters.allBrands") }], [t]);
+
+  function documentTypeLabel(value: ItemTransactionRow["document_type"]) {
+    const key = value.replace(/\s+/g, "").replace(/^./, (char) => char.toLowerCase());
+    return r(`itemTransactions.documentTypes.${key}`);
+  }
+
+  function statusLabel(value: string) {
+    const key = String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+    return key ? r(`statuses.${key}`) : "-";
+  }
 
   const columns = useMemo(
     () => [
-      { key: "brand", header: "Brand", render: (row: ItemTransactionSummaryRow) => <BrandPill brand={row.brand} compact /> },
-      { key: "code", header: "Code", render: (row: ItemTransactionSummaryRow) => row.product_code || "-" },
-      { key: "description", header: "Description", render: (row: ItemTransactionSummaryRow) => row.description || "-" },
-      { key: "inqty", header: "In Qty", render: (row: ItemTransactionSummaryRow) => row.inbound_qty.toLocaleString("en-US") },
-      { key: "outqty", header: "Out Qty", render: (row: ItemTransactionSummaryRow) => row.outbound_qty.toLocaleString("en-US") },
-      { key: "netqty", header: "Net Qty", render: (row: ItemTransactionSummaryRow) => row.net_qty.toLocaleString("en-US") },
-      { key: "inamount", header: "In Amount", render: (row: ItemTransactionSummaryRow) => formatMoney(row.inbound_amount) },
-      { key: "outamount", header: "Out Amount", render: (row: ItemTransactionSummaryRow) => formatMoney(row.outbound_amount) },
-      { key: "netamount", header: "Net Amount", render: (row: ItemTransactionSummaryRow) => formatMoney(row.net_amount) },
-      { key: "moves", header: "Moves", render: (row: ItemTransactionSummaryRow) => row.movement_count.toLocaleString("en-US") },
-      { key: "last", header: "Last Movement", render: (row: ItemTransactionSummaryRow) => row.last_movement_date || "-" },
+      { key: "brand", header: r("columns.brand"), render: (row: ItemTransactionSummaryRow) => <BrandPill brand={row.brand} compact /> },
+      { key: "code", header: r("columns.code"), render: (row: ItemTransactionSummaryRow) => row.product_code || "-" },
+      { key: "description", header: r("columns.description"), render: (row: ItemTransactionSummaryRow) => row.description || "-" },
+      { key: "inqty", header: r("columns.inQty"), render: (row: ItemTransactionSummaryRow) => row.inbound_qty.toLocaleString("en-US") },
+      { key: "outqty", header: r("columns.outQty"), render: (row: ItemTransactionSummaryRow) => row.outbound_qty.toLocaleString("en-US") },
+      { key: "netqty", header: r("columns.netQty"), render: (row: ItemTransactionSummaryRow) => row.net_qty.toLocaleString("en-US") },
+      { key: "inamount", header: r("columns.inAmount"), render: (row: ItemTransactionSummaryRow) => formatMoney(row.inbound_amount) },
+      { key: "outamount", header: r("columns.outAmount"), render: (row: ItemTransactionSummaryRow) => formatMoney(row.outbound_amount) },
+      { key: "netamount", header: r("columns.netAmount"), render: (row: ItemTransactionSummaryRow) => formatMoney(row.net_amount) },
+      { key: "moves", header: r("columns.moves"), render: (row: ItemTransactionSummaryRow) => row.movement_count.toLocaleString("en-US") },
+      { key: "last", header: r("columns.lastMovement"), render: (row: ItemTransactionSummaryRow) => row.last_movement_date || "-" },
     ],
-    [],
+    [t],
   );
 
   const historyColumns = useMemo(
     () => [
-      { key: "date", header: "Date", render: (row: ItemTransactionRow) => row.date || "-" },
-      { key: "type", header: "Document", render: (row: ItemTransactionRow) => row.document_type || "-" },
-      { key: "docno", header: "No", render: (row: ItemTransactionRow) => row.document_no || "-" },
-      { key: "status", header: "Status", render: (row: ItemTransactionRow) => row.status || "-" },
+      { key: "date", header: r("columns.date"), render: (row: ItemTransactionRow) => row.date || "-" },
+      { key: "type", header: r("columns.document"), render: (row: ItemTransactionRow) => documentTypeLabel(row.document_type) },
+      { key: "docno", header: r("columns.no"), render: (row: ItemTransactionRow) => row.document_no || "-" },
+      { key: "status", header: r("columns.status"), render: (row: ItemTransactionRow) => statusLabel(row.status) },
       {
         key: "direction",
-        header: "Flow",
-        render: (row: ItemTransactionRow) => (row.direction === "IN" ? "Bought" : "Sold"),
+        header: r("columns.flow"),
+        render: (row: ItemTransactionRow) => (row.direction === "IN" ? r("itemTransactions.flow.bought") : r("itemTransactions.flow.sold")),
       },
       {
         key: "party",
-        header: "Party",
+        header: r("columns.party"),
         render: (row: ItemTransactionRow) => <span title={row.party_name || "-"}>{buildEntityAlias(row.party_name)}</span>,
       },
-      { key: "brand", header: "Brand", render: (row: ItemTransactionRow) => <BrandPill brand={row.brand} compact /> },
-      { key: "code", header: "Code", render: (row: ItemTransactionRow) => row.product_code || "-" },
-      { key: "description", header: "Description", render: (row: ItemTransactionRow) => row.description || "-" },
-      { key: "qtyin", header: "Qty In", render: (row: ItemTransactionRow) => (row.direction === "IN" ? formatQty(row.qty) : "-") },
-      { key: "qtyout", header: "Qty Out", render: (row: ItemTransactionRow) => (row.direction === "OUT" ? formatQty(row.qty) : "-") },
-      { key: "price", header: "Unit Price", render: (row: ItemTransactionRow) => formatMoney(row.unit_price) },
-      { key: "amount", header: "Amount", render: (row: ItemTransactionRow) => formatMoney(row.amount) },
+      { key: "brand", header: r("columns.brand"), render: (row: ItemTransactionRow) => <BrandPill brand={row.brand} compact /> },
+      { key: "code", header: r("columns.code"), render: (row: ItemTransactionRow) => row.product_code || "-" },
+      { key: "description", header: r("columns.description"), render: (row: ItemTransactionRow) => row.description || "-" },
+      { key: "qtyin", header: r("columns.qtyIn"), render: (row: ItemTransactionRow) => (row.direction === "IN" ? formatQty(row.qty) : "-") },
+      { key: "qtyout", header: r("columns.qtyOut"), render: (row: ItemTransactionRow) => (row.direction === "OUT" ? formatQty(row.qty) : "-") },
+      { key: "price", header: r("columns.unitPrice"), render: (row: ItemTransactionRow) => formatMoney(row.unit_price) },
+      { key: "amount", header: r("columns.amount"), render: (row: ItemTransactionRow) => formatMoney(row.amount) },
       {
         key: "actions",
-        header: "Action",
+        header: r("columns.action"),
         render: (row: ItemTransactionRow) => (
           <Button
             variant="secondary"
@@ -402,18 +416,18 @@ export function ItemTransactionsPage({
             }}
             disabled={row.document_type === "Purchase Receive" || row.document_type === "Stock Transfer"}
           >
-            Open Document
+            {r("actions.openDocument")}
           </Button>
         ),
       },
     ],
-    [onOpenBill, onOpenInvoice, onOpenPurchaseOrder, onOpenSalesOrder],
+    [onOpenBill, onOpenInvoice, onOpenPurchaseOrder, onOpenSalesOrder, t],
   );
 
   async function handleExportExcel() {
     try {
       setExporting(true);
-      actionFeedback.begin("Preparing item transactions export...");
+      actionFeedback.begin(r("itemTransactions.feedback.preparingExport"));
       const sheetRows: Array<Array<string | number>> = [
         ["Brand", "Code", "Description", "In_Qty", "Out_Qty", "Net_Qty", "In_Amount_EUR", "Out_Amount_EUR", "Net_Amount_EUR", "Moves", "Last_Movement"],
         ...summaryRows.map((row) => [
@@ -431,11 +445,11 @@ export function ItemTransactionsPage({
         ]),
       ];
       const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-      const blob = buildXlsxBlob("Item Transactions", sheetRows, [3, 4, 5, 6, 7, 8, 9]);
+      const blob = buildXlsxBlob(r("itemTransactions.export.summarySheet"), sheetRows, [3, 4, 5, 6, 7, 8, 9]);
       downloadBlob(`item-transactions-${brand || "all"}-${stamp}.xlsx`, blob);
-      actionFeedback.succeed("Item transactions exported.");
+      actionFeedback.succeed(r("itemTransactions.feedback.exported"));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Item transactions export failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : r("itemTransactions.errors.exportFailed"));
     } finally {
       setExporting(false);
     }
@@ -444,7 +458,7 @@ export function ItemTransactionsPage({
   async function handleExportHistoryExcel() {
     try {
       setExportingHistory(true);
-      actionFeedback.begin("Preparing item transaction history export...");
+      actionFeedback.begin(r("itemTransactions.feedback.preparingHistoryExport"));
       const sheetRows: Array<Array<string | number>> = [
         ["Date", "Document", "No", "Status", "Flow", "Party", "Brand", "Code", "Description", "Qty_In", "Qty_Out", "Unit_Price_EUR", "Amount_EUR"],
         ...historyRows.map((row) => [
@@ -452,7 +466,7 @@ export function ItemTransactionsPage({
           row.document_type,
           row.document_no,
           row.status,
-          row.direction === "IN" ? "Bought" : "Sold",
+          row.direction === "IN" ? r("itemTransactions.flow.bought") : r("itemTransactions.flow.sold"),
           row.party_name,
           row.brand,
           row.product_code,
@@ -464,61 +478,61 @@ export function ItemTransactionsPage({
         ]),
       ];
       const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-      const blob = buildXlsxBlob("Item Transaction History", sheetRows, [9, 10, 11, 12]);
+      const blob = buildXlsxBlob(r("itemTransactions.export.historySheet"), sheetRows, [9, 10, 11, 12]);
       downloadBlob(`item-transaction-history-${brand || "all"}-${stamp}.xlsx`, blob);
-      actionFeedback.succeed("Item transaction history exported.");
+      actionFeedback.succeed(r("itemTransactions.feedback.historyExported"));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Item transaction history export failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : r("itemTransactions.errors.historyExportFailed"));
     } finally {
       setExportingHistory(false);
     }
   }
 
   return (
-    <SectionCard title="Item Transactions">
+    <SectionCard title={r("itemTransactions.title")}>
       <div className="toolbar toolbar--wrap">
-        <Select label="Brand" value={brand} options={brandOptions.length ? brandOptions : [{ value: "", label: "All Brands" }]} onChange={setBrand} />
-        <Input label="Code / Description" value={codeSearch} onChange={setCodeSearch} onEnter={() => void handleLoad()} />
-        <Input label="Customer / Vendor" value={partySearch} onChange={setPartySearch} onEnter={() => void handleLoad()} />
-        <Input label="Date From" type="date" value={dateFrom} onChange={setDateFrom} />
-        <Input label="Date To" type="date" value={dateTo} onChange={setDateTo} />
-        <Button onClick={() => void handleLoad()} busy={loading} busyLabel="Loading...">
-          Load Report
+        <Select label={r("fields.brand")} value={brand} options={brandOptions.length ? brandOptions : defaultBrandOptions} onChange={setBrand} />
+        <Input label={r("itemTransactions.fields.codeDescription")} value={codeSearch} onChange={setCodeSearch} onEnter={() => void handleLoad()} />
+        <Input label={r("itemTransactions.fields.customerVendor")} value={partySearch} onChange={setPartySearch} onEnter={() => void handleLoad()} />
+        <Input label={r("fields.dateFrom")} type="date" value={dateFrom} onChange={setDateFrom} />
+        <Input label={r("fields.dateTo")} type="date" value={dateTo} onChange={setDateTo} />
+        <Button onClick={() => void handleLoad()} busy={loading} busyLabel={r("busy.loading")}>
+          {r("actions.loadReport")}
         </Button>
-        <Button onClick={() => void handleExportExcel()} busy={exporting} busyLabel="Exporting..." disabled={!loaded || !summaryRows.length}>
-          Export Excel
+        <Button onClick={() => void handleExportExcel()} busy={exporting} busyLabel={r("busy.exporting")} disabled={!loaded || !summaryRows.length}>
+          {r("actions.exportExcel")}
         </Button>
       </div>
       <div className="meta-row">
-        <span>{summaryRows.length.toLocaleString("en-US")} items</span>
-        <span>Net Qty {netQty.toLocaleString("en-US")} | Inbound {formatMoney(inboundAmount)} | Outbound {formatMoney(outboundAmount)}</span>
+        <span>{r("itemTransactions.meta.items", { count: summaryRows.length.toLocaleString("en-US") })}</span>
+        <span>{r("itemTransactions.meta.flowTotals", { netQty: netQty.toLocaleString("en-US"), inbound: formatMoney(inboundAmount), outbound: formatMoney(outboundAmount) })}</span>
       </div>
       {loading ? (
-        <div className="empty-state">Loading item transactions...</div>
+        <div className="empty-state">{r("itemTransactions.loading")}</div>
       ) : loaded ? (
         <>
-          <DataTable rows={summaryRows} columns={columns} emptyText="No item transactions found for the selected filters." />
+          <DataTable rows={summaryRows} columns={columns} emptyText={r("itemTransactions.empty.noSummaryRows")} />
           <div className="section-card quote-workbench-card">
             <div className="section-card__header">
               <div>
-                <h2>Item Transaction History</h2>
-                <p>Shows who supplied the item, which customer or customers it was sold to, and related stock postings.</p>
+                <h2>{r("itemTransactions.history.title")}</h2>
+                <p>{r("itemTransactions.history.subtitle")}</p>
               </div>
-              <Button onClick={() => void handleExportHistoryExcel()} busy={exportingHistory} busyLabel="Exporting..." disabled={!historyRows.length}>
-                Export History Excel
+              <Button onClick={() => void handleExportHistoryExcel()} busy={exportingHistory} busyLabel={r("busy.exporting")} disabled={!historyRows.length}>
+                {r("itemTransactions.actions.exportHistoryExcel")}
               </Button>
             </div>
             <div className="section-card__body">
               <div className="meta-row">
-                <span>{historyRows.length.toLocaleString("en-US")} movements</span>
-                <span>Use code and party filters to narrow item-level history.</span>
+                <span>{r("itemTransactions.history.movements", { count: historyRows.length.toLocaleString("en-US") })}</span>
+                <span>{r("itemTransactions.history.filterHint")}</span>
               </div>
-              <DataTable rows={historyRows} columns={historyColumns} emptyText="No transaction history found for the selected filters." />
+              <DataTable rows={historyRows} columns={historyColumns} emptyText={r("itemTransactions.empty.noHistoryRows")} />
             </div>
           </div>
         </>
       ) : (
-        <div className="empty-state">Select a brand or enter a code, then load the report.</div>
+        <div className="empty-state">{r("itemTransactions.empty.loadPrompt")}</div>
       )}
     </SectionCard>
   );

@@ -16,9 +16,9 @@ import {
   SupplierComparisonCell,
   formatMasterNumber,
 } from "../components/master/MasterIntelligenceComponents";
+import { useI18n } from "../../i18n/I18nProvider";
 
 const DASHBOARD_ITEM_LIMIT = 10;
-const DASHBOARD_HEAVY_BRAND_MESSAGE = "This brand has many items. Please narrow the search or open Supplier Comparison.";
 
 type ProcurementDashboardPageProps = {
   onOpenSupplierComparison?: () => void;
@@ -35,7 +35,7 @@ const emptySummary: ProcurementDashboardSummary = {
   single_supplier_items: [],
 };
 
-function getDashboardErrorMessage(caught: unknown) {
+function getDashboardErrorMessage(caught: unknown, heavyBrandMessage: string, fallbackMessage: string) {
   const message = caught instanceof Error ? caught.message : String(caught || "");
   const normalized = message.toLowerCase();
   if (
@@ -44,9 +44,9 @@ function getDashboardErrorMessage(caught: unknown) {
     normalized.includes("timed out") ||
     normalized.includes("took too long")
   ) {
-    return DASHBOARD_HEAVY_BRAND_MESSAGE;
+    return heavyBrandMessage;
   }
-  return message || "Procurement dashboard request failed";
+  return message || fallbackMessage;
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -118,6 +118,8 @@ function InsightSection({
 }
 
 function InsightRow({ item, mode }: { item: ProcurementDashboardSummaryItem; mode: "gap" | "risk" }) {
+  const { t } = useI18n();
+  const r = (key: string, params?: Record<string, string | number>) => t(`reports.${key}`, params);
   const masterRow = itemToMasterRow(item, mode === "risk" ? 1 : 2);
   const hasGap = item.price_gap != null || item.price_gap_percent != null;
 
@@ -132,10 +134,10 @@ function InsightRow({ item, mode }: { item: ProcurementDashboardSummaryItem; mod
       <div className="procurement-insight-row__metrics">
         {mode === "risk" ? (
           <>
-            <RiskBadge label="Single supplier" tone="warning" />
+            <RiskBadge label={r("procurement.badges.singleSupplier")} tone="warning" />
             <MoneyCell value={item.cheapest_price} />
-            {item.stock_qty == null ? null : <span className="procurement-dashboard-mini-metric">Stock {formatMasterNumber(item.stock_qty, 0)}</span>}
-            {item.lead_time_days == null ? null : <span className="procurement-dashboard-mini-metric">{formatMasterNumber(item.lead_time_days, 0)} days lead</span>}
+            {item.stock_qty == null ? null : <span className="procurement-dashboard-mini-metric">{r("procurement.values.stockQty", { qty: formatMasterNumber(item.stock_qty, 0) })}</span>}
+            {item.lead_time_days == null ? null : <span className="procurement-dashboard-mini-metric">{r("procurement.values.daysLead", { days: formatMasterNumber(item.lead_time_days, 0) })}</span>}
           </>
         ) : (
           <>
@@ -150,6 +152,8 @@ function InsightRow({ item, mode }: { item: ProcurementDashboardSummaryItem; mod
 }
 
 export function ProcurementDashboardPage({ onOpenSupplierComparison }: ProcurementDashboardPageProps) {
+  const { t } = useI18n();
+  const r = (key: string, params?: Record<string, string | number>) => t(`reports.${key}`, params);
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [brandId, setBrandId] = useState("");
   const [summary, setSummary] = useState<ProcurementDashboardSummary | null>(null);
@@ -171,7 +175,7 @@ export function ProcurementDashboardPage({ onOpenSupplierComparison }: Procureme
         setBrandId((current) => current || result[0]?.id || "");
       } catch (caught) {
         if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : "Brand request failed");
+          setError(caught instanceof Error ? caught.message : r("procurement.errors.brandRequestFailed"));
         }
       } finally {
         if (!cancelled) setLoadingBrands(false);
@@ -205,7 +209,7 @@ export function ProcurementDashboardPage({ onOpenSupplierComparison }: Procureme
       } catch (caught) {
         if (!cancelled) {
           setSummary(null);
-          setError(getDashboardErrorMessage(caught));
+          setError(getDashboardErrorMessage(caught, r("procurement.errors.heavyBrand"), r("procurement.errors.requestFailed")));
         }
       } finally {
         if (!cancelled) setLoadingSummary(false);
@@ -221,73 +225,73 @@ export function ProcurementDashboardPage({ onOpenSupplierComparison }: Procureme
   const currentSummary = summary || emptySummary;
   const selectedBrand = useMemo(() => brands.find((item) => item.id === brandId) || null, [brandId, brands]);
   const brandOptions = [
-    { value: "", label: "Select brand" },
+    { value: "", label: r("procurement.filters.selectBrand") },
     ...brands.map((item) => ({ value: item.id, label: item.name })),
   ];
-  const loadedLabel = `${currentSummary.total_rollups.toLocaleString("en-US")} rollup rows`;
+  const loadedLabel = r("procurement.meta.rollupRows", { count: currentSummary.total_rollups.toLocaleString("en-US") });
   const refreshedLabel = formatDateTime(currentSummary.max_refreshed_at);
 
   return (
     <div className="page-stack procurement-dashboard-page">
       <section className="procurement-dashboard-header">
         <div>
-          <span className="procurement-page-header__eyebrow">Procurement Intelligence</span>
-          <h2>Procurement Intelligence</h2>
-          <p>Pricing coverage, supplier risk, and price gap opportunities from supplier price rollups.</p>
+          <span className="procurement-page-header__eyebrow">{r("procurement.eyebrow")}</span>
+          <h2>{r("procurement.title")}</h2>
+          <p>{r("procurement.subtitle")}</p>
         </div>
         <Button variant="secondary" className="button--compact" onClick={onOpenSupplierComparison}>
-          Supplier Comparison
+          {r("master.title")}
         </Button>
       </section>
 
-      <section className="smart-filter-bar" aria-label="Procurement dashboard filters">
+      <section className="smart-filter-bar" aria-label={r("procurement.filters.aria")}>
         <div className="smart-filter-bar__controls procurement-dashboard-filters">
-          <Select label="Brand" value={brandId} options={brandOptions} onChange={setBrandId} />
-          <Button onClick={() => setRefreshTick((current) => current + 1)} busy={loadingSummary} busyLabel="Loading...">
-            Refresh
+          <Select label={r("fields.brand")} value={brandId} options={brandOptions} onChange={setBrandId} />
+          <Button onClick={() => setRefreshTick((current) => current + 1)} busy={loadingSummary} busyLabel={r("busy.loading")}>
+            {r("actions.refresh")}
           </Button>
         </div>
         <div className="procurement-dashboard-meta">
-          <span>{loadingBrands ? "Loading brands..." : selectedBrand?.name || "No brand selected"}</span>
-          <span>{loadingSummary ? "Refreshing intelligence..." : loadedLabel}</span>
-          <span>Rollup refresh: {refreshedLabel}</span>
+          <span>{loadingBrands ? r("procurement.loading.brands") : selectedBrand?.name || r("procurement.values.noBrandSelected")}</span>
+          <span>{loadingSummary ? r("procurement.loading.refreshingIntelligence") : loadedLabel}</span>
+          <span>{r("procurement.meta.rollupRefresh", { value: refreshedLabel })}</span>
         </div>
       </section>
 
       {error ? <div className="procurement-dashboard-error">{error}</div> : null}
 
-      <section className="metric-strip" aria-label="Procurement KPI summary">
-        <MetricTile label="Total Priced Items" value={currentSummary.total_rollups.toLocaleString("en-US")} detail="Supplier rollups" tone="neutral" />
-        <MetricTile label="Items with 2+ Suppliers" value={currentSummary.with_second_supplier.toLocaleString("en-US")} detail="Comparison ready" tone="success" />
-        <MetricTile label="Single Supplier Risk" value={currentSummary.single_supplier_count.toLocaleString("en-US")} detail="No backup supplier" tone={currentSummary.single_supplier_count ? "warning" : "success"} />
-        <MetricTile label="Average Price Gap %" value={currentSummary.avg_gap_percent == null ? "-" : `${formatMasterNumber(currentSummary.avg_gap_percent, 2)}%`} detail="Rows with gap data" tone="neutral" />
-        <MetricTile label="High Gap Opportunities" value={currentSummary.high_gap_count.toLocaleString("en-US")} detail={`Gap >= ${HIGH_GAP_PERCENT}%`} tone={currentSummary.high_gap_count ? "info" : "neutral"} />
-        <MetricTile label="Rollup Freshness" value={currentSummary.max_refreshed_at ? "Ready" : "-"} detail={refreshedLabel} tone={currentSummary.max_refreshed_at ? "success" : "warning"} />
+      <section className="metric-strip" aria-label={r("procurement.summary.aria")}>
+        <MetricTile label={r("procurement.summary.totalPricedItems")} value={currentSummary.total_rollups.toLocaleString("en-US")} detail={r("procurement.summary.supplierRollups")} tone="neutral" />
+        <MetricTile label={r("procurement.summary.itemsWithTwoSuppliers")} value={currentSummary.with_second_supplier.toLocaleString("en-US")} detail={r("master.summary.comparisonReady")} tone="success" />
+        <MetricTile label={r("procurement.summary.singleSupplierRisk")} value={currentSummary.single_supplier_count.toLocaleString("en-US")} detail={r("procurement.summary.noBackupSupplier")} tone={currentSummary.single_supplier_count ? "warning" : "success"} />
+        <MetricTile label={r("procurement.summary.averagePriceGap")} value={currentSummary.avg_gap_percent == null ? "-" : `${formatMasterNumber(currentSummary.avg_gap_percent, 2)}%`} detail={r("master.summary.rowsWithGapData")} tone="neutral" />
+        <MetricTile label={r("procurement.summary.highGapOpportunities")} value={currentSummary.high_gap_count.toLocaleString("en-US")} detail={r("master.summary.gapThreshold", { percent: HIGH_GAP_PERCENT })} tone={currentSummary.high_gap_count ? "info" : "neutral"} />
+        <MetricTile label={r("procurement.summary.rollupFreshness")} value={currentSummary.max_refreshed_at ? r("values.ready") : "-"} detail={refreshedLabel} tone={currentSummary.max_refreshed_at ? "success" : "warning"} />
       </section>
 
       {loadingSummary ? (
         <div className="procurement-dashboard-loading" role="status">
-          <span className="procurement-loading-state__label">Loading procurement intelligence</span>
+          <span className="procurement-loading-state__label">{r("procurement.loading.procurementIntelligence")}</span>
           <span className="procurement-loading-state__bar" />
           <span className="procurement-loading-state__bar procurement-loading-state__bar--short" />
         </div>
       ) : !brandId ? (
-        <div className="procurement-insight-empty procurement-insight-empty--page">Select a brand to load procurement intelligence.</div>
+        <div className="procurement-insight-empty procurement-insight-empty--page">{r("procurement.empty.selectBrand")}</div>
       ) : (
         <div className="procurement-insight-grid">
           <InsightSection
-            title="Best Opportunities"
-            badge={`${currentSummary.top_high_gap_items.length} items`}
+            title={r("procurement.sections.bestOpportunities")}
+            badge={r("procurement.badges.items", { count: currentSummary.top_high_gap_items.length })}
             badgeTone={currentSummary.top_high_gap_items.length ? "info" : "neutral"}
             rows={currentSummary.top_high_gap_items}
-            emptyText="No high-gap supplier opportunities in the current rollup."
+            emptyText={r("procurement.empty.noHighGapOpportunities")}
           />
           <InsightSection
-            title="Single Supplier Risks"
-            badge={`${currentSummary.single_supplier_items.length} items`}
+            title={r("procurement.sections.singleSupplierRisks")}
+            badge={r("procurement.badges.items", { count: currentSummary.single_supplier_items.length })}
             badgeTone={currentSummary.single_supplier_items.length ? "warning" : "success"}
             rows={currentSummary.single_supplier_items}
-            emptyText="No single-supplier risk in the current rollup."
+            emptyText={r("procurement.empty.noSingleSupplierRisk")}
             mode="risk"
           />
         </div>

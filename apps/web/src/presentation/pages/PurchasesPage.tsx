@@ -48,6 +48,7 @@ import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { buildEntityAlias } from "../../shared/entityAlias";
 import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
 import type { Warehouse } from "../../types/warehouses";
+import { useI18n } from "../../i18n/I18nProvider";
 
 function formatMoney(value: number, currency = "EUR") {
   return `${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
@@ -190,27 +191,33 @@ function renderInventoryAvailabilityBadge(
     productCode?: string | null;
     oldCode?: string | null;
   },
+  labels: {
+    noStock: string;
+    available: string;
+    short: string;
+    availableAcrossWarehouses: (availableQty: string, warehouseCount: number) => string;
+  },
 ) {
   const availability = findInventoryAvailability(lookup, input.brand, input.productCode, input.oldCode);
   if (!availability || availability.available_qty <= 0) {
-    return <span className="mark-badge mark-badge--danger">No Stock</span>;
+    return <span className="mark-badge mark-badge--danger">{labels.noStock}</span>;
   }
   if (availability.available_qty >= input.qty) {
     return (
       <span
         className="mark-badge mark-badge--success"
-        title={`${formatAvailabilityQty(availability.available_qty)} available across ${availability.warehouse_count} warehouse(s)`}
+        title={labels.availableAcrossWarehouses(formatAvailabilityQty(availability.available_qty), availability.warehouse_count)}
       >
-        Avail {formatAvailabilityQty(availability.available_qty)}
+        {labels.available} {formatAvailabilityQty(availability.available_qty)}
       </span>
     );
   }
   return (
     <span
       className="mark-badge mark-badge--accent"
-      title={`${formatAvailabilityQty(availability.available_qty)} available across ${availability.warehouse_count} warehouse(s)`}
+      title={labels.availableAcrossWarehouses(formatAvailabilityQty(availability.available_qty), availability.warehouse_count)}
     >
-      Short {formatAvailabilityQty(Math.max(0, input.qty - availability.available_qty))}
+      {labels.short} {formatAvailabilityQty(Math.max(0, input.qty - availability.available_qty))}
     </span>
   );
 }
@@ -226,6 +233,8 @@ export function PurchasesPage({
   selectedPurchaseOrderId: externalSelectedPurchaseOrderId = "",
   selectedBillId: externalSelectedBillId = "",
 }: PurchasesPageProps) {
+  const { t } = useI18n();
+  const p = (key: string, params?: Record<string, string | number>) => t(`purchases.${key}`, params);
   const actionFeedback = useActionFeedback();
   const [activeTab, setActiveTab] = useState<"Vendors" | "Purchase Orders" | "Bills" | "Payments Made">(activeTabProp);
   const [purchaseOrders, setPurchaseOrders] = useState<LocalPurchaseOrder[]>([]);
@@ -266,9 +275,9 @@ export function PurchasesPage({
     () =>
       stockedWarehouses.map((warehouse) => ({
         value: warehouse.id,
-        label: `${warehouse.warehouse_code || warehouse.warehouse_name || "Warehouse"} - ${warehouse.warehouse_name || warehouse.warehouse_code}`,
+        label: `${warehouse.warehouse_code || warehouse.warehouse_name || p("values.warehouse")} - ${warehouse.warehouse_name || warehouse.warehouse_code}`,
       })),
-    [stockedWarehouses],
+    [stockedWarehouses, t],
   );
 
   useEffect(() => {
@@ -439,7 +448,7 @@ export function PurchasesPage({
     });
     setPurchaseOrderSourceSnapshot("");
     setPurchaseOrdersView("detail");
-    actionFeedback.succeed(`${pending.product_code} added to Purchase Order draft.`);
+    actionFeedback.succeed(p("feedback.productAddedToPurchaseDraft", { code: pending.product_code }));
   }, [actionFeedback, companyProfiles]);
 
   useEffect(() => {
@@ -555,12 +564,47 @@ export function PurchasesPage({
     return map;
   }, [bills]);
 
+  function statusLabel(value: string | null | undefined) {
+    const key = String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+    return key ? p(`statuses.${key}`) : "-";
+  }
+
+  const purchaseOrderStatusOptions = [
+    { value: "draft", label: p("statuses.draft") },
+    { value: "confirmed", label: p("statuses.confirmed") },
+    { value: "closed", label: p("statuses.closed") },
+  ];
+  const billStatusOptions = [
+    { value: "draft", label: p("statuses.draft") },
+    { value: "confirmed", label: p("statuses.confirmed") },
+    { value: "paid", label: p("statuses.paid") },
+    { value: "void", label: p("statuses.void") },
+  ];
+  const paymentStatusOptions = [
+    { value: "draft", label: p("statuses.draft") },
+    { value: "confirmed", label: p("statuses.confirmed") },
+    { value: "void", label: p("statuses.void") },
+  ];
+  const paymentMethodOptions = [
+    { value: "Bank Transfer", label: p("methods.bankTransfer") },
+    { value: "Cash", label: p("methods.cash") },
+    { value: "Credit Card", label: p("methods.creditCard") },
+    { value: "Cheque", label: p("methods.cheque") },
+  ];
+  const inventoryBadgeLabels = {
+    noStock: p("stock.noStock"),
+    available: p("stock.availableShort"),
+    short: p("stock.short"),
+    availableAcrossWarehouses: (availableQty: string, warehouseCount: number) =>
+      p("stock.availableAcrossWarehouses", { availableQty, warehouseCount }),
+  };
+
   const purchaseOrderColumns = useMemo(
     () => [
-      { key: "po", header: "PO No", render: (row: LocalPurchaseOrder) => row.id, sortValue: (row: LocalPurchaseOrder) => row.id },
+      { key: "po", header: p("columns.poNo"), render: (row: LocalPurchaseOrder) => row.id, sortValue: (row: LocalPurchaseOrder) => row.id },
       {
         key: "supplier",
-        header: "Vendor",
+        header: p("columns.vendor"),
         render: (row: LocalPurchaseOrder) => (
           <span title={row.supplier_name || "-"}>{getAdminVendorLabel(row.supplier_name)}</span>
         ),
@@ -568,16 +612,16 @@ export function PurchasesPage({
       },
       {
         key: "company",
-        header: "Purchase Company",
+        header: p("columns.purchaseCompany"),
         render: (row: LocalPurchaseOrder) => (
           <span title={row.purchase_company || "-"}>{buildEntityAlias(row.purchase_company)}</span>
         ),
         sortValue: (row: LocalPurchaseOrder) => buildEntityAlias(row.purchase_company),
       },
-      { key: "sales", header: "Sales Order", render: (row: LocalPurchaseOrder) => row.sales_order_no, sortValue: (row: LocalPurchaseOrder) => row.sales_order_no },
+      { key: "sales", header: p("columns.salesOrder"), render: (row: LocalPurchaseOrder) => row.sales_order_no, sortValue: (row: LocalPurchaseOrder) => row.sales_order_no },
       {
         key: "customer",
-        header: "Customer",
+        header: p("columns.customer"),
         render: (row: LocalPurchaseOrder) => (
           <span title={row.customer_name || "-"}>{getAdminCustomerLabel(row.customer_name)}</span>
         ),
@@ -585,7 +629,7 @@ export function PurchasesPage({
       },
       {
         key: "brands",
-        header: "Brand",
+        header: p("columns.brand"),
         render: (row: LocalPurchaseOrder) => {
           const brandSummary = buildPurchaseOrderBrandSummary(row.lines);
           if (!brandSummary.labels.length) return "-";
@@ -600,12 +644,12 @@ export function PurchasesPage({
         },
         sortValue: (row: LocalPurchaseOrder) => buildPurchaseOrderBrandSummary(row.lines).labels.join(", "),
       },
-      { key: "amount", header: "Purchase Total", render: (row: LocalPurchaseOrder) => formatMoney(row.total_amount, row.currency), sortValue: (row: LocalPurchaseOrder) => row.total_amount },
-      { key: "status", header: "Status", render: (row: LocalPurchaseOrder) => row.status, sortValue: (row: LocalPurchaseOrder) => row.status },
-      { key: "created", header: "Created", render: (row: LocalPurchaseOrder) => row.created_at.slice(0, 10), sortValue: (row: LocalPurchaseOrder) => row.created_at },
+      { key: "amount", header: p("columns.purchaseTotal"), render: (row: LocalPurchaseOrder) => formatMoney(row.total_amount, row.currency), sortValue: (row: LocalPurchaseOrder) => row.total_amount },
+      { key: "status", header: p("columns.status"), render: (row: LocalPurchaseOrder) => statusLabel(row.status), sortValue: (row: LocalPurchaseOrder) => row.status },
+      { key: "created", header: p("columns.created"), render: (row: LocalPurchaseOrder) => row.created_at.slice(0, 10), sortValue: (row: LocalPurchaseOrder) => row.created_at },
       {
         key: "actions",
-        header: "Delete",
+        header: p("columns.delete"),
         render: (row: LocalPurchaseOrder) => (
           <Button
             variant="secondary"
@@ -615,23 +659,23 @@ export function PurchasesPage({
               void handleDeletePurchaseOrderRow(row);
             }}
           >
-            Delete
+            {p("actions.delete")}
           </Button>
         ),
       },
     ],
-    [billCountByPurchaseOrderId, purchaseOrderDraft, selectedPurchaseOrderId],
+    [billCountByPurchaseOrderId, purchaseOrderDraft, selectedPurchaseOrderId, t],
   );
 
   const billColumns = useMemo(
     () => [
-      { key: "bill", header: "Bill No", render: (row: LocalBill) => row.id, sortValue: (row: LocalBill) => row.id },
-      { key: "po", header: "Purchase Order", render: (row: LocalBill) => row.purchase_order_no, sortValue: (row: LocalBill) => row.purchase_order_no },
-      { key: "supplier", header: "Vendor", render: (row: LocalBill) => <span title={row.supplier_name || "-"}>{getAdminVendorLabel(row.supplier_name)}</span>, sortValue: (row: LocalBill) => getAdminVendorLabel(row.supplier_name) },
-      { key: "company", header: "Purchase Company", render: (row: LocalBill) => <span title={row.purchase_company || "-"}>{buildEntityAlias(row.purchase_company)}</span>, sortValue: (row: LocalBill) => buildEntityAlias(row.purchase_company) },
+      { key: "bill", header: p("columns.billNo"), render: (row: LocalBill) => row.id, sortValue: (row: LocalBill) => row.id },
+      { key: "po", header: p("columns.purchaseOrder"), render: (row: LocalBill) => row.purchase_order_no, sortValue: (row: LocalBill) => row.purchase_order_no },
+      { key: "supplier", header: p("columns.vendor"), render: (row: LocalBill) => <span title={row.supplier_name || "-"}>{getAdminVendorLabel(row.supplier_name)}</span>, sortValue: (row: LocalBill) => getAdminVendorLabel(row.supplier_name) },
+      { key: "company", header: p("columns.purchaseCompany"), render: (row: LocalBill) => <span title={row.purchase_company || "-"}>{buildEntityAlias(row.purchase_company)}</span>, sortValue: (row: LocalBill) => buildEntityAlias(row.purchase_company) },
       {
         key: "brands",
-        header: "Brand",
+        header: p("columns.brand"),
         render: (row: LocalBill) => {
           const brandSummary = buildPurchaseOrderBrandSummary(row.lines);
           if (!brandSummary.labels.length) return "-";
@@ -646,13 +690,13 @@ export function PurchasesPage({
         },
         sortValue: (row: LocalBill) => buildPurchaseOrderBrandSummary(row.lines).labels.join(", "),
       },
-      { key: "date", header: "Bill Date", render: (row: LocalBill) => row.bill_date || "-", sortValue: (row: LocalBill) => row.bill_date || "" },
-      { key: "due", header: "Due Date", render: (row: LocalBill) => row.due_date || "-", sortValue: (row: LocalBill) => row.due_date || "" },
-      { key: "amount", header: "Total Amount", render: (row: LocalBill) => formatMoney(row.total_amount, row.currency), sortValue: (row: LocalBill) => row.total_amount },
-      { key: "status", header: "Status", render: (row: LocalBill) => row.status, sortValue: (row: LocalBill) => row.status },
+      { key: "date", header: p("columns.billDate"), render: (row: LocalBill) => row.bill_date || "-", sortValue: (row: LocalBill) => row.bill_date || "" },
+      { key: "due", header: p("columns.dueDate"), render: (row: LocalBill) => row.due_date || "-", sortValue: (row: LocalBill) => row.due_date || "" },
+      { key: "amount", header: p("columns.totalAmount"), render: (row: LocalBill) => formatMoney(row.total_amount, row.currency), sortValue: (row: LocalBill) => row.total_amount },
+      { key: "status", header: p("columns.status"), render: (row: LocalBill) => statusLabel(row.status), sortValue: (row: LocalBill) => row.status },
       {
         key: "actions",
-        header: "Delete",
+        header: p("columns.delete"),
         render: (row: LocalBill) => (
           <Button
             variant="secondary"
@@ -662,27 +706,27 @@ export function PurchasesPage({
               void handleDeleteBillRow(row);
             }}
           >
-            Delete
+            {p("actions.delete")}
           </Button>
         ),
       },
     ],
-    [billDraft, selectedBillId],
+    [billDraft, selectedBillId, t],
   );
 
   const paymentMadeColumns = useMemo(
     () => [
-      { key: "payment", header: "Payment No", render: (row: LocalPaymentMade) => row.id },
-      { key: "bill", header: "Bill", render: (row: LocalPaymentMade) => row.bill_no || "-" },
-      { key: "vendor", header: "Vendor", render: (row: LocalPaymentMade) => <span title={row.supplier_name || "-"}>{getAdminVendorLabel(row.supplier_name)}</span> },
-      { key: "date", header: "Date", render: (row: LocalPaymentMade) => row.payment_date || "-" },
-      { key: "method", header: "Method", render: (row: LocalPaymentMade) => row.method || "-" },
-      { key: "reference", header: "Reference", render: (row: LocalPaymentMade) => row.reference_no || "-" },
-      { key: "amount", header: "Amount", render: (row: LocalPaymentMade) => formatMoney(row.amount, row.currency) },
-      { key: "status", header: "Status", render: (row: LocalPaymentMade) => row.status },
+      { key: "payment", header: p("columns.paymentNo"), render: (row: LocalPaymentMade) => row.id },
+      { key: "bill", header: p("columns.bill"), render: (row: LocalPaymentMade) => row.bill_no || "-" },
+      { key: "vendor", header: p("columns.vendor"), render: (row: LocalPaymentMade) => <span title={row.supplier_name || "-"}>{getAdminVendorLabel(row.supplier_name)}</span> },
+      { key: "date", header: p("columns.date"), render: (row: LocalPaymentMade) => row.payment_date || "-" },
+      { key: "method", header: p("columns.method"), render: (row: LocalPaymentMade) => paymentMethodOptions.find((option) => option.value === row.method)?.label || row.method || "-" },
+      { key: "reference", header: p("columns.reference"), render: (row: LocalPaymentMade) => row.reference_no || "-" },
+      { key: "amount", header: p("columns.amount"), render: (row: LocalPaymentMade) => formatMoney(row.amount, row.currency) },
+      { key: "status", header: p("columns.status"), render: (row: LocalPaymentMade) => statusLabel(row.status) },
       {
         key: "actions",
-        header: "Delete",
+        header: p("columns.delete"),
         render: (row: LocalPaymentMade) => (
           <Button
             variant="secondary"
@@ -692,12 +736,12 @@ export function PurchasesPage({
               void handleDeletePaymentMadeRow(row);
             }}
           >
-            Delete
+            {p("actions.delete")}
           </Button>
         ),
       },
     ],
-    [selectedPaymentMadeId],
+    [selectedPaymentMadeId, t],
   );
 
   const purchaseOrderColumnsWithMarks = useMemo(
@@ -728,17 +772,17 @@ export function PurchasesPage({
                 render: (row: LocalPurchaseOrder) => (
                   <div className="document-marks">
                     <span className={`mark-badge ${row.status === "confirmed" || row.status === "closed" ? "mark-badge--success" : ""}`}>
-                      {row.status.toUpperCase()}
+                      {statusLabel(row.status)}
                     </span>
                     {(billCountByPurchaseOrderId.get(row.id) || 0) > 0 ? (
-                      <span className="mark-badge mark-badge--accent">Bill {billCountByPurchaseOrderId.get(row.id)}</span>
+                      <span className="mark-badge mark-badge--accent">{p("badges.billCount", { count: billCountByPurchaseOrderId.get(row.id) || 0 })}</span>
                     ) : null}
                   </div>
                 ),
               },
         ),
       ],
-    [purchaseOrderColumns, billCountByPurchaseOrderId, selectedPurchaseOrderIds],
+    [purchaseOrderColumns, billCountByPurchaseOrderId, selectedPurchaseOrderIds, t],
   );
 
   function findVendorByName(name: string) {
@@ -760,7 +804,7 @@ export function PurchasesPage({
     if (!purchaseOrderDraft) return;
     try {
       setResyncingPurchaseOrder(true);
-      actionFeedback.begin(`Re-syncing purchase order ${purchaseOrderDraft.id} from catalog...`);
+      actionFeedback.begin(p("feedback.resyncingPurchaseOrder", { id: purchaseOrderDraft.id }));
       const nextLines = await resyncPurchaseOrderLinesFromCatalog(purchaseOrderDraft.lines, {
         onlyFillBlanks: purchaseOrderResyncOnlyFillBlanks,
         keepPrices: purchaseOrderResyncKeepPrices,
@@ -775,9 +819,9 @@ export function PurchasesPage({
       setSelectedPurchaseOrderId(saved.id);
       setPurchaseOrderDraft({ ...saved, lines: saved.lines.map((line) => ({ ...line })) });
       setPurchaseOrderSourceSnapshot(serializePurchaseOrderForDirtyCheck(saved));
-      actionFeedback.succeed("Purchase order re-synced from catalog.");
+      actionFeedback.succeed(p("feedback.purchaseOrderResynced"));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase order catalog re-sync failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.purchaseOrderCatalogResyncFailed"));
     } finally {
       setResyncingPurchaseOrder(false);
     }
@@ -787,7 +831,7 @@ export function PurchasesPage({
     const vendor = findVendorByName(vendorName);
     if (!vendor) return vendorName || "-";
     const displayName = vendor.company_name || vendor.display_name || vendorName || "-";
-    return [displayName, vendor.billing_address || "", vendor.company_id ? `Company ID ${vendor.company_id}` : "", vendor.work_phone ? `Phone: ${vendor.work_phone}` : "", vendor.email || ""]
+    return [displayName, vendor.billing_address || "", vendor.company_id ? p("document.companyId", { id: vendor.company_id }) : "", vendor.work_phone ? p("document.phone", { phone: vendor.work_phone }) : "", vendor.email || ""]
       .filter(Boolean)
       .join("\n");
   }
@@ -796,7 +840,7 @@ export function PurchasesPage({
     const company =
       findCompanyProfileByName(companyProfiles, row.purchase_company) || {
         id: "",
-        companyName: row.purchase_company || "Company",
+        companyName: row.purchase_company || p("document.company"),
         email: "",
         phone: "",
         website: "",
@@ -808,7 +852,7 @@ export function PurchasesPage({
         logoDataUrl: "",
       };
     return buildBusinessDocumentHtml({
-      docType: "Purchase Order",
+      docType: p("document.purchaseOrder"),
       docNo: row.id,
       company: {
         companyName: company.companyName || "",
@@ -818,15 +862,15 @@ export function PurchasesPage({
         logoDataUrl: company.logoDataUrl || "",
       },
       party: {
-        title: "Vendor",
+        title: p("document.vendor"),
         details: buildVendorAddressBlock(row.supplier_name),
       },
       meta: [
-        { label: "PO Date", value: row.created_at?.slice(0, 10) || "-" },
-        { label: "Status", value: row.status || "-" },
-        { label: "Sales Order", value: row.sales_order_no || "-" },
-        { label: "Customer", value: row.customer_name || "-" },
-        { label: "Currency", value: row.currency || "EUR" },
+        { label: p("columns.poDate"), value: row.created_at?.slice(0, 10) || "-" },
+        { label: p("columns.status"), value: statusLabel(row.status) },
+        { label: p("columns.salesOrder"), value: row.sales_order_no || "-" },
+        { label: p("columns.customer"), value: row.customer_name || "-" },
+        { label: p("columns.currency"), value: row.currency || "EUR" },
       ],
       lines: row.lines.map((line) => ({
         code: line.product_code,
@@ -853,7 +897,7 @@ export function PurchasesPage({
     const company =
       findCompanyProfileByName(companyProfiles, row.purchase_company) || {
         id: "",
-        companyName: row.purchase_company || "Company",
+        companyName: row.purchase_company || p("document.company"),
         email: "",
         phone: "",
         website: "",
@@ -865,7 +909,7 @@ export function PurchasesPage({
         logoDataUrl: "",
       };
     return buildBusinessDocumentHtml({
-      docType: "Bill",
+      docType: p("document.bill"),
       docNo: row.id,
       company: {
         companyName: company.companyName || "",
@@ -875,15 +919,15 @@ export function PurchasesPage({
         logoDataUrl: company.logoDataUrl || "",
       },
       party: {
-        title: "Vendor",
+        title: p("document.vendor"),
         details: buildVendorAddressBlock(row.supplier_name),
       },
       meta: [
-        { label: "Bill Date", value: row.bill_date || "-" },
-        { label: "Due Date", value: row.due_date || "-" },
-        { label: "Terms", value: row.payment_terms || "-" },
-        { label: "Purchase Order", value: row.purchase_order_no || "-" },
-        { label: "Status", value: row.status || "-" },
+        { label: p("columns.billDate"), value: row.bill_date || "-" },
+        { label: p("columns.dueDate"), value: row.due_date || "-" },
+        { label: p("columns.terms"), value: row.payment_terms || "-" },
+        { label: p("columns.purchaseOrder"), value: row.purchase_order_no || "-" },
+        { label: p("columns.status"), value: statusLabel(row.status) },
       ],
       lines: row.lines.map((line) => ({
         code: line.product_code,
@@ -912,18 +956,18 @@ export function PurchasesPage({
   function handlePrintPurchaseOrder(row: LocalPurchaseOrder) {
     const win = window.open("about:blank", "_blank");
     if (!win) {
-      actionFeedback.fail("Popup blocked while opening PDF view.");
+      actionFeedback.fail(p("errors.popupBlocked"));
       return;
     }
     setPrintingPurchaseOrder(true);
     try {
-      actionFeedback.begin(`Preparing purchase order ${row.id}...`);
+      actionFeedback.begin(p("feedback.preparingPurchaseOrder", { id: row.id }));
       win.document.write(buildPurchaseOrderHtml(row));
       win.document.close();
       win.focus();
-      actionFeedback.succeed("Purchase order PDF view opened.");
+      actionFeedback.succeed(p("feedback.purchaseOrderPdfOpened"));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase order print failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.purchaseOrderPrintFailed"));
     } finally {
       setPrintingPurchaseOrder(false);
     }
@@ -932,14 +976,14 @@ export function PurchasesPage({
   function handleExportPurchaseOrderExcel(row: LocalPurchaseOrder) {
     try {
       const rows: Array<Array<string | number | null | undefined>> = [
-        ["Purchase Order", row.id],
-        ["Vendor", row.supplier_name],
-        ["Purchase Company", row.purchase_company || ""],
-        ["Status", row.status || ""],
-        ["Currency", row.currency || "EUR"],
-        ["Created", row.created_at?.slice(0, 10) || ""],
+        [p("columns.purchaseOrder"), row.id],
+        [p("columns.vendor"), row.supplier_name],
+        [p("columns.purchaseCompany"), row.purchase_company || ""],
+        [p("columns.status"), statusLabel(row.status)],
+        [p("columns.currency"), row.currency || "EUR"],
+        [p("columns.created"), row.created_at?.slice(0, 10) || ""],
         [],
-        ["Code", "Brand", "Description", "Qty", "OEM", "Tariff", "Weight", "Origin", `Buy Price ${row.currency || "EUR"}`, `Line Total ${row.currency || "EUR"}`, "Notes"],
+        [p("columns.code"), p("columns.brand"), p("columns.description"), p("columns.qty"), "OEM", p("columns.tariff"), p("columns.weight"), p("columns.origin"), p("columns.buyPriceWithCurrency", { currency: row.currency || "EUR" }), p("columns.lineTotalWithCurrency", { currency: row.currency || "EUR" }), p("columns.notes")],
         ...row.lines.map((line) => [
           line.product_code || line.old_code || "",
           line.brand || "",
@@ -954,31 +998,31 @@ export function PurchasesPage({
           line.notes || "",
         ]),
         [],
-        ["Total Amount", "", "", "", "", "", "", "", "", Number(row.total_amount || 0)],
+        [p("columns.totalAmount"), "", "", "", "", "", "", "", "", Number(row.total_amount || 0)],
       ];
       const blob = buildXlsxBlob((row.id || "purchase-order").slice(0, 31), rows, [3, 8, 9]);
       downloadBlob(`${sanitizeFileName(row.id || "purchase-order")}.xlsx`, blob);
-      actionFeedback.succeed(`Excel exported for ${row.id}.`);
+      actionFeedback.succeed(p("feedback.excelExported", { id: row.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase order Excel export failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.purchaseOrderExcelExportFailed"));
     }
   }
 
   function handlePrintBill(row: LocalBill) {
     const win = window.open("about:blank", "_blank");
     if (!win) {
-      actionFeedback.fail("Popup blocked while opening PDF view.");
+      actionFeedback.fail(p("errors.popupBlocked"));
       return;
     }
     setPrintingBill(true);
     try {
-      actionFeedback.begin(`Preparing bill ${row.id}...`);
+      actionFeedback.begin(p("feedback.preparingBill", { id: row.id }));
       win.document.write(buildBillHtml(row));
       win.document.close();
       win.focus();
-      actionFeedback.succeed("Bill PDF view opened.");
+      actionFeedback.succeed(p("feedback.billPdfOpened"));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Bill print failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.billPrintFailed"));
     } finally {
       setPrintingBill(false);
     }
@@ -1034,7 +1078,7 @@ export function PurchasesPage({
   async function postRemainingPurchaseReceive(order: LocalPurchaseOrder) {
     const warehouse = getSelectedReceiveWarehouse();
     if (!warehouse) {
-      throw new Error("Select an active stocked warehouse before converting purchase orders to bills.");
+      throw new Error(p("errors.selectActiveStockedWarehouse"));
     }
 
     const receives = await fetchPurchaseReceives();
@@ -1047,7 +1091,7 @@ export function PurchasesPage({
     return postPurchaseReceive(
       {
         ...receiveDraft,
-        notes: `Auto receive from bill conversion for ${order.id}`,
+        notes: p("notes.autoReceiveFromBillConversion", { id: order.id }),
       },
       order,
     );
@@ -1113,7 +1157,7 @@ export function PurchasesPage({
       await nextAction();
       return;
     }
-    if (!window.confirm(`Unsaved changes detected in ${purchaseOrderDraft?.id || "purchase order"}. Click OK to save before leaving, or Cancel to stay on this screen.`)) {
+    if (!window.confirm(p("confirm.unsavedPurchaseOrder", { id: purchaseOrderDraft?.id || p("document.purchaseOrderLower") }))) {
       return;
     }
     const saved = await savePurchaseOrderDraft();
@@ -1126,7 +1170,7 @@ export function PurchasesPage({
       await nextAction();
       return;
     }
-    if (!window.confirm(`Unsaved changes detected in ${billDraft?.id || "bill"}. Click OK to save before leaving, or Cancel to stay on this screen.`)) {
+    if (!window.confirm(p("confirm.unsavedBill", { id: billDraft?.id || p("document.billLower") }))) {
       return;
     }
     const saved = await saveBillDraft();
@@ -1138,19 +1182,19 @@ export function PurchasesPage({
     if (!purchaseOrderDraft) return null;
     const previousStatus = purchaseOrders.find((item) => item.id === purchaseOrderDraft.id)?.status || "";
     try {
-      actionFeedback.begin(`Saving purchase order ${purchaseOrderDraft.id}...`);
+      actionFeedback.begin(p("feedback.savingPurchaseOrder", { id: purchaseOrderDraft.id }));
       const saved = await upsertPurchaseOrder(recomputePurchaseOrderTotals(purchaseOrderDraft));
-      let message = `Purchase order ${saved.id} saved.`;
+      let message = p("feedback.purchaseOrderSaved", { id: saved.id });
       if (saved.status === "confirmed" && previousStatus !== "confirmed") {
         try {
           const queued = await queueVendorPurchaseOrderEmail(saved, saved.purchase_company || "Next Master", window.location.origin);
           const delivery = await deliverQueuedEmails([queued.id]);
           message =
             delivery.sentCount > 0
-              ? `${message} Vendor email sent to ${saved.supplier_name}.`
-              : `${message} Vendor email queued for ${saved.supplier_name}, but delivery did not complete on this runtime.`;
+              ? `${message} ${p("feedback.vendorEmailSent", { vendor: saved.supplier_name })}`
+              : `${message} ${p("feedback.vendorEmailQueued", { vendor: saved.supplier_name })}`;
         } catch (caught) {
-          message = `${message} ${caught instanceof Error ? caught.message : "Vendor email queue failed."}`;
+          message = `${message} ${caught instanceof Error ? caught.message : p("errors.vendorEmailQueueFailed")}`;
         }
       }
       const refreshed = await fetchPurchaseOrderSummaries();
@@ -1161,7 +1205,7 @@ export function PurchasesPage({
       actionFeedback.succeed(message);
       return saved;
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase order save failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.purchaseOrderSaveFailed"));
       return null;
     }
   }
@@ -1172,38 +1216,38 @@ export function PurchasesPage({
     const relatedBillCount = billCountByPurchaseOrderId.get(poId) || 0;
 
     if (relatedBillCount > 0) {
-      actionFeedback.fail(`Purchase order ${poId} cannot be deleted because ${relatedBillCount.toLocaleString("en-US")} bill record exists.`);
+      actionFeedback.fail(p("errors.purchaseOrderDeleteBlocked", { id: poId, count: relatedBillCount.toLocaleString("en-US") }));
       return;
     }
 
-    if (!window.confirm(`Delete purchase order ${poId}? This cannot be undone.`)) {
+    if (!window.confirm(p("confirm.deletePurchaseOrder", { id: poId }))) {
       return;
     }
 
     try {
-      actionFeedback.begin(`Deleting purchase order ${poId}...`);
+      actionFeedback.begin(p("feedback.deletingPurchaseOrder", { id: poId }));
       await deletePurchaseOrder(poId);
       const refreshed = await fetchPurchaseOrderSummaries();
       setPurchaseOrders(refreshed);
       setPurchaseOrderSourceSnapshot("");
       setPurchaseOrdersView("list");
-      actionFeedback.succeed(`Purchase order ${poId} deleted.`);
+      actionFeedback.succeed(p("feedback.purchaseOrderDeleted", { id: poId }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase order delete failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.purchaseOrderDeleteFailed"));
     }
   }
 
   async function handleDeletePurchaseOrderRow(row: LocalPurchaseOrder) {
     const relatedBillCount = billCountByPurchaseOrderId.get(row.id) || 0;
     if (relatedBillCount > 0) {
-      actionFeedback.fail(`Purchase order ${row.id} cannot be deleted because ${relatedBillCount.toLocaleString("en-US")} bill record exists.`);
+      actionFeedback.fail(p("errors.purchaseOrderDeleteBlocked", { id: row.id, count: relatedBillCount.toLocaleString("en-US") }));
       return;
     }
-    if (!window.confirm(`Delete purchase order ${row.id}? This cannot be undone.`)) {
+    if (!window.confirm(p("confirm.deletePurchaseOrder", { id: row.id }))) {
       return;
     }
     try {
-      actionFeedback.begin(`Deleting purchase order ${row.id}...`);
+      actionFeedback.begin(p("feedback.deletingPurchaseOrder", { id: row.id }));
       await deletePurchaseOrder(row.id);
       const refreshed = await fetchPurchaseOrderSummaries();
       setPurchaseOrders(refreshed);
@@ -1214,31 +1258,31 @@ export function PurchasesPage({
         setPurchaseOrderSourceSnapshot("");
         setPurchaseOrdersView("list");
       }
-      actionFeedback.succeed(`Purchase order ${row.id} deleted.`);
+      actionFeedback.succeed(p("feedback.purchaseOrderDeleted", { id: row.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Purchase order delete failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.purchaseOrderDeleteFailed"));
     }
   }
 
   async function handleBulkDeletePurchaseOrders(orderIds: string[]) {
     const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)));
     if (!uniqueIds.length) {
-      actionFeedback.fail("No purchase orders selected.");
+      actionFeedback.fail(p("errors.noPurchaseOrdersSelected"));
       return;
     }
 
     const blocked = uniqueIds.filter((purchaseOrderId) => (billCountByPurchaseOrderId.get(purchaseOrderId) || 0) > 0);
     if (blocked.length) {
-      actionFeedback.fail(`Delete blocked. ${blocked.length.toLocaleString("en-US")} selected purchase order(s) already have bills.`);
+      actionFeedback.fail(p("errors.bulkDeleteBlocked", { count: blocked.length.toLocaleString("en-US") }));
       return;
     }
 
-    if (!window.confirm(`Delete ${uniqueIds.length.toLocaleString("en-US")} purchase order(s)? This cannot be undone.`)) {
+    if (!window.confirm(p("confirm.bulkDeletePurchaseOrders", { count: uniqueIds.length.toLocaleString("en-US") }))) {
       return;
     }
 
     try {
-      actionFeedback.begin(`Deleting ${uniqueIds.length.toLocaleString("en-US")} purchase order(s)...`);
+      actionFeedback.begin(p("feedback.bulkDeletingPurchaseOrders", { count: uniqueIds.length.toLocaleString("en-US") }));
       await Promise.all(uniqueIds.map((purchaseOrderId) => deletePurchaseOrder(purchaseOrderId)));
       const refreshed = await fetchPurchaseOrderSummaries();
       setPurchaseOrders(refreshed);
@@ -1249,16 +1293,16 @@ export function PurchasesPage({
         setSelectedPurchaseOrderId("");
         setPurchaseOrdersView("list");
       }
-      actionFeedback.succeed(`${uniqueIds.length.toLocaleString("en-US")} purchase order(s) deleted.`);
+      actionFeedback.succeed(p("feedback.bulkPurchaseOrdersDeleted", { count: uniqueIds.length.toLocaleString("en-US") }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Bulk purchase order delete failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.bulkPurchaseOrderDeleteFailed"));
     }
   }
 
   async function convertPurchaseOrderToBill() {
     if (!purchaseOrderDraft) return;
     try {
-      actionFeedback.begin(`Converting ${purchaseOrderDraft.id} to bill...`);
+      actionFeedback.begin(p("feedback.convertingPurchaseOrderToBill", { id: purchaseOrderDraft.id }));
       const order = recomputePurchaseOrderTotals(purchaseOrderDraft);
       const saved = await buildAndUpsertBillFromPurchaseOrder(order);
       const receive = await postRemainingPurchaseReceive(order);
@@ -1272,18 +1316,18 @@ export function PurchasesPage({
       setBillsView("detail");
       actionFeedback.succeed(
         receive
-          ? `Bill ${saved.id} created and stock received into ${receive.warehouse_code || receive.warehouse_name}.`
-          : `Bill ${saved.id} created. Purchase order was already fully received.`,
+          ? p("feedback.billCreatedWithReceive", { id: saved.id, warehouse: receive.warehouse_code || receive.warehouse_name })
+          : p("feedback.billCreatedAlreadyReceived", { id: saved.id }),
       );
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Convert to bill failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.convertToBillFailed"));
     }
   }
 
   async function handleBulkConvertPurchaseOrdersToBills(orderIds: string[]) {
     const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)));
     if (!uniqueIds.length) {
-      actionFeedback.fail("No purchase orders selected.");
+      actionFeedback.fail(p("errors.noPurchaseOrdersSelected"));
       return;
     }
 
@@ -1291,12 +1335,12 @@ export function PurchasesPage({
       purchaseOrders.filter((order) => uniqueIds.includes(order.id)).map((order) => fetchPurchaseOrderById(order.id)),
     );
     if (!orders.length) {
-      actionFeedback.fail("Selected purchase orders are no longer available.");
+      actionFeedback.fail(p("errors.selectedPurchaseOrdersUnavailable"));
       return;
     }
 
     try {
-      actionFeedback.begin(`Converting ${orders.length.toLocaleString("en-US")} purchase order(s) to bills...`);
+      actionFeedback.begin(p("feedback.bulkConvertingPurchaseOrders", { count: orders.length.toLocaleString("en-US") }));
       const normalizedOrders = orders.map((order) => recomputePurchaseOrderTotals(order));
       await Promise.all(normalizedOrders.map((order) => buildAndUpsertBillFromPurchaseOrder(order)));
       const postedReceives = await Promise.all(normalizedOrders.map((order) => postRemainingPurchaseReceive(order)));
@@ -1305,17 +1349,20 @@ export function PurchasesPage({
       setBills(refreshedBills);
       setBillsView("list");
       actionFeedback.succeed(
-        `${orders.length.toLocaleString("en-US")} bill(s) created or updated; ${postedReceives.filter(Boolean).length.toLocaleString("en-US")} stock receive(s) posted.`,
+        p("feedback.bulkBillsCreated", {
+          billCount: orders.length.toLocaleString("en-US"),
+          receiveCount: postedReceives.filter(Boolean).length.toLocaleString("en-US"),
+        }),
       );
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Bulk convert to bill failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.bulkConvertToBillFailed"));
     }
   }
 
   async function handleMergePurchaseOrdersToBill(orderIds: string[]) {
     const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)));
     if (!uniqueIds.length) {
-      actionFeedback.fail("No purchase orders selected.");
+      actionFeedback.fail(p("errors.noPurchaseOrdersSelected"));
       return;
     }
 
@@ -1323,7 +1370,7 @@ export function PurchasesPage({
       purchaseOrders.filter((order) => uniqueIds.includes(order.id)).map((order) => fetchPurchaseOrderById(order.id)),
     );
     if (!orders.length) {
-      actionFeedback.fail("Selected purchase orders are no longer available.");
+      actionFeedback.fail(p("errors.selectedPurchaseOrdersUnavailable"));
       return;
     }
 
@@ -1335,18 +1382,18 @@ export function PurchasesPage({
         order.purchase_company !== first.purchase_company,
     );
     if (incompatible) {
-      actionFeedback.fail("Merged bill requires same vendor, same currency, and same purchase company.");
+      actionFeedback.fail(p("errors.mergeRequiresSameVendorCurrencyCompany"));
       return;
     }
 
     const blocked = orders.filter((order) => (billCountByPurchaseOrderId.get(order.id) || 0) > 0);
     if (blocked.length) {
-      actionFeedback.fail(`Merge blocked. ${blocked.length.toLocaleString("en-US")} selected purchase order(s) already have bills.`);
+      actionFeedback.fail(p("errors.mergeBlocked", { count: blocked.length.toLocaleString("en-US") }));
       return;
     }
 
     try {
-      actionFeedback.begin(`Merging ${orders.length.toLocaleString("en-US")} purchase order(s) into one bill...`);
+      actionFeedback.begin(p("feedback.mergingPurchaseOrders", { count: orders.length.toLocaleString("en-US") }));
       const normalizedOrders = orders.map((order) => recomputePurchaseOrderTotals(order));
       const merged = await buildAndUpsertMergedBillFromPurchaseOrders(normalizedOrders);
       const postedReceives = await Promise.all(normalizedOrders.map((order) => postRemainingPurchaseReceive(order)));
@@ -1360,37 +1407,37 @@ export function PurchasesPage({
       setActiveTab("Bills");
       setBillsView("detail");
       actionFeedback.succeed(
-        `Merged bill ${merged.id} created; ${postedReceives.filter(Boolean).length.toLocaleString("en-US")} stock receive(s) posted.`,
+        p("feedback.mergedBillCreated", { id: merged.id, receiveCount: postedReceives.filter(Boolean).length.toLocaleString("en-US") }),
       );
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Merged bill create failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.mergedBillCreateFailed"));
     }
   }
 
   async function saveBillDraft() {
     if (!billDraft) return null;
     try {
-      actionFeedback.begin(`Saving bill ${billDraft.id}...`);
+      actionFeedback.begin(p("feedback.savingBill", { id: billDraft.id }));
       const saved = await upsertBill(recomputeBillTotals(billDraft), selectedBillId);
       const refreshed = await fetchBillSummaries();
       setBills(refreshed);
       setSelectedBillId(saved.id);
       setBillDraft({ ...saved, lines: saved.lines.map((line) => ({ ...line })) });
       setBillSourceSnapshot(serializeBillForDirtyCheck(saved));
-      actionFeedback.succeed(`Bill ${saved.id} saved.`);
+      actionFeedback.succeed(p("feedback.billSaved", { id: saved.id }));
       return saved;
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Bill save failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.billSaveFailed"));
       return null;
     }
   }
 
   async function handleDeleteBillRow(row: LocalBill) {
-    if (!window.confirm(`Delete bill ${row.id}? This cannot be undone.`)) {
+    if (!window.confirm(p("confirm.deleteBill", { id: row.id }))) {
       return;
     }
     try {
-      actionFeedback.begin(`Deleting bill ${row.id}...`);
+      actionFeedback.begin(p("feedback.deletingBill", { id: row.id }));
       await deleteBill(row.id);
       const refreshed = await fetchBillSummaries();
       setBills(refreshed);
@@ -1400,9 +1447,9 @@ export function PurchasesPage({
         setBillSourceSnapshot("");
         setBillsView("list");
       }
-      actionFeedback.succeed(`Bill ${row.id} deleted.`);
+      actionFeedback.succeed(p("feedback.billDeleted", { id: row.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Bill delete failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.billDeleteFailed"));
     }
   }
 
@@ -1415,25 +1462,25 @@ export function PurchasesPage({
       updated_at: new Date().toISOString(),
     };
     try {
-      actionFeedback.begin(`Saving payment ${payload.id}...`);
+      actionFeedback.begin(p("feedback.savingPayment", { id: payload.id }));
       const saved = await upsertPaymentMade(payload, previousId);
       const [refreshedPayments, refreshedBills] = await Promise.all([fetchPaymentsMade(), fetchBillSummaries()]);
       setPaymentsMade(refreshedPayments);
       setBills(refreshedBills);
       setSelectedPaymentMadeId(saved.id);
       setPaymentMadeDraft({ ...saved });
-      actionFeedback.succeed(`Payment ${saved.id} saved.`);
+      actionFeedback.succeed(p("feedback.paymentSaved", { id: saved.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Payment save failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.paymentSaveFailed"));
     }
   }
 
   async function handleDeletePaymentMadeRow(row: LocalPaymentMade) {
-    if (!window.confirm(`Delete payment ${row.id}? This cannot be undone.`)) {
+    if (!window.confirm(p("confirm.deletePayment", { id: row.id }))) {
       return;
     }
     try {
-      actionFeedback.begin(`Deleting payment ${row.id}...`);
+      actionFeedback.begin(p("feedback.deletingPayment", { id: row.id }));
       await deletePaymentMade(row.id);
       const [refreshedPayments, refreshedBills] = await Promise.all([fetchPaymentsMade(), fetchBillSummaries()]);
       setPaymentsMade(refreshedPayments);
@@ -1443,9 +1490,9 @@ export function PurchasesPage({
         setSelectedPaymentMadeId(next?.id || "");
         setPaymentMadeDraft(next ? { ...next } : createEmptyPaymentMade(null));
       }
-      actionFeedback.succeed(`Payment ${row.id} deleted.`);
+      actionFeedback.succeed(p("feedback.paymentDeleted", { id: row.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Payment delete failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.paymentDeleteFailed"));
     }
   }
 
@@ -1454,7 +1501,7 @@ export function PurchasesPage({
     setSelectedPaymentMadeId(next.id);
     setPaymentMadeDraft(next);
     setActiveTab("Payments Made");
-    actionFeedback.succeed("New payment draft ready.");
+    actionFeedback.succeed(p("feedback.newPaymentDraftReady"));
   }
 
   return (
@@ -1462,29 +1509,29 @@ export function PurchasesPage({
       {activeTab === "Vendors" ? <VendorsPage /> : null}
 
       {activeTab === "Purchase Orders" ? (
-        <SectionCard title="Purchase Orders">
+        <SectionCard title={p("sections.purchaseOrders")}>
           {purchaseOrdersView === "list" ? (
             <>
               <div className="meta-row">
-                <span>{purchaseOrders.length.toLocaleString("en-US")} purchase orders loaded</span>
-                <span>Confirmed sales orders are split by vendor. Edit before converting to bill.</span>
+                <span>{p("meta.purchaseOrdersLoaded", { count: purchaseOrders.length.toLocaleString("en-US") })}</span>
+                <span>{p("meta.purchaseOrdersHelp")}</span>
               </div>
               <div className="toolbar toolbar--wrap">
                 <Button variant="secondary" className="button--compact" onClick={() => setPurchaseOrderActionsOpen((current) => !current)}>
-                  {purchaseOrderActionsOpen ? "Hide Actions" : "Actions"}
+                  {purchaseOrderActionsOpen ? p("actions.hideActions") : p("actions.actions")}
                 </Button>
               </div>
               {purchaseOrderActionsOpen ? (
                 <div className="action-menu-card">
                   <div className="meta-row">
-                    <span>{selectedPurchaseOrderIds.length.toLocaleString("en-US")} selected</span>
-                    <span>Delete is blocked when bills already exist. Convert creates or updates bills from selected purchase orders.</span>
+                    <span>{p("meta.selectedCount", { count: selectedPurchaseOrderIds.length.toLocaleString("en-US") })}</span>
+                    <span>{p("meta.bulkActionsHelp")}</span>
                   </div>
                   <div className="toolbar toolbar--wrap">
                     <Select
-                      label="Stock Receive Warehouse"
+                      label={p("fields.stockReceiveWarehouse")}
                       value={receiveWarehouseId}
-                      options={[{ value: "", label: "Select stocked warehouse" }, ...receiveWarehouseOptions]}
+                      options={[{ value: "", label: p("fields.selectStockedWarehouse") }, ...receiveWarehouseOptions]}
                       onChange={setReceiveWarehouseId}
                     />
                     <Button
@@ -1496,28 +1543,28 @@ export function PurchasesPage({
                         )
                       }
                     >
-                      {selectedPurchaseOrderIds.length === purchaseOrders.length ? "Clear Selection" : "Select All"}
+                      {selectedPurchaseOrderIds.length === purchaseOrders.length ? p("actions.clearSelection") : p("actions.selectAll")}
                     </Button>
                     <Button
                       variant="secondary"
                       className="button--compact danger-button"
                       onClick={() => void handleBulkDeletePurchaseOrders(selectedPurchaseOrderIds)}
                     >
-                      Bulk Delete
+                      {p("actions.bulkDelete")}
                     </Button>
                     <Button
                       variant="secondary"
                       className="button--compact"
                       onClick={() => void handleBulkConvertPurchaseOrdersToBills(selectedPurchaseOrderIds)}
                     >
-                      Bulk Convert Bill
+                      {p("actions.bulkConvertBill")}
                     </Button>
                     <Button
                       variant="secondary"
                       className="button--compact"
                       onClick={() => void handleMergePurchaseOrdersToBill(selectedPurchaseOrderIds)}
                     >
-                      Merge Into One Bill
+                      {p("actions.mergeIntoOneBill")}
                     </Button>
                   </div>
                 </div>
@@ -1525,7 +1572,7 @@ export function PurchasesPage({
               <DataTable
                 rows={purchaseOrders}
                 columns={purchaseOrderColumnsWithMarks}
-                emptyText="No purchase orders generated yet. Confirm a sales order first."
+                emptyText={p("empty.noPurchaseOrders")}
                 onRowClick={(row) =>
                   void confirmPurchaseOrderNavigation(async () => {
                     setSelectedPurchaseOrderId(row.id);
@@ -1544,62 +1591,58 @@ export function PurchasesPage({
                 <div className="invoice-edit-shell">
                   <div className="toolbar toolbar--wrap">
                     <Button variant="secondary" onClick={() => void confirmPurchaseOrderNavigation(() => setPurchaseOrdersView("list"))}>
-                      Back to List
+                      {p("actions.backToList")}
                     </Button>
                   </div>
                 <div className="document-marks document-marks--header">
                   <span className={`mark-badge ${purchaseOrderDraft.status === "confirmed" || purchaseOrderDraft.status === "closed" ? "mark-badge--success" : ""}`}>
-                    {purchaseOrderDraft.status.toUpperCase()}
+                    {statusLabel(purchaseOrderDraft.status)}
                   </span>
                   {(billCountByPurchaseOrderId.get(purchaseOrderDraft.id) || 0) > 0 ? (
                     <span className="mark-badge mark-badge--accent">
-                      Bill {(billCountByPurchaseOrderId.get(purchaseOrderDraft.id) || 0).toLocaleString("en-US")} created
+                      {p("badges.billCreated", { count: (billCountByPurchaseOrderId.get(purchaseOrderDraft.id) || 0).toLocaleString("en-US") })}
                     </span>
                   ) : null}
                 </div>
                 <div className="invoice-meta-grid">
-                  <Input label="PO No" value={purchaseOrderDraft.id} onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, id: value } : current))} />
+                  <Input label={p("fields.poNo")} value={purchaseOrderDraft.id} onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, id: value } : current))} />
                   <Input
-                    label="Vendor"
+                    label={p("fields.vendor")}
                     value={purchaseOrderDraft.supplier_name}
                     onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, supplier_name: value } : current))}
                   />
                   <Input
-                    label="Purchase Company"
+                    label={p("fields.purchaseCompany")}
                     value={purchaseOrderDraft.purchase_company}
                     onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, purchase_company: value } : current))}
                   />
-                  <Input label="Sales Order" value={purchaseOrderDraft.sales_order_no} onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, sales_order_no: value } : current))} />
-                  <Input label="Customer" value={purchaseOrderDraft.customer_name} onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, customer_name: value } : current))} />
+                  <Input label={p("fields.salesOrder")} value={purchaseOrderDraft.sales_order_no} onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, sales_order_no: value } : current))} />
+                  <Input label={p("fields.customer")} value={purchaseOrderDraft.customer_name} onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, customer_name: value } : current))} />
                   <Select
-                    label="Status"
+                    label={p("fields.status")}
                     value={purchaseOrderDraft.status}
-                    options={[
-                      { value: "draft", label: "Draft" },
-                      { value: "confirmed", label: "Confirmed" },
-                      { value: "closed", label: "Closed" },
-                    ]}
+                    options={purchaseOrderStatusOptions}
                     onChange={(value) =>
                       setPurchaseOrderDraft((current) => (current ? { ...current, status: value as LocalPurchaseOrder["status"] } : current))
                     }
                   />
                   <Select
-                    label="Stock Receive Warehouse"
+                    label={p("fields.stockReceiveWarehouse")}
                     value={receiveWarehouseId}
-                    options={[{ value: "", label: "Select stocked warehouse" }, ...receiveWarehouseOptions]}
+                    options={[{ value: "", label: p("fields.selectStockedWarehouse") }, ...receiveWarehouseOptions]}
                     onChange={setReceiveWarehouseId}
                   />
                 </div>
                     <table className="simple-edit-table">
                       <thead>
                         <tr>
-                          <th>Code</th>
-                          <th>Description</th>
-                          <th>Qty</th>
-                          <th>Stock</th>
-                          <th>Buy Price</th>
-                          <th>Line Total</th>
-                          <th>Notes</th>
+                          <th>{p("columns.code")}</th>
+                          <th>{p("columns.description")}</th>
+                          <th>{p("columns.qty")}</th>
+                          <th>{p("columns.stock")}</th>
+                          <th>{p("columns.buyPrice")}</th>
+                          <th>{p("columns.lineTotal")}</th>
+                          <th>{p("columns.notes")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1639,7 +1682,7 @@ export function PurchasesPage({
                                 qty: Number(line.qty || 0) || 0,
                                 productCode: line.product_code,
                                 oldCode: line.old_code,
-                              })}
+                              }, inventoryBadgeLabels)}
                             </td>
                             <td>
                               <input
@@ -1689,27 +1732,27 @@ export function PurchasesPage({
                 <div className="toolbar toolbar--wrap">
                   <label className="checkbox-field quote-toolbar-checkbox">
                     <input type="checkbox" checked={purchaseOrderResyncOnlyFillBlanks} onChange={(event) => setPurchaseOrderResyncOnlyFillBlanks(event.target.checked)} />
-                    <span className="field__label">Only Fill Blanks</span>
+                    <span className="field__label">{p("fields.onlyFillBlanks")}</span>
                   </label>
                   <label className="checkbox-field quote-toolbar-checkbox">
                     <input type="checkbox" checked={purchaseOrderResyncKeepPrices} onChange={(event) => setPurchaseOrderResyncKeepPrices(event.target.checked)} />
-                    <span className="field__label">Keep Prices</span>
+                    <span className="field__label">{p("fields.keepPrices")}</span>
                   </label>
-                  <Button variant="secondary" onClick={() => void handleResyncPurchaseOrderFromCatalog()} busy={resyncingPurchaseOrder} busyLabel="Re-syncing...">
-                    Re-sync from Catalog
+                  <Button variant="secondary" onClick={() => void handleResyncPurchaseOrderFromCatalog()} busy={resyncingPurchaseOrder} busyLabel={p("busy.resyncing")}>
+                    {p("actions.resyncFromCatalog")}
                   </Button>
-                  <Button variant="secondary" onClick={() => handlePrintPurchaseOrder(purchaseOrderDraft)} busy={printingPurchaseOrder} busyLabel="Opening PDF...">
-                    PDF / Print
+                  <Button variant="secondary" onClick={() => handlePrintPurchaseOrder(purchaseOrderDraft)} busy={printingPurchaseOrder} busyLabel={p("busy.openingPdf")}>
+                    {p("actions.pdfPrint")}
                   </Button>
                   <Button variant="secondary" onClick={() => handleExportPurchaseOrderExcel(purchaseOrderDraft)}>
-                    Export Excel
+                    {p("actions.exportExcel")}
                   </Button>
-                  <Button onClick={savePurchaseOrderDraft}>Save Purchase Order</Button>
+                  <Button onClick={savePurchaseOrderDraft}>{p("actions.savePurchaseOrder")}</Button>
                   <Button variant="secondary" onClick={convertPurchaseOrderToBill}>
-                    Convert to Bill
+                    {p("actions.convertToBill")}
                   </Button>
                   <Button variant="secondary" onClick={handleDeletePurchaseOrder}>
-                    Delete Purchase Order
+                    {p("actions.deletePurchaseOrder")}
                   </Button>
                 </div>
               </div>
@@ -1719,16 +1762,16 @@ export function PurchasesPage({
       ) : null}
 
       {activeTab === "Bills" ? (
-        <SectionCard title="Bills">
+        <SectionCard title={p("sections.bills")}>
           <div className="meta-row">
-            <span>{bills.length.toLocaleString("en-US")} bills loaded</span>
-            <span>Bills are generated from purchase orders and remain editable before confirmation.</span>
+            <span>{p("meta.billsLoaded", { count: bills.length.toLocaleString("en-US") })}</span>
+            <span>{p("meta.billsHelp")}</span>
           </div>
           {billsView === "list" ? (
             <DataTable
               rows={bills}
               columns={billColumns}
-              emptyText="No bills yet. Convert a purchase order first."
+              emptyText={p("empty.noBills")}
               onRowClick={(row) =>
                 void confirmBillNavigation(async () => {
                   setSelectedBillId(row.id);
@@ -1746,33 +1789,28 @@ export function PurchasesPage({
               <div className="invoice-edit-shell">
                 <div className="toolbar toolbar--wrap">
                   <Button variant="secondary" onClick={() => void confirmBillNavigation(() => setBillsView("list"))}>
-                    Back to List
+                    {p("actions.backToList")}
                   </Button>
                 </div>
                 <div className="invoice-meta-grid">
-                  <Input label="Bill No" value={billDraft.id} onChange={(value) => setBillDraft((current) => (current ? { ...current, id: value } : current))} />
-                  <Input label="Purchase Order" value={billDraft.purchase_order_no} onChange={(value) => setBillDraft((current) => (current ? { ...current, purchase_order_no: value } : current))} />
-                  <Input label="Vendor" value={billDraft.supplier_name} onChange={(value) => setBillDraft((current) => (current ? { ...current, supplier_name: value } : current))} />
-                  <Input label="Bill Date" type="date" value={billDraft.bill_date} onChange={(value) => setBillDraft((current) => (current ? { ...current, bill_date: value } : current))} />
-                  <Input label="Due Date" type="date" value={billDraft.due_date} onChange={(value) => setBillDraft((current) => (current ? { ...current, due_date: value } : current))} />
+                  <Input label={p("fields.billNo")} value={billDraft.id} onChange={(value) => setBillDraft((current) => (current ? { ...current, id: value } : current))} />
+                  <Input label={p("fields.purchaseOrder")} value={billDraft.purchase_order_no} onChange={(value) => setBillDraft((current) => (current ? { ...current, purchase_order_no: value } : current))} />
+                  <Input label={p("fields.vendor")} value={billDraft.supplier_name} onChange={(value) => setBillDraft((current) => (current ? { ...current, supplier_name: value } : current))} />
+                  <Input label={p("fields.billDate")} type="date" value={billDraft.bill_date} onChange={(value) => setBillDraft((current) => (current ? { ...current, bill_date: value } : current))} />
+                  <Input label={p("fields.dueDate")} type="date" value={billDraft.due_date} onChange={(value) => setBillDraft((current) => (current ? { ...current, due_date: value } : current))} />
                   <Select
-                    label="Status"
+                    label={p("fields.status")}
                     value={billDraft.status}
-                    options={[
-                      { value: "draft", label: "Draft" },
-                      { value: "confirmed", label: "Confirmed" },
-                      { value: "paid", label: "Paid" },
-                      { value: "void", label: "Void" },
-                    ]}
+                    options={billStatusOptions}
                     onChange={(value) => setBillDraft((current) => (current ? { ...current, status: value as LocalBill["status"] } : current))}
                   />
-                  <Input label="Payment Terms" value={billDraft.payment_terms} onChange={(value) => setBillDraft((current) => (current ? { ...current, payment_terms: value } : current))} />
-                  <Input label="Discount" type="number" value={String(billDraft.discount_amount)} onChange={(value) => setBillDraft((current) => (current ? { ...current, discount_amount: Number(value || 0) } : current))} />
-                  <Input label="Shipping" type="number" value={String(billDraft.shipping_cost)} onChange={(value) => setBillDraft((current) => (current ? { ...current, shipping_cost: Number(value || 0) } : current))} />
+                  <Input label={p("fields.paymentTerms")} value={billDraft.payment_terms} onChange={(value) => setBillDraft((current) => (current ? { ...current, payment_terms: value } : current))} />
+                  <Input label={p("fields.discount")} type="number" value={String(billDraft.discount_amount)} onChange={(value) => setBillDraft((current) => (current ? { ...current, discount_amount: Number(value || 0) } : current))} />
+                  <Input label={p("fields.shipping")} type="number" value={String(billDraft.shipping_cost)} onChange={(value) => setBillDraft((current) => (current ? { ...current, shipping_cost: Number(value || 0) } : current))} />
                 </div>
 
                 <div className="field field--full">
-                  <label className="field__label">Notes</label>
+                  <label className="field__label">{p("fields.notes")}</label>
                   <textarea
                     className="field__input field__input--textarea"
                     value={billDraft.notes}
@@ -1783,13 +1821,13 @@ export function PurchasesPage({
                 <table className="simple-edit-table">
                   <thead>
                     <tr>
-                      <th>Code</th>
-                      <th>Description</th>
-                      <th>Qty</th>
-                      <th>Stock</th>
-                      <th>Buy Price</th>
-                      <th>Line Total</th>
-                      <th>Notes</th>
+                      <th>{p("columns.code")}</th>
+                      <th>{p("columns.description")}</th>
+                      <th>{p("columns.qty")}</th>
+                      <th>{p("columns.stock")}</th>
+                      <th>{p("columns.buyPrice")}</th>
+                      <th>{p("columns.lineTotal")}</th>
+                      <th>{p("columns.notes")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1828,7 +1866,7 @@ export function PurchasesPage({
                                 qty: Number(line.qty || 0) || 0,
                                 productCode: line.product_code,
                                 oldCode: line.old_code,
-                              })}
+                              }, inventoryBadgeLabels)}
                             </td>
                             <td>
                               <input
@@ -1875,15 +1913,15 @@ export function PurchasesPage({
 
                 <div className="toolbar toolbar--wrap">
                   <div className="meta-row">
-                    <span>Subtotal: {formatMoney(recomputeBillTotals(billDraft).subtotal, billDraft.currency)}</span>
-                    <span>Total: {formatMoney(recomputeBillTotals(billDraft).total_amount, billDraft.currency)}</span>
+                    <span>{p("summary.subtotal", { amount: formatMoney(recomputeBillTotals(billDraft).subtotal, billDraft.currency) })}</span>
+                    <span>{p("summary.total", { amount: formatMoney(recomputeBillTotals(billDraft).total_amount, billDraft.currency) })}</span>
                   </div>
-                  <Button variant="secondary" onClick={() => handlePrintBill(billDraft)} busy={printingBill} busyLabel="Opening PDF...">
-                    PDF / Print
+                  <Button variant="secondary" onClick={() => handlePrintBill(billDraft)} busy={printingBill} busyLabel={p("busy.openingPdf")}>
+                    {p("actions.pdfPrint")}
                   </Button>
-                  <Button onClick={saveBillDraft}>Save Bill</Button>
+                  <Button onClick={saveBillDraft}>{p("actions.saveBill")}</Button>
                   <Button variant="secondary" onClick={() => handleAddPaymentMade(billDraft)}>
-                    Add Payment
+                    {p("actions.addPayment")}
                   </Button>
                 </div>
               </div>
@@ -1893,18 +1931,18 @@ export function PurchasesPage({
       ) : null}
 
       {activeTab === "Payments Made" ? (
-        <SectionCard title="Payments Made">
+        <SectionCard title={p("sections.paymentsMade")}>
           <div className="meta-row">
-            <span>{paymentsMade.length.toLocaleString("en-US")} payments loaded</span>
-            <span>Record settlements against vendor bills.</span>
+            <span>{p("meta.paymentsLoaded", { count: paymentsMade.length.toLocaleString("en-US") })}</span>
+            <span>{p("meta.paymentsHelp")}</span>
           </div>
           <div className="toolbar toolbar--wrap">
-            <Button onClick={() => handleAddPaymentMade()}>+ Add Payment Made</Button>
+            <Button onClick={() => handleAddPaymentMade()}>{p("actions.addPaymentMade")}</Button>
           </div>
           <DataTable
             rows={paymentsMade}
             columns={paymentMadeColumns}
-            emptyText="No vendor payments yet."
+            emptyText={p("empty.noVendorPayments")}
             onRowClick={(row) => {
               setSelectedPaymentMadeId(row.id);
               setPaymentMadeDraft({ ...row });
@@ -1915,9 +1953,9 @@ export function PurchasesPage({
             <div className="invoice-editor-block">
               <div className="invoice-edit-shell">
                 <div className="invoice-meta-grid">
-                  <Input label="Payment No" value={paymentMadeDraft.id} onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, id: value } : current))} />
+                  <Input label={p("fields.paymentNo")} value={paymentMadeDraft.id} onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, id: value } : current))} />
                   <label className="field">
-                    <span className="field__label">Bill</span>
+                    <span className="field__label">{p("fields.bill")}</span>
                     <select
                       className="field__input"
                       value={paymentMadeDraft.bill_id}
@@ -1938,7 +1976,7 @@ export function PurchasesPage({
                         );
                       }}
                     >
-                      <option value="">Manual / Unlinked</option>
+                      <option value="">{p("fields.manualUnlinked")}</option>
                       {bills.map((bill) => (
                         <option key={bill.id} value={bill.id}>
                           {bill.id} - {bill.supplier_name}
@@ -1946,42 +1984,33 @@ export function PurchasesPage({
                       ))}
                     </select>
                   </label>
-                  <Input label="Bill No" value={paymentMadeDraft.bill_no} onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, bill_no: value } : current))} />
-                  <Input label="Vendor" value={paymentMadeDraft.supplier_name} onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, supplier_name: value } : current))} />
-                  <Input label="Payment Date" type="date" value={paymentMadeDraft.payment_date} onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, payment_date: value } : current))} />
-                  <Input label="Amount" type="number" value={String(paymentMadeDraft.amount)} onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, amount: Number(value || 0) } : current))} />
+                  <Input label={p("fields.billNo")} value={paymentMadeDraft.bill_no} onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, bill_no: value } : current))} />
+                  <Input label={p("fields.vendor")} value={paymentMadeDraft.supplier_name} onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, supplier_name: value } : current))} />
+                  <Input label={p("fields.paymentDate")} type="date" value={paymentMadeDraft.payment_date} onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, payment_date: value } : current))} />
+                  <Input label={p("fields.amount")} type="number" value={String(paymentMadeDraft.amount)} onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, amount: Number(value || 0) } : current))} />
                   <Select
-                    label="Method"
+                    label={p("fields.method")}
                     value={paymentMadeDraft.method}
-                    options={[
-                      { value: "Bank Transfer", label: "Bank Transfer" },
-                      { value: "Cash", label: "Cash" },
-                      { value: "Credit Card", label: "Credit Card" },
-                      { value: "Cheque", label: "Cheque" },
-                    ]}
+                    options={paymentMethodOptions}
                     onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, method: value } : current))}
                   />
-                  <Input label="Reference No" value={paymentMadeDraft.reference_no} onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, reference_no: value } : current))} />
+                  <Input label={p("fields.referenceNo")} value={paymentMadeDraft.reference_no} onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, reference_no: value } : current))} />
                   <Select
-                    label="Status"
+                    label={p("fields.status")}
                     value={paymentMadeDraft.status}
-                    options={[
-                      { value: "draft", label: "Draft" },
-                      { value: "confirmed", label: "Confirmed" },
-                      { value: "void", label: "Void" },
-                    ]}
+                    options={paymentStatusOptions}
                     onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, status: value as LocalPaymentMade["status"] } : current))}
                   />
-                  <Input label="Currency" value={paymentMadeDraft.currency} onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, currency: value } : current))} />
+                  <Input label={p("fields.currency")} value={paymentMadeDraft.currency} onChange={(value) => setPaymentMadeDraft((current) => (current ? { ...current, currency: value } : current))} />
                 </div>
                 <div className="field field--full">
-                  <label className="field__label">Notes</label>
+                  <label className="field__label">{p("fields.notes")}</label>
                   <textarea className="field__input field__input--textarea" value={paymentMadeDraft.notes} onChange={(event) => setPaymentMadeDraft((current) => (current ? { ...current, notes: event.target.value } : current))} />
                 </div>
                 <div className="toolbar toolbar--wrap">
-                  <Button onClick={savePaymentMadeDraft}>Save Payment</Button>
+                  <Button onClick={savePaymentMadeDraft}>{p("actions.savePayment")}</Button>
                   <Button variant="secondary" onClick={() => setPaymentMadeDraft((current) => (current ? { ...current, status: "confirmed" } : current))}>
-                    Mark Confirmed
+                    {p("actions.markConfirmed")}
                   </Button>
                 </div>
               </div>
@@ -1996,22 +2025,22 @@ export function PurchasesPage({
             <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>{purchaseLinePreview.product_code || "-"}</h3>
-                <p>{purchaseLinePreview.brand || "Purchase order line preview"}</p>
+                <p>{purchaseLinePreview.brand || p("modals.purchaseOrderLinePreview")}</p>
               </div>
             </div>
             <div className="workbench-detail-list">
-              <div><span>Description</span><strong>{purchaseLinePreview.description || "-"}</strong></div>
-              <div><span>Vendor</span><strong>{purchaseLinePreview.supplier_name || "-"}</strong></div>
-              <div><span>Quantity</span><strong>{purchaseLinePreview.qty}</strong></div>
-              <div><span>Buy Price</span><strong>{formatMoney(purchaseLinePreview.buy_price, purchaseOrderDraft?.currency || "EUR")}</strong></div>
-              <div><span>Line Total</span><strong>{formatMoney(purchaseLinePreview.line_total, purchaseOrderDraft?.currency || "EUR")}</strong></div>
-              <div><span>Origin</span><strong>{purchaseLinePreview.origin || "-"}</strong></div>
+              <div><span>{p("columns.description")}</span><strong>{purchaseLinePreview.description || "-"}</strong></div>
+              <div><span>{p("columns.vendor")}</span><strong>{purchaseLinePreview.supplier_name || "-"}</strong></div>
+              <div><span>{p("columns.quantity")}</span><strong>{purchaseLinePreview.qty}</strong></div>
+              <div><span>{p("columns.buyPrice")}</span><strong>{formatMoney(purchaseLinePreview.buy_price, purchaseOrderDraft?.currency || "EUR")}</strong></div>
+              <div><span>{p("columns.lineTotal")}</span><strong>{formatMoney(purchaseLinePreview.line_total, purchaseOrderDraft?.currency || "EUR")}</strong></div>
+              <div><span>{p("columns.origin")}</span><strong>{purchaseLinePreview.origin || "-"}</strong></div>
               <div><span>OEM</span><strong>{purchaseLinePreview.oem_no || "-"}</strong></div>
-              {purchaseLinePreview.notes ? <div><span>Notes</span><strong>{purchaseLinePreview.notes}</strong></div> : null}
+              {purchaseLinePreview.notes ? <div><span>{p("columns.notes")}</span><strong>{purchaseLinePreview.notes}</strong></div> : null}
             </div>
             <div className="modal-actions">
               <Button variant="secondary" onClick={() => setPurchaseLinePreview(null)}>
-                Close
+                {t("common.close")}
               </Button>
             </div>
           </DraggableSurface>
@@ -2024,24 +2053,24 @@ export function PurchasesPage({
             <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>{billLinePreview.product_code || "-"}</h3>
-                <p>{billLinePreview.brand || "Bill line preview"}</p>
+                <p>{billLinePreview.brand || p("modals.billLinePreview")}</p>
               </div>
             </div>
             <div className="workbench-detail-list">
-              <div><span>Description</span><strong>{billLinePreview.description || "-"}</strong></div>
-              <div><span>Vendor</span><strong>{billLinePreview.supplier_name || "-"}</strong></div>
-              <div><span>Quantity</span><strong>{billLinePreview.qty}</strong></div>
-              <div><span>Buy Price</span><strong>{formatMoney(billLinePreview.buy_price, billDraft?.currency || "EUR")}</strong></div>
-              <div><span>Line Total</span><strong>{formatMoney(billLinePreview.line_total, billDraft?.currency || "EUR")}</strong></div>
-              <div><span>Origin</span><strong>{billLinePreview.origin || "-"}</strong></div>
-              <div><span>Tariff</span><strong>{billLinePreview.hs_code || "-"}</strong></div>
-              <div><span>Weight</span><strong>{billLinePreview.weight_kg == null ? "-" : formatWeight(billLinePreview.weight_kg)}</strong></div>
-              <div><span>PO Source</span><strong>{billLinePreview.purchase_order_no || "-"}</strong></div>
-              {billLinePreview.notes ? <div><span>Notes</span><strong>{billLinePreview.notes}</strong></div> : null}
+              <div><span>{p("columns.description")}</span><strong>{billLinePreview.description || "-"}</strong></div>
+              <div><span>{p("columns.vendor")}</span><strong>{billLinePreview.supplier_name || "-"}</strong></div>
+              <div><span>{p("columns.quantity")}</span><strong>{billLinePreview.qty}</strong></div>
+              <div><span>{p("columns.buyPrice")}</span><strong>{formatMoney(billLinePreview.buy_price, billDraft?.currency || "EUR")}</strong></div>
+              <div><span>{p("columns.lineTotal")}</span><strong>{formatMoney(billLinePreview.line_total, billDraft?.currency || "EUR")}</strong></div>
+              <div><span>{p("columns.origin")}</span><strong>{billLinePreview.origin || "-"}</strong></div>
+              <div><span>{p("columns.tariff")}</span><strong>{billLinePreview.hs_code || "-"}</strong></div>
+              <div><span>{p("columns.weight")}</span><strong>{billLinePreview.weight_kg == null ? "-" : formatWeight(billLinePreview.weight_kg)}</strong></div>
+              <div><span>{p("columns.poSource")}</span><strong>{billLinePreview.purchase_order_no || "-"}</strong></div>
+              {billLinePreview.notes ? <div><span>{p("columns.notes")}</span><strong>{billLinePreview.notes}</strong></div> : null}
             </div>
             <div className="modal-actions">
               <Button variant="secondary" onClick={() => setBillLinePreview(null)}>
-                Close
+                {t("common.close")}
               </Button>
             </div>
           </DraggableSurface>

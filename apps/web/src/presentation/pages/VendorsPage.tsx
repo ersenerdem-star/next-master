@@ -13,10 +13,13 @@ import { Input } from "../components/common/Input";
 import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
 import { SuppliersPage } from "./SuppliersPage";
+import { useI18n } from "../../i18n/I18nProvider";
 
 type VendorTab = "Other Details" | "Address" | "Contact Persons" | "Custom Fields" | "Reporting Tags" | "Remarks";
 
 export function VendorsPage() {
+  const { t } = useI18n();
+  const p = (key: string, params?: Record<string, string | number>) => t(`purchases.${key}`, params);
   const actionFeedback = useActionFeedback();
   const [activeMode, setActiveMode] = useState<"Vendor Directory" | "Supplier Prices">("Vendor Directory");
   const [vendors, setVendors] = useState<LocalVendor[]>([]);
@@ -52,7 +55,7 @@ export function VendorsPage() {
         }
       } catch (caught) {
         if (!cancelled) {
-          actionFeedback.fail(caught instanceof Error ? caught.message : "Vendors load failed");
+          actionFeedback.fail(caught instanceof Error ? caught.message : p("vendors.errors.loadFailed"));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -98,7 +101,7 @@ export function VendorsPage() {
         if (!cancelled) {
           setBills([]);
           setPaymentsMade([]);
-          actionFeedback.fail(caught instanceof Error ? caught.message : "Vendor statement load failed");
+          actionFeedback.fail(caught instanceof Error ? caught.message : p("vendors.errors.statementLoadFailed"));
         }
       } finally {
         if (!cancelled) setLoadingStatement(false);
@@ -157,17 +160,17 @@ export function VendorsPage() {
 
   const statementColumns = useMemo(
     () => [
-      { key: "date", header: "Date", render: (row: AccountStatementRow) => row.date || "-" },
-      { key: "type", header: "Type", render: (row: AccountStatementRow) => row.document_type || "-" },
-      { key: "document", header: "Document", render: (row: AccountStatementRow) => row.document_no || "-" },
-      { key: "due", header: "Due Date", render: (row: AccountStatementRow) => row.due_date || "-" },
-      { key: "status", header: "Status", render: (row: AccountStatementRow) => row.status || "-" },
-      { key: "subtotal", header: "Subtotal", render: (row: AccountStatementRow) => `${row.subtotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
-      { key: "discount", header: "Discount", render: (row: AccountStatementRow) => `${row.discount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
-      { key: "shipping", header: "Shipping", render: (row: AccountStatementRow) => `${row.shipping.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
-      { key: "total", header: "Total", render: (row: AccountStatementRow) => `${row.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
+      { key: "date", header: p("columns.date"), render: (row: AccountStatementRow) => row.date || "-" },
+      { key: "type", header: p("columns.type"), render: (row: AccountStatementRow) => row.document_type ? p(`vendors.statement.documentTypes.${row.document_type.toLowerCase()}`) : "-" },
+      { key: "document", header: p("columns.document"), render: (row: AccountStatementRow) => row.document_no || "-" },
+      { key: "due", header: p("columns.dueDate"), render: (row: AccountStatementRow) => row.due_date || "-" },
+      { key: "status", header: p("columns.status"), render: (row: AccountStatementRow) => (row.status ? p(`statuses.${String(row.status).toLowerCase()}`) : "-") },
+      { key: "subtotal", header: p("columns.subtotal"), render: (row: AccountStatementRow) => `${row.subtotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
+      { key: "discount", header: p("columns.discount"), render: (row: AccountStatementRow) => `${row.discount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
+      { key: "shipping", header: p("columns.shipping"), render: (row: AccountStatementRow) => `${row.shipping.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
+      { key: "total", header: p("columns.total"), render: (row: AccountStatementRow) => `${row.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency}` },
     ],
-    [],
+    [t],
   );
 
   function updateDraft(patch: Partial<LocalVendor>) {
@@ -184,28 +187,28 @@ export function VendorsPage() {
     setSelectedId(next.id);
     setDraft(next);
     setActiveTab("Other Details");
-    actionFeedback.succeed("New vendor draft ready.");
+    actionFeedback.succeed(p("vendors.feedback.newDraftReady"));
   }
 
   async function handleSave() {
     if (!draft) return;
     const displayName = draft.display_name.trim() || draft.company_name.trim() || `${draft.first_name} ${draft.last_name}`.trim();
     if (!displayName) {
-      actionFeedback.fail("Display Name or Company Name is required.");
+      actionFeedback.fail(p("vendors.errors.displayOrCompanyRequired"));
       return;
     }
 
     try {
       setSaving(true);
-      actionFeedback.begin(`Saving vendor ${displayName}...`);
+      actionFeedback.begin(p("vendors.feedback.savingVendor", { vendor: displayName }));
       const saved = await upsertVendor({ ...draft, display_name: displayName });
       const rows = await fetchVendors();
       setVendors(rows);
       setSelectedId(saved.id);
       setDraft(saved);
-      actionFeedback.succeed(`Vendor ${displayName} saved.`);
+      actionFeedback.succeed(p("vendors.feedback.vendorSaved", { vendor: displayName }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Vendor save failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("vendors.errors.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -214,7 +217,7 @@ export function VendorsPage() {
   function handleCancel() {
     if (selectedVendor) {
       setDraft(selectedVendor);
-      actionFeedback.succeed("Vendor changes reverted.");
+      actionFeedback.succeed(p("vendors.feedback.changesReverted"));
       return;
     }
     const next = createEmptyCloudVendor(vendors);
@@ -224,9 +227,9 @@ export function VendorsPage() {
 
   async function handleDelete() {
     if (!draft?.id) return;
-    if (!confirm(`Delete vendor ${draft.display_name || draft.company_name || draft.vendor_number}?`)) return;
+    if (!confirm(p("vendors.confirm.delete", { vendor: draft.display_name || draft.company_name || draft.vendor_number }))) return;
     try {
-      actionFeedback.begin(`Deleting vendor ${draft.display_name || draft.company_name || draft.vendor_number}...`);
+      actionFeedback.begin(p("vendors.feedback.deletingVendor", { vendor: draft.display_name || draft.company_name || draft.vendor_number }));
       await deleteVendor(draft.id);
       const rows = await fetchVendors();
       setVendors(rows);
@@ -238,9 +241,9 @@ export function VendorsPage() {
         setSelectedId(next.id);
         setDraft(next);
       }
-      actionFeedback.succeed("Vendor deleted.");
+      actionFeedback.succeed(p("vendors.feedback.vendorDeleted"));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : "Vendor delete failed");
+      actionFeedback.fail(caught instanceof Error ? caught.message : p("vendors.errors.deleteFailed"));
     }
   }
 
@@ -250,7 +253,7 @@ export function VendorsPage() {
         <div className="module-tabs">
           {(["Vendor Directory", "Supplier Prices"] as const).map((item) => (
             <button key={item} className={`module-tab${activeMode === item ? " active" : ""}`} onClick={() => setActiveMode(item)}>
-              {item}
+              {item === "Vendor Directory" ? p("vendors.tabs.directory") : p("vendors.tabs.supplierPrices")}
             </button>
           ))}
         </div>
@@ -261,24 +264,24 @@ export function VendorsPage() {
 
   return (
     <div className="page-stack">
-      <div className="module-tabs">
-        {(["Vendor Directory", "Supplier Prices"] as const).map((item) => (
-          <button key={item} className={`module-tab${activeMode === item ? " active" : ""}`} onClick={() => setActiveMode(item)}>
-            {item}
-          </button>
-        ))}
-      </div>
+        <div className="module-tabs">
+          {(["Vendor Directory", "Supplier Prices"] as const).map((item) => (
+            <button key={item} className={`module-tab${activeMode === item ? " active" : ""}`} onClick={() => setActiveMode(item)}>
+              {item === "Vendor Directory" ? p("vendors.tabs.directory") : p("vendors.tabs.supplierPrices")}
+            </button>
+          ))}
+        </div>
       <div className="customers-shell">
         <aside className="customers-sidebar">
           <div className="customers-sidebar__header">
-            <h3>Vendors</h3>
+            <h3>{p("vendors.title")}</h3>
             <Button className="button--compact" onClick={handleAddNew}>
-              + Add Vendor
+              {p("vendors.actions.addVendor")}
             </Button>
           </div>
           <div className="customers-list">
             {loading ? (
-              <div className="empty-state">Loading vendors...</div>
+              <div className="empty-state">{p("vendors.loading")}</div>
             ) : vendors.length ? (
               vendors.map((vendor) => (
                 <button key={vendor.id} className={`customers-list__item${selectedId === vendor.id ? " active" : ""}`} onClick={() => handleSelectVendor(vendor)}>
@@ -287,23 +290,23 @@ export function VendorsPage() {
                 </button>
               ))
             ) : (
-              <div className="empty-state">No vendors yet.</div>
+              <div className="empty-state">{p("vendors.empty")}</div>
             )}
           </div>
         </aside>
 
         <section className="customers-editor">
           <div className="customers-editor__header">
-            <h2>Edit Vendor</h2>
+            <h2>{p("vendors.editVendor")}</h2>
             <div className="toolbar">
               <Button variant="secondary" onClick={handleCancel}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button variant="secondary" className="danger-button" onClick={() => void handleDelete()}>
-                Delete
+                {t("common.delete")}
               </Button>
-              <Button onClick={() => void handleSave()} busy={saving} busyLabel="Saving...">
-                Save
+              <Button onClick={() => void handleSave()} busy={saving} busyLabel={t("common.saving")}>
+                {t("common.save")}
               </Button>
             </div>
           </div>
@@ -311,72 +314,72 @@ export function VendorsPage() {
             <div className="customers-form">
               <div className="customers-edit-card">
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Vendor Type</div>
+                  <div className="customers-form-row__label">{p("vendors.fields.vendorType")}</div>
                   <div className="customers-radio-group">
                     {(["Business", "Individual"] as const).map((item) => (
                       <label key={item} className="customers-radio">
                         <input type="radio" checked={draft.vendor_type === item} onChange={() => updateDraft({ vendor_type: item })} />
-                        <span>{item}</span>
+                        <span>{p(`vendors.vendorTypes.${item.toLowerCase()}`)}</span>
                       </label>
                     ))}
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Primary Contact</div>
+                  <div className="customers-form-row__label">{p("vendors.fields.primaryContact")}</div>
                   <div className="customers-inline-fields customers-inline-fields--contact">
                     <label className="field customer-field customer-field--salutation">
                       <select className="field__input" value={draft.salutation} onChange={(event) => updateDraft({ salutation: event.target.value })}>
-                        <option value="">Salutation</option>
-                        <option value="Mr.">Mr.</option>
-                        <option value="Ms.">Ms.</option>
-                        <option value="Mrs.">Mrs.</option>
-                        <option value="Company">Company</option>
+                        <option value="">{p("vendors.fields.salutation")}</option>
+                        <option value="Mr.">{p("vendors.salutations.mr")}</option>
+                        <option value="Ms.">{p("vendors.salutations.ms")}</option>
+                        <option value="Mrs.">{p("vendors.salutations.mrs")}</option>
+                        <option value="Company">{p("vendors.salutations.company")}</option>
                       </select>
                     </label>
-                    <Input value={draft.first_name} onChange={(value) => updateDraft({ first_name: value })} placeholder="First Name" />
-                    <Input value={draft.last_name} onChange={(value) => updateDraft({ last_name: value })} placeholder="Last Name" />
+                    <Input value={draft.first_name} onChange={(value) => updateDraft({ first_name: value })} placeholder={p("vendors.fields.firstName")} />
+                    <Input value={draft.last_name} onChange={(value) => updateDraft({ last_name: value })} placeholder={p("vendors.fields.lastName")} />
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Company Name</div>
+                  <div className="customers-form-row__label">{p("vendors.fields.companyName")}</div>
                   <div className="customers-field-wrap customers-field-wrap--wide">
                     <Input value={draft.company_name} onChange={(value) => updateDraft({ company_name: value })} />
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label customers-form-row__label--required">Display Name</div>
+                  <div className="customers-form-row__label customers-form-row__label--required">{p("vendors.fields.displayName")}</div>
                   <div className="customers-field-wrap customers-field-wrap--wide">
                     <Input value={draft.display_name} onChange={(value) => updateDraft({ display_name: value })} />
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Email Address</div>
+                  <div className="customers-form-row__label">{p("vendors.fields.emailAddress")}</div>
                   <div className="customers-field-wrap customers-field-wrap--wide">
                     <Input value={draft.email} onChange={(value) => updateDraft({ email: value })} />
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label customers-form-row__label--required">Vendor Number</div>
+                  <div className="customers-form-row__label customers-form-row__label--required">{p("vendors.fields.vendorNumber")}</div>
                   <div className="customers-field-wrap customers-field-wrap--medium">
                     <Input value={draft.vendor_number} onChange={(value) => updateDraft({ vendor_number: value })} />
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Phone</div>
+                  <div className="customers-form-row__label">{p("vendors.fields.phone")}</div>
                   <div className="customers-inline-fields customers-inline-fields--phone">
-                    <Input value={draft.work_phone} onChange={(value) => updateDraft({ work_phone: value })} placeholder="Work Phone" />
-                    <Input value={draft.mobile_phone} onChange={(value) => updateDraft({ mobile_phone: value })} placeholder="Mobile" />
+                    <Input value={draft.work_phone} onChange={(value) => updateDraft({ work_phone: value })} placeholder={p("vendors.fields.workPhone")} />
+                    <Input value={draft.mobile_phone} onChange={(value) => updateDraft({ mobile_phone: value })} placeholder={p("vendors.fields.mobile")} />
                   </div>
                 </div>
                 <div className="customers-form-row">
-                  <div className="customers-form-row__label">Vendor Language</div>
+                  <div className="customers-form-row__label">{p("vendors.fields.vendorLanguage")}</div>
                   <div className="customers-field-wrap customers-field-wrap--wide">
                     <label className="field customer-field">
                       <select className="field__input" value={draft.language} onChange={(event) => updateDraft({ language: event.target.value })}>
-                        <option value="English">English</option>
-                        <option value="Turkish">Turkish</option>
-                        <option value="Russian">Russian</option>
-                        <option value="German">German</option>
+                        <option value="English">{p("vendors.languages.english")}</option>
+                        <option value="Turkish">{p("vendors.languages.turkish")}</option>
+                        <option value="Russian">{p("vendors.languages.russian")}</option>
+                        <option value="German">{p("vendors.languages.german")}</option>
                       </select>
                     </label>
                   </div>
@@ -385,7 +388,7 @@ export function VendorsPage() {
               <div className="customers-tabs">
                 {tabs.map((tab) => (
                   <button key={tab} className={`customers-tab${activeTab === tab ? " active" : ""}`} onClick={() => setActiveTab(tab)}>
-                    {tab}
+                    {p(`vendors.tabs.${tab.replace(/\s+/g, "").replace(/^./, (char) => char.toLowerCase())}`)}
                   </button>
                 ))}
               </div>
@@ -393,11 +396,11 @@ export function VendorsPage() {
                 {activeTab === "Other Details" ? (
                   <div className="customers-edit-card customers-edit-card--narrow">
                     <div className="customers-form-row">
-                      <div className="customers-form-row__label">Tax Rate</div>
+                      <div className="customers-form-row__label">{p("vendors.fields.taxRate")}</div>
                       <div className="customers-field-wrap customers-field-wrap--wide">
                         <label className="field customer-field">
                           <select className="field__input" value={draft.tax_rate} onChange={(event) => updateDraft({ tax_rate: event.target.value })}>
-                            <option value="">Select a Tax</option>
+                            <option value="">{p("vendors.fields.selectTax")}</option>
                             <option value="0%">0%</option>
                             <option value="10%">10%</option>
                             <option value="20%">20%</option>
@@ -406,34 +409,34 @@ export function VendorsPage() {
                       </div>
                     </div>
                     <div className="customers-form-row">
-                      <div className="customers-form-row__label">Company ID</div>
+                      <div className="customers-form-row__label">{p("vendors.fields.companyId")}</div>
                       <div className="customers-field-wrap customers-field-wrap--wide">
                         <Input value={draft.company_id} onChange={(value) => updateDraft({ company_id: value })} />
                       </div>
                     </div>
                     <div className="customers-form-row">
-                      <div className="customers-form-row__label">Currency</div>
+                      <div className="customers-form-row__label">{p("vendors.fields.currency")}</div>
                       <div className="customers-field-wrap customers-field-wrap--wide">
                         <label className="field customer-field">
                           <select className="field__input" value={draft.currency} onChange={(event) => updateDraft({ currency: event.target.value })}>
-                            <option value="EUR">EUR - Euro</option>
-                            <option value="USD">USD - US Dollar</option>
-                            <option value="TRY">TRY - Turkish Lira</option>
+                            <option value="EUR">{p("vendors.currencies.eur")}</option>
+                            <option value="USD">{p("vendors.currencies.usd")}</option>
+                            <option value="TRY">{p("vendors.currencies.try")}</option>
                           </select>
                         </label>
                       </div>
                     </div>
                     <div className="customers-form-row">
-                      <div className="customers-form-row__label">Payment Terms</div>
+                      <div className="customers-form-row__label">{p("vendors.fields.paymentTerms")}</div>
                       <div className="customers-field-wrap customers-field-wrap--wide">
                         <label className="field customer-field">
                           <select className="field__input" value={draft.payment_terms} onChange={(event) => updateDraft({ payment_terms: event.target.value })}>
-                            <option value="Cash in Advance">Cash in Advance</option>
-                            <option value="Due on Receipt">Due on Receipt</option>
-                            <option value="Net 7">Net 7</option>
-                            <option value="Net 15">Net 15</option>
-                            <option value="Net 30">Net 30</option>
-                            <option value="Net 60">Net 60</option>
+                            <option value="Cash in Advance">{p("vendors.paymentTerms.cashInAdvance")}</option>
+                            <option value="Due on Receipt">{p("vendors.paymentTerms.dueOnReceipt")}</option>
+                            <option value="Net 7">{p("vendors.paymentTerms.net7")}</option>
+                            <option value="Net 15">{p("vendors.paymentTerms.net15")}</option>
+                            <option value="Net 30">{p("vendors.paymentTerms.net30")}</option>
+                            <option value="Net 60">{p("vendors.paymentTerms.net60")}</option>
                           </select>
                         </label>
                       </div>
@@ -443,7 +446,7 @@ export function VendorsPage() {
                 {activeTab === "Address" ? (
                   <div className="customers-edit-card customers-edit-card--narrow">
                     <div className="customers-form-row customers-form-row--top">
-                      <div className="customers-form-row__label">Billing Address</div>
+                      <div className="customers-form-row__label">{p("vendors.fields.billingAddress")}</div>
                       <div className="customers-field-wrap customers-field-wrap--full">
                         <label className="field customer-field">
                           <textarea className="field__input field__input--textarea" value={draft.billing_address} onChange={(event) => updateDraft({ billing_address: event.target.value })} />
@@ -451,7 +454,7 @@ export function VendorsPage() {
                       </div>
                     </div>
                     <div className="customers-form-row customers-form-row--top">
-                      <div className="customers-form-row__label">Shipping Address</div>
+                      <div className="customers-form-row__label">{p("vendors.fields.shippingAddress")}</div>
                       <div className="customers-field-wrap customers-field-wrap--full">
                         <label className="field customer-field">
                           <textarea className="field__input field__input--textarea" value={draft.shipping_address} onChange={(event) => updateDraft({ shipping_address: event.target.value })} />
@@ -463,10 +466,10 @@ export function VendorsPage() {
                 {activeTab === "Contact Persons" ? (
                   <div className="customers-edit-card customers-edit-card--narrow">
                     <div className="customers-form-row customers-form-row--top">
-                      <div className="customers-form-row__label">Contact Persons</div>
+                      <div className="customers-form-row__label">{p("vendors.fields.contactPersons")}</div>
                       <div className="customers-field-wrap customers-field-wrap--full">
                         <label className="field customer-field">
-                          <textarea className="field__input field__input--textarea" value={draft.contact_persons} onChange={(event) => updateDraft({ contact_persons: event.target.value })} placeholder="Name, role, phone, email..." />
+                          <textarea className="field__input field__input--textarea" value={draft.contact_persons} onChange={(event) => updateDraft({ contact_persons: event.target.value })} placeholder={p("vendors.placeholders.contactPersons")} />
                         </label>
                       </div>
                     </div>
@@ -475,10 +478,10 @@ export function VendorsPage() {
                 {activeTab === "Custom Fields" ? (
                   <div className="customers-edit-card customers-edit-card--narrow">
                     <div className="customers-form-row customers-form-row--top">
-                      <div className="customers-form-row__label">Custom Fields</div>
+                      <div className="customers-form-row__label">{p("vendors.fields.customFields")}</div>
                       <div className="customers-field-wrap customers-field-wrap--full">
                         <label className="field customer-field">
-                          <textarea className="field__input field__input--textarea" value={draft.custom_fields} onChange={(event) => updateDraft({ custom_fields: event.target.value })} placeholder="Internal custom field notes..." />
+                          <textarea className="field__input field__input--textarea" value={draft.custom_fields} onChange={(event) => updateDraft({ custom_fields: event.target.value })} placeholder={p("vendors.placeholders.customFields")} />
                         </label>
                       </div>
                     </div>
@@ -487,10 +490,10 @@ export function VendorsPage() {
                 {activeTab === "Reporting Tags" ? (
                   <div className="customers-edit-card customers-edit-card--narrow">
                     <div className="customers-form-row customers-form-row--top">
-                      <div className="customers-form-row__label">Reporting Tags</div>
+                      <div className="customers-form-row__label">{p("vendors.fields.reportingTags")}</div>
                       <div className="customers-field-wrap customers-field-wrap--full">
                         <label className="field customer-field">
-                          <textarea className="field__input field__input--textarea" value={draft.reporting_tags} onChange={(event) => updateDraft({ reporting_tags: event.target.value })} placeholder="Region, channel, buyer..." />
+                          <textarea className="field__input field__input--textarea" value={draft.reporting_tags} onChange={(event) => updateDraft({ reporting_tags: event.target.value })} placeholder={p("vendors.placeholders.reportingTags")} />
                         </label>
                       </div>
                     </div>
@@ -499,35 +502,35 @@ export function VendorsPage() {
                 {activeTab === "Remarks" ? (
                   <div className="customers-edit-card customers-edit-card--narrow">
                     <div className="customers-form-row customers-form-row--top">
-                      <div className="customers-form-row__label">Remarks</div>
+                      <div className="customers-form-row__label">{p("vendors.fields.remarks")}</div>
                       <div className="customers-field-wrap customers-field-wrap--full">
                         <label className="field customer-field">
-                          <textarea className="field__input field__input--textarea" value={draft.remarks} onChange={(event) => updateDraft({ remarks: event.target.value })} placeholder="Any vendor remarks..." />
+                          <textarea className="field__input field__input--textarea" value={draft.remarks} onChange={(event) => updateDraft({ remarks: event.target.value })} placeholder={p("vendors.placeholders.remarks")} />
                         </label>
                       </div>
                     </div>
                   </div>
                 ) : null}
               </div>
-              <SectionCard title="Account Statement">
+              <SectionCard title={p("vendors.statement.title")}>
                 <div className="toolbar toolbar--wrap">
                   <Select
-                    label="Period"
+                    label={p("vendors.statement.period")}
                     value={statementPeriodType}
                     options={[
-                      { value: "monthly", label: "Monthly" },
-                      { value: "quarterly", label: "Quarterly" },
-                      { value: "yearly", label: "Yearly" },
+                      { value: "monthly", label: p("vendors.statement.periods.monthly") },
+                      { value: "quarterly", label: p("vendors.statement.periods.quarterly") },
+                      { value: "yearly", label: p("vendors.statement.periods.yearly") },
                     ]}
                     onChange={(value) => setStatementPeriodType(value as StatementPeriodType)}
                   />
-                  <Input label="Anchor Date" type="date" value={statementAnchorDate} onChange={setStatementAnchorDate} />
+                  <Input label={p("vendors.statement.anchorDate")} type="date" value={statementAnchorDate} onChange={setStatementAnchorDate} />
                   <Button
                     disabled={loadingStatement}
                     variant="secondary"
                     onClick={() =>
                       openAccountStatementPrintWindow({
-                        title: `Vendor Statement - ${selectedVendor?.display_name || selectedVendor?.company_name || ""}`,
+                        title: p("vendors.statement.printTitle", { vendor: selectedVendor?.display_name || selectedVendor?.company_name || "" }),
                         company: companyProfiles[0] || null,
                         partyName: selectedVendor?.display_name || selectedVendor?.company_name || "",
                         billingAddress: selectedVendor?.billing_address || "",
@@ -537,15 +540,15 @@ export function VendorsPage() {
                       })
                     }
                   >
-                    Print / PDF
+                    {p("actions.printPdf")}
                   </Button>
                 </div>
-                {loadingStatement ? <div className="empty-state">Loading vendor statement...</div> : null}
+                {loadingStatement ? <div className="empty-state">{p("vendors.statement.loading")}</div> : null}
                 <div className="meta-row">
-                  <span>{vendorStatementRows.length.toLocaleString("en-US")} statement rows</span>
+                  <span>{p("vendors.statement.rows", { count: vendorStatementRows.length.toLocaleString("en-US") })}</span>
                   <span>{getStatementPeriodLabel(statementPeriodType, statementAnchorDate)}</span>
                 </div>
-                <DataTable rows={vendorStatementRows} columns={statementColumns} emptyText="No bill activity in the selected period." />
+                <DataTable rows={vendorStatementRows} columns={statementColumns} emptyText={p("vendors.statement.empty")} />
               </SectionCard>
             </div>
           ) : null}

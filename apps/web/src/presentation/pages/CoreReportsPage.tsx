@@ -26,6 +26,7 @@ import { Button } from "../components/common/Button";
 import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
+import { useI18n } from "../../i18n/I18nProvider";
 
 type CoreReportKey =
   | "supplierBalance"
@@ -47,17 +48,17 @@ type CoreReportRow =
 
 type ReportColumn = {
   key: string;
-  header: string;
+  headerKey: string;
   render: (row: CoreReportRow) => ReactNode;
   sortValue?: (row: CoreReportRow) => string | number | null | undefined;
 };
 
 type ReportDefinition = {
   key: CoreReportKey;
-  label: string;
+  labelKey: string;
   source: string;
-  partyLabel: string;
-  totalLabel: string;
+  partyLabelKey: string;
+  totalLabelKey: string;
   totalField: string;
   load: (filters: ReportingReportFilters) => Promise<CoreReportRow[]>;
   columns: ReportColumn[];
@@ -104,186 +105,180 @@ function money(row: CoreReportRow, amountKey: string) {
   return `${formatNumber(getField(row, amountKey))}${currency ? ` ${currency}` : ""}`;
 }
 
-const partyColumn = (key: string, header: string): ReportColumn => ({
+const partyColumn = (key: string, headerKey: string): ReportColumn => ({
   key,
-  header,
+  headerKey,
   render: (row) => asText(row, key) || "-",
   sortValue: (row) => asText(row, key),
 });
 
 const brandColumn: ReportColumn = {
   key: "brand",
-  header: "Brand",
+  headerKey: "columns.brand",
   render: (row) => asText(row, "brand") || "-",
   sortValue: (row) => asText(row, "brand"),
 };
 
 const productColumn: ReportColumn = {
   key: "product",
-  header: "Product",
+  headerKey: "columns.product",
   render: (row) => asText(row, "product_code") || asText(row, "normalized_code") || "-",
   sortValue: (row) => asText(row, "product_code") || asText(row, "normalized_code"),
 };
 
-const balanceColumns = (partyKey: string, partyHeader: string): ReportColumn[] => [
-  partyColumn(partyKey, partyHeader),
+const balanceColumns = (partyKey: string, partyHeaderKey: string): ReportColumn[] => [
+  partyColumn(partyKey, partyHeaderKey),
   brandColumn,
   productColumn,
-  { key: "debit", header: "Debit", render: (row) => money(row, "debit_amount"), sortValue: (row) => asNumber(row, "debit_amount") },
-  { key: "credit", header: "Credit", render: (row) => money(row, "credit_amount"), sortValue: (row) => asNumber(row, "credit_amount") },
-  { key: "balance", header: "Balance", render: (row) => money(row, "balance_amount"), sortValue: (row) => asNumber(row, "balance_amount") },
-  { key: "due", header: "Latest Due", render: (row) => formatDate(getField(row, "latest_due_date")), sortValue: (row) => asText(row, "latest_due_date") },
-  { key: "lines", header: "Lines", render: (row) => formatQuantity(getField(row, "line_count")), sortValue: (row) => asNumber(row, "line_count") },
+  { key: "debit", headerKey: "columns.debit", render: (row) => money(row, "debit_amount"), sortValue: (row) => asNumber(row, "debit_amount") },
+  { key: "credit", headerKey: "columns.credit", render: (row) => money(row, "credit_amount"), sortValue: (row) => asNumber(row, "credit_amount") },
+  { key: "balance", headerKey: "columns.balance", render: (row) => money(row, "balance_amount"), sortValue: (row) => asNumber(row, "balance_amount") },
+  { key: "due", headerKey: "columns.latestDue", render: (row) => formatDate(getField(row, "latest_due_date")), sortValue: (row) => asText(row, "latest_due_date") },
+  { key: "lines", headerKey: "columns.lines", render: (row) => formatQuantity(getField(row, "line_count")), sortValue: (row) => asNumber(row, "line_count") },
 ];
 
 const openPurchaseColumns: ReportColumn[] = [
-  partyColumn("supplier_name", "Supplier"),
-  { key: "po", header: "PO", render: (row) => asText(row, "purchase_order_no") || asText(row, "purchase_order_id") || "-", sortValue: (row) => asText(row, "purchase_order_no") },
-  { key: "so", header: "SO", render: (row) => asText(row, "sales_order_no") || "-", sortValue: (row) => asText(row, "sales_order_no") },
+  partyColumn("supplier_name", "columns.supplier"),
+  { key: "po", headerKey: "columns.po", render: (row) => asText(row, "purchase_order_no") || asText(row, "purchase_order_id") || "-", sortValue: (row) => asText(row, "purchase_order_no") },
+  { key: "so", headerKey: "columns.so", render: (row) => asText(row, "sales_order_no") || "-", sortValue: (row) => asText(row, "sales_order_no") },
   brandColumn,
   productColumn,
-  { key: "date", header: "Date", render: (row) => formatDate(getField(row, "transaction_date")), sortValue: (row) => asText(row, "transaction_date") },
-  { key: "status", header: "Status", render: (row) => asText(row, "status") || "-", sortValue: (row) => asText(row, "status") },
-  { key: "ordered", header: "Ordered", render: (row) => formatQuantity(getField(row, "ordered_qty")), sortValue: (row) => asNumber(row, "ordered_qty") },
-  { key: "received", header: "Received", render: (row) => formatQuantity(getField(row, "received_qty")), sortValue: (row) => asNumber(row, "received_qty") },
-  { key: "open", header: "Open", render: (row) => formatQuantity(getField(row, "open_qty")), sortValue: (row) => asNumber(row, "open_qty") },
-  { key: "amount", header: "Open Amount", render: (row) => money(row, "open_amount"), sortValue: (row) => asNumber(row, "open_amount") },
+  { key: "date", headerKey: "columns.date", render: (row) => formatDate(getField(row, "transaction_date")), sortValue: (row) => asText(row, "transaction_date") },
+  { key: "status", headerKey: "columns.status", render: (row) => asText(row, "status") || "-", sortValue: (row) => asText(row, "status") },
+  { key: "ordered", headerKey: "columns.ordered", render: (row) => formatQuantity(getField(row, "ordered_qty")), sortValue: (row) => asNumber(row, "ordered_qty") },
+  { key: "received", headerKey: "columns.received", render: (row) => formatQuantity(getField(row, "received_qty")), sortValue: (row) => asNumber(row, "received_qty") },
+  { key: "open", headerKey: "columns.open", render: (row) => formatQuantity(getField(row, "open_qty")), sortValue: (row) => asNumber(row, "open_qty") },
+  { key: "amount", headerKey: "columns.openAmount", render: (row) => money(row, "open_amount"), sortValue: (row) => asNumber(row, "open_amount") },
 ];
 
 const openSalesColumns: ReportColumn[] = [
-  partyColumn("customer_name", "Customer"),
-  { key: "so", header: "SO", render: (row) => asText(row, "sales_order_no") || asText(row, "sales_order_id") || "-", sortValue: (row) => asText(row, "sales_order_no") },
+  partyColumn("customer_name", "columns.customer"),
+  { key: "so", headerKey: "columns.so", render: (row) => asText(row, "sales_order_no") || asText(row, "sales_order_id") || "-", sortValue: (row) => asText(row, "sales_order_no") },
   brandColumn,
   productColumn,
-  { key: "date", header: "Date", render: (row) => formatDate(getField(row, "transaction_date")), sortValue: (row) => asText(row, "transaction_date") },
-  { key: "status", header: "Status", render: (row) => asText(row, "status") || "-", sortValue: (row) => asText(row, "status") },
-  { key: "ordered", header: "Ordered", render: (row) => formatQuantity(getField(row, "ordered_qty")), sortValue: (row) => asNumber(row, "ordered_qty") },
-  { key: "invoiced", header: "Invoiced", render: (row) => formatQuantity(getField(row, "invoiced_qty")), sortValue: (row) => asNumber(row, "invoiced_qty") },
-  { key: "open", header: "Open", render: (row) => formatQuantity(getField(row, "open_qty")), sortValue: (row) => asNumber(row, "open_qty") },
-  { key: "amount", header: "Open Amount", render: (row) => money(row, "open_amount"), sortValue: (row) => asNumber(row, "open_amount") },
+  { key: "date", headerKey: "columns.date", render: (row) => formatDate(getField(row, "transaction_date")), sortValue: (row) => asText(row, "transaction_date") },
+  { key: "status", headerKey: "columns.status", render: (row) => asText(row, "status") || "-", sortValue: (row) => asText(row, "status") },
+  { key: "ordered", headerKey: "columns.ordered", render: (row) => formatQuantity(getField(row, "ordered_qty")), sortValue: (row) => asNumber(row, "ordered_qty") },
+  { key: "invoiced", headerKey: "columns.invoiced", render: (row) => formatQuantity(getField(row, "invoiced_qty")), sortValue: (row) => asNumber(row, "invoiced_qty") },
+  { key: "open", headerKey: "columns.open", render: (row) => formatQuantity(getField(row, "open_qty")), sortValue: (row) => asNumber(row, "open_qty") },
+  { key: "amount", headerKey: "columns.openAmount", render: (row) => money(row, "open_amount"), sortValue: (row) => asNumber(row, "open_amount") },
 ];
 
 const priceVarianceColumns: ReportColumn[] = [
-  partyColumn("party_name", "Supplier"),
-  { key: "doc", header: "Document", render: (row) => asText(row, "document_no") || asText(row, "document_id") || "-", sortValue: (row) => asText(row, "document_no") },
+  partyColumn("party_name", "columns.supplier"),
+  { key: "doc", headerKey: "columns.document", render: (row) => asText(row, "document_no") || asText(row, "document_id") || "-", sortValue: (row) => asText(row, "document_no") },
   brandColumn,
   productColumn,
-  { key: "qty", header: "Qty", render: (row) => formatQuantity(getField(row, "quantity")), sortValue: (row) => asNumber(row, "quantity") },
-  { key: "po", header: "PO Price", render: (row) => formatNumber(getField(row, "po_unit_price"), 4), sortValue: (row) => asNumber(row, "po_unit_price") },
-  { key: "bill", header: "Bill Price", render: (row) => formatNumber(getField(row, "bill_unit_price"), 4), sortValue: (row) => asNumber(row, "bill_unit_price") },
-  { key: "last", header: "Last Buy", render: (row) => formatNumber(getField(row, "last_buy_price"), 4), sortValue: (row) => asNumber(row, "last_buy_price") },
-  { key: "variance", header: "Variance", render: (row) => money(row, "variance_amount"), sortValue: (row) => asNumber(row, "variance_amount") },
-  { key: "percent", header: "Variance %", render: (row) => `${formatNumber(getField(row, "variance_percent"), 2)}%`, sortValue: (row) => asNumber(row, "variance_percent") },
-  { key: "severity", header: "Severity", render: (row) => asText(row, "severity") || "-", sortValue: (row) => asText(row, "severity") },
-  { key: "date", header: "Date", render: (row) => formatDate(getField(row, "transaction_date")), sortValue: (row) => asText(row, "transaction_date") },
+  { key: "qty", headerKey: "columns.qty", render: (row) => formatQuantity(getField(row, "quantity")), sortValue: (row) => asNumber(row, "quantity") },
+  { key: "po", headerKey: "columns.poPrice", render: (row) => formatNumber(getField(row, "po_unit_price"), 4), sortValue: (row) => asNumber(row, "po_unit_price") },
+  { key: "bill", headerKey: "columns.billPrice", render: (row) => formatNumber(getField(row, "bill_unit_price"), 4), sortValue: (row) => asNumber(row, "bill_unit_price") },
+  { key: "last", headerKey: "columns.lastBuy", render: (row) => formatNumber(getField(row, "last_buy_price"), 4), sortValue: (row) => asNumber(row, "last_buy_price") },
+  { key: "variance", headerKey: "columns.variance", render: (row) => money(row, "variance_amount"), sortValue: (row) => asNumber(row, "variance_amount") },
+  { key: "percent", headerKey: "columns.variancePercent", render: (row) => `${formatNumber(getField(row, "variance_percent"), 2)}%`, sortValue: (row) => asNumber(row, "variance_percent") },
+  { key: "severity", headerKey: "columns.severity", render: (row) => asText(row, "severity") || "-", sortValue: (row) => asText(row, "severity") },
+  { key: "date", headerKey: "columns.date", render: (row) => formatDate(getField(row, "transaction_date")), sortValue: (row) => asText(row, "transaction_date") },
 ];
 
 const salesMarginColumns: ReportColumn[] = [
-  partyColumn("customer_name", "Customer"),
+  partyColumn("customer_name", "columns.customer"),
   brandColumn,
   productColumn,
-  { key: "qty", header: "Qty", render: (row) => formatQuantity(getField(row, "quantity")), sortValue: (row) => asNumber(row, "quantity") },
-  { key: "revenue", header: "Revenue", render: (row) => money(row, "revenue_amount"), sortValue: (row) => asNumber(row, "revenue_amount") },
-  { key: "cost", header: "Cost", render: (row) => money(row, "cost_amount"), sortValue: (row) => asNumber(row, "cost_amount") },
-  { key: "margin", header: "Margin", render: (row) => money(row, "margin_amount"), sortValue: (row) => asNumber(row, "margin_amount") },
-  { key: "percent", header: "Margin %", render: (row) => `${formatNumber(getField(row, "margin_percent"), 2)}%`, sortValue: (row) => asNumber(row, "margin_percent") },
-  { key: "lines", header: "Lines", render: (row) => formatQuantity(getField(row, "line_count")), sortValue: (row) => asNumber(row, "line_count") },
+  { key: "qty", headerKey: "columns.qty", render: (row) => formatQuantity(getField(row, "quantity")), sortValue: (row) => asNumber(row, "quantity") },
+  { key: "revenue", headerKey: "columns.revenue", render: (row) => money(row, "revenue_amount"), sortValue: (row) => asNumber(row, "revenue_amount") },
+  { key: "cost", headerKey: "columns.cost", render: (row) => money(row, "cost_amount"), sortValue: (row) => asNumber(row, "cost_amount") },
+  { key: "margin", headerKey: "columns.margin", render: (row) => money(row, "margin_amount"), sortValue: (row) => asNumber(row, "margin_amount") },
+  { key: "percent", headerKey: "columns.marginPercent", render: (row) => `${formatNumber(getField(row, "margin_percent"), 2)}%`, sortValue: (row) => asNumber(row, "margin_percent") },
+  { key: "lines", headerKey: "columns.lines", render: (row) => formatQuantity(getField(row, "line_count")), sortValue: (row) => asNumber(row, "line_count") },
 ];
 
 const inventoryColumns: ReportColumn[] = [
-  { key: "warehouse", header: "Warehouse", render: (row) => asText(row, "warehouse_code") || asText(row, "warehouse_name") || "-", sortValue: (row) => asText(row, "warehouse_code") },
+  { key: "warehouse", headerKey: "columns.warehouse", render: (row) => asText(row, "warehouse_code") || asText(row, "warehouse_name") || "-", sortValue: (row) => asText(row, "warehouse_code") },
   brandColumn,
   productColumn,
-  { key: "description", header: "Description", render: (row) => asText(row, "description") || "-", sortValue: (row) => asText(row, "description") },
-  { key: "in", header: "In", render: (row) => formatQuantity(getField(row, "qty_in")), sortValue: (row) => asNumber(row, "qty_in") },
-  { key: "out", header: "Out", render: (row) => formatQuantity(getField(row, "qty_out")), sortValue: (row) => asNumber(row, "qty_out") },
-  { key: "onhand", header: "On Hand", render: (row) => formatQuantity(getField(row, "on_hand_qty")), sortValue: (row) => asNumber(row, "on_hand_qty") },
-  { key: "cost", header: "Total Cost", render: (row) => formatNumber(getField(row, "total_cost")), sortValue: (row) => asNumber(row, "total_cost") },
-  { key: "last", header: "Last Move", render: (row) => formatDate(getField(row, "last_moved_at")), sortValue: (row) => asText(row, "last_moved_at") },
+  { key: "description", headerKey: "columns.description", render: (row) => asText(row, "description") || "-", sortValue: (row) => asText(row, "description") },
+  { key: "in", headerKey: "columns.in", render: (row) => formatQuantity(getField(row, "qty_in")), sortValue: (row) => asNumber(row, "qty_in") },
+  { key: "out", headerKey: "columns.out", render: (row) => formatQuantity(getField(row, "qty_out")), sortValue: (row) => asNumber(row, "qty_out") },
+  { key: "onhand", headerKey: "columns.onHand", render: (row) => formatQuantity(getField(row, "on_hand_qty")), sortValue: (row) => asNumber(row, "on_hand_qty") },
+  { key: "cost", headerKey: "columns.totalCost", render: (row) => formatNumber(getField(row, "total_cost")), sortValue: (row) => asNumber(row, "total_cost") },
+  { key: "last", headerKey: "columns.lastMove", render: (row) => formatDate(getField(row, "last_moved_at")), sortValue: (row) => asText(row, "last_moved_at") },
 ];
 
 const reports: ReportDefinition[] = [
   {
     key: "supplierBalance",
-    label: "Supplier Balance",
+    labelKey: "core.reports.supplierBalance",
     source: "reporting_supplier_balance_by_brand_product",
-    partyLabel: "Supplier",
-    totalLabel: "Balance",
+    partyLabelKey: "columns.supplier",
+    totalLabelKey: "columns.balance",
     totalField: "balance_amount",
     load: fetchSupplierBalanceByBrandProduct,
-    columns: balanceColumns("supplier_name", "Supplier"),
+    columns: balanceColumns("supplier_name", "columns.supplier"),
   },
   {
     key: "customerBalance",
-    label: "Customer Balance",
+    labelKey: "core.reports.customerBalance",
     source: "reporting_customer_balance_by_brand_product",
-    partyLabel: "Customer",
-    totalLabel: "Balance",
+    partyLabelKey: "columns.customer",
+    totalLabelKey: "columns.balance",
     totalField: "balance_amount",
     load: fetchCustomerBalanceByBrandProduct,
-    columns: balanceColumns("customer_name", "Customer"),
+    columns: balanceColumns("customer_name", "columns.customer"),
   },
   {
     key: "purchaseOpen",
-    label: "Purchase Open Balance",
+    labelKey: "core.reports.purchaseOpen",
     source: "reporting_open_purchase_orders_by_brand_product",
-    partyLabel: "Supplier",
-    totalLabel: "Open Amount",
+    partyLabelKey: "columns.supplier",
+    totalLabelKey: "columns.openAmount",
     totalField: "open_amount",
     load: fetchOpenPurchaseOrdersByBrandProduct,
     columns: openPurchaseColumns,
   },
   {
     key: "salesOpen",
-    label: "Sales Open Balance",
+    labelKey: "core.reports.salesOpen",
     source: "reporting_open_sales_orders_by_brand_product",
-    partyLabel: "Customer",
-    totalLabel: "Open Amount",
+    partyLabelKey: "columns.customer",
+    totalLabelKey: "columns.openAmount",
     totalField: "open_amount",
     load: fetchOpenSalesOrdersByBrandProduct,
     columns: openSalesColumns,
   },
   {
     key: "priceVariance",
-    label: "Price Variance",
+    labelKey: "core.reports.priceVariance",
     source: "reporting_purchase_price_variance_report",
-    partyLabel: "Supplier",
-    totalLabel: "Variance",
+    partyLabelKey: "columns.supplier",
+    totalLabelKey: "columns.variance",
     totalField: "variance_amount",
     load: fetchPurchasePriceVarianceReport,
     columns: priceVarianceColumns,
   },
   {
     key: "salesMargin",
-    label: "Sales Margin",
+    labelKey: "core.reports.salesMargin",
     source: "reporting_sales_margin_report",
-    partyLabel: "Customer",
-    totalLabel: "Margin",
+    partyLabelKey: "columns.customer",
+    totalLabelKey: "columns.margin",
     totalField: "margin_amount",
     load: fetchSalesMarginReport,
     columns: salesMarginColumns,
   },
   {
     key: "inventory",
-    label: "Inventory by Brand/Product/Warehouse",
+    labelKey: "core.reports.inventory",
     source: "reporting_inventory_by_brand_product_warehouse",
-    partyLabel: "Party",
-    totalLabel: "On Hand",
+    partyLabelKey: "columns.party",
+    totalLabelKey: "columns.onHand",
     totalField: "on_hand_qty",
     load: fetchInventoryByBrandProductWarehouse,
     columns: inventoryColumns,
   },
 ];
 
-const reportOptions = reports.map((report) => ({ value: report.key, label: report.label }));
-const limitOptions = [
-  { value: "100", label: "100 rows" },
-  { value: "500", label: "500 rows" },
-  { value: "1000", label: "1,000 rows" },
-  { value: "2500", label: "2,500 rows" },
-];
-
 export function CoreReportsPage() {
+  const { t } = useI18n();
+  const r = (key: string, params?: Record<string, string | number>) => t(`reports.${key}`, params);
   const actionFeedback = useActionFeedback();
   const [activeReport, setActiveReport] = useState<CoreReportKey>("supplierBalance");
   const [organizationId, setOrganizationId] = useState("");
@@ -300,8 +295,26 @@ export function CoreReportsPage() {
   const [error, setError] = useState("");
 
   const activeDefinition = useMemo(() => reports.find((report) => report.key === activeReport) || reports[0], [activeReport]);
+  const activeReportLabel = r(activeDefinition.labelKey);
+  const activePartyLabel = r(activeDefinition.partyLabelKey);
+  const activeTotalLabel = r(activeDefinition.totalLabelKey);
+  const limitOptions = useMemo(
+    () =>
+      [
+        { value: "100", count: "100" },
+        { value: "500", count: "500" },
+        { value: "1000", count: "1,000" },
+        { value: "2500", count: "2,500" },
+      ].map((item) => ({ value: item.value, label: r("core.fields.limitRows", { count: item.count }) })),
+    [t],
+  );
+  const reportOptions = useMemo(() => reports.map((report) => ({ value: report.key, label: r(report.labelKey) })), [t]);
+  const translatedColumns = useMemo(
+    () => activeDefinition.columns.map((column) => ({ ...column, header: r(column.headerKey) })),
+    [activeDefinition, t],
+  );
   const totalValue = useMemo(() => rows.reduce((sum, row) => sum + asNumber(row, activeDefinition.totalField), 0), [activeDefinition.totalField, rows]);
-  const brandOptions = useMemo(() => [{ value: "", label: "All brands" }, ...brands.map((brand) => ({ value: brand.id, label: brand.name }))], [brands]);
+  const brandOptions = useMemo(() => [{ value: "", label: r("core.filters.allBrands") }, ...brands.map((brand) => ({ value: brand.id, label: brand.name }))], [brands, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -313,7 +326,7 @@ export function CoreReportsPage() {
         setOrganizationId(session.organizationId);
         setBrands(brandRows);
       } catch (caught) {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : "Reporting context could not be loaded");
+        if (!cancelled) setError(caught instanceof Error ? caught.message : r("core.errors.contextLoadFailed"));
       }
     }
 
@@ -332,13 +345,13 @@ export function CoreReportsPage() {
   async function loadReport() {
     const nextOrganizationId = organizationId.trim();
     if (!nextOrganizationId) {
-      setError("Organization ID is required.");
+      setError(r("core.errors.organizationRequired"));
       return;
     }
 
     setLoading(true);
     setError("");
-    actionFeedback.begin(`Loading ${activeDefinition.label}...`);
+    actionFeedback.begin(r("core.feedback.loading", { report: activeReportLabel }));
     try {
       const result = await activeDefinition.load({
         organizationId: nextOrganizationId,
@@ -351,9 +364,9 @@ export function CoreReportsPage() {
       });
       setRows(result);
       setLoaded(true);
-      actionFeedback.succeed(`${result.length.toLocaleString("en-US")} ${activeDefinition.label} row(s) loaded.`);
+      actionFeedback.succeed(r("core.feedback.rowsLoaded", { count: result.length.toLocaleString("en-US"), report: activeReportLabel }));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Report request failed";
+      const message = caught instanceof Error ? caught.message : r("core.errors.requestFailed");
       setRows([]);
       setLoaded(false);
       setError(message);
@@ -368,30 +381,30 @@ export function CoreReportsPage() {
       <section className="section-card">
         <div className="section-card__header section-card__header--row">
           <div>
-            <h2>Core Reports</h2>
-            <p>{activeDefinition.label}</p>
+            <h2>{r("core.title")}</h2>
+            <p>{activeReportLabel}</p>
           </div>
           <div className="toolbar toolbar--wrap">
-            <Select label="Report" value={activeReport} options={reportOptions} onChange={(value) => setActiveReport(value as CoreReportKey)} />
-            <Input label="Organization ID" value={organizationId} onChange={setOrganizationId} />
-            <Input label="Start Date" type="date" value={startDate} onChange={setStartDate} />
-            <Input label="End Date" type="date" value={endDate} onChange={setEndDate} />
-            <Select label="Brand" value={brandId} options={brandOptions} onChange={setBrandId} />
-            <Input label="Product" value={productQuery} onChange={setProductQuery} placeholder="Code or description" />
-            <Input label={activeDefinition.partyLabel} value={partyQuery} onChange={setPartyQuery} placeholder={activeDefinition.partyLabel} />
-            <Select label="Limit" value={limit} options={limitOptions} onChange={setLimit} />
-            <Button onClick={() => void loadReport()} busy={loading} busyLabel="Loading...">
-              Load Report
+            <Select label={r("core.fields.report")} value={activeReport} options={reportOptions} onChange={(value) => setActiveReport(value as CoreReportKey)} />
+            <Input label={r("core.fields.organizationId")} value={organizationId} onChange={setOrganizationId} />
+            <Input label={r("core.fields.startDate")} type="date" value={startDate} onChange={setStartDate} />
+            <Input label={r("core.fields.endDate")} type="date" value={endDate} onChange={setEndDate} />
+            <Select label={r("columns.brand")} value={brandId} options={brandOptions} onChange={setBrandId} />
+            <Input label={r("columns.product")} value={productQuery} onChange={setProductQuery} placeholder={r("core.placeholders.product")} />
+            <Input label={activePartyLabel} value={partyQuery} onChange={setPartyQuery} placeholder={activePartyLabel} />
+            <Select label={r("core.fields.limit")} value={limit} options={limitOptions} onChange={setLimit} />
+            <Button onClick={() => void loadReport()} busy={loading} busyLabel={t("common.loadingPage")}>
+              {r("core.actions.loadReport")}
             </Button>
           </div>
         </div>
         <div className="section-card__body">
           <div className="meta-row">
-            <span>{loaded ? `${rows.length.toLocaleString("en-US")} rows` : "No report loaded"}</span>
-            <span>{loaded ? `${activeDefinition.totalLabel}: ${formatNumber(totalValue)}` : activeDefinition.source}</span>
+            <span>{loaded ? r("core.meta.rows", { count: rows.length.toLocaleString("en-US") }) : r("core.meta.noReportLoaded")}</span>
+            <span>{loaded ? r("core.meta.total", { label: activeTotalLabel, value: formatNumber(totalValue) }) : activeDefinition.source}</span>
             {error ? <span className="error-text">{error}</span> : null}
           </div>
-          <DataTable rows={rows} columns={activeDefinition.columns} emptyText={loading ? "Loading..." : "No report rows found"} />
+          <DataTable rows={rows} columns={translatedColumns} emptyText={loading ? t("common.loadingPage") : r("core.empty.noRows")} />
         </div>
       </section>
     </div>

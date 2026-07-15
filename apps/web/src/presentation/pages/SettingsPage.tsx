@@ -43,6 +43,7 @@ import { Select } from "../components/common/Select";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { includesLooseText } from "../../domain/shared/normalize";
 import { isSuperadminRole } from "../../shared/roles";
+import { useI18n } from "../../i18n/I18nProvider";
 
 type SettingsState = {
   email: string;
@@ -72,6 +73,8 @@ type SettingsPageProps = {
 };
 
 export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRecord }: SettingsPageProps) {
+  const { t } = useI18n();
+  const s = (key: string, params?: Record<string, string | number>) => t(`settings.${key}`, params);
   const actionFeedback = useActionFeedback();
   const [activeTab, setActiveTab] = useState<"session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics">(initialTab);
   const [state, setState] = useState<SettingsState>({ email: "", userId: "", role: "" });
@@ -125,10 +128,10 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const [editUserDraft, setEditUserDraft] = useState<EditUserDraft | null>(null);
   const passwordResetAvailable = isPasswordResetAvailable();
   const newUserEmail = newUserDraft.email.trim().toLowerCase();
-  const newUserValidationMessage = !newUserEmail ? "Email is required." : "";
+  const newUserValidationMessage = !newUserEmail ? s("users.validation.emailRequired") : "";
   const canCreateUser = !creatingUser && !newUserValidationMessage;
   const editUserEmail = editUserDraft?.email.trim().toLowerCase() || "";
-  const editUserValidationMessage = editUserDraft && !editUserEmail ? "Email is required." : "";
+  const editUserValidationMessage = editUserDraft && !editUserEmail ? s("users.validation.emailRequired") : "";
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -168,7 +171,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
         }
       } catch (caught) {
         if (!cancelled) {
-          actionFeedback.fail(caught instanceof Error ? caught.message : "Settings data load failed");
+          actionFeedback.fail(caught instanceof Error ? caught.message : s("errors.dataLoadFailed"));
         }
       }
     }
@@ -211,7 +214,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
       } catch (caught) {
         if (!cancelled) {
           setUsers([]);
-          setUsersError(caught instanceof Error ? caught.message : "Users load failed");
+          setUsersError(caught instanceof Error ? caught.message : s("users.errors.loadFailed"));
         }
       } finally {
         if (!cancelled) setLoadingUsers(false);
@@ -250,13 +253,13 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
       role: (row.role === "superadmin" || row.role === "admin" || row.role === "sales" || row.role === "viewer" ? row.role : "sales") as EditUserDraft["role"],
       isActive: row.is_active,
     });
-    setUserActionStatus(`Editing ${row.email}`);
+    setUserActionStatus(s("users.feedback.editing", { email: row.email }));
   }
 
   const userColumns = [
     {
       key: "email",
-      header: "Email",
+      header: s("columns.email"),
       render: (row: OrgUser) => (
         <button
           type="button"
@@ -272,7 +275,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     },
     {
       key: "name",
-      header: "Name",
+      header: s("columns.name"),
       render: (row: OrgUser) => (
         <button
           type="button"
@@ -288,30 +291,30 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     },
     {
       key: "presence",
-      header: "Presence",
+      header: s("columns.presence"),
       render: (row: OrgUser) => {
         const presence = getPresenceStatus(row.last_seen_at);
         return (
           <span className={`presence-badge presence-badge--${presence.tone}`}>
             <span className="presence-dot" />
-            {presence.label}
+            {s(`users.presence.${presence.tone}`)}
           </span>
         );
       },
     },
-    { key: "role", header: "Role", render: (row: OrgUser) => row.role },
-    { key: "active", header: "Active", render: (row: OrgUser) => (row.is_active ? "Yes" : "No") },
-    { key: "quotes", header: "Quotes", render: (row: OrgUser) => row.quote_count ?? 0 },
-    { key: "lastSeen", header: "Last Seen", render: (row: OrgUser) => row.last_seen_at || "-" },
+    { key: "role", header: s("columns.role"), render: (row: OrgUser) => s(`roles.${String(row.role || "viewer").toLowerCase()}`) },
+    { key: "active", header: s("columns.active"), render: (row: OrgUser) => (row.is_active ? s("values.yes") : s("values.no")) },
+    { key: "quotes", header: s("columns.quotes"), render: (row: OrgUser) => row.quote_count ?? 0 },
+    { key: "lastSeen", header: s("columns.lastSeen"), render: (row: OrgUser) => row.last_seen_at || "-" },
     {
       key: "password",
-      header: "Password",
+      header: s("columns.password"),
       render: (row: OrgUser) => (
         <div className="inline-password-reset">
           <input
             className="inline-password-reset__input"
             type="password"
-            placeholder="New password"
+            placeholder={s("users.placeholders.newPassword")}
             value={passwordDrafts[row.user_id] || ""}
             onChange={(event) =>
               setPasswordDrafts((current) => ({
@@ -329,29 +332,29 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           <Button
             variant="secondary"
             busy={passwordBusyUserId === row.user_id}
-            busyLabel="Updating..."
+            busyLabel={s("busy.updating")}
             disabled={!passwordResetAvailable}
             onClick={async () => {
               if (!passwordResetAvailable) {
-                setPasswordStatus("Password reset works only in deployed app or Netlify dev.");
+                setPasswordStatus(s("users.passwordReset.deployedOnly"));
                 return;
               }
               const password = (passwordDrafts[row.user_id] || "").trim();
               if (password.length < 8) {
-                setPasswordStatus("Password must be at least 8 characters.");
+                setPasswordStatus(s("users.passwordReset.minLength"));
                 return;
               }
 
               try {
                 setPasswordStatus("");
                 setPasswordBusyUserId(row.user_id);
-                actionFeedback.begin(`Updating password for ${row.email}...`);
+                actionFeedback.begin(s("users.passwordReset.updating", { email: row.email }));
                 await resetOrgUserPassword(row.user_id, password);
                 setPasswordDrafts((current) => ({ ...current, [row.user_id]: "" }));
-                setPasswordStatus(`Password updated for ${row.email}.`);
-                actionFeedback.succeed(`Password updated for ${row.email}.`);
+                setPasswordStatus(s("users.passwordReset.updated", { email: row.email }));
+                actionFeedback.succeed(s("users.passwordReset.updated", { email: row.email }));
               } catch (caught) {
-                const message = caught instanceof Error ? caught.message : "Password reset failed";
+                const message = caught instanceof Error ? caught.message : s("users.passwordReset.failed");
                 setPasswordStatus(message);
                 actionFeedback.fail(message);
               } finally {
@@ -359,14 +362,14 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               }
             }}
           >
-            Update
+            {s("actions.update")}
           </Button>
         </div>
       ),
     },
     {
       key: "actions",
-      header: "Actions",
+      header: s("columns.actions"),
       render: (row: OrgUser) => (
         <div className="inline-actions">
           <Button
@@ -374,34 +377,34 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
             className="button--compact danger-button"
             onClick={() => openUserEditor(row)}
           >
-            Edit
+            {s("actions.edit")}
           </Button>
           <Button
             variant="secondary"
             className="button--compact danger-button"
             busy={deletingUserId === row.user_id}
-            busyLabel="Deleting..."
+            busyLabel={s("busy.deleting")}
             disabled={row.user_id === state.userId}
             onClick={async () => {
               if (row.user_id === state.userId) {
-                setUserActionStatus("You cannot delete your own account.");
+                setUserActionStatus(s("users.errors.cannotDeleteOwnAccount"));
                 return;
               }
-              if (!window.confirm(`Delete user ${row.email}?`)) {
+              if (!window.confirm(s("users.confirm.delete", { email: row.email }))) {
                 return;
               }
 
               try {
                 setDeletingUserId(row.user_id);
                 setUserActionStatus("");
-                actionFeedback.begin(`Deleting ${row.email}...`);
+                actionFeedback.begin(s("users.feedback.deleting", { email: row.email }));
                 await deleteOrgUser(row.user_id);
                 const nextUsers = await fetchOrgUsers();
                 setUsers(nextUsers);
-                setUserActionStatus(`User deleted: ${row.email}`);
-                actionFeedback.succeed(`User deleted: ${row.email}`);
+                setUserActionStatus(s("users.feedback.deleted", { email: row.email }));
+                actionFeedback.succeed(s("users.feedback.deleted", { email: row.email }));
               } catch (caught) {
-                const message = caught instanceof Error ? caught.message : "User delete failed";
+                const message = caught instanceof Error ? caught.message : s("users.errors.deleteFailed");
                 setUserActionStatus(message);
                 actionFeedback.fail(message);
               } finally {
@@ -409,7 +412,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               }
             }}
           >
-            Delete
+            {t("common.delete")}
           </Button>
         </div>
       ),
@@ -440,7 +443,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     const next = createEmptyCloudCompanyProfile();
     setSelectedCompanyId(next.id);
     setCompanyProfile(next);
-    setCompanyProfileStatus("New company profile ready.");
+    setCompanyProfileStatus(s("companies.feedback.newProfileReady"));
   }
 
   function updatePortalField<K extends keyof PortalInvite>(key: K, value: PortalInvite[K]) {
@@ -483,15 +486,15 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   }));
 
   const outboundColumns = [
-    { key: "template", header: "Template", render: (row: OutboundEmail) => row.template_key },
-    { key: "recipient", header: "Recipient", render: (row: OutboundEmail) => row.recipient_name || "-" },
-    { key: "email", header: "Email", render: (row: OutboundEmail) => row.recipient_email || "-" },
-    { key: "related", header: "Related", render: (row: OutboundEmail) => `${row.related_type || "-"} ${row.related_id || ""}`.trim() },
-    { key: "status", header: "Status", render: (row: OutboundEmail) => row.status },
-    { key: "updated", header: "Updated", render: (row: OutboundEmail) => row.updated_at || "-" },
+    { key: "template", header: s("columns.template"), render: (row: OutboundEmail) => row.template_key },
+    { key: "recipient", header: s("columns.recipient"), render: (row: OutboundEmail) => row.recipient_name || "-" },
+    { key: "email", header: s("columns.email"), render: (row: OutboundEmail) => row.recipient_email || "-" },
+    { key: "related", header: s("columns.related"), render: (row: OutboundEmail) => `${row.related_type || "-"} ${row.related_id || ""}`.trim() },
+    { key: "status", header: s("columns.status"), render: (row: OutboundEmail) => s(`emails.statuses.${String(row.status || "").toLowerCase()}`) },
+    { key: "updated", header: s("columns.updated"), render: (row: OutboundEmail) => row.updated_at || "-" },
     {
       key: "actions",
-      header: "Actions",
+      header: s("columns.actions"),
       render: (row: OutboundEmail) => (
         <div className="inline-actions">
           <Button
@@ -509,11 +512,11 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                   onOpenRelatedRecord?.(row.related_type, row.related_id);
                 }
               } catch (caught) {
-                setEmailTemplateStatus(caught instanceof Error ? caught.message : "Open related record failed");
+                setEmailTemplateStatus(caught instanceof Error ? caught.message : s("emails.errors.openRelatedFailed"));
               }
             }}
           >
-            Open Related
+            {s("emails.actions.openRelated")}
           </Button>
           {row.status === "failed" ? (
             <Button
@@ -521,21 +524,21 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               className="button--compact"
               onClick={async () => {
                 try {
-                  actionFeedback.begin(`Retrying email to ${row.recipient_email}...`);
+                  actionFeedback.begin(s("emails.feedback.retryingEmail", { email: row.recipient_email }));
                   await setOutboundEmailStatus([row.id], "queued");
                   const result = await deliverQueuedEmails([row.id]);
                   setOutboundEmails(await fetchOutboundEmails());
-                  const message = `Retry processed: ${result.sentCount} sent, ${result.failedCount} failed.`;
+                  const message = s("emails.feedback.retryProcessed", { sent: result.sentCount, failed: result.failedCount });
                   setEmailTemplateStatus(message);
                   actionFeedback.succeed(message);
                 } catch (caught) {
-                  const message = caught instanceof Error ? caught.message : "Retry failed";
+                  const message = caught instanceof Error ? caught.message : s("emails.errors.retryFailed");
                   setEmailTemplateStatus(message);
                   actionFeedback.fail(message);
                 }
               }}
             >
-              Retry Failed
+              {s("emails.actions.retryFailed")}
             </Button>
           ) : null}
         </div>
@@ -575,30 +578,30 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   });
 
   const portalColumns = [
-    { key: "type", header: "Type", render: (row: PortalInvite) => row.party_type },
-    { key: "party", header: "Party", render: (row: PortalInvite) => row.party_name || "-" },
+    { key: "type", header: s("columns.type"), render: (row: PortalInvite) => s(`portal.types.${row.party_type}`) },
+    { key: "party", header: s("columns.party"), render: (row: PortalInvite) => row.party_name || "-" },
     {
       key: "brandScope",
-      header: "Brand Scope",
+      header: s("portal.fields.brandScope"),
       render: (row: PortalInvite) =>
         row.allowed_brand_ids.length
-          ? `${row.allowed_brand_ids.length} selected`
-          : "All Brands",
+          ? s("portal.brandScope.selected", { count: row.allowed_brand_ids.length })
+          : s("portal.brandScope.allBrands"),
     },
-    { key: "email", header: "Email", render: (row: PortalInvite) => row.email || "-" },
-    { key: "contact", header: "Contact", render: (row: PortalInvite) => row.contact_name || "-" },
-    { key: "status", header: "Status", render: (row: PortalInvite) => row.status },
-    { key: "passwordStatus", header: "Password", render: (row: PortalInvite) => (row.has_password ? "Configured" : "Missing") },
-    { key: "sent", header: "Last Sent", render: (row: PortalInvite) => row.last_sent_at || "-" },
+    { key: "email", header: s("columns.email"), render: (row: PortalInvite) => row.email || "-" },
+    { key: "contact", header: s("columns.contact"), render: (row: PortalInvite) => row.contact_name || "-" },
+    { key: "status", header: s("columns.status"), render: (row: PortalInvite) => s(`portal.statuses.${String(row.status || "").toLowerCase()}`) },
+    { key: "passwordStatus", header: s("columns.password"), render: (row: PortalInvite) => (row.has_password ? s("portal.password.configured") : s("portal.password.missing")) },
+    { key: "sent", header: s("columns.lastSent"), render: (row: PortalInvite) => row.last_sent_at || "-" },
     {
       key: "passwordActions",
-      header: "Portal Password",
+      header: s("portal.fields.portalPassword"),
       render: (row: PortalInvite) => (
         <div className="inline-password-reset">
           <input
             className="inline-password-reset__input"
             type="password"
-            placeholder={row.has_password ? "Update password" : "Set password"}
+            placeholder={row.has_password ? s("portal.placeholders.updatePassword") : s("portal.placeholders.setPassword")}
             value={portalPasswordDrafts[row.id] || ""}
             onChange={(event) =>
               setPortalPasswordDrafts((current) => ({
@@ -617,11 +620,11 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
             variant="secondary"
             className="button--compact"
             busy={portalPasswordBusyId === row.id}
-            busyLabel="Saving..."
+            busyLabel={t("common.saving")}
             onClick={async () => {
               const password = String(portalPasswordDrafts[row.id] || "").trim();
               if (password.length < 8) {
-                setPortalStatus("Portal password must be at least 8 characters.");
+                setPortalStatus(s("portal.password.minLength"));
                 return;
               }
               try {
@@ -629,21 +632,21 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                 const updated = await setPortalInvitePassword(row.id, password);
                 setPortalInvites(await fetchPortalInvites());
                 setPortalPasswordDrafts((current) => ({ ...current, [row.id]: "" }));
-                setPortalStatus(updated ? `Portal password saved for ${row.party_name}.` : "Portal password saved.");
+                setPortalStatus(updated ? s("portal.password.savedFor", { party: row.party_name }) : s("portal.password.saved"));
               } catch (caught) {
-                setPortalStatus(caught instanceof Error ? caught.message : "Portal password save failed");
+                setPortalStatus(caught instanceof Error ? caught.message : s("portal.password.saveFailed"));
               } finally {
                 setPortalPasswordBusyId("");
               }
             }}
           >
-            {row.has_password ? "Update" : "Set"}
+            {row.has_password ? s("actions.update") : s("actions.set")}
           </Button>
           <Button
             variant="secondary"
             className="button--compact danger-button"
             busy={portalPasswordBusyId === `clear:${row.id}`}
-            busyLabel="Clearing..."
+            busyLabel={s("busy.clearing")}
             disabled={!row.has_password}
             onClick={async () => {
               if (!row.has_password) return;
@@ -652,32 +655,32 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                 await clearPortalInvitePassword(row.id);
                 setPortalInvites(await fetchPortalInvites());
                 setPortalPasswordDrafts((current) => ({ ...current, [row.id]: "" }));
-                setPortalStatus(`Portal password cleared for ${row.party_name}.`);
+                setPortalStatus(s("portal.password.clearedFor", { party: row.party_name }));
               } catch (caught) {
-                setPortalStatus(caught instanceof Error ? caught.message : "Portal password clear failed");
+                setPortalStatus(caught instanceof Error ? caught.message : s("portal.password.clearFailed"));
               } finally {
                 setPortalPasswordBusyId("");
               }
             }}
           >
-            Clear
+            {s("actions.clear")}
           </Button>
         </div>
       ),
     },
     {
       key: "actions",
-      header: "Actions",
+      header: s("columns.actions"),
       render: (row: PortalInvite) => (
         <div className="inline-actions">
           <Button
             variant="secondary"
             className="button--compact"
             busy={sendingPortalInviteId === row.id}
-            busyLabel="Sending..."
+            busyLabel={t("common.sending")}
             onClick={async () => {
               if (!row.has_password) {
-                setPortalStatus(`Set a portal password for ${row.party_name} before sending access.`);
+                setPortalStatus(s("portal.errors.passwordRequiredBeforeSend", { party: row.party_name }));
                 return;
               }
               try {
@@ -693,38 +696,38 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                 setOutboundEmails(await fetchOutboundEmails());
                 setPortalStatus(
                   delivery.sent
-                    ? `Invitation sent to ${row.email}.`
-                    : `Invitation queued for ${row.email}, but delivery did not complete on this runtime.`,
+                    ? s("portal.feedback.invitationSent", { email: row.email })
+                    : s("portal.feedback.invitationQueuedRuntimeIncomplete", { email: row.email }),
                 );
               } catch (caught) {
-                setPortalStatus(caught instanceof Error ? caught.message : "Invitation queue failed");
+                setPortalStatus(caught instanceof Error ? caught.message : s("portal.errors.invitationQueueFailed"));
               } finally {
                 setSendingPortalInviteId("");
               }
             }}
           >
-            {row.status === "invited" || row.status === "active" ? "Resend Invite" : "Send Invite"}
+            {row.status === "invited" || row.status === "active" ? s("portal.actions.resendInvite") : s("portal.actions.sendInvite")}
           </Button>
           <Button
             variant="secondary"
             className="button--compact"
             busy={changingPortalStatusId === row.id}
-            busyLabel={row.status === "disabled" ? "Enabling..." : "Revoking..."}
+            busyLabel={row.status === "disabled" ? s("busy.enabling") : s("busy.revoking")}
             onClick={async () => {
               try {
                 setChangingPortalStatusId(row.id);
                 const nextStatus = row.status === "disabled" ? "draft" : "disabled";
                 await setPortalInviteStatus(row.id, nextStatus);
                 setPortalInvites(await fetchPortalInvites());
-                setPortalStatus(nextStatus === "disabled" ? `Portal access revoked for ${row.party_name}.` : `Portal access re-enabled for ${row.party_name}.`);
+                setPortalStatus(nextStatus === "disabled" ? s("portal.feedback.revokedFor", { party: row.party_name }) : s("portal.feedback.reenabledFor", { party: row.party_name }));
               } catch (caught) {
-                setPortalStatus(caught instanceof Error ? caught.message : "Portal invite status update failed");
+                setPortalStatus(caught instanceof Error ? caught.message : s("portal.errors.statusUpdateFailed"));
               } finally {
                 setChangingPortalStatusId("");
               }
             }}
           >
-            {row.status === "disabled" ? "Enable" : "Revoke"}
+            {row.status === "disabled" ? s("actions.enable") : s("actions.revoke")}
           </Button>
           <Button
             variant="secondary"
@@ -733,13 +736,13 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               try {
                 await deletePortalInvite(row.id);
                 setPortalInvites(await fetchPortalInvites());
-                setPortalStatus("Portal invite deleted.");
+                setPortalStatus(s("portal.feedback.deleted"));
               } catch (caught) {
-                setPortalStatus(caught instanceof Error ? caught.message : "Portal invite delete failed");
+                setPortalStatus(caught instanceof Error ? caught.message : s("portal.errors.deleteFailed"));
               }
             }}
           >
-            Delete
+            {t("common.delete")}
           </Button>
         </div>
       ),
@@ -748,26 +751,26 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
 
   return (
     <div className="page-stack">
-      {activeTab === "session" ? <SectionCard title="Session Settings">
+      {activeTab === "session" ? <SectionCard title={s("session.title")}>
         <div className="settings-grid">
           <div className="settings-item">
-            <span className="settings-label">App</span>
+            <span className="settings-label">{s("session.app")}</span>
             <strong>Next Master</strong>
           </div>
           <div className="settings-item">
-            <span className="settings-label">Environment</span>
-            <strong>Live Cloud</strong>
+            <span className="settings-label">{s("session.environment")}</span>
+            <strong>{s("session.liveCloud")}</strong>
           </div>
           <div className="settings-item">
-            <span className="settings-label">Signed in as</span>
+            <span className="settings-label">{s("session.signedInAs")}</span>
             <strong>{state.email || "-"}</strong>
           </div>
           <div className="settings-item">
-            <span className="settings-label">Role</span>
+            <span className="settings-label">{s("columns.role")}</span>
             <strong>{state.role || "-"}</strong>
           </div>
           <div className="settings-item">
-            <span className="settings-label">User ID</span>
+            <span className="settings-label">{s("columns.userId")}</span>
             <strong className="settings-mono">{state.userId || "-"}</strong>
           </div>
         </div>
@@ -775,54 +778,54 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           <Button
             variant="secondary"
             busy={loggingOut}
-            busyLabel="Logging out..."
+            busyLabel={s("session.loggingOut")}
             onClick={async () => {
               try {
                 setLoggingOut(true);
-                actionFeedback.begin("Logging out...");
+                actionFeedback.begin(s("session.loggingOut"));
                 await onLogout?.();
-                actionFeedback.succeed("Logged out.");
+                actionFeedback.succeed(s("session.loggedOut"));
               } catch (caught) {
-                const message = caught instanceof Error ? caught.message : "Logout failed";
+                const message = caught instanceof Error ? caught.message : s("session.logoutFailed");
                 actionFeedback.fail(message);
               } finally {
                 setLoggingOut(false);
               }
             }}
           >
-            Logout
+            {s("session.logout")}
           </Button>
         </div>
       </SectionCard> : null}
       {activeTab === "users" && isSuperadminRole(state.role) && !passwordResetAvailable ? (
-        <SectionCard title="User Password Reset">
-          <div className="warning-text">User admin actions depend on serverless admin endpoints. Use deployed app or Netlify dev instead of plain localhost.</div>
+        <SectionCard title={s("users.passwordReset.title")}>
+          <div className="warning-text">{s("users.passwordReset.serverlessWarning")}</div>
         </SectionCard>
       ) : null}
       {activeTab === "users" && isSuperadminRole(state.role) ? (
-        <SectionCard title="Users">
+        <SectionCard title={s("users.title")}>
           {editUserDraft ? (
             <div className="settings-grid settings-grid--user-edit">
               <Input
-                label="Edit Email"
+                label={s("users.fields.editEmail")}
                 value={editUserDraft.email}
                 placeholder="user@company.com"
                 onChange={(value) => setEditUserDraft((current) => (current ? { ...current, email: value } : current))}
               />
               <Input
-                label="Edit Full Name"
+                label={s("users.fields.editFullName")}
                 value={editUserDraft.fullName}
-                placeholder="Full name"
+                placeholder={s("users.placeholders.fullName")}
                 onChange={(value) => setEditUserDraft((current) => (current ? { ...current, fullName: value } : current))}
               />
               <Select
-                label="Edit Role"
+                label={s("users.fields.editRole")}
                 value={editUserDraft.role}
                 options={[
-                  { value: "superadmin", label: "Superadmin" },
-                  { value: "admin", label: "Admin" },
-                  { value: "sales", label: "Sales" },
-                  { value: "viewer", label: "Viewer" },
+                  { value: "superadmin", label: s("roles.superadmin") },
+                  { value: "admin", label: s("roles.admin") },
+                  { value: "sales", label: s("roles.sales") },
+                  { value: "viewer", label: s("roles.viewer") },
                 ]}
                 onChange={(value) =>
                   setEditUserDraft((current) => (current ? { ...current, role: value as EditUserDraft["role"] } : current))
@@ -836,14 +839,14 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                     setEditUserDraft((current) => (current ? { ...current, isActive: event.target.checked } : current))
                   }
                 />
-                <span className="field__label">Active user</span>
+                <span className="field__label">{s("users.fields.activeUser")}</span>
               </label>
               <div className="field field--actions">
-                <span className="field__label">Edit User</span>
+                <span className="field__label">{s("users.fields.editUser")}</span>
                 <div className="inline-actions">
                   <Button
                     busy={savingUserId === editUserDraft.userId}
-                    busyLabel="Saving..."
+                    busyLabel={t("common.saving")}
                     disabled={Boolean(editUserValidationMessage)}
                     onClick={async () => {
                       if (!editUserDraft) return;
@@ -854,7 +857,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                       try {
                         setSavingUserId(editUserDraft.userId);
                         setUserActionStatus("");
-                        actionFeedback.begin(`Saving ${editUserEmail}...`);
+                        actionFeedback.begin(s("users.feedback.saving", { email: editUserEmail }));
                         await updateOrgUser({
                           userId: editUserDraft.userId,
                           email: editUserEmail,
@@ -865,11 +868,11 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                         const nextUsers = await fetchOrgUsers();
                         setUsers(nextUsers);
                         setEditUserDraft(null);
-                        const message = `User updated: ${editUserEmail}`;
+                        const message = s("users.feedback.updated", { email: editUserEmail });
                         setUserActionStatus(message);
                         actionFeedback.succeed(message);
                       } catch (caught) {
-                        const message = caught instanceof Error ? caught.message : "User update failed";
+                        const message = caught instanceof Error ? caught.message : s("users.errors.updateFailed");
                         setUserActionStatus(message);
                         actionFeedback.fail(message);
                       } finally {
@@ -877,7 +880,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                       }
                     }}
                   >
-                    Save User
+                    {s("users.actions.saveUser")}
                   </Button>
                   <Button
                     variant="secondary"
@@ -886,7 +889,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                       setUserActionStatus("");
                     }}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                 </div>
               </div>
@@ -894,7 +897,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           ) : null}
           <div className="settings-grid">
             <Input
-              label="Email"
+              label={s("columns.email")}
               value={newUserDraft.email}
               placeholder="user@company.com"
               onChange={(value) => setNewUserDraft((current) => ({ ...current, email: value }))}
@@ -904,9 +907,9 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               }}
             />
             <Input
-              label="Full Name"
+              label={s("users.fields.fullName")}
               value={newUserDraft.fullName}
-              placeholder="Full name"
+              placeholder={s("users.placeholders.fullName")}
               onChange={(value) => setNewUserDraft((current) => ({ ...current, fullName: value }))}
               onEnter={() => {
                 const button = document.getElementById("settings-add-user-button");
@@ -914,12 +917,12 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               }}
             />
             <Select
-              label="Role"
+              label={s("columns.role")}
               value={newUserDraft.role}
               options={[
-                { value: "admin", label: "Admin" },
-                { value: "sales", label: "Sales" },
-                { value: "viewer", label: "Viewer" },
+                { value: "admin", label: s("roles.admin") },
+                { value: "sales", label: s("roles.sales") },
+                { value: "viewer", label: s("roles.viewer") },
               ]}
               onChange={(value) => setNewUserDraft((current) => ({ ...current, role: value as NewUserDraft["role"] }))}
             />
@@ -929,15 +932,15 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                 checked={newUserDraft.isActive}
                 onChange={(event) => setNewUserDraft((current) => ({ ...current, isActive: event.target.checked }))}
               />
-              <span className="field__label">Active user</span>
+              <span className="field__label">{s("users.fields.activeUser")}</span>
             </label>
             <div className="field field--actions">
-              <span className="field__label">Create User</span>
+              <span className="field__label">{s("users.fields.createUser")}</span>
               <Button
                 id="settings-add-user-button"
                 disabled={!canCreateUser}
                 busy={creatingUser}
-                busyLabel="Creating..."
+                busyLabel={s("busy.creating")}
                 onClick={async () => {
                   if (newUserValidationMessage) {
                     setUserActionStatus(newUserValidationMessage);
@@ -947,7 +950,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                   try {
                     setCreatingUser(true);
                     setUserActionStatus("");
-                    actionFeedback.begin(`Creating user ${newUserEmail}...`);
+                    actionFeedback.begin(s("users.feedback.creating", { email: newUserEmail }));
                     const created = await createOrgUser({
                       email: newUserEmail,
                       fullName: newUserDraft.fullName.trim(),
@@ -968,12 +971,12 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                     });
                     const message =
                       created.welcomeEmailError
-                        ? `User created: ${newUserEmail}. Welcome email queued but delivery failed: ${created.welcomeEmailError}`
-                        : `User created: ${newUserEmail}. Set password email sent.`;
+                        ? s("users.feedback.createdWithEmailFailure", { email: newUserEmail, error: created.welcomeEmailError })
+                        : s("users.feedback.created", { email: newUserEmail });
                     setUserActionStatus(message);
                     actionFeedback.succeed(message);
                   } catch (caught) {
-                    const message = caught instanceof Error ? caught.message : "User create failed";
+                    const message = caught instanceof Error ? caught.message : s("users.errors.createFailed");
                     setUserActionStatus(message);
                     actionFeedback.fail(message);
                   } finally {
@@ -981,49 +984,49 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                   }
                 }}
               >
-                Add User
+                {s("users.actions.addUser")}
               </Button>
             </div>
           </div>
           <div className="meta-row">
-            <span>System generates a random temporary password.</span>
-            <span>User receives a set password email and defines their own password on first access.</span>
+            <span>{s("users.meta.temporaryPassword")}</span>
+            <span>{s("users.meta.setPasswordEmail")}</span>
           </div>
           {editUserValidationMessage ? <div className="error-text">{editUserValidationMessage}</div> : null}
           {newUserValidationMessage ? <div className="error-text">{newUserValidationMessage}</div> : null}
           <div className="settings-grid settings-stats-grid">
             <div className="settings-item">
-              <span className="settings-label">Online Now</span>
+              <span className="settings-label">{s("users.presence.onlineNow")}</span>
               <strong>{onlineNow}</strong>
             </div>
             <div className="settings-item">
-              <span className="settings-label">Recently Active</span>
+              <span className="settings-label">{s("users.presence.recentlyActive")}</span>
               <strong>{recentlyActive}</strong>
             </div>
             <div className="settings-item">
-              <span className="settings-label">Offline</span>
+              <span className="settings-label">{s("users.presence.offline")}</span>
               <strong>{offline}</strong>
             </div>
           </div>
           <div className="meta-row">
-            <span>{users.length.toLocaleString("en-US")} users loaded</span>
-            <span>{loadingUsers ? "Loading users..." : usersError || userActionStatus || passwordStatus || "Admin can add, delete, and update user passwords here."}</span>
+            <span>{s("users.meta.loaded", { count: users.length.toLocaleString("en-US") })}</span>
+            <span>{loadingUsers ? s("users.loading") : usersError || userActionStatus || passwordStatus || s("users.meta.adminHelp")}</span>
           </div>
           <DataTable
             rows={users}
             columns={userColumns}
-            emptyText={loadingUsers ? "Loading users..." : "No organization users found."}
+            emptyText={loadingUsers ? s("users.loading") : s("users.empty")}
             onRowClick={(row) => openUserEditor(row)}
           />
         </SectionCard>
       ) : null}
-      {activeTab === "companies" ? <SectionCard title="Company Profile">
+      {activeTab === "companies" ? <SectionCard title={s("companies.title")}>
         <div className="toolbar toolbar--wrap">
           <Select
-            label="Saved Companies"
+            label={s("companies.fields.savedCompanies")}
             value={selectedCompanyId}
             options={[
-              { value: "", label: companyProfiles.length ? "Select company" : "No companies yet" },
+              { value: "", label: companyProfiles.length ? s("companies.placeholders.selectCompany") : s("companies.empty.noCompanies") },
               ...companyProfiles.map((item) => ({ value: item.id, label: item.companyName })),
             ]}
             onChange={(value) => {
@@ -1033,18 +1036,18 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
             }}
           />
           <Button variant="secondary" onClick={startNewCompanyProfile}>
-            Add Company
+            {s("companies.actions.addCompany")}
           </Button>
           <Button
             variant="secondary"
             className="danger-button"
             onClick={async () => {
               if (!companyProfile.id || !companyProfiles.some((item) => item.id === companyProfile.id)) {
-                setCompanyProfileStatus("Save this company first before deleting.");
+                setCompanyProfileStatus(s("companies.errors.saveBeforeDelete"));
                 return;
               }
               try {
-                actionFeedback.begin(`Deleting company ${companyProfile.companyName || companyProfile.id}...`);
+                actionFeedback.begin(s("companies.feedback.deleting", { company: companyProfile.companyName || companyProfile.id }));
                 await deleteCompanyProfileById(companyProfile.id);
                 const next = await fetchCompanyProfiles();
                 setCompanyProfiles(next);
@@ -1054,71 +1057,71 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                 } else {
                   startNewCompanyProfile();
                 }
-                setCompanyProfileStatus("Company profile deleted.");
-                actionFeedback.succeed("Company profile deleted.");
+                setCompanyProfileStatus(s("companies.feedback.deleted"));
+                actionFeedback.succeed(s("companies.feedback.deleted"));
               } catch (caught) {
-                const message = caught instanceof Error ? caught.message : "Company profile delete failed";
+                const message = caught instanceof Error ? caught.message : s("companies.errors.deleteFailed");
                 setCompanyProfileStatus(message);
                 actionFeedback.fail(message);
               }
             }}
           >
-            Delete Company
+            {s("companies.actions.deleteCompany")}
           </Button>
         </div>
         <div className="settings-grid">
           <div className="field">
-            <label className="field__label">Company Name</label>
+            <label className="field__label">{s("companies.fields.companyName")}</label>
             <input className="field__input" value={companyProfile.companyName} onChange={(event) => updateCompanyField("companyName", event.target.value)} />
           </div>
           <div className="field">
-            <label className="field__label">Email</label>
+            <label className="field__label">{s("columns.email")}</label>
             <input className="field__input" value={companyProfile.email} onChange={(event) => updateCompanyField("email", event.target.value)} />
           </div>
           <div className="field">
-            <label className="field__label">Phone</label>
+            <label className="field__label">{s("companies.fields.phone")}</label>
             <input className="field__input" value={companyProfile.phone} onChange={(event) => updateCompanyField("phone", event.target.value)} />
           </div>
           <div className="field">
-            <label className="field__label">Website</label>
+            <label className="field__label">{s("companies.fields.website")}</label>
             <input className="field__input" value={companyProfile.website} onChange={(event) => updateCompanyField("website", event.target.value)} />
           </div>
           <div className="field">
-            <label className="field__label">Tax Office</label>
+            <label className="field__label">{s("companies.fields.taxOffice")}</label>
             <input className="field__input" value={companyProfile.taxOffice} onChange={(event) => updateCompanyField("taxOffice", event.target.value)} />
           </div>
           <div className="field">
-            <label className="field__label">Tax Number</label>
+            <label className="field__label">{s("companies.fields.taxNumber")}</label>
             <input className="field__input" value={companyProfile.taxNumber} onChange={(event) => updateCompanyField("taxNumber", event.target.value)} />
           </div>
           <div className="field field--full">
-            <label className="field__label">Address</label>
+            <label className="field__label">{s("companies.fields.address")}</label>
             <textarea className="field__input field__input--textarea" value={companyProfile.address} onChange={(event) => updateCompanyField("address", event.target.value)} />
           </div>
           <div className="field field--full">
-            <label className="field__label">Bank Details</label>
+            <label className="field__label">{s("companies.fields.bankDetails")}</label>
             <textarea className="field__input field__input--textarea" value={companyProfile.bankDetails} onChange={(event) => updateCompanyField("bankDetails", event.target.value)} />
           </div>
           <div className="field field--full">
-            <label className="field__label">Footer Note</label>
+            <label className="field__label">{s("companies.fields.footerNote")}</label>
             <textarea className="field__input field__input--textarea" value={companyProfile.footerNote} onChange={(event) => updateCompanyField("footerNote", event.target.value)} />
           </div>
           <div className="field field--full">
-            <label className="field__label">Company Logo</label>
+            <label className="field__label">{s("companies.fields.companyLogo")}</label>
             <div className="logo-settings">
               <input type="file" accept="image/*" onChange={(event) => void handleLogoFile(event.target.files?.[0] || null)} />
-              {companyProfile.logoDataUrl ? <img className="logo-preview" src={companyProfile.logoDataUrl} alt="Company logo preview" /> : null}
+              {companyProfile.logoDataUrl ? <img className="logo-preview" src={companyProfile.logoDataUrl} alt={s("companies.logoPreviewAlt")} /> : null}
               <div className="inline-actions">
                 <Button variant="secondary" onClick={() => updateCompanyField("logoDataUrl", "")}>
-                  Clear Logo
+                  {s("companies.actions.clearLogo")}
                 </Button>
                 <Button
                   busy={savingCompanyProfile}
-                  busyLabel="Saving..."
+                  busyLabel={t("common.saving")}
                   onClick={async () => {
                     try {
                       setSavingCompanyProfile(true);
-                      actionFeedback.begin("Saving company profile...");
+                      actionFeedback.begin(s("companies.feedback.saving"));
                       const savedProfile = await upsertCompanyProfile(companyProfile);
                       const next = await fetchCompanyProfiles();
                       setCompanyProfiles(next);
@@ -1127,10 +1130,10 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                         setSelectedCompanyId(saved.id);
                         setCompanyProfile(saved);
                       }
-                      setCompanyProfileStatus("Company profile saved.");
-                      actionFeedback.succeed("Company profile saved.");
+                      setCompanyProfileStatus(s("companies.feedback.saved"));
+                      actionFeedback.succeed(s("companies.feedback.saved"));
                     } catch (caught) {
-                      const message = caught instanceof Error ? caught.message : "Company profile save failed";
+                      const message = caught instanceof Error ? caught.message : s("companies.errors.saveFailed");
                       setCompanyProfileStatus(message);
                       actionFeedback.fail(message);
                     } finally {
@@ -1138,7 +1141,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                     }
                   }}
                 >
-                  Save Company Profile
+                  {s("companies.actions.saveCompanyProfile")}
                 </Button>
               </div>
               {companyProfileStatus ? <span className="success-text">{companyProfileStatus}</span> : null}
@@ -1146,22 +1149,22 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           </div>
         </div>
       </SectionCard> : null}
-      {activeTab === "portals" ? <SectionCard title="Customer & Vendor Portal Access">
+      {activeTab === "portals" ? <SectionCard title={s("portal.title")}>
         <div className="settings-grid">
           <Select
-            label="Portal Type"
+            label={s("portal.fields.portalType")}
             value={portalDraft.party_type}
             options={[
-              { value: "customer", label: "Customer" },
-              { value: "vendor", label: "Vendor" },
+              { value: "customer", label: s("portal.types.customer") },
+              { value: "vendor", label: s("portal.types.vendor") },
             ]}
             onChange={(value) => updatePortalField("party_type", value as PortalInvite["party_type"])}
           />
           {portalDraft.party_type === "customer" ? (
             <Select
-              label="Customer"
+              label={s("portal.types.customer")}
               value={portalDraft.customer_id}
-              options={[{ value: "", label: "Select customer" }, ...customerOptions]}
+              options={[{ value: "", label: s("portal.placeholders.selectCustomer") }, ...customerOptions]}
               onChange={(value) => {
                 const selected = customers.find((item) => item.id === value);
                 updatePortalField("customer_id", value);
@@ -1171,9 +1174,9 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
             />
           ) : (
             <Select
-              label="Vendor"
+              label={s("portal.types.vendor")}
               value={portalDraft.vendor_id}
-              options={[{ value: "", label: "Select vendor" }, ...vendorOptions]}
+              options={[{ value: "", label: s("portal.placeholders.selectVendor") }, ...vendorOptions]}
               onChange={(value) => {
                 const selected = vendors.find((item) => item.id === value);
                 updatePortalField("vendor_id", value);
@@ -1182,33 +1185,33 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               }}
             />
           )}
-          <Input label="Portal Email" value={portalDraft.email} onChange={(value) => updatePortalField("email", value)} />
-          <Input label="Contact Name" value={portalDraft.contact_name} onChange={(value) => updatePortalField("contact_name", value)} />
+          <Input label={s("portal.fields.portalEmail")} value={portalDraft.email} onChange={(value) => updatePortalField("email", value)} />
+          <Input label={s("portal.fields.contactName")} value={portalDraft.contact_name} onChange={(value) => updatePortalField("contact_name", value)} />
         </div>
         <div className="settings-grid">
           <label className="field checkbox-field">
             <input type="checkbox" checked={portalDraft.access.can_view_account} onChange={(event) => updatePortalAccess("can_view_account", event.target.checked)} />
-            <span className="field__label">View account balance</span>
+            <span className="field__label">{s("portal.access.viewAccountBalance")}</span>
           </label>
           <label className="field checkbox-field">
             <input type="checkbox" checked={portalDraft.access.can_view_invoices} onChange={(event) => updatePortalAccess("can_view_invoices", event.target.checked)} />
-            <span className="field__label">View invoices</span>
+            <span className="field__label">{s("portal.access.viewInvoices")}</span>
           </label>
           <label className="field checkbox-field">
             <input type="checkbox" checked={portalDraft.access.can_view_payments} onChange={(event) => updatePortalAccess("can_view_payments", event.target.checked)} />
-            <span className="field__label">View payments</span>
+            <span className="field__label">{s("portal.access.viewPayments")}</span>
           </label>
           <label className="field checkbox-field">
             <input type="checkbox" checked={portalDraft.access.can_view_orders} onChange={(event) => updatePortalAccess("can_view_orders", event.target.checked)} />
-            <span className="field__label">View orders</span>
+            <span className="field__label">{s("portal.access.viewOrders")}</span>
           </label>
         </div>
         <div className="field">
-          <span className="field__label">Brand Scope</span>
+          <span className="field__label">{s("portal.fields.brandScope")}</span>
           <div className="meta-row">
-            <span>{portalDraft.allowed_brand_ids.length ? `${portalDraft.allowed_brand_ids.length} brand selected` : "All Brands"}</span>
+            <span>{portalDraft.allowed_brand_ids.length ? s("portal.brandScope.brandSelected", { count: portalDraft.allowed_brand_ids.length }) : s("portal.brandScope.allBrands")}</span>
             <Button variant="secondary" className="button--compact" onClick={() => updatePortalField("allowed_brand_ids", [])}>
-              Clear Scope
+              {s("portal.actions.clearScope")}
             </Button>
           </div>
           <div className="settings-grid">
@@ -1224,7 +1227,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
             ))}
           </div>
           <span className="field__help">
-            Empty scope means all brands. If you select brands here, portal search, price list, and order flow only use those brands.
+            {s("portal.help.brandScope")}
           </span>
         </div>
         <div className="toolbar toolbar--wrap">
@@ -1233,40 +1236,40 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               const missingPartyBinding =
                 portalDraft.party_type === "customer" ? !portalDraft.customer_id.trim() : !portalDraft.vendor_id.trim();
               if (!portalDraft.party_name.trim() || missingPartyBinding) {
-                setPortalStatus("Select customer or enter vendor name.");
+                setPortalStatus(s("portal.errors.partyRequired"));
                 return;
               }
               if (!portalDraft.email.trim()) {
-                setPortalStatus("Enter portal email.");
+                setPortalStatus(s("portal.errors.emailRequired"));
                 return;
               }
               try {
                 const saved = await upsertPortalInvite(portalDraft);
                 setPortalInvites(await fetchPortalInvites());
                 setPortalDraft(createEmptyCloudPortalInvite());
-                setPortalStatus(`Portal access saved for ${saved.party_name}.`);
+                setPortalStatus(s("portal.feedback.savedFor", { party: saved.party_name }));
               } catch (caught) {
-                setPortalStatus(caught instanceof Error ? caught.message : "Portal access save failed");
+                setPortalStatus(caught instanceof Error ? caught.message : s("portal.errors.saveFailed"));
               }
             }}
           >
-            Save Portal Access
+            {s("portal.actions.saveAccess")}
           </Button>
           <Button variant="secondary" onClick={() => setPortalDraft(createEmptyCloudPortalInvite())}>
-            New Invite
+            {s("portal.actions.newInvite")}
           </Button>
         </div>
         {portalStatus ? <div className="success-text">{portalStatus}</div> : null}
         <div className="meta-row">
-          <span>{portalInvites.length.toLocaleString("en-US")} portal records</span>
-          <span>Portal access is bound to the selected party record. Set a password first, then send the access email.</span>
+          <span>{s("portal.meta.records", { count: portalInvites.length.toLocaleString("en-US") })}</span>
+          <span>{s("portal.meta.accessHelp")}</span>
         </div>
-        <DataTable rows={portalInvites} columns={portalColumns} emptyText="No customer or vendor portal invite prepared yet." />
+        <DataTable rows={portalInvites} columns={portalColumns} emptyText={s("portal.empty.noInvites")} />
       </SectionCard> : null}
-      {activeTab === "templates" ? <SectionCard title="Email Templates">
+      {activeTab === "templates" ? <SectionCard title={s("templates.title")}>
         <div className="settings-grid">
           <Select
-            label="Template"
+            label={s("templates.fields.template")}
             value={selectedTemplateKey}
             options={emailTemplates.map((item) => ({ value: item.template_key, label: item.template_name }))}
             onChange={(value) => {
@@ -1276,17 +1279,17 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
             }}
           />
           <Input
-            label="Template Name"
+            label={s("templates.fields.templateName")}
             value={emailTemplateDraft?.template_name || ""}
             onChange={(value) => updateEmailTemplateField("template_name", value)}
           />
           <Input
-            label="Subject"
+            label={s("templates.fields.subject")}
             value={emailTemplateDraft?.subject || ""}
             onChange={(value) => updateEmailTemplateField("subject", value)}
           />
           <div className="field field--full">
-            <label className="field__label">Body</label>
+            <label className="field__label">{s("templates.fields.body")}</label>
             <textarea
               className="field__input field__input--textarea"
               value={emailTemplateDraft?.body || ""}
@@ -1295,74 +1298,74 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           </div>
         </div>
         <div className="meta-row">
-          <span>Available variables depend on template type.</span>
-          <span>Examples: {`{{party_name}} {{portal_link}} {{purchase_order_no}} {{company_name}} {{full_name}} {{user_email}} {{login_link}} {{set_password_link}}`}</span>
+          <span>{s("templates.meta.variablesDependOnType")}</span>
+          <span>{s("templates.meta.examples")}: {`{{party_name}} {{portal_link}} {{purchase_order_no}} {{company_name}} {{full_name}} {{user_email}} {{login_link}} {{set_password_link}}`}</span>
         </div>
         <div className="toolbar toolbar--wrap">
           <Button
             onClick={async () => {
               if (!emailTemplateDraft) return;
               try {
-                actionFeedback.begin(`Saving template ${emailTemplateDraft.template_name}...`);
+                actionFeedback.begin(s("templates.feedback.saving", { template: emailTemplateDraft.template_name }));
                 const saved = await upsertEmailTemplate(emailTemplateDraft);
                 const next = await fetchEmailTemplates();
                 setEmailTemplates(next);
                 setSelectedTemplateKey(saved.template_key);
                 setEmailTemplateDraft(next.find((item) => item.template_key === saved.template_key) || saved);
-                setEmailTemplateStatus(`Template saved: ${saved.template_name}.`);
-                actionFeedback.succeed(`Template saved: ${saved.template_name}.`);
+                setEmailTemplateStatus(s("templates.feedback.saved", { template: saved.template_name }));
+                actionFeedback.succeed(s("templates.feedback.saved", { template: saved.template_name }));
               } catch (caught) {
-                const message = caught instanceof Error ? caught.message : "Email template save failed";
+                const message = caught instanceof Error ? caught.message : s("templates.errors.saveFailed");
                 setEmailTemplateStatus(message);
                 actionFeedback.fail(message);
               }
             }}
           >
-            Save Email Template
+            {s("templates.actions.saveTemplate")}
           </Button>
         </div>
         {emailTemplateStatus ? <div className="success-text">{emailTemplateStatus}</div> : null}
       </SectionCard> : null}
-      {activeTab === "emails" ? <SectionCard title="Outgoing Emails">
+      {activeTab === "emails" ? <SectionCard title={s("emails.title")}>
         <div className="meta-row">
-          <span>{filteredOutboundEmails.length.toLocaleString("en-US")} emails shown / {outboundEmails.length.toLocaleString("en-US")} total</span>
-          <span>Queued mail is delivered by Netlify function when email environment variables are configured.</span>
+          <span>{s("emails.meta.shown", { shown: filteredOutboundEmails.length.toLocaleString("en-US"), total: outboundEmails.length.toLocaleString("en-US") })}</span>
+          <span>{s("emails.meta.deliveryHelp")}</span>
         </div>
         <div className="toolbar toolbar--wrap">
           <Select
-            label="Status Filter"
+            label={s("emails.fields.statusFilter")}
             value={emailStatusFilter}
             options={[
-              { value: "all", label: `All (${emailCounts.all})` },
-              { value: "queued", label: `Queued (${emailCounts.queued})` },
-              { value: "sent", label: `Sent (${emailCounts.sent})` },
-              { value: "failed", label: `Failed (${emailCounts.failed})` },
-              { value: "draft", label: `Draft (${emailCounts.draft})` },
+              { value: "all", label: s("emails.filters.all", { count: emailCounts.all }) },
+              { value: "queued", label: s("emails.filters.queued", { count: emailCounts.queued }) },
+              { value: "sent", label: s("emails.filters.sent", { count: emailCounts.sent }) },
+              { value: "failed", label: s("emails.filters.failed", { count: emailCounts.failed }) },
+              { value: "draft", label: s("emails.filters.draft", { count: emailCounts.draft }) },
             ]}
             onChange={(value) => setEmailStatusFilter(value as "all" | OutboundEmail["status"])}
           />
-          <Input label="Search" value={emailSearch} onChange={setEmailSearch} placeholder="recipient, email, subject, related..." />
-          <Input label="Date From" type="date" value={emailDateFrom} onChange={setEmailDateFrom} />
-          <Input label="Date To" type="date" value={emailDateTo} onChange={setEmailDateTo} />
+          <Input label={s("fields.search")} value={emailSearch} onChange={setEmailSearch} placeholder={s("emails.placeholders.search")} />
+          <Input label={s("fields.dateFrom")} type="date" value={emailDateFrom} onChange={setEmailDateFrom} />
+          <Input label={s("fields.dateTo")} type="date" value={emailDateTo} onChange={setEmailDateTo} />
           <Button
             variant="secondary"
             onClick={async () => {
               const failedIds = outboundEmails.filter((item) => item.status === "failed").map((item) => item.id);
               if (!failedIds.length) {
-                setEmailTemplateStatus("No failed emails to retry.");
+                setEmailTemplateStatus(s("emails.errors.noFailedEmails"));
                 return;
               }
               try {
                 setSendingQueuedEmails(true);
-                actionFeedback.begin(`Retrying ${failedIds.length.toLocaleString("en-US")} failed emails...`);
+                actionFeedback.begin(s("emails.feedback.retryingFailed", { count: failedIds.length.toLocaleString("en-US") }));
                 await setOutboundEmailStatus(failedIds, "queued");
                 const result = await deliverQueuedEmails(failedIds);
                 setOutboundEmails(await fetchOutboundEmails());
-                const message = `Retry processed: ${result.sentCount} sent, ${result.failedCount} failed.`;
+                const message = s("emails.feedback.retryProcessed", { sent: result.sentCount, failed: result.failedCount });
                 setEmailTemplateStatus(message);
                 actionFeedback.succeed(message);
               } catch (caught) {
-                const message = caught instanceof Error ? caught.message : "Retry failed emails failed";
+                const message = caught instanceof Error ? caught.message : s("emails.errors.retryFailedEmailsFailed");
                 setEmailTemplateStatus(message);
                 actionFeedback.fail(message);
               } finally {
@@ -1370,7 +1373,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               }
             }}
           >
-            Retry Failed
+            {s("emails.actions.retryFailed")}
           </Button>
           <Button
             variant="secondary"
@@ -1393,27 +1396,27 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               downloadBlob(`outgoing-emails-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
             }}
           >
-            Export Excel
+            {s("actions.exportExcel")}
           </Button>
         </div>
         <div className="toolbar toolbar--wrap">
           <Button
             variant="secondary"
             busy={sendingQueuedEmails}
-            busyLabel="Sending..."
+            busyLabel={t("common.sending")}
             onClick={async () => {
               try {
                 setSendingQueuedEmails(true);
-                actionFeedback.begin("Sending queued emails...");
+                actionFeedback.begin(s("emails.feedback.sendingQueued"));
                 const result = await deliverQueuedEmails(
                   outboundEmails.filter((item) => item.status === "queued").map((item) => item.id),
                 );
                 setOutboundEmails(await fetchOutboundEmails());
-                const message = `Queued emails processed: ${result.sentCount} sent, ${result.failedCount} failed.`;
+                const message = s("emails.feedback.queuedProcessed", { sent: result.sentCount, failed: result.failedCount });
                 setEmailTemplateStatus(message);
                 actionFeedback.succeed(message);
               } catch (caught) {
-                const message = caught instanceof Error ? caught.message : "Queued email delivery failed";
+                const message = caught instanceof Error ? caught.message : s("emails.errors.queuedDeliveryFailed");
                 setEmailTemplateStatus(message);
                 actionFeedback.fail(message);
               } finally {
@@ -1421,27 +1424,27 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               }
             }}
           >
-            Send Queued Emails
+            {s("emails.actions.sendQueued")}
           </Button>
         </div>
-        <DataTable rows={filteredOutboundEmails} columns={outboundColumns} emptyText="No outbound emails match the current filter." />
+        <DataTable rows={filteredOutboundEmails} columns={outboundColumns} emptyText={s("emails.empty.noMatches")} />
       </SectionCard> : null}
-      {activeTab === "diagnostics" ? <SectionCard title="Diagnostics">
+      {activeTab === "diagnostics" ? <SectionCard title={s("diagnostics.title")}>
         <div className="toolbar toolbar--wrap">
           <Button
             busy={diagnosticsBusy}
-            busyLabel="Running..."
+            busyLabel={s("busy.running")}
             onClick={async () => {
               try {
                 setDiagnosticsBusy(true);
                 setDiagnosticsStatus("");
-                actionFeedback.begin("Running diagnostics...");
+                actionFeedback.begin(s("diagnostics.feedback.running"));
                 const result = await fetchAdminDiagnostics();
                 setDiagnostics(result);
-                setDiagnosticsStatus("Diagnostics loaded.");
-                actionFeedback.succeed("Diagnostics loaded.");
+                setDiagnosticsStatus(s("diagnostics.feedback.loaded"));
+                actionFeedback.succeed(s("diagnostics.feedback.loaded"));
               } catch (caught) {
-                const message = caught instanceof Error ? caught.message : "Diagnostics failed";
+                const message = caught instanceof Error ? caught.message : s("diagnostics.errors.failed");
                 setDiagnosticsStatus(message);
                 actionFeedback.fail(message);
               } finally {
@@ -1449,39 +1452,39 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               }
             }}
           >
-            Run Diagnostics
+            {s("diagnostics.actions.run")}
           </Button>
         </div>
         {diagnostics ? (
           <>
             <div className="settings-grid settings-stats-grid">
               <div className="settings-item">
-                <span className="settings-label">Site URL</span>
+                <span className="settings-label">{s("diagnostics.fields.siteUrl")}</span>
                 <strong>{diagnostics.runtime.siteUrl || "-"}</strong>
               </div>
               <div className="settings-item">
-                <span className="settings-label">Function Region</span>
+                <span className="settings-label">{s("diagnostics.fields.functionRegion")}</span>
                 <strong>{diagnostics.runtime.functionRegion || "-"}</strong>
               </div>
               <div className="settings-item">
-                <span className="settings-label">Email From</span>
+                <span className="settings-label">{s("diagnostics.fields.emailFrom")}</span>
                 <strong>{diagnostics.env.emailFromValue || "-"}</strong>
               </div>
             </div>
             <div className="settings-grid settings-stats-grid">
               {[
-                ["Supabase URL", diagnostics.env.supabaseUrl],
-                ["Anon Key", diagnostics.env.supabaseAnonKey],
-                ["Service Role", diagnostics.env.serviceRoleKey],
-                ["Resend API", diagnostics.env.resendApiKey],
-                ["Email From", diagnostics.env.emailFrom],
-                ["Auth Check", diagnostics.checks.auth.ok],
-                ["Database Check", diagnostics.checks.database.ok],
-                ["Email Check", diagnostics.checks.email.ok],
+                [s("diagnostics.fields.supabaseUrl"), diagnostics.env.supabaseUrl],
+                [s("diagnostics.fields.anonKey"), diagnostics.env.supabaseAnonKey],
+                [s("diagnostics.fields.serviceRole"), diagnostics.env.serviceRoleKey],
+                [s("diagnostics.fields.resendApi"), diagnostics.env.resendApiKey],
+                [s("diagnostics.fields.emailFrom"), diagnostics.env.emailFrom],
+                [s("diagnostics.fields.authCheck"), diagnostics.checks.auth.ok],
+                [s("diagnostics.fields.databaseCheck"), diagnostics.checks.database.ok],
+                [s("diagnostics.fields.emailCheck"), diagnostics.checks.email.ok],
               ].map(([label, ok]) => (
                 <div key={String(label)} className="settings-item">
                   <span className="settings-label">{label}</span>
-                  <strong className={ok ? "success-text" : "warning-text"}>{ok ? "OK" : "Missing"}</strong>
+                  <strong className={ok ? "success-text" : "warning-text"}>{ok ? s("diagnostics.values.ok") : s("diagnostics.values.missing")}</strong>
                 </div>
               ))}
             </div>
@@ -1491,38 +1494,38 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
             </div>
             <div className="meta-row">
               <span>{diagnostics.checks.email.detail}</span>
-              <span>Use test email to validate Resend delivery from production credentials.</span>
+              <span>{s("diagnostics.meta.testEmailHelp")}</span>
             </div>
           </>
         ) : (
           <div className="meta-row">
-            <span>No diagnostics snapshot yet.</span>
-            <span>Run diagnostics to validate production runtime, Supabase access, and Resend configuration.</span>
+            <span>{s("diagnostics.empty.noSnapshot")}</span>
+            <span>{s("diagnostics.empty.runHelp")}</span>
           </div>
         )}
         <div className="settings-grid">
-          <Input label="Test Email Recipient" value={testEmail} onChange={setTestEmail} />
+          <Input label={s("diagnostics.fields.testEmailRecipient")} value={testEmail} onChange={setTestEmail} />
         </div>
         <div className="toolbar toolbar--wrap">
           <Button
             variant="secondary"
             busy={sendingTestEmail}
-            busyLabel="Sending..."
+            busyLabel={t("common.sending")}
             onClick={async () => {
               if (!testEmail.trim()) {
-                setDiagnosticsStatus("Enter a test recipient email.");
+                setDiagnosticsStatus(s("diagnostics.errors.testRecipientRequired"));
                 return;
               }
               try {
                 setSendingTestEmail(true);
                 setDiagnosticsStatus("");
-                actionFeedback.begin(`Sending test email to ${testEmail}...`);
+                actionFeedback.begin(s("diagnostics.feedback.sendingTestEmail", { email: testEmail }));
                 const result = await sendAdminTestEmail(testEmail.trim());
-                const message = `Test email sent to ${result.email}.`;
+                const message = s("diagnostics.feedback.testEmailSent", { email: result.email || testEmail.trim() });
                 setDiagnosticsStatus(message);
                 actionFeedback.succeed(message);
               } catch (caught) {
-                const message = caught instanceof Error ? caught.message : "Test email send failed";
+                const message = caught instanceof Error ? caught.message : s("diagnostics.errors.testEmailFailed");
                 setDiagnosticsStatus(message);
                 actionFeedback.fail(message);
               } finally {
@@ -1530,7 +1533,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               }
             }}
           >
-            Send Test Email
+            {s("diagnostics.actions.sendTestEmail")}
           </Button>
         </div>
         {diagnosticsStatus ? <div className="success-text">{diagnosticsStatus}</div> : null}
