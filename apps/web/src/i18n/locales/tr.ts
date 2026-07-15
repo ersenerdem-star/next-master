@@ -36,6 +36,7 @@ export const trMessages = {
     loadingPage: "Yükleniyor...",
     saving: "Kaydediliyor...",
     sending: "Gönderiliyor...",
+    noRowsFound: "Satır bulunamadı",
   },
   auth: {
     adminWorkspace: "Yönetici Çalışma Alanı",

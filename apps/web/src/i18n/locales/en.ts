@@ -55,6 +55,7 @@ export const enMessages = {
     loadingPage: "Loading...",
     saving: "Saving...",
     sending: "Sending...",
+    noRowsFound: "No rows found",
   },
   auth: {
     adminWorkspace: "Admin Workspace",

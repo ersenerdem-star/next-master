@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { useI18n } from "../../../i18n/I18nProvider";
 
 type Column<T> = {
   key: string;
@@ -20,14 +21,16 @@ type DataTableProps<T> = {
 export function DataTable<T>({
   rows,
   columns,
-  emptyText = "No rows found",
+  emptyText,
   onRowClick,
   rowClassName,
   className = "",
   wrapClassName = "",
 }: DataTableProps<T>) {
+  const { t } = useI18n();
   const [sortKey, setSortKey] = useState("");
   const [sortDirection, setSortDirection] = useState<"asc" | "">("");
+  const resolvedEmptyText = emptyText ?? t("common.noRowsFound");
 
   const sortedRows = useMemo(() => {
     if (!sortKey || !sortDirection) return rows;
@@ -72,7 +75,7 @@ export function DataTable<T>({
   if (!rows.length) {
     return (
       <div className={`table-wrap data-table-shell${wrapClassName ? ` ${wrapClassName}` : ""}`}>
-        <div className="empty-state">{emptyText}</div>
+        <div className="empty-state">{resolvedEmptyText}</div>
       </div>
     );
   }
