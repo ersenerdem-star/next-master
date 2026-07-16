@@ -201,6 +201,14 @@ export async function runPilot({ db, options: inputOptions, artifactDir: inputAr
       appendedObservationIds.push(observationId);
     }
 
+    const dedupe = appendedObservationIds[0]
+      ? await db.rpc("append_catalog_external_observation", {
+          input_run_id: runId,
+          input_collector_actor_id: actor.id,
+          ...plannedObservations[0],
+        })
+      : null;
+
     const finalStatus = deriveFinalStatus({ appendedCount: appendedObservationIds.length, failureCount: failures.length });
     const finishResult = await db.rpc("finish_catalog_observation_run", {
       input_run_id: runId,
@@ -219,14 +227,6 @@ export async function runPilot({ db, options: inputOptions, artifactDir: inputAr
         input_last_observed_at: new Date().toISOString(),
       });
     }
-
-    const dedupe = appendedObservationIds[0]
-      ? await db.rpc("append_catalog_external_observation", {
-          input_run_id: runId,
-          input_collector_actor_id: actor.id,
-          ...plannedObservations[0],
-        })
-      : null;
     const after = await captureSafetySnapshot(db, {
       organizationId: inputOptions.organizationId,
       sourceKey: SOURCE_KEY,
