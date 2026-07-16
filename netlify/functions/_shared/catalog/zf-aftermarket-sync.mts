@@ -446,6 +446,66 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
   };
 }
 
+export async function fetchZfAftermarketOfficialObservation(input: {
+  brandName: string;
+  productCode: string;
+  requestTimeoutMs?: number;
+  searchPageSize?: number;
+}) {
+  const target = resolveStaticTarget(input.brandName);
+  const requestTimeoutMs = Math.max(5000, input.requestTimeoutMs ?? 30000);
+  const searchPageSize = Math.max(20, input.searchPageSize ?? 100);
+  const search = await fetchSearchPage(target, normalizeCode(input.productCode), 0, searchPageSize, requestTimeoutMs);
+  if (!search.items.length) {
+    throw new Error(`search_returned_zero for ${input.productCode}`);
+  }
+
+  const sourceArticleId = String(search.items[0].source_article_number || search.items[0].product_code || input.productCode).trim();
+  if (!sourceArticleId) {
+    throw new Error(`search_schema_changed for ${input.productCode}`);
+  }
+
+  let detailPayload: any;
+  try {
+    detailPayload = await fetchArticle(target, sourceArticleId, requestTimeoutMs);
+  } catch (error) {
+    const message = String(error || "");
+    if (message.includes("404")) throw new Error(`article_detail_missing for ${input.productCode}`);
+    throw error;
+  }
+  if (!detailPayload?.details?.number) {
+    throw new Error(`article_detail_missing for ${input.productCode}`);
+  }
+  const detail = normalizeDetailPayload(target, detailPayload);
+  return {
+    source_name: "ZF Aftermarket official catalog",
+    source_base_url: "https://aftermarket.zf.com",
+    brand_name: target.internalName,
+    product_code: detail.product_code,
+    normalized_code: normalizeCode(detail.product_code || input.productCode),
+    external_product_ref: detail.product_code || input.productCode,
+    source_url: detail.source_url || "",
+    image_url: detail.image_url || "",
+    description: detail.description || "",
+    observed_at: new Date().toISOString(),
+    source_article_id: sourceArticleId,
+    source_search_result_count: search.items.length,
+  };
+}
+
+function resolveStaticTarget(brandInput: string) {
+  const key = normalizeBrandKey(brandInput);
+  const config = BRAND_CONFIGS.find(
+    (entry) => entry.key === key || normalizeBrandKey(entry.internalName) === key || entry.aliases.some((alias) => normalizeBrandKey(alias) === key),
+  );
+  if (!config) throw new Error(`No ZF Aftermarket provider mapping found for ${brandInput}`);
+  return {
+    ...config,
+    brand_id: "",
+    organization_id: "",
+  };
+}
+
 async function resolveTarget(supabaseUrl: string, headers: Record<string, string>, brandInput: string) {
   const requested = normalizeBrandKey(brandInput);
   const config =
@@ -612,11 +672,13 @@ async function fetchSearchPage(target: any, term: string, offset: number, search
 }
 
 function normalizeSearchItem(target: any, item: any) {
-  const productCode = normalizeCatalogDisplayCode(cleanText(item.productNumber || item.number || "").replace(/\+/g, " "), target.internalName);
+  const rawArticleNumber = cleanText(item.productNumber || item.number || "");
+  const productCode = normalizeCatalogDisplayCode(rawArticleNumber.replace(/\+/g, " "), target.internalName);
   const normalizedCode = normalizeCode(productCode);
   const imageUrl = String(item.productImage?.images?.[0]?.src || "").trim();
   return {
     brand_name: target.internalName,
+    source_article_number: rawArticleNumber,
     product_code: productCode,
     normalized_code: normalizedCode,
     description: formatOfficialDescription(target, item.name || ""),
