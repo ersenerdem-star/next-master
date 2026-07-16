@@ -283,9 +283,9 @@ function createDbClient({ supabaseUrl, serviceRoleKey }) {
       const response = await fetch(url, { headers });
       return parseResponse(response, `GET ${table}`);
     },
-    async count(table, params = {}) {
+    async count(table, params = {}, selectColumn = "id") {
       const url = new URL(`/rest/v1/${table}`, supabaseUrl);
-      url.searchParams.set("select", "id");
+      url.searchParams.set("select", selectColumn);
       url.searchParams.set("limit", "1");
       for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
       const response = await fetch(url, { headers: { ...headers, Prefer: "count=exact" } });
@@ -367,7 +367,7 @@ async function captureSafetySnapshot(db, { organizationId, sourceKey, jobKey, br
   const initialBackfillCount = await safeCount(db, "catalog_integrity_queue", {
     organization_id: `eq.${organizationId}`,
     reason: "eq.initial_backfill",
-  });
+  }, "product_id");
   const productCount = await db.count("catalog_products", {
     organization_id: `eq.${organizationId}`,
   });
@@ -411,9 +411,9 @@ async function safeGet(db, table, params) {
   }
 }
 
-async function safeCount(db, table, params) {
+async function safeCount(db, table, params, selectColumn = "id") {
   try {
-    return await db.count(table, params);
+    return await db.count(table, params, selectColumn);
   } catch (error) {
     return { unavailable: true, error: errorMessage(error) };
   }
