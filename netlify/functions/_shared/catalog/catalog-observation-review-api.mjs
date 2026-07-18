@@ -24,6 +24,14 @@ export const REVIEW_RECOMMENDATION_ORDER = [
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RECOMMENDATION_RANK = new Map(REVIEW_RECOMMENDATION_ORDER.map((value, index) => [value, index]));
 
+export class CatalogObservationReviewError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.name = "CatalogObservationReviewError";
+    this.status = status;
+  }
+}
+
 export function parseCatalogObservationReviewQuery(requestUrl) {
   const url = requestUrl instanceof URL ? requestUrl : new URL(String(requestUrl || ""));
   const organizationId = String(url.searchParams.get("organization_id") || "").trim();
@@ -77,19 +85,24 @@ export function createCatalogObservationReviewDb({ supabaseUrl, serviceRoleKey }
   };
 }
 
-export async function buildCatalogObservationReviewResponse({
-  db,
-  organizationId,
-  runId,
-  productId = "",
-  fieldFamily = "",
-  comparisonResult = "",
-  recommendation = "",
-  cursor = "",
-  limit = REVIEW_DEFAULT_LIMIT,
-  generatedAt = new Date().toISOString(),
-  now = generatedAt,
-}) {
+export async function loadCatalogObservationReviewWorkspace(db, { organizationId, runId }) {
+  const runs = await db.get("catalog_observation_runs", {
+    select: "id,organization_id,job_id,source_id,brand_id,status,started_at,finished_at,observed_count,deduped_count,candidate_count,review_routed_count,apply_event_count,error_message",
+    organization_id: `eq.${organizationId}`,
+    id: `eq.${runId}`,
+    limit: "1",
+  });
+
+  if (!runs.length) {
+    return {
+      runs: [],
+      observations: [],
+      products: [],
+      sources: [],
+      trustProfiles: [],
+    };
+  }
+
   const observations = await db.get("catalog_external_observations", {
     select: [
       "id",
@@ -113,15 +126,12 @@ export async function buildCatalogObservationReviewResponse({
     ].join(","),
     organization_id: `eq.${organizationId}`,
     run_id: `eq.${runId}`,
-    ...(productId ? { catalog_product_id: `eq.${productId}` } : {}),
-    ...(fieldFamily ? { field_family: `eq.${fieldFamily}` } : {}),
     order: "ingested_at.asc,id.asc",
   });
 
   const productIds = uniqueStrings(observations.map((observation) => observation.catalog_product_id));
   const sourceIds = uniqueStrings(observations.map((observation) => observation.source_id));
   const trustProfileIds = uniqueStrings(observations.map((observation) => observation.trust_profile_id));
-  const runIds = uniqueStrings(observations.map((observation) => observation.run_id));
 
   const products = productIds.length
     ? await db.get("catalog_products", {
@@ -144,19 +154,49 @@ export async function buildCatalogObservationReviewResponse({
       order: "source_id.asc",
     })
     : [];
-  const runs = runIds.length
-    ? await db.get("catalog_observation_runs", {
-      select: "id,organization_id,job_id,source_id,brand_id,status,started_at,finished_at,observed_count,deduped_count,candidate_count,review_routed_count,apply_event_count,error_message",
-      id: `in.(${runIds.join(",")})`,
-      order: "started_at.asc",
-    })
-    : [];
 
+  return {
+    runs,
+    observations,
+    products,
+    sources,
+    trustProfiles,
+  };
+}
+
+export async function buildCatalogObservationReviewResponse({
+  db,
+  organizationId,
+  runId,
+  productId = "",
+  fieldFamily = "",
+  comparisonResult = "",
+  recommendation = "",
+  cursor = "",
+  limit = REVIEW_DEFAULT_LIMIT,
+  generatedAt = new Date().toISOString(),
+  now = generatedAt,
+}) {
+  const workspace = await loadCatalogObservationReviewWorkspace(db, { organizationId, runId });
+  if (!workspace.runs.length) {
+    throw new CatalogObservationReviewError(404, "Review run not found in the authorized organization.");
+  }
+  if (!workspace.observations.length) {
+    throw new CatalogObservationReviewError(409, "Review run linkage is inconsistent.");
+  }
+
+  const { observations, products, sources, trustProfiles, runs } = workspace;
   const productById = new Map(products.map((product) => [product.id, product]));
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   const trustProfileById = new Map(trustProfiles.map((profile) => [profile.id, profile]));
   const runById = new Map(runs.map((run) => [run.id, run]));
   const observationById = new Map(observations.map((observation) => [observation.id, observation]));
+
+  for (const observation of observations) {
+    if (!productById.has(observation.catalog_product_id)) {
+      throw new CatalogObservationReviewError(409, "Review run linkage is inconsistent.");
+    }
+  }
 
   const comparisons = observations.map((observation) => compareObservationToProduct({
     observation,

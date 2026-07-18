@@ -4,10 +4,13 @@ import {
   REVIEW_DEFAULT_LIMIT,
   REVIEW_MAX_LIMIT,
   REVIEW_SCHEMA_VERSION,
+  CatalogObservationReviewError,
   authorizeCatalogObservationReviewAccess,
   buildCatalogObservationReviewResponse,
+  loadCatalogObservationReviewWorkspace,
   parseCatalogObservationReviewQuery,
 } from "../../netlify/functions/_shared/catalog/catalog-observation-review-api.mjs";
+import { handleCatalogObservationReviewRequest } from "../../netlify/functions/catalog-observation-review.mts";
 
 const ORG_ID = "1e4c5e99-e387-41aa-a6d3-cbe74558f766";
 const RUN_ID = "11581bfd-3a12-43d5-bb39-d6aa09e3bd96";
@@ -115,6 +118,57 @@ test("authorization blocks cross-org access and non-admin users", () => {
   assert.deepEqual(authorizeCatalogObservationReviewAccess({ role: "superadmin", organization_id: ORG_ID }, ORG_ID), { ok: true });
 });
 
+test("workspace loader returns 404 when the run is missing", async () => {
+  const db = {
+    async get(table) {
+      if (table === "catalog_observation_runs") return [];
+      throw new Error(`Unexpected table read: ${table}`);
+    },
+  };
+  const workspace = await loadCatalogObservationReviewWorkspace(db, { organizationId: ORG_ID, runId: RUN_ID });
+  assert.deepEqual(workspace, {
+    runs: [],
+    observations: [],
+    products: [],
+    sources: [],
+    trustProfiles: [],
+  });
+  await assert.rejects(() => buildCatalogObservationReviewResponse({
+    db,
+    organizationId: ORG_ID,
+    runId: RUN_ID,
+    generatedAt: NOW,
+    now: NOW,
+  }), (error) => error instanceof CatalogObservationReviewError && error.status === 404);
+});
+
+test("workspace loader returns 409 when linkage is inconsistent", async () => {
+  const db = {
+    async get(table) {
+      if (table === "catalog_observation_runs") {
+        return [{ id: RUN_ID, organization_id: ORG_ID }];
+      }
+      if (table === "catalog_external_observations") {
+        return [{
+          ...observations[0],
+          catalog_product_id: "00000000-0000-4000-8000-000000009999",
+        }];
+      }
+      if (table === "catalog_products") return [];
+      if (table === "catalog_external_sources") return sources;
+      if (table === "catalog_external_source_trust_profiles") return trustProfiles;
+      return [];
+    },
+  };
+  await assert.rejects(() => buildCatalogObservationReviewResponse({
+    db,
+    organizationId: ORG_ID,
+    runId: RUN_ID,
+    generatedAt: NOW,
+    now: NOW,
+  }), (error) => error instanceof CatalogObservationReviewError && error.status === 409);
+});
+
 test("read helper returns deterministic bounded review candidates with stable ordering", async () => {
   const { result, calls } = await buildWithFakeDb();
   assert.equal(result.schema_version, REVIEW_SCHEMA_VERSION);
@@ -167,6 +221,105 @@ test("only read operations are used when loading the review workspace", async ()
   const { calls } = await buildWithFakeDb();
   assert(calls.every((call) => call.method === "get"));
   assert.equal(calls.some((call) => ["insert", "update", "delete", "rpc"].includes(call.method)), false);
+});
+
+test("route handler returns documented statuses", async () => {
+  const env = {
+    get(name) {
+      if (name === "SUPABASE_URL") return "https://example.supabase.co";
+      if (name === "SUPABASE_ANON_KEY") return "anon-key";
+      if (name === "SUPABASE_SERVICE_ROLE_KEY") return "service-key";
+      return "";
+    },
+  };
+
+  const missingAuth = await handleCatalogObservationReviewRequest(
+    new Request(`https://example.test/api/catalog/observation-review?organization_id=${ORG_ID}&run_id=${RUN_ID}`, { method: "GET" }),
+    {},
+    {
+      requireCallerProfile: async () => ({ error: "Missing caller token", status: 401 }),
+      createCatalogObservationReviewDb: () => { throw new Error("should not be called"); },
+      env,
+    },
+  );
+  assert.equal(missingAuth.status, 401);
+
+  const forbidden = await handleCatalogObservationReviewRequest(
+    new Request(`https://example.test/api/catalog/observation-review?organization_id=${ORG_ID}&run_id=${RUN_ID}`, { method: "GET", headers: { authorization: "Bearer token" } }),
+    {},
+    {
+      requireCallerProfile: async () => ({ profile: { organization_id: ORG_ID, role: "viewer" } }),
+      createCatalogObservationReviewDb: () => { throw new Error("should not be called"); },
+      env,
+    },
+  );
+  assert.equal(forbidden.status, 403);
+
+  const invalid = await handleCatalogObservationReviewRequest(
+    new Request(`https://example.test/api/catalog/observation-review?organization_id=bad&run_id=${RUN_ID}`, { method: "GET", headers: { authorization: "Bearer token" } }),
+    {},
+    {
+      requireCallerProfile: async () => ({ profile: { organization_id: ORG_ID, role: "admin" } }),
+      createCatalogObservationReviewDb: () => { throw new Error("should not be called"); },
+      env,
+    },
+  );
+  assert.equal(invalid.status, 400);
+
+  const notFound = await handleCatalogObservationReviewRequest(
+    new Request(`https://example.test/api/catalog/observation-review?organization_id=${ORG_ID}&run_id=${RUN_ID}`, { method: "GET", headers: { authorization: "Bearer token" } }),
+    {},
+    {
+      requireCallerProfile: async () => ({ profile: { organization_id: ORG_ID, role: "admin" } }),
+      createCatalogObservationReviewDb: () => ({
+        async get(table) {
+          if (table === "catalog_observation_runs") return [];
+          throw new Error(`Unexpected table read: ${table}`);
+        },
+      }),
+      env,
+    },
+  );
+  assert.equal(notFound.status, 404);
+
+  const inconsistent = await handleCatalogObservationReviewRequest(
+    new Request(`https://example.test/api/catalog/observation-review?organization_id=${ORG_ID}&run_id=${RUN_ID}`, { method: "GET", headers: { authorization: "Bearer token" } }),
+    {},
+    {
+      requireCallerProfile: async () => ({ profile: { organization_id: ORG_ID, role: "admin" } }),
+      createCatalogObservationReviewDb: () => ({
+        async get(table) {
+          if (table === "catalog_observation_runs") return [{ id: RUN_ID, organization_id: ORG_ID }];
+          if (table === "catalog_external_observations") return [{
+            ...observations[0],
+            catalog_product_id: "00000000-0000-4000-8000-000000009999",
+          }];
+          if (table === "catalog_products") return [];
+          if (table === "catalog_external_sources") return sources;
+          if (table === "catalog_external_source_trust_profiles") return trustProfiles;
+          return [];
+        },
+      }),
+      env,
+    },
+  );
+  assert.equal(inconsistent.status, 409);
+
+  const internal = await handleCatalogObservationReviewRequest(
+    new Request(`https://example.test/api/catalog/observation-review?organization_id=${ORG_ID}&run_id=${RUN_ID}`, { method: "GET", headers: { authorization: "Bearer token" } }),
+    {},
+    {
+      requireCallerProfile: async () => ({ profile: { organization_id: ORG_ID, role: "admin" } }),
+      createCatalogObservationReviewDb: () => ({
+        async get() {
+          throw new Error("boom");
+        },
+      }),
+      env,
+    },
+  );
+  assert.equal(internal.status, 500);
+  assert.deepEqual(await internal.json(), { error: "Review queue could not be loaded right now." });
 });
 
 async function buildWithFakeDb({ limit, cursor, recommendation, comparisonResult } = {}) {
