@@ -77,3 +77,22 @@ test("Catalog observation review translations include read-only and advisory lab
   assert.match(en, /High-confidence recommendation/);
   assert.match(tr, /Yüksek güvenli öneri/);
 });
+
+test("Netlify SPA redirects preserve APIs before app route fallback", async () => {
+  const netlify = await read("netlify.toml");
+
+  const redirects = Array.from(netlify.matchAll(/\[\[redirects\]\]\s+from = "([^"]+)"\s+to = "([^"]+)"\s+status = (\d+)/g)).map((match) => ({
+    from: match[1],
+    to: match[2],
+    status: Number(match[3]),
+  }));
+
+  assert.deepEqual(redirects, [
+    { from: "/api/*", to: "/.netlify/functions/:splat", status: 200 },
+    { from: "/portal", to: "/index.html", status: 200 },
+    { from: "/portal/*", to: "/index.html", status: 200 },
+    { from: "/*", to: "/index.html", status: 200 },
+  ]);
+
+  assert.equal(redirects.at(-1)?.from, "/*");
+});
