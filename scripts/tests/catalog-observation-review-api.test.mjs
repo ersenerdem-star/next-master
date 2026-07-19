@@ -88,6 +88,10 @@ const products = [
   },
 ];
 
+const brands = [
+  { id: "brand-1", organization_id: ORG_ID, name: "Brand 1" },
+];
+
 const sources = [
   { id: "source-1", organization_id: ORG_ID, source_key: "zf-aftermarket", display_name: "ZF Aftermarket", source_type: "official", license_posture: "approved", is_active: true },
   { id: "source-2", organization_id: ORG_ID, source_key: "official-description", display_name: "Official Description", source_type: "official", license_posture: "approved", is_active: true },
@@ -130,6 +134,7 @@ test("workspace loader returns 404 when the run is missing", async () => {
     runs: [],
     observations: [],
     products: [],
+    brands: [],
     sources: [],
     trustProfiles: [],
   });
@@ -190,6 +195,16 @@ test("read helper returns deterministic bounded review candidates with stable or
   assert.equal(result.summary.recommendation_totals.AUTO_SAFE, 0);
   assert(result.items.every((item) => item.reviewer === null && item.decision === null));
   assert(result.items.every((item) => typeof item.recommendation_fingerprint === "string" && item.recommendation_fingerprint.length > 0));
+  assert(result.items.every((item) => typeof item.comparison_reason === "string" && item.comparison_reason.length > 0));
+  assert(result.items.every((item) => item.brand_id === "brand-1"));
+  assert(result.items.every((item) => item.brand_name === "Brand 1"));
+  assert(result.items.every((item) => typeof item.product_value === "string"));
+  assert(result.items.every((item) => typeof item.observation_value === "string"));
+  assert(result.items.every((item) => typeof item.source_display_name === "string" && item.source_display_name.length > 0));
+  assert(result.items.every((item) => typeof item.evidence_reference === "string" && item.evidence_reference.length > 0));
+  assert(result.items.every((item) => typeof item.evidence_url === "string" && item.evidence_url.length > 0));
+  assert(result.items.every((item) => typeof item.winning_rule === "string" && item.winning_rule.length > 0));
+  assert(result.items.every((item) => Array.isArray(item.positive_factors) && Array.isArray(item.negative_factors)));
   assert(calls.every((call) => call.method === "get"));
 });
 
@@ -329,6 +344,7 @@ async function buildWithFakeDb({ limit, cursor, recommendation, comparisonResult
       calls.push({ method: "get", table, params });
       if (table === "catalog_external_observations") return observations;
       if (table === "catalog_products") return products;
+      if (table === "brands") return brands;
       if (table === "catalog_external_sources") return sources;
       if (table === "catalog_external_source_trust_profiles") return trustProfiles;
       if (table === "catalog_observation_runs") return runs;

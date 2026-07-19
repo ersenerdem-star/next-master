@@ -30,6 +30,10 @@ export function canAccessCustomerOps(role: string | null | undefined) {
   return isCustomerStaffRole(role);
 }
 
+export function canAccessCatalogReviewModules(role: string | null | undefined) {
+  return isAdminLikeRole(role);
+}
+
 export function canAccessSalesModules(role: string | null | undefined) {
   return isCustomerStaffRole(role);
 }
