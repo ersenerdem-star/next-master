@@ -98,6 +98,7 @@ export async function loadCatalogObservationReviewWorkspace(db, { organizationId
       runs: [],
       observations: [],
       products: [],
+      brands: [],
       sources: [],
       trustProfiles: [],
     };
@@ -140,6 +141,17 @@ export async function loadCatalogObservationReviewWorkspace(db, { organizationId
       order: "product_code.asc",
     })
     : [];
+  const brandIds = uniqueStrings([
+    ...products.map((product) => product.brand_id),
+    ...runs.map((run) => run.brand_id),
+  ]);
+  const brands = brandIds.length
+    ? await db.get("brands", {
+      select: "id,organization_id,name",
+      id: `in.(${brandIds.join(",")})`,
+      order: "name.asc",
+    })
+    : [];
   const sources = sourceIds.length
     ? await db.get("catalog_external_sources", {
       select: "id,organization_id,source_key,display_name,source_type,license_posture,is_active",
@@ -159,6 +171,7 @@ export async function loadCatalogObservationReviewWorkspace(db, { organizationId
     runs,
     observations,
     products,
+    brands,
     sources,
     trustProfiles,
   };
@@ -185,8 +198,9 @@ export async function buildCatalogObservationReviewResponse({
     throw new CatalogObservationReviewError(409, "Review run linkage is inconsistent.");
   }
 
-  const { observations, products, sources, trustProfiles, runs } = workspace;
+  const { observations, products, brands, sources, trustProfiles, runs } = workspace;
   const productById = new Map(products.map((product) => [product.id, product]));
+  const brandById = new Map(brands.map((brand) => [brand.id, brand]));
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   const trustProfileById = new Map(trustProfiles.map((profile) => [profile.id, profile]));
   const runById = new Map(runs.map((run) => [run.id, run]));
@@ -229,6 +243,8 @@ export async function buildCatalogObservationReviewResponse({
     .map((queueItem) => {
       const observation = observationById.get(queueItem.observation) || null;
       const product = productById.get(queueItem.product) || null;
+      const brand = brandById.get(product?.brand_id || "") || null;
+      const source = sourceById.get(observation?.source_id || "") || null;
       const comparison = comparisons.find((candidate) => candidate.observation_id === queueItem.observation) || null;
       const recommendationBody = recommendationsByObservationId.get(String(queueItem.observation || "")) || null;
       if (!comparison || !recommendationBody) return null;
@@ -237,16 +253,36 @@ export async function buildCatalogObservationReviewResponse({
         run_id: comparison.run_id || runId,
         review_queue_id: recommendationBody.review_queue_key,
         product_id: comparison.product_id || queueItem.product || null,
+        brand_id: String(product?.brand_id || ""),
+        brand_name: String(brand?.name || ""),
         product_code: String(product?.product_code || ""),
         normalized_product_code: String(product?.normalized_code || product?.product_code || ""),
         observation_id: comparison.observation_id || queueItem.observation || null,
         field_family: comparison.field_family || queueItem.field || "",
         comparison_result: comparison.comparison_result || queueItem.comparison_result || "",
+        comparison_reason: comparison.reason || "",
+        product_value: comparison.product_value || "",
+        observation_value: comparison.observation_value || "",
+        normalized_product_value: comparison.normalized_product_value || "",
+        normalized_observation_value: comparison.normalized_observation_value || "",
         recommendation: recommendationBody.recommendation,
         score: recommendationBody.score,
         explanation: recommendationBody.human_explanation,
         rules: recommendationBody.rules_evaluated,
+        winning_rule: recommendationBody.winning_rule,
         recommendation_fingerprint: recommendationBody.recommendation_fingerprint,
+        source_key: recommendationBody.source_key || null,
+        source_display_name: String(source?.display_name || source?.source_key || recommendationBody.source_key || ""),
+        source_trust_level: recommendationBody.source_trust_level || null,
+        source_trust_score: recommendationBody.source_trust_score ?? null,
+        observation_confidence: recommendationBody.observation_confidence ?? null,
+        evidence_complete: Boolean(recommendationBody.evidence_complete),
+        evidence_reference: String(observation?.evidence_reference || ""),
+        evidence_url: String(observation?.evidence_url || ""),
+        observed_at: String(observation?.observed_at || observation?.ingested_at || ""),
+        run_status: recommendationBody.run_status || null,
+        positive_factors: Array.isArray(recommendationBody.positive_factors) ? recommendationBody.positive_factors : [],
+        negative_factors: Array.isArray(recommendationBody.negative_factors) ? recommendationBody.negative_factors : [],
         reviewer: null,
         decision: null,
         created_at: comparison.created_at || observation?.ingested_at || observation?.observed_at || generatedAt,

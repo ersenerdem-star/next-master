@@ -7,7 +7,7 @@ import { AppShell } from "../presentation/layout/AppShell";
 import { useI18n } from "../i18n/I18nProvider";
 import { APP_NAVIGATION_EVENT, type AppNavigationDetail } from "../shared/catalogTransfer";
 import {
-  canAccessCustomerOps,
+  canAccessCatalogReviewModules,
   canAccessInventoryModules,
   canAccessOperationsModules,
   canAccessPurchasingModules,
@@ -19,6 +19,9 @@ import {
   type AppRole,
 } from "../shared/roles";
 
+const CATALOG_OBSERVATION_REVIEW_PATH = "/catalog/observation-review";
+
+const CatalogObservationReviewPage = lazy(() => import("../presentation/pages/CatalogObservationReviewPage").then((module) => ({ default: module.CatalogObservationReviewPage })));
 const DashboardPage = lazy(() => import("../presentation/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const InventoryPage = lazy(() => import("../presentation/pages/InventoryPage").then((module) => ({ default: module.InventoryPage })));
 const ItemsPage = lazy(() => import("../presentation/pages/ItemsPage").then((module) => ({ default: module.ItemsPage })));
@@ -113,6 +116,7 @@ function writePersistedAppUiState(next: PersistedAppUiState | null) {
 const allNavItems = [
   { key: "Home", code: "01", labelKey: "nav.home", captionKey: "nav.homeCaption" },
   { key: "Items", code: "02", labelKey: "nav.items", captionKey: "nav.itemsCaption" },
+  { key: "CatalogReview", code: "02R", labelKey: "nav.catalogReview", captionKey: "nav.catalogReviewCaption" },
   { key: "Inventory", code: "03", labelKey: "nav.inventory", captionKey: "nav.inventoryCaption" },
   { key: "Sales", code: "04", labelKey: "nav.sales", captionKey: "nav.salesCaption" },
   { key: "Purchases", code: "05", labelKey: "nav.purchases", captionKey: "nav.purchasesCaption" },
@@ -123,7 +127,7 @@ const allNavItems = [
 function getAllowedNavItems(role: AppRole) {
   if (isSuperadminRole(role)) return allNavItems;
   if (canAccessOperationsModules(role)) {
-    return allNavItems.filter((item) => item.key === "Home" || item.key === "Inventory" || item.key === "Sales" || item.key === "Purchases" || item.key === "Reports" || item.key === "Settings");
+    return allNavItems.filter((item) => item.key === "Home" || item.key === "CatalogReview" || item.key === "Inventory" || item.key === "Sales" || item.key === "Purchases" || item.key === "Reports" || item.key === "Settings");
   }
   if (canAccessSalesModules(role)) {
     return allNavItems.filter((item) => item.key === "Home" || item.key === "Sales" || item.key === "Settings");
@@ -194,6 +198,7 @@ export function App() {
   const { t } = useI18n();
   const isPortalRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/portal");
   const initialUiState = typeof window === "undefined" || isPortalRoute ? null : readPersistedAppUiState();
+  const initialWorkspacePath = typeof window === "undefined" ? "/" : window.location.pathname;
   const initialAppSession = typeof window === "undefined" || isPortalRoute ? null : getCachedAppSessionSnapshot();
   const initialAppRole = normalizeAppRole(initialAppSession?.role || "");
   const [sessionReady, setSessionReady] = useState(false);
@@ -205,6 +210,7 @@ export function App() {
   const [activePage, setActivePage] = useState(initialUiState?.activePage || "Home");
   const [accessNotice, setAccessNotice] = useState("");
   const [recoveryMode, setRecoveryMode] = useState(false);
+  const [workspacePath, setWorkspacePath] = useState(initialWorkspacePath);
   const [selectedSalesOrderId, setSelectedSalesOrderId] = useState("");
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
   const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
@@ -401,6 +407,19 @@ export function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    const handlePopState = () => {
+      setWorkspacePath(window.location.pathname);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
     const handleNavigation = (event: Event) => {
       const detail = (event as CustomEvent<AppNavigationDetail>).detail;
       if (!detail?.page) return;
@@ -438,6 +457,15 @@ export function App() {
 
   function showAccessNotice(message: string) {
     setAccessNotice(message);
+  }
+
+  function pushWorkspacePath(path: string) {
+    if (typeof window === "undefined") return;
+    const currentPath = window.location.pathname;
+    if (currentPath !== path) {
+      window.history.pushState({}, "", path);
+    }
+    setWorkspacePath(path);
   }
 
   function openSalesOrder(salesOrderId: string) {
@@ -554,7 +582,9 @@ export function App() {
 
   function handleMainNavigate(nextPage: string) {
     if (!allowedNavItems.some((item) => item.key === nextPage)) {
-      if (nextPage === "Items") {
+      if (nextPage === "CatalogReview") {
+        showAccessNotice(t("errors.catalogReviewAccessDenied"));
+      } else if (nextPage === "Items") {
         showAccessNotice(t("errors.catalogAccessDenied"));
       } else if (nextPage === "Purchases" || nextPage === "Inventory" || nextPage === "Reports") {
         showAccessNotice(t("errors.operationAreaAccessDenied"));
@@ -564,6 +594,13 @@ export function App() {
       return;
     }
     setAccessNotice("");
+    if (nextPage === "CatalogReview") {
+      pushWorkspacePath(CATALOG_OBSERVATION_REVIEW_PATH);
+      return;
+    }
+    if (workspacePath.startsWith(CATALOG_OBSERVATION_REVIEW_PATH)) {
+      pushWorkspacePath("/");
+    }
     setActivePage(nextPage);
   }
 
@@ -623,6 +660,8 @@ export function App() {
   const reportsSubNavItems = useMemo(() => getReportsSubNav(appRole), [appRole]);
   const settingsSubNavItems = useMemo(() => getSettingsSubNav(appRole), [appRole]);
   const allowedNavItems = useMemo(() => getAllowedNavItems(appRole), [appRole]);
+  const isCatalogReviewRoute = workspacePath.startsWith(CATALOG_OBSERVATION_REVIEW_PATH);
+  const shellActivePage = isCatalogReviewRoute ? "CatalogReview" : activePage;
   const localizedNavItems = useMemo(
     () =>
       allowedNavItems.map((item) => ({
@@ -687,7 +726,9 @@ export function App() {
   }, [settingsSubNavItems, settingsTab]);
 
   const subNavItems =
-    activePage === "Items" && canAccessSystemModules(appRole)
+    isCatalogReviewRoute
+      ? []
+      : activePage === "Items" && canAccessSystemModules(appRole)
       ? itemSubNav
       : activePage === "Inventory" && canAccessInventoryModules(appRole)
         ? inventorySubNavItems
@@ -711,7 +752,9 @@ export function App() {
   );
 
   const activeSubPage =
-    activePage === "Items"
+    isCatalogReviewRoute
+      ? ""
+      : activePage === "Items"
       ? itemsTab
       : activePage === "Inventory"
         ? inventoryInitialTab
@@ -761,8 +804,14 @@ export function App() {
     return <div className="loading-screen">{t("common.loadingWorkspace")}</div>;
   }
 
+  if (isCatalogReviewRoute && !canAccessCatalogReviewModules(appRole)) {
+    return <div className="loading-screen">{t("errors.catalogReviewAccessDenied")}</div>;
+  }
+
   const pageContent =
-    activePage === "Items" && canAccessSystemModules(appRole) ? (
+    isCatalogReviewRoute ? (
+      <CatalogObservationReviewPage />
+    ) : activePage === "Items" && canAccessSystemModules(appRole) ? (
       <ItemsPage activeTab={itemsTab} />
     ) : activePage === "Inventory" && canAccessInventoryModules(appRole) ? (
       <InventoryPage initialTab={inventoryInitialTab} selectedWarehouseId={inventorySelectedWarehouseId} stockSearch={inventoryStockSearch} />
@@ -800,7 +849,7 @@ export function App() {
   return (
     <ActionFeedbackProvider>
       <AppShell
-        activePage={activePage}
+        activePage={shellActivePage}
         activeSubPage={activeSubPage}
         notice={accessNotice}
         onDismissNotice={() => setAccessNotice("")}
@@ -811,7 +860,7 @@ export function App() {
       >
         <Suspense fallback={renderPageFallback(t("common.loadingPage"))}>
           <PageErrorBoundary
-            key={`${activePage}:${activeSubPage || "root"}`}
+            key={`${shellActivePage}:${activeSubPage || "root"}`}
             title={t("errors.pageFailedToRender")}
             description={t("errors.reloadWorkspace")}
           >

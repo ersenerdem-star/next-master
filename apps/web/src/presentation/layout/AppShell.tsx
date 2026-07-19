@@ -32,6 +32,7 @@ type AppShellProps = {
 const pageMeta = {
   Home: { code: "01", eyebrowKey: "nav.home", titleKey: "nav.home", descriptionKey: "nav.homeCaption" },
   Items: { code: "02", eyebrowKey: "nav.items", titleKey: "nav.items", descriptionKey: "nav.itemsCaption" },
+  CatalogReview: { code: "02R", eyebrowKey: "nav.catalogReview", titleKey: "nav.catalogReview", descriptionKey: "nav.catalogReviewCaption" },
   Inventory: { code: "03", eyebrowKey: "nav.inventory", titleKey: "nav.inventory", descriptionKey: "nav.inventoryCaption" },
   Sales: { code: "04", eyebrowKey: "nav.sales", titleKey: "nav.sales", descriptionKey: "nav.salesCaption" },
   Purchases: { code: "05", eyebrowKey: "nav.purchases", titleKey: "nav.purchases", descriptionKey: "nav.purchasesCaption" },
