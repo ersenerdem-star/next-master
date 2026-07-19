@@ -1,12 +1,14 @@
 import type { Config, Context } from "@netlify/functions";
 import { json } from "./_shared/http.mts";
 import { requireCallerProfile } from "./_shared/auth.mts";
+import { getBearerToken } from "./_shared/app-auth.mts";
 import { sanitizeUserFacingMessage } from "./_shared/user-message.mts";
 import {
   authorizeCatalogObservationReviewAccess,
   buildCatalogObservationReviewResponse,
   CatalogObservationReviewError,
   createCatalogObservationReviewDb,
+  createCatalogObservationReviewDecisionStateDb,
   parseCatalogObservationReviewQuery,
 } from "./_shared/catalog/catalog-observation-review-api.mjs";
 
@@ -16,6 +18,7 @@ export async function handleCatalogObservationReviewRequest(
   deps = {
     requireCallerProfile,
     createCatalogObservationReviewDb,
+    createCatalogObservationReviewDecisionStateDb,
     env: Netlify.env,
   },
 ) {
@@ -47,8 +50,15 @@ export async function handleCatalogObservationReviewRequest(
     }
 
     const db = deps.createCatalogObservationReviewDb({ supabaseUrl, serviceRoleKey });
+    const createDecisionStateDb = deps.createCatalogObservationReviewDecisionStateDb || createCatalogObservationReviewDecisionStateDb;
+    const decisionStateDb = createDecisionStateDb({
+      supabaseUrl,
+      supabaseAnonKey,
+      accessToken: getBearerToken(req),
+    });
     const body = await buildCatalogObservationReviewResponse({
       db,
+      decisionStateDb,
       organizationId: query.organization_id,
       runId: query.run_id,
       productId: query.product_id,

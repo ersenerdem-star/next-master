@@ -1,5 +1,6 @@
 import type {
   CatalogObservationReviewItem,
+  CatalogObservationReviewDecisionState,
   CatalogObservationReviewPage,
   CatalogObservationReviewResponse,
   CatalogObservationReviewRuleEvaluation,
@@ -73,6 +74,33 @@ function ruleArray(value: unknown): CatalogObservationReviewRuleEvaluation[] {
   });
 }
 
+function mapDecisionState(value: unknown): CatalogObservationReviewDecisionState {
+  const row = objectValue(value);
+  return {
+    organization_id: nullableString(row.organization_id),
+    review_item_id: nullableString(row.review_item_id),
+    current_decision: nullableString(row.current_decision),
+    current_event_id: nullableString(row.current_event_id),
+    reviewer_user_id: nullableString(row.reviewer_user_id),
+    reviewer_role: nullableString(row.reviewer_role),
+    decided_at: nullableString(row.decided_at),
+    decision_version: numberValue(row.decision_version),
+    is_reversed: Boolean(row.is_reversed),
+    is_superseded: Boolean(row.is_superseded),
+    is_invalidated: Boolean(row.is_invalidated),
+    is_stale: Boolean(row.is_stale),
+    requires_re_review: Boolean(row.requires_re_review),
+    recommendation_fingerprint_at_decision: nullableString(row.recommendation_fingerprint_at_decision),
+    current_recommendation_fingerprint: nullableString(row.current_recommendation_fingerprint),
+    review_item_fingerprint_at_decision: nullableString(row.review_item_fingerprint_at_decision),
+    current_review_item_fingerprint: nullableString(row.current_review_item_fingerprint),
+    product_target_fingerprint_at_decision: nullableString(row.product_target_fingerprint_at_decision),
+    current_product_target_fingerprint: nullableString(row.current_product_target_fingerprint),
+    apply_eligible: Boolean(row.apply_eligible),
+    apply_block_reasons: stringArray(row.apply_block_reasons),
+  };
+}
+
 function mapReviewItem(value: unknown): CatalogObservationReviewItem {
   const row = objectValue(value);
   return {
@@ -98,6 +126,8 @@ function mapReviewItem(value: unknown): CatalogObservationReviewItem {
     rules: ruleArray(row.rules),
     winning_rule: stringValue(row.winning_rule),
     recommendation_fingerprint: stringValue(row.recommendation_fingerprint),
+    review_item_fingerprint: stringValue(row.review_item_fingerprint),
+    product_target_fingerprint: stringValue(row.product_target_fingerprint),
     source_key: nullableString(row.source_key),
     source_display_name: nullableString(row.source_display_name),
     source_trust_level: nullableString(row.source_trust_level),
@@ -112,6 +142,7 @@ function mapReviewItem(value: unknown): CatalogObservationReviewItem {
     negative_factors: stringArray(row.negative_factors),
     reviewer: nullableString(row.reviewer),
     decision: nullableString(row.decision),
+    decision_state: mapDecisionState(row.decision_state),
     created_at: stringValue(row.created_at),
   };
 }

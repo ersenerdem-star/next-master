@@ -1,4 +1,5 @@
-import { buildRestUrl, getJson, serviceRoleHeaders } from "../http.mts";
+import crypto from "node:crypto";
+import { buildRestUrl, getJson, sendJson, serviceRoleHeaders } from "../http.mts";
 import { isAdminLikeRole } from "../roles.mts";
 import {
   COMPARISON_RESULTS,
@@ -80,6 +81,27 @@ export function createCatalogObservationReviewDb({ supabaseUrl, serviceRoleKey }
     async get(table, params) {
       return getJson(buildRestUrl(supabaseUrl, table, params), {
         headers: serviceRoleHeaders(serviceRoleKey),
+      });
+    },
+  };
+}
+
+export function createCatalogObservationReviewDecisionStateDb({ supabaseUrl, supabaseAnonKey, accessToken }) {
+  return {
+    async getDecisionState(input) {
+      return sendJson(`${supabaseUrl}/rest/v1/rpc/get_catalog_observation_review_decision_state`, {
+        method: "POST",
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          input_review_item_id: input.reviewItemId,
+          input_current_recommendation_fingerprint: input.recommendationFingerprint,
+          input_current_review_item_fingerprint: input.reviewItemFingerprint,
+          input_current_product_target_fingerprint: input.productTargetFingerprint,
+        }),
       });
     },
   };
@@ -179,6 +201,7 @@ export async function loadCatalogObservationReviewWorkspace(db, { organizationId
 
 export async function buildCatalogObservationReviewResponse({
   db,
+  decisionStateDb = null,
   organizationId,
   runId,
   productId = "",
@@ -248,6 +271,8 @@ export async function buildCatalogObservationReviewResponse({
       const comparison = comparisons.find((candidate) => candidate.observation_id === queueItem.observation) || null;
       const recommendationBody = recommendationsByObservationId.get(String(queueItem.observation || "")) || null;
       if (!comparison || !recommendationBody) return null;
+      const productTargetFingerprint = fingerprintProductTargetValue(comparison.field_family || queueItem.field || "", product);
+      const reviewItemFingerprint = fingerprintReviewItem(recommendationBody.review_queue_key, observation, product);
       return {
         organization_id: recommendationBody.organization_id || comparison.organization_id || organizationId,
         run_id: comparison.run_id || runId,
@@ -271,6 +296,8 @@ export async function buildCatalogObservationReviewResponse({
         rules: recommendationBody.rules_evaluated,
         winning_rule: recommendationBody.winning_rule,
         recommendation_fingerprint: recommendationBody.recommendation_fingerprint,
+        review_item_fingerprint: reviewItemFingerprint,
+        product_target_fingerprint: productTargetFingerprint,
         source_key: recommendationBody.source_key || null,
         source_display_name: String(source?.display_name || source?.source_key || recommendationBody.source_key || ""),
         source_trust_level: recommendationBody.source_trust_level || null,
@@ -285,10 +312,30 @@ export async function buildCatalogObservationReviewResponse({
         negative_factors: Array.isArray(recommendationBody.negative_factors) ? recommendationBody.negative_factors : [],
         reviewer: null,
         decision: null,
+        decision_state: buildUndecidedDecisionState({
+          organizationId,
+          reviewItemId: recommendationBody.review_queue_key,
+          recommendationFingerprint: recommendationBody.recommendation_fingerprint,
+          reviewItemFingerprint,
+          productTargetFingerprint,
+        }),
         created_at: comparison.created_at || observation?.ingested_at || observation?.observed_at || generatedAt,
       };
     })
     .filter(Boolean);
+
+  if (decisionStateDb) {
+    for (const record of records) {
+      record.decision_state = await decisionStateDb.getDecisionState({
+        reviewItemId: record.review_queue_id,
+        recommendationFingerprint: record.recommendation_fingerprint,
+        reviewItemFingerprint: record.review_item_fingerprint,
+        productTargetFingerprint: record.product_target_fingerprint,
+      });
+      record.decision = record.decision_state?.current_decision === "UNDECIDED" ? null : String(record.decision_state?.current_decision || "");
+      record.reviewer = record.decision_state?.reviewer_user_id ? String(record.decision_state.reviewer_user_id) : null;
+    }
+  }
 
   const comparisonTotals = summarizeComparisons(comparisons, reviewQueue);
   const recommendedRecords = records.filter((record) => matchesResponseFilters(record, { productId, fieldFamily, comparisonResult, recommendation }));
@@ -459,4 +506,83 @@ function uniqueStrings(values) {
 
 function isUuid(value) {
   return UUID_PATTERN.test(String(value || "").trim());
+}
+
+function buildUndecidedDecisionState({
+  organizationId,
+  reviewItemId,
+  recommendationFingerprint,
+  reviewItemFingerprint,
+  productTargetFingerprint,
+}) {
+  return {
+    organization_id: organizationId,
+    review_item_id: reviewItemId,
+    current_decision: "UNDECIDED",
+    current_event_id: null,
+    reviewer_user_id: null,
+    reviewer_role: null,
+    decided_at: null,
+    decision_version: 0,
+    is_reversed: false,
+    is_superseded: false,
+    is_invalidated: false,
+    is_stale: false,
+    requires_re_review: false,
+    recommendation_fingerprint_at_decision: null,
+    current_recommendation_fingerprint: recommendationFingerprint,
+    review_item_fingerprint_at_decision: null,
+    current_review_item_fingerprint: reviewItemFingerprint,
+    product_target_fingerprint_at_decision: null,
+    current_product_target_fingerprint: productTargetFingerprint,
+    apply_eligible: false,
+    apply_block_reasons: ["NO_ACCEPT_DECISION"],
+  };
+}
+
+function fingerprintReviewItem(reviewItemId, observation, product) {
+  return catalogReviewHash("review_item", [
+    reviewItemId,
+    fingerprintObservation(observation),
+    fingerprintProductTargetValue(observation?.field_family || "", product),
+  ].join("|"));
+}
+
+function fingerprintObservation(observation) {
+  return catalogReviewHash("observation", [
+    observation?.id,
+    observation?.organization_id,
+    observation?.catalog_product_id,
+    observation?.field_family,
+    observation?.raw_value,
+    observation?.normalized_value,
+    observation?.evidence_reference,
+    observation?.evidence_hash,
+    observation?.evidence_url,
+    observation?.confidence,
+    observation?.deduplication_key,
+  ].map((value) => String(value ?? "")).join("|"));
+}
+
+function fingerprintProductTargetValue(fieldFamily, product) {
+  return catalogReviewHash("product_target", [
+    product?.id,
+    fieldFamily,
+    productTargetValue(fieldFamily, product),
+    product?.updated_at,
+  ].map((value) => String(value ?? "")).join("|"));
+}
+
+function productTargetValue(fieldFamily, product) {
+  if (!product) return "";
+  if (fieldFamily === "image_reference") return String(product.image_url || "");
+  if (fieldFamily === "supplemental_description") return String(product.description || "");
+  if (fieldFamily === "weight") return String(product.weight_kg ?? "");
+  if (fieldFamily === "origin") return String(product.origin || "");
+  if (fieldFamily === "hs_code") return String(product.hs_code || "");
+  return "";
+}
+
+function catalogReviewHash(label, payload) {
+  return crypto.createHash("md5").update(`${String(label || "")}:v1:${String(payload || "")}`).digest("hex");
 }

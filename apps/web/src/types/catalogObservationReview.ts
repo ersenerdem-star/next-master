@@ -43,6 +43,8 @@ export type CatalogObservationReviewItem = {
   rules: CatalogObservationReviewRuleEvaluation[];
   winning_rule: string;
   recommendation_fingerprint: string;
+  review_item_fingerprint: string;
+  product_target_fingerprint: string;
   source_key: string | null;
   source_display_name: string | null;
   source_trust_level: string | null;
@@ -57,7 +59,32 @@ export type CatalogObservationReviewItem = {
   negative_factors: string[];
   reviewer: string | null;
   decision: string | null;
+  decision_state: CatalogObservationReviewDecisionState;
   created_at: string;
+};
+
+export type CatalogObservationReviewDecisionState = {
+  organization_id: string | null;
+  review_item_id: string | null;
+  current_decision: string | null;
+  current_event_id: string | null;
+  reviewer_user_id: string | null;
+  reviewer_role: string | null;
+  decided_at: string | null;
+  decision_version: number;
+  is_reversed: boolean;
+  is_superseded: boolean;
+  is_invalidated: boolean;
+  is_stale: boolean;
+  requires_re_review: boolean;
+  recommendation_fingerprint_at_decision: string | null;
+  current_recommendation_fingerprint: string | null;
+  review_item_fingerprint_at_decision: string | null;
+  current_review_item_fingerprint: string | null;
+  product_target_fingerprint_at_decision: string | null;
+  current_product_target_fingerprint: string | null;
+  apply_eligible: boolean;
+  apply_block_reasons: string[];
 };
 
 export type CatalogObservationReviewSummary = {
