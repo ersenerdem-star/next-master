@@ -27,16 +27,20 @@ test("Catalog observation review route and role guard are wired", async () => {
 
 test("Catalog observation review API client uses authenticated GET with organization and run context", async () => {
   const api = await read("apps/web/src/infrastructure/api/catalogObservationReviewApi.ts");
+  const readSectionStart = api.indexOf("export async function fetchCatalogObservationReview");
+  const readSectionEnd = api.indexOf("export async function submitCatalogObservationReviewDecision");
+  const readSection = readSectionStart >= 0 && readSectionEnd > readSectionStart ? api.slice(readSectionStart, readSectionEnd) : api;
 
   assert.match(api, /getCurrentOrgId/);
   assert.match(api, /supabaseClient\.auth\.getSession/);
   assert.match(api, /\/api\/catalog\/observation-review/);
   assert.match(api, /url\.searchParams\.set\("organization_id", organizationId\)/);
   assert.match(api, /url\.searchParams\.set\("run_id", input\.runId\)/);
-  assert.match(api, /method: "GET"/);
+  assert.match(readSection, /method: "GET"/);
   assert.match(api, /AbortSignal/);
-  assert.doesNotMatch(api, /method: "(POST|PUT|PATCH|DELETE)"/);
-  assert.doesNotMatch(api, /\.from\(/);
+  assert.doesNotMatch(readSection, /method: "(POST|PUT|PATCH|DELETE)"/);
+  assert.doesNotMatch(readSection, /\.from\(/);
+  assert.match(api, /method: "POST"/);
 });
 
 test("Catalog observation review page preserves read-only URL-backed workspace state", async () => {
@@ -56,8 +60,17 @@ test("Catalog observation review page preserves read-only URL-backed workspace s
   assert.match(page, /requestAnimationFrame/);
   assert.match(page, /target="_blank"/);
   assert.match(page, /rel="noopener noreferrer"/);
+  assert.match(page, /submitCatalogObservationReviewDecision/);
+  assert.match(page, /reverseCatalogObservationReviewDecision/);
+  assert.match(page, /decisionModal/);
+  assert.match(page, /reversalModal/);
+  assert.match(page, /decision\.title/);
+  assert.match(page, /decision\.history\.title/);
+  assert.match(page, /decision\.modal\.confirm/);
+  assert.match(page, /decision\.states\.stale/);
   assert.doesNotMatch(page, /acceptReview|rejectReview|applyReview|publishReview/i);
-  assert.doesNotMatch(page, /method: "(POST|PUT|PATCH|DELETE)"/);
+  assert.doesNotMatch(page, /apply current product/i);
+  assert.doesNotMatch(page, /method: "(PUT|PATCH|DELETE)"/);
   assert.doesNotMatch(page, /supabaseClient\.from/);
 });
 
@@ -72,6 +85,9 @@ test("Catalog observation review translations include read-only and advisory lab
     assert.match(locale, /observationReview\.recommendations\.autoSafe/);
     assert.match(locale, /observationReview\.detail\.unassigned/);
     assert.match(locale, /observationReview\.detail\.notDecided/);
+    assert.match(locale, /observationReview\.decision\.title/);
+    assert.match(locale, /observationReview\.decision\.modal\.confirm/);
+    assert.match(locale, /observationReview\.decision\.states\.stale/);
     assert.match(locale, /catalogReviewAccessDenied/);
   }
   assert.match(en, /High-confidence recommendation/);

@@ -6,6 +6,37 @@ export type CatalogObservationReviewComparisonResult =
   | "UNSUPPORTED_FIELD"
   | string;
 
+export const CATALOG_OBSERVATION_REVIEW_DECISION_TYPES = [
+  "ACCEPT_RECOMMENDATION",
+  "REJECT_RECOMMENDATION",
+  "DEFER",
+  "REQUEST_MORE_EVIDENCE",
+] as const;
+
+export type CatalogObservationReviewDecisionType = (typeof CATALOG_OBSERVATION_REVIEW_DECISION_TYPES)[number];
+
+export const CATALOG_OBSERVATION_REVIEW_DECISION_REASON_CODES = {
+  ACCEPT_RECOMMENDATION: ["EVIDENCE_SUFFICIENT", "VERIFIED_AGAINST_CURRENT_PRODUCT", "TRUSTED_OFFICIAL_SOURCE"],
+  REJECT_RECOMMENDATION: ["INCORRECT_OBSERVATION", "INSUFFICIENT_EVIDENCE", "CONFLICTS_WITH_CANONICAL_DATA", "WRONG_PRODUCT_MATCH", "FIELD_NOT_APPLICABLE"],
+  DEFER: ["NEEDS_SECOND_REVIEW", "WAITING_FOR_SOURCE_CONFIRMATION", "TEMPORARY_REVIEW_HOLD"],
+  REQUEST_MORE_EVIDENCE: ["MISSING_PRIMARY_SOURCE", "CONFLICTING_SOURCES", "LOW_CONFIDENCE", "INCOMPLETE_PRODUCT_MATCH"],
+} as const;
+
+export type CatalogObservationReviewDecisionReasonCode =
+  | (typeof CATALOG_OBSERVATION_REVIEW_DECISION_REASON_CODES.ACCEPT_RECOMMENDATION)[number]
+  | (typeof CATALOG_OBSERVATION_REVIEW_DECISION_REASON_CODES.REJECT_RECOMMENDATION)[number]
+  | (typeof CATALOG_OBSERVATION_REVIEW_DECISION_REASON_CODES.DEFER)[number]
+  | (typeof CATALOG_OBSERVATION_REVIEW_DECISION_REASON_CODES.REQUEST_MORE_EVIDENCE)[number];
+
+export const CATALOG_OBSERVATION_REVIEW_REVERSAL_REASON_CODES = [
+  "DECISION_ENTERED_IN_ERROR",
+  "NEW_EVIDENCE_RECEIVED",
+  "RECOMMENDATION_CHANGED",
+  "PRODUCT_STATE_CHANGED",
+] as const;
+
+export type CatalogObservationReviewReversalReasonCode = (typeof CATALOG_OBSERVATION_REVIEW_REVERSAL_REASON_CODES)[number];
+
 export type CatalogObservationReviewRecommendation =
   | "AUTO_SAFE"
   | "LIKELY_ACCEPT"
@@ -85,6 +116,49 @@ export type CatalogObservationReviewDecisionState = {
   current_product_target_fingerprint: string | null;
   apply_eligible: boolean;
   apply_block_reasons: string[];
+};
+
+export type CatalogObservationReviewDecisionEvent = {
+  event_id: string | null;
+  review_item_id: string | null;
+  event_type: string | null;
+  decision_type: string | null;
+  reason_code: string | null;
+  decision_version: number;
+  reviewer_user_id: string | null;
+  reviewer_role: string | null;
+  decided_at: string | null;
+  reversal_target_event_id: string | null;
+};
+
+export type CatalogObservationReviewDecisionCommandInput = {
+  reviewItemId: string;
+  decisionType: CatalogObservationReviewDecisionType;
+  reasonCode: CatalogObservationReviewDecisionReasonCode;
+  reviewerNote: string;
+  expectedDecisionVersion: number;
+  expectedRecommendationFingerprint: string;
+  expectedReviewItemFingerprint: string;
+  expectedProductTargetFingerprint: string;
+  idempotencyKey: string;
+};
+
+export type CatalogObservationReviewDecisionReversalInput = {
+  reviewItemId: string;
+  targetDecisionEventId: string;
+  reasonCode: CatalogObservationReviewReversalReasonCode;
+  reviewerNote: string;
+  expectedDecisionVersion: number;
+  idempotencyKey: string;
+};
+
+export type CatalogObservationReviewDecisionCommandResult = {
+  schema_version: string;
+  success: boolean;
+  action: "record_decision" | "reverse_decision" | string;
+  replayed: boolean;
+  event: CatalogObservationReviewDecisionEvent;
+  current_state: CatalogObservationReviewDecisionState;
 };
 
 export type CatalogObservationReviewSummary = {

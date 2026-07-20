@@ -1,4 +1,8 @@
 import type {
+  CatalogObservationReviewDecisionCommandInput,
+  CatalogObservationReviewDecisionCommandResult,
+  CatalogObservationReviewDecisionEvent,
+  CatalogObservationReviewDecisionReversalInput,
   CatalogObservationReviewItem,
   CatalogObservationReviewDecisionState,
   CatalogObservationReviewPage,
@@ -11,6 +15,20 @@ import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
 
 const CATALOG_OBSERVATION_REVIEW_SCHEMA_VERSION = "catalog-observation-review.v1";
+const CATALOG_OBSERVATION_REVIEW_DECISION_SCHEMA_VERSION = "catalog-observation-review-decision.v1";
+
+export class CatalogObservationReviewCommandError extends Error {
+  status: number;
+
+  code: string;
+
+  constructor(message: string, status: number, code = "CATALOG_REVIEW_COMMAND_FAILED") {
+    super(message);
+    this.name = "CatalogObservationReviewCommandError";
+    this.status = status;
+    this.code = code;
+  }
+}
 
 type FetchCatalogObservationReviewInput = {
   runId: string;
@@ -25,6 +43,7 @@ type FetchCatalogObservationReviewInput = {
 
 type ErrorResponse = {
   error?: string;
+  code?: string;
 };
 
 async function getAccessToken() {
@@ -98,6 +117,22 @@ function mapDecisionState(value: unknown): CatalogObservationReviewDecisionState
     current_product_target_fingerprint: nullableString(row.current_product_target_fingerprint),
     apply_eligible: Boolean(row.apply_eligible),
     apply_block_reasons: stringArray(row.apply_block_reasons),
+  };
+}
+
+function mapDecisionEvent(value: unknown): CatalogObservationReviewDecisionEvent {
+  const row = objectValue(value);
+  return {
+    event_id: nullableString(row.event_id),
+    review_item_id: nullableString(row.review_item_id),
+    event_type: nullableString(row.event_type),
+    decision_type: nullableString(row.decision_type),
+    reason_code: nullableString(row.reason_code),
+    decision_version: numberValue(row.decision_version),
+    reviewer_user_id: nullableString(row.reviewer_user_id),
+    reviewer_role: nullableString(row.reviewer_role),
+    decided_at: nullableString(row.decided_at),
+    reversal_target_event_id: nullableString(row.reversal_target_event_id),
   };
 }
 
@@ -188,6 +223,48 @@ function mapResponse(value: unknown): CatalogObservationReviewResponse {
   };
 }
 
+function mapDecisionResponse(value: unknown): CatalogObservationReviewDecisionCommandResult {
+  const row = objectValue(value);
+  return {
+    schema_version: stringValue(row.schema_version),
+    success: Boolean(row.success),
+    action: stringValue(row.action),
+    replayed: Boolean(row.replayed),
+    event: mapDecisionEvent(row.event),
+    current_state: mapDecisionState(row.current_state),
+  };
+}
+
+async function sendDecisionCommand(
+  path: string,
+  input: CatalogObservationReviewDecisionCommandInput | CatalogObservationReviewDecisionReversalInput,
+  signal?: AbortSignal,
+): Promise<CatalogObservationReviewDecisionCommandResult> {
+  const accessToken = await getAccessToken();
+  const response = await fetch(new URL(path, window.location.origin), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+    signal,
+  });
+  const data = (await response.json().catch(() => ({}))) as ErrorResponse;
+  if (!response.ok) {
+    throw new CatalogObservationReviewCommandError(
+      sanitizeUserFacingMessage(data.error || `Catalog observation review decision failed: ${response.status}`, "The decision could not be completed right now."),
+      response.status,
+      data.code || "CATALOG_REVIEW_COMMAND_FAILED",
+    );
+  }
+  const mapped = mapDecisionResponse(data);
+  if (mapped.schema_version !== CATALOG_OBSERVATION_REVIEW_DECISION_SCHEMA_VERSION) {
+    throw new CatalogObservationReviewCommandError("The decision response is not compatible with this UI version.", 500, "CATALOG_REVIEW_COMMAND_VERSION_MISMATCH");
+  }
+  return mapped;
+}
+
 export async function fetchCatalogObservationReview(input: FetchCatalogObservationReviewInput): Promise<CatalogObservationReviewResponse> {
   const organizationId = await getCurrentOrgId();
   const accessToken = await getAccessToken();
@@ -217,4 +294,18 @@ export async function fetchCatalogObservationReview(input: FetchCatalogObservati
     throw new Error("The review workspace response is not compatible with this UI version.");
   }
   return mapped;
+}
+
+export async function submitCatalogObservationReviewDecision(
+  input: CatalogObservationReviewDecisionCommandInput,
+  signal?: AbortSignal,
+): Promise<CatalogObservationReviewDecisionCommandResult> {
+  return sendDecisionCommand("/api/catalog/observation-review/decision", input, signal);
+}
+
+export async function reverseCatalogObservationReviewDecision(
+  input: CatalogObservationReviewDecisionReversalInput,
+  signal?: AbortSignal,
+): Promise<CatalogObservationReviewDecisionCommandResult> {
+  return sendDecisionCommand("/api/catalog/observation-review/decision/reverse", input, signal);
 }

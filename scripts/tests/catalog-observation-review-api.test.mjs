@@ -194,6 +194,7 @@ test("read helper returns deterministic bounded review candidates with stable or
   assert.equal(result.summary.recommendation_totals.MANUAL_REQUIRED, 1);
   assert.equal(result.summary.recommendation_totals.AUTO_SAFE, 0);
   assert(result.items.every((item) => item.reviewer === null && item.decision === null));
+  assert(result.items.every((item) => item.decision_state && typeof item.decision_state.decision_version === "number"));
   assert(result.items.every((item) => typeof item.recommendation_fingerprint === "string" && item.recommendation_fingerprint.length > 0));
   assert(result.items.every((item) => typeof item.comparison_reason === "string" && item.comparison_reason.length > 0));
   assert(result.items.every((item) => item.brand_id === "brand-1"));

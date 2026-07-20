@@ -10,13 +10,14 @@ type SelectProps = {
   onChange: (value: string) => void;
   fieldClassName?: string;
   inputClassName?: string;
+  disabled?: boolean;
 };
 
-export function Select({ label, value, options, onChange, fieldClassName = "", inputClassName = "" }: SelectProps) {
+export function Select({ label, value, options, onChange, fieldClassName = "", inputClassName = "", disabled = false }: SelectProps) {
   return (
     <label className={`field ${fieldClassName}`.trim()}>
       {label ? <span className="field__label">{label}</span> : null}
-      <select className={`field__input ${inputClassName}`.trim()} value={value} onChange={(event) => onChange(event.target.value)}>
+      <select className={`field__input ${inputClassName}`.trim()} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
