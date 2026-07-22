@@ -74,6 +74,7 @@ export type CatalogObservationReviewItem = {
   rules: CatalogObservationReviewRuleEvaluation[];
   winning_rule: string;
   recommendation_fingerprint: string;
+  observation_fingerprint: string;
   review_item_fingerprint: string;
   product_target_fingerprint: string;
   source_key: string | null;

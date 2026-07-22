@@ -196,6 +196,11 @@ test("read helper returns deterministic bounded review candidates with stable or
   assert(result.items.every((item) => item.reviewer === null && item.decision === null));
   assert(result.items.every((item) => item.decision_state && typeof item.decision_state.decision_version === "number"));
   assert(result.items.every((item) => typeof item.recommendation_fingerprint === "string" && item.recommendation_fingerprint.length > 0));
+  assert(result.items.every((item) => item.observation_fingerprint === `db-observation:${item.review_queue_id}`));
+  assert(result.items.every((item) => item.review_item_fingerprint === `db-review:${item.review_queue_id}`));
+  assert(result.items.every((item) => item.product_target_fingerprint === `db-product:${item.review_queue_id}`));
+  assert(result.items.every((item) => item.decision_state.current_review_item_fingerprint === item.review_item_fingerprint));
+  assert(result.items.every((item) => item.decision_state.current_product_target_fingerprint === item.product_target_fingerprint));
   assert(result.items.every((item) => typeof item.comparison_reason === "string" && item.comparison_reason.length > 0));
   assert(result.items.every((item) => item.brand_id === "brand-1"));
   assert(result.items.every((item) => item.brand_name === "Brand 1"));
@@ -206,7 +211,18 @@ test("read helper returns deterministic bounded review candidates with stable or
   assert(result.items.every((item) => typeof item.evidence_url === "string" && item.evidence_url.length > 0));
   assert(result.items.every((item) => typeof item.winning_rule === "string" && item.winning_rule.length > 0));
   assert(result.items.every((item) => Array.isArray(item.positive_factors) && Array.isArray(item.negative_factors)));
-  assert(calls.every((call) => call.method === "get"));
+  assert.equal(calls.some((call) => call.name === "get_catalog_observation_review_fingerprints"), true);
+});
+
+test("read helper requires DB-backed canonical fingerprint projection", async () => {
+  const db = createFakeReadDb([]);
+  await assert.rejects(() => buildCatalogObservationReviewResponse({
+    db,
+    organizationId: ORG_ID,
+    runId: RUN_ID,
+    generatedAt: NOW,
+    now: NOW,
+  }), (error) => error instanceof CatalogObservationReviewError && error.status === 500);
 });
 
 test("cursor pagination is stable and repeatable", async () => {
@@ -235,8 +251,8 @@ test("filters keep only matching review records", async () => {
 
 test("only read operations are used when loading the review workspace", async () => {
   const { calls } = await buildWithFakeDb();
-  assert(calls.every((call) => call.method === "get"));
-  assert.equal(calls.some((call) => ["insert", "update", "delete", "rpc"].includes(call.method)), false);
+  assert(calls.every((call) => ["get", "read-rpc"].includes(call.method)));
+  assert.equal(calls.some((call) => ["insert", "update", "delete", "write-rpc"].includes(call.method)), false);
 });
 
 test("route handler returns documented statuses", async () => {
@@ -340,21 +356,49 @@ test("route handler returns documented statuses", async () => {
 
 async function buildWithFakeDb({ limit, cursor, recommendation, comparisonResult } = {}) {
   const calls = [];
-  const db = {
-    async get(table, params) {
-      calls.push({ method: "get", table, params });
-      if (table === "catalog_external_observations") return observations;
-      if (table === "catalog_products") return products;
-      if (table === "brands") return brands;
-      if (table === "catalog_external_sources") return sources;
-      if (table === "catalog_external_source_trust_profiles") return trustProfiles;
-      if (table === "catalog_observation_runs") return runs;
-      return [];
+  const db = createFakeReadDb(calls);
+  const decisionStateDb = {
+    async getFingerprints(input) {
+      calls.push({ method: "read-rpc", name: "get_catalog_observation_review_fingerprints", input });
+      return {
+        organization_id: ORG_ID,
+        review_item_id: input.reviewItemId,
+        observation_fingerprint: `db-observation:${input.reviewItemId}`,
+        review_item_fingerprint: `db-review:${input.reviewItemId}`,
+        product_target_fingerprint: `db-product:${input.reviewItemId}`,
+      };
+    },
+    async getDecisionState(input) {
+      calls.push({ method: "read-rpc", name: "get_catalog_observation_review_decision_state", input });
+      return {
+        organization_id: ORG_ID,
+        review_item_id: input.reviewItemId,
+        current_decision: "UNDECIDED",
+        current_event_id: null,
+        reviewer_user_id: null,
+        reviewer_role: null,
+        decided_at: null,
+        decision_version: 0,
+        is_reversed: false,
+        is_superseded: false,
+        is_invalidated: false,
+        is_stale: false,
+        requires_re_review: false,
+        recommendation_fingerprint_at_decision: null,
+        current_recommendation_fingerprint: input.recommendationFingerprint,
+        review_item_fingerprint_at_decision: null,
+        current_review_item_fingerprint: input.reviewItemFingerprint,
+        product_target_fingerprint_at_decision: null,
+        current_product_target_fingerprint: input.productTargetFingerprint,
+        apply_eligible: false,
+        apply_block_reasons: ["NO_ACCEPT_DECISION"],
+      };
     },
   };
 
   const result = await buildCatalogObservationReviewResponse({
     db,
+    decisionStateDb,
     organizationId: ORG_ID,
     runId: RUN_ID,
     limit: limit || REVIEW_DEFAULT_LIMIT,
@@ -366,6 +410,21 @@ async function buildWithFakeDb({ limit, cursor, recommendation, comparisonResult
   });
 
   return { result, calls };
+}
+
+function createFakeReadDb(calls) {
+  return {
+    async get(table, params) {
+      calls.push({ method: "get", table, params });
+      if (table === "catalog_external_observations") return observations;
+      if (table === "catalog_products") return products;
+      if (table === "brands") return brands;
+      if (table === "catalog_external_sources") return sources;
+      if (table === "catalog_external_source_trust_profiles") return trustProfiles;
+      if (table === "catalog_observation_runs") return runs;
+      return [];
+    },
+  };
 }
 
 function makeObservation(id, productId, sourceId, trustProfileId, fieldFamily, rawValue, normalizedValue) {

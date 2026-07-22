@@ -4,6 +4,8 @@ import { test } from "node:test";
 
 const migrationPath = new URL("../../supabase/migrations/20260719_001_catalog_review_decision_ledger.sql", import.meta.url);
 const sql = readFileSync(migrationPath, "utf8");
+const fingerprintProjectionPath = new URL("../../supabase/migrations/20260722_001_catalog_review_fingerprint_projection.sql", import.meta.url);
+const fingerprintSql = readFileSync(fingerprintProjectionPath, "utf8");
 
 function has(pattern) {
   assert.match(sql, pattern);
@@ -82,4 +84,21 @@ test("direct mutation grants are not exposed to browser roles", () => {
   notHas(/grant\s+(insert|update|delete).*catalog_observation_review_decision_events.*authenticated/i);
   has(/revoke all on function public\.record_catalog_observation_review_decision\(text, text, text, text, integer, text, text, text, text\) from public, anon, authenticated, service_role/);
   has(/grant execute on function public\.record_catalog_observation_review_decision\(text, text, text, text, integer, text, text, text, text\) to authenticated, service_role/);
+});
+
+test("fingerprint projection exposes DB-canonical read contract only", () => {
+  assert.match(fingerprintSql, /create or replace function public\.get_catalog_observation_review_fingerprints\(input_review_item_id text\)/);
+  assert.match(fingerprintSql, /auth\.uid\(\)/);
+  assert.match(fingerprintSql, /public\.current_profile_org_id\(\)/);
+  assert.match(fingerprintSql, /lower\(coalesce\(p\.role, ''\)\) in \('admin', 'superadmin'\)/);
+  assert.match(fingerprintSql, /public\.catalog_review_observation_fingerprint\(v_observation\)/);
+  assert.match(fingerprintSql, /public\.catalog_review_product_target_fingerprint\(v_parsed\.field_family, v_product\)/);
+  assert.match(fingerprintSql, /public\.catalog_review_item_fingerprint\(input_review_item_id, v_observation, v_product\)/);
+  assert.match(fingerprintSql, /CATALOG_REVIEW_DECISION_ORGANIZATION_MISMATCH/);
+  assert.match(fingerprintSql, /grant execute on function public\.get_catalog_observation_review_fingerprints\(text\) to authenticated;/);
+  assert.doesNotMatch(fingerprintSql, /grant execute on function public\.get_catalog_observation_review_fingerprints\(text\) to authenticated, service_role/);
+  assert.doesNotMatch(fingerprintSql, /update\s+public\.catalog_products/i);
+  assert.doesNotMatch(fingerprintSql, /insert\s+into\s+public\.catalog_products/i);
+  assert.doesNotMatch(fingerprintSql, /update\s+public\.catalog_external_observations/i);
+  assert.doesNotMatch(fingerprintSql, /insert\s+into\s+public\.catalog_observation_review_decision_events/i);
 });

@@ -71,6 +71,9 @@ test("decision endpoint invokes only record RPC and serializes success", async (
   assert.equal(body.event.event_type, "DECISION_RECORDED");
   assert.equal(body.current_state.apply_eligible, true);
   assert.deepEqual(calls.map((call) => call.name), ["record_catalog_observation_review_decision"]);
+  assert.equal(calls[0].input.expectedRecommendationFingerprint, "canonical-recommendation-fingerprint");
+  assert.equal(calls[0].input.expectedReviewItemFingerprint, "canonical-review-item-fingerprint");
+  assert.equal(calls[0].input.expectedProductTargetFingerprint, "canonical-product-target-fingerprint");
 });
 
 test("idempotent replay and DB conflicts are stable HTTP responses", async () => {
@@ -96,6 +99,19 @@ test("idempotent replay and DB conflicts are stable HTTP responses", async () =>
   }));
   assert.equal(stale.status, 409);
   assert.equal((await stale.json()).code, "CATALOG_REVIEW_DECISION_CONFLICT");
+
+  const mutatedFingerprint = await handleCatalogObservationReviewDecisionRequest(request({ ...validDecisionBody(), expectedReviewItemFingerprint: "mutated-review-fingerprint" }), {}, deps({
+    createCatalogObservationDecisionCommandDb: () => ({
+      async recordDecision() {
+        throw new Error("CATALOG_REVIEW_DECISION_REVIEW_FINGERPRINT_MISMATCH: review item changed");
+      },
+    }),
+  }));
+  assert.equal(mutatedFingerprint.status, 409);
+  assert.deepEqual(await mutatedFingerprint.json(), {
+    error: "This review item changed while you were reviewing it. Reload the latest state before deciding.",
+    code: "CATALOG_REVIEW_DECISION_REVIEW_FINGERPRINT_MISMATCH",
+  });
 });
 
 test("reverse endpoint invokes only reversal RPC and serializes reversal", async () => {
@@ -172,9 +188,9 @@ function validDecisionBody() {
     reasonCode: "EVIDENCE_SUFFICIENT",
     reviewerNote: "checked",
     expectedDecisionVersion: 0,
-    expectedRecommendationFingerprint: "a".repeat(64),
-    expectedReviewItemFingerprint: "b".repeat(32),
-    expectedProductTargetFingerprint: "c".repeat(32),
+    expectedRecommendationFingerprint: "canonical-recommendation-fingerprint",
+    expectedReviewItemFingerprint: "canonical-review-item-fingerprint",
+    expectedProductTargetFingerprint: "canonical-product-target-fingerprint",
     idempotencyKey: "decision-1",
   };
 }

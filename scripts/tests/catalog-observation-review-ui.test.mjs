@@ -68,6 +68,9 @@ test("Catalog observation review page preserves read-only URL-backed workspace s
   assert.match(page, /decision\.history\.title/);
   assert.match(page, /decision\.modal\.confirm/);
   assert.match(page, /decision\.states\.stale/);
+  assert.match(page, /expectedRecommendationFingerprint: selectedItem\.recommendation_fingerprint/);
+  assert.match(page, /expectedReviewItemFingerprint: selectedItem\.review_item_fingerprint/);
+  assert.match(page, /expectedProductTargetFingerprint: selectedItem\.product_target_fingerprint/);
   assert.doesNotMatch(page, /acceptReview|rejectReview|applyReview|publishReview/i);
   assert.doesNotMatch(page, /apply current product/i);
   assert.doesNotMatch(page, /method: "(PUT|PATCH|DELETE)"/);

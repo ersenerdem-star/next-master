@@ -161,6 +161,7 @@ function mapReviewItem(value: unknown): CatalogObservationReviewItem {
     rules: ruleArray(row.rules),
     winning_rule: stringValue(row.winning_rule),
     recommendation_fingerprint: stringValue(row.recommendation_fingerprint),
+    observation_fingerprint: stringValue(row.observation_fingerprint),
     review_item_fingerprint: stringValue(row.review_item_fingerprint),
     product_target_fingerprint: stringValue(row.product_target_fingerprint),
     source_key: nullableString(row.source_key),
