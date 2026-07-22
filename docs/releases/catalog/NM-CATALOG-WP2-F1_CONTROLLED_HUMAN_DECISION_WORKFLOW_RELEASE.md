@@ -110,6 +110,23 @@ It does not apply recommendations to canonical Product truth.
 Production DB object verification passed.
 Application, deployment, runtime API, authenticated decision, idempotency, concurrency, authorization, reversal, UI context, and Product immutability proofs remain pending.
 
+## Reversal Idempotency Hotfix
+- Migration: `supabase/migrations/20260722_002_catalog_review_reversal_idempotency_order_fix.sql`
+- Production application method: manually applied once through Supabase Dashboard SQL Editor
+- Production migration result: Success
+- Production behavior validation result: `REVERSAL_IDEMPOTENCY_BEHAVIOR_VERIFIED`
+- Production post-migration verification result: `WP2F1_REVERSAL_IDEMPOTENCY_DB_VERIFIED`
+- Root cause: exact replay of a previously accepted reversal command was evaluated after current-version conflict checks, so an idempotent replay could incorrectly return `CATALOG_REVIEW_DECISION_CONFLICT`.
+- Correction: reversal idempotency lookup now resolves an existing same-key, same-payload event before evaluating expected-version conflict for genuinely new reversal commands.
+- Preserved boundaries: no Product mutation, no observation mutation, no recommendation mutation, no canonical Apply path, and no WP2-F2 behavior.
+- Re-run policy: do not apply or rerun `20260722_002` again in production.
+
+## Accepted Residual Risk
+- Open item: `NM-CATALOG-WP2-F1-HARDENING-001` - Reversal Idempotency Concurrent Replay Proof
+- Status: accepted residual risk for this hotfix release.
+- Rationale: production SQL behavior gates verified deterministic replay behavior, but the two-session concurrent replay proof remains deferred.
+- Closure constraint: WP2-F1 must not be called fully closed until live production replay proof succeeds and the hardening item remains explicitly tracked.
+
 ## Rollback Posture
 Migration rollback must be handled as a production DBA decision because the migration has already been manually applied successfully.
 Application rollback remains pending production deployment and verification.

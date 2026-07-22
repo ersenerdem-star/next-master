@@ -132,6 +132,52 @@ test("reverse endpoint invokes only reversal RPC and serializes reversal", async
   assert.equal(body.action, "reverse_decision");
   assert.equal(body.event.event_type, "DECISION_REVERSED");
   assert.deepEqual(calls.map((call) => call.name), ["reverse_catalog_observation_review_decision"]);
+  assert.deepEqual(calls[0].input, {
+    reviewItemId: REVIEW_ITEM_ID,
+    targetDecisionEventId: EVENT_ID,
+    reasonCode: "DECISION_ENTERED_IN_ERROR",
+    reviewerNote: "wrong item",
+    expectedDecisionVersion: 1,
+    idempotencyKey: "reverse-1",
+  });
+});
+
+test("reverse endpoint preserves idempotent replay responses", async () => {
+  const calls = [];
+  const response = await handleCatalogObservationReviewDecisionReverseRequest(request(validReversalBody(), "/api/catalog/observation-review/decision/reverse"), {}, deps({
+    createCatalogObservationDecisionCommandDb: () => ({
+      async reverseDecision(input) {
+        calls.push(input);
+        return rpcResult({ eventType: "DECISION_REVERSED", decisionType: null, replayed: true, version: 2 });
+      },
+    }),
+  }));
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.replayed, true);
+  assert.equal(body.event.event_type, "DECISION_REVERSED");
+  assert.equal(body.current_state.is_reversed, true);
+  assert.deepEqual(calls, [{
+    reviewItemId: REVIEW_ITEM_ID,
+    targetDecisionEventId: EVENT_ID,
+    reasonCode: "DECISION_ENTERED_IN_ERROR",
+    reviewerNote: "wrong item",
+    expectedDecisionVersion: 1,
+    idempotencyKey: "reverse-1",
+  }]);
+});
+
+test("reverse endpoint does not emulate replay when DB returns stale-version conflict", async () => {
+  const response = await handleCatalogObservationReviewDecisionReverseRequest(request(validReversalBody(), "/api/catalog/observation-review/decision/reverse"), {}, deps({
+    createCatalogObservationDecisionCommandDb: () => ({
+      async reverseDecision() {
+        throw new Error("CATALOG_REVIEW_DECISION_CONFLICT: expected version does not match current version");
+      },
+    }),
+  }));
+  const body = await response.json();
+  assert.equal(response.status, 409);
+  assert.equal(body.code, "CATALOG_REVIEW_DECISION_CONFLICT");
 });
 
 test("unexpected failures are sanitized and reviewer notes are not reflected in error body", async () => {
