@@ -15,6 +15,16 @@ const DECISION_EVENT_ID = "00000000-0000-4000-8000-000000000301";
 const APPLY_EVENT_ID = "00000000-0000-4000-8000-000000000401";
 const REVIEW_ITEM_ID = `${ORG_ID}:${PRODUCT_ID}:${OBSERVATION_ID}:image_reference`;
 const grantSql = readFileSync(new URL("../../supabase/migrations/20260724_002_catalog_controlled_image_apply_api_grant.sql", import.meta.url), "utf8");
+const netlifyToml = readFileSync(new URL("../../netlify.toml", import.meta.url), "utf8");
+
+test("Apply endpoint has an explicit Netlify route before the generic API redirect", () => {
+  const explicitRoute = netlifyToml.indexOf('from = "/api/catalog/observation-review/apply"');
+  const genericRoute = netlifyToml.indexOf('from = "/api/*"');
+  assert.ok(explicitRoute >= 0);
+  assert.ok(genericRoute >= 0);
+  assert.ok(explicitRoute < genericRoute);
+  assert.match(netlifyToml, /to = "\/.netlify\/functions\/catalog-observation-review-apply"/);
+});
 
 test("Apply command accepts only the bounded F2 contract", () => {
   const command = validateApplyCommand(validBody());

@@ -89,6 +89,11 @@
     X-Robots-Tag = "noindex, nofollow, noarchive"
 
 [[redirects]]
+  from = "/api/catalog/observation-review/apply"
+  to = "/.netlify/functions/catalog-observation-review-apply"
+  status = 200
+
+[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
