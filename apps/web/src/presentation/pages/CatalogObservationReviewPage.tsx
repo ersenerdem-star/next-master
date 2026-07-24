@@ -366,7 +366,11 @@ function mergeDecisionHistoryEntries(current: DecisionAuditEntry[], next: Decisi
   return entries.slice(0, 5);
 }
 
-export function CatalogObservationReviewPage() {
+type CatalogObservationReviewPageProps = {
+  loadReview?: typeof fetchCatalogObservationReview;
+};
+
+export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservationReview }: CatalogObservationReviewPageProps) {
   const { locale, t } = useI18n();
   const actionFeedback = useActionFeedback();
   const [filters, setFilters] = useState<ReviewFilters>(() => readFiltersFromUrl());
@@ -404,7 +408,7 @@ export function CatalogObservationReviewPage() {
       setLoading(!hasLoadedOnceRef.current);
       setRefreshing(hasLoadedOnceRef.current);
       try {
-        const result = await fetchCatalogObservationReview({
+        const result = await loadReview({
           runId: CATALOG_OBSERVATION_REVIEW_RUN_ID,
           fieldFamily: filters.fieldFamily,
           comparisonResult: filters.comparisonResult,
@@ -442,7 +446,7 @@ export function CatalogObservationReviewPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [filters.comparisonResult, filters.cursor, filters.fieldFamily, filters.limit, filters.recommendation, reloadTick]);
+  }, [filters.comparisonResult, filters.cursor, filters.fieldFamily, filters.limit, filters.recommendation, loadReview, reloadTick]);
 
   const items = response?.items ?? [];
   const summary = response?.summary ?? null;
@@ -719,11 +723,6 @@ export function CatalogObservationReviewPage() {
     return text || fallback;
   }
 
-  function renderValue(value: string | null | undefined, fallback: string) {
-    const text = String(value ?? "").trim();
-    return <span className={text ? "catalog-review-value" : "muted-text"}>{text || fallback}</span>;
-  }
-
   return (
     <PageShell className="catalog-observation-review-page">
       <PageHeader
@@ -822,15 +821,9 @@ export function CatalogObservationReviewPage() {
                   <tr>
                     <th>{c("table.statusPriority")}</th>
                     <th>{c("table.product")}</th>
-                    <th>{c("table.brand")}</th>
                     <th>{c("table.fieldFamily")}</th>
-                    <th>{c("table.currentValue")}</th>
                     <th>{c("table.observedValue")}</th>
-                    <th>{c("table.comparison")}</th>
-                    <th>{c("table.recommendation")}</th>
-                    <th>{c("table.score")}</th>
-                    <th>{c("table.sourceEvidence")}</th>
-                    <th>{c("table.createdAt")}</th>
+                    <th>{c("decision.title")}</th>
                     <th>{c("table.details")}</th>
                   </tr>
                 </thead>
@@ -868,31 +861,24 @@ export function CatalogObservationReviewPage() {
                         <td data-label={c("table.product")}>
                           <div className="catalog-review-product-cell">
                             <strong>{emptyDash(item.product_code)}</strong>
-                            <span>{emptyDash(item.normalized_product_code)}</span>
+                            <span>{emptyDash(item.brand_name)}</span>
                           </div>
                         </td>
-                        <td data-label={c("table.brand")}>{displayValue(item.brand_name, c("emptyValue.notAvailable"))}</td>
                         <td data-label={c("table.fieldFamily")}>{fieldFamilyLabel(item.field_family, c)}</td>
-                        <td data-label={c("table.currentValue")}>{renderValue(item.product_value, c("emptyValue.emptyInProduct"))}</td>
-                        <td data-label={c("table.observedValue")}>{renderValue(item.observation_value, c("emptyValue.notAvailable"))}</td>
-                        <td data-label={c("table.comparison")}>
-                          <StatusBadge tone={badgeToneForComparison(item.comparison_result)}>
-                            {comparisonLabel(item.comparison_result, c)}
-                          </StatusBadge>
-                        </td>
-                        <td data-label={c("table.recommendation")}>
-                          <StatusBadge tone={badgeToneForRecommendation(item.recommendation)}>
-                            {recommendationLabel(item.recommendation, c)}
-                          </StatusBadge>
-                        </td>
-                        <td data-label={c("table.score")} className="numeric-cell">{formatScore(item.score, locale)}</td>
-                        <td data-label={c("table.sourceEvidence")}>
-                          <div className="catalog-review-evidence-cell">
+                        <td data-label={c("table.observedValue")}>
+                          <div className="catalog-review-candidate-cell">
+                            <strong>{emptyDash(item.observation_value)}</strong>
                             <span>{emptyDash(item.source_display_name || item.source_key)}</span>
-                            <span>{emptyDash(item.evidence_reference)}</span>
                           </div>
                         </td>
-                        <td data-label={c("table.createdAt")}>{formatDate(item.created_at, locale, c("emptyValue.notAvailable"))}</td>
+                        <td data-label={c("decision.title")}>
+                          <div className="catalog-review-decision-cell">
+                            <StatusBadge tone={createDecisionStateTone(item)}>{createDecisionStateLabel(item, c)}</StatusBadge>
+                            <StatusBadge tone={item.decision_state.apply_eligible ? "success" : "warning"}>
+                              {item.decision_state.apply_eligible ? c("decision.state.applyEligible") : c("decision.state.applyBlocked")}
+                            </StatusBadge>
+                          </div>
+                        </td>
                         <td data-label={c("table.details")}>
                           <Button variant="secondary" className="button--compact" onClick={(event) => {
                             event.stopPropagation();

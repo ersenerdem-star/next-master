@@ -1,4 +1,7 @@
 import type {
+  CatalogObservationReviewApplyCommandInput,
+  CatalogObservationReviewApplyCommandResult,
+  CatalogObservationReviewApplyEvent,
   CatalogObservationReviewDecisionCommandInput,
   CatalogObservationReviewDecisionCommandResult,
   CatalogObservationReviewDecisionEvent,
@@ -16,6 +19,7 @@ import { supabaseClient } from "./supabaseClient";
 
 const CATALOG_OBSERVATION_REVIEW_SCHEMA_VERSION = "catalog-observation-review.v1";
 const CATALOG_OBSERVATION_REVIEW_DECISION_SCHEMA_VERSION = "catalog-observation-review-decision.v1";
+const CATALOG_OBSERVATION_REVIEW_APPLY_SCHEMA_VERSION = "catalog-observation-review-apply.v1";
 
 export class CatalogObservationReviewCommandError extends Error {
   status: number;
@@ -236,6 +240,35 @@ function mapDecisionResponse(value: unknown): CatalogObservationReviewDecisionCo
   };
 }
 
+function mapApplyEvent(value: unknown): CatalogObservationReviewApplyEvent {
+  const row = objectValue(value);
+  return {
+    apply_event_id: nullableString(row.apply_event_id),
+    review_item_id: nullableString(row.review_item_id),
+    decision_event_id: nullableString(row.decision_event_id),
+    observation_id: nullableString(row.observation_id),
+    catalog_product_id: nullableString(row.catalog_product_id),
+    field_family: nullableString(row.field_family),
+    target_field: nullableString(row.target_field),
+    decision_version: nullableNumber(row.decision_version),
+    apply_authorizer_user_id: nullableString(row.apply_authorizer_user_id),
+    outcome: nullableString(row.outcome),
+    applied_at: nullableString(row.applied_at),
+    downstream_revalidation_requested_at: nullableString(row.downstream_revalidation_requested_at),
+  };
+}
+
+function mapApplyResponse(value: unknown): CatalogObservationReviewApplyCommandResult {
+  const row = objectValue(value);
+  return {
+    schema_version: stringValue(row.schema_version),
+    success: Boolean(row.success),
+    action: stringValue(row.action),
+    replayed: Boolean(row.replayed),
+    event: mapApplyEvent(row.event),
+  };
+}
+
 async function sendDecisionCommand(
   path: string,
   input: CatalogObservationReviewDecisionCommandInput | CatalogObservationReviewDecisionReversalInput,
@@ -309,4 +342,33 @@ export async function reverseCatalogObservationReviewDecision(
   signal?: AbortSignal,
 ): Promise<CatalogObservationReviewDecisionCommandResult> {
   return sendDecisionCommand("/api/catalog/observation-review/decision/reverse", input, signal);
+}
+
+export async function applyCatalogObservationReviewImage(
+  input: CatalogObservationReviewApplyCommandInput,
+  signal?: AbortSignal,
+): Promise<CatalogObservationReviewApplyCommandResult> {
+  const accessToken = await getAccessToken();
+  const response = await fetch(new URL("/api/catalog/observation-review/apply", window.location.origin), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+    signal,
+  });
+  const data = (await response.json().catch(() => ({}))) as ErrorResponse;
+  if (!response.ok) {
+    throw new CatalogObservationReviewCommandError(
+      sanitizeUserFacingMessage(data.error || `Catalog image Apply failed: ${response.status}`, "The reviewed image could not be applied right now."),
+      response.status,
+      data.code || "CATALOG_REVIEW_APPLY_FAILED",
+    );
+  }
+  const mapped = mapApplyResponse(data);
+  if (mapped.schema_version !== CATALOG_OBSERVATION_REVIEW_APPLY_SCHEMA_VERSION || !mapped.success || mapped.action !== "apply_canonical_image") {
+    throw new CatalogObservationReviewCommandError("The Apply response is not compatible with this UI version.", 500, "CATALOG_REVIEW_APPLY_VERSION_MISMATCH");
+  }
+  return mapped;
 }

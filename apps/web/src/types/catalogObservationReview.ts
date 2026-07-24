@@ -162,6 +162,38 @@ export type CatalogObservationReviewDecisionCommandResult = {
   current_state: CatalogObservationReviewDecisionState;
 };
 
+export type CatalogObservationReviewApplyCommandInput = {
+  reviewItemId: string;
+  decisionEventId: string;
+  expectedDecisionVersion: number;
+  expectedReviewItemFingerprint: string;
+  expectedProductTargetFingerprint: string;
+  idempotencyKey: string;
+};
+
+export type CatalogObservationReviewApplyEvent = {
+  apply_event_id: string | null;
+  review_item_id: string | null;
+  decision_event_id: string | null;
+  observation_id: string | null;
+  catalog_product_id: string | null;
+  field_family: string | null;
+  target_field: string | null;
+  decision_version: number | null;
+  apply_authorizer_user_id: string | null;
+  outcome: string | null;
+  applied_at: string | null;
+  downstream_revalidation_requested_at: string | null;
+};
+
+export type CatalogObservationReviewApplyCommandResult = {
+  schema_version: string;
+  success: boolean;
+  action: "apply_canonical_image" | string;
+  replayed: boolean;
+  event: CatalogObservationReviewApplyEvent;
+};
+
 export type CatalogObservationReviewSummary = {
   total_observations: number;
   review_queue_count: number;

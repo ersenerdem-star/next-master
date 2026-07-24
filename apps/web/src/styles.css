@@ -6646,7 +6646,7 @@ textarea {
 }
 
 .catalog-observation-review-table {
-  min-width: 1960px;
+  min-width: 900px;
   table-layout: fixed;
 }
 
@@ -6657,56 +6657,32 @@ textarea {
 
 .catalog-observation-review-table th:nth-child(1),
 .catalog-observation-review-table td:nth-child(1) {
-  width: 180px;
+  width: 170px;
 }
 
 .catalog-observation-review-table th:nth-child(2),
 .catalog-observation-review-table td:nth-child(2) {
-  width: 190px;
+  width: 160px;
 }
 
 .catalog-observation-review-table th:nth-child(3),
 .catalog-observation-review-table td:nth-child(3) {
-  width: 145px;
+  width: 140px;
 }
 
 .catalog-observation-review-table th:nth-child(4),
 .catalog-observation-review-table td:nth-child(4) {
-  width: 160px;
+  width: 260px;
 }
 
 .catalog-observation-review-table th:nth-child(5),
-.catalog-observation-review-table td:nth-child(5),
+.catalog-observation-review-table td:nth-child(5) {
+  width: 160px;
+}
+
 .catalog-observation-review-table th:nth-child(6),
 .catalog-observation-review-table td:nth-child(6) {
-  width: 190px;
-}
-
-.catalog-observation-review-table th:nth-child(7),
-.catalog-observation-review-table td:nth-child(7),
-.catalog-observation-review-table th:nth-child(8),
-.catalog-observation-review-table td:nth-child(8) {
-  width: 180px;
-}
-
-.catalog-observation-review-table th:nth-child(9),
-.catalog-observation-review-table td:nth-child(9) {
-  width: 90px;
-}
-
-.catalog-observation-review-table th:nth-child(10),
-.catalog-observation-review-table td:nth-child(10) {
-  width: 190px;
-}
-
-.catalog-observation-review-table th:nth-child(11),
-.catalog-observation-review-table td:nth-child(11) {
-  width: 150px;
-}
-
-.catalog-observation-review-table th:nth-child(12),
-.catalog-observation-review-table td:nth-child(12) {
-  width: 110px;
+  width: 100px;
 }
 
 .catalog-observation-review-table tr:focus-visible td {
@@ -6714,7 +6690,8 @@ textarea {
 }
 
 .catalog-review-product-cell,
-.catalog-review-evidence-cell {
+.catalog-review-candidate-cell,
+.catalog-review-decision-cell {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -6732,7 +6709,7 @@ textarea {
 }
 
 .catalog-review-product-cell span,
-.catalog-review-evidence-cell span {
+.catalog-review-candidate-cell span {
   color: #64748b;
   font-size: 11px;
   line-height: 1.25;
@@ -6748,10 +6725,10 @@ textarea {
   gap: 6px;
 }
 
-.catalog-review-value {
-  display: block;
-  max-width: 100%;
+.catalog-review-candidate-cell strong {
   color: #0f172a;
+  font-size: 12px;
+  font-weight: 700;
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6809,6 +6786,51 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+@media (max-width: 1440px) {
+  .catalog-observation-review-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .workbench-detail-panel--catalog {
+    position: static;
+    max-height: none;
+  }
+
+  .catalog-observation-review-table {
+    min-width: 760px;
+  }
+
+  .catalog-observation-review-table th:nth-child(1),
+  .catalog-observation-review-table td:nth-child(1) {
+    width: 140px;
+  }
+
+  .catalog-observation-review-table th:nth-child(2),
+  .catalog-observation-review-table td:nth-child(2) {
+    width: 120px;
+  }
+
+  .catalog-observation-review-table th:nth-child(3),
+  .catalog-observation-review-table td:nth-child(3) {
+    width: 110px;
+  }
+
+  .catalog-observation-review-table th:nth-child(4),
+  .catalog-observation-review-table td:nth-child(4) {
+    width: 180px;
+  }
+
+  .catalog-observation-review-table th:nth-child(5),
+  .catalog-observation-review-table td:nth-child(5) {
+    width: 140px;
+  }
+
+  .catalog-observation-review-table th:nth-child(6),
+  .catalog-observation-review-table td:nth-child(6) {
+    width: 70px;
+  }
+}
+
 @media (max-width: 1180px) {
   .smart-filter-bar__controls {
     grid-template-columns: 1fr;
@@ -6830,14 +6852,6 @@ textarea {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .catalog-observation-review-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .workbench-detail-panel--catalog {
-    position: static;
-    max-height: none;
-  }
 }
 
 @media (max-width: 720px) {
@@ -6916,7 +6930,8 @@ textarea {
 
   .catalog-review-status-cell,
   .catalog-review-product-cell,
-  .catalog-review-evidence-cell {
+  .catalog-review-candidate-cell,
+  .catalog-review-decision-cell {
     min-width: 0;
   }
 

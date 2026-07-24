@@ -1,3 +1,15 @@
+-- Baseline reproducibility foundation.
+-- Existing environments already carry this immutable normalizer; fresh local
+-- bootstrap must define it before generated normalized-code expressions use it.
+create or replace function public.normalize_part_code(input text)
+returns text
+language sql
+immutable
+set search_path = public
+as $$
+  select regexp_replace(upper(coalesce(input, '')), '[^A-Z0-9]', '', 'g');
+$$;
+
 create table if not exists public.item_code_references (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
