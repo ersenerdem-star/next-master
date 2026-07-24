@@ -2381,8 +2381,23 @@ select {
   position: fixed;
   right: 24px;
   top: 120px;
+  bottom: 20px;
   z-index: 50;
   width: min(420px, calc(100vw - 32px));
+  min-width: 0;
+  max-height: none;
+}
+
+.catalog-selected-popup .workbench-detail-panel {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.catalog-selected-popup .workbench-detail-panel__media {
+  min-height: 144px;
 }
 
 .workbench-detail-panel__dragbar {
@@ -4365,9 +4380,13 @@ select {
   .catalog-selected-popup {
     right: 18px;
     top: 104px;
+    bottom: 18px;
     width: min(340px, calc(100vw - 36px));
-    max-height: calc(100vh - 128px);
-    overflow: auto;
+    max-height: none;
+  }
+
+  .catalog-selected-popup .workbench-detail-panel__media {
+    min-height: 128px;
   }
 }
 
@@ -4482,10 +4501,18 @@ select {
     left: 50%;
     right: auto;
     top: 96px;
+    bottom: 14px;
     transform: translateX(-50%);
     width: min(560px, calc(100vw - 28px));
-    max-height: calc(100vh - 118px);
-    overflow: auto;
+    max-height: none;
+  }
+
+  .catalog-selected-popup .workbench-detail-panel {
+    padding: 14px;
+  }
+
+  .catalog-selected-popup .workbench-detail-panel__media {
+    min-height: 116px;
   }
 
   .invoice-edit-topbar,
@@ -4663,8 +4690,9 @@ select {
 
   .catalog-selected-popup {
     top: 88px;
+    bottom: 12px;
     width: calc(100vw - 24px);
-    max-height: calc(100vh - 108px);
+    max-height: none;
   }
 }
 
@@ -4816,8 +4844,9 @@ select {
 
 .catalog-selected-popup {
   top: 76px;
+  bottom: 8px;
   width: calc(100vw - 16px);
-  max-height: calc(100vh - 92px);
+  max-height: none;
 }
 }
 

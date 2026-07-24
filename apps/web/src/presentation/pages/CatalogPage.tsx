@@ -1605,9 +1605,9 @@ export function CatalogPage() {
       </section>
 
       {selectedCatalogRow && selectedCatalogDraft ? (
-        <DraggableSurface className="catalog-selected-popup" ref={selectedCatalogPopupRef} dragHandleSelector=".draggable-surface__handle">
+        <aside className="catalog-selected-popup" ref={selectedCatalogPopupRef} aria-label={t("catalog.detail.selectedItem")}>
         <div className="workbench-detail-panel workbench-detail-panel--catalog">
-            <div className="toolbar toolbar--wrap workbench-detail-panel__dragbar draggable-surface__handle">
+            <div className="toolbar toolbar--wrap workbench-detail-panel__dragbar">
               <span className="workbench-detail-panel__eyebrow">{t("catalog.detail.selectedItem")}</span>
               <Button variant="secondary" className="button--compact" onClick={() => setSelectedCatalogProductId("")}>
                 {t("catalog.actions.close")}
@@ -1799,7 +1799,7 @@ export function CatalogPage() {
             ) : null}
             {selectedCatalogDraft.lifecycle_note ? <div className="info-text">{selectedCatalogDraft.lifecycle_note}</div> : null}
           </div>
-        </DraggableSurface>
+        </aside>
       ) : null}
 
       {showImportDialog ? (
