@@ -51,5 +51,4 @@ export default async (req: Request, context: Context) => handleCatalogObservatio
 
 export const config: Config = {
   path: "/api/catalog/observation-review/apply",
-  method: "POST",
 };
