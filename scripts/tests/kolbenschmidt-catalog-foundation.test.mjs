@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const migrationSql = readFileSync(
-  new URL("../../supabase/migrations/20260725111411_kolbenschmidt_catalog_foundation.sql", import.meta.url),
+  new URL("../../supabase/migrations/20260725114505_kolbenschmidt_catalog_foundation.sql", import.meta.url),
   "utf8",
 );
 const logoSource = readFileSync(
