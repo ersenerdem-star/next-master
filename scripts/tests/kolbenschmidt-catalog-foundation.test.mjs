@@ -60,6 +60,7 @@ test("Kolbenschmidt background refresh is explicit and cannot import other brand
   assert.match(bulkImportSource, /brandName\.toLowerCase\(\) !== "kolbenschmidt"/);
   assert.match(bulkImportSource, /const refreshExisting = body\.refreshExisting === true/);
   assert.match(bulkImportSource, /onlyNew: !refreshExisting/);
+  assert.match(bulkImportSource, /const pageSize = 48/);
   assert.match(bulkImportSource, /estimatedResumePage/);
   assert.match(adminApiSource, /startBulkBrandCatalogImport\(brandName: string, refreshExisting = false\)/);
   assert.match(adminApiSource, /JSON\.stringify\(\{ brandName, refreshExisting \}\)/);

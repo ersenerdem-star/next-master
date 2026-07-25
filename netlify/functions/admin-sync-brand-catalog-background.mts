@@ -17,7 +17,8 @@ export default async (req: Request, _context: Context) => {
       return json({ error: "This bounded background import is only enabled for Kolbenschmidt." }, 400);
     }
     const refreshExisting = body.refreshExisting === true;
-    const pageSize = 96;
+    // Spareto currently caps this listing at 48 rows even when a larger value is requested.
+    const pageSize = 48;
 
     let page = 1;
     let lastPage = 1;
