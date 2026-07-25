@@ -1847,6 +1847,41 @@ export function CatalogPage() {
               {selectedCatalogDetailsError ? <div className="catalog-product-details__status error-text">{selectedCatalogDetailsError}</div> : null}
               {selectedCatalogDetails ? (
                 <>
+                  {selectedCatalogDetails.counts.relations ? (
+                    <div className="catalog-product-details__section">
+                      <div className="catalog-product-details__heading">
+                        <span>{t("catalog.detail.productRelations")}</span>
+                        <span className="catalog-product-details__count">{selectedCatalogDetails.counts.relations}</span>
+                      </div>
+                      <div className="catalog-product-details__relations">
+                        {selectedCatalogDetails.relations.map((relation) => {
+                          const source = selectedCatalogDetails.source_records.find((candidate) => candidate.id === relation.source_record_id);
+                          return (
+                            <div key={relation.id} className="catalog-product-details__relation">
+                              <div className="catalog-product-details__relation-heading">
+                                <span>{t(`catalog.detail.relationTypes.${relation.relation_type}`)}</span>
+                                {source ? (
+                                  <a href={source.source_url} target="_blank" rel="noreferrer">
+                                    {t("catalog.detail.sourceEvidence")}
+                                  </a>
+                                ) : null}
+                              </div>
+                              <strong>
+                                {[relation.related_brand, relation.related_product_code].filter(Boolean).join(" · ")
+                                  || relation.related_oem_no
+                                  || "-"}
+                              </strong>
+                              {relation.related_oem_no ? (
+                                <small>{t("catalog.common.oem")}: {relation.related_oem_no}</small>
+                              ) : null}
+                              {relation.related_description ? <small>{relation.related_description}</small> : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="catalog-product-details__muted">{t("catalog.detail.relationEvidenceHint")}</div>
+                    </div>
+                  ) : null}
                   <div className="catalog-product-details__section">
                     <div className="catalog-product-details__heading">
                       <span>{t("catalog.detail.technicalData")}</span>

@@ -30,6 +30,26 @@ export type CatalogProductAttribute = {
   source_record_id: string | null;
 };
 
+export type CatalogProductRelationType =
+  | "replacement"
+  | "replaced_by"
+  | "alternative"
+  | "kit_component"
+  | "recommended_tool"
+  | "related";
+
+export type CatalogProductRelation = {
+  id: string;
+  relation_type: CatalogProductRelationType;
+  related_brand: string | null;
+  related_product_code: string | null;
+  related_oem_no: string | null;
+  related_description: string | null;
+  source_record_id: string | null;
+  relation_fingerprint: string;
+  created_at: string | null;
+};
+
 export type CatalogProductFitment = {
   id: string;
   fitment_type: "vehicle" | "engine";
@@ -61,11 +81,13 @@ export type CatalogProductDetails = {
   source_records: CatalogProductSourceRecord[];
   identifiers: CatalogProductIdentifier[];
   attributes: CatalogProductAttribute[];
+  relations: CatalogProductRelation[];
   fitments: CatalogProductFitment[];
   counts: {
     source_records: number;
     identifiers: number;
     attributes: number;
+    relations: number;
     vehicle_fitments: number;
     engine_fitments: number;
   };

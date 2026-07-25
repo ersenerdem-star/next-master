@@ -1133,13 +1133,13 @@ export default async (req: Request, context: Context) => {
       const product = products[0];
       if (!product) return json({ error: "Catalog product not found" }, 404);
 
-      const [sourceRecords, identifiers, attributes, fitments] = await Promise.all([
+      const [sourceRecords, identifiers, attributes, relations, fitments] = await Promise.all([
         fetchRestRows<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_product_source_records", {
           select: "id,source_key,source_url,source_product_id,source_version,source_product_type,source_as_of,retrieved_at,payload_fingerprint",
           organization_id: `eq.${caller.organizationId}`,
           catalog_product_id: `eq.${productId}`,
           order: "retrieved_at.desc",
-          limit: "20",
+          limit: "1000",
         }),
         fetchRestRows<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_product_identifiers", {
           select: "id,identifier_type,authority,value,source_record_id,created_at",
@@ -1153,6 +1153,13 @@ export default async (req: Request, context: Context) => {
           organization_id: `eq.${caller.organizationId}`,
           catalog_product_id: `eq.${productId}`,
           order: "attribute_key.asc,ordinal.asc",
+          limit: "1000",
+        }),
+        fetchRestRows<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_product_relations", {
+          select: "id,relation_type,related_brand,related_product_code,related_oem_no,related_description,source_record_id,relation_fingerprint,created_at",
+          organization_id: `eq.${caller.organizationId}`,
+          catalog_product_id: `eq.${productId}`,
+          order: "created_at.asc",
           limit: "1000",
         }),
         fetchRestRowsPaged<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_product_fitments", {
@@ -1171,11 +1178,13 @@ export default async (req: Request, context: Context) => {
           source_records: sourceRecords,
           identifiers,
           attributes,
+          relations,
           fitments,
           counts: {
             source_records: sourceRecords.length,
             identifiers: identifiers.length,
             attributes: attributes.length,
+            relations: relations.length,
             vehicle_fitments: fitments.filter((row) => row.fitment_type === "vehicle").length,
             engine_fitments: fitments.filter((row) => row.fitment_type === "engine").length,
           },
