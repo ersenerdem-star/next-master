@@ -2,6 +2,7 @@
 -- Official-source catalog foundation for Kolbenschmidt and future brands.
 -- This migration is source/runtime preparation only; it does not insert a brand
 -- or product row and does not apply any external-source data.
+-- Production migration record: 20260725114505_kolbenschmidt_catalog_foundation.
 
 alter table public.catalog_products
   add column if not exists vehicle_model text;
