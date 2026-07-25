@@ -1525,7 +1525,7 @@ export function CatalogPage() {
     }
   }
 
-  async function handleBulkImportSelectedBrand() {
+  async function handleBulkImportSelectedBrand(refreshExisting = false) {
     if (!isOnline || catalogBrand.trim().toLowerCase() !== "kolbenschmidt") {
       return;
     }
@@ -1533,13 +1533,18 @@ export function CatalogPage() {
     setSyncingBrandCatalog(true);
     setError("");
     setStatus("");
-    actionFeedback.begin(t("catalog.status.bulkImportStarting", { brand: catalogBrand }));
+    actionFeedback.begin(
+      t(refreshExisting ? "catalog.status.bulkRefreshStarting" : "catalog.status.bulkImportStarting", {
+        brand: catalogBrand,
+      }),
+    );
 
     try {
-      const result = await startBulkBrandCatalogImport(catalogBrand);
+      const result = await startBulkBrandCatalogImport(catalogBrand, refreshExisting);
       const startedBrand = result.targetBrandName || catalogBrand;
-      setStatus(t("catalog.status.bulkImportStarted", { brand: startedBrand }));
-      actionFeedback.succeed(t("catalog.status.bulkImportStarted", { brand: startedBrand }));
+      const statusKey = refreshExisting ? "catalog.status.bulkRefreshStarted" : "catalog.status.bulkImportStarted";
+      setStatus(t(statusKey, { brand: startedBrand }));
+      actionFeedback.succeed(t(statusKey, { brand: startedBrand }));
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : t("catalog.errors.syncFailed");
       setError(message);
@@ -1647,15 +1652,26 @@ export function CatalogPage() {
               </Button>
             ) : null}
             {catalogBrand.trim().toLowerCase() === "kolbenschmidt" ? (
-              <Button
-                variant="secondary"
-                onClick={() => void handleBulkImportSelectedBrand()}
-                disabled={!isOnline}
-                busy={syncingBrandCatalog}
-                busyLabel={t("catalog.actions.bulkImporting")}
-              >
-                {t("catalog.actions.bulkImport")}
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => void handleBulkImportSelectedBrand()}
+                  disabled={!isOnline}
+                  busy={syncingBrandCatalog}
+                  busyLabel={t("catalog.actions.bulkImporting")}
+                >
+                  {t("catalog.actions.bulkImport")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => void handleBulkImportSelectedBrand(true)}
+                  disabled={!isOnline}
+                  busy={syncingBrandCatalog}
+                  busyLabel={t("catalog.actions.bulkRefreshing")}
+                >
+                  {t("catalog.actions.bulkRefresh")}
+                </Button>
+              </>
             ) : null}
         </PageActions>
       </details>

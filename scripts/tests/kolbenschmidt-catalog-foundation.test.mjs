@@ -14,6 +14,18 @@ const templateSource = readFileSync(
   new URL("../../apps/web/src/shared/importTemplates.ts", import.meta.url),
   "utf8",
 );
+const bulkImportSource = readFileSync(
+  new URL("../../netlify/functions/admin-sync-brand-catalog-background.mts", import.meta.url),
+  "utf8",
+);
+const adminApiSource = readFileSync(
+  new URL("../../apps/web/src/infrastructure/api/adminApi.ts", import.meta.url),
+  "utf8",
+);
+const sparetoSyncSource = readFileSync(
+  new URL("../../netlify/functions/_shared/catalog/spareto-sync.mts", import.meta.url),
+  "utf8",
+);
 
 test("Kolbenschmidt foundation keeps source data normalized and tenant-scoped", () => {
   assert.match(migrationSql, /catalog_product_source_records/);
@@ -42,4 +54,21 @@ test("Kolbenschmidt logo fallback and import fields are discoverable", () => {
   assert.match(templateSource, /"EAN"/);
   assert.match(templateSource, /"Vehicle_Model"/);
   assert.match(templateSource, /"Source_Fingerprint"/);
+});
+
+test("Kolbenschmidt background refresh is explicit and cannot import other brands", () => {
+  assert.match(bulkImportSource, /brandName\.toLowerCase\(\) !== "kolbenschmidt"/);
+  assert.match(bulkImportSource, /const refreshExisting = body\.refreshExisting === true/);
+  assert.match(bulkImportSource, /onlyNew: !refreshExisting/);
+  assert.match(bulkImportSource, /estimatedResumePage/);
+  assert.match(adminApiSource, /startBulkBrandCatalogImport\(brandName: string, refreshExisting = false\)/);
+  assert.match(adminApiSource, /JSON\.stringify\(\{ brandName, refreshExisting \}\)/);
+});
+
+test("Kolbenschmidt technical refresh fills segment and fitment model without retaining placeholder images", () => {
+  assert.match(sparetoSyncSource, /preferMarketSegment\(existing\?\.market_segment, detail\.market_segment\)/);
+  assert.match(sparetoSyncSource, /preferCatalogImage\(existing\?\.image_url, detail\.image_url, candidate\.image_url\)/);
+  assert.match(sparetoSyncSource, /String\(row\.vehicle \|\| ""\)\.trim\(\) && !String\(row\.vehicle_model \|\| ""\)\.trim\(\)/);
+  assert.match(sparetoSyncSource, /!sanitizeImageUrl\(row\.image_url \|\| ""\)/);
+  assert.match(sparetoSyncSource, /normalizeTextValue\(existing\?\.vehicle_model\) !== normalizeTextValue\(merged\?\.vehicle_model\)/);
 });

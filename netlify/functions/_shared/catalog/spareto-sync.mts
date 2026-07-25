@@ -922,11 +922,11 @@ function buildCatalogRow(target: SyncBrandTarget, candidate: any, detail: any, e
   const nextOemNo = preferCatalogValue(existing?.oem_no, detail.oem_no);
   const nextVehicle = preferCatalogValue(existing?.vehicle, detail.vehicle);
   const nextVehicleModel = preferCatalogValue(existing?.vehicle_model, detail.vehicle_model);
-  const nextMarketSegment = preferCatalogValue(existing?.market_segment, detail.market_segment) || "Engines";
+  const nextMarketSegment = preferMarketSegment(existing?.market_segment, detail.market_segment) || "Engines";
   const nextHsCode = preferCatalogValue(existing?.hs_code, detail.hs_code);
   const nextOrigin = preferOrigin(existing?.origin, detail.origin);
   const nextWeight = existing?.weight_kg ?? detail.weight_kg ?? null;
-  const nextImage = preferCatalogValue(existing?.image_url, detail.image_url, candidate.image_url);
+  const nextImage = preferCatalogImage(existing?.image_url, detail.image_url, candidate.image_url);
   const nextLifecycleStatus = detail.lifecycle_status === "discontinued" ? "discontinued" : String(existing?.lifecycle_status || "active").trim().toLowerCase() || "active";
   const nextLifecycleNote = preferCatalogValue(detail.lifecycle_note, existing?.lifecycle_note);
 
@@ -957,11 +957,13 @@ function isIncomplete(row: any, supportsEanColumn: boolean) {
     (supportsEanColumn && !normalizeCatalogEan(row.ean || "")) ||
     !String(row.oem_no || "").trim() ||
     !String(row.vehicle || "").trim() ||
+    (String(row.vehicle || "").trim() && !String(row.vehicle_model || "").trim()) ||
+    !String(row.market_segment || "").trim() ||
     !String(row.hs_code || "").trim() ||
     !String(row.origin || "").trim() ||
     row.weight_kg == null ||
     Number.isNaN(Number(row.weight_kg)) ||
-    !String(row.image_url || "").trim();
+    !sanitizeImageUrl(row.image_url || "");
 }
 
 function hasCatalogDelta(existing: any, merged: any, supportsEanColumn: boolean) {
@@ -969,6 +971,8 @@ function hasCatalogDelta(existing: any, merged: any, supportsEanColumn: boolean)
     (supportsEanColumn && normalizeCatalogEan(existing?.ean || "") !== normalizeCatalogEan(merged?.ean || "")) ||
     normalizeTextValue(existing?.oem_no) !== normalizeTextValue(merged?.oem_no) ||
     normalizeTextValue(existing?.vehicle) !== normalizeTextValue(merged?.vehicle) ||
+    normalizeTextValue(existing?.vehicle_model) !== normalizeTextValue(merged?.vehicle_model) ||
+    normalizeTextValue(existing?.market_segment) !== normalizeTextValue(merged?.market_segment) ||
     normalizeTextValue(existing?.hs_code) !== normalizeTextValue(merged?.hs_code) ||
     normalizeTextValue(existing?.origin) !== normalizeTextValue(merged?.origin) ||
     normalizeWeightValue(existing?.weight_kg) !== normalizeWeightValue(merged?.weight_kg) ||
@@ -1020,6 +1024,22 @@ function preferCatalogValue(...values: unknown[]) {
   for (const value of values) {
     const text = String(value || "").trim();
     if (text) return text;
+  }
+  return "";
+}
+
+function preferCatalogImage(...values: unknown[]) {
+  for (const value of values) {
+    const sanitized = sanitizeImageUrl(value);
+    if (sanitized) return sanitized;
+  }
+  return "";
+}
+
+function preferMarketSegment(...values: unknown[]) {
+  for (const value of values) {
+    const text = String(value || "").trim();
+    if (text && text.toLowerCase() !== "unassigned") return text;
   }
   return "";
 }

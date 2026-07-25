@@ -229,7 +229,7 @@ export async function syncBrandCatalog(brandName: string, refreshExisting = true
   };
 }
 
-export async function startBulkBrandCatalogImport(brandName: string) {
+export async function startBulkBrandCatalogImport(brandName: string, refreshExisting = false) {
   const accessToken = await getCallerAccessToken();
   const response = await fetch(bulkSyncBrandCatalogUrl, {
     method: "POST",
@@ -237,7 +237,7 @@ export async function startBulkBrandCatalogImport(brandName: string) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ brandName }),
+    body: JSON.stringify({ brandName, refreshExisting }),
   });
 
   const payload = await response.json().catch(() => ({}));
@@ -247,6 +247,7 @@ export async function startBulkBrandCatalogImport(brandName: string) {
   return payload as {
     ok: boolean;
     mode: "background";
+    refreshExisting: boolean;
     targetBrandName: string;
     listingUniqueRows: number;
     resolvedRows: number;

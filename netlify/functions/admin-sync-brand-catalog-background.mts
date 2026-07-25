@@ -11,11 +11,13 @@ export default async (req: Request, _context: Context) => {
     const caller = await requireCallerProfile(req, ["superadmin"]);
     if ("error" in caller) return json({ error: caller.error }, caller.status);
 
-    const body = await readJson<{ brandName?: string }>(req);
+    const body = await readJson<{ brandName?: string; refreshExisting?: boolean }>(req);
     const brandName = String(body.brandName || "").trim();
     if (brandName.toLowerCase() !== "kolbenschmidt") {
       return json({ error: "This bounded background import is only enabled for Kolbenschmidt." }, 400);
     }
+    const refreshExisting = body.refreshExisting === true;
+    const pageSize = 96;
 
     let page = 1;
     let lastPage = 1;
@@ -29,9 +31,9 @@ export default async (req: Request, _context: Context) => {
         serviceRoleKey: caller.serviceRoleKey,
         brandName: "Kolbenschmidt",
         refreshExisting: false,
-        onlyNew: true,
+        onlyNew: !refreshExisting,
         concurrency: 24,
-        pageSize: 96,
+        pageSize,
         requestTimeoutMs: 20000,
         startPage: page,
         maxPages: 1,
@@ -40,12 +42,19 @@ export default async (req: Request, _context: Context) => {
       resolvedRows += Number(pageResult.resolvedRows || 0);
       errorRows += Number(pageResult.errorRows || 0);
       replacementRows += Number(pageResult.replacementRows || 0);
-      page += Math.max(1, Number(pageResult.listingPagesProcessed || 1));
+      const nextSequentialPage = page + Math.max(1, Number(pageResult.listingPagesProcessed || 1));
+      if (!refreshExisting && page === 1) {
+        const estimatedResumePage = Math.max(2, Math.floor(Number(pageResult.existingRows || 0) / pageSize) - 1);
+        page = Math.max(nextSequentialPage, Math.min(estimatedResumePage, lastPage));
+      } else {
+        page = nextSequentialPage;
+      }
     } while (page <= lastPage);
 
     return json({
       ok: true,
       mode: "background",
+      refreshExisting,
       targetBrandName: "Kolbenschmidt",
       listingLastPage: lastPage,
       resolvedRows,
