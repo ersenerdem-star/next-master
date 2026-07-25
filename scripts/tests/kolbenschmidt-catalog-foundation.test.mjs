@@ -26,6 +26,10 @@ const sparetoSyncSource = readFileSync(
   new URL("../../netlify/functions/_shared/catalog/spareto-sync.mts", import.meta.url),
   "utf8",
 );
+const segmentCaseMigration = readFileSync(
+  new URL("../../supabase/migrations/20260725162636_catalog_market_segment_case_normalization_fix.sql", import.meta.url),
+  "utf8",
+);
 
 test("Kolbenschmidt foundation keeps source data normalized and tenant-scoped", () => {
   assert.match(migrationSql, /catalog_product_source_records/);
@@ -75,4 +79,9 @@ test("Kolbenschmidt technical refresh fills segment and fitment model without re
   assert.match(sparetoSyncSource, /!sanitizeImageUrl\(row\.image_url \|\| ""\)/);
   assert.match(sparetoSyncSource, /!isAssignedMarketSegment\(row\.market_segment\)/);
   assert.match(sparetoSyncSource, /normalizeTextValue\(existing\?\.vehicle_model\) !== normalizeTextValue\(merged\?\.vehicle_model\)/);
+});
+
+test("market segment normalization lowercases before filtering uppercase source values", () => {
+  assert.match(segmentCaseMigration, /regexp_replace\(lower\(trim/);
+  assert.match(segmentCaseMigration, /when value in \('engine', 'engines', 'powertrain'\) then 'engines'/);
 });
