@@ -4,6 +4,18 @@ import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 const BREMBO_HOME_URL = "https://www.bremboparts.com/europe/en";
 const BREMBO_SEARCH_CODE_URL = `${BREMBO_HOME_URL}/catalogue/search/searchcode`;
+const KOLBENSCHMIDT_MEDIA_BY_CODE: Record<string, CatalogProductMediaItem[]> = {
+  "40448601": [
+    {
+      src: "https://onlineshop.ms-motorservice.com/static_content/msicd/abb/Kolben2/40448601z_main1.jpg",
+      label: "MS Motorservice",
+    },
+    {
+      src: "https://onlineshop.ms-motorservice.com/static_content/msicd/abb/Kolben2/40448601z_pic1.jpg",
+      label: "MS Motorservice detail",
+    },
+  ],
+};
 
 const requestHeaders = {
   "user-agent":
@@ -40,6 +52,8 @@ export default async (req: Request) => {
     const items =
       normalizeBrand(brand) === "BREMBO"
         ? await fetchBremboMediaByCode(code, imageUrl)
+        : normalizeBrand(brand) === "KOLBENSCHMIDT"
+          ? buildKolbenschmidtMediaByCode(code, imageUrl)
         : buildDefaultMedia(imageUrl);
 
     return json({ ok: true, items });
@@ -64,6 +78,11 @@ async function fetchBremboMediaByCode(code: string, currentImageUrl: string): Pr
   const detailHtml = await fetchText(detailUrl, 20000);
   const items = extractBremboGallery(detailHtml, currentImageUrl);
   return items.length ? items : buildDefaultMedia(currentImageUrl);
+}
+
+function buildKolbenschmidtMediaByCode(code: string, currentImageUrl: string): CatalogProductMediaItem[] {
+  const normalizedCode = String(code || "").replace(/\s+/g, "");
+  return KOLBENSCHMIDT_MEDIA_BY_CODE[normalizedCode] || buildDefaultMedia(currentImageUrl);
 }
 
 function extractBremboGallery(detailHtml: string, currentImageUrl: string) {

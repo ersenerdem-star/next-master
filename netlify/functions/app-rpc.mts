@@ -29,6 +29,7 @@ const ALLOWED_RPCS = new Set([
   "get_latest_supplier_price_rollup_refresh_run",
   "get_catalog_integrity_summary",
   "get_catalog_product_integrity",
+  "get_catalog_product_details",
   "queue_supplier_price_catalog_sync",
   "queue_supplier_price_rollups_refresh",
   "post_invoice_stock_movements",
@@ -78,6 +79,7 @@ const SUPERADMIN_RPCS = new Set([
   "get_latest_supplier_price_rollup_refresh_run",
   "get_catalog_integrity_summary",
   "get_catalog_product_integrity",
+  "get_catalog_product_details",
   "list_cloud_suppliers",
   "queue_supplier_price_rollups_refresh",
   "search_catalog_products",
@@ -634,6 +636,27 @@ async function fetchRestRows<T>(
   return (data ?? []) as T[];
 }
 
+async function fetchRestRowsPaged<T>(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  table: string,
+  params: Record<string, string>,
+  pageSize = 1000,
+  maxPages = 5,
+) {
+  const rows: T[] = [];
+  for (let page = 0; page < maxPages; page += 1) {
+    const nextRows = await fetchRestRows<T>(supabaseUrl, serviceRoleKey, table, {
+      ...params,
+      limit: String(pageSize),
+      offset: String(page * pageSize),
+    });
+    rows.push(...nextRows);
+    if (nextRows.length < pageSize) break;
+  }
+  return rows;
+}
+
 async function fetchRestCountOnly(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -1088,6 +1111,74 @@ export default async (req: Request, context: Context) => {
           catalog_sync_status: "pending",
           run_id: runId || null,
           organization_id: caller.organizationId,
+        },
+      });
+    }
+
+    if (name === "get_catalog_product_details") {
+      const productId = String(args.product_id || "").trim();
+      if (!productId) return json({ error: "product_id is required" }, 400);
+
+      const products = await fetchRestRows<{
+        id: string;
+        organization_id: string;
+        product_code: string | null;
+        brand_id: string | null;
+      }>(supabaseUrl, serviceRoleKey, "catalog_products", {
+        select: "id,organization_id,product_code,brand_id",
+        id: `eq.${productId}`,
+        organization_id: `eq.${caller.organizationId}`,
+        limit: "1",
+      });
+      const product = products[0];
+      if (!product) return json({ error: "Catalog product not found" }, 404);
+
+      const [sourceRecords, identifiers, attributes, fitments] = await Promise.all([
+        fetchRestRows<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_product_source_records", {
+          select: "id,source_key,source_url,source_product_id,source_version,source_product_type,source_as_of,retrieved_at,payload_fingerprint",
+          organization_id: `eq.${caller.organizationId}`,
+          catalog_product_id: `eq.${productId}`,
+          order: "retrieved_at.desc",
+          limit: "20",
+        }),
+        fetchRestRows<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_product_identifiers", {
+          select: "id,identifier_type,authority,value,source_record_id,created_at",
+          organization_id: `eq.${caller.organizationId}`,
+          catalog_product_id: `eq.${productId}`,
+          order: "identifier_type.asc,created_at.asc",
+          limit: "1000",
+        }),
+        fetchRestRows<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_product_attributes", {
+          select: "id,attribute_key,label,value_text,value_numeric,unit,ordinal,source_record_id",
+          organization_id: `eq.${caller.organizationId}`,
+          catalog_product_id: `eq.${productId}`,
+          order: "attribute_key.asc,ordinal.asc",
+          limit: "1000",
+        }),
+        fetchRestRowsPaged<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_product_fitments", {
+          select: "id,fitment_type,manufacturer,model_series,vehicle,model_year_from,model_year_to,engine_code,fuel_type,power_kw_min,power_kw_max,power_ps_min,power_ps_max,charging_type,cylinder_count,valve_count,bore_mm,stroke_mm,displacement_cc,compression_ratio,source_record_id,fitment_fingerprint",
+          organization_id: `eq.${caller.organizationId}`,
+          catalog_product_id: `eq.${productId}`,
+          order: "fitment_type.asc,manufacturer.asc,model_series.asc,vehicle.asc,engine_code.asc",
+        }),
+      ]);
+
+      return json({
+        ok: true,
+        data: {
+          product_id: productId,
+          product_code: product.product_code,
+          source_records: sourceRecords,
+          identifiers,
+          attributes,
+          fitments,
+          counts: {
+            source_records: sourceRecords.length,
+            identifiers: identifiers.length,
+            attributes: attributes.length,
+            vehicle_fitments: fitments.filter((row) => row.fitment_type === "vehicle").length,
+            engine_fitments: fitments.filter((row) => row.fitment_type === "engine").length,
+          },
         },
       });
     }

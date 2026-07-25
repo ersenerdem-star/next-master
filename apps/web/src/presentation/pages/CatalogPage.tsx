@@ -15,11 +15,13 @@ import {
   type CatalogDeleteReferenceSummary,
 } from "../../infrastructure/api/catalogApi";
 import { fetchCatalogProductMedia } from "../../infrastructure/api/catalogMediaApi";
+import { fetchCatalogProductDetails } from "../../infrastructure/api/catalogDetailsApi";
 import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenceUsage } from "../../infrastructure/api/codeReferencesApi";
 import { bulkImportCatalog, type CatalogImportResult } from "../../infrastructure/api/importApi";
 import { matchesOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import type { BrandOption } from "../../types/brand";
 import type { CatalogIntegrityFilter, CatalogIntegrityStatus, CatalogIntegritySummary, CatalogRow } from "../../types/catalog";
+import type { CatalogProductDetails, CatalogProductFitment } from "../../types/catalogDetails";
 import type { CodeReferenceUsage } from "../../types/codeReferences";
 import { Button } from "../components/common/Button";
 import { DraggableSurface } from "../components/common/DraggableSurface";
@@ -68,6 +70,38 @@ function parseWeightInput(value: number | string | null | undefined) {
   const normalized = text.replace(",", ".");
   const numeric = Number(normalized);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function formatDetailNumber(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(Number(value))) return "";
+  return String(Number(value));
+}
+
+function formatPowerRange(min: number | null, max: number | null, unit: string) {
+  if (min == null && max == null) return "";
+  const range = min == null || max == null || min === max ? String(min ?? max) : `${min}-${max}`;
+  return `${range} ${unit}`;
+}
+
+function fitmentLabel(fitment: CatalogProductFitment) {
+  if (fitment.fitment_type === "engine") {
+    const specs = [
+      fitment.engine_code,
+      fitment.displacement_cc ? `${formatDetailNumber(fitment.displacement_cc)} cc` : "",
+      formatPowerRange(fitment.power_kw_min, fitment.power_kw_max, "kW"),
+      formatPowerRange(fitment.power_ps_min, fitment.power_ps_max, "PS"),
+    ].filter(Boolean);
+    return specs.join(" · ") || "-";
+  }
+  const specs = [
+    fitment.manufacturer,
+    fitment.model_series,
+    fitment.vehicle,
+    fitment.model_year_from ? `${fitment.model_year_from}${fitment.model_year_to ? `–${fitment.model_year_to}` : ""}` : "",
+    fitment.engine_code,
+    formatPowerRange(fitment.power_kw_min, fitment.power_kw_max, "kW"),
+  ].filter(Boolean);
+  return specs.join(" · ") || "-";
 }
 
 function readCatalogCache() {
@@ -205,6 +239,9 @@ export function CatalogPage() {
   const [previewImage, setPreviewImage] = useState<{ src: string; code: string; name: string } | null>(null);
   const [selectedCatalogProductId, setSelectedCatalogProductId] = useState("");
   const [selectedCatalogMedia, setSelectedCatalogMedia] = useState<ProductMediaItem[]>([]);
+  const [selectedCatalogDetails, setSelectedCatalogDetails] = useState<CatalogProductDetails | null>(null);
+  const [selectedCatalogDetailsLoading, setSelectedCatalogDetailsLoading] = useState(false);
+  const [selectedCatalogDetailsError, setSelectedCatalogDetailsError] = useState("");
   const [showFullSelectedOem, setShowFullSelectedOem] = useState(false);
   const [importCatalogSegment, setImportCatalogSegment] = useState("");
   const [createDraft, setCreateDraft] = useState({
@@ -699,6 +736,32 @@ export function CatalogPage() {
       cancelled = true;
     };
   }, [selectedCatalogRow]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSelectedCatalogDetails(null);
+    setSelectedCatalogDetailsError("");
+    if (!selectedCatalogRow || !isOnline) {
+      setSelectedCatalogDetailsLoading(false);
+      return;
+    }
+
+    setSelectedCatalogDetailsLoading(true);
+    void fetchCatalogProductDetails(selectedCatalogRow.product_id)
+      .then((details) => {
+        if (!cancelled) setSelectedCatalogDetails(details);
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedCatalogDetailsError(t("catalog.detail.detailsUnavailable"));
+      })
+      .finally(() => {
+        if (!cancelled) setSelectedCatalogDetailsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOnline, selectedCatalogRow, t]);
 
   function clearCatalogSearch() {
     setSearch("");
@@ -1778,6 +1841,83 @@ export function CatalogPage() {
               <div><span>{t("catalog.common.weight")}</span><strong>{selectedCatalogDraft.weight_kg ?? "-"}</strong></div>
               <div><span>{t("catalog.detail.referenceLinks")}</span><strong>{referenceCoverage[`${selectedCatalogRow.brand.trim().toLowerCase()}::${normalizePartCode(selectedCatalogRow.product_code)}`] || 0}</strong></div>
               {selectedCatalogDraft.replacement_warning ? <div><span>{t("catalog.detail.replacement")}</span><strong>{selectedCatalogDraft.replacement_warning}</strong></div> : null}
+            </div>
+            <div className="catalog-product-details">
+              {selectedCatalogDetailsLoading ? <div className="catalog-product-details__status">{t("catalog.detail.loadingDetails")}</div> : null}
+              {selectedCatalogDetailsError ? <div className="catalog-product-details__status error-text">{selectedCatalogDetailsError}</div> : null}
+              {selectedCatalogDetails ? (
+                <>
+                  <div className="catalog-product-details__section">
+                    <div className="catalog-product-details__heading">
+                      <span>{t("catalog.detail.technicalData")}</span>
+                      <span className="catalog-product-details__count">{selectedCatalogDetails.counts.attributes}</span>
+                    </div>
+                    <div className="catalog-product-details__grid">
+                      {selectedCatalogDetails.attributes
+                        .filter((attribute) => !attribute.attribute_key.startsWith("secondary_"))
+                        .map((attribute) => (
+                          <div key={attribute.id} className="catalog-product-details__attribute">
+                            <span>{attribute.label}</span>
+                            <strong>
+                              {attribute.value_text || formatDetailNumber(attribute.value_numeric) || "-"}
+                              {attribute.value_numeric != null && attribute.unit ? ` ${attribute.unit}` : ""}
+                            </strong>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                  {selectedCatalogDetails.counts.vehicle_fitments ? (
+                    <div className="catalog-product-details__section">
+                      <div className="catalog-product-details__heading">
+                        <span>{t("catalog.detail.vehicles")}</span>
+                        <span className="catalog-product-details__count">{t("catalog.detail.fitmentCount", { count: String(selectedCatalogDetails.counts.vehicle_fitments) })}</span>
+                      </div>
+                      <div className="catalog-product-details__fitments">
+                        {selectedCatalogDetails.fitments
+                          .filter((fitment) => fitment.fitment_type === "vehicle")
+                          .slice(0, 40)
+                          .map((fitment) => <div key={fitment.id}>{fitmentLabel(fitment)}</div>)}
+                      </div>
+                      {selectedCatalogDetails.counts.vehicle_fitments > 40 ? (
+                        <div className="catalog-product-details__muted">
+                          {t("catalog.detail.showingFirst", { count: "40" })}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {selectedCatalogDetails.counts.engine_fitments ? (
+                    <div className="catalog-product-details__section">
+                      <div className="catalog-product-details__heading">
+                        <span>{t("catalog.detail.engines")}</span>
+                        <span className="catalog-product-details__count">{t("catalog.detail.fitmentCount", { count: String(selectedCatalogDetails.counts.engine_fitments) })}</span>
+                      </div>
+                      <div className="catalog-product-details__fitments">
+                        {selectedCatalogDetails.fitments
+                          .filter((fitment) => fitment.fitment_type === "engine")
+                          .slice(0, 40)
+                          .map((fitment) => <div key={fitment.id}>{fitmentLabel(fitment)}</div>)}
+                      </div>
+                      {selectedCatalogDetails.counts.engine_fitments > 40 ? (
+                        <div className="catalog-product-details__muted">
+                          {t("catalog.detail.showingFirst", { count: "40" })}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {selectedCatalogDetails.source_records.length ? (
+                    <div className="catalog-product-details__source">
+                      <span>{t("catalog.detail.source")}</span>
+                      <div>
+                        {selectedCatalogDetails.source_records.map((source) => (
+                          <a key={source.id} href={source.source_url} target="_blank" rel="noreferrer">
+                            {source.source_key === "spareto-secondary" ? t("catalog.detail.secondarySource") : source.source_key}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
             </div>
             <div className="toolbar toolbar--wrap">
               <Button

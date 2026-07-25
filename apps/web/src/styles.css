@@ -2471,6 +2471,108 @@ select {
   padding: 0;
 }
 
+.catalog-product-details {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(214, 226, 236, 0.9);
+}
+
+.catalog-product-details__status,
+.catalog-product-details__muted {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.catalog-product-details__section {
+  display: grid;
+  gap: 8px;
+}
+
+.catalog-product-details__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.catalog-product-details__count {
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.catalog-product-details__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.catalog-product-details__attribute {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(214, 226, 236, 0.8);
+  border-radius: 10px;
+  background: rgba(247, 251, 254, 0.7);
+}
+
+.catalog-product-details__attribute span,
+.catalog-product-details__source > span {
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.catalog-product-details__attribute strong {
+  color: #0f172a;
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.catalog-product-details__fitments {
+  display: grid;
+  gap: 5px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 9px 10px;
+  border: 1px solid rgba(214, 226, 236, 0.8);
+  border-radius: 10px;
+  background: rgba(247, 251, 254, 0.7);
+  color: #334155;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.catalog-product-details__source {
+  display: grid;
+  gap: 5px;
+}
+
+.catalog-product-details__source > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.catalog-product-details__source a {
+  color: #0e7490;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .workbench-detail-panel__media {
   display: grid;
   place-items: center;
