@@ -27,18 +27,31 @@ export default async (req: Request, _context: Context) => {
     let replacementRows = 0;
 
     do {
-      const pageResult = await syncBrandCatalog({
-        supabaseUrl: caller.supabaseUrl,
-        serviceRoleKey: caller.serviceRoleKey,
-        brandName: "Kolbenschmidt",
-        refreshExisting: false,
-        onlyNew: !refreshExisting,
-        concurrency: 24,
-        pageSize,
-        requestTimeoutMs: 20000,
-        startPage: page,
-        maxPages: 1,
-      });
+      let pageResult: Awaited<ReturnType<typeof syncBrandCatalog>> | null = null;
+      let lastError: unknown = null;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          pageResult = await syncBrandCatalog({
+            supabaseUrl: caller.supabaseUrl,
+            serviceRoleKey: caller.serviceRoleKey,
+            brandName: "Kolbenschmidt",
+            refreshExisting: false,
+            onlyNew: !refreshExisting,
+            concurrency: 24,
+            pageSize,
+            requestTimeoutMs: 20000,
+            startPage: page,
+            maxPages: 1,
+          });
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt < 3) {
+            await wait(attempt * 2000);
+          }
+        }
+      }
+      if (!pageResult) throw lastError;
       lastPage = Math.max(page, Number(pageResult.listingLastPage || page));
       resolvedRows += Number(pageResult.resolvedRows || 0);
       errorRows += Number(pageResult.errorRows || 0);
@@ -50,6 +63,7 @@ export default async (req: Request, _context: Context) => {
       } else {
         page = nextSequentialPage;
       }
+      if (page <= lastPage) await wait(750);
     } while (page <= lastPage);
 
     return json({
@@ -71,3 +85,7 @@ export const config: Config = {
   path: "/api/admin-sync-brand-catalog-background",
   method: "POST",
 };
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
