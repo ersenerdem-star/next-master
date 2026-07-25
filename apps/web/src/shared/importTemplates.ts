@@ -4,8 +4,8 @@ export function downloadCatalogTemplate() {
   downloadCsv(
     "catalog-import-template.csv",
     toCsv([
-      ["Product_Code", "Brand", "Product_Name", "OEM_No", "Vehicle", "HS_Code", "Origin", "Market_Segment", "Weight_kg"],
-      ["0986332404", "Bosch", "Starter", "1519524", "Mercedes-Benz, MAN", "851140", "HU", "pc", "3.142"],
+      ["Product_Code", "Brand", "EAN", "Product_Name", "OEM_No", "Vehicle", "Vehicle_Model", "HS_Code", "Origin", "Market_Segment", "Weight_kg", "Product_Type", "Source_URL", "Source_As_Of", "Source_Retrieved_At", "Source_Fingerprint"],
+      ["40 448 601", "Kolbenschmidt", "4028977704116", "Piston", "", "Mercedes-Benz", "Actros", "", "", "truck", "", "Piston", "https://onlineshop.ms-motorservice.com/msi/MSICD", "2026-07-22", "2026-07-25T00:00:00Z", ""],
     ]),
   );
 }

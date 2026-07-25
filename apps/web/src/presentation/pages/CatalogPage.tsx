@@ -810,9 +810,11 @@ export function CatalogPage() {
         await updateCloudCatalogRow(row.product_id, {
           product_code: draft.product_code,
           brand: draft.brand,
+          ean: draft.ean || null,
           description: draft.description || null,
           oem_no: draft.oem_no || null,
           vehicle: draft.vehicle || null,
+          vehicle_model: draft.vehicle_model || null,
           hs_code: draft.hs_code || null,
           origin: draft.origin || null,
           market_segment: normalizeCatalogMarketSegment(draft.market_segment),
@@ -968,6 +970,15 @@ export function CatalogPage() {
         render: (row: CatalogRow) => (
           <div className="catalog-cell catalog-cell--code">
             <strong className="catalog-code">{drafts[row.product_id]?.product_code ?? row.product_code}</strong>
+          </div>
+        ),
+      },
+      {
+        key: "ean",
+        header: t("catalog.common.ean"),
+        render: (row: CatalogRow) => (
+          <div className="catalog-cell">
+            <span className="catalog-mono">{drafts[row.product_id]?.ean ?? row.ean ?? "-"}</span>
           </div>
         ),
       },
@@ -1175,16 +1186,23 @@ export function CatalogPage() {
 
       const codeIndex = indexOfAny("Product_Code", "Part_No", "Code");
       const brandIndex = indexOfAny("Brand");
+      const eanIndex = indexOfAny("EAN", "GTIN", "Barcode");
       const nameIndex = indexOfAny("Product_Name", "Name", "Description");
       const oemIndex = indexOfAny("OEM_No", "OEM", "Original_Number");
       const hsIndex = indexOfAny("HS_Code", "HS", "GTIP");
       const vehicleIndex = indexOfAny("Vehicle", "Vehicles", "Fit_Vehicles", "Fit Vehicles", "Applications");
+      const vehicleModelIndex = indexOfAny("Vehicle_Model", "Vehicle Model", "Model");
       const originIndex = indexOfAny("Origin", "Country_Of_Origin");
       const segmentIndex = indexOfAny("Market_Segment", "Market Segment", "Segment", "Catalog_Segment");
       const weightIndex = indexOfAny("Weight_kg", "Weight", "Net_Weight");
       const imageUrlIndex = indexOfAny("Image_URL", "Image Url", "Image");
       const lifecycleStatusIndex = indexOfAny("Lifecycle_Status", "Lifecycle");
       const lifecycleNoteIndex = indexOfAny("Lifecycle_Note", "Lifecycle Note", "Discontinued_Note", "Discontinued Note");
+      const productTypeIndex = indexOfAny("Product_Type", "Product Type");
+      const sourceUrlIndex = indexOfAny("Source_URL", "Source URL");
+      const sourceAsOfIndex = indexOfAny("Source_As_Of", "Source As Of", "As_Of");
+      const sourceRetrievedAtIndex = indexOfAny("Source_Retrieved_At", "Source Retrieved At", "Retrieved_At");
+      const sourceFingerprintIndex = indexOfAny("Source_Fingerprint", "Source Fingerprint", "Payload_Fingerprint");
       const selectedImportBrand = importBrand === "__new__" ? importBrandName.trim() : importBrand.trim();
       const selectedImportSegment = normalizeCatalogMarketSegment(importCatalogSegment);
       const rowBrands = dataRows.map((row) => normalizeText(row[brandIndex]) ?? "");
@@ -1221,9 +1239,11 @@ export function CatalogPage() {
         .map((row) => ({
           product_code: normalizeText(row[codeIndex]),
           brand: normalizeText(row[brandIndex]) || activeImportBrand || "Unbranded",
+          ean: normalizeText(row[eanIndex]),
           description: normalizeText(row[nameIndex]),
           oem_no: normalizeText(row[oemIndex]),
           vehicle: normalizeText(row[vehicleIndex]),
+          vehicle_model: normalizeText(row[vehicleModelIndex]),
           hs_code: normalizeText(row[hsIndex]),
           origin: normalizeText(row[originIndex]),
           market_segment: normalizeCatalogMarketSegment(normalizeText(row[segmentIndex]) || activeImportSegment) || activeImportSegment,
@@ -1231,6 +1251,11 @@ export function CatalogPage() {
           image_url: normalizeText(row[imageUrlIndex]),
           lifecycle_status: normalizeCatalogLifecycleStatus(normalizeText(row[lifecycleStatusIndex])),
           lifecycle_note: normalizeText(row[lifecycleNoteIndex]),
+          product_type: normalizeText(row[productTypeIndex]),
+          source_url: normalizeText(row[sourceUrlIndex]),
+          source_as_of: normalizeText(row[sourceAsOfIndex]),
+          source_retrieved_at: normalizeText(row[sourceRetrievedAtIndex]),
+          source_fingerprint: normalizeText(row[sourceFingerprintIndex]),
         }))
         .filter((row) => Object.values(row).some((value) => value != null && String(value).trim().length > 0));
 
@@ -1346,13 +1371,15 @@ export function CatalogPage() {
     try {
       const exportData = await fetchCatalogExportRows({ brandName: exportBrand, marketSegment: catalogSegment || undefined });
       const exportRows = [
-        ["Product_Code", "Brand", "Product_Name", "OEM_No", "Vehicle", "HS_Code", "Origin", "Market_Segment", "Weight_kg", "Image_URL", "Lifecycle_Status", "Lifecycle_Note"],
+        ["Product_Code", "Brand", "EAN", "Product_Name", "OEM_No", "Vehicle", "Vehicle_Model", "HS_Code", "Origin", "Market_Segment", "Weight_kg", "Image_URL", "Lifecycle_Status", "Lifecycle_Note"],
         ...exportData.map((row) => [
           row.product_code,
           row.brand,
+          row.ean || "",
           row.description || "",
           row.oem_no || "",
           row.vehicle || "",
+          row.vehicle_model || "",
           row.hs_code || "",
           row.origin || "",
           row.market_segment || "",
@@ -1680,6 +1707,11 @@ export function CatalogPage() {
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { weight_kg: value })}
               />
               <Input
+                label={t("catalog.common.ean")}
+                value={selectedCatalogDraft.ean || ""}
+                onChange={(value) => patchCatalogDraft(selectedCatalogRow, { ean: value })}
+              />
+              <Input
                 label={t("catalog.common.description")}
                 value={selectedCatalogDraft.description || ""}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { description: value })}
@@ -1693,6 +1725,11 @@ export function CatalogPage() {
                 label={t("catalog.common.vehicle")}
                 value={selectedCatalogDraft.vehicle || ""}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { vehicle: value })}
+              />
+              <Input
+                label={t("catalog.common.vehicleModel")}
+                value={selectedCatalogDraft.vehicle_model || ""}
+                onChange={(value) => patchCatalogDraft(selectedCatalogRow, { vehicle_model: value })}
               />
               <Input
                 label={t("catalog.common.lifecycleNote")}
@@ -1712,6 +1749,7 @@ export function CatalogPage() {
             </div>
             <div className="workbench-detail-list">
               <div><span>{t("catalog.common.description")}</span><strong>{selectedCatalogDraft.description || "-"}</strong></div>
+              <div><span>{t("catalog.common.ean")}</span><strong>{selectedCatalogDraft.ean || "-"}</strong></div>
               <div>
                 <span>{t("catalog.common.oem")}</span>
                 <strong className="catalog-detail-list-text">
@@ -1734,6 +1772,7 @@ export function CatalogPage() {
                   <VehicleBadges value={selectedCatalogDraft.vehicle || ""} limit={5} expandable />
                 </strong>
               </div>
+              <div><span>{t("catalog.common.vehicleModel")}</span><strong>{selectedCatalogDraft.vehicle_model || "-"}</strong></div>
               <div><span>{t("catalog.common.hs")}</span><strong>{selectedCatalogDraft.hs_code || "-"}</strong></div>
               <div><span>{t("catalog.common.origin")}</span><strong>{selectedCatalogDraft.origin || "-"}</strong></div>
               <div><span>{t("catalog.common.weight")}</span><strong>{selectedCatalogDraft.weight_kg ?? "-"}</strong></div>

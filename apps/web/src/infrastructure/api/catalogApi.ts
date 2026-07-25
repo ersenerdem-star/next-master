@@ -18,13 +18,13 @@ import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 import { mapCatalogIntegritySummary } from "../../shared/catalogIntegritySummary";
 
 const CATALOG_SELECT_WITH_IMAGE =
-  "id,product_code,image_url,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note";
+  "id,product_code,image_url,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note";
 const CATALOG_SELECT_NO_IMAGE =
-  "id,product_code,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note";
+  "id,product_code,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note";
 const CATALOG_GLOBAL_SELECT_WITH_IMAGE =
-  "id,product_code,image_url,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
+  "id,product_code,image_url,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
 const CATALOG_GLOBAL_SELECT_NO_IMAGE =
-  "id,product_code,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
+  "id,product_code,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note,brands!inner(name)";
 
 type CatalogSearchMode = "strict" | "loose";
 
@@ -32,6 +32,8 @@ type CatalogQueryRow = {
   id: string;
   product_code: string;
   image_url?: string | null;
+  ean?: string | null;
+  vehicle_model?: string | null;
   description: string | null;
   oem_no: string | null;
   vehicle: string | null;
@@ -207,9 +209,11 @@ export async function fetchCloudCatalog(input: {
     product_code: String(row.product_code || ""),
     brand: String(row.brand || ""),
     image_url: String(row.image_url || ""),
+    ean: String(row.ean || ""),
     description: String(row.description || ""),
     oem_no: sanitizeCatalogOemNumbers(String(row.oem_no || "")),
     vehicle: String(row.vehicle || ""),
+    vehicle_model: String(row.vehicle_model || ""),
     hs_code: String(row.hs_code || ""),
     origin: String(row.origin || ""),
     market_segment: normalizeCatalogMarketSegment(String(row.market_segment || "")),
@@ -281,9 +285,11 @@ export async function updateCloudCatalogRow(
   updates: {
     product_code: string;
     brand: string;
+    ean?: string | null;
     description: string | null;
     oem_no: string | null;
     vehicle: string | null;
+    vehicle_model?: string | null;
     hs_code: string | null;
     origin: string | null;
     market_segment: string | null;
@@ -300,9 +306,11 @@ export async function updateCloudCatalogRow(
     .update({
       product_code: normalizeCatalogDisplayCode(updates.product_code, updates.brand),
       brand_id: brandId,
+      ean: updates.ean?.trim() || null,
       description: updates.description ? normalizeCatalogDescription(updates.description) : null,
       oem_no: sanitizeCatalogOemNumbers(updates.oem_no),
       vehicle: updates.vehicle?.trim() || null,
+      vehicle_model: updates.vehicle_model?.trim() || null,
       hs_code: updates.hs_code,
       origin: updates.origin ? normalizeCatalogOrigin(updates.origin) : null,
       market_segment: marketSegment,
@@ -319,9 +327,11 @@ export async function updateCloudCatalogRow(
 export async function createCloudCatalogRow(input: {
   product_code: string;
   brand: string;
+  ean?: string | null;
   description: string | null;
   oem_no: string | null;
   vehicle: string | null;
+  vehicle_model?: string | null;
   hs_code: string | null;
   origin: string | null;
   market_segment: string | null;
@@ -337,9 +347,11 @@ export async function createCloudCatalogRow(input: {
     organization_id: organizationId,
     brand_id: brandId,
     product_code: normalizeCatalogDisplayCode(input.product_code, input.brand),
+    ean: input.ean?.trim() || null,
     description: input.description ? normalizeCatalogDescription(input.description) : null,
     oem_no: sanitizeCatalogOemNumbers(input.oem_no),
     vehicle: input.vehicle?.trim() || null,
+    vehicle_model: input.vehicle_model?.trim() || null,
     hs_code: input.hs_code,
     origin: input.origin ? normalizeCatalogOrigin(input.origin) : null,
     market_segment: marketSegment,
@@ -431,9 +443,11 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
   const allRows: Array<{
     product_code: string;
     image_url?: string | null;
+    ean?: string | null;
     description: string | null;
     oem_no: string | null;
     vehicle: string | null;
+    vehicle_model?: string | null;
     hs_code: string | null;
     origin: string | null;
     market_segment: string | null;
@@ -468,23 +482,23 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     };
 
     let { data, error } = await buildQuery(
-      "product_code,image_url,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
+      "product_code,image_url,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
       "strict",
     );
     if (error && isMissingCatalogImageError(error)) {
       ({ data, error } = await buildQuery(
-        "product_code,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
+        "product_code,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
         "strict",
       ));
     }
     if (!error && search && shouldRunLooseOriginalNumberSearch(search) && !(data || []).length) {
       ({ data, error } = await buildQuery(
-        "product_code,image_url,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
+        "product_code,image_url,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
         "loose",
       ));
       if (error && isMissingCatalogImageError(error)) {
         ({ data, error } = await buildQuery(
-          "product_code,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
+          "product_code,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
           "loose",
         ));
       }
@@ -503,9 +517,11 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     product_code: row.product_code,
     brand: brandRow.name as string,
     image_url: row.image_url || "",
+    ean: row.ean || "",
     description: row.description || "",
     oem_no: sanitizeCatalogOemNumbers(row.oem_no || ""),
     vehicle: row.vehicle || "",
+    vehicle_model: row.vehicle_model || "",
     hs_code: row.hs_code || "",
     origin: row.origin || "",
     market_segment: normalizeCatalogMarketSegment(row.market_segment),
@@ -577,9 +593,11 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
         id: string;
         product_code: string;
         image_url?: string | null;
+        ean?: string | null;
         description: string | null;
         oem_no: string | null;
         vehicle: string | null;
+        vehicle_model?: string | null;
         hs_code: string | null;
         origin: string | null;
         market_segment: string | null;
@@ -604,9 +622,11 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
         product_code: row.product_code,
         brand: brandRow.name as string,
         image_url: row.image_url ?? "",
+        ean: row.ean ?? "",
         description: row.description ?? "",
         oem_no: sanitizeCatalogOemNumbers(row.oem_no ?? ""),
         vehicle: row.vehicle ?? "",
+        vehicle_model: row.vehicle_model ?? "",
         hs_code: row.hs_code ?? "",
         origin: row.origin ?? "",
         market_segment: normalizeCatalogMarketSegment(row.market_segment),

@@ -37,6 +37,7 @@ const LOGO_PRESETS: LogoPreset[] = [
   { match: /master\s*power/i, label: "Master Power", wordmark: "MASTER POWER", assetSrc: "/brand-logos/masterpower_logo.png", bgFrom: "#fff7ed", bgTo: "#ffffff", fg: "#c2410c", stroke: "#fdba74" },
   { match: /meyle/i, label: "Meyle", wordmark: "MEYLE", assetSrc: "/brand-logos/meyle_logo.svg", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#111827", stroke: "#cbd5e1" },
   { match: /mahle/i, label: "Mahle", wordmark: "MAHLE", assetSrc: "/brand-logos/mahle_logo.jpg", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#93c5fd" },
+  { match: /kolbenschmidt|kolben\s*schmidt|(^|\s)ks(\s|$)/i, label: "Kolbenschmidt", wordmark: "KS", assetSrc: "/brand-logos/kolbenschmidt_logo.jpeg", bgFrom: "#eef6ff", bgTo: "#ffffff", fg: "#005aa9", stroke: "#7db7e8" },
   { match: /behr/i, label: "Behr", wordmark: "BEHR", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#93c5fd" },
   { match: /payen/i, label: "Payen", wordmark: "PAYEN", assetSrc: "/brand-logos/payen_logo.jpg", bgFrom: "#fff7ed", bgTo: "#ffffff", fg: "#111827", stroke: "#fdba74" },
   { match: /jurid/i, label: "Jurid", wordmark: "JURID", assetSrc: "/brand-logos/jurid_logo.png", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#93c5fd" },

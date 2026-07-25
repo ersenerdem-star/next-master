@@ -8,16 +8,17 @@ export type CatalogRow = {
   product_code: string;
   brand: string;
   image_url?: string;
+  ean?: string;
   market_segment: CatalogMarketSegment | null;
   description: string;
   oem_no: string;
   vehicle: string;
+  vehicle_model?: string;
   hs_code: string;
   origin: string;
   weight_kg: number | null;
   lifecycle_status: CatalogLifecycleStatus | null;
   lifecycle_note: string;
-  ean?: string;
   integrity_status?: CatalogIntegrityStatus;
   critical_missing_fields?: string[];
   optional_missing_fields?: string[];
