@@ -1248,6 +1248,7 @@ function formatOrigin(value: string) {
     ["SPAIN", "ES"],
     ["CZECH REPUBLIC", "CZ"],
     ["TURKEY", "TR"],
+    ["TAIWAN", "TW"],
     ["FRANCE", "FR"],
     ["CHINA", "CN"],
     ["ROMANIA", "RO"],
