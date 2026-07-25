@@ -7,6 +7,8 @@ const deleteUserUrl = import.meta.env.VITE_ADMIN_DELETE_USER_URL || "/api/admin-
 const diagnosticsUrl = import.meta.env.VITE_ADMIN_DIAGNOSTICS_URL || "/api/admin-diagnostics";
 const testEmailUrl = import.meta.env.VITE_ADMIN_TEST_EMAIL_URL || "/api/admin-test-email";
 const syncBrandCatalogUrl = import.meta.env.VITE_ADMIN_SYNC_BRAND_CATALOG_URL || "/api/admin-sync-brand-catalog";
+const bulkSyncBrandCatalogUrl =
+  import.meta.env.VITE_ADMIN_BULK_SYNC_BRAND_CATALOG_URL || "/api/admin-sync-brand-catalog-background";
 
 export type AdminDiagnostics = {
   runtime: {
@@ -224,5 +226,30 @@ export async function syncBrandCatalog(brandName: string, refreshExisting = true
     discontinuedRows: number;
     replacementRows: number;
     replacementFetchRows: number;
+  };
+}
+
+export async function startBulkBrandCatalogImport(brandName: string) {
+  const accessToken = await getCallerAccessToken();
+  const response = await fetch(bulkSyncBrandCatalogUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ brandName }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || "Bulk brand catalog import failed");
+  }
+  return payload as {
+    ok: boolean;
+    mode: "background";
+    targetBrandName: string;
+    listingUniqueRows: number;
+    resolvedRows: number;
+    errorRows: number;
   };
 }

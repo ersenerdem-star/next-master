@@ -40,6 +40,7 @@ type KnownCatalogSyncPreferredProvider =
   | "hengst_connect"
   | "meyle_official"
   | "skf_automotive"
+  | "motorservice_msicd"
   | "federal_mogul_aftermarket";
 
 export type CatalogSyncPreferredProvider = KnownCatalogSyncPreferredProvider | `tecalliance_${string}`;
@@ -314,6 +315,17 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredProviderLabel: "Brembo Parts official catalog",
     preferredSourceType: "official",
     preferredSourceUrl: "https://www.bremboparts.com/europe/en",
+  },
+  kolbenschmidt: {
+    aliases: ["kolbenschmidt", "ks"],
+    managedBrandNames: ["Kolbenschmidt"],
+    preferredProviderKey: "motorservice_msicd",
+    preferredProviderLabel: "MS Motorservice International official MSICD catalog",
+    preferredSourceType: "official",
+    preferredSourceUrl: "https://onlineshop.ms-motorservice.com/msi/MSICD?page=checkUser&vko=0001&usertype=guest&app=shop",
+    executionProviderKey: "spareto",
+    executionProviderLabel: "Spareto exact-detail fallback",
+    executionSourceType: "marketplace",
   },
   hepu: {
     aliases: ["hepu"],
