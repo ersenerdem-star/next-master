@@ -1537,8 +1537,9 @@ export function CatalogPage() {
 
     try {
       const result = await startBulkBrandCatalogImport(catalogBrand);
-      setStatus(t("catalog.status.bulkImportStarted", { brand: result.targetBrandName }));
-      actionFeedback.succeed(t("catalog.status.bulkImportStarted", { brand: result.targetBrandName }));
+      const startedBrand = result.targetBrandName || catalogBrand;
+      setStatus(t("catalog.status.bulkImportStarted", { brand: startedBrand }));
+      actionFeedback.succeed(t("catalog.status.bulkImportStarted", { brand: startedBrand }));
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : t("catalog.errors.syncFailed");
       setError(message);

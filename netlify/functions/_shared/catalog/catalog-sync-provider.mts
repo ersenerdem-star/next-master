@@ -326,6 +326,7 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     executionProviderKey: "spareto",
     executionProviderLabel: "Spareto exact-detail fallback",
     executionSourceType: "marketplace",
+    completionProviders: [],
   },
   hepu: {
     aliases: ["hepu"],
@@ -648,6 +649,8 @@ export async function syncBrandCatalog(input: {
   pageSize?: number;
   requestTimeoutMs?: number;
   maxPages?: number;
+  startPage?: number;
+  onlyNew?: boolean;
   expandPrefixes?: boolean;
   skipDiscovery?: boolean;
   candidateLimit?: number;

@@ -153,6 +153,8 @@ export async function syncBrandCatalogFromSpareto(input: {
   pageSize?: number;
   requestTimeoutMs?: number;
   maxPages?: number;
+  startPage?: number;
+  onlyNew?: boolean;
   candidateLimit?: number;
 }) {
   const brandName = canonicalizeInternalBrandName(input.brandName);
@@ -163,6 +165,8 @@ export async function syncBrandCatalogFromSpareto(input: {
   const pageSize = Math.max(12, input.pageSize ?? 48);
   const requestTimeoutMs = Math.max(5000, input.requestTimeoutMs ?? 20000);
   const maxPages = Number.isFinite(input.maxPages) && Number(input.maxPages) > 0 ? Math.max(1, Number(input.maxPages)) : undefined;
+  const startPage = Number.isFinite(input.startPage) && Number(input.startPage) > 0 ? Math.max(1, Math.floor(Number(input.startPage))) : 1;
+  const onlyNew = input.onlyNew === true;
   const candidateLimit =
     Number.isFinite(input.candidateLimit) && Number(input.candidateLimit) > 0 ? Math.max(1, Number(input.candidateLimit)) : undefined;
   const headers = {
@@ -177,10 +181,11 @@ export async function syncBrandCatalogFromSpareto(input: {
   const existingRows = await fetchExistingCatalogRows(input.supabaseUrl, headers, target.brandId);
   const existingByCode = new Map(existingRows.map((row) => [row.normalized_code, row]));
 
-  const listing = await fetchSparetoListing(brandQuery, pageSize, requestTimeoutMs, maxPages);
+  const listing = await fetchSparetoListing(brandQuery, pageSize, requestTimeoutMs, maxPages, startPage);
   const candidates = listing.rows.filter((row) => {
     const existing = existingByCode.get(row.normalized_code);
     if (!existing) return true;
+    if (onlyNew) return false;
     if (refreshExisting) return true;
     return isIncomplete(existing, supportsEanColumn);
   });
@@ -597,10 +602,16 @@ async function fetchExistingCatalogRows(supabaseUrl: string, headers: Record<str
   return dedupeBy(results, (row) => row.normalized_code);
 }
 
-async function fetchSparetoListing(brandQuery: string, pageSize: number, requestTimeoutMs: number, maxPages?: number) {
+async function fetchSparetoListing(
+  brandQuery: string,
+  pageSize: number,
+  requestTimeoutMs: number,
+  maxPages?: number,
+  startPage = 1,
+) {
   const rowsByCode = new Map();
-  let page = 1;
-  let lastPage = 1;
+  let page = Math.max(1, Math.floor(startPage));
+  let lastPage = page;
   let pagesProcessed = 0;
 
   while (true) {

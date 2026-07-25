@@ -17,20 +17,40 @@ export default async (req: Request, _context: Context) => {
       return json({ error: "This bounded background import is only enabled for Kolbenschmidt." }, 400);
     }
 
-    const result = await syncBrandCatalog({
-      supabaseUrl: caller.supabaseUrl,
-      serviceRoleKey: caller.serviceRoleKey,
-      brandName: "Kolbenschmidt",
-      refreshExisting: true,
-      concurrency: 24,
-      pageSize: 96,
-      requestTimeoutMs: 20000,
-    });
+    let page = 1;
+    let lastPage = 1;
+    let resolvedRows = 0;
+    let errorRows = 0;
+    let replacementRows = 0;
+
+    do {
+      const pageResult = await syncBrandCatalog({
+        supabaseUrl: caller.supabaseUrl,
+        serviceRoleKey: caller.serviceRoleKey,
+        brandName: "Kolbenschmidt",
+        refreshExisting: false,
+        onlyNew: true,
+        concurrency: 24,
+        pageSize: 96,
+        requestTimeoutMs: 20000,
+        startPage: page,
+        maxPages: 1,
+      });
+      lastPage = Math.max(page, Number(pageResult.listingLastPage || page));
+      resolvedRows += Number(pageResult.resolvedRows || 0);
+      errorRows += Number(pageResult.errorRows || 0);
+      replacementRows += Number(pageResult.replacementRows || 0);
+      page += Math.max(1, Number(pageResult.listingPagesProcessed || 1));
+    } while (page <= lastPage);
 
     return json({
       ok: true,
       mode: "background",
-      ...result,
+      targetBrandName: "Kolbenschmidt",
+      listingLastPage: lastPage,
+      resolvedRows,
+      errorRows,
+      replacementRows,
     });
   } catch (error) {
     return json({ error: sanitizeUserFacingError(error, "Kolbenschmidt bulk import failed") }, 500);
