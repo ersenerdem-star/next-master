@@ -73,5 +73,6 @@ test("Kolbenschmidt technical refresh fills segment and fitment model without re
   assert.match(sparetoSyncSource, /preferCatalogImage\(existing\?\.image_url, detail\.image_url, candidate\.image_url\)/);
   assert.match(sparetoSyncSource, /String\(row\.vehicle \|\| ""\)\.trim\(\) && !String\(row\.vehicle_model \|\| ""\)\.trim\(\)/);
   assert.match(sparetoSyncSource, /!sanitizeImageUrl\(row\.image_url \|\| ""\)/);
+  assert.match(sparetoSyncSource, /!isAssignedMarketSegment\(row\.market_segment\)/);
   assert.match(sparetoSyncSource, /normalizeTextValue\(existing\?\.vehicle_model\) !== normalizeTextValue\(merged\?\.vehicle_model\)/);
 });

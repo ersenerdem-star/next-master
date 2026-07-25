@@ -958,7 +958,7 @@ function isIncomplete(row: any, supportsEanColumn: boolean) {
     !String(row.oem_no || "").trim() ||
     !String(row.vehicle || "").trim() ||
     (String(row.vehicle || "").trim() && !String(row.vehicle_model || "").trim()) ||
-    !String(row.market_segment || "").trim() ||
+    !isAssignedMarketSegment(row.market_segment) ||
     !String(row.hs_code || "").trim() ||
     !String(row.origin || "").trim() ||
     row.weight_kg == null ||
@@ -1042,6 +1042,11 @@ function preferMarketSegment(...values: unknown[]) {
     if (text && text.toLowerCase() !== "unassigned") return text;
   }
   return "";
+}
+
+function isAssignedMarketSegment(value: unknown) {
+  const text = String(value || "").trim();
+  return Boolean(text) && text.toLowerCase() !== "unassigned";
 }
 
 function preferOrigin(existing: unknown, incoming: unknown) {
