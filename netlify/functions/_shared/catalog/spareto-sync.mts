@@ -259,6 +259,8 @@ export async function syncBrandCatalogFromSpareto(input: {
     ...(supportsEanColumn ? { ean: emptyToNull(row.ean) } : {}),
     oem_no: emptyToNull(row.oem_no),
     vehicle: emptyToNull(row.vehicle),
+    vehicle_model: emptyToNull(row.vehicle_model),
+    market_segment: emptyToNull(row.market_segment),
     hs_code: emptyToNull(row.hs_code),
     origin: emptyToNull(row.origin),
     weight_kg: row.weight_kg == null || Number.isNaN(Number(row.weight_kg)) ? null : Number(row.weight_kg),
@@ -430,6 +432,8 @@ export async function completeMissingCatalogFieldsFromSpareto(input: {
     ...(supportsEanColumn ? { ean: emptyToNull(row.ean) } : {}),
     oem_no: emptyToNull(row.oem_no),
     vehicle: emptyToNull(row.vehicle),
+    vehicle_model: emptyToNull(row.vehicle_model),
+    market_segment: emptyToNull(row.market_segment),
     hs_code: emptyToNull(row.hs_code),
     origin: emptyToNull(row.origin),
     weight_kg: row.weight_kg == null || Number.isNaN(Number(row.weight_kg)) ? null : Number(row.weight_kg),
@@ -562,6 +566,8 @@ async function fetchExistingCatalogRows(supabaseUrl: string, headers: Record<str
     ...(supportsEanColumn ? ["ean"] : []),
     "oem_no",
     "vehicle",
+    "vehicle_model",
+    "market_segment",
     "hs_code",
     "origin",
     "weight_kg",
@@ -588,6 +594,8 @@ async function fetchExistingCatalogRows(supabaseUrl: string, headers: Record<str
         ean: normalizeCatalogEan(String(row.ean || "").trim()),
         oem_no: String(row.oem_no || "").trim(),
         vehicle: String(row.vehicle || "").trim(),
+        vehicle_model: String(row.vehicle_model || "").trim(),
+        market_segment: String(row.market_segment || "").trim(),
         hs_code: String(row.hs_code || "").trim(),
         origin: String(row.origin || "").trim(),
         weight_kg: row.weight_kg == null ? null : Number(row.weight_kg),
@@ -715,6 +723,8 @@ async function fetchSparetoDetail(card: any, requestTimeoutMs: number, targetBra
     ean: detail.ean || card.ean || "",
     oem_no: detail.oe_numbers || "",
     vehicle: detail.vehicle || "",
+    vehicle_model: detail.vehicle_model || "",
+    market_segment: "Engines",
     hs_code: detail.customs_code || "",
     origin: formatOrigin(detail.country_of_origin),
     weight_kg: detail.weight_kg,
@@ -756,6 +766,8 @@ function extractDetailProperties(html: string) {
     country_of_origin: captureTableValue(html, "Country of Origin"),
     ean: extractSparetoEan(html),
     vehicle: extractVehicleManufacturers(html),
+    vehicle_model: extractVehicleModels(html),
+    market_segment: "Engines",
     weight_kg: parseWeight(
       capture(
         html,
@@ -789,6 +801,19 @@ function extractVehicleManufacturers(html: string) {
     if (formatted) manufacturers.push(formatted);
   }
   return [...new Set(manufacturers)].join(", ");
+}
+
+function extractVehicleModels(html: string) {
+  const vehiclesSectionMatch = html.match(/<section[^>]+id=['"]nav-vehicles['"][^>]*>([\s\S]*?)<\/section>/i);
+  const vehiclesSection = vehiclesSectionMatch?.[1] || "";
+  if (!vehiclesSection) return "";
+  const models = [];
+  const modelPattern = /<div[^>]*class=['"][^'"]*\bcol-6\s+ps-4\b[^'"]*['"][^>]*>([\s\S]*?)<\/div>/gi;
+  for (const match of vehiclesSection.matchAll(modelPattern)) {
+    const model = cleanText(match[1]);
+    if (model) models.push(model);
+  }
+  return compactReferenceNumbers(models, 1000);
 }
 
 function formatVehicleManufacturer(value: string) {
@@ -896,6 +921,8 @@ function buildCatalogRow(target: SyncBrandTarget, candidate: any, detail: any, e
   const nextEan = preferCatalogEan(existing?.ean, detail.ean, candidate.ean);
   const nextOemNo = preferCatalogValue(existing?.oem_no, detail.oem_no);
   const nextVehicle = preferCatalogValue(existing?.vehicle, detail.vehicle);
+  const nextVehicleModel = preferCatalogValue(existing?.vehicle_model, detail.vehicle_model);
+  const nextMarketSegment = preferCatalogValue(existing?.market_segment, detail.market_segment) || "Engines";
   const nextHsCode = preferCatalogValue(existing?.hs_code, detail.hs_code);
   const nextOrigin = preferOrigin(existing?.origin, detail.origin);
   const nextWeight = existing?.weight_kg ?? detail.weight_kg ?? null;
@@ -912,6 +939,8 @@ function buildCatalogRow(target: SyncBrandTarget, candidate: any, detail: any, e
     ean: supportsEanColumn ? nextEan : "",
     oem_no: nextOemNo,
     vehicle: nextVehicle,
+    vehicle_model: nextVehicleModel,
+    market_segment: nextMarketSegment,
     hs_code: nextHsCode,
     origin: nextOrigin,
     weight_kg: nextWeight,
@@ -1138,6 +1167,7 @@ function parseWeight(value: string) {
 
 function sanitizeImageUrl(value: unknown) {
   const text = String(value || "").trim();
+  if (/no[-_]?image/i.test(text)) return "";
   return text && /^https?:\/\//i.test(text) ? text : "";
 }
 
