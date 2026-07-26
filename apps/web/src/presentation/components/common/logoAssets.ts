@@ -27,6 +27,8 @@ const LOGO_PRESETS: LogoPreset[] = [
   { match: /febi/i, label: "febi", wordmark: "FEBI", bgFrom: "#fef2f2", bgTo: "#ffffff", fg: "#b91c1c", stroke: "#fca5a5" },
   { match: /\bfte\b/i, label: "FTE", wordmark: "FTE", assetSrc: "/brand-logos/fte_logo.png", bgFrom: "#eef2ff", bgTo: "#ffffff", fg: "#1e3a8a", stroke: "#93c5fd" },
   { match: /\bswf\b/i, label: "SWF", wordmark: "SWF", assetSrc: "/brand-logos/swf_logo.jpg", bgFrom: "#fff7ed", bgTo: "#ffffff", fg: "#c2410c", stroke: "#fdba74" },
+  { match: /\bbf\b/i, label: "BF", wordmark: "BF", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#00569d", stroke: "#7db7e8" },
+  { match: /pierburg/i, label: "Pierburg", wordmark: "PIERBURG", bgFrom: "#eef6ff", bgTo: "#ffffff", fg: "#00569d", stroke: "#7db7e8" },
   { match: /\btrw\b/i, label: "TRW", wordmark: "TRW", assetSrc: "/brand-logos/trw_logo.png", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1e40af", stroke: "#93c5fd" },
   { match: /hella/i, label: "Hella", wordmark: "HELLA", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#bfdbfe" },
   { match: /hepu/i, label: "HEPU", wordmark: "HEPU", assetSrc: "/brand-logos/hepu_logo.png", bgFrom: "#f0fdf4", bgTo: "#ffffff", fg: "#15803d", stroke: "#86efac" },
