@@ -129,6 +129,8 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
   pageSize?: number;
   requestTimeoutMs?: number;
   seedPrefixes?: string[];
+  candidateLimit?: number;
+  skipDiscovery?: boolean;
 }) {
   const refreshExisting = input.refreshExisting !== false;
   const detailConcurrency = Math.max(1, input.concurrency ?? 6);
@@ -150,13 +152,17 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
   const supportsEanColumn = await detectCatalogEanColumn(input.supabaseUrl, headers);
   const existingRows = await fetchCatalogRows(input.supabaseUrl, headers, target, supportsEanColumn);
   const existingByCode = new Map(existingRows.map((row) => [row.normalized_code, row]));
-  const discoveryQueries = buildDiscoveryQueries(target, existingRows, input.seedPrefixes);
-  const discoveredSearchMap = await crawlOfficialQueries({
-    target,
-    queries: discoveryQueries,
-    searchPageSize,
-    requestTimeoutMs,
-  });
+  const discoveryQueries = input.skipDiscovery === true
+    ? []
+    : buildDiscoveryQueries(target, existingRows, input.seedPrefixes);
+  const discoveredSearchMap = discoveryQueries.length
+    ? await crawlOfficialQueries({
+        target,
+        queries: discoveryQueries,
+        searchPageSize,
+        requestTimeoutMs,
+      })
+    : new Map<string, any>();
 
   const workMap = new Map<string, any>();
   for (const row of existingRows) {
@@ -179,7 +185,8 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
     });
   }
 
-  const workItems = Array.from(workMap.values());
+  const allWorkItems = Array.from(workMap.values());
+  const workItems = boundZfCandidateItems(allWorkItems, input.candidateLimit);
   const processedCodes = new Set(workItems.map((item) => item.searchItem?.normalized_code || item.existing?.normalized_code).filter(Boolean));
   const extraCodes = new Set<string>();
   const catalogPayload: Array<Record<string, unknown>> = [];
@@ -247,7 +254,7 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
     }
   });
 
-  const extraSearchItems = await resolveExtraCodes({
+  const allExtraSearchItems = await resolveExtraCodes({
     target,
     extraCodes,
     existingByCode,
@@ -255,6 +262,14 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
     searchPageSize,
     requestTimeoutMs,
   });
+  const extraSearchItems = boundZfCandidateItems(
+    allExtraSearchItems,
+    input.candidateLimit,
+    workItems.length,
+  );
+  const candidateRowsBeforeLimit = allWorkItems.length + allExtraSearchItems.length;
+  const candidateRows = workItems.length + extraSearchItems.length;
+  const truncatedByCandidateLimit = candidateRows < candidateRowsBeforeLimit;
 
   if (extraSearchItems.length) {
     await runPool(extraSearchItems, detailConcurrency, async (item) => {
@@ -429,8 +444,11 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
     listingLastPage: 0,
     listingUniqueRows: discoveredSearchMap.size,
     newRowsInListing: [...discoveredSearchMap.keys()].filter((code) => !existingByCode.has(code)).length,
+    discoverySkipped: input.skipDiscovery === true,
     incompleteExistingRows: existingRows.filter((row) => shouldProcessRow(row, supportsEanColumn)).length,
-    candidateRows: workItems.length + extraSearchItems.length,
+    candidateRows,
+    candidateRowsBeforeLimit,
+    truncatedByCandidateLimit,
     resolvedRows: matchedRows,
     errorRows: errorRows.length,
     discontinuedRows,
@@ -450,6 +468,21 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
     hsRows: 0,
     weightRows,
   };
+}
+
+export function boundZfCandidateItems<T>(
+  items: readonly T[],
+  candidateLimit?: number,
+  alreadySelected = 0,
+) {
+  const parsedLimit = Number(candidateLimit);
+  if (!Number.isFinite(parsedLimit) || parsedLimit <= 0) return [...items];
+
+  const remaining = Math.max(
+    0,
+    Math.floor(parsedLimit) - Math.max(0, Math.floor(Number(alreadySelected) || 0)),
+  );
+  return items.slice(0, remaining);
 }
 
 export async function fetchZfAftermarketOfficialObservation(input: {
@@ -592,7 +625,10 @@ async function fetchCatalogRows(supabaseUrl: string, headers: Record<string, str
       "lifecycle_note",
     ].join(",");
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/catalog_products?select=${selectColumns}&brand_id=eq.${encodeURIComponent(target.brand_id)}&limit=${pageLimit}&offset=${offset}`,
+      `${supabaseUrl}/rest/v1/catalog_products?select=${selectColumns}`
+        + `&organization_id=eq.${encodeURIComponent(target.organization_id)}`
+        + `&brand_id=eq.${encodeURIComponent(target.brand_id)}`
+        + `&order=normalized_code.asc&limit=${pageLimit}&offset=${offset}`,
       { headers },
     );
     const text = await response.text();

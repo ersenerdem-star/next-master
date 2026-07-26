@@ -656,6 +656,7 @@ export async function syncBrandCatalog(input: {
   seedPrefixes?: string[];
   lineIds?: number[];
   sparetoFallbackLimit?: number;
+  skipCompletion?: boolean;
 }) {
   const plan = resolveCatalogSyncPlan(input.brandName);
   const tecallianceEntry = resolveTecAllianceBrandEntry(plan.brandName);
@@ -786,7 +787,9 @@ export async function syncBrandCatalog(input: {
     });
   }
 
-  const shouldApplySparetoCompletion = plan.completionProviders.includes("spareto");
+  const shouldApplySparetoCompletion =
+    plan.completionProviders.includes("spareto")
+    && input.skipCompletion !== true;
   const sparetoCompletion =
     shouldApplySparetoCompletion && result?.targetBrandId && result?.organizationId
       ? await completeMissingCatalogFieldsFromSpareto({
