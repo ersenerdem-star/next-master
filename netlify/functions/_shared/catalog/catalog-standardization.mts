@@ -14,7 +14,9 @@ export function normalizeCatalogDisplayCode(value: string, brandName = ""): stri
     .replace(/[^a-z0-9]+/g, "");
 
   const spaceOnlyBrands = new Set([
+    "bf",
     "bosch",
+    "kolbenschmidt",
     "sachs",
     "lemforder",
     "wabco",
@@ -23,6 +25,9 @@ export function normalizeCatalogDisplayCode(value: string, brandName = ""): stri
     "knorrbremse",
     "mann",
     "mannfilter",
+    "pierburg",
+    "trwenginecomponent",
+    "trwenginecomponents",
   ]);
   if (spaceOnlyBrands.has(normalizedBrand)) {
     return text.replace(/\s+/g, "");

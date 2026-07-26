@@ -21,7 +21,9 @@ function formatDotAndSpaceDisplayCode(value) {
 export function normalizeCatalogDisplayCode(value, brand = "") {
   const canonicalBrand = normalizeBrandKey(brand);
   const spaceOnlyBrands = new Set([
+    "BF",
     "BOSCH",
+    "KOLBENSCHMIDT",
     "SACHS",
     "LEMFORDER",
     "WABCO",
@@ -30,6 +32,9 @@ export function normalizeCatalogDisplayCode(value, brand = "") {
     "KNORRBREMSE",
     "MANN",
     "MANNFILTER",
+    "PIERBURG",
+    "TRWENGINECOMPONENT",
+    "TRWENGINECOMPONENTS",
   ]);
   if (spaceOnlyBrands.has(canonicalBrand)) {
     return formatSpaceOnlyDisplayCode(value);

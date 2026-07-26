@@ -7,7 +7,9 @@ function normalizeBrandKey(value: string): string {
 }
 
 const SPACE_ONLY_CODE_BRANDS = new Set([
+  "BF",
   "BOSCH",
+  "KOLBENSCHMIDT",
   "SACHS",
   "LEMFORDER",
   "WABCO",
@@ -16,6 +18,9 @@ const SPACE_ONLY_CODE_BRANDS = new Set([
   "KNORRBREMSE",
   "MANN",
   "MANNFILTER",
+  "PIERBURG",
+  "TRWENGINECOMPONENT",
+  "TRWENGINECOMPONENTS",
 ]);
 const DOT_AND_SPACE_CODE_BRANDS = new Set(["ZF"]);
 
