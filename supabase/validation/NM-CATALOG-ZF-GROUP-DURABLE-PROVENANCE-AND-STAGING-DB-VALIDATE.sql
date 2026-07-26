@@ -1463,32 +1463,28 @@ begin
      ) then
     raise exception 'Tenant-one RLS leaked a staging candidate';
   end if;
-
-  begin
-    perform public.begin_catalog_zf_durable_run(
-      '73000000-0000-4000-8000-000000000040',
-      'unauthorized-function-call',
-      '5b7ee1873285ad88f5342126ca965ee8d9021b06',
-      null,
-      1,
-      null,
-      'zf-durable-staging.v1',
-      null
-    );
-    raise exception 'Expected authenticated function execute rejection';
-  exception
-    when insufficient_privilege then null;
-  end;
 end;
 $zf_rls_tenant_one$;
 
 reset role;
 
+do $zf_authenticated_function_grant$
+begin
+  if has_function_privilege(
+    'authenticated',
+    'public.begin_catalog_zf_durable_run(uuid,text,text,text,integer,text,text,text)',
+    'EXECUTE'
+  ) then
+    raise exception 'Authenticated unexpectedly has durable-run execute';
+  end if;
+end;
+$zf_authenticated_function_grant$;
+
 insert into zf_durable_gate_results values
   (
     '11_tenant_rls_and_function_auth',
     'PASS',
-    'authenticated superadmin sees one tenant only and cannot execute persistence functions'
+    'authenticated superadmin sees one tenant only; exact function privilege catalog denies persistence execute'
   );
 
 set local role service_role;

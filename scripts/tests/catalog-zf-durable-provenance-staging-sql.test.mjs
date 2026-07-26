@@ -161,4 +161,9 @@ test("behavior validator covers the accepted local evidence matrix and always ro
 
   assert.match(validator, /^begin;/m);
   assert.match(validator, /^rollback;$/m);
+  assert.match(
+    validator,
+    /has_function_privilege\(\s*'authenticated',[\s\S]*?'public\.begin_catalog_zf_durable_run\(uuid,text,text,text,integer,text,text,text\)'[\s\S]*?'EXECUTE'/,
+  );
+  assert.doesNotMatch(validator, /'unauthorized-function-call'/);
 });
