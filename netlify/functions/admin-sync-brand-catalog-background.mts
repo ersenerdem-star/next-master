@@ -34,6 +34,7 @@ export default async (req: Request, _context: Context) => {
           pageResult = await syncBrandCatalog({
             supabaseUrl: caller.supabaseUrl,
             serviceRoleKey: caller.serviceRoleKey,
+            organizationId: caller.profile.organization_id,
             brandName: "Kolbenschmidt",
             refreshExisting: false,
             onlyNew: !refreshExisting,

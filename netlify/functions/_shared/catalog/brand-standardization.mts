@@ -9,6 +9,9 @@ export function canonicalizeInternalBrandName(input: string) {
   if (lower === "lemforder") return "Lemforder";
   if (lower === "wabco") return "Wabco";
   if (lower === "trw") return "TRW";
+  if (lower === "trwenginecomponent" || lower === "trwenginecomponents") return "TRW Engine Components";
+  if (lower === "bf") return "BF";
+  if (lower === "pierburg") return "Pierburg";
   if (lower === "bosch") return "Bosch";
   if (lower === "mann" || lower === "mannfilter") return "Mann";
   if (lower === "sachs") return "Sachs";

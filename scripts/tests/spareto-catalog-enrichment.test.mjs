@@ -47,8 +47,9 @@ test("part numbers remove whitespace only and preserve punctuation", () => {
 });
 
 test("known brand variants use one strict comparison key", () => {
-  assert.equal(normalizeCatalogBrand("TRW Engine Component"), "trw");
-  assert.equal(normalizeCatalogBrand("TRW Engine Components"), "trw");
+  assert.equal(normalizeCatalogBrand("TRW Engine Component"), "trw engine components");
+  assert.equal(normalizeCatalogBrand("TRW Engine Components"), "trw engine components");
+  assert.notEqual(normalizeCatalogBrand("TRW Engine Components"), normalizeCatalogBrand("TRW"));
   assert.equal(normalizeCatalogBrand("BF"), "bf");
 });
 

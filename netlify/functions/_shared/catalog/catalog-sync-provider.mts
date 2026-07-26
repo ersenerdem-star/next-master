@@ -191,13 +191,11 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
   wabco: {
     aliases: ["wabco"],
     managedBrandNames: ["WABCO"],
-    preferredProviderKey: "wabco_customercentre",
-    preferredProviderLabel: "WABCO Customer Centre official catalog",
+    preferredProviderKey: "zf_aftermarket",
+    preferredProviderLabel: "ZF Aftermarket official WABCO catalog",
     preferredSourceType: "official",
-    preferredSourceUrl: "https://www.wabco-customercentre.com/catalog/",
-    executionProviderKey: "spareto",
-    executionProviderLabel: "Spareto exact-detail fallback",
-    executionSourceType: "marketplace",
+    preferredSourceUrl: "https://aftermarket.zf.com/en/catalog/?country=AE",
+    completionProviders: ["spareto"],
   },
   masterpower: {
     aliases: ["master power", "masterpower"],
@@ -317,8 +315,8 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredSourceUrl: "https://www.bremboparts.com/europe/en",
   },
   kolbenschmidt: {
-    aliases: ["kolbenschmidt", "ks"],
-    managedBrandNames: ["Kolbenschmidt"],
+    aliases: ["kolbenschmidt", "ks", "bf", "pierburg", "trw engine component", "trw engine components"],
+    managedBrandNames: ["Kolbenschmidt", "BF", "Pierburg", "TRW Engine Components"],
     preferredProviderKey: "motorservice_msicd",
     preferredProviderLabel: "MS Motorservice International official MSICD catalog",
     preferredSourceType: "official",
@@ -643,6 +641,7 @@ export function resolveCatalogSyncPlan(inputBrandName: string): CatalogSyncPlan 
 export async function syncBrandCatalog(input: {
   supabaseUrl: string;
   serviceRoleKey: string;
+  organizationId?: string;
   brandName: string;
   refreshExisting?: boolean;
   concurrency?: number;
@@ -843,6 +842,7 @@ export async function syncBrandCatalog(input: {
 export async function syncBrandCatalogWithProgressiveBatches(input: {
   supabaseUrl: string;
   serviceRoleKey: string;
+  organizationId?: string;
   brandName: string;
   refreshExisting?: boolean;
   concurrency?: number;

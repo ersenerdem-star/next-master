@@ -2784,6 +2784,102 @@ select {
   margin-bottom: 12px;
 }
 
+.catalog-operations-kpis,
+.catalog-field-health {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.catalog-operations-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.catalog-field-health {
+  grid-template-columns: repeat(8, minmax(92px, 1fr));
+}
+
+.catalog-operations-kpis > div,
+.catalog-field-health > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(137, 156, 179, 0.18);
+  border-radius: 12px;
+  background: rgba(248, 251, 253, 0.92);
+}
+
+.catalog-operations-kpis span,
+.catalog-field-health small,
+.catalog-brand-operations__heading span {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.catalog-operations-kpis strong,
+.catalog-field-health strong {
+  color: #163047;
+  font-size: 17px;
+}
+
+.catalog-brand-operations {
+  margin-bottom: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(137, 156, 179, 0.18);
+  border-radius: 14px;
+}
+
+.catalog-brand-operations__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(245, 249, 252, 0.96);
+}
+
+.catalog-brand-operations__table-wrap {
+  max-height: 360px;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+.catalog-brand-operations table {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.catalog-brand-operations th,
+.catalog-brand-operations td {
+  padding: 8px 12px;
+  border-top: 1px solid rgba(214, 226, 236, 0.75);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.catalog-brand-operations th:first-child,
+.catalog-brand-operations td:first-child {
+  text-align: left;
+}
+
+.catalog-brand-operations th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.catalog-brand-operations tr.is-selected td {
+  background: rgba(217, 164, 37, 0.08);
+}
+
 .catalog-integrity-detail {
   padding: 10px 0;
   border-bottom: 1px solid rgba(214, 226, 236, 0.9);
@@ -7025,6 +7121,14 @@ textarea {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .catalog-operations-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .catalog-field-health {
+    grid-template-columns: repeat(4, minmax(92px, 1fr));
+  }
+
   .catalog-observation-review-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -7044,6 +7148,11 @@ textarea {
   .smart-filter-bar__selects,
   .metric-strip {
     grid-template-columns: 1fr;
+  }
+
+  .catalog-operations-kpis,
+  .catalog-field-health {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .catalog-observation-review-summary {

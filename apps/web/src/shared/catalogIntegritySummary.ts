@@ -22,7 +22,8 @@ export function deriveCatalogIntegrityInitializationState(input: {
 }
 
 export function shouldDisplayCatalogIntegrityCounts(state: CatalogIntegrityInitializationState) {
-  return state !== "not_initialized" && state !== "partial";
+  void state;
+  return true;
 }
 
 export function mapCatalogIntegritySummary(data: Record<string, unknown> | null | undefined): CatalogIntegritySummary {
@@ -36,13 +37,26 @@ export function mapCatalogIntegritySummary(data: Record<string, unknown> | null 
   });
 
   return {
-    total_products: shouldDisplayCatalogIntegrityCounts(initializationState) ? toCount(data?.total_products) : null,
+    total_products: toCount(data?.total_products),
     projected_products: projectedProducts,
+    evaluated_products: toCount(data?.evaluated_products),
     clear_count: toCount(data?.clear_count),
     incomplete_count: toCount(data?.incomplete_count),
     conflict_count: toCount(data?.conflict_count),
     pending_count: toCount(data?.pending_count),
+    queue_depth: toCount(data?.queue_depth),
     failed_count: toCount(data?.failed_count),
+    evaluation_coverage_percent: toCount(data?.evaluation_coverage_percent),
+    data_completeness_percent: toCount(data?.data_completeness_percent),
+    missing_description_count: toCount(data?.missing_description_count),
+    missing_origin_count: toCount(data?.missing_origin_count),
+    missing_hs_code_count: toCount(data?.missing_hs_code_count),
+    missing_weight_count: toCount(data?.missing_weight_count),
+    missing_ean_count: toCount(data?.missing_ean_count),
+    missing_oem_count: toCount(data?.missing_oem_count),
+    missing_vehicle_count: toCount(data?.missing_vehicle_count),
+    missing_image_count: toCount(data?.missing_image_count),
+    last_catalog_change_at: data?.last_catalog_change_at ? String(data.last_catalog_change_at) : null,
     last_evaluated_at: data?.last_evaluated_at ? String(data.last_evaluated_at) : null,
     backfill_status: backfillStatus,
     backfill_queued_products: toCount(data?.backfill_queued_products),

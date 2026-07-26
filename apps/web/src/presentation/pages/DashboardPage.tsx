@@ -551,8 +551,8 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
                       : catalogIntegrity.initialization_state === "partial"
                         ? t("catalog.integrity.partial")
                         : t("dashboard.operationsStatus.catalogIntegrityProgress", {
-                            processed: formatCount(catalogIntegrity.projected_products),
-                            total: catalogIntegrity.total_products == null ? "—" : formatCount(catalogIntegrity.total_products),
+                            processed: formatCount(catalogIntegrity.evaluated_products),
+                            total: formatCount(catalogIntegrity.total_products),
                           })}
                   </span>
                 </div>

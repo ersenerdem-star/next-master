@@ -17,9 +17,12 @@ export function normalizeCatalogDisplayCode(value: string, brandName = ""): stri
     "bf",
     "bosch",
     "kolbenschmidt",
+    "zf",
     "sachs",
     "lemforder",
     "wabco",
+    "boge",
+    "trw",
     "mahle",
     "knorr",
     "knorrbremse",
@@ -33,7 +36,7 @@ export function normalizeCatalogDisplayCode(value: string, brandName = ""): stri
     return text.replace(/\s+/g, "");
   }
 
-  const dotAndSpaceBrands = new Set(["zf"]);
+  const dotAndSpaceBrands = new Set<string>();
   if (dotAndSpaceBrands.has(normalizedBrand)) {
     return text.replace(/[\s.]+/g, "");
   }

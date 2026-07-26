@@ -12,9 +12,12 @@ export function normalizeCatalogDisplayCode(value, brand = "") {
     "BF",
     "BOSCH",
     "KOLBENSCHMIDT",
+    "ZF",
     "SACHS",
     "LEMFORDER",
     "WABCO",
+    "BOGE",
+    "TRW",
     "MAHLE",
     "KNORR",
     "KNORRBREMSE",
@@ -28,7 +31,7 @@ export function normalizeCatalogDisplayCode(value, brand = "") {
     return formatSpaceOnlyDisplayCode(value);
   }
 
-  const dotAndSpaceBrands = new Set(["ZF"]);
+  const dotAndSpaceBrands = new Set();
   if (dotAndSpaceBrands.has(canonicalBrand)) {
     return formatDotAndSpaceDisplayCode(value);
   }

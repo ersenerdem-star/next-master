@@ -10,9 +10,12 @@ const SPACE_ONLY_CODE_BRANDS = new Set([
   "BF",
   "BOSCH",
   "KOLBENSCHMIDT",
+  "ZF",
   "SACHS",
   "LEMFORDER",
   "WABCO",
+  "BOGE",
+  "TRW",
   "MAHLE",
   "KNORR",
   "KNORRBREMSE",
@@ -22,7 +25,7 @@ const SPACE_ONLY_CODE_BRANDS = new Set([
   "TRWENGINECOMPONENT",
   "TRWENGINECOMPONENTS",
 ]);
-const DOT_AND_SPACE_CODE_BRANDS = new Set(["ZF"]);
+const DOT_AND_SPACE_CODE_BRANDS = new Set<string>();
 
 function formatSpaceOnlyDisplayCode(value: string): string {
   return String(value || "")

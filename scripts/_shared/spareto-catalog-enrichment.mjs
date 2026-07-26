@@ -13,7 +13,8 @@ export function normalizeCatalogBrand(value) {
 
   if (/^bf$/.test(normalized)) return "bf";
   if (/^pierburg$/.test(normalized)) return "pierburg";
-  if (/^trw engine components?$/.test(normalized) || normalized === "trw") return "trw";
+  if (/^trw engine components?$/.test(normalized)) return "trw engine components";
+  if (normalized === "trw") return "trw";
   return normalized;
 }
 

@@ -39,17 +39,44 @@ export type CatalogIntegrityFilter = "" | "conflict" | "incomplete" | "missing_e
 export type CatalogIntegrityInitializationState = "not_initialized" | "partial" | "running" | "completed" | "failed";
 
 export type CatalogIntegritySummary = {
-  total_products: number | null;
+  total_products: number;
   projected_products: number;
+  evaluated_products: number;
   clear_count: number;
   incomplete_count: number;
   conflict_count: number;
   pending_count: number;
+  queue_depth: number;
   failed_count: number;
+  evaluation_coverage_percent: number;
+  data_completeness_percent: number;
+  missing_description_count: number;
+  missing_origin_count: number;
+  missing_hs_code_count: number;
+  missing_weight_count: number;
+  missing_ean_count: number;
+  missing_oem_count: number;
+  missing_vehicle_count: number;
+  missing_image_count: number;
+  last_catalog_change_at: string | null;
   last_evaluated_at: string | null;
   backfill_status: "queued" | "running" | "completed" | "failed";
   backfill_queued_products: number;
   backfill_updated_at: string | null;
   backfill_error: string | null;
   initialization_state: CatalogIntegrityInitializationState;
+};
+
+export type CatalogOperationsBrandStatus = {
+  brand_id: string;
+  brand: string;
+  total_products: number;
+  complete_count: number;
+  incomplete_count: number;
+  data_completeness_percent: number;
+  missing_ean_count: number;
+  missing_oem_count: number;
+  missing_vehicle_count: number;
+  missing_image_count: number;
+  last_catalog_change_at: string | null;
 };

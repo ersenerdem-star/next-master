@@ -11,6 +11,7 @@ import {
   fetchCatalogRowsByCodes,
   fetchCloudCatalogIntegrity,
   fetchCatalogIntegritySummary,
+  fetchCatalogOperationsBrandStatus,
   updateCloudCatalogRow,
   type CatalogDeleteReferenceSummary,
 } from "../../infrastructure/api/catalogApi";
@@ -20,7 +21,13 @@ import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenc
 import { bulkImportCatalog, type CatalogImportResult } from "../../infrastructure/api/importApi";
 import { matchesOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import type { BrandOption } from "../../types/brand";
-import type { CatalogIntegrityFilter, CatalogIntegrityStatus, CatalogIntegritySummary, CatalogRow } from "../../types/catalog";
+import type {
+  CatalogIntegrityFilter,
+  CatalogIntegrityStatus,
+  CatalogIntegritySummary,
+  CatalogOperationsBrandStatus,
+  CatalogRow,
+} from "../../types/catalog";
 import type { CatalogProductDetails, CatalogProductFitment } from "../../types/catalogDetails";
 import type { CodeReferenceUsage } from "../../types/codeReferences";
 import { Button } from "../components/common/Button";
@@ -36,7 +43,6 @@ import { downloadCatalogLifecycleTemplate, downloadCatalogTemplate } from "../..
 import { dispatchAppNavigation, PENDING_CATALOG_PURCHASE_ITEM_KEY, PENDING_CATALOG_SALES_ITEM_KEY, storeCatalogTransfer } from "../../shared/catalogTransfer";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { useI18n } from "../../i18n/I18nProvider";
-import { shouldDisplayCatalogIntegrityCounts } from "../../shared/catalogIntegritySummary";
 import { CompactFilterBar, PageActions, PageHeader, PageShell } from "../components/common/VisualPrimitives";
 
 const CATALOG_CACHE_KEY = "next-master-catalog-cache";
@@ -218,6 +224,7 @@ export function CatalogPage() {
   const [submittedIntegrityFilter, setSubmittedIntegrityFilter] = useState<CatalogIntegrityFilter>("");
   const [catalogPage, setCatalogPage] = useState(1);
   const [integritySummary, setIntegritySummary] = useState<CatalogIntegritySummary | null>(null);
+  const [brandOperations, setBrandOperations] = useState<CatalogOperationsBrandStatus[]>([]);
   const [integritySummaryLoading, setIntegritySummaryLoading] = useState(false);
   const [previewSelection, setPreviewSelection] = useState<{ brand: string; codes: string[] } | null>(null);
   const [rows, setRows] = useState<CatalogRow[]>([]);
@@ -267,8 +274,8 @@ export function CatalogPage() {
   });
   const numberLocale = locale === "tr" ? "tr-TR" : "en-US";
   const formatCount = (value: number) => value.toLocaleString(numberLocale);
-  const displayIntegrityCounts = integritySummary ? shouldDisplayCatalogIntegrityCounts(integritySummary.initialization_state) : false;
-  const formatIntegrityCount = (value: number | null | undefined) => displayIntegrityCounts && value != null ? formatCount(value) : "—";
+  const formatIntegrityCount = (value: number | null | undefined) => value == null ? "—" : formatCount(value);
+  const formatPercent = (value: number | null | undefined) => value == null ? "—" : `${value.toLocaleString(numberLocale, { maximumFractionDigits: 1 })}%`;
   const getSegmentLabel = (value: string | null | undefined) => {
     const normalized = normalizeCatalogMarketSegment(value);
     return normalized ? t(`catalog.segments.${normalized}`) : t("catalog.segments.unassigned");
@@ -311,7 +318,12 @@ export function CatalogPage() {
     if (!isOnline) return;
     setIntegritySummaryLoading(true);
     try {
-      setIntegritySummary(await fetchCatalogIntegritySummary());
+      const [summary, brandStatus] = await Promise.all([
+        fetchCatalogIntegritySummary(),
+        fetchCatalogOperationsBrandStatus(100).catch(() => []),
+      ]);
+      setIntegritySummary(summary);
+      setBrandOperations(brandStatus);
     } catch {
       // Catalog search remains usable if the operations projection is temporarily unavailable.
     } finally {
@@ -1692,8 +1704,8 @@ export function CatalogPage() {
           {integritySummary?.initialization_state === "running" ? (
             <div className="operations-subtle">
               {t("catalog.integrity.runningProgress", {
-                processed: formatCount(integritySummary.projected_products),
-                total: integritySummary.total_products == null ? "—" : formatCount(integritySummary.total_products),
+                processed: formatCount(integritySummary.evaluated_products),
+                total: formatCount(integritySummary.total_products),
               })}
             </div>
           ) : null}
@@ -1706,6 +1718,60 @@ export function CatalogPage() {
             <div className="metric-tile metric-tile--info"><span className="metric-tile__label">{t("catalog.integrity.pending")}</span><strong className="metric-tile__value">{formatIntegrityCount(integritySummary?.pending_count)}</strong></div>
             <div className="metric-tile metric-tile--danger"><span className="metric-tile__label">{t("catalog.integrity.failed")}</span><strong className="metric-tile__value">{formatIntegrityCount(integritySummary?.failed_count)}</strong></div>
           </div>
+          <div className="catalog-operations-kpis" aria-label={t("catalog.integrity.operationalHealth")}>
+            <div><span>{t("catalog.integrity.dataCompleteness")}</span><strong>{formatPercent(integritySummary?.data_completeness_percent)}</strong></div>
+            <div><span>{t("catalog.integrity.evaluationCoverage")}</span><strong>{formatPercent(integritySummary?.evaluation_coverage_percent)}</strong></div>
+            <div><span>{t("catalog.integrity.evaluatedProducts")}</span><strong>{formatIntegrityCount(integritySummary?.evaluated_products)}</strong></div>
+            <div><span>{t("catalog.integrity.queueDepth")}</span><strong>{formatIntegrityCount(integritySummary?.queue_depth)}</strong></div>
+          </div>
+          <div className="catalog-field-health">
+            <span><small>{t("catalog.integrity.missingDescription")}</small><strong>{formatIntegrityCount(integritySummary?.missing_description_count)}</strong></span>
+            <span><small>{t("catalog.integrity.missingOrigin")}</small><strong>{formatIntegrityCount(integritySummary?.missing_origin_count)}</strong></span>
+            <span><small>{t("catalog.integrity.missingHsCode")}</small><strong>{formatIntegrityCount(integritySummary?.missing_hs_code_count)}</strong></span>
+            <span><small>{t("catalog.integrity.missingWeight")}</small><strong>{formatIntegrityCount(integritySummary?.missing_weight_count)}</strong></span>
+            <span><small>{t("catalog.integrity.missingEanShort")}</small><strong>{formatIntegrityCount(integritySummary?.missing_ean_count)}</strong></span>
+            <span><small>{t("catalog.integrity.missingOem")}</small><strong>{formatIntegrityCount(integritySummary?.missing_oem_count)}</strong></span>
+            <span><small>{t("catalog.integrity.missingVehicle")}</small><strong>{formatIntegrityCount(integritySummary?.missing_vehicle_count)}</strong></span>
+            <span><small>{t("catalog.integrity.missingImage")}</small><strong>{formatIntegrityCount(integritySummary?.missing_image_count)}</strong></span>
+          </div>
+          {brandOperations.length ? (
+            <div className="catalog-brand-operations">
+              <div className="catalog-brand-operations__heading">
+                <strong>{t("catalog.integrity.brandAnalysis")}</strong>
+                <span>{t("catalog.integrity.brandAnalysisHint")}</span>
+              </div>
+              <div className="catalog-brand-operations__table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t("catalog.integrity.brand")}</th>
+                      <th>{t("catalog.integrity.products")}</th>
+                      <th>{t("catalog.integrity.completeness")}</th>
+                      <th>{t("catalog.integrity.incomplete")}</th>
+                      <th>{t("catalog.integrity.missingEanShort")}</th>
+                      <th>{t("catalog.integrity.missingOem")}</th>
+                      <th>{t("catalog.integrity.missingVehicle")}</th>
+                      <th>{t("catalog.integrity.missingImage")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {brandOperations.map((row) => (
+                      <tr key={row.brand_id} className={row.brand === submittedCatalogBrand ? "is-selected" : ""}>
+                        <td><strong>{row.brand}</strong></td>
+                        <td>{formatCount(row.total_products)}</td>
+                        <td>{formatPercent(row.data_completeness_percent)}</td>
+                        <td>{formatCount(row.incomplete_count)}</td>
+                        <td>{formatCount(row.missing_ean_count)}</td>
+                        <td>{formatCount(row.missing_oem_count)}</td>
+                        <td>{formatCount(row.missing_vehicle_count)}</td>
+                        <td>{formatCount(row.missing_image_count)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
           <div className="meta-row catalog-meta-strip">
             <span>{catalogCountLabel}</span>
             {(hasSubmittedSearch || hasSubmittedBrand || hasSubmittedSegment || hasSubmittedIntegrity) && rows.length ? (
@@ -1719,6 +1785,7 @@ export function CatalogPage() {
                 </Button>
               </span>
             ) : null}
+            {integritySummary?.last_catalog_change_at ? <span>{t("catalog.integrity.lastCatalogChange")}: <strong>{new Date(integritySummary.last_catalog_change_at).toLocaleString(locale)}</strong></span> : null}
             {integritySummary?.last_evaluated_at ? <span>{t("catalog.integrity.lastEvaluation")}: <strong>{new Date(integritySummary.last_evaluated_at).toLocaleString(locale)}</strong></span> : null}
             {originalNumberBrandMatches.length ? (
               <span>

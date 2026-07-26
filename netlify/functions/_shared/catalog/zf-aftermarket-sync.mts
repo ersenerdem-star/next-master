@@ -122,6 +122,7 @@ const BRAND_CONFIGS = [
 export async function syncBrandCatalogFromZfAftermarket(input: {
   supabaseUrl: string;
   serviceRoleKey: string;
+  organizationId?: string;
   brandName: string;
   refreshExisting?: boolean;
   concurrency?: number;
@@ -139,7 +140,12 @@ export async function syncBrandCatalogFromZfAftermarket(input: {
     "Content-Type": "application/json",
   };
 
-  const target = await resolveTarget(input.supabaseUrl, headers, input.brandName);
+  const target = await resolveTarget(
+    input.supabaseUrl,
+    headers,
+    input.brandName,
+    input.organizationId,
+  );
   const supportsImageColumn = await detectCatalogImageColumn(input.supabaseUrl, headers);
   const supportsEanColumn = await detectCatalogEanColumn(input.supabaseUrl, headers);
   const existingRows = await fetchCatalogRows(input.supabaseUrl, headers, target, supportsEanColumn);
@@ -506,24 +512,54 @@ function resolveStaticTarget(brandInput: string) {
   };
 }
 
-async function resolveTarget(supabaseUrl: string, headers: Record<string, string>, brandInput: string) {
+async function resolveTarget(
+  supabaseUrl: string,
+  headers: Record<string, string>,
+  brandInput: string,
+  organizationId?: string,
+) {
   const requested = normalizeBrandKey(brandInput);
+  const requestedOrganizationId = String(organizationId || "").trim();
   const config =
     BRAND_CONFIGS.find((item) => [item.key, ...item.aliases.map((alias) => normalizeBrandKey(alias))].includes(requested)) || null;
   if (!config) throw new Error(`No ZF Aftermarket provider mapping found for ${brandInput}`);
 
-  const brands = await fetchAll(`${supabaseUrl}/rest/v1/brands?select=id,name,organization_id&order=name.asc`, headers);
+  const organizationFilter = requestedOrganizationId
+    ? `&organization_id=eq.${encodeURIComponent(requestedOrganizationId)}`
+    : "";
+  const brands = await fetchAll(
+    `${supabaseUrl}/rest/v1/brands?select=id,name,organization_id${organizationFilter}&order=name.asc`,
+    headers,
+  );
   const rows = Array.isArray(brands) ? brands : [];
-  const defaultOrganizationId = String(rows.find((row) => String(row.organization_id || "").trim())?.organization_id || "").trim();
-  let brand = rows.find((row) => {
+  const matchingBrands = rows.filter((row) => {
     const name = normalizeBrandKey(row.name || "");
     return [config.key, ...config.aliases.map((alias) => normalizeBrandKey(alias))].includes(name);
   });
-  if ((!brand?.id || !brand?.organization_id) && defaultOrganizationId) {
-    brand = await createBrandRow(supabaseUrl, headers, defaultOrganizationId, config.internalName);
+  const matchingOrganizations = new Set(
+    matchingBrands.map((row) => String(row.organization_id || "").trim()).filter(Boolean),
+  );
+  if (!requestedOrganizationId && matchingOrganizations.size > 1) {
+    throw new Error(`Organization scope is required for ${config.internalName} catalog sync`);
+  }
+
+  let brand = matchingBrands[0];
+  if ((!brand?.id || !brand?.organization_id) && requestedOrganizationId) {
+    brand = await createBrandRow(
+      supabaseUrl,
+      headers,
+      requestedOrganizationId,
+      config.internalName,
+    );
   }
   if (!brand?.id || !brand?.organization_id) {
-    throw new Error(`Target brand not found for ${config.internalName}`);
+    throw new Error(`Tenant-scoped target brand not found for ${config.internalName}`);
+  }
+  if (
+    requestedOrganizationId
+    && String(brand.organization_id || "").trim() !== requestedOrganizationId
+  ) {
+    throw new Error(`Tenant scope mismatch for ${config.internalName}`);
   }
   return {
     ...config,

@@ -20,6 +20,7 @@ export default async (req: Request, _context: Context) => {
     const result = await syncBrandCatalogWithProgressiveBatches({
       supabaseUrl: caller.supabaseUrl,
       serviceRoleKey: caller.serviceRoleKey,
+      organizationId: caller.profile.organization_id,
       brandName,
       refreshExisting: body.refreshExisting !== false,
       concurrency: 8,

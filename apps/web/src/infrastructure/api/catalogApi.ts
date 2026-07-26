@@ -1,4 +1,10 @@
-import type { CatalogIntegrityFilter, CatalogIntegritySummary, CatalogIntegrityStatus, CatalogRow } from "../../types/catalog";
+import type {
+  CatalogIntegrityFilter,
+  CatalogIntegritySummary,
+  CatalogIntegrityStatus,
+  CatalogOperationsBrandStatus,
+  CatalogRow,
+} from "../../types/catalog";
 import { normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
 import { normalizeCatalogDisplayCode, normalizeCatalogDescription, normalizeCatalogOrigin } from "../../domain/shared/catalogFormatting";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
@@ -274,6 +280,25 @@ export async function fetchCloudCatalogIntegrity(input: {
 export async function fetchCatalogIntegritySummary(): Promise<CatalogIntegritySummary> {
   const data = await callAppRpc<Record<string, unknown>>("get_catalog_integrity_summary");
   return mapCatalogIntegritySummary(data);
+}
+
+export async function fetchCatalogOperationsBrandStatus(limit = 12): Promise<CatalogOperationsBrandStatus[]> {
+  const data = await callAppRpc<Record<string, unknown>[]>("get_catalog_operations_brand_status", {
+    input_limit: limit,
+  });
+  return (data || []).map((row) => ({
+    brand_id: String(row.brand_id || ""),
+    brand: String(row.brand || ""),
+    total_products: Number(row.total_products || 0),
+    complete_count: Number(row.complete_count || 0),
+    incomplete_count: Number(row.incomplete_count || 0),
+    data_completeness_percent: Number(row.data_completeness_percent || 0),
+    missing_ean_count: Number(row.missing_ean_count || 0),
+    missing_oem_count: Number(row.missing_oem_count || 0),
+    missing_vehicle_count: Number(row.missing_vehicle_count || 0),
+    missing_image_count: Number(row.missing_image_count || 0),
+    last_catalog_change_at: row.last_catalog_change_at ? String(row.last_catalog_change_at) : null,
+  }));
 }
 
 export async function fetchCatalogProductIntegrity(productId: string) {
