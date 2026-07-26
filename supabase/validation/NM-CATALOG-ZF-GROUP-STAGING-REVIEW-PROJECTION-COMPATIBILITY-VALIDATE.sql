@@ -184,6 +184,57 @@ begin
 end;
 $zf_projection_security$;
 
+do $zf_admin_superadmin_policy_catalog$
+declare
+  v_policy_count integer;
+  v_exact_select_policies boolean;
+begin
+  select
+    count(*)::integer,
+    coalesce(
+      bool_and(
+        policy.cmd = 'SELECT'
+        and policy.roles = array['authenticated']::name[]
+        and lower(policy.qual) like '%auth.uid%'
+        and lower(policy.qual) like '%current_profile_role%'
+        and lower(policy.qual) like '%is_superadmin%'
+        and lower(policy.qual) like '%current_profile_org_id%'
+      ),
+      false
+    )
+  into v_policy_count, v_exact_select_policies
+  from pg_policies policy
+  where policy.schemaname = 'public'
+    and (
+      (
+        policy.tablename = 'catalog_new_product_staging_candidates'
+        and policy.policyname =
+          'catalog_new_product_staging_candidates_select_admin_org'
+      )
+      or (
+        policy.tablename = 'catalog_new_product_staging_events'
+        and policy.policyname =
+          'catalog_new_product_staging_events_select_admin_org'
+      )
+    );
+
+  insert into zf_staging_review_projection_gate_results
+  values (
+    '02b_admin_superadmin_policy_catalog',
+    case
+      when v_policy_count = 2 and v_exact_select_policies
+        then 'PASS'
+      else 'REJECTED'
+    end,
+    format(
+      'policy_count=%s exact_authenticated_select_tenant_predicates=%s',
+      v_policy_count,
+      v_exact_select_policies
+    )
+  );
+end;
+$zf_admin_superadmin_policy_catalog$;
+
 insert into public.organizations (id, name)
 values
   ('76000000-0000-4000-8000-000000000001', 'ZF Projection Validation Tenant'),

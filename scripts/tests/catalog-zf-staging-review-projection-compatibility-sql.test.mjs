@@ -6,13 +6,18 @@ const migrationPath = new URL(
   "../../supabase/migrations/20260726213449_catalog_zf_group_staging_review_projection_compatibility.sql",
   import.meta.url,
 );
+const policyMigrationPath = new URL(
+  "../../supabase/migrations/20260726215408_catalog_zf_group_staging_review_admin_rls_compatibility.sql",
+  import.meta.url,
+);
 const validatorPath = new URL(
   "../../supabase/validation/NM-CATALOG-ZF-GROUP-STAGING-REVIEW-PROJECTION-COMPATIBILITY-VALIDATE.sql",
   import.meta.url,
 );
 
-const [migration, validator] = await Promise.all([
+const [migration, policyMigration, validator] = await Promise.all([
   readFile(migrationPath, "utf8"),
+  readFile(policyMigrationPath, "utf8"),
   readFile(validatorPath, "utf8"),
 ]);
 
@@ -25,6 +30,16 @@ const uncommentedMigration = migration
   .join("\n");
 
 const statements = uncommentedMigration
+  .split(";")
+  .map((statement) => statement.trim())
+  .filter(Boolean);
+
+const uncommentedPolicyMigration = policyMigration
+  .split("\n")
+  .filter((line) => !line.trimStart().startsWith("--"))
+  .join("\n");
+
+const policyStatements = uncommentedPolicyMigration
   .split(";")
   .map((statement) => statement.trim())
   .filter(Boolean);
@@ -131,10 +146,58 @@ test("migration contains no object, policy, function, data, or write expansion",
   }
 });
 
+test("policy compatibility migration replaces exactly two tenant-scoped SELECT policies", () => {
+  assert.equal(policyStatements.length, 4);
+  assert.match(
+    policyStatements[0],
+    /^drop policy if exists catalog_new_product_staging_candidates_select_admin_org\s+on public\.catalog_new_product_staging_candidates$/i,
+  );
+  assert.match(
+    policyStatements[1],
+    /^create policy catalog_new_product_staging_candidates_select_admin_org\s+on public\.catalog_new_product_staging_candidates\s+for select\s+to authenticated\s+using \(/i,
+  );
+  assert.match(
+    policyStatements[2],
+    /^drop policy if exists catalog_new_product_staging_events_select_admin_org\s+on public\.catalog_new_product_staging_events$/i,
+  );
+  assert.match(
+    policyStatements[3],
+    /^create policy catalog_new_product_staging_events_select_admin_org\s+on public\.catalog_new_product_staging_events\s+for select\s+to authenticated\s+using \(/i,
+  );
+
+  for (const policyStatement of [policyStatements[1], policyStatements[3]]) {
+    assert.match(policyStatement, /\(select auth\.uid\(\)\) is not null/i);
+    assert.match(
+      policyStatement,
+      /\(select public\.current_profile_role\(\)\) = 'admin'/i,
+    );
+    assert.match(policyStatement, /\(select public\.is_superadmin\(\)\)/i);
+    assert.match(
+      policyStatement,
+      /organization_id = \(select public\.current_profile_org_id\(\)\)/i,
+    );
+  }
+});
+
+test("policy compatibility migration has no view, grant, object, or data expansion", () => {
+  for (const forbidden of [
+    /\b(create|replace|alter|drop)\s+view\b/i,
+    /\bcreate\s+(table|function|index|trigger|type|extension|schema)\b/i,
+    /\balter\s+(table|function|role|schema)\b/i,
+    /\bdrop\s+(table|function|index|trigger|type|extension|schema)\b/i,
+    /\b(insert\s+into|update|delete\s+from|truncate|merge\s+into|copy)\b/i,
+    /\b(grant|revoke)\b/i,
+    /\bsecurity\s+definer\b/i,
+  ]) {
+    assert.doesNotMatch(uncommentedPolicyMigration, forbidden);
+  }
+});
+
 test("validator is rollback-safe and covers the accepted security matrix", () => {
   for (const expected of [
     "security_invoker=true",
     "has_table_privilege",
+    "02b_admin_superadmin_policy_catalog",
     "04_admin_same_tenant",
     "03_superadmin_same_tenant_and_cross_tenant_isolation",
     "05_non_admin_zero_rows",
