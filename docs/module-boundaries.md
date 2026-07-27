@@ -76,6 +76,15 @@ Forbidden:
 - Business logic, API calls, state management, or UI composition in presentation pages.
 - New feature pages added directly under presentation.
 
+### Incremental migration baseline
+
+The existing internal admin/portal/warehouse page set predates this rule and is
+tracked as an explicit `baseline` finding by `npm run audit:modules`. Those
+legacy entries do not make the audit fail, but they remain visible in the
+generated report. Any new page must be module-owned; a new non-wrapper under
+`presentation/pages` is still a critical finding. The baseline can be reduced
+only by moving one legacy page at a time into its owning module.
+
 ## Workbench UI Rule
 
 Admin, portal, and warehouse may share the same design system, but they must not share accidental page-level layout fixes.

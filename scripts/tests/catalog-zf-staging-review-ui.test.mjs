@@ -27,7 +27,11 @@ test("ZF staging review API client uses only the authenticated GET boundary", as
 });
 
 test("ZF staging review page exposes projection evidence without decision or Apply controls", async () => {
-  const page = await read("apps/web/src/presentation/pages/CatalogZfStagingReviewPage.tsx");
+  const [page, wrapper] = await Promise.all([
+    read("apps/web/src/modules/catalog/CatalogZfStagingReviewPage.tsx"),
+    read("apps/web/src/presentation/pages/CatalogZfStagingReviewPage.tsx"),
+  ]);
+  assert.match(wrapper, /export \{ CatalogZfStagingReviewPage \} from/);
   assert.match(page, /catalog\.zfStagingReview/);
   assert.match(page, /official_source_display_code/);
   assert.match(page, /vehicle_applications/);
