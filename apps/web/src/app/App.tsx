@@ -20,8 +20,10 @@ import {
 } from "../shared/roles";
 
 const CATALOG_OBSERVATION_REVIEW_PATH = "/catalog/observation-review";
+const CATALOG_ZF_STAGING_REVIEW_PATH = "/catalog/zf-group/staging-review";
 
 const CatalogObservationReviewPage = lazy(() => import("../presentation/pages/CatalogObservationReviewPage").then((module) => ({ default: module.CatalogObservationReviewPage })));
+const CatalogZfStagingReviewPage = lazy(() => import("../presentation/pages/CatalogZfStagingReviewPage").then((module) => ({ default: module.CatalogZfStagingReviewPage })));
 const DashboardPage = lazy(() => import("../presentation/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const InventoryPage = lazy(() => import("../presentation/pages/InventoryPage").then((module) => ({ default: module.InventoryPage })));
 const ItemsPage = lazy(() => import("../presentation/pages/ItemsPage").then((module) => ({ default: module.ItemsPage })));
@@ -35,6 +37,11 @@ const SettingsPage = lazy(() => import("../presentation/pages/SettingsPage").the
 const itemSubNav = [
   { key: "Catalog", labelKey: "nav.catalog" },
   { key: "Code References", labelKey: "nav.codeReferences" },
+] as const;
+
+const catalogReviewSubNav = [
+  { key: "Observation Review", labelKey: "nav.catalogReview" },
+  { key: "ZF Staging Evidence", labelKey: "nav.zfStagingEvidence" },
 ] as const;
 
 const inventorySubNav = [
@@ -598,13 +605,17 @@ export function App() {
       pushWorkspacePath(CATALOG_OBSERVATION_REVIEW_PATH);
       return;
     }
-    if (workspacePath.startsWith(CATALOG_OBSERVATION_REVIEW_PATH)) {
+    if (workspacePath.startsWith(CATALOG_OBSERVATION_REVIEW_PATH) || workspacePath.startsWith(CATALOG_ZF_STAGING_REVIEW_PATH)) {
       pushWorkspacePath("/");
     }
     setActivePage(nextPage);
   }
 
   function handleSubNavigate(nextSubPage: string) {
+    if (isCatalogReadRoute && catalogReviewSubNav.some((item) => item.key === nextSubPage)) {
+      pushWorkspacePath(nextSubPage === "ZF Staging Evidence" ? CATALOG_ZF_STAGING_REVIEW_PATH : CATALOG_OBSERVATION_REVIEW_PATH);
+      return;
+    }
     if (activePage === "Items" && itemSubNav.some((item) => item.key === nextSubPage)) {
       setItemsTab(nextSubPage as "Catalog" | "Code References");
       return;
@@ -661,7 +672,9 @@ export function App() {
   const settingsSubNavItems = useMemo(() => getSettingsSubNav(appRole), [appRole]);
   const allowedNavItems = useMemo(() => getAllowedNavItems(appRole), [appRole]);
   const isCatalogReviewRoute = workspacePath.startsWith(CATALOG_OBSERVATION_REVIEW_PATH);
-  const shellActivePage = isCatalogReviewRoute ? "CatalogReview" : activePage;
+  const isCatalogZfStagingReviewRoute = workspacePath.startsWith(CATALOG_ZF_STAGING_REVIEW_PATH);
+  const isCatalogReadRoute = isCatalogReviewRoute || isCatalogZfStagingReviewRoute;
+  const shellActivePage = isCatalogReadRoute ? "CatalogReview" : activePage;
   const localizedNavItems = useMemo(
     () =>
       allowedNavItems.map((item) => ({
@@ -726,8 +739,8 @@ export function App() {
   }, [settingsSubNavItems, settingsTab]);
 
   const subNavItems =
-    isCatalogReviewRoute
-      ? []
+    isCatalogReadRoute
+      ? catalogReviewSubNav
       : activePage === "Items" && canAccessSystemModules(appRole)
       ? itemSubNav
       : activePage === "Inventory" && canAccessInventoryModules(appRole)
@@ -752,8 +765,8 @@ export function App() {
   );
 
   const activeSubPage =
-    isCatalogReviewRoute
-      ? ""
+    isCatalogReadRoute
+      ? isCatalogZfStagingReviewRoute ? "ZF Staging Evidence" : "Observation Review"
       : activePage === "Items"
       ? itemsTab
       : activePage === "Inventory"
@@ -804,12 +817,14 @@ export function App() {
     return <div className="loading-screen">{t("common.loadingWorkspace")}</div>;
   }
 
-  if (isCatalogReviewRoute && !canAccessCatalogReviewModules(appRole)) {
+  if (isCatalogReadRoute && !canAccessCatalogReviewModules(appRole)) {
     return <div className="loading-screen">{t("errors.catalogReviewAccessDenied")}</div>;
   }
 
   const pageContent =
-    isCatalogReviewRoute ? (
+    isCatalogZfStagingReviewRoute ? (
+      <CatalogZfStagingReviewPage />
+    ) : isCatalogReviewRoute ? (
       <CatalogObservationReviewPage />
     ) : activePage === "Items" && canAccessSystemModules(appRole) ? (
       <ItemsPage activeTab={itemsTab} />
