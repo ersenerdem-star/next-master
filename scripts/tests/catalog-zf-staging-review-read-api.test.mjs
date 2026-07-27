@@ -694,10 +694,29 @@ test("route requires environment configuration without exposing its values", asy
   });
 });
 
-test("source remains an exact GET-only, zero-write, zero-provider review boundary", () => {
+test("non-GET methods reach the handler and fail closed with 405", async () => {
+  const response = await handleCatalogZfStagingReviewRequest(
+    new Request(
+      "https://portal.next-master.com/api/catalog/zf-group/staging-review",
+      { method: "POST" },
+    ),
+    {},
+    handlerDeps({
+      requireCallerProfile: async () => {
+        throw new Error("must not authenticate non-GET requests");
+      },
+    }),
+  );
+
+  assert.equal(response.status, 405);
+  assert.deepEqual(await responseBody(response), {
+    error: "Method not allowed",
+  });
+});
+
+test("source remains an exact GET-only handler, zero-write, zero-provider review boundary", () => {
   assert.deepEqual(config, {
     path: "/api/catalog/zf-group/staging-review",
-    method: "GET",
   });
   assert.match(routeSource, /requireCallerProfile\(req, \["admin", "superadmin"\]\)/);
   assert.match(routeSource, /caller\.profile\.organization_id/);
