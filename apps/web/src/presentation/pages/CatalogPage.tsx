@@ -240,7 +240,7 @@ export function CatalogPage() {
   const [deleteBlockSummary, setDeleteBlockSummary] = useState<CatalogDeleteReferenceSummary[] | null>(null);
   const [importingCatalog, setImportingCatalog] = useState(false);
   const [catalogImportSummary, setCatalogImportSummary] = useState<CatalogImportResult | null>(null);
-  const [bilsteinStageBrand, setBilsteinStageBrand] = useState<"FEBI" | "SWAG" | "BLUE_PRINT">("FEBI");
+  const [bilsteinStageBrand, setBilsteinStageBrand] = useState<"FEBI" | "BLUE_PRINT">("FEBI");
   const [bilsteinStageCount, setBilsteinStageCount] = useState("10");
   const [stagingBilsteinProducts, setStagingBilsteinProducts] = useState(false);
   const [bilsteinStageSummary, setBilsteinStageSummary] = useState<CatalogImportStageOnlyResult | null>(null);
@@ -2306,10 +2306,9 @@ export function CatalogPage() {
                   value={bilsteinStageBrand}
                   options={[
                     { value: "FEBI", label: "Febi" },
-                    { value: "SWAG", label: "Swag" },
                     { value: "BLUE_PRINT", label: "Blue Print" },
                   ]}
-                  onChange={(value) => setBilsteinStageBrand(value as "FEBI" | "SWAG" | "BLUE_PRINT")}
+                  onChange={(value) => setBilsteinStageBrand(value as "FEBI" | "BLUE_PRINT")}
                   disabled={stagingBilsteinProducts || loading}
                 />
                 <Input

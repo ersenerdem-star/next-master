@@ -6,7 +6,6 @@ import { json } from "./_shared/http.mts";
 const API_URL = "https://partsfinder.bilsteingroup.com/api/articles";
 const BRAND_NAMES = {
   FEBI: "Febi",
-  SWAG: "Swag",
   BLUE_PRINT: "Blue Print",
 } as const;
 
@@ -72,7 +71,7 @@ function readDescription(article: Record<string, unknown>) {
 
 function parseRequest(body: ProductStageRequest) {
   const brand = String(body.brand || "").trim().toUpperCase().replace(/[\s-]+/g, "_");
-  if (!(brand in BRAND_NAMES)) throw new Error("brand must be FEBI, SWAG, or BLUE_PRINT.");
+  if (!(brand in BRAND_NAMES)) throw new Error("brand must be FEBI or BLUE_PRINT for this official provider access.");
 
   const page = parseInteger(body.page, 0);
   if (page < 0 || page > 10000) throw new Error("page must be an integer between 0 and 10000.");

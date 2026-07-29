@@ -3,7 +3,7 @@ import { stageCatalogImportOnly, type CatalogImportStageOnlyResult } from "./imp
 import { supabaseClient } from "./supabaseClient";
 
 export type BilsteinGroupProductStageInput = {
-  brand: "FEBI" | "SWAG" | "BLUE_PRINT";
+  brand: "FEBI" | "BLUE_PRINT";
   page?: number;
   maxItems?: number;
   onProgress?: (input: { processedChunks: number; totalChunks: number; processedRows: number; totalRows: number }) => void;
