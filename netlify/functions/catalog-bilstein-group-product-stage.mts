@@ -122,9 +122,23 @@ export async function handleCatalogBilsteinGroupProductStageRequest(
       },
       signal: AbortSignal.timeout(15000),
     });
-    if (!response.ok) return json({ error: "Bilstein Group source is temporarily unavailable." }, 502);
+    if (!response.ok) {
+      console.warn("bilstein_group_source_non_success", {
+        status: response.status,
+        statusText: response.statusText,
+      });
+      return json(
+        {
+          error: `Bilstein Group source returned HTTP ${response.status}. No catalog data was staged.`,
+        },
+        502,
+      );
+    }
     payload = (await response.json()) as { data?: unknown };
-  } catch {
+  } catch (error) {
+    console.warn("bilstein_group_source_request_failed", {
+      message: error instanceof Error ? error.message : "unknown error",
+    });
     return json({ error: "Bilstein Group source request timed out." }, 504);
   }
 
