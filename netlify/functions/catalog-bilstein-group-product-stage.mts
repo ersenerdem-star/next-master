@@ -123,13 +123,19 @@ export async function handleCatalogBilsteinGroupProductStageRequest(
       signal: AbortSignal.timeout(15000),
     });
     if (!response.ok) {
+      const responseBody = await response.text().catch(() => "");
+      const responseDetail = responseBody.replace(/\s+/g, " ").trim().slice(0, 300);
       console.warn("bilstein_group_source_non_success", {
+        brand: input.brand,
         status: response.status,
         statusText: response.statusText,
+        responseDetail,
       });
       return json(
         {
-          error: `Bilstein Group source returned HTTP ${response.status}. No catalog data was staged.`,
+          error: responseDetail
+            ? `Bilstein Group source returned HTTP ${response.status}: ${responseDetail}`
+            : `Bilstein Group source returned HTTP ${response.status}. No catalog data was staged.`,
         },
         502,
       );
