@@ -18,7 +18,8 @@ import {
 import { fetchCatalogProductMedia } from "../../infrastructure/api/catalogMediaApi";
 import { fetchCatalogProductDetails } from "../../infrastructure/api/catalogDetailsApi";
 import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenceUsage } from "../../infrastructure/api/codeReferencesApi";
-import { bulkImportCatalog, type CatalogImportResult } from "../../infrastructure/api/importApi";
+import { bulkImportCatalog, type CatalogImportResult, type CatalogImportStageOnlyResult } from "../../infrastructure/api/importApi";
+import { stageBilsteinGroupProducts } from "../../infrastructure/api/bilsteinGroupProductStageApi";
 import { matchesOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import type { BrandOption } from "../../types/brand";
 import type {
@@ -239,6 +240,10 @@ export function CatalogPage() {
   const [deleteBlockSummary, setDeleteBlockSummary] = useState<CatalogDeleteReferenceSummary[] | null>(null);
   const [importingCatalog, setImportingCatalog] = useState(false);
   const [catalogImportSummary, setCatalogImportSummary] = useState<CatalogImportResult | null>(null);
+  const [bilsteinStageBrand, setBilsteinStageBrand] = useState<"FEBI" | "SWAG" | "BLUE_PRINT">("FEBI");
+  const [bilsteinStageCount, setBilsteinStageCount] = useState("10");
+  const [stagingBilsteinProducts, setStagingBilsteinProducts] = useState(false);
+  const [bilsteinStageSummary, setBilsteinStageSummary] = useState<CatalogImportStageOnlyResult | null>(null);
   const [syncingBrandCatalog, setSyncingBrandCatalog] = useState(false);
   const [creatingItem, setCreatingItem] = useState(false);
   const [savingReference, setSavingReference] = useState(false);
@@ -1414,6 +1419,47 @@ export function CatalogPage() {
     }
   }
 
+  async function handleBilsteinProductStage() {
+    if (!isOnline) {
+      setError("Connect to the internet before staging a provider catalog.");
+      return;
+    }
+
+    const maxItems = Number(bilsteinStageCount);
+    if (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 25) {
+      setError("Bilstein stage size must be a whole number between 1 and 25.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setStatus("");
+    setBilsteinStageSummary(null);
+    setStagingBilsteinProducts(true);
+
+    try {
+      const result = await stageBilsteinGroupProducts({
+        brand: bilsteinStageBrand,
+        maxItems,
+        onProgress: ({ processedRows, totalRows }) => {
+          setStatus(`Bilstein ${bilsteinStageBrand} product identities staging: ${processedRows}/${totalRows}.`);
+        },
+      });
+
+      setBilsteinStageSummary(result);
+      setStatus(`Bilstein ${bilsteinStageBrand}: ${result.stagedRows} product identities staged for review. No catalog product was finalized.`);
+      actionFeedback.succeed(`Bilstein ${bilsteinStageBrand} staged for review; no catalog products were changed.`);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Bilstein provider staging failed.";
+      setError(message);
+      setStatus("");
+      actionFeedback.fail(message);
+    } finally {
+      setStagingBilsteinProducts(false);
+      setLoading(false);
+    }
+  }
+
   function openCatalogExport(format: CatalogExportFormat) {
     setExportFormat(format);
     setShowExportDialog(true);
@@ -2217,6 +2263,7 @@ export function CatalogPage() {
                   setImportBrandName("");
                   setImportCatalogSegment("");
                   setCatalogImportSummary(null);
+                  setBilsteinStageSummary(null);
                 }}
               >
 	                {t("catalog.actions.cancelImport")}
@@ -2250,6 +2297,46 @@ export function CatalogPage() {
                 </div>
               </div>
             ) : null}
+            <div className="info-text">
+              <strong>Bilstein Group provider pilot</strong>
+              <p>Stages product identities from the official PartsFinder API for review only. It does not validate, finalize, insert, or update catalog products.</p>
+              <div className="modal-form-grid">
+                <Select
+                  label="Provider brand"
+                  value={bilsteinStageBrand}
+                  options={[
+                    { value: "FEBI", label: "Febi" },
+                    { value: "SWAG", label: "Swag" },
+                    { value: "BLUE_PRINT", label: "Blue Print" },
+                  ]}
+                  onChange={(value) => setBilsteinStageBrand(value as "FEBI" | "SWAG" | "BLUE_PRINT")}
+                  disabled={stagingBilsteinProducts || loading}
+                />
+                <Input
+                  label="Pilot products (1–25)"
+                  type="number"
+                  value={bilsteinStageCount}
+                  onChange={setBilsteinStageCount}
+                  disabled={stagingBilsteinProducts || loading}
+                />
+              </div>
+              <div className="modal-actions">
+                <Button
+                  variant="secondary"
+                  onClick={() => void handleBilsteinProductStage()}
+                  disabled={stagingBilsteinProducts || loading}
+                  busy={stagingBilsteinProducts}
+                  busyLabel="Staging provider pilot"
+                >
+                  Stage Bilstein pilot (no finalize)
+                </Button>
+              </div>
+              {bilsteinStageSummary ? (
+                <p>
+                  Run {bilsteinStageSummary.runId}: {bilsteinStageSummary.stagedRows} staged; catalog products unchanged.
+                </p>
+              ) : null}
+            </div>
           </DraggableSurface>
         </div>
       ) : null}

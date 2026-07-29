@@ -63,6 +63,17 @@ export type CatalogImportResult = {
   message: string | null;
 };
 
+export type CatalogImportStageOnlyResult = {
+  runId: string;
+  totalRows: number;
+  totalChunks: number;
+  stagedRows: number;
+  errorCount: number;
+  status: "staged";
+  finalized: false;
+  message: string;
+};
+
 type SupplierImportChunkResult = {
   processed?: number;
   catalog_synced?: number;
@@ -134,6 +145,14 @@ type CatalogImportFinalizeResult = {
   updated_count: number;
   skipped_count: number;
   error_count: number;
+};
+
+type CatalogImportStageOnlySealResult = {
+  run_id: string;
+  status: "staged";
+  staged_count: number;
+  error_count: number;
+  total_count: number;
 };
 
 type SupplierRollupRefreshOutcome = {
@@ -466,6 +485,97 @@ async function failCatalogImport(runId: string, message: string) {
     { input_run_id: runId, message },
     "Catalog import failure recording",
   );
+}
+
+async function sealCatalogImportStageOnly(runId: string) {
+  return callImportRpc<CatalogImportStageOnlySealResult>(
+    "seal_catalog_import_stage_only",
+    { input_run_id: runId },
+    "Catalog import staging completion",
+  );
+}
+
+/**
+ * Stages product identities for review without validating or finalizing them.
+ * It intentionally never writes to catalog_products.
+ */
+export async function stageCatalogImportOnly(
+  payload: Array<Record<string, unknown>>,
+  options: {
+    brandName: string;
+    marketSegment?: string;
+    sourceScope: Record<string, unknown>;
+    onProgress?: (input: { processedChunks: number; totalChunks: number; processedRows: number; totalRows: number }) => void;
+  },
+): Promise<CatalogImportStageOnlyResult> {
+  const totalRows = payload.length;
+  if (!totalRows) {
+    throw new Error("Catalog staging did not contain any rows.");
+  }
+
+  const normalizedPayload = payload.map((row, rowIndex) => ({
+    ...row,
+    row_index: Number.isFinite(Number(row.row_index)) ? Number(row.row_index) : rowIndex,
+    product_code: normalizeCatalogImportProductCode(row, options.brandName),
+    description: row.description == null ? null : normalizeCatalogDescription(String(row.description || "")),
+    vehicle: row.vehicle == null ? null : String(row.vehicle || "").trim() || null,
+    market_segment: normalizeCatalogMarketSegment(String(row.market_segment || "")),
+  }));
+  const batches = buildAdaptiveCatalogImportBatches(normalizedPayload);
+  const totalChunks = Math.max(1, batches.length);
+  const importRun = await callImportRpc<CatalogImportRunResult>(
+    "begin_catalog_import",
+    {
+      input_scope: {
+        ...options.sourceScope,
+        source: "provider_stage_only",
+        brand: options.brandName,
+        market_segment: options.marketSegment || null,
+      },
+      input_mode: "insert_only",
+    },
+    "Catalog staging start",
+  );
+  const runId = importRun.run_id;
+  let stagedRows = 0;
+
+  try {
+    for (let index = 0; index < batches.length; index += 1) {
+      const batch = batches[index];
+      const chunk = batch.rows;
+      const chunkNumber = index + 1;
+      const data = await importCatalogChunkWithAdaptiveRetry({
+        chunk,
+        chunkNumber,
+        totalChunks,
+        processedRowsBeforeFailure: batch.startRowIndex,
+        runId,
+      });
+      stagedRows += Number(data.staged_count || chunk.length);
+      options.onProgress?.({
+        processedChunks: chunkNumber,
+        totalChunks,
+        processedRows: Math.min(batch.startRowIndex + chunk.length, totalRows),
+        totalRows,
+      });
+    }
+
+    const sealed = await sealCatalogImportStageOnly(runId);
+    return {
+      runId,
+      totalRows,
+      totalChunks,
+      stagedRows: Number(sealed.staged_count || stagedRows),
+      errorCount: Number(sealed.error_count || 0),
+      status: "staged",
+      finalized: false,
+      message: "Catalog rows staged for review. No catalog product was finalized.",
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "Catalog staging failed");
+    await failCatalogImport(runId, message).catch(() => undefined);
+    throw error;
+  }
 }
 
 export async function bulkImportCatalog(

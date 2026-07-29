@@ -6,7 +6,12 @@ export const COMPARISON_RESULTS = Object.freeze({
   UNSUPPORTED_FIELD: "UNSUPPORTED_FIELD",
 });
 
-export const SUPPORTED_FIELD_FAMILIES = new Set(["image_reference", "supplemental_description"]);
+export const SUPPORTED_FIELD_FAMILIES = new Set([
+  "image_reference",
+  "supplemental_description",
+  "oem_reference",
+  "technical_specification",
+]);
 
 export function normalizeImageValue(value) {
   const compact = String(value || "").trim().replace(/\s+/g, " ");
@@ -29,6 +34,9 @@ export function normalizeDescriptionValue(value) {
 export function normalizeObservationComparableValue(fieldFamily, value) {
   if (fieldFamily === "image_reference") return normalizeImageValue(value);
   if (fieldFamily === "supplemental_description") return normalizeDescriptionValue(value);
+  if (fieldFamily === "oem_reference" || fieldFamily === "technical_specification") {
+    return String(value || "").trim();
+  }
   return String(value || "").trim();
 }
 
@@ -36,6 +44,11 @@ export function productValueForObservation(product, observation) {
   if (!product) return "";
   if (observation.field_family === "image_reference") return product.image_url || "";
   if (observation.field_family === "supplemental_description") return product.description || "";
+  // These detail fields do not yet have canonical Catalog Product columns.
+  // They therefore enter review as evidence-only enrichment candidates and
+  // cannot be auto-applied by this comparison layer.
+  if (observation.field_family === "oem_reference") return "";
+  if (observation.field_family === "technical_specification") return "";
   return "";
 }
 

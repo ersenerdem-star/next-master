@@ -85,7 +85,10 @@ function buildConnectionString({ host, password }) {
   const url = new URL("postgresql://placeholder");
   url.username = "postgres";
   url.password = encodeURIComponent(password);
+  // db.<project-ref>.supabase.co is the direct Postgres host. Port 6543 is
+  // reserved for the separate pooler hostname, not this direct host.
   url.host = host;
+  url.port = "5432";
   url.pathname = "/postgres";
   return url.toString().replace("placeholder", host);
 }
