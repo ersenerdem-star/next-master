@@ -155,7 +155,7 @@ export async function handleCatalogBilsteinGroupProductStageRequest(
       brand: BRAND_NAMES[input.brand],
       product_code: readProductCode(article),
       description: readDescription(article),
-      market_segment: "aftermarket",
+      market_segment: "pc",
     }))
     .filter((row) => Boolean(row.product_code));
 

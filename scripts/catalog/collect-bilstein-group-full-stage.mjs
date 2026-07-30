@@ -439,7 +439,7 @@ function buildStageRows(articles, { brand }) {
       description: cleanText(attributes.articleDescription)
         || cleanText(attributes.additionalDescription),
       oem_no: flattenOemNumbers(attributes.oeNumbers),
-      market_segment: "aftermarket",
+      market_segment: "pc",
       source_url: buildArticleUrl(sourceProductId, brand),
       source_payload: article,
     };
