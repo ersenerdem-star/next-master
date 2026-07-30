@@ -482,7 +482,7 @@ async function finalizeCatalogImport(runId: string) {
 async function failCatalogImport(runId: string, message: string) {
   return callImportRpc(
     "fail_catalog_import",
-    { input_run_id: runId, message },
+    { run_id: runId, message },
     "Catalog import failure recording",
   );
 }
