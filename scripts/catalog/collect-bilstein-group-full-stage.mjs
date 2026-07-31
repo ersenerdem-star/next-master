@@ -24,7 +24,10 @@ const DEFAULT_COLLECTION_KEY = "bilstein-partsfinder-list-tr-car-v1";
 const BLUE_PRINT_COLLECTION_KEY = "bilstein-partsfinder-list-tr-car-cardinality-v2";
 const DEFAULT_PAGE_SIZE = 500;
 const DEFAULT_REQUEST_DELAY_MS = 300;
-const PROVIDER_RESULT_WINDOW = 50_000;
+// PartsFinder accepts page sizes up to 1,000. Keep a bounded safety window,
+// while allowing the current 50,412-row Febi snapshot to be collected in 51
+// pages instead of truncating at the old 500-row/50,000-row window.
+const PROVIDER_RESULT_WINDOW = 100_000;
 const SOURCE_REQUEST_TIMEOUT_MS = 30_000;
 const DATABASE_REQUEST_TIMEOUT_MS = 120_000;
 const MAX_ATTEMPTS = 4;
@@ -32,7 +35,7 @@ const MAX_ATTEMPTS = 4;
 const args = parseArgs(process.argv.slice(2));
 const confirmed = args.has("confirm-production");
 const brandInput = normalizeBrand(args.get("brand") || "ALL");
-const pageSize = readInteger(args.get("page-size"), DEFAULT_PAGE_SIZE, 1, 500, "page-size");
+const pageSize = readInteger(args.get("page-size"), DEFAULT_PAGE_SIZE, 1, 1_000, "page-size");
 const requestDelayMs = readInteger(
   args.get("delay-ms"),
   DEFAULT_REQUEST_DELAY_MS,
