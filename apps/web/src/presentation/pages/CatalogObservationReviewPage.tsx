@@ -33,7 +33,7 @@ import {
   StatusBadge,
 } from "../components/common/VisualPrimitives";
 
-const CATALOG_OBSERVATION_REVIEW_RUN_ID = "11581bfd-3a12-43d5-bb39-d6aa09e3bd96";
+const DEFAULT_CATALOG_OBSERVATION_REVIEW_RUN_ID = "c060aa25-7068-4fd3-a2ee-7f6944402fd7";
 const DEFAULT_LIMIT = 25;
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
 const FIELD_FAMILY_OPTIONS = ["image_reference", "supplemental_description"] as const;
@@ -105,6 +105,12 @@ function readFiltersFromUrl(): ReviewFilters {
     selected: String(params.get("selected") || ""),
     limit: Number.isInteger(rawLimit) && rawLimit > 0 && rawLimit <= 50 ? rawLimit : DEFAULT_LIMIT,
   };
+}
+
+function readRunIdFromUrl() {
+  if (typeof window === "undefined") return DEFAULT_CATALOG_OBSERVATION_REVIEW_RUN_ID;
+  const runId = String(new URLSearchParams(window.location.search).get("run_id") || "").trim();
+  return runId || DEFAULT_CATALOG_OBSERVATION_REVIEW_RUN_ID;
 }
 
 function writeFiltersToUrl(filters: ReviewFilters) {
@@ -374,6 +380,7 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
   const { locale, t } = useI18n();
   const actionFeedback = useActionFeedback();
   const [filters, setFilters] = useState<ReviewFilters>(() => readFiltersFromUrl());
+  const [runId] = useState(() => readRunIdFromUrl());
   const [response, setResponse] = useState<CatalogObservationReviewResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -409,7 +416,7 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
       setRefreshing(hasLoadedOnceRef.current);
       try {
         const result = await loadReview({
-          runId: CATALOG_OBSERVATION_REVIEW_RUN_ID,
+          runId,
           fieldFamily: filters.fieldFamily,
           comparisonResult: filters.comparisonResult,
           recommendation: filters.recommendation,
@@ -446,7 +453,7 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
       cancelled = true;
       controller.abort();
     };
-  }, [filters.comparisonResult, filters.cursor, filters.fieldFamily, filters.limit, filters.recommendation, loadReview, reloadTick]);
+  }, [filters.comparisonResult, filters.cursor, filters.fieldFamily, filters.limit, filters.recommendation, loadReview, reloadTick, runId]);
 
   const items = response?.items ?? [];
   const summary = response?.summary ?? null;
@@ -728,7 +735,7 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
       <PageHeader
         eyebrow={t("nav.catalogReview")}
         title={c("title")}
-        subtitle={c("subtitle", { runId: CATALOG_OBSERVATION_REVIEW_RUN_ID })}
+        subtitle={c("subtitle", { runId })}
         status={
           <div className="document-marks document-marks--compact">
             <StatusBadge tone="info">{c("readOnlyBadge")}</StatusBadge>
@@ -804,7 +811,7 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
                 total: (page?.total_count ?? items.length).toLocaleString(numberLocale),
               })}
             </span>
-            <span>{c("meta.runId", { runId: response?.run_id || CATALOG_OBSERVATION_REVIEW_RUN_ID })}</span>
+            <span>{c("meta.runId", { runId: response?.run_id || runId })}</span>
             {page?.has_more ? (
               <Button variant="secondary" className="button--compact" onClick={handleNextPage}>
                 {c("actions.nextPage")}

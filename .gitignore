@@ -4,6 +4,8 @@ node_modules
 apps/web/node_modules
 apps/web/dist
 apps/web/.env.local
+.env
+scripts/sync/.env
 *.tsbuildinfo
 backups/
 
