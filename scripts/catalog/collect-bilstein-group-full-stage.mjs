@@ -462,7 +462,10 @@ async function countCanonicalProducts(brand) {
 
   const { count, error } = await db
     .from("catalog_products")
-    .select("id", { count: "exact", head: true })
+    // The exact HEAD count can exceed the REST statement timeout on the live
+    // catalog. A planned count is sufficient for the before/after invariant
+    // here; the provider-stage RPC itself never writes catalog_products.
+    .select("id", { count: "planned", head: true })
     .eq("organization_id", organizationId)
     .eq("brand_id", brandRow.id);
   if (error) throw new Error(`Canonical product count failed: ${error.message}`);
