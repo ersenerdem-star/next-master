@@ -42,9 +42,16 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
   const [inventoryPulseErrorKey, setInventoryPulseErrorKey] = useState<string | null>(null);
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriodKey>("thisMonth");
   const showSystemPanels = canAccessSystemModules(role);
+  const portalAlertCutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const isRecentPortalOrder = (submittedAt: string | null | undefined) => {
+    if (!submittedAt) return false;
+    const submittedMs = new Date(submittedAt).getTime();
+    return Number.isFinite(submittedMs) && submittedMs >= portalAlertCutoffMs;
+  };
   const isDraftPortalAlert = (quote: DashboardSalesOrderSummary) =>
     quote.source_channel === "portal" &&
     Boolean(quote.portal_submitted_at) &&
+    isRecentPortalOrder(quote.portal_submitted_at) &&
     !quote.portal_seen_at &&
     String(quote.status || "").toLowerCase() === "draft";
 
@@ -135,6 +142,12 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
   const revenue = snapshot?.revenue;
   const issues = snapshot?.issues ?? {};
   const selectedRevenue = revenue?.periods?.[revenuePeriod] ?? null;
+  const selectedSpread = selectedRevenue ? selectedRevenue.sales.total - selectedRevenue.purchases.total : null;
+  const topBrand = selectedRevenue?.brandTotals[0] ?? null;
+  const openRecentOrders = latestQuotes.filter((quote) => {
+    const status = String(quote.status || "").toLowerCase();
+    return status === "draft" || status === "confirmed";
+  });
 
   function formatCount(value: number) {
     return value.toLocaleString(numberLocale);
@@ -179,12 +192,63 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
     <PageShell className="dashboard dashboard-page">
       <PageHeader title={t("dashboard.overview.title")} subtitle={t("dashboard.overview.subtitle")} />
 
-      <div className="stats-grid dashboard-executive-summary" aria-label={t("dashboard.overview.summary")}>
-        {showSystemPanels ? <StatCard label={t("dashboard.stats.catalogProducts")} value={formatCount(catalogCount)} subtext={t("dashboard.stats.catalogProductsSubtitle")} tone="success" /> : null}
-        {showSystemPanels ? <StatCard label={t("dashboard.stats.brands")} value={formatCount(brandCount)} subtext={t("dashboard.stats.brandsSubtitle")} tone="warning" /> : null}
-        {showSystemPanels ? <StatCard label={t("dashboard.stats.suppliers")} value={formatCount(supplierCount)} subtext={t("dashboard.stats.suppliersSubtitle")} tone="success" /> : null}
-        <StatCard label={t("dashboard.stats.quotes")} value={formatCount(quoteCount)} subtext={t("dashboard.stats.quotesSubtitle")} tone="neutral" />
-      </div>
+      <SectionCard title={t("dashboard.moneySignals.title")} className="dashboard-money-signals">
+        <div className="stats-grid dashboard-executive-summary" aria-label={t("dashboard.overview.summary")}>
+          <StatCard
+            label={t("dashboard.moneySignals.sales")}
+            value={selectedRevenue ? formatMoney(selectedRevenue.sales.total) : "—"}
+            subtext={selectedRevenue ? t("dashboard.moneySignals.salesSubtitle", { count: formatCount(selectedRevenue.sales.count) }) : t("dashboard.moneySignals.loading")}
+            tone="success"
+          />
+          <StatCard
+            label={t("dashboard.moneySignals.spread")}
+            value={selectedSpread == null ? "—" : formatMoney(selectedSpread)}
+            subtext={t("dashboard.moneySignals.spreadSubtitle")}
+            tone="warning"
+          />
+          <StatCard
+            label={t("dashboard.moneySignals.stockValue")}
+            value={showSystemPanels ? formatMoney(inventoryPulse.stockValue) : "—"}
+            subtext={t("dashboard.moneySignals.stockValueSubtitle")}
+            tone="neutral"
+            onClick={showSystemPanels ? () => onOpenInventoryTab?.("On Hand") : undefined}
+          />
+          <StatCard
+            label={t("dashboard.moneySignals.openOrders")}
+            value={formatCount(openRecentOrders.length)}
+            subtext={t("dashboard.moneySignals.openOrdersSubtitle")}
+            tone={openRecentOrders.length ? "warning" : "success"}
+            onClick={openRecentOrders[0] ? () => onOpenSalesOrder?.(openRecentOrders[0].id) : undefined}
+          />
+        </div>
+        <div className="dashboard-insight-strip">
+          <div>
+            <strong>{t("dashboard.moneySignals.nextMove")}</strong>
+            <span>
+              {newPortalOrders > 0
+                ? t("dashboard.moneySignals.nextMovePortal", { count: formatCount(newPortalOrders) })
+                : openRecentOrders.length > 0
+                  ? t("dashboard.moneySignals.nextMoveOrders", { count: formatCount(openRecentOrders.length) })
+                  : topBrand
+                    ? t("dashboard.moneySignals.nextMoveBrand", { brand: topBrand.name, amount: formatMoney(topBrand.total) })
+                    : t("dashboard.moneySignals.nextMoveEmpty")}
+            </span>
+          </div>
+          <div>
+            <strong>{t("dashboard.moneySignals.topBrand")}</strong>
+            <span>{topBrand ? `${topBrand.name} · ${formatMoney(topBrand.total)}` : "—"}</span>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title={t("dashboard.systemInventory.title")} className="dashboard-system-inventory">
+        <div className="dashboard-system-inventory__grid">
+          <div><span>{t("dashboard.stats.catalogProducts")}</span><strong>{formatCount(catalogCount)}</strong><small>{t("dashboard.stats.catalogProductsSubtitle")}</small></div>
+          <div><span>{t("dashboard.stats.brands")}</span><strong>{formatCount(brandCount)}</strong><small>{t("dashboard.stats.brandsSubtitle")}</small></div>
+          <div><span>{t("dashboard.stats.suppliers")}</span><strong>{formatCount(supplierCount)}</strong><small>{t("dashboard.stats.suppliersSubtitle")}</small></div>
+          <div><span>{t("dashboard.stats.salesOrders")}</span><strong>{formatCount(quoteCount)}</strong><small>{t("dashboard.stats.salesOrdersSubtitle")}</small></div>
+        </div>
+      </SectionCard>
 
       {showSystemPanels ? (
         <SectionCard title={t("dashboard.pulse.title")} className="dashboard-operations-pulse">

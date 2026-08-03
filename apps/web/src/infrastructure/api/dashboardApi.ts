@@ -286,11 +286,16 @@ export async function fetchDashboardLatestQuotes(): Promise<DashboardSalesOrderS
 }
 
 async function fetchNewPortalOrderCount() {
+  // A notification is an action queue, not an archive. Old portal drafts
+  // remain visible in Sales Orders, but should not keep the home page red
+  // forever after the operator has already moved on.
+  const portalAlertCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const { count, error } = await supabaseClient
     .from("sales_orders")
     .select("id", { count: "planned", head: true })
     .eq("source_channel", "portal")
     .not("portal_submitted_at", "is", null)
+    .gte("portal_submitted_at", portalAlertCutoff)
     .eq("status", "draft")
     .is("portal_seen_at", null);
 

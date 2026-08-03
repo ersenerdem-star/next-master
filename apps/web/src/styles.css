@@ -6179,13 +6179,100 @@ textarea {
 
 .dashboard-executive-summary {
   order: 1;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px;
   margin: 0;
 }
 
 .dashboard-executive-summary .stat-card {
   min-height: 112px;
+}
+
+.dashboard-money-signals {
+  order: 1;
+}
+
+.dashboard-money-signals .section-card__body {
+  padding-top: 2px;
+}
+
+.dashboard-insight-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(180px, 0.8fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.dashboard-insight-strip > div {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8fbff, #ffffff);
+}
+
+.dashboard-insight-strip strong,
+.dashboard-insight-strip span {
+  display: block;
+}
+
+.dashboard-insight-strip strong {
+  color: #0f5f86;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-insight-strip span {
+  margin-top: 5px;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-system-inventory {
+  order: 2;
+}
+
+.dashboard-system-inventory__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.dashboard-system-inventory__grid > div {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.dashboard-system-inventory__grid span,
+.dashboard-system-inventory__grid strong,
+.dashboard-system-inventory__grid small {
+  display: block;
+}
+
+.dashboard-system-inventory__grid span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.dashboard-system-inventory__grid strong {
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: clamp(18px, 2vw, 26px);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-system-inventory__grid small {
+  margin-top: 4px;
+  color: #94a3b8;
+  line-height: 1.25;
 }
 
 .dashboard-content-grid {
@@ -6255,6 +6342,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .dashboard-insight-strip {
+    grid-template-columns: 1fr;
+  }
+
   .dashboard-content-grid > * {
     grid-column: 1;
   }
@@ -6263,6 +6354,10 @@ textarea {
 @media (max-width: 640px) {
   .dashboard-executive-summary {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-money-signals .stat-card__value {
+    font-size: clamp(20px, 7vw, 30px);
   }
 }
 
