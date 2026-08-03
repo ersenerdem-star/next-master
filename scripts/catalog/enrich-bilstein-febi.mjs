@@ -21,6 +21,10 @@ const DEFAULT_ORGANIZATION_ID = "1e4c5e99-e387-41aa-a6d3-cbe74558f766";
 const PAGE_SIZE = 100;
 const REQUEST_TIMEOUT_MS = 20_000;
 const REQUEST_DELAY_MS = 100;
+// The guarded RPC also writes provenance/trigger records. In this database
+// even small multi-row transactions can hit statement_timeout, so keep the
+// canonical write atomic per product.
+const RPC_BATCH_SIZE = 1;
 
 const args = parseArgs(process.argv.slice(2));
 const apply = args.has("apply");
@@ -65,13 +69,30 @@ for (const product of products) {
 
 let rpcResult = null;
 if (apply && enriched.length > 0) {
-  const response = await db.rpc("apply_catalog_product_enrichment_guarded", {
-    input_rows: enriched,
-    input_source_type: "bilstein_group_partsfinder_febi_official",
-    input_source_reference: `${API_ORIGIN}/en/article/febi/`,
-  });
-  if (response.error) throw new Error(`Guarded FEBI enrichment failed: ${response.error.message}`);
-  rpcResult = response.data;
+  const totals = {
+    applied_count: 0,
+    unchanged_count: 0,
+    conflict_count: 0,
+    affected_product_ids: [],
+  };
+  // Keep each guarded transaction small. Catalog triggers and provenance
+  // work can make a large FEBI batch exceed Postgres statement_timeout.
+  for (let index = 0; index < enriched.length; index += RPC_BATCH_SIZE) {
+    const batch = enriched.slice(index, index + RPC_BATCH_SIZE);
+    const response = await db.rpc("apply_catalog_product_enrichment_guarded", {
+      input_rows: batch,
+      input_source_type: "bilstein_group_partsfinder_febi_official",
+      input_source_reference: `${API_ORIGIN}/en/article/febi/`,
+    });
+    if (response.error) throw new Error(`Guarded FEBI enrichment failed on batch ${Math.floor(index / RPC_BATCH_SIZE) + 1}: ${response.error.message}`);
+    const result = response.data || {};
+    totals.applied_count += Number(result.applied_count || 0);
+    totals.unchanged_count += Number(result.unchanged_count || 0);
+    totals.conflict_count += Number(result.conflict_count || 0);
+    totals.affected_product_ids.push(...(Array.isArray(result.affected_product_ids) ? result.affected_product_ids : []));
+  }
+  totals.affected_product_ids = [...new Set(totals.affected_product_ids)];
+  rpcResult = totals;
 }
 
 console.log(JSON.stringify({
