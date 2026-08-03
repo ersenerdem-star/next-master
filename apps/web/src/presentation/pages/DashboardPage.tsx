@@ -183,6 +183,9 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
 
   const revenuePeriodOptions = [
     { value: "thisMonth", label: t("dashboard.revenueAnalysis.period.thisMonth") },
+    { value: "previousMonth", label: t("dashboard.revenueAnalysis.period.previousMonth") },
+    { value: "last2Months", label: t("dashboard.revenueAnalysis.period.last2Months") },
+    { value: "last3Months", label: t("dashboard.revenueAnalysis.period.last3Months") },
     { value: "thisQuarter", label: t("dashboard.revenueAnalysis.period.thisQuarter") },
     { value: "thisYear", label: t("dashboard.revenueAnalysis.period.thisYear") },
     { value: "previousYear", label: t("dashboard.revenueAnalysis.period.previousYear") },

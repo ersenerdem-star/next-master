@@ -11,7 +11,14 @@ export type RevenueBreakdownRow = {
   count: number;
 };
 
-export type RevenuePeriodKey = "thisMonth" | "thisQuarter" | "thisYear" | "previousYear";
+export type RevenuePeriodKey =
+  | "thisMonth"
+  | "previousMonth"
+  | "last2Months"
+  | "last3Months"
+  | "thisQuarter"
+  | "thisYear"
+  | "previousYear";
 
 export type RevenuePeriodSnapshot = {
   sales: RevenuePeriodSummary;
@@ -65,6 +72,9 @@ function buildEmptyRevenue(available: boolean): RevenueSnapshot {
     available,
     periods: {
       thisMonth: buildEmptyPeriodSnapshot(),
+      previousMonth: buildEmptyPeriodSnapshot(),
+      last2Months: buildEmptyPeriodSnapshot(),
+      last3Months: buildEmptyPeriodSnapshot(),
       thisQuarter: buildEmptyPeriodSnapshot(),
       thisYear: buildEmptyPeriodSnapshot(),
       previousYear: buildEmptyPeriodSnapshot(),
@@ -85,28 +95,35 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
-  const currentQuarter = Math.floor(currentMonth / 3);
   const previousYear = currentYear - 1;
-  const startDate = `${previousYear}-01-01`;
+  const startOfMonth = (year: number, month: number) => new Date(year, month, 1);
+  const periodRanges: Record<RevenuePeriodKey, { start: Date; end: Date }> = {
+    thisMonth: { start: startOfMonth(currentYear, currentMonth), end: startOfMonth(currentYear, currentMonth + 1) },
+    previousMonth: { start: startOfMonth(currentYear, currentMonth - 1), end: startOfMonth(currentYear, currentMonth) },
+    last2Months: { start: startOfMonth(currentYear, currentMonth - 1), end: startOfMonth(currentYear, currentMonth + 1) },
+    last3Months: { start: startOfMonth(currentYear, currentMonth - 2), end: startOfMonth(currentYear, currentMonth + 1) },
+    thisQuarter: { start: startOfMonth(currentYear, Math.floor(currentMonth / 3) * 3), end: startOfMonth(currentYear, Math.floor(currentMonth / 3) * 3 + 3) },
+    thisYear: { start: startOfMonth(currentYear, 0), end: startOfMonth(currentYear + 1, 0) },
+    previousYear: { start: startOfMonth(previousYear, 0), end: startOfMonth(currentYear, 0) },
+  };
+  const startDate = periodRanges.previousYear.start.toISOString();
   const snapshot = buildEmptyRevenue(true);
-  const brandMaps = {
-    thisMonth: new Map<string, RevenueBreakdownRow>(),
-    thisQuarter: new Map<string, RevenueBreakdownRow>(),
-    thisYear: new Map<string, RevenueBreakdownRow>(),
-    previousYear: new Map<string, RevenueBreakdownRow>(),
-  } satisfies Record<RevenuePeriodKey, Map<string, RevenueBreakdownRow>>;
-  const sellerMaps = {
-    thisMonth: new Map<string, RevenueBreakdownRow>(),
-    thisQuarter: new Map<string, RevenueBreakdownRow>(),
-    thisYear: new Map<string, RevenueBreakdownRow>(),
-    previousYear: new Map<string, RevenueBreakdownRow>(),
-  } satisfies Record<RevenuePeriodKey, Map<string, RevenueBreakdownRow>>;
-  const purchaseCompanyMaps = {
-    thisMonth: new Map<string, RevenueBreakdownRow>(),
-    thisQuarter: new Map<string, RevenueBreakdownRow>(),
-    thisYear: new Map<string, RevenueBreakdownRow>(),
-    previousYear: new Map<string, RevenueBreakdownRow>(),
-  } satisfies Record<RevenuePeriodKey, Map<string, RevenueBreakdownRow>>;
+  const brandMaps = Object.fromEntries(
+    (Object.keys(periodRanges) as RevenuePeriodKey[]).map((period) => [period, new Map<string, RevenueBreakdownRow>()]),
+  ) as Record<RevenuePeriodKey, Map<string, RevenueBreakdownRow>>;
+  const sellerMaps = Object.fromEntries(
+    (Object.keys(periodRanges) as RevenuePeriodKey[]).map((period) => [period, new Map<string, RevenueBreakdownRow>()]),
+  ) as Record<RevenuePeriodKey, Map<string, RevenueBreakdownRow>>;
+  const purchaseCompanyMaps = Object.fromEntries(
+    (Object.keys(periodRanges) as RevenuePeriodKey[]).map((period) => [period, new Map<string, RevenueBreakdownRow>()]),
+  ) as Record<RevenuePeriodKey, Map<string, RevenueBreakdownRow>>;
+
+  function matchingPeriods(date: Date) {
+    return (Object.keys(periodRanges) as RevenuePeriodKey[]).filter((period) => {
+      const range = periodRanges[period];
+      return date >= range.start && date < range.end;
+    });
+  }
 
   async function accumulateSalesOrders() {
     let from = 0;
@@ -137,9 +154,6 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
         if (Number.isNaN(date.getTime())) return;
         const total = Number(row.sales_total || 0);
         const sellerName = row.seller_company || "Unassigned";
-        const year = date.getFullYear();
-        const month = date.getMonth();
-        const quarter = Math.floor(month / 3);
         const lineBrandTotals = new Map<string, { total: number; count: number }>();
 
         for (const line of row.lines || []) {
@@ -170,13 +184,7 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
           bucket.count += 1;
         }
 
-        if (year === currentYear) {
-          apply("thisYear");
-          if (quarter === currentQuarter) apply("thisQuarter");
-          if (month === currentMonth) apply("thisMonth");
-        } else if (year === previousYear) {
-          apply("previousYear");
-        }
+        matchingPeriods(date).forEach(apply);
       });
 
       if (batch.length < pageSize) break;
@@ -212,10 +220,6 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
         if (Number.isNaN(date.getTime())) return;
         const total = Number(row.total_amount || 0);
         const purchaseCompany = row.purchase_company || "Unassigned";
-        const year = date.getFullYear();
-        const month = date.getMonth();
-        const quarter = Math.floor(month / 3);
-
         function apply(period: RevenuePeriodKey) {
           snapshot.periods[period].purchases.total += total;
           snapshot.periods[period].purchases.count += 1;
@@ -224,13 +228,7 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
           bucket.count += 1;
         }
 
-        if (year === currentYear) {
-          apply("thisYear");
-          if (quarter === currentQuarter) apply("thisQuarter");
-          if (month === currentMonth) apply("thisMonth");
-        } else if (year === previousYear) {
-          apply("previousYear");
-        }
+        matchingPeriods(date).forEach(apply);
       });
 
       if (batch.length < pageSize) break;
