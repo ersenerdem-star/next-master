@@ -25,6 +25,7 @@ const REQUEST_DELAY_MS = 100;
 // even small multi-row transactions can hit statement_timeout, so keep the
 // canonical write atomic per product.
 const RPC_BATCH_SIZE = 1;
+const RPC_RETRY_COUNT = 3;
 
 const args = parseArgs(process.argv.slice(2));
 const apply = args.has("apply");
@@ -79,11 +80,7 @@ if (apply && enriched.length > 0) {
   // work can make a large FEBI batch exceed Postgres statement_timeout.
   for (let index = 0; index < enriched.length; index += RPC_BATCH_SIZE) {
     const batch = enriched.slice(index, index + RPC_BATCH_SIZE);
-    const response = await db.rpc("apply_catalog_product_enrichment_guarded", {
-      input_rows: batch,
-      input_source_type: "bilstein_group_partsfinder_febi_official",
-      input_source_reference: `${API_ORIGIN}/en/article/febi/`,
-    });
+    const response = await callEnrichmentRpcWithRetry(batch, index);
     if (response.error) throw new Error(`Guarded FEBI enrichment failed on batch ${Math.floor(index / RPC_BATCH_SIZE) + 1}: ${response.error.message}`);
     const result = response.data || {};
     totals.applied_count += Number(result.applied_count || 0);
@@ -93,6 +90,34 @@ if (apply && enriched.length > 0) {
   }
   totals.affected_product_ids = [...new Set(totals.affected_product_ids)];
   rpcResult = totals;
+}
+
+async function callEnrichmentRpcWithRetry(batch, index) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= RPC_RETRY_COUNT; attempt += 1) {
+    try {
+      const response = await db.rpc("apply_catalog_product_enrichment_guarded", {
+        input_rows: batch,
+        input_source_type: "bilstein_group_partsfinder_febi_official",
+        input_source_reference: `${API_ORIGIN}/en/article/febi/`,
+      });
+      if (!response.error) return response;
+      lastError = response.error;
+      if (!isTransientRpcError(response.error.message) || attempt === RPC_RETRY_COUNT) return response;
+    } catch (error) {
+      lastError = error;
+      if (!isTransientRpcError(errorMessage(error)) || attempt === RPC_RETRY_COUNT) {
+        throw error;
+      }
+    }
+    await sleep(1500 * attempt);
+  }
+  throw lastError;
+}
+
+function isTransientRpcError(message) {
+  const value = String(message || "").toLowerCase();
+  return value.includes("fetch failed") || value.includes("network") || value.includes("socket") || value.includes("503") || value.includes("504");
 }
 
 console.log(JSON.stringify({

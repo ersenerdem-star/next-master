@@ -51,6 +51,7 @@ if (error) fail(`FEBI catalog count failed: ${error.message}`);
 
 const totalPages = Math.ceil(Number(count || 0) / PAGE_SIZE);
 const endPage = Math.min(totalPages, startPage + maxPages);
+let stopped = false;
 
 console.log("BILSTEIN FEBI ENRICHMENT ALL START");
 console.log(`mode=${apply ? "apply" : "dry_run"}; pages=${startPage}..${Math.max(startPage, endPage - 1)}; page_size=${PAGE_SIZE}`);
@@ -72,6 +73,7 @@ for (let page = startPage; page < endPage; page += 1) {
 
   const exitCode = await runWorker(workerArgs);
   if (exitCode !== 0) {
+    stopped = true;
     console.error(`\nSTOPPED at page ${page}. Resume with:`);
     console.error(
       `node scripts/catalog/enrich-bilstein-febi-all.mjs ${apply ? "--apply " : ""}--start-page ${page}`,
@@ -81,7 +83,7 @@ for (let page = startPage; page < endPage; page += 1) {
   }
 }
 
-if (endPage >= totalPages) {
+if (!stopped && endPage >= totalPages) {
   console.log("\nBILSTEIN FEBI ENRICHMENT ALL COMPLETE");
 }
 
