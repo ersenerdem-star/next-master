@@ -15,7 +15,7 @@ import { BrandPill } from "../components/common/BrandPill";
 import { fetchWarehouseStockItems } from "../../infrastructure/api/inventoryApi";
 import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
 import { buildEntityAlias } from "../../shared/entityAlias";
-import { canAccessSystemModules } from "../../shared/roles";
+import { canAccessCustomerOps, canAccessSystemModules } from "../../shared/roles";
 import { useI18n } from "../../i18n/I18nProvider";
 import { PageHeader, PageShell } from "../components/common/VisualPrimitives";
 
@@ -42,6 +42,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
   const [inventoryPulseErrorKey, setInventoryPulseErrorKey] = useState<string | null>(null);
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriodKey>("thisMonth");
   const showSystemPanels = canAccessSystemModules(role);
+  const canLoadDashboard = showSystemPanels || canAccessCustomerOps(role);
   const portalAlertCutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const isRecentPortalOrder = (submittedAt: string | null | undefined) => {
     if (!submittedAt) return false;
@@ -56,7 +57,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
     String(quote.status || "").toLowerCase() === "draft";
 
   useEffect(() => {
-    if (!showSystemPanels) return;
+    if (!canLoadDashboard) return;
     let cancelled = false;
 
     async function run() {
@@ -76,10 +77,10 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
     return () => {
       cancelled = true;
     };
-  }, [showSystemPanels]);
+  }, [canLoadDashboard, showSystemPanels]);
 
   useEffect(() => {
-    if (!showSystemPanels) return;
+    if (!canLoadDashboard) return;
     let cancelled = false;
 
     async function run() {
@@ -105,10 +106,10 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
     return () => {
       cancelled = true;
     };
-  }, [showSystemPanels]);
+  }, [canLoadDashboard]);
 
   useEffect(() => {
-    if (!showSystemPanels) return;
+    if (!canLoadDashboard) return;
     let cancelled = false;
 
     async function run() {
@@ -132,7 +133,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
     return () => {
       cancelled = true;
     };
-  }, [showSystemPanels]);
+  }, [canLoadDashboard]);
 
   const catalogCount = snapshot?.catalogCount ?? 0;
   const brandCount = snapshot?.brandCount ?? 0;
@@ -244,14 +245,16 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
         </div>
       </SectionCard>
 
-      <SectionCard title={t("dashboard.systemInventory.title")} className="dashboard-system-inventory">
-        <div className="dashboard-system-inventory__grid">
-          <div><span>{t("dashboard.stats.catalogProducts")}</span><strong>{formatCount(catalogCount)}</strong><small>{t("dashboard.stats.catalogProductsSubtitle")}</small></div>
-          <div><span>{t("dashboard.stats.brands")}</span><strong>{formatCount(brandCount)}</strong><small>{t("dashboard.stats.brandsSubtitle")}</small></div>
-          <div><span>{t("dashboard.stats.suppliers")}</span><strong>{formatCount(supplierCount)}</strong><small>{t("dashboard.stats.suppliersSubtitle")}</small></div>
-          <div><span>{t("dashboard.stats.salesOrders")}</span><strong>{formatCount(quoteCount)}</strong><small>{t("dashboard.stats.salesOrdersSubtitle")}</small></div>
-        </div>
-      </SectionCard>
+      {showSystemPanels ? (
+        <SectionCard title={t("dashboard.systemInventory.title")} className="dashboard-system-inventory">
+          <div className="dashboard-system-inventory__grid">
+            <div><span>{t("dashboard.stats.catalogProducts")}</span><strong>{formatCount(catalogCount)}</strong><small>{t("dashboard.stats.catalogProductsSubtitle")}</small></div>
+            <div><span>{t("dashboard.stats.brands")}</span><strong>{formatCount(brandCount)}</strong><small>{t("dashboard.stats.brandsSubtitle")}</small></div>
+            <div><span>{t("dashboard.stats.suppliers")}</span><strong>{formatCount(supplierCount)}</strong><small>{t("dashboard.stats.suppliersSubtitle")}</small></div>
+            <div><span>{t("dashboard.stats.salesOrders")}</span><strong>{formatCount(quoteCount)}</strong><small>{t("dashboard.stats.salesOrdersSubtitle")}</small></div>
+          </div>
+        </SectionCard>
+      ) : null}
 
       {showSystemPanels ? (
         <SectionCard title={t("dashboard.pulse.title")} className="dashboard-operations-pulse">
