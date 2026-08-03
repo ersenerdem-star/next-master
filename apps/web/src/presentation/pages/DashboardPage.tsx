@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   fetchCustomerOpsDashboardSnapshot,
   fetchDashboardLatestQuotes,
@@ -8,31 +8,15 @@ import {
   type DashboardSnapshot,
 } from "../../infrastructure/api/dashboardApi";
 import { Button } from "../components/common/Button";
-import { useActionFeedback } from "../components/common/ActionFeedback";
-import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { SectionCard } from "../components/common/SectionCard";
 import { StatCard } from "../components/common/StatCard";
 import { BrandPill } from "../components/common/BrandPill";
-import {
-  fetchCloudSupplierOperationsStatusAll,
-  fetchCloudSuppliers,
-  queueSupplierPriceCatalogSync,
-  queueSupplierPriceRollupRefresh,
-  retrySupplierPriceImportFinalize,
-} from "../../infrastructure/api/suppliersApi";
-import type { SupplierOperationsStatusRow, SupplierSummary } from "../../types/suppliers";
-import { downloadCsv, toCsv } from "../../shared/csv";
 import { fetchWarehouseStockItems } from "../../infrastructure/api/inventoryApi";
 import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
-import { includesLooseText } from "../../domain/shared/normalize";
 import { buildEntityAlias } from "../../shared/entityAlias";
-import { getOperationDefinition, isRegisteredOperation } from "../../shared/operationsRegistry";
-import { isImportFailedStatus, mapImportStatusToTone, type ImportEngineStatus } from "../../shared/importEngine";
 import { canAccessSystemModules } from "../../shared/roles";
 import { useI18n } from "../../i18n/I18nProvider";
-import { fetchCatalogIntegritySummary } from "../../infrastructure/api/catalogApi";
-import type { CatalogIntegritySummary } from "../../types/catalog";
 import { PageHeader, PageShell } from "../components/common/VisualPrimitives";
 
 type DashboardPageProps = {
@@ -42,20 +26,13 @@ type DashboardPageProps = {
 };
 
 export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab }: DashboardPageProps) {
-  const actionFeedback = useActionFeedback();
   const { locale, t } = useI18n();
   const numberLocale = locale === "tr" ? "tr-TR" : "en-US";
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
   const [latestQuotes, setLatestQuotes] = useState<DashboardSalesOrderSummary[]>([]);
   const [loadingLatestQuotes, setLoadingLatestQuotes] = useState(false);
-  const [operationsRows, setOperationsRows] = useState<SupplierOperationsStatusRow[]>([]);
-  const [catalogIntegrity, setCatalogIntegrity] = useState<CatalogIntegritySummary | null>(null);
-  const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
-  const [loadingOperations, setLoadingOperations] = useState(false);
   const [snapshotErrorKey, setSnapshotErrorKey] = useState<string | null>(null);
   const [latestQuotesErrorKey, setLatestQuotesErrorKey] = useState<string | null>(null);
-  const [operationsErrorKey, setOperationsErrorKey] = useState<string | null>(null);
-  const operationsLoadInFlight = useRef(false);
   const [inventoryPulse, setInventoryPulse] = useState({
     warehouses: 0,
     stockedItems: 0,
@@ -63,8 +40,6 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
     stockValue: 0,
   });
   const [inventoryPulseErrorKey, setInventoryPulseErrorKey] = useState<string | null>(null);
-  const [operationsSearch, setOperationsSearch] = useState("");
-  const [operationsSupplier, setOperationsSupplier] = useState("");
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriodKey>("thisMonth");
   const showSystemPanels = canAccessSystemModules(role);
   const isDraftPortalAlert = (quote: DashboardSalesOrderSummary) =>
@@ -152,51 +127,6 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
     };
   }, [showSystemPanels]);
 
-  const reloadOperationsStatus = useCallback(async () => {
-    if (operationsLoadInFlight.current) return;
-    operationsLoadInFlight.current = true;
-    setLoadingOperations(true);
-    setOperationsErrorKey(null);
-    try {
-      const refreshedSuppliers = await fetchCloudSuppliers();
-      const result = await fetchCloudSupplierOperationsStatusAll(refreshedSuppliers);
-      setSuppliers(refreshedSuppliers);
-      setOperationsRows(result);
-      setCatalogIntegrity(await fetchCatalogIntegritySummary().catch(() => null));
-    } catch (caught) {
-      console.error(caught);
-      setOperationsErrorKey("dashboard.operationsStatus.loadFailed");
-    } finally {
-      operationsLoadInFlight.current = false;
-      setLoadingOperations(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!showSystemPanels) return;
-    let cancelled = false;
-
-    async function run() {
-      if (cancelled) return;
-      await reloadOperationsStatus();
-    }
-
-    void run();
-    const intervalId = window.setInterval(() => {
-      void run();
-    }, 45 * 1000);
-    const handleFocus = () => {
-      void run();
-    };
-    window.addEventListener("focus", handleFocus);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", handleFocus);
-    };
-  }, [reloadOperationsStatus, showSystemPanels]);
-
   const catalogCount = snapshot?.catalogCount ?? 0;
   const brandCount = snapshot?.brandCount ?? 0;
   const supplierCount = snapshot?.supplierCount ?? 0;
@@ -228,137 +158,6 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
       default:
         return value || "-";
     }
-  }
-
-  const supplierOptions = suppliers.map((supplier) => ({
-    value: supplier.supplier_id,
-    label: supplier.name,
-  }));
-  const operationsSupplierOptions = [{ value: "", label: t("dashboard.operationsStatus.allSuppliers") }, ...supplierOptions];
-
-  const filteredOperationsRows = operationsRows.filter((row) => {
-    const search = operationsSearch.trim().toLowerCase();
-    const matchesSearch =
-      !search ||
-      includesLooseText(row.brand, search) ||
-      includesLooseText(row.supplier_name, search);
-    const matchesSupplier = !operationsSupplier || row.supplier_id === operationsSupplier;
-    return matchesSearch && matchesSupplier;
-  });
-
-  function formatDateTime(value: string | null | undefined) {
-    if (!value) return "-";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleString(locale === "tr" ? "tr-TR" : "en-US", {
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-
-  function formatDurationMs(value: number | null | undefined) {
-    if (typeof value !== "number" || !Number.isFinite(value)) return "-";
-    const seconds = Math.max(0, Math.round(value / 1000));
-    return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-  }
-
-  function toImportEngineStatus(status: string | null | undefined): ImportEngineStatus {
-    const normalized = String(status || "").toLowerCase();
-    switch (normalized) {
-      case "completed":
-        return "completed";
-      case "running":
-        return "finalizing";
-      case "pending":
-      case "waiting":
-        return "validated";
-      case "failed":
-        return "failed";
-      default:
-        return "idle";
-    }
-  }
-
-  function statusTone(status: string | null | undefined) {
-    return mapImportStatusToTone(toImportEngineStatus(status));
-  }
-
-  function supportsRegisteredRetry(operationType: string) {
-    if (!isRegisteredOperation(operationType)) {
-      return true;
-    }
-
-    return getOperationDefinition(operationType)?.supports_retry ?? true;
-  }
-
-  function isOperationsFailedStatus(status: string | null | undefined) {
-    return isImportFailedStatus(toImportEngineStatus(status));
-  }
-
-  const catalogIntegrityOperationStatus = catalogIntegrity?.backfill_status === "failed" || (catalogIntegrity?.failed_count || 0) > 0
-    ? "failed"
-    : catalogIntegrity?.initialization_state === "not_initialized"
-      ? "idle"
-      : catalogIntegrity?.initialization_state === "partial"
-        ? "waiting"
-    : !catalogIntegrity || catalogIntegrity.backfill_status !== "completed" || catalogIntegrity.pending_count > 0
-      ? "running"
-      : "completed";
-
-  async function handleRetryRow(row: SupplierOperationsStatusRow) {
-    try {
-      const supplier = row.supplier_name;
-      const brand = row.brand;
-      if (row.supplier_import_status === "failed" && row.supplier_import_run_id) {
-        actionFeedback.begin(t("dashboard.operationsStatus.retryingSupplierImport", { supplier, brand }));
-        await retrySupplierPriceImportFinalize(row.supplier_import_run_id);
-      } else if (row.catalog_sync_status === "failed" && row.supplier_import_run_id) {
-        actionFeedback.begin(t("dashboard.operationsStatus.retryingCatalogSync", { supplier, brand }));
-        await queueSupplierPriceCatalogSync(row.supplier_import_run_id);
-      } else if (row.rollup_refresh_status === "failed") {
-        actionFeedback.begin(t("dashboard.operationsStatus.retryingRollupRefresh", { supplier, brand }));
-        await queueSupplierPriceRollupRefresh();
-      } else {
-        return;
-      }
-
-      await reloadOperationsStatus();
-      actionFeedback.succeed(t("dashboard.operationsStatus.retryQueued", { supplier, brand }));
-    } catch (caught) {
-      console.error(caught);
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("dashboard.operationsStatus.retryFailed"));
-    }
-  }
-
-  function handleExportOperationsStatus() {
-    const rows = [
-      [
-        t("dashboard.operationsStatus.brand"),
-        t("dashboard.operationsStatus.supplier"),
-        t("dashboard.operationsStatus.lastImport"),
-        t("dashboard.operationsStatus.supplierImport"),
-        t("dashboard.operationsStatus.rows"),
-        t("dashboard.operationsStatus.catalogSync"),
-        t("dashboard.operationsStatus.rollupRefresh"),
-        t("dashboard.operationsStatus.customerPrice"),
-        t("dashboard.operationsStatus.lastSuccessfulRefresh"),
-      ],
-      ...filteredOperationsRows.map((row) => [
-        row.brand,
-        row.supplier_name,
-        `${formatDateTime(row.supplier_import_started_at)} / ${formatDateTime(row.supplier_import_finished_at)} / ${formatDurationMs(row.supplier_import_duration_ms)}`,
-        row.supplier_import_status,
-        `${row.supplier_import_staged_rows} / ${row.supplier_import_processed_rows}`,
-        row.catalog_sync_status,
-        row.rollup_refresh_status,
-        row.customer_price_status,
-        `${formatDateTime(row.last_successful_refresh_at)} (${row.last_successful_refresh_source || "-"})`,
-      ]),
-    ];
-    downloadCsv("operations-status.csv", toCsv(rows));
-    actionFeedback.succeed(t("dashboard.operationsStatus.csvDownloaded"));
   }
 
   function formatMoney(value: number) {
@@ -531,172 +330,6 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
             <div className="error-text">{t(snapshotErrorKey)}</div>
           ) : null}
         </SectionCard>
-        {showSystemPanels ? (
-          <SectionCard
-            title={t("dashboard.operationsStatus.title")}
-            className="dashboard-operations-status"
-            actions={
-              <Button variant="secondary" className="button--compact" onClick={() => void reloadOperationsStatus()} busy={loadingOperations} busyLabel={t("dashboard.operationsStatus.refreshing")}>
-                {t("dashboard.operationsStatus.refresh")}
-              </Button>
-            }
-          >
-            {catalogIntegrity ? (
-              <div className="operations-catalog-integrity">
-                <div>
-                  <strong>{t("dashboard.operationsStatus.catalogIntegrity")}</strong>
-                  <span className="operations-subtle">
-                    {catalogIntegrity.initialization_state === "not_initialized"
-                      ? t("catalog.integrity.notInitialized")
-                      : catalogIntegrity.initialization_state === "partial"
-                        ? t("catalog.integrity.partial")
-                        : t("dashboard.operationsStatus.catalogIntegrityProgress", {
-                            processed: formatCount(catalogIntegrity.evaluated_products),
-                            total: formatCount(catalogIntegrity.total_products),
-                          })}
-                  </span>
-                </div>
-                <span className={`mark-badge mark-badge--${statusTone(catalogIntegrityOperationStatus)}`}>
-                  {t(`statuses.${catalogIntegrityOperationStatus}`)}
-                </span>
-                <span className="operations-subtle">
-                  {t("dashboard.operationsStatus.catalogIntegrityConditions", {
-                    conflict: formatCount(catalogIntegrity.conflict_count),
-                    incomplete: formatCount(catalogIntegrity.incomplete_count),
-                    pending: formatCount(catalogIntegrity.pending_count),
-                    failed: formatCount(catalogIntegrity.failed_count),
-                  })}
-                </span>
-                <span className="operations-subtle">
-                  {t("dashboard.operationsStatus.lastEvaluation")}: {formatDateTime(catalogIntegrity.last_evaluated_at)}
-                </span>
-              </div>
-            ) : null}
-            <div className="toolbar toolbar--wrap dashboard-toolbar">
-              <Select value={operationsSupplier} options={operationsSupplierOptions} onChange={setOperationsSupplier} />
-              <Input value={operationsSearch} placeholder={t("dashboard.operationsStatus.searchPlaceholder")} onChange={setOperationsSearch} />
-              <Button variant="secondary" className="button--compact" onClick={handleExportOperationsStatus} disabled={!filteredOperationsRows.length}>
-                {t("dashboard.operationsStatus.exportCsv")}
-              </Button>
-            </div>
-            {operationsErrorKey ? <div className="error-text">{t(operationsErrorKey)}</div> : null}
-            {filteredOperationsRows.length ? (
-              <div className="table-wrap table-wrap--tall">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>{t("dashboard.operationsStatus.brand")}</th>
-                      <th>{t("dashboard.operationsStatus.lastImport")}</th>
-                      <th>{t("dashboard.operationsStatus.supplierImport")}</th>
-                      <th>{t("dashboard.operationsStatus.rows")}</th>
-                      <th>{t("dashboard.operationsStatus.catalogSync")}</th>
-                      <th>{t("dashboard.operationsStatus.rollupRefresh")}</th>
-                      <th>{t("dashboard.operationsStatus.customerPrice")}</th>
-                      <th>{t("dashboard.operationsStatus.lastSuccessfulRefresh")}</th>
-                      <th>{t("dashboard.operationsStatus.action")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredOperationsRows.map((row) => {
-                      const rowKey = `${row.supplier_id}-${row.brand}`;
-                      const retryEnabled =
-                        (supportsRegisteredRetry("supplier_import") && isOperationsFailedStatus(row.supplier_import_status)) ||
-                        (supportsRegisteredRetry("supplier_catalog_sync") && isOperationsFailedStatus(row.catalog_sync_status)) ||
-                        (supportsRegisteredRetry("supplier_rollup_refresh") && isOperationsFailedStatus(row.rollup_refresh_status));
-                      return (
-                        <tr key={rowKey}>
-                          <td>
-                            <div className="list-stack">
-                              <BrandPill brand={row.brand} compact />
-                              <strong>{row.supplier_name}</strong>
-                              <span className="operations-subtle">
-                                {t("dashboard.operationsStatus.partsAndLines", {
-                                  parts: formatCount(row.part_count),
-                                  lines: formatCount(row.line_count),
-                                })}
-                                {row.latest_price_date ? ` · ${t("dashboard.operationsStatus.latestPrice")} ${row.latest_price_date}` : ""}
-                              </span>
-                            </div>
-                          </td>
-                          <td>
-                            <div className="list-stack">
-                              <span>{t("dashboard.operationsStatus.started")}: {formatDateTime(row.supplier_import_started_at)}</span>
-                              <span>{t("dashboard.operationsStatus.finished")}: {formatDateTime(row.supplier_import_finished_at)}</span>
-                              <span>{t("dashboard.operationsStatus.duration")}: {formatDurationMs(row.supplier_import_duration_ms)}</span>
-                            </div>
-                          </td>
-                          <td>
-                            <div className="list-stack">
-                              <span className={`mark-badge mark-badge--${statusTone(row.supplier_import_status)}`}>{t(`statuses.${row.supplier_import_status}`)}</span>
-                              {row.supplier_import_status === "failed" ? (
-                                <span className="error-text">{row.supplier_import_error_message || t("dashboard.operationsStatus.failed")}</span>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td>
-                            <div className="list-stack">
-                              <span>{t("dashboard.operationsStatus.staged")}: {formatCount(row.supplier_import_staged_rows)}</span>
-                              <span>{t("dashboard.operationsStatus.processed")}: {formatCount(row.supplier_import_processed_rows)}</span>
-                            </div>
-                          </td>
-                          <td>
-                            <div className="list-stack">
-                              <span className={`mark-badge mark-badge--${statusTone(row.catalog_sync_status)}`}>{t(`statuses.${row.catalog_sync_status}`)}</span>
-                              {row.catalog_sync_status === "failed" ? (
-                                <span className="error-text">{row.catalog_sync_error_message || t("dashboard.operationsStatus.failed")}</span>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td>
-                            <div className="list-stack">
-                              <span className={`mark-badge mark-badge--${statusTone(row.rollup_refresh_status)}`}>{t(`statuses.${row.rollup_refresh_status}`)}</span>
-                              {row.rollup_refresh_status === "failed" ? (
-                                <span className="error-text">{row.rollup_refresh_error_message || t("dashboard.operationsStatus.failed")}</span>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td>
-                            <div className="list-stack">
-                              <span className={`mark-badge mark-badge--${statusTone(row.customer_price_status)}`}>{t(`statuses.${row.customer_price_status}`)}</span>
-                              <span className="operations-subtle">{row.customer_price_waiting_message || t("dashboard.operationsStatus.readyToGenerate")}</span>
-                            </div>
-                          </td>
-                          <td>
-                            <div className="list-stack">
-                              <span>{formatDateTime(row.last_successful_refresh_at)}</span>
-                              <span className="operations-subtle">
-                                {row.last_successful_refresh_source
-                                  ? `${t("dashboard.operationsStatus.source")}: ${
-                                      row.last_successful_refresh_source === "supplier import"
-                                        ? t("dashboard.operationsStatus.supplierImport")
-                                        : t("dashboard.operationsStatus.rollupRefresh")
-                                    }`
-                                  : "-"}
-                              </span>
-                            </div>
-                          </td>
-                          <td>
-                            {retryEnabled ? (
-                              <Button variant="secondary" className="button--compact" onClick={() => void handleRetryRow(row)}>
-                                {t("common.retry")}
-                              </Button>
-                            ) : (
-                              <span className="operations-subtle">-</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ) : !operationsErrorKey ? (
-              <div className="chart-placeholder">
-                {loadingOperations ? t("dashboard.operationsStatus.loading") : t("dashboard.operationsStatus.noRowsMatchCurrentFilters")}
-              </div>
-            ) : null}
-          </SectionCard>
-        ) : null}
         <SectionCard title={t("dashboard.salesByBrand.title")} className="dashboard-sales-by-brand">
           <div className="toolbar toolbar--wrap dashboard-toolbar">
             <Select value={revenuePeriod} options={revenuePeriodOptions} onChange={(value) => setRevenuePeriod(value as RevenuePeriodKey)} />
@@ -730,9 +363,6 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
             <div className="error-text">{t(snapshotErrorKey)}</div>
           ) : null}
         </SectionCard>
-        <div className="dashboard-section-heading dashboard-section-heading--operations">
-          <span>{t("dashboard.overview.operations")}</span>
-        </div>
       </div>
     </PageShell>
   );

@@ -3,9 +3,10 @@ import { InventoryAnalyticsPage } from "./InventoryAnalyticsPage";
 import { ItemTransactionsPage } from "./ItemTransactionsPage";
 import { MasterPage } from "./MasterPage";
 import { ProcurementDashboardPage } from "./ProcurementDashboardPage";
+import { OperationsStatusPage } from "./OperationsStatusPage";
 
 type ReportsPageProps = {
-  activeTab?: "Procurement Dashboard" | "Master" | "Core Reports" | "Item Transactions" | "Inventory Analytics";
+  activeTab?: "Procurement Dashboard" | "Master" | "Core Reports" | "Item Transactions" | "Inventory Analytics" | "Status Center";
   onOpenSalesOrder?: (salesOrderId: string) => void;
   onOpenPurchaseOrder?: (purchaseOrderId: string) => void;
   onOpenInvoice?: (invoiceId: string) => void;
@@ -41,6 +42,7 @@ export function ReportsPage({
       {activeTab === "Inventory Analytics" ? (
         <InventoryAnalyticsPage onOpenSalesOrder={onOpenSalesOrder} onOpenInventoryWarehouse={onOpenInventoryWarehouse} onOpenInventoryItem={onOpenInventoryItem} />
       ) : null}
+      {activeTab === "Status Center" ? <OperationsStatusPage /> : null}
     </div>
   );
 }

@@ -73,6 +73,7 @@ const reportsSubNav = [
   { key: "Core Reports", labelKey: "nav.coreReports" },
   { key: "Item Transactions", labelKey: "nav.itemTransactions" },
   { key: "Inventory Analytics", labelKey: "nav.inventoryAnalytics" },
+  { key: "Status Center", labelKey: "nav.statusCenter" },
 ] as const;
 
 type ReportsTab = (typeof reportsSubNav)[number]["key"];
