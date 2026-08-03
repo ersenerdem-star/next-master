@@ -26,6 +26,7 @@ const REQUEST_DELAY_MS = 100;
 // canonical write atomic per product.
 const RPC_BATCH_SIZE = 1;
 const RPC_RETRY_COUNT = 3;
+const CATALOG_READ_RETRY_COUNT = 3;
 
 const args = parseArgs(process.argv.slice(2));
 const apply = args.has("apply");
@@ -174,23 +175,52 @@ async function resolveFebiBrand() {
 }
 
 async function loadCandidates(brandId) {
-  let query = db
-    .from("catalog_products")
-    .select("id,organization_id,brand_id,product_code,image_url,oem_no,vehicle")
-    .eq("organization_id", organizationId)
-    .eq("brand_id", brandId);
   if (productCode) {
-    query = query.eq("product_code", productCode).limit(1);
-  } else {
-    const from = page * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-    query = query.order("product_code", { ascending: true }).range(from, to);
+    const rows = await readCatalogRange(brandId, 0, 0, true);
+    return rows.filter((row) => !hasText(row.image_url) || !hasText(row.oem_no) || !hasText(row.vehicle)).slice(0, maxItems);
   }
-  const { data, error } = await query;
-  if (error) throw new Error(`FEBI catalog lookup failed: ${error.message}`);
-  return (data || [])
+
+  const from = page * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+  let data;
+  try {
+    data = await readCatalogRange(brandId, from, to);
+  } catch (error) {
+    if (!isTransientDbError(errorMessage(error))) throw error;
+    // Offset/range reads can hit statement_timeout under load. Fall back to
+    // smaller ranges so a page remains resumable without skipping products.
+    data = [];
+    for (let chunkFrom = from; chunkFrom <= to; chunkFrom += 25) {
+      data.push(...await readCatalogRange(brandId, chunkFrom, Math.min(to, chunkFrom + 24)));
+    }
+  }
+  return data
     .filter((row) => !hasText(row.image_url) || !hasText(row.oem_no) || !hasText(row.vehicle))
     .slice(0, maxItems);
+}
+
+async function readCatalogRange(brandId, from, to, singleProduct = false) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= CATALOG_READ_RETRY_COUNT; attempt += 1) {
+    let query = db
+      .from("catalog_products")
+      .select("id,organization_id,brand_id,product_code,image_url,oem_no,vehicle")
+      .eq("organization_id", organizationId)
+      .eq("brand_id", brandId);
+    if (singleProduct) query = query.eq("product_code", productCode).limit(1);
+    else query = query.order("product_code", { ascending: true }).range(from, to);
+    const { data, error } = await query;
+    if (!error) return data || [];
+    lastError = error;
+    if (!isTransientDbError(error.message) || attempt === CATALOG_READ_RETRY_COUNT) break;
+    await sleep(1500 * attempt);
+  }
+  throw new Error(`FEBI catalog lookup failed: ${errorMessage(lastError)}`);
+}
+
+function isTransientDbError(message) {
+  const value = String(message || "").toLowerCase();
+  return value.includes("statement timeout") || value.includes("canceling statement") || value.includes("connection") || value.includes("fetch failed") || value.includes("timeout");
 }
 
 async function fetchProductEvidence(productCode) {
