@@ -1,0 +1,274 @@
+#!/usr/bin/env node
+
+/*
+ * FEBI-only source enrichment.
+ *
+ * Reads existing FEBI catalog products, fetches the official PartsFinder
+ * detail/application evidence, and sends only currently-empty fields through
+ * the guarded catalog enrichment RPC. Dry-run is the default; --apply is
+ * required for canonical Product changes.
+ */
+
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import "dotenv/config";
+import { createClient } from "@supabase/supabase-js";
+import { resolveSyncEnvValue } from "../shared/load-sync-env.mjs";
+
+const API_ORIGIN = "https://partsfinder.bilsteingroup.com";
+const API_URL = `${API_ORIGIN}/api/articles`;
+const DEFAULT_ORGANIZATION_ID = "1e4c5e99-e387-41aa-a6d3-cbe74558f766";
+const PAGE_SIZE = 100;
+const REQUEST_TIMEOUT_MS = 20_000;
+const REQUEST_DELAY_MS = 100;
+
+const args = parseArgs(process.argv.slice(2));
+const apply = args.has("apply");
+const maxItems = readInteger(args.get("max-items"), 10, 1, 100);
+const page = readInteger(args.get("page"), 0, 0, 100_000);
+const organizationId = String(
+  args.get("organization-id") || process.env.NEXT_MASTER_ORGANIZATION_ID || DEFAULT_ORGANIZATION_ID,
+).trim();
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const supabaseUrl = resolveSyncEnvValue("SUPABASE_URL", { projectRoot: repoRoot }).replace(/\/+$/, "");
+const serviceRoleKey = resolveSyncEnvValue("SUPABASE_SERVICE_ROLE_KEY", { projectRoot: repoRoot });
+
+if (!/^https:\/\//i.test(supabaseUrl) || !serviceRoleKey) {
+  fail("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.");
+}
+
+const db = createClient(supabaseUrl, serviceRoleKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+
+const brand = await resolveFebiBrand();
+const products = await loadCandidates(brand.id);
+const enriched = [];
+const failures = [];
+
+console.log("BILSTEIN FEBI ENRICHMENT START");
+console.log(`mode=${apply ? "apply" : "dry_run"}; page=${page}; max_items=${maxItems}`);
+console.log(`brand=${brand.name}; brand_id=${brand.id}`);
+
+for (const product of products) {
+  try {
+    const detail = await fetchProductEvidence(product.product_code);
+    const row = buildEnrichmentRow(product, detail);
+    if (hasIncomingFields(row)) enriched.push(row);
+  } catch (error) {
+    failures.push({ product_code: product.product_code, error: errorMessage(error) });
+  }
+  await sleep(REQUEST_DELAY_MS);
+}
+
+let rpcResult = null;
+if (apply && enriched.length > 0) {
+  const response = await db.rpc("apply_catalog_product_enrichment_guarded", {
+    input_rows: enriched,
+    input_source_type: "bilstein_group_partsfinder_febi_official",
+    input_source_reference: `${API_ORIGIN}/en/article/febi/`,
+  });
+  if (response.error) throw new Error(`Guarded FEBI enrichment failed: ${response.error.message}`);
+  rpcResult = response.data;
+}
+
+console.log(JSON.stringify({
+  mode: apply ? "apply" : "dry_run",
+  brand: brand.name,
+  page,
+  candidates: products.length,
+  enrichment_rows: enriched.length,
+  fields: {
+    image_url: enriched.filter((row) => row.image_url).length,
+    oem_no: enriched.filter((row) => row.oem_no).length,
+    vehicle: enriched.filter((row) => row.vehicle).length,
+  },
+  failures,
+  guarded_result: rpcResult,
+  guarantee: apply
+    ? "Only empty FEBI catalog fields were sent to the guarded enrichment RPC; conflicts are reported by the RPC."
+    : "No catalog_products row was changed.",
+}, null, 2));
+
+async function resolveFebiBrand() {
+  const { data, error } = await db
+    .from("brands")
+    .select("id,organization_id,name")
+    .eq("organization_id", organizationId)
+    .ilike("name", "FEBI")
+    .limit(2);
+  if (error) throw new Error(`FEBI brand lookup failed: ${error.message}`);
+  const matches = (data || []).filter((row) => String(row.name || "").trim().toUpperCase() === "FEBI");
+  if (matches.length !== 1) throw new Error(`Expected exactly one FEBI brand; found ${matches.length}.`);
+  return matches[0];
+}
+
+async function loadCandidates(brandId) {
+  const from = page * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+  const { data, error } = await db
+    .from("catalog_products")
+    .select("id,organization_id,brand_id,product_code,image_url,oem_no,vehicle")
+    .eq("organization_id", organizationId)
+    .eq("brand_id", brandId)
+    .order("product_code", { ascending: true })
+    .range(from, to);
+  if (error) throw new Error(`FEBI catalog lookup failed: ${error.message}`);
+  return (data || [])
+    .filter((row) => !hasText(row.image_url) || !hasText(row.oem_no) || !hasText(row.vehicle))
+    .slice(0, maxItems);
+}
+
+async function fetchProductEvidence(productCode) {
+  const detailUrl = new URL(`${API_URL}/${encodeURIComponent(productCode)}`);
+  detailUrl.searchParams.set("filter[brands]", "FEBI");
+  detailUrl.searchParams.set("filter[country]", "TR");
+  detailUrl.searchParams.set("filter[vehicleType]", "CAR");
+  const payload = await fetchJson(detailUrl);
+  const article = payload?.data || {};
+  const attributes = article.attributes || {};
+  const oemNumbers = normalizeOemNumbers(attributes.oeNumbers);
+  const imageUrl = await fetchImageUrl(productCode);
+  const applications = await fetchApplications(productCode);
+  return { attributes, oemNumbers, imageUrl, applications };
+}
+
+async function fetchImageUrl(productCode) {
+  const url = `${API_ORIGIN}/en/article/febi/${encodeURIComponent(productCode)}`;
+  const html = await fetchText(url);
+  const matches = html.match(/https?:\/\/cdn\.partsfinder\.bilsteingroup\.com\/pf-article-details\/[^"'\\s<]+/g) || [];
+  return unique(matches.map((value) => value.replace(/&amp;/g, "&")))[0] || null;
+}
+
+async function fetchApplications(productCode) {
+  const makesUrl = new URL(`${API_ORIGIN}/api/makes`);
+  makesUrl.searchParams.set("filter[country]", "TR");
+  makesUrl.searchParams.set("filter[articleId]", productCode);
+  makesUrl.searchParams.set("filter[vehicleType]", "CAR");
+  makesUrl.searchParams.set("filter[brands]", "FEBI");
+  const makesPayload = await fetchJson(makesUrl);
+  const applications = [];
+  for (const make of Array.isArray(makesPayload?.data) ? makesPayload.data : []) {
+    const makeId = cleanText(make?.id);
+    if (!makeId) continue;
+    const url = new URL(`${API_ORIGIN}/api/applications`);
+    url.searchParams.set("articleId", productCode);
+    url.searchParams.set("vehicleType", "CAR");
+    url.searchParams.set("makeId", makeId);
+    url.searchParams.set("filter[brands]", "FEBI");
+    url.searchParams.set("filter[country]", "TR");
+    url.searchParams.set("include", "limitations");
+    const payload = await fetchJson(url);
+    for (const entry of Array.isArray(payload?.data) ? payload.data : []) {
+      const attributes = entry?.attributes || {};
+      const manufacturer = cleanText(attributes.makeTitle) || cleanText(make?.attributes?.title);
+      const model = cleanText(attributes.modelTitle);
+      const variant = cleanText(attributes.variantTitle);
+      const label = [manufacturer, model, variant].filter(Boolean).join(" ");
+      if (label) applications.push(label);
+    }
+    await sleep(REQUEST_DELAY_MS);
+  }
+  return unique(applications);
+}
+
+function buildEnrichmentRow(product, detail) {
+  const attributes = detail.attributes || {};
+  const oemNo = detail.oemNumbers.flatMap((entry) => entry.numbers || []).filter(Boolean);
+  const vehicle = detail.applications.join(", ");
+  return {
+    organization_id: product.organization_id,
+    brand_id: product.brand_id,
+    product_code: product.product_code,
+    image_url: hasText(product.image_url) ? null : detail.imageUrl,
+    oem_no: hasText(product.oem_no) ? null : unique(oemNo).join(", ") || null,
+    vehicle: hasText(product.vehicle) ? null : vehicle || cleanText(attributes.vehicleType),
+    source_reference: `${API_ORIGIN}/api/articles/${encodeURIComponent(product.product_code)}?filter%5Bbrands%5D=FEBI&filter%5Bcountry%5D=TR&filter%5BvehicleType%5D=CAR`,
+  };
+}
+
+function normalizeOemNumbers(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => ({
+    numbers: unique((Array.isArray(entry?.numbers) ? entry.numbers : []).map(cleanText).filter(Boolean)),
+  })).filter((entry) => entry.numbers.length > 0);
+}
+
+async function fetchJson(url) {
+  const response = await fetchWithTimeout(url, { headers: { Accept: "application/vnd.api+json" } });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`PartsFinder ${response.status}: ${text.slice(0, 300)}`);
+  return text ? JSON.parse(text) : null;
+}
+
+async function fetchText(url) {
+  const response = await fetchWithTimeout(url, { headers: { Accept: "text/html,application/xhtml+xml" } });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`PartsFinder ${response.status}: ${text.slice(0, 300)}`);
+  return text;
+}
+
+async function fetchWithTimeout(url, init = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === "AbortError") throw new Error(`PartsFinder request timed out after ${REQUEST_TIMEOUT_MS / 1000} seconds.`);
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function hasIncomingFields(row) {
+  return Boolean(row.image_url || row.oem_no || row.vehicle);
+}
+
+function hasText(value) {
+  return Boolean(String(value || "").trim());
+}
+
+function cleanText(value) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function unique(values) {
+  return [...new Set(values)];
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function readInteger(value, fallback, min, max) {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+    fail(`Value must be an integer between ${min} and ${max}.`);
+  }
+  return parsed;
+}
+
+function parseArgs(argv) {
+  const values = new Map();
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (!token.startsWith("--")) continue;
+    const [key, inlineValue] = token.slice(2).split("=", 2);
+    if (inlineValue !== undefined) values.set(key, inlineValue);
+    else if (argv[index + 1] && !argv[index + 1].startsWith("--")) values.set(key, argv[++index]);
+    else values.set(key, true);
+  }
+  return values;
+}
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function fail(message) {
+  console.error(`BLOCKED: ${message}`);
+  process.exit(1);
+}
