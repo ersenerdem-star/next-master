@@ -482,7 +482,10 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
   }> = [];
 
   let from = 0;
-  const pageSize = 1000;
+  // Keep export pages bounded for large brands (for example Sachs). The
+  // organization + brand predicate below matches the canonical browse index
+  // and avoids a large cross-tenant scan before the ordered page is built.
+  const pageSize = 250;
 
   while (true) {
     const search = input.search?.trim();
@@ -492,6 +495,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
       let query = supabaseClient
         .from("catalog_products")
         .select(selectClause)
+        .eq("organization_id", organizationId)
         .eq("brand_id", brandRow.id)
         .order("product_code", { ascending: true })
         .range(from, from + pageSize - 1);
