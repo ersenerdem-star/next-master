@@ -6998,6 +6998,13 @@ textarea {
   gap: 6px;
 }
 
+.catalog-review-quick-accept {
+  align-self: flex-start;
+  border-color: rgba(22, 163, 74, 0.5);
+  color: #166534;
+  white-space: nowrap;
+}
+
 .catalog-review-candidate-cell strong {
   color: #0f172a;
   font-size: 12px;

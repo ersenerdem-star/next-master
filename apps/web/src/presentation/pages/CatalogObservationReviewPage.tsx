@@ -559,6 +559,21 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
     setFilters((current) => ({ ...current, selected: itemKey(item) }));
   }
 
+  function handleQuickAccept(item: CatalogObservationReviewItem) {
+    if (
+      item.decision_state.is_stale ||
+      item.decision_state.is_invalidated ||
+      item.decision_state.current_decision
+    ) {
+      return;
+    }
+
+    // Keep the existing authenticated decision flow, but open it from the
+    // row so long observation payloads do not block access to the action.
+    handleSelectItem(item);
+    window.requestAnimationFrame(() => openDecisionModal("ACCEPT_RECOMMENDATION"));
+  }
+
   function handleCloseDetail() {
     if (commandSubmitting) return;
     const focusKey = filters.selected;
@@ -863,6 +878,22 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
                             <StatusBadge tone={badgeToneForComparison(item.comparison_result)}>
                               {comparisonLabel(item.comparison_result, c)}
                             </StatusBadge>
+                            {item.recommendation === "LIKELY_ACCEPT" &&
+                            !item.decision_state.current_decision &&
+                            !item.decision_state.is_stale &&
+                            !item.decision_state.is_invalidated ? (
+                              <Button
+                                variant="secondary"
+                                className="button--compact catalog-review-quick-accept"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleQuickAccept(item);
+                                }}
+                                disabled={commandSubmitting}
+                              >
+                                {c("decision.actions.accept")}
+                              </Button>
+                            ) : null}
                           </div>
                         </td>
                         <td data-label={c("table.product")}>
