@@ -21,6 +21,7 @@ const DEFAULT_ORGANIZATION_ID = "1e4c5e99-e387-41aa-a6d3-cbe74558f766";
 const PAGE_SIZE = 100;
 const REQUEST_TIMEOUT_MS = 20_000;
 const REQUEST_DELAY_MS = 100;
+const EVIDENCE_CONCURRENCY = Number(process.env.FEBI_EVIDENCE_CONCURRENCY || 3);
 // The guarded RPC also writes provenance/trigger records. In this database
 // even small multi-row transactions can hit statement_timeout, so keep the
 // canonical write atomic per product.
@@ -56,17 +57,25 @@ const failures = [];
 
 console.log("BILSTEIN FEBI ENRICHMENT START");
 console.log(`mode=${apply ? "apply" : "dry_run"}; page=${page}; max_items=${maxItems}${productCode ? `; product_code=${productCode}` : ""}`);
-console.log(`brand=${brand.name}; brand_id=${brand.id}`);
+console.log(`brand=${brand.name}; brand_id=${brand.id}; evidence_concurrency=${EVIDENCE_CONCURRENCY}`);
 
-for (const product of products) {
+const evidenceResults = await mapWithConcurrency(products, async (product) => {
   try {
     const detail = await fetchProductEvidence(product.product_code);
-    const row = buildEnrichmentRow(product, detail);
-    if (hasIncomingFields(row)) enriched.push(row);
+    return { product, row: buildEnrichmentRow(product, detail) };
   } catch (error) {
-    failures.push({ product_code: product.product_code, error: errorMessage(error) });
+    return { product, error };
+  } finally {
+    await sleep(REQUEST_DELAY_MS);
   }
-  await sleep(REQUEST_DELAY_MS);
+}, EVIDENCE_CONCURRENCY);
+
+for (const result of evidenceResults) {
+  if (result.error) {
+    failures.push({ product_code: result.product.product_code, phase: "source_evidence", error: errorMessage(result.error) });
+  } else if (hasIncomingFields(result.row)) {
+    enriched.push(result.row);
+  }
 }
 
 let rpcResult = null;
@@ -344,6 +353,21 @@ function unique(values) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function mapWithConcurrency(items, worker, concurrency) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.max(1, Math.min(Number(concurrency) || 1, items.length || 1));
+  async function runWorker() {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+  return results;
 }
 
 function readInteger(value, fallback, min, max) {
