@@ -41,13 +41,9 @@ const db = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const { count, error } = await db
-  .from("catalog_products")
-  .select("id", { count: "exact", head: true })
-  .eq("organization_id", organizationId)
-  .eq("brand_id", BRAND_ID);
+const { count, error } = await loadCountWithRetry();
 
-if (error) fail(`FEBI catalog count failed: ${error.message}`);
+if (error) fail(`FEBI catalog count failed: ${error.message || "temporary database error"}`);
 
 const totalPages = Math.ceil(Number(count || 0) / PAGE_SIZE);
 const endPage = Math.min(totalPages, startPage + maxPages);
@@ -97,6 +93,21 @@ function runWorker(workerArgs) {
     child.on("error", () => resolve(1));
     child.on("exit", (code, signal) => resolve(code ?? (signal ? 1 : 0)));
   });
+}
+
+async function loadCountWithRetry() {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const result = await db
+      .from("catalog_products")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .eq("brand_id", BRAND_ID);
+    if (!result.error) return result;
+    lastError = result.error;
+    if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+  }
+  return { count: null, error: lastError };
 }
 
 function parseArgs(argv) {
