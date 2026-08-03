@@ -392,7 +392,12 @@ function parseArgs(argv) {
 }
 
 function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    if (error.message) return String(error.message);
+    try { return JSON.stringify(error); } catch { return String(error); }
+  }
+  return String(error);
 }
 
 function fail(message) {

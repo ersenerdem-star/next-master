@@ -67,7 +67,13 @@ for (let page = startPage; page < endPage; page += 1) {
   ];
   if (apply) workerArgs.push("--apply");
 
-  const exitCode = await runWorker(workerArgs);
+  let exitCode = 1;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    exitCode = await runWorker(workerArgs);
+    if (exitCode === 0 || attempt === 3) break;
+    console.error(`Worker page ${page} failed; retrying (${attempt}/3)...`);
+    await new Promise((resolve) => setTimeout(resolve, 3000 * attempt));
+  }
   if (exitCode !== 0) {
     stopped = true;
     console.error(`\nSTOPPED at page ${page}. Resume with:`);
