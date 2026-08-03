@@ -26,6 +26,7 @@ const args = parseArgs(process.argv.slice(2));
 const apply = args.has("apply");
 const maxItems = readInteger(args.get("max-items"), 10, 1, 100);
 const page = readInteger(args.get("page"), 0, 0, 100_000);
+const productCode = cleanText(args.get("product-code"));
 const organizationId = String(
   args.get("organization-id") || process.env.NEXT_MASTER_ORGANIZATION_ID || DEFAULT_ORGANIZATION_ID,
 ).trim();
@@ -48,7 +49,7 @@ const enriched = [];
 const failures = [];
 
 console.log("BILSTEIN FEBI ENRICHMENT START");
-console.log(`mode=${apply ? "apply" : "dry_run"}; page=${page}; max_items=${maxItems}`);
+console.log(`mode=${apply ? "apply" : "dry_run"}; page=${page}; max_items=${maxItems}${productCode ? `; product_code=${productCode}` : ""}`);
 console.log(`brand=${brand.name}; brand_id=${brand.id}`);
 
 for (const product of products) {
@@ -105,15 +106,19 @@ async function resolveFebiBrand() {
 }
 
 async function loadCandidates(brandId) {
-  const from = page * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
-  const { data, error } = await db
+  let query = db
     .from("catalog_products")
     .select("id,organization_id,brand_id,product_code,image_url,oem_no,vehicle")
     .eq("organization_id", organizationId)
-    .eq("brand_id", brandId)
-    .order("product_code", { ascending: true })
-    .range(from, to);
+    .eq("brand_id", brandId);
+  if (productCode) {
+    query = query.eq("product_code", productCode).limit(1);
+  } else {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    query = query.order("product_code", { ascending: true }).range(from, to);
+  }
+  const { data, error } = await query;
   if (error) throw new Error(`FEBI catalog lookup failed: ${error.message}`);
   return (data || [])
     .filter((row) => !hasText(row.image_url) || !hasText(row.oem_no) || !hasText(row.vehicle))
