@@ -52,6 +52,57 @@ type CatalogQueryRow = {
   brands?: { name?: string | null } | null;
 };
 
+type CatalogOemIdentifierRow = {
+  catalog_product_id: string;
+  value: string | null;
+};
+
+async function loadCatalogOemFallbacks(organizationId: string, productIds: string[]) {
+  const ids = Array.from(new Set(productIds.map((value) => String(value || "").trim()).filter(Boolean)));
+  if (!ids.length) return new Map<string, string>();
+
+  const { data, error } = await supabaseClient
+    .from("catalog_product_identifiers")
+    .select("catalog_product_id,value")
+    .eq("organization_id", organizationId)
+    .eq("identifier_type", "oem")
+    .in("catalog_product_id", ids)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    // Product browsing/export remains available if an older deployment has
+    // not exposed the identifier table yet; canonical oem_no is still used.
+    return new Map<string, string>();
+  }
+
+  const grouped = new Map<string, string[]>();
+  for (const row of (data || []) as CatalogOemIdentifierRow[]) {
+    const value = String(row.value || "").trim();
+    if (!value) continue;
+    const current = grouped.get(row.catalog_product_id) || [];
+    if (!current.includes(value)) current.push(value);
+    grouped.set(row.catalog_product_id, current);
+  }
+
+  return new Map(
+    Array.from(grouped.entries()).map(([productId, values]) => [
+      productId,
+      sanitizeCatalogOemNumbers(values.join(", ")),
+    ]),
+  );
+}
+
+async function mergeCatalogOemFallbacks<T extends { product_id: string; oem_no: string }>(
+  organizationId: string,
+  rows: T[],
+) {
+  const fallbacks = await loadCatalogOemFallbacks(organizationId, rows.map((row) => row.product_id));
+  return rows.map((row) => ({
+    ...row,
+    oem_no: row.oem_no.trim() || fallbacks.get(row.product_id) || "",
+  }));
+}
+
 function shouldRunLooseOriginalNumberSearch(search: string) {
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
   return normalizedOriginalSearch.length >= 6;
@@ -201,6 +252,7 @@ export async function fetchCloudCatalog(input: {
   page?: number;
   pageSize?: number;
 }): Promise<CatalogRow[]> {
+  const organizationId = await getCurrentOrgId();
   const data = await callAppRpc<Array<Record<string, unknown>>>("cloud_catalog_page", {
     input_search: input.search,
     input_brand: normalizeBrandName(input.brandName || ""),
@@ -208,7 +260,7 @@ export async function fetchCloudCatalog(input: {
     input_page: input.page ?? 1,
     input_page_size: input.pageSize ?? 50,
   });
-  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+  const rows = ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
     total_count: row.total_count == null ? null : Number(row.total_count),
     has_more: Boolean(row.has_more),
     product_id: String(row.product_id || ""),
@@ -231,6 +283,7 @@ export async function fetchCloudCatalog(input: {
     replacement_reason: String(row.replacement_reason || "") || null,
     replacement_warning: String(row.replacement_warning || "") || null,
   }));
+  return mergeCatalogOemFallbacks(organizationId, rows);
 }
 
 export async function fetchCloudCatalogIntegrity(input: {
@@ -241,6 +294,7 @@ export async function fetchCloudCatalogIntegrity(input: {
   page?: number;
   pageSize?: number;
 }): Promise<CatalogRow[]> {
+  const organizationId = await getCurrentOrgId();
   const data = await callAppRpc<Array<Record<string, unknown>>>("cloud_catalog_integrity_page", {
     input_search: input.search,
     input_brand: normalizeBrandName(input.brandName || ""),
@@ -250,7 +304,7 @@ export async function fetchCloudCatalogIntegrity(input: {
     input_page_size: input.pageSize ?? 50,
   });
 
-  return (data ?? []).map((row) => ({
+  const rows = (data ?? []).map((row) => ({
     total_count: row.total_count == null ? null : Number(row.total_count),
     has_more: Boolean(row.has_more),
     product_id: String(row.product_id || ""),
@@ -275,6 +329,7 @@ export async function fetchCloudCatalogIntegrity(input: {
     last_evaluated_at: row.last_evaluated_at ? String(row.last_evaluated_at) : null,
     integrity_last_error: row.integrity_last_error ? String(row.integrity_last_error) : null,
   }));
+  return mergeCatalogOemFallbacks(organizationId, rows);
 }
 
 export async function fetchCatalogIntegritySummary(): Promise<CatalogIntegritySummary> {
@@ -466,6 +521,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
   }
 
   const allRows: Array<{
+    id: string;
     product_code: string;
     image_url?: string | null;
     ean?: string | null;
@@ -511,23 +567,23 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     };
 
     let { data, error } = await buildQuery(
-      "product_code,image_url,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
+      "id,product_code,image_url,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
       "strict",
     );
     if (error && isMissingCatalogImageError(error)) {
       ({ data, error } = await buildQuery(
-        "product_code,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
+        "id,product_code,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
         "strict",
       ));
     }
     if (!error && search && shouldRunLooseOriginalNumberSearch(search) && !(data || []).length) {
       ({ data, error } = await buildQuery(
-        "product_code,image_url,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
+        "id,product_code,image_url,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
         "loose",
       ));
       if (error && isMissingCatalogImageError(error)) {
         ({ data, error } = await buildQuery(
-          "product_code,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
+          "id,product_code,ean,description,oem_no,vehicle,vehicle_model,hs_code,origin,market_segment,weight_kg,lifecycle_status,lifecycle_note",
           "loose",
         ));
       }
@@ -537,7 +593,11 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     }
 
     const batch = (data || []) as unknown as typeof allRows;
-    allRows.push(...batch);
+    const oemFallbacks = await loadCatalogOemFallbacks(organizationId, batch.map((row) => row.id));
+    allRows.push(...batch.map((row) => ({
+      ...row,
+      oem_no: row.oem_no || oemFallbacks.get(row.id) || null,
+    })));
     if (batch.length < pageSize) break;
     from += pageSize;
   }
@@ -666,5 +726,6 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
     );
   }
 
-  return result.sort((left, right) => left.product_code.localeCompare(right.product_code));
+  const sorted = result.sort((left, right) => left.product_code.localeCompare(right.product_code));
+  return mergeCatalogOemFallbacks(organizationId, sorted);
 }
