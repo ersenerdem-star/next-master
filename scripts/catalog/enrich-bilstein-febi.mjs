@@ -80,8 +80,25 @@ if (apply && enriched.length > 0) {
   // work can make a large FEBI batch exceed Postgres statement_timeout.
   for (let index = 0; index < enriched.length; index += RPC_BATCH_SIZE) {
     const batch = enriched.slice(index, index + RPC_BATCH_SIZE);
-    const response = await callEnrichmentRpcWithRetry(batch, index);
-    if (response.error) throw new Error(`Guarded FEBI enrichment failed on batch ${Math.floor(index / RPC_BATCH_SIZE) + 1}: ${response.error.message}`);
+    let response;
+    try {
+      response = await callEnrichmentRpcWithRetry(batch, index);
+    } catch (error) {
+      failures.push({
+        product_code: batch[0]?.product_code,
+        phase: "guarded_enrichment",
+        error: errorMessage(error),
+      });
+      continue;
+    }
+    if (response.error) {
+      failures.push({
+        product_code: batch[0]?.product_code,
+        phase: "guarded_enrichment",
+        error: response.error.message,
+      });
+      continue;
+    }
     const result = response.data || {};
     totals.applied_count += Number(result.applied_count || 0);
     totals.unchanged_count += Number(result.unchanged_count || 0);
