@@ -117,6 +117,26 @@ export function OperationsStatusPage() {
     return value == null ? "—" : `${value.toLocaleString(numberLocale, { maximumFractionDigits: 1 })}%`;
   }
 
+  function enrichmentFilledCount(total: number, missing: number) {
+    return Math.max(0, total - missing);
+  }
+
+  function enrichmentPercent(total: number, missing: number) {
+    if (total <= 0) return 100;
+    return Math.min(100, Math.max(0, (enrichmentFilledCount(total, missing) / total) * 100));
+  }
+
+  function enrichmentStatus(row: CatalogOperationsBrandStatus) {
+    const remaining = row.missing_image_count + row.missing_oem_count + row.missing_vehicle_count;
+    const filled =
+      enrichmentFilledCount(row.total_products, row.missing_image_count) +
+      enrichmentFilledCount(row.total_products, row.missing_oem_count) +
+      enrichmentFilledCount(row.total_products, row.missing_vehicle_count);
+    if (remaining === 0) return { label: t("catalog.integrity.enrichmentComplete"), tone: "complete" };
+    if (filled > 0) return { label: t("catalog.integrity.enrichmentPartial"), tone: "partial" };
+    return { label: t("catalog.integrity.enrichmentNotStarted"), tone: "idle" };
+  }
+
   function formatDateTime(value: string | null | undefined) {
     if (!value) return "-";
     const date = new Date(value);
@@ -391,6 +411,47 @@ export function OperationsStatusPage() {
           <span><small>{t("catalog.integrity.missingVehicle")}</small><strong>{formatIntegrityCount(catalogIntegrity?.missing_vehicle_count)}</strong></span>
           <span><small>{t("catalog.integrity.missingImage")}</small><strong>{formatIntegrityCount(catalogIntegrity?.missing_image_count)}</strong></span>
         </div>
+        {catalogBrandOperations.length ? (
+          <div className="catalog-enrichment-progress">
+            <div className="catalog-enrichment-progress__heading">
+              <strong>{t("catalog.integrity.enrichmentTitle")}</strong>
+              <span>{t("catalog.integrity.enrichmentHint")}</span>
+            </div>
+            <div className="catalog-enrichment-progress__rows">
+              {catalogBrandOperations.map((row) => {
+                const status = enrichmentStatus(row);
+                const metrics = [
+                  { key: "image", label: t("catalog.integrity.enrichmentImage"), missing: row.missing_image_count },
+                  { key: "oem", label: t("catalog.integrity.enrichmentOem"), missing: row.missing_oem_count },
+                  { key: "vehicle", label: t("catalog.integrity.enrichmentVehicle"), missing: row.missing_vehicle_count },
+                ];
+                return (
+                  <div className="catalog-enrichment-progress__row" key={row.brand_id}>
+                    <div className="catalog-enrichment-progress__brand">
+                      <BrandPill brand={row.brand} compact />
+                      <span>{formatCount(row.total_products)} {t("catalog.integrity.products").toLowerCase()}</span>
+                    </div>
+                    <div className="catalog-enrichment-progress__metrics">
+                      {metrics.map((metric) => {
+                        const filled = enrichmentFilledCount(row.total_products, metric.missing);
+                        const percent = enrichmentPercent(row.total_products, metric.missing);
+                        return (
+                          <div className="catalog-enrichment-progress__metric" key={metric.key}>
+                            <div><span>{metric.label}</span><strong>{formatCount(filled)} / {formatCount(row.total_products)}</strong></div>
+                            <div className="catalog-enrichment-progress__track" aria-label={`${metric.label}: ${formatPercent(percent)}`}>
+                              <span style={{ width: `${percent}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <span className={`catalog-enrichment-progress__status is-${status.tone}`}>{status.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
         {catalogBrandOperations.length ? (
           <div className="catalog-brand-operations">
             <div className="catalog-brand-operations__heading">

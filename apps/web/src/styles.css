@@ -2824,6 +2824,115 @@ select {
   font-size: 17px;
 }
 
+.catalog-enrichment-progress {
+  margin-bottom: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(137, 156, 179, 0.18);
+  border-radius: 14px;
+}
+
+.catalog-enrichment-progress__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(245, 249, 252, 0.96);
+}
+
+.catalog-enrichment-progress__heading span,
+.catalog-enrichment-progress__brand > span,
+.catalog-enrichment-progress__metric span {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.catalog-enrichment-progress__rows {
+  display: grid;
+}
+
+.catalog-enrichment-progress__row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(360px, 2fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(214, 226, 236, 0.75);
+}
+
+.catalog-enrichment-progress__brand,
+.catalog-enrichment-progress__metric > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.catalog-enrichment-progress__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(100px, 1fr));
+  gap: 12px;
+}
+
+.catalog-enrichment-progress__metric strong {
+  color: #163047;
+  font-size: 11px;
+}
+
+.catalog-enrichment-progress__track {
+  height: 6px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e7eef4;
+}
+
+.catalog-enrichment-progress__track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f6f92, #2f9f86);
+}
+
+.catalog-enrichment-progress__status {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 76px;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.catalog-enrichment-progress__status.is-complete {
+  color: #166534;
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.catalog-enrichment-progress__status.is-partial {
+  color: #9a3412;
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+
+.catalog-enrichment-progress__status.is-idle {
+  color: #475569;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+@media (max-width: 900px) {
+  .catalog-enrichment-progress__row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .catalog-enrichment-progress__status {
+    justify-self: start;
+  }
+}
+
 .catalog-brand-operations {
   margin-bottom: 12px;
   overflow: hidden;
