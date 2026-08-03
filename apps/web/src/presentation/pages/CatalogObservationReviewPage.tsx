@@ -143,6 +143,11 @@ function itemKey(item: CatalogObservationReviewItem) {
   return item.observation_id || item.review_queue_id || `${item.product_id || ""}:${item.field_family}`;
 }
 
+function hasRecordedDecision(item: CatalogObservationReviewItem) {
+  const decision = String(item.decision_state.current_decision || "").trim();
+  return Boolean(decision && decision !== "UNDECIDED");
+}
+
 function emptyDash(value: string | number | null | undefined) {
   const text = String(value ?? "").trim();
   return text || "-";
@@ -563,7 +568,7 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
     if (
       item.decision_state.is_stale ||
       item.decision_state.is_invalidated ||
-      item.decision_state.current_decision
+      hasRecordedDecision(item)
     ) {
       return;
     }
@@ -879,7 +884,7 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
                               {comparisonLabel(item.comparison_result, c)}
                             </StatusBadge>
                             {item.recommendation === "LIKELY_ACCEPT" &&
-                            !item.decision_state.current_decision &&
+                            !hasRecordedDecision(item) &&
                             !item.decision_state.is_stale &&
                             !item.decision_state.is_invalidated ? (
                               <Button
