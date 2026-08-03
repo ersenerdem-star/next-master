@@ -101,10 +101,15 @@ console.log(JSON.stringify({
   page,
   candidates: products.length,
   enrichment_rows: enriched.length,
-  fields: {
+  fields_written: {
     image_url: enriched.filter((row) => row.image_url).length,
     oem_no: enriched.filter((row) => row.oem_no).length,
     vehicle: enriched.filter((row) => row.vehicle).length,
+  },
+  fields_already_present_before_run: {
+    image_url: products.filter((row) => hasText(row.image_url)).length,
+    oem_no: products.filter((row) => hasText(row.oem_no)).length,
+    vehicle: products.filter((row) => hasText(row.vehicle)).length,
   },
   failures,
   guarded_result: rpcResult,
