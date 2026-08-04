@@ -1703,6 +1703,50 @@ export function PortalPage() {
     if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
   }
 
+  function handleExportPortalBasket() {
+    if (!portalDraftLines.length) {
+      setError("Add at least one line before exporting the basket.");
+      return;
+    }
+
+    const rows: Array<Array<string | number | null | undefined>> = [
+      [
+        "Part_No",
+        "Brand",
+        "Qty",
+        "Description",
+        "OEM_No",
+        "Market_Segment",
+        "HS_Code",
+        "Origin",
+        "Weight_kg",
+        "Customer_Price",
+        "Currency",
+        "Lifecycle_Status",
+      ],
+      ...portalDraftLines.map((line) => [
+        line.resolvedCode || line.requestedCode,
+        line.brand,
+        line.qty,
+        line.description,
+        line.oem_no,
+        line.market_segment || "",
+        line.hs_code,
+        line.origin,
+        line.weight_kg,
+        line.sell_price,
+        portalOrderCurrency,
+        line.lifecycle_status || "",
+      ]),
+    ];
+
+    const blob = buildXlsxBlob("Basket", rows, [2, 8, 9]);
+    const fileName = sanitizeFileName(`${activeSnapshot.invite.party_name}-basket`);
+    downloadBlob(`${fileName || "portal-basket"}.xlsx`, blob);
+    setPortalOrderStatus(`Exported ${portalDraftLines.length.toLocaleString("en-US")} basket line${portalDraftLines.length === 1 ? "" : "s"}.`);
+    setError("");
+  }
+
   async function handleImportPortalOrderFile(file: File) {
     if (!isOnline) {
       setError("Connect to the internet to import and price a file.");
@@ -2776,6 +2820,9 @@ export function PortalPage() {
                   <Button type="button" variant="secondary" onClick={downloadQuoteTemplate}>
                     Template
                   </Button>
+                  <Button type="button" variant="secondary" disabled={!portalDraftLines.length} onClick={handleExportPortalBasket}>
+                    Export Basket
+                  </Button>
                   <Button type="button" variant="secondary" onClick={handleClearPortalSearch}>
                     Clear Search
                   </Button>
@@ -2813,6 +2860,12 @@ export function PortalPage() {
                   onBrandChange={setOrderSearchBrand}
                   onSearch={(searchField) => void handlePortalCatalogSearch(searchField)}
                   onClear={handleClearPortalSearch}
+                  onImport={() => portalImportRef.current?.click()}
+                  onTemplate={downloadQuoteTemplate}
+                  onExport={handleExportPortalBasket}
+                  exportDisabled={!portalDraftLines.length}
+                  basketCount={portalDraftLines.length}
+                  orderStatus={portalOrderStatus}
                   selectedCode={selectedCatalogCode}
                   onSelect={(item) => {
                     setSelectedCatalogCode(item.code);

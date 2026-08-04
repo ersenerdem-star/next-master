@@ -6818,6 +6818,60 @@ textarea {
 
 .portal-search-result-view__submit:disabled { opacity: 0.6; cursor: wait; }
 
+.portal-search-result-view__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.portal-search-result-view__action-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.portal-search-result-view__action-label {
+  margin-right: 3px;
+  color: #52667d;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.portal-search-result-view__action-group .button {
+  min-height: 34px;
+  padding: 6px 11px;
+  font-size: 12px;
+}
+
+.portal-search-result-view__action-status {
+  display: grid;
+  min-width: 220px;
+  gap: 3px;
+  color: #52667d;
+  font-size: 12px;
+  text-align: right;
+}
+
+.portal-search-result-view__action-status strong {
+  color: #183b69;
+  font-size: 13px;
+}
+
+.portal-search-result-view__action-status span {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .portal-search-result-view__layout {
   display: grid;
   grid-template-columns: minmax(250px, 0.8fr) minmax(430px, 1.65fr) minmax(235px, 0.72fr);
@@ -6941,6 +6995,23 @@ textarea {
   .portal-search-result-insights { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .portal-search-insight-card { border-right: 1px solid #e0e7ef; border-bottom: 0; }
   .portal-search-insight-card:last-child { border-right: 0; }
+}
+
+@media (max-width: 768px) {
+  .portal-search-result-view__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .portal-search-result-view__action-status {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .portal-search-result-view__action-status span {
+    max-width: none;
+    white-space: normal;
+  }
 }
 
 @media (max-width: 760px) {

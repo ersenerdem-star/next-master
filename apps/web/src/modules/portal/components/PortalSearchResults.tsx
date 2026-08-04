@@ -18,6 +18,12 @@ type PortalSearchResultsProps = {
   onBrandChange: (value: string) => void;
   onSearch: (searchField: PortalSearchField) => void;
   onClear: () => void;
+  onImport: () => void;
+  onTemplate: () => void;
+  onExport: () => void;
+  exportDisabled: boolean;
+  basketCount: number;
+  orderStatus?: string;
   selectedCode: string;
   onSelect: (item: PortalCatalogSearchItem) => void;
   onAdd: (item: PortalCatalogSearchItem) => void;
@@ -58,6 +64,12 @@ export function PortalSearchResults({
   onBrandChange,
   onSearch,
   onClear,
+  onImport,
+  onTemplate,
+  onExport,
+  exportDisabled,
+  basketCount,
+  orderStatus,
   selectedCode,
   onSelect,
   onAdd,
@@ -119,6 +131,24 @@ export function PortalSearchResults({
           <button type="button" className="portal-search-result-view__clear" onClick={onClear} aria-label="Clear search">×</button>
           <button type="submit" className="portal-search-result-view__submit" disabled={searching}>{searching ? "…" : "Search"}</button>
         </form>
+        <div className="portal-search-result-view__actions" aria-label="Import and export tools">
+          <div className="portal-search-result-view__action-group">
+            <span className="portal-search-result-view__action-label">Order tools</span>
+            <Button type="button" variant="secondary" onClick={onImport}>
+              Import Excel
+            </Button>
+            <Button type="button" variant="secondary" onClick={onTemplate}>
+              Template
+            </Button>
+            <Button type="button" variant="secondary" onClick={onExport} disabled={exportDisabled}>
+              Export basket
+            </Button>
+          </div>
+          <div className="portal-search-result-view__action-status" aria-live="polite">
+            <strong>{basketCount.toLocaleString("en-US")} basket line{basketCount === 1 ? "" : "s"}</strong>
+            <span>{orderStatus || "Import a file or add a search result to build the basket."}</span>
+          </div>
+        </div>
       </div>
 
       <div className="portal-search-result-view__layout">
