@@ -45,9 +45,14 @@ export default async (req: Request, _context: Context) => {
       hostname: getPortalRequestHostname(req),
     });
     let snapshot;
+    let snapshotStatus: "ok" | "fallback" = "ok";
+    let snapshotFailureReason = "";
     try {
       snapshot = await buildPortalSnapshot(supabaseUrl, serviceRoleKey, invite);
-    } catch {
+    } catch (error) {
+      snapshotStatus = "fallback";
+      snapshotFailureReason = sanitizeUserFacingError(error, "Portal snapshot build failed");
+      console.error("[portal-data] snapshot build failed; serving guarded fallback", error);
       snapshot = await buildPortalFallbackSnapshot(supabaseUrl, serviceRoleKey, invite);
     }
     await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
@@ -56,7 +61,8 @@ export default async (req: Request, _context: Context) => {
       partyType: invite.party_type,
       email: invite.email,
       eventType: "portal_data",
-      status: "ok",
+      status: snapshotStatus,
+      ...(snapshotFailureReason ? { details: { reason: snapshotFailureReason } } : {}),
     });
     return json({ ok: true, snapshot }, 200, {
       "Set-Cookie": buildPortalSessionCookie(nextSessionToken),
