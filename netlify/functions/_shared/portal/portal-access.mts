@@ -39,6 +39,7 @@ const CUSTOMER_PORTAL_SELECT_BASE =
   "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,custom_fields";
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 const COMPANY_PROFILE_SELECT = "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url";
+const PORTAL_DB_REQUEST_TIMEOUT_MS = 12_000;
 
 function toPortalBrandingProfile(companyProfile: Record<string, unknown> | null) {
   if (!companyProfile) return null;
@@ -91,6 +92,7 @@ function portalAllowedBrandIds(invite: PortalInviteRow) {
 async function fetchFirst<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
   const rows = await getJson<Array<T>>(buildRestUrl(supabaseUrl, table, params), {
     headers: serviceRoleHeaders(serviceRoleKey),
+    timeoutMs: PORTAL_DB_REQUEST_TIMEOUT_MS,
   });
   return rows[0] || null;
 }
@@ -98,6 +100,7 @@ async function fetchFirst<T>(supabaseUrl: string, serviceRoleKey: string, table:
 async function fetchAll<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
   return getJson<Array<T>>(buildRestUrl(supabaseUrl, table, params), {
     headers: serviceRoleHeaders(serviceRoleKey),
+    timeoutMs: PORTAL_DB_REQUEST_TIMEOUT_MS,
   });
 }
 
@@ -444,6 +447,15 @@ function mapInvoiceLines(lines: unknown) {
   });
 }
 
+// Customer responses must not expose internal supplier or acquisition-cost data.
+function mapCustomerSalesOrderLines(lines: unknown) {
+  return mapSalesOrderLines(lines).map(({ supplier_name: _supplierName, buy_price: _buyPrice, purchase_total: _purchaseTotal, ...line }) => line);
+}
+
+function mapCustomerInvoiceLines(lines: unknown) {
+  return mapInvoiceLines(lines).map(({ supplier_name: _supplierName, buy_price: _buyPrice, purchase_total: _purchaseTotal, ...line }) => line);
+}
+
 function mapPurchaseOrderLines(lines: unknown) {
   if (!Array.isArray(lines)) return [];
   return lines.map((line) => {
@@ -757,7 +769,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         sales_total: toNumber(row.sales_total),
         discount_amount: toNumber(row.discount_amount),
         shipping_cost: toNumber(row.shipping_cost),
-        lines: mapSalesOrderLines(row.lines),
+        lines: mapCustomerSalesOrderLines(row.lines),
       })),
       invoices: invoices.map((row) => ({
         ...row,
@@ -765,7 +777,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         subtotal: toNumber(row.subtotal),
         discount_amount: toNumber(row.discount_amount),
         shipping_cost: toNumber(row.shipping_cost),
-        lines: mapInvoiceLines(row.lines),
+        lines: mapCustomerInvoiceLines(row.lines),
       })),
       creditNotes: creditNotes.map((row) => ({
         ...row,

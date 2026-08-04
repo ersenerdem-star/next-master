@@ -379,7 +379,8 @@ function clearPortalQueryParams() {
 }
 
 function getPortalCacheKey(email: string) {
-  return `${PORTAL_CACHE_PREFIX}:${String(email || "").trim().toLowerCase()}`;
+  const hostname = typeof window === "undefined" ? "server" : window.location.hostname.toLowerCase();
+  return `${PORTAL_CACHE_PREFIX}:${hostname}:${String(email || "").trim().toLowerCase()}`;
 }
 
 function getPortalSnapshotCacheKey(email: string) {

@@ -41,12 +41,27 @@ const CUSTOMER_PORTAL_SELECT_BASE =
   "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,custom_fields";
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 const COMPANY_PROFILE_SELECT = "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url";
+const PORTAL_DB_REQUEST_TIMEOUT_MS = 12_000;
 
 function toPortalBrandingProfile(companyProfile: Record<string, unknown> | null) {
   if (!companyProfile) return null;
   return {
     company_name: String(companyProfile.company_name || "").trim() || "",
     logo_data_url: String(companyProfile.logo_data_url || "").trim() || "",
+  };
+}
+
+function toCustomerCompanyProfile(companyProfile: Record<string, unknown> | null) {
+  if (!companyProfile) return null;
+  return {
+    id: String(companyProfile.id || ""),
+    company_name: String(companyProfile.company_name || ""),
+    email: String(companyProfile.email || ""),
+    phone: String(companyProfile.phone || ""),
+    website: String(companyProfile.website || ""),
+    address: String(companyProfile.address || ""),
+    footer_note: String(companyProfile.footer_note || ""),
+    logo_data_url: String(companyProfile.logo_data_url || ""),
   };
 }
 
@@ -93,6 +108,7 @@ function portalAllowedBrandIds(invite: PortalInviteRow) {
 async function fetchFirst<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
   const rows = await getJson<Array<T>>(buildRestUrl(supabaseUrl, table, params), {
     headers: serviceRoleHeaders(serviceRoleKey),
+    timeoutMs: PORTAL_DB_REQUEST_TIMEOUT_MS,
   });
   return rows[0] || null;
 }
@@ -100,6 +116,7 @@ async function fetchFirst<T>(supabaseUrl: string, serviceRoleKey: string, table:
 async function fetchAll<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
   return getJson<Array<T>>(buildRestUrl(supabaseUrl, table, params), {
     headers: serviceRoleHeaders(serviceRoleKey),
+    timeoutMs: PORTAL_DB_REQUEST_TIMEOUT_MS,
   });
 }
 
@@ -206,7 +223,7 @@ function buildPortalCustomerHistoryParams(
     ...customerFilter,
     ...(sellerCompanyName ? { seller_company: `eq.${sellerCompanyName}` } : {}),
     order: "updated_at.desc",
-    limit: "500",
+    limit: "100",
   };
 }
 
@@ -518,6 +535,15 @@ function mapInvoiceLines(lines: unknown) {
           : null,
     };
   });
+}
+
+// Customer responses must not expose internal supplier or acquisition-cost data.
+function mapCustomerSalesOrderLines(lines: unknown) {
+  return mapSalesOrderLines(lines).map(({ supplier_name: _supplierName, buy_price: _buyPrice, purchase_total: _purchaseTotal, ...line }) => line);
+}
+
+function mapCustomerInvoiceLines(lines: unknown) {
+  return mapInvoiceLines(lines).map(({ supplier_name: _supplierName, buy_price: _buyPrice, purchase_total: _purchaseTotal, ...line }) => line);
 }
 
 function mapPurchaseOrderLines(lines: unknown) {
@@ -868,7 +894,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
           can_view_orders: invite.access_can_view_orders,
         },
       },
-      companyProfile,
+      companyProfile: toCustomerCompanyProfile(companyProfile),
       customer,
       availableBrands,
       salesOrders: salesOrders.map((row) => ({
@@ -879,7 +905,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         sales_total: toNumber(row.sales_total),
         discount_amount: toNumber(row.discount_amount),
         shipping_cost: toNumber(row.shipping_cost),
-        lines: mapSalesOrderLines(row.lines),
+        lines: mapCustomerSalesOrderLines(row.lines),
       })),
       invoices: invoices.map((row) => ({
         ...row,
@@ -887,7 +913,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         subtotal: toNumber(row.subtotal),
         discount_amount: toNumber(row.discount_amount),
         shipping_cost: toNumber(row.shipping_cost),
-        lines: mapInvoiceLines(row.lines),
+        lines: mapCustomerInvoiceLines(row.lines),
       })),
       creditNotes: creditNotes.map((row) => ({
         ...row,
@@ -1080,7 +1106,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         can_view_orders: invite.access_can_view_orders,
       },
     },
-    companyProfile,
+    companyProfile: invite.party_type === "customer" ? toCustomerCompanyProfile(companyProfile) : companyProfile,
     customer: null,
     vendor,
     availableBrands: await fetchPortalAvailableBrands(

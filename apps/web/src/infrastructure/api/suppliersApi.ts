@@ -305,10 +305,21 @@ export async function fetchCloudSupplierBrandSummary(inputSupplierId: string | n
 
 export async function fetchCloudSupplierBrandSummaryAll(inputSuppliers?: SupplierSummary[]): Promise<SupplierBrandSummaryRow[]> {
   const suppliers = inputSuppliers?.length ? inputSuppliers : await fetchCloudSuppliers();
-  const batches = await Promise.allSettled(
-    suppliers.map((supplier) => fetchCloudSupplierBrandSummary(supplier.supplier_id)),
-  );
-  const rows = batches.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+  const rows: SupplierBrandSummaryRow[] = [];
+  const concurrency = 4;
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < suppliers.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      try {
+        rows.push(...await fetchCloudSupplierBrandSummary(suppliers[index].supplier_id));
+      } catch {
+        // A single slow supplier must not block the whole status center.
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, suppliers.length) }, () => worker()));
 
   return rows.sort((a, b) => a.supplier_name.localeCompare(b.supplier_name) || b.part_count - a.part_count || a.brand.localeCompare(b.brand));
 }

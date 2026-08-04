@@ -26,6 +26,19 @@ async function hmacSha256(secret: string, value: string) {
   return encodeHex(signature);
 }
 
+function constantTimeEqual(left: string, right: string) {
+  const leftBytes = new TextEncoder().encode(String(left || ""));
+  const rightBytes = new TextEncoder().encode(String(right || ""));
+  const length = Math.max(leftBytes.length, rightBytes.length);
+  let difference = leftBytes.length ^ rightBytes.length;
+
+  for (let index = 0; index < length; index += 1) {
+    difference |= (leftBytes[index] || 0) ^ (rightBytes[index] || 0);
+  }
+
+  return difference === 0;
+}
+
 export async function hashPortalToken(token: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(token || "")));
   return encodeHex(digest);
@@ -120,7 +133,7 @@ export async function verifyPortalSessionToken(secret: string, token: string) {
   if (!payloadPart || !signature) return null;
 
   const expectedSignature = await hmacSha256(secret, payloadPart);
-  if (expectedSignature !== signature) return null;
+  if (!constantTimeEqual(expectedSignature, signature)) return null;
 
   try {
     const payload = JSON.parse(decodeBase64Url(payloadPart)) as PortalSessionPayload;
@@ -160,7 +173,7 @@ export async function verifyPortalPasswordResetToken(secret: string, token: stri
   if (!payloadPart || !signature) return null;
 
   const expectedSignature = await hmacSha256(secret, payloadPart);
-  if (expectedSignature !== signature) return null;
+  if (!constantTimeEqual(expectedSignature, signature)) return null;
 
   try {
     const payload = JSON.parse(decodeBase64Url(payloadPart)) as PortalPasswordResetPayload;
