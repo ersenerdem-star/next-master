@@ -954,7 +954,10 @@ async function hydratePortalCatalogItems(
       image_url: item.image_url,
       sell_price: preview?.sell_price ?? null,
       currency: context.currency,
-      supplier_name: preview?.supplier_name || "",
+      // Supplier identity is an internal pricing detail. It must not cross
+      // the customer-portal API boundary, even though it is used above to
+      // calculate the account price.
+      supplier_name: "",
       lifecycle_status: item.lifecycle_status,
       lifecycle_note: item.lifecycle_note,
       lifecycle_warning: item.lifecycle_status === "discontinued" ? buildDiscontinuedWarning(item.code, item.lifecycle_note) : null,

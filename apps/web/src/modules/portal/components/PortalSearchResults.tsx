@@ -235,7 +235,6 @@ export function PortalSearchResults({
                 <span>Tariff {selected.tariff || "-"}</span>
                 <span>Origin {selected.origin || "-"}</span>
                 <span>Weight {selected.weight_kg == null ? "-" : `${selected.weight_kg} kg`}</span>
-                <span>Supplier {selected.supplier_name || "-"}</span>
               </div>
             </>
           ) : <div className="empty-state">Search by part number, OEM, vehicle or description.</div>}
