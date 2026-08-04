@@ -1522,15 +1522,20 @@ export async function searchPortalCatalog(
   rows = filterCatalogRowsBySearchRelevance(rows, search, replacementRowsByKey);
   const baseItems = mapCatalogRowsToBaseItems(rows, brandMap, replacementRowsByKey);
   if (!baseItems.length) return { items: [], recommendations: [] };
-  const cachedContext = portalCustomerContextCache.get(`${invite.organization_id}::${String(invite.customer_id || "").trim()}`);
-  const currency = cachedContext && cachedContext.expiresAt > Date.now() ? cachedContext.value.currency || "EUR" : "EUR";
+  // Resolve the tenant-scoped customer pricing context here instead of
+  // reading the cache with a shortened key. The cache key also includes the
+  // seller company profile, which is required when a customer buys from more
+  // than one seller. Without this lookup, search results intentionally fall
+  // back to null prices and the portal shows "Price on request".
+  const pricingContext = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite).catch(() => null);
+  const currency = pricingContext?.currency || "EUR";
   const fallbackItems = mapPortalCatalogItemsWithoutPricing(baseItems, currency);
-  const items = cachedContext?.value
+  const items = pricingContext
     ? await hydratePortalCatalogItems(
         supabaseUrl,
         serviceRoleKey,
         invite,
-        cachedContext.value,
+        pricingContext,
         baseItems,
         PORTAL_SEARCH_PRICE_REST_TIMEOUT_MS,
       ).catch(() => fallbackItems)
