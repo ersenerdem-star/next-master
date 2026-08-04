@@ -659,6 +659,11 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
 
     const customerName = String(customer?.display_name || customer?.company_name || invite.party_name);
     const customerId = String(customer?.id || invite.customer_id || "");
+    // Orders and invoices are tenant-scoped by seller company as well as customer.
+    // Older records may only have customer_name populated, so the seller filter
+    // must be applied to both the id and name lookup paths.
+    const sellerCompanyName = String(companyProfile?.company_name || "").trim();
+    const sellerCompanyFilter = sellerCompanyName ? { seller_company: `eq.${sellerCompanyName}` } : {};
 
     const salesOrders = invite.access_can_view_orders
       ? dedupeById([
@@ -668,6 +673,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
                   "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
                 organization_id: `eq.${invite.organization_id}`,
                 customer_id: `eq.${customerId}`,
+                ...sellerCompanyFilter,
                 order: "updated_at.desc",
               })
             : []),
@@ -677,6 +683,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
                   "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
                 organization_id: `eq.${invite.organization_id}`,
                 customer_name: `eq.${customerName}`,
+                ...sellerCompanyFilter,
                 order: "updated_at.desc",
               })
             : []),
@@ -691,6 +698,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
                   "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
                 organization_id: `eq.${invite.organization_id}`,
                 customer_id: `eq.${customerId}`,
+                ...sellerCompanyFilter,
                 order: "updated_at.desc",
               })
             : []),
@@ -700,6 +708,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
                   "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
                 organization_id: `eq.${invite.organization_id}`,
                 customer_name: `eq.${customerName}`,
+                ...sellerCompanyFilter,
                 order: "updated_at.desc",
               })
             : []),
