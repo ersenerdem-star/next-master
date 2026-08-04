@@ -62,6 +62,7 @@ export function AppShell({
 }: AppShellProps) {
   const { locale, t } = useI18n();
   const appDesktopFrameRef = useRef<HTMLDivElement | null>(null);
+  const activeSubmenuRef = useRef<HTMLDivElement | null>(null);
   const meta = pageMeta[activePage as keyof typeof pageMeta] || pageMeta.Home;
   const context = contextMeta[buildMeta.context as keyof typeof contextMeta] || {
     labelKey: "common.build",
@@ -119,6 +120,11 @@ export function AppShell({
     return () => observer.disconnect();
   }, [activePage, activeSubPage, children, notice, shouldScaleAppDesktop]);
 
+  useEffect(() => {
+    if (!activeSubmenuRef.current) return;
+    activeSubmenuRef.current.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activePage, activeSubPage, subNavItems.length]);
+
   return (
     <div className={`app-desktop-stage${shouldScaleAppDesktop ? " app-desktop-stage--scaled" : ""}`} style={appDesktopStageStyle}>
       <div
@@ -144,7 +150,12 @@ export function AppShell({
                 <span className="nav-item__indicator" />
               </button>
               {item.key === activePage && subNavItems.length ? (
-                <div className="nav-submenu" role="menu" aria-label={`${item.label} ${t("common.sections")}`}>
+                <div
+                  ref={activeSubmenuRef}
+                  className="nav-submenu"
+                  role="menu"
+                  aria-label={`${item.label} ${t("common.sections")}`}
+                >
                   {subNavItems.map((subItem) => (
                     <button
                       key={subItem.key}

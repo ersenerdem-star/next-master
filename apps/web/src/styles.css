@@ -73,6 +73,10 @@ select {
 }
 
 .sidebar {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   border-right: 1px solid rgba(128, 150, 173, 0.24);
   background:
     radial-gradient(circle at top right, rgba(63, 174, 215, 0.16), transparent 34%),
@@ -81,7 +85,7 @@ select {
   position: sticky;
   top: 0;
   height: 100vh;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .sidebar::after {
@@ -142,9 +146,40 @@ select {
 .sidebar-nav {
   position: relative;
   z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 4px 12px 0;
+  scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
+  scrollbar-width: thin;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.42);
+  background-clip: padding-box;
+}
+
+.sidebar .nav-item__caption {
+  display: none;
+}
+
+.sidebar .nav-item__body {
+  gap: 0;
 }
 
 .nav-group {
