@@ -11,6 +11,7 @@ import {
 } from "../../infrastructure/api/adminApi";
 import { createEmptyCloudCompanyProfile, deleteCompanyProfileById, fetchCompanyProfiles, upsertCompanyProfile } from "../../infrastructure/api/companyProfilesApi";
 import { fetchCustomers } from "../../infrastructure/api/customersApi";
+import { isUuid } from "../../infrastructure/api/organizationApi";
 import { deliverQueuedEmails, fetchEmailTemplates, fetchOutboundEmails, sendPortalInviteEmail, setOutboundEmailStatus, upsertEmailTemplate } from "../../infrastructure/api/emailTemplatesApi";
 import {
   clearPortalInvitePassword,
@@ -1196,6 +1197,12 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               options={[{ value: "", label: s("portal.placeholders.selectCustomer") }, ...customerOptions]}
               onChange={(value) => {
                 const selected = customers.find((item) => item.id === value);
+                if (!isUuid(value) || !selected) {
+                  updatePortalField("customer_id", "");
+                  updatePortalField("seller_company_profile_id", "");
+                  updatePortalField("party_name", "");
+                  return;
+                }
                 updatePortalField("customer_id", value);
                 updatePortalField("vendor_id", "");
                 updatePortalField("party_name", selected?.display_name || selected?.company_name || "");
@@ -1215,6 +1222,11 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               options={[{ value: "", label: s("portal.placeholders.selectVendor") }, ...vendorOptions]}
               onChange={(value) => {
                 const selected = vendors.find((item) => item.id === value);
+                if (!isUuid(value) || !selected) {
+                  updatePortalField("vendor_id", "");
+                  updatePortalField("party_name", "");
+                  return;
+                }
                 updatePortalField("vendor_id", value);
                 updatePortalField("customer_id", "");
                 updatePortalField("party_name", selected?.display_name || selected?.company_name || "");
@@ -1314,7 +1326,9 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           <Button
             onClick={async () => {
               const missingPartyBinding =
-                portalDraft.party_type === "customer" ? !portalDraft.customer_id.trim() : !portalDraft.vendor_id.trim();
+                portalDraft.party_type === "customer"
+                  ? !isUuid(portalDraft.customer_id)
+                  : !isUuid(portalDraft.vendor_id);
               if (!portalDraft.party_name.trim() || missingPartyBinding) {
                 setPortalStatus(s("portal.errors.partyRequired"));
                 return;

@@ -7,6 +7,12 @@ export function sanitizeUserFacingMessage(message: unknown, fallback = "The requ
     return "You do not have permission for this action.";
   }
 
+  if (normalized.includes("invalid input syntax for type uuid")) {
+    return normalized.includes("vendor")
+      ? "Select a valid vendor before saving portal access."
+      : "Select a valid customer or seller company before saving portal access.";
+  }
+
   if (normalized.includes("superadmin access required")) {
     return "This system area is enabled only for superadmin. Ask superadmin to open this permission if needed.";
   }

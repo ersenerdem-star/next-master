@@ -89,6 +89,12 @@ export async function issuePortalInviteToken(portalInviteId: string): Promise<{ 
 }
 
 export async function upsertPortalInvite(input: PortalInvite): Promise<PortalInvite> {
+  if (input.party_type === "customer" && !isUuid(input.customer_id)) {
+    throw new Error("Select a valid customer before saving portal access.");
+  }
+  if (input.party_type === "vendor" && !isUuid(input.vendor_id)) {
+    throw new Error("Select a valid vendor before saving portal access.");
+  }
   const organizationId = await getCurrentOrgId();
   const payload = mapPortalInvitePayload(input, organizationId);
 
