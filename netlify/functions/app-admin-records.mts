@@ -314,7 +314,9 @@ async function sanitizePortalInvitePayload(input: {
   }
 
   if (next.party_type === "customer") {
-    next.vendor_id = "";
+    // UUID columns must receive NULL when the field is not applicable.
+    // Empty strings fail PostgreSQL UUID coercion for customer invites.
+    next.vendor_id = null;
     const customerSelect = "id,display_name,company_name,email,seller_company_profile_id,seller_company_profile_ids,custom_fields";
     const customerLookup = async (filters: Record<string, string>) => getJson<Array<Record<string, unknown>>>(
       buildRestUrl(input.supabaseUrl, "customers", {
@@ -364,7 +366,8 @@ async function sanitizePortalInvitePayload(input: {
     }
     next.seller_company_profile_id = resolvedSellerProfileId || null;
   } else {
-    next.customer_id = "";
+    // UUID columns must receive NULL when the field is not applicable.
+    next.customer_id = null;
     next.seller_company_profile_id = null;
     if (!isUuid(String(next.vendor_id || ""))) {
       throw new Error("Select a valid vendor before saving portal access.");
