@@ -673,6 +673,13 @@ function buildPortalFastCatalogSearchOr(search: string, normalizedSearch: string
     clauses.add(`normalized_oem.eq.${variant}`);
     clauses.add(`normalized_code.like.${variant}*`);
     clauses.add(`normalized_oem.like.${variant}*`);
+    // OEM references often contain several manufacturer numbers in one
+    // normalized value. Keep those alternatives in the result set even when
+    // the searched number is not the first reference. Pricing is hydrated
+    // afterward and must never decide whether a catalog row is searchable.
+    if (variant.length >= 6) {
+      clauses.add(`normalized_oem.like.*${variant}*`);
+    }
   }
   if (escaped && escaped.length <= 24) {
     clauses.add(`product_code.ilike.${escaped}*`);
