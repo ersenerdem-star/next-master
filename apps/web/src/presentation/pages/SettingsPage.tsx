@@ -455,10 +455,15 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   }
 
   function updatePortalField<K extends keyof PortalInvite>(key: K, value: PortalInvite[K]) {
+    // Clear a previous save error as soon as the user changes the binding
+    // or scope that caused it. Otherwise a resolved error remains visible
+    // and looks like the current form state is still invalid.
+    setPortalStatus("");
     setPortalDraft((current) => ({ ...current, [key]: value }));
   }
 
   function updatePortalAccess(key: keyof PortalInvite["access"], value: boolean) {
+    setPortalStatus("");
     setPortalDraft((current) => ({
       ...current,
       access: {
@@ -469,6 +474,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   }
 
   function togglePortalAllowedBrand(brandId: string, checked: boolean) {
+    setPortalStatus("");
     setPortalDraft((current) => {
       const nextSet = new Set((current.allowed_brand_ids || []).map((value) => String(value || "").trim()).filter(Boolean));
       if (checked) nextSet.add(brandId);
@@ -484,6 +490,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     const visibleIds = brandOptions
       .filter((brand) => includesLooseText(brand.name, portalBrandSearch))
       .map((brand) => brand.id);
+    setPortalStatus("");
     setPortalDraft((current) => ({
       ...current,
       allowed_brand_ids: Array.from(new Set([...(current.allowed_brand_ids || []), ...visibleIds])),
@@ -1199,6 +1206,8 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           {portalDraft.party_type === "customer" ? (
             <Select
               label={s("portal.types.customer")}
+              name="portal-customer"
+              autoComplete="off"
               value={portalDraft.customer_id}
               options={[{ value: "", label: s("portal.placeholders.selectCustomer") }, ...customerOptions]}
               onChange={(value) => {
@@ -1224,6 +1233,8 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           ) : (
             <Select
               label={s("portal.types.vendor")}
+              name="portal-vendor"
+              autoComplete="off"
               value={portalDraft.vendor_id}
               options={[{ value: "", label: s("portal.placeholders.selectVendor") }, ...vendorOptions]}
               onChange={(value) => {
@@ -1242,6 +1253,8 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           {portalDraft.party_type === "customer" ? (
             <Select
               label={s("portal.fields.sellerCompany")}
+              name="portal-seller-company"
+              autoComplete="off"
               value={portalDraft.seller_company_profile_id}
               options={[
                 { value: "", label: s("portal.placeholders.selectSellerCompany") },
@@ -1333,20 +1346,44 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
         <div className="toolbar toolbar--wrap">
           <Button
             onClick={async () => {
+              const namedCustomer = portalDraft.party_type === "customer" && portalDraft.party_name.trim() && !isUuid(portalDraft.customer_id)
+                ? customers.find((item) => includesLooseText(item.display_name || item.company_name, portalDraft.party_name))
+                : undefined;
+              const resolvedCustomerId = isUuid(portalDraft.customer_id)
+                ? portalDraft.customer_id
+                : namedCustomer?.id || "";
+              const selectedCustomer = customers.find((item) => item.id === resolvedCustomerId);
+              const customerSellerIds = selectedCustomer
+                ? [...new Set([
+                    ...(Array.isArray(selectedCustomer.seller_company_profile_ids) ? selectedCustomer.seller_company_profile_ids : []),
+                    ...(selectedCustomer.seller_company_profile_id ? [selectedCustomer.seller_company_profile_id] : []),
+                  ])]
+                : [];
+              const resolvedSellerCompanyId = portalDraft.party_type === "customer" && !isUuid(portalDraft.seller_company_profile_id)
+                ? customerSellerIds[0] || portalSellerOptions[0]?.id || ""
+                : portalDraft.seller_company_profile_id;
+              const draftForSave = portalDraft.party_type === "customer"
+                ? {
+                    ...portalDraft,
+                    customer_id: resolvedCustomerId,
+                    seller_company_profile_id: resolvedSellerCompanyId,
+                  }
+                : portalDraft;
+              if (draftForSave !== portalDraft) setPortalDraft(draftForSave);
               const missingPartyBinding =
-                portalDraft.party_type === "customer"
-                  ? !isUuid(portalDraft.customer_id)
-                  : !isUuid(portalDraft.vendor_id);
-              if (!portalDraft.party_name.trim() || missingPartyBinding) {
+                draftForSave.party_type === "customer"
+                  ? !isUuid(draftForSave.customer_id)
+                  : !isUuid(draftForSave.vendor_id);
+              if (!draftForSave.party_name.trim() || missingPartyBinding) {
                 setPortalStatus(s("portal.errors.partyRequired"));
                 return;
               }
-              if (!portalDraft.email.trim()) {
+              if (!draftForSave.email.trim()) {
                 setPortalStatus(s("portal.errors.emailRequired"));
                 return;
               }
               try {
-                const saved = await upsertPortalInvite(portalDraft);
+                const saved = await upsertPortalInvite(draftForSave);
                 setPortalInvites(await fetchPortalInvites());
                 setPortalDraft(createEmptyCloudPortalInvite());
                 setPortalBrandSearch("");

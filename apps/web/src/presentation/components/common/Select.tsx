@@ -8,16 +8,18 @@ type SelectProps = {
   value: string;
   options: SelectOption[];
   onChange: (value: string) => void;
+  name?: string;
+  autoComplete?: string;
   fieldClassName?: string;
   inputClassName?: string;
   disabled?: boolean;
 };
 
-export function Select({ label, value, options, onChange, fieldClassName = "", inputClassName = "", disabled = false }: SelectProps) {
+export function Select({ label, value, options, onChange, name, autoComplete, fieldClassName = "", inputClassName = "", disabled = false }: SelectProps) {
   return (
     <label className={`field ${fieldClassName}`.trim()}>
       {label ? <span className="field__label">{label}</span> : null}
-      <select className={`field__input ${inputClassName}`.trim()} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
+      <select className={`field__input ${inputClassName}`.trim()} name={name} autoComplete={autoComplete} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
