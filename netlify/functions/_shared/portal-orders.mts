@@ -169,7 +169,10 @@ const PORTAL_PRICE_LIST_SUPPLIER_PAGE_SIZE = 5000;
 const PORTAL_PRICE_LIST_ITEM_PAGE_SIZE = 5000;
 const PORTAL_SEARCH_REST_TIMEOUT_MS = 2800;
 const PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS = 900;
-const PORTAL_SEARCH_PRICE_REST_TIMEOUT_MS = 900;
+// Search results may need one tenant-scoped supplier-price lookup in addition
+// to the catalog query. The previous 900 ms budget caused valid prices to be
+// discarded on a cold Supabase request, leaving the UI at "Price on request".
+const PORTAL_SEARCH_PRICE_REST_TIMEOUT_MS = 3000;
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 
 type PortalLookupCacheEntry<T> = {
