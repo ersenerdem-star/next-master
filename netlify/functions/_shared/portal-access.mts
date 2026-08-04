@@ -185,6 +185,54 @@ async function fetchAllOptional<T>(supabaseUrl: string, serviceRoleKey: string, 
   }
 }
 
+function buildPortalCustomerHistoryParams(
+  organizationId: string,
+  customerId: string,
+  customerName: string,
+  sellerCompanyName: string,
+) {
+  const normalizedCustomerId = String(customerId || "").trim();
+  const normalizedCustomerName = String(customerName || "").trim();
+  const customerFilter = normalizedCustomerId && normalizedCustomerName
+    ? { or: `(customer_id.eq.${normalizedCustomerId},customer_name.eq.${normalizedCustomerName})` }
+    : normalizedCustomerId
+      ? { customer_id: `eq.${normalizedCustomerId}` }
+      : normalizedCustomerName
+        ? { customer_name: `eq.${normalizedCustomerName}` }
+        : {};
+
+  return {
+    organization_id: `eq.${organizationId}`,
+    ...customerFilter,
+    ...(sellerCompanyName ? { seller_company: `eq.${sellerCompanyName}` } : {}),
+    order: "updated_at.desc",
+    limit: "500",
+  };
+}
+
+async function fetchPortalHistoryRows(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  table: "sales_orders" | "invoices",
+  fullSelect: string,
+  compactSelect: string,
+  params: Record<string, string>,
+) {
+  // Keep line details when the database is healthy. Under catalog-import load,
+  // retry the same tenant-scoped query without the large JSON lines column so
+  // history remains visible instead of falling back to an empty workspace.
+  const fullRows = await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
+    select: fullSelect,
+    ...params,
+  });
+  if (fullRows.length) return fullRows;
+
+  return await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
+    select: compactSelect,
+    ...params,
+  });
+}
+
 async function fetchFirstOptional<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
   try {
     return await fetchFirst<T>(supabaseUrl, serviceRoleKey, table, params);
@@ -663,56 +711,41 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     // Older records may only have customer_name populated, so the seller filter
     // must be applied to both the id and name lookup paths.
     const sellerCompanyName = String(companyProfile?.company_name || "").trim();
-    const sellerCompanyFilter = sellerCompanyName ? { seller_company: `eq.${sellerCompanyName}` } : {};
+    const historyParams = buildPortalCustomerHistoryParams(
+      invite.organization_id,
+      customerId,
+      customerName,
+      sellerCompanyName,
+    );
+    const salesOrderFullSelect =
+      "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines";
+    const salesOrderCompactSelect =
+      "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at";
+    const invoiceFullSelect =
+      "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at,lines";
+    const invoiceCompactSelect =
+      "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at";
 
     const salesOrders = invite.access_can_view_orders
-      ? dedupeById([
-          ...(customerId
-            ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
-                select:
-                  "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
-                organization_id: `eq.${invite.organization_id}`,
-                customer_id: `eq.${customerId}`,
-                ...sellerCompanyFilter,
-                order: "updated_at.desc",
-              })
-            : []),
-          ...((!customerId || customerName)
-            ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
-                select:
-                  "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
-                organization_id: `eq.${invite.organization_id}`,
-                customer_name: `eq.${customerName}`,
-                ...sellerCompanyFilter,
-                order: "updated_at.desc",
-              })
-            : []),
-        ])
+      ? dedupeById(await fetchPortalHistoryRows(
+          supabaseUrl,
+          serviceRoleKey,
+          "sales_orders",
+          salesOrderFullSelect,
+          salesOrderCompactSelect,
+          historyParams,
+        ))
       : [];
 
     const invoices = invite.access_can_view_invoices
-      ? dedupeById([
-          ...(customerId
-            ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "invoices", {
-                select:
-                  "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
-                organization_id: `eq.${invite.organization_id}`,
-                customer_id: `eq.${customerId}`,
-                ...sellerCompanyFilter,
-                order: "updated_at.desc",
-              })
-            : []),
-          ...((!customerId || customerName)
-            ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "invoices", {
-                select:
-                  "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at,lines",
-                organization_id: `eq.${invite.organization_id}`,
-                customer_name: `eq.${customerName}`,
-                ...sellerCompanyFilter,
-                order: "updated_at.desc",
-              })
-            : []),
-        ])
+      ? dedupeById(await fetchPortalHistoryRows(
+          supabaseUrl,
+          serviceRoleKey,
+          "invoices",
+          invoiceFullSelect,
+          invoiceCompactSelect,
+          historyParams,
+        ))
       : [];
 
     const paymentsReceived = invite.access_can_view_payments
