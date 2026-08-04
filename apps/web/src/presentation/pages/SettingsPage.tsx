@@ -1346,8 +1346,11 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
         <div className="toolbar toolbar--wrap">
           <Button
             onClick={async () => {
-              const namedCustomer = portalDraft.party_type === "customer" && portalDraft.party_name.trim() && !isUuid(portalDraft.customer_id)
-                ? customers.find((item) => includesLooseText(item.display_name || item.company_name, portalDraft.party_name))
+              const namedCustomer = portalDraft.party_type === "customer" && !isUuid(portalDraft.customer_id)
+                ? customers.find((item) =>
+                    (portalDraft.party_name.trim() && includesLooseText(item.display_name || item.company_name, portalDraft.party_name))
+                    || (portalDraft.email.trim() && item.email.trim().toLowerCase() === portalDraft.email.trim().toLowerCase())
+                  )
                 : undefined;
               const resolvedCustomerId = isUuid(portalDraft.customer_id)
                 ? portalDraft.customer_id
@@ -1366,6 +1369,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                 ? {
                     ...portalDraft,
                     customer_id: resolvedCustomerId,
+                    party_name: portalDraft.party_name.trim() || selectedCustomer?.display_name || selectedCustomer?.company_name || "",
                     seller_company_profile_id: resolvedSellerCompanyId,
                   }
                 : portalDraft;
