@@ -1346,24 +1346,28 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
         <div className="toolbar toolbar--wrap">
           <Button
             onClick={async () => {
-              const namedCustomer = portalDraft.party_type === "customer" && !isUuid(portalDraft.customer_id)
-                ? customers.find((item) =>
+              // Resolve against the currently loaded organization records, not
+              // just the text/UUID stored in a browser-cached draft. A stale
+              // but syntactically valid UUID must not reach the portal API.
+              const selectedCustomer = portalDraft.party_type === "customer"
+                ? customers.find((item) => item.id === portalDraft.customer_id)
+                  || customers.find((item) =>
                     (portalDraft.party_name.trim() && includesLooseText(item.display_name || item.company_name, portalDraft.party_name))
                     || (portalDraft.email.trim() && item.email.trim().toLowerCase() === portalDraft.email.trim().toLowerCase())
                   )
                 : undefined;
-              const resolvedCustomerId = isUuid(portalDraft.customer_id)
-                ? portalDraft.customer_id
-                : namedCustomer?.id || "";
-              const selectedCustomer = customers.find((item) => item.id === resolvedCustomerId);
+              const resolvedCustomerId = selectedCustomer?.id || "";
               const customerSellerIds = selectedCustomer
                 ? [...new Set([
                     ...(Array.isArray(selectedCustomer.seller_company_profile_ids) ? selectedCustomer.seller_company_profile_ids : []),
                     ...(selectedCustomer.seller_company_profile_id ? [selectedCustomer.seller_company_profile_id] : []),
                   ])]
                 : [];
-              const resolvedSellerCompanyId = portalDraft.party_type === "customer" && !isUuid(portalDraft.seller_company_profile_id)
-                ? customerSellerIds[0] || portalSellerOptions[0]?.id || ""
+              const sellerIsAllowed = portalDraft.party_type === "customer"
+                && isUuid(portalDraft.seller_company_profile_id)
+                && customerSellerIds.includes(portalDraft.seller_company_profile_id);
+              const resolvedSellerCompanyId = portalDraft.party_type === "customer"
+                ? (sellerIsAllowed ? portalDraft.seller_company_profile_id : customerSellerIds[0] || portalSellerOptions[0]?.id || "")
                 : portalDraft.seller_company_profile_id;
               const draftForSave = portalDraft.party_type === "customer"
                 ? {
