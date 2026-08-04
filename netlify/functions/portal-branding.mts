@@ -3,6 +3,7 @@ import { json } from "./_shared/http.mts";
 import { buildPortalBranding, resolvePortalInvitePreview } from "./_shared/portal-access.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
+import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
 
 export default async (req: Request, _context: Context) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -30,6 +31,7 @@ export default async (req: Request, _context: Context) => {
     const { invite } = await resolvePortalInvitePreview(supabaseUrl, serviceRoleKey, sessionSecret, {
       email,
       sessionToken,
+      hostname: getPortalRequestHostname(req),
     });
     let branding;
     try {

@@ -40,6 +40,7 @@ export function createEmptyPortalInvite(): PortalInvite {
     party_name: "",
     customer_id: "",
     vendor_id: "",
+    seller_company_profile_id: "",
     email: "",
     contact_name: "",
     status: "draft",

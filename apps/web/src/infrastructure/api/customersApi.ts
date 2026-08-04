@@ -24,6 +24,7 @@ const CUSTOMER_COLUMNS = [
   "payment_terms",
   "contract_nr",
   "seller_company_profile_id",
+  "seller_company_profile_ids",
   "price_list_type",
   "portal_c_price_mode",
   "price_list_margin_percent",
@@ -53,7 +54,8 @@ function parseEmbeddedCustomerMeta(raw: unknown) {
     return {
       clean: text,
       meta: {} as {
-        seller_company_profile_id?: string;
+    seller_company_profile_id?: string;
+    seller_company_profile_ids?: string[];
         price_list_type?: LocalCustomer["price_list_type"];
         portal_c_price_mode?: LocalCustomer["portal_c_price_mode"];
         price_list_margin_percent?: number | null;
@@ -65,6 +67,7 @@ function parseEmbeddedCustomerMeta(raw: unknown) {
   try {
     const parsed = JSON.parse(jsonText) as {
       seller_company_profile_id?: string;
+      seller_company_profile_ids?: string[];
       price_list_type?: LocalCustomer["price_list_type"];
       portal_c_price_mode?: LocalCustomer["portal_c_price_mode"];
       price_list_margin_percent?: number | null;
@@ -123,6 +126,11 @@ function mapCustomerRow(row: Record<string, unknown>): LocalCustomer {
     payment_terms: String(row.payment_terms || "Cash in Advance"),
     contract_nr: String(row.contract_nr || ""),
     seller_company_profile_id: String(row.seller_company_profile_id || parsedCustomFields.meta.seller_company_profile_id || ""),
+    seller_company_profile_ids: Array.isArray(row.seller_company_profile_ids)
+      ? row.seller_company_profile_ids.map((value) => String(value || "").trim()).filter(Boolean)
+      : String(row.seller_company_profile_id || parsedCustomFields.meta.seller_company_profile_id || "").trim()
+        ? [String(row.seller_company_profile_id || parsedCustomFields.meta.seller_company_profile_id || "").trim()]
+        : [],
     price_list_type: String(row.price_list_type || parsedCustomFields.meta.price_list_type || "A") as LocalCustomer["price_list_type"],
     portal_c_price_mode: String(row.portal_c_price_mode || parsedCustomFields.meta.portal_c_price_mode || "standard") as LocalCustomer["portal_c_price_mode"],
     price_list_margin_percent:
@@ -144,6 +152,10 @@ function mapCustomerRow(row: Record<string, unknown>): LocalCustomer {
 
 function mapCustomerPayload(input: LocalCustomer, organizationId: string) {
   const sellerCompanyProfileId = isUuid(input.seller_company_profile_id) ? input.seller_company_profile_id : null;
+  const sellerCompanyProfileIds = [...new Set([
+    ...(Array.isArray(input.seller_company_profile_ids) ? input.seller_company_profile_ids : []),
+    ...(sellerCompanyProfileId ? [sellerCompanyProfileId] : []),
+  ].filter((value) => isUuid(String(value))).map((value) => String(value)))];
   return {
     organization_id: organizationId,
     customer_type: input.customer_type,
@@ -163,6 +175,7 @@ function mapCustomerPayload(input: LocalCustomer, organizationId: string) {
     payment_terms: input.payment_terms,
     contract_nr: input.contract_nr,
     seller_company_profile_id: sellerCompanyProfileId,
+    seller_company_profile_ids: sellerCompanyProfileIds,
     price_list_type: input.price_list_type,
     portal_c_price_mode: input.portal_c_price_mode || "standard",
     price_list_margin_percent: input.price_list_margin_percent,

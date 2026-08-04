@@ -14,6 +14,7 @@ import {
   verifyPortalPasswordResetToken,
 } from "./_shared/portal-security.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
+import { assertPortalTenantInvite, getPortalRequestHostname, resolvePortalSellerTenant } from "./_shared/portal-tenant.mts";
 
 export default async (req: Request, _context: Context) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -56,10 +57,23 @@ export default async (req: Request, _context: Context) => {
       return json({ error: "Reset link is invalid or expired." }, 401);
     }
 
-    const invite = await fetchPortalInviteByIdAndEmail(supabaseUrl, serviceRoleKey, payload.invite_id, payload.email);
+    const hostname = getPortalRequestHostname(req);
+    const tenant = await resolvePortalSellerTenant(supabaseUrl, serviceRoleKey, hostname);
+    if (!tenant || String(payload.organization_id || "") !== String(tenant.organization_id)) {
+      return json({ error: "Reset link is invalid or expired." }, 401);
+    }
+    const invite = await fetchPortalInviteByIdAndEmail(
+      supabaseUrl,
+      serviceRoleKey,
+      payload.invite_id,
+      payload.email,
+      tenant.organization_id,
+      tenant.seller_company_profile_id || "",
+    );
     if (!invite || invite.status === "disabled" || !invite.updated_at) {
       return json({ error: "Reset link is invalid or expired." }, 401);
     }
+    assertPortalTenantInvite(invite.organization_id, invite.seller_company_profile_id, tenant);
     if (String(invite.updated_at || "") !== String(payload.updated_at || "")) {
       return json({ error: "Reset link is invalid or expired." }, 401);
     }
@@ -98,7 +112,7 @@ export default async (req: Request, _context: Context) => {
       last_used_at: nowIso,
       updated_at: nowIso,
     };
-    const sessionToken = await createPortalSessionToken(sessionSecret, nextInvite.id, nextInvite.email);
+    const sessionToken = await createPortalSessionToken(sessionSecret, nextInvite.id, nextInvite.email, nextInvite.organization_id, hostname);
     let snapshot;
     try {
       snapshot = await buildPortalSnapshot(supabaseUrl, serviceRoleKey, nextInvite);

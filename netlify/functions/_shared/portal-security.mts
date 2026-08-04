@@ -41,6 +41,8 @@ export function isPortalInviteExpired(expiresAt: string | null | undefined) {
 type PortalSessionPayload = {
   invite_id: string;
   email: string;
+  organization_id?: string;
+  hostname?: string;
   exp: number;
 };
 
@@ -48,6 +50,8 @@ type PortalPasswordResetPayload = {
   purpose: "portal_password_reset";
   invite_id: string;
   email: string;
+  organization_id?: string;
+  hostname?: string;
   updated_at: string;
   exp: number;
 };
@@ -91,10 +95,18 @@ export function buildExpiredPortalSessionCookie() {
   return `${PORTAL_SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
 }
 
-export async function createPortalSessionToken(secret: string, inviteId: string, email: string) {
+export async function createPortalSessionToken(
+  secret: string,
+  inviteId: string,
+  email: string,
+  organizationId = "",
+  hostname = "",
+) {
   const payload: PortalSessionPayload = {
     invite_id: String(inviteId || ""),
     email: String(email || "").trim().toLowerCase(),
+    ...(String(organizationId || "").trim() ? { organization_id: String(organizationId).trim() } : {}),
+    ...(String(hostname || "").trim() ? { hostname: String(hostname).trim().toLowerCase() } : {}),
     exp: Math.floor(Date.now() / 1000) + PORTAL_SESSION_TTL_SECONDS,
   };
   const payloadText = JSON.stringify(payload);
@@ -120,11 +132,20 @@ export async function verifyPortalSessionToken(secret: string, token: string) {
   }
 }
 
-export async function createPortalPasswordResetToken(secret: string, inviteId: string, email: string, updatedAt: string) {
+export async function createPortalPasswordResetToken(
+  secret: string,
+  inviteId: string,
+  email: string,
+  updatedAt: string,
+  organizationId = "",
+  hostname = "",
+) {
   const payload: PortalPasswordResetPayload = {
     purpose: "portal_password_reset",
     invite_id: String(inviteId || ""),
     email: String(email || "").trim().toLowerCase(),
+    ...(String(organizationId || "").trim() ? { organization_id: String(organizationId).trim() } : {}),
+    ...(String(hostname || "").trim() ? { hostname: String(hostname).trim().toLowerCase() } : {}),
     updated_at: String(updatedAt || ""),
     exp: Math.floor(Date.now() / 1000) + PORTAL_PASSWORD_RESET_TTL_SECONDS,
   };

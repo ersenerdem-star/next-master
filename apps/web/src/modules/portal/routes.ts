@@ -1,5 +1,5 @@
 export { PortalLoginPage } from "../../presentation/pages/PortalLoginPage";
-export { PortalPage } from "../../presentation/pages/PortalPage";
+export { PortalPage } from "./pages/PortalPage";
 
 export const portalModuleRoutes = {
   Login: "PortalLoginPage",

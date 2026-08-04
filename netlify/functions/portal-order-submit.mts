@@ -6,6 +6,7 @@ import { submitPortalSalesOrder } from "./_shared/portal-orders.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
+import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
 
 const PORTAL_ORDER_ROW_MAX = 200;
 
@@ -52,6 +53,7 @@ export default async (req: Request, _context: Context) => {
       email,
       password,
       sessionToken,
+      hostname: getPortalRequestHostname(req),
     });
     const result = await submitPortalSalesOrder(supabaseUrl, serviceRoleKey, invite, {
       orderId: body?.orderId ? String(body.orderId) : undefined,

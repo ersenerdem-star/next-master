@@ -22,13 +22,18 @@ import {
 const CATALOG_OBSERVATION_REVIEW_PATH = "/catalog/observation-review";
 const CATALOG_ZF_STAGING_REVIEW_PATH = "/catalog/zf-group/staging-review";
 
+function isSellerPortalHostname(hostname: string) {
+  const normalized = hostname.trim().toLowerCase().split(":")[0];
+  return normalized.endsWith(".portal.next-master.com") && normalized !== "portal.next-master.com";
+}
+
 const CatalogObservationReviewPage = lazy(() => import("../presentation/pages/CatalogObservationReviewPage").then((module) => ({ default: module.CatalogObservationReviewPage })));
 const CatalogZfStagingReviewPage = lazy(() => import("../presentation/pages/CatalogZfStagingReviewPage").then((module) => ({ default: module.CatalogZfStagingReviewPage })));
 const DashboardPage = lazy(() => import("../presentation/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const InventoryPage = lazy(() => import("../presentation/pages/InventoryPage").then((module) => ({ default: module.InventoryPage })));
 const ItemsPage = lazy(() => import("../presentation/pages/ItemsPage").then((module) => ({ default: module.ItemsPage })));
 const LoginPage = lazy(() => import("../presentation/pages/LoginPage").then((module) => ({ default: module.LoginPage })));
-const PortalPage = lazy(() => import("../presentation/pages/PortalPage").then((module) => ({ default: module.PortalPage })));
+const PortalPage = lazy(() => import("../modules/portal/pages/PortalPage").then((module) => ({ default: module.PortalPage })));
 const PurchasesPage = lazy(() => import("../presentation/pages/PurchasesPage").then((module) => ({ default: module.PurchasesPage })));
 const ReportsPage = lazy(() => import("../presentation/pages/ReportsPage").then((module) => ({ default: module.ReportsPage })));
 const SalesPage = lazy(() => import("../presentation/pages/SalesPage").then((module) => ({ default: module.SalesPage })));
@@ -204,7 +209,10 @@ class PageErrorBoundary extends Component<
 
 export function App() {
   const { t } = useI18n();
-  const isPortalRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/portal");
+  const isPortalRoute = typeof window !== "undefined" && (
+    window.location.pathname.startsWith("/portal") ||
+    isSellerPortalHostname(window.location.hostname)
+  );
   const initialUiState = typeof window === "undefined" || isPortalRoute ? null : readPersistedAppUiState();
   const initialWorkspacePath = typeof window === "undefined" ? "/" : window.location.pathname;
   const initialAppSession = typeof window === "undefined" || isPortalRoute ? null : getCachedAppSessionSnapshot();

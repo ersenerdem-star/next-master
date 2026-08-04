@@ -1113,6 +1113,9 @@ async function fetchPortalCustomerForOrders(
       select,
       organization_id: `eq.${invite.organization_id}`,
       id: `eq.${customerId}`,
+      ...(String(invite.seller_company_profile_id || "").trim()
+        ? { seller_company_profile_id: `eq.${String(invite.seller_company_profile_id).trim()}` }
+        : {}),
       limit: "1",
     });
 
@@ -1141,7 +1144,7 @@ async function resolvePortalCustomer(
     throw new Error("This portal invite is missing its customer scope.");
   }
 
-  const cacheKey = `${invite.organization_id}::${String(invite.customer_id || "").trim()}`;
+  const cacheKey = `${invite.organization_id}::${String(invite.seller_company_profile_id || "").trim()}::${String(invite.customer_id || "").trim()}`;
   const cached = portalCustomerContextCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.value;
@@ -1154,7 +1157,7 @@ async function resolvePortalCustomer(
     throw new Error(`Customer card not found for ${invite.party_name}`);
   }
 
-  const sellerCompanyProfileId = String(customer.seller_company_profile_id || customerMeta.seller_company_profile_id || "").trim();
+  const sellerCompanyProfileId = String(invite.seller_company_profile_id || customer.seller_company_profile_id || customerMeta.seller_company_profile_id || "").trim();
   const portalCPriceMode =
     String(customer.portal_c_price_mode || customerMeta.portal_c_price_mode || "standard").trim().toLowerCase() ===
     "prefer_c_when_available"

@@ -24,6 +24,7 @@ const CUSTOMER_COLUMNS = [
   "payment_terms",
   "contract_nr",
   "seller_company_profile_id",
+  "seller_company_profile_ids",
   "price_list_type",
   "portal_c_price_mode",
   "price_list_margin_percent",
@@ -113,6 +114,7 @@ const PORTAL_INVITE_COLUMNS = [
   "party_name",
   "customer_id",
   "vendor_id",
+  "seller_company_profile_id",
   "email",
   "contact_name",
   "status",
@@ -238,8 +240,16 @@ async function sanitizeCustomerPayload(input: {
 }) {
   const next = { ...input.payload };
   const rawProfileId = String(next.seller_company_profile_id || "").trim();
-  if (!rawProfileId || !isUuid(rawProfileId)) {
+  const rawProfileIds = Array.isArray(next.seller_company_profile_ids)
+    ? next.seller_company_profile_ids.map((value) => String(value || "").trim()).filter(isUuid)
+    : [];
+  const requestedProfileIds = [...new Set([
+    ...rawProfileIds,
+    ...(isUuid(rawProfileId) ? [rawProfileId] : []),
+  ])];
+  if (!requestedProfileIds.length) {
     next.seller_company_profile_id = null;
+    next.seller_company_profile_ids = [];
     next.custom_fields = embedCustomerMeta(next.custom_fields, {
       seller_company_profile_id: null,
       price_list_type: String(next.price_list_type || ""),
@@ -253,15 +263,19 @@ async function sanitizeCustomerPayload(input: {
     buildRestUrl(input.supabaseUrl, "company_profiles", {
       select: "id",
       organization_id: `eq.${input.organizationId}`,
-      id: `eq.${rawProfileId}`,
-      limit: "1",
+      id: `in.(${requestedProfileIds.join(",")})`,
+      limit: "5000",
     }),
     {
       headers: serviceRoleHeaders(input.serviceRoleKey),
     },
   ).catch(() => []);
 
-  next.seller_company_profile_id = profile[0]?.id ? rawProfileId : null;
+  const allowedProfileIds = profile.map((row) => String(row.id || "").trim()).filter(Boolean);
+  next.seller_company_profile_ids = allowedProfileIds;
+  next.seller_company_profile_id = allowedProfileIds.includes(rawProfileId)
+    ? rawProfileId
+    : allowedProfileIds[0] || null;
   next.custom_fields = embedCustomerMeta(next.custom_fields, {
     seller_company_profile_id: String(next.seller_company_profile_id || ""),
     price_list_type: String(next.price_list_type || ""),
@@ -302,7 +316,7 @@ async function sanitizePortalInvitePayload(input: {
     }
     const customerRows = await getJson<Array<Record<string, unknown>>>(
       buildRestUrl(input.supabaseUrl, "customers", {
-        select: "id",
+        select: "id,seller_company_profile_id,seller_company_profile_ids,custom_fields",
         organization_id: `eq.${input.organizationId}`,
         id: `eq.${String(next.customer_id || "").trim()}`,
         limit: "1",
@@ -314,8 +328,26 @@ async function sanitizePortalInvitePayload(input: {
     if (!customerRows[0]?.id) {
       throw new Error("Selected customer was not found in this organization.");
     }
+    const customerMeta = parseEmbeddedCustomerMeta(customerRows[0].custom_fields).meta;
+    const customerSellerProfileIds = Array.isArray(customerRows[0].seller_company_profile_ids)
+      ? customerRows[0].seller_company_profile_ids.map((value) => String(value || "").trim()).filter(isUuid)
+      : [];
+    const primarySellerProfileId = String(
+      customerRows[0].seller_company_profile_id || customerMeta.seller_company_profile_id || "",
+    ).trim();
+    const requestedSellerProfileId = String(next.seller_company_profile_id || "").trim();
+    const resolvedSellerProfileId = requestedSellerProfileId && (
+      customerSellerProfileIds.includes(requestedSellerProfileId) || requestedSellerProfileId === primarySellerProfileId
+    )
+      ? requestedSellerProfileId
+      : primarySellerProfileId || customerSellerProfileIds[0] || "";
+    if (requestedSellerProfileId && resolvedSellerProfileId !== requestedSellerProfileId) {
+      throw new Error("Selected seller company is not enabled for this customer.");
+    }
+    next.seller_company_profile_id = resolvedSellerProfileId || null;
   } else {
     next.customer_id = "";
+    next.seller_company_profile_id = null;
     if (!isUuid(String(next.vendor_id || ""))) {
       throw new Error("Select a valid vendor before saving portal access.");
     }
@@ -550,6 +582,7 @@ function matchesPortalInviteIdentity(
   if (!partyType || !email) return false;
   if (String(row.party_type || "").trim() !== partyType) return false;
   if (String(row.email || "").trim().toLowerCase() !== email) return false;
+  if (partyType === "customer" && String(row.seller_company_profile_id || "").trim() !== String(payload.seller_company_profile_id || "").trim()) return false;
   if (partyType === "customer") {
     return String(row.customer_id || "").trim() === String(payload.customer_id || "").trim();
   }
@@ -716,6 +749,7 @@ async function setPortalInviteStatusRecord(input: {
 function stripCustomerOptionalFields(payload: Record<string, unknown>) {
   const next = { ...payload };
   delete next.seller_company_profile_id;
+  delete next.seller_company_profile_ids;
   delete next.portal_c_price_mode;
   delete next.price_list_margin_percent;
   return next;
@@ -782,7 +816,7 @@ async function upsertCustomerRecord(input: {
   } catch (primaryError) {
     const primaryMessage = getErrorMessage(primaryError, "Customer save failed").toLowerCase();
     if (primaryMessage.includes("seller_company_profile_id") || primaryMessage.includes("company profile")) {
-      const retryPayload = { ...input.payload, seller_company_profile_id: null };
+      const retryPayload = { ...input.payload, seller_company_profile_id: null, seller_company_profile_ids: [] };
       try {
         return await runWith(CUSTOMER_COLUMNS, retryPayload);
       } catch (retryError) {

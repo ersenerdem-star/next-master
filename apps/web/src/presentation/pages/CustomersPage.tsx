@@ -220,6 +220,32 @@ export function CustomersPage() {
     setDraft((current) => (current ? { ...current, ...patch } : current));
   }
 
+  function toggleSellerProfile(profileId: string, checked: boolean) {
+    if (!draft) return;
+    const currentIds = new Set(
+      (Array.isArray(draft.seller_company_profile_ids) ? draft.seller_company_profile_ids : [])
+        .filter((value) => companyProfiles.some((item) => item.id === value)),
+    );
+    if (checked) currentIds.add(profileId);
+    else currentIds.delete(profileId);
+    const nextIds = [...currentIds];
+    const nextPrimary = nextIds.includes(draft.seller_company_profile_id)
+      ? draft.seller_company_profile_id
+      : nextIds[0] || "";
+    updateDraft({ seller_company_profile_ids: nextIds, seller_company_profile_id: nextPrimary });
+  }
+
+  function selectAllSellerProfiles() {
+    if (!draft) return;
+    const allIds = companyProfiles.map((item) => item.id);
+    updateDraft({
+      seller_company_profile_ids: allIds,
+      seller_company_profile_id: draft.seller_company_profile_id && allIds.includes(draft.seller_company_profile_id)
+        ? draft.seller_company_profile_id
+        : allIds[0] || "",
+    });
+  }
+
   function handleSelectCustomer(customer: LocalCustomer) {
     setSelectedId(customer.id);
     setDraft(customer);
@@ -239,17 +265,17 @@ export function CustomersPage() {
     const normalizedSellerProfileId =
       draft.seller_company_profile_id && companyProfiles.some((item) => item.id === draft.seller_company_profile_id)
         ? draft.seller_company_profile_id
-        : "";
+        : (Array.isArray(draft.seller_company_profile_ids) ? draft.seller_company_profile_ids.find((value) => companyProfiles.some((item) => item.id === value)) || "" : "");
+    const normalizedSellerProfileIds = [...new Set([
+      ...(Array.isArray(draft.seller_company_profile_ids) ? draft.seller_company_profile_ids : []),
+      ...(normalizedSellerProfileId ? [normalizedSellerProfileId] : []),
+    ].filter((value) => companyProfiles.some((item) => item.id === value)))];
     if (!displayName) {
       actionFeedback.fail(t("sales.customers.displayOrCompanyRequired"));
       return;
     }
     if (!draft.price_list_type) {
       actionFeedback.fail(t("sales.customers.priceListRequired"));
-      return;
-    }
-    if (draft.price_list_type === "C") {
-      actionFeedback.fail(t("sales.customers.legacyCPriceListWarning"));
       return;
     }
     if (draft.price_list_type === "Other" && draft.price_list_margin_percent == null) {
@@ -264,6 +290,7 @@ export function CustomersPage() {
         ...draft,
         display_name: displayName,
         seller_company_profile_id: normalizedSellerProfileId,
+        seller_company_profile_ids: normalizedSellerProfileIds,
       });
       const rows = await fetchCustomers();
       setCustomers(rows);
@@ -276,6 +303,13 @@ export function CustomersPage() {
       setSaving(false);
     }
   }
+
+  const selectedSellerProfileIds = draft
+    ? [...new Set([
+        ...(Array.isArray(draft.seller_company_profile_ids) ? draft.seller_company_profile_ids : []),
+        ...(draft.seller_company_profile_id ? [draft.seller_company_profile_id] : []),
+      ])].filter((value) => companyProfiles.some((item) => item.id === value))
+    : [];
 
   function handleCancel() {
     if (selectedCustomer) {
@@ -341,7 +375,7 @@ export function CustomersPage() {
             <Button variant="secondary" className="danger-button" onClick={() => void handleDelete()}>
               {t("common.delete")}
             </Button>
-            <Button onClick={() => void handleSave()} busy={saving} busyLabel={t("common.saving")} disabled={legacyCPriceList}>
+            <Button onClick={() => void handleSave()} busy={saving} busyLabel={t("common.saving")}>
               {t("sales.customers.save")}
             </Button>
           </div>
@@ -496,27 +530,64 @@ export function CustomersPage() {
                   <div className="customers-form-row">
                     <div className="customers-form-row__label">{t("sales.customers.mainSeller")}</div>
                     <div className="customers-field-wrap customers-field-wrap--wide">
-                      <label className="field customer-field">
-                        <select
-                          className="field__input"
-                          value={draft.seller_company_profile_id}
-                          onChange={(event) => updateDraft({ seller_company_profile_id: event.target.value })}
-                        >
-                          <option value="">{t("sales.customers.defaultCompanyProfile")}</option>
-                          {companyProfiles.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {item.companyName}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <div className="portal-brand-scope portal-brand-scope--customer-sellers">
+                        <div className="portal-brand-scope__header">
+                          <div>
+                            <span className="field__help">{t("sales.customers.sellerScopeHelp")}</span>
+                          </div>
+                          <span className="portal-brand-scope__status portal-brand-scope__status--limited">
+                            {t("sales.customers.sellerScopeSelected", { count: selectedSellerProfileIds.length })}
+                          </span>
+                        </div>
+                        <div className="portal-brand-scope__actions">
+                          <Button variant="secondary" className="button--compact" onClick={selectAllSellerProfiles} disabled={!companyProfiles.length || selectedSellerProfileIds.length === companyProfiles.length}>
+                            {t("sales.customers.selectAllSellers")}
+                          </Button>
+                          <Button variant="secondary" className="button--compact" onClick={() => updateDraft({ seller_company_profile_ids: [], seller_company_profile_id: "" })} disabled={!selectedSellerProfileIds.length}>
+                            {t("sales.customers.clearSellerScope")}
+                          </Button>
+                        </div>
+                        <div className="portal-brand-scope__list" role="group" aria-label={t("sales.customers.sellerScope") }>
+                          {companyProfiles.length ? companyProfiles.map((item) => (
+                            <label key={item.id} className="portal-brand-scope__option">
+                              <input
+                                type="checkbox"
+                                checked={selectedSellerProfileIds.includes(item.id)}
+                                onChange={(event) => toggleSellerProfile(item.id, event.target.checked)}
+                              />
+                              <span>{item.companyName}</span>
+                            </label>
+                          )) : <span className="portal-brand-scope__empty">{t("sales.customers.noCompanyProfiles")}</span>}
+                        </div>
+                        <label className="field customer-field">
+                          <span className="field__label">{t("sales.customers.defaultCompanyProfile")}</span>
+                          <select
+                            className="field__input"
+                            value={draft.seller_company_profile_id}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              updateDraft({
+                                seller_company_profile_id: value,
+                                seller_company_profile_ids: value && !selectedSellerProfileIds.includes(value)
+                                  ? [...selectedSellerProfileIds, value]
+                                  : selectedSellerProfileIds,
+                              });
+                            }}
+                          >
+                            <option value="">{t("sales.customers.defaultCompanyProfile")}</option>
+                            {companyProfiles.filter((item) => selectedSellerProfileIds.includes(item.id)).map((item) => (
+                              <option key={item.id} value={item.id}>{item.companyName}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
                     </div>
                   </div>
                   <div className="customers-form-row">
                     <div className="customers-form-row__label">{t("sales.customers.priceList")}</div>
                     <div className="customers-field-wrap customers-field-wrap--wide">
                       {legacyCPriceList ? (
-                        <Input value={t("sales.customers.legacyCPriceList")} onChange={() => undefined} disabled />
+                        <Input value={t("sales.customers.legacyPricingProfile")} onChange={() => undefined} disabled />
                       ) : (
                         <label className="field customer-field">
                           <select
@@ -540,7 +611,7 @@ export function CustomersPage() {
                     </div>
                   </div>
                   {legacyCPriceList ? (
-                    <div className="warning-text">{t("sales.customers.legacyCPriceListWarning")}</div>
+                    <div className="warning-text">{t("sales.customers.legacyPricingProfileWarning")}</div>
                   ) : draft.price_list_type ? (
                     <div className="customers-form-row">
                       <div className="customers-form-row__label">{t("sales.customers.cPriceRule")}</div>

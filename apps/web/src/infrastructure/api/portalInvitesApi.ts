@@ -13,6 +13,7 @@ function mapPortalInviteRow(row: Record<string, unknown>): PortalInvite {
     party_name: String(row.party_name || ""),
     customer_id: String(row.customer_id || ""),
     vendor_id: String(row.vendor_id || ""),
+    seller_company_profile_id: String(row.seller_company_profile_id || ""),
     email: String(row.email || ""),
     contact_name: String(row.contact_name || ""),
     status: String(row.status || "draft") as PortalInvite["status"],
@@ -39,6 +40,9 @@ function mapPortalInvitePayload(input: PortalInvite, organizationId: string) {
     party_name: input.party_name.trim(),
     customer_id: input.party_type === "customer" && isUuid(input.customer_id) ? input.customer_id : null,
     vendor_id: input.party_type === "vendor" && isUuid(input.vendor_id) ? input.vendor_id : null,
+    seller_company_profile_id: input.party_type === "customer" && isUuid(input.seller_company_profile_id)
+      ? input.seller_company_profile_id
+      : null,
     email: input.email.trim(),
     contact_name: input.contact_name.trim(),
     status: input.status,

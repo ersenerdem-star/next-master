@@ -5,6 +5,8 @@ import { writePortalAuditEvent } from "./_shared/portal-audit.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { createPortalPasswordResetToken } from "./_shared/portal-security.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
+import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
+import { resolvePortalSellerTenant } from "./_shared/portal-tenant.mts";
 
 const GENERIC_MESSAGE = "If the portal email exists, a reset link has been sent.";
 
@@ -62,7 +64,18 @@ export default async (req: Request, _context: Context) => {
       });
     }
 
-    const invite = await fetchPortalInviteByEmail(supabaseUrl, serviceRoleKey, email).catch(() => null);
+    const hostname = getPortalRequestHostname(req);
+    const tenant = await resolvePortalSellerTenant(supabaseUrl, serviceRoleKey, hostname);
+    if (!tenant && hostname && hostname !== "localhost" && hostname !== "127.0.0.1") {
+      return json({ ok: true, message: GENERIC_MESSAGE });
+    }
+    const invite = await fetchPortalInviteByEmail(
+      supabaseUrl,
+      serviceRoleKey,
+      email,
+      tenant?.organization_id || "",
+      tenant?.seller_company_profile_id || "",
+    ).catch(() => null);
     if (!invite || invite.status === "disabled" || !invite.updated_at) {
       await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
         email,
@@ -73,7 +86,7 @@ export default async (req: Request, _context: Context) => {
       return json({ ok: true, message: GENERIC_MESSAGE });
     }
 
-    const resetToken = await createPortalPasswordResetToken(sessionSecret, invite.id, invite.email, invite.updated_at);
+    const resetToken = await createPortalPasswordResetToken(sessionSecret, invite.id, invite.email, invite.updated_at, invite.organization_id, hostname);
     const resetUrl = new URL("/portal", req.url);
     resetUrl.searchParams.set("email", invite.email);
     resetUrl.searchParams.set("reset", resetToken);

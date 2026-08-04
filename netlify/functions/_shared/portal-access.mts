@@ -1,6 +1,7 @@
 import { buildRestUrl, getJson, serviceRoleHeaders } from "./http.mts";
 import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./catalog-standardization.mts";
 import { createPortalSessionToken, hashPortalToken, verifyPortalSessionToken } from "./portal-security.mts";
+import { assertPortalTenantInvite, isLocalPortalHostname, resolvePortalSellerTenant, type PortalSellerTenant } from "./portal-tenant.mts";
 
 export type PortalInviteRow = {
   id: string;
@@ -9,6 +10,7 @@ export type PortalInviteRow = {
   party_name: string;
   customer_id: string | null;
   vendor_id: string | null;
+  seller_company_profile_id?: string | null;
   email: string;
   contact_name: string;
   status: "draft" | "invited" | "active" | "disabled";
@@ -25,9 +27,9 @@ export type PortalInviteRow = {
 };
 
 const PORTAL_INVITE_SELECT =
-  "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders,allowed_brand_ids,updated_at";
+  "id,organization_id,party_type,party_name,customer_id,vendor_id,seller_company_profile_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders,allowed_brand_ids,updated_at";
 const PORTAL_INVITE_SELECT_ACCESS =
-  "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders,updated_at";
+  "id,organization_id,party_type,party_name,customer_id,vendor_id,seller_company_profile_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders,updated_at";
 const PORTAL_INVITE_SELECT_LEGACY =
   "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,updated_at";
 
@@ -113,9 +115,11 @@ function normalizePortalInviteRow(row: PortalInviteRow | null | undefined) {
   } satisfies PortalInviteRow;
 }
 
-async function fetchPortalInvitesByEmail(supabaseUrl: string, serviceRoleKey: string, email: string) {
+async function fetchPortalInvitesByEmail(supabaseUrl: string, serviceRoleKey: string, email: string, organizationId = "", sellerCompanyProfileId = "") {
   const params = {
     email: `ilike.${String(email || "").trim().toLowerCase()}`,
+    ...(String(organizationId || "").trim() ? { organization_id: `eq.${String(organizationId).trim()}` } : {}),
+    ...(String(sellerCompanyProfileId || "").trim() ? { seller_company_profile_id: `eq.${String(sellerCompanyProfileId).trim()}` } : {}),
     order: "updated_at.desc",
     limit: "20",
   };
@@ -149,8 +153,8 @@ async function fetchPortalInvitesByEmail(supabaseUrl: string, serviceRoleKey: st
   }
 }
 
-async function fetchPortalInviteByIdEmail(supabaseUrl: string, serviceRoleKey: string, inviteId: string, email: string) {
-  const rows = await fetchPortalInvitesByEmail(supabaseUrl, serviceRoleKey, email);
+async function fetchPortalInviteByIdEmail(supabaseUrl: string, serviceRoleKey: string, inviteId: string, email: string, organizationId = "", sellerCompanyProfileId = "") {
+  const rows = await fetchPortalInvitesByEmail(supabaseUrl, serviceRoleKey, email, organizationId, sellerCompanyProfileId);
   const normalizedInviteId = String(inviteId || "").trim();
   return rows.find((row) => String(row.id || "").trim() === normalizedInviteId) || null;
 }
@@ -204,6 +208,9 @@ async function fetchPortalCustomerRecord(
       select,
       organization_id: `eq.${organizationId}`,
       id: `eq.${customerId}`,
+      ...(String(invite.seller_company_profile_id || "").trim()
+        ? { seller_company_profile_id: `eq.${String(invite.seller_company_profile_id).trim()}` }
+        : {}),
       limit: "1",
     });
 
@@ -464,15 +471,15 @@ function mapPurchaseOrderLines(lines: unknown) {
   });
 }
 
-async function fetchPortalInviteByEmailPreview(supabaseUrl: string, serviceRoleKey: string, email: string) {
+async function fetchPortalInviteByEmailPreview(supabaseUrl: string, serviceRoleKey: string, email: string, organizationId = "", sellerCompanyProfileId = "") {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   if (!normalizedEmail) return null;
-  const invites = await fetchPortalInvitesByEmail(supabaseUrl, serviceRoleKey, normalizedEmail);
+  const invites = await fetchPortalInvitesByEmail(supabaseUrl, serviceRoleKey, normalizedEmail, organizationId, sellerCompanyProfileId);
   return invites.find((invite) => isPortalInviteUsable(invite)) || invites.find((invite) => isPortalInvitePasswordReady(invite)) || null;
 }
 
-export async function fetchPortalInviteByEmail(supabaseUrl: string, serviceRoleKey: string, email: string) {
-  return fetchPortalInviteByEmailPreview(supabaseUrl, serviceRoleKey, email);
+export async function fetchPortalInviteByEmail(supabaseUrl: string, serviceRoleKey: string, email: string, organizationId = "", sellerCompanyProfileId = "") {
+  return fetchPortalInviteByEmailPreview(supabaseUrl, serviceRoleKey, email, organizationId, sellerCompanyProfileId);
 }
 
 export async function fetchPortalInviteByIdAndEmail(
@@ -480,18 +487,20 @@ export async function fetchPortalInviteByIdAndEmail(
   serviceRoleKey: string,
   inviteId: string,
   email: string,
+  organizationId = "",
+  sellerCompanyProfileId = "",
 ) {
-  return fetchPortalInviteByIdEmail(supabaseUrl, serviceRoleKey, inviteId, email);
+  return fetchPortalInviteByIdEmail(supabaseUrl, serviceRoleKey, inviteId, email, organizationId, sellerCompanyProfileId);
 }
 
-export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: string, email: string, password: string) {
+export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: string, email: string, password: string, organizationId = "", sellerCompanyProfileId = "") {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   const tokenHash = await hashPortalToken(password);
   let invite: PortalInviteRow | null = null;
   let fallbackInvites: PortalInviteRow[] = [];
 
   try {
-    fallbackInvites = await fetchPortalInvitesByEmail(supabaseUrl, serviceRoleKey, normalizedEmail);
+    fallbackInvites = await fetchPortalInvitesByEmail(supabaseUrl, serviceRoleKey, normalizedEmail, organizationId, sellerCompanyProfileId);
     invite =
       fallbackInvites.find(
         (row) =>
@@ -529,11 +538,17 @@ export async function resolvePortalInvite(
     password?: string | null;
     token?: string | null;
     sessionToken?: string | null;
+    hostname?: string | null;
   },
 ) {
   const providedPassword = String(auth.password || "").trim();
   const sessionToken = String(auth.sessionToken || "").trim();
   const providedEmail = String(auth.email || "").trim().toLowerCase();
+  const hostname = String(auth.hostname || "").trim().toLowerCase();
+  const tenant = await resolvePortalSellerTenant(supabaseUrl, serviceRoleKey, hostname);
+  if (!tenant && hostname && !isLocalPortalHostname(hostname)) {
+    throw new Error("This seller portal domain is not configured.");
+  }
 
   if (!providedPassword && sessionToken) {
     const session = await verifyPortalSessionToken(sessionSecret, sessionToken);
@@ -541,14 +556,25 @@ export async function resolvePortalInvite(
       throw new Error("Portal session expired. Sign in again.");
     }
 
-    const invite = await fetchPortalInviteByIdEmail(supabaseUrl, serviceRoleKey, session.invite_id, session.email);
+    if (tenant && String(session.organization_id || "") !== String(tenant.organization_id)) {
+      throw new Error("Portal session belongs to another seller domain. Sign in again.");
+    }
+    const invite = await fetchPortalInviteByIdEmail(
+      supabaseUrl,
+      serviceRoleKey,
+      session.invite_id,
+      session.email,
+      String(session.organization_id || tenant?.organization_id || ""),
+      String(tenant?.seller_company_profile_id || ""),
+    );
 
     if (!isPortalInviteUsable(invite)) {
       throw new Error("Portal session is no longer active.");
     }
 
+    assertPortalTenantInvite(invite.organization_id, invite.seller_company_profile_id, tenant);
     await touchPortalInvite(supabaseUrl, serviceRoleKey, invite);
-    const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email);
+    const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname);
     return { invite, sessionToken: nextSessionToken };
   }
 
@@ -557,8 +583,16 @@ export async function resolvePortalInvite(
     throw new Error("Email and password are required");
   }
 
-  const invite = await validatePortalInvite(supabaseUrl, serviceRoleKey, email, providedPassword);
-  const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email);
+  const invite = await validatePortalInvite(
+    supabaseUrl,
+    serviceRoleKey,
+    email,
+    providedPassword,
+    tenant?.organization_id || "",
+    tenant?.seller_company_profile_id || "",
+  );
+  assertPortalTenantInvite(invite.organization_id, invite.seller_company_profile_id, tenant);
+  const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname);
   return { invite, sessionToken: nextSessionToken };
 }
 
@@ -569,33 +603,58 @@ export async function resolvePortalInvitePreview(
   auth: {
     email?: string | null;
     sessionToken?: string | null;
+    hostname?: string | null;
   },
 ) {
   const sessionToken = String(auth.sessionToken || "").trim();
+  const hostname = String(auth.hostname || "").trim().toLowerCase();
+  const tenant = await resolvePortalSellerTenant(supabaseUrl, serviceRoleKey, hostname);
+  if (!tenant && hostname && !isLocalPortalHostname(hostname)) {
+    throw new Error("This seller portal domain is not configured.");
+  }
   if (sessionToken) {
     const session = await verifyPortalSessionToken(sessionSecret, sessionToken);
     if (!session) {
       throw new Error("Portal session expired. Sign in again.");
     }
-    const invite = await fetchPortalInviteByIdEmail(supabaseUrl, serviceRoleKey, session.invite_id, session.email);
+    if (tenant && String(session.organization_id || "") !== String(tenant.organization_id)) {
+      throw new Error("Portal session belongs to another seller domain. Sign in again.");
+    }
+    const invite = await fetchPortalInviteByIdEmail(
+      supabaseUrl,
+      serviceRoleKey,
+      session.invite_id,
+      session.email,
+      String(session.organization_id || tenant?.organization_id || ""),
+      String(tenant?.seller_company_profile_id || ""),
+    );
     if (!isPortalInviteUsable(invite)) {
       throw new Error("Portal session is no longer active.");
     }
-    const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email);
+    assertPortalTenantInvite(invite.organization_id, invite.seller_company_profile_id, tenant);
+    const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname);
     return { invite, sessionToken: nextSessionToken };
   }
 
-  const invite = await fetchPortalInviteByEmailPreview(supabaseUrl, serviceRoleKey, auth.email || "");
+  const invite = await fetchPortalInviteByEmailPreview(
+    supabaseUrl,
+    serviceRoleKey,
+    auth.email || "",
+    tenant?.organization_id || "",
+    tenant?.seller_company_profile_id || "",
+  );
   if (!invite) {
     throw new Error("Portal invite not found or disabled");
   }
+  assertPortalTenantInvite(invite.organization_id, invite.seller_company_profile_id, tenant);
   return { invite, sessionToken: "" };
 }
 
 export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {
   if (invite.party_type === "customer") {
     const customer = await fetchPortalCustomerRecord(supabaseUrl, serviceRoleKey, invite.organization_id, invite);
-    const { customerMeta, sellerCompanyProfileId, portalCPriceMode } = readCustomerPortalMetadata(customer);
+    const { customerMeta, sellerCompanyProfileId: customerSellerCompanyProfileId, portalCPriceMode } = readCustomerPortalMetadata(customer);
+    const sellerCompanyProfileId = String(invite.seller_company_profile_id || customerSellerCompanyProfileId || "").trim();
     const companyProfile = await fetchPortalCompanyProfile(supabaseUrl, serviceRoleKey, invite.organization_id, sellerCompanyProfileId);
 
     const customerName = String(customer?.display_name || customer?.company_name || invite.party_name);

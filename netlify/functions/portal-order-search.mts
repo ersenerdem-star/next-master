@@ -6,6 +6,7 @@ import { searchPortalCatalog } from "./_shared/portal-orders.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
+import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
 
 const PORTAL_SEARCH_QUERY_MAX_LENGTH = 80;
 
@@ -51,6 +52,7 @@ export default async (req: Request, _context: Context) => {
       email,
       password,
       sessionToken,
+      hostname: getPortalRequestHostname(req),
     });
     const result = await searchPortalCatalog(supabaseUrl, serviceRoleKey, invite, query, brand);
     void writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {

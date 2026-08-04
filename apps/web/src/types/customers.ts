@@ -21,6 +21,7 @@ export type LocalCustomer = {
   payment_terms: string;
   contract_nr: string;
   seller_company_profile_id: string;
+  seller_company_profile_ids: string[];
   price_list_type: CustomerPriceList;
   portal_c_price_mode: CustomerPortalCPriceMode;
   price_list_margin_percent: number | null;

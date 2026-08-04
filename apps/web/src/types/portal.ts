@@ -14,6 +14,7 @@ export type PortalInvite = {
   party_name: string;
   customer_id: string;
   vendor_id: string;
+  seller_company_profile_id: string;
   email: string;
   contact_name: string;
   status: PortalInviteStatus;

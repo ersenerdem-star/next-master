@@ -2,6 +2,7 @@ import type { Config, Context } from "@netlify/functions";
 import { requireCallerProfile } from "./_shared/auth.mts";
 import { buildRestUrl, getJson, json, serviceRoleHeaders } from "./_shared/http.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
+import { resolvePortalSellerDomainForSeller } from "./_shared/portal-tenant.mts";
 
 type PortalInviteRow = {
   id: string;
@@ -10,6 +11,7 @@ type PortalInviteRow = {
   party_name: string;
   customer_id?: string | null;
   vendor_id?: string | null;
+  seller_company_profile_id?: string | null;
   email: string;
   contact_name: string | null;
   status: "draft" | "invited" | "active" | "disabled";
@@ -17,6 +19,7 @@ type PortalInviteRow = {
 };
 
 type EmailTemplateRow = {
+  template_key?: string | null;
   subject: string | null;
   body: string | null;
 };
@@ -26,20 +29,89 @@ type OutboundEmailRow = {
 };
 
 const PORTAL_INVITE_SELECT =
-  "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,updated_at";
+  "id,organization_id,party_type,party_name,customer_id,vendor_id,seller_company_profile_id,email,contact_name,status,invite_token_hash,updated_at";
 
-const DEFAULT_TEMPLATES = {
+type InviteLocale = "en" | "tr" | "de" | "ru";
+
+const DEFAULT_TEMPLATES: Record<"customer_portal_invite" | "vendor_portal_invite", Record<InviteLocale, { subject: string; body: string }>> = {
   customer_portal_invite: {
-    subject: "Portal access for {{party_name}}",
-    body:
-      "Hello {{contact_name}},\n\nYour customer portal access is ready for {{party_name}}.\n\nPortal link: {{portal_link}}\nPassword: Use the password set by your admin.\n\nYou can review account balance, invoices, payments, and orders based on your permissions.\n\nRegards,\n{{company_name}}",
+    en: {
+      subject: "Secure portal access for {{party_name}}",
+      body:
+        "Dear {{contact_name}},\n\nWe are pleased to confirm that your secure customer portal access for {{party_name}} is ready.\n\nPortal: {{portal_link}}\n\nPlease use the password provided by your account administrator. For your security, do not share your password or this message.\n\nThrough the portal you can review your account information, orders, invoices, payments, and the product information available to your account.\n\nIf you did not expect this invitation, please contact your account representative before signing in.\n\nKind regards,\n{{seller_portal_label}}\n{{company_name}}",
+    },
+    tr: {
+      subject: "Güvenli portal erişiminiz hazır — {{party_name}}",
+      body:
+        "Sayın {{contact_name}},\n\n{{party_name}} için güvenli müşteri portalı erişiminiz hazırdır.\n\nPortal bağlantısı: {{portal_link}}\n\nLütfen hesap yöneticiniz tarafından belirlenen şifreyi kullanın. Güvenliğiniz için şifrenizi veya bu mesajı başkalarıyla paylaşmayın.\n\nPortal üzerinden hesabınıza tanımlı bilgileri, siparişleri, faturaları, ödemeleri ve erişiminize açık ürün bilgilerini inceleyebilirsiniz.\n\nBu daveti beklemiyorsanız giriş yapmadan önce hesap temsilcinizle iletişime geçin.\n\nSaygılarımızla,\n{{seller_portal_label}}\n{{company_name}}",
+    },
+    de: {
+      subject: "Sicherer Portalzugang für {{party_name}}",
+      body:
+        "Guten Tag {{contact_name}},\n\nIhr sicherer Kundenportal-Zugang für {{party_name}} ist jetzt eingerichtet.\n\nPortal: {{portal_link}}\n\nBitte verwenden Sie das von Ihrem Administrator festgelegte Passwort. Geben Sie Ihr Passwort und diese Nachricht aus Sicherheitsgründen nicht weiter.\n\nIm Portal können Sie die für Ihr Konto verfügbaren Kontoinformationen, Bestellungen, Rechnungen, Zahlungen und Produktinformationen einsehen.\n\nWenn Sie diese Einladung nicht erwartet haben, wenden Sie sich bitte vor der Anmeldung an Ihren Ansprechpartner.\n\nMit freundlichen Grüßen,\n{{seller_portal_label}}\n{{company_name}}",
+    },
+    ru: {
+      subject: "Безопасный доступ к порталу — {{party_name}}",
+      body:
+        "Здравствуйте, {{contact_name}}!\n\nВаш безопасный доступ к клиентскому порталу {{party_name}} готов.\n\nПортал: {{portal_link}}\n\nИспользуйте пароль, установленный администратором вашей учетной записи. В целях безопасности не передавайте пароль или это сообщение другим лицам.\n\nВ портале доступны данные вашей учетной записи, заказы, счета, платежи и информация о товарах в соответствии с предоставленными правами доступа.\n\nЕсли вы не ожидали это приглашение, свяжитесь с вашим менеджером до входа в систему.\n\nС уважением,\n{{seller_portal_label}}\n{{company_name}}",
+    },
   },
   vendor_portal_invite: {
-    subject: "Vendor portal access for {{party_name}}",
-    body:
-      "Hello {{contact_name}},\n\nYour vendor portal access is ready for {{party_name}}.\n\nPortal link: {{portal_link}}\nPassword: Use the password set by your admin.\n\nYou can review purchase orders, bills, and payment activity based on your permissions.\n\nRegards,\n{{company_name}}",
+    en: {
+      subject: "Secure supplier portal access for {{party_name}}",
+      body:
+        "Dear {{contact_name}},\n\nYour secure supplier portal access for {{party_name}} is ready.\n\nPortal: {{portal_link}}\n\nPlease use the password provided by your account administrator. For your security, do not share your password or this message.\n\nThe portal provides access to the purchasing and payment information permitted for your account.\n\nIf you did not expect this invitation, please contact your account representative before signing in.\n\nKind regards,\n{{seller_portal_label}}\n{{company_name}}",
+    },
+    tr: {
+      subject: "Güvenli tedarikçi portalı erişiminiz hazır — {{party_name}}",
+      body:
+        "Sayın {{contact_name}},\n\n{{party_name}} için güvenli tedarikçi portalı erişiminiz hazırdır.\n\nPortal bağlantısı: {{portal_link}}\n\nLütfen hesap yöneticiniz tarafından belirlenen şifreyi kullanın. Güvenliğiniz için şifrenizi veya bu mesajı başkalarıyla paylaşmayın.\n\nPortal üzerinden hesabınıza tanımlı satın alma ve ödeme bilgilerine erişebilirsiniz.\n\nBu daveti beklemiyorsanız giriş yapmadan önce hesap temsilcinizle iletişime geçin.\n\nSaygılarımızla,\n{{seller_portal_label}}\n{{company_name}}",
+    },
+    de: {
+      subject: "Sicherer Lieferantenportal-Zugang für {{party_name}}",
+      body:
+        "Guten Tag {{contact_name}},\n\nIhr sicherer Lieferantenportal-Zugang für {{party_name}} ist jetzt eingerichtet.\n\nPortal: {{portal_link}}\n\nBitte verwenden Sie das von Ihrem Administrator festgelegte Passwort. Geben Sie Ihr Passwort und diese Nachricht aus Sicherheitsgründen nicht weiter.\n\nIm Portal stehen Ihnen die für Ihr Konto freigegebenen Einkaufs- und Zahlungsinformationen zur Verfügung.\n\nWenn Sie diese Einladung nicht erwartet haben, wenden Sie sich bitte vor der Anmeldung an Ihren Ansprechpartner.\n\nMit freundlichen Grüßen,\n{{seller_portal_label}}\n{{company_name}}",
+    },
+    ru: {
+      subject: "Безопасный доступ поставщика к порталу — {{party_name}}",
+      body:
+        "Здравствуйте, {{contact_name}}!\n\nВаш безопасный доступ поставщика к порталу {{party_name}} готов.\n\nПортал: {{portal_link}}\n\nИспользуйте пароль, установленный администратором вашей учетной записи. В целях безопасности не передавайте пароль или это сообщение другим лицам.\n\nВ портале доступны разрешенные для вашей учетной записи закупочные и платежные данные.\n\nЕсли вы не ожидали это приглашение, свяжитесь с вашим менеджером до входа в систему.\n\nС уважением,\n{{seller_portal_label}}\n{{company_name}}",
+    },
   },
-} as const;
+};
+
+function normalizeInviteLocale(value: unknown): InviteLocale {
+  const language = String(value || "").trim().toLowerCase();
+  if (language === "tr" || language.startsWith("turk") || language.includes("türk")) return "tr";
+  if (language === "de" || language.startsWith("germ") || language.includes("deutsch")) return "de";
+  if (language === "ru" || language.startsWith("russ") || language.includes("рус")) return "ru";
+  return "en";
+}
+
+async function resolveRecipientLocale(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+  partyType: "customer" | "vendor";
+  customerId: string;
+  vendorId: string;
+}) {
+  const table = input.partyType === "customer" ? "customers" : "vendors";
+  const id = input.partyType === "customer" ? input.customerId : input.vendorId;
+  if (!id) return "en" satisfies InviteLocale;
+
+  const rows = await getJson<Array<{ language?: string | null }>>(
+    buildRestUrl(input.supabaseUrl, table, {
+      select: "language",
+      organization_id: `eq.${input.organizationId}`,
+      id: `eq.${id}`,
+      limit: "1",
+    }),
+    { headers: serviceRoleHeaders(input.serviceRoleKey) },
+  ).catch(() => []);
+
+  return normalizeInviteLocale(rows[0]?.language);
+}
 
 function hasConfiguredPortalPassword(invite: PortalInviteRow | null | undefined) {
   if (!invite) return false;
@@ -273,28 +345,68 @@ export default async (req: Request, _context: Context) => {
     }
 
     const templateKey = invite.party_type === "vendor" ? "vendor_portal_invite" : "customer_portal_invite";
-    const templateRows = await getJson<Array<EmailTemplateRow>>(
+    const inviteLocale = await resolveRecipientLocale({
+      supabaseUrl: caller.supabaseUrl,
+      serviceRoleKey: caller.serviceRoleKey,
+      organizationId: caller.profile.organization_id,
+      partyType: invite.party_type,
+      customerId: String(invite.customer_id || "").trim(),
+      vendorId: String(invite.vendor_id || "").trim(),
+    });
+
+    // A locale-specific admin template can override the built-in corporate copy.
+    // If it does not exist, the existing base template remains authoritative.
+    const localizedTemplateRows = await getJson<Array<EmailTemplateRow>>(
       buildRestUrl(caller.supabaseUrl, "email_templates", {
-        select: "subject,body",
+        select: "template_key,subject,body",
         organization_id: `eq.${caller.profile.organization_id}`,
-        template_key: `eq.${templateKey}`,
+        template_key: `eq.${`${templateKey}.${inviteLocale}`}`,
         limit: "1",
       }),
       {
         headers: serviceRoleHeaders(caller.serviceRoleKey),
       },
     ).catch(() => []);
-
-    const template = templateRows[0] || DEFAULT_TEMPLATES[templateKey];
-    const portalLink = `${portalBaseUrl.replace(/\/$/, "")}/portal?email=${encodeURIComponent(invite.email)}`;
+    const baseTemplateRows = localizedTemplateRows.length
+      ? []
+      : await getJson<Array<EmailTemplateRow>>(
+          buildRestUrl(caller.supabaseUrl, "email_templates", {
+            select: "template_key,subject,body",
+            organization_id: `eq.${caller.profile.organization_id}`,
+            template_key: `eq.${templateKey}`,
+            limit: "1",
+          }),
+          {
+            headers: serviceRoleHeaders(caller.serviceRoleKey),
+          },
+        ).catch(() => []);
+    const fallbackTemplate = DEFAULT_TEMPLATES[templateKey][inviteLocale];
+    // The legacy base template is English-only. It may be used for English,
+    // but it must never override a recipient's Turkish, German, or Russian copy.
+    const template = localizedTemplateRows[0] || (inviteLocale === "en" ? baseTemplateRows[0] : null) || fallbackTemplate;
+    const sellerDomain =
+      invite.party_type === "customer" && invite.seller_company_profile_id
+        ? await resolvePortalSellerDomainForSeller(
+            caller.supabaseUrl,
+            caller.serviceRoleKey,
+            caller.profile.organization_id,
+            invite.seller_company_profile_id,
+          ).catch(() => null)
+        : null;
+    const portalOrigin = sellerDomain?.hostname
+      ? `https://${sellerDomain.hostname}`
+      : portalBaseUrl.replace(/\/$/, "");
+    const portalLink = `${portalOrigin}/portal?email=${encodeURIComponent(invite.email)}`;
     const variables = {
       party_name: invite.party_name,
       contact_name: String(invite.contact_name || invite.party_name || "").trim(),
       portal_link: portalLink,
       company_name: companyName,
+      seller_portal_label: String(sellerDomain?.portal_label || companyName).trim(),
+      language: inviteLocale,
     };
-    const subject = renderTemplate(String(template.subject || DEFAULT_TEMPLATES[templateKey].subject), variables);
-    const body = renderTemplate(String(template.body || DEFAULT_TEMPLATES[templateKey].body), variables);
+    const subject = renderTemplate(String(template.subject || fallbackTemplate.subject), variables);
+    const body = renderTemplate(String(template.body || fallbackTemplate.body), variables);
 
     const queued = await upsertOutboundEmail({
       supabaseUrl: caller.supabaseUrl,
