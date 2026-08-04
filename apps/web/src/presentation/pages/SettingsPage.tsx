@@ -139,6 +139,12 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     setActiveTab(initialTab);
   }, [initialTab]);
 
+  // Browsers sometimes autofill the first text field with the signed-in admin
+  // email. The brand scope search is not an email field, so clear that noise.
+  useEffect(() => {
+    if (portalBrandSearch.includes("@")) setPortalBrandSearch("");
+  }, [portalBrandSearch]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1280,6 +1286,8 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           <div className="portal-brand-scope__toolbar">
             <Input
               label=""
+              name="portal-brand-search"
+              autoComplete="off"
               value={portalBrandSearch}
               placeholder={s("portal.placeholders.searchBrands")}
               onChange={setPortalBrandSearch}
@@ -1341,6 +1349,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                 const saved = await upsertPortalInvite(portalDraft);
                 setPortalInvites(await fetchPortalInvites());
                 setPortalDraft(createEmptyCloudPortalInvite());
+                setPortalBrandSearch("");
                 setPortalStatus(s("portal.feedback.savedFor", { party: saved.party_name }));
               } catch (caught) {
                 setPortalStatus(caught instanceof Error ? caught.message : s("portal.errors.saveFailed"));
@@ -1349,7 +1358,11 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           >
             {s("portal.actions.saveAccess")}
           </Button>
-          <Button variant="secondary" onClick={() => setPortalDraft(createEmptyCloudPortalInvite())}>
+          <Button variant="secondary" onClick={() => {
+            setPortalDraft(createEmptyCloudPortalInvite());
+            setPortalBrandSearch("");
+            setPortalStatus("");
+          }}>
             {s("portal.actions.newInvite")}
           </Button>
         </div>
