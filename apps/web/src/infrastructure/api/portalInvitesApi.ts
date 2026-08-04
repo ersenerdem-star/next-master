@@ -89,9 +89,9 @@ export async function issuePortalInviteToken(portalInviteId: string): Promise<{ 
 }
 
 export async function upsertPortalInvite(input: PortalInvite): Promise<PortalInvite> {
-  if (input.party_type === "customer" && !isUuid(input.customer_id)) {
-    throw new Error("Select a valid customer before saving portal access.");
-  }
+  // The admin function resolves a customer by the selected UUID first and
+  // falls back to the portal email when a browser-cached form has lost its
+  // customer_id. Do not reject a recoverable draft in the client.
   if (input.party_type === "vendor" && !isUuid(input.vendor_id)) {
     throw new Error("Select a valid vendor before saving portal access.");
   }

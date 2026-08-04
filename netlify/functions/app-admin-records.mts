@@ -315,23 +315,31 @@ async function sanitizePortalInvitePayload(input: {
 
   if (next.party_type === "customer") {
     next.vendor_id = "";
-    if (!isUuid(String(next.customer_id || ""))) {
-      throw new Error("Select a valid customer before saving portal access.");
-    }
-    const customerRows = await getJson<Array<Record<string, unknown>>>(
+    const customerSelect = "id,display_name,company_name,email,seller_company_profile_id,seller_company_profile_ids,custom_fields";
+    const customerLookup = async (filters: Record<string, string>) => getJson<Array<Record<string, unknown>>>(
       buildRestUrl(input.supabaseUrl, "customers", {
-        select: "id,seller_company_profile_id,seller_company_profile_ids,custom_fields",
+        select: customerSelect,
         organization_id: `eq.${input.organizationId}`,
-        id: `eq.${String(next.customer_id || "").trim()}`,
+        ...filters,
         limit: "1",
       }),
-      {
-        headers: serviceRoleHeaders(input.serviceRoleKey),
-      },
+      { headers: serviceRoleHeaders(input.serviceRoleKey) },
     ).catch(() => []);
-    if (!customerRows[0]?.id) {
-      throw new Error("Selected customer was not found in this organization.");
+
+    const requestedCustomerId = String(next.customer_id || "").trim();
+    let customerRows = isUuid(requestedCustomerId)
+      ? await customerLookup({ id: `eq.${requestedCustomerId}` })
+      : [];
+
+    // A browser-cached invite can retain the party name/email while losing
+    // the selected UUID. Resolve that draft against the same organization.
+    if (!customerRows[0]?.id && next.email) {
+      customerRows = await customerLookup({ email: `eq.${next.email}` });
     }
+    if (!customerRows[0]?.id) {
+      throw new Error("Select a valid customer before saving portal access.");
+    }
+    next.customer_id = String(customerRows[0].id);
     const customerMeta = parseEmbeddedCustomerMeta(customerRows[0].custom_fields).meta;
     const customerSellerProfileIds = Array.isArray(customerRows[0].seller_company_profile_ids)
       ? customerRows[0].seller_company_profile_ids.map((value) => String(value || "").trim()).filter(isUuid)
