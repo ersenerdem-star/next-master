@@ -336,6 +336,12 @@ async function sanitizePortalInvitePayload(input: {
     if (!customerRows[0]?.id && next.email) {
       customerRows = await customerLookup({ email: `eq.${next.email}` });
     }
+    if (!customerRows[0]?.id && next.party_name) {
+      customerRows = await customerLookup({ display_name: `eq.${next.party_name}` });
+    }
+    if (!customerRows[0]?.id && next.party_name) {
+      customerRows = await customerLookup({ company_name: `eq.${next.party_name}` });
+    }
     if (!customerRows[0]?.id) {
       throw new Error("Select a valid customer before saving portal access.");
     }

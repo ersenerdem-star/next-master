@@ -1380,7 +1380,10 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               if (draftForSave !== portalDraft) setPortalDraft(draftForSave);
               const missingPartyBinding =
                 draftForSave.party_type === "customer"
-                  ? !isUuid(draftForSave.customer_id)
+                  // The admin function can recover a stale/empty customer id
+                  // from the selected customer's email or party name. Do not
+                  // block the save before that authoritative lookup runs.
+                  ? !isUuid(draftForSave.customer_id) && !draftForSave.email.trim()
                   : !isUuid(draftForSave.vendor_id);
               if (!draftForSave.party_name.trim() || missingPartyBinding) {
                 setPortalStatus(s("portal.errors.partyRequired"));
