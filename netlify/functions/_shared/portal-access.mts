@@ -1182,6 +1182,68 @@ export async function buildPortalFallbackSnapshot(supabaseUrl: string, serviceRo
     currency: "EUR",
   };
 
+  // A transient customer/profile lookup failure must not erase an already
+  // existing tenant-scoped document history. Rebuild the compact history
+  // from the invite scope when the full snapshot cannot be assembled.
+  let fallbackSalesOrders: Record<string, unknown>[] = [];
+  let fallbackInvoices: Record<string, unknown>[] = [];
+  if (invite.party_type === "customer" && invite.access_can_view_orders) {
+    const sellerCompanyProfileId = String(invite.seller_company_profile_id || "").trim();
+    const sellerCompanyProfile = await fetchPortalCompanyProfile(
+      supabaseUrl,
+      serviceRoleKey,
+      invite.organization_id,
+      sellerCompanyProfileId,
+    );
+    const sellerCompanyName = String(sellerCompanyProfile?.company_name || "").trim();
+    // Do not broaden a failed tenant lookup into another seller's history.
+    if (sellerCompanyName) {
+      const fallbackHistoryParams = buildPortalCustomerHistoryParams(
+        invite.organization_id,
+        String(invite.customer_id || "").trim(),
+        String(invite.party_name || "").trim(),
+        sellerCompanyName,
+      );
+      const orderSelect =
+        "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at";
+      const invoiceSelect =
+        "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at";
+      fallbackSalesOrders = await fetchPortalHistoryRows(
+        supabaseUrl,
+        serviceRoleKey,
+        "sales_orders",
+        "",
+        orderSelect,
+        fallbackHistoryParams,
+      );
+      if (invite.access_can_view_invoices) {
+        fallbackInvoices = await fetchPortalHistoryRows(
+          supabaseUrl,
+          serviceRoleKey,
+          "invoices",
+          "",
+          invoiceSelect,
+          fallbackHistoryParams,
+        );
+      }
+    }
+  }
+
+  const fallbackAccountRows = fallbackInvoices.map((row) => ({
+    document_no: String(row.id || row.sales_order_no || ""),
+    document_type: "Invoice",
+    document_date: String(row.quote_date || ""),
+    due_date: String(row.due_date || ""),
+    status: String(row.status || ""),
+    amount: toNumber(row.total_amount),
+    currency: String(row.currency || "EUR"),
+    subtotal: toNumber(row.total_amount),
+    discount: 0,
+    shipping: 0,
+    total: toNumber(row.total_amount),
+  }));
+  const fallbackInvoiceAmount = fallbackInvoices.reduce((sum, row) => sum + toNumber(row.total_amount), 0);
+
   return {
     invite: {
       id: invite.id,
@@ -1207,9 +1269,25 @@ export async function buildPortalFallbackSnapshot(supabaseUrl: string, serviceRo
       invite.access_can_view_orders,
       portalAllowedBrandIds(invite),
     ),
-    salesOrders: [],
+    salesOrders: fallbackSalesOrders.map((row) => ({
+      ...row,
+      source_channel: String(row.source_channel || "internal"),
+      portal_submitted_at: row.portal_submitted_at ? String(row.portal_submitted_at) : null,
+      portal_seen_at: row.portal_seen_at ? String(row.portal_seen_at) : null,
+      sales_total: toNumber(row.sales_total),
+      discount_amount: toNumber(row.discount_amount),
+      shipping_cost: toNumber(row.shipping_cost),
+      lines: [],
+    })),
     purchaseOrders: [],
-    invoices: [],
+    invoices: fallbackInvoices.map((row) => ({
+      ...row,
+      total_amount: toNumber(row.total_amount),
+      subtotal: toNumber(row.subtotal),
+      discount_amount: toNumber(row.discount_amount),
+      shipping_cost: toNumber(row.shipping_cost),
+      lines: [],
+    })),
     bills: [],
     creditNotes: [],
     vendorCredits: [],
@@ -1217,15 +1295,15 @@ export async function buildPortalFallbackSnapshot(supabaseUrl: string, serviceRo
     paymentsMade: [],
     accountSummary: {
       currency: "EUR",
-      totalDocuments: 0,
-      totalAmount: 0,
-      documentAmount: 0,
+      totalDocuments: fallbackAccountRows.length,
+      totalAmount: fallbackAccountRows.reduce((sum, row) => sum + row.amount, 0),
+      documentAmount: fallbackInvoiceAmount,
       creditAmount: 0,
       paymentAmount: 0,
-      openAmount: 0,
+      openAmount: fallbackAccountRows.filter((row) => !["void"].includes(row.status.toLowerCase())).reduce((sum, row) => sum + row.amount, 0),
       paymentCount: 0,
     },
     pricingProfile: null,
-    accountRows: [],
+    accountRows: fallbackAccountRows,
   };
 }
