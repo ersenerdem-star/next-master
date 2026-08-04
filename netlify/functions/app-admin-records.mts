@@ -292,6 +292,10 @@ async function sanitizePortalInvitePayload(input: {
   payload: Record<string, unknown>;
 }) {
   const next = { ...input.payload };
+  // Never trust a client-cached organization_id. The caller's resolved
+  // organization is authoritative and prevents stale/invalid UUID values
+  // from reaching portal_invites.
+  next.organization_id = input.organizationId;
   next.email = String(next.email || "").trim().toLowerCase();
   next.party_type = String(next.party_type || "").trim().toLowerCase();
   next.party_name = String(next.party_name || "").trim();
