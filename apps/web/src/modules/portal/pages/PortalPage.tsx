@@ -31,6 +31,7 @@ import {
   submitPortalOrder,
   type PortalCatalogSearchItem,
   type PortalPreparedLine,
+  type PortalSearchField,
 } from "../../../infrastructure/api/portalOrderApi";
 import { fetchCatalogProductMedia } from "../../../infrastructure/api/catalogMediaApi";
 import type { ProductMediaItem } from "../../../presentation/components/common/ProductVisual";
@@ -1590,7 +1591,7 @@ export function PortalPage() {
     });
   }
 
-  async function handlePortalCatalogSearch() {
+  async function handlePortalCatalogSearch(searchField: PortalSearchField = "part_number") {
     if (!isOnline) {
       setError("");
       if (catalogResults.length) {
@@ -1607,7 +1608,7 @@ export function PortalPage() {
     try {
       setSearchingCatalog(true);
       setError("");
-      const result = await searchPortalCatalogItems(credentials, orderSearch, orderSearchBrand);
+      const result = await searchPortalCatalogItems(credentials, orderSearch, orderSearchBrand, searchField);
       const items = result.items;
       setCatalogResults(items);
       setPortalRecommendations(result.recommendations);
@@ -2810,7 +2811,7 @@ export function PortalPage() {
                   searching={searchingCatalog}
                   onQueryChange={setOrderSearch}
                   onBrandChange={setOrderSearchBrand}
-                  onSearch={() => void handlePortalCatalogSearch()}
+                  onSearch={(searchField) => void handlePortalCatalogSearch(searchField)}
                   onClear={handleClearPortalSearch}
                   selectedCode={selectedCatalogCode}
                   onSelect={(item) => {

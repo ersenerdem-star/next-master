@@ -29,6 +29,7 @@ export default async (req: Request, _context: Context) => {
     const sessionToken = String(body?.sessionToken || body?.session_token || readPortalSessionCookie(req) || "").trim();
     const query = String(body?.query || "").trim();
     const brand = String(body?.brand || "").trim();
+    const searchField = String(body?.searchField || body?.search_field || "part_number").trim();
     if (!sessionToken && (!email || !password)) return json({ error: "Email and password are required" }, 400);
     if (!query && !brand) return json({ error: "Enter a search term or choose a brand" }, 400);
     if (query.length > PORTAL_SEARCH_QUERY_MAX_LENGTH) {
@@ -54,7 +55,7 @@ export default async (req: Request, _context: Context) => {
       sessionToken,
       hostname: getPortalRequestHostname(req),
     });
-    const result = await searchPortalCatalog(supabaseUrl, serviceRoleKey, invite, query, brand);
+    const result = await searchPortalCatalog(supabaseUrl, serviceRoleKey, invite, query, brand, searchField);
     void writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       organizationId: invite.organization_id,
       inviteId: invite.id,

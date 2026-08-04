@@ -25,6 +25,8 @@ export type PortalCatalogSearchItem = {
   available_qty?: number | null;
 };
 
+export type PortalSearchField = "part_number" | "oem" | "vehicle" | "description";
+
 export type PortalOrderInputRow = {
   code: string;
   brand: string;
@@ -108,11 +110,17 @@ async function postPortalOrderJson(path: string, payload: Record<string, unknown
   return data;
 }
 
-export async function searchPortalCatalogItems(credentials: PortalCredentials, query: string, brand: string) {
+export async function searchPortalCatalogItems(
+  credentials: PortalCredentials,
+  query: string,
+  brand: string,
+  searchField: PortalSearchField = "part_number",
+) {
   const data = await postPortalOrderJson("/api/portal-order-search", {
     ...credentials,
     query,
     brand,
+    searchField,
   });
   return {
     items: data.items || [],

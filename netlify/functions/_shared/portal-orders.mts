@@ -549,7 +549,36 @@ function filterCatalogRowsBySearchRelevance(
 }
 
 type PortalSearchMode = "strict" | "loose";
+type PortalSearchField = "part_number" | "oem" | "vehicle" | "description";
 const PORTAL_CODE_SEARCH_EXPANSION_THRESHOLD = 8;
+
+function normalizePortalSearchField(value: string): PortalSearchField {
+  const normalized = String(value || "").trim().toLowerCase().replace(/[-\s]+/g, "_");
+  if (normalized === "oem") return "oem";
+  if (normalized === "vehicle") return "vehicle";
+  if (normalized === "description") return "description";
+  return "part_number";
+}
+
+function buildPortalFieldSearchOr(search: string, normalizedSearch: string, field: PortalSearchField) {
+  const escaped = search.replace(/[%*(),]/g, " ").trim();
+  const clauses = new Set<string>();
+  if (!escaped && !normalizedSearch) return "";
+
+  if (field === "oem") {
+    if (normalizedSearch.length >= 3) {
+      clauses.add(`normalized_oem.eq.${normalizedSearch}`);
+      clauses.add(`normalized_oem.like.${normalizedSearch}*`);
+    }
+    if (escaped) clauses.add(`oem_no.ilike.*${escaped}*`);
+  } else if (field === "vehicle") {
+    if (escaped) clauses.add(`vehicle.ilike.*${escaped}*`);
+  } else if (field === "description") {
+    if (escaped) clauses.add(`description.ilike.*${escaped}*`);
+  }
+
+  return clauses.size ? `(${[...clauses].join(",")})` : "";
+}
 
 function shouldRunLooseOriginalNumberSearch(search: string) {
   return normalizeOriginalNumberSearch(search).length >= 6;
@@ -1261,6 +1290,7 @@ export async function searchPortalCatalog(
   invite: PortalInviteRow,
   query: string,
   brand: string,
+  requestedSearchField: string = "part_number",
 ): Promise<PortalCatalogSearchResponse> {
   if (invite.party_type !== "customer" || !invite.access_can_view_orders) {
     throw new Error("This portal cannot search items");
@@ -1268,6 +1298,7 @@ export async function searchPortalCatalog(
   const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
   const search = String(query || "").trim();
   const normalizedSearch = normalizePartCode(search);
+  const searchField = normalizePortalSearchField(requestedSearchField);
   const selectedBrandId = brand ? brandMap.byName.get(brand.trim().toLowerCase()) || "" : "";
   if (brand && !selectedBrandId) {
     throw new Error("Brand not found for portal search");
@@ -1281,9 +1312,11 @@ export async function searchPortalCatalog(
 
   const { allowedBrandIds } = applyPortalBrandScope(params, invite, selectedBrandId);
   if (search) {
-    params.or = isLikelyPortalCodeSearch(search)
-      ? buildPortalFastCatalogSearchOr(search, normalizedSearch)
-      : buildPortalCatalogSearchOr(search, normalizedSearch, "strict");
+    params.or = searchField === "part_number"
+      ? (isLikelyPortalCodeSearch(search)
+        ? buildPortalFastCatalogSearchOr(search, normalizedSearch)
+        : buildPortalCatalogSearchOr(search, normalizedSearch, "strict"))
+      : buildPortalFieldSearchOr(search, normalizedSearch, searchField);
   }
 
   let rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", params, PORTAL_SEARCH_REST_TIMEOUT_MS).catch(
@@ -1298,7 +1331,7 @@ export async function searchPortalCatalog(
     }
   >();
 
-  if (!rows.length && search && normalizedSearch.length >= 3) {
+  if (!rows.length && search && (searchField === "part_number" || searchField === "oem") && normalizedSearch.length >= 3) {
     const referenceRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "item_code_references", {
       select: "brand_id,old_code,new_code,reason,normalized_new_code",
       organization_id: `eq.${invite.organization_id}`,
@@ -1348,6 +1381,7 @@ export async function searchPortalCatalog(
     }
   }
   if (
+    (searchField === "part_number" || searchField === "oem") &&
     search &&
     shouldRunLooseOriginalNumberSearch(search) &&
     !rows.length
@@ -1378,6 +1412,7 @@ export async function searchPortalCatalog(
     }
   }
   if (
+    (searchField === "part_number" || searchField === "oem") &&
     search &&
     shouldRunLooseOriginalNumberSearch(search) &&
     !rows.length
@@ -1429,13 +1464,13 @@ export async function searchPortalCatalog(
       }
     }
   }
-  if (!rows.length && search && shouldRunLooseOriginalNumberSearch(search)) {
+  if (!rows.length && (searchField === "part_number" || searchField === "oem") && search && shouldRunLooseOriginalNumberSearch(search)) {
     rows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
       ...params,
       or: buildPortalCatalogSearchOr(search, normalizedSearch, "loose"),
     }, PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS).catch(() => []);
   }
-  if (!rows.length && search && shouldRunLooseOriginalNumberSearch(search)) {
+  if (!rows.length && (searchField === "part_number" || searchField === "oem") && search && shouldRunLooseOriginalNumberSearch(search)) {
     const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
     const normalizedRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
       select: "id,product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",

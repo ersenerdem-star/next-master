@@ -1,10 +1,10 @@
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import type { PortalSnapshot } from "../../../types/portalSession";
 import { Button } from "../../../presentation/components/common/Button";
 import { BrandPill } from "../../../presentation/components/common/BrandPill";
 import { ProductVisual } from "../../../presentation/components/common/ProductVisual";
 import { VehicleBadges } from "../../../presentation/components/common/VehicleBadges";
-import type { PortalCatalogSearchItem } from "../../../infrastructure/api/portalOrderApi";
+import type { PortalCatalogSearchItem, PortalSearchField } from "../../../infrastructure/api/portalOrderApi";
 
 type PortalSearchResultsProps = {
   results: PortalCatalogSearchItem[];
@@ -16,7 +16,7 @@ type PortalSearchResultsProps = {
   searching: boolean;
   onQueryChange: (value: string) => void;
   onBrandChange: (value: string) => void;
-  onSearch: () => void;
+  onSearch: (searchField: PortalSearchField) => void;
   onClear: () => void;
   selectedCode: string;
   onSelect: (item: PortalCatalogSearchItem) => void;
@@ -63,6 +63,7 @@ export function PortalSearchResults({
   onAdd,
   onPreview,
 }: PortalSearchResultsProps) {
+  const [searchField, setSearchField] = useState<PortalSearchField>("part_number");
   const selected = results.find((item) => item.code === selectedCode) || results[0] || null;
   const visibleResults = results.slice(0, 12);
   const documentRows = snapshot.invite.party_type === "customer" ? snapshot.salesOrders : snapshot.purchaseOrders;
@@ -77,23 +78,44 @@ export function PortalSearchResults({
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSearch();
+    onSearch(searchField);
   }
+
+  const searchTabs: Array<{ value: PortalSearchField; label: string }> = [
+    { value: "part_number", label: "Part number" },
+    { value: "oem", label: "OEM" },
+    { value: "vehicle", label: "Vehicle" },
+    { value: "description", label: "Description" },
+  ];
+
+  const searchPlaceholder: Record<PortalSearchField, string> = {
+    part_number: "Part number",
+    oem: "OEM number",
+    vehicle: "Vehicle make, model or engine",
+    description: "Part description",
+  };
 
   return (
     <div className="portal-search-result-view">
       <div className="portal-search-result-view__toolbar">
         <div className="portal-search-result-view__types" role="tablist" aria-label="Search type">
-          <button type="button" className="is-active">Part number</button>
-          <button type="button">OEM</button>
-          <button type="button">Vehicle</button>
-          <button type="button">Description</button>
+          {searchTabs.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              className={searchField === tab.value ? "is-active" : ""}
+              aria-selected={searchField === tab.value}
+              onClick={() => setSearchField(tab.value)}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
         <form className="portal-search-result-view__form" onSubmit={submitSearch}>
           <select aria-label="Search brand" value={brand} onChange={(event) => onBrandChange(event.target.value)}>
             {brands.map((option) => <option key={option.value || "all"} value={option.value}>{option.label}</option>)}
           </select>
-          <input aria-label="Part number or OEM search" value={query} onChange={(event) => onQueryChange(event.target.value)} />
+          <input aria-label={`${searchTabs.find((tab) => tab.value === searchField)?.label || "Part"} search`} placeholder={searchPlaceholder[searchField]} value={query} onChange={(event) => onQueryChange(event.target.value)} />
           <button type="button" className="portal-search-result-view__clear" onClick={onClear} aria-label="Clear search">×</button>
           <button type="submit" className="portal-search-result-view__submit" disabled={searching}>{searching ? "…" : "Search"}</button>
         </form>
