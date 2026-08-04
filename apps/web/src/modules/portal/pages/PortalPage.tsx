@@ -2780,7 +2780,7 @@ export function PortalPage() {
           {activeSection === "desk" && portalCanOrder ? (
         <div className="portal-section-stack">
           <SectionCard title="Part Search" className="search-focus-card search-focus-card--portal">
-            <div className={`portal-order-builder${catalogResults.length ? " portal-order-builder--results" : ""}`}>
+            <div className="portal-order-builder portal-order-builder--modern">
               <form
                 className={`portal-filter-grid portal-filter-grid--desk${catalogResults.length ? " portal-filter-grid--results-hidden" : ""}`}
                 onSubmit={(event) => {
@@ -2847,8 +2847,7 @@ export function PortalPage() {
                 </div>
               ) : null}
 
-              {catalogResults.length ? (
-                <PortalSearchResults
+              <PortalSearchResults
                   results={catalogResults}
                   query={orderSearch}
                   brand={orderSearchBrand}
@@ -2866,6 +2865,13 @@ export function PortalPage() {
                   exportDisabled={!portalDraftLines.length}
                   basketCount={portalDraftLines.length}
                   orderStatus={portalOrderStatus}
+                  draftLines={portalDraftLines}
+                  savingBasket={savingPortalOrder}
+                  confirmingBasket={confirmingPortalOrder}
+                  confirmDisabled={portalDraftHasMissingPrices}
+                  onSaveBasket={() => void handleSubmitPortalOrder("draft")}
+                  onClearBasket={handleClearPortalBuilder}
+                  onConfirmBasket={() => void handleSubmitPortalOrder("confirm")}
                   selectedCode={selectedCatalogCode}
                   onSelect={(item) => {
                     setSelectedCatalogCode(item.code);
@@ -2874,7 +2880,6 @@ export function PortalPage() {
                   onAdd={(item) => void handleAddPortalCatalogItem(item)}
                   onPreview={(item) => setPortalPreview({ kind: "catalog", item })}
                 />
-              ) : null}
 
               <div className="portal-workbench">
                 <div className="portal-workbench__tables">

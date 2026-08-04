@@ -4,7 +4,7 @@ import { Button } from "../../../presentation/components/common/Button";
 import { BrandPill } from "../../../presentation/components/common/BrandPill";
 import { ProductVisual } from "../../../presentation/components/common/ProductVisual";
 import { VehicleBadges } from "../../../presentation/components/common/VehicleBadges";
-import type { PortalCatalogSearchItem, PortalSearchField } from "../../../infrastructure/api/portalOrderApi";
+import type { PortalCatalogSearchItem, PortalPreparedLine, PortalSearchField } from "../../../infrastructure/api/portalOrderApi";
 
 type PortalSearchResultsProps = {
   results: PortalCatalogSearchItem[];
@@ -24,6 +24,13 @@ type PortalSearchResultsProps = {
   exportDisabled: boolean;
   basketCount: number;
   orderStatus?: string;
+  draftLines: PortalPreparedLine[];
+  savingBasket: boolean;
+  confirmingBasket: boolean;
+  confirmDisabled: boolean;
+  onSaveBasket: () => void;
+  onClearBasket: () => void;
+  onConfirmBasket: () => void;
   selectedCode: string;
   onSelect: (item: PortalCatalogSearchItem) => void;
   onAdd: (item: PortalCatalogSearchItem) => void;
@@ -70,6 +77,13 @@ export function PortalSearchResults({
   exportDisabled,
   basketCount,
   orderStatus,
+  draftLines,
+  savingBasket,
+  confirmingBasket,
+  confirmDisabled,
+  onSaveBasket,
+  onClearBasket,
+  onConfirmBasket,
   selectedCode,
   onSelect,
   onAdd,
@@ -251,6 +265,39 @@ export function PortalSearchResults({
           </section>
         </aside>
       </div>
+
+      <section className="portal-search-result-basket" aria-label="Basket">
+        <div className="portal-search-result-basket__header">
+          <div>
+            <span className="portal-search-result-view__eyebrow">Order workspace</span>
+            <h3>Basket ({draftLines.length.toLocaleString("en-US")})</h3>
+            <p>{draftLines.length ? "Review imported or selected lines before saving or confirming the basket." : "Import a file or add a search result to build the basket here."}</p>
+          </div>
+          <div className="portal-search-result-basket__actions">
+            <Button variant="secondary" busy={savingBasket} busyLabel="Saving..." onClick={onSaveBasket} disabled={!draftLines.length}>
+              Save Basket
+            </Button>
+            <Button variant="secondary" onClick={onClearBasket} disabled={!draftLines.length}>
+              Clear
+            </Button>
+            <Button busy={confirmingBasket} busyLabel="Confirming..." onClick={onConfirmBasket} disabled={!draftLines.length || confirmDisabled}>
+              Confirm Basket
+            </Button>
+          </div>
+        </div>
+        {draftLines.length ? (
+          <div className="portal-search-result-basket__lines">
+            {draftLines.slice(0, 6).map((line) => (
+              <div key={line.lineId} className="portal-search-result-basket__line">
+                <strong>{line.resolvedCode || line.requestedCode || "-"}</strong>
+                <span>{line.description || "Part description"}</span>
+                <small>Qty {line.qty} · {line.sell_price == null ? "Price on request" : formatMoney(line.sell_price, currency)}</small>
+              </div>
+            ))}
+            {draftLines.length > 6 ? <div className="portal-search-result-basket__more">+{(draftLines.length - 6).toLocaleString("en-US")} more line{draftLines.length - 6 === 1 ? "" : "s"} in basket</div> : null}
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 }

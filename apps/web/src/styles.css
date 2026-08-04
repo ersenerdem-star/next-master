@@ -6738,6 +6738,15 @@ textarea {
   display: none;
 }
 
+/* Part Search is the single customer workspace. Keep the legacy builder
+ * mounted for its file input/ref, but do not show a second search UI. */
+.portal-order-builder--modern > .portal-filter-grid--desk,
+.portal-order-builder--modern > .portal-inline-note--compact,
+.portal-order-builder--modern > .portal-workbench,
+.portal-order-builder--modern > .portal-action-bar {
+  display: none;
+}
+
 .portal-search-result-view {
   display: grid;
   gap: 14px;
@@ -6817,6 +6826,16 @@ textarea {
 }
 
 .portal-search-result-view__submit:disabled { opacity: 0.6; cursor: wait; }
+
+.portal-search-result-view__eyebrow {
+  display: inline-flex;
+  padding: 5px 9px;
+  border-radius: 5px;
+  background: #e9f2ff;
+  color: #2268ba;
+  font-size: 12px;
+  font-weight: 800;
+}
 
 .portal-search-result-view__actions {
   display: flex;
@@ -6990,6 +7009,65 @@ textarea {
 .portal-search-insight-card__line i { display: block; width: 18px; height: 12px; border-radius: 3px 3px 0 0; background: #2f80d1; }
 .portal-search-insight-card__line i:nth-child(2) { height: 21px; }.portal-search-insight-card__line i:nth-child(3) { height: 16px; }.portal-search-insight-card__line i:nth-child(4) { height: 28px; }.portal-search-insight-card__line i:nth-child(5) { height: 20px; }.portal-search-insight-card__line i:nth-child(6) { height: 25px; }.portal-search-insight-card__line i:nth-child(7) { height: 31px; }
 
+.portal-search-result-basket {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #d4dfeb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.portal-search-result-basket__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.portal-search-result-basket__header h3 {
+  margin: 10px 0 4px;
+  color: #10233f;
+  font-size: 20px;
+}
+
+.portal-search-result-basket__header p {
+  margin: 0;
+  color: #60728a;
+}
+
+.portal-search-result-basket__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.portal-search-result-basket__actions .button { min-height: 38px; }
+
+.portal-search-result-basket__lines {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid #e3eaf2;
+}
+
+.portal-search-result-basket__line {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid #e4ebf3;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.portal-search-result-basket__line strong { color: #183b69; }
+.portal-search-result-basket__line span { min-width: 0; overflow: hidden; color: #40536b; text-overflow: ellipsis; white-space: nowrap; }
+.portal-search-result-basket__line small { color: #657990; white-space: nowrap; }
+.portal-search-result-basket__more { color: #2268ba; font-size: 12px; font-weight: 800; }
+
 @media (max-width: 1120px) {
   .portal-search-result-view__layout { grid-template-columns: minmax(220px, 0.72fr) minmax(380px, 1.4fr); }
   .portal-search-result-insights { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -7010,6 +7088,23 @@ textarea {
 
   .portal-search-result-view__action-status span {
     max-width: none;
+    white-space: normal;
+  }
+
+  .portal-search-result-basket__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .portal-search-result-basket__actions {
+    justify-content: flex-start;
+  }
+
+  .portal-search-result-basket__line {
+    grid-template-columns: 1fr;
+  }
+
+  .portal-search-result-basket__line span {
     white-space: normal;
   }
 }
