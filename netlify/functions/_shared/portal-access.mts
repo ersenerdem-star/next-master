@@ -218,19 +218,40 @@ async function fetchPortalHistoryRows(
   compactSelect: string,
   params: Record<string, string>,
 ) {
-  // Keep line details when the database is healthy. Under catalog-import load,
-  // retry the same tenant-scoped query without the large JSON lines column so
-  // history remains visible instead of falling back to an empty workspace.
-  const fullRows = await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
-    select: fullSelect,
-    ...params,
-  });
-  if (fullRows.length) return fullRows;
-
-  return await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
+  // History cards only need the compact document fields. Fetching the large
+  // JSON `lines` column first made this endpoint time out while catalog
+  // enrichment was running, and the soft-failure path then looked like an
+  // empty customer history. Keep the list fast and deterministic by loading
+  // compact rows first. Detail lines can be loaded by the existing document
+  // detail flow when the user opens a record.
+  const compactRows = await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
     select: compactSelect,
     ...params,
   });
+  if (compactRows.length) return compactRows;
+
+  // If the combined OR filter was the expensive part under load, retry the
+  // same tenant-scoped request as two simple indexed lookups and deduplicate
+  // by document id. This still never broadens the customer/seller scope.
+  const customerFilter = params.or;
+  if (!customerFilter) return compactRows;
+  const match = customerFilter.match(/^\(customer_id\.eq\.([^,]+),customer_name\.eq\.(.*)\)$/);
+  if (!match) return compactRows;
+  const [, customerId, customerName] = match;
+  const { or: _or, ...baseParams } = params;
+  const [byId, byName] = await Promise.all([
+    fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
+      select: compactSelect,
+      ...baseParams,
+      customer_id: `eq.${customerId}`,
+    }),
+    fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
+      select: compactSelect,
+      ...baseParams,
+      customer_name: `eq.${customerName}`,
+    }),
+  ]);
+  return dedupeById([...byId, ...byName]);
 }
 
 async function fetchFirstOptional<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
