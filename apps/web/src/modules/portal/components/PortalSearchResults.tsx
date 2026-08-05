@@ -230,7 +230,7 @@ export function PortalSearchResults({
               ) : null}
               <div className="portal-search-result-main__facts">
                 <section><h3>OEM references</h3><p>{selected.oem_no || "No OEM references recorded"}</p><button type="button" onClick={() => onPreview?.(selected)}>Show all references</button></section>
-                <section><h3>Vehicle compatibility</h3><div className="portal-search-result-main__vehicle"><VehicleBadges value={selected.vehicle || ""} limit={5} expandable /></div><button type="button" onClick={() => onPreview?.(selected)}>View compatible vehicles</button></section>
+                <section><h3>Vehicle compatibility</h3><div className="portal-search-result-main__vehicle"><VehicleBadges value={selected.vehicle || ""} limit={5} expandable logoOnly /></div><button type="button" onClick={() => onPreview?.(selected)}>View compatible vehicles</button></section>
               </div>
               <div className="portal-search-result-main__metadata">
                 <span>Tariff {selected.tariff || "-"}</span>

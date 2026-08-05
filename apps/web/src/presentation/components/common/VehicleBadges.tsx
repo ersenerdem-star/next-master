@@ -12,6 +12,7 @@ type VehicleBadgesProps = {
   compact?: boolean;
   limit?: number;
   expandable?: boolean;
+  logoOnly?: boolean;
   className?: string;
 };
 
@@ -86,6 +87,7 @@ export function VehicleBadges({
   compact = false,
   limit = 4,
   expandable = false,
+  logoOnly = false,
   className = "",
 }: VehicleBadgesProps) {
   const [expanded, setExpanded] = useState(false);
@@ -97,19 +99,19 @@ export function VehicleBadges({
   const hiddenCount = items.length - visibleItems.length;
 
   return (
-    <div className={`vehicle-badge-list${compact ? " vehicle-badge-list--compact" : ""}${className ? ` ${className}` : ""}`}>
+    <div className={`vehicle-badge-list${compact ? " vehicle-badge-list--compact" : ""}${logoOnly ? " vehicle-badge-list--logo-only" : ""}${className ? ` ${className}` : ""}`}>
       {visibleItems.map((item) => {
         const logoAsset = resolveNamedLogo(item.label);
         return (
           <span
             key={item.label}
-            className={`vehicle-badge vehicle-badge--${item.tone}${compact ? " vehicle-badge--compact" : ""}`}
+            className={`vehicle-badge vehicle-badge--${item.tone}${compact ? " vehicle-badge--compact" : ""}${logoOnly ? " vehicle-badge--logo-only" : ""}`}
             title={item.label}
           >
             <span className="vehicle-badge__mark">
               {logoAsset ? <img src={logoAsset.src} alt="" className="vehicle-badge__logo" /> : item.mark}
             </span>
-            {!compact ? <span className="vehicle-badge__label">{item.label}</span> : null}
+            {!compact && !logoOnly ? <span className="vehicle-badge__label">{item.label}</span> : null}
           </span>
         );
       })}

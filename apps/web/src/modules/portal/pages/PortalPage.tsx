@@ -2931,7 +2931,7 @@ export function PortalPage() {
                             </div>
                             <div className="portal-search-card__body">
                               <strong>{row.description || "-"}</strong>
-                              {row.vehicle ? <VehicleBadges value={row.vehicle} compact limit={3} className="portal-search-card__vehicles" /> : null}
+                              {row.vehicle ? <VehicleBadges value={row.vehicle} compact limit={3} logoOnly className="portal-search-card__vehicles" /> : null}
                               <div className="portal-search-card__specs">
                                 <span>{row.tariff || "No tariff"}</span>
                                 <span>{row.origin || "No origin"}</span>
@@ -3011,7 +3011,7 @@ export function PortalPage() {
                             </div>
                             <div className="portal-search-card__body">
                               <strong>{row.description || "-"}</strong>
-                              {row.vehicle ? <VehicleBadges value={row.vehicle} compact limit={3} className="portal-search-card__vehicles" /> : null}
+                              {row.vehicle ? <VehicleBadges value={row.vehicle} compact limit={3} logoOnly className="portal-search-card__vehicles" /> : null}
                               <div className="portal-search-card__specs">
                                 <span>{row.available_qty == null ? "Stock check" : `${Number(row.available_qty).toLocaleString("en-US")} in stock`}</span>
                                 <span>{row.origin || "No origin"}</span>
@@ -3196,7 +3196,7 @@ export function PortalPage() {
                   <div>
                     <span>Vehicle</span>
                     <strong className="catalog-detail-list-text">
-                      <VehicleBadges value={portalPreview.item.vehicle || ""} limit={5} expandable />
+                      <VehicleBadges value={portalPreview.item.vehicle || ""} limit={5} expandable logoOnly />
                     </strong>
                   </div>
                   <div><span>Tariff</span><strong>{portalPreview.item.tariff || "-"}</strong></div>

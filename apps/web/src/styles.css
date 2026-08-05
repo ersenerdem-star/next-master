@@ -1967,6 +1967,32 @@ select {
   line-height: 1.1;
 }
 
+.vehicle-badge-list--logo-only { gap: 8px; }
+
+.vehicle-badge--logo-only {
+  width: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+}
+
+.vehicle-badge--logo-only .vehicle-badge__mark {
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.vehicle-badge--logo-only .vehicle-badge__logo {
+  width: 30px;
+  height: 30px;
+}
+
 .vehicle-badge--mercedes {
   background: linear-gradient(180deg, #f3f4f6, #ffffff);
   color: #111827;
@@ -6990,17 +7016,22 @@ textarea {
 .portal-search-result-rail__copy small { color: #14945a; font-weight: 800; }
 .portal-search-result-rail__brand.brand-pill {
   align-self: start;
-  min-height: 20px;
-  max-width: 100%;
-  padding: 2px 6px;
-  gap: 4px;
-  font-size: 10px;
-  line-height: 1;
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  max-width: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
 }
 .portal-search-result-rail__brand .brand-pill__logo {
-  width: 13px;
-  height: 13px;
-  flex: 0 0 13px;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border-radius: 0;
+  background: transparent;
 }
 .portal-search-result-rail__brand .brand-pill__label { display: none; }
 .portal-search-result-rail__chevron { color: #7589a2; font-size: 24px; }
