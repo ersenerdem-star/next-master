@@ -202,7 +202,7 @@ export function PortalSearchResults({
                   <p>{selected.description || "Part description"}</p>
                   <span>{selected.market_segment || "Automotive"}</span>
                 </div>
-                <BrandPill brand={selected.brand} compact withLogo />
+                <BrandPill brand={selected.brand} compact logoOnly />
               </div>
               <div className="portal-search-result-main__hero">
                 <div className="portal-search-result-main__image">

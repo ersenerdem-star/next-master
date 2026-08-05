@@ -2232,6 +2232,26 @@ select {
   font-size: 0.68rem;
 }
 
+.brand-pill--logo-only {
+  width: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+  gap: 0;
+}
+
+.brand-pill--logo-only .brand-pill__logo {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 0;
+  background: transparent;
+}
+
 .module-tabs {
   display: flex;
   flex-wrap: wrap;

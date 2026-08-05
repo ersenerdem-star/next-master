@@ -28,6 +28,7 @@ import type {
 import type { CatalogProductDetails, CatalogProductFitment } from "../../types/catalogDetails";
 import type { CodeReferenceUsage } from "../../types/codeReferences";
 import { Button } from "../components/common/Button";
+import { BrandPill } from "../components/common/BrandPill";
 import { DraggableSurface } from "../components/common/DraggableSurface";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { DataTable } from "../components/common/DataTable";
@@ -1034,7 +1035,7 @@ export function CatalogPage() {
         header: t("catalog.common.brand"),
         render: (row: CatalogRow) => (
           <div className="catalog-cell">
-            <span className="catalog-brand-badge">{drafts[row.product_id]?.brand ?? row.brand}</span>
+            <BrandPill brand={drafts[row.product_id]?.brand ?? row.brand} compact logoOnly />
           </div>
         ),
       },
@@ -1074,7 +1075,7 @@ export function CatalogPage() {
         header: t("catalog.common.vehicle"),
         render: (row: CatalogRow) => (
           <div className="catalog-cell catalog-cell--stack">
-            <VehicleBadges value={drafts[row.product_id]?.vehicle ?? row.vehicle ?? ""} limit={3} expandable />
+            <VehicleBadges value={drafts[row.product_id]?.vehicle ?? row.vehicle ?? ""} limit={3} expandable logoOnly />
           </div>
         ),
       },
@@ -1780,7 +1781,7 @@ export function CatalogPage() {
             </div>
             <div className="workbench-detail-panel__title">{selectedCatalogDraft.product_code}</div>
             <div className="document-marks document-marks--compact">
-              <span className="mark-badge">{selectedCatalogDraft.brand || t("catalog.detail.noBrand")}</span>
+              <BrandPill brand={selectedCatalogDraft.brand || t("catalog.detail.noBrand")} compact logoOnly />
               <span className="mark-badge">{getSegmentLabel(selectedCatalogDraft.market_segment)}</span>
               {selectedCatalogDraft.replacement_warning ? <span className="mark-badge mark-badge--accent">{t("catalog.detail.replacement")}</span> : null}
               <span className={`mark-badge ${selectedCatalogDraft.lifecycle_status === "discontinued" ? "mark-badge--danger" : "mark-badge--success"}`}>
@@ -1879,7 +1880,7 @@ export function CatalogPage() {
               <div>
                 <span>{t("catalog.common.vehicle")}</span>
                 <strong className="catalog-detail-list-text">
-                  <VehicleBadges value={selectedCatalogDraft.vehicle || ""} limit={5} expandable />
+                  <VehicleBadges value={selectedCatalogDraft.vehicle || ""} limit={5} expandable logoOnly />
                 </strong>
               </div>
               <div><span>{t("catalog.common.vehicleModel")}</span><strong>{selectedCatalogDraft.vehicle_model || "-"}</strong></div>
