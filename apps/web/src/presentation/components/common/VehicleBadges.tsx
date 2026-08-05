@@ -105,7 +105,7 @@ export function VehicleBadges({
         return (
           <span
             key={item.label}
-            className={`vehicle-badge vehicle-badge--${item.tone}${compact ? " vehicle-badge--compact" : ""}${logoOnly ? " vehicle-badge--logo-only" : ""}`}
+            className={`vehicle-badge vehicle-badge--${item.tone}${compact ? " vehicle-badge--compact" : ""}${logoOnly ? " vehicle-badge--logo-only" : ""}${logoAsset ? " vehicle-badge--has-logo" : ""}`}
             title={item.label}
           >
             <span className="vehicle-badge__mark">

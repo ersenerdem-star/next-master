@@ -1993,6 +1993,23 @@ select {
   height: 30px;
 }
 
+/* Word-mark vehicle logos need their natural aspect ratio, not a square crop. */
+.vehicle-badge--logo-only.vehicle-badge--has-logo {
+  width: auto;
+  min-width: 0;
+}
+
+.vehicle-badge--logo-only.vehicle-badge--has-logo .vehicle-badge__mark {
+  min-width: 0;
+  width: auto;
+}
+
+.vehicle-badge--logo-only.vehicle-badge--has-logo .vehicle-badge__logo {
+  width: auto;
+  max-width: 76px;
+  height: 30px;
+}
+
 .vehicle-badge--mercedes {
   background: linear-gradient(180deg, #f3f4f6, #ffffff);
   color: #111827;
@@ -2233,8 +2250,8 @@ select {
 }
 
 .brand-pill--logo-only {
-  width: 30px;
-  min-width: 30px;
+  width: auto;
+  min-width: 0;
   min-height: 30px;
   padding: 0;
   border: 0;
@@ -2245,9 +2262,10 @@ select {
 }
 
 .brand-pill--logo-only .brand-pill__logo {
-  width: 28px;
+  width: auto;
+  max-width: 76px;
   height: 28px;
-  flex: 0 0 28px;
+  flex: 0 0 auto;
   border-radius: 0;
   background: transparent;
 }
