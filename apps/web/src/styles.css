@@ -7002,6 +7002,7 @@ textarea {
   height: 13px;
   flex: 0 0 13px;
 }
+.portal-search-result-rail__brand .brand-pill__label { display: none; }
 .portal-search-result-rail__chevron { color: #7589a2; font-size: 24px; }
 
 .portal-search-result-rail__all {
