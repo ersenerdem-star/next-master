@@ -1281,8 +1281,20 @@ export function CatalogPage() {
       if (!activeImportBrand) {
         throw new Error(t("catalog.errors.importBrandRequired"));
       }
-      if (!activeImportSegment) {
+      const hasSegmentColumn = segmentIndex >= 0;
+      const rowsMissingSegment = hasSegmentColumn
+        ? dataRows.filter((row) => {
+            const hasData = row.some((cell) => normalizeText(cell));
+            const rowSegment = normalizeCatalogMarketSegment(normalizeText(row[segmentIndex]) || "");
+            return hasData && !rowSegment && !selectedImportSegment;
+          }).length
+        : 0;
+
+      if (!selectedImportSegment && !hasSegmentColumn) {
         throw new Error(t("catalog.errors.importSegmentRequired"));
+      }
+      if (!selectedImportSegment && rowsMissingSegment > 0) {
+        throw new Error(t("catalog.errors.importRowSegmentRequired", { count: String(rowsMissingSegment) }));
       }
 
       actionFeedback.begin(t("catalog.status.importingForBrand", { brand: activeImportBrand }));
