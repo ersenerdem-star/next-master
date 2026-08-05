@@ -74,7 +74,7 @@ const LOGO_PRESETS: LogoPreset[] = [
   { match: /fag/i, label: "FAG", wordmark: "FAG", assetSrc: "/brand-logos/fag_logo.jpg", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#0f172a", stroke: "#cbd5e1" },
   { match: /knorr/i, label: "Knorr", wordmark: "KNORR", assetSrc: "/brand-logos/knorr_logo.png", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#0f172a", stroke: "#cbd5e1" },
   { match: /brembo/i, label: "Brembo", wordmark: "BREMBO", assetSrc: "/brand-logos/brembo_logo.svg", bgFrom: "#fef2f2", bgTo: "#ffffff", fg: "#b91c1c", stroke: "#fca5a5" },
-  { match: /mercedes|benz/i, label: "Mercedes-Benz", wordmark: "MB", assetSrc: "/brand-logos/mercedes-benz_logo.jpeg", bgFrom: "#f3f4f6", bgTo: "#ffffff", fg: "#111827", stroke: "#cbd5e1" },
+  { match: /mercedes|benz/i, label: "Mercedes-Benz", wordmark: "MB", assetSrc: "/brand-logos/mercedes-benz-star.svg", bgFrom: "#f3f4f6", bgTo: "#ffffff", fg: "#111827", stroke: "#cbd5e1" },
   { match: /\bman\b/i, label: "MAN", wordmark: "MAN", assetSrc: "/brand-logos/man_logo.png", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#93c5fd" },
   { match: /volvo/i, label: "Volvo", wordmark: "VOLVO", assetSrc: "/brand-logos/volvo_logo.png", bgFrom: "#ecfeff", bgTo: "#ffffff", fg: "#0f766e", stroke: "#99f6e4" },
   { match: /\bdaf\b/i, label: "DAF", wordmark: "DAF", assetSrc: "/brand-logos/daf_logo.png", bgFrom: "#fff7ed", bgTo: "#ffffff", fg: "#c2410c", stroke: "#fdba74" },
