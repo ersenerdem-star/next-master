@@ -92,6 +92,11 @@ function ensureBreakdownRow(map: Map<string, RevenueBreakdownRow>, name: string)
 }
 
 async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
+  // Keep the opening dashboard bounded. Loading every historical order and
+  // its JSON lines column from the browser can exhaust the Supabase pool and
+  // block both admin and portal requests. Detailed history remains available
+  // in Reports/Sales; the dashboard is intentionally a lightweight summary.
+  const DASHBOARD_SUMMARY_LIMIT = 250;
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
@@ -126,29 +131,25 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
   }
 
   async function accumulateSalesOrders() {
-    let from = 0;
-    const pageSize = 1000;
+    const { data, error } = await supabaseClient
+      .from("sales_orders")
+      .select("quote_date,sales_total,seller_company,lines")
+      .gte("quote_date", startDate)
+      .order("quote_date", { ascending: false })
+      .limit(DASHBOARD_SUMMARY_LIMIT);
 
-    while (true) {
-      const { data, error } = await supabaseClient
-        .from("sales_orders")
-        .select("quote_date,sales_total,seller_company,lines")
-        .gte("quote_date", startDate)
-        .order("quote_date", { ascending: false })
-        .range(from, from + pageSize - 1);
+    if (error) {
+      throw new Error(error.message || "Revenue analytics load failed");
+    }
 
-      if (error) {
-        throw new Error(error.message || "Revenue analytics load failed");
-      }
-
-      const batch = (data || []) as Array<{
+    const batch = (data || []) as Array<{
         quote_date: string | null;
         sales_total: number | null;
         seller_company: string | null;
         lines?: Array<Record<string, unknown>> | null;
       }>;
 
-      batch.forEach((row) => {
+    batch.forEach((row) => {
         if (!row.quote_date) return;
         const date = new Date(row.quote_date);
         if (Number.isNaN(date.getTime())) return;
@@ -187,34 +188,27 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
         matchingPeriods(date).forEach(apply);
       });
 
-      if (batch.length < pageSize) break;
-      from += pageSize;
-    }
   }
 
   async function accumulatePurchaseOrders() {
-    let from = 0;
-    const pageSize = 1000;
+    const { data, error } = await supabaseClient
+      .from("purchase_orders")
+      .select("created_at,total_amount,purchase_company")
+      .gte("created_at", `${startDate}T00:00:00`)
+      .order("created_at", { ascending: false })
+      .limit(DASHBOARD_SUMMARY_LIMIT);
 
-    while (true) {
-      const { data, error } = await supabaseClient
-        .from("purchase_orders")
-        .select("created_at,total_amount,purchase_company")
-        .gte("created_at", `${startDate}T00:00:00`)
-        .order("created_at", { ascending: false })
-        .range(from, from + pageSize - 1);
+    if (error) {
+      throw new Error(error.message || "Purchase analytics load failed");
+    }
 
-      if (error) {
-        throw new Error(error.message || "Purchase analytics load failed");
-      }
-
-      const batch = (data || []) as Array<{
+    const batch = (data || []) as Array<{
         created_at: string | null;
         total_amount: number | null;
         purchase_company: string | null;
       }>;
 
-      batch.forEach((row) => {
+    batch.forEach((row) => {
         if (!row.created_at) return;
         const date = new Date(row.created_at);
         if (Number.isNaN(date.getTime())) return;
@@ -231,9 +225,6 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
         matchingPeriods(date).forEach(apply);
       });
 
-      if (batch.length < pageSize) break;
-      from += pageSize;
-    }
   }
 
   await Promise.all([accumulateSalesOrders(), accumulatePurchaseOrders()]);
