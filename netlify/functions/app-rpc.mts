@@ -32,6 +32,8 @@ const ALLOWED_RPCS = new Set([
   "get_catalog_product_integrity",
   "get_catalog_product_details",
   "queue_supplier_price_catalog_sync",
+  "queue_supplier_price_import_finalize",
+  "queue_catalog_import_processing",
   "queue_supplier_price_rollups_refresh",
   "post_invoice_stock_movements",
   "search_catalog_products",
@@ -115,6 +117,8 @@ const OPERATIONS_RPCS = new Set([
   "post_invoice_stock_movements",
   "reverse_invoice_stock_movements",
   "queue_supplier_price_catalog_sync",
+  "queue_supplier_price_import_finalize",
+  "queue_catalog_import_processing",
   "save_bill_atomic",
   "save_invoice_atomic",
   "save_payment_made_atomic",
@@ -195,6 +199,10 @@ const DESCRIPTION_FAMILY_STOPWORDS = new Set([
   "vehicle",
   "part",
 ]);
+
+function sleep(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
 function normalizePartCode(value: string) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -1086,6 +1094,191 @@ export default async (req: Request, context: Context) => {
 
       context.waitUntil(task);
       return json({ ok: true, data: { queued: true, status: "queued", organization_id: caller.organizationId } });
+    }
+
+    if (name === "queue_supplier_price_import_finalize") {
+      const runId = String(args.input_run_id || "").trim();
+      if (!runId) return json({ error: "input_run_id is required" }, 400);
+
+      // Persist the queue marker before starting background work.  If the
+      // function is reclaimed, the scheduled worker can resume this run.
+      await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/mark_supplier_price_import_processing_queued`, {
+        method: "POST",
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: authorizationHeader,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ input_run_id: runId }),
+        timeoutMs: 8_000,
+      });
+
+      const finalizeTask = (async () => {
+        let latest: { status?: string; has_more?: boolean } | null = null;
+        let finalized = false;
+
+        // Keep each invocation short. The scheduled worker will continue the
+        // same idempotent run after this bounded foreground hand-off.
+        for (let batch = 0; batch < 8; batch += 1) {
+          let lastError: unknown = null;
+
+          for (let retry = 0; retry < 3; retry += 1) {
+            try {
+              latest = await sendJson<{ status?: string; has_more?: boolean }>(
+                `${supabaseUrl}/rest/v1/rpc/finalize_supplier_price_import_batch`,
+                {
+                  method: "POST",
+                  headers: {
+                    apikey: supabaseAnonKey,
+                    Authorization: authorizationHeader,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    input_run_id: runId,
+                    input_batch_size: 500,
+                  }),
+                },
+              );
+              lastError = null;
+              break;
+            } catch (error) {
+              lastError = error;
+              await sleep((retry + 1) * 1500);
+            }
+          }
+
+          if (lastError) {
+            console.error("supplier price finalize background batch failed", runId, lastError);
+            return;
+          }
+
+          const status = String(latest?.status || "");
+          if (status === "finalized" || status === "succeeded" || latest?.has_more === false) {
+            finalized = true;
+            break;
+          }
+
+          await sleep(250);
+        }
+
+        if (!finalized) {
+          console.error("supplier price finalize background task did not reach finalized state", runId, latest);
+          return;
+        }
+
+        try {
+          await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/sync_supplier_price_catalog_from_import`, {
+            method: "POST",
+            headers: {
+              apikey: supabaseAnonKey,
+              Authorization: authorizationHeader,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ input_run_id: runId }),
+          });
+        } catch (error) {
+          console.error("supplier price catalog sync background task failed", runId, error);
+        }
+
+        try {
+          await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/refresh_supplier_price_rollups_logged`, {
+            method: "POST",
+            headers: {
+              apikey: supabaseAnonKey,
+              Authorization: authorizationHeader,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ p_organization_id: caller.organizationId }),
+          });
+        } catch (error) {
+          console.error("supplier price rollup background task failed", runId, error);
+        }
+      })().catch((error) => {
+        console.error("supplier price finalize background task failed", runId, error);
+      });
+
+      context.waitUntil(finalizeTask);
+      return json({
+        ok: true,
+        data: {
+          queued: true,
+          status: "queued",
+          run_id: runId,
+          organization_id: caller.organizationId,
+        },
+      });
+    }
+
+    if (name === "queue_catalog_import_processing") {
+      const runId = String(args.input_run_id || "").trim();
+      if (!runId) return json({ error: "input_run_id is required" }, 400);
+
+      // Queue first. This is intentionally a fast, idempotent write; all
+      // expensive validation/publication work runs outside the browser request.
+      await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/mark_catalog_import_processing_queued`, {
+        method: "POST",
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: authorizationHeader,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ input_run_id: runId }),
+        timeoutMs: 8_000,
+      });
+
+      const processingTask = (async () => {
+        try {
+          const run = await getJson<{
+            organization_id: string;
+            created_by: string | null;
+            status: string;
+          }[]>(`${supabaseUrl}/rest/v1/catalog_import_runs?select=organization_id,created_by,status&id=eq.${encodeURIComponent(runId)}&limit=1`, {
+            headers: serviceRoleHeaders(serviceRoleKey),
+            timeoutMs: 12_000,
+          });
+          const current = run[0];
+          if (!current?.organization_id || !current.created_by) return;
+
+          let latestStatus = current.status;
+          if (latestStatus === "running") {
+            const validation = await sendJson<{ status?: string }>(`${supabaseUrl}/rest/v1/rpc/validate_catalog_import_system`, {
+              method: "POST",
+              headers: serviceRoleHeaders(serviceRoleKey),
+              body: JSON.stringify({
+                input_run_id: runId,
+                input_organization_id: current.organization_id,
+                input_actor_id: current.created_by,
+              }),
+              timeoutMs: 55_000,
+            });
+            latestStatus = String(validation?.status || "");
+          }
+
+          if (latestStatus === "validated" || latestStatus === "finalizing") {
+            for (let batch = 0; batch < 4; batch += 1) {
+              const result = await sendJson<{ status?: string; has_more?: boolean }>(`${supabaseUrl}/rest/v1/rpc/finalize_catalog_import_batch_system`, {
+                method: "POST",
+                headers: serviceRoleHeaders(serviceRoleKey),
+                body: JSON.stringify({
+                  input_run_id: runId,
+                  input_organization_id: current.organization_id,
+                  input_actor_id: current.created_by,
+                  input_batch_size: 100,
+                }),
+                timeoutMs: 55_000,
+              });
+              if (result?.has_more === false || result?.status === "finalized") break;
+            }
+          }
+        } catch (error) {
+          // Never convert a transient background timeout into a user-visible
+          // failure. The persisted queue marker is the recovery source.
+          console.error("catalog import background processing deferred", runId, error);
+        }
+      })();
+
+      context.waitUntil(processingTask);
+      return json({ ok: true, data: { queued: true, status: "queued", run_id: runId, organization_id: caller.organizationId } });
     }
 
     if (name === "queue_supplier_price_catalog_sync") {

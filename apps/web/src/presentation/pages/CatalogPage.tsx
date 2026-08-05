@@ -1347,10 +1347,19 @@ export function CatalogPage() {
       });
       setCatalogImportSummary(importResult);
 
-      const summaryText = `Catalog import ${importResult.finalized ? "finalized" : "validated"} for ${activeImportBrand}. ` +
+      const summaryText = `Catalog import ${importResult.validationStatus === "processing" ? "queued for background processing" : importResult.finalized ? "finalized" : "validated"} for ${activeImportBrand}. ` +
         `${importResult.insertCount.toLocaleString("en-US")} inserted, ${importResult.updateCount.toLocaleString("en-US")} updated, ` +
         `${importResult.skipCount.toLocaleString("en-US")} skipped, ${importResult.errorCount.toLocaleString("en-US")} errors, ` +
         `${importResult.conflictCount.toLocaleString("en-US")} conflicts.`;
+
+      if (importResult.validationStatus === "processing") {
+        setError("");
+        setStatus(`${summaryText} Run ${importResult.runId || ""} will continue automatically.`);
+        actionFeedback.succeed("Catalog upload accepted. Processing continues in the background.");
+        setShowImportDialog(false);
+        setImportFile(null);
+        return;
+      }
 
       if (!importResult.finalized) {
         const blockedMessage = importResult.message || "Catalog import validation failed. Finalize is blocked.";
@@ -2189,7 +2198,7 @@ export function CatalogPage() {
             </div>
             {catalogImportSummary ? (
               <div className="info-text">
-                <strong>{catalogImportSummary.finalized ? "Finalize summary" : "Validation summary"}</strong>
+                <strong>{catalogImportSummary.validationStatus === "processing" ? "Background processing" : catalogImportSummary.finalized ? "Finalize summary" : "Validation summary"}</strong>
                 <ul>
                   <li>Total rows: {formatCount(catalogImportSummary.totalRows)}</li>
                   <li>Insert: {formatCount(catalogImportSummary.insertCount)}</li>
@@ -2199,7 +2208,9 @@ export function CatalogPage() {
                   <li>Conflict: {formatCount(catalogImportSummary.conflictCount)}</li>
                 </ul>
                 <div>
-                  {catalogImportSummary.finalized
+                  {catalogImportSummary.validationStatus === "processing"
+                    ? catalogImportSummary.message || "Catalog upload is queued and will continue in the background."
+                    : catalogImportSummary.finalized
                     ? "Catalog import finalized successfully."
                     : catalogImportSummary.message || "Validation errors detected. Finalize is blocked."}
                 </div>

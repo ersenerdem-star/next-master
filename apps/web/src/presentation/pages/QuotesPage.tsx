@@ -2200,6 +2200,11 @@ export function QuotesPage({
         processedRows,
         totalRows: rows.length,
       });
+      // Leave a small gap between read batches so a large sales-order import
+      // does not compete with catalog/supplier workers for the same indexes.
+      if (processedRows < rows.length) {
+        await new Promise((resolve) => window.setTimeout(resolve, 150));
+      }
     }
 
     return allLines;

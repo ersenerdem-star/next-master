@@ -44,7 +44,7 @@ function chunk<T>(items: T[], size: number) {
   return batches;
 }
 
-export async function batchResolveQuoteImportRows(input: {
+async function resolveQuoteImportRowsOnce(input: {
   rows: QuoteImportRow[];
   customerType: "A" | "B" | "C" | "Other";
   marginA: number;
@@ -274,6 +274,76 @@ export async function batchResolveQuoteImportRows(input: {
       selectedSupplierKey: selected ? `${selected.supplier_name}-0` : "",
     } satisfies QuoteBuilderLine;
   });
+}
+
+function isTransientImportError(error: unknown) {
+  const message = String(error instanceof Error ? error.message : error || "").toLowerCase();
+  return ["timeout", "timed out", "statement timeout", "canceling statement", "upstream request", "fetch failed", "connection", "504", "503", "502"].some((token) => message.includes(token));
+}
+
+function delayedQuoteImportLine(row: QuoteImportRow, reason: string): QuoteBuilderLine {
+  return {
+    lineId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    requestedCode: row.code,
+    resolvedCode: row.code,
+    brand: canonicalizeBrandName(row.brand),
+    description: "",
+    qty: row.qty,
+    oem_no: "",
+    hs_code: "",
+    origin: "",
+    weight_kg: null,
+    supplier_name: "",
+    buy_price: null,
+    sell_price: null,
+    c_sell_price: null,
+    price_date: "",
+    notes: `${reason} Retry this line from the quote workspace.`,
+    found: false,
+    codeChanged: false,
+    codeChangeWarning: "",
+    lifecycle_status: null,
+    lifecycle_note: null,
+    lifecycle_warning: null,
+    supplierOptions: [],
+    selectedSupplierKey: "",
+  } satisfies QuoteBuilderLine;
+}
+
+/**
+ * Timeout-safe sales-order import rule. Reads are retried briefly and then
+ * split into smaller independent batches. A single slow row becomes an
+ * explicit unresolved line rather than aborting the whole order import.
+ */
+export async function batchResolveQuoteImportRows(input: {
+  rows: QuoteImportRow[];
+  customerType: "A" | "B" | "C" | "Other";
+  marginA: number;
+  marginB: number;
+}): Promise<QuoteBuilderLine[]> {
+  const rows = input.rows.filter((row) => row.code.trim() && row.brand.trim());
+  if (!rows.length) return [];
+
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await resolveQuoteImportRowsOnce(input);
+    } catch (error) {
+      lastError = error;
+      if (!isTransientImportError(error) || attempt === 2) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 400 * (attempt + 1)));
+    }
+  }
+
+  if (isTransientImportError(lastError) && rows.length > 1) {
+    const midpoint = Math.ceil(rows.length / 2);
+    const left = await batchResolveQuoteImportRows({ ...input, rows: rows.slice(0, midpoint) });
+    const right = await batchResolveQuoteImportRows({ ...input, rows: rows.slice(midpoint) });
+    return [...left, ...right];
+  }
+
+  const reason = lastError instanceof Error ? lastError.message : "Resolution timed out.";
+  return rows.map((row) => delayedQuoteImportLine(row, reason));
 }
 
 export async function fetchCatalogMetadataForRows(
