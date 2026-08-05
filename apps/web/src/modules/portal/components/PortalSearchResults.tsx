@@ -181,6 +181,7 @@ export function PortalSearchResults({
                 <span className="portal-search-result-rail__media"><ProductVisual imageUrl={item.image_url} brand={item.brand} alt={item.code} /></span>
                 <span className="portal-search-result-rail__copy">
                   <strong>{item.code || "-"}</strong>
+                  <BrandPill brand={item.brand} compact withLogo className="portal-search-result-rail__brand" />
                   <span>{compactText(item.description || "Part description", 48)}</span>
                   <small>{item.available_qty == null ? "Stock check" : `${Number(item.available_qty).toLocaleString("en-US")} in stock`}</small>
                 </span>

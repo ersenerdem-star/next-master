@@ -6988,6 +6988,20 @@ textarea {
 .portal-search-result-rail__copy strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .portal-search-result-rail__copy span { color: #3f536c; line-height: 1.25; }
 .portal-search-result-rail__copy small { color: #14945a; font-weight: 800; }
+.portal-search-result-rail__brand.brand-pill {
+  align-self: start;
+  min-height: 20px;
+  max-width: 100%;
+  padding: 2px 6px;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1;
+}
+.portal-search-result-rail__brand .brand-pill__logo {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+}
 .portal-search-result-rail__chevron { color: #7589a2; font-size: 24px; }
 
 .portal-search-result-rail__all {
