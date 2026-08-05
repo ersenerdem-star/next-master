@@ -255,6 +255,7 @@ export function CatalogPage() {
     brand: "",
     brand_name: "",
     description: "",
+    description_tr: "",
     oem_no: "",
     vehicle: "",
     hs_code: "",
@@ -860,6 +861,7 @@ export function CatalogPage() {
           brand: draft.brand,
           ean: draft.ean || null,
           description: draft.description || null,
+          description_tr: draft.description_tr || null,
           oem_no: draft.oem_no || null,
           vehicle: draft.vehicle || null,
           vehicle_model: draft.vehicle_model || null,
@@ -926,6 +928,7 @@ export function CatalogPage() {
         product_code: draft.product_code,
         brand: draft.brand,
         description: draft.description || null,
+        description_tr: draft.description_tr || null,
         oem_no: draft.oem_no || null,
         vehicle: draft.vehicle || null,
         hs_code: draft.hs_code || null,
@@ -1236,6 +1239,7 @@ export function CatalogPage() {
       const brandIndex = indexOfAny("Brand");
       const eanIndex = indexOfAny("EAN", "GTIN", "Barcode");
       const nameIndex = indexOfAny("Product_Name", "Name", "Description");
+      const nameTrIndex = indexOfAny("Product_Name_TR", "Product_Name_Turkish", "Description_TR", "Description_Turkish", "Name_TR");
       const oemIndex = indexOfAny("OEM_No", "OEM", "Original_Number");
       const hsIndex = indexOfAny("HS_Code", "HS", "GTIP");
       const vehicleIndex = indexOfAny("Vehicle", "Vehicles", "Fit_Vehicles", "Fit Vehicles", "Applications");
@@ -1289,6 +1293,7 @@ export function CatalogPage() {
           brand: normalizeText(row[brandIndex]) || activeImportBrand || "Unbranded",
           ean: normalizeText(row[eanIndex]),
           description: normalizeText(row[nameIndex]),
+          description_tr: normalizeText(row[nameTrIndex]),
           oem_no: normalizeText(row[oemIndex]),
           vehicle: normalizeText(row[vehicleIndex]),
           vehicle_model: normalizeText(row[vehicleModelIndex]),
@@ -1460,12 +1465,13 @@ export function CatalogPage() {
     try {
       const exportData = await fetchCatalogExportRows({ brandName: exportBrand, marketSegment: catalogSegment || undefined });
       const exportRows = [
-        ["Product_Code", "Brand", "EAN", "Product_Name", "OEM_No", "Vehicle", "Vehicle_Model", "HS_Code", "Origin", "Market_Segment", "Weight_kg", "Image_URL", "Lifecycle_Status", "Lifecycle_Note"],
+        ["Product_Code", "Brand", "EAN", "Product_Name", "Product_Name_TR", "OEM_No", "Vehicle", "Vehicle_Model", "HS_Code", "Origin", "Market_Segment", "Weight_kg", "Image_URL", "Lifecycle_Status", "Lifecycle_Note"],
         ...exportData.map((row) => [
           row.product_code,
           row.brand,
           row.ean || "",
           row.description || "",
+          row.description_tr || "",
           row.oem_no || "",
           row.vehicle || "",
           row.vehicle_model || "",
@@ -1828,6 +1834,11 @@ export function CatalogPage() {
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { description: value })}
               />
               <Input
+                label="Description (TR)"
+                value={selectedCatalogDraft.description_tr || ""}
+                onChange={(value) => patchCatalogDraft(selectedCatalogRow, { description_tr: value })}
+              />
+              <Input
                 label={t("catalog.common.oem")}
                 value={selectedCatalogDraft.oem_no || ""}
                 onChange={(value) => patchCatalogDraft(selectedCatalogRow, { oem_no: value })}
@@ -1860,6 +1871,7 @@ export function CatalogPage() {
             </div>
             <div className="workbench-detail-list">
               <div><span>{t("catalog.common.description")}</span><strong>{selectedCatalogDraft.description || "-"}</strong></div>
+              <div><span>Description (TR)</span><strong>{selectedCatalogDraft.description_tr || "-"}</strong></div>
               <div><span>{t("catalog.common.ean")}</span><strong>{selectedCatalogDraft.ean || "-"}</strong></div>
               <div>
                 <span>{t("catalog.common.oem")}</span>
@@ -2292,6 +2304,7 @@ export function CatalogPage() {
                 disabled={createDraft.brand !== "__new__"}
               />
 	              <Input label={t("catalog.common.productName")} value={createDraft.description} onChange={(value) => setCreateDraft((current) => ({ ...current, description: value }))} />
+	              <Input label="Product name (TR)" value={createDraft.description_tr} onChange={(value) => setCreateDraft((current) => ({ ...current, description_tr: value }))} />
 	              <Input label={t("catalog.common.oem")} value={createDraft.oem_no} onChange={(value) => setCreateDraft((current) => ({ ...current, oem_no: value }))} />
 	              <Input label={t("catalog.common.vehicle")} value={createDraft.vehicle} onChange={(value) => setCreateDraft((current) => ({ ...current, vehicle: value }))} />
 	              <Input label={t("catalog.common.hsCode")} value={createDraft.hs_code} onChange={(value) => setCreateDraft((current) => ({ ...current, hs_code: value }))} />
@@ -2326,6 +2339,7 @@ export function CatalogPage() {
                       product_code: createDraft.product_code.trim(),
                       brand: activeBrand,
                       description: createDraft.description.trim() || null,
+                      description_tr: createDraft.description_tr.trim() || null,
                       oem_no: createDraft.oem_no.trim() || null,
                       vehicle: createDraft.vehicle.trim() || null,
                       hs_code: createDraft.hs_code.trim() || null,
@@ -2340,6 +2354,7 @@ export function CatalogPage() {
                       brand: "",
                       brand_name: "",
                       description: "",
+                      description_tr: "",
                       oem_no: "",
                       vehicle: "",
                       hs_code: "",

@@ -1277,6 +1277,7 @@ export const enMessages = {
     "segments.unassigned": "Unassigned",
     "segments.universal": "Universal",
     "segments.industrial": "Industrial",
+    "segments.off_highway": "OHV · Off-highway",
     "status.creatingItem": "Creating item {code}...",
     "status.deletingRow": "Deleting catalog row {code}...",
     "status.deactivatingRow": "Deactivating catalog row {code}...",

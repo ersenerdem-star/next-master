@@ -7,7 +7,8 @@ export type CatalogMarketSegment =
   | "universal"
   | "marine"
   | "industrial"
-  | "agriculture";
+  | "agriculture"
+  | "off_highway";
 
 const SEGMENT_OPTIONS: Array<{ value: CatalogMarketSegment; label: string }> = [
   { value: "pc", label: "PC" },
@@ -19,6 +20,7 @@ const SEGMENT_OPTIONS: Array<{ value: CatalogMarketSegment; label: string }> = [
   { value: "marine", label: "Marine" },
   { value: "industrial", label: "Industrial" },
   { value: "agriculture", label: "Agriculture" },
+  { value: "off_highway", label: "OHV · Off-highway" },
 ];
 
 const SEGMENT_LABELS = new Map(SEGMENT_OPTIONS.map((option) => [option.value, option.label]));
@@ -65,6 +67,10 @@ const SEGMENT_ALIASES: Record<string, CatalogMarketSegment> = {
   agriculture: "agriculture",
   agricultural: "agriculture",
   agri: "agriculture",
+  off_highway: "off_highway",
+  offhighway: "off_highway",
+  ohv: "off_highway",
+  oh: "off_highway",
 };
 
 export const CATALOG_MARKET_SEGMENT_OPTIONS = SEGMENT_OPTIONS;
@@ -91,6 +97,7 @@ export function normalizeCatalogMarketSegment(value: string | null | undefined):
     case "marine":
     case "industrial":
     case "agriculture":
+    case "off_highway":
       return text;
     default:
       return null;

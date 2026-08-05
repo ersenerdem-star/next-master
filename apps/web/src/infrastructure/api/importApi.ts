@@ -518,6 +518,7 @@ export async function stageCatalogImportOnly(
     row_index: Number.isFinite(Number(row.row_index)) ? Number(row.row_index) : rowIndex,
     product_code: normalizeCatalogImportProductCode(row, options.brandName),
     description: row.description == null ? null : normalizeCatalogDescription(String(row.description || "")),
+    description_tr: row.description_tr == null ? null : String(row.description_tr || "").trim() || null,
     vehicle: row.vehicle == null ? null : String(row.vehicle || "").trim() || null,
     market_segment: normalizeCatalogMarketSegment(String(row.market_segment || "")),
   }));
@@ -611,6 +612,7 @@ export async function bulkImportCatalog(
     row_index: Number.isFinite(Number(row.row_index)) ? Number(row.row_index) : rowIndex,
     product_code: normalizeCatalogImportProductCode(row, options?.brandName),
     description: row.description == null ? null : normalizeCatalogDescription(String(row.description || "")),
+    description_tr: row.description_tr == null ? null : String(row.description_tr || "").trim() || null,
     vehicle: row.vehicle == null ? null : String(row.vehicle || "").trim() || null,
     market_segment: normalizeCatalogMarketSegment(String(row.market_segment || "")),
   }));

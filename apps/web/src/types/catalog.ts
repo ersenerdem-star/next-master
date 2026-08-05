@@ -11,6 +11,7 @@ export type CatalogRow = {
   ean?: string;
   market_segment: CatalogMarketSegment | null;
   description: string;
+  description_tr?: string;
   oem_no: string;
   vehicle: string;
   vehicle_model?: string;

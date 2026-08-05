@@ -41,6 +41,7 @@ type CatalogQueryRow = {
   ean?: string | null;
   vehicle_model?: string | null;
   description: string | null;
+  description_tr?: string | null;
   oem_no: string | null;
   vehicle: string | null;
   hs_code: string | null;
@@ -100,6 +101,43 @@ async function mergeCatalogOemFallbacks<T extends { product_id: string; oem_no: 
   return rows.map((row) => ({
     ...row,
     oem_no: row.oem_no.trim() || fallbacks.get(row.product_id) || "",
+  }));
+}
+
+async function mergeCatalogTurkishDescriptions<T extends { product_id: string; description_tr?: string | null }>(
+  organizationId: string,
+  rows: T[],
+): Promise<Array<T & { description_tr: string }>> {
+  const ids = Array.from(new Set(rows.map((row) => String(row.product_id || "").trim()).filter(Boolean)));
+  if (!ids.length) {
+    return rows.map((row) => ({
+      ...row,
+      description_tr: String(row.description_tr || "").trim(),
+    }));
+  }
+
+  const { data, error } = await supabaseClient
+    .from("catalog_products")
+    .select("id,description_tr")
+    .eq("organization_id", organizationId)
+    .in("id", ids);
+
+  // Keep catalog browsing available until this additive migration reaches an
+  // older environment. Turkish description is an optional enhancement.
+  if (error) {
+    return rows.map((row) => ({
+      ...row,
+      description_tr: String(row.description_tr || "").trim(),
+    }));
+  }
+
+  const descriptions = new Map(
+    (data || []).map((row) => [String(row.id), String(row.description_tr || "").trim()]),
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    description_tr: String(row.description_tr || "").trim() || descriptions.get(row.product_id) || "",
   }));
 }
 
@@ -240,7 +278,7 @@ async function resolveOrCreateBrandId(brandName: string) {
 function requireCatalogMarketSegment(value: string | null | undefined) {
   const normalized = normalizeCatalogMarketSegment(value);
   if (!normalized) {
-    throw new Error("Market segment is required. Choose Truck, Bus, Agriculture, Marine, Passenger Car, or Industrial.");
+    throw new Error("Market segment is required. Choose PC, CV, LCV, Agriculture, Marine, Industrial, or OHV Off-highway.");
   }
   return normalized;
 }
@@ -269,6 +307,7 @@ export async function fetchCloudCatalog(input: {
     image_url: String(row.image_url || ""),
     ean: String(row.ean || ""),
     description: String(row.description || ""),
+    description_tr: String(row.description_tr || ""),
     oem_no: sanitizeCatalogOemNumbers(String(row.oem_no || "")),
     vehicle: String(row.vehicle || ""),
     vehicle_model: String(row.vehicle_model || ""),
@@ -283,7 +322,7 @@ export async function fetchCloudCatalog(input: {
     replacement_reason: String(row.replacement_reason || "") || null,
     replacement_warning: String(row.replacement_warning || "") || null,
   }));
-  return mergeCatalogOemFallbacks(organizationId, rows);
+  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogTurkishDescriptions(organizationId, rows));
 }
 
 export async function fetchCloudCatalogIntegrity(input: {
@@ -312,6 +351,7 @@ export async function fetchCloudCatalogIntegrity(input: {
     brand: String(row.brand || ""),
     image_url: String(row.image_url || ""),
     description: String(row.description || ""),
+    description_tr: String(row.description_tr || ""),
     oem_no: sanitizeCatalogOemNumbers(String(row.oem_no || "")),
     vehicle: String(row.vehicle || ""),
     hs_code: String(row.hs_code || ""),
@@ -329,7 +369,7 @@ export async function fetchCloudCatalogIntegrity(input: {
     last_evaluated_at: row.last_evaluated_at ? String(row.last_evaluated_at) : null,
     integrity_last_error: row.integrity_last_error ? String(row.integrity_last_error) : null,
   }));
-  return mergeCatalogOemFallbacks(organizationId, rows);
+  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogTurkishDescriptions(organizationId, rows));
 }
 
 export async function fetchCatalogIntegritySummary(): Promise<CatalogIntegritySummary> {
@@ -367,6 +407,7 @@ export async function updateCloudCatalogRow(
     brand: string;
     ean?: string | null;
     description: string | null;
+    description_tr?: string | null;
     oem_no: string | null;
     vehicle: string | null;
     vehicle_model?: string | null;
@@ -388,6 +429,7 @@ export async function updateCloudCatalogRow(
       brand_id: brandId,
       ean: updates.ean?.trim() || null,
       description: updates.description ? normalizeCatalogDescription(updates.description) : null,
+      description_tr: updates.description_tr?.trim() || null,
       oem_no: sanitizeCatalogOemNumbers(updates.oem_no),
       vehicle: updates.vehicle?.trim() || null,
       vehicle_model: updates.vehicle_model?.trim() || null,
@@ -409,6 +451,7 @@ export async function createCloudCatalogRow(input: {
   brand: string;
   ean?: string | null;
   description: string | null;
+  description_tr?: string | null;
   oem_no: string | null;
   vehicle: string | null;
   vehicle_model?: string | null;
@@ -429,6 +472,7 @@ export async function createCloudCatalogRow(input: {
     product_code: normalizeCatalogDisplayCode(input.product_code, input.brand),
     ean: input.ean?.trim() || null,
     description: input.description ? normalizeCatalogDescription(input.description) : null,
+    description_tr: input.description_tr?.trim() || null,
     oem_no: sanitizeCatalogOemNumbers(input.oem_no),
     vehicle: input.vehicle?.trim() || null,
     vehicle_model: input.vehicle_model?.trim() || null,
@@ -526,6 +570,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     image_url?: string | null;
     ean?: string | null;
     description: string | null;
+    description_tr?: string | null;
     oem_no: string | null;
     vehicle: string | null;
     vehicle_model?: string | null;
@@ -602,12 +647,21 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     from += pageSize;
   }
 
-  return allRows.map((row) => ({
+  const localizedRows = await mergeCatalogTurkishDescriptions(
+    organizationId,
+    allRows.map((row) => ({
+      ...row,
+      product_id: row.id,
+    })),
+  );
+
+  return localizedRows.map((row) => ({
     product_code: row.product_code,
     brand: brandRow.name as string,
     image_url: row.image_url || "",
     ean: row.ean || "",
     description: row.description || "",
+    description_tr: row.description_tr || "",
     oem_no: sanitizeCatalogOemNumbers(row.oem_no || ""),
     vehicle: row.vehicle || "",
     vehicle_model: row.vehicle_model || "",
@@ -684,6 +738,7 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
         image_url?: string | null;
         ean?: string | null;
         description: string | null;
+        description_tr?: string | null;
         oem_no: string | null;
         vehicle: string | null;
         vehicle_model?: string | null;
@@ -713,6 +768,7 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
         image_url: row.image_url ?? "",
         ean: row.ean ?? "",
         description: row.description ?? "",
+        description_tr: row.description_tr ?? "",
         oem_no: sanitizeCatalogOemNumbers(row.oem_no ?? ""),
         vehicle: row.vehicle ?? "",
         vehicle_model: row.vehicle_model ?? "",
@@ -727,5 +783,5 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
   }
 
   const sorted = result.sort((left, right) => left.product_code.localeCompare(right.product_code));
-  return mergeCatalogOemFallbacks(organizationId, sorted);
+  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogTurkishDescriptions(organizationId, sorted));
 }

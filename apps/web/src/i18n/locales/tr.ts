@@ -1254,6 +1254,7 @@ export const trMessages = {
     "segments.unassigned": "Atanmamış",
     "segments.universal": "Genel",
     "segments.industrial": "Endüstriyel",
+    "segments.off_highway": "OHV · Arazi / iş makinesi",
     "status.creatingItem": "{code} kalemi oluşturuluyor...",
     "status.deletingRow": "{code} katalog satırı siliniyor...",
     "status.deactivatingRow": "{code} katalog satırı pasife alınıyor...",
