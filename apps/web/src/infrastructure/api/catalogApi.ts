@@ -104,40 +104,67 @@ async function mergeCatalogOemFallbacks<T extends { product_id: string; oem_no: 
   }));
 }
 
-async function mergeCatalogTurkishDescriptions<T extends { product_id: string; description_tr?: string | null }>(
+type CatalogOptionalFieldsRow = {
+  product_id: string;
+  ean?: string | null;
+  description_tr?: string | null;
+  vehicle?: string | null;
+  vehicle_model?: string | null;
+};
+
+/**
+ * Legacy catalog search RPCs do not expose every canonical product column.
+ * Hydrate optional display fields by the product ids already returned by the
+ * RPC so catalog search and export do not silently show blanks.
+ */
+async function mergeCatalogProductOptionalFields<T extends CatalogOptionalFieldsRow>(
   organizationId: string,
   rows: T[],
-): Promise<Array<T & { description_tr: string }>> {
+): Promise<Array<T & { ean: string; description_tr: string; vehicle: string; vehicle_model: string }>> {
   const ids = Array.from(new Set(rows.map((row) => String(row.product_id || "").trim()).filter(Boolean)));
   if (!ids.length) {
     return rows.map((row) => ({
       ...row,
+      ean: String(row.ean || "").trim(),
       description_tr: String(row.description_tr || "").trim(),
+      vehicle: String(row.vehicle || "").trim(),
+      vehicle_model: String(row.vehicle_model || "").trim(),
     }));
   }
 
   const { data, error } = await supabaseClient
     .from("catalog_products")
-    .select("id,description_tr")
+    .select("id,ean,description_tr,vehicle,vehicle_model")
     .eq("organization_id", organizationId)
     .in("id", ids);
 
-  // Keep catalog browsing available until this additive migration reaches an
-  // older environment. Turkish description is an optional enhancement.
+  // Keep catalog browsing available if an older environment does not expose
+  // one of these additive columns yet; the RPC values remain usable.
   if (error) {
     return rows.map((row) => ({
       ...row,
+      ean: String(row.ean || "").trim(),
       description_tr: String(row.description_tr || "").trim(),
+      vehicle: String(row.vehicle || "").trim(),
+      vehicle_model: String(row.vehicle_model || "").trim(),
     }));
   }
 
   const descriptions = new Map(
-    (data || []).map((row) => [String(row.id), String(row.description_tr || "").trim()]),
+    (data || []).map((row) => [String(row.id), {
+      ean: String(row.ean || "").trim(),
+      description_tr: String(row.description_tr || "").trim(),
+      vehicle: String(row.vehicle || "").trim(),
+      vehicle_model: String(row.vehicle_model || "").trim(),
+    }]),
   );
 
   return rows.map((row) => ({
     ...row,
-    description_tr: String(row.description_tr || "").trim() || descriptions.get(row.product_id) || "",
+    ean: String(row.ean || "").trim() || descriptions.get(row.product_id)?.ean || "",
+    description_tr: String(row.description_tr || "").trim() || descriptions.get(row.product_id)?.description_tr || "",
+    vehicle: String(row.vehicle || "").trim() || descriptions.get(row.product_id)?.vehicle || "",
+    vehicle_model: String(row.vehicle_model || "").trim() || descriptions.get(row.product_id)?.vehicle_model || "",
   }));
 }
 
@@ -322,7 +349,7 @@ export async function fetchCloudCatalog(input: {
     replacement_reason: String(row.replacement_reason || "") || null,
     replacement_warning: String(row.replacement_warning || "") || null,
   }));
-  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogTurkishDescriptions(organizationId, rows));
+  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogProductOptionalFields(organizationId, rows));
 }
 
 export async function fetchCloudCatalogIntegrity(input: {
@@ -392,7 +419,7 @@ export async function fetchCloudCatalogIntegrity(input: {
     last_evaluated_at: row.last_evaluated_at ? String(row.last_evaluated_at) : null,
     integrity_last_error: row.integrity_last_error ? String(row.integrity_last_error) : null,
   }));
-  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogTurkishDescriptions(organizationId, rows));
+  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogProductOptionalFields(organizationId, rows));
 }
 
 export async function fetchCatalogIntegritySummary(): Promise<CatalogIntegritySummary> {
@@ -670,7 +697,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     from += pageSize;
   }
 
-  const localizedRows = await mergeCatalogTurkishDescriptions(
+  const localizedRows = await mergeCatalogProductOptionalFields(
     organizationId,
     allRows.map((row) => ({
       ...row,
@@ -806,5 +833,5 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
   }
 
   const sorted = result.sort((left, right) => left.product_code.localeCompare(right.product_code));
-  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogTurkishDescriptions(organizationId, sorted));
+  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogProductOptionalFields(organizationId, sorted));
 }
