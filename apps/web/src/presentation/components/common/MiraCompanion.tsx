@@ -4,7 +4,7 @@ type MiraState = "away" | "road" | "home";
 
 const STATES: MiraState[] = ["away", "road", "home"];
 
-/** Visual-only MIRA companion. The demo state loop is not connected to Catalog data. */
+/** Visual-only compact MIRA companion. The demo state loop is not connected to Catalog data. */
 export function MiraCompanion() {
   const [stateIndex, setStateIndex] = useState(2);
 
@@ -20,7 +20,7 @@ export function MiraCompanion() {
   const stateLabel = activeState === "away" ? "Away" : activeState === "road" ? "On the road" : "At home";
 
   return (
-    <aside className={`mira-companion mira-companion--${activeState}`} aria-label="MIRA visual companion">
+    <aside className={`mira-companion mira-companion--${activeState}`} aria-label={`MIRA assistant: ${stateLabel}`}>
       <span className="mira-companion__halo" aria-hidden="true" />
       <div className="mira-companion__figure" aria-hidden="true">
         <img className="mira-companion__frame mira-companion__frame--away" src="/mira/mira-away.png" alt="" />
