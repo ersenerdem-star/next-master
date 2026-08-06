@@ -17,23 +17,21 @@ export function MiraCompanion() {
   }, []);
 
   const activeState = STATES[stateIndex];
+  const stateLabel = activeState === "away" ? "Away" : activeState === "road" ? "On the road" : "At home";
 
   return (
-    <section className={`mira-companion mira-companion--${activeState}`} aria-label="MIRA visual companion">
-      <div className="mira-companion__copy">
-        <span className="mira-companion__eyebrow">MIRA</span>
-        <h2>Operations companion</h2>
-        <p>Present on the dashboard while you work.</p>
-      </div>
+    <aside className={`mira-companion mira-companion--${activeState}`} aria-label="MIRA visual companion">
+      <span className="mira-companion__halo" aria-hidden="true" />
       <div className="mira-companion__figure" aria-hidden="true">
         <img className="mira-companion__frame mira-companion__frame--away" src="/mira/mira-away.png" alt="" />
         <img className="mira-companion__frame mira-companion__frame--road" src="/mira/mira-road.png" alt="" />
         <img className="mira-companion__frame mira-companion__frame--home" src="/mira/mira-home.png" alt="" />
       </div>
-      <div className="mira-companion__state" aria-live="polite">
+      <div className="mira-companion__badge" aria-live="polite">
         <span className="mira-companion__state-dot" />
-        {activeState === "away" ? "Away" : activeState === "road" ? "On the road" : "At home"}
+        <strong>MIRA</strong>
+        <span>{stateLabel}</span>
       </div>
-    </section>
+    </aside>
   );
 }
