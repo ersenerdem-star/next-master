@@ -333,6 +333,29 @@ export async function fetchCloudCatalogIntegrity(input: {
   page?: number;
   pageSize?: number;
 }): Promise<CatalogRow[]> {
+  const integrityFilter = String(input.integrityFilter || "").trim().toLowerCase();
+
+  if (!integrityFilter || integrityFilter === "all") {
+    const rows = await fetchCloudCatalog({
+      search: input.search,
+      brandName: input.brandName,
+      marketSegment: input.marketSegment,
+      page: input.page,
+      pageSize: input.pageSize,
+    });
+
+    return rows.map((row) => ({
+      ...row,
+      integrity_status: "unknown" as CatalogIntegrityStatus,
+      critical_missing_fields: [],
+      optional_missing_fields: [],
+      conflict_fields: [],
+      pending_conflict_count: 0,
+      last_evaluated_at: null,
+      integrity_last_error: null,
+    }));
+  }
+
   const organizationId = await getCurrentOrgId();
   const data = await callAppRpc<Array<Record<string, unknown>>>("cloud_catalog_integrity_page", {
     input_search: input.search,
