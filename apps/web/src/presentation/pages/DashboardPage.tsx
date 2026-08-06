@@ -18,6 +18,7 @@ import { buildEntityAlias } from "../../shared/entityAlias";
 import { canAccessCustomerOps, canAccessSystemModules } from "../../shared/roles";
 import { useI18n } from "../../i18n/I18nProvider";
 import { PageHeader, PageShell } from "../components/common/VisualPrimitives";
+import { MiraCompanion } from "../components/common/MiraCompanion";
 
 type DashboardPageProps = {
   role?: string;
@@ -195,6 +196,8 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
   return (
     <PageShell className="dashboard dashboard-page">
       <PageHeader title={t("dashboard.overview.title")} subtitle={t("dashboard.overview.subtitle")} />
+
+      <MiraCompanion />
 
       <SectionCard title={t("dashboard.moneySignals.title")} className="dashboard-money-signals">
         <div className="stats-grid dashboard-executive-summary" aria-label={t("dashboard.overview.summary")}>
