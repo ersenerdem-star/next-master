@@ -5,6 +5,8 @@ export { SalesPage } from "../../presentation/pages/SalesPage";
 export { PurchasesPage } from "../../presentation/pages/PurchasesPage";
 export { ReportsPage } from "../../presentation/pages/ReportsPage";
 export { SettingsPage } from "../../presentation/pages/SettingsPage";
+export { MiraMissionDeskPage } from "../../presentation/pages/MiraMissionDeskPage";
+export { OperationsStatusPage } from "./OperationsStatusPage";
 
 export const adminModuleRoutes = {
   Home: "DashboardPage",
@@ -14,4 +16,5 @@ export const adminModuleRoutes = {
   Purchases: "PurchasesPage",
   Reports: "ReportsPage",
   Settings: "SettingsPage",
+  Mira: "MiraMissionDeskPage",
 } as const;

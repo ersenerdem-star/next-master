@@ -5453,6 +5453,144 @@ select {
   width: calc(100vw - 16px);
   max-height: none;
 }
+
+/* MIRA Mission Desk: an admin entry point to the independent local worker. */
+.mira-mission-page {
+  gap: 24px;
+}
+
+.mira-mission-page__hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.6fr);
+  align-items: center;
+  gap: 32px;
+  overflow: hidden;
+  padding: 32px;
+  border: 1px solid rgba(34, 75, 116, 0.14);
+  border-radius: 24px;
+  background: linear-gradient(135deg, #f9fbff 0%, #eef5fb 100%);
+}
+
+.mira-mission-page__visual {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 230px;
+}
+
+.mira-mission-page__visual img {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 240px);
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 18px 28px rgba(8, 26, 51, 0.2));
+}
+
+.mira-mission-page__glow {
+  position: absolute;
+  width: 190px;
+  height: 42px;
+  bottom: 22px;
+  border-radius: 50%;
+  background: rgba(218, 158, 38, 0.24);
+  filter: blur(14px);
+}
+
+.mira-mission-page__copy h2 {
+  margin: 0 0 12px;
+  color: #10233e;
+  font-size: clamp(28px, 3vw, 42px);
+}
+
+.mira-mission-page__copy p {
+  max-width: 760px;
+  margin: 0;
+  color: #59708d;
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.mira-mission-page__address {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 22px;
+  color: #59708d;
+}
+
+.mira-mission-page__address code {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #10233e;
+  color: #f5c76b;
+  font-size: 13px;
+}
+
+.mira-mission-page__boundary {
+  margin-top: 22px;
+  padding: 14px 16px;
+  border-left: 4px solid #d89b28;
+  border-radius: 10px;
+  background: rgba(255, 248, 229, 0.9);
+  color: #73511a;
+  line-height: 1.5;
+}
+
+.mira-mission-page__capabilities {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.mira-mission-page__capabilities article {
+  padding: 22px;
+  border: 1px solid rgba(34, 75, 116, 0.14);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.mira-mission-page__capability-icon {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: #10233e;
+  color: #f5c76b;
+  font-size: 21px;
+}
+
+.mira-mission-page__capabilities h3 {
+  margin: 14px 0 8px;
+  color: #10233e;
+}
+
+.mira-mission-page__capabilities p {
+  margin: 0;
+  color: #59708d;
+  line-height: 1.5;
+}
+
+/* Home is a resting state; it should not continuously rotate or pulse. */
+.mira-companion--home .mira-companion__halo,
+.mira-companion--home .mira-companion__figure,
+.mira-companion--home .mira-companion__frame--home {
+  animation: none;
+}
+
+@media (max-width: 900px) {
+  .mira-mission-page__hero,
+  .mira-mission-page__capabilities {
+    grid-template-columns: 1fr;
+  }
+
+  .mira-mission-page__visual {
+    min-height: 180px;
+  }
+}
 }
 
 .app-shell-notice {
@@ -9614,4 +9752,41 @@ select.field__input {
     border-radius: 18px;
     padding: 22px 18px;
   }
+}
+
+/* MIRA Mission Desk global layout. */
+.mira-mission-page { gap: 24px; }
+.mira-mission-page__hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.6fr);
+  align-items: center;
+  gap: 32px;
+  overflow: hidden;
+  padding: 32px;
+  border: 1px solid rgba(34, 75, 116, 0.14);
+  border-radius: 24px;
+  background: linear-gradient(135deg, #f9fbff 0%, #eef5fb 100%);
+}
+.mira-mission-page__visual { position: relative; display: grid; place-items: center; min-height: 230px; }
+.mira-mission-page__visual img { position: relative; z-index: 1; width: min(100%, 240px); height: auto; object-fit: contain; filter: drop-shadow(0 18px 28px rgba(8, 26, 51, 0.2)); }
+.mira-mission-page__glow { position: absolute; width: 190px; height: 42px; bottom: 22px; border-radius: 50%; background: rgba(218, 158, 38, 0.24); filter: blur(14px); }
+.mira-mission-page__copy h2 { margin: 0 0 12px; color: #10233e; font-size: clamp(28px, 3vw, 42px); }
+.mira-mission-page__copy p { max-width: 760px; margin: 0; color: #59708d; font-size: 17px; line-height: 1.6; }
+.mira-mission-page__address { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 22px; color: #59708d; }
+.mira-mission-page__address code { padding: 8px 12px; border-radius: 10px; background: #10233e; color: #f5c76b; font-size: 13px; }
+.mira-mission-page__boundary { margin-top: 22px; padding: 14px 16px; border-left: 4px solid #d89b28; border-radius: 10px; background: rgba(255, 248, 229, 0.9); color: #73511a; line-height: 1.5; }
+.mira-mission-page__capabilities { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.mira-mission-page__capabilities article { padding: 22px; border: 1px solid rgba(34, 75, 116, 0.14); border-radius: 18px; background: #fff; }
+.mira-mission-page__capability-icon { display: inline-grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: #10233e; color: #f5c76b; font-size: 21px; }
+.mira-mission-page__capabilities h3 { margin: 14px 0 8px; color: #10233e; }
+.mira-mission-page__capabilities p { margin: 0; color: #59708d; line-height: 1.5; }
+.mira-companion--home .mira-companion__halo,
+.mira-companion--home .mira-companion__figure,
+.mira-companion--home .mira-companion__frame--home { animation: none; }
+
+@media (max-width: 900px) {
+  .mira-mission-page__hero,
+  .mira-mission-page__capabilities { grid-template-columns: 1fr; }
+  .mira-mission-page__visual { min-height: 180px; }
 }

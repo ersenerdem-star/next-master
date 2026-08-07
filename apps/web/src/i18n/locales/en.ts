@@ -2,6 +2,7 @@ export type LocaleMessages = {
   common: Record<string, string>;
   auth: Record<string, string>;
   nav: Record<string, string>;
+  mira: Record<string, string>;
   sales: Record<string, string>;
   catalog: Record<string, string>;
   inventory: Record<string, string>;
@@ -112,6 +113,8 @@ export const enMessages = {
     reportsCaption: "Reporting views and analytical pricing comparisons",
     settings: "Settings",
     settingsCaption: "Application and company-level settings",
+    mira: "MIRA",
+    miraCaption: "Local autonomous mission control",
     customers: "Customers",
     salesOrders: "Sales Orders",
     invoices: "Invoices",
@@ -136,6 +139,22 @@ export const enMessages = {
     diagnostics: "Diagnostics",
     driveConsole: "Drive Console",
     operationalCockpit: "Operational cockpit",
+  },
+  mira: {
+    "missionDesk.eyebrow": "Local mission control",
+    "missionDesk.title": "MIRA Mission Desk",
+    "missionDesk.subtitle": "A focused workspace for local autonomous research missions",
+    "missionDesk.home": "At home · Ready",
+    "missionDesk.copy": "MIRA is ready for a mission. Assign a bounded task, review the evidence debrief, and keep production catalog changes under human control.",
+    "missionDesk.open": "Open Mission Desk",
+    "missionDesk.address": "Local address",
+    "missionDesk.worker": "Autonomous worker",
+    "missionDesk.workerCopy": "Runs locally and reports its current state without rotating the home view.",
+    "missionDesk.queue": "Mission queue",
+    "missionDesk.queueCopy": "Queue work in the local desk before it is reviewed or handed off.",
+    "missionDesk.debrief": "Evidence debrief",
+    "missionDesk.debriefCopy": "Review artifacts and fingerprints before any separate catalog decision.",
+    "missionDesk.boundary": "MIRA remains independent from the Next-Master Catalog, database, and Apply flows. This page only opens the local Mission Desk.",
   },
   dashboard: {
     "overview.title": "Overview",

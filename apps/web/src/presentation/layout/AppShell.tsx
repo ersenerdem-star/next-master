@@ -38,6 +38,7 @@ const pageMeta = {
   Purchases: { code: "05", eyebrowKey: "nav.purchases", titleKey: "nav.purchases", descriptionKey: "nav.purchasesCaption" },
   Reports: { code: "06", eyebrowKey: "nav.reports", titleKey: "nav.reports", descriptionKey: "nav.reportsCaption" },
   Settings: { code: "07", eyebrowKey: "nav.settings", titleKey: "nav.settings", descriptionKey: "nav.settingsCaption" },
+  Mira: { code: "08", eyebrowKey: "nav.mira", titleKey: "nav.mira", descriptionKey: "nav.miraCaption" },
 } as const;
 
 const buildMeta = __APP_BUILD_META__;

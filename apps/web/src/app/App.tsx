@@ -33,6 +33,7 @@ const DashboardPage = lazy(() => import("../presentation/pages/DashboardPage").t
 const InventoryPage = lazy(() => import("../presentation/pages/InventoryPage").then((module) => ({ default: module.InventoryPage })));
 const ItemsPage = lazy(() => import("../presentation/pages/ItemsPage").then((module) => ({ default: module.ItemsPage })));
 const LoginPage = lazy(() => import("../presentation/pages/LoginPage").then((module) => ({ default: module.LoginPage })));
+const MiraMissionDeskPage = lazy(() => import("../presentation/pages/MiraMissionDeskPage").then((module) => ({ default: module.MiraMissionDeskPage })));
 const PortalPage = lazy(() => import("../modules/portal/pages/PortalPage").then((module) => ({ default: module.PortalPage })));
 const PurchasesPage = lazy(() => import("../presentation/pages/PurchasesPage").then((module) => ({ default: module.PurchasesPage })));
 const ReportsPage = lazy(() => import("../presentation/pages/ReportsPage").then((module) => ({ default: module.ReportsPage })));
@@ -135,6 +136,7 @@ const allNavItems = [
   { key: "Purchases", code: "05", labelKey: "nav.purchases", captionKey: "nav.purchasesCaption" },
   { key: "Reports", code: "06", labelKey: "nav.reports", captionKey: "nav.reportsCaption" },
   { key: "Settings", code: "07", labelKey: "nav.settings", captionKey: "nav.settingsCaption" },
+  { key: "Mira", code: "08", labelKey: "nav.mira", captionKey: "nav.miraCaption" },
 ] as const;
 
 function getAllowedNavItems(role: AppRole) {
@@ -866,6 +868,8 @@ export function App() {
       />
     ) : activePage === "Settings" ? (
       <SettingsPage initialTab={settingsTab} onLogout={handleLogout} onOpenRelatedRecord={openRelatedRecord} />
+    ) : activePage === "Mira" && isSuperadminRole(appRole) ? (
+      <MiraMissionDeskPage />
     ) : (
       <DashboardPage role={appRole} onOpenSalesOrder={openSalesOrder} onOpenInventoryTab={openInventoryTab} />
     );
