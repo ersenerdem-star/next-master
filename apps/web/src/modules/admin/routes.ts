@@ -6,7 +6,7 @@ export { PurchasesPage } from "../../presentation/pages/PurchasesPage";
 export { ReportsPage } from "../../presentation/pages/ReportsPage";
 export { SettingsPage } from "../../presentation/pages/SettingsPage";
 export { MiraMissionDeskPage } from "../../presentation/pages/MiraMissionDeskPage";
-export { OperationsStatusPage } from "./OperationsStatusPage";
+export { OperationsStatusPage } from "../../presentation/pages/OperationsStatusPage";
 
 export const adminModuleRoutes = {
   Home: "DashboardPage",
