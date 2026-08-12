@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useI18n } from "../../i18n/I18nProvider";
+import { MiraCompanion } from "../components/common/MiraCompanion";
 
 const APP_DESKTOP_BASE_WIDTH_PX = 1440;
 const APP_DESKTOP_SCALE_SIDE_PADDING_PX = 24;
@@ -196,6 +197,11 @@ export function AppShell({
               </span>
               {buildMeta.deployUrl ? <span>{t("common.deployReady")}</span> : null}
             </div>
+            {activePage === "Home" ? (
+              <div className="topbar-build__mira-slot">
+                <MiraCompanion embedded onOpenMissionDesk={() => onNavigate?.("Mira")} />
+              </div>
+            ) : null}
           </div>
         </header>
         {subNavItems.length ? (
