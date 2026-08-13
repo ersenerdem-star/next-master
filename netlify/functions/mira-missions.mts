@@ -3,6 +3,13 @@ import { buildRestUrl, getJson, json, readJson, sendJson, serviceRoleHeaders } f
 import { requireCallerProfile } from "./_shared/auth.mts";
 import { verifyMiraBridgeRequest } from "./_shared/mira-bridge-auth.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
+import {
+  MiraObservationIntakeError,
+} from "./_shared/catalog/mira-observation-intake.mjs";
+import {
+  normalizeMiraObservationResultIntake,
+  stageMiraObservationResult,
+} from "./_shared/catalog/mira-observation-result-intake.mjs";
 
 type MissionInput = {
   objective?: unknown;
@@ -14,7 +21,14 @@ type MissionInput = {
 type BridgeMission = {
   id: string;
   organization_id: string;
+  objective?: string;
+  mission_area?: string;
+  max_pages?: number;
+  delay_ms?: number;
   status: string;
+  created_at?: string;
+  started_at?: string | null;
+  bridge_client?: string | null;
   bridge_event_id?: string | null;
   result?: unknown;
 };
@@ -211,9 +225,82 @@ async function claimBridgeMission(req: Request) {
   return json({ error: `MIRA mission cannot be claimed from status=${existing.status}.` }, 409);
 }
 
+/**
+ * Read-only queue peek for the autonomous worker. It deliberately does not
+ * claim or mutate a row; the worker must use the exact-ID claim immediately
+ * afterwards, which remains the single atomic ownership transition.
+ */
+async function nextBridgeMission(req: Request) {
+  const auth = await authorizeBridge(req, "");
+  if ("error" in auth) return auth.error;
+  const supabaseUrl = env("SUPABASE_URL");
+  const serviceRoleKey = env("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) return json({ error: "MIRA bridge server configuration is incomplete." }, 503);
+  const url = buildRestUrl(supabaseUrl, "mira_missions", {
+    select: "id,organization_id,objective,mission_area,max_pages,delay_ms,status,created_at,started_at,bridge_client",
+    organization_id: `eq.${auth.config.organizationId}`,
+    status: "eq.queued",
+    order: "created_at.asc",
+    limit: "1",
+  });
+  const missions = await getJson<BridgeMission[]>(url, { headers: serviceRoleHeaders(serviceRoleKey), timeoutMs: 12000 });
+  return json({ ok: true, mission: missions[0] ?? null });
+}
+
+/**
+ * Requeue a mission that this bridge worker claimed but could not execute.
+ * The transition is deliberately exact-ID and bridge-bound.  It never touches
+ * Catalog data; it only releases a queue lease so a later worker cycle can
+ * retry the same mission safely.
+ */
+async function releaseBridgeMission(req: Request) {
+  const auth = await authorizeBridge(req, "");
+  if ("error" in auth) return auth.error;
+  const missionId = new URL(req.url).searchParams.get("missionId")?.trim() || "";
+  if (!UUID_PATTERN.test(missionId)) {
+    return json({ error: "MIRA bridge release requires an exact missionId UUID." }, 400);
+  }
+  const supabaseUrl = env("SUPABASE_URL");
+  const serviceRoleKey = env("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) return json({ error: "MIRA bridge server configuration is incomplete." }, 503);
+
+  const current = await loadBridgeMission(supabaseUrl, serviceRoleKey, auth.config.organizationId, missionId);
+  if (!current) return json({ error: "MIRA mission was not found for the bridge organization." }, 404);
+  if (current.status === "queued") return json({ ok: true, requeued: false, idempotent: true, mission: current });
+  if (current.status !== "processing") {
+    return json({ error: `MIRA mission cannot be released from status=${current.status}.` }, 409);
+  }
+  if (current.bridge_client !== auth.bridgeId) {
+    return json({ error: "MIRA mission is leased by a different bridge worker." }, 409);
+  }
+
+  const updateUrl = buildRestUrl(supabaseUrl, "mira_missions", {
+    id: `eq.${missionId}`,
+    organization_id: `eq.${auth.config.organizationId}`,
+    status: "eq.processing",
+    bridge_client: `eq.${auth.bridgeId}`,
+  });
+  const updated = await sendJson<BridgeMission[]>(updateUrl, {
+    method: "PATCH",
+    headers: { ...serviceRoleHeaders(serviceRoleKey), Prefer: "return=representation" },
+    body: JSON.stringify({
+      status: "queued",
+      started_at: null,
+      bridge_client: null,
+    }),
+    timeoutMs: 12000,
+  });
+  if (updated.length === 0) {
+    const afterRace = await loadBridgeMission(supabaseUrl, serviceRoleKey, auth.config.organizationId, missionId);
+    if (afterRace?.status === "queued") return json({ ok: true, requeued: false, idempotent: true, mission: afterRace });
+    return json({ error: "MIRA mission was changed by another worker before release." }, 409);
+  }
+  return json({ ok: true, requeued: true, idempotent: false, mission: updated[0] ?? null });
+}
+
 async function loadBridgeMission(supabaseUrl: string, serviceRoleKey: string, organizationId: string, missionId: string) {
   const url = buildRestUrl(supabaseUrl, "mira_missions", {
-    select: "id,organization_id,status,bridge_event_id,result",
+    select: "id,organization_id,status,bridge_client,bridge_event_id,result",
     id: `eq.${missionId}`,
     organization_id: `eq.${organizationId}`,
     limit: "1",
@@ -249,6 +336,87 @@ async function acceptBridgeResult(req: Request) {
   if (current.bridge_event_id === idempotencyKey) return json({ ok: true, idempotent: true, mission: current });
   if (TERMINAL_STATUSES.has(current.status)) return json({ error: "MIRA mission already has a different terminal result." }, 409);
   if (current.status !== "processing") return json({ error: "MIRA mission must be claimed before a bridge result is accepted." }, 409);
+  if (current.bridge_client !== auth.bridgeId) return json({ error: "MIRA mission is leased by a different bridge worker." }, 409);
+
+  let terminalStatus = envelope.terminalStatus;
+  let normalizedResult: Record<string, unknown> = envelope.normalizedResult;
+  const resultBody = body.result && typeof body.result === "object" && !Array.isArray(body.result)
+    ? body.result as Record<string, unknown>
+    : null;
+  const rawObservationIntake = body.observationIntake ?? resultBody?.observationIntake;
+  if (rawObservationIntake === undefined) {
+    normalizedResult = {
+      ...normalizedResult,
+      observationIntake: {
+        protocolVersion: "mira-observation-intake.v1",
+        status: "skipped",
+        code: envelope.normalizedResult.candidateCount > 0 ? "NO_TYPED_OBSERVATIONS" : "NO_CANDIDATES",
+        reason: envelope.normalizedResult.candidateCount > 0
+          ? "Bridge result contained no typed observation batch; no Catalog staging was attempted."
+          : "Mission returned no candidates; no Catalog staging was necessary.",
+        catalogProductsWritten: 0,
+        applyPerformed: false,
+      },
+    };
+  } else {
+    try {
+      const resultIntake = normalizeMiraObservationResultIntake(rawObservationIntake);
+      const expectedCandidateCount = envelope.normalizedResult.candidateCount;
+      const intakeCandidateCount = resultIntake.candidateCount ?? expectedCandidateCount;
+      const skippedCount = resultIntake.skippedCount ?? 0;
+      if (intakeCandidateCount !== expectedCandidateCount
+        || resultIntake.observations.length + skippedCount !== expectedCandidateCount) {
+        throw new MiraObservationIntakeError("CANDIDATE_COUNT_MISMATCH", "MIRA result candidateCount must equal staged observations plus explicit skipped candidates");
+      }
+      if (resultIntake.observations.length === 0) {
+        normalizedResult = {
+          ...normalizedResult,
+          observationIntake: {
+            protocolVersion: "mira-observation-intake.v1",
+            status: "skipped",
+            code: "ALL_CANDIDATES_SKIPPED",
+            reason: "No candidate contained a complete product identity and HTTPS evidence pair; no Catalog staging was attempted.",
+            candidateCount: expectedCandidateCount,
+            stagedCount: 0,
+            skippedCount,
+            skipReasons: resultIntake.skipReasons,
+            catalogProductsWritten: 0,
+            applyPerformed: false,
+          },
+        };
+      } else {
+        const intake = await stageMiraObservationResult({
+          supabaseUrl,
+          serviceRoleKey,
+          organizationId: auth.config.organizationId,
+          missionId,
+          resultIntake,
+        });
+        normalizedResult = { ...normalizedResult, observationIntake: {
+          ...intake,
+          candidateCount: expectedCandidateCount,
+          stagedCount: resultIntake.observations.length,
+          skippedCount,
+          skipReasons: resultIntake.skipReasons,
+        } };
+        if (intake.status !== "staged" && terminalStatus === "completed") terminalStatus = "partial";
+      }
+    } catch (error) {
+      const code = error instanceof MiraObservationIntakeError ? error.code : "OBSERVATION_INTAKE_FAILED";
+      normalizedResult = {
+        ...normalizedResult,
+        observationIntake: {
+          protocolVersion: "mira-observation-intake.v1",
+          status: "blocked",
+          code,
+          reason: error instanceof Error ? error.message.slice(0, 500) : "MIRA observation intake failed server-side validation.",
+          catalogProductsWritten: 0,
+          applyPerformed: false,
+        },
+      };
+      if (terminalStatus === "completed") terminalStatus = "partial";
+    }
+  }
 
   const updateUrl = buildRestUrl(supabaseUrl, "mira_missions", {
     id: `eq.${missionId}`,
@@ -259,8 +427,8 @@ async function acceptBridgeResult(req: Request) {
     method: "PATCH",
     headers: { ...serviceRoleHeaders(serviceRoleKey), Prefer: "return=representation" },
     body: JSON.stringify({
-      status: envelope.terminalStatus,
-      result: envelope.normalizedResult,
+      status: terminalStatus,
+      result: normalizedResult,
       bridge_event_id: idempotencyKey,
       bridge_protocol_version: "mira-bridge.v1",
       bridge_received_at: new Date().toISOString(),
@@ -278,7 +446,7 @@ async function acceptBridgeResult(req: Request) {
 
 function isBridgeRoute(req: Request) {
   const bridge = new URL(req.url).searchParams.get("bridge");
-  return bridge === "claim" || bridge === "result" ? bridge : null;
+  return bridge === "claim" || bridge === "next" || bridge === "release" || bridge === "result" ? bridge : null;
 }
 
 export default async (req: Request, _context: Context) => {
@@ -287,6 +455,14 @@ export default async (req: Request, _context: Context) => {
     if (bridgeRoute === "claim") {
       if (req.method !== "GET") return json({ error: "Method not allowed" }, 405);
       return await claimBridgeMission(req);
+    }
+    if (bridgeRoute === "next") {
+      if (req.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      return await nextBridgeMission(req);
+    }
+    if (bridgeRoute === "release") {
+      if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      return await releaseBridgeMission(req);
     }
     if (bridgeRoute === "result") {
       if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);

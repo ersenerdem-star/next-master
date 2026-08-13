@@ -127,7 +127,7 @@ function reportForMission(mission: MiraMission): MissionReport {
   const read = (...keys: string[]) => readRecordValue(nested, ...keys);
   const pagesObserved = readNumber(read("pagesObserved", "pages_observed", "pageCount", "page_count"));
   const candidates = readNumber(read("eanCandidates", "ean_candidates", "candidateCount", "candidate_count", "observationCount", "observation_count"));
-  const resultStatus = firstText(read("status", "outcome", "resultStatus", "result_status"), mission.status);
+  const resultStatus = firstText(mission.status, read("status", "resultStatus", "result_status", "outcome"));
   const lifecycle = firstText(read("lifecycle", "phase"));
   const authorityDecisionRequired = readBoolean(read("authorityDecisionRequired", "authority_decision_required"));
   const explicitEvidence = read("evidence", "observations", "observation_count", "observed_count", "evidence_count");
@@ -276,19 +276,26 @@ export function MiraMissionDeskPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
 
-  async function refresh() {
-    setLoading(true);
+  async function refresh({ silent = false }: { silent?: boolean } = {}) {
+    if (!silent) setLoading(true);
     try {
       setMissions(await listMiraMissions());
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "MIRA online status could not be loaded.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => { void refresh(); }, []);
+
+  const hasActiveMission = missions.some((mission) => mission.status === "queued" || mission.status === "processing");
+  useEffect(() => {
+    if (!hasActiveMission) return undefined;
+    const timer = window.setInterval(() => { void refresh({ silent: true }); }, 8000);
+    return () => window.clearInterval(timer);
+  }, [hasActiveMission]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -298,7 +305,7 @@ export function MiraMissionDeskPage() {
       if (result.mission) setMissions((items) => [result.mission, ...items]);
       setObjective("");
       setActiveTab("queue");
-      setMessage("MIRA görev online kuyruğa alındı. Worker bağlandığında çalışmaya başlayacak.");
+      setMessage("Görev MIRA kuyruğuna alındı. Kaynak seçimi, çalışma ve kanıt dönüşü otomatik ilerleyecek.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "MIRA görevi kuyruğa alınamadı.");
     } finally {
@@ -306,11 +313,23 @@ export function MiraMissionDeskPage() {
     }
   }
 
-  const reportMissions = useMemo(() => missions.filter((mission) => mission.status !== "queued" || mission.result || mission.error_message), [missions]);
+  const evidenceMissions = useMemo(
+    () => missions.filter((mission) => mission.status !== "queued" || Boolean(mission.result) || Boolean(mission.error_message)),
+    [missions],
+  );
+  const terminalMissions = useMemo(
+    () => missions.filter((mission) => ["completed", "partial", "blocked", "failed", "cancelled"].includes(mission.status)),
+    [missions],
+  );
+  const deskStatus = missions.some((mission) => mission.status === "processing")
+    ? "MIRA çalışıyor"
+    : missions.some((mission) => mission.status === "queued")
+      ? "Görev bekliyor"
+      : "Online";
   const tabs: Array<{ id: MiraDeskTab; label: string; count: number }> = [
     { id: "queue", label: t("mira.missionDesk.tabs.queue"), count: missions.length },
-    { id: "evidence", label: t("mira.missionDesk.tabs.evidence"), count: reportMissions.length },
-    { id: "results", label: t("mira.missionDesk.tabs.results"), count: missions.filter((mission) => ["completed", "partial", "blocked", "failed", "cancelled"].includes(mission.status)).length },
+    { id: "evidence", label: t("mira.missionDesk.tabs.evidence"), count: evidenceMissions.length },
+    { id: "results", label: t("mira.missionDesk.tabs.results"), count: terminalMissions.length },
   ];
 
   return (
@@ -319,7 +338,7 @@ export function MiraMissionDeskPage() {
         eyebrow={t("mira.missionDesk.eyebrow")}
         title={t("mira.missionDesk.title")}
         subtitle={t("mira.missionDesk.subtitle")}
-        status={<StatusBadge tone="success">Online · Review-only</StatusBadge>}
+        status={<StatusBadge tone={deskStatus === "MIRA çalışıyor" ? "warning" : "success"}>{deskStatus}</StatusBadge>}
         actions={<button className="button button--secondary" type="button" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>}
       />
 
@@ -327,7 +346,7 @@ export function MiraMissionDeskPage() {
         <div className="mira-mission-page__visual"><img src="/mira/mira-home.png" alt="MIRA" /><span className="mira-mission-page__glow" aria-hidden="true" /></div>
         <div className="mira-mission-page__copy">
           <h2 id="mira-mission-copy">MIRA online görev masası</h2>
-          <p>Görevi buradan ver. MIRA üretimde oturumla korunan kuyruğa kaydeder; sonuçlar review-only olarak döner.</p>
+          <p>Yalnızca görevi yaz. MIRA hedef markayı ve istenen alanı çıkarır, uygun resmî kaynağı seçer ve kanıtı doğrulama kuyruğuna getirir.</p>
           <div className="mira-mission-page__address"><span>Durum</span><code>/api/mira-missions · authenticated</code></div>
           <div className="mira-mission-page__boundary"><strong>Catalog’a otomatik yazma, Apply ve yetki genişletme kapalıdır.</strong></div>
         </div>
@@ -345,7 +364,7 @@ export function MiraMissionDeskPage() {
         <section className="mira-mission-page__online-grid" role="tabpanel">
           <form className="mira-mission-page__online-form" onSubmit={submit}>
             <h2>Yeni online görev</h2>
-            <label>Görev<input value={objective} onChange={(event) => setObjective(event.target.value)} minLength={8} maxLength={500} placeholder="Örn. Bosch resmi kaynaklarında EAN adaylarını gözlemle" required /></label>
+            <label>Görev<input value={objective} onChange={(event) => setObjective(event.target.value)} minLength={8} maxLength={500} placeholder="Örn. BF ürünleri için 50 doğrulanmış EAN bul" required /></label>
             <label>Görev alanı<select value={missionArea} onChange={(event) => setMissionArea(event.target.value)}><option>Public catalog signal</option><option>Supplier market watch</option><option>Customer demand review</option></select></label>
             <div className="mira-mission-page__form-row"><label>Sayfa bütçesi<input type="number" min="1" max="50" value={maxPages} onChange={(event) => setMaxPages(Number(event.target.value))} /></label><label>İstek aralığı (ms)<input type="number" min="1000" max="10000" step="100" value={delayMs} onChange={(event) => setDelayMs(Number(event.target.value))} /></label></div>
             <button className="button button--primary" type="submit" disabled={submitting}>{submitting ? "Kuyruğa alınıyor…" : "MIRA’ya görev ver"}</button>
@@ -358,21 +377,21 @@ export function MiraMissionDeskPage() {
       {activeTab === "evidence" ? (
         <section className="mira-mission-page__report-panel" role="tabpanel" aria-label={t("mira.missionDesk.tabs.evidence")}>
           <div className="mira-mission-page__panel-heading"><div><h2>{t("mira.missionDesk.evidence.title")}</h2><p>{t("mira.missionDesk.evidence.subtitle")}</p></div><StatusBadge tone="info">Review-only</StatusBadge></div>
-          {missions.length === 0 ? <p className="mira-mission-page__empty">{t("mira.missionDesk.evidence.empty")}</p> : missions.map((mission) => <MissionReportCard key={mission.id} mission={mission} report={reportForMission(mission)} evidenceLabel={t("mira.missionDesk.evidence.label")} reasonLabel={t("mira.missionDesk.evidence.negativeReason")} artifactLabel={t("mira.missionDesk.evidence.artifact")} debriefLabel={t("mira.missionDesk.evidence.debrief")} pendingLabel={t("mira.missionDesk.evidence.pending")} />)}
+          {evidenceMissions.length === 0 ? <p className="mira-mission-page__empty">{t("mira.missionDesk.evidence.empty")}</p> : evidenceMissions.map((mission) => <MissionReportCard key={mission.id} mission={mission} report={reportForMission(mission)} evidenceLabel={t("mira.missionDesk.evidence.label")} reasonLabel={t("mira.missionDesk.evidence.negativeReason")} artifactLabel={t("mira.missionDesk.evidence.artifact")} debriefLabel={t("mira.missionDesk.evidence.debrief")} pendingLabel={t("mira.missionDesk.evidence.pending")} />)}
         </section>
       ) : null}
 
       {activeTab === "results" ? (
         <section className="mira-mission-page__report-panel" role="tabpanel" aria-label={t("mira.missionDesk.tabs.results")}>
           <div className="mira-mission-page__panel-heading"><div><h2>{t("mira.missionDesk.results.title")}</h2><p>{t("mira.missionDesk.results.subtitle")}</p></div><StatusBadge tone="info">Review-only</StatusBadge></div>
-          {reportMissions.length === 0 ? <p className="mira-mission-page__empty">{t("mira.missionDesk.results.empty")}</p> : reportMissions.map((mission) => <MissionReportCard key={mission.id} mission={mission} report={reportForMission(mission)} evidenceLabel={t("mira.missionDesk.evidence.label")} reasonLabel={t("mira.missionDesk.evidence.negativeReason")} artifactLabel={t("mira.missionDesk.evidence.artifact")} debriefLabel={t("mira.missionDesk.evidence.debrief")} pendingLabel={t("mira.missionDesk.evidence.pending")} />)}
+          {terminalMissions.length === 0 ? <p className="mira-mission-page__empty">{t("mira.missionDesk.results.empty")}</p> : terminalMissions.map((mission) => <MissionReportCard key={mission.id} mission={mission} report={reportForMission(mission)} evidenceLabel={t("mira.missionDesk.evidence.label")} reasonLabel={t("mira.missionDesk.evidence.negativeReason")} artifactLabel={t("mira.missionDesk.evidence.artifact")} debriefLabel={t("mira.missionDesk.evidence.debrief")} pendingLabel={t("mira.missionDesk.evidence.pending")} />)}
         </section>
       ) : null}
 
       <section className="mira-mission-page__capabilities" aria-label={t("mira.missionDesk.title")}>
-        <article><span className="mira-mission-page__capability-icon" aria-hidden="true">◎</span><h3>{t("mira.missionDesk.worker")}</h3><p>Online görev kuyruğu üretimde durur; worker bağlantısı ayrıca açılır.</p></article>
+        <article><span className="mira-mission-page__capability-icon" aria-hidden="true">◎</span><h3>{t("mira.missionDesk.worker")}</h3><p>Online worker görevi alır, kaynağı seçer ve sonucu bu ekrana geri yollar.</p></article>
         <article><span className="mira-mission-page__capability-icon" aria-hidden="true">≋</span><h3>{t("mira.missionDesk.queue")}</h3><p>Görevler oturum ve organizasyon sınırıyla saklanır.</p></article>
-        <article><span className="mira-mission-page__capability-icon" aria-hidden="true">✓</span><h3>{t("mira.missionDesk.debrief")}</h3><p>Sonuçlar review-only kalır; insan kararı olmadan Catalog değişmez.</p></article>
+        <article><span className="mira-mission-page__capability-icon" aria-hidden="true">✓</span><h3>{t("mira.missionDesk.debrief")}</h3><p>Doğrulanan kanıt otomatik staging'e alınır; çelişki ve güven açığı review'a yönlenir.</p></article>
       </section>
     </PageShell>
   );
