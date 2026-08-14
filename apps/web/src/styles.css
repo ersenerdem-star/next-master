@@ -3093,9 +3093,27 @@ select {
 
 .catalog-enrichment-progress__heading span,
 .catalog-enrichment-progress__brand > span,
-.catalog-enrichment-progress__metric span {
+.catalog-enrichment-progress__metric span,
+.catalog-enrichment-card__metric span {
   color: #64748b;
   font-size: 11px;
+}
+
+.catalog-enrichment-progress__toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 360px) auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-top: 1px solid rgba(214, 226, 236, 0.75);
+}
+
+.catalog-enrichment-progress__result-count {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
 }
 
 .catalog-enrichment-progress__rows {
@@ -3121,11 +3139,12 @@ select {
 
 .catalog-enrichment-progress__metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(100px, 1fr));
+  grid-template-columns: repeat(7, minmax(100px, 1fr));
   gap: 12px;
 }
 
-.catalog-enrichment-progress__metric strong {
+.catalog-enrichment-progress__metric strong,
+.catalog-enrichment-card__metric strong {
   color: #163047;
   font-size: 11px;
 }
@@ -3174,10 +3193,83 @@ select {
   border-color: #cbd5e1;
 }
 
+.catalog-enrichment-progress__cards {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-top: 1px solid rgba(214, 226, 236, 0.75);
+}
+
+.catalog-enrichment-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(137, 156, 179, 0.22);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.catalog-enrichment-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.catalog-enrichment-card__header > div {
+  display: grid;
+  gap: 6px;
+}
+
+.catalog-enrichment-card__header span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.catalog-enrichment-card__metrics {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.catalog-enrichment-card__metric {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid rgba(214, 226, 236, 0.9);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.catalog-enrichment-card__metric strong {
+  font-size: 13px;
+}
+
+.catalog-enrichment-progress__empty {
+  padding: 18px 12px;
+  border-top: 1px solid rgba(214, 226, 236, 0.75);
+  color: #64748b;
+  text-align: center;
+}
+
 @media (max-width: 900px) {
+  .catalog-enrichment-progress__toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-enrichment-progress__result-count {
+    text-align: left;
+  }
+
   .catalog-enrichment-progress__row {
     grid-template-columns: 1fr;
     gap: 10px;
+  }
+
+  .catalog-enrichment-progress__metrics,
+  .catalog-enrichment-card__metrics {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
   }
 
   .catalog-enrichment-progress__status {
@@ -3239,6 +3331,64 @@ select {
 
 .catalog-brand-operations tr.is-selected td {
   background: rgba(217, 164, 37, 0.08);
+}
+
+.catalog-enrichment-table-wrap {
+  max-height: 420px;
+  overflow: auto;
+  border-top: 1px solid rgba(214, 226, 236, 0.75);
+}
+
+.catalog-enrichment-table {
+  width: 100%;
+  min-width: 1500px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.catalog-enrichment-table th,
+.catalog-enrichment-table td {
+  padding: 7px 10px;
+  border-top: 1px solid rgba(214, 226, 236, 0.75);
+  text-align: right;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.catalog-enrichment-table th:first-child,
+.catalog-enrichment-table td:first-child {
+  text-align: left;
+}
+
+.catalog-enrichment-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.catalog-enrichment-table__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.catalog-enrichment-table__brand small,
+.catalog-enrichment-table__meta small {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.catalog-enrichment-table__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
 }
 
 .catalog-integrity-detail {
