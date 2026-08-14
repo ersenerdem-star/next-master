@@ -122,40 +122,10 @@ export function OperationsStatusPage() {
     return value == null ? "—" : `${value.toLocaleString(numberLocale, { maximumFractionDigits: 1 })}%`;
   }
 
-  function enrichmentFilledCount(total: number, missing: number) {
-    return Math.max(0, total - missing);
-  }
-
-  function enrichmentPercent(total: number, missing: number) {
-    if (total <= 0) return 100;
-    return Math.min(100, Math.max(0, (enrichmentFilledCount(total, missing) / total) * 100));
-  }
-
   function enrichmentStatus(row: CatalogOperationsBrandStatus) {
-    const metrics = enrichmentMetrics(row);
-    const remaining = metrics.reduce((sum, metric) => sum + metric.missing, 0);
-    const filled = metrics.reduce((sum, metric) => sum + enrichmentFilledCount(row.total_products, metric.missing), 0);
-    if (remaining === 0) return { label: t("catalog.integrity.enrichmentComplete"), tone: "complete" };
-    if (filled > 0) return { label: t("catalog.integrity.enrichmentPartial"), tone: "partial" };
+    if ((row.incomplete_count || 0) === 0) return { label: t("catalog.integrity.enrichmentComplete"), tone: "complete" };
+    if ((row.complete_count || 0) === 0) return { label: t("catalog.integrity.enrichmentNotStarted"), tone: "idle" };
     return { label: t("catalog.integrity.enrichmentNotStarted"), tone: "idle" };
-  }
-
-  function enrichmentMetrics(row: CatalogOperationsBrandStatus) {
-    return [
-      { key: "ean", label: t("catalog.integrity.enrichmentEan"), missing: row.missing_ean_count },
-      { key: "oem", label: t("catalog.integrity.enrichmentOem"), missing: row.missing_oem_count },
-      { key: "vehicle", label: t("catalog.integrity.enrichmentVehicle"), missing: row.missing_vehicle_count },
-      { key: "vehicleModel", label: t("catalog.integrity.enrichmentVehicleModel"), missing: row.missing_vehicle_model_count },
-      { key: "descriptionTr", label: t("catalog.integrity.enrichmentDescriptionTr"), missing: row.missing_description_tr_count },
-      { key: "marketSegment", label: t("catalog.integrity.enrichmentMarketSegment"), missing: row.missing_market_segment_count },
-      { key: "image", label: t("catalog.integrity.enrichmentImage"), missing: row.missing_image_count },
-    ];
-  }
-
-  function enrichmentCoveragePercent(row: CatalogOperationsBrandStatus) {
-    const metrics = enrichmentMetrics(row);
-    if (row.total_products <= 0 || metrics.length === 0) return 100;
-    return metrics.reduce((sum, metric) => sum + enrichmentPercent(row.total_products, metric.missing), 0) / metrics.length;
   }
 
   function formatDateTime(value: string | null | undefined) {
@@ -433,8 +403,8 @@ export function OperationsStatusPage() {
           <span><small>{t("catalog.integrity.missingImage")}</small><strong>{formatIntegrityCount(catalogIntegrity?.missing_image_count)}</strong></span>
         </div>
         {catalogBrandOperations.length ? (
-          <div className="catalog-enrichment-progress">
-            <div className="catalog-enrichment-progress__heading">
+          <div className="catalog-brand-operations">
+            <div className="catalog-brand-operations__heading">
               <strong>{t("catalog.integrity.enrichmentTitle")}</strong>
               <span>{t("catalog.integrity.enrichmentHint")}</span>
             </div>
@@ -449,80 +419,60 @@ export function OperationsStatusPage() {
               </span>
             </div>
             {filteredCatalogBrandOperations.length ? (
-              <div className="catalog-enrichment-progress__cards">
-                {filteredCatalogBrandOperations.map((row) => {
-                  const status = enrichmentStatus(row);
-                  const metrics = enrichmentMetrics(row);
-                  return (
-                    <article className="catalog-enrichment-card" key={row.brand_id}>
-                      <div className="catalog-enrichment-card__header">
-                        <div>
-                          <BrandPill brand={row.brand} compact />
-                          <span>{formatCount(row.total_products)} {t("catalog.integrity.products").toLowerCase()} · {formatPercent(enrichmentCoveragePercent(row))} {t("catalog.integrity.enrichmentAverage").toLowerCase()}</span>
-                        </div>
-                        <span className={`catalog-enrichment-progress__status is-${status.tone}`}>{status.label}</span>
-                      </div>
-                      <div className="catalog-enrichment-card__metrics">
-                        {metrics.map((metric) => {
-                          const filled = enrichmentFilledCount(row.total_products, metric.missing);
-                          const percent = enrichmentPercent(row.total_products, metric.missing);
-                          return (
-                            <div className="catalog-enrichment-card__metric" key={metric.key}>
-                              <div><span>{metric.label}</span><strong>{formatCount(filled)} / {formatCount(row.total_products)}</strong></div>
-                              <div className="catalog-enrichment-progress__track" aria-label={`${metric.label}: ${formatPercent(percent)}`}>
-                                <span style={{ width: `${percent}%` }} />
-                              </div>
+              <div className="catalog-enrichment-table-wrap">
+                <table className="catalog-enrichment-table">
+                  <thead>
+                    <tr>
+                      <th>{t("catalog.integrity.brand")}</th>
+                      <th>{t("catalog.integrity.products")}</th>
+                      <th>{t("catalog.integrity.coreCompleteness")}</th>
+                      <th>{t("catalog.integrity.incomplete")}</th>
+                      <th>{t("catalog.integrity.enrichmentEan")}</th>
+                      <th>{t("catalog.integrity.enrichmentOem")}</th>
+                      <th>{t("catalog.integrity.enrichmentVehicle")}</th>
+                      <th>{t("catalog.integrity.enrichmentVehicleModel")}</th>
+                      <th>{t("catalog.integrity.enrichmentDescriptionTr")}</th>
+                      <th>{t("catalog.integrity.enrichmentMarketSegment")}</th>
+                      <th>{t("catalog.integrity.enrichmentImage")}</th>
+                      <th>{t("catalog.integrity.enrichmentCoverage")}</th>
+                      <th>{t("catalog.integrity.snapshot")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCatalogBrandOperations.map((row) => {
+                      const status = enrichmentStatus(row);
+                      return (
+                        <tr key={row.brand_id}>
+                          <td>
+                            <div className="catalog-enrichment-table__brand">
+                              <BrandPill brand={row.brand} compact />
+                              <small>{status.label}</small>
                             </div>
-                          );
-                        })}
-                      </div>
-                    </article>
-                  );
-                })}
+                          </td>
+                          <td>{formatCount(row.total_products)}</td>
+                          <td>{formatPercent(row.data_completeness_percent)}</td>
+                          <td>{formatCount(row.incomplete_count)}</td>
+                          <td>{formatCount(row.missing_ean_count)}</td>
+                          <td>{formatCount(row.missing_oem_count)}</td>
+                          <td>{formatCount(row.missing_vehicle_count)}</td>
+                          <td>{formatCount(row.missing_vehicle_model_count)}</td>
+                          <td>{formatCount(row.missing_description_tr_count)}</td>
+                          <td>{formatCount(row.missing_market_segment_count)}</td>
+                          <td>{formatCount(row.missing_image_count)}</td>
+                          <td><span className={`catalog-enrichment-progress__status is-${status.tone}`}>{status.label}</span></td>
+                          <td>
+                            <div className="catalog-enrichment-table__meta">
+                              <small>{t("catalog.integrity.snapshot")}</small>
+                              <strong>{formatDateTime(row.projection_updated_at)}</strong>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             ) : <div className="catalog-enrichment-progress__empty">{t("catalog.integrity.enrichmentNoBrandMatches")}</div>}
-          </div>
-        ) : null}
-        {catalogBrandOperations.length ? (
-          <div className="catalog-brand-operations">
-            <div className="catalog-brand-operations__heading">
-              <strong>{t("catalog.integrity.brandAnalysis")}</strong>
-              <span>{t("catalog.integrity.brandAnalysisHint")}</span>
-            </div>
-            <div className="catalog-brand-operations__table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t("catalog.integrity.brand")}</th>
-                    <th>{t("catalog.integrity.products")}</th>
-                    <th>{t("catalog.integrity.coreCompleteness")}</th>
-                    <th>{t("catalog.integrity.enrichmentCoverage")}</th>
-                    <th>{t("catalog.integrity.incomplete")}</th>
-                    <th>{t("catalog.integrity.missingEanShort")}</th>
-                    <th>{t("catalog.integrity.missingOem")}</th>
-                    <th>{t("catalog.integrity.missingVehicle")}</th>
-                    <th>{t("catalog.integrity.missingImage")}</th>
-                    <th>{t("catalog.integrity.snapshot")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredCatalogBrandOperations.map((row) => (
-                    <tr key={row.brand_id}>
-                      <td><strong>{row.brand}</strong></td>
-                      <td>{formatCount(row.total_products)}</td>
-                      <td>{formatPercent(row.data_completeness_percent)}</td>
-                      <td>{formatPercent(enrichmentCoveragePercent(row))}</td>
-                      <td>{formatCount(row.incomplete_count)}</td>
-                      <td>{formatCount(row.missing_ean_count)}</td>
-                      <td>{formatCount(row.missing_oem_count)}</td>
-                      <td>{formatCount(row.missing_vehicle_count)}</td>
-                      <td>{formatCount(row.missing_image_count)}</td>
-                      <td>{formatDateTime(row.projection_updated_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           </div>
         ) : null}
         <div className="meta-row catalog-meta-strip">

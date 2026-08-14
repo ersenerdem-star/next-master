@@ -3333,6 +3333,64 @@ select {
   background: rgba(217, 164, 37, 0.08);
 }
 
+.catalog-enrichment-table-wrap {
+  max-height: 420px;
+  overflow: auto;
+  border-top: 1px solid rgba(214, 226, 236, 0.75);
+}
+
+.catalog-enrichment-table {
+  width: 100%;
+  min-width: 1500px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.catalog-enrichment-table th,
+.catalog-enrichment-table td {
+  padding: 7px 10px;
+  border-top: 1px solid rgba(214, 226, 236, 0.75);
+  text-align: right;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.catalog-enrichment-table th:first-child,
+.catalog-enrichment-table td:first-child {
+  text-align: left;
+}
+
+.catalog-enrichment-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.catalog-enrichment-table__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.catalog-enrichment-table__brand small,
+.catalog-enrichment-table__meta small {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.catalog-enrichment-table__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
 .catalog-integrity-detail {
   padding: 10px 0;
   border-bottom: 1px solid rgba(214, 226, 236, 0.9);
