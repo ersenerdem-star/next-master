@@ -2,6 +2,7 @@ import { fetchCPriceMapForRows, getCPriceForRow } from "../infrastructure/api/cP
 import { canonicalizeBrandName, normalizeBrandKey, normalizePartCode } from "../domain/shared/normalize";
 import { getCurrentOrgId } from "../infrastructure/api/organizationApi";
 import { fetchCatalogMetadataForRows } from "../infrastructure/api/quoteImportApi";
+import { fetchCodeReferenceMatchesForRows } from "../infrastructure/api/codeReferencesApi";
 import { resolveQuoteLine } from "../infrastructure/api/quoteResolverApi";
 import { supabaseClient } from "../infrastructure/api/supabaseClient";
 import type { QuoteBuilderLine } from "../types/quoteBuilder";
@@ -190,14 +191,40 @@ export async function resyncSalesOrderLinesFromCatalog(
   const onlyFillBlanks = options.onlyFillBlanks !== false;
   const keepPrices = options.keepPrices !== false;
 
-  const metadataMap = await fetchCatalogMetadataForRows(
+  // Code References are applied when a new quote line is resolved. A saved
+  // order can outlive that lookup, so resync must explicitly re-read the
+  // approved old-code -> new-code mapping before loading catalog metadata.
+  const referenceMatches = await fetchCodeReferenceMatchesForRows(
     lines.map((line) => ({
+      brand: canonicalizeBrandName(line.brand || ""),
+      code: line.requestedCode || line.resolvedCode,
+    })),
+  );
+
+  const mappedLines = lines.map((line) => {
+    const referenceMatch = referenceMatches.get(
+      `${normalizeBrandKey(line.brand || "")}::${normalizePartCode(line.requestedCode || line.resolvedCode)}`,
+    );
+    if (!referenceMatch) return line;
+
+    return {
+      ...line,
+      resolvedCode: referenceMatch.new_code || line.resolvedCode || line.requestedCode,
+      codeChanged: true,
+      codeChangeWarning:
+        `Old Code ${referenceMatch.old_code} => New Code ${referenceMatch.new_code}.` +
+        (referenceMatch.reason ? ` ${referenceMatch.reason}` : ""),
+    };
+  });
+
+  const metadataMap = await fetchCatalogMetadataForRows(
+    mappedLines.map((line) => ({
       brand: canonicalizeBrandName(line.brand || ""),
       product_code: line.resolvedCode || line.requestedCode,
     })),
   );
 
-  const patchedLines = lines.map((line) => {
+  const patchedLines = mappedLines.map((line) => {
     const metadata = metadataMap.get(`${normalizeBrandKey(line.brand || "")}::${normalizePartCode(line.resolvedCode || line.requestedCode)}`);
     return mergeCatalogMetadata(
       {

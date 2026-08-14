@@ -10,29 +10,39 @@
   border-top: 1px solid rgba(197, 140, 47, 0.14);
 }
 
-.mira-companion--embedded {
-  position: relative;
-  left: auto;
-  right: auto;
-  bottom: auto;
-  width: 76px;
-  height: 76px;
-  margin-left: auto;
+/* The Overview has one canonical MIRA entry point. This intentionally
+   overrides legacy floating-companion rules still present in the base theme. */
+.app-shell .mira-companion:not([data-mira-entry="build-context"]) {
+  display: none !important;
+}
+
+.topbar-build__mira-slot > .mira-companion--embedded[data-mira-entry="build-context"] {
+  position: relative !important;
+  inset: auto !important;
+  z-index: 1 !important;
+  display: block !important;
+  width: 76px !important;
+  height: 76px !important;
+  margin: 0 0 0 auto !important;
   filter: drop-shadow(0 8px 8px rgba(5, 16, 31, 0.2));
 }
 
+.topbar-build__mira-slot > .mira-companion--embedded[data-mira-entry="build-context"] ~ .mira-companion--embedded {
+  display: none !important;
+}
+
 .mira-companion--embedded .mira-companion__badge {
-  top: auto;
-  right: calc(100% + 8px);
-  bottom: 4px;
-  left: auto;
-  transform: none;
+  top: auto !important;
+  right: calc(100% + 8px) !important;
+  bottom: 4px !important;
+  left: auto !important;
+  transform: none !important;
 }
 
 .mira-companion--embedded .mira-companion__panel {
-  right: 0;
-  bottom: calc(100% + 10px);
-  left: auto;
+  right: 0 !important;
+  bottom: calc(100% + 10px) !important;
+  left: auto !important;
 }
 
 .mira-companion__launcher {

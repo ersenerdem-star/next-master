@@ -20,6 +20,7 @@ export function MiraCompanion({ embedded = false, onOpenMissionDesk }: MiraCompa
   return (
     <aside
       className={`mira-companion${embedded ? " mira-companion--embedded" : ""} mira-companion--home`}
+      data-mira-entry={embedded ? "build-context" : "legacy-floating"}
       aria-label="MIRA online assistant"
     >
       <button
