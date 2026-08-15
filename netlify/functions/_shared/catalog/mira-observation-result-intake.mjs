@@ -271,9 +271,14 @@ export async function stageMiraObservationResult({
     protocolVersion: MIRA_OBSERVATION_INTAKE_VERSION,
     status: accepted ? "staged" : "blocked",
     intakeStatus: text(receipt?.status) || "blocked",
+    reason: text(receipt?.reason).slice(0, 500) || null,
     runId: UUID_PATTERN.test(text(receipt?.run_id)) ? text(receipt.run_id) : null,
-    observedCount: Number.isInteger(receipt?.observed_count) ? receipt.observed_count : 0,
-    dedupedCount: Number.isInteger(receipt?.deduped_count) ? receipt.deduped_count : 0,
+    observedCount: Number.isInteger(receipt?.observations_appended)
+      ? receipt.observations_appended
+      : Number.isInteger(receipt?.observed_count) ? receipt.observed_count : 0,
+    dedupedCount: Number.isInteger(receipt?.observations_deduped)
+      ? receipt.observations_deduped
+      : Number.isInteger(receipt?.deduped_count) ? receipt.deduped_count : 0,
     idempotent: receipt?.idempotent === true,
     catalogProductsWritten: 0,
     applyPerformed: false,
