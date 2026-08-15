@@ -441,8 +441,12 @@ export async function fetchCatalogOperationsBrandStatus(limit = 12): Promise<Cat
     missing_ean_count: Number(row.missing_ean_count || 0),
     missing_oem_count: Number(row.missing_oem_count || 0),
     missing_vehicle_count: Number(row.missing_vehicle_count || 0),
+    missing_vehicle_model_count: Number(row.missing_vehicle_model_count || 0),
+    missing_description_tr_count: Number(row.missing_description_tr_count || 0),
+    missing_market_segment_count: Number(row.missing_market_segment_count || 0),
     missing_image_count: Number(row.missing_image_count || 0),
     last_catalog_change_at: row.last_catalog_change_at ? String(row.last_catalog_change_at) : null,
+    projection_updated_at: row.projection_updated_at ? String(row.projection_updated_at) : null,
   }));
 }
 

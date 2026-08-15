@@ -78,6 +78,10 @@ export type CatalogOperationsBrandStatus = {
   missing_ean_count: number;
   missing_oem_count: number;
   missing_vehicle_count: number;
+  missing_vehicle_model_count: number;
+  missing_description_tr_count: number;
+  missing_market_segment_count: number;
   missing_image_count: number;
   last_catalog_change_at: string | null;
+  projection_updated_at: string | null;
 };
