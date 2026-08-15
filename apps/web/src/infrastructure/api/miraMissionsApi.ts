@@ -19,6 +19,14 @@ export type MiraMission = {
   bridge_event_id?: string | null;
   bridge_protocol_version?: string | null;
   bridge_received_at?: string | null;
+  origin?: "manual" | "planner";
+  planner_key?: string | null;
+  planner_score?: number | null;
+  planner_reason?: string | null;
+  planner_context?: Record<string, unknown> | null;
+  target_brand?: string | null;
+  requested_fields?: string[] | null;
+  max_items?: number | null;
 };
 
 async function accessToken() {
@@ -27,9 +35,9 @@ async function accessToken() {
   return data.session.access_token;
 }
 
-async function request<T>(init?: RequestInit) {
+async function request<T>(init?: RequestInit, path = "/api/mira-missions") {
   const token = await accessToken();
-  const response = await fetch("/api/mira-missions", {
+  const response = await fetch(path, {
     ...init,
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(init?.headers || {}) },
   });
@@ -45,4 +53,8 @@ export async function listMiraMissions() {
 
 export async function queueMiraMission(input: { objective: string; missionArea: string; maxPages: number; delayMs: number }) {
   return request<{ mission: MiraMission }>({ method: "POST", body: JSON.stringify(input) });
+}
+
+export async function planMiraMissions() {
+  return request<{ planner?: Record<string, unknown>; mission?: MiraMission }>({ method: "POST", body: "{}" }, "/api/mira-missions?planner=run");
 }
