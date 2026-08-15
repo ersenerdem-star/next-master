@@ -463,7 +463,8 @@ async function acceptBridgeResult(req: Request) {
               resultIntake,
             });
             if (intake.status !== "staged") {
-              intake = await stageMiraDiscoveryQuarantine({
+              const blockedIntake = intake;
+              const quarantine = await stageMiraDiscoveryQuarantine({
                 supabaseUrl,
                 serviceRoleKey,
                 organizationId: auth.config.organizationId,
@@ -471,6 +472,11 @@ async function acceptBridgeResult(req: Request) {
                 resultIntake,
                 reason: "CANONICAL_STAGING_BLOCKED",
               });
+              intake = {
+                ...quarantine,
+                canonicalStagingStatus: blockedIntake.intakeStatus,
+                canonicalStagingReason: blockedIntake.reason || "Canonical observation staging was blocked.",
+              };
             }
           } catch (error) {
             if (!isMiraQuarantineEligibleError(error)) throw error;
