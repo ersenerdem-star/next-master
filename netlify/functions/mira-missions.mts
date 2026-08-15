@@ -10,6 +10,11 @@ import {
   normalizeMiraObservationResultIntake,
   stageMiraObservationResult,
 } from "./_shared/catalog/mira-observation-result-intake.mjs";
+import {
+  isMiraQuarantineEligibleError,
+  quarantineReasonForResultIntake,
+  stageMiraDiscoveryQuarantine,
+} from "./_shared/catalog/mira-discovery-quarantine.mjs";
 
 type MissionInput = {
   objective?: unknown;
@@ -385,17 +390,56 @@ async function acceptBridgeResult(req: Request) {
           },
         };
       } else {
-        const intake = await stageMiraObservationResult({
-          supabaseUrl,
-          serviceRoleKey,
-          organizationId: auth.config.organizationId,
-          missionId,
-          resultIntake,
-        });
+        let intake;
+        const preflightQuarantineReason = quarantineReasonForResultIntake(resultIntake);
+        if (preflightQuarantineReason) {
+          intake = await stageMiraDiscoveryQuarantine({
+            supabaseUrl,
+            serviceRoleKey,
+            organizationId: auth.config.organizationId,
+            missionId,
+            resultIntake,
+            reason: preflightQuarantineReason,
+          });
+        } else {
+          try {
+            intake = await stageMiraObservationResult({
+              supabaseUrl,
+              serviceRoleKey,
+              organizationId: auth.config.organizationId,
+              missionId,
+              resultIntake,
+            });
+            if (intake.status !== "staged") {
+              intake = await stageMiraDiscoveryQuarantine({
+                supabaseUrl,
+                serviceRoleKey,
+                organizationId: auth.config.organizationId,
+                missionId,
+                resultIntake,
+                reason: "CANONICAL_STAGING_BLOCKED",
+              });
+            }
+          } catch (error) {
+            if (!isMiraQuarantineEligibleError(error)) throw error;
+            const quarantineReason = error instanceof MiraObservationIntakeError
+              ? error.code
+              : "CANONICAL_STAGING_BLOCKED";
+            intake = await stageMiraDiscoveryQuarantine({
+              supabaseUrl,
+              serviceRoleKey,
+              organizationId: auth.config.organizationId,
+              missionId,
+              resultIntake,
+              reason: quarantineReason,
+            });
+          }
+        }
         normalizedResult = { ...normalizedResult, observationIntake: {
           ...intake,
           candidateCount: expectedCandidateCount,
-          stagedCount: resultIntake.observations.length,
+          stagedCount: intake.status === "staged" ? resultIntake.observations.length : 0,
+          quarantinedCount: intake.status === "quarantined" ? intake.quarantinedCount : 0,
           skippedCount,
           skipReasons: resultIntake.skipReasons,
         } };
