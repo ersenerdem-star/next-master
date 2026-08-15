@@ -188,9 +188,12 @@ export async function resolveMiraObservationScope({
   const brands = await getRows({
     ...base,
     table: "brands",
-    query: { select: "id,organization_id,name,is_active", organization_id: `eq.${organizationId}`, is_active: "eq.true", limit: "1000" },
+    // The production brands table has no lifecycle column; tenant membership
+    // is the authoritative scope here. Source/trust/job activity remains
+    // enforced by their own active filters above.
+    query: { select: "id,organization_id,name", organization_id: `eq.${organizationId}`, limit: "1000" },
   });
-  const matchingBrands = brands.filter((row) => row.is_active === true && normalizedLabel(row.name) === normalizedLabel(brand));
+  const matchingBrands = brands.filter((row) => normalizedLabel(row.name) === normalizedLabel(brand));
   const brandRecord = exactlyOne(matchingBrands, "BRAND_MAPPING_MISSING", "MIRA brand does not resolve to exactly one tenant brand");
 
   const jobs = await getRows({

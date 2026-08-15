@@ -67,9 +67,9 @@ function fakeFetch(url, init = {}) {
   }
   if (path.endsWith("/brands")) {
     const query = new URL(url).searchParams;
-    assert.equal(query.get("is_active"), "eq.true");
-    assert.match(query.get("select") ?? "", /is_active/);
-    return Promise.resolve(response([{ id: ids.brand, organization_id: ids.organization, name: "BF", is_active: true }]));
+    assert.equal(query.get("is_active"), null);
+    assert.doesNotMatch(query.get("select") ?? "", /is_active/);
+    return Promise.resolve(response([{ id: ids.brand, organization_id: ids.organization, name: "BF" }]));
   }
   if (path.endsWith("/catalog_observation_jobs")) {
     return Promise.resolve(response([{
