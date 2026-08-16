@@ -35,6 +35,7 @@ export async function resolveCaller(
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
+    timeoutMs: 8_000,
   });
 
   const userId = String(user.id || "");
@@ -46,6 +47,7 @@ export async function resolveCaller(
     `${supabaseUrl}/rest/v1/profiles?select=organization_id,role&id=eq.${encodeURIComponent(userId)}&limit=1`,
     {
       headers: serviceRoleHeaders(serviceRoleKey),
+      timeoutMs: 8_000,
     },
   );
 

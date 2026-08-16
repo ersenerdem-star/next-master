@@ -227,6 +227,37 @@ function bridgeRequestError(error: unknown) {
   return json({ error: error instanceof Error ? error.message : "MIRA bridge request failed." }, status);
 }
 
+/** Preserve upstream status for the worker's transient-outage retry policy. */
+async function getBridgeJson<T>(url: string, init: RequestInit & { timeoutMs?: number }) {
+  const { timeoutMs, signal, ...requestInit } = init;
+  const controller = timeoutMs && !signal ? new AbortController() : null;
+  const timer = timeoutMs && controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const response = await fetch(url, { ...requestInit, signal: signal || controller?.signal });
+    const text = await response.text().catch(() => "");
+    let data: unknown = {};
+    try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
+    if (!response.ok) {
+      const message = data && typeof data === "object" && !Array.isArray(data)
+        ? String((data as Record<string, unknown>).message || (data as Record<string, unknown>).error || text || `Request failed: ${response.status}`)
+        : text || `Request failed: ${response.status}`;
+      throw Object.assign(new Error(message.slice(0, 500)), { status: response.status });
+    }
+    return data as T;
+  } catch (error) {
+    if ((error instanceof DOMException && error.name === "AbortError") || String(error || "").toLowerCase().includes("aborted")) {
+      throw Object.assign(new Error(`Bridge request timed out after ${timeoutMs || 0}ms`), { status: 504 });
+    }
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function isTransientSupabaseError(error: unknown) {
+  return /PGRST002|schema cache|could not query the database|request timed out/i.test(String(error instanceof Error ? error.message : error));
+}
+
 async function authorizeBridge(req: Request, bodyText: string) {
   const config = bridgeConfig();
   const verification = await verifyMiraBridgeRequest(req, bodyText, config.secret);
@@ -273,13 +304,29 @@ async function planBridgeMission(req: Request) {
   const supabaseUrl = env("SUPABASE_URL");
   const serviceRoleKey = env("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) return json({ error: "MIRA bridge server configuration is incomplete." }, 503);
-  const planner = await planMiraMissions({
-    supabaseUrl,
-    serviceRoleKey,
-    organizationId: auth.config.organizationId,
-    actorId: null,
-  });
-  return json({ ok: true, planner });
+  try {
+    const planner = await planMiraMissions({
+      supabaseUrl,
+      serviceRoleKey,
+      organizationId: auth.config.organizationId,
+      actorId: null,
+    });
+    return json({ ok: true, planner });
+  } catch (error) {
+    // A schema-cache/database outage must not turn the scheduled worker into
+    // a false application failure. No mission is invented or written here.
+    if (isTransientSupabaseError(error)) {
+      return json({ ok: true, planner: {
+        status: "deferred",
+        createdMissionCount: 0,
+        reason: "Supabase is temporarily unavailable; planner will retry on the next cycle.",
+        retryable: true,
+        catalogWrite: false,
+        apply: false,
+      } });
+    }
+    throw error;
+  }
 }
 
 /**
@@ -300,7 +347,7 @@ async function nextBridgeMission(req: Request) {
     order: "created_at.asc",
     limit: "1",
   });
-  const missions = await getJson<BridgeMission[]>(url, { headers: serviceRoleHeaders(serviceRoleKey), timeoutMs: 12000 });
+  const missions = await getBridgeJson<BridgeMission[]>(url, { headers: serviceRoleHeaders(serviceRoleKey), timeoutMs: 12000 });
   return json({ ok: true, mission: missions[0] ?? null });
 }
 
