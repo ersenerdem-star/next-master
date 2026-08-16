@@ -737,9 +737,14 @@ async function fetchCachedBrandCount(
   return count;
 }
 
-async function fetchBrandMaps(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
+async function fetchBrandMaps(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  forceRefresh = false,
+) {
   const cached = brandMapCache.get(organizationId);
-  if (cached && cached.expiresAt > Date.now()) {
+  if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
     return { byId: cached.byId, byName: cached.byName };
   }
   const { rows } = await fetchRestRowsWithCount<{ id?: string | null; name?: string | null }>(
@@ -801,8 +806,21 @@ async function fetchCloudCatalogPageViaRest(
   const pageSize = Math.min(250, Math.max(1, Number(args.input_page_size || 50) || 50));
   const offset = (page - 1) * pageSize;
   const normalizedSearch = normalizePartCode(search);
-  const brandMaps = await fetchBrandMaps(supabaseUrl, serviceRoleKey, caller.organizationId);
-  const selectedBrandId = brand ? brandMaps.byName.get(normalizePartCode(brand)) || "" : "";
+  let brandMaps = await fetchBrandMaps(supabaseUrl, serviceRoleKey, caller.organizationId);
+  let selectedBrandId = brand ? brandMaps.byName.get(normalizePartCode(brand)) || "" : "";
+
+  /*
+   * A newly imported brand can arrive after this function's in-memory map was
+   * populated. Refresh once on a miss so a valid brand does not silently turn
+   * into an unscoped catalog query (which makes the brand appear empty).
+   */
+  if (brand && !selectedBrandId) {
+    brandMaps = await fetchBrandMaps(supabaseUrl, serviceRoleKey, caller.organizationId, true);
+    selectedBrandId = brandMaps.byName.get(normalizePartCode(brand)) || "";
+    if (!selectedBrandId) {
+      throw new Error(`Catalog brand not found: ${brand}`);
+    }
+  }
   const strictCodeSearch = shouldStrictlyFilterCodeSearch(search);
   const searchBrandId = strictCodeSearch ? "" : selectedBrandId;
   const fetchLimit = search && strictCodeSearch ? Math.max(pageSize * 2, 80) : pageSize;
