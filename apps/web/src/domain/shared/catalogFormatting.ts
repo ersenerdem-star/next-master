@@ -116,8 +116,16 @@ export function normalizeCatalogDescription(value: string): string {
     .replace(/\s+/g, " ")
     .trim();
   if (!text) return "";
-  const translated = translateTechnicalDescriptionToEnglish(text);
+  const translated = translateTechnicalDescriptionToEnglish(stripCatalogItemNumberPrefix(text));
   return translated.replace(/^\p{Ll}/u, (letter) => letter.toUpperCase());
+}
+
+export function stripCatalogItemNumberPrefix(value: string): string {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const labeled = text.replace(/^(?:items?|item|article|part|product)\s*(?:no\.?|number|code)?\s*[:#-]?\s*(?=[A-Z0-9._\/-]*\d)[A-Z0-9][A-Z0-9._\/-]*\s*(?:[-:|]\s*|\s+)(?=[A-Za-z])/i, "");
+  if (labeled !== text) return labeled.trim();
+  return text.replace(/^(?=[A-Z0-9]*\d)(?:[A-Z]{0,4}\d{4,}[A-Z0-9._\/-]*)\s*[-:|]\s+(.+)$/i, "$1").trim();
 }
 
 const TECHNICAL_PHRASE_REPLACEMENTS: Array<[string, string]> = [

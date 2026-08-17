@@ -25,6 +25,7 @@ const LOGO_PRESETS: LogoPreset[] = [
   { match: /boge/i, label: "Boge", wordmark: "BOGE", assetSrc: "/brand-logos/boge_logo.png", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#0f172a", stroke: "#cbd5e1" },
   { match: /mann/i, label: "MANN", wordmark: "MANN", assetSrc: "/brand-logos/mann_logo.png", bgFrom: "#fefce8", bgTo: "#ffffff", fg: "#a16207", stroke: "#fde047" },
   { match: /febi/i, label: "febi", wordmark: "FEBI", assetSrc: "/brand-logos/febi_logo.png", bgFrom: "#fef2f2", bgTo: "#ffffff", fg: "#b91c1c", stroke: "#fca5a5" },
+  { match: /(?:euroricambi|euricambi)/i, label: "Euroricambi", wordmark: "EURORICAMBI", assetSrc: "/brand-logos/euroricambi_logo.png", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#1f2937", stroke: "#cbd5e1" },
   { match: /\bfte\b/i, label: "FTE", wordmark: "FTE", assetSrc: "/brand-logos/fte_logo.png", bgFrom: "#eef2ff", bgTo: "#ffffff", fg: "#1e3a8a", stroke: "#93c5fd" },
   { match: /\bswf\b/i, label: "SWF", wordmark: "SWF", assetSrc: "/brand-logos/swf_logo.jpg", bgFrom: "#fff7ed", bgTo: "#ffffff", fg: "#c2410c", stroke: "#fdba74" },
   { match: /\bbf\b/i, label: "BF", wordmark: "BF", assetSrc: "/brand-logos/bf_logo.png", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#00569d", stroke: "#7db7e8" },

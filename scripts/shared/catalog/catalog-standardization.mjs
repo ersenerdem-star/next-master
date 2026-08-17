@@ -76,9 +76,17 @@ export function normalizeCatalogDescription(value) {
     .replace(/\s+/g, " ")
     .trim();
   if (!text) return "";
-  const translated = translateTechnicalDescriptionToEnglish(text);
+  const translated = translateTechnicalDescriptionToEnglish(stripCatalogItemNumberPrefix(text));
   const normalized = translated.replace(/^\p{Ll}/u, (letter) => letter.toUpperCase());
   return isCatalogPlaceholderDescription(normalized, "") ? "" : normalized;
+}
+
+export function stripCatalogItemNumberPrefix(value) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const labeled = text.replace(/^(?:items?|item|article|part|product)\s*(?:no\.?|number|code)?\s*[:#-]?\s*(?=[A-Z0-9._\/-]*\d)[A-Z0-9][A-Z0-9._\/-]*\s*(?:[-:|]\s*|\s+)(?=[A-Za-z])/i, "");
+  if (labeled !== text) return labeled.trim();
+  return text.replace(/^(?=[A-Z0-9]*\d)(?:[A-Z]{0,4}\d{4,}[A-Z0-9._\/-]*)\s*[-:|]\s+(.+)$/i, "$1").trim();
 }
 
 export function normalizeCatalogEan(value) {
