@@ -583,6 +583,7 @@ export function resolveCatalogSyncPlan(inputBrandName: string): CatalogSyncPlan 
         preferredProviderLabel: tecallianceEntry.preferredProviderLabel,
         preferredSourceType: "official",
         preferredSourceUrl: tecallianceEntry.preferredSourceUrl,
+        completionProviders: tecallianceEntry.completionProviders,
       };
     }
   }
@@ -769,10 +770,11 @@ export async function syncBrandCatalog(input: {
         brandName: plan.brandName,
         seedPrefixes: tecallianceSeedPrefixes,
         maxPages: input.maxPages,
+        onlyNew: input.onlyNew,
         expandPrefixes: input.expandPrefixes,
         skipDiscovery: input.skipDiscovery,
         candidateLimit: input.candidateLimit,
-        includeBlankDiscoveryRoot: true,
+        includeBlankDiscoveryRoot: !tecallianceSeedPrefixes?.length,
       },
       tecallianceEntry.sync,
     );

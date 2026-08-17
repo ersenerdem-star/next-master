@@ -8,11 +8,27 @@ export type TecAllianceBrandRegistryEntry = {
   preferredProviderKey: `tecalliance_${string}`;
   preferredProviderLabel: string;
   preferredSourceUrl: string;
+  completionProviders?: "spareto"[];
   seedPrefixes?: string[];
   sync: TecAllianceSyncConfig;
 };
 
 const TECALLIANCE_BRAND_REGISTRY: TecAllianceBrandRegistryEntry[] = [
+  {
+    key: "corteco",
+    aliases: ["corteco"],
+    managedBrandNames: ["Corteco"],
+    preferredProviderKey: "tecalliance_corteco",
+    preferredProviderLabel: "Corteco TecAlliance official catalog",
+    preferredSourceUrl: "https://web.tecalliance.net/ecatcorteco/en/home",
+    completionProviders: [],
+    sync: {
+      providerLabel: "Corteco",
+      providerId: 25647,
+      dataSupplierId: 140,
+      manufacturerNames: ["CORTECO"],
+    },
+  },
   {
     key: "mahle",
     aliases: ["mahle"],

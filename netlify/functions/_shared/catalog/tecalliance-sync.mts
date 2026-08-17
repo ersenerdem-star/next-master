@@ -155,6 +155,7 @@ export async function syncBrandCatalogFromTecAllianceBrand(
     serviceRoleKey: string;
     brandName: string;
     refreshExisting?: boolean;
+    onlyNew?: boolean;
     concurrency?: number;
     pageSize?: number;
     requestTimeoutMs?: number;
@@ -168,6 +169,7 @@ export async function syncBrandCatalogFromTecAllianceBrand(
   config: TecAllianceSyncConfig,
 ) {
   const refreshExisting = input.refreshExisting !== false;
+  const onlyNew = input.onlyNew === true;
   const concurrency = Math.max(1, input.concurrency ?? 4);
   const requestTimeoutMs = Math.max(5000, input.requestTimeoutMs ?? 30000);
   const perPage = Math.max(25, Math.min(100, input.pageSize ?? 100));
@@ -193,7 +195,7 @@ export async function syncBrandCatalogFromTecAllianceBrand(
 
   const explicitSeedPrefixes = dedupeStrings((input.seedPrefixes || []).map((value) => normalizeSearchPrefix(value)).filter(Boolean));
   const exactSeedTerms = dedupeStrings([
-    ...existingRows.map((row) => row.product_code),
+    ...(onlyNew ? [] : existingRows.map((row) => row.product_code)),
     ...supplierSeedRows.map((row) => row.product_code),
   ]);
 
@@ -220,7 +222,7 @@ export async function syncBrandCatalogFromTecAllianceBrand(
 
   const workMap = new Map<string, { existing: CatalogRow | null; article: TecAllianceApiArticle | null; searchTerm: string | null }>();
 
-  for (const row of existingRows) {
+  for (const row of onlyNew ? [] : existingRows) {
     if (refreshExisting || shouldProcessRow(row)) {
       workMap.set(row.normalized_code, {
         existing: row,
@@ -234,6 +236,7 @@ export async function syncBrandCatalogFromTecAllianceBrand(
     const productCode = normalizeCatalogDisplayCode(article.articleNumber || "", target.name);
     const normalizedCode = normalizeCode(productCode);
     if (!productCode || !normalizedCode) continue;
+    if (onlyNew && existingByCode.has(normalizedCode)) continue;
     if (existingByCode.has(normalizedCode) && !refreshExisting && !shouldProcessRow(existingByCode.get(normalizedCode)!)) continue;
     workMap.set(normalizedCode, {
       existing: existingByCode.get(normalizedCode) || null,
@@ -245,6 +248,7 @@ export async function syncBrandCatalogFromTecAllianceBrand(
   for (const term of exactSeedTerms) {
     const normalizedCode = normalizeCode(term);
     if (!normalizedCode || workMap.has(normalizedCode)) continue;
+    if (onlyNew && existingByCode.has(normalizedCode)) continue;
     workMap.set(normalizedCode, {
       existing: existingByCode.get(normalizedCode) || null,
       article: null,
@@ -955,7 +959,7 @@ async function fetchCatalogRows(supabaseUrl: string, headers: Record<string, str
     const rows = await fetchAll<Record<string, unknown>>(
       supabaseUrl,
       headers,
-      `/rest/v1/catalog_products?select=${selectColumns}&brand_id=eq.${encodeURIComponent(target.brandId)}&limit=${pageLimit}&offset=${offset}`,
+      `/rest/v1/catalog_products?select=${selectColumns}&organization_id=eq.${encodeURIComponent(target.organizationId)}&brand_id=eq.${encodeURIComponent(target.brandId)}&limit=${pageLimit}&offset=${offset}`,
     );
     if (!rows.length) break;
 
@@ -998,7 +1002,7 @@ async function fetchSupplierPriceSeedRows(supabaseUrl: string, headers: Record<s
     const rows = await fetchAll<Record<string, unknown>>(
       supabaseUrl,
       headers,
-      `/rest/v1/supplier_prices?select=product_code,normalized_code&brand_id=eq.${encodeURIComponent(target.brandId)}&is_active=eq.true&limit=${pageLimit}&offset=${offset}`,
+      `/rest/v1/supplier_prices?select=product_code,normalized_code&organization_id=eq.${encodeURIComponent(target.organizationId)}&brand_id=eq.${encodeURIComponent(target.brandId)}&is_active=eq.true&limit=${pageLimit}&offset=${offset}`,
     );
     if (!rows.length) break;
 
