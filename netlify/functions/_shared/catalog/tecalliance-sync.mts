@@ -757,16 +757,26 @@ function extractTecAllianceVehicleModel(
   logisticsCriteria: TecAllianceApiCriteria[],
   fallback: string,
 ) {
-  const candidateValues = [
-    ...(article.articleText || []).map((item) => normalizeTextValue(item.text || "")),
-    ...criteria.map((entry) => normalizeTextValue(entry.formattedValue || entry.rawValue || "")),
-    ...logisticsCriteria.map((entry) => normalizeTextValue(entry.formattedValue || entry.rawValue || "")),
-  ].filter(Boolean);
-  const selected =
-    candidateValues.find((value) => /(?:^|\b)(vehicle model|model|series|vehicle type|type)(?:\b|$)/i.test(value)) ||
-    candidateValues.find((value) => /[A-Za-z].*\d/.test(value)) ||
-    "";
-  return normalizeTextValue(selected || fallback);
+  const labelledValues = [
+    ...(article.articleText || []).map((item) => ({
+      label: normalizeTextValue(item.informationTypeDescription || ""),
+      value: normalizeTextValue(item.text || ""),
+    })),
+    ...criteria.map((entry) => ({
+      label: normalizeTextValue(entry.criteriaDescription || entry.criteriaAbbrDescription || ""),
+      value: normalizeTextValue(entry.formattedValue || entry.rawValue || ""),
+    })),
+    ...logisticsCriteria.map((entry) => ({
+      label: normalizeTextValue(entry.criteriaDescription || entry.criteriaAbbrDescription || ""),
+      value: normalizeTextValue(entry.formattedValue || entry.rawValue || ""),
+    })),
+  ];
+  const selected = labelledValues.find(
+    (entry) =>
+      entry.value &&
+      /(?:^|\b)(vehicle model|model|series)(?:\b|$)/i.test(entry.label),
+  );
+  return normalizeTextValue(selected?.value || fallback);
 }
 
 function extractTecAllianceMarketSegment(

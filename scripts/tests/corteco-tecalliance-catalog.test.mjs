@@ -64,3 +64,9 @@ test("catalog writes use bounded packages and split retryable timeout failures",
   assert.match(syncSource, /input\.payload\.slice\(0, midpoint\)/);
   assert.match(syncSource, /input\.payload\.slice\(midpoint\)/);
 });
+
+test("vehicle models require an explicit model-labelled source field", () => {
+  assert.match(syncSource, /const labelledValues = \[/);
+  assert.match(syncSource, /vehicle model\|model\|series/);
+  assert.doesNotMatch(syncSource, /candidateValues\.find\(\(value\) => \/\[A-Za-z\]\.\*\\d\//);
+});
