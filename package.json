@@ -21,7 +21,8 @@
     "predeploy:verify": "npm run netlify:ensure-link && npm run guardian:brands:apply && npm run build && npm run audit:core && npm run audit:secrets && npm run audit:hygiene:strict",
     "deploy:status": "node scripts/ops/check-netlify-deploy-state.mjs",
     "ship": "node scripts/ship-staged-to-production.mjs",
-    "ship:dry-run": "node scripts/ship-staged-to-production.mjs --dry-run"
+    "ship:dry-run": "node scripts/ship-staged-to-production.mjs --dry-run",
+    "genckaya:bosch-replacement-review": "node scripts/catalog/run-genckaya-bosch-replacement-review.mjs"
   },
   "devDependencies": {
     "yaml": "^2.9.0"
