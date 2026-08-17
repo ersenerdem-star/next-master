@@ -56,3 +56,11 @@ test("only-new packages never requeue existing Corteco products", () => {
   assert.match(syncSource, /const onlyNew = input\.onlyNew === true/);
   assert.match(syncSource, /if \(onlyNew && existingByCode\.has\(normalizedCode\)\) continue/);
 });
+
+test("catalog writes use bounded packages and split retryable timeout failures", () => {
+  assert.match(syncSource, /DEFAULT_CATALOG_WRITE_BATCH_SIZE = 50/);
+  assert.match(syncSource, /upsertCatalogPayloadWithRecovery/);
+  assert.match(syncSource, /57014\|55P03\|statement timeout\|lock timeout/);
+  assert.match(syncSource, /input\.payload\.slice\(0, midpoint\)/);
+  assert.match(syncSource, /input\.payload\.slice\(midpoint\)/);
+});

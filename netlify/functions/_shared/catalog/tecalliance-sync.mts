@@ -12,6 +12,9 @@ import { normalizeCatalogMarketSegment } from "./catalog-segments.mts";
 
 const TECALLIANCE_API_URL = "https://webservice.tecalliance.services/pegasus-3-0/services/TecdocToCatDLB.jsonEndpoint";
 const DEFAULT_DISCOVERY_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const DEFAULT_CATALOG_WRITE_BATCH_SIZE = 50;
+const MIN_CATALOG_WRITE_BATCH_SIZE = 10;
+const CATALOG_WRITE_RETRY_DELAYS_MS = [750, 1500, 3000];
 
 const defaultRequestHeaders = {
   "user-agent":
@@ -148,6 +151,84 @@ export type TecAllianceSyncConfig = {
   filterQueries?: string[];
   requestHeaders?: Record<string, string>;
 };
+
+type CatalogWritePayload = Record<string, unknown>;
+
+type ProcessedCatalogBatch = {
+  type: "catalog";
+  batch: string;
+  rows: number;
+  status: number;
+  attempts: number;
+};
+
+async function upsertCatalogPayloadWithRecovery(input: {
+  supabaseUrl: string;
+  headers: Record<string, string>;
+  payload: CatalogWritePayload[];
+  processedBatches: ProcessedCatalogBatch[];
+  batchLabel: string | number;
+}) {
+  const maxAttempts = input.payload.length > MIN_CATALOG_WRITE_BATCH_SIZE ? 2 : CATALOG_WRITE_RETRY_DELAYS_MS.length + 1;
+  let lastFailure = "";
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const response = await fetch(
+      `${input.supabaseUrl}/rest/v1/catalog_products?on_conflict=organization_id,brand_id,normalized_code`,
+      {
+        method: "POST",
+        headers: {
+          ...input.headers,
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify(input.payload),
+      },
+    );
+    if (response.ok) {
+      input.processedBatches.push({
+        type: "catalog",
+        batch: String(input.batchLabel),
+        rows: input.payload.length,
+        status: response.status,
+        attempts: attempt,
+      });
+      return;
+    }
+
+    const text = await response.text();
+    lastFailure = `${response.status} ${text}`;
+    const retryable =
+      [429, 502, 503, 504].includes(response.status) ||
+      /57014|55P03|statement timeout|lock timeout|upstream request timeout|gateway timeout/i.test(text);
+    if (!retryable) {
+      throw new Error(`catalog_products upsert failed: ${lastFailure}`);
+    }
+    if (attempt < maxAttempts) {
+      await wait(CATALOG_WRITE_RETRY_DELAYS_MS[Math.min(attempt - 1, CATALOG_WRITE_RETRY_DELAYS_MS.length - 1)]);
+    }
+  }
+
+  if (input.payload.length > MIN_CATALOG_WRITE_BATCH_SIZE) {
+    const midpoint = Math.ceil(input.payload.length / 2);
+    await upsertCatalogPayloadWithRecovery({
+      ...input,
+      payload: input.payload.slice(0, midpoint),
+      batchLabel: `${input.batchLabel}.1`,
+    });
+    await upsertCatalogPayloadWithRecovery({
+      ...input,
+      payload: input.payload.slice(midpoint),
+      batchLabel: `${input.batchLabel}.2`,
+    });
+    return;
+  }
+
+  throw new Error(`catalog_products upsert failed after bounded recovery: ${lastFailure}`);
+}
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
 export async function syncBrandCatalogFromTecAllianceBrand(
   input: {
@@ -317,43 +398,36 @@ export async function syncBrandCatalogFromTecAllianceBrand(
     }
   });
 
-  const processedBatches = [];
-  const batchSize = 200;
+  const processedBatches: ProcessedCatalogBatch[] = [];
+  const batchSize = DEFAULT_CATALOG_WRITE_BATCH_SIZE;
   if (catalogPayload.length) {
     for (let index = 0; index < catalogPayload.length; index += batchSize) {
       const batch = catalogPayload.slice(index, index + batchSize);
-      const response = await fetch(`${input.supabaseUrl}/rest/v1/catalog_products?on_conflict=organization_id,brand_id,normalized_code`, {
-        method: "POST",
-        headers: {
-          ...headers,
-          Prefer: "resolution=merge-duplicates,return=minimal",
-        },
-        body: JSON.stringify(
-          batch.map((row) => ({
-            organization_id: row.organization_id,
-            brand_id: row.brand_id,
-            product_code: row.product_code,
-            description: emptyToNull(row.description),
-            ...(supportsEanColumn ? { ean: emptyToNull(row.ean) } : {}),
-            oem_no: emptyToNull(row.oem_no),
-            vehicle: emptyToNull(row.vehicle),
-            ...(supportsVehicleModelColumn ? { vehicle_model: emptyToNull(row.vehicle_model) } : {}),
-            ...(supportsMarketSegmentColumn ? { market_segment: emptyToNull(row.market_segment) } : {}),
-            hs_code: emptyToNull(row.hs_code),
-            origin: emptyToNull(row.origin),
-            weight_kg: row.weight_kg == null || Number.isNaN(Number(row.weight_kg)) ? null : Number(row.weight_kg),
-            ...(supportsImageColumn ? { image_url: emptyToNull(row.image_url) } : {}),
-            lifecycle_status: emptyToNull(row.lifecycle_status) || "active",
-            lifecycle_note: emptyToNull(row.lifecycle_note),
-            updated_at: new Date().toISOString(),
-          })),
-        ),
+      const payload = batch.map((row) => ({
+        organization_id: row.organization_id,
+        brand_id: row.brand_id,
+        product_code: row.product_code,
+        description: emptyToNull(row.description),
+        ...(supportsEanColumn ? { ean: emptyToNull(row.ean) } : {}),
+        oem_no: emptyToNull(row.oem_no),
+        vehicle: emptyToNull(row.vehicle),
+        ...(supportsVehicleModelColumn ? { vehicle_model: emptyToNull(row.vehicle_model) } : {}),
+        ...(supportsMarketSegmentColumn ? { market_segment: emptyToNull(row.market_segment) } : {}),
+        hs_code: emptyToNull(row.hs_code),
+        origin: emptyToNull(row.origin),
+        weight_kg: row.weight_kg == null || Number.isNaN(Number(row.weight_kg)) ? null : Number(row.weight_kg),
+        ...(supportsImageColumn ? { image_url: emptyToNull(row.image_url) } : {}),
+        lifecycle_status: emptyToNull(row.lifecycle_status) || "active",
+        lifecycle_note: emptyToNull(row.lifecycle_note),
+        updated_at: new Date().toISOString(),
+      }));
+      await upsertCatalogPayloadWithRecovery({
+        supabaseUrl: input.supabaseUrl,
+        headers,
+        payload,
+        processedBatches,
+        batchLabel: index / batchSize + 1,
       });
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`catalog_products upsert failed: ${response.status} ${text}`);
-      }
-      processedBatches.push({ type: "catalog", batch: index / batchSize + 1, rows: batch.length, status: response.status });
     }
   }
 
