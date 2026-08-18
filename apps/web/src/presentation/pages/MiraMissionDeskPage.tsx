@@ -360,12 +360,17 @@ export function MiraMissionDeskPage() {
       />
 
       <section className="mira-mission-page__hero" aria-labelledby="mira-mission-copy">
-        <div className="mira-mission-page__visual"><img src="/mira/mira-home.png" alt="MIRA" /><span className="mira-mission-page__glow" aria-hidden="true" /></div>
+        <div className="mira-mission-page__visual" aria-hidden="true"><img src="/mira/mira-home.png" alt="" /><span className="mira-mission-page__glow" /></div>
         <div className="mira-mission-page__copy">
           <h2 id="mira-mission-copy">MIRA online görev masası</h2>
-          <p>Yalnızca görevi yaz. MIRA hedef markayı ve istenen alanı çıkarır, uygun resmî kaynağı seçer ve kanıtı doğrulama kuyruğuna getirir.</p>
-          <div className="mira-mission-page__address"><span>Durum</span><code>/api/mira-missions · authenticated</code></div>
-          <div className="mira-mission-page__boundary"><strong>Catalog’a otomatik yazma, Apply ve yetki genişletme kapalıdır.</strong></div>
+          <p>Görevi yaz. MIRA hedef markayı, aranacak alanı ve uygun kaynağı kendi çıkarır; sonucu kanıt ve debrief olarak geri getirir.</p>
+          <div className="mira-mission-page__status-grid" aria-label="MIRA runtime status">
+            <div><span>Worker</span><strong>{deskStatus}</strong></div>
+            <div><span>Kuyruk</span><strong>{missions.length} görev</strong></div>
+            <div><span>Kanıt</span><strong>{evidenceMissions.length} kayıt</strong></div>
+            <div><span>Guard</span><strong>Review-only</strong></div>
+          </div>
+          <div className="mira-mission-page__boundary"><strong>Catalog’a otomatik Apply yok.</strong><span> Kanıt staging’e gelir; final karar ayrı review akışındadır.</span></div>
         </div>
       </section>
 
@@ -381,7 +386,7 @@ export function MiraMissionDeskPage() {
         <section className="mira-mission-page__online-grid" role="tabpanel">
           <form className="mira-mission-page__online-form" onSubmit={submit}>
             <h2>Yeni online görev</h2>
-            <label>Görev<input value={objective} onChange={(event) => setObjective(event.target.value)} minLength={8} maxLength={500} placeholder="Örn. BF ürünleri için 50 doğrulanmış EAN bul" required /></label>
+            <label>Görev<textarea value={objective} onChange={(event) => setObjective(event.target.value)} minLength={8} maxLength={500} placeholder="Örn. BF ürünleri için 50 doğrulanmış EAN bul" rows={4} required /></label>
             <label>Görev alanı<select value={missionArea} onChange={(event) => setMissionArea(event.target.value)}><option>Public catalog signal</option><option>Supplier market watch</option><option>Customer demand review</option></select></label>
             <div className="mira-mission-page__form-row"><label>Sayfa bütçesi<input type="number" min="1" max="50" value={maxPages} onChange={(event) => setMaxPages(Number(event.target.value))} /></label><label>İstek aralığı (ms)<input type="number" min="1000" max="10000" step="100" value={delayMs} onChange={(event) => setDelayMs(Number(event.target.value))} /></label></div>
             <button className="button button--primary" type="submit" disabled={submitting}>{submitting ? "Kuyruğa alınıyor…" : "MIRA’ya görev ver"}</button>
@@ -406,9 +411,9 @@ export function MiraMissionDeskPage() {
       ) : null}
 
       <section className="mira-mission-page__capabilities" aria-label={t("mira.missionDesk.title")}>
-        <article><span className="mira-mission-page__capability-icon" aria-hidden="true">◎</span><h3>{t("mira.missionDesk.worker")}</h3><p>Online worker görevi alır, kaynağı seçer ve sonucu bu ekrana geri yollar.</p></article>
-        <article><span className="mira-mission-page__capability-icon" aria-hidden="true">≋</span><h3>{t("mira.missionDesk.queue")}</h3><p>Görevler oturum ve organizasyon sınırıyla saklanır.</p></article>
-        <article><span className="mira-mission-page__capability-icon" aria-hidden="true">✓</span><h3>{t("mira.missionDesk.debrief")}</h3><p>Doğrulanan kanıt otomatik staging'e alınır; çelişki ve güven açığı review'a yönlenir.</p></article>
+        <article><span>Çalışma</span><strong>Worker görevi alır, kaynağı seçer ve sonucu geri yollar.</strong></article>
+        <article><span>Kanıt</span><strong>Bulunan veri artifact, debrief ve gerekçeyle görünür.</strong></article>
+        <article><span>Kontrol</span><strong>Catalog değişikliği ayrı review ve Apply kararı ister.</strong></article>
       </section>
     </PageShell>
   );

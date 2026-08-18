@@ -159,3 +159,209 @@
   .mira-mission-page__report-heading { flex-direction: column; }
   .mira-mission-page__artifact-grid { grid-template-columns: 1fr; }
 }
+
+/* Compact operational MIRA desk. These rules intentionally sit last and
+   neutralize the older hero-style MIRA layout still present in the base theme. */
+.mira-mission-page {
+  gap: 14px !important;
+}
+
+.mira-mission-page__hero {
+  grid-template-columns: 92px minmax(0, 1fr) !important;
+  gap: 18px !important;
+  padding: 16px 18px !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+}
+
+.mira-mission-page__visual {
+  min-height: 0 !important;
+}
+
+.mira-mission-page__visual img {
+  width: 86px !important;
+  filter: drop-shadow(0 10px 14px rgba(8, 26, 51, 0.16)) !important;
+}
+
+.mira-mission-page__glow {
+  width: 70px !important;
+  height: 16px !important;
+  bottom: -2px !important;
+  filter: blur(8px) !important;
+}
+
+.mira-mission-page__copy h2 {
+  margin-bottom: 6px !important;
+  font-size: 24px !important;
+  line-height: 1.1 !important;
+}
+
+.mira-mission-page__copy p {
+  max-width: none !important;
+  font-size: 14px !important;
+  line-height: 1.45 !important;
+}
+
+.mira-mission-page__status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.mira-mission-page__status-grid div {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #dbe7f3;
+  border-radius: 8px;
+  background: #f8fbfe;
+}
+
+.mira-mission-page__status-grid span,
+.mira-mission-page__capabilities span {
+  display: block;
+  color: #6b7f99;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.mira-mission-page__status-grid strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 3px;
+  color: #10233e;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mira-mission-page__address {
+  display: none !important;
+}
+
+.mira-mission-page__boundary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 10px !important;
+  padding: 9px 11px !important;
+  border-radius: 8px !important;
+  font-size: 12px;
+  line-height: 1.35 !important;
+}
+
+.mira-mission-page__online-grid {
+  grid-template-columns: minmax(320px, 0.72fr) minmax(420px, 1.28fr);
+  gap: 14px;
+}
+
+.mira-mission-page__online-form,
+.mira-mission-page__online-queue,
+.mira-mission-page__report-panel {
+  padding: 16px !important;
+  border-radius: 8px !important;
+}
+
+.mira-mission-page__online-form h2,
+.mira-mission-page__online-queue h2,
+.mira-mission-page__panel-heading h2 {
+  margin-bottom: 8px !important;
+  font-size: 18px !important;
+}
+
+.mira-mission-page__online-form textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid #cbd8e7;
+  border-radius: 8px;
+  color: #10233e;
+  background: #fff;
+  font: inherit;
+  line-height: 1.45;
+}
+
+.mira-mission-page__queue-item {
+  padding: 11px 0;
+}
+
+.mira-mission-page__queue-item strong,
+.mira-mission-page__report-heading strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.mira-mission-page__tabs {
+  padding: 6px !important;
+  border-radius: 8px !important;
+}
+
+.mira-mission-page__tabs button {
+  min-height: 36px !important;
+  border-radius: 7px !important;
+}
+
+.mira-mission-page__report-card {
+  gap: 10px !important;
+  padding: 13px !important;
+  border-radius: 8px !important;
+}
+
+.mira-mission-page__result-overview,
+.mira-mission-page__safety-result,
+.mira-mission-page__report-detail,
+.mira-mission-page__negative-result {
+  border-radius: 7px !important;
+}
+
+.mira-mission-page__capabilities {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.mira-mission-page__capabilities article {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px !important;
+  border-radius: 8px !important;
+  background: #f8fbfe !important;
+}
+
+.mira-mission-page__capability-icon {
+  display: none !important;
+}
+
+.mira-mission-page__capabilities h3,
+.mira-mission-page__capabilities p {
+  display: none !important;
+}
+
+.mira-mission-page__capabilities strong {
+  color: #183352;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+@media (max-width: 1100px) {
+  .mira-mission-page__status-grid,
+  .mira-mission-page__capabilities {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .mira-mission-page__hero,
+  .mira-mission-page__online-grid,
+  .mira-mission-page__status-grid,
+  .mira-mission-page__capabilities {
+    grid-template-columns: 1fr !important;
+  }
+
+  .mira-mission-page__visual {
+    display: none !important;
+  }
+}
