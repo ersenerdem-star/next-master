@@ -24,6 +24,7 @@ const LOGO_PRESETS: LogoPreset[] = [
   { match: /sachs/i, label: "Sachs", wordmark: "SACHS", assetSrc: "/brand-logos/sachs_logo.png", bgFrom: "#f5f3ff", bgTo: "#ffffff", fg: "#6d28d9", stroke: "#c4b5fd" },
   { match: /boge/i, label: "Boge", wordmark: "BOGE", assetSrc: "/brand-logos/boge_logo.png", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#0f172a", stroke: "#cbd5e1" },
   { match: /mann/i, label: "MANN", wordmark: "MANN", assetSrc: "/brand-logos/mann_logo.png", bgFrom: "#fefce8", bgTo: "#ffffff", fg: "#a16207", stroke: "#fde047" },
+  { match: /\bgates\b/i, label: "Gates", wordmark: "GATES", assetSrc: "/brand-logos/gates_logo.jpeg", bgFrom: "#ffffff", bgTo: "#ffffff", fg: "#111827", stroke: "#cbd5e1" },
   { match: /febi/i, label: "febi", wordmark: "FEBI", assetSrc: "/brand-logos/febi_logo.png", bgFrom: "#fef2f2", bgTo: "#ffffff", fg: "#b91c1c", stroke: "#fca5a5" },
   { match: /corteco/i, label: "Corteco", wordmark: "CORTECO", assetSrc: "/brand-logos/corteco_logo.jpg", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#1f2937", stroke: "#cbd5e1" },
   { match: /(?:euroricambi|euricambi)/i, label: "Euroricambi", wordmark: "EURORICAMBI", assetSrc: "/brand-logos/euroricambi_logo.png", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#1f2937", stroke: "#cbd5e1" },
