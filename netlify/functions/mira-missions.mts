@@ -15,6 +15,7 @@ import {
   quarantineReasonForResultIntake,
   stageMiraDiscoveryQuarantine,
 } from "./_shared/catalog/mira-discovery-quarantine.mjs";
+import { buildMiraKnowledgeSnapshot } from "./_shared/catalog/mira-knowledge-snapshot.mts";
 
 type MissionInput = {
   objective?: unknown;
@@ -250,6 +251,23 @@ async function nextBridgeMission(req: Request) {
   });
   const missions = await getJson<BridgeMission[]>(url, { headers: serviceRoleHeaders(serviceRoleKey), timeoutMs: 12000 });
   return json({ ok: true, mission: missions[0] ?? null });
+}
+
+async function getBridgeKnowledgeSnapshot(req: Request) {
+  const auth = await authorizeBridge(req, "");
+  if ("error" in auth) return auth.error;
+  const supabaseUrl = env("SUPABASE_URL");
+  const serviceRoleKey = env("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) return json({ error: "MIRA bridge server configuration is incomplete." }, 503);
+  const snapshot = await buildMiraKnowledgeSnapshot({
+    supabaseUrl,
+    serviceRoleKey,
+    organizationId: auth.config.organizationId,
+  });
+  return json({ ok: true, snapshot }, 200, {
+    "Cache-Control": "private, no-store",
+    "X-Content-Type-Options": "nosniff",
+  });
 }
 
 /**
@@ -490,7 +508,7 @@ async function acceptBridgeResult(req: Request) {
 
 function isBridgeRoute(req: Request) {
   const bridge = new URL(req.url).searchParams.get("bridge");
-  return bridge === "claim" || bridge === "next" || bridge === "release" || bridge === "result" ? bridge : null;
+  return bridge === "claim" || bridge === "next" || bridge === "knowledge" || bridge === "release" || bridge === "result" ? bridge : null;
 }
 
 export default async (req: Request, _context: Context) => {
@@ -503,6 +521,10 @@ export default async (req: Request, _context: Context) => {
     if (bridgeRoute === "next") {
       if (req.method !== "GET") return json({ error: "Method not allowed" }, 405);
       return await nextBridgeMission(req);
+    }
+    if (bridgeRoute === "knowledge") {
+      if (req.method !== "GET") return json({ error: "Method not allowed" }, 405);
+      return await getBridgeKnowledgeSnapshot(req);
     }
     if (bridgeRoute === "release") {
       if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
