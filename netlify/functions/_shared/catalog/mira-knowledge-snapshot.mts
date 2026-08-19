@@ -17,6 +17,11 @@ const FIELD_MAP: Record<string, string> = {
   technical_specification: "technical_specification",
 };
 
+// Keep the server response within the public MIRA knowledge contract. A brand
+// summary can expose ten missing-field rows, so 100 brands may otherwise
+// expand beyond the worker's 500-row validation ceiling.
+const MAX_KNOWLEDGE_GAP_FIELDS = 500;
+
 type Row = Record<string, unknown>;
 
 function array(value: unknown) {
@@ -66,6 +71,19 @@ function missingFields(row: Row) {
     .map(([field, value]) => ({ field, missingCount: Math.max(0, Number(value || 0)) }))
     .filter((entry) => entry.missingCount > 0)
     .map((entry) => ({ ...entry, priority: entry.missingCount }));
+}
+
+function boundedCatalogGaps(rows: Array<Record<string, unknown>>) {
+  let remaining = MAX_KNOWLEDGE_GAP_FIELDS;
+  const bounded = [];
+  for (const row of rows) {
+    if (remaining <= 0) break;
+    const rowFields = array(row.missingFields).slice(0, remaining);
+    if (!rowFields.length) continue;
+    bounded.push({ ...row, missingFields: rowFields });
+    remaining -= rowFields.length;
+  }
+  return bounded;
 }
 
 function rest(supabaseUrl: string, table: string, params: Record<string, string>) {
@@ -159,13 +177,13 @@ export async function buildMiraKnowledgeSnapshot({
     };
   });
 
-  const catalogGaps = summaries.map((row) => ({
+  const catalogGaps = boundedCatalogGaps(summaries.map((row) => ({
     brand: brandById.get(String(row.brand_id)) || "Unknown brand",
     totalProducts: Number(row.total_products || 0),
     missingFields: missingFields(row),
     lastCatalogChangeAt: row.last_catalog_change_at || null,
     projectionUpdatedAt: row.updated_at || null,
-  })).filter((row) => row.missingFields.length > 0);
+  })).filter((row) => row.missingFields.length > 0));
 
   return {
     knowledgeVersion: "mira-system-knowledge.v1",

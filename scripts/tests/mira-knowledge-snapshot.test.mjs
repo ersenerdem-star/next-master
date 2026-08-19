@@ -35,3 +35,40 @@ test("builds a tenant-scoped read-only MIRA knowledge snapshot", async () => {
   assert.ok(requested.every((url) => url.searchParams.get("organization_id") === "eq.org-1"));
   assert.equal(JSON.stringify(snapshot).includes("server-only-key"), false);
 });
+
+test("caps expanded catalog gap fields at the worker contract limit", async () => {
+  const summaries = Array.from({ length: 60 }, (_, index) => ({
+    brand_id: `b${index}`,
+    total_products: 1000 - index,
+    missing_ean_count: 1,
+    missing_oem_count: 1,
+    missing_vehicle_count: 1,
+    missing_vehicle_model_count: 1,
+    missing_description_count: 1,
+    missing_image_count: 1,
+    missing_origin_count: 1,
+    missing_weight_count: 1,
+    missing_hs_code_count: 1,
+    missing_market_segment_count: 1,
+  }));
+  const rows = {
+    catalog_operations_brand_summary: summaries,
+    brands: summaries.map((row, index) => ({ id: row.brand_id, name: `Brand ${index}` })),
+    catalog_external_sources: [],
+    catalog_external_source_trust_profiles: [],
+    catalog_observation_jobs: [],
+    catalog_observation_runs: [],
+    mira_missions: [],
+  };
+
+  const snapshot = await buildMiraKnowledgeSnapshot({
+    supabaseUrl: "https://project.supabase.co",
+    serviceRoleKey: "server-only-key",
+    organizationId: "org-1",
+    fetchRows: async (url) => structuredClone(rows[new URL(url).pathname.split("/").pop()] ?? []),
+  });
+
+  const expandedCount = snapshot.catalog.gaps.reduce((sum, row) => sum + row.missingFields.length, 0);
+  assert.equal(expandedCount, 500);
+  assert.equal(snapshot.catalog.gaps.length, 50);
+});
