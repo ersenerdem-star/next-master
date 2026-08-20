@@ -7,6 +7,8 @@ export type QuoteSupplierOption = {
   price_date: string | null;
   sell_price: number | null;
   notes: string | null;
+  moq?: number | null;
+  order_multiple?: number | null;
   lifecycle_status?: CatalogLifecycleStatus | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
@@ -28,6 +30,8 @@ export type QuoteResolveResult = {
   price_date: string | null;
   sell_price: number | null;
   notes: string | null;
+  moq?: number | null;
+  order_multiple?: number | null;
   lifecycle_status?: CatalogLifecycleStatus | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
@@ -42,6 +46,11 @@ export type QuoteBuilderLine = {
   brand: string;
   description: string;
   qty: number;
+  requested_qty?: number | null;
+  moq?: number | null;
+  order_multiple?: number | null;
+  quantity_adjusted?: boolean;
+  quantity_adjustment_note?: string | null;
   oem_no: string;
   hs_code: string;
   origin: string;

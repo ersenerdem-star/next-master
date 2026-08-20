@@ -38,9 +38,11 @@ const ALLOWED_RPCS = new Set([
   "post_invoice_stock_movements",
   "search_catalog_products",
   "cloud_quote_supplier_options",
+  "cloud_supplier_order_rules",
   "cloud_resolve_quote_line",
   "cloud_supplier_brand_summary",
   "cloud_supplier_price_page",
+  "cloud_supplier_price_page_with_rules",
   "delete_catalog_product_guarded",
   "deactivate_supplier_prices_by_filter",
   "fail_catalog_import",
@@ -78,6 +80,7 @@ const SUPERADMIN_RPCS = new Set([
   "cloud_catalog_integrity_page",
   "cloud_supplier_brand_summary",
   "cloud_supplier_price_page",
+  "cloud_supplier_price_page_with_rules",
   "delete_catalog_product_guarded",
   "deactivate_supplier_prices_by_filter",
   "get_latest_supplier_price_rollup_refresh_run",
@@ -132,6 +135,7 @@ const OPERATIONS_RPCS = new Set([
 
 const CUSTOMER_STAFF_RPCS = new Set([
   "cloud_quote_supplier_options",
+  "cloud_supplier_order_rules",
   "cloud_resolve_quote_line",
   "delete_purchase_order_guarded",
   "delete_sales_order_guarded",

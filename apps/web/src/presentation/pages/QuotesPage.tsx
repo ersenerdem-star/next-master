@@ -22,6 +22,7 @@ import { fetchCloudQuoteDetail, fetchCloudQuotes } from "../../infrastructure/ap
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, inventoryAvailabilityLookupKey, type InventoryAvailabilitySummary } from "../../infrastructure/api/inventoryApi";
 import { canonicalizeBrandName, matchesOriginalNumberSearch, normalizeBrandKey, normalizeBrandName, normalizePartCode, normalizeSearchText } from "../../domain/shared/normalize";
+import { normalizeOrderQuantity, orderQuantityAdjustmentMessage } from "../../domain/shared/orderQuantityRules";
 import { buildBrandResolutionLookup, resolveCanonicalBrandName } from "../../shared/brandResolver";
 import { parseCsv } from "../../shared/csv";
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
@@ -541,6 +542,7 @@ function getQuoteBuilderLineIssues(t: TranslateFn, line: QuoteBuilderLine) {
   if (!line.found) issues.push(t("sales.warnings.notMatched"));
   if (!line.description?.trim()) issues.push(t("sales.warnings.missingDescription"));
   if ((line.sell_price ?? 0) <= 0) issues.push(t("sales.warnings.missingSellPrice"));
+  if (line.quantity_adjustment_note) issues.push(line.quantity_adjustment_note);
   return issues;
 }
 
@@ -584,6 +586,8 @@ function mapDetailLineToBuilderLine(
             notes: option.notes || line.notes || fallbackResolved?.notes || null,
           },
         ];
+  const quantityRule = supplierOptions[0] || option;
+  const quantityAdjustment = normalizeOrderQuantity(Number(line.qty || 1), quantityRule);
 
   return {
     lineId: String(line.id || nextLineId()),
@@ -591,7 +595,12 @@ function mapDetailLineToBuilderLine(
     resolvedCode: line.product_code || "",
     brand: line.brand_text || "",
     description: line.description || "",
-    qty: Math.max(1, Number(line.qty || 1) || 1),
+    qty: quantityAdjustment.corrected,
+    requested_qty: quantityAdjustment.adjusted ? quantityAdjustment.requested : null,
+    moq: quantityRule.moq ?? null,
+    order_multiple: quantityRule.order_multiple ?? null,
+    quantity_adjusted: quantityAdjustment.adjusted,
+    quantity_adjustment_note: orderQuantityAdjustmentMessage(quantityAdjustment, (key, params) => t(key, params)),
     oem_no: line.oem_no || "",
     hs_code: line.hs_code || "",
     origin: line.origin || "",
@@ -1547,6 +1556,8 @@ export function QuotesPage({
       });
 
       const selectedKey = supplierOptions[0] ? `${supplierOptions[0].supplier_name}-0` : line.selectedSupplierKey;
+      const selectedRule = supplierOptions[0] || {};
+      const quantityAdjustment = normalizeOrderQuantity(line.qty, selectedRule);
 
       return {
         ...line,
@@ -1564,6 +1575,12 @@ export function QuotesPage({
         c_sell_price: cSellPrice ?? line.c_sell_price,
         price_date: resolved.price_date || supplierOptions[0]?.price_date || line.price_date,
         notes: resolved.notes || supplierOptions[0]?.notes || line.notes,
+        qty: quantityAdjustment.corrected,
+        requested_qty: quantityAdjustment.adjusted ? quantityAdjustment.requested : null,
+        moq: selectedRule.moq ?? line.moq ?? null,
+        order_multiple: selectedRule.order_multiple ?? line.order_multiple ?? null,
+        quantity_adjusted: quantityAdjustment.adjusted,
+        quantity_adjustment_note: orderQuantityAdjustmentMessage(quantityAdjustment, (key, params) => t(key, params)),
         lifecycle_status: resolved.lifecycle_status ?? line.lifecycle_status ?? "active",
         lifecycle_note: resolved.lifecycle_note ?? line.lifecycle_note ?? null,
         lifecycle_warning: resolved.lifecycle_warning ?? line.lifecycle_warning ?? null,
@@ -1880,19 +1897,32 @@ export function QuotesPage({
           pdfView ? (
             row.qty
           ) : (
-            <input
-              className="inline-edit-input inline-edit-input--qty"
-              type="number"
-              min={1}
-              step={1}
-              value={row.qty}
-              onChange={(event) => {
-                const nextQty = Math.max(1, Number(event.target.value || 1) || 1);
-                setQuoteBuilderLines((current) =>
-                  current.map((item) => (item.lineId === row.lineId ? { ...item, qty: nextQty } : item)),
-                );
-              }}
-            />
+            <div>
+              <input
+                className="inline-edit-input inline-edit-input--qty"
+                type="number"
+                min={1}
+                step={1}
+                value={row.qty}
+                onChange={(event) => {
+                  const nextQty = Math.max(1, Number(event.target.value || 1) || 1);
+                  setQuoteBuilderLines((current) =>
+                    current.map((item) => {
+                      if (item.lineId !== row.lineId) return item;
+                      const adjustment = normalizeOrderQuantity(nextQty, item);
+                      return {
+                        ...item,
+                        qty: adjustment.corrected,
+                        requested_qty: adjustment.adjusted ? adjustment.requested : null,
+                        quantity_adjusted: adjustment.adjusted,
+                        quantity_adjustment_note: orderQuantityAdjustmentMessage(adjustment, (key, params) => t(key, params)),
+                      };
+                    }),
+                  );
+                }}
+              />
+              {row.quantity_adjustment_note ? <div className="warning-text">{row.quantity_adjustment_note}</div> : null}
+            </div>
           ),
       },
     ] as Array<{ key: string; header: string; render: (row: QuoteBuilderLine) => ReactNode }>;
@@ -1924,9 +1954,16 @@ export function QuotesPage({
                     if (item.lineId !== row.lineId) return item;
                     const selected = item.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === nextKey);
                     if (!selected) return { ...item, selectedSupplierKey: nextKey };
+                    const adjustment = normalizeOrderQuantity(item.qty, selected);
                     return {
                       ...item,
                       selectedSupplierKey: nextKey,
+                      qty: adjustment.corrected,
+                      requested_qty: adjustment.adjusted ? adjustment.requested : null,
+                      moq: selected.moq ?? null,
+                      order_multiple: selected.order_multiple ?? null,
+                      quantity_adjusted: adjustment.adjusted,
+                      quantity_adjustment_note: orderQuantityAdjustmentMessage(adjustment, (key, params) => t(key, params)),
                       supplier_name: selected.supplier_name || "",
                       buy_price: selected.buy_price ?? null,
                       sell_price:

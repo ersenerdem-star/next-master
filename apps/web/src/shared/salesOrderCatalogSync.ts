@@ -5,6 +5,7 @@ import { fetchCatalogMetadataForRows } from "../infrastructure/api/quoteImportAp
 import { fetchCodeReferenceMatchesForRows } from "../infrastructure/api/codeReferencesApi";
 import { resolveQuoteLine } from "../infrastructure/api/quoteResolverApi";
 import { supabaseClient } from "../infrastructure/api/supabaseClient";
+import { normalizeOrderQuantity } from "../domain/shared/orderQuantityRules";
 import type { QuoteBuilderLine } from "../types/quoteBuilder";
 import type { LocalBillLine, LocalInvoiceLine, LocalPurchaseOrderLine } from "../types/orders";
 
@@ -286,6 +287,7 @@ async function refreshLinePricesFromCatalog(
       supplierOptions.find((option) => String(option.supplier_name || "").trim().toLowerCase() === selectedSupplierName) ||
       supplierOptions[0] ||
       null;
+    const quantityAdjustment = normalizeOrderQuantity(line.qty, selected || {});
 
     const cSellPrice = shouldUseCPriceForSalesOrder(options.customerType, options.customerPricingMode)
       ? getCPriceForRow(cPriceMap || new Map<string, number>(), {
@@ -319,6 +321,14 @@ async function refreshLinePricesFromCatalog(
       supplier_name: selected?.supplier_name || resolved.supplier_name || line.supplier_name,
       buy_price: selected?.buy_price ?? resolved.buy_price ?? line.buy_price,
       sell_price: nextSellPrice,
+      qty: quantityAdjustment.corrected,
+      requested_qty: quantityAdjustment.adjusted ? quantityAdjustment.requested : null,
+      moq: selected?.moq ?? line.moq ?? null,
+      order_multiple: selected?.order_multiple ?? line.order_multiple ?? null,
+      quantity_adjusted: quantityAdjustment.adjusted,
+      quantity_adjustment_note: quantityAdjustment.adjusted
+        ? `Order amount ${quantityAdjustment.requested} pcs corrected to ${quantityAdjustment.corrected} pcs by supplier quantity rule.`
+        : null,
       c_sell_price: cSellPrice ?? line.c_sell_price,
       price_date: selected?.price_date || resolved.price_date || line.price_date,
       supplierOptions: supplierOptions.length ? supplierOptions : line.supplierOptions,
