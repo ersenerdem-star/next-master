@@ -1155,9 +1155,6 @@ async function fetchPortalCustomerForOrders(
       select,
       organization_id: `eq.${invite.organization_id}`,
       id: `eq.${customerId}`,
-      ...(String(invite.seller_company_profile_id || "").trim()
-        ? { seller_company_profile_id: `eq.${String(invite.seller_company_profile_id).trim()}` }
-        : {}),
       limit: "1",
     });
 
