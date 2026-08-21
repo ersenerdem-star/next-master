@@ -66,6 +66,7 @@ type SearchCatalogBaseItem = {
   brand: string;
   brand_id: string;
   normalized_code: string;
+  normalized_oem: string;
   description: string;
   oem_no: string;
   vehicle: string;
@@ -737,6 +738,7 @@ function mapCatalogRowsToBaseItems(
       brand: brandMap.byId.get(String(row.brand_id || "")) || "",
       brand_id: String(row.brand_id || ""),
       normalized_code: String(row.normalized_code || normalizePartCode(String(row.product_code || ""))),
+      normalized_oem: normalizePartCode(String(row.normalized_oem || "")),
       description: String(row.description || ""),
       oem_no: sanitizeCatalogOemNumbers(row.oem_no),
       vehicle: String(row.vehicle || ""),
@@ -860,11 +862,14 @@ async function hydratePortalCatalogItems(
         .map((item) => ({
           brandId: item.brand_id,
           normalizedCode: item.normalized_code,
+          normalizedOem: item.normalized_oem,
         })),
       timeoutMs,
     ).catch(() => new Map());
     for (const item of baseItems) {
-      const bestOption = bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`);
+      const bestOption =
+        bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`) ||
+        (item.normalized_oem ? bestOptionMap.get(`${item.brand_id}::oem::${item.normalized_oem}`) : undefined);
       if (!bestOption) continue;
       previewByCode.set(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`, {
         sell_price: computeSellFromBuy(bestOption.buy_price, context),
@@ -903,11 +908,14 @@ async function hydratePortalCatalogItems(
         .map((item) => ({
           brandId: item.brand_id,
           normalizedCode: item.normalized_code,
+          normalizedOem: item.normalized_oem,
         })),
       timeoutMs,
     ).catch(() => new Map());
     for (const item of baseItems) {
-      const bestOption = bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`);
+      const bestOption =
+        bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`) ||
+        (item.normalized_oem ? bestOptionMap.get(`${item.brand_id}::oem::${item.normalized_oem}`) : undefined);
       if (!bestOption) continue;
       previewByCode.set(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`, {
         sell_price:
@@ -1826,7 +1834,7 @@ async function fetchPortalBestSupplierPreviewMap(
   supabaseUrl: string,
   serviceRoleKey: string,
   organizationId: string,
-  items: Array<{ brandId: string; normalizedCode: string }>,
+  items: Array<{ brandId: string; normalizedCode: string; normalizedOem?: string }>,
   timeoutMs?: number,
 ) {
   const bestByKey = new Map<
@@ -1840,10 +1848,39 @@ async function fetchPortalBestSupplierPreviewMap(
   >();
   const brandIds = [...new Set(items.map((item) => item.brandId).filter(Boolean))];
   const normalizedCodes = [...new Set(items.map((item) => item.normalizedCode).filter(Boolean))];
+  const normalizedOems = [...new Set(items.map((item) => item.normalizedOem || "").filter(Boolean))];
+
+  const recordSupplierRows = (supplierRows: Array<Record<string, unknown>>) => {
+    for (const row of supplierRows) {
+      const brandId = String(row.brand_id || "");
+      const normalizedCode = normalizePartCode(String(row.normalized_code || row.product_code || ""));
+      const normalizedOem = normalizePartCode(String(row.normalized_oem || ""));
+      const buyPrice = row.buy_price == null ? null : Number(row.buy_price);
+      if (!brandId || buyPrice == null || !Number.isFinite(buyPrice)) continue;
+
+      const option = {
+        buy_price: buyPrice,
+        supplier_name: String(row.suppliers?.name || ""),
+        price_date: row.valid_from == null ? null : String(row.valid_from),
+        notes: row.notes == null ? null : String(row.notes),
+      };
+      const keys = [
+        normalizedCode ? `${brandId}::${normalizedCode}` : "",
+        normalizedOem ? `${brandId}::oem::${normalizedOem}` : "",
+      ].filter(Boolean);
+      for (const key of keys) {
+        const current = bestByKey.get(key);
+        if (current && Number(current.buy_price ?? Number.MAX_SAFE_INTEGER) <= buyPrice) continue;
+        bestByKey.set(key, option);
+      }
+    }
+  };
+
   for (const brandChunk of chunkValues(brandIds, 50)) {
     for (const codeChunk of chunkValues(normalizedCodes, 200)) {
+      if (!codeChunk.length) continue;
       const supplierRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "supplier_prices", {
-        select: "brand_id,normalized_code,buy_price,valid_from,notes,suppliers(name)",
+        select: "brand_id,normalized_code,normalized_oem,buy_price,valid_from,notes,suppliers(name)",
         organization_id: `eq.${organizationId}`,
         brand_id: `in.(${brandChunk.join(",")})`,
         is_active: "eq.true",
@@ -1852,21 +1889,21 @@ async function fetchPortalBestSupplierPreviewMap(
         order: "buy_price.asc",
         limit: "5000",
       }, timeoutMs);
-      for (const row of supplierRows) {
-        const brandId = String(row.brand_id || "");
-        const normalizedCode = String(row.normalized_code || "");
-        const buyPrice = row.buy_price == null ? null : Number(row.buy_price);
-        if (!brandId || !normalizedCode || buyPrice == null || !Number.isFinite(buyPrice)) continue;
-        const key = `${brandId}::${normalizedCode}`;
-        const current = bestByKey.get(key);
-        if (current && Number(current.buy_price ?? Number.MAX_SAFE_INTEGER) <= buyPrice) continue;
-        bestByKey.set(key, {
-          buy_price: buyPrice,
-          supplier_name: String(row.suppliers?.name || ""),
-          price_date: row.valid_from == null ? null : String(row.valid_from),
-          notes: row.notes == null ? null : String(row.notes),
-        });
-      }
+      recordSupplierRows(supplierRows);
+    }
+    for (const oemChunk of chunkValues(normalizedOems, 200)) {
+      if (!oemChunk.length) continue;
+      const supplierRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "supplier_prices", {
+        select: "brand_id,normalized_code,normalized_oem,buy_price,valid_from,notes,suppliers(name)",
+        organization_id: `eq.${organizationId}`,
+        brand_id: `in.(${brandChunk.join(",")})`,
+        is_active: "eq.true",
+        buy_price: "not.is.null",
+        normalized_oem: `in.(${oemChunk.join(",")})`,
+        order: "buy_price.asc",
+        limit: "5000",
+      }, timeoutMs);
+      recordSupplierRows(supplierRows);
     }
   }
   return bestByKey;
