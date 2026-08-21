@@ -168,6 +168,77 @@ async function mergeCatalogProductOptionalFields<T extends CatalogOptionalFields
   }));
 }
 
+type CatalogPriceRow = {
+  product_id: string;
+  product_code: string;
+  brand: string;
+  best_buy_price?: number | null;
+  best_buy_price_date?: string | null;
+};
+
+/**
+ * Hydrate the admin catalog with the current lowest active supplier price.
+ * The rollup is already tenant-scoped and indexed; missing/failed optional
+ * price hydration must never make catalog search unusable.
+ */
+async function mergeCatalogSupplierPrices<T extends CatalogPriceRow>(organizationId: string, rows: T[]) {
+  const scopedRows = rows
+    .map((row) => ({
+      row,
+      code: normalizePartCode(row.product_code),
+      brand: normalizeBrandName(row.brand).toLowerCase(),
+    }))
+    .filter((item) => item.code && item.brand);
+  if (!scopedRows.length) return rows;
+
+  let brands;
+  try {
+    brands = await fetchCloudBrands();
+  } catch {
+    return rows.map((row) => ({ ...row, best_buy_price: null, best_buy_price_date: null }));
+  }
+  const brandIdByName = new Map(
+    brands.map((brand) => [normalizeBrandName(brand.name).toLowerCase(), String(brand.id || "")]),
+  );
+  const brandIds = Array.from(new Set(scopedRows.map((item) => brandIdByName.get(item.brand)).filter(Boolean))) as string[];
+  const codes = Array.from(new Set(scopedRows.map((item) => item.code)));
+  if (!brandIds.length || !codes.length) {
+    return rows.map((row) => ({ ...row, best_buy_price: null, best_buy_price_date: null }));
+  }
+
+  const { data, error } = await supabaseClient
+    .from("supplier_price_rollups")
+    .select("brand_id,normalized_code,cheapest_price,price_date")
+    .eq("organization_id", organizationId)
+    .in("brand_id", brandIds)
+    .in("normalized_code", codes);
+  if (error) {
+    return rows.map((row) => ({ ...row, best_buy_price: null, best_buy_price_date: null }));
+  }
+
+  const priceByScope = new Map<string, { price: number | null; date: string | null }>();
+  for (const item of (data || []) as Array<Record<string, unknown>>) {
+    const price = item.cheapest_price == null ? null : Number(item.cheapest_price);
+    const normalizedCode = normalizePartCode(String(item.normalized_code || ""));
+    const brandId = String(item.brand_id || "");
+    if (!normalizedCode || !brandId || price == null || !Number.isFinite(price) || price <= 0) continue;
+    priceByScope.set(`${brandId}::${normalizedCode}`, {
+      price,
+      date: item.price_date ? String(item.price_date) : null,
+    });
+  }
+
+  return rows.map((row) => {
+    const key = `${brandIdByName.get(normalizeBrandName(row.brand).toLowerCase()) || ""}::${normalizePartCode(row.product_code)}`;
+    const match = priceByScope.get(key);
+    return {
+      ...row,
+      best_buy_price: match?.price ?? null,
+      best_buy_price_date: match?.date ?? null,
+    };
+  });
+}
+
 function shouldRunLooseOriginalNumberSearch(search: string) {
   const normalizedOriginalSearch = normalizeOriginalNumberSearch(search);
   return normalizedOriginalSearch.length >= 6;
@@ -349,7 +420,8 @@ export async function fetchCloudCatalog(input: {
     replacement_reason: String(row.replacement_reason || "") || null,
     replacement_warning: String(row.replacement_warning || "") || null,
   }));
-  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogProductOptionalFields(organizationId, rows));
+  const hydrated = await mergeCatalogProductOptionalFields(organizationId, rows);
+  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogSupplierPrices(organizationId, hydrated));
 }
 
 export async function fetchCloudCatalogIntegrity(input: {
@@ -419,7 +491,8 @@ export async function fetchCloudCatalogIntegrity(input: {
     last_evaluated_at: row.last_evaluated_at ? String(row.last_evaluated_at) : null,
     integrity_last_error: row.integrity_last_error ? String(row.integrity_last_error) : null,
   }));
-  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogProductOptionalFields(organizationId, rows));
+  const hydrated = await mergeCatalogProductOptionalFields(organizationId, rows);
+  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogSupplierPrices(organizationId, hydrated));
 }
 
 export async function fetchCatalogIntegritySummary(): Promise<CatalogIntegritySummary> {
@@ -838,5 +911,6 @@ export async function fetchCatalogRowsByCodes(input: { brandName: string; codes:
   }
 
   const sorted = result.sort((left, right) => left.product_code.localeCompare(right.product_code));
-  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogProductOptionalFields(organizationId, sorted));
+  const hydrated = await mergeCatalogProductOptionalFields(organizationId, sorted);
+  return mergeCatalogOemFallbacks(organizationId, await mergeCatalogSupplierPrices(organizationId, hydrated));
 }

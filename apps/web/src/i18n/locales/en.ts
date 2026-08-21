@@ -856,6 +856,7 @@ export const enMessages = {
     "actions.searching": "Searching...",
     "common.brand": "Brand",
     "common.brandName": "Brand Name",
+    "common.bestBuyPrice": "Lowest buy price",
     "common.code": "Code",
     "common.description": "Description",
     "common.ean": "EAN / GTIN",

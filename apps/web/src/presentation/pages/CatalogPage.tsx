@@ -274,6 +274,10 @@ export function CatalogPage() {
   });
   const numberLocale = locale === "tr" ? "tr-TR" : "en-US";
   const formatCount = (value: number) => value.toLocaleString(numberLocale);
+  const formatCatalogPrice = (value: number | null | undefined) =>
+    value == null || !Number.isFinite(Number(value))
+      ? "-"
+      : Number(value).toLocaleString(numberLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const getSegmentLabel = (value: string | null | undefined) => {
     const normalized = normalizeCatalogMarketSegment(value);
     return normalized ? t(`catalog.segments.${normalized}`) : t("catalog.segments.unassigned");
@@ -1061,6 +1065,15 @@ export function CatalogPage() {
             <strong className="catalog-name">{drafts[row.product_id]?.description ?? row.description ?? "-"}</strong>
             {row.replacement_warning ? <span className="catalog-inline-flag">{t("catalog.table.replacementMapped")}</span> : null}
             {row.lifecycle_status === "discontinued" && row.lifecycle_note ? <span className="catalog-inline-flag catalog-inline-flag--danger">{row.lifecycle_note}</span> : null}
+          </div>
+        ),
+      },
+      {
+        key: "bestBuyPrice",
+        header: t("catalog.common.bestBuyPrice"),
+        render: (row: CatalogRow) => (
+          <div className="catalog-cell">
+            <strong className="catalog-mono">{formatCatalogPrice(row.best_buy_price)}</strong>
           </div>
         ),
       },
@@ -1920,6 +1933,7 @@ export function CatalogPage() {
               <div><span>{t("catalog.common.hs")}</span><strong>{selectedCatalogDraft.hs_code || "-"}</strong></div>
               <div><span>{t("catalog.common.origin")}</span><strong>{selectedCatalogDraft.origin || "-"}</strong></div>
               <div><span>{t("catalog.common.weight")}</span><strong>{selectedCatalogDraft.weight_kg ?? "-"}</strong></div>
+              <div><span>{t("catalog.common.bestBuyPrice")}</span><strong>{formatCatalogPrice(selectedCatalogDraft.best_buy_price)}</strong></div>
               <div><span>{t("catalog.detail.referenceLinks")}</span><strong>{referenceCoverage[`${selectedCatalogRow.brand.trim().toLowerCase()}::${normalizePartCode(selectedCatalogRow.product_code)}`] || 0}</strong></div>
               {selectedCatalogDraft.replacement_warning ? <div><span>{t("catalog.detail.replacement")}</span><strong>{selectedCatalogDraft.replacement_warning}</strong></div> : null}
             </div>

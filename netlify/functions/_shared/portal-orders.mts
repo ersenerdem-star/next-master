@@ -1985,20 +1985,31 @@ export async function buildPortalPriceListRows(
     }
   }
 
+  // A price list is a commercial offer, not a dump of the whole catalog.
+  // Keep only rows for which the pricing resolver produced a finite, positive
+  // customer price.  Unpriced catalog rows must remain searchable in the
+  // portal, but must not be exported to customers as an unusable list.
+  const rows = catalogRows
+    .map((row) => {
+      const salesPrice = salesPriceByCode.get(row.normalized_code);
+      return {
+        product_code: row.product_code,
+        brand: row.brand,
+        description: row.description || "",
+        price_list_type: priceTypeByCode.get(row.normalized_code) ?? portalFallbackPriceType(context),
+        sales_price: salesPrice ?? null,
+        price_date: priceDateByCode.get(row.normalized_code) ?? null,
+        lifecycle_status: row.lifecycle_status,
+        lifecycle_note: row.lifecycle_note,
+      };
+    })
+    .filter((row) => row.sales_price != null && Number.isFinite(Number(row.sales_price)) && Number(row.sales_price) > 0);
+
   const result = {
     priceListType: context.customerType,
     pricingMode: context.portalCPriceMode,
     currency: context.currency,
-    rows: catalogRows.map((row) => ({
-      product_code: row.product_code,
-      brand: row.brand,
-      description: row.description || "",
-      price_list_type: priceTypeByCode.get(row.normalized_code) ?? portalFallbackPriceType(context),
-      sales_price: salesPriceByCode.get(row.normalized_code) ?? null,
-      price_date: priceDateByCode.get(row.normalized_code) ?? null,
-      lifecycle_status: row.lifecycle_status,
-      lifecycle_note: row.lifecycle_note,
-    })),
+    rows,
   };
   portalPriceListCache.set(cacheKey, {
     value: result,

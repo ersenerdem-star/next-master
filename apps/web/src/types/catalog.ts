@@ -18,6 +18,9 @@ export type CatalogRow = {
   hs_code: string;
   origin: string;
   weight_kg: number | null;
+  /** Current lowest active supplier buy price from the tenant rollup. */
+  best_buy_price?: number | null;
+  best_buy_price_date?: string | null;
   lifecycle_status: CatalogLifecycleStatus | null;
   lifecycle_note: string;
   integrity_status?: CatalogIntegrityStatus;

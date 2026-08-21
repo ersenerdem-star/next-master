@@ -832,6 +832,7 @@ export const trMessages = {
     "actions.searching": "Aranıyor...",
     "common.brand": "Marka",
     "common.brandName": "Marka Adı",
+    "common.bestBuyPrice": "En düşük alış fiyatı",
     "common.code": "Kod",
     "common.description": "Açıklama",
     "common.ean": "EAN / GTIN",
