@@ -2838,8 +2838,6 @@ export function PortalPage() {
                 <strong>Use the middle field for part number or OEM code. Import Brand, Part Code, and Qty files with Excel or CSV; exact matches stay on top and alternatives appear below.</strong>
               </div>
 
-              {!catalogResults.length ? <Input label="Notes" value={portalOrderNotes} placeholder="Order note for your internal buying team" onChange={setPortalOrderNotes} /> : null}
-
               {portalOrderStatus && !catalogResults.length ? <div className="success-text">{portalOrderStatus}</div> : null}
               {portalDraftHasMissingPrices ? <div className="warning-text">Items without live price can be saved in the basket but cannot be confirmed.</div> : null}
               {portalDraftDiscontinuedCount > 0 ? (
@@ -2870,6 +2868,15 @@ export function PortalPage() {
                   savingBasket={savingPortalOrder}
                   confirmingBasket={confirmingPortalOrder}
                   confirmDisabled={portalDraftHasMissingPrices}
+                  orderNotes={portalOrderNotes}
+                  deliveryTerm={portalDeliveryTerm}
+                  paymentTerms={portalPaymentTerms}
+                  packingDetails={portalPackingDetails}
+                  onOrderNotesChange={setPortalOrderNotes}
+                  onDeliveryTermChange={setPortalDeliveryTerm}
+                  onPaymentTermsChange={setPortalPaymentTerms}
+                  onPackingDetailsChange={setPortalPackingDetails}
+                  onQuantityChange={(lineId, quantity) => setPortalDraftLines((current) => current.map((line) => (line.lineId === lineId ? { ...line, qty: quantity } : line)))}
                   onSaveBasket={() => void handleSubmitPortalOrder("draft")}
                   onClearBasket={handleClearPortalBuilder}
                   onConfirmBasket={() => void handleSubmitPortalOrder("confirm")}
@@ -2882,6 +2889,7 @@ export function PortalPage() {
                   onPreview={(item) => setPortalPreview({ kind: "catalog", item })}
                 />
 
+              {false ? <>
               <div className="portal-workbench">
                 <div className="portal-workbench__tables">
                   <SectionCard title={`Search Items (${catalogResults.length.toLocaleString("en-US")})`} className={`search-results-focus-card${catalogResults.length ? " search-results-focus-card--legacy" : ""}`}>
@@ -3105,6 +3113,7 @@ export function PortalPage() {
                   Confirm Basket
                 </Button>
               </div>
+              </> : null}
             </div>
           </SectionCard>
         </div>
