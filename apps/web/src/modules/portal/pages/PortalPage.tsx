@@ -51,6 +51,7 @@ const buildContextMeta = {
 const SESSION_KEY = "next-master-portal-session";
 const PORTAL_CACHE_PREFIX = "next-master-portal-cache";
 const PORTAL_CACHE_WRITE_DELAY_MS = 250;
+const PORTAL_BACKGROUND_REFRESH_MS = 60_000;
 const PORTAL_COMPACT_SEARCH_BREAKPOINT_PX = 1280;
 const PORTAL_MOBILE_LAYOUT_BREAKPOINT_PX = 768;
 const PORTAL_DESKTOP_BASE_WIDTH_PX = 1440;
@@ -79,6 +80,74 @@ type PortalOfflineCache = {
   draft: PortalOfflineDraft;
   updatedAt: string;
 };
+
+type PortalActivityNotification = {
+  id: string;
+  title: string;
+  detail: string;
+};
+
+function getPortalActivityStorageKey(email: string) {
+  return `${getPortalCacheKey(email)}:activity`;
+}
+
+function buildPortalActivityFingerprint(snapshot: PortalSnapshot) {
+  const compact = (rows: Array<Record<string, unknown>>) =>
+    rows.map((row) => ({
+      id: String(row.id || ""),
+      status: String(row.status || ""),
+      updated_at: String(row.updated_at || ""),
+      portal_submitted_at: String(row.portal_submitted_at || ""),
+    }));
+  return {
+    salesOrders: compact(snapshot.salesOrders as unknown as Array<Record<string, unknown>>),
+    invoices: compact(snapshot.invoices as unknown as Array<Record<string, unknown>>),
+    creditNotes: compact(snapshot.creditNotes as unknown as Array<Record<string, unknown>>),
+    payments: compact(snapshot.paymentsReceived as unknown as Array<Record<string, unknown>>),
+  };
+}
+
+function readPortalActivityFingerprint(email: string) {
+  if (typeof window === "undefined" || !email) return null;
+  try {
+    const raw = window.sessionStorage.getItem(getPortalActivityStorageKey(email));
+    return raw ? (JSON.parse(raw) as ReturnType<typeof buildPortalActivityFingerprint>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePortalActivityFingerprint(email: string, snapshot: PortalSnapshot) {
+  if (typeof window === "undefined" || !email) return;
+  try {
+    window.sessionStorage.setItem(getPortalActivityStorageKey(email), JSON.stringify(buildPortalActivityFingerprint(snapshot)));
+  } catch {
+    // Notifications are best-effort and must never block the portal.
+  }
+}
+
+function buildPortalActivityNotifications(
+  previous: ReturnType<typeof buildPortalActivityFingerprint> | null,
+  next: PortalSnapshot,
+): PortalActivityNotification[] {
+  if (!previous) return [];
+  const current = buildPortalActivityFingerprint(next);
+  const events: PortalActivityNotification[] = [];
+  const compare = (kind: string, title: string, before: Array<Record<string, string>>, after: Array<Record<string, string>>) => {
+    const beforeById = new Map(before.map((row) => [row.id, row]));
+    after.forEach((row) => {
+      const prior = beforeById.get(row.id);
+      if (prior && prior.updated_at === row.updated_at && prior.status === row.status && prior.portal_submitted_at === row.portal_submitted_at) return;
+      const action = prior ? "updated" : "added";
+      events.push({ id: `${kind}:${row.id}:${row.updated_at}:${row.status}`, title: `${title} ${row.id || "record"} ${action}`, detail: "New information is available in your portal." });
+    });
+  };
+  compare("sales-order", "Sales Order", previous.salesOrders, current.salesOrders);
+  compare("invoice", "Invoice", previous.invoices, current.invoices);
+  compare("credit-note", "Credit Note", previous.creditNotes, current.creditNotes);
+  compare("payment", "Payment", previous.payments, current.payments);
+  return events.slice(-8).reverse();
+}
 
 function buildEmptyPortalOfflineDraft(activeSection: PortalSection = "home"): PortalOfflineDraft {
   return {
@@ -526,6 +595,7 @@ export function PortalPage() {
   const [portalDetailManualCode, setPortalDetailManualCode] = useState("");
   const [portalDetailManualBrand, setPortalDetailManualBrand] = useState("");
   const [portalDetailManualQty, setPortalDetailManualQty] = useState("1");
+  const [portalNotifications, setPortalNotifications] = useState<PortalActivityNotification[]>([]);
   const [previewImage, setPreviewImage] = useState<{ src: string; code: string; name: string } | null>(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const portalPricingCurrency = snapshot?.pricingProfile?.currency || snapshot?.accountSummary.currency || "EUR";
@@ -695,6 +765,28 @@ export function PortalPage() {
     };
   }, [credentials.email, isOnline, portalResetToken, snapshot]);
 
+  useEffect(() => {
+    if (!isOnline || !credentials.email || !snapshot || portalResetToken) return;
+    let cancelled = false;
+    const refreshInBackground = async () => {
+      try {
+        const { snapshot: next } = await fetchPortalSnapshot(credentials);
+        if (cancelled) return;
+        setSnapshot(next);
+        setError("");
+      } catch (caught) {
+        if (cancelled) return;
+        const message = caught instanceof Error ? caught.message : "Portal refresh failed";
+        setStatus(message.toLowerCase().includes("session expired") ? "Your portal session expired. Please sign in again." : "The latest portal update is temporarily unavailable. Select Refresh to retry.");
+      }
+    };
+    const interval = window.setInterval(() => void refreshInBackground(), PORTAL_BACKGROUND_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [credentials.email, credentials.sessionToken, isOnline, portalResetToken, Boolean(snapshot)]);
+
   const accountColumns = useMemo(
     () => [
       { key: "type", header: "Document", render: (row: PortalSnapshot["accountRows"][number]) => row.document_type },
@@ -729,6 +821,14 @@ export function PortalPage() {
         key: "status",
         header: "Status",
         render: (row: PortalSnapshot["salesOrders"][number]) => (row.portal_submitted_at ? "Submitted" : row.status || "-"),
+      },
+      {
+        key: "brands",
+        header: "Brands",
+        render: (row: PortalSnapshot["salesOrders"][number]) => {
+          const brands = [...new Set((row.lines || []).map((line) => String(line.brand || "").trim()).filter(Boolean))];
+          return brands.length ? brands.join(", ") : "Open order for details";
+        },
       },
       { key: "amount", header: "Amount", render: (row: PortalSnapshot["salesOrders"][number]) => formatMoney(Number(row.sales_total || 0), row.currency) },
     ],
@@ -1144,6 +1244,14 @@ export function PortalPage() {
       writePortalSnapshotCache(credentials.email, snapshot);
     }, PORTAL_CACHE_WRITE_DELAY_MS);
     return () => window.clearTimeout(handle);
+  }, [credentials.email, snapshot]);
+
+  useEffect(() => {
+    if (!snapshot || !credentials.email || snapshot.invite.party_type !== "customer") return;
+    const previous = readPortalActivityFingerprint(credentials.email);
+    const events = buildPortalActivityNotifications(previous, snapshot);
+    if (events.length) setPortalNotifications((current) => [...events, ...current.filter((item) => !events.some((event) => event.id === item.id))].slice(0, 8));
+    writePortalActivityFingerprint(credentials.email, snapshot);
   }, [credentials.email, snapshot]);
 
   useEffect(() => {
@@ -2782,8 +2890,29 @@ export function PortalPage() {
               </button>
             ))}
           </div>
-          {status ? <div className="success-text">{status}</div> : null}
-          {error ? <div className="warning-text">{error}</div> : null}
+          {status ? <div className="success-text" role="status">{status}</div> : null}
+          {error ? <div className="warning-text" role="alert">{error}</div> : null}
+          {portalNotifications.length ? (
+            <section className="portal-notification-panel" aria-label="Portal updates">
+              <div className="portal-notification-panel__header">
+                <div>
+                  <span className="settings-label">New information</span>
+                  <strong>Updates from your seller</strong>
+                </div>
+                <Button variant="secondary" onClick={() => setPortalNotifications([])}>
+                  Mark as read
+                </Button>
+              </div>
+              <div className="portal-notification-panel__list">
+                {portalNotifications.map((notification) => (
+                  <div className="portal-notification-panel__item" key={notification.id}>
+                    <strong>{notification.title}</strong>
+                    <span>{notification.detail}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
           {activeSection !== "home" ? (
             <div className="portal-inline-note portal-inline-note--soft portal-inline-note--compact">
               <span>Current View</span>

@@ -75,6 +75,7 @@ type PortalOrderRow = {
   updated_at?: string;
   currency: string;
   sales_total?: number;
+  subtotal?: number;
   total_amount?: number;
   line_count?: number;
   source_channel?: string;

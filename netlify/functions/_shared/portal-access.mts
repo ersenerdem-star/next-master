@@ -982,6 +982,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         sales_total: toNumber(row.sales_total),
         discount_amount: toNumber(row.discount_amount),
         shipping_cost: toNumber(row.shipping_cost),
+        subtotal: toNumber(row.sales_total) + toNumber(row.discount_amount) - toNumber(row.shipping_cost),
         lines: mapCustomerSalesOrderLines(row.lines),
       })),
       invoices: invoices.map(({ notes: _internalNotes, ...row }) => ({
@@ -1279,6 +1280,7 @@ export async function fetchPortalSalesOrderDetail(
     sales_total: toNumber(row.sales_total),
     discount_amount: toNumber(row.discount_amount),
     shipping_cost: toNumber(row.shipping_cost),
+    subtotal: toNumber(row.sales_total) + toNumber(row.discount_amount) - toNumber(row.shipping_cost),
     lines: mapCustomerSalesOrderLines(row.lines),
   };
 }
@@ -1432,6 +1434,7 @@ export async function buildPortalFallbackSnapshot(supabaseUrl: string, serviceRo
       sales_total: toNumber(row.sales_total),
       discount_amount: toNumber(row.discount_amount),
       shipping_cost: toNumber(row.shipping_cost),
+      subtotal: toNumber(row.sales_total) + toNumber(row.discount_amount) - toNumber(row.shipping_cost),
       lines: [],
     })),
     purchaseOrders: [],

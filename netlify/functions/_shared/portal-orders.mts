@@ -2376,7 +2376,7 @@ export async function submitPortalSalesOrder(
   const existing =
     input.orderId
       ? await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
-          select: "id,sales_order_no,status,created_at,portal_submitted_at,portal_seen_at",
+          select: "id,sales_order_no,status,created_at,portal_submitted_at,portal_seen_at,discount_amount,shipping_cost,notes",
           organization_id: `eq.${invite.organization_id}`,
           id: `eq.${input.orderId}`,
           portal_invite_id: `eq.${invite.id}`,
@@ -2392,7 +2392,12 @@ export async function submitPortalSalesOrder(
 
   const purchaseTotal = roundMoney(lines.reduce((sum, line) => sum + Number(line.buy_price || 0) * line.qty, 0));
   const subtotal = roundMoney(lines.reduce((sum, line) => sum + Number(line.sell_price || 0) * line.qty, 0));
-  const totalAmount = subtotal;
+  // Discounts and shipping are seller-controlled fields. A portal quantity
+  // edit must preserve values already set by the admin instead of silently
+  // resetting them to zero.
+  const discountAmount = existing ? roundMoney(Number(existing.discount_amount || 0)) : 0;
+  const shippingCost = existing ? roundMoney(Number(existing.shipping_cost || 0)) : 0;
+  const totalAmount = roundMoney(subtotal - discountAmount + shippingCost);
   const profitTotal = roundMoney(totalAmount - purchaseTotal);
   const marginPercent = totalAmount > 0 ? roundMoney((profitTotal / totalAmount) * 100) : 0;
   const today = new Date().toISOString().slice(0, 10);
@@ -2411,8 +2416,8 @@ export async function submitPortalSalesOrder(
     quote_date: today,
     currency: context.currency,
     customer_type: context.customerType,
-    shipping_cost: 0,
-    discount_amount: 0,
+    shipping_cost: shippingCost,
+    discount_amount: discountAmount,
     supplier_mode: "Best price",
     preferred_supplier: "",
     seller_info: context.customer.contract_nr || "",
@@ -2420,7 +2425,9 @@ export async function submitPortalSalesOrder(
     delivery_term: String(input.deliveryTerm || ""),
     payment_terms: String(input.paymentTerms || context.customer.payment_terms || ""),
     packing_details: String(input.packingDetails || ""),
-    notes: String(input.notes || ""),
+    // Internal seller notes are never returned to the customer, but they must
+    // survive a customer-side quantity/manual-line update.
+    notes: existing ? String(existing.notes || "") : String(input.notes || ""),
     status: "draft",
     purchase_total: purchaseTotal,
     sales_total: totalAmount,
