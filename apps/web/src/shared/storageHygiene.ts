@@ -2,6 +2,7 @@ const STORAGE_VERSION_KEY = "next-master-storage-version";
 const SALES_ORDER_WORKSPACE_KEY = "next-master-sales-order-workspace";
 const CATALOG_CACHE_KEY = "next-master-catalog-cache";
 const PORTAL_CACHE_PREFIX = "next-master-portal-cache:";
+const WORKSPACE_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
 
@@ -18,8 +19,15 @@ function clearInvalidSalesOrderWorkspace(storage: StorageLike) {
   const raw = storage.getItem(SALES_ORDER_WORKSPACE_KEY);
   if (!raw) return;
   try {
-    const workspace = JSON.parse(raw) as { workbenchMode?: string; quoteBuilderLines?: unknown[] };
-    const hasDraft = workspace.workbenchMode === "new" && Array.isArray(workspace.quoteBuilderLines) && workspace.quoteBuilderLines.length > 0;
+    const workspace = JSON.parse(raw) as { workbenchMode?: string; quoteBuilderLines?: unknown[]; selectedLocalSalesOrderId?: string; updatedAt?: string };
+    const updatedAt = Date.parse(String(workspace.updatedAt || ""));
+    const isRecent = Number.isFinite(updatedAt) && Date.now() - updatedAt <= WORKSPACE_MAX_AGE_MS;
+    const hasDraft =
+      workspace.workbenchMode === "new" &&
+      !workspace.selectedLocalSalesOrderId &&
+      Array.isArray(workspace.quoteBuilderLines) &&
+      workspace.quoteBuilderLines.length > 0 &&
+      isRecent;
     if (!hasDraft) storage.removeItem(SALES_ORDER_WORKSPACE_KEY);
   } catch {
     storage.removeItem(SALES_ORDER_WORKSPACE_KEY);
@@ -36,10 +44,12 @@ export function reconcileAppStorage(buildVersion: string) {
   const version = String(buildVersion || "local").trim() || "local";
   try {
     const previousVersion = window.localStorage.getItem(STORAGE_VERSION_KEY) || "";
+    // Run workspace validation on every boot so deletion/expiry is not tied
+    // to a deployment. Version changes additionally invalidate result caches.
+    clearInvalidSalesOrderWorkspace(window.localStorage);
+    removePortalSnapshots(window.localStorage);
     if (previousVersion !== version) {
-      clearInvalidSalesOrderWorkspace(window.localStorage);
       window.localStorage.removeItem(CATALOG_CACHE_KEY);
-      removePortalSnapshots(window.localStorage);
       window.localStorage.setItem(STORAGE_VERSION_KEY, version);
     }
   } catch {
