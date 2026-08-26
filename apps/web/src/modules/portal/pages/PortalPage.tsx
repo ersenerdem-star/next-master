@@ -2992,7 +2992,7 @@ export function PortalPage() {
                     setSelectedCatalogCode(item.code);
                     setPortalPreview({ kind: "catalog", item });
                   }}
-                  onAdd={(item) => void handleAddPortalCatalogItem(item)}
+                  onAdd={(item, quantity) => void handleAddPortalCatalogItem(item, quantity)}
                   onPreview={(item) => setPortalPreview({ kind: "catalog", item })}
                 />
 
