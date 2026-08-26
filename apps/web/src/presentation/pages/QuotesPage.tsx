@@ -1850,9 +1850,14 @@ export function QuotesPage({
           manualCustomerName.trim() ||
           quoteNotes.trim() ||
           discountAmount !== "0" ||
-          shippingCost !== "0",
+        shippingCost !== "0",
       );
     }
+    // A persisted editor identity is not trusted until the tenant-scoped
+    // order list has loaded and confirms that the order still exists. This
+    // prevents a stale browser cache from blocking navigation on page entry.
+    if (!localSalesOrdersLoaded) return false;
+    if (!localSalesOrders.some((order) => order.id === selectedLocalSalesOrderId)) return false;
     return Boolean(selectedLocalSalesOrderId) && salesOrderDraftSnapshot !== salesOrderSourceSnapshot;
   }, [
     customerName,
@@ -1866,6 +1871,8 @@ export function QuotesPage({
     selectedLocalSalesOrderId,
     shippingCost,
     workbenchMode,
+    localSalesOrders,
+    localSalesOrdersLoaded,
   ]);
 
   async function persistSalesOrderDraft() {
