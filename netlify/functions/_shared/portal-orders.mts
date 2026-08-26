@@ -2383,8 +2383,11 @@ export async function submitPortalSalesOrder(
         })
       : null;
 
-  if (existing?.status === "confirmed") {
-    throw new Error("Internally confirmed sales orders cannot be edited from portal");
+  if (
+    existing &&
+    (String(existing.status || "").trim().toLowerCase() !== "draft" || existing.portal_submitted_at)
+  ) {
+    throw new Error("Confirmed sales orders cannot be edited from portal");
   }
 
   const purchaseTotal = roundMoney(lines.reduce((sum, line) => sum + Number(line.buy_price || 0) * line.qty, 0));

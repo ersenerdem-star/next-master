@@ -523,6 +523,9 @@ export function PortalPage() {
   const [portalPreview, setPortalPreview] = useState<{ kind: "catalog"; item: PortalCatalogSearchItem } | { kind: "basket"; item: PortalPreparedLine } | null>(null);
   const [portalPreviewMedia, setPortalPreviewMedia] = useState<ProductMediaItem[]>([]);
   const [portalDetailQtyEdits, setPortalDetailQtyEdits] = useState<Record<string, number>>({});
+  const [portalDetailManualCode, setPortalDetailManualCode] = useState("");
+  const [portalDetailManualBrand, setPortalDetailManualBrand] = useState("");
+  const [portalDetailManualQty, setPortalDetailManualQty] = useState("1");
   const [previewImage, setPreviewImage] = useState<{ src: string; code: string; name: string } | null>(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const portalPricingCurrency = snapshot?.pricingProfile?.currency || snapshot?.accountSummary.currency || "EUR";
@@ -2042,7 +2045,9 @@ export function PortalPage() {
   }
 
   const detailCanEditQuantities = Boolean(
-    selectedDocument?.kind === "sales-order" && String(selectedDocument.row.status || "").toLowerCase() !== "confirmed",
+    selectedDocument?.kind === "sales-order" &&
+      String(selectedDocument.row.status || "").toLowerCase() === "draft" &&
+      !selectedDocument.row.portal_submitted_at,
   );
   const detailHasQuantityEdits = Boolean(
     detailCanEditQuantities &&
@@ -2087,6 +2092,55 @@ export function PortalPage() {
       setStatus(`Sales order ${row.sales_order_no || row.id} quantities updated.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Sales order quantity update failed");
+    } finally {
+      setSavingPortalOrder(false);
+      setPortalOverlay(null);
+    }
+  }
+
+  async function handleAddPortalDetailManualLine() {
+    if (!selectedDocument || selectedDocument.kind !== "sales-order" || !detailCanEditQuantities) return;
+    const code = portalDetailManualCode.trim();
+    const brand = portalDetailManualBrand.trim();
+    const qty = normalizePortalQuantity(portalDetailManualQty);
+    if (!code || !brand) {
+      setError("Enter both the part number and brand before adding a line.");
+      return;
+    }
+
+    const row = selectedDocument.row;
+    const rows = [
+      ...(row.lines || []).map((line, index) => ({
+        code: String(line.requested_code || line.old_code || line.code || "").trim(),
+        brand: String(line.brand || "").trim(),
+        qty: getPortalDetailQuantity(row.id, index, line.qty),
+        market_segment: line.market_segment ?? null,
+      })),
+      { code, brand, qty, market_segment: null },
+    ].filter((line) => line.code && line.brand && line.qty > 0);
+
+    try {
+      setSavingPortalOrder(true);
+      setError("");
+      setPortalOverlay({ title: "Adding Manual Part", message: "Checking the item and refreshing the sales order total." });
+      const result = await submitPortalOrder(credentials, {
+        orderId: row.id,
+        salesOrderNo: row.sales_order_no || row.id,
+        mode: "draft",
+        deliveryTerm: "delivery_term" in row ? String(row.delivery_term || "") : "",
+        paymentTerms: "payment_terms" in row ? String(row.payment_terms || "") : "",
+        packingDetails: "packing_details" in row ? String(row.packing_details || "") : "",
+        notes: String(row.notes || ""),
+        rows,
+      });
+      setSnapshot(result.snapshot);
+      setSelection({ kind: "sales-order", id: result.orderId || row.id });
+      setPortalDetailQtyEdits({});
+      setPortalDetailManualCode("");
+      setPortalDetailManualQty("1");
+      setStatus(`${code} added to sales order ${row.sales_order_no || row.id}.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Manual part could not be added to the sales order");
     } finally {
       setSavingPortalOrder(false);
       setPortalOverlay(null);
@@ -2560,6 +2614,28 @@ export function PortalPage() {
           <div className="portal-detail-notes">
             <span className="settings-label">Notes</span>
             <strong>{selectedDocument.row.notes}</strong>
+          </div>
+        ) : null}
+
+        {detailCanEditQuantities ? (
+          <div className="portal-manual-line">
+            <div>
+              <span className="settings-label">Add manual part</span>
+              <strong>Enter a known part number directly without returning to Search.</strong>
+            </div>
+            <div className="portal-manual-line__fields">
+              <Input label="Part no" value={portalDetailManualCode} placeholder="e.g. W11025" onChange={setPortalDetailManualCode} onEnter={() => void handleAddPortalDetailManualLine()} />
+              <Select label="Brand" value={portalDetailManualBrand} options={[{ value: "", label: "Select brand" }, ...portalBrandValueOptions]} onChange={setPortalDetailManualBrand} />
+              <Input label="Qty" type="number" value={portalDetailManualQty} onChange={setPortalDetailManualQty} onEnter={() => void handleAddPortalDetailManualLine()} />
+              <Button busy={savingPortalOrder} busyLabel="Adding..." disabled={!portalDetailManualCode.trim() || !portalDetailManualBrand.trim()} onClick={() => void handleAddPortalDetailManualLine()}>
+                Add part
+              </Button>
+            </div>
+          </div>
+        ) : selectedDocument.kind === "sales-order" && selectedDocument.row.portal_submitted_at ? (
+          <div className="portal-inline-note">
+            <span>Order locked</span>
+            <strong>This order has been confirmed and can no longer be edited.</strong>
           </div>
         ) : null}
 
