@@ -6,6 +6,7 @@ import { ActionFeedbackProvider } from "../presentation/components/common/Action
 import { AppShell } from "../presentation/layout/AppShell";
 import { useI18n } from "../i18n/I18nProvider";
 import { APP_NAVIGATION_EVENT, type AppNavigationDetail } from "../shared/catalogTransfer";
+import { reconcileAppStorage } from "../shared/storageHygiene";
 import {
   canAccessCatalogReviewModules,
   canAccessInventoryModules,
@@ -244,6 +245,10 @@ export function App() {
   const [purchasesTab, setPurchasesTab] = useState<"Vendors" | "Purchase Orders" | "Bills" | "Payments Made">(initialUiState?.purchasesTab || "Vendors");
   const [reportsTab, setReportsTab] = useState<ReportsTab>(initialUiState?.reportsTab || "Procurement Dashboard");
   const [settingsTab, setSettingsTab] = useState<"session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics">(initialUiState?.settingsTab || "session");
+
+  useEffect(() => {
+    reconcileAppStorage(__APP_BUILD_META__.buildVersion || __APP_BUILD_META__.gitSha || __APP_BUILD_META__.commit || "local");
+  }, []);
 
   useEffect(() => {
     appRoleRef.current = appRole;
