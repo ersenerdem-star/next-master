@@ -1736,6 +1736,10 @@ export function PortalPage() {
         portalOrderCurrency,
         line.lifecycle_status || "",
       ]),
+      [],
+      ["Total lines", portalDraftLines.length],
+      ["Total quantity", portalDraftLines.reduce((sum, line) => sum + Number(line.qty || 0), 0)],
+      ["Subtotal excl. VAT", "", "", "", "", "", "", "", "", portalDraftLines.reduce((sum, line) => sum + (line.sell_price == null ? 0 : Number(line.sell_price || 0) * Number(line.qty || 0)), 0), portalOrderCurrency],
     ];
 
     const blob = buildXlsxBlob("Basket", rows, [2, 8, 9]);
