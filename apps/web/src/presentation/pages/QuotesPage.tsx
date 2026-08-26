@@ -733,6 +733,7 @@ export function QuotesPage({
   const [salesOrderFilter, setSalesOrderFilter] = useState<"all" | "draft" | "confirmed" | "purchased" | "invoiced">(initialWorkspaceCache?.salesOrderFilter || "all");
   const [quotes, setQuotes] = useState<QuoteSummary[]>([]);
   const [localSalesOrders, setLocalSalesOrders] = useState<LocalSalesOrder[]>([]);
+  const [localSalesOrdersLoaded, setLocalSalesOrdersLoaded] = useState(false);
   const [savedPurchaseOrders, setSavedPurchaseOrders] = useState<PurchaseOrderSalesLinkSummary[]>([]);
   const [savedInvoices, setSavedInvoices] = useState<InvoiceSalesLinkSummary[]>([]);
   const [salesOrderBrandsById, setSalesOrderBrandsById] = useState<Record<string, string[]>>({});
@@ -826,7 +827,10 @@ export function QuotesPage({
     async function run() {
       try {
         const salesOrderRows = await fetchSalesOrderSummaries();
-        if (!cancelled) setLocalSalesOrders(salesOrderRows);
+        if (!cancelled) {
+          setLocalSalesOrders(salesOrderRows);
+          setLocalSalesOrdersLoaded(true);
+        }
       } catch {
         if (!cancelled) setLocalSalesOrders([]);
       }
@@ -862,6 +866,17 @@ export function QuotesPage({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!localSalesOrdersLoaded || !selectedLocalSalesOrderId) return;
+    if (localSalesOrders.some((order) => order.id === selectedLocalSalesOrderId)) return;
+
+    // A cached order can have been deleted or belong to another tenant. Do
+    // not let that stale identity block every navigation with a save prompt.
+    resetSalesOrderEditor();
+    setSalesOrdersView("list");
+    writeSalesOrderWorkspaceCache(null);
+  }, [localSalesOrders, localSalesOrdersLoaded, selectedLocalSalesOrderId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1215,6 +1230,9 @@ export function QuotesPage({
   const effectiveWorkbenchColumnVisibility = DEFAULT_QUOTE_WORKBENCH_COLUMNS;
 
   useEffect(() => {
+    // A saved order is a historical commercial document. Repricing it merely
+    // by opening the editor creates a false dirty state and blocks navigation.
+    if (workbenchMode === "existing") return;
     setQuoteBuilderLines((current) =>
       current.map((line) => {
         const selected =
@@ -1250,12 +1268,15 @@ export function QuotesPage({
         };
       }),
     );
-  }, [customerType, customerPricingMode, shouldUseCPricePricing, effectiveMarginA, effectiveMarginB]);
+  }, [workbenchMode, customerType, customerPricingMode, shouldUseCPricePricing, effectiveMarginA, effectiveMarginB]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
+      // Do not silently reprice stored sales orders. Existing order prices only
+      // change through an explicit line edit or a deliberate synchronization.
+      if (workbenchMode === "existing") return;
       if (!shouldUseCPricePricing || !quoteBuilderLines.length) return;
 
       const cPriceMap = await fetchCPriceMapForRows(
@@ -1294,6 +1315,7 @@ export function QuotesPage({
       cancelled = true;
     };
   }, [
+    workbenchMode,
     customerType,
     customerPricingMode,
     effectiveMarginA,
@@ -1594,9 +1616,16 @@ export function QuotesPage({
 
   async function loadLocalSalesOrderIntoEditor(order: LocalSalesOrder) {
     const detailOrder = order.lines.length ? order : await fetchSalesOrderById(order.id);
+    // Older rows may only have purchase_company. Hydrate the editor baseline
+    // with the same fallback rendered in the form so merely opening one of
+    // those rows does not look like an unsaved buyer-info edit.
+    const editorOrder = {
+      ...detailOrder,
+      buyer_info: detailOrder.buyer_info || detailOrder.purchase_company || "",
+    };
     setWorkbenchMode("existing");
-    setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(detailOrder));
-    setSelectedLocalSalesOrderId(detailOrder.id);
+    setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(editorOrder));
+    setSelectedLocalSalesOrderId(editorOrder.id);
     setSelectedQuoteId("");
     onSelectedQuoteChange?.("");
     setQuoteNo(detailOrder.sales_order_no);
@@ -1613,7 +1642,7 @@ export function QuotesPage({
     setDiscountAmount(String(detailOrder.discount_amount ?? 0));
     setSupplierMode(detailOrder.supplier_mode || "Best price");
     setSellerInfo(detailOrder.seller_info || "");
-    setBuyerInfo(detailOrder.buyer_info || detailOrder.purchase_company || "");
+    setBuyerInfo(editorOrder.buyer_info);
     setDeliveryTermSelection(toTermSelection(detailOrder.delivery_term || "", DELIVERY_TERM_OPTIONS));
     setPaymentTermsSelection(toTermSelection(detailOrder.payment_terms || "", PAYMENT_TERM_OPTIONS));
     setDeliveryTerm(detailOrder.delivery_term || "");
@@ -1636,6 +1665,18 @@ export function QuotesPage({
     setBuilderStatus(t("sales.orders.loadedOrder", { salesOrderNo: detailOrder.sales_order_no, status: detailOrder.status }));
     onSelectedSalesOrderChange?.(detailOrder.id);
     actionFeedback.succeed(t("sales.orders.loadedOrderToast", { salesOrderNo: detailOrder.sales_order_no }));
+  }
+
+  function openLocalSalesOrder(order: LocalSalesOrder) {
+    void confirmSalesOrderNavigation(async () => {
+      setSalesOrdersView("detail");
+      await loadLocalSalesOrderIntoEditor(order);
+    }).catch(() => {
+      // A failed read must leave the list reachable. This flow never writes
+      // the selected order, so retrying it is safe.
+      setSalesOrdersView("list");
+      actionFeedback.fail(t("sales.orders.openFailed"));
+    });
   }
 
   useEffect(() => {
@@ -3037,12 +3078,7 @@ export function QuotesPage({
                 rows={filteredLocalSalesOrders}
                 columns={savedSalesOrderColumns}
                 emptyText={t("sales.orders.noSavedOrders")}
-                onRowClick={(row) =>
-                  void confirmSalesOrderNavigation(async () => {
-                    setSalesOrdersView("detail");
-                    await loadLocalSalesOrderIntoEditor(row);
-                  })
-                }
+                onRowClick={openLocalSalesOrder}
                 rowClassName={(row) => (row.id === selectedLocalSalesOrderId ? "data-table__row--active" : "")}
               />
             </div>

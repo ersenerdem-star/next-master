@@ -624,6 +624,7 @@ export const enMessages = {
     "orders.loadingOrder": "Loading sales order {salesOrderNo}",
     "orders.loadedOrder": "Loaded sales order {salesOrderNo} with status {status}",
     "orders.loadedOrderToast": "Loaded sales order {salesOrderNo}",
+     "orders.openFailed": "This sales order could not be opened. Nothing was changed; please retry.",
     "orders.noLinesToResync": "No lines to resync",
     "orders.resyncingOrder": "Resyncing sales order {salesOrderNo}",
     "orders.resyncCompleteBlanksOnly": "Resync complete, blanks only",
