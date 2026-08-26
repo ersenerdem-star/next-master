@@ -42,7 +42,7 @@ type PortalSearchResultsProps = {
   onConfirmBasket: () => void;
   selectedCode: string;
   onSelect: (item: PortalCatalogSearchItem) => void;
-  onAdd: (item: PortalCatalogSearchItem) => void;
+  onAdd: (item: PortalCatalogSearchItem, quantity: number) => void;
   onPreview?: (item: PortalCatalogSearchItem) => void;
 };
 
@@ -108,6 +108,7 @@ export function PortalSearchResults({
   onPreview,
 }: PortalSearchResultsProps) {
   const [searchField, setSearchField] = useState<PortalSearchField>("part_number");
+  const [addQuantity, setAddQuantity] = useState(1);
   const selected = results.find((item) => item.code === selectedCode) || results[0] || null;
   const visibleResults = results.slice(0, 12);
   const documentRows = snapshot.invite.party_type === "customer" ? snapshot.salesOrders : snapshot.purchaseOrders;
@@ -241,8 +242,19 @@ export function PortalSearchResults({
                   <strong className="portal-search-result-main__price">{formatMoney(selected.sell_price, selected.currency || currency)}</strong>
                   <span className="portal-search-result-main__price-note">Your customer price · Excl. VAT</span>
                   <div className="portal-search-result-main__actions">
-                    <select aria-label="Quantity" defaultValue="1"><option>1</option><option>2</option><option>5</option><option>10</option></select>
-                    <Button onClick={() => onAdd(selected)}>Add to basket</Button>
+                    <label className="portal-search-result-main__quantity">
+                      <span>Quantity</span>
+                      <input
+                        aria-label="Quantity to add"
+                        type="number"
+                        min={1}
+                        step={1}
+                        inputMode="numeric"
+                        value={addQuantity}
+                        onChange={(event) => setAddQuantity(Math.max(1, Math.floor(Number(event.target.value || 1) || 1)))}
+                      />
+                    </label>
+                    <Button onClick={() => onAdd(selected, addQuantity)}>Add to basket</Button>
                   </div>
                   <button type="button" className="portal-search-result-main__secondary" onClick={() => onPreview?.(selected)}>View larger / details</button>
                 </div>

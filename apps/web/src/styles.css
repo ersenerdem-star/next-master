@@ -7525,8 +7525,9 @@ textarea {
 .portal-search-result-main__stock span { display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 50%; background: #17a765; }
 .portal-search-result-main__price { margin-top: 6px; font-size: 30px; color: #10233f; }
 .portal-search-result-main__price-note { color: #62738a; }
-.portal-search-result-main__actions { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; margin-top: 12px; }
-.portal-search-result-main__actions select { min-height: 44px; border: 1px solid #cad7e5; border-radius: 7px; padding: 0 10px; background: #fff; color: #122947; }
+.portal-search-result-main__actions { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; margin-top: 12px; }
+.portal-search-result-main__quantity { display: grid; gap: 3px; align-content: center; color: #687d99; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.portal-search-result-main__quantity input { width: 100%; min-height: 35px; border: 1px solid #cad7e5; border-radius: 7px; padding: 0 8px; background: #fff; color: #122947; font: inherit; font-size: 15px; letter-spacing: normal; text-transform: none; }
 .portal-search-result-main__actions .button { min-height: 44px; background: #f6a400; border-color: #f6a400; color: #182b48; }
 .portal-search-result-main__secondary { padding: 9px; border: 1px solid #cbd8e6; border-radius: 7px; background: #fff; color: #244a78; font-weight: 800; cursor: pointer; }
 .portal-search-result-main__notice { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; padding: 12px 14px; border: 1px solid #f1c870; border-radius: 7px; background: #fff8e7; color: #75551e; }

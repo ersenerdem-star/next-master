@@ -305,6 +305,10 @@ function buildOfflinePreparedLineFromCatalogItem(item: PortalCatalogSearchItem):
   };
 }
 
+function normalizePortalQuantity(value: unknown) {
+  return Math.max(1, Math.floor(Number(value || 1) || 1));
+}
+
 function matchesSearch(value: string, row: { id: string; sales_order_no?: string; lines?: PortalLine[] }) {
   if (!value) return true;
   const needle = value.trim().toLowerCase();
@@ -515,6 +519,7 @@ export function PortalPage() {
   const [selectedDraftLineId, setSelectedDraftLineId] = useState("");
   const [portalPreview, setPortalPreview] = useState<{ kind: "catalog"; item: PortalCatalogSearchItem } | { kind: "basket"; item: PortalPreparedLine } | null>(null);
   const [portalPreviewMedia, setPortalPreviewMedia] = useState<ProductMediaItem[]>([]);
+  const [portalDetailQtyEdits, setPortalDetailQtyEdits] = useState<Record<string, number>>({});
   const [previewImage, setPreviewImage] = useState<{ src: string; code: string; name: string } | null>(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const portalPricingCurrency = snapshot?.pricingProfile?.currency || snapshot?.accountSummary.currency || "EUR";
@@ -1685,18 +1690,20 @@ export function PortalPage() {
     }
   }
 
-  async function handleAddPortalCatalogItem(item: PortalCatalogSearchItem) {
+  async function handleAddPortalCatalogItem(item: PortalCatalogSearchItem, quantity = 1) {
+    const normalizedQuantity = normalizePortalQuantity(quantity);
     setSelectedCatalogCode(item.code);
     if (!isOnline) {
       const offlineLine = buildOfflinePreparedLineFromCatalogItem(item);
+      offlineLine.qty = normalizedQuantity;
       setPortalDraftLines((current) => mergePortalPreparedLines(current, [offlineLine]));
-      setPortalOrderStatus(`1 item added to ${portalSalesOrderNo || "Local Basket"} in Basket. Offline changes stay on this device.`);
+      setPortalOrderStatus(`${normalizedQuantity} pcs added to ${portalSalesOrderNo || "Local Basket"} in Basket. Offline changes stay on this device.`);
       focusPortalDraftLines(offlineLine.lineId);
       return;
     }
     const prepared = await appendPortalRows(
-      [{ code: item.replacement_old_code || item.code, brand: item.brand, qty: 1, market_segment: item.market_segment || null }],
-      `{count} item added to ${portalSalesOrderNo || "New Basket"} in Basket.`,
+      [{ code: item.replacement_old_code || item.code, brand: item.brand, qty: normalizedQuantity, market_segment: item.market_segment || null }],
+      `{count} pcs added to ${portalSalesOrderNo || "New Basket"} in Basket.`,
     );
     if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
   }
@@ -1981,6 +1988,66 @@ export function PortalPage() {
     return row ? { kind: selection.kind, row } : null;
   })();
 
+  function portalDetailQuantityKey(orderId: string, lineIndex: number) {
+    return `${orderId}:${lineIndex}`;
+  }
+
+  function getPortalDetailQuantity(orderId: string, lineIndex: number, fallback: unknown) {
+    return portalDetailQtyEdits[portalDetailQuantityKey(orderId, lineIndex)] ?? normalizePortalQuantity(fallback);
+  }
+
+  const detailCanEditQuantities = Boolean(
+    selectedDocument?.kind === "sales-order" && String(selectedDocument.row.status || "").toLowerCase() !== "confirmed",
+  );
+  const detailHasQuantityEdits = Boolean(
+    detailCanEditQuantities &&
+      selectedDocument?.row.lines?.some((line, index) => {
+        const edited = portalDetailQtyEdits[portalDetailQuantityKey(selectedDocument.row.id, index)];
+        return edited != null && edited !== normalizePortalQuantity(line.qty);
+      }),
+  );
+
+  async function handleSavePortalDetailQuantities() {
+    if (!selectedDocument || selectedDocument.kind !== "sales-order" || !detailCanEditQuantities) return;
+    const row = selectedDocument.row;
+    const rows = (row.lines || [])
+      .map((line, index) => ({
+        code: String(line.requested_code || line.old_code || line.code || "").trim(),
+        brand: String(line.brand || "").trim(),
+        qty: getPortalDetailQuantity(row.id, index, line.qty),
+        market_segment: line.market_segment ?? null,
+      }))
+      .filter((line) => line.code && line.qty > 0);
+    if (!rows.length) {
+      setError("This order has no editable lines.");
+      return;
+    }
+    try {
+      setSavingPortalOrder(true);
+      setError("");
+      setPortalOverlay({ title: "Updating Sales Order", message: "Saving the revised quantities and recalculating prices." });
+      const result = await submitPortalOrder(credentials, {
+        orderId: row.id,
+        salesOrderNo: row.sales_order_no || row.id,
+        mode: "draft",
+        deliveryTerm: "delivery_term" in row ? String(row.delivery_term || "") : "",
+        paymentTerms: "payment_terms" in row ? String(row.payment_terms || "") : "",
+        packingDetails: "packing_details" in row ? String(row.packing_details || "") : "",
+        notes: String(row.notes || ""),
+        rows,
+      });
+      setSnapshot(result.snapshot);
+      setSelection({ kind: "sales-order", id: result.orderId || row.id });
+      setPortalDetailQtyEdits({});
+      setStatus(`Sales order ${row.sales_order_no || row.id} quantities updated.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Sales order quantity update failed");
+    } finally {
+      setSavingPortalOrder(false);
+      setPortalOverlay(null);
+    }
+  }
+
   const detailColumns = (() => {
     if (!selectedDocument) return [];
     if (selectedDocument.kind === "sales-order" || selectedDocument.kind === "invoice") {
@@ -1997,7 +2064,34 @@ export function PortalPage() {
             </div>
           ),
         },
-        { key: "qty", header: "Qty", render: (row: PortalLine) => row.qty || 0 },
+        {
+          key: "qty",
+          header: "Qty",
+          render: (row: PortalLine) => {
+            const lineIndex = selectedDocument.row.lines?.indexOf(row) ?? -1;
+            const quantity = getPortalDetailQuantity(selectedDocument.row.id, lineIndex, row.qty);
+            return detailCanEditQuantities ? (
+              <input
+                className="inline-edit-input inline-edit-input--qty"
+                aria-label={`Quantity for ${row.code || row.requested_code || "line"}`}
+                type="number"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                value={quantity}
+                onChange={(event) => {
+                  if (lineIndex < 0) return;
+                  setPortalDetailQtyEdits((current) => ({
+                    ...current,
+                    [portalDetailQuantityKey(selectedDocument.row.id, lineIndex)]: normalizePortalQuantity(event.target.value),
+                  }));
+                }}
+              />
+            ) : (
+              quantity
+            );
+          },
+        },
         { key: "origin", header: "Origin", render: (row: PortalLine) => row.origin || "-" },
         { key: "weight", header: "Weight", render: (row: PortalLine) => formatWeight(row.weight_kg) },
         { key: "unit", header: "Unit Price", render: (row: PortalLine) => formatMoney(Number(row.sell_price || 0), selectedDocument.row.currency) },
@@ -2282,6 +2376,17 @@ export function PortalPage() {
       title={detailTitle}
       actions={
         <div className="inline-actions">
+          {detailCanEditQuantities ? (
+            <Button
+              variant="secondary"
+              busy={savingPortalOrder}
+              busyLabel="Updating..."
+              disabled={!detailHasQuantityEdits}
+              onClick={() => void handleSavePortalDetailQuantities()}
+            >
+              Update quantities
+            </Button>
+          ) : null}
           <Button variant="secondary" onClick={handlePortalPrint}>
             PDF / Print
           </Button>
