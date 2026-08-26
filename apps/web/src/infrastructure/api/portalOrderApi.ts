@@ -13,7 +13,6 @@ export type PortalCatalogSearchItem = {
   image_url: string;
   sell_price: number | null;
   currency: string;
-  supplier_name: string;
   lifecycle_status?: "active" | "discontinued" | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
@@ -47,12 +46,9 @@ export type PortalPreparedLine = {
   origin: string;
   weight_kg: number | null;
   image_url: string;
-  supplier_name: string;
-  buy_price: number | null;
   sell_price: number | null;
   c_sell_price: number | null;
   price_date: string;
-  notes: string;
   found: boolean;
   codeChanged: boolean;
   codeChangeWarning: string;
