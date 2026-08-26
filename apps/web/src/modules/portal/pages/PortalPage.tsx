@@ -1856,7 +1856,26 @@ export function PortalPage() {
           market_segment: line.market_segment || null,
         })),
       });
-      setSnapshot(result.snapshot);
+      // The save response normally includes the new order in its refreshed
+      // snapshot. If a concurrent history read briefly misses it, hydrate
+      // the just-saved order directly so Documents > Orders never appears
+      // empty after a successful Save Draft.
+      let nextSnapshot = result.snapshot;
+      if (!nextSnapshot.salesOrders.some((row) => row.id === result.orderId)) {
+        try {
+          const savedOrder = await fetchPortalSalesOrderDetail(credentials, result.orderId);
+          if (savedOrder) {
+            nextSnapshot = {
+              ...nextSnapshot,
+              salesOrders: [savedOrder, ...nextSnapshot.salesOrders.filter((row) => row.id !== savedOrder.id)],
+            };
+          }
+        } catch {
+          // The successful save remains authoritative; an explicit Refresh
+          // can retry the history read if the detail endpoint is transient.
+        }
+      }
+      setSnapshot(nextSnapshot);
       setSelection({ kind: "sales-order", id: result.orderId });
       // Keep the newly saved draft visible in the same Sales Orders view as a confirmed order.
       setActiveSection("orders");
