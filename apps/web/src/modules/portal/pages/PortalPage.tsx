@@ -1460,7 +1460,7 @@ export function PortalPage() {
   const portalRecommendationCards = portalRecommendations.slice(0, 3);
   const portalOrderHistoryRows =
     activeSnapshot.invite.party_type === "customer"
-      ? filteredSalesOrders.filter((row) => !(row.source_channel === "portal" && !row.portal_submitted_at && String(row.status || "").toLowerCase() === "draft"))
+      ? filteredSalesOrders
       : filteredPurchaseOrders;
   const portalBillingRows = activeSnapshot.invite.party_type === "customer" ? filteredInvoices : filteredBills;
   const portalQuickStats = [
@@ -2049,6 +2049,47 @@ export function PortalPage() {
     }
   }
 
+  async function handleConfirmPortalDocument() {
+    if (!selectedDocument || selectedDocument.kind !== "sales-order" || !detailCanEditQuantities) return;
+    const row = selectedDocument.row;
+    const rows = (row.lines || [])
+      .map((line, index) => ({
+        code: String(line.requested_code || line.old_code || line.code || "").trim(),
+        brand: String(line.brand || "").trim(),
+        qty: getPortalDetailQuantity(row.id, index, line.qty),
+        market_segment: line.market_segment ?? null,
+      }))
+      .filter((line) => line.code && line.qty > 0);
+    if (!rows.length) {
+      setError("This order has no confirmable lines.");
+      return;
+    }
+    try {
+      setConfirmingPortalOrder(true);
+      setError("");
+      setPortalOverlay({ title: "Confirming Sales Order", message: "Sending the order with the current quantities to the internal team." });
+      const result = await submitPortalOrder(credentials, {
+        orderId: row.id,
+        salesOrderNo: row.sales_order_no || row.id,
+        mode: "confirm",
+        deliveryTerm: "delivery_term" in row ? String(row.delivery_term || "") : "",
+        paymentTerms: "payment_terms" in row ? String(row.payment_terms || "") : "",
+        packingDetails: "packing_details" in row ? String(row.packing_details || "") : "",
+        notes: String(row.notes || ""),
+        rows,
+      });
+      setSnapshot(result.snapshot);
+      setSelection({ kind: "sales-order", id: result.orderId || row.id });
+      setPortalDetailQtyEdits({});
+      setStatus(`Sales order ${row.sales_order_no || row.id} confirmed.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Sales order confirmation failed");
+    } finally {
+      setConfirmingPortalOrder(false);
+      setPortalOverlay(null);
+    }
+  }
+
   const detailColumns = (() => {
     if (!selectedDocument) return [];
     if (selectedDocument.kind === "sales-order" || selectedDocument.kind === "invoice") {
@@ -2386,6 +2427,16 @@ export function PortalPage() {
               onClick={() => void handleSavePortalDetailQuantities()}
             >
               Update quantities
+            </Button>
+          ) : null}
+          {detailCanEditQuantities ? (
+            <Button
+              busy={confirmingPortalOrder}
+              busyLabel="Confirming..."
+              disabled={confirmingPortalOrder}
+              onClick={() => void handleConfirmPortalDocument()}
+            >
+              Confirm order
             </Button>
           ) : null}
           <Button variant="secondary" onClick={handlePortalPrint}>
