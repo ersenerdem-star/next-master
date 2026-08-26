@@ -533,6 +533,20 @@ export function PortalPage() {
   const portalCachedDraftRef = useRef<PortalOfflineCache["draft"] | null>(null);
   const portalAutoRefreshKeyRef = useRef("");
   const portalBrandingKeyRef = useRef("");
+  // Background snapshot reads may race a draft-order mutation. Keep a small
+  // client-side revision and grace window so an older read cannot overwrite
+  // the line list that was just added/removed by the customer.
+  const portalOrderMutationRef = useRef(0);
+  const portalOrderMutationSettledAtRef = useRef(0);
+
+  function beginPortalOrderMutation() {
+    portalOrderMutationRef.current += 1;
+    return portalOrderMutationRef.current;
+  }
+
+  function settlePortalOrderMutation() {
+    portalOrderMutationSettledAtRef.current = Date.now();
+  }
   const portalDesktopFrameRef = useRef<HTMLDivElement | null>(null);
   const [credentials, setCredentials] = useState<PortalCredentials>(() => {
     const stored = typeof window !== "undefined" ? readStoredCredentials() : null;
@@ -727,9 +741,14 @@ export function PortalPage() {
     portalAutoRefreshKeyRef.current = refreshKey;
 
     let cancelled = false;
+    const refreshMutationRevision = portalOrderMutationRef.current;
     fetchPortalSnapshot(credentials)
       .then(({ snapshot: next }) => {
         if (cancelled) return;
+        if (
+          portalOrderMutationRef.current !== refreshMutationRevision ||
+          Date.now() - portalOrderMutationSettledAtRef.current < 15_000
+        ) return;
         setSnapshot(next);
         const nextCredentials = { email: credentials.email, password: "", sessionToken: "" };
         setCredentials(nextCredentials);
@@ -769,9 +788,14 @@ export function PortalPage() {
     if (!isOnline || !credentials.email || !snapshot || portalResetToken) return;
     let cancelled = false;
     const refreshInBackground = async () => {
+      const refreshMutationRevision = portalOrderMutationRef.current;
       try {
         const { snapshot: next } = await fetchPortalSnapshot(credentials);
         if (cancelled) return;
+        if (
+          portalOrderMutationRef.current !== refreshMutationRevision ||
+          Date.now() - portalOrderMutationSettledAtRef.current < 15_000
+        ) return;
         setSnapshot(next);
         setError("");
       } catch (caught) {
@@ -1944,6 +1968,7 @@ export function PortalPage() {
     ) {
       return;
     }
+    beginPortalOrderMutation();
     try {
       if (mode === "confirm") setConfirmingPortalOrder(true);
       else setSavingPortalOrder(true);
@@ -1987,6 +2012,7 @@ export function PortalPage() {
         }
       }
       setSnapshot(nextSnapshot);
+      settlePortalOrderMutation();
       setSelection({ kind: "sales-order", id: result.orderId });
       // Keep the newly saved draft visible in the same Sales Orders view as a confirmed order.
       setActiveSection("orders");
@@ -2060,6 +2086,7 @@ export function PortalPage() {
       return;
     }
     if (!window.confirm(`Delete basket ${row.sales_order_no || row.id}?`)) return;
+    beginPortalOrderMutation();
     try {
       setSavingPortalOrder(true);
       setError("");
@@ -2069,6 +2096,7 @@ export function PortalPage() {
       });
       const result = await deletePortalDraftOrder(credentials, row.id);
       setSnapshot(result.snapshot);
+      settlePortalOrderMutation();
       if (selection?.kind === "sales-order" && selection.id === row.id) {
         setSelection(null);
       }
@@ -2180,6 +2208,7 @@ export function PortalPage() {
       setError("This order has no editable lines.");
       return;
     }
+    beginPortalOrderMutation();
     try {
       setSavingPortalOrder(true);
       setError("");
@@ -2211,6 +2240,7 @@ export function PortalPage() {
         // transient detail-read failure.
       }
       setSnapshot(nextSnapshot);
+      settlePortalOrderMutation();
       setSelection({ kind: "sales-order", id: result.orderId || row.id });
       setPortalDetailQtyEdits({});
       setStatus(`Sales order ${row.sales_order_no || row.id} quantities updated.`);
@@ -2243,6 +2273,7 @@ export function PortalPage() {
       { code, brand, qty, market_segment: null },
     ].filter((line) => line.code && line.brand && line.qty > 0);
 
+    beginPortalOrderMutation();
     try {
       setSavingPortalOrder(true);
       setError("");
@@ -2284,6 +2315,7 @@ export function PortalPage() {
         salesOrders: [optimisticOrder, ...result.snapshot.salesOrders.filter((order) => order.id !== savedId)],
       };
       setSnapshot(nextSnapshot);
+      settlePortalOrderMutation();
       setSelection({ kind: "sales-order", id: savedId });
       void fetchPortalSalesOrderDetail(credentials, savedId).then((savedOrder) => {
         // A just-written JSON line array can be briefly stale on the read
@@ -2335,6 +2367,7 @@ export function PortalPage() {
       setError("The remaining order lines are not valid.");
       return;
     }
+    beginPortalOrderMutation();
     try {
       setSavingPortalOrder(true);
       setError("");
@@ -2360,6 +2393,7 @@ export function PortalPage() {
         ...result.snapshot,
         salesOrders: [optimisticOrder, ...result.snapshot.salesOrders.filter((order) => order.id !== savedId)],
       });
+      settlePortalOrderMutation();
       setSelection({ kind: "sales-order", id: savedId });
       void fetchPortalSalesOrderDetail(credentials, savedId).then((savedOrder) => {
         if (!savedOrder || !savedOrder.lines?.length) return;
@@ -2395,6 +2429,7 @@ export function PortalPage() {
       setError("This order has no confirmable lines.");
       return;
     }
+    beginPortalOrderMutation();
     try {
       setConfirmingPortalOrder(true);
       setError("");
@@ -2410,6 +2445,7 @@ export function PortalPage() {
         rows,
       });
       setSnapshot(result.snapshot);
+      settlePortalOrderMutation();
       setSelection({ kind: "sales-order", id: result.orderId || row.id });
       setPortalDetailQtyEdits({});
       setStatus(`Sales order ${row.sales_order_no || row.id} confirmed.`);
