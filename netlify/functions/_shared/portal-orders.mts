@@ -1933,6 +1933,9 @@ export async function buildPortalPriceListRows(
   ].join("::");
   const cached = portalPriceListCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
+    if (!cached.value.rows.length) {
+      throw new Error(`Price list is not available for ${brandName}.`);
+    }
     return cached.value;
   }
 
@@ -1948,7 +1951,7 @@ export async function buildPortalPriceListRows(
       value: emptyResult,
       expiresAt: Date.now() + PORTAL_PRICE_LIST_CACHE_TTL_MS,
     });
-    return emptyResult;
+    throw new Error(`Price list is not available for ${brandName}.`);
   }
 
   let salesPriceByCode = new Map<string, number>();
@@ -2034,6 +2037,9 @@ export async function buildPortalPriceListRows(
     value: result,
     expiresAt: Date.now() + PORTAL_PRICE_LIST_CACHE_TTL_MS,
   });
+  if (!result.rows.length) {
+    throw new Error(`Price list is not available for ${brandName}.`);
+  }
   return result;
 }
 
