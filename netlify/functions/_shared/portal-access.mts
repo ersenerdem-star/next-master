@@ -277,11 +277,15 @@ async function fetchPortalHistoryRows(
     // only when that batched projection returned no rows: an existing order
     // must never render as a document with no lines because a read fallback
     // happened to be unavailable.
-    const resolvedDetailRows = detailRows.length
-      ? detailRows
-      : (
+    const detailById = new Map(detailRows.map((row) => [String(row.id || ""), row]));
+    const missingIds = ids.filter((id) => {
+      const row = detailById.get(id);
+      return !row || row.lines == null;
+    });
+    const fallbackDetailRows = missingIds.length
+      ? (
           await Promise.all(
-            ids.map((id) =>
+            missingIds.map((id) =>
               fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
                 select: "id,lines",
                 organization_id: params.organization_id,
@@ -290,7 +294,9 @@ async function fetchPortalHistoryRows(
               }),
             ),
           )
-        ).filter((row): row is Record<string, unknown> => Boolean(row));
+        ).filter((row): row is Record<string, unknown> => Boolean(row))
+      : [];
+    const resolvedDetailRows = [...detailRows, ...fallbackDetailRows];
     if (!resolvedDetailRows.length) return rows;
     const byId = new Map(resolvedDetailRows.map((row) => [String(row.id || ""), row]));
     return rows.map((row) => byId.get(String(row.id || "")) || row);
