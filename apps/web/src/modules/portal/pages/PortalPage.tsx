@@ -2257,27 +2257,47 @@ export function PortalPage() {
         notes: String(row.notes || ""),
         rows,
       });
-      // A submit response can contain a compact order row. Always hydrate the
-      // saved order so Documents > Orders renders the persisted lines.
-      let nextSnapshot = result.snapshot;
-      try {
-        const savedOrder = await fetchPortalSalesOrderDetail(credentials, result.orderId || row.id);
-        if (savedOrder) {
-          nextSnapshot = {
-            ...nextSnapshot,
-            salesOrders: [savedOrder, ...nextSnapshot.salesOrders.filter((order) => order.id !== savedOrder.id)],
-          };
-        }
-      } catch {
-        // Keep the successful save response; an explicit Refresh can retry a
-        // transient detail read.
-      }
+      const savedId = result.orderId || row.id;
+      // Render the line immediately from the successful mutation response.
+      // The detail read is intentionally moved to the background so a slow
+      // refresh cannot make the table look empty or close the order view.
+      const optimisticLines = rows.map((inputLine) => {
+        const previous = (row.lines || []).find((line) => String(line.requested_code || line.old_code || line.code || "").trim() === inputLine.code);
+        return previous
+          ? { ...previous, qty: inputLine.qty }
+          : {
+              code: inputLine.code,
+              requested_code: inputLine.code,
+              brand: inputLine.brand,
+              market_segment: inputLine.market_segment ?? null,
+              description: "",
+              qty: inputLine.qty,
+              sell_price: null,
+              line_total: null,
+              sales_total: null,
+            };
+      });
+      const compactOrder = result.snapshot.salesOrders.find((order) => order.id === savedId);
+      const optimisticOrder = { ...(compactOrder || row), id: savedId, lines: optimisticLines };
+      const nextSnapshot = {
+        ...result.snapshot,
+        salesOrders: [optimisticOrder, ...result.snapshot.salesOrders.filter((order) => order.id !== savedId)],
+      };
       setSnapshot(nextSnapshot);
-      setSelection({ kind: "sales-order", id: result.orderId || row.id });
+      setSelection({ kind: "sales-order", id: savedId });
+      void fetchPortalSalesOrderDetail(credentials, savedId).then((savedOrder) => {
+        if (!savedOrder) return;
+        setSnapshot((current) => current ? {
+          ...current,
+          salesOrders: [savedOrder, ...current.salesOrders.filter((order) => order.id !== savedOrder.id)],
+        } : current);
+      }).catch(() => {
+        // The optimistic line remains visible; Refresh can retry the detail read.
+      });
       setPortalDetailQtyEdits({});
       setPortalDetailManualCode("");
       setPortalDetailManualQty("1");
-      const savedLine = nextSnapshot.salesOrders.find((order) => order.id === (result.orderId || row.id))?.lines?.find((line) => String(line.code || line.requested_code || "").trim() === code);
+      const savedLine = optimisticLines.find((line) => String(line.code || line.requested_code || "").trim() === code);
       setStatus(
         savedLine?.sell_price == null
           ? `${code} added. Catalog and price not available; admin can complete it in Sales Orders.`
