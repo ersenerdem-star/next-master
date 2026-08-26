@@ -95,6 +95,7 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
     .filter(Boolean)
     .join("   ");
   const showShipping = Boolean(input.party.shippingDetails && input.party.shippingDetails.trim());
+  const showLineOrderNo = input.docType.trim().toLowerCase() !== "sales order";
   const totalQty = input.totalQty ?? input.lines.reduce((sum, line) => sum + Number(line.qty || 0), 0);
   const totalWeight = input.totalWeight ?? null;
   const rowsHtml = input.lines
@@ -114,7 +115,7 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
           <td><span class="line-description">${safeText(line.description)}</span>${alertsHtml ? `<div class="line-alerts">${alertsHtml}</div>` : ""}</td>
           <td>${safeText(line.origin || "")}</td>
           <td>${safeText(line.brand || "")}</td>
-          <td><span class="line-order-no">${safeText(line.orderNo || "")}</span></td>
+          ${showLineOrderNo ? `<td><span class="line-order-no">${safeText(line.orderNo || "")}</span></td>` : ""}
           <td>${safeText(line.weight || "")}</td>
           <td>${safeText(line.gtip || "")}</td>
           <td>${safeText(line.qty)}</td>
@@ -187,12 +188,22 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
         tr { page-break-inside:avoid; break-inside:avoid-page; page-break-after:auto; }
         th, td { border:0.25mm solid #d7dee8; padding:1.5mm 1.7mm; text-align:left; vertical-align:top; font-size:7.2pt; word-break:normal; overflow-wrap:break-word; }
         th { background:#f4f7fa; font-weight:700; line-height:1.18; }
-        th:nth-child(1), td:nth-child(1),
-        th:nth-child(5), td:nth-child(5) { white-space:nowrap; }
-        td:nth-child(8), td:nth-child(9), td:nth-child(10),
-        th:nth-child(8), th:nth-child(9), th:nth-child(10) { text-align:right; }
+        th:nth-child(1), td:nth-child(1) { white-space:nowrap; }
+        .document-lines--with-order th:nth-child(5), .document-lines--with-order td:nth-child(5) { white-space:normal; overflow-wrap:anywhere; }
+        .document-lines--with-order th:nth-child(6), .document-lines--with-order td:nth-child(6),
+        .document-lines--with-order th:nth-child(7), .document-lines--with-order td:nth-child(7) { white-space:nowrap; overflow-wrap:normal; }
+        .document-lines--sales-order th:nth-child(5), .document-lines--sales-order td:nth-child(5),
+        .document-lines--sales-order th:nth-child(6), .document-lines--sales-order td:nth-child(6) { white-space:nowrap; overflow-wrap:normal; }
+        .document-lines--with-order th:nth-child(7), .document-lines--with-order td:nth-child(7),
+        .document-lines--with-order th:nth-child(8), .document-lines--with-order td:nth-child(8),
+        .document-lines--with-order th:nth-child(9), .document-lines--with-order td:nth-child(9),
+        .document-lines--with-order th:nth-child(10), .document-lines--with-order td:nth-child(10),
+        .document-lines--sales-order th:nth-child(7), .document-lines--sales-order td:nth-child(7),
+        .document-lines--sales-order th:nth-child(8), .document-lines--sales-order td:nth-child(8),
+        .document-lines--sales-order th:nth-child(9), .document-lines--sales-order td:nth-child(9) { text-align:right; }
         .line-code-wrap { display:flex; flex-direction:column; gap:0.6mm; }
-        .line-code, .line-order-no { white-space:nowrap; word-break:keep-all; overflow-wrap:normal; }
+        .line-code { white-space:nowrap; word-break:keep-all; overflow-wrap:normal; }
+        .line-order-no { white-space:normal; overflow-wrap:anywhere; word-break:break-word; }
         .line-description { white-space:normal; word-break:normal; overflow-wrap:break-word; }
         .line-subtext { font-size:6.3pt; color:#64748b; line-height:1.18; white-space:normal; word-break:break-word; overflow-wrap:anywhere; }
         .line-alerts { display:flex; flex-direction:column; gap:0.5mm; margin-top:0.8mm; }
@@ -253,26 +264,17 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
             </div>
           </div>
         </div>
-        <table>
-          <colgroup>
-            <col style="width:14%;" />
-            <col style="width:27%;" />
-            <col style="width:7%;" />
-            <col style="width:9%;" />
-            <col style="width:13%;" />
-            <col style="width:8%;" />
-            <col style="width:9%;" />
-            <col style="width:6%;" />
-            <col style="width:10%;" />
-            <col style="width:11%;" />
-          </colgroup>
+        <table class="document-lines ${showLineOrderNo ? "document-lines--with-order" : "document-lines--sales-order"}">
+          <colgroup>${showLineOrderNo
+            ? '<col style="width:13%;" /><col style="width:24%;" /><col style="width:7%;" /><col style="width:8%;" /><col style="width:9%;" /><col style="width:8%;" /><col style="width:8%;" /><col style="width:6%;" /><col style="width:9%;" /><col style="width:8%;" />'
+            : '<col style="width:14%;" /><col style="width:28%;" /><col style="width:7%;" /><col style="width:9%;" /><col style="width:8%;" /><col style="width:9%;" /><col style="width:6%;" /><col style="width:10%;" /><col style="width:9%;" />'}</colgroup>
           <thead>
             <tr>
               <th># Item</th>
               <th>Description</th>
               <th>Origin</th>
               <th>Brand</th>
-              <th>Order Nr</th>
+              ${showLineOrderNo ? "<th>Order Nr</th>" : ""}
               <th>Weight</th>
               <th>Tariff</th>
               <th>Qty</th>
