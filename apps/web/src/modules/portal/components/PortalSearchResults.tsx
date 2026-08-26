@@ -359,7 +359,7 @@ export function PortalSearchResults({
             <label className="portal-order-workspace__field"><span>Delivery term</span><input value={deliveryTerm} onChange={(event) => onDeliveryTermChange(event.target.value)} placeholder="e.g. Standard delivery" /></label>
             <label className="portal-order-workspace__field"><span>Payment terms</span><input value={paymentTerms} onChange={(event) => onPaymentTermsChange(event.target.value)} placeholder="e.g. As agreed" /></label>
             <label className="portal-order-workspace__field"><span>Packing details</span><input value={packingDetails} onChange={(event) => onPackingDetailsChange(event.target.value)} placeholder="Optional packing instruction" /></label>
-            <label className="portal-order-workspace__field"><span>Order note</span><textarea value={orderNotes} onChange={(event) => onOrderNotesChange(event.target.value)} placeholder="Note for the internal buying team" rows={3} /></label>
+            <label className="portal-order-workspace__field portal-order-workspace__field--message"><span>Message to seller</span><small>Leave a note for the seller or admin team.</small><textarea value={orderNotes} onChange={(event) => onOrderNotesChange(event.target.value)} placeholder="Write a message for the seller or admin team" rows={3} /></label>
           </aside>
         </div>
       </section>

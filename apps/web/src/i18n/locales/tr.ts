@@ -477,6 +477,8 @@ export const trMessages = {
     "orders.openOrStartDescription": "Bir siparişi açın veya yeni bir tane başlatın",
     "orders.portalOrder": "Portal siparişi",
     "orders.newPortalOrder": "Yeni portal siparişi",
+    "orders.customerMessage": "Müşteri mesajı",
+    "orders.customerMessageHint": "Müşteriden gelen mesaj — siparişi işleme almadan önce inceleyin.",
     "orders.poCreated": "{count} satın alma siparişi",
     "orders.invoiceCreated": "{count} fatura",
     "orders.brandContext": "Marka bağlamı",

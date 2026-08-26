@@ -87,6 +87,24 @@ type PortalActivityNotification = {
   detail: string;
 };
 
+function mergePortalSnapshotOrderDetails(current: PortalSnapshot | null, next: PortalSnapshot) {
+  if (!current) return next;
+  const currentOrders = new Map(current.salesOrders.map((order) => [order.id, order]));
+  return {
+    ...next,
+    salesOrders: next.salesOrders.map((order) => {
+      const previous = currentOrders.get(order.id);
+      // History snapshots intentionally use a compact order projection and
+      // omit line JSON. Keep any detail already loaded in the workspace so a
+      // background refresh can never blank an open order after an edit.
+      if (previous?.lines?.length && !order.lines?.length) {
+        return { ...order, lines: previous.lines };
+      }
+      return order;
+    }),
+  };
+}
+
 function getPortalActivityStorageKey(email: string) {
   return `${getPortalCacheKey(email)}:activity`;
 }
@@ -749,7 +767,7 @@ export function PortalPage() {
           portalOrderMutationRef.current !== refreshMutationRevision ||
           Date.now() - portalOrderMutationSettledAtRef.current < 15_000
         ) return;
-        setSnapshot(next);
+        setSnapshot((current) => mergePortalSnapshotOrderDetails(current, next));
         const nextCredentials = { email: credentials.email, password: "", sessionToken: "" };
         setCredentials(nextCredentials);
         writeStoredCredentials(nextCredentials);
@@ -796,7 +814,7 @@ export function PortalPage() {
           portalOrderMutationRef.current !== refreshMutationRevision ||
           Date.now() - portalOrderMutationSettledAtRef.current < 15_000
         ) return;
-        setSnapshot(next);
+        setSnapshot((current) => mergePortalSnapshotOrderDetails(current, next));
         setError("");
       } catch (caught) {
         if (cancelled) return;
@@ -2095,7 +2113,7 @@ export function PortalPage() {
         message: `Removing basket ${row.sales_order_no || row.id} from your portal workspace.`,
       });
       const result = await deletePortalDraftOrder(credentials, row.id);
-      setSnapshot(result.snapshot);
+      setSnapshot((current) => mergePortalSnapshotOrderDetails(current, result.snapshot));
       settlePortalOrderMutation();
       if (selection?.kind === "sales-order" && selection.id === row.id) {
         setSelection(null);
@@ -2444,7 +2462,7 @@ export function PortalPage() {
         notes: String(row.notes || ""),
         rows,
       });
-      setSnapshot(result.snapshot);
+      setSnapshot((current) => mergePortalSnapshotOrderDetails(current, result.snapshot));
       settlePortalOrderMutation();
       setSelection({ kind: "sales-order", id: result.orderId || row.id });
       setPortalDetailQtyEdits({});

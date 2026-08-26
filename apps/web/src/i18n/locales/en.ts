@@ -497,6 +497,8 @@ export const enMessages = {
     "orders.openOrStartDescription": "Open an order or start a new one",
     "orders.portalOrder": "Portal order",
     "orders.newPortalOrder": "New portal order",
+    "orders.customerMessage": "Customer message",
+    "orders.customerMessageHint": "Message from the customer — review before processing this order.",
     "orders.poCreated": "{count} purchase orders",
     "orders.invoiceCreated": "{count} invoices",
     "orders.brandContext": "Brand context",

@@ -2188,6 +2188,13 @@ select {
   color: #b45309;
 }
 
+.mark-badge--warning {
+  border-color: #fb923c;
+  background: #fff7ed;
+  color: #c2410c;
+  box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.12);
+}
+
 .mark-badge--danger {
   border-color: #fecaca;
   background: #fef2f2;
@@ -4018,6 +4025,38 @@ select {
 .quote-notes-input {
   min-height: 96px;
   resize: vertical;
+}
+
+.portal-customer-message {
+  margin-top: 14px;
+  border: 1px solid #fb923c;
+  border-left-width: 5px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fff7ed 0%, #fffbeb 100%);
+  padding: 12px 14px;
+  color: #7c2d12;
+  box-shadow: 0 4px 14px rgba(194, 65, 12, 0.1);
+}
+
+.portal-customer-message__title {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.portal-customer-message__hint {
+  margin-top: 3px;
+  color: #9a3412;
+  font-size: 0.78rem;
+}
+
+.portal-customer-message p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  font-size: 0.96rem;
+  font-weight: 650;
+  line-height: 1.45;
 }
 
 .quote-summary-card {
@@ -7819,6 +7858,8 @@ textarea {
 .portal-order-workspace__field { display: grid; gap: 5px; margin-top: 10px; color: #52667d; font-size: 12px; font-weight: 800; }
 .portal-order-workspace__field input,
 .portal-order-workspace__field textarea { width: 100%; border: 1px solid #cbd8e6; border-radius: 6px; padding: 9px 10px; background: #fff; color: #183b69; font: inherit; font-weight: 500; resize: vertical; box-sizing: border-box; }
+.portal-order-workspace__field--message { padding: 10px; border: 1px solid #f4c27a; border-radius: 8px; background: #fffaf0; color: #8a4b08; }
+.portal-order-workspace__field--message small { color: #9a6b2f; font-size: 11px; font-weight: 600; }
 
 @media (max-width: 1120px) {
   .portal-search-result-view__layout { grid-template-columns: minmax(220px, 0.72fr) minmax(380px, 1.4fr); }

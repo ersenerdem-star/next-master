@@ -271,6 +271,10 @@ function isDraftPortalAlert(order: Pick<LocalSalesOrder, "source_channel" | "por
   );
 }
 
+function hasPortalCustomerMessage(order: Pick<LocalSalesOrder, "source_channel" | "notes">) {
+  return order.source_channel === "portal" && Boolean(String(order.notes || "").trim());
+}
+
 function buildSalesOrderPrintAlerts(line: QuoteBuilderLine) {
   const alerts: Array<{ text: string; tone?: "warning" | "danger" | "muted" }> = [];
   const codeWarning = compactWarningText(line.codeChangeWarning);
@@ -2850,6 +2854,9 @@ export function QuotesPage({
               {isDraftPortalAlert(row, poCount, invoiceCount) ? (
                 <span className="mark-badge mark-badge--accent">{t("sales.orders.newOrder")}</span>
               ) : null}
+              {hasPortalCustomerMessage(row) ? (
+                <span className="mark-badge mark-badge--warning">{t("sales.orders.customerMessage")}</span>
+              ) : null}
               {poCount > 0 ? <span className="mark-badge mark-badge--info">{t("sales.orders.poShort", { count: poCount })}</span> : null}
               {invoiceCount > 0 ? <span className="mark-badge mark-badge--accent">{t("sales.orders.invoiceShort", { count: invoiceCount })}</span> : null}
             </span>
@@ -3156,6 +3163,9 @@ export function QuotesPage({
                       : t("sales.orders.portalOrder")}
                   </span>
                 ) : null}
+                {hasPortalCustomerMessage(currentLocalSalesOrder) ? (
+                  <span className="mark-badge mark-badge--warning">{t("sales.orders.customerMessage")}</span>
+                ) : null}
                 {(salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0) > 0 ? (
                   <span className="mark-badge mark-badge--info">
                     {t("sales.orders.poCreated", { count: (salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0).toLocaleString("en-US") })}
@@ -3166,6 +3176,13 @@ export function QuotesPage({
                     {t("sales.orders.invoiceCreated", { count: (salesOrderDocumentState.invoiceCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0).toLocaleString("en-US") })}
                   </span>
                 ) : null}
+              </div>
+            ) : null}
+            {currentLocalSalesOrder && hasPortalCustomerMessage(currentLocalSalesOrder) ? (
+              <div className="portal-customer-message" role="alert">
+                <div className="portal-customer-message__title">{t("sales.orders.customerMessage")}</div>
+                <div className="portal-customer-message__hint">{t("sales.orders.customerMessageHint")}</div>
+                <p>{currentLocalSalesOrder.notes.trim()}</p>
               </div>
             ) : null}
           </div>
