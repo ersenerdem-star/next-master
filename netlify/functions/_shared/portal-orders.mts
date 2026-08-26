@@ -49,7 +49,6 @@ type PortalCatalogSearchItem = {
   image_url: string;
   sell_price: number | null;
   currency: string;
-  supplier_name: string;
   lifecycle_status?: "active" | "discontinued" | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
@@ -66,7 +65,6 @@ type SearchCatalogBaseItem = {
   brand: string;
   brand_id: string;
   normalized_code: string;
-  normalized_oem: string;
   description: string;
   oem_no: string;
   vehicle: string;
@@ -145,6 +143,22 @@ type PreparedPortalLine = {
   }>;
   selectedSupplierKey: string;
 };
+
+/**
+ * The customer portal must never receive supplier identities, costs or
+ * supplier-selection metadata.  Keep the internal preparation shape above
+ * because it is required when the sales order is persisted, then project it
+ * at the customer API boundary below.
+ */
+export type CustomerPortalPreparedLine = Omit<
+  PreparedPortalLine,
+  "supplier_name" | "buy_price" | "notes" | "supplierOptions" | "selectedSupplierKey"
+>;
+
+function toCustomerPortalPreparedLine(line: PreparedPortalLine): CustomerPortalPreparedLine {
+  const { supplier_name: _supplierName, buy_price: _buyPrice, notes: _notes, supplierOptions: _supplierOptions, selectedSupplierKey: _selectedSupplierKey, ...safeLine } = line;
+  return safeLine;
+}
 
 type CustomerPricingContext = {
   organizationId: string;
@@ -738,7 +752,6 @@ function mapCatalogRowsToBaseItems(
       brand: brandMap.byId.get(String(row.brand_id || "")) || "",
       brand_id: String(row.brand_id || ""),
       normalized_code: String(row.normalized_code || normalizePartCode(String(row.product_code || ""))),
-      normalized_oem: normalizePartCode(String(row.normalized_oem || "")),
       description: String(row.description || ""),
       oem_no: sanitizeCatalogOemNumbers(row.oem_no),
       vehicle: String(row.vehicle || ""),
@@ -771,7 +784,6 @@ function mapPortalCatalogItemsWithoutPricing(baseItems: SearchCatalogBaseItem[],
     image_url: item.image_url,
     sell_price: null,
     currency,
-    supplier_name: "",
     lifecycle_status: item.lifecycle_status,
     lifecycle_note: item.lifecycle_note,
     lifecycle_warning: item.lifecycle_status === "discontinued" ? buildDiscontinuedWarning(item.code, item.lifecycle_note) : null,
@@ -848,7 +860,6 @@ async function hydratePortalCatalogItems(
     string,
     {
       sell_price: number | null;
-      supplier_name: string;
     }
   >();
 
@@ -862,18 +873,14 @@ async function hydratePortalCatalogItems(
         .map((item) => ({
           brandId: item.brand_id,
           normalizedCode: item.normalized_code,
-          normalizedOem: item.normalized_oem,
         })),
       timeoutMs,
     ).catch(() => new Map());
     for (const item of baseItems) {
-      const bestOption =
-        bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`) ||
-        (item.normalized_oem ? bestOptionMap.get(`${item.brand_id}::oem::${item.normalized_oem}`) : undefined);
+      const bestOption = bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`);
       if (!bestOption) continue;
       previewByCode.set(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`, {
         sell_price: computeSellFromBuy(bestOption.buy_price, context),
-        supplier_name: bestOption.supplier_name || "",
       });
     }
     const cPriceMap = await fetchCPriceMap(
@@ -891,10 +898,8 @@ async function hydratePortalCatalogItems(
       const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
       const cPrice = cPriceMap.get(key);
       if (cPrice == null) continue;
-      const existing = previewByCode.get(key);
       previewByCode.set(key, {
         sell_price: cPrice,
-        supplier_name: existing?.supplier_name || "",
       });
     }
   } else {
@@ -908,19 +913,15 @@ async function hydratePortalCatalogItems(
         .map((item) => ({
           brandId: item.brand_id,
           normalizedCode: item.normalized_code,
-          normalizedOem: item.normalized_oem,
         })),
       timeoutMs,
     ).catch(() => new Map());
     for (const item of baseItems) {
-      const bestOption =
-        bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`) ||
-        (item.normalized_oem ? bestOptionMap.get(`${item.brand_id}::oem::${item.normalized_oem}`) : undefined);
+      const bestOption = bestOptionMap.get(`${item.brand_id}::${item.normalized_code}`);
       if (!bestOption) continue;
       previewByCode.set(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`, {
         sell_price:
           bestOption.buy_price == null ? null : roundMoney(Number(bestOption.buy_price) * (1 + marginPercent / 100)),
-        supplier_name: bestOption.supplier_name || "",
       });
     }
     if (prefersCPriceWhereAvailable(context)) {
@@ -937,12 +938,10 @@ async function hydratePortalCatalogItems(
       ).catch(() => new Map());
       for (const item of baseItems) {
         const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
-        const existing = previewByCode.get(key);
         const cPrice = cPriceMap.get(key);
         if (cPrice == null) continue;
         previewByCode.set(key, {
           sell_price: cPrice,
-          supplier_name: existing?.supplier_name || "",
         });
       }
     }
@@ -962,10 +961,6 @@ async function hydratePortalCatalogItems(
       image_url: item.image_url,
       sell_price: preview?.sell_price ?? null,
       currency: context.currency,
-      // Supplier identity is an internal pricing detail. It must not cross
-      // the customer-portal API boundary, even though it is used above to
-      // calculate the account price.
-      supplier_name: "",
       lifecycle_status: item.lifecycle_status,
       lifecycle_note: item.lifecycle_note,
       lifecycle_warning: item.lifecycle_status === "discontinued" ? buildDiscontinuedWarning(item.code, item.lifecycle_note) : null,
@@ -1123,6 +1118,14 @@ function chunkValues<T>(rows: T[], size: number) {
   return chunks;
 }
 
+function effectiveSupplierPriceFilters() {
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    valid_from: `lte.${today}`,
+    or: `(valid_to.is.null,valid_to.gte.${today})`,
+  };
+}
+
 function rpcUrl(supabaseUrl: string, fn: string) {
   return new URL(`/rest/v1/rpc/${fn}`, supabaseUrl).toString();
 }
@@ -1158,25 +1161,37 @@ async function fetchPortalCustomerForOrders(
   if (!customerId) {
     throw new Error("Portal invite is missing its customer scope.");
   }
-  const trySelect = async (select: string) =>
+  const trySelect = async (select: string, scopedToSeller: boolean) =>
     await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
       select,
       organization_id: `eq.${invite.organization_id}`,
       id: `eq.${customerId}`,
+      ...(scopedToSeller && String(invite.seller_company_profile_id || "").trim()
+        ? { seller_company_profile_id: `eq.${String(invite.seller_company_profile_id).trim()}` }
+        : {}),
       limit: "1",
     });
 
-  try {
-    return await trySelect(CUSTOMER_ORDER_SELECT);
-  } catch (primaryError) {
+  const trySelectVariants = async (scopedToSeller: boolean) => {
     try {
-      return await trySelect(CUSTOMER_ORDER_SELECT_LEGACY);
-    } catch (legacyError) {
-      const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError || "");
-      const legacyMessage = legacyError instanceof Error ? legacyError.message : String(legacyError || "");
-      throw new Error(legacyMessage || primaryMessage || `Customer card not found for ${invite.party_name}`);
+      return await trySelect(CUSTOMER_ORDER_SELECT, scopedToSeller);
+    } catch (primaryError) {
+      try {
+        return await trySelect(CUSTOMER_ORDER_SELECT_LEGACY, scopedToSeller);
+      } catch (legacyError) {
+        const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError || "");
+        const legacyMessage = legacyError instanceof Error ? legacyError.message : String(legacyError || "");
+        throw new Error(legacyMessage || primaryMessage || `Customer card not found for ${invite.party_name}`);
+      }
     }
-  }
+  };
+
+  // Older customer cards may store the seller profile in custom_fields
+  // metadata while the physical seller_company_profile_id column is null.
+  // Keep the lookup tenant- and customer-id scoped, then retry without only
+  // the physical seller-column filter for those legacy cards.
+  const scoped = await trySelectVariants(true);
+  return scoped || (await trySelectVariants(false));
 }
 
 async function resolvePortalCustomer(
@@ -1763,6 +1778,7 @@ async function fetchPortalBestSupplierPriceMap(
       brand_id: `eq.${brandId}`,
       is_active: "eq.true",
       buy_price: "not.is.null",
+      ...effectiveSupplierPriceFilters(),
       normalized_code: `in.(${chunk.join(",")})`,
       order: "buy_price.asc",
       limit: "5000",
@@ -1807,6 +1823,7 @@ async function fetchPortalBestSupplierOptionMap(
       brand_id: `eq.${brandId}`,
       is_active: "eq.true",
       buy_price: "not.is.null",
+      ...effectiveSupplierPriceFilters(),
       order: "normalized_code.asc",
       limit: String(PORTAL_PRICE_LIST_SUPPLIER_PAGE_SIZE),
       offset: String(offset),
@@ -1834,7 +1851,7 @@ async function fetchPortalBestSupplierPreviewMap(
   supabaseUrl: string,
   serviceRoleKey: string,
   organizationId: string,
-  items: Array<{ brandId: string; normalizedCode: string; normalizedOem?: string }>,
+  items: Array<{ brandId: string; normalizedCode: string }>,
   timeoutMs?: number,
 ) {
   const bestByKey = new Map<
@@ -1848,62 +1865,34 @@ async function fetchPortalBestSupplierPreviewMap(
   >();
   const brandIds = [...new Set(items.map((item) => item.brandId).filter(Boolean))];
   const normalizedCodes = [...new Set(items.map((item) => item.normalizedCode).filter(Boolean))];
-  const normalizedOems = [...new Set(items.map((item) => item.normalizedOem || "").filter(Boolean))];
-
-  const recordSupplierRows = (supplierRows: Array<Record<string, unknown>>) => {
-    for (const row of supplierRows) {
-      const brandId = String(row.brand_id || "");
-      const normalizedCode = normalizePartCode(String(row.normalized_code || row.product_code || ""));
-      const normalizedOem = normalizePartCode(String(row.normalized_oem || ""));
-      const buyPrice = row.buy_price == null ? null : Number(row.buy_price);
-      if (!brandId || buyPrice == null || !Number.isFinite(buyPrice)) continue;
-
-      const option = {
-        buy_price: buyPrice,
-        supplier_name: String(row.suppliers?.name || ""),
-        price_date: row.valid_from == null ? null : String(row.valid_from),
-        notes: row.notes == null ? null : String(row.notes),
-      };
-      const keys = [
-        normalizedCode ? `${brandId}::${normalizedCode}` : "",
-        normalizedOem ? `${brandId}::oem::${normalizedOem}` : "",
-      ].filter(Boolean);
-      for (const key of keys) {
-        const current = bestByKey.get(key);
-        if (current && Number(current.buy_price ?? Number.MAX_SAFE_INTEGER) <= buyPrice) continue;
-        bestByKey.set(key, option);
-      }
-    }
-  };
-
   for (const brandChunk of chunkValues(brandIds, 50)) {
     for (const codeChunk of chunkValues(normalizedCodes, 200)) {
-      if (!codeChunk.length) continue;
       const supplierRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "supplier_prices", {
-        select: "brand_id,normalized_code,normalized_oem,buy_price,valid_from,notes,suppliers(name)",
+        select: "brand_id,normalized_code,buy_price,valid_from,notes,suppliers(name)",
         organization_id: `eq.${organizationId}`,
         brand_id: `in.(${brandChunk.join(",")})`,
         is_active: "eq.true",
         buy_price: "not.is.null",
+        ...effectiveSupplierPriceFilters(),
         normalized_code: `in.(${codeChunk.join(",")})`,
         order: "buy_price.asc",
         limit: "5000",
       }, timeoutMs);
-      recordSupplierRows(supplierRows);
-    }
-    for (const oemChunk of chunkValues(normalizedOems, 200)) {
-      if (!oemChunk.length) continue;
-      const supplierRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "supplier_prices", {
-        select: "brand_id,normalized_code,normalized_oem,buy_price,valid_from,notes,suppliers(name)",
-        organization_id: `eq.${organizationId}`,
-        brand_id: `in.(${brandChunk.join(",")})`,
-        is_active: "eq.true",
-        buy_price: "not.is.null",
-        normalized_oem: `in.(${oemChunk.join(",")})`,
-        order: "buy_price.asc",
-        limit: "5000",
-      }, timeoutMs);
-      recordSupplierRows(supplierRows);
+      for (const row of supplierRows) {
+        const brandId = String(row.brand_id || "");
+        const normalizedCode = String(row.normalized_code || "");
+        const buyPrice = row.buy_price == null ? null : Number(row.buy_price);
+        if (!brandId || !normalizedCode || buyPrice == null || !Number.isFinite(buyPrice)) continue;
+        const key = `${brandId}::${normalizedCode}`;
+        const current = bestByKey.get(key);
+        if (current && Number(current.buy_price ?? Number.MAX_SAFE_INTEGER) <= buyPrice) continue;
+        bestByKey.set(key, {
+          buy_price: buyPrice,
+          supplier_name: String(row.suppliers?.name || ""),
+          price_date: row.valid_from == null ? null : String(row.valid_from),
+          notes: row.notes == null ? null : String(row.notes),
+        });
+      }
     }
   }
   return bestByKey;
@@ -2022,31 +2011,24 @@ export async function buildPortalPriceListRows(
     }
   }
 
-  // A price list is a commercial offer, not a dump of the whole catalog.
-  // Keep only rows for which the pricing resolver produced a finite, positive
-  // customer price.  Unpriced catalog rows must remain searchable in the
-  // portal, but must not be exported to customers as an unusable list.
-  const rows = catalogRows
-    .map((row) => {
-      const salesPrice = salesPriceByCode.get(row.normalized_code);
-      return {
-        product_code: row.product_code,
-        brand: row.brand,
-        description: row.description || "",
-        price_list_type: priceTypeByCode.get(row.normalized_code) ?? portalFallbackPriceType(context),
-        sales_price: salesPrice ?? null,
-        price_date: priceDateByCode.get(row.normalized_code) ?? null,
-        lifecycle_status: row.lifecycle_status,
-        lifecycle_note: row.lifecycle_note,
-      };
-    })
-    .filter((row) => row.sales_price != null && Number.isFinite(Number(row.sales_price)) && Number(row.sales_price) > 0);
-
+  // A customer price list is an offerable list, not a full catalog export.
+  // Do not send catalog rows that have no effective customer price: they add
+  // noise to the workbook and make large-brand downloads needlessly heavy.
+  const pricedCatalogRows = catalogRows.filter((row) => salesPriceByCode.has(row.normalized_code));
   const result = {
     priceListType: context.customerType,
     pricingMode: context.portalCPriceMode,
     currency: context.currency,
-    rows,
+    rows: pricedCatalogRows.map((row) => ({
+      product_code: row.product_code,
+      brand: row.brand,
+      description: row.description || "",
+      price_list_type: priceTypeByCode.get(row.normalized_code) ?? portalFallbackPriceType(context),
+      sales_price: salesPriceByCode.get(row.normalized_code) ?? null,
+      price_date: priceDateByCode.get(row.normalized_code) ?? null,
+      lifecycle_status: row.lifecycle_status,
+      lifecycle_note: row.lifecycle_note,
+    })),
   };
   portalPriceListCache.set(cacheKey, {
     value: result,
@@ -2097,6 +2079,8 @@ async function resolvePortalCatalogSupplierData(
       organization_id: `eq.${context.organizationId}`,
       brand_id: `eq.${brandId}`,
       is_active: "eq.true",
+      buy_price: "not.is.null",
+      ...effectiveSupplierPriceFilters(),
       normalized_code: `eq.${normalizedCode}`,
       order: "buy_price.asc",
       limit: "50",
@@ -2106,6 +2090,8 @@ async function resolvePortalCatalogSupplierData(
       organization_id: `eq.${context.organizationId}`,
       brand_id: `eq.${brandId}`,
       is_active: "eq.true",
+      buy_price: "not.is.null",
+      ...effectiveSupplierPriceFilters(),
       normalized_oem: `eq.${normalizedCode}`,
       order: "buy_price.asc",
       limit: "50",
@@ -2345,6 +2331,19 @@ export async function preparePortalOrderLines(
       price_list_type: context.customerType,
       portal_c_price_mode: context.portalCPriceMode,
     },
+  };
+}
+
+export async function prepareCustomerPortalOrderLines(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  invite: PortalInviteRow,
+  rows: PortalOrderInputRow[],
+) {
+  const prepared = await preparePortalOrderLines(supabaseUrl, serviceRoleKey, invite, rows);
+  return {
+    ...prepared,
+    lines: prepared.lines.map(toCustomerPortalPreparedLine),
   };
 }
 

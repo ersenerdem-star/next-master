@@ -42,6 +42,10 @@ const CUSTOMER_PORTAL_SELECT_BASE =
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 const COMPANY_PROFILE_SELECT = "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url";
 const PORTAL_DB_REQUEST_TIMEOUT_MS = 12_000;
+// Portal home is an operational workspace, not a full historical export.
+// Keeping secondary document queries bounded prevents a large customer or
+// vendor history from delaying sign-in and the initial portal snapshot.
+const PORTAL_SNAPSHOT_HISTORY_LIMIT = "100";
 
 function toPortalBrandingProfile(companyProfile: Record<string, unknown> | null) {
   if (!companyProfile) return null;
@@ -177,8 +181,11 @@ async function fetchPortalInviteByIdEmail(supabaseUrl: string, serviceRoleKey: s
 }
 
 function isPortalSoftFailure(error: unknown) {
-  const message = String(error instanceof Error ? error.message : error || "").toLowerCase();
+  const details = error as { message?: unknown; rawMessage?: unknown; status?: unknown };
+  const message = String(details?.rawMessage || details?.message || error || "").toLowerCase();
+  const status = Number(details?.status || 0);
   return (
+    status === 404 ||
     message.includes("could not find the table") ||
     message.includes("relation") && message.includes("does not exist") ||
     message.includes("column") && message.includes("does not exist") ||
@@ -223,7 +230,7 @@ function buildPortalCustomerHistoryParams(
     ...customerFilter,
     ...(sellerCompanyName ? { seller_company: `eq.${sellerCompanyName}` } : {}),
     order: "updated_at.desc",
-    limit: "100",
+    limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
   };
 }
 
@@ -245,7 +252,31 @@ async function fetchPortalHistoryRows(
     select: compactSelect,
     ...params,
   });
-  if (compactRows.length) return compactRows;
+  const attachDetailLines = async (rows: Record<string, unknown>[]) => {
+    if (!rows.length || !fullSelect) return rows;
+    const ids = rows
+      .map((row) => String(row.id || "").trim())
+      .filter(Boolean);
+    if (!ids.length) return rows;
+
+    // Keep the history/list query compact, then load the bounded line detail
+    // for the same tenant/customer-scoped document ids. This preserves fast
+    // portal startup while ensuring the Orders/Invoices detail view has the
+    // same line data as the admin Sales Order screen.
+    // The compact query already established the tenant/customer scope. Keep
+    // this follow-up intentionally narrow so optional legacy columns in the
+    // full document projection cannot make line details disappear entirely.
+    const detailRows = await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
+      select: "id,lines",
+      organization_id: params.organization_id,
+      id: `in.(${ids.join(",")})`,
+    });
+    if (!detailRows.length) return rows;
+    const byId = new Map(detailRows.map((row) => [String(row.id || ""), row]));
+    return rows.map((row) => byId.get(String(row.id || "")) || row);
+  };
+
+  if (compactRows.length) return attachDetailLines(compactRows);
 
   // If the combined OR filter was the expensive part under load, retry the
   // same tenant-scoped request as two simple indexed lookups and deduplicate
@@ -268,7 +299,7 @@ async function fetchPortalHistoryRows(
       customer_name: `eq.${customerName}`,
     }),
   ]);
-  return dedupeById([...byId, ...byName]);
+  return attachDetailLines(dedupeById([...byId, ...byName]));
 }
 
 async function fetchFirstOptional<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
@@ -326,7 +357,6 @@ async function touchPortalInvite(supabaseUrl: string, serviceRoleKey: string, in
       status: "active",
       expires_at: null,
       last_used_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     }),
   });
 }
@@ -474,10 +504,14 @@ function mapSalesOrderLines(lines: unknown) {
     const salesTotal = sellPrice == null ? null : sellPrice * qty;
     const lifecycleStatus = normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`);
     const lifecycleNote = String(row.lifecycle_note || "").trim() || null;
-    const resolvedCode = String(row.resolvedCode || row.requestedCode || "");
+    // Portal-created lines use resolvedCode/requestedCode; admin-created
+    // sales orders use the canonical product_code/old_code shape. Normalize
+    // both representations so customer order detail and exports never lose
+    // their line identity when an order originated on the admin side.
+    const resolvedCode = String(row.resolvedCode || row.requestedCode || row.product_code || row.code || "");
     return {
       code: resolvedCode,
-      requested_code: String(row.requestedCode || ""),
+      requested_code: String(row.requestedCode || row.old_code || row.product_code || row.code || ""),
       brand: String(row.brand || ""),
       description: String(row.description || ""),
       qty,
@@ -654,6 +688,9 @@ export async function resolvePortalInvite(
     if (tenant && String(session.organization_id || "") !== String(tenant.organization_id)) {
       throw new Error("Portal session belongs to another seller domain. Sign in again.");
     }
+    if (hostname && session.hostname && hostname !== String(session.hostname).trim().toLowerCase()) {
+      throw new Error("Portal session belongs to another seller domain. Sign in again.");
+    }
     const invite = await fetchPortalInviteByIdEmail(
       supabaseUrl,
       serviceRoleKey,
@@ -666,10 +703,13 @@ export async function resolvePortalInvite(
     if (!isPortalInviteUsable(invite)) {
       throw new Error("Portal session is no longer active.");
     }
+    if (String(invite.updated_at || "") !== session.updated_at) {
+      throw new Error("Portal session expired. Sign in again.");
+    }
 
     assertPortalTenantInvite(invite.organization_id, invite.seller_company_profile_id, tenant);
     await touchPortalInvite(supabaseUrl, serviceRoleKey, invite);
-    const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname);
+    const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname, String(invite.updated_at || ""));
     return { invite, sessionToken: nextSessionToken };
   }
 
@@ -687,7 +727,7 @@ export async function resolvePortalInvite(
     tenant?.seller_company_profile_id || "",
   );
   assertPortalTenantInvite(invite.organization_id, invite.seller_company_profile_id, tenant);
-  const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname);
+  const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname, String(invite.updated_at || ""));
   return { invite, sessionToken: nextSessionToken };
 }
 
@@ -715,6 +755,9 @@ export async function resolvePortalInvitePreview(
     if (tenant && String(session.organization_id || "") !== String(tenant.organization_id)) {
       throw new Error("Portal session belongs to another seller domain. Sign in again.");
     }
+    if (hostname && session.hostname && hostname !== String(session.hostname).trim().toLowerCase()) {
+      throw new Error("Portal session belongs to another seller domain. Sign in again.");
+    }
     const invite = await fetchPortalInviteByIdEmail(
       supabaseUrl,
       serviceRoleKey,
@@ -726,23 +769,18 @@ export async function resolvePortalInvitePreview(
     if (!isPortalInviteUsable(invite)) {
       throw new Error("Portal session is no longer active.");
     }
+    if (String(invite.updated_at || "") !== session.updated_at) {
+      throw new Error("Portal session expired. Sign in again.");
+    }
     assertPortalTenantInvite(invite.organization_id, invite.seller_company_profile_id, tenant);
-    const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname);
+    const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname, String(invite.updated_at || ""));
     return { invite, sessionToken: nextSessionToken };
   }
 
-  const invite = await fetchPortalInviteByEmailPreview(
-    supabaseUrl,
-    serviceRoleKey,
-    auth.email || "",
-    tenant?.organization_id || "",
-    tenant?.seller_company_profile_id || "",
-  );
-  if (!invite) {
-    throw new Error("Portal invite not found or disabled");
-  }
-  assertPortalTenantInvite(invite.organization_id, invite.seller_company_profile_id, tenant);
-  return { invite, sessionToken: "" };
+  // Do not reveal a tenant, party, or company profile merely because an
+  // attacker knows an email address. Login branding is generic until an
+  // authenticated portal session is present.
+  return { invite: null, sessionToken: "" };
 }
 
 export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {
@@ -803,6 +841,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
                 organization_id: `eq.${invite.organization_id}`,
                 customer_id: `eq.${customerId}`,
                 order: "updated_at.desc",
+                limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
               })
             : []),
           ...((!customerId || customerName)
@@ -811,6 +850,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
                 organization_id: `eq.${invite.organization_id}`,
                 customer_name: `eq.${customerName}`,
                 order: "updated_at.desc",
+                limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
               })
             : []),
         ])
@@ -822,6 +862,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
           organization_id: `eq.${invite.organization_id}`,
           customer_name: `eq.${customerName}`,
           order: "updated_at.desc",
+          limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
         })
       : [];
 
@@ -979,6 +1020,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
               organization_id: `eq.${invite.organization_id}`,
               vendor_id: `eq.${vendorId}`,
               order: "updated_at.desc",
+              limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
             })
           : []),
         ...((!vendorId || vendorName)
@@ -987,6 +1029,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
               organization_id: `eq.${invite.organization_id}`,
               supplier_name: `eq.${vendorName}`,
               order: "updated_at.desc",
+              limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
             })
           : []),
       ])
@@ -1001,6 +1044,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
               organization_id: `eq.${invite.organization_id}`,
               vendor_id: `eq.${vendorId}`,
               order: "updated_at.desc",
+              limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
             })
           : []),
         ...((!vendorId || vendorName)
@@ -1010,6 +1054,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
               organization_id: `eq.${invite.organization_id}`,
               supplier_name: `eq.${vendorName}`,
               order: "updated_at.desc",
+              limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
             })
           : []),
       ])
@@ -1023,6 +1068,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
               organization_id: `eq.${invite.organization_id}`,
               vendor_id: `eq.${vendorId}`,
               order: "updated_at.desc",
+              limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
             })
           : []),
         ...((!vendorId || vendorName)
@@ -1031,6 +1077,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
               organization_id: `eq.${invite.organization_id}`,
               supplier_name: `eq.${vendorName}`,
               order: "updated_at.desc",
+              limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
             })
           : []),
       ])
@@ -1042,6 +1089,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         organization_id: `eq.${invite.organization_id}`,
         supplier_name: `eq.${vendorName}`,
         order: "updated_at.desc",
+        limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
       })
     : [];
 

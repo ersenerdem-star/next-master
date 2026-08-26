@@ -243,7 +243,6 @@ function mapPortalSalesOrderToPreparedLines(row: PortalSalesOrderRow): PortalPre
     const requestedCode = String(line.old_code || line.requested_code || line.code || "");
     const resolvedCode = String(line.code || requestedCode || "");
     const qty = Math.max(1, Number(line.qty || 1) || 1);
-    const buyPrice = line.buy_price == null ? null : Number(line.buy_price);
     const sellPrice = line.sell_price == null ? null : Number(line.sell_price);
     const codeChanged = Boolean(
       line.old_code || (requestedCode && resolvedCode && requestedCode.trim().toLowerCase() !== resolvedCode.trim().toLowerCase()),
@@ -261,20 +260,15 @@ function mapPortalSalesOrderToPreparedLines(row: PortalSalesOrderRow): PortalPre
       origin: String(line.origin || ""),
       weight_kg: line.weight_kg == null ? null : Number(line.weight_kg),
       image_url: "",
-      supplier_name: String(line.supplier_name || ""),
-      buy_price: buyPrice,
       sell_price: sellPrice,
       c_sell_price: null,
       price_date: String(line.price_date || ""),
-      notes: String(line.notes || ""),
       found: true,
       codeChanged,
       codeChangeWarning: codeChanged ? `Old Code ${requestedCode} => New Code ${resolvedCode}` : "",
       lifecycle_status: line.lifecycle_status ?? "active",
       lifecycle_note: line.lifecycle_note ?? null,
       lifecycle_warning: line.lifecycle_warning ?? null,
-      supplierOptions: [],
-      selectedSupplierKey: "",
     };
   });
 }
@@ -295,12 +289,9 @@ function buildOfflinePreparedLineFromCatalogItem(item: PortalCatalogSearchItem):
     origin: String(item.origin || ""),
     weight_kg: item.weight_kg == null ? null : Number(item.weight_kg),
     image_url: String(item.image_url || ""),
-    supplier_name: "",
-    buy_price: null,
     sell_price: item.sell_price == null ? null : Number(item.sell_price),
     c_sell_price: null,
     price_date: "",
-    notes: "",
     found: true,
     codeChanged: Boolean(replacementWarning),
     codeChangeWarning: replacementWarning,
@@ -394,17 +385,21 @@ function getPortalDraftCacheKey(email: string) {
 function readPortalCache(email: string) {
   if (typeof window === "undefined" || !email) return null as PortalOfflineCache | null;
   try {
-    const snapshotRaw = window.localStorage.getItem(getPortalSnapshotCacheKey(email));
-    const draftRaw = window.localStorage.getItem(getPortalDraftCacheKey(email));
-    if (snapshotRaw || draftRaw) {
+    // Account, pricing and document data must not persist after the browser
+    // session ends. Remove earlier localStorage snapshots on sight, while
+    // retaining only the current tab's basket in sessionStorage.
+    window.localStorage.removeItem(getPortalCacheKey(email));
+    window.localStorage.removeItem(getPortalSnapshotCacheKey(email));
+    window.localStorage.removeItem(getPortalDraftCacheKey(email));
+    const draftRaw = window.sessionStorage.getItem(getPortalDraftCacheKey(email));
+    if (draftRaw) {
       return {
-        snapshot: snapshotRaw ? (JSON.parse(snapshotRaw) as PortalSnapshot | null) : null,
-        draft: draftRaw ? (JSON.parse(draftRaw) as PortalOfflineDraft) : buildEmptyPortalOfflineDraft(),
+        snapshot: null,
+        draft: JSON.parse(draftRaw) as PortalOfflineDraft,
         updatedAt: new Date().toISOString(),
       };
     }
-    const raw = window.localStorage.getItem(getPortalCacheKey(email));
-    return raw ? (JSON.parse(raw) as PortalOfflineCache) : null;
+    return null;
   } catch {
     return null;
   }
@@ -416,32 +411,35 @@ function writePortalCache(email: string, cache: PortalOfflineCache | null) {
     window.localStorage.removeItem(getPortalCacheKey(email));
     window.localStorage.removeItem(getPortalSnapshotCacheKey(email));
     window.localStorage.removeItem(getPortalDraftCacheKey(email));
+    window.sessionStorage.removeItem(getPortalDraftCacheKey(email));
     return;
   }
-  window.localStorage.setItem(getPortalSnapshotCacheKey(email), JSON.stringify(cache.snapshot));
-  window.localStorage.setItem(getPortalDraftCacheKey(email), JSON.stringify(cache.draft));
+  window.localStorage.removeItem(getPortalCacheKey(email));
+  window.localStorage.removeItem(getPortalSnapshotCacheKey(email));
+  window.localStorage.removeItem(getPortalDraftCacheKey(email));
+  window.sessionStorage.setItem(getPortalDraftCacheKey(email), JSON.stringify(cache.draft));
 }
 
 function writePortalSnapshotCache(email: string, snapshot: PortalSnapshot | null) {
   if (typeof window === "undefined" || !email) return;
   const key = getPortalSnapshotCacheKey(email);
   window.localStorage.removeItem(getPortalCacheKey(email));
-  if (!snapshot) {
-    window.localStorage.removeItem(key);
-    return;
-  }
-  window.localStorage.setItem(key, JSON.stringify(snapshot));
+  window.localStorage.removeItem(key);
+  // Snapshots deliberately remain memory-only. The argument is retained so
+  // existing callers can explicitly clear legacy cache values.
+  void snapshot;
 }
 
 function writePortalDraftCache(email: string, draft: PortalOfflineDraft | null) {
   if (typeof window === "undefined" || !email) return;
   const key = getPortalDraftCacheKey(email);
   window.localStorage.removeItem(getPortalCacheKey(email));
+  window.localStorage.removeItem(key);
   if (!draft) {
-    window.localStorage.removeItem(key);
+    window.sessionStorage.removeItem(key);
     return;
   }
-  window.localStorage.setItem(key, JSON.stringify(draft));
+  window.sessionStorage.setItem(key, JSON.stringify(draft));
 }
 
 function getDefaultPortalSection(snapshot: PortalSnapshot) {
@@ -628,8 +626,9 @@ export function PortalPage() {
     if (typeof window === "undefined") return;
     if (snapshot || !credentials.email || portalResetToken) return;
     const cached = readPortalCache(credentials.email);
-    if (!cached?.snapshot) return;
+    if (!cached) return;
     portalCachedDraftRef.current = cached.draft;
+    if (!cached.snapshot) return;
     setSnapshot(cached.snapshot);
     setSelection(null);
     setActiveSection(cached.draft.activeSection || getDefaultPortalSection(cached.snapshot));
@@ -1653,7 +1652,6 @@ export function PortalPage() {
           });
           const prepared = await preparePortalOrderLinesApi(credentials, chunk);
           preparedLines = mergePortalPreparedLines(preparedLines, prepared.lines);
-          setPortalDraftLines((current) => mergePortalPreparedLines(current, prepared.lines));
           latestPricingProfile = prepared.pricingProfile || latestPricingProfile;
           processed += chunk.length;
         } catch (caught) {
@@ -1662,9 +1660,11 @@ export function PortalPage() {
         }
       }
 
-      if (!preparedLines.length && failedChunkMessage) {
+      if (failedChunkMessage) {
         throw new Error(failedChunkMessage);
       }
+
+      setPortalDraftLines((current) => mergePortalPreparedLines(current, preparedLines));
 
       if (!portalPaymentTerms && latestPricingProfile?.payment_terms) {
         setPortalPaymentTerms(latestPricingProfile.payment_terms);
@@ -1673,11 +1673,8 @@ export function PortalPage() {
       const discontinuedCount = preparedLines.filter((line) => line.lifecycle_status === "discontinued").length;
       const pricedCount = preparedLines.length - missingPriceCount;
       setPortalOrderStatus(
-        `${statusText.replace("{count}", preparedLines.length.toLocaleString("en-US"))} ${pricedCount > 0 ? `${pricedCount.toLocaleString("en-US")} priced.` : ""}${missingPriceCount > 0 ? ` ${missingPriceCount.toLocaleString("en-US")} need live pricing.` : ""}${discontinuedCount > 0 ? ` ${discontinuedCount.toLocaleString("en-US")} discontinued item(s) detected.` : ""}${failedChunkMessage ? " Some lines could not be processed; save basket and continue later." : ""}`.trim(),
+        `${statusText.replace("{count}", preparedLines.length.toLocaleString("en-US"))} ${pricedCount > 0 ? `${pricedCount.toLocaleString("en-US")} priced.` : ""}${missingPriceCount > 0 ? ` ${missingPriceCount.toLocaleString("en-US")} need live pricing.` : ""}${discontinuedCount > 0 ? ` ${discontinuedCount.toLocaleString("en-US")} discontinued item(s) detected.` : ""}`.trim(),
       );
-      if (failedChunkMessage) {
-        setError(failedChunkMessage);
-      }
       return preparedLines;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal order pricing failed");
@@ -2838,8 +2835,6 @@ export function PortalPage() {
                 <strong>Use the middle field for part number or OEM code. Import Brand, Part Code, and Qty files with Excel or CSV; exact matches stay on top and alternatives appear below.</strong>
               </div>
 
-              {!catalogResults.length ? <Input label="Notes" value={portalOrderNotes} placeholder="Order note for your internal buying team" onChange={setPortalOrderNotes} /> : null}
-
               {portalOrderStatus && !catalogResults.length ? <div className="success-text">{portalOrderStatus}</div> : null}
               {portalDraftHasMissingPrices ? <div className="warning-text">Items without live price can be saved in the basket but cannot be confirmed.</div> : null}
               {portalDraftDiscontinuedCount > 0 ? (
@@ -2870,6 +2865,15 @@ export function PortalPage() {
                   savingBasket={savingPortalOrder}
                   confirmingBasket={confirmingPortalOrder}
                   confirmDisabled={portalDraftHasMissingPrices}
+                  orderNotes={portalOrderNotes}
+                  deliveryTerm={portalDeliveryTerm}
+                  paymentTerms={portalPaymentTerms}
+                  packingDetails={portalPackingDetails}
+                  onOrderNotesChange={setPortalOrderNotes}
+                  onDeliveryTermChange={setPortalDeliveryTerm}
+                  onPaymentTermsChange={setPortalPaymentTerms}
+                  onPackingDetailsChange={setPortalPackingDetails}
+                  onQuantityChange={(lineId, quantity) => setPortalDraftLines((current) => current.map((line) => (line.lineId === lineId ? { ...line, qty: quantity } : line)))}
                   onSaveBasket={() => void handleSubmitPortalOrder("draft")}
                   onClearBasket={handleClearPortalBuilder}
                   onConfirmBasket={() => void handleSubmitPortalOrder("confirm")}
@@ -2882,6 +2886,7 @@ export function PortalPage() {
                   onPreview={(item) => setPortalPreview({ kind: "catalog", item })}
                 />
 
+              {false ? <>
               <div className="portal-workbench">
                 <div className="portal-workbench__tables">
                   <SectionCard title={`Search Items (${catalogResults.length.toLocaleString("en-US")})`} className={`search-results-focus-card${catalogResults.length ? " search-results-focus-card--legacy" : ""}`}>
@@ -3105,6 +3110,7 @@ export function PortalPage() {
                   Confirm Basket
                 </Button>
               </div>
+              </> : null}
             </div>
           </SectionCard>
         </div>
