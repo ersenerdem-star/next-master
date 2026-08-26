@@ -1833,7 +1833,8 @@ export function PortalPage() {
       });
       setSnapshot(result.snapshot);
       setSelection({ kind: "sales-order", id: result.orderId });
-      setActiveSection(mode === "confirm" ? "orders" : "desk");
+      // Keep the newly saved draft visible in the same Sales Orders view as a confirmed order.
+      setActiveSection("orders");
       setStatus(
         mode === "confirm"
           ? `Basket ${result.orderId} submitted. Internal team can prepare proforma and next documents.`
