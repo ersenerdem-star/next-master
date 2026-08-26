@@ -458,6 +458,7 @@ export function PortalPage() {
   const portalLinkEmail = search.get("email") || "";
   const portalResetToken = search.get("reset") || search.get("reset_token") || "";
   const portalImportRef = useRef<HTMLInputElement | null>(null);
+  const portalDocumentsImportRef = useRef<HTMLInputElement | null>(null);
   const portalDraftLinesRef = useRef<HTMLDivElement | null>(null);
   const portalCachedDraftRef = useRef<PortalOfflineCache["draft"] | null>(null);
   const portalAutoRefreshKeyRef = useRef("");
@@ -1756,10 +1757,13 @@ export function PortalPage() {
     setError("");
   }
 
-  async function handleImportPortalOrderFile(file: File) {
+  async function handleImportPortalOrderFile(
+    file: File,
+    resetInputRef: { current: HTMLInputElement | null } = portalImportRef,
+  ) {
     if (!isOnline) {
       setError("Connect to the internet to import and price a file.");
-      if (portalImportRef.current) portalImportRef.current.value = "";
+      if (resetInputRef.current) resetInputRef.current.value = "";
       return;
     }
     try {
@@ -1775,7 +1779,7 @@ export function PortalPage() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal import failed");
     } finally {
-      if (portalImportRef.current) portalImportRef.current.value = "";
+      if (resetInputRef.current) resetInputRef.current.value = "";
     }
   }
 
@@ -2884,7 +2888,31 @@ export function PortalPage() {
           {orderDetailOpen ? (
             documentDetailSection
           ) : (
-            <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Order History" : "Purchase Orders"}>
+            <SectionCard
+              title={activeSnapshot.invite.party_type === "customer" ? "Order History" : "Purchase Orders"}
+              actions={
+                activeSnapshot.invite.party_type === "customer" ? (
+                  <div className="inline-actions">
+                    <input
+                      ref={portalDocumentsImportRef}
+                      type="file"
+                      hidden
+                      accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void handleImportPortalOrderFile(file, portalDocumentsImportRef);
+                      }}
+                    />
+                    <Button type="button" variant="secondary" onClick={() => portalDocumentsImportRef.current?.click()}>
+                      Import Excel
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={downloadQuoteTemplate}>
+                      Template
+                    </Button>
+                  </div>
+                ) : null
+              }
+            >
               <DataTable
                 rows={portalOrderHistoryRows}
                 columns={activeSnapshot.invite.party_type === "customer" ? salesOrderColumns : purchaseOrderColumns}
