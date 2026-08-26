@@ -680,7 +680,11 @@ export function PortalPage() {
           setStatus("");
           return;
         }
-        setError(message);
+        // A successful login or a cached workspace already provides a usable
+        // tenant-scoped snapshot. The opportunistic refresh must never turn
+        // that working portal into a blocking error state; the user can keep
+        // working and explicitly refresh later.
+        setStatus("Portal is open. The latest background refresh could not be completed; retry with Refresh when ready.");
       });
 
     return () => {

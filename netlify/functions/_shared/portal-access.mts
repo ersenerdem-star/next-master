@@ -838,12 +838,8 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       customerName,
       sellerCompanyName,
     );
-    const salesOrderFullSelect =
-      "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines";
     const salesOrderCompactSelect =
       "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at";
-    const invoiceFullSelect =
-      "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at,lines";
     const invoiceCompactSelect =
       "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at";
 
@@ -852,7 +848,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
           supabaseUrl,
           serviceRoleKey,
           "sales_orders",
-          salesOrderFullSelect,
+          "",
           salesOrderCompactSelect,
           historyParams,
         ))
@@ -863,7 +859,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
           supabaseUrl,
           serviceRoleKey,
           "invoices",
-          invoiceFullSelect,
+          "",
           invoiceCompactSelect,
           historyParams,
         ))
