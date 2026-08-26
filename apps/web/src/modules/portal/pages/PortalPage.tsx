@@ -2430,7 +2430,7 @@ export function PortalPage() {
         "Weight",
         isCustomerDoc ? `Unit Price ${currency}` : `Buy Price ${currency}`,
         `Line Total ${currency}`,
-        "Notes",
+        ...(isCustomerDoc ? [] : ["Notes"]),
       ],
       ...(documentToExport.row.lines || []).map((line) => [
         line.code || line.requested_code || line.old_code || "-",
@@ -2442,7 +2442,7 @@ export function PortalPage() {
         line.weight_kg == null ? "" : Number(line.weight_kg),
         Number(isCustomerDoc ? line.sell_price || 0 : line.buy_price || 0),
         Number(isCustomerDoc ? line.line_total || line.sales_total || 0 : line.line_total || 0),
-        line.notes || "",
+        ...(isCustomerDoc ? [] : [line.notes || ""]),
       ]),
       [],
       ["Subtotal", "", "", "", "", "", "", "", Number(("subtotal" in documentToExport.row ? documentToExport.row.subtotal : documentToExport.row.total_amount) || 0)],

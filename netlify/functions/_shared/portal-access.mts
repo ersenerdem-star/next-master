@@ -609,11 +609,15 @@ function mapInvoiceLines(lines: unknown) {
 
 // Customer responses must not expose internal supplier or acquisition-cost data.
 function mapCustomerSalesOrderLines(lines: unknown) {
-  return mapSalesOrderLines(lines).map(({ supplier_name: _supplierName, buy_price: _buyPrice, purchase_total: _purchaseTotal, ...line }) => line);
+  return mapSalesOrderLines(lines).map(
+    ({ supplier_name: _supplierName, buy_price: _buyPrice, purchase_total: _purchaseTotal, notes: _internalNotes, ...line }) => line,
+  );
 }
 
 function mapCustomerInvoiceLines(lines: unknown) {
-  return mapInvoiceLines(lines).map(({ supplier_name: _supplierName, buy_price: _buyPrice, purchase_total: _purchaseTotal, ...line }) => line);
+  return mapInvoiceLines(lines).map(
+    ({ supplier_name: _supplierName, buy_price: _buyPrice, purchase_total: _purchaseTotal, notes: _internalNotes, ...line }) => line,
+  );
 }
 
 function mapPurchaseOrderLines(lines: unknown) {
@@ -970,7 +974,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       companyProfile: toCustomerCompanyProfile(companyProfile),
       customer,
       availableBrands,
-      salesOrders: salesOrders.map((row) => ({
+      salesOrders: salesOrders.map(({ notes: _internalNotes, ...row }) => ({
         ...row,
         source_channel: String(row.source_channel || "internal"),
         portal_submitted_at: row.portal_submitted_at ? String(row.portal_submitted_at) : null,
@@ -980,7 +984,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         shipping_cost: toNumber(row.shipping_cost),
         lines: mapCustomerSalesOrderLines(row.lines),
       })),
-      invoices: invoices.map((row) => ({
+      invoices: invoices.map(({ notes: _internalNotes, ...row }) => ({
         ...row,
         total_amount: toNumber(row.total_amount),
         subtotal: toNumber(row.subtotal),
@@ -1266,8 +1270,9 @@ export async function fetchPortalSalesOrderDetail(
   const sellerMatches = !sellerCompany || !rowSellerCompany || rowSellerCompany === sellerCompany;
   if (!customerMatches || !sellerMatches) return null;
 
+  const { notes: _internalNotes, ...safeRow } = row;
   return {
-    ...row,
+    ...safeRow,
     source_channel: String(row.source_channel || "internal"),
     portal_submitted_at: row.portal_submitted_at ? String(row.portal_submitted_at) : null,
     portal_seen_at: row.portal_seen_at ? String(row.portal_seen_at) : null,
