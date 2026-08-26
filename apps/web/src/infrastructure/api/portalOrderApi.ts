@@ -69,6 +69,7 @@ type PortalOrderResponse = {
   lines?: PortalPreparedLine[];
   pricingProfile?: PortalSnapshot["pricingProfile"];
   snapshot?: PortalSnapshot;
+  order?: PortalSnapshot["salesOrders"][number];
   orderId?: string;
   priceListType?: "A" | "B" | "C" | "Other";
   pricingMode?: "standard" | "prefer_c_when_available";
@@ -157,6 +158,14 @@ export async function submitPortalOrder(
     snapshot: data.snapshot,
     orderId: data.orderId || "",
   };
+}
+
+export async function fetchPortalSalesOrderDetail(credentials: PortalCredentials, orderId: string) {
+  const data = await postPortalOrderJson("/api/portal-order-detail", {
+    ...credentials,
+    orderId,
+  });
+  return data.order || null;
 }
 
 export async function deletePortalDraftOrder(credentials: PortalCredentials, orderId: string) {

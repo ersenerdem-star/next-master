@@ -26,6 +26,7 @@ import { downloadQuoteTemplate } from "../../../shared/importTemplates";
 import {
   deletePortalDraftOrder,
   downloadPortalPriceList,
+  fetchPortalSalesOrderDetail,
   preparePortalOrderLines as preparePortalOrderLinesApi,
   searchPortalCatalogItems,
   submitPortalOrder,
@@ -475,6 +476,7 @@ export function PortalPage() {
   const [snapshot, setSnapshot] = useState<PortalSnapshot | null>(null);
   const [loginBranding, setLoginBranding] = useState<PortalBranding | null>(null);
   const [selection, setSelection] = useState<PortalSelection | null>(null);
+  const [portalDetailLoadingId, setPortalDetailLoadingId] = useState("");
   const [activeSection, setActiveSection] = useState<PortalSection>("home");
   const [documentSearch, setDocumentSearch] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
@@ -1584,9 +1586,26 @@ export function PortalPage() {
     if (defaultSection) setActiveSection(defaultSection);
   }
 
-  function openPortalDocument(selection: PortalSelection) {
+  async function openPortalDocument(selection: PortalSelection) {
     setSelection(selection);
     setActiveSection(selection.kind === "sales-order" || selection.kind === "purchase-order" ? "orders" : "billing");
+    if (selection.kind !== "sales-order" || !isOnline) return;
+    const existing = snapshot?.salesOrders.find((row) => row.id === selection.id);
+    if (!existing || existing.lines?.length) return;
+    try {
+      setPortalDetailLoadingId(selection.id);
+      const detail = await fetchPortalSalesOrderDetail(credentials, selection.id);
+      if (!detail) return;
+      setSnapshot((current) =>
+        current
+          ? { ...current, salesOrders: current.salesOrders.map((row) => (row.id === detail.id ? { ...row, ...detail } : row)) }
+          : current,
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Portal order detail load failed");
+    } finally {
+      setPortalDetailLoadingId("");
+    }
   }
 
   function focusPortalDraftLines(lineId?: string) {
@@ -2522,7 +2541,11 @@ export function PortalPage() {
           </div>
         ) : null}
 
-        <DataTable rows={selectedDocument.row.lines || []} columns={detailColumns} emptyText="No line details available." />
+        <DataTable
+          rows={selectedDocument.row.lines || []}
+          columns={detailColumns}
+          emptyText={portalDetailLoadingId === selectedDocument.row.id ? "Loading line details..." : "No line details available."}
+        />
 
         <div className="portal-detail-totals">
           {"subtotal" in selectedDocument.row ? (
@@ -2917,7 +2940,7 @@ export function PortalPage() {
                 rows={portalOrderHistoryRows}
                 columns={activeSnapshot.invite.party_type === "customer" ? salesOrderColumns : purchaseOrderColumns}
                 emptyText={activeSnapshot.invite.party_type === "customer" ? "No orders available." : "No purchase orders available."}
-                onRowClick={(row) => openPortalDocument({ kind: activeSnapshot.invite.party_type === "customer" ? "sales-order" : "purchase-order", id: row.id })}
+                onRowClick={(row) => void openPortalDocument({ kind: activeSnapshot.invite.party_type === "customer" ? "sales-order" : "purchase-order", id: row.id })}
                 rowClassName={(row) =>
                   selection &&
                   ((selection.kind === "sales-order" && activeSnapshot.invite.party_type === "customer") ||

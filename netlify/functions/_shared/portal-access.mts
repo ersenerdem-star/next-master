@@ -1238,6 +1238,50 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
   };
 }
 
+export async function fetchPortalSalesOrderDetail(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  invite: PortalInviteRow,
+  orderId: string,
+) {
+  if (invite.party_type !== "customer" || !invite.access_can_view_orders) return null;
+  const normalizedOrderId = String(orderId || "").trim();
+  if (!normalizedOrderId) return null;
+
+  const customer = await fetchPortalCustomerRecord(supabaseUrl, serviceRoleKey, invite.organization_id, invite);
+  const { sellerCompanyProfileId: customerSellerCompanyProfileId } = readCustomerPortalMetadata(customer);
+  const sellerCompanyProfileId = String(invite.seller_company_profile_id || customerSellerCompanyProfileId || "").trim();
+  const companyProfile = await fetchPortalCompanyProfile(supabaseUrl, serviceRoleKey, invite.organization_id, sellerCompanyProfileId);
+  const customerId = String(customer?.id || invite.customer_id || "").trim();
+  const customerName = String(customer?.display_name || customer?.company_name || invite.party_name || "").trim().toLowerCase();
+  const sellerCompany = String(companyProfile?.company_name || "").trim().toLowerCase();
+  const row = await fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
+    select: "id,sales_order_no,customer_id,customer_name,seller_company,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
+    organization_id: `eq.${invite.organization_id}`,
+    id: `eq.${normalizedOrderId}`,
+    limit: "1",
+  });
+  if (!row) return null;
+
+  const rowCustomerId = String(row.customer_id || "").trim();
+  const rowCustomerName = String(row.customer_name || "").trim().toLowerCase();
+  const rowSellerCompany = String(row.seller_company || "").trim().toLowerCase();
+  const customerMatches = (customerId && rowCustomerId === customerId) || (customerName && rowCustomerName === customerName);
+  const sellerMatches = !sellerCompany || !rowSellerCompany || rowSellerCompany === sellerCompany;
+  if (!customerMatches || !sellerMatches) return null;
+
+  return {
+    ...row,
+    source_channel: String(row.source_channel || "internal"),
+    portal_submitted_at: row.portal_submitted_at ? String(row.portal_submitted_at) : null,
+    portal_seen_at: row.portal_seen_at ? String(row.portal_seen_at) : null,
+    sales_total: toNumber(row.sales_total),
+    discount_amount: toNumber(row.discount_amount),
+    shipping_cost: toNumber(row.shipping_cost),
+    lines: mapCustomerSalesOrderLines(row.lines),
+  };
+}
+
 export async function buildPortalBranding(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {
   if (invite.party_type === "customer") {
     let customer: Record<string, unknown> | null = null;
