@@ -2286,7 +2286,9 @@ export function PortalPage() {
       setSnapshot(nextSnapshot);
       setSelection({ kind: "sales-order", id: savedId });
       void fetchPortalSalesOrderDetail(credentials, savedId).then((savedOrder) => {
-        if (!savedOrder) return;
+        // A just-written JSON line array can be briefly stale on the read
+        // replica. Never replace the optimistic lines with an empty detail.
+        if (!savedOrder || !savedOrder.lines?.length) return;
         setSnapshot((current) => current ? {
           ...current,
           salesOrders: [savedOrder, ...current.salesOrders.filter((order) => order.id !== savedOrder.id)],
@@ -2305,6 +2307,73 @@ export function PortalPage() {
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Manual part could not be added to the sales order");
+    } finally {
+      setSavingPortalOrder(false);
+      setPortalOverlay(null);
+    }
+  }
+
+  async function handleRemovePortalDetailLine(lineIndex: number) {
+    if (!selectedDocument || selectedDocument.kind !== "sales-order" || !detailCanEditQuantities) return;
+    const row = selectedDocument.row;
+    const currentLines = row.lines || [];
+    if (lineIndex < 0 || lineIndex >= currentLines.length) return;
+    if (currentLines.length <= 1) {
+      setError("A draft order must keep at least one line. Delete the draft order from the Orders list if it is no longer needed.");
+      return;
+    }
+    const rows = currentLines
+      .filter((_, index) => index !== lineIndex)
+      .map((line, index) => ({
+        code: String(line.requested_code || line.old_code || line.code || "").trim(),
+        brand: String(line.brand || "").trim(),
+        qty: getPortalDetailQuantity(row.id, index >= lineIndex ? index + 1 : index, line.qty),
+        market_segment: line.market_segment ?? null,
+      }))
+      .filter((line) => line.code && line.brand && line.qty > 0);
+    if (!rows.length) {
+      setError("The remaining order lines are not valid.");
+      return;
+    }
+    try {
+      setSavingPortalOrder(true);
+      setError("");
+      setPortalOverlay({ title: "Removing Order Line", message: "Updating the sales order total." });
+      const result = await submitPortalOrder(credentials, {
+        orderId: row.id,
+        salesOrderNo: row.sales_order_no || row.id,
+        mode: "draft",
+        deliveryTerm: "delivery_term" in row ? String(row.delivery_term || "") : "",
+        paymentTerms: "payment_terms" in row ? String(row.payment_terms || "") : "",
+        packingDetails: "packing_details" in row ? String(row.packing_details || "") : "",
+        notes: String(row.notes || ""),
+        rows,
+      });
+      const savedId = result.orderId || row.id;
+      const compactOrder = result.snapshot.salesOrders.find((order) => order.id === savedId);
+      const optimisticOrder = {
+        ...(compactOrder || row),
+        id: savedId,
+        lines: currentLines.filter((_, index) => index !== lineIndex),
+      };
+      setSnapshot({
+        ...result.snapshot,
+        salesOrders: [optimisticOrder, ...result.snapshot.salesOrders.filter((order) => order.id !== savedId)],
+      });
+      setSelection({ kind: "sales-order", id: savedId });
+      void fetchPortalSalesOrderDetail(credentials, savedId).then((savedOrder) => {
+        if (!savedOrder || !savedOrder.lines?.length) return;
+        setSnapshot((current) => current ? {
+          ...current,
+          salesOrders: [savedOrder, ...current.salesOrders.filter((order) => order.id !== savedOrder.id)],
+        } : current);
+      }).catch(() => {
+        // Keep the optimistic removal visible; Refresh can retry the detail read.
+      });
+      setPortalDetailQtyEdits({});
+      setStatus("Order line removed and total recalculated.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Order line could not be removed");
     } finally {
       setSavingPortalOrder(false);
       setPortalOverlay(null);
@@ -2409,6 +2478,23 @@ export function PortalPage() {
         { key: "weight", header: "Weight", render: (row: PortalLine) => formatWeight(row.weight_kg) },
         { key: "unit", header: "Unit Price", render: (row: PortalLine) => row.sell_price == null ? "Price on request" : formatMoney(Number(row.sell_price), selectedDocument.row.currency) },
         { key: "amount", header: "Line Total", render: (row: PortalLine) => row.line_total == null && row.sales_total == null ? "—" : formatMoney(Number(row.line_total ?? row.sales_total ?? 0), selectedDocument.row.currency) },
+        ...(selectedDocument.kind === "sales-order" ? [{
+          key: "actions",
+          header: "Action",
+          render: (row: PortalLine) => {
+            const lineIndex = selectedDocument.row.lines?.indexOf(row) ?? -1;
+            return detailCanEditQuantities ? (
+              <Button
+                variant="secondary"
+                className="button--compact danger-button"
+                disabled={lineIndex < 0 || (selectedDocument.row.lines?.length || 0) <= 1 || savingPortalOrder}
+                onClick={() => void handleRemovePortalDetailLine(lineIndex)}
+              >
+                Remove
+              </Button>
+            ) : null;
+          },
+        }] : []),
       ];
     }
     return [
