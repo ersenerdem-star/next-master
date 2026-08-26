@@ -270,9 +270,29 @@ async function fetchPortalHistoryRows(
       select: "id,lines",
       organization_id: params.organization_id,
       id: `in.(${ids.join(",")})`,
+      limit: String(ids.length),
     });
-    if (!detailRows.length) return rows;
-    const byId = new Map(detailRows.map((row) => [String(row.id || ""), row]));
+    // A minority of PostgREST deployments reject an `in.(...)` predicate for
+    // opaque portal order ids. Fall back to small, tenant-scoped id lookups
+    // only when that batched projection returned no rows: an existing order
+    // must never render as a document with no lines because a read fallback
+    // happened to be unavailable.
+    const resolvedDetailRows = detailRows.length
+      ? detailRows
+      : (
+          await Promise.all(
+            ids.map((id) =>
+              fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
+                select: "id,lines",
+                organization_id: params.organization_id,
+                id: `eq.${id}`,
+                limit: "1",
+              }),
+            ),
+          )
+        ).filter((row): row is Record<string, unknown> => Boolean(row));
+    if (!resolvedDetailRows.length) return rows;
+    const byId = new Map(resolvedDetailRows.map((row) => [String(row.id || ""), row]));
     return rows.map((row) => byId.get(String(row.id || "")) || row);
   };
 
@@ -494,9 +514,19 @@ async function fetchPortalAvailableBrands(
   return fallback;
 }
 
+function normalizeStoredLines(lines: unknown) {
+  if (typeof lines !== "string") return lines;
+  try {
+    return JSON.parse(lines);
+  } catch {
+    return [];
+  }
+}
+
 function mapSalesOrderLines(lines: unknown) {
-  if (!Array.isArray(lines)) return [];
-  return lines.map((line) => {
+  const normalizedLines = normalizeStoredLines(lines);
+  if (!Array.isArray(normalizedLines)) return [];
+  return normalizedLines.map((line) => {
     const row = (line || {}) as Record<string, unknown>;
     const qty = toNumber(row.qty);
     const sellPrice = row.sell_price == null ? null : toNumber(row.sell_price);
