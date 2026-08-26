@@ -1744,7 +1744,6 @@ export function PortalPage() {
         "Brand",
         "Qty",
         "Description",
-        "OEM_No",
         "Market_Segment",
         "HS_Code",
         "Origin",
@@ -1758,7 +1757,6 @@ export function PortalPage() {
         line.brand,
         line.qty,
         line.description,
-        line.oem_no,
         line.market_segment || "",
         line.hs_code,
         line.origin,
@@ -2379,6 +2377,7 @@ export function PortalPage() {
     const documentToExport = kind && id ? getPortalDocumentSelection(kind, id) : selectedDocument;
     if (!documentToExport) return;
     const isCustomerDoc = documentToExport.kind === "sales-order" || documentToExport.kind === "invoice";
+    const isSalesOrderExport = documentToExport.kind === "sales-order";
     const currency = documentToExport.row.currency || activeSnapshot.accountSummary.currency || "EUR";
     const docNo =
       documentToExport.kind === "sales-order"
@@ -2407,7 +2406,7 @@ export function PortalPage() {
         "Brand",
         "Description",
         "Qty",
-        "OEM",
+        ...(isSalesOrderExport ? [] : ["OEM"]),
         "Origin",
         "Weight",
         isCustomerDoc ? `Unit Price ${currency}` : `Buy Price ${currency}`,
@@ -2419,7 +2418,7 @@ export function PortalPage() {
         line.brand || "",
         line.description || "",
         Number(line.qty || 0),
-        line.oem_no || "",
+        ...(isSalesOrderExport ? [] : [line.oem_no || ""]),
         line.origin || "",
         line.weight_kg == null ? "" : Number(line.weight_kg),
         Number(isCustomerDoc ? line.sell_price || 0 : line.buy_price || 0),
