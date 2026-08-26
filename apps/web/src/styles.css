@@ -7395,6 +7395,26 @@ textarea {
   gap: 18px;
 }
 
+.portal-order-detail-image {
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #dbe5ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.portal-order-detail-image .catalog-thumb,
+.portal-order-detail-image .catalog-thumb-fallback {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
 .portal-search-result-view__toolbar {
   display: grid;
   gap: 10px;

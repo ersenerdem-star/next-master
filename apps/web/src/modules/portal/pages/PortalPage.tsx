@@ -2257,12 +2257,32 @@ export function PortalPage() {
         notes: String(row.notes || ""),
         rows,
       });
-      setSnapshot(result.snapshot);
+      // A submit response can contain a compact order row. Always hydrate the
+      // saved order so Documents > Orders renders the persisted lines.
+      let nextSnapshot = result.snapshot;
+      try {
+        const savedOrder = await fetchPortalSalesOrderDetail(credentials, result.orderId || row.id);
+        if (savedOrder) {
+          nextSnapshot = {
+            ...nextSnapshot,
+            salesOrders: [savedOrder, ...nextSnapshot.salesOrders.filter((order) => order.id !== savedOrder.id)],
+          };
+        }
+      } catch {
+        // Keep the successful save response; an explicit Refresh can retry a
+        // transient detail read.
+      }
+      setSnapshot(nextSnapshot);
       setSelection({ kind: "sales-order", id: result.orderId || row.id });
       setPortalDetailQtyEdits({});
       setPortalDetailManualCode("");
       setPortalDetailManualQty("1");
-      setStatus(`${code} added to sales order ${row.sales_order_no || row.id}.`);
+      const savedLine = nextSnapshot.salesOrders.find((order) => order.id === (result.orderId || row.id))?.lines?.find((line) => String(line.code || line.requested_code || "").trim() === code);
+      setStatus(
+        savedLine?.sell_price == null
+          ? `${code} added. Catalog and price not available; admin can complete it in Sales Orders.`
+          : `${code} added to sales order ${row.sales_order_no || row.id}.`,
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Manual part could not be added to the sales order");
     } finally {
@@ -2316,6 +2336,15 @@ export function PortalPage() {
     if (!selectedDocument) return [];
     if (selectedDocument.kind === "sales-order" || selectedDocument.kind === "invoice") {
       return [
+        {
+          key: "image",
+          header: "Image",
+          render: (row: PortalLine) => (
+            <span className="portal-order-detail-image">
+              <ProductVisual imageUrl={row.image_url} brand={row.brand} alt={row.code || row.requested_code || "Part"} />
+            </span>
+          ),
+        },
         { key: "code", header: "Code", render: (row: PortalLine) => row.code || row.requested_code || "-" },
         { key: "brand", header: "Brand", render: (row: PortalLine) => <BrandPill brand={row.brand} compact /> },
         {
@@ -2323,7 +2352,7 @@ export function PortalPage() {
           header: "Description",
           render: (row: PortalLine) => (
             <div>
-              <div>{row.description || "-"}</div>
+              <div>{row.description || (row.sell_price == null ? "Catalog and price not available" : "-")}</div>
               {renderDiscontinuedBadge(row)}
             </div>
           ),
@@ -2358,8 +2387,8 @@ export function PortalPage() {
         },
         { key: "origin", header: "Origin", render: (row: PortalLine) => row.origin || "-" },
         { key: "weight", header: "Weight", render: (row: PortalLine) => formatWeight(row.weight_kg) },
-        { key: "unit", header: "Unit Price", render: (row: PortalLine) => formatMoney(Number(row.sell_price || 0), selectedDocument.row.currency) },
-        { key: "amount", header: "Line Total", render: (row: PortalLine) => formatMoney(Number(row.line_total || row.sales_total || 0), selectedDocument.row.currency) },
+        { key: "unit", header: "Unit Price", render: (row: PortalLine) => row.sell_price == null ? "Price on request" : formatMoney(Number(row.sell_price), selectedDocument.row.currency) },
+        { key: "amount", header: "Line Total", render: (row: PortalLine) => row.line_total == null && row.sales_total == null ? "—" : formatMoney(Number(row.line_total ?? row.sales_total ?? 0), selectedDocument.row.currency) },
       ];
     }
     return [

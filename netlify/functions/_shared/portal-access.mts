@@ -551,6 +551,7 @@ function mapSalesOrderLines(lines: unknown) {
       brand: String(row.brand || ""),
       description: String(row.description || ""),
       qty,
+      image_url: String(row.image_url || ""),
       oem_no: sanitizeCatalogOemNumbers(row.oem_no),
       hs_code: String(row.hs_code || ""),
       origin: String(row.origin || ""),

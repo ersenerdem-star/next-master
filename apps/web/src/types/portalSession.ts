@@ -141,6 +141,7 @@ type PortalDocumentLine = {
   market_segment?: string | null;
   description?: string;
   qty: number;
+  image_url?: string;
   oem_no?: string;
   hs_code?: string;
   origin?: string;
