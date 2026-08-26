@@ -5022,10 +5022,23 @@ select {
 
 .portal-manual-line__fields {
   flex: 1;
+  min-width: 0;
   display: grid;
   grid-template-columns: minmax(150px, 1.25fr) minmax(150px, 1fr) 88px auto;
   align-items: end;
   gap: 10px;
+}
+
+.portal-manual-line__fields .field,
+.portal-manual-line__fields .field__input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.portal-manual-line__fields > .button {
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .portal-detail-totals {
@@ -7360,6 +7373,26 @@ textarea {
   display: grid;
   gap: 14px;
   color: #10233f;
+}
+
+/* Order creation and editing live in Documents > Orders. Search remains a
+ * spacious, read-only product discovery surface for customer users. */
+.portal-search-result-view__actions,
+.portal-search-result-main__actions,
+.portal-search-result-view > .portal-order-workspace {
+  display: none;
+}
+
+/* Keep the other customer views in the same airy blue/white visual system as
+ * the Search screen instead of switching back to the denser beige surface. */
+.portal-shell {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.9), transparent 26%),
+    linear-gradient(180deg, #f5f8fc 0%, #edf3f8 100%);
+}
+
+.portal-content {
+  gap: 18px;
 }
 
 .portal-search-result-view__toolbar {

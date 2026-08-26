@@ -2194,7 +2194,23 @@ export function PortalPage() {
         notes: String(row.notes || ""),
         rows,
       });
-      setSnapshot(result.snapshot);
+      // The mutation response may contain a compact order row without line
+      // details. Hydrate the just-updated order so the new manual line is
+      // immediately visible in Documents > Orders.
+      let nextSnapshot = result.snapshot;
+      try {
+        const savedOrder = await fetchPortalSalesOrderDetail(credentials, result.orderId || row.id);
+        if (savedOrder) {
+          nextSnapshot = {
+            ...nextSnapshot,
+            salesOrders: [savedOrder, ...nextSnapshot.salesOrders.filter((order) => order.id !== savedOrder.id)],
+          };
+        }
+      } catch {
+        // Keep the successful mutation response; Refresh can retry a
+        // transient detail-read failure.
+      }
+      setSnapshot(nextSnapshot);
       setSelection({ kind: "sales-order", id: result.orderId || row.id });
       setPortalDetailQtyEdits({});
       setStatus(`Sales order ${row.sales_order_no || row.id} quantities updated.`);
