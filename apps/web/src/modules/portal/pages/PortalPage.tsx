@@ -1971,14 +1971,16 @@ export function PortalPage() {
         const offlineLine = buildOfflinePreparedLineFromCatalogItem(pending.item);
         offlineLine.qty = pending.quantity;
         setPortalDraftLines((current) => mergePortalPreparedLines(current, [offlineLine]));
-        setPortalOrderStatus(`${pending.quantity} pcs added to ${target === "new" ? "Local Basket" : selectedTarget?.sales_order_no || selectedTarget?.id || "sales order"}. Offline changes stay on this device.`);
+        setPortalOrderStatus(
+          `${pending.quantity} pcs added to ${target === "new" ? "Local Basket" : selectedTarget?.sales_order_no || selectedTarget?.id || "sales order"}. Save draft to create/update the order in Documents > Orders. Offline changes stay on this device.`,
+        );
         focusPortalDraftLines(offlineLine.lineId);
         return;
       }
 
       const prepared = await appendPortalRows(
         [{ code: pending.item.replacement_old_code || pending.item.code, brand: pending.item.brand, qty: pending.quantity, market_segment: pending.item.market_segment || null }],
-        `${pending.quantity} pcs added to ${target === "new" ? "New Basket" : selectedTarget?.sales_order_no || selectedTarget?.id || "sales order"} in Basket.`,
+        `${pending.quantity} pcs added to ${target === "new" ? "New Basket" : selectedTarget?.sales_order_no || selectedTarget?.id || "sales order"} in Basket. Save draft to create/update the order in Documents > Orders.`,
       );
       if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
     } catch (caught) {
@@ -3927,7 +3929,7 @@ export function PortalPage() {
 
               <div className="portal-action-bar">
                 <Button variant="secondary" busy={savingPortalOrder} busyLabel="Saving..." onClick={() => void handleSubmitPortalOrder("draft")}>
-                  Save Basket
+                  Save draft → Documents / Orders
                 </Button>
                 <Button variant="secondary" onClick={handleClearPortalBuilder}>
                   Clear
@@ -3962,12 +3964,16 @@ export function PortalPage() {
             <div className="modal-card__header draggable-surface__handle">
               <h3 id="portal-add-target-title">Add to which sales order?</h3>
               <p>{portalAddTarget.item.code} · Qty {portalAddTarget.quantity.toLocaleString("en-US")}</p>
+              <div className="portal-inline-note portal-inline-note--soft portal-inline-note--compact">
+                <span>Save required</span>
+                <strong>First choose a target, then click Save draft in the basket. Only then will the order appear in Documents &gt; Orders.</strong>
+              </div>
             </div>
             <div className="portal-add-target-modal__actions">
               <Button busy={portalAddTargetLoading} onClick={() => void choosePortalAddTarget("new")}>
-                New sales order
+                New sales order · then Save draft
               </Button>
-              <span className="portal-add-target-modal__label">Or add to an existing draft</span>
+              <span className="portal-add-target-modal__label">Or add to an existing draft · then Save draft</span>
               {portalDraftOrders.length ? (
                 <div className="portal-add-target-modal__list">
                   {portalDraftOrders.map((row) => (

@@ -322,7 +322,7 @@ export function PortalSearchResults({
         <div className="portal-order-workspace__toolbar" aria-label="Sales order actions">
           <div className="portal-order-workspace__toolbar-group">
             <span className="portal-order-workspace__toolbar-label">Order actions</span>
-            <Button variant="secondary" busy={savingBasket} busyLabel="Saving..." onClick={onSaveBasket} disabled={!draftLines.length}>Save draft</Button>
+            <Button variant="secondary" busy={savingBasket} busyLabel="Saving..." onClick={onSaveBasket} disabled={!draftLines.length}>Save draft → Documents / Orders</Button>
             <Button variant="secondary" onClick={onClearBasket} disabled={!draftLines.length}>Clear lines</Button>
             <Button busy={confirmingBasket} busyLabel="Confirming..." onClick={onConfirmBasket} disabled={!draftLines.length || confirmDisabled}>Confirm order</Button>
           </div>
