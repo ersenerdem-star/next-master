@@ -555,6 +555,8 @@ export function PortalPage() {
   const portalCachedDraftRef = useRef<PortalOfflineCache["draft"] | null>(null);
   const portalAutoRefreshKeyRef = useRef("");
   const portalBrandingKeyRef = useRef("");
+  const portalSearchRequestRef = useRef<{ id: number; controller: AbortController | null }>({ id: 0, controller: null });
+  const portalDetailRequestRef = useRef<{ id: number; controller: AbortController | null }>({ id: 0, controller: null });
   // Background snapshot reads may race a draft-order mutation. Keep a small
   // client-side revision and grace window so an older read cannot overwrite
   // the line list that was just added/removed by the customer.
@@ -579,6 +581,10 @@ export function PortalPage() {
     };
   });
   const [snapshot, setSnapshot] = useState<PortalSnapshot | null>(null);
+  // Order history is intentionally compact. Keep hydrated/optimistic order
+  // details outside the snapshot so a background refresh can never blank an
+  // open order while it replaces metadata.
+  const [portalOrderDetailsById, setPortalOrderDetailsById] = useState<Record<string, PortalSalesOrderRow>>({});
   const [loginBranding, setLoginBranding] = useState<PortalBranding | null>(null);
   const [selection, setSelection] = useState<PortalSelection | null>(null);
   const [portalDetailLoadingId, setPortalDetailLoadingId] = useState("");
@@ -1106,6 +1112,7 @@ export function PortalPage() {
         sessionToken: "",
       });
       setSnapshot(next);
+      setPortalOrderDetailsById({});
       setSelection(null);
       setActiveSection(getDefaultPortalSection(next));
       setDocumentSearch("");
@@ -1170,6 +1177,7 @@ export function PortalPage() {
         portalResetPassword,
       );
       setSnapshot(next);
+      setPortalOrderDetailsById({});
       setSelection(null);
       setActiveSection(getDefaultPortalSection(next));
       setDocumentSearch("");
@@ -1201,8 +1209,7 @@ export function PortalPage() {
       setLoading(true);
       setError("");
       const { snapshot: next } = await fetchPortalSnapshot(credentials);
-      setSnapshot(next);
-      setSelection(null);
+      setSnapshot((current) => mergePortalSnapshotOrderDetails(current, next));
       setStatus("Portal data refreshed.");
       const nextCredentials = { email: credentials.email, password: "", sessionToken: "" };
       setCredentials(nextCredentials);
@@ -1219,6 +1226,7 @@ export function PortalPage() {
     writePortalCache(credentials.email, null);
     setCredentials({ email: credentials.email, password: "", sessionToken: "" });
     setSnapshot(null);
+    setPortalOrderDetailsById({});
     setSelection(null);
     setActiveSection("desk");
     setStatus("");
@@ -1767,23 +1775,37 @@ export function PortalPage() {
     setActiveSection(selection.kind === "sales-order" || selection.kind === "purchase-order" ? "orders" : "billing");
     if (selection.kind !== "sales-order" || !isOnline) return;
     const existing = snapshot?.salesOrders.find((row) => row.id === selection.id);
-    if (!existing || existing.lines?.length) return;
+    const hydrated = portalOrderDetailsById[selection.id];
+    if (!existing || existing.lines?.length || hydrated?.lines?.length) return;
+    const requestId = portalDetailRequestRef.current.id + 1;
+    portalDetailRequestRef.current.controller?.abort();
+    const controller = new AbortController();
+    portalDetailRequestRef.current = { id: requestId, controller };
     try {
       setPortalDetailLoadingId(selection.id);
-      const detail = await fetchPortalSalesOrderDetail(credentials, selection.id);
+      const detail = await fetchPortalSalesOrderDetail(credentials, selection.id, { signal: controller.signal });
       // The detail endpoint can briefly return a compact row while the write
       // replica catches up. Never merge that empty projection over visible
       // lines that are already in the workspace.
-      if (!detail || !detail.lines?.length) return;
+      if (controller.signal.aborted || portalDetailRequestRef.current.id !== requestId) return;
+      if (!detail || !detail.lines?.length) {
+        setError("Order lines are still loading. Use Retry details to try again.");
+        return;
+      }
+      setPortalOrderDetailsById((current) => ({ ...current, [detail.id]: detail }));
       setSnapshot((current) =>
         current
           ? { ...current, salesOrders: current.salesOrders.map((row) => (row.id === detail.id ? { ...row, ...detail } : row)) }
           : current,
       );
     } catch (caught) {
+      if (controller.signal.aborted || portalDetailRequestRef.current.id !== requestId) return;
       setError(caught instanceof Error ? caught.message : "Portal order detail load failed");
     } finally {
-      setPortalDetailLoadingId("");
+      if (portalDetailRequestRef.current.id === requestId) {
+        portalDetailRequestRef.current.controller = null;
+        setPortalDetailLoadingId("");
+      }
     }
   }
 
@@ -1809,10 +1831,15 @@ export function PortalPage() {
       }
       return;
     }
+    const requestId = portalSearchRequestRef.current.id + 1;
+    portalSearchRequestRef.current.controller?.abort();
+    const controller = new AbortController();
+    portalSearchRequestRef.current = { id: requestId, controller };
     try {
       setSearchingCatalog(true);
       setError("");
-      const result = await searchPortalCatalogItems(credentials, orderSearch, orderSearchBrand, searchField);
+      const result = await searchPortalCatalogItems(credentials, orderSearch, orderSearchBrand, searchField, { signal: controller.signal });
+      if (portalSearchRequestRef.current.id !== requestId) return;
       const items = result.items;
       setCatalogResults(items);
       setPortalRecommendations(result.recommendations);
@@ -1827,10 +1854,14 @@ export function PortalPage() {
         `${items.length.toLocaleString("en-US")} matching product and alternative result(s) found for the basket flow.${result.recommendations.length ? ` ${result.recommendations.length.toLocaleString("en-US")} stock-backed recommendation(s) added below.` : ""}`,
       );
     } catch (caught) {
+      if (controller.signal.aborted || portalSearchRequestRef.current.id !== requestId) return;
       setError(caught instanceof Error ? caught.message : "Portal item search failed");
       setPortalOrderStatus("Search failed. Keeping the last visible result set.");
     } finally {
-      setSearchingCatalog(false);
+      if (portalSearchRequestRef.current.id === requestId) {
+        portalSearchRequestRef.current.controller = null;
+        setSearchingCatalog(false);
+      }
     }
   }
 
@@ -1909,6 +1940,7 @@ export function PortalPage() {
             throw new Error("This saved sales order is still loading. Refresh it and try again.");
           }
           selectedTarget = detail;
+          setPortalOrderDetailsById((current) => ({ ...current, [detail.id]: detail }));
           setSnapshot((current) =>
             current
               ? {
@@ -2082,16 +2114,34 @@ export function PortalPage() {
           market_segment: line.market_segment || null,
         })),
       });
+      const mutationSnapshot = result.snapshot || activeSnapshot;
       // The save response normally includes the new order in its refreshed
       // snapshot. If a concurrent history read briefly misses it, hydrate
       // the just-saved order directly so Documents > Orders never appears
       // empty after a successful Save Draft.
       const savedId = result.orderId;
-      const compactOrder = result.snapshot.salesOrders.find((row) => row.id === savedId);
-      const optimisticOrder = compactOrder
-        ? {
-            ...compactOrder,
-            lines: portalDraftLines.map((line) => ({
+      const compactOrder = mutationSnapshot.salesOrders.find((row) => row.id === savedId) || result.order;
+      const optimisticOrder = {
+        ...(compactOrder || {
+          id: savedId,
+          sales_order_no: portalSalesOrderNo || savedId,
+          customer_name: activeSnapshot.customer?.display_name || activeSnapshot.invite.party_name,
+          currency: portalPricingCurrency,
+          status: mode === "confirm" ? "draft" : "draft",
+          source_channel: "portal",
+          portal_submitted_at: mode === "confirm" ? new Date().toISOString() : null,
+          portal_seen_at: null,
+          updated_at: new Date().toISOString(),
+          sales_total: 0,
+          discount_amount: 0,
+          shipping_cost: 0,
+          subtotal: 0,
+          delivery_term: portalDeliveryTerm,
+          payment_terms: portalPaymentTerms,
+          packing_details: portalPackingDetails,
+        }),
+        id: savedId,
+        lines: portalDraftLines.map((line) => ({
               code: line.resolvedCode || line.requestedCode,
               requested_code: line.requestedCode,
               brand: line.brand,
@@ -2109,20 +2159,19 @@ export function PortalPage() {
               lifecycle_note: line.lifecycle_note,
               lifecycle_warning: line.lifecycle_warning,
             })),
-          }
-        : null;
+      };
       let nextSnapshot = mergePortalSnapshotOrderDetails(snapshot, {
-        ...result.snapshot,
-        salesOrders: optimisticOrder
-          ? [optimisticOrder, ...result.snapshot.salesOrders.filter((row) => row.id !== savedId)]
-          : result.snapshot.salesOrders,
+        ...mutationSnapshot,
+        salesOrders: [optimisticOrder, ...mutationSnapshot.salesOrders.filter((row) => row.id !== savedId)],
       });
+      setPortalOrderDetailsById((current) => ({ ...current, [savedId]: optimisticOrder }));
       // The refreshed snapshot deliberately uses compact order rows. Always
       // hydrate the saved order so Documents > Orders shows the persisted line
       // detail without requiring a browser refresh.
       try {
         const savedOrder = await fetchPortalSalesOrderDetail(credentials, savedId);
         if (savedOrder?.lines?.length) {
+          setPortalOrderDetailsById((current) => ({ ...current, [savedOrder.id]: savedOrder }));
           nextSnapshot = {
             ...nextSnapshot,
             salesOrders: [savedOrder, ...nextSnapshot.salesOrders.filter((row) => row.id !== savedOrder.id)],
@@ -2279,7 +2328,11 @@ export function PortalPage() {
   const selectedDocument = (() => {
     if (!selection) return null;
     if (selection.kind === "sales-order") {
-      const row = activeSnapshot.salesOrders.find((entry) => entry.id === selection.id);
+      const compactRow = activeSnapshot.salesOrders.find((entry) => entry.id === selection.id);
+      const hydratedRow = portalOrderDetailsById[selection.id];
+      const row = hydratedRow && (!compactRow?.updated_at || !hydratedRow.updated_at || hydratedRow.updated_at >= compactRow.updated_at)
+        ? hydratedRow
+        : compactRow;
       return row ? { kind: selection.kind, row } : null;
     }
     if (selection.kind === "invoice") {
@@ -2345,13 +2398,15 @@ export function PortalPage() {
         notes: String(row.notes || ""),
         rows,
       });
+      const mutationSnapshot = result.snapshot || activeSnapshot;
       // The mutation response may contain a compact order row without line
       // details. Hydrate the just-updated order so the new manual line is
       // immediately visible in Documents > Orders.
-      let nextSnapshot = result.snapshot;
+      let nextSnapshot = mutationSnapshot;
       try {
         const savedOrder = await fetchPortalSalesOrderDetail(credentials, result.orderId || row.id);
         if (savedOrder) {
+          setPortalOrderDetailsById((current) => ({ ...current, [savedOrder.id]: savedOrder }));
           nextSnapshot = {
             ...nextSnapshot,
             salesOrders: [savedOrder, ...nextSnapshot.salesOrders.filter((order) => order.id !== savedOrder.id)],
@@ -2410,6 +2465,7 @@ export function PortalPage() {
         notes: String(row.notes || ""),
         rows,
       });
+      const mutationSnapshot = result.snapshot || activeSnapshot;
       const savedId = result.orderId || row.id;
       // Render the line immediately from the successful mutation response.
       // The detail read is intentionally moved to the background so a slow
@@ -2430,12 +2486,13 @@ export function PortalPage() {
               sales_total: null,
             };
       });
-      const compactOrder = result.snapshot.salesOrders.find((order) => order.id === savedId);
+      const compactOrder = mutationSnapshot.salesOrders.find((order) => order.id === savedId) || result.order;
       const optimisticOrder = { ...(compactOrder || row), id: savedId, lines: optimisticLines };
       const nextSnapshot = mergePortalSnapshotOrderDetails(null, {
-        ...result.snapshot,
-        salesOrders: [optimisticOrder, ...result.snapshot.salesOrders.filter((order) => order.id !== savedId)],
+        ...mutationSnapshot,
+        salesOrders: [optimisticOrder, ...mutationSnapshot.salesOrders.filter((order) => order.id !== savedId)],
       });
+      setPortalOrderDetailsById((current) => ({ ...current, [savedId]: optimisticOrder }));
       setSnapshot(nextSnapshot);
       settlePortalOrderMutation();
       setSelection({ kind: "sales-order", id: savedId });
@@ -2443,6 +2500,7 @@ export function PortalPage() {
         // A just-written JSON line array can be briefly stale on the read
         // replica. Never replace the optimistic lines with an empty detail.
         if (!savedOrder || !savedOrder.lines?.length) return;
+        setPortalOrderDetailsById((current) => ({ ...current, [savedOrder.id]: savedOrder }));
         setSnapshot((current) => current ? mergePortalSnapshotOrderDetails(current, {
           ...current,
           salesOrders: [savedOrder, ...current.salesOrders.filter((order) => order.id !== savedOrder.id)],
@@ -2504,21 +2562,24 @@ export function PortalPage() {
         notes: String(row.notes || ""),
         rows,
       });
+      const mutationSnapshot = result.snapshot || activeSnapshot;
       const savedId = result.orderId || row.id;
-      const compactOrder = result.snapshot.salesOrders.find((order) => order.id === savedId);
+      const compactOrder = mutationSnapshot.salesOrders.find((order) => order.id === savedId) || result.order;
       const optimisticOrder = {
         ...(compactOrder || row),
         id: savedId,
         lines: currentLines.filter((_, index) => index !== lineIndex),
       };
       setSnapshot(mergePortalSnapshotOrderDetails(snapshot, {
-        ...result.snapshot,
-        salesOrders: [optimisticOrder, ...result.snapshot.salesOrders.filter((order) => order.id !== savedId)],
+        ...mutationSnapshot,
+        salesOrders: [optimisticOrder, ...mutationSnapshot.salesOrders.filter((order) => order.id !== savedId)],
       }));
+      setPortalOrderDetailsById((current) => ({ ...current, [savedId]: optimisticOrder }));
       settlePortalOrderMutation();
       setSelection({ kind: "sales-order", id: savedId });
       void fetchPortalSalesOrderDetail(credentials, savedId).then((savedOrder) => {
         if (!savedOrder || !savedOrder.lines?.length) return;
+        setPortalOrderDetailsById((current) => ({ ...current, [savedOrder.id]: savedOrder }));
         setSnapshot((current) => current ? mergePortalSnapshotOrderDetails(current, {
           ...current,
           salesOrders: [savedOrder, ...current.salesOrders.filter((order) => order.id !== savedOrder.id)],
@@ -2566,7 +2627,8 @@ export function PortalPage() {
         notes: String(row.notes || ""),
         rows,
       });
-      setSnapshot((current) => mergePortalSnapshotOrderDetails(current, result.snapshot));
+      const mutationSnapshot = result.snapshot || activeSnapshot;
+      setSnapshot((current) => mergePortalSnapshotOrderDetails(current, mutationSnapshot));
       settlePortalOrderMutation();
       setSelection({ kind: "sales-order", id: result.orderId || row.id });
       setPortalDetailQtyEdits({});
@@ -3053,6 +3115,22 @@ export function PortalPage() {
           <div className="portal-inline-note">
             <span>Order locked</span>
             <strong>This order has been confirmed and can no longer be edited.</strong>
+          </div>
+        ) : null}
+
+        {selectedDocument.kind === "sales-order" && !selectedDocument.row.lines?.length ? (
+          <div className="portal-inline-note">
+            <span>Order lines unavailable</span>
+            <strong>The order was found, but its line details have not arrived yet.</strong>
+            <Button
+              variant="secondary"
+              busy={portalDetailLoadingId === selectedDocument.row.id}
+              busyLabel="Loading..."
+              disabled={portalDetailLoadingId === selectedDocument.row.id}
+              onClick={() => void openPortalDocument({ kind: "sales-order", id: selectedDocument.row.id })}
+            >
+              Retry details
+            </Button>
           </div>
         ) : null}
 

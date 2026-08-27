@@ -2476,8 +2476,59 @@ export async function submitPortalSalesOrder(
   }
 
   const savedId = String(rows[0]?.id || payload.id);
-  const snapshot = await buildPortalSnapshot(supabaseUrl, serviceRoleKey, invite);
-  return { orderId: savedId, snapshot };
+  // Return the just-written order independently from the history snapshot.
+  // Snapshot assembly fans out across several tables and may time out even
+  // though the mutation already committed. The customer-safe projection lets
+  // the portal reconcile that success without duplicating the order.
+  const customerOrder = {
+    id: savedId,
+    sales_order_no: salesOrderNo,
+    customer_name: payload.customer_name,
+    status: payload.status,
+    quote_date: today,
+    currency: context.currency,
+    sales_total: totalAmount,
+    subtotal: roundMoney(totalAmount + discountAmount - shippingCost),
+    discount_amount: discountAmount,
+    shipping_cost: shippingCost,
+    source_channel: "portal",
+    portal_submitted_at: payload.portal_submitted_at,
+    portal_seen_at: payload.portal_seen_at,
+    delivery_term: payload.delivery_term,
+    payment_terms: payload.payment_terms,
+    packing_details: payload.packing_details,
+    updated_at: payload.updated_at,
+    lines: prepared.lines.filter((line) => line.qty > 0 && line.resolvedCode).map((line) => {
+      const safeLine = toCustomerPortalPreparedLine(line);
+      return {
+        code: safeLine.resolvedCode,
+        requested_code: safeLine.requestedCode,
+        brand: safeLine.brand,
+        description: safeLine.description,
+        qty: safeLine.qty,
+        oem_no: safeLine.oem_no,
+        hs_code: safeLine.hs_code,
+        origin: safeLine.origin,
+        weight_kg: safeLine.weight_kg,
+        image_url: safeLine.image_url,
+        sell_price: safeLine.sell_price,
+        line_total: safeLine.sell_price == null ? null : roundMoney(Number(safeLine.sell_price) * Number(safeLine.qty || 0)),
+        price_date: safeLine.price_date,
+        lifecycle_status: safeLine.lifecycle_status,
+        lifecycle_note: safeLine.lifecycle_note,
+        lifecycle_warning: safeLine.lifecycle_warning,
+      };
+    }),
+  };
+  let snapshot = null;
+  try {
+    snapshot = await buildPortalSnapshot(supabaseUrl, serviceRoleKey, invite);
+  } catch {
+    // The write and customerOrder remain authoritative when the broad history
+    // snapshot is temporarily unavailable. The next background refresh will
+    // reconcile the rest of the portal workspace.
+  }
+  return { orderId: savedId, order: customerOrder, snapshot };
 }
 
 export async function deletePortalSalesOrder(

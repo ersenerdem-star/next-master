@@ -86,10 +86,15 @@ type PortalOrderResponse = {
   }>;
 };
 
-async function postPortalOrderJson(path: string, payload: Record<string, unknown>) {
+type PortalRequestOptions = {
+  signal?: AbortSignal;
+};
+
+async function postPortalOrderJson(path: string, payload: Record<string, unknown>, options: PortalRequestOptions = {}) {
   const response = await fetch(path, {
     method: "POST",
     credentials: "same-origin",
+    signal: options.signal,
     headers: {
       "Content-Type": "application/json",
     },
@@ -112,24 +117,25 @@ export async function searchPortalCatalogItems(
   query: string,
   brand: string,
   searchField: PortalSearchField = "part_number",
+  options: PortalRequestOptions = {},
 ) {
   const data = await postPortalOrderJson("/api/portal-order-search", {
     ...credentials,
     query,
     brand,
     searchField,
-  });
+  }, options);
   return {
     items: data.items || [],
     recommendations: data.recommendations || [],
   };
 }
 
-export async function preparePortalOrderLines(credentials: PortalCredentials, rows: PortalOrderInputRow[]) {
+export async function preparePortalOrderLines(credentials: PortalCredentials, rows: PortalOrderInputRow[], options: PortalRequestOptions = {}) {
   const data = await postPortalOrderJson("/api/portal-order-prepare", {
     ...credentials,
     rows,
-  });
+  }, options);
   return {
     lines: data.lines || [],
     pricingProfile: data.pricingProfile || null,
@@ -148,23 +154,25 @@ export async function submitPortalOrder(
     notes: string;
     rows: PortalOrderInputRow[];
   },
+  options: PortalRequestOptions = {},
 ) {
   const data = await postPortalOrderJson("/api/portal-order-submit", {
     ...credentials,
     ...input,
-  });
-  if (!data.snapshot) throw new Error("Portal order save did not return refreshed portal snapshot");
+  }, options);
+  if (!data.snapshot && !data.order) throw new Error("Portal order save did not return a persisted order");
   return {
-    snapshot: data.snapshot,
+    snapshot: data.snapshot || null,
+    order: data.order || null,
     orderId: data.orderId || "",
   };
 }
 
-export async function fetchPortalSalesOrderDetail(credentials: PortalCredentials, orderId: string) {
+export async function fetchPortalSalesOrderDetail(credentials: PortalCredentials, orderId: string, options: PortalRequestOptions = {}) {
   const data = await postPortalOrderJson("/api/portal-order-detail", {
     ...credentials,
     orderId,
-  });
+  }, options);
   return data.order || null;
 }
 
