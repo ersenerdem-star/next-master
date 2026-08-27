@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { PortalSnapshot } from "../../../types/portalSession";
 import { Button } from "../../../presentation/components/common/Button";
 import { BrandPill } from "../../../presentation/components/common/BrandPill";
@@ -109,8 +109,10 @@ export function PortalSearchResults({
 }: PortalSearchResultsProps) {
   const [searchField, setSearchField] = useState<PortalSearchField>("part_number");
   const [addQuantity, setAddQuantity] = useState(1);
+  const [showAllResults, setShowAllResults] = useState(false);
   const selected = results.find((item) => item.code === selectedCode) || results[0] || null;
-  const visibleResults = results.slice(0, 12);
+  const visibleResults = showAllResults ? results : results.slice(0, 12);
+  useEffect(() => setShowAllResults(false), [query, results.length]);
   const documentRows = snapshot.invite.party_type === "customer" ? snapshot.salesOrders : snapshot.purchaseOrders;
   const matchedOrder = selected
     ? documentRows.find((order) => (order.lines || []).some((line) => hasProductCode(line, selected.code)))
@@ -212,7 +214,11 @@ export function PortalSearchResults({
               </button>
             ))}
           </div>
-          {results.length > visibleResults.length ? <button type="button" className="portal-search-result-rail__all">View all {results.length.toLocaleString("en-US")} results</button> : null}
+          {results.length > 12 ? (
+            <button type="button" className="portal-search-result-rail__all" onClick={() => setShowAllResults((current) => !current)}>
+              {showAllResults ? "Show fewer results" : `View all ${results.length.toLocaleString("en-US")} results`}
+            </button>
+          ) : null}
         </aside>
 
         <main className="portal-search-result-main">
