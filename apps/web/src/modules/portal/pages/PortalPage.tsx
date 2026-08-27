@@ -1208,6 +1208,7 @@ export function PortalPage() {
     try {
       setLoading(true);
       setError("");
+      setStatus("Refreshing portal data...");
       const { snapshot: next } = await fetchPortalSnapshot(credentials);
       setSnapshot((current) => mergePortalSnapshotOrderDetails(current, next));
       setStatus("Portal data refreshed.");
@@ -3218,10 +3219,10 @@ export function PortalPage() {
             </div>
           </div>
           <div className="inline-actions inline-actions--portal-header">
-            <Button variant="secondary" busy={loading} busyLabel="Refreshing..." onClick={() => void handleRefresh()}>
+            <Button type="button" variant="secondary" busy={loading} busyLabel="Refreshing..." onClick={() => void handleRefresh()}>
               Refresh
             </Button>
-            <Button variant="secondary" onClick={() => void handleLogout()}>
+            <Button type="button" variant="secondary" onClick={() => void handleLogout()}>
               Logout
             </Button>
           </div>
