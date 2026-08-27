@@ -129,7 +129,9 @@ if (adminAuthorization) adminHeaders.set("authorization", adminAuthorization.sta
 const cases = [
   { module: "app", name: "app-root", method: "GET", path: "/", expectedStatuses: [200] },
   { module: "portal", name: "portal-route", method: "GET", path: "/portal", expectedStatuses: [200] },
-  { module: "portal", name: "portal-branding", method: "POST", path: "/api/portal-branding", body: { email: portalEmail || "stress@example.com" }, expectedStatuses: portalEmail ? [200, 400, 401, 429] : [400, 401, 429] },
+  // Branding previews intentionally return generic 200 data before login;
+  // an email address alone must not reveal tenant information.
+  { module: "portal", name: "portal-branding", method: "POST", path: "/api/portal-branding", body: { email: portalEmail || "stress@example.com" }, expectedStatuses: [200, 400, 401, 429] },
   { module: "portal", name: "portal-data", method: "POST", path: "/api/portal-data", body: { email: portalEmail || "stress@example.com" }, expectedStatuses: portalSession.cookie ? [200, 401, 429] : [400, 401, 429] },
   { module: "portal", name: "portal-price-list", method: "POST", path: "/api/portal-price-list", body: { email: portalEmail || "stress@example.com" }, expectedStatuses: portalSession.cookie ? [200, 400, 401, 429] : [400, 401, 429] },
   { module: "portal", name: "portal-order-prepare", method: "POST", path: "/api/portal-order-prepare", body: { email: portalEmail || "stress@example.com", rows: [{ code: "TEST", brand: "", qty: 1 }] }, expectedStatuses: portalSession.cookie ? [200, 400, 401, 429] : [400, 401, 429] },
