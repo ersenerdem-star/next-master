@@ -42,6 +42,10 @@ const CUSTOMER_PORTAL_SELECT_BASE =
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 const COMPANY_PROFILE_SELECT = "id,company_name,email,phone,website,address,bank_details,tax_office,tax_number,footer_note,logo_data_url";
 const PORTAL_DB_REQUEST_TIMEOUT_MS = 12_000;
+// Portal home is an operational workspace, not a full historical export.
+// Keeping secondary document queries bounded prevents a large customer or
+// vendor history from delaying sign-in and the initial portal snapshot.
+const PORTAL_SNAPSHOT_HISTORY_LIMIT = "100";
 
 function toPortalBrandingProfile(companyProfile: Record<string, unknown> | null) {
   if (!companyProfile) return null;
@@ -177,8 +181,11 @@ async function fetchPortalInviteByIdEmail(supabaseUrl: string, serviceRoleKey: s
 }
 
 function isPortalSoftFailure(error: unknown) {
-  const message = String(error instanceof Error ? error.message : error || "").toLowerCase();
+  const details = error as { message?: unknown; rawMessage?: unknown; status?: unknown };
+  const message = String(details?.rawMessage || details?.message || error || "").toLowerCase();
+  const status = Number(details?.status || 0);
   return (
+    status === 404 ||
     message.includes("could not find the table") ||
     message.includes("relation") && message.includes("does not exist") ||
     message.includes("column") && message.includes("does not exist") ||
@@ -202,6 +209,36 @@ async function fetchAllOptional<T>(supabaseUrl: string, serviceRoleKey: string, 
   }
 }
 
+async function fetchPortalNotifications(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  inviteId: string,
+) {
+  const rows = await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "portal_audit_logs", {
+    select: "id,event_type,status,details,created_at",
+    invite_id: `eq.${inviteId}`,
+    event_type: "eq.sales_order_deleted_by_admin",
+    status: "eq.ok",
+    order: "created_at.desc",
+    limit: "20",
+  });
+  return rows.map((row) => {
+    const details = row.details && typeof row.details === "object" ? (row.details as Record<string, unknown>) : {};
+    return {
+      id: String(row.id || `${inviteId}-${row.created_at || "notification"}`),
+      type: String(row.event_type || "portal_update"),
+      title: "Sales order deleted by seller",
+      message: String(
+        details.message ||
+          "The seller deleted this confirmed order. You can now delete this order from your portal.",
+      ),
+      created_at: String(row.created_at || ""),
+      order_id: String(details.order_id || "") || undefined,
+      order_no: String(details.sales_order_no || "") || undefined,
+    };
+  });
+}
+
 function buildPortalCustomerHistoryParams(
   organizationId: string,
   customerId: string,
@@ -223,7 +260,7 @@ function buildPortalCustomerHistoryParams(
     ...customerFilter,
     ...(sellerCompanyName ? { seller_company: `eq.${sellerCompanyName}` } : {}),
     order: "updated_at.desc",
-    limit: "100",
+    limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
   };
 }
 
@@ -245,7 +282,50 @@ async function fetchPortalHistoryRows(
     select: compactSelect,
     ...params,
   });
-  if (compactRows.length) return compactRows;
+  const attachDetailLines = async (rows: Record<string, unknown>[]) => {
+    if (!rows.length || !fullSelect) return rows;
+    const ids = rows
+      .map((row) => String(row.id || "").trim())
+      .filter(Boolean);
+    if (!ids.length) return rows;
+
+    // Keep the history/list query compact, then load the bounded line detail
+    // for the same tenant/customer-scoped document ids. This preserves fast
+    // portal startup while ensuring the Orders/Invoices detail view has the
+    // same line data as the admin Sales Order screen.
+    // The compact query already established the tenant/customer scope. Keep
+    // this follow-up intentionally narrow so optional legacy columns in the
+    // full document projection cannot make line details disappear entirely.
+    const detailRows = await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
+      select: "id,lines",
+      organization_id: params.organization_id,
+      id: `in.(${ids.join(",")})`,
+      limit: String(ids.length),
+    });
+    // Some PostgREST versions reject a long `in.(...)` predicate for the
+    // short, human-readable portal order ids. Retry each bounded id only
+    // when the batch projection was unavailable, so one optional detail
+    // query cannot turn a valid order into an empty detail view.
+    const resolvedDetailRows = detailRows.length
+      ? detailRows
+      : (
+          await Promise.all(
+            ids.map((id) =>
+              fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
+                select: "id,lines",
+                organization_id: params.organization_id,
+                id: `eq.${id}`,
+                limit: "1",
+              }),
+            ),
+          )
+        ).filter((row): row is Record<string, unknown> => Boolean(row));
+    if (!resolvedDetailRows.length) return rows;
+    const byId = new Map(resolvedDetailRows.map((row) => [String(row.id || ""), row]));
+    return rows.map((row) => byId.get(String(row.id || "")) || row);
+  };
+
+  if (compactRows.length) return attachDetailLines(compactRows);
 
   // If the combined OR filter was the expensive part under load, retry the
   // same tenant-scoped request as two simple indexed lookups and deduplicate
@@ -268,7 +348,7 @@ async function fetchPortalHistoryRows(
       customer_name: `eq.${customerName}`,
     }),
   ]);
-  return dedupeById([...byId, ...byName]);
+  return attachDetailLines(dedupeById([...byId, ...byName]));
 }
 
 async function fetchFirstOptional<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
@@ -326,7 +406,6 @@ async function touchPortalInvite(supabaseUrl: string, serviceRoleKey: string, in
       status: "active",
       expires_at: null,
       last_used_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     }),
   });
 }
@@ -464,9 +543,19 @@ async function fetchPortalAvailableBrands(
   return fallback;
 }
 
+function normalizeStoredLines(lines: unknown) {
+  if (typeof lines !== "string") return lines;
+  try {
+    return JSON.parse(lines);
+  } catch {
+    return [];
+  }
+}
+
 function mapSalesOrderLines(lines: unknown) {
-  if (!Array.isArray(lines)) return [];
-  return lines.map((line) => {
+  const normalizedLines = normalizeStoredLines(lines);
+  if (!Array.isArray(normalizedLines)) return [];
+  return normalizedLines.map((line) => {
     const row = (line || {}) as Record<string, unknown>;
     const qty = toNumber(row.qty);
     const sellPrice = row.sell_price == null ? null : toNumber(row.sell_price);
@@ -474,10 +563,14 @@ function mapSalesOrderLines(lines: unknown) {
     const salesTotal = sellPrice == null ? null : sellPrice * qty;
     const lifecycleStatus = normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`);
     const lifecycleNote = String(row.lifecycle_note || "").trim() || null;
-    const resolvedCode = String(row.resolvedCode || row.requestedCode || "");
+    // Portal-created lines use resolvedCode/requestedCode; admin-created
+    // sales orders use the canonical product_code/old_code shape. Normalize
+    // both representations so customer order detail and exports never lose
+    // their line identity when an order originated on the admin side.
+    const resolvedCode = String(row.resolvedCode || row.requestedCode || row.product_code || row.code || "");
     return {
       code: resolvedCode,
-      requested_code: String(row.requestedCode || ""),
+      requested_code: String(row.requestedCode || row.old_code || row.product_code || row.code || ""),
       brand: String(row.brand || ""),
       description: String(row.description || ""),
       qty,
@@ -654,6 +747,9 @@ export async function resolvePortalInvite(
     if (tenant && String(session.organization_id || "") !== String(tenant.organization_id)) {
       throw new Error("Portal session belongs to another seller domain. Sign in again.");
     }
+    if (hostname && session.hostname && hostname !== String(session.hostname).trim().toLowerCase()) {
+      throw new Error("Portal session belongs to another seller domain. Sign in again.");
+    }
     const invite = await fetchPortalInviteByIdEmail(
       supabaseUrl,
       serviceRoleKey,
@@ -666,10 +762,13 @@ export async function resolvePortalInvite(
     if (!isPortalInviteUsable(invite)) {
       throw new Error("Portal session is no longer active.");
     }
+    if (String(invite.updated_at || "") !== session.updated_at) {
+      throw new Error("Portal session expired. Sign in again.");
+    }
 
     assertPortalTenantInvite(invite.organization_id, invite.seller_company_profile_id, tenant);
     await touchPortalInvite(supabaseUrl, serviceRoleKey, invite);
-    const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname);
+    const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname, String(invite.updated_at || ""));
     return { invite, sessionToken: nextSessionToken };
   }
 
@@ -687,7 +786,7 @@ export async function resolvePortalInvite(
     tenant?.seller_company_profile_id || "",
   );
   assertPortalTenantInvite(invite.organization_id, invite.seller_company_profile_id, tenant);
-  const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname);
+  const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname, String(invite.updated_at || ""));
   return { invite, sessionToken: nextSessionToken };
 }
 
@@ -715,6 +814,9 @@ export async function resolvePortalInvitePreview(
     if (tenant && String(session.organization_id || "") !== String(tenant.organization_id)) {
       throw new Error("Portal session belongs to another seller domain. Sign in again.");
     }
+    if (hostname && session.hostname && hostname !== String(session.hostname).trim().toLowerCase()) {
+      throw new Error("Portal session belongs to another seller domain. Sign in again.");
+    }
     const invite = await fetchPortalInviteByIdEmail(
       supabaseUrl,
       serviceRoleKey,
@@ -726,23 +828,18 @@ export async function resolvePortalInvitePreview(
     if (!isPortalInviteUsable(invite)) {
       throw new Error("Portal session is no longer active.");
     }
+    if (String(invite.updated_at || "") !== session.updated_at) {
+      throw new Error("Portal session expired. Sign in again.");
+    }
     assertPortalTenantInvite(invite.organization_id, invite.seller_company_profile_id, tenant);
-    const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname);
+    const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname, String(invite.updated_at || ""));
     return { invite, sessionToken: nextSessionToken };
   }
 
-  const invite = await fetchPortalInviteByEmailPreview(
-    supabaseUrl,
-    serviceRoleKey,
-    auth.email || "",
-    tenant?.organization_id || "",
-    tenant?.seller_company_profile_id || "",
-  );
-  if (!invite) {
-    throw new Error("Portal invite not found or disabled");
-  }
-  assertPortalTenantInvite(invite.organization_id, invite.seller_company_profile_id, tenant);
-  return { invite, sessionToken: "" };
+  // Do not reveal a tenant, party, or company profile merely because an
+  // attacker knows an email address. Login branding is generic until an
+  // authenticated portal session is present.
+  return { invite: null, sessionToken: "" };
 }
 
 export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {
@@ -803,6 +900,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
                 organization_id: `eq.${invite.organization_id}`,
                 customer_id: `eq.${customerId}`,
                 order: "updated_at.desc",
+                limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
               })
             : []),
           ...((!customerId || customerName)
@@ -811,6 +909,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
                 organization_id: `eq.${invite.organization_id}`,
                 customer_name: `eq.${customerName}`,
                 order: "updated_at.desc",
+                limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
               })
             : []),
         ])
@@ -822,7 +921,12 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
           organization_id: `eq.${invite.organization_id}`,
           customer_name: `eq.${customerName}`,
           order: "updated_at.desc",
+          limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
         })
+      : [];
+
+    const notifications = invite.access_can_view_orders
+      ? await fetchPortalNotifications(supabaseUrl, serviceRoleKey, invite.id)
       : [];
 
     const availableBrands = await fetchPortalAvailableBrands(
@@ -924,6 +1028,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       vendorCredits: [],
       paymentsReceived,
       paymentsMade: [],
+      notifications,
       accountSummary: {
         currency: String(customer?.currency || invoices[0]?.currency || "EUR"),
         totalDocuments: accountRows.length,
@@ -979,6 +1084,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
               organization_id: `eq.${invite.organization_id}`,
               vendor_id: `eq.${vendorId}`,
               order: "updated_at.desc",
+              limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
             })
           : []),
         ...((!vendorId || vendorName)
@@ -987,6 +1093,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
               organization_id: `eq.${invite.organization_id}`,
               supplier_name: `eq.${vendorName}`,
               order: "updated_at.desc",
+              limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
             })
           : []),
       ])
@@ -1001,6 +1108,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
               organization_id: `eq.${invite.organization_id}`,
               vendor_id: `eq.${vendorId}`,
               order: "updated_at.desc",
+              limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
             })
           : []),
         ...((!vendorId || vendorName)
@@ -1010,6 +1118,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
               organization_id: `eq.${invite.organization_id}`,
               supplier_name: `eq.${vendorName}`,
               order: "updated_at.desc",
+              limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
             })
           : []),
       ])
@@ -1023,6 +1132,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
               organization_id: `eq.${invite.organization_id}`,
               vendor_id: `eq.${vendorId}`,
               order: "updated_at.desc",
+              limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
             })
           : []),
         ...((!vendorId || vendorName)
@@ -1031,6 +1141,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
               organization_id: `eq.${invite.organization_id}`,
               supplier_name: `eq.${vendorName}`,
               order: "updated_at.desc",
+              limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
             })
           : []),
       ])
@@ -1042,6 +1153,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         organization_id: `eq.${invite.organization_id}`,
         supplier_name: `eq.${vendorName}`,
         order: "updated_at.desc",
+        limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
       })
     : [];
 
@@ -1139,6 +1251,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     })),
     paymentsReceived: [],
     paymentsMade,
+    notifications: [],
     accountSummary: {
       currency: String(vendor?.currency || bills[0]?.currency || "EUR"),
       totalDocuments: accountRows.length,
@@ -1151,6 +1264,50 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     },
     pricingProfile: null,
     accountRows,
+  };
+}
+
+export async function fetchPortalSalesOrderDetail(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  invite: PortalInviteRow,
+  orderId: string,
+) {
+  if (invite.party_type !== "customer" || !invite.access_can_view_orders) return null;
+  const normalizedOrderId = String(orderId || "").trim();
+  if (!normalizedOrderId) return null;
+
+  const customer = await fetchPortalCustomerRecord(supabaseUrl, serviceRoleKey, invite.organization_id, invite);
+  const { sellerCompanyProfileId: customerSellerCompanyProfileId } = readCustomerPortalMetadata(customer);
+  const sellerCompanyProfileId = String(invite.seller_company_profile_id || customerSellerCompanyProfileId || "").trim();
+  const companyProfile = await fetchPortalCompanyProfile(supabaseUrl, serviceRoleKey, invite.organization_id, sellerCompanyProfileId);
+  const customerId = String(customer?.id || invite.customer_id || "").trim();
+  const customerName = String(customer?.display_name || customer?.company_name || invite.party_name || "").trim().toLowerCase();
+  const sellerCompany = String(companyProfile?.company_name || "").trim().toLowerCase();
+  const row = await fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
+    select: "id,sales_order_no,customer_id,customer_name,seller_company,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
+    organization_id: `eq.${invite.organization_id}`,
+    id: `eq.${normalizedOrderId}`,
+    limit: "1",
+  });
+  if (!row) return null;
+
+  const rowCustomerId = String(row.customer_id || "").trim();
+  const rowCustomerName = String(row.customer_name || "").trim().toLowerCase();
+  const rowSellerCompany = String(row.seller_company || "").trim().toLowerCase();
+  const customerMatches = (customerId && rowCustomerId === customerId) || (customerName && rowCustomerName === customerName);
+  const sellerMatches = !sellerCompany || !rowSellerCompany || rowSellerCompany === sellerCompany;
+  if (!customerMatches || !sellerMatches) return null;
+
+  return {
+    ...row,
+    source_channel: String(row.source_channel || "internal"),
+    portal_submitted_at: row.portal_submitted_at ? String(row.portal_submitted_at) : null,
+    portal_seen_at: row.portal_seen_at ? String(row.portal_seen_at) : null,
+    sales_total: toNumber(row.sales_total),
+    discount_amount: toNumber(row.discount_amount),
+    shipping_cost: toNumber(row.shipping_cost),
+    lines: mapCustomerSalesOrderLines(row.lines),
   };
 }
 
@@ -1305,6 +1462,9 @@ export async function buildPortalFallbackSnapshot(supabaseUrl: string, serviceRo
       shipping_cost: toNumber(row.shipping_cost),
       lines: [],
     })),
+    notifications: invite.access_can_view_orders
+      ? await fetchPortalNotifications(supabaseUrl, serviceRoleKey, invite.id)
+      : [],
     purchaseOrders: [],
     invoices: fallbackInvoices.map((row) => ({
       ...row,

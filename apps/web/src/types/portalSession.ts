@@ -172,6 +172,16 @@ type PortalPaymentRow = {
   currency: string;
 };
 
+export type PortalNotification = {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  created_at: string;
+  order_id?: string;
+  order_no?: string;
+};
+
 export type PortalSnapshot = {
   invite: PortalInviteSnapshot;
   companyProfile: PortalCompanyProfile | null;
@@ -186,6 +196,7 @@ export type PortalSnapshot = {
   vendorCredits: PortalCreditRow[];
   paymentsReceived: PortalPaymentRow[];
   paymentsMade: PortalPaymentRow[];
+  notifications: PortalNotification[];
   accountSummary: {
     currency: string;
     totalDocuments: number;

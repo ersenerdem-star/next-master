@@ -26,6 +26,7 @@ import { downloadQuoteTemplate } from "../../../shared/importTemplates";
 import {
   deletePortalDraftOrder,
   downloadPortalPriceList,
+  fetchPortalSalesOrderDetail,
   preparePortalOrderLines as preparePortalOrderLinesApi,
   searchPortalCatalogItems,
   submitPortalOrder,
@@ -238,12 +239,15 @@ type PortalSearchView = "cards" | "list";
 type PortalLine = NonNullable<PortalSnapshot["invoices"][number]["lines"]>[number];
 type PortalSalesOrderRow = PortalSnapshot["salesOrders"][number];
 
+function canDeletePortalSalesOrder(row: PortalSalesOrderRow) {
+  return row.source_channel === "portal" && !row.portal_submitted_at && String(row.status || "").trim().toLowerCase() === "draft";
+}
+
 function mapPortalSalesOrderToPreparedLines(row: PortalSalesOrderRow): PortalPreparedLine[] {
   return (row.lines || []).map((line, index) => {
     const requestedCode = String(line.old_code || line.requested_code || line.code || "");
     const resolvedCode = String(line.code || requestedCode || "");
     const qty = Math.max(1, Number(line.qty || 1) || 1);
-    const buyPrice = line.buy_price == null ? null : Number(line.buy_price);
     const sellPrice = line.sell_price == null ? null : Number(line.sell_price);
     const codeChanged = Boolean(
       line.old_code || (requestedCode && resolvedCode && requestedCode.trim().toLowerCase() !== resolvedCode.trim().toLowerCase()),
@@ -261,20 +265,15 @@ function mapPortalSalesOrderToPreparedLines(row: PortalSalesOrderRow): PortalPre
       origin: String(line.origin || ""),
       weight_kg: line.weight_kg == null ? null : Number(line.weight_kg),
       image_url: "",
-      supplier_name: String(line.supplier_name || ""),
-      buy_price: buyPrice,
       sell_price: sellPrice,
       c_sell_price: null,
       price_date: String(line.price_date || ""),
-      notes: String(line.notes || ""),
       found: true,
       codeChanged,
       codeChangeWarning: codeChanged ? `Old Code ${requestedCode} => New Code ${resolvedCode}` : "",
       lifecycle_status: line.lifecycle_status ?? "active",
       lifecycle_note: line.lifecycle_note ?? null,
       lifecycle_warning: line.lifecycle_warning ?? null,
-      supplierOptions: [],
-      selectedSupplierKey: "",
     };
   });
 }
@@ -295,12 +294,9 @@ function buildOfflinePreparedLineFromCatalogItem(item: PortalCatalogSearchItem):
     origin: String(item.origin || ""),
     weight_kg: item.weight_kg == null ? null : Number(item.weight_kg),
     image_url: String(item.image_url || ""),
-    supplier_name: "",
-    buy_price: null,
     sell_price: item.sell_price == null ? null : Number(item.sell_price),
     c_sell_price: null,
     price_date: "",
-    notes: "",
     found: true,
     codeChanged: Boolean(replacementWarning),
     codeChangeWarning: replacementWarning,
@@ -312,6 +308,10 @@ function buildOfflinePreparedLineFromCatalogItem(item: PortalCatalogSearchItem):
     replacement_reason: item.replacement_reason ?? null,
     replacement_warning: replacementWarning || null,
   };
+}
+
+function normalizePortalQuantity(value: unknown) {
+  return Math.max(1, Math.floor(Number(value || 1) || 1));
 }
 
 function matchesSearch(value: string, row: { id: string; sales_order_no?: string; lines?: PortalLine[] }) {
@@ -394,17 +394,21 @@ function getPortalDraftCacheKey(email: string) {
 function readPortalCache(email: string) {
   if (typeof window === "undefined" || !email) return null as PortalOfflineCache | null;
   try {
-    const snapshotRaw = window.localStorage.getItem(getPortalSnapshotCacheKey(email));
-    const draftRaw = window.localStorage.getItem(getPortalDraftCacheKey(email));
-    if (snapshotRaw || draftRaw) {
+    // Account, pricing and document data must not persist after the browser
+    // session ends. Remove earlier localStorage snapshots on sight, while
+    // retaining only the current tab's basket in sessionStorage.
+    window.localStorage.removeItem(getPortalCacheKey(email));
+    window.localStorage.removeItem(getPortalSnapshotCacheKey(email));
+    window.localStorage.removeItem(getPortalDraftCacheKey(email));
+    const draftRaw = window.sessionStorage.getItem(getPortalDraftCacheKey(email));
+    if (draftRaw) {
       return {
-        snapshot: snapshotRaw ? (JSON.parse(snapshotRaw) as PortalSnapshot | null) : null,
-        draft: draftRaw ? (JSON.parse(draftRaw) as PortalOfflineDraft) : buildEmptyPortalOfflineDraft(),
+        snapshot: null,
+        draft: JSON.parse(draftRaw) as PortalOfflineDraft,
         updatedAt: new Date().toISOString(),
       };
     }
-    const raw = window.localStorage.getItem(getPortalCacheKey(email));
-    return raw ? (JSON.parse(raw) as PortalOfflineCache) : null;
+    return null;
   } catch {
     return null;
   }
@@ -416,32 +420,35 @@ function writePortalCache(email: string, cache: PortalOfflineCache | null) {
     window.localStorage.removeItem(getPortalCacheKey(email));
     window.localStorage.removeItem(getPortalSnapshotCacheKey(email));
     window.localStorage.removeItem(getPortalDraftCacheKey(email));
+    window.sessionStorage.removeItem(getPortalDraftCacheKey(email));
     return;
   }
-  window.localStorage.setItem(getPortalSnapshotCacheKey(email), JSON.stringify(cache.snapshot));
-  window.localStorage.setItem(getPortalDraftCacheKey(email), JSON.stringify(cache.draft));
+  window.localStorage.removeItem(getPortalCacheKey(email));
+  window.localStorage.removeItem(getPortalSnapshotCacheKey(email));
+  window.localStorage.removeItem(getPortalDraftCacheKey(email));
+  window.sessionStorage.setItem(getPortalDraftCacheKey(email), JSON.stringify(cache.draft));
 }
 
 function writePortalSnapshotCache(email: string, snapshot: PortalSnapshot | null) {
   if (typeof window === "undefined" || !email) return;
   const key = getPortalSnapshotCacheKey(email);
   window.localStorage.removeItem(getPortalCacheKey(email));
-  if (!snapshot) {
-    window.localStorage.removeItem(key);
-    return;
-  }
-  window.localStorage.setItem(key, JSON.stringify(snapshot));
+  window.localStorage.removeItem(key);
+  // Snapshots deliberately remain memory-only. The argument is retained so
+  // existing callers can explicitly clear legacy cache values.
+  void snapshot;
 }
 
 function writePortalDraftCache(email: string, draft: PortalOfflineDraft | null) {
   if (typeof window === "undefined" || !email) return;
   const key = getPortalDraftCacheKey(email);
   window.localStorage.removeItem(getPortalCacheKey(email));
+  window.localStorage.removeItem(key);
   if (!draft) {
-    window.localStorage.removeItem(key);
+    window.sessionStorage.removeItem(key);
     return;
   }
-  window.localStorage.setItem(key, JSON.stringify(draft));
+  window.sessionStorage.setItem(key, JSON.stringify(draft));
 }
 
 function getDefaultPortalSection(snapshot: PortalSnapshot) {
@@ -456,6 +463,7 @@ export function PortalPage() {
   const portalLinkEmail = search.get("email") || "";
   const portalResetToken = search.get("reset") || search.get("reset_token") || "";
   const portalImportRef = useRef<HTMLInputElement | null>(null);
+  const portalDocumentsImportRef = useRef<HTMLInputElement | null>(null);
   const portalDraftLinesRef = useRef<HTMLDivElement | null>(null);
   const portalCachedDraftRef = useRef<PortalOfflineCache["draft"] | null>(null);
   const portalAutoRefreshKeyRef = useRef("");
@@ -472,6 +480,7 @@ export function PortalPage() {
   const [snapshot, setSnapshot] = useState<PortalSnapshot | null>(null);
   const [loginBranding, setLoginBranding] = useState<PortalBranding | null>(null);
   const [selection, setSelection] = useState<PortalSelection | null>(null);
+  const [portalDetailLoadingId, setPortalDetailLoadingId] = useState("");
   const [activeSection, setActiveSection] = useState<PortalSection>("home");
   const [documentSearch, setDocumentSearch] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
@@ -517,6 +526,8 @@ export function PortalPage() {
   const [selectedDraftLineId, setSelectedDraftLineId] = useState("");
   const [portalPreview, setPortalPreview] = useState<{ kind: "catalog"; item: PortalCatalogSearchItem } | { kind: "basket"; item: PortalPreparedLine } | null>(null);
   const [portalPreviewMedia, setPortalPreviewMedia] = useState<ProductMediaItem[]>([]);
+  const [portalDetailQtyEdits, setPortalDetailQtyEdits] = useState<Record<string, number>>({});
+  const [dismissedPortalNotificationIds, setDismissedPortalNotificationIds] = useState<Set<string>>(() => new Set());
   const [previewImage, setPreviewImage] = useState<{ src: string; code: string; name: string } | null>(null);
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
   const portalPricingCurrency = snapshot?.pricingProfile?.currency || snapshot?.accountSummary.currency || "EUR";
@@ -628,8 +639,9 @@ export function PortalPage() {
     if (typeof window === "undefined") return;
     if (snapshot || !credentials.email || portalResetToken) return;
     const cached = readPortalCache(credentials.email);
-    if (!cached?.snapshot) return;
+    if (!cached) return;
     portalCachedDraftRef.current = cached.draft;
+    if (!cached.snapshot) return;
     setSnapshot(cached.snapshot);
     setSelection(null);
     setActiveSection(cached.draft.activeSection || getDefaultPortalSection(cached.snapshot));
@@ -717,8 +729,31 @@ export function PortalPage() {
         render: (row: PortalSnapshot["salesOrders"][number]) => (row.portal_submitted_at ? "Submitted" : row.status || "-"),
       },
       { key: "amount", header: "Amount", render: (row: PortalSnapshot["salesOrders"][number]) => formatMoney(Number(row.sales_total || 0), row.currency) },
+      {
+        key: "actions",
+        header: "Actions",
+        render: (row: PortalSnapshot["salesOrders"][number]) =>
+          canDeletePortalSalesOrder(row) ? (
+            <Button
+              type="button"
+              variant="secondary"
+              className="button--compact danger-button"
+              aria-label={`Delete basket ${row.sales_order_no || row.id}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                void handleDeletePortalDraft(row);
+              }}
+            >
+              Delete
+            </Button>
+          ) : row.source_channel === "portal" && row.portal_submitted_at ? (
+            <span className="field__help">Confirmed</span>
+          ) : (
+            <span className="field__help">-</span>
+          ),
+      },
     ],
-    [],
+    [credentials, isOnline, selection],
   );
 
   const invoiceColumns = useMemo(
@@ -1378,6 +1413,9 @@ export function PortalPage() {
     .map((value) => String(value || "").trim())
     .filter(Boolean)
     .join("  •  ");
+  const visiblePortalNotifications = (activeSnapshot.notifications || []).filter(
+    (notification) => !dismissedPortalNotificationIds.has(notification.id),
+  );
   const visibleDocumentRows =
     activeSnapshot.invite.party_type === "customer"
       ? [...activeSnapshot.salesOrders, ...activeSnapshot.invoices]
@@ -1456,7 +1494,7 @@ export function PortalPage() {
   const portalRecommendationCards = portalRecommendations.slice(0, 3);
   const portalOrderHistoryRows =
     activeSnapshot.invite.party_type === "customer"
-      ? filteredSalesOrders.filter((row) => !(row.source_channel === "portal" && !row.portal_submitted_at && String(row.status || "").toLowerCase() === "draft"))
+      ? filteredSalesOrders
       : filteredPurchaseOrders;
   const portalBillingRows = activeSnapshot.invite.party_type === "customer" ? filteredInvoices : filteredBills;
   const portalQuickStats = [
@@ -1579,9 +1617,26 @@ export function PortalPage() {
     if (defaultSection) setActiveSection(defaultSection);
   }
 
-  function openPortalDocument(selection: PortalSelection) {
+  async function openPortalDocument(selection: PortalSelection) {
     setSelection(selection);
     setActiveSection(selection.kind === "sales-order" || selection.kind === "purchase-order" ? "orders" : "billing");
+    if (selection.kind !== "sales-order" || !isOnline) return;
+    const existing = snapshot?.salesOrders.find((row) => row.id === selection.id);
+    if (!existing || existing.lines?.length) return;
+    try {
+      setPortalDetailLoadingId(selection.id);
+      const detail = await fetchPortalSalesOrderDetail(credentials, selection.id);
+      if (!detail) return;
+      setSnapshot((current) =>
+        current
+          ? { ...current, salesOrders: current.salesOrders.map((row) => (row.id === detail.id ? { ...row, ...detail } : row)) }
+          : current,
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Portal order detail load failed");
+    } finally {
+      setPortalDetailLoadingId("");
+    }
   }
 
   function focusPortalDraftLines(lineId?: string) {
@@ -1653,7 +1708,6 @@ export function PortalPage() {
           });
           const prepared = await preparePortalOrderLinesApi(credentials, chunk);
           preparedLines = mergePortalPreparedLines(preparedLines, prepared.lines);
-          setPortalDraftLines((current) => mergePortalPreparedLines(current, prepared.lines));
           latestPricingProfile = prepared.pricingProfile || latestPricingProfile;
           processed += chunk.length;
         } catch (caught) {
@@ -1662,9 +1716,11 @@ export function PortalPage() {
         }
       }
 
-      if (!preparedLines.length && failedChunkMessage) {
+      if (failedChunkMessage) {
         throw new Error(failedChunkMessage);
       }
+
+      setPortalDraftLines((current) => mergePortalPreparedLines(current, preparedLines));
 
       if (!portalPaymentTerms && latestPricingProfile?.payment_terms) {
         setPortalPaymentTerms(latestPricingProfile.payment_terms);
@@ -1673,11 +1729,8 @@ export function PortalPage() {
       const discontinuedCount = preparedLines.filter((line) => line.lifecycle_status === "discontinued").length;
       const pricedCount = preparedLines.length - missingPriceCount;
       setPortalOrderStatus(
-        `${statusText.replace("{count}", preparedLines.length.toLocaleString("en-US"))} ${pricedCount > 0 ? `${pricedCount.toLocaleString("en-US")} priced.` : ""}${missingPriceCount > 0 ? ` ${missingPriceCount.toLocaleString("en-US")} need live pricing.` : ""}${discontinuedCount > 0 ? ` ${discontinuedCount.toLocaleString("en-US")} discontinued item(s) detected.` : ""}${failedChunkMessage ? " Some lines could not be processed; save basket and continue later." : ""}`.trim(),
+        `${statusText.replace("{count}", preparedLines.length.toLocaleString("en-US"))} ${pricedCount > 0 ? `${pricedCount.toLocaleString("en-US")} priced.` : ""}${missingPriceCount > 0 ? ` ${missingPriceCount.toLocaleString("en-US")} need live pricing.` : ""}${discontinuedCount > 0 ? ` ${discontinuedCount.toLocaleString("en-US")} discontinued item(s) detected.` : ""}`.trim(),
       );
-      if (failedChunkMessage) {
-        setError(failedChunkMessage);
-      }
       return preparedLines;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal order pricing failed");
@@ -1688,18 +1741,20 @@ export function PortalPage() {
     }
   }
 
-  async function handleAddPortalCatalogItem(item: PortalCatalogSearchItem) {
+  async function handleAddPortalCatalogItem(item: PortalCatalogSearchItem, quantity = 1) {
+    const normalizedQuantity = normalizePortalQuantity(quantity);
     setSelectedCatalogCode(item.code);
     if (!isOnline) {
       const offlineLine = buildOfflinePreparedLineFromCatalogItem(item);
+      offlineLine.qty = normalizedQuantity;
       setPortalDraftLines((current) => mergePortalPreparedLines(current, [offlineLine]));
-      setPortalOrderStatus(`1 item added to ${portalSalesOrderNo || "Local Basket"} in Basket. Offline changes stay on this device.`);
+      setPortalOrderStatus(`${normalizedQuantity} pcs added to ${portalSalesOrderNo || "Local Basket"} in Basket. Offline changes stay on this device.`);
       focusPortalDraftLines(offlineLine.lineId);
       return;
     }
     const prepared = await appendPortalRows(
-      [{ code: item.replacement_old_code || item.code, brand: item.brand, qty: 1, market_segment: item.market_segment || null }],
-      `{count} item added to ${portalSalesOrderNo || "New Basket"} in Basket.`,
+      [{ code: item.replacement_old_code || item.code, brand: item.brand, qty: normalizedQuantity, market_segment: item.market_segment || null }],
+      `{count} pcs added to ${portalSalesOrderNo || "New Basket"} in Basket.`,
     );
     if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
   }
@@ -1739,6 +1794,10 @@ export function PortalPage() {
         portalOrderCurrency,
         line.lifecycle_status || "",
       ]),
+      [],
+      ["Total lines", portalDraftLines.length],
+      ["Total quantity", portalDraftLines.reduce((sum, line) => sum + Number(line.qty || 0), 0)],
+      ["Subtotal excl. VAT", "", "", "", "", "", "", "", "", portalDraftLines.reduce((sum, line) => sum + (line.sell_price == null ? 0 : Number(line.sell_price || 0) * Number(line.qty || 0)), 0), portalOrderCurrency],
     ];
 
     const blob = buildXlsxBlob("Basket", rows, [2, 8, 9]);
@@ -1748,10 +1807,13 @@ export function PortalPage() {
     setError("");
   }
 
-  async function handleImportPortalOrderFile(file: File) {
+  async function handleImportPortalOrderFile(
+    file: File,
+    resetInputRef: { current: HTMLInputElement | null } = portalImportRef,
+  ) {
     if (!isOnline) {
       setError("Connect to the internet to import and price a file.");
-      if (portalImportRef.current) portalImportRef.current.value = "";
+      if (resetInputRef.current) resetInputRef.current.value = "";
       return;
     }
     try {
@@ -1767,7 +1829,7 @@ export function PortalPage() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal import failed");
     } finally {
-      if (portalImportRef.current) portalImportRef.current.value = "";
+      if (resetInputRef.current) resetInputRef.current.value = "";
     }
   }
 
@@ -1825,7 +1887,8 @@ export function PortalPage() {
       });
       setSnapshot(result.snapshot);
       setSelection({ kind: "sales-order", id: result.orderId });
-      setActiveSection(mode === "confirm" ? "orders" : "desk");
+      // Keep the newly saved draft visible in the same Sales Orders view as a confirmed order.
+      setActiveSection("orders");
       setStatus(
         mode === "confirm"
           ? `Basket ${result.orderId} submitted. Internal team can prepare proforma and next documents.`
@@ -1980,6 +2043,107 @@ export function PortalPage() {
     return row ? { kind: selection.kind, row } : null;
   })();
 
+  function portalDetailQuantityKey(orderId: string, lineIndex: number) {
+    return `${orderId}:${lineIndex}`;
+  }
+
+  function getPortalDetailQuantity(orderId: string, lineIndex: number, fallback: unknown) {
+    return portalDetailQtyEdits[portalDetailQuantityKey(orderId, lineIndex)] ?? normalizePortalQuantity(fallback);
+  }
+
+  const detailCanEditQuantities = Boolean(
+    selectedDocument?.kind === "sales-order" && String(selectedDocument.row.status || "").toLowerCase() !== "confirmed",
+  );
+  const detailHasQuantityEdits = Boolean(
+    detailCanEditQuantities &&
+      selectedDocument?.row.lines?.some((line, index) => {
+        const edited = portalDetailQtyEdits[portalDetailQuantityKey(selectedDocument.row.id, index)];
+        return edited != null && edited !== normalizePortalQuantity(line.qty);
+      }),
+  );
+
+  async function handleSavePortalDetailQuantities() {
+    if (!selectedDocument || selectedDocument.kind !== "sales-order" || !detailCanEditQuantities) return;
+    const row = selectedDocument.row;
+    const rows = (row.lines || [])
+      .map((line, index) => ({
+        code: String(line.requested_code || line.old_code || line.code || "").trim(),
+        brand: String(line.brand || "").trim(),
+        qty: getPortalDetailQuantity(row.id, index, line.qty),
+        market_segment: line.market_segment ?? null,
+      }))
+      .filter((line) => line.code && line.qty > 0);
+    if (!rows.length) {
+      setError("This order has no editable lines.");
+      return;
+    }
+    try {
+      setSavingPortalOrder(true);
+      setError("");
+      setPortalOverlay({ title: "Updating Sales Order", message: "Saving the revised quantities and recalculating prices." });
+      const result = await submitPortalOrder(credentials, {
+        orderId: row.id,
+        salesOrderNo: row.sales_order_no || row.id,
+        mode: "draft",
+        deliveryTerm: "delivery_term" in row ? String(row.delivery_term || "") : "",
+        paymentTerms: "payment_terms" in row ? String(row.payment_terms || "") : "",
+        packingDetails: "packing_details" in row ? String(row.packing_details || "") : "",
+        notes: String(row.notes || ""),
+        rows,
+      });
+      setSnapshot(result.snapshot);
+      setSelection({ kind: "sales-order", id: result.orderId || row.id });
+      setPortalDetailQtyEdits({});
+      setStatus(`Sales order ${row.sales_order_no || row.id} quantities updated.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Sales order quantity update failed");
+    } finally {
+      setSavingPortalOrder(false);
+      setPortalOverlay(null);
+    }
+  }
+
+  async function handleConfirmPortalDocument() {
+    if (!selectedDocument || selectedDocument.kind !== "sales-order" || !detailCanEditQuantities) return;
+    const row = selectedDocument.row;
+    const rows = (row.lines || [])
+      .map((line, index) => ({
+        code: String(line.requested_code || line.old_code || line.code || "").trim(),
+        brand: String(line.brand || "").trim(),
+        qty: getPortalDetailQuantity(row.id, index, line.qty),
+        market_segment: line.market_segment ?? null,
+      }))
+      .filter((line) => line.code && line.qty > 0);
+    if (!rows.length) {
+      setError("This order has no confirmable lines.");
+      return;
+    }
+    try {
+      setConfirmingPortalOrder(true);
+      setError("");
+      setPortalOverlay({ title: "Confirming Sales Order", message: "Sending the order with the current quantities to the internal team." });
+      const result = await submitPortalOrder(credentials, {
+        orderId: row.id,
+        salesOrderNo: row.sales_order_no || row.id,
+        mode: "confirm",
+        deliveryTerm: "delivery_term" in row ? String(row.delivery_term || "") : "",
+        paymentTerms: "payment_terms" in row ? String(row.payment_terms || "") : "",
+        packingDetails: "packing_details" in row ? String(row.packing_details || "") : "",
+        notes: String(row.notes || ""),
+        rows,
+      });
+      setSnapshot(result.snapshot);
+      setSelection({ kind: "sales-order", id: result.orderId || row.id });
+      setPortalDetailQtyEdits({});
+      setStatus(`Sales order ${row.sales_order_no || row.id} confirmed.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Sales order confirmation failed");
+    } finally {
+      setConfirmingPortalOrder(false);
+      setPortalOverlay(null);
+    }
+  }
+
   const detailColumns = (() => {
     if (!selectedDocument) return [];
     if (selectedDocument.kind === "sales-order" || selectedDocument.kind === "invoice") {
@@ -1996,7 +2160,34 @@ export function PortalPage() {
             </div>
           ),
         },
-        { key: "qty", header: "Qty", render: (row: PortalLine) => row.qty || 0 },
+        {
+          key: "qty",
+          header: "Qty",
+          render: (row: PortalLine) => {
+            const lineIndex = selectedDocument.row.lines?.indexOf(row) ?? -1;
+            const quantity = getPortalDetailQuantity(selectedDocument.row.id, lineIndex, row.qty);
+            return detailCanEditQuantities ? (
+              <input
+                className="inline-edit-input inline-edit-input--qty"
+                aria-label={`Quantity for ${row.code || row.requested_code || "line"}`}
+                type="number"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                value={quantity}
+                onChange={(event) => {
+                  if (lineIndex < 0) return;
+                  setPortalDetailQtyEdits((current) => ({
+                    ...current,
+                    [portalDetailQuantityKey(selectedDocument.row.id, lineIndex)]: normalizePortalQuantity(event.target.value),
+                  }));
+                }}
+              />
+            ) : (
+              quantity
+            );
+          },
+        },
         { key: "origin", header: "Origin", render: (row: PortalLine) => row.origin || "-" },
         { key: "weight", header: "Weight", render: (row: PortalLine) => formatWeight(row.weight_kg) },
         { key: "unit", header: "Unit Price", render: (row: PortalLine) => formatMoney(Number(row.sell_price || 0), selectedDocument.row.currency) },
@@ -2281,6 +2472,27 @@ export function PortalPage() {
       title={detailTitle}
       actions={
         <div className="inline-actions">
+          {detailCanEditQuantities ? (
+            <Button
+              variant="secondary"
+              busy={savingPortalOrder}
+              busyLabel="Updating..."
+              disabled={!detailHasQuantityEdits}
+              onClick={() => void handleSavePortalDetailQuantities()}
+            >
+              Update quantities
+            </Button>
+          ) : null}
+          {detailCanEditQuantities ? (
+            <Button
+              busy={confirmingPortalOrder}
+              busyLabel="Confirming..."
+              disabled={confirmingPortalOrder}
+              onClick={() => void handleConfirmPortalDocument()}
+            >
+              Confirm order
+            </Button>
+          ) : null}
           <Button variant="secondary" onClick={handlePortalPrint}>
             PDF / Print
           </Button>
@@ -2360,7 +2572,11 @@ export function PortalPage() {
           </div>
         ) : null}
 
-        <DataTable rows={selectedDocument.row.lines || []} columns={detailColumns} emptyText="No line details available." />
+        <DataTable
+          rows={selectedDocument.row.lines || []}
+          columns={detailColumns}
+          emptyText={portalDetailLoadingId === selectedDocument.row.id ? "Loading line details..." : "No line details available."}
+        />
 
         <div className="portal-detail-totals">
           {"subtotal" in selectedDocument.row ? (
@@ -2501,6 +2717,33 @@ export function PortalPage() {
           </div>
           {status ? <div className="success-text">{status}</div> : null}
           {error ? <div className="warning-text">{error}</div> : null}
+          {visiblePortalNotifications.length ? (
+            <SectionCard
+              title="New information from your seller"
+              actions={
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="button--compact"
+                  onClick={() => setDismissedPortalNotificationIds(new Set((activeSnapshot.notifications || []).map((notification) => notification.id)))}
+                >
+                  Mark as read
+                </Button>
+              }
+            >
+              <div className="portal-warning-list">
+                {visiblePortalNotifications.map((notification) => (
+                  <div className="portal-warning-list__item" key={notification.id}>
+                    <strong>{notification.title}</strong>
+                    <span>{notification.message}</span>
+                    {notification.order_no || notification.order_id ? (
+                      <small>{notification.order_no || notification.order_id}</small>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          ) : null}
           {activeSection !== "home" ? (
             <div className="portal-inline-note portal-inline-note--soft portal-inline-note--compact">
               <span>Current View</span>
@@ -2726,12 +2969,36 @@ export function PortalPage() {
           {orderDetailOpen ? (
             documentDetailSection
           ) : (
-            <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Order History" : "Purchase Orders"}>
+            <SectionCard
+              title={activeSnapshot.invite.party_type === "customer" ? "Order History" : "Purchase Orders"}
+              actions={
+                activeSnapshot.invite.party_type === "customer" ? (
+                  <div className="inline-actions">
+                    <input
+                      ref={portalDocumentsImportRef}
+                      type="file"
+                      hidden
+                      accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void handleImportPortalOrderFile(file, portalDocumentsImportRef);
+                      }}
+                    />
+                    <Button type="button" variant="secondary" onClick={() => portalDocumentsImportRef.current?.click()}>
+                      Import Excel
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={downloadQuoteTemplate}>
+                      Template
+                    </Button>
+                  </div>
+                ) : null
+              }
+            >
               <DataTable
                 rows={portalOrderHistoryRows}
                 columns={activeSnapshot.invite.party_type === "customer" ? salesOrderColumns : purchaseOrderColumns}
                 emptyText={activeSnapshot.invite.party_type === "customer" ? "No orders available." : "No purchase orders available."}
-                onRowClick={(row) => openPortalDocument({ kind: activeSnapshot.invite.party_type === "customer" ? "sales-order" : "purchase-order", id: row.id })}
+                onRowClick={(row) => void openPortalDocument({ kind: activeSnapshot.invite.party_type === "customer" ? "sales-order" : "purchase-order", id: row.id })}
                 rowClassName={(row) =>
                   selection &&
                   ((selection.kind === "sales-order" && activeSnapshot.invite.party_type === "customer") ||
@@ -2838,8 +3105,6 @@ export function PortalPage() {
                 <strong>Use the middle field for part number or OEM code. Import Brand, Part Code, and Qty files with Excel or CSV; exact matches stay on top and alternatives appear below.</strong>
               </div>
 
-              {!catalogResults.length ? <Input label="Notes" value={portalOrderNotes} placeholder="Order note for your internal buying team" onChange={setPortalOrderNotes} /> : null}
-
               {portalOrderStatus && !catalogResults.length ? <div className="success-text">{portalOrderStatus}</div> : null}
               {portalDraftHasMissingPrices ? <div className="warning-text">Items without live price can be saved in the basket but cannot be confirmed.</div> : null}
               {portalDraftDiscontinuedCount > 0 ? (
@@ -2870,6 +3135,15 @@ export function PortalPage() {
                   savingBasket={savingPortalOrder}
                   confirmingBasket={confirmingPortalOrder}
                   confirmDisabled={portalDraftHasMissingPrices}
+                  orderNotes={portalOrderNotes}
+                  deliveryTerm={portalDeliveryTerm}
+                  paymentTerms={portalPaymentTerms}
+                  packingDetails={portalPackingDetails}
+                  onOrderNotesChange={setPortalOrderNotes}
+                  onDeliveryTermChange={setPortalDeliveryTerm}
+                  onPaymentTermsChange={setPortalPaymentTerms}
+                  onPackingDetailsChange={setPortalPackingDetails}
+                  onQuantityChange={(lineId, quantity) => setPortalDraftLines((current) => current.map((line) => (line.lineId === lineId ? { ...line, qty: quantity } : line)))}
                   onSaveBasket={() => void handleSubmitPortalOrder("draft")}
                   onClearBasket={handleClearPortalBuilder}
                   onConfirmBasket={() => void handleSubmitPortalOrder("confirm")}
@@ -2878,10 +3152,11 @@ export function PortalPage() {
                     setSelectedCatalogCode(item.code);
                     setPortalPreview({ kind: "catalog", item });
                   }}
-                  onAdd={(item) => void handleAddPortalCatalogItem(item)}
+                  onAdd={(item, quantity) => void handleAddPortalCatalogItem(item, quantity)}
                   onPreview={(item) => setPortalPreview({ kind: "catalog", item })}
                 />
 
+              {false ? <>
               <div className="portal-workbench">
                 <div className="portal-workbench__tables">
                   <SectionCard title={`Search Items (${catalogResults.length.toLocaleString("en-US")})`} className={`search-results-focus-card${catalogResults.length ? " search-results-focus-card--legacy" : ""}`}>
@@ -3105,6 +3380,7 @@ export function PortalPage() {
                   Confirm Basket
                 </Button>
               </div>
+              </> : null}
             </div>
           </SectionCard>
         </div>
