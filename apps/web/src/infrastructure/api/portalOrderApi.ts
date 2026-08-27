@@ -90,16 +90,38 @@ type PortalRequestOptions = {
   signal?: AbortSignal;
 };
 
+const PORTAL_ORDER_REQUEST_TIMEOUT_MS = 25_000;
+
 async function postPortalOrderJson(path: string, payload: Record<string, unknown>, options: PortalRequestOptions = {}) {
-  const response = await fetch(path, {
-    method: "POST",
-    credentials: "same-origin",
-    signal: options.signal,
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), PORTAL_ORDER_REQUEST_TIMEOUT_MS);
+  const abortFromCaller = () => controller.abort();
+  if (options.signal) {
+    if (options.signal.aborted) controller.abort();
+    else options.signal.addEventListener("abort", abortFromCaller, { once: true });
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (caught) {
+    if (controller.signal.aborted && !options.signal?.aborted) {
+      throw new Error("Portal request timed out. Please try again.");
+    }
+    throw caught;
+  } finally {
+    window.clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", abortFromCaller);
+  }
   const data = (await response.json().catch(() => ({}))) as PortalOrderResponse;
   if (!response.ok) {
     throw new Error(
