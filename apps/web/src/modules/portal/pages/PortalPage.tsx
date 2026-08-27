@@ -2086,20 +2086,51 @@ export function PortalPage() {
       // snapshot. If a concurrent history read briefly misses it, hydrate
       // the just-saved order directly so Documents > Orders never appears
       // empty after a successful Save Draft.
-      let nextSnapshot = result.snapshot;
-      if (!nextSnapshot.salesOrders.some((row) => row.id === result.orderId)) {
-        try {
-          const savedOrder = await fetchPortalSalesOrderDetail(credentials, result.orderId);
-          if (savedOrder) {
-            nextSnapshot = {
-              ...nextSnapshot,
-              salesOrders: [savedOrder, ...nextSnapshot.salesOrders.filter((row) => row.id !== savedOrder.id)],
-            };
+      const savedId = result.orderId;
+      const compactOrder = result.snapshot.salesOrders.find((row) => row.id === savedId);
+      const optimisticOrder = compactOrder
+        ? {
+            ...compactOrder,
+            lines: portalDraftLines.map((line) => ({
+              code: line.resolvedCode || line.requestedCode,
+              requested_code: line.requestedCode,
+              brand: line.brand,
+              market_segment: line.market_segment,
+              description: line.description,
+              qty: line.qty,
+              image_url: line.image_url,
+              oem_no: line.oem_no,
+              hs_code: line.hs_code,
+              origin: line.origin,
+              weight_kg: line.weight_kg,
+              sell_price: line.sell_price,
+              line_total: line.sell_price == null ? null : Number(line.sell_price) * Number(line.qty || 0),
+              lifecycle_status: line.lifecycle_status,
+              lifecycle_note: line.lifecycle_note,
+              lifecycle_warning: line.lifecycle_warning,
+            })),
           }
-        } catch {
-          // The successful save remains authoritative; an explicit Refresh
-          // can retry the history read if the detail endpoint is transient.
+        : null;
+      let nextSnapshot = mergePortalSnapshotOrderDetails(snapshot, {
+        ...result.snapshot,
+        salesOrders: optimisticOrder
+          ? [optimisticOrder, ...result.snapshot.salesOrders.filter((row) => row.id !== savedId)]
+          : result.snapshot.salesOrders,
+      });
+      // The refreshed snapshot deliberately uses compact order rows. Always
+      // hydrate the saved order so Documents > Orders shows the persisted line
+      // detail without requiring a browser refresh.
+      try {
+        const savedOrder = await fetchPortalSalesOrderDetail(credentials, savedId);
+        if (savedOrder?.lines?.length) {
+          nextSnapshot = {
+            ...nextSnapshot,
+            salesOrders: [savedOrder, ...nextSnapshot.salesOrders.filter((row) => row.id !== savedOrder.id)],
+          };
         }
+      } catch {
+        // Optimistic lines remain visible; an explicit Refresh can retry a
+        // transient detail-read failure.
       }
       setSnapshot(nextSnapshot);
       settlePortalOrderMutation();
