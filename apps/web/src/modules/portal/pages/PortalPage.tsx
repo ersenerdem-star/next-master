@@ -1933,6 +1933,7 @@ export function PortalPage() {
     setError("");
     try {
       let selectedTarget: PortalSalesOrderRow | null = null;
+      let targetLines: PortalPreparedLine[] = [];
       if (target !== "new") {
         selectedTarget = target;
         if (!selectedTarget.lines?.length && isOnline) {
@@ -1951,9 +1952,10 @@ export function PortalPage() {
               : current,
           );
         }
+        targetLines = mapPortalSalesOrderToPreparedLines(selectedTarget);
         setPortalOrderId(selectedTarget.id);
         setPortalSalesOrderNo(selectedTarget.sales_order_no || selectedTarget.id);
-        setPortalDraftLines(mapPortalSalesOrderToPreparedLines(selectedTarget));
+        setPortalDraftLines(targetLines);
         setPortalDeliveryTerm(selectedTarget.delivery_term || "");
         setPortalPaymentTerms(selectedTarget.payment_terms || activeSnapshot.pricingProfile?.payment_terms || "");
         setPortalPackingDetails(selectedTarget.packing_details || "");
@@ -1971,9 +1973,9 @@ export function PortalPage() {
       if (!isOnline) {
         const offlineLine = buildOfflinePreparedLineFromCatalogItem(pending.item);
         offlineLine.qty = pending.quantity;
-        setPortalDraftLines((current) => mergePortalPreparedLines(current, [offlineLine]));
+        setPortalDraftLines(mergePortalPreparedLines(targetLines, [offlineLine]));
         setPortalOrderStatus(
-          `${pending.quantity} pcs added to ${target === "new" ? "New sales order" : selectedTarget?.sales_order_no || selectedTarget?.id || "sales order"}. Save sales order to create/update it in Documents > Orders. Offline changes stay on this device.`,
+          `${pending.quantity} pcs added locally to ${target === "new" ? "New sales order" : selectedTarget?.sales_order_no || selectedTarget?.id || "sales order"}. Reconnect and save the sales order to update Documents > Orders.`,
         );
         focusPortalDraftLines(offlineLine.lineId);
         return;
@@ -1981,9 +1983,20 @@ export function PortalPage() {
 
       const prepared = await appendPortalRows(
         [{ code: pending.item.replacement_old_code || pending.item.code, brand: pending.item.brand, qty: pending.quantity, market_segment: pending.item.market_segment || null }],
-        `${pending.quantity} pcs added to ${target === "new" ? "New sales order" : selectedTarget?.sales_order_no || selectedTarget?.id || "sales order"}. Save sales order to create/update it in Documents > Orders.`,
+        `${pending.quantity} pcs prepared for ${target === "new" ? "New sales order" : selectedTarget?.sales_order_no || selectedTarget?.id || "sales order"}. Saving automatically.`,
       );
-      if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
+      if (!prepared.length) throw new Error("The selected product could not be prepared for the sales order.");
+      const nextLines = mergePortalPreparedLines(targetLines, prepared);
+      setPortalDraftLines(nextLines);
+      await handleSubmitPortalOrder("draft", {
+        lines: nextLines,
+        orderId: selectedTarget?.id || "",
+        salesOrderNo: selectedTarget?.sales_order_no || selectedTarget?.id || "",
+        deliveryTerm: selectedTarget?.delivery_term || "",
+        paymentTerms: selectedTarget?.payment_terms || activeSnapshot.pricingProfile?.payment_terms || "",
+        packingDetails: selectedTarget?.packing_details || "",
+        notes: selectedTarget?.notes || "",
+      });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not select a sales order target");
     } finally {
@@ -2064,8 +2077,29 @@ export function PortalPage() {
     }
   }
 
-  async function handleSubmitPortalOrder(mode: "draft" | "confirm") {
-    if (!portalDraftLines.length) {
+  async function handleSubmitPortalOrder(
+    mode: "draft" | "confirm",
+    overrides: {
+      lines?: PortalPreparedLine[];
+      orderId?: string;
+      salesOrderNo?: string;
+      deliveryTerm?: string;
+      paymentTerms?: string;
+      packingDetails?: string;
+      notes?: string;
+    } = {},
+  ) {
+    const orderLines = overrides.lines || portalDraftLines;
+    const effectiveOrderId = overrides.orderId ?? portalOrderId;
+    const effectiveSalesOrderNo = overrides.salesOrderNo ?? portalSalesOrderNo;
+    const effectiveDeliveryTerm = overrides.deliveryTerm ?? portalDeliveryTerm;
+    const effectivePaymentTerms = overrides.paymentTerms ?? portalPaymentTerms;
+    const effectivePackingDetails = overrides.packingDetails ?? portalPackingDetails;
+    const effectiveNotes = overrides.notes ?? portalOrderNotes;
+    const orderHasMissingPrices = orderLines.some((line) => line.sell_price == null);
+    const orderDiscontinuedCount = orderLines.filter((line) => line.lifecycle_status === "discontinued").length;
+
+    if (!orderLines.length) {
       setError("Add at least one line before saving portal order.");
       return;
     }
@@ -2080,15 +2114,15 @@ export function PortalPage() {
       setStatus("Sales order saved offline on this device.");
       return;
     }
-    if (mode === "confirm" && portalDraftHasMissingPrices) {
+    if (mode === "confirm" && orderHasMissingPrices) {
       setError("Some lines do not have a live price yet. Remove them or complete pricing before submitting.");
       return;
     }
     if (
       mode === "confirm" &&
-      portalDraftDiscontinuedCount > 0 &&
+      orderDiscontinuedCount > 0 &&
       !window.confirm(
-        `${portalDraftDiscontinuedCount.toLocaleString("en-US")} discontinued item(s) are still in this sales order. Continue and submit anyway?`,
+        `${orderDiscontinuedCount.toLocaleString("en-US")} discontinued item(s) are still in this sales order. Continue and submit anyway?`,
       )
     ) {
       return;
@@ -2103,14 +2137,14 @@ export function PortalPage() {
         message: mode === "confirm" ? "Submitting the sales order and sending it to the internal team." : "Saving current sales order lines and details.",
       });
       const result = await submitPortalOrder(credentials, {
-        orderId: portalOrderId || undefined,
-        salesOrderNo: portalSalesOrderNo || undefined,
+        orderId: effectiveOrderId || undefined,
+        salesOrderNo: effectiveSalesOrderNo || undefined,
         mode,
-        deliveryTerm: portalDeliveryTerm,
-        paymentTerms: portalPaymentTerms,
-        packingDetails: portalPackingDetails,
-        notes: portalOrderNotes,
-        rows: portalDraftLines.map((line) => ({
+        deliveryTerm: effectiveDeliveryTerm,
+        paymentTerms: effectivePaymentTerms,
+        packingDetails: effectivePackingDetails,
+        notes: effectiveNotes,
+        rows: orderLines.map((line) => ({
           code: line.requestedCode || line.resolvedCode,
           brand: line.brand,
           qty: Number(line.qty || 0),
@@ -2127,7 +2161,7 @@ export function PortalPage() {
       const optimisticOrder = {
         ...(compactOrder || {
           id: savedId,
-          sales_order_no: portalSalesOrderNo || savedId,
+          sales_order_no: effectiveSalesOrderNo || savedId,
           customer_name: activeSnapshot.customer?.display_name || activeSnapshot.invite.party_name,
           currency: portalPricingCurrency,
           status: mode === "confirm" ? "draft" : "draft",
@@ -2139,12 +2173,12 @@ export function PortalPage() {
           discount_amount: 0,
           shipping_cost: 0,
           subtotal: 0,
-          delivery_term: portalDeliveryTerm,
-          payment_terms: portalPaymentTerms,
-          packing_details: portalPackingDetails,
+          delivery_term: effectiveDeliveryTerm,
+          payment_terms: effectivePaymentTerms,
+          packing_details: effectivePackingDetails,
         }),
         id: savedId,
-        lines: portalDraftLines.map((line) => ({
+        lines: orderLines.map((line) => ({
               code: line.resolvedCode || line.requestedCode,
               requested_code: line.requestedCode,
               brand: line.brand,
@@ -2185,8 +2219,10 @@ export function PortalPage() {
         // transient detail-read failure.
       }
       setSnapshot(nextSnapshot);
+      setPortalDraftLines(orderLines);
       settlePortalOrderMutation();
-      setPortalOrderId(result.orderId || portalOrderId);
+      setPortalOrderId(result.orderId || effectiveOrderId);
+      setPortalSalesOrderNo(result.order?.sales_order_no || compactOrder?.sales_order_no || effectiveSalesOrderNo || result.orderId);
       setSelection({ kind: "sales-order", id: result.orderId });
       // Keep the newly saved draft visible in the same Sales Orders view as a confirmed order.
       setActiveSection("orders");
@@ -3966,15 +4002,15 @@ export function PortalPage() {
               <h3 id="portal-add-target-title">Add to which sales order?</h3>
               <p>{portalAddTarget.item.code} · Qty {portalAddTarget.quantity.toLocaleString("en-US")}</p>
               <div className="portal-inline-note portal-inline-note--soft portal-inline-note--compact">
-                <span>Save required</span>
-                <strong>First choose a target, then click Save sales order. Only then will it appear in Documents &gt; Orders.</strong>
+                <span>Automatic save</span>
+                <strong>Choose a target. The product will be saved immediately and the sales order will open in Documents &gt; Orders.</strong>
               </div>
             </div>
             <div className="portal-add-target-modal__actions">
               <Button busy={portalAddTargetLoading} onClick={() => void choosePortalAddTarget("new")}>
-                New sales order · then Save draft
+                Create new sales order
               </Button>
-              <span className="portal-add-target-modal__label">Or add to an existing draft · then Save draft</span>
+              <span className="portal-add-target-modal__label">Or add and save to an existing draft</span>
               {portalDraftOrders.length ? (
                 <div className="portal-add-target-modal__list">
                   {portalDraftOrders.map((row) => (
