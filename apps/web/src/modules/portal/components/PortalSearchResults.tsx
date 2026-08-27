@@ -172,7 +172,7 @@ export function PortalSearchResults({
         </form>
         <div className="portal-search-result-view__actions" aria-label="Import and export tools">
           <div className="portal-search-result-view__action-group">
-            <span className="portal-search-result-view__action-label">Order tools</span>
+            <span className="portal-search-result-view__action-label">Sales order tools</span>
             <Button type="button" variant="secondary" onClick={onImport}>
               Import Excel
             </Button>
@@ -180,12 +180,12 @@ export function PortalSearchResults({
               Template
             </Button>
             <Button type="button" variant="secondary" onClick={onExport} disabled={exportDisabled}>
-              Export basket
+              Export sales order
             </Button>
           </div>
           <div className="portal-search-result-view__action-status" aria-live="polite">
-            <strong>{basketCount.toLocaleString("en-US")} basket line{basketCount === 1 ? "" : "s"}</strong>
-            <span>{orderStatus || "Import a file or add a search result to build the basket."}</span>
+            <strong>{basketCount.toLocaleString("en-US")} sales order line{basketCount === 1 ? "" : "s"}</strong>
+            <span>{orderStatus || "Import a file or add a search result to build a sales order."}</span>
           </div>
         </div>
       </div>
@@ -260,7 +260,7 @@ export function PortalSearchResults({
                         onChange={(event) => setAddQuantity(Math.max(1, Math.floor(Number(event.target.value || 1) || 1)))}
                       />
                     </label>
-                    <Button onClick={() => onAdd(selected, addQuantity)}>Add to basket</Button>
+                    <Button onClick={() => onAdd(selected, addQuantity)}>Add to sales order</Button>
                   </div>
                   <button type="button" className="portal-search-result-main__secondary" onClick={() => onPreview?.(selected)}>View larger / details</button>
                 </div>
@@ -322,7 +322,7 @@ export function PortalSearchResults({
         <div className="portal-order-workspace__toolbar" aria-label="Sales order actions">
           <div className="portal-order-workspace__toolbar-group">
             <span className="portal-order-workspace__toolbar-label">Order actions</span>
-            <Button variant="secondary" busy={savingBasket} busyLabel="Saving..." onClick={onSaveBasket} disabled={!draftLines.length}>Save draft → Documents / Orders</Button>
+            <Button variant="secondary" busy={savingBasket} busyLabel="Saving..." onClick={onSaveBasket} disabled={!draftLines.length}>Save sales order → Documents / Orders</Button>
             <Button variant="secondary" onClick={onClearBasket} disabled={!draftLines.length}>Clear lines</Button>
             <Button busy={confirmingBasket} busyLabel="Confirming..." onClick={onConfirmBasket} disabled={!draftLines.length || confirmDisabled}>Confirm order</Button>
           </div>
@@ -356,7 +356,7 @@ export function PortalSearchResults({
                   );
                 })}
               </div>
-            ) : <div className="portal-order-workspace__empty">No order lines yet. Search for a part or import a basket file above.</div>}
+            ) : <div className="portal-order-workspace__empty">No order lines yet. Search for a part or import a sales order file above.</div>}
           </section>
 
           <aside className="portal-order-workspace__summary" aria-label="Order summary">
