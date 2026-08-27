@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { PortalSnapshot } from "../../../types/portalSession";
 import { Button } from "../../../presentation/components/common/Button";
 import { BrandPill } from "../../../presentation/components/common/BrandPill";
@@ -28,12 +28,21 @@ type PortalSearchResultsProps = {
   savingBasket: boolean;
   confirmingBasket: boolean;
   confirmDisabled: boolean;
+  orderNotes: string;
+  deliveryTerm: string;
+  paymentTerms: string;
+  packingDetails: string;
+  onOrderNotesChange: (value: string) => void;
+  onDeliveryTermChange: (value: string) => void;
+  onPaymentTermsChange: (value: string) => void;
+  onPackingDetailsChange: (value: string) => void;
+  onQuantityChange: (lineId: string, quantity: number) => void;
   onSaveBasket: () => void;
   onClearBasket: () => void;
   onConfirmBasket: () => void;
   selectedCode: string;
   onSelect: (item: PortalCatalogSearchItem) => void;
-  onAdd: (item: PortalCatalogSearchItem) => void;
+  onAdd: (item: PortalCatalogSearchItem, quantity: number) => void;
   onPreview?: (item: PortalCatalogSearchItem) => void;
 };
 
@@ -81,6 +90,15 @@ export function PortalSearchResults({
   savingBasket,
   confirmingBasket,
   confirmDisabled,
+  orderNotes,
+  deliveryTerm,
+  paymentTerms,
+  packingDetails,
+  onOrderNotesChange,
+  onDeliveryTermChange,
+  onPaymentTermsChange,
+  onPackingDetailsChange,
+  onQuantityChange,
   onSaveBasket,
   onClearBasket,
   onConfirmBasket,
@@ -90,8 +108,11 @@ export function PortalSearchResults({
   onPreview,
 }: PortalSearchResultsProps) {
   const [searchField, setSearchField] = useState<PortalSearchField>("part_number");
+  const [addQuantity, setAddQuantity] = useState(1);
+  const [showAllResults, setShowAllResults] = useState(false);
   const selected = results.find((item) => item.code === selectedCode) || results[0] || null;
-  const visibleResults = results.slice(0, 12);
+  const visibleResults = showAllResults ? results : results.slice(0, 12);
+  useEffect(() => setShowAllResults(false), [query, results.length]);
   const documentRows = snapshot.invite.party_type === "customer" ? snapshot.salesOrders : snapshot.purchaseOrders;
   const matchedOrder = selected
     ? documentRows.find((order) => (order.lines || []).some((line) => hasProductCode(line, selected.code)))
@@ -101,6 +122,10 @@ export function PortalSearchResults({
   const openInvoice = (snapshot.invite.party_type === "customer" ? snapshot.invoices : snapshot.bills).find(
     (invoice) => !["paid", "settled", "closed"].includes(String(invoice.status || "").toLowerCase()),
   );
+  const pricedLines = draftLines.filter((line) => line.sell_price != null);
+  const unpricedLines = draftLines.length - pricedLines.length;
+  const orderSubtotal = pricedLines.reduce((total, line) => total + Number(line.sell_price || 0) * Number(line.qty || 0), 0);
+  const orderQuantity = draftLines.reduce((total, line) => total + Number(line.qty || 0), 0);
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -147,7 +172,7 @@ export function PortalSearchResults({
         </form>
         <div className="portal-search-result-view__actions" aria-label="Import and export tools">
           <div className="portal-search-result-view__action-group">
-            <span className="portal-search-result-view__action-label">Order tools</span>
+            <span className="portal-search-result-view__action-label">Sales order tools</span>
             <Button type="button" variant="secondary" onClick={onImport}>
               Import Excel
             </Button>
@@ -155,12 +180,12 @@ export function PortalSearchResults({
               Template
             </Button>
             <Button type="button" variant="secondary" onClick={onExport} disabled={exportDisabled}>
-              Export basket
+              Export sales order
             </Button>
           </div>
           <div className="portal-search-result-view__action-status" aria-live="polite">
-            <strong>{basketCount.toLocaleString("en-US")} basket line{basketCount === 1 ? "" : "s"}</strong>
-            <span>{orderStatus || "Import a file or add a search result to build the basket."}</span>
+            <strong>{basketCount.toLocaleString("en-US")} sales order line{basketCount === 1 ? "" : "s"}</strong>
+            <span>{orderStatus || "Import a file or add a search result to build a sales order."}</span>
           </div>
         </div>
       </div>
@@ -189,7 +214,11 @@ export function PortalSearchResults({
               </button>
             ))}
           </div>
-          {results.length > visibleResults.length ? <button type="button" className="portal-search-result-rail__all">View all {results.length.toLocaleString("en-US")} results</button> : null}
+          {results.length > 12 ? (
+            <button type="button" className="portal-search-result-rail__all" onClick={() => setShowAllResults((current) => !current)}>
+              {showAllResults ? "Show fewer results" : `View all ${results.length.toLocaleString("en-US")} results`}
+            </button>
+          ) : null}
         </aside>
 
         <main className="portal-search-result-main">
@@ -219,8 +248,19 @@ export function PortalSearchResults({
                   <strong className="portal-search-result-main__price">{formatMoney(selected.sell_price, selected.currency || currency)}</strong>
                   <span className="portal-search-result-main__price-note">Your customer price · Excl. VAT</span>
                   <div className="portal-search-result-main__actions">
-                    <select aria-label="Quantity" defaultValue="1"><option>1</option><option>2</option><option>5</option><option>10</option></select>
-                    <Button onClick={() => onAdd(selected)}>Add to basket</Button>
+                    <label className="portal-search-result-main__quantity">
+                      <span>Quantity</span>
+                      <input
+                        aria-label="Quantity to add"
+                        type="number"
+                        min={1}
+                        step={1}
+                        inputMode="numeric"
+                        value={addQuantity}
+                        onChange={(event) => setAddQuantity(Math.max(1, Math.floor(Number(event.target.value || 1) || 1)))}
+                      />
+                    </label>
+                    <Button onClick={() => onAdd(selected, addQuantity)}>Add to sales order</Button>
                   </div>
                   <button type="button" className="portal-search-result-main__secondary" onClick={() => onPreview?.(selected)}>View larger / details</button>
                 </div>
@@ -266,37 +306,68 @@ export function PortalSearchResults({
         </aside>
       </div>
 
-      <section className="portal-search-result-basket" aria-label="Basket">
-        <div className="portal-search-result-basket__header">
+      <section className="portal-order-workspace" aria-label="Sales order workspace">
+        <div className="portal-order-workspace__header">
           <div>
-            <span className="portal-search-result-view__eyebrow">Order workspace</span>
-            <h3>Basket ({draftLines.length.toLocaleString("en-US")})</h3>
-            <p>{draftLines.length ? "Review imported or selected lines before saving or confirming the basket." : "Import a file or add a search result to build the basket here."}</p>
+            <span className="portal-search-result-view__eyebrow">Sales order workspace</span>
+            <h3>New sales order</h3>
+            <p>{draftLines.length ? "Review lines, quantities and customer terms before saving or confirming the order." : "Add a search result or import a file to start an order."}</p>
           </div>
-          <div className="portal-search-result-basket__actions">
-            <Button variant="secondary" busy={savingBasket} busyLabel="Saving..." onClick={onSaveBasket} disabled={!draftLines.length}>
-              Save Basket
-            </Button>
-            <Button variant="secondary" onClick={onClearBasket} disabled={!draftLines.length}>
-              Clear
-            </Button>
-            <Button busy={confirmingBasket} busyLabel="Confirming..." onClick={onConfirmBasket} disabled={!draftLines.length || confirmDisabled}>
-              Confirm Basket
-            </Button>
+          <div className="portal-order-workspace__header-meta">
+            <span className="portal-order-workspace__status">{orderStatus || "Draft"}</span>
+            <strong>{draftLines.length.toLocaleString("en-US")} line{draftLines.length === 1 ? "" : "s"}</strong>
           </div>
         </div>
-        {draftLines.length ? (
-          <div className="portal-search-result-basket__lines">
-            {draftLines.slice(0, 6).map((line) => (
-              <div key={line.lineId} className="portal-search-result-basket__line">
-                <strong>{line.resolvedCode || line.requestedCode || "-"}</strong>
-                <span>{line.description || "Part description"}</span>
-                <small>Qty {line.qty} · {line.sell_price == null ? "Price on request" : formatMoney(line.sell_price, currency)}</small>
-              </div>
-            ))}
-            {draftLines.length > 6 ? <div className="portal-search-result-basket__more">+{(draftLines.length - 6).toLocaleString("en-US")} more line{draftLines.length - 6 === 1 ? "" : "s"} in basket</div> : null}
+
+        <div className="portal-order-workspace__toolbar" aria-label="Sales order actions">
+          <div className="portal-order-workspace__toolbar-group">
+            <span className="portal-order-workspace__toolbar-label">Order actions</span>
+            <Button variant="secondary" busy={savingBasket} busyLabel="Saving..." onClick={onSaveBasket} disabled={!draftLines.length}>Save sales order → Documents / Orders</Button>
+            <Button variant="secondary" onClick={onClearBasket} disabled={!draftLines.length}>Clear lines</Button>
+            <Button busy={confirmingBasket} busyLabel="Confirming..." onClick={onConfirmBasket} disabled={!draftLines.length || confirmDisabled}>Confirm order</Button>
           </div>
-        ) : null}
+          <div className="portal-order-workspace__toolbar-summary">
+            <span>{orderQuantity.toLocaleString("en-US")} pcs</span>
+            <strong>{formatMoney(orderSubtotal, currency)}</strong>
+          </div>
+        </div>
+
+        {unpricedLines > 0 ? <div className="portal-order-workspace__warning">{unpricedLines.toLocaleString("en-US")} line{unpricedLines === 1 ? "" : "s"} have no customer price and cannot be confirmed yet.</div> : null}
+
+        <div className="portal-order-workspace__grid">
+          <section className="portal-order-workspace__lines" aria-label="Order lines">
+            <div className="portal-order-workspace__section-heading"><h4>Order lines</h4><span>{draftLines.length.toLocaleString("en-US")} items</span></div>
+            {draftLines.length ? (
+              <div className="portal-order-line-table" role="table" aria-label="Sales order lines">
+                <div className="portal-order-line-table__head" role="row">
+                  <span>Part</span><span>Description</span><span>Qty</span><span>Price</span><span>Amount</span>
+                </div>
+                {draftLines.map((line) => {
+                  const code = line.resolvedCode || line.requestedCode || "-";
+                  const amount = line.sell_price == null ? null : Number(line.sell_price || 0) * Number(line.qty || 0);
+                  return (
+                    <div key={line.lineId} className="portal-order-line-table__row" role="row">
+                      <div className="portal-order-line-table__part"><strong>{code}</strong><BrandPill brand={line.brand} compact withLogo /><small>{line.market_segment || "Automotive"}</small></div>
+                      <div className="portal-order-line-table__description"><span>{line.description || "Part description"}</span>{line.codeChangeWarning ? <small className="portal-order-line-table__notice">{line.codeChangeWarning}</small> : null}{line.lifecycle_status === "discontinued" ? <small className="portal-order-line-table__notice">Discontinued</small> : null}</div>
+                      <input className="portal-order-line-table__qty" aria-label={`Quantity for ${code}`} type="number" min={1} step={1} value={line.qty} onChange={(event) => onQuantityChange(line.lineId, Math.max(1, Number(event.target.value || 1) || 1))} />
+                      <span className="portal-order-line-table__price">{formatMoney(line.sell_price, currency)}</span>
+                      <strong className="portal-order-line-table__amount">{amount == null ? "—" : formatMoney(amount, currency)}</strong>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : <div className="portal-order-workspace__empty">No order lines yet. Search for a part or import a sales order file above.</div>}
+          </section>
+
+          <aside className="portal-order-workspace__summary" aria-label="Order summary">
+            <div className="portal-order-workspace__section-heading"><h4>Order summary</h4><span>{currency}</span></div>
+            <div className="portal-order-workspace__totals"><div><span>Lines</span><strong>{draftLines.length.toLocaleString("en-US")}</strong></div><div><span>Quantity</span><strong>{orderQuantity.toLocaleString("en-US")} pcs</strong></div><div className="is-total"><span>Subtotal excl. VAT</span><strong>{formatMoney(orderSubtotal, currency)}</strong></div></div>
+            <label className="portal-order-workspace__field"><span>Delivery term</span><input value={deliveryTerm} onChange={(event) => onDeliveryTermChange(event.target.value)} placeholder="e.g. Standard delivery" /></label>
+            <label className="portal-order-workspace__field"><span>Payment terms</span><input value={paymentTerms} onChange={(event) => onPaymentTermsChange(event.target.value)} placeholder="e.g. As agreed" /></label>
+            <label className="portal-order-workspace__field"><span>Packing details</span><input value={packingDetails} onChange={(event) => onPackingDetailsChange(event.target.value)} placeholder="Optional packing instruction" /></label>
+            <label className="portal-order-workspace__field portal-order-workspace__field--message"><span>Message to seller</span><small>Leave a note for the seller or admin team.</small><textarea value={orderNotes} onChange={(event) => onOrderNotesChange(event.target.value)} placeholder="Write a message for the seller or admin team" rows={3} /></label>
+          </aside>
+        </div>
       </section>
     </div>
   );

@@ -13,7 +13,6 @@ export type PortalCatalogSearchItem = {
   image_url: string;
   sell_price: number | null;
   currency: string;
-  supplier_name: string;
   lifecycle_status?: "active" | "discontinued" | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
@@ -47,12 +46,9 @@ export type PortalPreparedLine = {
   origin: string;
   weight_kg: number | null;
   image_url: string;
-  supplier_name: string;
-  buy_price: number | null;
   sell_price: number | null;
   c_sell_price: number | null;
   price_date: string;
-  notes: string;
   found: boolean;
   codeChanged: boolean;
   codeChangeWarning: string;
@@ -73,6 +69,7 @@ type PortalOrderResponse = {
   lines?: PortalPreparedLine[];
   pricingProfile?: PortalSnapshot["pricingProfile"];
   snapshot?: PortalSnapshot;
+  order?: PortalSnapshot["salesOrders"][number];
   orderId?: string;
   priceListType?: "A" | "B" | "C" | "Other";
   pricingMode?: "standard" | "prefer_c_when_available";
@@ -89,15 +86,42 @@ type PortalOrderResponse = {
   }>;
 };
 
-async function postPortalOrderJson(path: string, payload: Record<string, unknown>) {
-  const response = await fetch(path, {
-    method: "POST",
-    credentials: "same-origin",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+type PortalRequestOptions = {
+  signal?: AbortSignal;
+};
+
+const PORTAL_ORDER_REQUEST_TIMEOUT_MS = 25_000;
+
+async function postPortalOrderJson(path: string, payload: Record<string, unknown>, options: PortalRequestOptions = {}) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), PORTAL_ORDER_REQUEST_TIMEOUT_MS);
+  const abortFromCaller = () => controller.abort();
+  if (options.signal) {
+    if (options.signal.aborted) controller.abort();
+    else options.signal.addEventListener("abort", abortFromCaller, { once: true });
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (caught) {
+    if (controller.signal.aborted && !options.signal?.aborted) {
+      throw new Error("Portal request timed out. Please try again.");
+    }
+    throw caught;
+  } finally {
+    window.clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", abortFromCaller);
+  }
   const data = (await response.json().catch(() => ({}))) as PortalOrderResponse;
   if (!response.ok) {
     throw new Error(
@@ -115,24 +139,25 @@ export async function searchPortalCatalogItems(
   query: string,
   brand: string,
   searchField: PortalSearchField = "part_number",
+  options: PortalRequestOptions = {},
 ) {
   const data = await postPortalOrderJson("/api/portal-order-search", {
     ...credentials,
     query,
     brand,
     searchField,
-  });
+  }, options);
   return {
     items: data.items || [],
     recommendations: data.recommendations || [],
   };
 }
 
-export async function preparePortalOrderLines(credentials: PortalCredentials, rows: PortalOrderInputRow[]) {
+export async function preparePortalOrderLines(credentials: PortalCredentials, rows: PortalOrderInputRow[], options: PortalRequestOptions = {}) {
   const data = await postPortalOrderJson("/api/portal-order-prepare", {
     ...credentials,
     rows,
-  });
+  }, options);
   return {
     lines: data.lines || [],
     pricingProfile: data.pricingProfile || null,
@@ -151,16 +176,26 @@ export async function submitPortalOrder(
     notes: string;
     rows: PortalOrderInputRow[];
   },
+  options: PortalRequestOptions = {},
 ) {
   const data = await postPortalOrderJson("/api/portal-order-submit", {
     ...credentials,
     ...input,
-  });
-  if (!data.snapshot) throw new Error("Portal order save did not return refreshed portal snapshot");
+  }, options);
+  if (!data.snapshot && !data.order) throw new Error("Portal order save did not return a persisted order");
   return {
-    snapshot: data.snapshot,
+    snapshot: data.snapshot || null,
+    order: data.order || null,
     orderId: data.orderId || "",
   };
+}
+
+export async function fetchPortalSalesOrderDetail(credentials: PortalCredentials, orderId: string, options: PortalRequestOptions = {}) {
+  const data = await postPortalOrderJson("/api/portal-order-detail", {
+    ...credentials,
+    orderId,
+  }, options);
+  return data.order || null;
 }
 
 export async function deletePortalDraftOrder(credentials: PortalCredentials, orderId: string) {

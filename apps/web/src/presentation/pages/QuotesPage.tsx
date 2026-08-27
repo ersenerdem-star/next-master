@@ -22,6 +22,7 @@ import { fetchCloudQuoteDetail, fetchCloudQuotes } from "../../infrastructure/ap
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, inventoryAvailabilityLookupKey, type InventoryAvailabilitySummary } from "../../infrastructure/api/inventoryApi";
 import { canonicalizeBrandName, matchesOriginalNumberSearch, normalizeBrandKey, normalizeBrandName, normalizePartCode, normalizeSearchText } from "../../domain/shared/normalize";
+import { normalizeOrderQuantity, orderQuantityAdjustmentMessage } from "../../domain/shared/orderQuantityRules";
 import { buildBrandResolutionLookup, resolveCanonicalBrandName } from "../../shared/brandResolver";
 import { parseCsv } from "../../shared/csv";
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
@@ -268,6 +269,10 @@ function isDraftPortalAlert(order: Pick<LocalSalesOrder, "source_channel" | "por
     purchaseOrderCount === 0 &&
     invoiceCount === 0
   );
+}
+
+function hasPortalCustomerMessage(order: Pick<LocalSalesOrder, "source_channel" | "notes">) {
+  return order.source_channel === "portal" && Boolean(String(order.notes || "").trim());
 }
 
 function buildSalesOrderPrintAlerts(line: QuoteBuilderLine) {
@@ -541,6 +546,7 @@ function getQuoteBuilderLineIssues(t: TranslateFn, line: QuoteBuilderLine) {
   if (!line.found) issues.push(t("sales.warnings.notMatched"));
   if (!line.description?.trim()) issues.push(t("sales.warnings.missingDescription"));
   if ((line.sell_price ?? 0) <= 0) issues.push(t("sales.warnings.missingSellPrice"));
+  if (line.quantity_adjustment_note) issues.push(line.quantity_adjustment_note);
   return issues;
 }
 
@@ -584,6 +590,8 @@ function mapDetailLineToBuilderLine(
             notes: option.notes || line.notes || fallbackResolved?.notes || null,
           },
         ];
+  const quantityRule = supplierOptions[0] || option;
+  const quantityAdjustment = normalizeOrderQuantity(Number(line.qty || 1), quantityRule);
 
   return {
     lineId: String(line.id || nextLineId()),
@@ -591,7 +599,12 @@ function mapDetailLineToBuilderLine(
     resolvedCode: line.product_code || "",
     brand: line.brand_text || "",
     description: line.description || "",
-    qty: Math.max(1, Number(line.qty || 1) || 1),
+    qty: quantityAdjustment.corrected,
+    requested_qty: quantityAdjustment.adjusted ? quantityAdjustment.requested : null,
+    moq: quantityRule.moq ?? null,
+    order_multiple: quantityRule.order_multiple ?? null,
+    quantity_adjusted: quantityAdjustment.adjusted,
+    quantity_adjustment_note: orderQuantityAdjustmentMessage(quantityAdjustment, (key, params) => t(key, params)),
     oem_no: line.oem_no || "",
     hs_code: line.hs_code || "",
     origin: line.origin || "",
@@ -724,6 +737,7 @@ export function QuotesPage({
   const [salesOrderFilter, setSalesOrderFilter] = useState<"all" | "draft" | "confirmed" | "purchased" | "invoiced">(initialWorkspaceCache?.salesOrderFilter || "all");
   const [quotes, setQuotes] = useState<QuoteSummary[]>([]);
   const [localSalesOrders, setLocalSalesOrders] = useState<LocalSalesOrder[]>([]);
+  const [localSalesOrdersLoaded, setLocalSalesOrdersLoaded] = useState(false);
   const [savedPurchaseOrders, setSavedPurchaseOrders] = useState<PurchaseOrderSalesLinkSummary[]>([]);
   const [savedInvoices, setSavedInvoices] = useState<InvoiceSalesLinkSummary[]>([]);
   const [salesOrderBrandsById, setSalesOrderBrandsById] = useState<Record<string, string[]>>({});
@@ -817,7 +831,10 @@ export function QuotesPage({
     async function run() {
       try {
         const salesOrderRows = await fetchSalesOrderSummaries();
-        if (!cancelled) setLocalSalesOrders(salesOrderRows);
+        if (!cancelled) {
+          setLocalSalesOrders(salesOrderRows);
+          setLocalSalesOrdersLoaded(true);
+        }
       } catch {
         if (!cancelled) setLocalSalesOrders([]);
       }
@@ -853,6 +870,17 @@ export function QuotesPage({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!localSalesOrdersLoaded || !selectedLocalSalesOrderId) return;
+    if (localSalesOrders.some((order) => order.id === selectedLocalSalesOrderId)) return;
+
+    // A cached order can have been deleted or belong to another tenant. Do
+    // not let that stale identity block every navigation with a save prompt.
+    resetSalesOrderEditor();
+    setSalesOrdersView("list");
+    writeSalesOrderWorkspaceCache(null);
+  }, [localSalesOrders, localSalesOrdersLoaded, selectedLocalSalesOrderId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -906,6 +934,9 @@ export function QuotesPage({
 
   useEffect(() => {
     if (pendingCatalogSalesHandledRef.current) return;
+    // Wait until the saved-order list is available so a catalog handoff can
+    // offer every existing draft instead of silently creating a new one.
+    if (!localSalesOrdersLoaded) return;
     const pending = consumeCatalogTransfer(PENDING_CATALOG_SALES_ITEM_KEY);
     if (!pending) return;
     pendingCatalogSalesHandledRef.current = true;
@@ -914,7 +945,37 @@ export function QuotesPage({
     let cancelled = false;
 
     async function run() {
-      if (!quoteBuilderLines.length) {
+      const draftOrders = localSalesOrders.filter((order) => order.status === "draft");
+      let targetOrder: LocalSalesOrder | null = null;
+      if (draftOrders.length) {
+        const orderChoices = draftOrders
+          .slice(0, 20)
+          .map((order, index) => `${index + 1}. ${order.sales_order_no || order.id}`)
+          .join("\n");
+        const answer = window.prompt(
+          `Existing draft sales orders:\n${orderChoices}\n\nEnter an order number or ID to add ${pendingItem.product_code} to it. Leave blank for a new order.`,
+          draftOrders[0]?.sales_order_no || "",
+        );
+        if (answer === null) return;
+        const normalizedAnswer = answer.trim().toLowerCase();
+        if (normalizedAnswer) {
+          targetOrder = draftOrders.find(
+            (order, index) =>
+              order.id.toLowerCase() === normalizedAnswer ||
+              order.sales_order_no.toLowerCase() === normalizedAnswer ||
+              String(index + 1) === normalizedAnswer,
+          ) || null;
+          if (!targetOrder) {
+            setBuilderStatus(`Draft sales order not found: ${answer.trim()}`);
+            actionFeedback.fail(`Draft sales order not found: ${answer.trim()}`);
+            return;
+          }
+        }
+      }
+
+      if (targetOrder) {
+        await loadLocalSalesOrderIntoEditor(targetOrder);
+      } else if (!quoteBuilderLines.length) {
         resetSalesOrderEditor();
         setSelectedLocalSalesOrderId("");
         onSelectedSalesOrderChange?.("");
@@ -957,7 +1018,7 @@ export function QuotesPage({
     return () => {
       cancelled = true;
     };
-  }, [actionFeedback, companyProfiles, onSelectedSalesOrderChange, quoteBuilderLines.length]);
+  }, [actionFeedback, companyProfiles, localSalesOrders, localSalesOrdersLoaded, onSelectedSalesOrderChange, quoteBuilderLines.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1206,6 +1267,9 @@ export function QuotesPage({
   const effectiveWorkbenchColumnVisibility = DEFAULT_QUOTE_WORKBENCH_COLUMNS;
 
   useEffect(() => {
+    // A saved order is a historical commercial document. Repricing it merely
+    // by opening the editor creates a false dirty state and blocks navigation.
+    if (workbenchMode === "existing") return;
     setQuoteBuilderLines((current) =>
       current.map((line) => {
         const selected =
@@ -1241,12 +1305,15 @@ export function QuotesPage({
         };
       }),
     );
-  }, [customerType, customerPricingMode, shouldUseCPricePricing, effectiveMarginA, effectiveMarginB]);
+  }, [workbenchMode, customerType, customerPricingMode, shouldUseCPricePricing, effectiveMarginA, effectiveMarginB]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
+      // Do not silently reprice stored sales orders. Existing order prices only
+      // change through an explicit line edit or a deliberate synchronization.
+      if (workbenchMode === "existing") return;
       if (!shouldUseCPricePricing || !quoteBuilderLines.length) return;
 
       const cPriceMap = await fetchCPriceMapForRows(
@@ -1285,6 +1352,7 @@ export function QuotesPage({
       cancelled = true;
     };
   }, [
+    workbenchMode,
     customerType,
     customerPricingMode,
     effectiveMarginA,
@@ -1547,6 +1615,8 @@ export function QuotesPage({
       });
 
       const selectedKey = supplierOptions[0] ? `${supplierOptions[0].supplier_name}-0` : line.selectedSupplierKey;
+      const selectedRule = supplierOptions[0] || {};
+      const quantityAdjustment = normalizeOrderQuantity(line.qty, selectedRule);
 
       return {
         ...line,
@@ -1564,6 +1634,12 @@ export function QuotesPage({
         c_sell_price: cSellPrice ?? line.c_sell_price,
         price_date: resolved.price_date || supplierOptions[0]?.price_date || line.price_date,
         notes: resolved.notes || supplierOptions[0]?.notes || line.notes,
+        qty: quantityAdjustment.corrected,
+        requested_qty: quantityAdjustment.adjusted ? quantityAdjustment.requested : null,
+        moq: selectedRule.moq ?? line.moq ?? null,
+        order_multiple: selectedRule.order_multiple ?? line.order_multiple ?? null,
+        quantity_adjusted: quantityAdjustment.adjusted,
+        quantity_adjustment_note: orderQuantityAdjustmentMessage(quantityAdjustment, (key, params) => t(key, params)),
         lifecycle_status: resolved.lifecycle_status ?? line.lifecycle_status ?? "active",
         lifecycle_note: resolved.lifecycle_note ?? line.lifecycle_note ?? null,
         lifecycle_warning: resolved.lifecycle_warning ?? line.lifecycle_warning ?? null,
@@ -1577,9 +1653,16 @@ export function QuotesPage({
 
   async function loadLocalSalesOrderIntoEditor(order: LocalSalesOrder) {
     const detailOrder = order.lines.length ? order : await fetchSalesOrderById(order.id);
+    // Older rows may only have purchase_company. Hydrate the editor baseline
+    // with the same fallback rendered in the form so merely opening one of
+    // those rows does not look like an unsaved buyer-info edit.
+    const editorOrder = {
+      ...detailOrder,
+      buyer_info: detailOrder.buyer_info || detailOrder.purchase_company || "",
+    };
     setWorkbenchMode("existing");
-    setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(detailOrder));
-    setSelectedLocalSalesOrderId(detailOrder.id);
+    setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(editorOrder));
+    setSelectedLocalSalesOrderId(editorOrder.id);
     setSelectedQuoteId("");
     onSelectedQuoteChange?.("");
     setQuoteNo(detailOrder.sales_order_no);
@@ -1596,7 +1679,7 @@ export function QuotesPage({
     setDiscountAmount(String(detailOrder.discount_amount ?? 0));
     setSupplierMode(detailOrder.supplier_mode || "Best price");
     setSellerInfo(detailOrder.seller_info || "");
-    setBuyerInfo(detailOrder.buyer_info || detailOrder.purchase_company || "");
+    setBuyerInfo(editorOrder.buyer_info);
     setDeliveryTermSelection(toTermSelection(detailOrder.delivery_term || "", DELIVERY_TERM_OPTIONS));
     setPaymentTermsSelection(toTermSelection(detailOrder.payment_terms || "", PAYMENT_TERM_OPTIONS));
     setDeliveryTerm(detailOrder.delivery_term || "");
@@ -1619,6 +1702,18 @@ export function QuotesPage({
     setBuilderStatus(t("sales.orders.loadedOrder", { salesOrderNo: detailOrder.sales_order_no, status: detailOrder.status }));
     onSelectedSalesOrderChange?.(detailOrder.id);
     actionFeedback.succeed(t("sales.orders.loadedOrderToast", { salesOrderNo: detailOrder.sales_order_no }));
+  }
+
+  function openLocalSalesOrder(order: LocalSalesOrder) {
+    void confirmSalesOrderNavigation(async () => {
+      setSalesOrdersView("detail");
+      await loadLocalSalesOrderIntoEditor(order);
+    }).catch(() => {
+      // A failed read must leave the list reachable. This flow never writes
+      // the selected order, so retrying it is safe.
+      setSalesOrdersView("list");
+      actionFeedback.fail(t("sales.orders.openFailed"));
+    });
   }
 
   useEffect(() => {
@@ -1792,9 +1887,14 @@ export function QuotesPage({
           manualCustomerName.trim() ||
           quoteNotes.trim() ||
           discountAmount !== "0" ||
-          shippingCost !== "0",
+        shippingCost !== "0",
       );
     }
+    // A persisted editor identity is not trusted until the tenant-scoped
+    // order list has loaded and confirms that the order still exists. This
+    // prevents a stale browser cache from blocking navigation on page entry.
+    if (!localSalesOrdersLoaded) return false;
+    if (!localSalesOrders.some((order) => order.id === selectedLocalSalesOrderId)) return false;
     return Boolean(selectedLocalSalesOrderId) && salesOrderDraftSnapshot !== salesOrderSourceSnapshot;
   }, [
     customerName,
@@ -1808,6 +1908,8 @@ export function QuotesPage({
     selectedLocalSalesOrderId,
     shippingCost,
     workbenchMode,
+    localSalesOrders,
+    localSalesOrdersLoaded,
   ]);
 
   async function persistSalesOrderDraft() {
@@ -1880,19 +1982,32 @@ export function QuotesPage({
           pdfView ? (
             row.qty
           ) : (
-            <input
-              className="inline-edit-input inline-edit-input--qty"
-              type="number"
-              min={1}
-              step={1}
-              value={row.qty}
-              onChange={(event) => {
-                const nextQty = Math.max(1, Number(event.target.value || 1) || 1);
-                setQuoteBuilderLines((current) =>
-                  current.map((item) => (item.lineId === row.lineId ? { ...item, qty: nextQty } : item)),
-                );
-              }}
-            />
+            <div>
+              <input
+                className="inline-edit-input inline-edit-input--qty"
+                type="number"
+                min={1}
+                step={1}
+                value={row.qty}
+                onChange={(event) => {
+                  const nextQty = Math.max(1, Number(event.target.value || 1) || 1);
+                  setQuoteBuilderLines((current) =>
+                    current.map((item) => {
+                      if (item.lineId !== row.lineId) return item;
+                      const adjustment = normalizeOrderQuantity(nextQty, item);
+                      return {
+                        ...item,
+                        qty: adjustment.corrected,
+                        requested_qty: adjustment.adjusted ? adjustment.requested : null,
+                        quantity_adjusted: adjustment.adjusted,
+                        quantity_adjustment_note: orderQuantityAdjustmentMessage(adjustment, (key, params) => t(key, params)),
+                      };
+                    }),
+                  );
+                }}
+              />
+              {row.quantity_adjustment_note ? <div className="warning-text">{row.quantity_adjustment_note}</div> : null}
+            </div>
           ),
       },
     ] as Array<{ key: string; header: string; render: (row: QuoteBuilderLine) => ReactNode }>;
@@ -1924,9 +2039,16 @@ export function QuotesPage({
                     if (item.lineId !== row.lineId) return item;
                     const selected = item.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === nextKey);
                     if (!selected) return { ...item, selectedSupplierKey: nextKey };
+                    const adjustment = normalizeOrderQuantity(item.qty, selected);
                     return {
                       ...item,
                       selectedSupplierKey: nextKey,
+                      qty: adjustment.corrected,
+                      requested_qty: adjustment.adjusted ? adjustment.requested : null,
+                      moq: selected.moq ?? null,
+                      order_multiple: selected.order_multiple ?? null,
+                      quantity_adjusted: adjustment.adjusted,
+                      quantity_adjustment_note: orderQuantityAdjustmentMessage(adjustment, (key, params) => t(key, params)),
                       supplier_name: selected.supplier_name || "",
                       buy_price: selected.buy_price ?? null,
                       sell_price:
@@ -2732,6 +2854,9 @@ export function QuotesPage({
               {isDraftPortalAlert(row, poCount, invoiceCount) ? (
                 <span className="mark-badge mark-badge--accent">{t("sales.orders.newOrder")}</span>
               ) : null}
+              {hasPortalCustomerMessage(row) ? (
+                <span className="mark-badge mark-badge--warning">{t("sales.orders.customerMessage")}</span>
+              ) : null}
               {poCount > 0 ? <span className="mark-badge mark-badge--info">{t("sales.orders.poShort", { count: poCount })}</span> : null}
               {invoiceCount > 0 ? <span className="mark-badge mark-badge--accent">{t("sales.orders.invoiceShort", { count: invoiceCount })}</span> : null}
             </span>
@@ -3000,12 +3125,7 @@ export function QuotesPage({
                 rows={filteredLocalSalesOrders}
                 columns={savedSalesOrderColumns}
                 emptyText={t("sales.orders.noSavedOrders")}
-                onRowClick={(row) =>
-                  void confirmSalesOrderNavigation(async () => {
-                    setSalesOrdersView("detail");
-                    await loadLocalSalesOrderIntoEditor(row);
-                  })
-                }
+                onRowClick={openLocalSalesOrder}
                 rowClassName={(row) => (row.id === selectedLocalSalesOrderId ? "data-table__row--active" : "")}
               />
             </div>
@@ -3043,6 +3163,9 @@ export function QuotesPage({
                       : t("sales.orders.portalOrder")}
                   </span>
                 ) : null}
+                {hasPortalCustomerMessage(currentLocalSalesOrder) ? (
+                  <span className="mark-badge mark-badge--warning">{t("sales.orders.customerMessage")}</span>
+                ) : null}
                 {(salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0) > 0 ? (
                   <span className="mark-badge mark-badge--info">
                     {t("sales.orders.poCreated", { count: (salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0).toLocaleString("en-US") })}
@@ -3053,6 +3176,13 @@ export function QuotesPage({
                     {t("sales.orders.invoiceCreated", { count: (salesOrderDocumentState.invoiceCountBySalesOrderId.get(currentLocalSalesOrder.id) || 0).toLocaleString("en-US") })}
                   </span>
                 ) : null}
+              </div>
+            ) : null}
+            {currentLocalSalesOrder && hasPortalCustomerMessage(currentLocalSalesOrder) ? (
+              <div className="portal-customer-message" role="alert">
+                <div className="portal-customer-message__title">{t("sales.orders.customerMessage")}</div>
+                <div className="portal-customer-message__hint">{t("sales.orders.customerMessageHint")}</div>
+                <p>{currentLocalSalesOrder.notes.trim()}</p>
               </div>
             ) : null}
           </div>

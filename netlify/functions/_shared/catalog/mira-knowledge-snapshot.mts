@@ -17,6 +17,11 @@ const FIELD_MAP: Record<string, string> = {
   technical_specification: "technical_specification",
 };
 
+// Keep the server response within the public MIRA knowledge contract. A brand
+// summary can expose ten missing-field rows, so 100 brands may otherwise
+// expand beyond the worker's 500-row validation ceiling.
+const MAX_KNOWLEDGE_GAP_FIELDS = 500;
+
 type Row = Record<string, unknown>;
 
 function array(value: unknown) {
@@ -68,6 +73,19 @@ function missingFields(row: Row) {
     .map((entry) => ({ ...entry, priority: entry.missingCount }));
 }
 
+function boundedCatalogGaps(rows: Array<Record<string, unknown>>) {
+  let remaining = MAX_KNOWLEDGE_GAP_FIELDS;
+  const bounded = [];
+  for (const row of rows) {
+    if (remaining <= 0) break;
+    const rowFields = array(row.missingFields).slice(0, remaining);
+    if (!rowFields.length) continue;
+    bounded.push({ ...row, missingFields: rowFields });
+    remaining -= rowFields.length;
+  }
+  return bounded;
+}
+
 function rest(supabaseUrl: string, table: string, params: Record<string, string>) {
   return buildRestUrl(supabaseUrl, table, params);
 }
@@ -99,7 +117,10 @@ export async function buildMiraKnowledgeSnapshot({
   }
   const [summaries, brands, sources, trusts, jobs, runs, missions] = await Promise.all([
     get<Row[]>("catalog_operations_brand_summary", { select: "brand_id,total_products,missing_ean_count,missing_oem_count,missing_vehicle_count,missing_vehicle_model_count,missing_description_count,missing_image_count,missing_origin_count,missing_weight_count,missing_hs_code_count,missing_market_segment_count,last_catalog_change_at,updated_at", organization_id: `eq.${organizationId}`, total_products: "gt.0", order: "total_products.desc", limit: "100" }),
-    get<Row[]>("brands", { select: "id,name,is_active", organization_id: `eq.${organizationId}`, limit: "200" }),
+    // The production brands table has no lifecycle flag. Keep this lookup to
+    // the canonical identity columns so the read-only snapshot cannot fail on
+    // a field that belongs to another brand projection.
+    get<Row[]>("brands", { select: "id,name", organization_id: `eq.${organizationId}`, limit: "200" }),
     get<Row[]>("catalog_external_sources", { select: "id,source_key,display_name,source_type,base_url,license_posture,robots_posture,rate_limit_posture,credential_boundary,is_active,metadata", organization_id: `eq.${organizationId}`, limit: "200" }),
     get<Row[]>("catalog_external_source_trust_profiles", { select: "id,source_id,allowed_field_families,auto_enrichment_allowed_fields,human_review_required,evidence_required,is_active", organization_id: `eq.${organizationId}`, limit: "200" }),
     get<Row[]>("catalog_observation_jobs", { select: "id,source_id,trust_profile_id,brand_id,job_key,status,allowed_field_families,updated_at", organization_id: `eq.${organizationId}`, limit: "200" }),
@@ -156,13 +177,13 @@ export async function buildMiraKnowledgeSnapshot({
     };
   });
 
-  const catalogGaps = summaries.map((row) => ({
+  const catalogGaps = boundedCatalogGaps(summaries.map((row) => ({
     brand: brandById.get(String(row.brand_id)) || "Unknown brand",
     totalProducts: Number(row.total_products || 0),
     missingFields: missingFields(row),
     lastCatalogChangeAt: row.last_catalog_change_at || null,
     projectionUpdatedAt: row.updated_at || null,
-  })).filter((row) => row.missingFields.length > 0);
+  })).filter((row) => row.missingFields.length > 0));
 
   return {
     knowledgeVersion: "mira-system-knowledge.v1",

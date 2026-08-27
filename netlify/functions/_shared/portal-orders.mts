@@ -49,7 +49,6 @@ type PortalCatalogSearchItem = {
   image_url: string;
   sell_price: number | null;
   currency: string;
-  supplier_name: string;
   lifecycle_status?: "active" | "discontinued" | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
@@ -144,6 +143,22 @@ type PreparedPortalLine = {
   }>;
   selectedSupplierKey: string;
 };
+
+/**
+ * The customer portal must never receive supplier identities, costs or
+ * supplier-selection metadata.  Keep the internal preparation shape above
+ * because it is required when the sales order is persisted, then project it
+ * at the customer API boundary below.
+ */
+export type CustomerPortalPreparedLine = Omit<
+  PreparedPortalLine,
+  "supplier_name" | "buy_price" | "notes" | "supplierOptions" | "selectedSupplierKey"
+>;
+
+function toCustomerPortalPreparedLine(line: PreparedPortalLine): CustomerPortalPreparedLine {
+  const { supplier_name: _supplierName, buy_price: _buyPrice, notes: _notes, supplierOptions: _supplierOptions, selectedSupplierKey: _selectedSupplierKey, ...safeLine } = line;
+  return safeLine;
+}
 
 type CustomerPricingContext = {
   organizationId: string;
@@ -769,7 +784,6 @@ function mapPortalCatalogItemsWithoutPricing(baseItems: SearchCatalogBaseItem[],
     image_url: item.image_url,
     sell_price: null,
     currency,
-    supplier_name: "",
     lifecycle_status: item.lifecycle_status,
     lifecycle_note: item.lifecycle_note,
     lifecycle_warning: item.lifecycle_status === "discontinued" ? buildDiscontinuedWarning(item.code, item.lifecycle_note) : null,
@@ -846,7 +860,6 @@ async function hydratePortalCatalogItems(
     string,
     {
       sell_price: number | null;
-      supplier_name: string;
     }
   >();
 
@@ -868,7 +881,6 @@ async function hydratePortalCatalogItems(
       if (!bestOption) continue;
       previewByCode.set(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`, {
         sell_price: computeSellFromBuy(bestOption.buy_price, context),
-        supplier_name: bestOption.supplier_name || "",
       });
     }
     const cPriceMap = await fetchCPriceMap(
@@ -886,10 +898,8 @@ async function hydratePortalCatalogItems(
       const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
       const cPrice = cPriceMap.get(key);
       if (cPrice == null) continue;
-      const existing = previewByCode.get(key);
       previewByCode.set(key, {
         sell_price: cPrice,
-        supplier_name: existing?.supplier_name || "",
       });
     }
   } else {
@@ -912,7 +922,6 @@ async function hydratePortalCatalogItems(
       previewByCode.set(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`, {
         sell_price:
           bestOption.buy_price == null ? null : roundMoney(Number(bestOption.buy_price) * (1 + marginPercent / 100)),
-        supplier_name: bestOption.supplier_name || "",
       });
     }
     if (prefersCPriceWhereAvailable(context)) {
@@ -929,12 +938,10 @@ async function hydratePortalCatalogItems(
       ).catch(() => new Map());
       for (const item of baseItems) {
         const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
-        const existing = previewByCode.get(key);
         const cPrice = cPriceMap.get(key);
         if (cPrice == null) continue;
         previewByCode.set(key, {
           sell_price: cPrice,
-          supplier_name: existing?.supplier_name || "",
         });
       }
     }
@@ -954,10 +961,6 @@ async function hydratePortalCatalogItems(
       image_url: item.image_url,
       sell_price: preview?.sell_price ?? null,
       currency: context.currency,
-      // Supplier identity is an internal pricing detail. It must not cross
-      // the customer-portal API boundary, even though it is used above to
-      // calculate the account price.
-      supplier_name: "",
       lifecycle_status: item.lifecycle_status,
       lifecycle_note: item.lifecycle_note,
       lifecycle_warning: item.lifecycle_status === "discontinued" ? buildDiscontinuedWarning(item.code, item.lifecycle_note) : null,
@@ -1115,6 +1118,14 @@ function chunkValues<T>(rows: T[], size: number) {
   return chunks;
 }
 
+function effectiveSupplierPriceFilters() {
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    valid_from: `lte.${today}`,
+    or: `(valid_to.is.null,valid_to.gte.${today})`,
+  };
+}
+
 function rpcUrl(supabaseUrl: string, fn: string) {
   return new URL(`/rest/v1/rpc/${fn}`, supabaseUrl).toString();
 }
@@ -1150,28 +1161,37 @@ async function fetchPortalCustomerForOrders(
   if (!customerId) {
     throw new Error("Portal invite is missing its customer scope.");
   }
-  const trySelect = async (select: string) =>
+  const trySelect = async (select: string, scopedToSeller: boolean) =>
     await fetchFirst<CustomerRow>(supabaseUrl, serviceRoleKey, "customers", {
       select,
       organization_id: `eq.${invite.organization_id}`,
       id: `eq.${customerId}`,
-      ...(String(invite.seller_company_profile_id || "").trim()
+      ...(scopedToSeller && String(invite.seller_company_profile_id || "").trim()
         ? { seller_company_profile_id: `eq.${String(invite.seller_company_profile_id).trim()}` }
         : {}),
       limit: "1",
     });
 
-  try {
-    return await trySelect(CUSTOMER_ORDER_SELECT);
-  } catch (primaryError) {
+  const trySelectVariants = async (scopedToSeller: boolean) => {
     try {
-      return await trySelect(CUSTOMER_ORDER_SELECT_LEGACY);
-    } catch (legacyError) {
-      const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError || "");
-      const legacyMessage = legacyError instanceof Error ? legacyError.message : String(legacyError || "");
-      throw new Error(legacyMessage || primaryMessage || `Customer card not found for ${invite.party_name}`);
+      return await trySelect(CUSTOMER_ORDER_SELECT, scopedToSeller);
+    } catch (primaryError) {
+      try {
+        return await trySelect(CUSTOMER_ORDER_SELECT_LEGACY, scopedToSeller);
+      } catch (legacyError) {
+        const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError || "");
+        const legacyMessage = legacyError instanceof Error ? legacyError.message : String(legacyError || "");
+        throw new Error(legacyMessage || primaryMessage || `Customer card not found for ${invite.party_name}`);
+      }
     }
-  }
+  };
+
+  // Older customer cards may store the seller profile in custom_fields
+  // metadata while the physical seller_company_profile_id column is null.
+  // Keep the lookup tenant- and customer-id scoped, then retry without only
+  // the physical seller-column filter for those legacy cards.
+  const scoped = await trySelectVariants(true);
+  return scoped || (await trySelectVariants(false));
 }
 
 async function resolvePortalCustomer(
@@ -1758,6 +1778,7 @@ async function fetchPortalBestSupplierPriceMap(
       brand_id: `eq.${brandId}`,
       is_active: "eq.true",
       buy_price: "not.is.null",
+      ...effectiveSupplierPriceFilters(),
       normalized_code: `in.(${chunk.join(",")})`,
       order: "buy_price.asc",
       limit: "5000",
@@ -1802,6 +1823,7 @@ async function fetchPortalBestSupplierOptionMap(
       brand_id: `eq.${brandId}`,
       is_active: "eq.true",
       buy_price: "not.is.null",
+      ...effectiveSupplierPriceFilters(),
       order: "normalized_code.asc",
       limit: String(PORTAL_PRICE_LIST_SUPPLIER_PAGE_SIZE),
       offset: String(offset),
@@ -1851,6 +1873,7 @@ async function fetchPortalBestSupplierPreviewMap(
         brand_id: `in.(${brandChunk.join(",")})`,
         is_active: "eq.true",
         buy_price: "not.is.null",
+        ...effectiveSupplierPriceFilters(),
         normalized_code: `in.(${codeChunk.join(",")})`,
         order: "buy_price.asc",
         limit: "5000",
@@ -1910,6 +1933,9 @@ export async function buildPortalPriceListRows(
   ].join("::");
   const cached = portalPriceListCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
+    if (!cached.value.rows.length) {
+      throw new Error(`Price list is not available for ${brandName}.`);
+    }
     return cached.value;
   }
 
@@ -1925,7 +1951,7 @@ export async function buildPortalPriceListRows(
       value: emptyResult,
       expiresAt: Date.now() + PORTAL_PRICE_LIST_CACHE_TTL_MS,
     });
-    return emptyResult;
+    throw new Error(`Price list is not available for ${brandName}.`);
   }
 
   let salesPriceByCode = new Map<string, number>();
@@ -1988,11 +2014,15 @@ export async function buildPortalPriceListRows(
     }
   }
 
+  // A customer price list is an offerable list, not a full catalog export.
+  // Do not send catalog rows that have no effective customer price: they add
+  // noise to the workbook and make large-brand downloads needlessly heavy.
+  const pricedCatalogRows = catalogRows.filter((row) => salesPriceByCode.has(row.normalized_code));
   const result = {
     priceListType: context.customerType,
     pricingMode: context.portalCPriceMode,
     currency: context.currency,
-    rows: catalogRows.map((row) => ({
+    rows: pricedCatalogRows.map((row) => ({
       product_code: row.product_code,
       brand: row.brand,
       description: row.description || "",
@@ -2007,6 +2037,9 @@ export async function buildPortalPriceListRows(
     value: result,
     expiresAt: Date.now() + PORTAL_PRICE_LIST_CACHE_TTL_MS,
   });
+  if (!result.rows.length) {
+    throw new Error(`Price list is not available for ${brandName}.`);
+  }
   return result;
 }
 
@@ -2052,6 +2085,8 @@ async function resolvePortalCatalogSupplierData(
       organization_id: `eq.${context.organizationId}`,
       brand_id: `eq.${brandId}`,
       is_active: "eq.true",
+      buy_price: "not.is.null",
+      ...effectiveSupplierPriceFilters(),
       normalized_code: `eq.${normalizedCode}`,
       order: "buy_price.asc",
       limit: "50",
@@ -2061,6 +2096,8 @@ async function resolvePortalCatalogSupplierData(
       organization_id: `eq.${context.organizationId}`,
       brand_id: `eq.${brandId}`,
       is_active: "eq.true",
+      buy_price: "not.is.null",
+      ...effectiveSupplierPriceFilters(),
       normalized_oem: `eq.${normalizedCode}`,
       order: "buy_price.asc",
       limit: "50",
@@ -2303,6 +2340,19 @@ export async function preparePortalOrderLines(
   };
 }
 
+export async function prepareCustomerPortalOrderLines(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  invite: PortalInviteRow,
+  rows: PortalOrderInputRow[],
+) {
+  const prepared = await preparePortalOrderLines(supabaseUrl, serviceRoleKey, invite, rows);
+  return {
+    ...prepared,
+    lines: prepared.lines.map(toCustomerPortalPreparedLine),
+  };
+}
+
 export async function submitPortalSalesOrder(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -2326,20 +2376,28 @@ export async function submitPortalSalesOrder(
   const existing =
     input.orderId
       ? await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
-          select: "id,sales_order_no,status,created_at,portal_submitted_at,portal_seen_at",
+          select: "id,sales_order_no,status,created_at,portal_submitted_at,portal_seen_at,discount_amount,shipping_cost,notes",
           organization_id: `eq.${invite.organization_id}`,
           id: `eq.${input.orderId}`,
           portal_invite_id: `eq.${invite.id}`,
         })
       : null;
 
-  if (existing?.status === "confirmed") {
-    throw new Error("Internally confirmed sales orders cannot be edited from portal");
+  if (
+    existing &&
+    (String(existing.status || "").trim().toLowerCase() !== "draft" || existing.portal_submitted_at)
+  ) {
+    throw new Error("Confirmed sales orders cannot be edited from portal");
   }
 
   const purchaseTotal = roundMoney(lines.reduce((sum, line) => sum + Number(line.buy_price || 0) * line.qty, 0));
   const subtotal = roundMoney(lines.reduce((sum, line) => sum + Number(line.sell_price || 0) * line.qty, 0));
-  const totalAmount = subtotal;
+  // Discounts and shipping are seller-controlled fields. A portal quantity
+  // edit must preserve values already set by the admin instead of silently
+  // resetting them to zero.
+  const discountAmount = existing ? roundMoney(Number(existing.discount_amount || 0)) : 0;
+  const shippingCost = existing ? roundMoney(Number(existing.shipping_cost || 0)) : 0;
+  const totalAmount = roundMoney(subtotal - discountAmount + shippingCost);
   const profitTotal = roundMoney(totalAmount - purchaseTotal);
   const marginPercent = totalAmount > 0 ? roundMoney((profitTotal / totalAmount) * 100) : 0;
   const today = new Date().toISOString().slice(0, 10);
@@ -2358,8 +2416,8 @@ export async function submitPortalSalesOrder(
     quote_date: today,
     currency: context.currency,
     customer_type: context.customerType,
-    shipping_cost: 0,
-    discount_amount: 0,
+    shipping_cost: shippingCost,
+    discount_amount: discountAmount,
     supplier_mode: "Best price",
     preferred_supplier: "",
     seller_info: context.customer.contract_nr || "",
@@ -2367,7 +2425,9 @@ export async function submitPortalSalesOrder(
     delivery_term: String(input.deliveryTerm || ""),
     payment_terms: String(input.paymentTerms || context.customer.payment_terms || ""),
     packing_details: String(input.packingDetails || ""),
-    notes: String(input.notes || ""),
+    // Internal seller notes are never returned to the customer, but they must
+    // survive a customer-side quantity/manual-line update.
+    notes: existing ? String(existing.notes || "") : String(input.notes || ""),
     status: "draft",
     purchase_total: purchaseTotal,
     sales_total: totalAmount,
@@ -2416,8 +2476,59 @@ export async function submitPortalSalesOrder(
   }
 
   const savedId = String(rows[0]?.id || payload.id);
-  const snapshot = await buildPortalSnapshot(supabaseUrl, serviceRoleKey, invite);
-  return { orderId: savedId, snapshot };
+  // Return the just-written order independently from the history snapshot.
+  // Snapshot assembly fans out across several tables and may time out even
+  // though the mutation already committed. The customer-safe projection lets
+  // the portal reconcile that success without duplicating the order.
+  const customerOrder = {
+    id: savedId,
+    sales_order_no: salesOrderNo,
+    customer_name: payload.customer_name,
+    status: payload.status,
+    quote_date: today,
+    currency: context.currency,
+    sales_total: totalAmount,
+    subtotal: roundMoney(totalAmount + discountAmount - shippingCost),
+    discount_amount: discountAmount,
+    shipping_cost: shippingCost,
+    source_channel: "portal",
+    portal_submitted_at: payload.portal_submitted_at,
+    portal_seen_at: payload.portal_seen_at,
+    delivery_term: payload.delivery_term,
+    payment_terms: payload.payment_terms,
+    packing_details: payload.packing_details,
+    updated_at: payload.updated_at,
+    lines: prepared.lines.filter((line) => line.qty > 0 && line.resolvedCode).map((line) => {
+      const safeLine = toCustomerPortalPreparedLine(line);
+      return {
+        code: safeLine.resolvedCode,
+        requested_code: safeLine.requestedCode,
+        brand: safeLine.brand,
+        description: safeLine.description,
+        qty: safeLine.qty,
+        oem_no: safeLine.oem_no,
+        hs_code: safeLine.hs_code,
+        origin: safeLine.origin,
+        weight_kg: safeLine.weight_kg,
+        image_url: safeLine.image_url,
+        sell_price: safeLine.sell_price,
+        line_total: safeLine.sell_price == null ? null : roundMoney(Number(safeLine.sell_price) * Number(safeLine.qty || 0)),
+        price_date: safeLine.price_date,
+        lifecycle_status: safeLine.lifecycle_status,
+        lifecycle_note: safeLine.lifecycle_note,
+        lifecycle_warning: safeLine.lifecycle_warning,
+      };
+    }),
+  };
+  let snapshot = null;
+  try {
+    snapshot = await buildPortalSnapshot(supabaseUrl, serviceRoleKey, invite);
+  } catch {
+    // The write and customerOrder remain authoritative when the broad history
+    // snapshot is temporarily unavailable. The next background refresh will
+    // reconcile the rest of the portal workspace.
+  }
+  return { orderId: savedId, order: customerOrder, snapshot };
 }
 
 export async function deletePortalSalesOrder(

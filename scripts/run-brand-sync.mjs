@@ -1,5 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { syncBrandCatalogWithProgressiveBatches } from "../netlify/functions/_shared/catalog/catalog-sync-provider.mts";
+import {
+  syncBrandCatalog,
+  syncBrandCatalogWithProgressiveBatches,
+} from "../netlify/functions/_shared/catalog/catalog-sync-provider.mts";
 
 function resolveEnvValue(name) {
   const direct = String(process.env[name] || "").trim();
@@ -11,6 +14,10 @@ const supabaseUrl = resolveEnvValue("SUPABASE_URL").replace(/\/+$/, "");
 const serviceRoleKey = resolveEnvValue("SUPABASE_SERVICE_ROLE_KEY");
 const brandName = String(process.argv[2] || "").trim();
 const refreshExisting = process.argv.includes("--no-refresh") ? false : true;
+const singlePass = process.argv.includes("--single-pass");
+const skipCompletion = process.argv.includes("--skip-completion");
+const onlyNew = process.argv.includes("--only-new");
+const expandPrefixes = !process.argv.includes("--no-expand");
 const concurrencyArg = process.argv.find((arg) => arg.startsWith("--concurrency="));
 const pageSizeArg = process.argv.find((arg) => arg.startsWith("--page-size="));
 const timeoutArg = process.argv.find((arg) => arg.startsWith("--timeout-ms="));
@@ -43,20 +50,27 @@ const seedPrefixes = String(seedPrefixesArg?.split("=")[1] || "")
   .map((value) => String(value || "").trim())
   .filter(Boolean);
 
-const result = await syncBrandCatalogWithProgressiveBatches({
+const syncInput = {
   supabaseUrl,
   serviceRoleKey,
   brandName,
   refreshExisting,
+  onlyNew,
   concurrency: Number.isFinite(concurrency) ? concurrency : 8,
   pageSize: Number.isFinite(pageSize) ? pageSize : 48,
   requestTimeoutMs: Number.isFinite(requestTimeoutMs) ? requestTimeoutMs : 20000,
   maxPages: Number.isFinite(maxPages) && maxPages > 0 ? maxPages : undefined,
+  expandPrefixes,
   candidateLimit: Number.isFinite(candidateLimit) && candidateLimit > 0 ? candidateLimit : undefined,
   lineIds,
   seedPrefixes,
   sparetoFallbackLimit:
     Number.isFinite(sparetoFallbackLimit) && sparetoFallbackLimit > 0 ? sparetoFallbackLimit : undefined,
-});
+  skipCompletion,
+};
+
+const result = singlePass
+  ? await syncBrandCatalog(syncInput)
+  : await syncBrandCatalogWithProgressiveBatches(syncInput);
 
 console.log(JSON.stringify(result, null, 2));

@@ -7,7 +7,7 @@ test("builds a tenant-scoped read-only MIRA knowledge snapshot", async () => {
   const requested = [];
   const rows = {
     catalog_operations_brand_summary: [{ brand_id: "b1", total_products: 10, missing_ean_count: 7, missing_oem_count: 0 }],
-    brands: [{ id: "b1", name: "Bosch", is_active: true }],
+    brands: [{ id: "b1", name: "Bosch" }],
     catalog_external_sources: [{ id: "s1", source_key: "bosch-official", source_type: "official", base_url: "https://example.com", license_posture: "allowed", robots_posture: "allowed", rate_limit_posture: "bounded", credential_boundary: "none", is_active: true, metadata: { automated_read_only_approved: true, internal_observation_allowed: true } }],
     catalog_external_source_trust_profiles: [{ id: "t1", source_id: "s1", allowed_field_families: ["ean_reference", "oem_reference"], auto_enrichment_allowed_fields: [], human_review_required: true, evidence_required: true, is_active: true }],
     catalog_observation_jobs: [{ id: "j1", source_id: "s1", trust_profile_id: "t1", brand_id: "b1", job_key: "bosch-ean", status: "active", allowed_field_families: ["ean_reference"], updated_at: null }],
@@ -34,4 +34,41 @@ test("builds a tenant-scoped read-only MIRA knowledge snapshot", async () => {
   assert.equal(snapshot.guarantees.supplierPriceDataIncluded, false);
   assert.ok(requested.every((url) => url.searchParams.get("organization_id") === "eq.org-1"));
   assert.equal(JSON.stringify(snapshot).includes("server-only-key"), false);
+});
+
+test("caps expanded catalog gap fields at the worker contract limit", async () => {
+  const summaries = Array.from({ length: 60 }, (_, index) => ({
+    brand_id: `b${index}`,
+    total_products: 1000 - index,
+    missing_ean_count: 1,
+    missing_oem_count: 1,
+    missing_vehicle_count: 1,
+    missing_vehicle_model_count: 1,
+    missing_description_count: 1,
+    missing_image_count: 1,
+    missing_origin_count: 1,
+    missing_weight_count: 1,
+    missing_hs_code_count: 1,
+    missing_market_segment_count: 1,
+  }));
+  const rows = {
+    catalog_operations_brand_summary: summaries,
+    brands: summaries.map((row, index) => ({ id: row.brand_id, name: `Brand ${index}` })),
+    catalog_external_sources: [],
+    catalog_external_source_trust_profiles: [],
+    catalog_observation_jobs: [],
+    catalog_observation_runs: [],
+    mira_missions: [],
+  };
+
+  const snapshot = await buildMiraKnowledgeSnapshot({
+    supabaseUrl: "https://project.supabase.co",
+    serviceRoleKey: "server-only-key",
+    organizationId: "org-1",
+    fetchRows: async (url) => structuredClone(rows[new URL(url).pathname.split("/").pop()] ?? []),
+  });
+
+  const expandedCount = snapshot.catalog.gaps.reduce((sum, row) => sum + row.missingFields.length, 0);
+  assert.equal(expandedCount, 500);
+  assert.equal(snapshot.catalog.gaps.length, 50);
 });

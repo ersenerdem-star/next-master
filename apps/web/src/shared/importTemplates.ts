@@ -25,8 +25,8 @@ export function downloadSupplierTemplate() {
   downloadCsv(
     "supplier-import-template.csv",
     toCsv([
-      ["Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Lead_Time_Days", "Notes"],
-      ["0986332404", "Bosch", "Starter", "1519524", "52.43", "2026-05-11", "1", "7", "Sample row"],
+      ["Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes"],
+      ["0986332404", "Bosch", "Starter", "1519524", "52.43", "2026-05-11", "1", "", "7", "Sample row"],
     ]),
   );
 }

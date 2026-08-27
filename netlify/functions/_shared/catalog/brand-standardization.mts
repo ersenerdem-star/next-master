@@ -13,6 +13,7 @@ export function canonicalizeInternalBrandName(input: string) {
   if (lower === "bf") return "BF";
   if (lower === "pierburg") return "Pierburg";
   if (lower === "bosch") return "Bosch";
+  if (lower === "corteco") return "Corteco";
   if (lower === "mann" || lower === "mannfilter") return "Mann";
   if (lower === "sachs") return "Sachs";
   if (lower === "nrf") return "NRF";

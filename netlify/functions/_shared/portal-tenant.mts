@@ -19,8 +19,9 @@ function normalizeHostname(value: string) {
 }
 
 export function getPortalRequestHostname(req: Request) {
-  const forwarded = req.headers.get("x-forwarded-host") || "";
-  const host = forwarded || req.headers.get("host") || "";
+  // Prefer the direct host header. `x-forwarded-host` is only a fallback for
+  // trusted platform forwarding and is easier for arbitrary callers to spoof.
+  const host = req.headers.get("host") || req.headers.get("x-forwarded-host") || "";
   return normalizeHostname(host);
 }
 

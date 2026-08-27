@@ -188,9 +188,12 @@ export async function resolveMiraObservationScope({
   const brands = await getRows({
     ...base,
     table: "brands",
-    query: { select: "id,organization_id,name,is_active", organization_id: `eq.${organizationId}`, is_active: "eq.true", limit: "1000" },
+    // The production brands table has no lifecycle column; tenant membership
+    // is the authoritative scope here. Source/trust/job activity remains
+    // enforced by their own active filters above.
+    query: { select: "id,organization_id,name", organization_id: `eq.${organizationId}`, limit: "1000" },
   });
-  const matchingBrands = brands.filter((row) => row.is_active === true && normalizedLabel(row.name) === normalizedLabel(brand));
+  const matchingBrands = brands.filter((row) => normalizedLabel(row.name) === normalizedLabel(brand));
   const brandRecord = exactlyOne(matchingBrands, "BRAND_MAPPING_MISSING", "MIRA brand does not resolve to exactly one tenant brand");
 
   const jobs = await getRows({
@@ -268,9 +271,14 @@ export async function stageMiraObservationResult({
     protocolVersion: MIRA_OBSERVATION_INTAKE_VERSION,
     status: accepted ? "staged" : "blocked",
     intakeStatus: text(receipt?.status) || "blocked",
+    reason: text(receipt?.reason).slice(0, 500) || null,
     runId: UUID_PATTERN.test(text(receipt?.run_id)) ? text(receipt.run_id) : null,
-    observedCount: Number.isInteger(receipt?.observed_count) ? receipt.observed_count : 0,
-    dedupedCount: Number.isInteger(receipt?.deduped_count) ? receipt.deduped_count : 0,
+    observedCount: Number.isInteger(receipt?.observations_appended)
+      ? receipt.observations_appended
+      : Number.isInteger(receipt?.observed_count) ? receipt.observed_count : 0,
+    dedupedCount: Number.isInteger(receipt?.observations_deduped)
+      ? receipt.observations_deduped
+      : Number.isInteger(receipt?.deduped_count) ? receipt.deduped_count : 0,
     idempotent: receipt?.idempotent === true,
     catalogProductsWritten: 0,
     applyPerformed: false,

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 const route = "/catalog/observation-review";
-const runId = "11581bfd-3a12-43d5-bb39-d6aa09e3bd96";
+const runId = "c060aa25-7068-4fd3-a2ee-7f6944402fd7";
 
 async function read(path) {
   return readFile(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -107,6 +107,7 @@ test("Netlify SPA redirects preserve APIs before app route fallback", async () =
   }));
 
   assert.deepEqual(redirects, [
+    { from: "/api/catalog/observation-review/apply", to: "/.netlify/functions/catalog-observation-review-apply", status: 200 },
     { from: "/api/*", to: "/.netlify/functions/:splat", status: 200 },
     { from: "/portal", to: "/index.html", status: 200 },
     { from: "/portal/*", to: "/index.html", status: 200 },

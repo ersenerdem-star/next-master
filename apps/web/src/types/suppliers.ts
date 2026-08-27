@@ -19,6 +19,7 @@ export type SupplierPriceRow = {
   currency: string | null;
   price_date: string | null;
   moq: number | null;
+  order_multiple: number | null;
   lead_time_days: number | null;
   notes: string | null;
   freshness: string | null;

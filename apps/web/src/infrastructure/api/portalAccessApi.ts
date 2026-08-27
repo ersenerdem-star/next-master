@@ -8,15 +8,29 @@ type PortalResponse = {
   error?: string;
 };
 
+const PORTAL_REQUEST_TIMEOUT_MS = 25_000;
+
 async function postPortalJson(path: string, credentials: PortalCredentials): Promise<{ snapshot: PortalSnapshot }> {
-  const response = await fetch(path, {
-    method: "POST",
-    credentials: "same-origin",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(credentials),
-  });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), PORTAL_REQUEST_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(credentials),
+    });
+  } catch (caught) {
+    if (controller.signal.aborted) throw new Error("Portal request timed out. Please try Refresh again.");
+    throw caught;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 
   const data = (await response.json().catch(() => ({}))) as PortalResponse;
   if (!response.ok || !data.snapshot) {
@@ -44,6 +58,7 @@ export async function fetchPortalBranding(credentials: PortalCredentials): Promi
   const response = await fetch("/api/portal-branding", {
     method: "POST",
     credentials: "same-origin",
+    cache: "no-store",
     headers: {
       "Content-Type": "application/json",
     },

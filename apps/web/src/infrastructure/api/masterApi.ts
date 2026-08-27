@@ -670,25 +670,38 @@ async function fetchCloudMasterPricedExportRows(params: MasterExportParams, page
 
 async function fetchCloudMasterExportRows(params: MasterExportParams, pageSize: number, maxRows: number) {
   const { maxRows: _maxRows, pageSize: _pageSize, ...masterParams } = params;
+  // Catalog exports are brand-scoped in the UI. Use the indexed UUID-based
+  // page RPC instead of the legacy CTE export, which materializes supplier
+  // rollups before applying LIMIT/OFFSET and regularly times out on large
+  // brands. Keep the legacy path as a compatibility fallback for older DBs.
+  const useFastCatalogPages = masterParams.scope === "catalog" && Boolean(String(masterParams.brandId || "").trim());
+  const catalogPageSize = Math.min(pageSize, 250);
+  const effectivePageSize = useFastCatalogPages ? catalogPageSize : pageSize;
   const allRows: MasterRow[] = [];
-  const maxPages = Math.ceil(maxRows / pageSize);
+  const maxPages = Math.ceil(maxRows / effectivePageSize);
 
   for (let page = 1; page <= maxPages && allRows.length < maxRows; page += 1) {
-    const currentPageSize = Math.min(pageSize, maxRows - allRows.length);
+    const currentPageSize = Math.min(effectivePageSize, maxRows - allRows.length);
     let rows: MasterRow[];
     try {
-      rows = await fetchCloudMasterExportPage({
-        ...masterParams,
-        page,
-        pageSize: currentPageSize,
-      });
+      rows = useFastCatalogPages
+        ? await fetchCloudMasterCatalogFast({
+            ...masterParams,
+            page,
+            pageSize: currentPageSize,
+          })
+        : await fetchCloudMasterExportPage({
+            ...masterParams,
+            page,
+            pageSize: currentPageSize,
+          });
     } catch (error) {
-      if (!isMissingExportRpc(error)) throw error;
-      rows = await fetchCloudMaster({
-        ...masterParams,
-        page,
-        pageSize: currentPageSize,
-      });
+      if (useFastCatalogPages && isMissingExportRpc(error)) {
+        rows = await fetchCloudMasterExportPage({ ...masterParams, page, pageSize: currentPageSize });
+      } else {
+        if (!isMissingExportRpc(error)) throw error;
+        rows = await fetchCloudMaster({ ...masterParams, page, pageSize: currentPageSize });
+      }
     }
     allRows.push(...rows);
     if (rows.length < currentPageSize) break;

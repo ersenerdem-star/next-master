@@ -56,6 +56,7 @@ type PortalSessionPayload = {
   email: string;
   organization_id?: string;
   hostname?: string;
+  updated_at: string;
   exp: number;
 };
 
@@ -114,12 +115,14 @@ export async function createPortalSessionToken(
   email: string,
   organizationId = "",
   hostname = "",
+  updatedAt = "",
 ) {
   const payload: PortalSessionPayload = {
     invite_id: String(inviteId || ""),
     email: String(email || "").trim().toLowerCase(),
     ...(String(organizationId || "").trim() ? { organization_id: String(organizationId).trim() } : {}),
     ...(String(hostname || "").trim() ? { hostname: String(hostname).trim().toLowerCase() } : {}),
+    updated_at: String(updatedAt || "").trim(),
     exp: Math.floor(Date.now() / 1000) + PORTAL_SESSION_TTL_SECONDS,
   };
   const payloadText = JSON.stringify(payload);
@@ -137,7 +140,7 @@ export async function verifyPortalSessionToken(secret: string, token: string) {
 
   try {
     const payload = JSON.parse(decodeBase64Url(payloadPart)) as PortalSessionPayload;
-    if (!payload?.invite_id || !payload?.email || !payload?.exp) return null;
+    if (!payload?.invite_id || !payload?.email || !payload?.updated_at || !payload?.exp) return null;
     if (Number(payload.exp) <= Math.floor(Date.now() / 1000)) return null;
     return payload;
   } catch {

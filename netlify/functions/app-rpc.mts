@@ -38,9 +38,11 @@ const ALLOWED_RPCS = new Set([
   "post_invoice_stock_movements",
   "search_catalog_products",
   "cloud_quote_supplier_options",
+  "cloud_supplier_order_rules",
   "cloud_resolve_quote_line",
   "cloud_supplier_brand_summary",
   "cloud_supplier_price_page",
+  "cloud_supplier_price_page_with_rules",
   "delete_catalog_product_guarded",
   "deactivate_supplier_prices_by_filter",
   "fail_catalog_import",
@@ -78,6 +80,7 @@ const SUPERADMIN_RPCS = new Set([
   "cloud_catalog_integrity_page",
   "cloud_supplier_brand_summary",
   "cloud_supplier_price_page",
+  "cloud_supplier_price_page_with_rules",
   "delete_catalog_product_guarded",
   "deactivate_supplier_prices_by_filter",
   "get_latest_supplier_price_rollup_refresh_run",
@@ -132,6 +135,7 @@ const OPERATIONS_RPCS = new Set([
 
 const CUSTOMER_STAFF_RPCS = new Set([
   "cloud_quote_supplier_options",
+  "cloud_supplier_order_rules",
   "cloud_resolve_quote_line",
   "delete_purchase_order_guarded",
   "delete_sales_order_guarded",
@@ -737,9 +741,14 @@ async function fetchCachedBrandCount(
   return count;
 }
 
-async function fetchBrandMaps(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
+async function fetchBrandMaps(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  forceRefresh = false,
+) {
   const cached = brandMapCache.get(organizationId);
-  if (cached && cached.expiresAt > Date.now()) {
+  if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
     return { byId: cached.byId, byName: cached.byName };
   }
   const { rows } = await fetchRestRowsWithCount<{ id?: string | null; name?: string | null }>(
@@ -801,8 +810,21 @@ async function fetchCloudCatalogPageViaRest(
   const pageSize = Math.min(250, Math.max(1, Number(args.input_page_size || 50) || 50));
   const offset = (page - 1) * pageSize;
   const normalizedSearch = normalizePartCode(search);
-  const brandMaps = await fetchBrandMaps(supabaseUrl, serviceRoleKey, caller.organizationId);
-  const selectedBrandId = brand ? brandMaps.byName.get(normalizePartCode(brand)) || "" : "";
+  let brandMaps = await fetchBrandMaps(supabaseUrl, serviceRoleKey, caller.organizationId);
+  let selectedBrandId = brand ? brandMaps.byName.get(normalizePartCode(brand)) || "" : "";
+
+  /*
+   * A newly imported brand can arrive after this function's in-memory map was
+   * populated. Refresh once on a miss so a valid brand does not silently turn
+   * into an unscoped catalog query (which makes the brand appear empty).
+   */
+  if (brand && !selectedBrandId) {
+    brandMaps = await fetchBrandMaps(supabaseUrl, serviceRoleKey, caller.organizationId, true);
+    selectedBrandId = brandMaps.byName.get(normalizePartCode(brand)) || "";
+    if (!selectedBrandId) {
+      throw new Error(`Catalog brand not found: ${brand}`);
+    }
+  }
   const strictCodeSearch = shouldStrictlyFilterCodeSearch(search);
   const searchBrandId = strictCodeSearch ? "" : selectedBrandId;
   const fetchLimit = search && strictCodeSearch ? Math.max(pageSize * 2, 80) : pageSize;

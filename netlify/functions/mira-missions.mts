@@ -37,6 +37,14 @@ type BridgeMission = {
   bridge_client?: string | null;
   bridge_event_id?: string | null;
   result?: unknown;
+  origin?: "manual" | "planner";
+  planner_key?: string | null;
+  planner_score?: number | null;
+  planner_reason?: string | null;
+  planner_context?: Record<string, unknown> | null;
+  target_brand?: string | null;
+  requested_fields?: string[] | null;
+  max_items?: number | null;
 };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -70,13 +78,37 @@ function parseMissionInput(body: MissionInput) {
 async function listMissions(caller: Awaited<ReturnType<typeof requireCallerProfile>>) {
   if ("error" in caller) return json({ error: caller.error }, caller.status);
   const url = buildRestUrl(caller.supabaseUrl, "mira_missions", {
-    select: "id,objective,mission_area,max_pages,delay_ms,status,execution_mode,result,error_message,created_at,started_at,finished_at,bridge_client,bridge_event_id,bridge_protocol_version,bridge_received_at",
+    select: "id,objective,mission_area,max_pages,delay_ms,status,execution_mode,result,error_message,created_at,started_at,finished_at,bridge_client,bridge_event_id,bridge_protocol_version,bridge_received_at,origin,planner_key,planner_score,planner_reason,planner_context,target_brand,requested_fields,max_items",
     organization_id: `eq.${caller.profile.organization_id}`,
     order: "created_at.desc",
     limit: "50",
   });
   const missions = await getJson<unknown[]>(url, { headers: serviceRoleHeaders(caller.serviceRoleKey), timeoutMs: 12000 });
   return json({ ok: true, online: true, missions });
+}
+
+async function planMiraMissions({
+  supabaseUrl,
+  serviceRoleKey,
+  organizationId,
+  actorId,
+}: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+  actorId: string | null;
+}) {
+  const rpcUrl = new URL("/rest/v1/rpc/plan_mira_catalog_missions", supabaseUrl).toString();
+  return sendJson<Record<string, unknown>>(rpcUrl, {
+    method: "POST",
+    headers: serviceRoleHeaders(serviceRoleKey),
+    body: JSON.stringify({
+      input_organization_id: organizationId,
+      input_actor_id: actorId,
+      input_limit: 1,
+    }),
+    timeoutMs: 60000,
+  });
 }
 
 function bridgeEnabled() {
@@ -196,6 +228,37 @@ function bridgeRequestError(error: unknown) {
   return json({ error: error instanceof Error ? error.message : "MIRA bridge request failed." }, status);
 }
 
+/** Preserve upstream status for the worker's transient-outage retry policy. */
+async function getBridgeJson<T>(url: string, init: RequestInit & { timeoutMs?: number }) {
+  const { timeoutMs, signal, ...requestInit } = init;
+  const controller = timeoutMs && !signal ? new AbortController() : null;
+  const timer = timeoutMs && controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const response = await fetch(url, { ...requestInit, signal: signal || controller?.signal });
+    const text = await response.text().catch(() => "");
+    let data: unknown = {};
+    try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
+    if (!response.ok) {
+      const message = data && typeof data === "object" && !Array.isArray(data)
+        ? String((data as Record<string, unknown>).message || (data as Record<string, unknown>).error || text || `Request failed: ${response.status}`)
+        : text || `Request failed: ${response.status}`;
+      throw Object.assign(new Error(message.slice(0, 500)), { status: response.status });
+    }
+    return data as T;
+  } catch (error) {
+    if ((error instanceof DOMException && error.name === "AbortError") || String(error || "").toLowerCase().includes("aborted")) {
+      throw Object.assign(new Error(`Bridge request timed out after ${timeoutMs || 0}ms`), { status: 504 });
+    }
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function isTransientSupabaseError(error: unknown) {
+  return /PGRST002|schema cache|could not query the database|request timed out/i.test(String(error instanceof Error ? error.message : error));
+}
+
 async function authorizeBridge(req: Request, bodyText: string) {
   const config = bridgeConfig();
   const verification = await verifyMiraBridgeRequest(req, bodyText, config.secret);
@@ -232,6 +295,42 @@ async function claimBridgeMission(req: Request) {
 }
 
 /**
+ * Run one bounded planner cycle before the worker peeks at the queue. The
+ * database function is the tenant-scoped authority and creates at most one
+ * review-only mission; this endpoint never writes Catalog products.
+ */
+async function planBridgeMission(req: Request) {
+  const auth = await authorizeBridge(req, "");
+  if ("error" in auth) return auth.error;
+  const supabaseUrl = env("SUPABASE_URL");
+  const serviceRoleKey = env("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) return json({ error: "MIRA bridge server configuration is incomplete." }, 503);
+  try {
+    const planner = await planMiraMissions({
+      supabaseUrl,
+      serviceRoleKey,
+      organizationId: auth.config.organizationId,
+      actorId: null,
+    });
+    return json({ ok: true, planner });
+  } catch (error) {
+    // A schema-cache/database outage must not turn the scheduled worker into
+    // a false application failure. No mission is invented or written here.
+    if (isTransientSupabaseError(error)) {
+      return json({ ok: true, planner: {
+        status: "deferred",
+        createdMissionCount: 0,
+        reason: "Supabase is temporarily unavailable; planner will retry on the next cycle.",
+        retryable: true,
+        catalogWrite: false,
+        apply: false,
+      } });
+    }
+    throw error;
+  }
+}
+
+/**
  * Read-only queue peek for the autonomous worker. It deliberately does not
  * claim or mutate a row; the worker must use the exact-ID claim immediately
  * afterwards, which remains the single atomic ownership transition.
@@ -243,13 +342,13 @@ async function nextBridgeMission(req: Request) {
   const serviceRoleKey = env("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) return json({ error: "MIRA bridge server configuration is incomplete." }, 503);
   const url = buildRestUrl(supabaseUrl, "mira_missions", {
-    select: "id,organization_id,objective,mission_area,max_pages,delay_ms,status,created_at,started_at,bridge_client",
+    select: "id,organization_id,objective,mission_area,max_pages,delay_ms,status,created_at,started_at,bridge_client,origin,planner_key,planner_score,planner_reason,planner_context,target_brand,requested_fields,max_items",
     organization_id: `eq.${auth.config.organizationId}`,
     status: "eq.queued",
     order: "created_at.asc",
     limit: "1",
   });
-  const missions = await getJson<BridgeMission[]>(url, { headers: serviceRoleHeaders(serviceRoleKey), timeoutMs: 12000 });
+  const missions = await getBridgeJson<BridgeMission[]>(url, { headers: serviceRoleHeaders(serviceRoleKey), timeoutMs: 12000 });
   return json({ ok: true, mission: missions[0] ?? null });
 }
 
@@ -429,7 +528,8 @@ async function acceptBridgeResult(req: Request) {
               resultIntake,
             });
             if (intake.status !== "staged") {
-              intake = await stageMiraDiscoveryQuarantine({
+              const blockedIntake = intake;
+              const quarantine = await stageMiraDiscoveryQuarantine({
                 supabaseUrl,
                 serviceRoleKey,
                 organizationId: auth.config.organizationId,
@@ -437,6 +537,11 @@ async function acceptBridgeResult(req: Request) {
                 resultIntake,
                 reason: "CANONICAL_STAGING_BLOCKED",
               });
+              intake = {
+                ...quarantine,
+                canonicalStagingStatus: blockedIntake.intakeStatus,
+                canonicalStagingReason: blockedIntake.reason || "Canonical observation staging was blocked.",
+              };
             }
           } catch (error) {
             if (!isMiraQuarantineEligibleError(error)) throw error;
@@ -508,7 +613,7 @@ async function acceptBridgeResult(req: Request) {
 
 function isBridgeRoute(req: Request) {
   const bridge = new URL(req.url).searchParams.get("bridge");
-  return bridge === "claim" || bridge === "next" || bridge === "knowledge" || bridge === "release" || bridge === "result" ? bridge : null;
+  return bridge === "claim" || bridge === "plan" || bridge === "next" || bridge === "knowledge" || bridge === "release" || bridge === "result" ? bridge : null;
 }
 
 export default async (req: Request, _context: Context) => {
@@ -517,6 +622,10 @@ export default async (req: Request, _context: Context) => {
     if (bridgeRoute === "claim") {
       if (req.method !== "GET") return json({ error: "Method not allowed" }, 405);
       return await claimBridgeMission(req);
+    }
+    if (bridgeRoute === "plan") {
+      if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      return await planBridgeMission(req);
     }
     if (bridgeRoute === "next") {
       if (req.method !== "GET") return json({ error: "Method not allowed" }, 405);
@@ -539,6 +648,16 @@ export default async (req: Request, _context: Context) => {
     const caller = await requireCallerProfile(req, ["superadmin"]);
     if ("error" in caller) return json({ error: caller.error }, caller.status);
     if (req.method === "GET") return listMissions(caller);
+
+    if (new URL(req.url).searchParams.get("planner") === "run") {
+      const planner = await planMiraMissions({
+        supabaseUrl: caller.supabaseUrl,
+        serviceRoleKey: caller.serviceRoleKey,
+        organizationId: caller.profile.organization_id,
+        actorId: caller.profile.id,
+      });
+      return json({ ok: true, online: true, planner });
+    }
 
     const body = await readJson<MissionInput>(req);
     const input = parseMissionInput(body);

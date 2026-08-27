@@ -1052,6 +1052,28 @@ select {
   width: min(520px, 100%);
 }
 
+.portal-add-target-modal__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.portal-add-target-modal__label {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.portal-add-target-modal__list {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 2px;
+}
+
 .draggable-surface__handle {
   cursor: grab;
   user-select: none;
@@ -2186,6 +2208,13 @@ select {
   border-color: #fcd34d;
   background: #fffbeb;
   color: #b45309;
+}
+
+.mark-badge--warning {
+  border-color: #fb923c;
+  background: #fff7ed;
+  color: #c2410c;
+  box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.12);
 }
 
 .mark-badge--danger {
@@ -4020,6 +4049,38 @@ select {
   resize: vertical;
 }
 
+.portal-customer-message {
+  margin-top: 14px;
+  border: 1px solid #fb923c;
+  border-left-width: 5px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fff7ed 0%, #fffbeb 100%);
+  padding: 12px 14px;
+  color: #7c2d12;
+  box-shadow: 0 4px 14px rgba(194, 65, 12, 0.1);
+}
+
+.portal-customer-message__title {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.portal-customer-message__hint {
+  margin-top: 3px;
+  color: #9a3412;
+  font-size: 0.78rem;
+}
+
+.portal-customer-message p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  font-size: 0.96rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
 .quote-summary-card {
   border: 1px solid #e2e8f0;
   border-radius: 16px;
@@ -4885,6 +4946,53 @@ select {
   font-size: 13px;
 }
 
+.portal-notification-panel {
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  background: #eff6ff;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.portal-notification-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.portal-notification-panel__header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.portal-notification-panel__list {
+  display: grid;
+  gap: 8px;
+}
+
+.portal-notification-panel__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.portal-notification-panel__item strong {
+  color: #1e3a8a;
+  font-size: 13px;
+}
+
+.portal-notification-panel__item span {
+  color: #475569;
+  font-size: 12px;
+}
+
 .portal-warning-list {
   border-top: 1px solid #edf2f7;
   padding-top: 12px;
@@ -4948,6 +5056,50 @@ select {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.portal-manual-line {
+  border: 1px solid #dbe6f1;
+  border-radius: 14px;
+  background: #f8fbff;
+  padding: 14px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.portal-manual-line > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 220px;
+}
+
+.portal-manual-line > div:first-child strong {
+  font-size: 13px;
+  color: #475569;
+}
+
+.portal-manual-line__fields {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(150px, 1.25fr) minmax(150px, 1fr) 88px auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.portal-manual-line__fields .field,
+.portal-manual-line__fields .field__input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.portal-manual-line__fields > .button {
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .portal-detail-totals {
@@ -5349,6 +5501,13 @@ select {
   .portal-detail-grid,
   .portal-detail-totals {
     grid-template-columns: 1fr;
+  }
+
+  .portal-manual-line,
+  .portal-manual-line__fields {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .portal-sidebar {
@@ -7265,7 +7424,9 @@ textarea {
 .portal-order-builder--modern > .portal-filter-grid--desk,
 .portal-order-builder--modern > .portal-inline-note--compact,
 .portal-order-builder--modern > .portal-workbench,
-.portal-order-builder--modern > .portal-action-bar {
+.portal-order-builder--modern > .portal-action-bar,
+.portal-order-builder--modern > .warning-text,
+.portal-order-builder--modern > .success-text {
   display: none;
 }
 
@@ -7273,6 +7434,46 @@ textarea {
   display: grid;
   gap: 14px;
   color: #10233f;
+}
+
+/* Order creation and editing live in Documents > Orders. Search remains a
+ * spacious, read-only product discovery surface for customer users. */
+.portal-search-result-view__actions,
+.portal-search-result-main__actions,
+.portal-search-result-view > .portal-order-workspace {
+  display: none;
+}
+
+/* Keep the other customer views in the same airy blue/white visual system as
+ * the Search screen instead of switching back to the denser beige surface. */
+.portal-shell {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.9), transparent 26%),
+    linear-gradient(180deg, #f5f8fc 0%, #edf3f8 100%);
+}
+
+.portal-content {
+  gap: 18px;
+}
+
+.portal-order-detail-image {
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #dbe5ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.portal-order-detail-image .catalog-thumb,
+.portal-order-detail-image .catalog-thumb-fallback {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 6px;
+  object-fit: contain;
 }
 
 .portal-search-result-view__toolbar {
@@ -7523,8 +7724,9 @@ textarea {
 .portal-search-result-main__stock span { display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 50%; background: #17a765; }
 .portal-search-result-main__price { margin-top: 6px; font-size: 30px; color: #10233f; }
 .portal-search-result-main__price-note { color: #62738a; }
-.portal-search-result-main__actions { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; margin-top: 12px; }
-.portal-search-result-main__actions select { min-height: 44px; border: 1px solid #cad7e5; border-radius: 7px; padding: 0 10px; background: #fff; color: #122947; }
+.portal-search-result-main__actions { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; margin-top: 12px; }
+.portal-search-result-main__quantity { display: grid; gap: 3px; align-content: center; color: #687d99; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.portal-search-result-main__quantity input { width: 100%; min-height: 35px; border: 1px solid #cad7e5; border-radius: 7px; padding: 0 8px; background: #fff; color: #122947; font: inherit; font-size: 15px; letter-spacing: normal; text-transform: none; }
 .portal-search-result-main__actions .button { min-height: 44px; background: #f6a400; border-color: #f6a400; color: #182b48; }
 .portal-search-result-main__secondary { padding: 9px; border: 1px solid #cbd8e6; border-radius: 7px; background: #fff; color: #244a78; font-weight: 800; cursor: pointer; }
 .portal-search-result-main__notice { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; padding: 12px 14px; border: 1px solid #f1c870; border-radius: 7px; background: #fff8e7; color: #75551e; }
@@ -7610,6 +7812,77 @@ textarea {
 .portal-search-result-basket__line small { color: #657990; white-space: nowrap; }
 .portal-search-result-basket__more { color: #2268ba; font-size: 12px; font-weight: 800; }
 
+/* Admin-aligned customer order workspace. The customer sees the same
+ * order-building hierarchy as Sales Orders without internal buy-price or
+ * supplier fields. */
+.portal-order-workspace {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #d4dfeb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.portal-order-workspace__header,
+.portal-order-workspace__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.portal-order-workspace__header { padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+.portal-order-workspace__header h3 { margin: 9px 0 4px; color: #10233f; font-size: 22px; }
+.portal-order-workspace__header p { margin: 0; color: #60728a; }
+.portal-order-workspace__header-meta { display: grid; justify-items: end; gap: 5px; color: #52667d; white-space: nowrap; }
+.portal-order-workspace__status { padding: 5px 10px; border: 1px solid #c9d9e8; border-radius: 999px; background: #f6f9fc; color: #244a78; font-size: 12px; font-weight: 800; }
+
+.portal-order-workspace__toolbar { padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
+.portal-order-workspace__toolbar-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.portal-order-workspace__toolbar-label { margin-right: 3px; color: #52667d; font-size: 12px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+.portal-order-workspace__toolbar .button { min-height: 36px; padding: 7px 12px; font-size: 12px; }
+.portal-order-workspace__toolbar-summary { display: flex; align-items: baseline; gap: 12px; color: #52667d; font-size: 13px; }
+.portal-order-workspace__toolbar-summary strong { color: #10233f; font-size: 18px; }
+.portal-order-workspace__warning { padding: 10px 12px; border: 1px solid #f1c870; border-radius: 7px; background: #fff8e7; color: #75551e; font-size: 13px; font-weight: 700; }
+
+.portal-order-workspace__grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(270px, .72fr); gap: 14px; align-items: start; }
+.portal-order-workspace__lines,
+.portal-order-workspace__summary { min-width: 0; padding: 14px; border: 1px solid #e0e7ef; border-radius: 8px; background: #fff; }
+.portal-order-workspace__section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.portal-order-workspace__section-heading h4 { margin: 0; color: #243c5c; font-size: 16px; }
+.portal-order-workspace__section-heading span { color: #657990; font-size: 12px; font-weight: 800; }
+.portal-order-workspace__empty { padding: 28px 16px; border: 1px dashed #cbd8e6; border-radius: 7px; background: #fbfcfe; color: #60728a; text-align: center; }
+
+.portal-order-line-table { display: grid; overflow: auto; border: 1px solid #dfe7ef; border-radius: 7px; }
+.portal-order-line-table__head,
+.portal-order-line-table__row { display: grid; grid-template-columns: minmax(150px, 1.1fr) minmax(180px, 1.5fr) 70px minmax(118px, .8fr) minmax(118px, .8fr); gap: 10px; align-items: center; min-width: 660px; }
+.portal-order-line-table__head { padding: 9px 10px; background: #f4f7fa; color: #60728a; font-size: 11px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
+.portal-order-line-table__row { padding: 10px; border-top: 1px solid #e6ecf2; color: #334b68; font-size: 13px; }
+.portal-order-line-table__part { display: grid; grid-template-columns: auto 30px; gap: 4px 7px; align-items: center; min-width: 0; }
+.portal-order-line-table__part strong { color: #183b69; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-order-line-table__part small { grid-column: 1 / -1; color: #71839a; font-size: 11px; }
+.portal-order-line-table__part .brand-pill { width: 30px; min-width: 30px; min-height: 24px; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.portal-order-line-table__part .brand-pill__label { display: none; }
+.portal-order-line-table__part .brand-pill__logo { width: 26px; height: 26px; border-radius: 0; background: transparent; }
+.portal-order-line-table__description { display: grid; gap: 3px; min-width: 0; }
+.portal-order-line-table__description > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-order-line-table__notice { color: #a3610d; font-size: 11px; font-weight: 700; }
+.portal-order-line-table__qty { width: 58px; min-height: 34px; border: 1px solid #cbd8e6; border-radius: 6px; padding: 0 7px; color: #183b69; font: inherit; font-weight: 700; }
+.portal-order-line-table__price { color: #52667d; white-space: nowrap; }
+.portal-order-line-table__amount { color: #183b69; white-space: nowrap; }
+
+.portal-order-workspace__totals { display: grid; gap: 8px; margin-bottom: 14px; }
+.portal-order-workspace__totals div { display: flex; justify-content: space-between; gap: 8px; color: #60728a; font-size: 13px; }
+.portal-order-workspace__totals strong { color: #183b69; }
+.portal-order-workspace__totals .is-total { margin-top: 4px; padding-top: 10px; border-top: 1px solid #e0e7ef; font-weight: 800; }
+.portal-order-workspace__totals .is-total strong { font-size: 18px; }
+.portal-order-workspace__field { display: grid; gap: 5px; margin-top: 10px; color: #52667d; font-size: 12px; font-weight: 800; }
+.portal-order-workspace__field input,
+.portal-order-workspace__field textarea { width: 100%; border: 1px solid #cbd8e6; border-radius: 6px; padding: 9px 10px; background: #fff; color: #183b69; font: inherit; font-weight: 500; resize: vertical; box-sizing: border-box; }
+.portal-order-workspace__field--message { padding: 10px; border: 1px solid #f4c27a; border-radius: 8px; background: #fffaf0; color: #8a4b08; }
+.portal-order-workspace__field--message small { color: #9a6b2f; font-size: 11px; font-weight: 600; }
+
 @media (max-width: 1120px) {
   .portal-search-result-view__layout { grid-template-columns: minmax(220px, 0.72fr) minmax(380px, 1.4fr); }
   .portal-search-result-insights { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -7618,6 +7891,25 @@ textarea {
 }
 
 @media (max-width: 768px) {
+  .portal-order-workspace__header,
+  .portal-order-workspace__toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .portal-order-workspace__header-meta {
+    justify-items: start;
+  }
+
+  .portal-order-workspace__toolbar-summary {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .portal-order-workspace__grid {
+    grid-template-columns: 1fr;
+  }
+
   .portal-search-result-view__actions {
     align-items: stretch;
     flex-direction: column;

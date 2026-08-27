@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { PageHeader, PageShell, StatusBadge } from "../components/common/VisualPrimitives";
 import { useI18n } from "../../i18n/I18nProvider";
-import { listMiraMissions, queueMiraMission, type MiraMission } from "../../infrastructure/api/miraMissionsApi";
+import { listMiraMissions, planMiraMissions, queueMiraMission, type MiraMission } from "../../infrastructure/api/miraMissionsApi";
 
 type MiraDeskTab = "queue" | "evidence" | "results";
 
@@ -154,7 +154,7 @@ function reportForMission(mission: MiraMission): MissionReport {
   );
   const negativeReason = explicitNegative ?? (
     candidates === 0 && resultStatus !== "queued" && resultStatus !== "processing"
-      ? "Doğrulanmış EAN adayı bulunmadı; kaynak çıktısı kanıt için yetersiz kaldı."
+      ? "Doğrulanmış katalog adayı bulunmadı; kaynak çıktısı kanıt için yetersiz kaldı."
       : null
   );
 
@@ -274,6 +274,7 @@ export function MiraMissionDeskPage() {
   const [delayMs, setDelayMs] = useState(2000);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [planning, setPlanning] = useState(false);
   const [message, setMessage] = useState("");
 
   async function refresh({ silent = false }: { silent?: boolean } = {}) {
@@ -313,6 +314,22 @@ export function MiraMissionDeskPage() {
     }
   }
 
+  async function runPlanner() {
+    setPlanning(true);
+    try {
+      const result = await planMiraMissions();
+      await refresh({ silent: true });
+      setActiveTab("queue");
+      setMessage(result.mission
+        ? "MIRA sıradaki işi seçti; görev worker kuyruğuna alındı."
+        : "MIRA planlayıcısı çalıştı; uygun yeni görev bulunmadı.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "MIRA planlayıcısı çalıştırılamadı.");
+    } finally {
+      setPlanning(false);
+    }
+  }
+
   const evidenceMissions = useMemo(
     () => missions.filter((mission) => mission.status !== "queued" || Boolean(mission.result) || Boolean(mission.error_message)),
     [missions],
@@ -339,7 +356,7 @@ export function MiraMissionDeskPage() {
         title={t("mira.missionDesk.title")}
         subtitle={t("mira.missionDesk.subtitle")}
         status={<StatusBadge tone={deskStatus === "MIRA çalışıyor" ? "warning" : "success"}>{deskStatus}</StatusBadge>}
-        actions={<button className="button button--secondary" type="button" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>}
+        actions={<div className="mira-mission-page__header-actions"><button className="button button--primary" type="button" onClick={() => void runPlanner()} disabled={planning || loading}>{planning ? "Planlanıyor…" : "MIRA sıradaki işi seçsin"}</button><button className="button button--secondary" type="button" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button></div>}
       />
 
       <section className="mira-mission-page__hero" aria-labelledby="mira-mission-copy">
@@ -375,7 +392,7 @@ export function MiraMissionDeskPage() {
             <button className="button button--primary" type="submit" disabled={submitting}>{submitting ? "Kuyruğa alınıyor…" : "MIRA’ya görev ver"}</button>
             {message ? <p className="mira-mission-page__message" role="status">{message}</p> : null}
           </form>
-          <section className="mira-mission-page__online-queue" aria-label="MIRA mission queue"><div className="mira-mission-page__queue-header"><h2>Online görev kuyruğu</h2><span>{missions.length} kayıt</span></div>{missions.length === 0 && !loading ? <p>Henüz online görev yok.</p> : missions.map((mission) => <article key={mission.id} className="mira-mission-page__queue-item"><div><strong>{mission.objective}</strong><small>{mission.mission_area} · {mission.max_pages} sayfa · {mission.delay_ms} ms</small></div><StatusBadge tone={statusTone(mission.status)}>{mission.status}</StatusBadge></article>)}</section>
+          <section className="mira-mission-page__online-queue" aria-label="MIRA mission queue"><div className="mira-mission-page__queue-header"><h2>Online görev kuyruğu</h2><span>{missions.length} kayıt</span></div>{missions.length === 0 && !loading ? <p>Henüz online görev yok.</p> : missions.map((mission) => <article key={mission.id} className="mira-mission-page__queue-item"><div><div className="mira-mission-page__queue-title"><strong>{mission.objective}</strong>{mission.origin === "planner" ? <span className="mira-mission-page__planner-badge">Planner</span> : null}</div><small>{mission.mission_area} · {mission.max_items ?? mission.max_pages} ürün · {mission.delay_ms} ms</small>{mission.origin === "planner" && mission.planner_reason ? <small className="mira-mission-page__planner-reason">{mission.target_brand ?? "Marka"}: {mission.planner_reason}</small> : null}</div><StatusBadge tone={statusTone(mission.status)}>{mission.status}</StatusBadge></article>)}</section>
         </section>
       ) : null}
 

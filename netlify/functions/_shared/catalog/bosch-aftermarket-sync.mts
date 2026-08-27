@@ -377,7 +377,7 @@ async function resolveBoschOfficialPayload(existing: any, searchItem: any, searc
       searchItems.find((item) => item.normalized_code === existing?.normalized_code) ||
       searchItems.find((item) => normalizeCode(item.product_code) === existing?.normalized_code) ||
       searchItems.find((item) => item.normalized_code === searchItem?.normalized_code) ||
-      searchItems[0] ||
+      searchItems.find((item) => item.normalized_code === normalizeCode(term)) ||
       null;
     if (!exact?.productNumber) continue;
     const detail = await fetchBoschDetail(exact.productNumber, requestTimeoutMs, { accept404: false });

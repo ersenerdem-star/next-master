@@ -67,9 +67,9 @@ function fakeFetch(url, init = {}) {
   }
   if (path.endsWith("/brands")) {
     const query = new URL(url).searchParams;
-    assert.equal(query.get("is_active"), "eq.true");
-    assert.match(query.get("select") ?? "", /is_active/);
-    return Promise.resolve(response([{ id: ids.brand, organization_id: ids.organization, name: "BF", is_active: true }]));
+    assert.equal(query.get("is_active"), null);
+    assert.doesNotMatch(query.get("select") ?? "", /is_active/);
+    return Promise.resolve(response([{ id: ids.brand, organization_id: ids.organization, name: "BF" }]));
   }
   if (path.endsWith("/catalog_observation_jobs")) {
     return Promise.resolve(response([{
@@ -93,6 +93,19 @@ function fakeFetch(url, init = {}) {
     return Promise.resolve(response({ status: "succeeded", run_id: ids.mission, observed_count: 1, deduped_count: 0 }));
   }
   throw new Error(`unexpected URL ${url}`);
+}
+
+function fakeFetchWithBlockedRpc(url, init = {}) {
+  const path = new URL(url).pathname;
+  if (path.endsWith("/rpc/ingest_mira_catalog_observation_batch")) {
+    return Promise.resolve(response({
+      status: "blocked",
+      reason: "MIRA observation 1 confidence must be numeric",
+      catalog_products_written: 0,
+      apply_performed: false,
+    }));
+  }
+  return fakeFetch(url, init);
 }
 
 test("rejects client-supplied scope identifiers", () => {
@@ -158,6 +171,22 @@ test("stages through the observation RPC and reports no Product mutation", async
   });
   assert.equal(result.status, "staged");
   assert.equal(result.observedCount, 1);
+  assert.equal(result.catalogProductsWritten, 0);
+  assert.equal(result.applyPerformed, false);
+});
+
+test("preserves the canonical database reason when staging is blocked", async () => {
+  const result = await stageMiraObservationResult({
+    supabaseUrl: "https://example.supabase.co",
+    serviceRoleKey: "service-role",
+    organizationId: ids.organization,
+    missionId: ids.mission,
+    resultIntake: intake(),
+    fetchImpl: fakeFetchWithBlockedRpc,
+  });
+  assert.equal(result.status, "blocked");
+  assert.equal(result.intakeStatus, "blocked");
+  assert.equal(result.reason, "MIRA observation 1 confidence must be numeric");
   assert.equal(result.catalogProductsWritten, 0);
   assert.equal(result.applyPerformed, false);
 });

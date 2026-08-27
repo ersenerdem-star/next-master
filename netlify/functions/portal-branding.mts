@@ -33,6 +33,22 @@ export default async (req: Request, _context: Context) => {
       sessionToken,
       hostname: getPortalRequestHostname(req),
     });
+    // Login-page branding previews are intentionally generic before a portal
+    // session exists. Do not dereference a null invite or reveal tenant data
+    // merely because a caller supplied an email address.
+    if (!invite) {
+      return json(
+        {
+          ok: true,
+          branding: {
+            companyProfile: null,
+            portalLabel: "Customer Portal",
+            partyName: "",
+          },
+        },
+        200,
+      );
+    }
     let branding;
     try {
       branding = await buildPortalBranding(supabaseUrl, serviceRoleKey, invite);

@@ -75,6 +75,7 @@ type PortalOrderRow = {
   updated_at?: string;
   currency: string;
   sales_total?: number;
+  subtotal?: number;
   total_amount?: number;
   line_count?: number;
   source_channel?: string;
@@ -140,6 +141,7 @@ type PortalDocumentLine = {
   market_segment?: string | null;
   description?: string;
   qty: number;
+  image_url?: string;
   oem_no?: string;
   hs_code?: string;
   origin?: string;

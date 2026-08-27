@@ -33,6 +33,7 @@ const SUPPLIER_IMPORT_COLUMNS = [
   "Buy_Price_EUR",
   "Price_Date",
   "MOQ",
+  "Order_Multiple",
   "Lead_Time_Days",
   "Notes",
 ] as const;
@@ -45,6 +46,7 @@ const SUPPLIER_IMPORT_HEADER_ALIASES: Record<(typeof SUPPLIER_IMPORT_COLUMNS)[nu
   Buy_Price_EUR: ["Buy_Price_EUR", "Buy Price EUR", "Buy_Price", "Buy Price", "Price_EUR", "Price"],
   Price_Date: ["Price_Date", "Price Date", "Valid_From", "Date"],
   MOQ: ["MOQ", "Min_Qty", "Minimum Order Quantity"],
+  Order_Multiple: ["Order_Multiple", "Order Multiple", "Pack_Multiple", "Pack Multiple", "Case_Qty", "Case Quantity"],
   Lead_Time_Days: ["Lead_Time_Days", "Lead Time Days", "Lead_Time", "Lead Time"],
   Notes: ["Notes", "Note", "Comment", "Comments"],
 };
@@ -90,6 +92,7 @@ export function SuppliersPage() {
     buy_price: "",
     price_date: "",
     moq: "",
+    order_multiple: "",
     lead_time_days: "",
     notes: "",
   });
@@ -236,6 +239,8 @@ export function SuppliersPage() {
       { key: "oem", header: "OEM", render: (row: SupplierPriceRow) => row.oem_no || "-" },
       { key: "price", header: p("columns.buy"), render: (row: SupplierPriceRow) => row.buy_price ?? "-" },
       { key: "currency", header: p("columns.currency"), render: (row: SupplierPriceRow) => row.currency || "-" },
+      { key: "moq", header: p("fields.moq"), render: (row: SupplierPriceRow) => row.moq ?? "-" },
+      { key: "orderMultiple", header: p("fields.orderMultiple"), render: (row: SupplierPriceRow) => row.order_multiple ?? "-" },
       { key: "date", header: p("columns.priceDate"), render: (row: SupplierPriceRow) => row.price_date || "-" },
       { key: "freshness", header: p("columns.freshness"), render: (row: SupplierPriceRow) => (row.freshness ? p(`suppliers.freshness.${row.freshness}`) : "-") },
     ],
@@ -359,6 +364,7 @@ export function SuppliersPage() {
       const priceIndex = findSupplierImportHeaderIndex(header, "Buy_Price_EUR");
       const dateIndex = findSupplierImportHeaderIndex(header, "Price_Date");
       const moqIndex = findSupplierImportHeaderIndex(header, "MOQ");
+      const orderMultipleIndex = findSupplierImportHeaderIndex(header, "Order_Multiple");
       const leadIndex = findSupplierImportHeaderIndex(header, "Lead_Time_Days");
       const notesIndex = findSupplierImportHeaderIndex(header, "Notes");
 
@@ -384,6 +390,7 @@ export function SuppliersPage() {
           buy_price: normalizeNumber(row[priceIndex]),
           currency: "EUR",
           moq: normalizeNumber(moqIndex === -1 ? "" : row[moqIndex]),
+          order_multiple: normalizeNumber(orderMultipleIndex === -1 ? "" : row[orderMultipleIndex]),
           lead_time_days: normalizeNumber(leadIndex === -1 ? "" : row[leadIndex]),
           notes: normalizeText(notesIndex === -1 ? "" : row[notesIndex]),
           valid_from: normalizeText(dateIndex === -1 ? "" : row[dateIndex]),
@@ -496,6 +503,7 @@ export function SuppliersPage() {
           buy_price: buyPrice,
           currency: "EUR",
           moq: normalizeNumber(manualPriceDraft.moq),
+          order_multiple: normalizeNumber(manualPriceDraft.order_multiple),
           lead_time_days: normalizeNumber(manualPriceDraft.lead_time_days),
           notes: normalizeText(manualPriceDraft.notes),
           valid_from: normalizeText(manualPriceDraft.price_date),
@@ -519,6 +527,7 @@ export function SuppliersPage() {
         buy_price: "",
         price_date: "",
         moq: "",
+        order_multiple: "",
         lead_time_days: "",
         notes: "",
       });
@@ -550,7 +559,7 @@ export function SuppliersPage() {
     setExportingSuppliers(true);
     actionFeedback.begin(p("suppliers.feedback.preparingCsvExport"));
     const exportRows = [
-      ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Lead_Time_Days", "Notes"],
+      ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes"],
       ...rows.map((row) => [
         row.supplier_name || suppliers.find((supplier) => supplier.supplier_id === selectedSupplierId)?.name || "",
         formatBrandAwareProductCode(row.product_code, row.brand || row.supplier_name || ""),
@@ -560,6 +569,7 @@ export function SuppliersPage() {
         row.buy_price ?? "",
         row.price_date || "",
         row.moq ?? "",
+        row.order_multiple ?? "",
         row.lead_time_days ?? "",
         row.notes || "",
       ]),
@@ -817,6 +827,11 @@ export function SuppliersPage() {
                 label={p("fields.moq")}
                 value={manualPriceDraft.moq}
                 onChange={(value) => setManualPriceDraft((current) => ({ ...current, moq: value }))}
+              />
+              <Input
+                label={p("fields.orderMultiple")}
+                value={manualPriceDraft.order_multiple}
+                onChange={(value) => setManualPriceDraft((current) => ({ ...current, order_multiple: value }))}
               />
               <Input
                 label={p("fields.leadTimeDays")}

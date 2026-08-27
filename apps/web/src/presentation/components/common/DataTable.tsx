@@ -16,7 +16,14 @@ type DataTableProps<T> = {
   rowClassName?: (row: T) => string;
   className?: string;
   wrapClassName?: string;
+  rowKey?: (row: T, index: number) => string | number;
 };
+
+function getStableRowKey<T>(row: T, index: number) {
+  const candidate = row as T & { id?: unknown; lineId?: unknown; code?: unknown; product_code?: unknown };
+  const identity = candidate.id || candidate.lineId || candidate.product_code || candidate.code;
+  return identity == null || String(identity).trim() === "" ? `row-${index}` : `${String(identity)}-${index}`;
+}
 
 export function DataTable<T>({
   rows,
@@ -26,6 +33,7 @@ export function DataTable<T>({
   rowClassName,
   className = "",
   wrapClassName = "",
+  rowKey,
 }: DataTableProps<T>) {
   const { t } = useI18n();
   const [sortKey, setSortKey] = useState("");
@@ -107,7 +115,11 @@ export function DataTable<T>({
         </thead>
         <tbody>
           {sortedRows.map((row, index) => (
-            <tr key={index} onClick={onRowClick ? (event) => handleRowClick(row, event) : undefined} className={`${rowClassName?.(row) || ""}${onRowClick ? " data-table__row--clickable" : ""}`}>
+            <tr
+              key={rowKey ? rowKey(row, index) : getStableRowKey(row, index)}
+              onClick={onRowClick ? (event) => handleRowClick(row, event) : undefined}
+              className={`${rowClassName?.(row) || ""}${onRowClick ? " data-table__row--clickable" : ""}`}
+            >
               {columns.map((column) => (
                 <td key={column.key}>{column.render(row)}</td>
               ))}

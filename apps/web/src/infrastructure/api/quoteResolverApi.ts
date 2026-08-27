@@ -4,6 +4,8 @@ import type { QuoteResolveResult, QuoteSupplierOption } from "../../types/quoteB
 import { callAppRpc } from "./appRpcApi";
 import { supabaseClient } from "./supabaseClient";
 
+type SupplierOrderRuleRow = { supplier_name?: string | null; moq?: number | null; order_multiple?: number | null };
+
 async function enrichLifecycle(resolved: QuoteResolveResult): Promise<QuoteResolveResult> {
   if (!resolved.product_id) {
     const lifecycleStatus = normalizeCatalogLifecycleStatus(resolved.lifecycle_status);
@@ -108,6 +110,24 @@ export async function resolveQuoteLine(input: {
       sell_price: option.sell_price ?? null,
       notes: option.notes || null,
     }));
+
+    try {
+      const ruleRows = await callAppRpc<SupplierOrderRuleRow[]>("cloud_supplier_order_rules", {
+        input_code: code,
+        input_brand: brand || resolved.brand || "",
+      });
+      const rulesBySupplier = new Map(
+        (ruleRows || []).map((row) => [String(row.supplier_name || "").trim().toLowerCase(), row]),
+      );
+      supplierOptions = supplierOptions.map((option) => {
+        const rule = rulesBySupplier.get(String(option.supplier_name || "").trim().toLowerCase());
+        return rule
+          ? { ...option, moq: rule.moq ?? null, order_multiple: rule.order_multiple ?? null }
+          : option;
+      });
+    } catch {
+      // Quantity rules are additive; quote resolution remains usable until the migration is applied.
+    }
   }
 
   const normalizedRequested = normalizePartCode(code);

@@ -339,13 +339,19 @@ export async function fetchCloudSupplierPrices({
   page = 1,
   pageSize = 50,
 }: SupplierPriceParams): Promise<SupplierPriceRow[]> {
-  const data = await callAppRpc<SupplierPriceRow[]>("cloud_supplier_price_page", {
+  const input = {
     input_supplier_id: supplierId,
     input_search: search,
     input_page: page,
     input_page_size: pageSize,
     input_freshness: freshness,
-  });
+  };
+  let data: SupplierPriceRow[];
+  try {
+    data = await callAppRpc<SupplierPriceRow[]>("cloud_supplier_price_page_with_rules", input);
+  } catch {
+    data = await callAppRpc<SupplierPriceRow[]>("cloud_supplier_price_page", input);
+  }
 
   return (data || []) as SupplierPriceRow[];
 }
@@ -405,6 +411,7 @@ export async function fetchCloudSupplierPricesAcrossSuppliers(input: {
         currency: null,
         price_date: null,
         moq: null,
+        order_multiple: null,
         lead_time_days: null,
         notes: null,
         freshness: "no price",
@@ -475,7 +482,7 @@ export async function fetchSupplierExportRows(input: { supplierId: string; brand
     const buildQuery = (mode: SupplierSearchMode) => {
       let query = supabaseClient
         .from("supplier_prices")
-        .select("id,product_code,description,oem_no,buy_price,currency,valid_from,moq,lead_time_days,notes")
+        .select("id,product_code,description,oem_no,buy_price,currency,valid_from,moq,order_multiple,lead_time_days,notes")
         .eq("supplier_id", input.supplierId)
         .eq("brand_id", brandRow.id)
         .eq("is_active", true)
@@ -508,6 +515,7 @@ export async function fetchSupplierExportRows(input: { supplierId: string; brand
       currency: (row.currency as string | null) || "EUR",
       price_date: (row.valid_from as string | null) || "",
       moq: (row.moq as number | null) ?? null,
+      order_multiple: (row.order_multiple as number | null) ?? null,
       lead_time_days: (row.lead_time_days as number | null) ?? null,
       notes: (row.notes as string | null) || "",
       freshness: null,

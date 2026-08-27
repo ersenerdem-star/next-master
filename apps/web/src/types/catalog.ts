@@ -18,6 +18,9 @@ export type CatalogRow = {
   hs_code: string;
   origin: string;
   weight_kg: number | null;
+  /** Current lowest active supplier buy price from the tenant rollup. */
+  best_buy_price?: number | null;
+  best_buy_price_date?: string | null;
   lifecycle_status: CatalogLifecycleStatus | null;
   lifecycle_note: string;
   integrity_status?: CatalogIntegrityStatus;
@@ -78,6 +81,11 @@ export type CatalogOperationsBrandStatus = {
   missing_ean_count: number;
   missing_oem_count: number;
   missing_vehicle_count: number;
+  missing_vehicle_model_count: number;
   missing_image_count: number;
+  missing_description_count: number;
+  missing_description_tr_count: number;
+  missing_market_segment_count: number;
   last_catalog_change_at: string | null;
+  projection_updated_at: string | null;
 };

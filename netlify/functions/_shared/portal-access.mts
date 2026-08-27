@@ -209,11 +209,7 @@ async function fetchAllOptional<T>(supabaseUrl: string, serviceRoleKey: string, 
   }
 }
 
-async function fetchPortalNotifications(
-  supabaseUrl: string,
-  serviceRoleKey: string,
-  inviteId: string,
-) {
+async function fetchPortalNotifications(supabaseUrl: string, serviceRoleKey: string, inviteId: string) {
   const rows = await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "portal_audit_logs", {
     select: "id,event_type,status,details,created_at",
     invite_id: `eq.${inviteId}`,
@@ -228,10 +224,7 @@ async function fetchPortalNotifications(
       id: String(row.id || `${inviteId}-${row.created_at || "notification"}`),
       type: String(row.event_type || "portal_update"),
       title: "Sales order deleted by seller",
-      message: String(
-        details.message ||
-          "The seller deleted this confirmed order. You can now delete this order from your portal.",
-      ),
+      message: String(details.message || "The seller deleted this confirmed order. You can now delete this order from your portal."),
       created_at: String(row.created_at || ""),
       order_id: String(details.order_id || "") || undefined,
       order_no: String(details.sales_order_no || "") || undefined,
@@ -302,15 +295,20 @@ async function fetchPortalHistoryRows(
       id: `in.(${ids.join(",")})`,
       limit: String(ids.length),
     });
-    // Some PostgREST versions reject a long `in.(...)` predicate for the
-    // short, human-readable portal order ids. Retry each bounded id only
-    // when the batch projection was unavailable, so one optional detail
-    // query cannot turn a valid order into an empty detail view.
-    const resolvedDetailRows = detailRows.length
-      ? detailRows
-      : (
+    // A minority of PostgREST deployments reject an `in.(...)` predicate for
+    // opaque portal order ids. Fall back to small, tenant-scoped id lookups
+    // only when that batched projection returned no rows: an existing order
+    // must never render as a document with no lines because a read fallback
+    // happened to be unavailable.
+    const detailById = new Map(detailRows.map((row) => [String(row.id || ""), row]));
+    const missingIds = ids.filter((id) => {
+      const row = detailById.get(id);
+      return !row || row.lines == null;
+    });
+    const fallbackDetailRows = missingIds.length
+      ? (
           await Promise.all(
-            ids.map((id) =>
+            missingIds.map((id) =>
               fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
                 select: "id,lines",
                 organization_id: params.organization_id,
@@ -319,7 +317,9 @@ async function fetchPortalHistoryRows(
               }),
             ),
           )
-        ).filter((row): row is Record<string, unknown> => Boolean(row));
+        ).filter((row): row is Record<string, unknown> => Boolean(row))
+      : [];
+    const resolvedDetailRows = [...detailRows, ...fallbackDetailRows];
     if (!resolvedDetailRows.length) return rows;
     const byId = new Map(resolvedDetailRows.map((row) => [String(row.id || ""), row]));
     return rows.map((row) => byId.get(String(row.id || "")) || row);
@@ -574,6 +574,7 @@ function mapSalesOrderLines(lines: unknown) {
       brand: String(row.brand || ""),
       description: String(row.description || ""),
       qty,
+      image_url: String(row.image_url || ""),
       oem_no: sanitizeCatalogOemNumbers(row.oem_no),
       hs_code: String(row.hs_code || ""),
       origin: String(row.origin || ""),
@@ -632,11 +633,15 @@ function mapInvoiceLines(lines: unknown) {
 
 // Customer responses must not expose internal supplier or acquisition-cost data.
 function mapCustomerSalesOrderLines(lines: unknown) {
-  return mapSalesOrderLines(lines).map(({ supplier_name: _supplierName, buy_price: _buyPrice, purchase_total: _purchaseTotal, ...line }) => line);
+  return mapSalesOrderLines(lines).map(
+    ({ supplier_name: _supplierName, buy_price: _buyPrice, purchase_total: _purchaseTotal, notes: _internalNotes, ...line }) => line,
+  );
 }
 
 function mapCustomerInvoiceLines(lines: unknown) {
-  return mapInvoiceLines(lines).map(({ supplier_name: _supplierName, buy_price: _buyPrice, purchase_total: _purchaseTotal, ...line }) => line);
+  return mapInvoiceLines(lines).map(
+    ({ supplier_name: _supplierName, buy_price: _buyPrice, purchase_total: _purchaseTotal, notes: _internalNotes, ...line }) => line,
+  );
 }
 
 function mapPurchaseOrderLines(lines: unknown) {
@@ -861,12 +866,8 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       customerName,
       sellerCompanyName,
     );
-    const salesOrderFullSelect =
-      "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines";
     const salesOrderCompactSelect =
       "id,sales_order_no,customer_name,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at";
-    const invoiceFullSelect =
-      "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at,lines";
     const invoiceCompactSelect =
       "id,sales_order_no,customer_name,quote_date,currency,status,total_amount,due_date,payment_terms,delivery_term,contract_nr,packing_details,notes,subtotal,discount_amount,shipping_cost,updated_at";
 
@@ -875,7 +876,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
           supabaseUrl,
           serviceRoleKey,
           "sales_orders",
-          salesOrderFullSelect,
+          "",
           salesOrderCompactSelect,
           historyParams,
         ))
@@ -886,7 +887,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
           supabaseUrl,
           serviceRoleKey,
           "invoices",
-          invoiceFullSelect,
+          "",
           invoiceCompactSelect,
           historyParams,
         ))
@@ -915,6 +916,10 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         ])
       : [];
 
+    const notifications = invite.access_can_view_orders
+      ? await fetchPortalNotifications(supabaseUrl, serviceRoleKey, invite.id)
+      : [];
+
     const creditNotes = invite.access_can_view_invoices
       ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "credit_notes", {
           select: "id,credit_note_no,customer_name,status,credit_date,due_date,notes,total_amount,currency,updated_at",
@@ -923,10 +928,6 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
           order: "updated_at.desc",
           limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
         })
-      : [];
-
-    const notifications = invite.access_can_view_orders
-      ? await fetchPortalNotifications(supabaseUrl, serviceRoleKey, invite.id)
       : [];
 
     const availableBrands = await fetchPortalAvailableBrands(
@@ -1001,7 +1002,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       companyProfile: toCustomerCompanyProfile(companyProfile),
       customer,
       availableBrands,
-      salesOrders: salesOrders.map((row) => ({
+      salesOrders: salesOrders.map(({ notes: _internalNotes, ...row }) => ({
         ...row,
         source_channel: String(row.source_channel || "internal"),
         portal_submitted_at: row.portal_submitted_at ? String(row.portal_submitted_at) : null,
@@ -1009,9 +1010,10 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         sales_total: toNumber(row.sales_total),
         discount_amount: toNumber(row.discount_amount),
         shipping_cost: toNumber(row.shipping_cost),
+        subtotal: toNumber(row.sales_total) + toNumber(row.discount_amount) - toNumber(row.shipping_cost),
         lines: mapCustomerSalesOrderLines(row.lines),
       })),
-      invoices: invoices.map((row) => ({
+      invoices: invoices.map(({ notes: _internalNotes, ...row }) => ({
         ...row,
         total_amount: toNumber(row.total_amount),
         subtotal: toNumber(row.subtotal),
@@ -1299,14 +1301,16 @@ export async function fetchPortalSalesOrderDetail(
   const sellerMatches = !sellerCompany || !rowSellerCompany || rowSellerCompany === sellerCompany;
   if (!customerMatches || !sellerMatches) return null;
 
+  const { notes: _internalNotes, ...safeRow } = row;
   return {
-    ...row,
+    ...safeRow,
     source_channel: String(row.source_channel || "internal"),
     portal_submitted_at: row.portal_submitted_at ? String(row.portal_submitted_at) : null,
     portal_seen_at: row.portal_seen_at ? String(row.portal_seen_at) : null,
     sales_total: toNumber(row.sales_total),
     discount_amount: toNumber(row.discount_amount),
     shipping_cost: toNumber(row.shipping_cost),
+    subtotal: toNumber(row.sales_total) + toNumber(row.discount_amount) - toNumber(row.shipping_cost),
     lines: mapCustomerSalesOrderLines(row.lines),
   };
 }
@@ -1460,11 +1464,9 @@ export async function buildPortalFallbackSnapshot(supabaseUrl: string, serviceRo
       sales_total: toNumber(row.sales_total),
       discount_amount: toNumber(row.discount_amount),
       shipping_cost: toNumber(row.shipping_cost),
+      subtotal: toNumber(row.sales_total) + toNumber(row.discount_amount) - toNumber(row.shipping_cost),
       lines: [],
     })),
-    notifications: invite.access_can_view_orders
-      ? await fetchPortalNotifications(supabaseUrl, serviceRoleKey, invite.id)
-      : [],
     purchaseOrders: [],
     invoices: fallbackInvoices.map((row) => ({
       ...row,
@@ -1479,6 +1481,9 @@ export async function buildPortalFallbackSnapshot(supabaseUrl: string, serviceRo
     vendorCredits: [],
     paymentsReceived: [],
     paymentsMade: [],
+    notifications: invite.access_can_view_orders
+      ? await fetchPortalNotifications(supabaseUrl, serviceRoleKey, invite.id)
+      : [],
     accountSummary: {
       currency: "EUR",
       totalDocuments: fallbackAccountRows.length,

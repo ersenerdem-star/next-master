@@ -116,6 +116,10 @@
 .mira-mission-page__queue-item strong,
 .mira-mission-page__queue-item small { display: block; }
 .mira-mission-page__queue-item small { margin-top: 5px; color: #6c8098; }
+.mira-mission-page__header-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.mira-mission-page__queue-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mira-mission-page__planner-badge { display: inline-flex; align-items: center; border: 1px solid #d7a13a; color: #8a5b00; background: #fff7e6; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
+.mira-mission-page__planner-reason { color: #41657e !important; max-width: 720px; }
 .mira-mission-page__tabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; border: 1px solid rgba(34, 75, 116, .14); border-radius: 16px; background: #f4f8fc; }
 .mira-mission-page__tabs button { display: inline-flex; align-items: center; gap: 9px; min-height: 42px; padding: 8px 14px; border: 1px solid transparent; border-radius: 10px; color: #415875; background: transparent; font: inherit; font-weight: 800; cursor: pointer; }
 .mira-mission-page__tabs button.is-active { border-color: #2d7bc8; color: #10233e; background: #fff; box-shadow: 0 5px 14px rgba(16, 35, 62, .09); }

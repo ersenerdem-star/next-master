@@ -27,7 +27,9 @@ export default async (req: Request, _context: Context) => {
       },
     });
   } catch (error) {
-    return json({ error: sanitizeUserFacingError(error, "Session details could not be loaded right now.") }, 401);
+    const message = sanitizeUserFacingError(error, "Session details could not be loaded right now.");
+    const unauthenticated = /missing session token|session user not found|session has expired/i.test(message);
+    return json({ error: message }, unauthenticated ? 401 : 503);
   }
 };
 
