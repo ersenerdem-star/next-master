@@ -1052,6 +1052,28 @@ select {
   width: min(520px, 100%);
 }
 
+.portal-add-target-modal__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.portal-add-target-modal__label {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.portal-add-target-modal__list {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 2px;
+}
+
 .draggable-surface__handle {
   cursor: grab;
   user-select: none;

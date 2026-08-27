@@ -325,6 +325,10 @@ type PortalSearchView = "cards" | "list";
 
 type PortalLine = NonNullable<PortalSnapshot["invoices"][number]["lines"]>[number];
 type PortalSalesOrderRow = PortalSnapshot["salesOrders"][number];
+type PortalAddTarget = {
+  item: PortalCatalogSearchItem;
+  quantity: number;
+};
 
 function mapPortalSalesOrderToPreparedLines(row: PortalSalesOrderRow): PortalPreparedLine[] {
   return (row.lines || []).map((line, index) => {
@@ -619,6 +623,8 @@ export function PortalPage() {
   const [confirmingPortalOrder, setConfirmingPortalOrder] = useState(false);
   const [downloadingPortalPriceList, setDownloadingPortalPriceList] = useState(false);
   const [portalOverlay, setPortalOverlay] = useState<{ title: string; message: string } | null>(null);
+  const [portalAddTarget, setPortalAddTarget] = useState<PortalAddTarget | null>(null);
+  const [portalAddTargetLoading, setPortalAddTargetLoading] = useState(false);
   const [selectedCatalogCode, setSelectedCatalogCode] = useState("");
   const [selectedDraftLineId, setSelectedDraftLineId] = useState("");
   const [portalPreview, setPortalPreview] = useState<{ kind: "catalog"; item: PortalCatalogSearchItem } | { kind: "basket"; item: PortalPreparedLine } | null>(null);
@@ -988,7 +994,7 @@ export function PortalPage() {
         key: "actions",
         header: "Actions",
         render: (row: PortalCatalogSearchItem) => (
-          <Button variant="secondary" className="button--compact" onClick={() => void handleAddPortalCatalogItem(row)}>
+          <Button variant="secondary" className="button--compact" onClick={() => requestPortalCatalogAdd(row)}>
             Add to Basket
           </Button>
         ),
@@ -1261,6 +1267,19 @@ export function PortalPage() {
       return;
     }
 
+    // Keep the basket selected by the customer while snapshots refresh. A
+    // compact history row may omit lines; replacing the builder from it would
+    // silently switch orders and make the current basket disappear.
+    if (portalOrderId) {
+      const selectedDraft = snapshot.salesOrders.find((row) => row.id === portalOrderId);
+      if (selectedDraft) {
+        if (!portalDraftLines.length && selectedDraft.lines?.length) {
+          setPortalDraftLines(mapPortalSalesOrderToPreparedLines(selectedDraft));
+        }
+        return;
+      }
+    }
+
     const latestPortalDraft = snapshot.salesOrders.find((row) => row.source_channel === "portal" && !row.portal_submitted_at);
     setPortalOrderId(latestPortalDraft?.id || "");
     setPortalSalesOrderNo(latestPortalDraft?.sales_order_no || "");
@@ -1278,7 +1297,7 @@ export function PortalPage() {
         : "",
     );
     setOrderSearchBrand((current) => (current && snapshot.availableBrands.includes(current) ? current : ""));
-  }, [snapshot]);
+  }, [snapshot, portalOrderId]);
 
   useEffect(() => {
     if (!snapshot || !credentials.email) return;
@@ -1752,7 +1771,10 @@ export function PortalPage() {
     try {
       setPortalDetailLoadingId(selection.id);
       const detail = await fetchPortalSalesOrderDetail(credentials, selection.id);
-      if (!detail) return;
+      // The detail endpoint can briefly return a compact row while the write
+      // replica catches up. Never merge that empty projection over visible
+      // lines that are already in the workspace.
+      if (!detail || !detail.lines?.length) return;
       setSnapshot((current) =>
         current
           ? { ...current, salesOrders: current.salesOrders.map((row) => (row.id === detail.id ? { ...row, ...detail } : row)) }
@@ -1867,22 +1889,72 @@ export function PortalPage() {
     }
   }
 
-  async function handleAddPortalCatalogItem(item: PortalCatalogSearchItem, quantity = 1) {
-    const normalizedQuantity = normalizePortalQuantity(quantity);
-    setSelectedCatalogCode(item.code);
-    if (!isOnline) {
-      const offlineLine = buildOfflinePreparedLineFromCatalogItem(item);
-      offlineLine.qty = normalizedQuantity;
-      setPortalDraftLines((current) => mergePortalPreparedLines(current, [offlineLine]));
-      setPortalOrderStatus(`${normalizedQuantity} pcs added to ${portalSalesOrderNo || "Local Basket"} in Basket. Offline changes stay on this device.`);
-      focusPortalDraftLines(offlineLine.lineId);
-      return;
+  function requestPortalCatalogAdd(item: PortalCatalogSearchItem, quantity = 1) {
+    setError("");
+    setPortalAddTarget({ item, quantity: normalizePortalQuantity(quantity) });
+  }
+
+  async function choosePortalAddTarget(target: "new" | PortalSalesOrderRow) {
+    const pending = portalAddTarget;
+    if (!pending) return;
+    setPortalAddTargetLoading(true);
+    setError("");
+    try {
+      let selectedTarget: PortalSalesOrderRow | null = null;
+      if (target !== "new") {
+        selectedTarget = target;
+        if (!selectedTarget.lines?.length && isOnline) {
+          const detail = await fetchPortalSalesOrderDetail(credentials, selectedTarget.id);
+          if (!detail || !detail.lines?.length) {
+            throw new Error("This saved sales order is still loading. Refresh it and try again.");
+          }
+          selectedTarget = detail;
+          setSnapshot((current) =>
+            current
+              ? {
+                  ...current,
+                  salesOrders: [detail, ...current.salesOrders.filter((row) => row.id !== detail.id)],
+                }
+              : current,
+          );
+        }
+        setPortalOrderId(selectedTarget.id);
+        setPortalSalesOrderNo(selectedTarget.sales_order_no || selectedTarget.id);
+        setPortalDraftLines(mapPortalSalesOrderToPreparedLines(selectedTarget));
+        setPortalDeliveryTerm(selectedTarget.delivery_term || "");
+        setPortalPaymentTerms(selectedTarget.payment_terms || activeSnapshot.pricingProfile?.payment_terms || "");
+        setPortalPackingDetails(selectedTarget.packing_details || "");
+        setPortalOrderNotes(selectedTarget.notes || "");
+      } else {
+        setPortalOrderId("");
+        setPortalSalesOrderNo("");
+        setPortalDraftLines([]);
+        setPortalDeliveryTerm("");
+        setPortalPaymentTerms(activeSnapshot.pricingProfile?.payment_terms || "");
+        setPortalPackingDetails("");
+        setPortalOrderNotes("");
+      }
+
+      if (!isOnline) {
+        const offlineLine = buildOfflinePreparedLineFromCatalogItem(pending.item);
+        offlineLine.qty = pending.quantity;
+        setPortalDraftLines((current) => mergePortalPreparedLines(current, [offlineLine]));
+        setPortalOrderStatus(`${pending.quantity} pcs added to ${target === "new" ? "Local Basket" : selectedTarget?.sales_order_no || selectedTarget?.id || "sales order"}. Offline changes stay on this device.`);
+        focusPortalDraftLines(offlineLine.lineId);
+        return;
+      }
+
+      const prepared = await appendPortalRows(
+        [{ code: pending.item.replacement_old_code || pending.item.code, brand: pending.item.brand, qty: pending.quantity, market_segment: pending.item.market_segment || null }],
+        `${pending.quantity} pcs added to ${target === "new" ? "New Basket" : selectedTarget?.sales_order_no || selectedTarget?.id || "sales order"} in Basket.`,
+      );
+      if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not select a sales order target");
+    } finally {
+      setPortalAddTargetLoading(false);
+      setPortalAddTarget(null);
     }
-    const prepared = await appendPortalRows(
-      [{ code: item.replacement_old_code || item.code, brand: item.brand, qty: normalizedQuantity, market_segment: item.market_segment || null }],
-      `{count} pcs added to ${portalSalesOrderNo || "New Basket"} in Basket.`,
-    );
-    if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
   }
 
   function handleExportPortalBasket() {
@@ -2031,6 +2103,7 @@ export function PortalPage() {
       }
       setSnapshot(nextSnapshot);
       settlePortalOrderMutation();
+      setPortalOrderId(result.orderId || portalOrderId);
       setSelection({ kind: "sales-order", id: result.orderId });
       // Keep the newly saved draft visible in the same Sales Orders view as a confirmed order.
       setActiveSection("orders");
@@ -2328,10 +2401,10 @@ export function PortalPage() {
       });
       const compactOrder = result.snapshot.salesOrders.find((order) => order.id === savedId);
       const optimisticOrder = { ...(compactOrder || row), id: savedId, lines: optimisticLines };
-      const nextSnapshot = {
+      const nextSnapshot = mergePortalSnapshotOrderDetails(null, {
         ...result.snapshot,
         salesOrders: [optimisticOrder, ...result.snapshot.salesOrders.filter((order) => order.id !== savedId)],
-      };
+      });
       setSnapshot(nextSnapshot);
       settlePortalOrderMutation();
       setSelection({ kind: "sales-order", id: savedId });
@@ -2339,10 +2412,10 @@ export function PortalPage() {
         // A just-written JSON line array can be briefly stale on the read
         // replica. Never replace the optimistic lines with an empty detail.
         if (!savedOrder || !savedOrder.lines?.length) return;
-        setSnapshot((current) => current ? {
+        setSnapshot((current) => current ? mergePortalSnapshotOrderDetails(current, {
           ...current,
           salesOrders: [savedOrder, ...current.salesOrders.filter((order) => order.id !== savedOrder.id)],
-        } : current);
+        }) : current);
       }).catch(() => {
         // The optimistic line remains visible; Refresh can retry the detail read.
       });
@@ -2407,18 +2480,18 @@ export function PortalPage() {
         id: savedId,
         lines: currentLines.filter((_, index) => index !== lineIndex),
       };
-      setSnapshot({
+      setSnapshot(mergePortalSnapshotOrderDetails(snapshot, {
         ...result.snapshot,
         salesOrders: [optimisticOrder, ...result.snapshot.salesOrders.filter((order) => order.id !== savedId)],
-      });
+      }));
       settlePortalOrderMutation();
       setSelection({ kind: "sales-order", id: savedId });
       void fetchPortalSalesOrderDetail(credentials, savedId).then((savedOrder) => {
         if (!savedOrder || !savedOrder.lines?.length) return;
-        setSnapshot((current) => current ? {
+        setSnapshot((current) => current ? mergePortalSnapshotOrderDetails(current, {
           ...current,
           salesOrders: [savedOrder, ...current.salesOrders.filter((order) => order.id !== savedOrder.id)],
-        } : current);
+        }) : current);
       }).catch(() => {
         // Keep the optimistic removal visible; Refresh can retry the detail read.
       });
@@ -3526,7 +3599,7 @@ export function PortalPage() {
                     setSelectedCatalogCode(item.code);
                     setPortalPreview({ kind: "catalog", item });
                   }}
-                  onAdd={(item, quantity) => void handleAddPortalCatalogItem(item, quantity)}
+                  onAdd={(item, quantity) => requestPortalCatalogAdd(item, quantity)}
                   onPreview={(item) => setPortalPreview({ kind: "catalog", item })}
                 />
 
@@ -3599,7 +3672,7 @@ export function PortalPage() {
                                 className="button--compact"
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  void handleAddPortalCatalogItem(row);
+                                  requestPortalCatalogAdd(row);
                                 }}
                               >
                                 Add to Basket
@@ -3680,7 +3753,7 @@ export function PortalPage() {
                                 className="button--compact"
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  void handleAddPortalCatalogItem(row);
+                                  requestPortalCatalogAdd(row);
                                 }}
                               >
                                 Add to Basket
@@ -3774,6 +3847,43 @@ export function PortalPage() {
         ))}
       </nav>
 
+      {portalAddTarget ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="portal-add-target-title">
+          <DraggableSurface className="modal-card modal-card--compact portal-add-target-modal" dragHandleSelector=".draggable-surface__handle">
+            <div className="modal-card__header draggable-surface__handle">
+              <h3 id="portal-add-target-title">Add to which sales order?</h3>
+              <p>{portalAddTarget.item.code} · Qty {portalAddTarget.quantity.toLocaleString("en-US")}</p>
+            </div>
+            <div className="portal-add-target-modal__actions">
+              <Button busy={portalAddTargetLoading} onClick={() => void choosePortalAddTarget("new")}>
+                New sales order
+              </Button>
+              <span className="portal-add-target-modal__label">Or add to an existing draft</span>
+              {portalDraftOrders.length ? (
+                <div className="portal-add-target-modal__list">
+                  {portalDraftOrders.map((row) => (
+                    <Button
+                      key={row.id}
+                      type="button"
+                      variant="secondary"
+                      disabled={portalAddTargetLoading}
+                      onClick={() => void choosePortalAddTarget(row)}
+                    >
+                      {row.sales_order_no || row.id} · {(row.line_count || row.lines?.length || 0).toLocaleString("en-US")} lines
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <div className="portal-inline-note portal-inline-note--soft">No saved draft sales orders are available.</div>
+              )}
+              <Button type="button" variant="secondary" disabled={portalAddTargetLoading} onClick={() => setPortalAddTarget(null)}>
+                Cancel
+              </Button>
+            </div>
+          </DraggableSurface>
+        </div>
+      ) : null}
+
       {portalOverlay ? (
         <div className="modal-backdrop">
           <DraggableSurface className="modal-card modal-card--compact" dragHandleSelector=".draggable-surface__handle">
@@ -3866,7 +3976,7 @@ export function PortalPage() {
               {portalPreview.kind === "catalog" ? (
                 <Button
                   onClick={() => {
-                    void handleAddPortalCatalogItem(portalPreview.item);
+                    requestPortalCatalogAdd(portalPreview.item);
                   }}
                 >
                   Add to Basket
