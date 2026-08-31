@@ -20,10 +20,13 @@ type QueuedSupplierRun = {
 const CATALOG_BATCH_SIZE = 100;
 const SUPPLIER_BATCH_SIZE = 500;
 const CATALOG_SYNC_BATCH_SIZE = 1000;
-const MAX_CATALOG_BATCHES = 4;
-const MAX_SUPPLIER_BATCHES = 8;
-const MAX_CATALOG_SYNC_BATCHES = 4;
-const MAX_RUNS_PER_TICK = 3;
+// Keep a scheduled invocation bounded. The cron runs every two minutes; doing
+// several long batches in one invocation lets invocations overlap and turns a
+// transient lock into a database-wide timeout storm.
+const MAX_CATALOG_BATCHES = 2;
+const MAX_SUPPLIER_BATCHES = 2;
+const MAX_CATALOG_SYNC_BATCHES = 2;
+const MAX_RUNS_PER_TICK = 1;
 
 async function clearQueueMarker(supabaseUrl: string, serviceRoleKey: string, table: string, runId: string) {
   const url = new URL(`/rest/v1/${table}`, supabaseUrl);
@@ -191,7 +194,7 @@ export default async (_request: Request, context: Context) => {
         return 2;
       };
       return rank(left) - rank(right);
-    }).slice(0, MAX_RUNS_PER_TICK * 2);
+    }).slice(0, MAX_RUNS_PER_TICK);
     const results: unknown[] = [];
     for (const run of catalogRuns || []) {
       try { results.push(await processCatalogRun(supabaseUrl, serviceRoleKey, run)); }
