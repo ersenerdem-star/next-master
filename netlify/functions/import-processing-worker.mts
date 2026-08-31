@@ -11,6 +11,7 @@ type QueuedCatalogRun = {
 type QueuedSupplierRun = {
   id: string;
   organization_id: string;
+  brand_id: string;
   created_by: string | null;
   status: string;
   catalog_sync_status: string | null;
@@ -121,10 +122,13 @@ async function processSupplierRun(supabaseUrl: string, serviceRoleKey: string, r
       return { runId: run.id, status, catalogSyncStatus, hasMore: true, workerState: catalogSync?.worker_state || "running" };
     }
 
-    await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/refresh_supplier_price_rollups_logged`, {
+    // An import changes one brand. A full-organization rollup here keeps a
+    // long transaction open and contends with the next worker tick, which
+    // surfaces as statement/lock timeouts. Refresh only the affected brand.
+    await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/refresh_supplier_price_rollups_for_brand`, {
       method: "POST",
       headers: serviceRoleHeaders(serviceRoleKey),
-      body: JSON.stringify({ p_organization_id: run.organization_id }),
+      body: JSON.stringify({ p_organization_id: run.organization_id, p_brand_id: run.brand_id }),
       timeoutMs: 55_000,
     });
     await clearQueueMarker(supabaseUrl, serviceRoleKey, "supplier_price_import_runs", run.id);
@@ -147,21 +151,21 @@ export default async (_request: Request, context: Context) => {
   catalogUrl.searchParams.set("limit", String(MAX_RUNS_PER_TICK));
 
   const supplierUrl = new URL("/rest/v1/supplier_price_import_runs", supabaseUrl);
-  supplierUrl.searchParams.set("select", "id,organization_id,created_by,status,catalog_sync_status");
+  supplierUrl.searchParams.set("select", "id,organization_id,brand_id,created_by,status,catalog_sync_status");
   supplierUrl.searchParams.set("processing_queued_at", "not.is.null");
   supplierUrl.searchParams.set("status", "in.(running,finalizing,finalized,succeeded)");
   supplierUrl.searchParams.set("order", "processing_queued_at.asc");
   supplierUrl.searchParams.set("limit", String(MAX_RUNS_PER_TICK));
 
   const catalogSyncRunningUrl = new URL("/rest/v1/supplier_price_import_runs", supabaseUrl);
-  catalogSyncRunningUrl.searchParams.set("select", "id,organization_id,created_by,status,catalog_sync_status");
+  catalogSyncRunningUrl.searchParams.set("select", "id,organization_id,brand_id,created_by,status,catalog_sync_status");
   catalogSyncRunningUrl.searchParams.set("status", "in.(finalized,succeeded)");
   catalogSyncRunningUrl.searchParams.set("catalog_sync_status", "eq.running");
   catalogSyncRunningUrl.searchParams.set("order", "catalog_sync_started_at.asc.nullsfirst");
   catalogSyncRunningUrl.searchParams.set("limit", String(MAX_RUNS_PER_TICK));
 
   const catalogSyncPendingUrl = new URL("/rest/v1/supplier_price_import_runs", supabaseUrl);
-  catalogSyncPendingUrl.searchParams.set("select", "id,organization_id,created_by,status,catalog_sync_status");
+  catalogSyncPendingUrl.searchParams.set("select", "id,organization_id,brand_id,created_by,status,catalog_sync_status");
   catalogSyncPendingUrl.searchParams.set("status", "in.(finalized,succeeded)");
   catalogSyncPendingUrl.searchParams.set("catalog_sync_status", "eq.pending");
   // New finalized imports should not sit behind months-old backlog.
