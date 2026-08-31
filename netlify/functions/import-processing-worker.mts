@@ -18,8 +18,10 @@ type QueuedSupplierRun = {
 
 const CATALOG_BATCH_SIZE = 100;
 const SUPPLIER_BATCH_SIZE = 500;
+const CATALOG_SYNC_BATCH_SIZE = 1000;
 const MAX_CATALOG_BATCHES = 4;
 const MAX_SUPPLIER_BATCHES = 8;
+const MAX_CATALOG_SYNC_BATCHES = 4;
 const MAX_RUNS_PER_TICK = 3;
 
 async function clearQueueMarker(supabaseUrl: string, serviceRoleKey: string, table: string, runId: string) {
@@ -97,16 +99,28 @@ async function processSupplierRun(supabaseUrl: string, serviceRoleKey: string, r
   }
 
   if (status === "finalized" || status === "succeeded") {
-    await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/sync_supplier_price_catalog_from_import_system`, {
-      method: "POST",
-      headers: serviceRoleHeaders(serviceRoleKey),
-      body: JSON.stringify({
-        input_run_id: run.id,
-        input_organization_id: run.organization_id,
-        input_actor_id: run.created_by,
-      }),
-      timeoutMs: 55_000,
-    });
+    let catalogSyncStatus = String(run.catalog_sync_status || "pending");
+    let catalogSync: { status?: string; has_more?: boolean; catalog_sync_status?: string } | null = null;
+    for (let index = 0; index < MAX_CATALOG_SYNC_BATCHES; index += 1) {
+      catalogSync = await sendJson<{ status?: string; has_more?: boolean; catalog_sync_status?: string }>(`${supabaseUrl}/rest/v1/rpc/sync_supplier_price_catalog_batch_system`, {
+        method: "POST",
+        headers: serviceRoleHeaders(serviceRoleKey),
+        body: JSON.stringify({
+          input_run_id: run.id,
+          input_organization_id: run.organization_id,
+          input_actor_id: run.created_by,
+          input_batch_size: CATALOG_SYNC_BATCH_SIZE,
+        }),
+        timeoutMs: 55_000,
+      });
+      catalogSyncStatus = String(catalogSync?.catalog_sync_status || catalogSync?.status || catalogSyncStatus);
+      if (catalogSyncStatus === "succeeded" || catalogSync?.has_more === false) break;
+    }
+
+    if (catalogSyncStatus !== "succeeded") {
+      return { runId: run.id, status, catalogSyncStatus, hasMore: true };
+    }
+
     await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/refresh_supplier_price_rollups_logged`, {
       method: "POST",
       headers: serviceRoleHeaders(serviceRoleKey),
@@ -139,15 +153,29 @@ export default async (_request: Request, context: Context) => {
   supplierUrl.searchParams.set("order", "processing_queued_at.asc");
   supplierUrl.searchParams.set("limit", String(MAX_RUNS_PER_TICK));
 
+  const catalogSyncUrl = new URL("/rest/v1/supplier_price_import_runs", supabaseUrl);
+  catalogSyncUrl.searchParams.set("select", "id,organization_id,created_by,status,catalog_sync_status");
+  catalogSyncUrl.searchParams.set("status", "in.(finalized,succeeded)");
+  catalogSyncUrl.searchParams.set("catalog_sync_status", "in.(pending,running)");
+  catalogSyncUrl.searchParams.set("order", "started_at.asc");
+  catalogSyncUrl.searchParams.set("limit", String(MAX_RUNS_PER_TICK));
+
   const task = (async () => {
     const catalogRuns = await getJson<QueuedCatalogRun[]>(catalogUrl.toString(), { headers, timeoutMs: 12_000 });
     const supplierRuns = await getJson<QueuedSupplierRun[]>(supplierUrl.toString(), { headers, timeoutMs: 12_000 });
+    const catalogSyncRuns = await getJson<QueuedSupplierRun[]>(catalogSyncUrl.toString(), { headers, timeoutMs: 12_000 });
+    const seenSupplierRuns = new Set<string>();
+    const pendingSupplierRuns = [...(supplierRuns || []), ...(catalogSyncRuns || [])].filter((run) => {
+      if (seenSupplierRuns.has(run.id)) return false;
+      seenSupplierRuns.add(run.id);
+      return true;
+    });
     const results: unknown[] = [];
     for (const run of catalogRuns || []) {
       try { results.push(await processCatalogRun(supabaseUrl, serviceRoleKey, run)); }
       catch (error) { console.error("catalog import worker deferred", run.id, error); }
     }
-    for (const run of supplierRuns || []) {
+    for (const run of pendingSupplierRuns) {
       try { results.push(await processSupplierRun(supabaseUrl, serviceRoleKey, run)); }
       catch (error) { console.error("supplier import worker deferred", run.id, error); }
     }

@@ -208,6 +208,35 @@ function sleep(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+async function syncSupplierCatalogInBatches(
+  supabaseUrl: string,
+  headers: Record<string, string>,
+  runId: string,
+  organizationId: string,
+  actorId: string,
+) {
+  let latest: { status?: string; has_more?: boolean; catalog_sync_status?: string } | null = null;
+  for (let batch = 0; batch < 4; batch += 1) {
+    latest = await sendJson<{ status?: string; has_more?: boolean; catalog_sync_status?: string }>(
+      `${supabaseUrl}/rest/v1/rpc/sync_supplier_price_catalog_batch_system`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          input_run_id: runId,
+          input_organization_id: organizationId,
+          input_actor_id: actorId,
+          input_batch_size: 1000,
+        }),
+        timeoutMs: 55_000,
+      },
+    );
+    const status = String(latest?.catalog_sync_status || latest?.status || "");
+    if (status === "succeeded" || latest?.has_more === false) break;
+  }
+  return latest;
+}
+
 function normalizePartCode(value: string) {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -1189,17 +1218,24 @@ export default async (req: Request, context: Context) => {
         }
 
         try {
-          await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/sync_supplier_price_catalog_from_import`, {
-            method: "POST",
-            headers: {
+          const syncResult = await syncSupplierCatalogInBatches(
+            supabaseUrl,
+            {
               apikey: supabaseAnonKey,
               Authorization: authorizationHeader,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ input_run_id: runId }),
-          });
+            runId,
+            caller.organizationId,
+            caller.id,
+          );
+          if (String(syncResult?.catalog_sync_status || syncResult?.status || "") !== "succeeded") {
+            console.error("supplier price catalog sync deferred", runId, syncResult);
+            return;
+          }
         } catch (error) {
           console.error("supplier price catalog sync background task failed", runId, error);
+          return;
         }
 
         try {
@@ -1306,17 +1342,20 @@ export default async (req: Request, context: Context) => {
     if (name === "queue_supplier_price_catalog_sync") {
       const runId = String(args.input_run_id || "").trim();
       const task = (async () => {
-        await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/sync_supplier_price_catalog_from_import`, {
-          method: "POST",
-          headers: {
+        const result = await syncSupplierCatalogInBatches(
+          supabaseUrl,
+          {
             apikey: supabaseAnonKey,
             Authorization: authorizationHeader,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            input_run_id: runId,
-          }),
-        });
+          runId,
+          caller.organizationId,
+          caller.id,
+        );
+        if (String(result?.catalog_sync_status || result?.status || "") !== "succeeded") {
+          console.error("supplier price catalog sync deferred", runId, result);
+        }
       })().catch((error) => {
         console.error("supplier price catalog sync failed", error);
       });
