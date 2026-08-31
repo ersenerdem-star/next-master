@@ -166,6 +166,28 @@ export function OperationsStatusPage() {
     return mapImportStatusToTone(toImportEngineStatus(status));
   }
 
+  function catalogWorkerState(row: SupplierOperationsStatusRow) {
+    const state = String(row.catalog_sync_worker_state || "queued");
+    if (state === "running" && row.catalog_sync_last_progress_at) {
+      const lastProgress = new Date(row.catalog_sync_last_progress_at).getTime();
+      if (Number.isFinite(lastProgress) && Date.now() - lastProgress > 15 * 60 * 1000) return "stalled";
+    }
+    return state;
+  }
+
+  function catalogWorkerStateLabel(row: SupplierOperationsStatusRow) {
+    const state = catalogWorkerState(row);
+    return t(`dashboard.operationsStatus.workerState.${state}`);
+  }
+
+  function catalogWorkerStateTone(row: SupplierOperationsStatusRow) {
+    const state = catalogWorkerState(row);
+    if (state === "completed") return "completed";
+    if (state === "failed" || state === "stalled") return "failed";
+    if (state === "lock_waiting" || state === "queued") return "pending";
+    return "running";
+  }
+
   function supportsRegisteredRetry(operationType: string) {
     if (!isRegisteredOperation(operationType)) return true;
     return getOperationDefinition(operationType)?.supports_retry ?? true;
@@ -220,6 +242,7 @@ export function OperationsStatusPage() {
         t("dashboard.operationsStatus.catalogSync"),
         t("dashboard.operationsStatus.rollupRefresh"),
         t("dashboard.operationsStatus.customerPrice"),
+        t("dashboard.operationsStatus.catalogSyncProgress"),
         t("dashboard.operationsStatus.lastSuccessfulRefresh"),
       ],
       ...filteredOperationsRows.map((row) => [
@@ -231,6 +254,7 @@ export function OperationsStatusPage() {
         row.catalog_sync_status,
         row.rollup_refresh_status,
         row.customer_price_status,
+        `${row.catalog_sync_processed} / ${row.supplier_import_staged_rows} · ${row.catalog_sync_worker_state} · ${row.catalog_sync_batches} batches · ${row.catalog_sync_cursor || "-"}`,
         `${formatDateTime(row.last_successful_refresh_at)} (${row.last_successful_refresh_source || "-"})`,
       ]),
     ];
@@ -318,6 +342,17 @@ export function OperationsStatusPage() {
                       <td>
                         <div className="list-stack">
                           <span className={`mark-badge mark-badge--${statusTone(row.catalog_sync_status)}`}>{t(`statuses.${row.catalog_sync_status}`)}</span>
+                          <span className={`mark-badge mark-badge--${catalogWorkerStateTone(row)}`}>{catalogWorkerStateLabel(row)}</span>
+                          <span className="operations-subtle">
+                            {t("dashboard.operationsStatus.catalogSyncProgressValue", {
+                              processed: formatCount(row.catalog_sync_processed),
+                              total: formatCount(row.supplier_import_staged_rows),
+                              batches: formatCount(row.catalog_sync_batches),
+                            })}
+                          </span>
+                          <span className="operations-subtle">
+                            {t("dashboard.operationsStatus.catalogSyncLastProgress")}: {formatDateTime(row.catalog_sync_last_progress_at)} · {t("dashboard.operationsStatus.catalogSyncCursor")}: {row.catalog_sync_cursor || "-"}
+                          </span>
                           {row.catalog_sync_status === "failed" ? <span className="error-text">{row.catalog_sync_error_message || t("dashboard.operationsStatus.failed")}</span> : null}
                         </div>
                       </td>

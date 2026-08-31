@@ -52,6 +52,14 @@ export type SupplierOperationsStatusRow = SupplierBrandSummaryRow & {
   supplier_import_error_message: string | null;
   catalog_sync_status: SupplierOperationsStatus;
   catalog_sync_error_message: string | null;
+  catalog_sync_cursor: string | null;
+  catalog_sync_processed: number;
+  catalog_sync_last_progress_at: string | null;
+  catalog_sync_last_batch_processed: number;
+  catalog_sync_batches: number;
+  catalog_sync_worker_state: "queued" | "running" | "lock_waiting" | "stalled" | "completed" | "failed" | "superseded" | string;
+  superseded_by: string | null;
+  superseded_at: string | null;
   rollup_refresh_run_id: string | null;
   rollup_refresh_status: SupplierOperationsStatus;
   rollup_refresh_started_at: string | null;

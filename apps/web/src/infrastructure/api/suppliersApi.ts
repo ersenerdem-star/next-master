@@ -57,6 +57,14 @@ type SupplierPriceImportRunRow = {
   catalog_synced: number | null;
   catalog_sync_status: string | null;
   catalog_sync_error_message: string | null;
+  catalog_sync_cursor: string | null;
+  catalog_sync_processed: number | null;
+  catalog_sync_last_progress_at: string | null;
+  catalog_sync_last_batch_processed: number | null;
+  catalog_sync_batches: number | null;
+  catalog_sync_worker_state: string | null;
+  superseded_by: string | null;
+  superseded_at: string | null;
 };
 
 type SupplierPriceRollupRefreshRun = {
@@ -127,7 +135,7 @@ async function fetchLatestSupplierImportRuns(inputOrganizationId: string) {
   const { data, error } = await supabaseClient
     .from("supplier_price_import_runs")
     .select(
-      "id,supplier_id,brand_id,status,started_at,finished_at,error_message,staged_rows,processed_rows,catalog_synced,catalog_sync_status,catalog_sync_error_message",
+      "id,supplier_id,brand_id,status,started_at,finished_at,error_message,staged_rows,processed_rows,catalog_synced,catalog_sync_status,catalog_sync_error_message,catalog_sync_cursor,catalog_sync_processed,catalog_sync_last_progress_at,catalog_sync_last_batch_processed,catalog_sync_batches,catalog_sync_worker_state,superseded_by,superseded_at",
     )
     .eq("organization_id", inputOrganizationId)
     .order("started_at", { ascending: false });
@@ -258,6 +266,14 @@ export async function fetchCloudSupplierOperationsStatusAll(inputSuppliers?: Sup
       supplier_import_error_message: importStatus === "failed" ? importRun?.error_message || "Supplier import failed." : null,
       catalog_sync_status: catalogSyncStatus,
       catalog_sync_error_message: catalogSyncStatus === "failed" ? importRun?.catalog_sync_error_message || "Catalog sync failed." : null,
+      catalog_sync_cursor: importRun?.catalog_sync_cursor || null,
+      catalog_sync_processed: Number(importRun?.catalog_sync_processed || 0),
+      catalog_sync_last_progress_at: importRun?.catalog_sync_last_progress_at || null,
+      catalog_sync_last_batch_processed: Number(importRun?.catalog_sync_last_batch_processed || 0),
+      catalog_sync_batches: Number(importRun?.catalog_sync_batches || 0),
+      catalog_sync_worker_state: importRun?.superseded_by ? "superseded" : importRun?.catalog_sync_worker_state || (catalogSyncStatus === "running" ? "running" : catalogSyncStatus === "completed" ? "completed" : "queued"),
+      superseded_by: importRun?.superseded_by || null,
+      superseded_at: importRun?.superseded_at || null,
       rollup_refresh_run_id: rollupRun?.id || null,
       rollup_refresh_status: rollupStatus,
       rollup_refresh_started_at: rollupRun?.started_at || null,

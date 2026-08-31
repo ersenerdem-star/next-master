@@ -100,7 +100,7 @@ async function processSupplierRun(supabaseUrl: string, serviceRoleKey: string, r
 
   if (status === "finalized" || status === "succeeded") {
     let catalogSyncStatus = String(run.catalog_sync_status || "pending");
-    let catalogSync: { status?: string; has_more?: boolean; catalog_sync_status?: string } | null = null;
+    let catalogSync: { status?: string; has_more?: boolean; catalog_sync_status?: string; worker_state?: string } | null = null;
     for (let index = 0; index < MAX_CATALOG_SYNC_BATCHES; index += 1) {
       catalogSync = await sendJson<{ status?: string; has_more?: boolean; catalog_sync_status?: string }>(`${supabaseUrl}/rest/v1/rpc/sync_supplier_price_catalog_batch_system`, {
         method: "POST",
@@ -118,7 +118,7 @@ async function processSupplierRun(supabaseUrl: string, serviceRoleKey: string, r
     }
 
     if (catalogSyncStatus !== "succeeded") {
-      return { runId: run.id, status, catalogSyncStatus, hasMore: true };
+      return { runId: run.id, status, catalogSyncStatus, hasMore: true, workerState: catalogSync?.worker_state || "running" };
     }
 
     await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/refresh_supplier_price_rollups_logged`, {
@@ -153,23 +153,41 @@ export default async (_request: Request, context: Context) => {
   supplierUrl.searchParams.set("order", "processing_queued_at.asc");
   supplierUrl.searchParams.set("limit", String(MAX_RUNS_PER_TICK));
 
-  const catalogSyncUrl = new URL("/rest/v1/supplier_price_import_runs", supabaseUrl);
-  catalogSyncUrl.searchParams.set("select", "id,organization_id,created_by,status,catalog_sync_status");
-  catalogSyncUrl.searchParams.set("status", "in.(finalized,succeeded)");
-  catalogSyncUrl.searchParams.set("catalog_sync_status", "in.(pending,running)");
-  catalogSyncUrl.searchParams.set("order", "started_at.asc");
-  catalogSyncUrl.searchParams.set("limit", String(MAX_RUNS_PER_TICK));
+  const catalogSyncRunningUrl = new URL("/rest/v1/supplier_price_import_runs", supabaseUrl);
+  catalogSyncRunningUrl.searchParams.set("select", "id,organization_id,created_by,status,catalog_sync_status");
+  catalogSyncRunningUrl.searchParams.set("status", "in.(finalized,succeeded)");
+  catalogSyncRunningUrl.searchParams.set("catalog_sync_status", "eq.running");
+  catalogSyncRunningUrl.searchParams.set("order", "catalog_sync_started_at.asc.nullsfirst");
+  catalogSyncRunningUrl.searchParams.set("limit", String(MAX_RUNS_PER_TICK));
+
+  const catalogSyncPendingUrl = new URL("/rest/v1/supplier_price_import_runs", supabaseUrl);
+  catalogSyncPendingUrl.searchParams.set("select", "id,organization_id,created_by,status,catalog_sync_status");
+  catalogSyncPendingUrl.searchParams.set("status", "in.(finalized,succeeded)");
+  catalogSyncPendingUrl.searchParams.set("catalog_sync_status", "eq.pending");
+  // New finalized imports should not sit behind months-old backlog.
+  catalogSyncPendingUrl.searchParams.set("order", "started_at.desc");
+  catalogSyncPendingUrl.searchParams.set("limit", String(MAX_RUNS_PER_TICK));
 
   const task = (async () => {
     const catalogRuns = await getJson<QueuedCatalogRun[]>(catalogUrl.toString(), { headers, timeoutMs: 12_000 });
     const supplierRuns = await getJson<QueuedSupplierRun[]>(supplierUrl.toString(), { headers, timeoutMs: 12_000 });
-    const catalogSyncRuns = await getJson<QueuedSupplierRun[]>(catalogSyncUrl.toString(), { headers, timeoutMs: 12_000 });
+    const [catalogSyncRunningRuns, catalogSyncPendingRuns] = await Promise.all([
+      getJson<QueuedSupplierRun[]>(catalogSyncRunningUrl.toString(), { headers, timeoutMs: 12_000 }),
+      getJson<QueuedSupplierRun[]>(catalogSyncPendingUrl.toString(), { headers, timeoutMs: 12_000 }),
+    ]);
     const seenSupplierRuns = new Set<string>();
-    const pendingSupplierRuns = [...(supplierRuns || []), ...(catalogSyncRuns || [])].filter((run) => {
+    const pendingSupplierRuns = [...(supplierRuns || []), ...(catalogSyncRunningRuns || []), ...(catalogSyncPendingRuns || [])].filter((run) => {
       if (seenSupplierRuns.has(run.id)) return false;
       seenSupplierRuns.add(run.id);
       return true;
-    });
+    }).sort((left, right) => {
+      const rank = (run: QueuedSupplierRun) => {
+        if (run.status === "running" || run.status === "finalizing") return 0;
+        if (run.catalog_sync_status === "running") return 1;
+        return 2;
+      };
+      return rank(left) - rank(right);
+    }).slice(0, MAX_RUNS_PER_TICK * 2);
     const results: unknown[] = [];
     for (const run of catalogRuns || []) {
       try { results.push(await processCatalogRun(supabaseUrl, serviceRoleKey, run)); }
