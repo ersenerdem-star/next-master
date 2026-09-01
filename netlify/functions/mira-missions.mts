@@ -124,6 +124,26 @@ async function planMiraMissions({
   });
 }
 
+async function clearQueuedMiraMissions(caller: Awaited<ReturnType<typeof requireCallerProfile>>) {
+  if ("error" in caller) return json({ error: caller.error }, caller.status);
+  const url = buildRestUrl(caller.supabaseUrl, "mira_missions", {
+    organization_id: `eq.${caller.profile.organization_id}`,
+    status: "eq.queued",
+  });
+  const cleared = await sendJson<unknown[]>(url, {
+    method: "PATCH",
+    headers: { ...serviceRoleHeaders(caller.serviceRoleKey), Prefer: "return=representation" },
+    body: JSON.stringify({
+      status: "cancelled",
+      finished_at: new Date().toISOString(),
+      error_message: "Görev kuyruğu kullanıcı tarafından temizlendi.",
+      result: { outcome: "cancelled", summary: "Bekleyen görev kuyruktan kaldırıldı." },
+    }),
+    timeoutMs: 12000,
+  });
+  return json({ ok: true, clearedCount: Array.isArray(cleared) ? cleared.length : 0 });
+}
+
 function bridgeEnabled() {
   return ["1", "true", "yes"].includes(env("MIRA_BRIDGE_ENABLED").toLowerCase());
 }
@@ -661,6 +681,11 @@ export default async (req: Request, _context: Context) => {
     const caller = await requireCallerProfile(req, ["superadmin"]);
     if ("error" in caller) return json({ error: caller.error }, caller.status);
     if (req.method === "GET") return listMissions(caller);
+
+    if (new URL(req.url).searchParams.get("queue") === "clear") {
+      if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      return clearQueuedMiraMissions(caller);
+    }
 
     if (new URL(req.url).searchParams.get("planner") === "run") {
       const planner = await planMiraMissions({

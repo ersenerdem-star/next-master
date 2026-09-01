@@ -67,3 +67,7 @@ export async function queueMiraMission(input: {
 export async function planMiraMissions() {
   return request<{ planner?: Record<string, unknown>; mission?: MiraMission }>({ method: "POST", body: "{}" }, "/api/mira-missions?planner=run");
 }
+
+export async function clearQueuedMiraMissions() {
+  return request<{ clearedCount?: number }>({ method: "POST", body: "{}" }, "/api/mira-missions?queue=clear");
+}

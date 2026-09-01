@@ -112,6 +112,8 @@
 .mira-mission-page__queue-header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
 .mira-mission-page__queue-header h2 { margin-bottom: 0; }
 .mira-mission-page__queue-header span { color: #6b7f99; font-size: 13px; }
+.mira-mission-page__queue-header > div { min-width: 0; }
+.mira-mission-page__clear-queue { white-space: nowrap; }
 .mira-mission-page__queue-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 14px 0; border-top: 1px solid #e5edf5; }
 .mira-mission-page__queue-item strong,
 .mira-mission-page__queue-item small { display: block; }
