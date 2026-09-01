@@ -124,11 +124,17 @@ async function planMiraMissions({
   });
 }
 
-async function clearQueuedMiraMissions(caller: Awaited<ReturnType<typeof requireCallerProfile>>) {
+async function clearQueuedMiraMissions(req: Request, caller: Awaited<ReturnType<typeof requireCallerProfile>>) {
   if ("error" in caller) return json({ error: caller.error }, caller.status);
+  const body = await readJson<{ missionIds?: unknown }>(req);
+  const missionIds = Array.isArray(body.missionIds)
+    ? [...new Set(body.missionIds.map((id) => String(id).trim()).filter((id) => UUID_PATTERN.test(id)))].slice(0, 100)
+    : [];
+  if (!missionIds.length) return json({ error: "En az bir bekleyen görev seçin." }, 400);
   const url = buildRestUrl(caller.supabaseUrl, "mira_missions", {
     organization_id: `eq.${caller.profile.organization_id}`,
     status: "eq.queued",
+    id: `in.(${missionIds.join(",")})`,
   });
   const cleared = await sendJson<unknown[]>(url, {
     method: "PATCH",
@@ -684,7 +690,7 @@ export default async (req: Request, _context: Context) => {
 
     if (new URL(req.url).searchParams.get("queue") === "clear") {
       if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
-      return clearQueuedMiraMissions(caller);
+      return clearQueuedMiraMissions(req, caller);
     }
 
     if (new URL(req.url).searchParams.get("planner") === "run") {

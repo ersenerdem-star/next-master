@@ -114,6 +114,11 @@
 .mira-mission-page__queue-header span { color: #6b7f99; font-size: 13px; }
 .mira-mission-page__queue-header > div { min-width: 0; }
 .mira-mission-page__clear-queue { white-space: nowrap; }
+.mira-mission-page__queue-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.mira-mission-page__select-all { display: inline-flex; align-items: center; gap: 6px; color: #6b7f99; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.mira-mission-page__select-all input,
+.mira-mission-page__queue-check input { accent-color: #bd8624; }
+.mira-mission-page__queue-check { display: flex; align-items: flex-start; padding-top: 2px; }
 .mira-mission-page__queue-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 14px 0; border-top: 1px solid #e5edf5; }
 .mira-mission-page__queue-item strong,
 .mira-mission-page__queue-item small { display: block; }
@@ -313,6 +318,9 @@
 .mira-mission-page__field-picker { min-width: 0; }
 
 .mira-mission-page__queue-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
   padding: 11px 0;
 }
 
