@@ -1164,98 +1164,11 @@ export default async (req: Request, context: Context) => {
         timeoutMs: 8_000,
       });
 
-      const finalizeTask = (async () => {
-        let latest: { status?: string; has_more?: boolean } | null = null;
-        let finalized = false;
-
-        // Keep each invocation short. The scheduled worker will continue the
-        // same idempotent run after this bounded foreground hand-off.
-        for (let batch = 0; batch < 8; batch += 1) {
-          let lastError: unknown = null;
-
-          for (let retry = 0; retry < 3; retry += 1) {
-            try {
-              latest = await sendJson<{ status?: string; has_more?: boolean }>(
-                `${supabaseUrl}/rest/v1/rpc/finalize_supplier_price_import_batch`,
-                {
-                  method: "POST",
-                  headers: {
-                    apikey: supabaseAnonKey,
-                    Authorization: authorizationHeader,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    input_run_id: runId,
-                    input_batch_size: 500,
-                  }),
-                },
-              );
-              lastError = null;
-              break;
-            } catch (error) {
-              lastError = error;
-              await sleep((retry + 1) * 1500);
-            }
-          }
-
-          if (lastError) {
-            console.error("supplier price finalize background batch failed", runId, lastError);
-            return;
-          }
-
-          const status = String(latest?.status || "");
-          if (status === "finalized" || status === "succeeded" || latest?.has_more === false) {
-            finalized = true;
-            break;
-          }
-
-          await sleep(250);
-        }
-
-        if (!finalized) {
-          console.error("supplier price finalize background task did not reach finalized state", runId, latest);
-          return;
-        }
-
-        try {
-          const syncResult = await syncSupplierCatalogInBatches(
-            supabaseUrl,
-            {
-              apikey: supabaseAnonKey,
-              Authorization: authorizationHeader,
-              "Content-Type": "application/json",
-            },
-            runId,
-            caller.organizationId,
-            caller.id,
-          );
-          if (String(syncResult?.catalog_sync_status || syncResult?.status || "") !== "succeeded") {
-            console.error("supplier price catalog sync deferred", runId, syncResult);
-            return;
-          }
-        } catch (error) {
-          console.error("supplier price catalog sync background task failed", runId, error);
-          return;
-        }
-
-        try {
-          await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/refresh_supplier_price_rollups_logged`, {
-            method: "POST",
-            headers: {
-              apikey: supabaseAnonKey,
-              Authorization: authorizationHeader,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ p_organization_id: caller.organizationId }),
-          });
-        } catch (error) {
-          console.error("supplier price rollup background task failed", runId, error);
-        }
-      })().catch((error) => {
-        console.error("supplier price finalize background task failed", runId, error);
-      });
-
-      context.waitUntil(finalizeTask);
+      // Finalization is owned exclusively by import-processing-worker. Starting
+      // a second long-running finalize task here races the scheduled worker on
+      // the same run and turns a recoverable lock wait into a 55s timeout.
+      // The persisted queue marker is the hand-off; the worker resumes it
+      // idempotently on its next tick.
       return json({
         ok: true,
         data: {
