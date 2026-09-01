@@ -654,6 +654,7 @@ export async function syncBrandCatalog(input: {
   expandPrefixes?: boolean;
   skipDiscovery?: boolean;
   candidateLimit?: number;
+  productCodes?: string[];
   seedPrefixes?: string[];
   lineIds?: number[];
   sparetoFallbackLimit?: number;

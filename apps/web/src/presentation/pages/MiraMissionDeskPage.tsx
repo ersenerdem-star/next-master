@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { PageHeader, PageShell, StatusBadge } from "../components/common/VisualPrimitives";
 import { useI18n } from "../../i18n/I18nProvider";
-import { clearQueuedMiraMissions, hideMiraMissions, listMiraMissions, planMiraMissions, queueMiraMission, type MiraMission } from "../../infrastructure/api/miraMissionsApi";
+import { clearQueuedMiraMissions, hideMiraMissions, listMiraMissions, planMiraMissions, queueMiraMission, reviewMiraMission, type MiraMission } from "../../infrastructure/api/miraMissionsApi";
 
 type MiraDeskTab = "queue" | "evidence" | "results";
 
@@ -39,6 +39,17 @@ type MissionReport = {
   knowledgeGaps: unknown;
   learning: unknown;
   authorityFindings: unknown;
+  package: {
+    requested: number | null;
+    observed: number | null;
+    failed: number | null;
+    staged: number | null;
+    loaded: number | null;
+    alreadyPresent: number | null;
+    guarded: number | null;
+    deduped: number | null;
+    skipped: number | null;
+  };
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -135,6 +146,7 @@ function reportForMission(mission: MiraMission): MissionReport {
   const paths = asRecord(result.paths);
   const guarantees = asRecord(result.guarantees) ?? {};
   const authority = asRecord(result.authority);
+  const intake = asRecord(result.observationIntake) ?? asRecord(result.observation_intake);
   const nested = [result, debrief, handoff, authority].filter((value): value is Record<string, unknown> => Boolean(value));
   const read = (...keys: string[]) => readRecordValue(nested, ...keys);
   const pagesObserved = readNumber(read("pagesObserved", "pages_observed", "pageCount", "page_count"));
@@ -169,6 +181,15 @@ function reportForMission(mission: MiraMission): MissionReport {
       ? "Doğrulanmış katalog adayı bulunmadı; kaynak çıktısı kanıt için yetersiz kaldı."
       : null
   );
+  const requested = readNumber(mission.max_items, read("requestedCount", "requested_count", "requested"));
+  const observed = readNumber(read("observedCount", "observed_count", "observed", "observationCount", "observation_count"), intake?.observedCount, intake?.observed_count);
+  const staged = readNumber(intake?.stagedCount, intake?.staged_count, intake?.observationsAppended, intake?.observations_appended, intake?.observedCount, intake?.observed_count);
+  const loaded = readNumber(read("publishedInserted", "published_inserted", "catalogProductsWritten", "catalog_products_written", "insertedCount", "inserted_count"), intake?.publishedInserted, intake?.published_inserted, intake?.catalogProductsWritten, intake?.catalog_products_written);
+  const alreadyPresent = readNumber(read("alreadyPresent", "already_present", "dedupedCount", "deduped_count"), intake?.alreadyPresent, intake?.already_present);
+  const guarded = readNumber(read("guardedEnrichment", "guarded_enrichment", "guardedCount", "guarded_count"), intake?.guardedEnrichment, intake?.guarded_enrichment);
+  const deduped = readNumber(intake?.dedupedCount, intake?.deduped_count, intake?.observationsDeduped, intake?.observations_deduped);
+  const skipped = readNumber(read("skippedCount", "skipped_count", "skipped"), intake?.skippedCount, intake?.skipped_count);
+  const failed = readNumber(read("failedCount", "failed_count", "failed"), skipped, requested !== null && observed !== null ? Math.max(requested - observed, 0) : null);
 
   return {
     evidence,
@@ -199,6 +220,7 @@ function reportForMission(mission: MiraMission): MissionReport {
     knowledgeGaps: read("knowledgeGaps", "knowledge_gaps"),
     learning: read("researchLearning", "research_learning", "learning", "lessons"),
     authorityFindings: authority?.findings ?? read("authorityFindings", "authority_findings", "findings"),
+    package: { requested, observed, failed, staged, loaded, alreadyPresent, guarded, deduped, skipped },
   };
 }
 
@@ -220,7 +242,7 @@ function ArtifactReference({ label, path, url }: { label: string; path: string |
   );
 }
 
-function MissionReportCard({ mission, report, evidenceLabel, reasonLabel, artifactLabel, debriefLabel, pendingLabel }: {
+function MissionReportCard({ mission, report, evidenceLabel, reasonLabel, artifactLabel, debriefLabel, pendingLabel, onReview }: {
   mission: MiraMission;
   report: MissionReport;
   evidenceLabel: string;
@@ -228,6 +250,7 @@ function MissionReportCard({ mission, report, evidenceLabel, reasonLabel, artifa
   artifactLabel: string;
   debriefLabel: string;
   pendingLabel: string;
+  onReview: (mission: MiraMission, decision: "approved" | "rejected") => void;
 }) {
   const evidenceText = compactValue(report.evidence);
   const summaryText = report.summary || "Sonuç özeti henüz dönmedi.";
@@ -239,6 +262,8 @@ function MissionReportCard({ mission, report, evidenceLabel, reasonLabel, artifa
     report.guarantees.automaticAuthorityExpansion === false ? "Yetkiyi genişletmedi" : null,
   ].filter(Boolean).join(" · ");
   const listText = (value: unknown) => compactValue(value, 600);
+  const reviewStatus = mission.catalog_review_status || "pending";
+  const canReview = ["completed", "partial", "blocked", "failed", "cancelled"].includes(mission.status) && reviewStatus === "pending";
   return (
     <article className="mira-mission-page__report-card">
       <div className="mira-mission-page__report-heading">
@@ -256,6 +281,21 @@ function MissionReportCard({ mission, report, evidenceLabel, reasonLabel, artifa
           <span>Yetki kararı: <b>{report.authorityDecisionRequired === true ? "Gerekli" : report.authorityDecisionRequired === false ? "Gerekli değil" : "—"}</b></span>
         </div>
       </div>
+      <div className="mira-mission-page__package-summary" aria-label="Paket sonucu">
+        <span>Paket: <b>{report.package.requested ?? "—"}</b></span>
+        <span>Gözlenen: <b>{report.package.observed ?? "—"}</b></span>
+        <span>Staging: <b>{report.package.staged ?? "—"}</b></span>
+        <span>Kataloğa yazılan: <b>{report.package.loaded ?? 0}</b></span>
+        <span>Yüklenmeyen: <b>{report.package.failed ?? "—"}</b></span>
+        {report.package.alreadyPresent !== null ? <span>Mevcut: <b>{report.package.alreadyPresent}</b></span> : null}
+        {report.package.guarded !== null ? <span>Guarded: <b>{report.package.guarded}</b></span> : null}
+        {report.package.deduped !== null ? <span>Tekrar: <b>{report.package.deduped}</b></span> : null}
+      </div>
+      <div className="mira-mission-page__catalog-review-gate">
+        <div><strong>Kataloğa aktarım kararı</strong><small>{reviewStatus === "approved" ? "Onaylandı — kontrollü Catalog Review / Apply adımını bekliyor." : reviewStatus === "rejected" ? "Reddedildi — bu paketin katalog yazımı yapılmayacak." : "Bu aday veriyi içeri almak için onay verin veya reddedin."}</small></div>
+        {canReview ? <div className="mira-mission-page__review-actions"><button className="button button--primary" type="button" onClick={() => onReview(mission, "approved")}>İçeri almayı onayla</button><button className="button button--secondary" type="button" onClick={() => onReview(mission, "rejected")}>Reddet</button></div> : null}
+        {mission.catalog_review_note ? <small>Not: {mission.catalog_review_note}</small> : null}
+      </div>
       {mission.status === "failed" || report.negativeReason || report.candidates === 0 ? (
         <div className="mira-mission-page__negative-result" role="status">
           <strong>{reasonLabel}</strong>
@@ -266,13 +306,15 @@ function MissionReportCard({ mission, report, evidenceLabel, reasonLabel, artifa
       <div className="mira-mission-page__write-preview"><strong>İçeriye yazılacak alanlar</strong><span>{mission.requested_fields?.length ? mission.requested_fields.join(" · ") : "MIRA talimattan çıkaracak"}</span><small>Gerçek yazım, doğrulama ve güvenlik kontrollerinden sonra worker tarafından yapılır.</small></div>
       {evidenceText ? <div className="mira-mission-page__evidence-value"><strong>{evidenceLabel}</strong><code>{evidenceText}</code></div> : <p className="mira-mission-page__artifact-empty">{mission.status === "queued" || mission.status === "processing" ? pendingLabel : `${evidenceLabel}: henüz kanıt yok.`}</p>}
       {safetyItems ? <div className="mira-mission-page__safety-result"><strong>MIRA ne yapmadı?</strong><span>{safetyItems}</span></div> : null}
-      {listText(report.knowledgeGaps) ? <div className="mira-mission-page__report-detail"><strong>Açık kalan konu</strong><span>{listText(report.knowledgeGaps)}</span></div> : null}
-      {listText(report.learning) ? <div className="mira-mission-page__report-detail"><strong>Öğrenilen</strong><span>{listText(report.learning)}</span></div> : null}
-      {listText(report.authorityFindings) ? <div className="mira-mission-page__report-detail"><strong>Yetki / kaynak bulgusu</strong><span>{listText(report.authorityFindings)}</span></div> : null}
-      <div className="mira-mission-page__artifact-grid">
-        <ArtifactReference label={artifactLabel} path={report.artifactPath} url={report.artifactUrl} />
-        <ArtifactReference label={debriefLabel} path={report.debriefPath} url={report.debriefUrl} />
-      </div>
+      <details className="mira-mission-page__report-details"><summary>Kanıt ve debrief ayrıntıları</summary>
+        {listText(report.knowledgeGaps) ? <div className="mira-mission-page__report-detail"><strong>Açık kalan konu</strong><span>{listText(report.knowledgeGaps)}</span></div> : null}
+        {listText(report.learning) ? <div className="mira-mission-page__report-detail"><strong>Öğrenilen</strong><span>{listText(report.learning)}</span></div> : null}
+        {listText(report.authorityFindings) ? <div className="mira-mission-page__report-detail"><strong>Yetki / kaynak bulgusu</strong><span>{listText(report.authorityFindings)}</span></div> : null}
+        <div className="mira-mission-page__artifact-grid">
+          <ArtifactReference label={artifactLabel} path={report.artifactPath} url={report.artifactUrl} />
+          <ArtifactReference label={debriefLabel} path={report.debriefPath} url={report.debriefUrl} />
+        </div>
+      </details>
     </article>
   );
 }
@@ -388,6 +430,18 @@ export function MiraMissionDeskPage() {
     }
   }
 
+  async function reviewMission(mission: MiraMission, decision: "approved" | "rejected") {
+    const label = decision === "approved" ? "kataloga aktarım" : "paket reddi";
+    if (!window.confirm(`${mission.target_brand || "Bu görev"} için ${label} onaylansın mı?`)) return;
+    try {
+      const response = await reviewMiraMission(mission.id, decision);
+      if (response.mission) setMissions((items) => items.map((item) => item.id === mission.id ? { ...item, ...response.mission } : item));
+      setMessage(response.handoff?.nextStep || `${label} kaydedildi.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "MIRA review kararı kaydedilemedi.");
+    }
+  }
+
   const evidenceMissions = useMemo(
     () => missions.filter((mission) => mission.status !== "queued" || Boolean(mission.result) || Boolean(mission.error_message)),
     [missions],
@@ -452,7 +506,7 @@ export function MiraMissionDeskPage() {
             <label>Görev talimatı<textarea value={objective} onChange={(event) => setObjective(event.target.value)} minLength={8} maxLength={500} placeholder="Örn. Corteco için eksik OEM ve görselleri bul" rows={3} required /></label>
             <div className="mira-mission-page__form-row"><label>Hedef marka<input value={targetBrand} onChange={(event) => setTargetBrand(event.target.value)} placeholder="Örn. Corteco" /></label><label>Kaynak<select value={sourceKey} onChange={(event) => setSourceKey(event.target.value)}><option value="mira_auto">MIRA otomatik seçsin</option><option value="tecalliance">TecAlliance resmi</option><option value="spareto">Spareto liste kaynağı</option></select></label></div>
             <fieldset className="mira-mission-page__field-picker"><legend>Kontrol edilecek alanlar</legend><div>{MIRA_FIELDS.map(([value, label]) => <label key={value}><input type="checkbox" checked={requestedFields.includes(value)} onChange={(event) => setRequestedFields((current) => event.target.checked ? [...new Set([...current, value])] : current.filter((item) => item !== value))} />{label}</label>)}</div></fieldset>
-            <div className="mira-mission-page__form-row"><label>Paket boyutu<input type="number" min="1" max="50" value={maxItems} onChange={(event) => setMaxItems(Number(event.target.value))} /></label><label>İstek aralığı (ms)<input type="number" min="1000" max="10000" step="100" value={delayMs} onChange={(event) => setDelayMs(Number(event.target.value))} /></label></div>
+            <div className="mira-mission-page__form-row"><label>Paket boyutu<input type="number" min="1" max="1000" value={maxItems} onChange={(event) => setMaxItems(Number(event.target.value))} /></label><label>İstek aralığı (ms)<input type="number" min="1000" max="10000" step="100" value={delayMs} onChange={(event) => setDelayMs(Number(event.target.value))} /></label></div>
             <p className="mira-mission-page__form-hint">MIRA önce kanıt/staging üretir. Yazılacak alanlar 3. aşamadaki sonuç ekranında ayrı gösterilir.</p>
             <button className="button button--primary" type="submit" disabled={submitting}>{submitting ? "Kuyruğa alınıyor…" : "MIRA’ya görev ver"}</button>
             {message ? <p className="mira-mission-page__message" role="status">{message}</p> : null}
@@ -464,14 +518,16 @@ export function MiraMissionDeskPage() {
       {activeTab === "evidence" ? (
         <section className="mira-mission-page__report-panel" role="tabpanel" aria-label={t("mira.missionDesk.tabs.evidence")}>
           <div className="mira-mission-page__panel-heading"><div><h2>{t("mira.missionDesk.evidence.title")}</h2><p>{t("mira.missionDesk.evidence.subtitle")}</p></div><StatusBadge tone="info">Review-only</StatusBadge></div>
-          {evidenceMissions.length === 0 ? <p className="mira-mission-page__empty">{t("mira.missionDesk.evidence.empty")}</p> : evidenceMissions.map((mission) => <MissionReportCard key={mission.id} mission={mission} report={reportForMission(mission)} evidenceLabel={t("mira.missionDesk.evidence.label")} reasonLabel={t("mira.missionDesk.evidence.negativeReason")} artifactLabel={t("mira.missionDesk.evidence.artifact")} debriefLabel={t("mira.missionDesk.evidence.debrief")} pendingLabel={t("mira.missionDesk.evidence.pending")} />)}
+          {message ? <p className="mira-mission-page__message" role="status">{message}</p> : null}
+          {evidenceMissions.length === 0 ? <p className="mira-mission-page__empty">{t("mira.missionDesk.evidence.empty")}</p> : evidenceMissions.map((mission) => <MissionReportCard key={mission.id} mission={mission} report={reportForMission(mission)} evidenceLabel={t("mira.missionDesk.evidence.label")} reasonLabel={t("mira.missionDesk.evidence.negativeReason")} artifactLabel={t("mira.missionDesk.evidence.artifact")} debriefLabel={t("mira.missionDesk.evidence.debrief")} pendingLabel={t("mira.missionDesk.evidence.pending")} onReview={reviewMission} />)}
         </section>
       ) : null}
 
       {activeTab === "results" ? (
         <section className="mira-mission-page__report-panel" role="tabpanel" aria-label={t("mira.missionDesk.tabs.results")}>
           <div className="mira-mission-page__panel-heading"><div><h2>{t("mira.missionDesk.results.title")}</h2><p>{t("mira.missionDesk.results.subtitle")}</p></div><StatusBadge tone="info">Review-only</StatusBadge></div>
-          {terminalMissions.length === 0 ? <p className="mira-mission-page__empty">{t("mira.missionDesk.results.empty")}</p> : terminalMissions.map((mission) => <MissionReportCard key={mission.id} mission={mission} report={reportForMission(mission)} evidenceLabel={t("mira.missionDesk.evidence.label")} reasonLabel={t("mira.missionDesk.evidence.negativeReason")} artifactLabel={t("mira.missionDesk.evidence.artifact")} debriefLabel={t("mira.missionDesk.evidence.debrief")} pendingLabel={t("mira.missionDesk.evidence.pending")} />)}
+          {message ? <p className="mira-mission-page__message" role="status">{message}</p> : null}
+          {terminalMissions.length === 0 ? <p className="mira-mission-page__empty">{t("mira.missionDesk.results.empty")}</p> : terminalMissions.map((mission) => <MissionReportCard key={mission.id} mission={mission} report={reportForMission(mission)} evidenceLabel={t("mira.missionDesk.evidence.label")} reasonLabel={t("mira.missionDesk.evidence.negativeReason")} artifactLabel={t("mira.missionDesk.evidence.artifact")} debriefLabel={t("mira.missionDesk.evidence.debrief")} pendingLabel={t("mira.missionDesk.evidence.pending")} onReview={reviewMission} />)}
         </section>
       ) : null}
 

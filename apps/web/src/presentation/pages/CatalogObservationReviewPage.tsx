@@ -770,7 +770,7 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
         subtitle={c("subtitle", { runId: response?.run_id || runId })}
         status={
           <div className="document-marks document-marks--compact">
-            <StatusBadge tone="info">{c("readOnlyBadge")}</StatusBadge>
+            <StatusBadge tone="info">{c("reviewBadge")}</StatusBadge>
             <StatusBadge tone="neutral">{response?.schema_version || "catalog-observation-review.v1"}</StatusBadge>
           </div>
         }
@@ -786,8 +786,8 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
         }
       />
 
-      <InlineAlert tone="info" title={c("readOnlyNoticeTitle")}>
-        {c("readOnlyNoticeBody")}
+      <InlineAlert tone="info" title={c("reviewNoticeTitle")}>
+        {c("reviewNoticeBody")}
       </InlineAlert>
 
       <div className="metric-strip catalog-observation-review-summary">
@@ -950,7 +950,11 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
               </table>
             </div>
           ) : (
-            <EmptyState title={c("empty.title")}>{c("empty.body")}</EmptyState>
+            <EmptyState title={c("empty.title")}>
+              {summary?.total_observations && !summary.review_queue_count
+                ? c("empty.observationsWithoutCandidates", { count: summary.total_observations })
+                : c("empty.body")}
+            </EmptyState>
           )}
         </div>
 

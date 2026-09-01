@@ -28,6 +28,12 @@ type MissionInput = {
   maxItems?: unknown;
 };
 
+type MissionReviewInput = {
+  missionId?: unknown;
+  decision?: unknown;
+  note?: unknown;
+};
+
 type BridgeMission = {
   id: string;
   organization_id: string;
@@ -83,7 +89,7 @@ function parseMissionInput(body: MissionInput) {
   }
   if (targetBrand.length > 120) throw new Error("Target brand is too long.");
   if (!/^[a-z0-9._:-]{2,80}$/i.test(sourceKey)) throw new Error("Source selection is invalid.");
-  if (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 50) throw new Error("Package size must be between 1 and 50.");
+  if (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 1000) throw new Error("Package size must be between 1 and 1000.");
 
   return { objective, missionArea, maxPages, delayMs, targetBrand, sourceKey, requestedFields, maxItems };
 }
@@ -91,7 +97,7 @@ function parseMissionInput(body: MissionInput) {
 async function listMissions(caller: Awaited<ReturnType<typeof requireCallerProfile>>) {
   if ("error" in caller) return json({ error: caller.error }, caller.status);
   const url = buildRestUrl(caller.supabaseUrl, "mira_missions", {
-    select: "id,objective,mission_area,max_pages,delay_ms,status,execution_mode,result,error_message,created_at,started_at,finished_at,bridge_client,bridge_event_id,bridge_protocol_version,bridge_received_at,origin,planner_key,planner_score,planner_reason,planner_context,target_brand,requested_fields,max_items,hidden_at",
+    select: "id,objective,mission_area,max_pages,delay_ms,status,execution_mode,result,error_message,created_at,started_at,finished_at,bridge_client,bridge_event_id,bridge_protocol_version,bridge_received_at,origin,planner_key,planner_score,planner_reason,planner_context,target_brand,requested_fields,max_items,hidden_at,catalog_review_status,catalog_reviewed_at,catalog_reviewed_by,catalog_review_note",
     organization_id: `eq.${caller.profile.organization_id}`,
     hidden_at: "is.null",
     order: "created_at.desc",
@@ -99,6 +105,49 @@ async function listMissions(caller: Awaited<ReturnType<typeof requireCallerProfi
   });
   const missions = await getJson<unknown[]>(url, { headers: serviceRoleHeaders(caller.serviceRoleKey), timeoutMs: 12000 });
   return json({ ok: true, online: true, missions });
+}
+
+async function recordMissionReview(req: Request, caller: Awaited<ReturnType<typeof requireCallerProfile>>) {
+  if ("error" in caller) return json({ error: caller.error }, caller.status);
+  const body = await readJson<MissionReviewInput>(req);
+  const missionId = String(body.missionId ?? "").trim();
+  const decision = String(body.decision ?? "").trim().toLowerCase();
+  const note = String(body.note ?? "").trim();
+  if (!UUID_PATTERN.test(missionId)) return json({ error: "Geçerli bir MIRA görev kimliği gerekli." }, 400);
+  if (decision !== "approved" && decision !== "rejected") return json({ error: "Karar approved veya rejected olmalı." }, 400);
+  if (note.length > 500) return json({ error: "Review notu en fazla 500 karakter olabilir." }, 400);
+
+  const url = buildRestUrl(caller.supabaseUrl, "mira_missions", {
+    id: `eq.${missionId}`,
+    organization_id: `eq.${caller.profile.organization_id}`,
+    status: "in.(completed,partial,blocked,failed,cancelled)",
+    catalog_review_status: "eq.pending",
+    hidden_at: "is.null",
+  });
+  const updated = await sendJson<BridgeMission[]>(url, {
+    method: "PATCH",
+    headers: { ...serviceRoleHeaders(caller.serviceRoleKey), Prefer: "return=representation" },
+    body: JSON.stringify({
+      catalog_review_status: decision,
+      catalog_reviewed_at: new Date().toISOString(),
+      catalog_reviewed_by: caller.profile.id,
+      catalog_review_note: note || null,
+    }),
+    timeoutMs: 12000,
+  });
+  if (updated.length === 0) {
+    return json({ error: "Görev bulunamadı, gizli veya daha önce review kararı verilmiş olabilir." }, 409);
+  }
+  return json({
+    ok: true,
+    mission: updated[0] ?? null,
+    handoff: {
+      catalogWrite: false,
+      nextStep: decision === "approved"
+        ? "Staged observations Catalog Observation Review ekranında doğrulanıp kontrollü Apply ile içeri alınabilir."
+        : "Staged observations reddedildi; Catalog'a yazılmaz.",
+    },
+  });
 }
 
 async function planMiraMissions({
@@ -719,6 +768,11 @@ export default async (req: Request, _context: Context) => {
     if (new URL(req.url).searchParams.get("queue") === "hide") {
       if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
       return hideMiraMissions(req, caller);
+    }
+
+    if (new URL(req.url).searchParams.get("review") === "record") {
+      if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      return recordMissionReview(req, caller);
     }
 
     if (new URL(req.url).searchParams.get("planner") === "run") {

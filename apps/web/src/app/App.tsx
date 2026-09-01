@@ -21,7 +21,6 @@ import {
 } from "../shared/roles";
 
 const CATALOG_OBSERVATION_REVIEW_PATH = "/catalog/observation-review";
-const CATALOG_ZF_STAGING_REVIEW_PATH = "/catalog/zf-group/staging-review";
 
 function isSellerPortalHostname(hostname: string) {
   const normalized = hostname.trim().toLowerCase().split(":")[0];
@@ -29,7 +28,6 @@ function isSellerPortalHostname(hostname: string) {
 }
 
 const CatalogObservationReviewPage = lazy(() => import("../presentation/pages/CatalogObservationReviewPage").then((module) => ({ default: module.CatalogObservationReviewPage })));
-const CatalogZfStagingReviewPage = lazy(() => import("../presentation/pages/CatalogZfStagingReviewPage").then((module) => ({ default: module.CatalogZfStagingReviewPage })));
 const DashboardPage = lazy(() => import("../presentation/pages/DashboardPage").then((module) => ({ default: module.DashboardPage })));
 const InventoryPage = lazy(() => import("../presentation/pages/InventoryPage").then((module) => ({ default: module.InventoryPage })));
 const ItemsPage = lazy(() => import("../presentation/pages/ItemsPage").then((module) => ({ default: module.ItemsPage })));
@@ -48,7 +46,6 @@ const itemSubNav = [
 
 const catalogReviewSubNav = [
   { key: "Observation Review", labelKey: "nav.catalogReview" },
-  { key: "ZF Staging Evidence", labelKey: "nav.zfStagingEvidence" },
 ] as const;
 
 const inventorySubNav = [
@@ -621,7 +618,7 @@ export function App() {
       pushWorkspacePath(CATALOG_OBSERVATION_REVIEW_PATH);
       return;
     }
-    if (workspacePath.startsWith(CATALOG_OBSERVATION_REVIEW_PATH) || workspacePath.startsWith(CATALOG_ZF_STAGING_REVIEW_PATH)) {
+    if (workspacePath.startsWith(CATALOG_OBSERVATION_REVIEW_PATH)) {
       pushWorkspacePath("/");
     }
     setActivePage(nextPage);
@@ -629,7 +626,7 @@ export function App() {
 
   function handleSubNavigate(nextSubPage: string) {
     if (isCatalogReadRoute && catalogReviewSubNav.some((item) => item.key === nextSubPage)) {
-      pushWorkspacePath(nextSubPage === "ZF Staging Evidence" ? CATALOG_ZF_STAGING_REVIEW_PATH : CATALOG_OBSERVATION_REVIEW_PATH);
+      pushWorkspacePath(CATALOG_OBSERVATION_REVIEW_PATH);
       return;
     }
     if (activePage === "Items" && itemSubNav.some((item) => item.key === nextSubPage)) {
@@ -688,8 +685,7 @@ export function App() {
   const settingsSubNavItems = useMemo(() => getSettingsSubNav(appRole), [appRole]);
   const allowedNavItems = useMemo(() => getAllowedNavItems(appRole), [appRole]);
   const isCatalogReviewRoute = workspacePath.startsWith(CATALOG_OBSERVATION_REVIEW_PATH);
-  const isCatalogZfStagingReviewRoute = workspacePath.startsWith(CATALOG_ZF_STAGING_REVIEW_PATH);
-  const isCatalogReadRoute = isCatalogReviewRoute || isCatalogZfStagingReviewRoute;
+  const isCatalogReadRoute = isCatalogReviewRoute;
   const shellActivePage = isCatalogReadRoute ? "CatalogReview" : activePage;
   const localizedNavItems = useMemo(
     () =>
@@ -782,7 +778,7 @@ export function App() {
 
   const activeSubPage =
     isCatalogReadRoute
-      ? isCatalogZfStagingReviewRoute ? "ZF Staging Evidence" : "Observation Review"
+      ? "Observation Review"
       : activePage === "Items"
       ? itemsTab
       : activePage === "Inventory"
@@ -838,9 +834,7 @@ export function App() {
   }
 
   const pageContent =
-    isCatalogZfStagingReviewRoute ? (
-      <CatalogZfStagingReviewPage />
-    ) : isCatalogReviewRoute ? (
+    isCatalogReviewRoute ? (
       <CatalogObservationReviewPage />
     ) : activePage === "Items" && canAccessSystemModules(appRole) ? (
       <ItemsPage activeTab={itemsTab} />

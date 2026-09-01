@@ -1,6 +1,7 @@
 import { supabaseClient } from "./supabaseClient";
 
 export type MiraMissionStatus = "queued" | "processing" | "completed" | "partial" | "blocked" | "failed" | "cancelled";
+export type MiraCatalogReviewStatus = "pending" | "approved" | "rejected";
 
 export type MiraMission = {
   id: string;
@@ -28,6 +29,10 @@ export type MiraMission = {
   target_brand?: string | null;
   requested_fields?: string[] | null;
   max_items?: number | null;
+  catalog_review_status?: MiraCatalogReviewStatus | null;
+  catalog_reviewed_at?: string | null;
+  catalog_reviewed_by?: string | null;
+  catalog_review_note?: string | null;
 };
 
 async function accessToken() {
@@ -75,4 +80,11 @@ export async function clearQueuedMiraMissions(missionIds: string[]) {
 
 export async function hideMiraMissions(missionIds: string[]) {
   return request<{ hiddenCount?: number }>({ method: "POST", body: JSON.stringify({ missionIds }) }, "/api/mira-missions?queue=hide");
+}
+
+export async function reviewMiraMission(missionId: string, decision: "approved" | "rejected", note?: string) {
+  return request<{ mission?: MiraMission; handoff?: { catalogWrite: boolean; nextStep: string } }>({
+    method: "POST",
+    body: JSON.stringify({ missionId, decision, note: note || "" }),
+  }, "/api/mira-missions?review=record");
 }

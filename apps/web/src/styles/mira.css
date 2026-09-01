@@ -348,6 +348,37 @@
   border-radius: 8px !important;
 }
 
+.mira-mission-page__package-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 9px 12px;
+  border: 1px solid #d9e5f1;
+  border-radius: 7px;
+  color: #49647f;
+  background: #fff;
+  font-size: 13px;
+}
+.mira-mission-page__catalog-review-gate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid #efd6a6;
+  border-radius: 8px;
+  background: #fffaf0;
+  color: #62471b;
+}
+.mira-mission-page__catalog-review-gate div:first-child { display: grid; gap: 3px; }
+.mira-mission-page__catalog-review-gate small { color: #806534; line-height: 1.35; }
+.mira-mission-page__review-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+.mira-mission-page__review-actions .button { min-height: 32px; padding: 6px 10px; font-size: 12px; }
+.mira-mission-page__report-details { border-top: 1px solid #e5edf5; padding-top: 8px; }
+.mira-mission-page__report-details summary { cursor: pointer; color: #315779; font-size: 13px; font-weight: 800; }
+.mira-mission-page__report-details[open] { display: grid; gap: 9px; }
+
 .mira-mission-page__result-overview,
 .mira-mission-page__safety-result,
 .mira-mission-page__report-detail,

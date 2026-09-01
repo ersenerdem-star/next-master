@@ -3,7 +3,6 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 const route = "/catalog/observation-review";
-const runId = "c060aa25-7068-4fd3-a2ee-7f6944402fd7";
 
 async function read(path) {
   return readFile(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -23,6 +22,7 @@ test("Catalog observation review route and role guard are wired", async () => {
   assert.match(appShell, /CatalogReview/);
   assert.match(roles, /export function canAccessCatalogReviewModules/);
   assert.match(roles, /return isAdminLikeRole\(role\)/);
+  assert.doesNotMatch(app, /CatalogZfStagingReviewPage|CATALOG_ZF_STAGING_REVIEW_PATH|ZF Staging Evidence/);
 });
 
 test("Catalog observation review API client uses authenticated GET with organization and run context", async () => {
@@ -46,7 +46,7 @@ test("Catalog observation review API client uses authenticated GET with organiza
 test("Catalog observation review page preserves read-only URL-backed workspace state", async () => {
   const page = await read("apps/web/src/presentation/pages/CatalogObservationReviewPage.tsx");
 
-  assert.match(page, new RegExp(runId));
+  assert.match(page, /DEFAULT_CATALOG_OBSERVATION_REVIEW_RUN_ID = "latest"/);
   assert.match(page, /field_family/);
   assert.match(page, /comparison_result/);
   assert.match(page, /recommendation/);
@@ -84,7 +84,7 @@ test("Catalog observation review translations include read-only and advisory lab
   ]);
 
   for (const locale of [en, tr]) {
-    assert.match(locale, /observationReview\.readOnlyNoticeBody/);
+    assert.match(locale, /observationReview\.reviewNoticeBody/);
     assert.match(locale, /observationReview\.recommendations\.autoSafe/);
     assert.match(locale, /observationReview\.detail\.unassigned/);
     assert.match(locale, /observationReview\.detail\.notDecided/);
