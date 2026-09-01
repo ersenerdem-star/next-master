@@ -47,7 +47,7 @@ export function parseCatalogObservationReviewQuery(requestUrl) {
   if (!organizationId) throw new Error("organization_id is required");
   if (!isUuid(organizationId)) throw new Error("organization_id must be a UUID");
   if (!runId) throw new Error("run_id is required");
-  if (!isUuid(runId)) throw new Error("run_id must be a UUID");
+  if (runId !== "latest" && !isUuid(runId)) throw new Error("run_id must be a UUID or latest");
   if (productId && !isUuid(productId)) throw new Error("product_id must be a UUID");
   if (!Number.isInteger(limit) || limit < 1) throw new Error("limit must be a positive integer");
   if (limit > REVIEW_MAX_LIMIT) throw new Error(`limit must be at most ${REVIEW_MAX_LIMIT}`);
@@ -120,12 +120,19 @@ export function createCatalogObservationReviewDecisionStateDb({ supabaseUrl, sup
 }
 
 export async function loadCatalogObservationReviewWorkspace(db, { organizationId, runId }) {
-  const runs = await db.get("catalog_observation_runs", {
+  const runQuery = {
     select: "id,organization_id,job_id,source_id,brand_id,status,started_at,finished_at,observed_count,deduped_count,candidate_count,review_routed_count,apply_event_count,error_message",
     organization_id: `eq.${organizationId}`,
-    id: `eq.${runId}`,
     limit: "1",
-  });
+  };
+  if (runId === "latest") {
+    runQuery.status = "eq.succeeded";
+    runQuery.observed_count = "gt.0";
+    runQuery.order = "created_at.desc,id.desc";
+  } else {
+    runQuery.id = `eq.${runId}`;
+  }
+  const runs = await db.get("catalog_observation_runs", runQuery);
 
   if (!runs.length) {
     return {
@@ -138,6 +145,7 @@ export async function loadCatalogObservationReviewWorkspace(db, { organizationId
     };
   }
 
+  const resolvedRunId = String(runs[0].id);
   const observations = await db.get("catalog_external_observations", {
     select: [
       "id",
@@ -160,7 +168,7 @@ export async function loadCatalogObservationReviewWorkspace(db, { organizationId
       "deduplication_key",
     ].join(","),
     organization_id: `eq.${organizationId}`,
-    run_id: `eq.${runId}`,
+    run_id: `eq.${resolvedRunId}`,
     order: "ingested_at.asc,id.asc",
   });
 
@@ -234,6 +242,7 @@ export async function buildCatalogObservationReviewResponse({
   }
 
   const { observations, products, brands, sources, trustProfiles, runs } = workspace;
+  const effectiveRunId = String(runs[0].id);
   const productById = new Map(products.map((product) => [product.id, product]));
   const brandById = new Map(brands.map((brand) => [brand.id, brand]));
   const sourceById = new Map(sources.map((source) => [source.id, source]));
@@ -285,7 +294,7 @@ export async function buildCatalogObservationReviewResponse({
       if (!comparison || !recommendationBody) return null;
       return {
         organization_id: recommendationBody.organization_id || comparison.organization_id || organizationId,
-        run_id: comparison.run_id || runId,
+        run_id: comparison.run_id || effectiveRunId,
         review_queue_id: recommendationBody.review_queue_key,
         product_id: comparison.product_id || queueItem.product || null,
         brand_id: String(product?.brand_id || ""),
@@ -367,7 +376,7 @@ export async function buildCatalogObservationReviewResponse({
   if (cursorPayload) {
     validateCursorPayload(cursorPayload, {
       organizationId,
-      runId,
+      runId: effectiveRunId,
       productId,
       fieldFamily,
       comparisonResult,
@@ -380,7 +389,7 @@ export async function buildCatalogObservationReviewResponse({
   const nextCursor = safeStartIndex + limit < sortedRecords.length && pageItems.length
     ? encodeCursor(pageItems[pageItems.length - 1], {
       organizationId,
-      runId,
+      runId: effectiveRunId,
       productId,
       fieldFamily,
       comparisonResult,
@@ -391,7 +400,7 @@ export async function buildCatalogObservationReviewResponse({
   return {
     schema_version: REVIEW_SCHEMA_VERSION,
     organization_id: organizationId,
-    run_id: runId,
+    run_id: effectiveRunId,
     items: pageItems,
     page: {
       limit,

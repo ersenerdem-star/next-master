@@ -8493,7 +8493,7 @@ textarea {
 
 .catalog-observation-review-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.85fr);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
   gap: 14px;
   align-items: start;
   min-width: 0;
@@ -8610,8 +8610,29 @@ textarea {
 .workbench-detail-panel--catalog {
   position: sticky;
   top: 14px;
-  max-height: calc(100vh - 28px);
+  max-height: min(720px, calc(100vh - 140px));
   overflow: auto;
+  padding: 14px;
+  gap: 9px;
+}
+
+.catalog-observation-review-detail .workbench-detail-list {
+  gap: 5px;
+  margin: 4px 0;
+}
+
+.catalog-observation-review-detail .workbench-detail-list > div {
+  padding-bottom: 5px;
+}
+
+.catalog-observation-review-detail .catalog-observation-review-decision-panel,
+.catalog-observation-review-detail .catalog-observation-review-rules {
+  margin-top: 6px;
+}
+
+.catalog-meta-strip__context {
+  color: #0f5f83;
+  font-weight: 800;
 }
 
 .catalog-observation-review-detail a {
@@ -8815,7 +8836,7 @@ textarea {
 
   .workbench-detail-panel--catalog {
     position: static;
-    max-height: none;
+    max-height: min(640px, 70vh);
   }
 
   .catalog-observation-review-table {

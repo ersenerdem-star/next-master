@@ -112,8 +112,22 @@ test("query parsing enforces bounded UUID filters and default limit", () => {
   assert.equal(parsed.organization_id, ORG_ID);
   assert.equal(parsed.run_id, RUN_ID);
 
+  const latest = parseCatalogObservationReviewQuery(`https://example.test/api/catalog/observation-review?organization_id=${ORG_ID}&run_id=latest`);
+  assert.equal(latest.run_id, "latest");
+
   assert.throws(() => parseCatalogObservationReviewQuery(`https://example.test/api/catalog/observation-review?organization_id=bad&run_id=${RUN_ID}`), /organization_id must be a UUID/);
   assert.throws(() => parseCatalogObservationReviewQuery(`https://example.test/api/catalog/observation-review?organization_id=${ORG_ID}&run_id=${RUN_ID}&limit=${REVIEW_MAX_LIMIT + 1}`), /at most 50/);
+});
+
+test("latest run resolves to the newest successful observed run and returns its canonical id", async () => {
+  const { result, calls } = await buildWithFakeDb({ runId: "latest" });
+  assert.equal(result.run_id, RUN_ID);
+  const runQuery = calls.find((call) => call.table === "catalog_observation_runs");
+  assert.equal(runQuery.params.status, "eq.succeeded");
+  assert.equal(runQuery.params.observed_count, "gt.0");
+  assert.equal(runQuery.params.order, "created_at.desc,id.desc");
+  const observationsQuery = calls.find((call) => call.table === "catalog_external_observations");
+  assert.equal(observationsQuery.params.run_id, `eq.${RUN_ID}`);
 });
 
 test("authorization blocks cross-org access and non-admin users", () => {
@@ -354,7 +368,7 @@ test("route handler returns documented statuses", async () => {
   assert.deepEqual(await internal.json(), { error: "Review queue could not be loaded right now." });
 });
 
-async function buildWithFakeDb({ limit, cursor, recommendation, comparisonResult } = {}) {
+async function buildWithFakeDb({ limit, cursor, recommendation, comparisonResult, runId = RUN_ID } = {}) {
   const calls = [];
   const db = createFakeReadDb(calls);
   const decisionStateDb = {
@@ -400,7 +414,7 @@ async function buildWithFakeDb({ limit, cursor, recommendation, comparisonResult
     db,
     decisionStateDb,
     organizationId: ORG_ID,
-    runId: RUN_ID,
+    runId,
     limit: limit || REVIEW_DEFAULT_LIMIT,
     cursor: cursor || "",
     recommendation: recommendation || "",

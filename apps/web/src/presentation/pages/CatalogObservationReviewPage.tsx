@@ -33,10 +33,19 @@ import {
   StatusBadge,
 } from "../components/common/VisualPrimitives";
 
-const DEFAULT_CATALOG_OBSERVATION_REVIEW_RUN_ID = "c060aa25-7068-4fd3-a2ee-7f6944402fd7";
+// Resolve the latest successful observation run server-side so new MIRA runs
+// (for example Corteco/TecAlliance) appear without editing or bookmarking a
+// hard-coded run id.
+const DEFAULT_CATALOG_OBSERVATION_REVIEW_RUN_ID = "latest";
 const DEFAULT_LIMIT = 25;
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
-const FIELD_FAMILY_OPTIONS = ["image_reference", "supplemental_description"] as const;
+const FIELD_FAMILY_OPTIONS = [
+  "ean_reference",
+  "image_reference",
+  "oem_reference",
+  "supplemental_description",
+  "technical_specification",
+] as const;
 const COMPARISON_RESULT_OPTIONS = ["ENRICHMENT_CANDIDATE", "CONFLICT", "NO_CHANGE", "INSUFFICIENT_EVIDENCE", "UNSUPPORTED_FIELD"] as const;
 const RECOMMENDATION_OPTIONS = ["LIKELY_ACCEPT", "MANUAL_REQUIRED", "LIKELY_REJECT", "AUTO_SAFE", "INSUFFICIENT_EVIDENCE"] as const;
 
@@ -466,6 +475,9 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
   const selectedItem = items.find((item) => itemKey(item) === filters.selected) || null;
   const selectedItemKey = selectedItem ? itemKey(selectedItem) : "";
   const selectedDecisionState = selectedItem?.decision_state ?? null;
+  const reviewContext = response?.items[0]
+    ? [response.items[0].brand_name, response.items[0].source_display_name].filter(Boolean).join(" · ")
+    : "";
   const hasActiveFilters = Boolean(filters.fieldFamily || filters.comparisonResult || filters.recommendation || filters.cursor);
   const evidenceUrlIsSafe = validHttpUrl(selectedItem?.evidence_url);
   const selectedDecisionHistory = useMemo(() => {
@@ -755,7 +767,7 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
       <PageHeader
         eyebrow={t("nav.catalogReview")}
         title={c("title")}
-        subtitle={c("subtitle", { runId })}
+        subtitle={c("subtitle", { runId: response?.run_id || runId })}
         status={
           <div className="document-marks document-marks--compact">
             <StatusBadge tone="info">{c("readOnlyBadge")}</StatusBadge>
@@ -832,6 +844,7 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
               })}
             </span>
             <span>{c("meta.runId", { runId: response?.run_id || runId })}</span>
+            {reviewContext ? <span className="catalog-meta-strip__context">{reviewContext}</span> : null}
             {page?.has_more ? (
               <Button variant="secondary" className="button--compact" onClick={handleNextPage}>
                 {c("actions.nextPage")}
@@ -1269,8 +1282,11 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
 }
 
 function fieldFamilyLabel(value: string, translate: (key: string, params?: Record<string, string | number>) => string) {
+  if (value === "ean_reference") return translate("fieldFamilies.eanReference");
   if (value === "image_reference") return translate("fieldFamilies.imageReference");
+  if (value === "oem_reference") return translate("fieldFamilies.oemReference");
   if (value === "supplemental_description") return translate("fieldFamilies.supplementalDescription");
+  if (value === "technical_specification") return translate("fieldFamilies.technicalSpecification");
   return emptyDash(value);
 }
 
