@@ -250,6 +250,20 @@
   font-size: 12px;
   line-height: 1.35 !important;
 }
+.mira-mission-page__workflow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.mira-mission-page__workflow span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border: 1px solid #dbe7f3; border-radius: 999px; color: #6b7f99; background: #f8fbfe; font-size: 11px; font-weight: 800; }
+.mira-mission-page__workflow span.is-active { border-color: #d8a33b; color: #8a5b00; background: #fff8e9; }
+.mira-mission-page__workflow b { display: grid; width: 18px; height: 18px; place-items: center; border-radius: 50%; color: #fff; background: #8aa1b9; font-size: 10px; }
+.mira-mission-page__workflow .is-active b { background: #c38a22; }
+.mira-mission-page__field-picker { margin: 0; padding: 10px 12px 12px; border: 1px solid #dbe7f3; border-radius: 8px; }
+.mira-mission-page__field-picker legend { padding: 0 4px; color: #415875; font-size: 12px; font-weight: 800; }
+.mira-mission-page__field-picker > div { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.mira-mission-page__field-picker label { display: inline-flex; grid-template-columns: none; align-items: center; gap: 6px; color: #415875; font-size: 12px; font-weight: 600; }
+.mira-mission-page__field-picker input { width: auto; min-height: auto; accent-color: #bd8624; }
+.mira-mission-page__form-hint { margin: -2px 0 0; color: #6b7f99; font-size: 12px; line-height: 1.4; }
+.mira-mission-page__write-preview { display: grid; gap: 5px; padding: 10px 12px; border: 1px solid #d8e7f4; border-radius: 8px; color: #1d5f82; background: #f3f9fd; line-height: 1.4; }
+.mira-mission-page__write-preview span { font-weight: 800; overflow-wrap: anywhere; }
+.mira-mission-page__write-preview small { color: #607b96; }
 
 .mira-mission-page__online-grid {
   grid-template-columns: minmax(320px, 0.72fr) minmax(420px, 1.28fr);

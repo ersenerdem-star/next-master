@@ -5,6 +5,18 @@ import { listMiraMissions, planMiraMissions, queueMiraMission, type MiraMission 
 
 type MiraDeskTab = "queue" | "evidence" | "results";
 
+const MIRA_FIELDS = [
+  ["description", "Description"],
+  ["oem", "OEM"],
+  ["ean", "EAN"],
+  ["tariff", "Tariff / HS code"],
+  ["vehicle", "Vehicle"],
+  ["vehicle_model", "Vehicle model"],
+  ["dimensions", "Dimensions"],
+  ["weight", "Weight"],
+  ["image", "Image"],
+] as const;
+
 type MissionReport = {
   evidence: unknown;
   summary: string | null;
@@ -251,6 +263,7 @@ function MissionReportCard({ mission, report, evidenceLabel, reasonLabel, artifa
         </div>
       ) : null}
       <p className="mira-mission-page__report-summary"><strong>Sonuç:</strong> {summaryText}</p>
+      <div className="mira-mission-page__write-preview"><strong>İçeriye yazılacak alanlar</strong><span>{mission.requested_fields?.length ? mission.requested_fields.join(" · ") : "MIRA talimattan çıkaracak"}</span><small>Gerçek yazım, doğrulama ve güvenlik kontrollerinden sonra worker tarafından yapılır.</small></div>
       {evidenceText ? <div className="mira-mission-page__evidence-value"><strong>{evidenceLabel}</strong><code>{evidenceText}</code></div> : <p className="mira-mission-page__artifact-empty">{mission.status === "queued" || mission.status === "processing" ? pendingLabel : `${evidenceLabel}: henüz kanıt yok.`}</p>}
       {safetyItems ? <div className="mira-mission-page__safety-result"><strong>MIRA ne yapmadı?</strong><span>{safetyItems}</span></div> : null}
       {listText(report.knowledgeGaps) ? <div className="mira-mission-page__report-detail"><strong>Açık kalan konu</strong><span>{listText(report.knowledgeGaps)}</span></div> : null}
@@ -272,6 +285,10 @@ export function MiraMissionDeskPage() {
   const [missionArea, setMissionArea] = useState("Public catalog signal");
   const [maxPages, setMaxPages] = useState(1);
   const [delayMs, setDelayMs] = useState(2000);
+  const [targetBrand, setTargetBrand] = useState("");
+  const [sourceKey, setSourceKey] = useState("mira_auto");
+  const [requestedFields, setRequestedFields] = useState<string[]>(["description", "oem", "ean", "image"]);
+  const [maxItems, setMaxItems] = useState(25);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [planning, setPlanning] = useState(false);
@@ -302,9 +319,10 @@ export function MiraMissionDeskPage() {
     event.preventDefault();
     setSubmitting(true);
     try {
-      const result = await queueMiraMission({ objective, missionArea, maxPages, delayMs });
+      const result = await queueMiraMission({ objective, missionArea, maxPages, delayMs, targetBrand, sourceKey, requestedFields, maxItems });
       if (result.mission) setMissions((items) => [result.mission, ...items]);
       setObjective("");
+      setTargetBrand("");
       setActiveTab("queue");
       setMessage("Görev MIRA kuyruğuna alındı. Kaynak seçimi, çalışma ve kanıt dönüşü otomatik ilerleyecek.");
     } catch (error) {
@@ -371,6 +389,7 @@ export function MiraMissionDeskPage() {
             <div><span>Guard</span><strong>Review-only</strong></div>
           </div>
           <div className="mira-mission-page__boundary"><strong>Catalog’a otomatik Apply yok.</strong><span> Kanıt staging’e gelir; final karar ayrı review akışındadır.</span></div>
+          <div className="mira-mission-page__workflow" aria-label="MIRA çalışma aşamaları"><span className="is-active"><b>1</b> Görevi tanımla</span><span><b>2</b> Rakamlarla izle</span><span><b>3</b> Yazılacak veriyi gör</span></div>
         </div>
       </section>
 
@@ -386,13 +405,15 @@ export function MiraMissionDeskPage() {
         <section className="mira-mission-page__online-grid" role="tabpanel">
           <form className="mira-mission-page__online-form" onSubmit={submit}>
             <h2>Yeni online görev</h2>
-            <label>Görev<textarea value={objective} onChange={(event) => setObjective(event.target.value)} minLength={8} maxLength={500} placeholder="Örn. BF ürünleri için 50 doğrulanmış EAN bul" rows={4} required /></label>
-            <label>Görev alanı<select value={missionArea} onChange={(event) => setMissionArea(event.target.value)}><option>Public catalog signal</option><option>Supplier market watch</option><option>Customer demand review</option></select></label>
-            <div className="mira-mission-page__form-row"><label>Sayfa bütçesi<input type="number" min="1" max="50" value={maxPages} onChange={(event) => setMaxPages(Number(event.target.value))} /></label><label>İstek aralığı (ms)<input type="number" min="1000" max="10000" step="100" value={delayMs} onChange={(event) => setDelayMs(Number(event.target.value))} /></label></div>
+            <label>Görev talimatı<textarea value={objective} onChange={(event) => setObjective(event.target.value)} minLength={8} maxLength={500} placeholder="Örn. Corteco için eksik OEM ve görselleri bul" rows={3} required /></label>
+            <div className="mira-mission-page__form-row"><label>Hedef marka<input value={targetBrand} onChange={(event) => setTargetBrand(event.target.value)} placeholder="Örn. Corteco" /></label><label>Kaynak<select value={sourceKey} onChange={(event) => setSourceKey(event.target.value)}><option value="mira_auto">MIRA otomatik seçsin</option><option value="tecalliance">TecAlliance resmi</option><option value="spareto">Spareto liste kaynağı</option></select></label></div>
+            <fieldset className="mira-mission-page__field-picker"><legend>Kontrol edilecek alanlar</legend><div>{MIRA_FIELDS.map(([value, label]) => <label key={value}><input type="checkbox" checked={requestedFields.includes(value)} onChange={(event) => setRequestedFields((current) => event.target.checked ? [...new Set([...current, value])] : current.filter((item) => item !== value))} />{label}</label>)}</div></fieldset>
+            <div className="mira-mission-page__form-row"><label>Paket boyutu<input type="number" min="1" max="50" value={maxItems} onChange={(event) => setMaxItems(Number(event.target.value))} /></label><label>İstek aralığı (ms)<input type="number" min="1000" max="10000" step="100" value={delayMs} onChange={(event) => setDelayMs(Number(event.target.value))} /></label></div>
+            <p className="mira-mission-page__form-hint">MIRA önce kanıt/staging üretir. Yazılacak alanlar 3. aşamadaki sonuç ekranında ayrı gösterilir.</p>
             <button className="button button--primary" type="submit" disabled={submitting}>{submitting ? "Kuyruğa alınıyor…" : "MIRA’ya görev ver"}</button>
             {message ? <p className="mira-mission-page__message" role="status">{message}</p> : null}
           </form>
-          <section className="mira-mission-page__online-queue" aria-label="MIRA mission queue"><div className="mira-mission-page__queue-header"><h2>Online görev kuyruğu</h2><span>{missions.length} kayıt</span></div>{missions.length === 0 && !loading ? <p>Henüz online görev yok.</p> : missions.map((mission) => <article key={mission.id} className="mira-mission-page__queue-item"><div><div className="mira-mission-page__queue-title"><strong>{mission.objective}</strong>{mission.origin === "planner" ? <span className="mira-mission-page__planner-badge">Planner</span> : null}</div><small>{mission.mission_area} · {mission.max_items ?? mission.max_pages} ürün · {mission.delay_ms} ms</small>{mission.origin === "planner" && mission.planner_reason ? <small className="mira-mission-page__planner-reason">{mission.target_brand ?? "Marka"}: {mission.planner_reason}</small> : null}</div><StatusBadge tone={statusTone(mission.status)}>{mission.status}</StatusBadge></article>)}</section>
+          <section className="mira-mission-page__online-queue" aria-label="MIRA mission queue"><div className="mira-mission-page__queue-header"><h2>Online görev kuyruğu</h2><span>{missions.length} kayıt</span></div>{missions.length === 0 && !loading ? <p>Henüz online görev yok.</p> : missions.map((mission) => <article key={mission.id} className="mira-mission-page__queue-item"><div><div className="mira-mission-page__queue-title"><strong>{mission.objective}</strong>{mission.origin === "planner" ? <span className="mira-mission-page__planner-badge">Planner</span> : null}</div><small>{mission.target_brand || "Marka otomatik"} · {mission.planner_context?.sourceKey === "tecalliance" ? "TecAlliance" : mission.planner_context?.sourceKey === "spareto" ? "Spareto" : "MIRA kaynak seçimi"} · {mission.max_items ?? mission.max_pages} ürün</small><small>Alanlar: {(mission.requested_fields || []).join(", ") || "talimat içinden çıkarılacak"}</small>{mission.origin === "planner" && mission.planner_reason ? <small className="mira-mission-page__planner-reason">{mission.target_brand ?? "Marka"}: {mission.planner_reason}</small> : null}</div><StatusBadge tone={statusTone(mission.status)}>{mission.status}</StatusBadge></article>)}</section>
         </section>
       ) : null}
 

@@ -22,6 +22,10 @@ type MissionInput = {
   missionArea?: unknown;
   maxPages?: unknown;
   delayMs?: unknown;
+  targetBrand?: unknown;
+  sourceKey?: unknown;
+  requestedFields?: unknown;
+  maxItems?: unknown;
 };
 
 type BridgeMission = {
@@ -61,6 +65,12 @@ function parseMissionInput(body: MissionInput) {
   const missionArea = String(body.missionArea ?? "Public catalog signal").trim() || "Public catalog signal";
   const maxPages = Number(body.maxPages ?? 1);
   const delayMs = Number(body.delayMs ?? 2000);
+  const targetBrand = String(body.targetBrand ?? "").trim();
+  const sourceKey = String(body.sourceKey ?? "mira_auto").trim() || "mira_auto";
+  const requestedFields = Array.isArray(body.requestedFields)
+    ? [...new Set(body.requestedFields.map((field) => String(field).trim().toLowerCase()).filter(Boolean))].slice(0, 14)
+    : [];
+  const maxItems = Number(body.maxItems ?? 25);
 
   if (objective.length < 8 || objective.length > 500) {
     throw new Error("Mission objective must be between 8 and 500 characters.");
@@ -71,8 +81,11 @@ function parseMissionInput(body: MissionInput) {
   if (!Number.isInteger(delayMs) || delayMs < 1000 || delayMs > 10000) {
     throw new Error("Request interval must be between 1000 and 10000 milliseconds.");
   }
+  if (targetBrand.length > 120) throw new Error("Target brand is too long.");
+  if (!/^[a-z0-9._:-]{2,80}$/i.test(sourceKey)) throw new Error("Source selection is invalid.");
+  if (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 50) throw new Error("Package size must be between 1 and 50.");
 
-  return { objective, missionArea, maxPages, delayMs };
+  return { objective, missionArea, maxPages, delayMs, targetBrand, sourceKey, requestedFields, maxItems };
 }
 
 async function listMissions(caller: Awaited<ReturnType<typeof requireCallerProfile>>) {
@@ -674,6 +687,15 @@ export default async (req: Request, _context: Context) => {
         delay_ms: input.delayMs,
         status: "queued",
         execution_mode: "review_only",
+        target_brand: input.targetBrand || null,
+        requested_fields: input.requestedFields,
+        max_items: input.maxItems,
+        planner_context: {
+          sourceKey: input.sourceKey,
+          requestedFields: input.requestedFields,
+          packageSize: input.maxItems,
+          controlPlane: "mira-desk.v2",
+        },
       }),
       timeoutMs: 12000,
     });

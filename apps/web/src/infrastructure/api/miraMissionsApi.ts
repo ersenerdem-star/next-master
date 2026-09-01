@@ -51,7 +51,16 @@ export async function listMiraMissions() {
   return response.missions || [];
 }
 
-export async function queueMiraMission(input: { objective: string; missionArea: string; maxPages: number; delayMs: number }) {
+export async function queueMiraMission(input: {
+  objective: string;
+  missionArea: string;
+  maxPages: number;
+  delayMs: number;
+  targetBrand?: string;
+  sourceKey?: string;
+  requestedFields?: string[];
+  maxItems?: number;
+}) {
   return request<{ mission: MiraMission }>({ method: "POST", body: JSON.stringify(input) });
 }
 
