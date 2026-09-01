@@ -266,8 +266,9 @@
 .mira-mission-page__write-preview small { color: #607b96; }
 
 .mira-mission-page__online-grid {
-  grid-template-columns: minmax(320px, 0.72fr) minmax(420px, 1.28fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+  align-items: start;
 }
 
 .mira-mission-page__online-form,
@@ -275,6 +276,7 @@
 .mira-mission-page__report-panel {
   padding: 16px !important;
   border-radius: 8px !important;
+  min-width: 0;
 }
 
 .mira-mission-page__online-form h2,
@@ -295,7 +297,18 @@
   background: #fff;
   font: inherit;
   line-height: 1.45;
+  box-sizing: border-box;
 }
+
+.mira-mission-page__online-form input,
+.mira-mission-page__online-form select,
+.mira-mission-page__online-form textarea {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.mira-mission-page__form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mira-mission-page__field-picker { min-width: 0; }
 
 .mira-mission-page__queue-item {
   padding: 11px 0;
