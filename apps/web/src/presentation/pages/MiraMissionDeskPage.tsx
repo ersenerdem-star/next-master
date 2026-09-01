@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { PageHeader, PageShell, StatusBadge } from "../components/common/VisualPrimitives";
 import { useI18n } from "../../i18n/I18nProvider";
-import { clearQueuedMiraMissions, listMiraMissions, planMiraMissions, queueMiraMission, type MiraMission } from "../../infrastructure/api/miraMissionsApi";
+import { clearQueuedMiraMissions, hideMiraMissions, listMiraMissions, planMiraMissions, queueMiraMission, type MiraMission } from "../../infrastructure/api/miraMissionsApi";
 
 type MiraDeskTab = "queue" | "evidence" | "results";
 
@@ -294,6 +294,7 @@ export function MiraMissionDeskPage() {
   const [planning, setPlanning] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [selectedMissionIds, setSelectedMissionIds] = useState<string[]>([]);
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
 
   async function refresh({ silent = false }: { silent?: boolean } = {}) {
@@ -303,11 +304,29 @@ export function MiraMissionDeskPage() {
       setMissions(nextMissions);
       const queuedIds = new Set(nextMissions.filter((mission) => mission.status === "queued").map((mission) => mission.id));
       setSelectedMissionIds((current) => current.filter((id) => queuedIds.has(id)));
+      const historyIds = new Set(nextMissions.filter((mission) => mission.status !== "queued" && mission.status !== "processing").map((mission) => mission.id));
+      setSelectedHistoryIds((current) => current.filter((id) => historyIds.has(id)));
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "MIRA online status could not be loaded.");
     } finally {
       if (!silent) setLoading(false);
+    }
+  }
+
+  async function hideHistory() {
+    if (!selectedHistoryIds.length) return;
+    if (!window.confirm(`${selectedHistoryIds.length} seçili MIRA geçmiş kaydı gizlensin mi? Kayıtlar silinmez, yalnızca bu masadan kaldırılır.`)) return;
+    setClearing(true);
+    try {
+      const result = await hideMiraMissions(selectedHistoryIds);
+      await refresh({ silent: true });
+      setSelectedHistoryIds([]);
+      setMessage(`${result.hiddenCount ?? 0} geçmiş kayıt masadan gizlendi.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "MIRA geçmişi gizlenemedi.");
+    } finally {
+      setClearing(false);
     }
   }
 
@@ -389,6 +408,8 @@ export function MiraMissionDeskPage() {
   ];
   const queuedMissions = missions.filter((mission) => mission.status === "queued");
   const allQueuedSelected = queuedMissions.length > 0 && queuedMissions.every((mission) => selectedMissionIds.includes(mission.id));
+  const historyMissions = missions.filter((mission) => mission.status !== "queued" && mission.status !== "processing");
+  const allHistorySelected = historyMissions.length > 0 && historyMissions.every((mission) => selectedHistoryIds.includes(mission.id));
 
   return (
     <PageShell className="mira-mission-page">
@@ -436,7 +457,7 @@ export function MiraMissionDeskPage() {
             <button className="button button--primary" type="submit" disabled={submitting}>{submitting ? "Kuyruğa alınıyor…" : "MIRA’ya görev ver"}</button>
             {message ? <p className="mira-mission-page__message" role="status">{message}</p> : null}
           </form>
-          <section className="mira-mission-page__online-queue" aria-label="MIRA mission queue"><div className="mira-mission-page__queue-header"><div><h2>Online görev kuyruğu</h2><span>{missions.length} kayıt</span></div><div className="mira-mission-page__queue-actions"><label className="mira-mission-page__select-all"><input type="checkbox" checked={allQueuedSelected} onChange={(event) => setSelectedMissionIds(event.target.checked ? queuedMissions.map((mission) => mission.id) : [])} disabled={!queuedMissions.length} />Tüm bekleyenleri seç</label><button className="button button--secondary mira-mission-page__clear-queue" type="button" onClick={() => void clearQueue()} disabled={clearing || !selectedMissionIds.length}>{clearing ? "Siliniyor…" : "Seçilenleri sil"}</button></div></div>{missions.length === 0 && !loading ? <p>Henüz online görev yok.</p> : missions.map((mission) => <article key={mission.id} className="mira-mission-page__queue-item"><label className="mira-mission-page__queue-check"><input type="checkbox" checked={selectedMissionIds.includes(mission.id)} onChange={(event) => setSelectedMissionIds((current) => event.target.checked ? [...new Set([...current, mission.id])] : current.filter((id) => id !== mission.id))} disabled={mission.status !== "queued"} aria-label={`${mission.objective} görevini seç`} /></label><div><div className="mira-mission-page__queue-title"><strong>{mission.objective}</strong>{mission.origin === "planner" ? <span className="mira-mission-page__planner-badge">Planner</span> : null}</div><small>{mission.target_brand || "Marka otomatik"} · {mission.planner_context?.sourceKey === "tecalliance" ? "TecAlliance" : mission.planner_context?.sourceKey === "spareto" ? "Spareto" : "MIRA kaynak seçimi"} · {mission.max_items ?? mission.max_pages} ürün</small><small>Alanlar: {(mission.requested_fields || []).join(", ") || "talimattan çıkarılacak"}</small>{mission.origin === "planner" && mission.planner_reason ? <small className="mira-mission-page__planner-reason">{mission.target_brand ?? "Marka"}: {mission.planner_reason}</small> : null}</div><StatusBadge tone={statusTone(mission.status)}>{mission.status}</StatusBadge></article>)}</section>
+          <section className="mira-mission-page__online-queue" aria-label="MIRA mission queue"><div className="mira-mission-page__queue-header"><div><h2>Online görev kuyruğu</h2><span>{missions.length} kayıt</span></div><div className="mira-mission-page__queue-actions"><label className="mira-mission-page__select-all"><input type="checkbox" checked={allQueuedSelected} onChange={(event) => setSelectedMissionIds(event.target.checked ? queuedMissions.map((mission) => mission.id) : [])} disabled={!queuedMissions.length} />Tüm bekleyenleri seç</label><button className="button button--secondary mira-mission-page__clear-queue" type="button" onClick={() => void clearQueue()} disabled={clearing || !selectedMissionIds.length}>{clearing ? "Siliniyor…" : "Seçilenleri sil"}</button><label className="mira-mission-page__select-all"><input type="checkbox" checked={allHistorySelected} onChange={(event) => setSelectedHistoryIds(event.target.checked ? historyMissions.map((mission) => mission.id) : [])} disabled={!historyMissions.length} />Tüm geçmişi seç</label><button className="button button--secondary mira-mission-page__clear-queue" type="button" onClick={() => void hideHistory()} disabled={clearing || !selectedHistoryIds.length}>{clearing ? "Gizleniyor…" : "Geçmişten gizle"}</button></div></div>{missions.length === 0 && !loading ? <p>Henüz online görev yok.</p> : missions.map((mission) => <article key={mission.id} className="mira-mission-page__queue-item"><label className="mira-mission-page__queue-check"><input type="checkbox" checked={mission.status === "queued" ? selectedMissionIds.includes(mission.id) : selectedHistoryIds.includes(mission.id)} onChange={(event) => { const setter = mission.status === "queued" ? setSelectedMissionIds : setSelectedHistoryIds; setter((current) => event.target.checked ? [...new Set([...current, mission.id])] : current.filter((id) => id !== mission.id)); }} disabled={mission.status === "processing"} aria-label={`${mission.objective} görevini seç`} /></label><div><div className="mira-mission-page__queue-title"><strong>{mission.objective}</strong>{mission.origin === "planner" ? <span className="mira-mission-page__planner-badge">Planner</span> : null}</div><small>{mission.target_brand || "Marka otomatik"} · {mission.planner_context?.sourceKey === "tecalliance" ? "TecAlliance" : mission.planner_context?.sourceKey === "spareto" ? "Spareto" : "MIRA kaynak seçimi"} · {mission.max_items ?? mission.max_pages} ürün</small><small>Alanlar: {(mission.requested_fields || []).join(", ") || "talimattan çıkarılacak"}</small>{mission.origin === "planner" && mission.planner_reason ? <small className="mira-mission-page__planner-reason">{mission.target_brand ?? "Marka"}: {mission.planner_reason}</small> : null}</div><StatusBadge tone={statusTone(mission.status)}>{mission.status}</StatusBadge></article>)}</section>
         </section>
       ) : null}
 

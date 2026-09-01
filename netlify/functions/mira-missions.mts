@@ -91,8 +91,9 @@ function parseMissionInput(body: MissionInput) {
 async function listMissions(caller: Awaited<ReturnType<typeof requireCallerProfile>>) {
   if ("error" in caller) return json({ error: caller.error }, caller.status);
   const url = buildRestUrl(caller.supabaseUrl, "mira_missions", {
-    select: "id,objective,mission_area,max_pages,delay_ms,status,execution_mode,result,error_message,created_at,started_at,finished_at,bridge_client,bridge_event_id,bridge_protocol_version,bridge_received_at,origin,planner_key,planner_score,planner_reason,planner_context,target_brand,requested_fields,max_items",
+    select: "id,objective,mission_area,max_pages,delay_ms,status,execution_mode,result,error_message,created_at,started_at,finished_at,bridge_client,bridge_event_id,bridge_protocol_version,bridge_received_at,origin,planner_key,planner_score,planner_reason,planner_context,target_brand,requested_fields,max_items,hidden_at",
     organization_id: `eq.${caller.profile.organization_id}`,
+    hidden_at: "is.null",
     order: "created_at.desc",
     limit: "50",
   });
@@ -148,6 +149,28 @@ async function clearQueuedMiraMissions(req: Request, caller: Awaited<ReturnType<
     timeoutMs: 12000,
   });
   return json({ ok: true, clearedCount: Array.isArray(cleared) ? cleared.length : 0 });
+}
+
+async function hideMiraMissions(req: Request, caller: Awaited<ReturnType<typeof requireCallerProfile>>) {
+  if ("error" in caller) return json({ error: caller.error }, caller.status);
+  const body = await readJson<{ missionIds?: unknown }>(req);
+  const missionIds = Array.isArray(body.missionIds)
+    ? [...new Set(body.missionIds.map((id) => String(id).trim()).filter((id) => UUID_PATTERN.test(id)))].slice(0, 100)
+    : [];
+  if (!missionIds.length) return json({ error: "En az bir geçmiş görevi seçin." }, 400);
+  const url = buildRestUrl(caller.supabaseUrl, "mira_missions", {
+    organization_id: `eq.${caller.profile.organization_id}`,
+    id: `in.(${missionIds.join(",")})`,
+    status: "in.(completed,partial,blocked,failed,cancelled)",
+    hidden_at: "is.null",
+  });
+  const hidden = await sendJson<unknown[]>(url, {
+    method: "PATCH",
+    headers: { ...serviceRoleHeaders(caller.serviceRoleKey), Prefer: "return=representation" },
+    body: JSON.stringify({ hidden_at: new Date().toISOString() }),
+    timeoutMs: 12000,
+  });
+  return json({ ok: true, hiddenCount: Array.isArray(hidden) ? hidden.length : 0 });
 }
 
 function bridgeEnabled() {
@@ -691,6 +714,11 @@ export default async (req: Request, _context: Context) => {
     if (new URL(req.url).searchParams.get("queue") === "clear") {
       if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
       return clearQueuedMiraMissions(req, caller);
+    }
+
+    if (new URL(req.url).searchParams.get("queue") === "hide") {
+      if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+      return hideMiraMissions(req, caller);
     }
 
     if (new URL(req.url).searchParams.get("planner") === "run") {

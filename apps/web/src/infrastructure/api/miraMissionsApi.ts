@@ -19,6 +19,7 @@ export type MiraMission = {
   bridge_event_id?: string | null;
   bridge_protocol_version?: string | null;
   bridge_received_at?: string | null;
+  hidden_at?: string | null;
   origin?: "manual" | "planner";
   planner_key?: string | null;
   planner_score?: number | null;
@@ -70,4 +71,8 @@ export async function planMiraMissions() {
 
 export async function clearQueuedMiraMissions(missionIds: string[]) {
   return request<{ clearedCount?: number }>({ method: "POST", body: JSON.stringify({ missionIds }) }, "/api/mira-missions?queue=clear");
+}
+
+export async function hideMiraMissions(missionIds: string[]) {
+  return request<{ hiddenCount?: number }>({ method: "POST", body: JSON.stringify({ missionIds }) }, "/api/mira-missions?queue=hide");
 }
