@@ -111,6 +111,7 @@ type SupplierImportBatchFinalizeResult = SupplierImportFinalizeResult & {
 type SupplierPriceImportRunState = {
   status: "running" | "finalizing" | "finalized" | "succeeded" | "failed" | string;
   error_message: string | null;
+  staged_rows: number | null;
   processed_rows: number | null;
   catalog_synced: number | null;
   catalog_sync_status: "pending" | "running" | "succeeded" | "failed" | string | null;
@@ -165,8 +166,9 @@ type SupplierRollupRefreshOutcome = {
 
 const SUPPLIER_IMPORT_MAX_BATCH_ROWS = 100;
 const SUPPLIER_IMPORT_TARGET_BATCH_BYTES = 48000;
-const SUPPLIER_IMPORT_CHUNK_RETRY_LIMIT = 2;
-const SUPPLIER_IMPORT_CHUNK_RETRY_BACKOFF_MS = 1000;
+const SUPPLIER_IMPORT_CHUNK_RETRY_LIMIT = 5;
+const SUPPLIER_IMPORT_CHUNK_RETRY_BACKOFF_MS = 1200;
+const SUPPLIER_IMPORT_CHUNK_GAP_MS = 75;
 const SUPPLIER_IMPORT_POLL_INTERVAL_MS = 1500;
 const SUPPLIER_IMPORT_FINALIZE_CONFIRM_RETRY_LIMIT = 5;
 const SUPPLIER_IMPORT_REFRESH_CONFIRM_RETRY_LIMIT = 3;
@@ -235,6 +237,22 @@ function isTimeoutLikeMessage(message: string) {
   );
 }
 
+function isTransientImportError(message: string) {
+  const normalized = String(message || "").toLowerCase();
+  return isTimeoutLikeMessage(message)
+    || normalized.includes("failed to fetch")
+    || normalized.includes("networkerror")
+    || normalized.includes("network error")
+    || normalized.includes("fetch failed")
+    || normalized.includes("connection reset")
+    || normalized.includes("connection closed")
+    || normalized.includes("connection refused")
+    || normalized.includes("502")
+    || normalized.includes("503")
+    || normalized.includes("504")
+    || normalized.includes("temporarily unavailable");
+}
+
 function contextualizeImportError(error: unknown, context: string) {
   const message = error instanceof Error ? error.message : String(error || "");
   if (!message) {
@@ -262,7 +280,7 @@ async function callImportRpc<T>(name: string, args: Record<string, unknown>, con
 async function fetchSupplierPriceImportRun(runId: string) {
   const { data, error } = await supabaseClient
     .from("supplier_price_import_runs")
-    .select("status,error_message,processed_rows,catalog_synced,catalog_sync_status,catalog_sync_error_message")
+    .select("status,error_message,staged_rows,processed_rows,catalog_synced,catalog_sync_status,catalog_sync_error_message")
     .eq("id", runId)
     .limit(1);
 
@@ -272,6 +290,18 @@ async function fetchSupplierPriceImportRun(runId: string) {
 
   const rows = (data || []) as SupplierPriceImportRunState[];
   return rows[0] || null;
+}
+
+async function confirmSupplierPriceChunkCommitted(runId: string, expectedStagedRows: number) {
+  try {
+    const latestRun = await fetchSupplierPriceImportRun(runId);
+    if (!latestRun || latestRun.status === "failed") return false;
+    return Number(latestRun.staged_rows || 0) >= expectedStagedRows;
+  } catch {
+    // A status read can fail during the same transient outage as the RPC.
+    // Keep the original error and let the bounded retry policy decide.
+    return false;
+  }
 }
 
 async function confirmSupplierPriceImportRun(runId: string) {
@@ -768,6 +798,7 @@ async function importSupplierPriceChunkWithRetry(input: {
   chunkNumber: number;
   totalChunks: number;
   processedRowsBeforeFailure: number;
+  expectedStagedRows?: number;
   runId?: string | null;
 }): Promise<SupplierImportChunkResult> {
   let lastError: Error | null = null;
@@ -782,10 +813,26 @@ async function importSupplierPriceChunkWithRetry(input: {
       );
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error || ""));
-      if (!isTimeoutLikeMessage(lastError.message) || attempt >= SUPPLIER_IMPORT_CHUNK_RETRY_LIMIT) {
+      if (
+        input.runId &&
+        input.expectedStagedRows &&
+        isTransientImportError(lastError.message) &&
+        await confirmSupplierPriceChunkCommitted(input.runId, input.expectedStagedRows)
+      ) {
+        // The server may commit the chunk and lose only the HTTP response.
+        // Count it once and continue instead of replaying the payload.
+        return { processed: input.chunk.length, staged_rows: input.expectedStagedRows };
+      }
+      if (!isTransientImportError(lastError.message) || attempt >= SUPPLIER_IMPORT_CHUNK_RETRY_LIMIT) {
         break;
       }
-      await sleep(SUPPLIER_IMPORT_CHUNK_RETRY_BACKOFF_MS * (attempt + 1));
+      // Exponential backoff with bounded jitter prevents every large import
+      // tab from retrying on the same millisecond after a transient outage.
+      const backoff = Math.min(
+        10_000,
+        SUPPLIER_IMPORT_CHUNK_RETRY_BACKOFF_MS * (2 ** attempt),
+      );
+      await sleep(backoff + Math.floor(Math.random() * 350));
     }
   }
 
@@ -801,13 +848,14 @@ async function importSupplierPriceChunkWithAdaptiveRetry(input: {
   chunkNumber: number;
   totalChunks: number;
   processedRowsBeforeFailure: number;
+  expectedStagedRows?: number;
   runId?: string | null;
 }): Promise<SupplierImportChunkResult> {
   try {
     return await importSupplierPriceChunkWithRetry(input);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error || "");
-    if (!isTimeoutLikeMessage(message) || input.chunk.length <= 1) {
+    if (!isTransientImportError(message) || input.chunk.length <= 1) {
       throw error;
     }
 
@@ -819,6 +867,7 @@ async function importSupplierPriceChunkWithAdaptiveRetry(input: {
       chunkNumber: input.chunkNumber,
       totalChunks: input.totalChunks,
       processedRowsBeforeFailure: input.processedRowsBeforeFailure,
+      expectedStagedRows: input.processedRowsBeforeFailure + midpoint,
       runId: input.runId,
     });
     const secondResult: SupplierImportChunkResult = await importSupplierPriceChunkWithAdaptiveRetry({
@@ -826,6 +875,7 @@ async function importSupplierPriceChunkWithAdaptiveRetry(input: {
       chunkNumber: input.chunkNumber,
       totalChunks: input.totalChunks,
       processedRowsBeforeFailure: input.processedRowsBeforeFailure + midpoint,
+      expectedStagedRows: input.processedRowsBeforeFailure + input.chunk.length,
       runId: input.runId,
     });
 
@@ -961,12 +1011,14 @@ export async function bulkImportSupplierPrices(
         chunkNumber,
         totalChunks,
         processedRowsBeforeFailure: batch.startRowIndex,
+        expectedStagedRows: batch.startRowIndex + chunk.length,
         runId,
       });
 
       processed += Number((data as { processed?: number } | null)?.processed || chunk.length);
       catalogSynced += Number((data as { catalog_synced?: number } | null)?.catalog_synced || 0);
       options?.onProgress?.(progress);
+      if (index < batches.length - 1) await sleep(SUPPLIER_IMPORT_CHUNK_GAP_MS);
     }
 
     options?.onStatus?.({

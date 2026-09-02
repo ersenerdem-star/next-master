@@ -7,7 +7,13 @@ type RpcResponse<T> = {
   error?: string;
 };
 
-const APP_RPC_TIMEOUT_MS = 15_000;
+// Supplier imports use the same gateway as ordinary RPCs, but a busy
+// database/Netlify cold start can legitimately take longer than 15 seconds.
+// Aborting at that point produces the browser-only "Failed to fetch" error
+// even when the server has already committed the chunk. Keep a bounded client
+// timeout below the platform request ceiling and let the import retry policy
+// handle transient failures.
+const APP_RPC_TIMEOUT_MS = 25_000;
 
 async function getAccessToken() {
   const { data, error } = await supabaseClient.auth.getSession();
