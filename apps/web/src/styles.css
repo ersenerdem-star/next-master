@@ -3321,6 +3321,32 @@ select {
   background: rgba(245, 249, 252, 0.96);
 }
 
+.catalog-operations-explainer {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(137, 156, 179, 0.24);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.88);
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.catalog-operations-explainer p {
+  margin: 4px 0 8px;
+}
+
+.catalog-operations-explainer__rules {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 16px;
+  color: #64748b;
+}
+
+.catalog-operations-explainer__rules b {
+  color: #1e293b;
+}
+
 .catalog-brand-operations__table-wrap {
   max-height: 360px;
   overflow-x: auto;
@@ -3411,6 +3437,11 @@ select {
 .catalog-enrichment-table__meta small {
   color: #64748b;
   font-size: 11px;
+}
+
+.catalog-enrichment-table__brand .catalog-enrichment-table__summary {
+  color: #475569;
+  font-size: 10px;
 }
 
 .catalog-enrichment-table__meta {
@@ -8956,6 +8987,10 @@ textarea {
   .catalog-operations-kpis,
   .catalog-field-health {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .catalog-operations-explainer__rules {
+    grid-template-columns: 1fr;
   }
 
   .catalog-observation-review-summary {
