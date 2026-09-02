@@ -196,13 +196,25 @@ export default async (_request: Request, context: Context) => {
       return rank(left) - rank(right);
     }).slice(0, MAX_RUNS_PER_TICK);
     const results: unknown[] = [];
-    for (const run of catalogRuns || []) {
+    let importRunClaimed = false;
+    for (const run of (catalogRuns || []).slice(0, MAX_RUNS_PER_TICK)) {
+      importRunClaimed = true;
       try { results.push(await processCatalogRun(supabaseUrl, serviceRoleKey, run)); }
       catch (error) { console.error("catalog import worker deferred", run.id, error); }
+      break;
     }
-    for (const run of pendingSupplierRuns) {
-      try { results.push(await processSupplierRun(supabaseUrl, serviceRoleKey, run)); }
-      catch (error) { console.error("supplier import worker deferred", run.id, error); }
+    // A tick owns at most one import run in total. Previously the catalog and
+    // supplier loops each had their own one-run limit, which still allowed a
+    // catalog finalizer and supplier sync to execute back-to-back in the same
+    // invocation during heavy traffic. Keeping one owner per tick makes the
+    // queue predictable and leaves headroom for auth/portal requests.
+    if (!importRunClaimed) {
+      for (const run of pendingSupplierRuns.slice(0, MAX_RUNS_PER_TICK)) {
+        importRunClaimed = true;
+        try { results.push(await processSupplierRun(supabaseUrl, serviceRoleKey, run)); }
+        catch (error) { console.error("supplier import worker deferred", run.id, error); }
+        break;
+      }
     }
     console.info("import processing worker completed", { results });
     return results;

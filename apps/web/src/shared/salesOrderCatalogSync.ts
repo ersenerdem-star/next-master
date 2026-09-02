@@ -11,7 +11,6 @@ import type { LocalBillLine, LocalInvoiceLine, LocalPurchaseOrderLine } from "..
 
 export type SalesOrderCatalogSyncOptions = {
   customerType: "A" | "B" | "C" | "Other";
-  customerPricingMode?: "standard" | "prefer_c_when_available";
   marginA: number;
   marginB: number;
   onlyFillBlanks?: boolean;
@@ -36,11 +35,8 @@ function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-function shouldUseCPriceForSalesOrder(
-  customerType: "A" | "B" | "C" | "Other",
-  customerPricingMode: "standard" | "prefer_c_when_available" = "standard",
-) {
-  return customerType === "C" || customerPricingMode === "prefer_c_when_available";
+function shouldUseCPriceForSalesOrder(customerType: "A" | "B" | "C" | "Other") {
+  return customerType === "C";
 }
 
 function isBlankText(value: string | null | undefined) {
@@ -273,7 +269,7 @@ async function refreshLinePricesFromCatalog(
     });
 
     const cPriceMap =
-      shouldUseCPriceForSalesOrder(options.customerType, options.customerPricingMode)
+      shouldUseCPriceForSalesOrder(options.customerType)
         ? await fetchCPriceMapForRows([
             {
               brand: canonicalizeBrandName(resolved.brand || line.brand || ""),
@@ -289,7 +285,7 @@ async function refreshLinePricesFromCatalog(
       null;
     const quantityAdjustment = normalizeOrderQuantity(line.qty, selected || {});
 
-    const cSellPrice = shouldUseCPriceForSalesOrder(options.customerType, options.customerPricingMode)
+    const cSellPrice = shouldUseCPriceForSalesOrder(options.customerType)
       ? getCPriceForRow(cPriceMap || new Map<string, number>(), {
           brand: resolved.brand || line.brand || "",
           product_code: resolved.product_code || line.resolvedCode || line.requestedCode,

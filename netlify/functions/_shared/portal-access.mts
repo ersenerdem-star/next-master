@@ -34,7 +34,7 @@ const PORTAL_INVITE_SELECT_LEGACY =
   "id,organization_id,party_type,party_name,customer_id,vendor_id,email,contact_name,status,invite_token_hash,last_sent_at,expires_at,last_used_at,updated_at";
 
 const CUSTOMER_PORTAL_SELECT =
-  "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,custom_fields,seller_company_profile_id,price_list_type,portal_c_price_mode";
+  "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,custom_fields,seller_company_profile_id,price_list_type";
 const CUSTOMER_PORTAL_SELECT_LEGACY =
   "id,display_name,company_name,email,work_phone,mobile_phone,billing_address,shipping_address,currency,payment_terms,contract_nr,remarks,custom_fields,price_list_type";
 const CUSTOMER_PORTAL_SELECT_BASE =
@@ -452,15 +452,9 @@ function getEmbeddedCustomerPriceListType(meta: Record<string, unknown>) {
 function readCustomerPortalMetadata(customer: Record<string, unknown> | null) {
   const customerMeta = parseEmbeddedCustomerMeta(customer?.custom_fields);
   const sellerCompanyProfileId = String(customer?.seller_company_profile_id || customerMeta.seller_company_profile_id || "").trim();
-  const portalCPriceMode =
-    String(customer?.portal_c_price_mode || customerMeta.portal_c_price_mode || "standard").trim().toLowerCase() ===
-    "prefer_c_when_available"
-      ? "prefer_c_when_available"
-      : "standard";
   return {
     customerMeta,
     sellerCompanyProfileId,
-    portalCPriceMode,
   } as const;
 }
 
@@ -850,7 +844,7 @@ export async function resolvePortalInvitePreview(
 export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: string, invite: PortalInviteRow) {
   if (invite.party_type === "customer") {
     const customer = await fetchPortalCustomerRecord(supabaseUrl, serviceRoleKey, invite.organization_id, invite);
-    const { customerMeta, sellerCompanyProfileId: customerSellerCompanyProfileId, portalCPriceMode } = readCustomerPortalMetadata(customer);
+    const { customerMeta, sellerCompanyProfileId: customerSellerCompanyProfileId } = readCustomerPortalMetadata(customer);
     const sellerCompanyProfileId = String(invite.seller_company_profile_id || customerSellerCompanyProfileId || "").trim();
     const companyProfile = await fetchPortalCompanyProfile(supabaseUrl, serviceRoleKey, invite.organization_id, sellerCompanyProfileId);
 
@@ -1047,7 +1041,6 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
             payment_terms: String(customer.payment_terms || ""),
             contract_nr: String(customer.contract_nr || ""),
             price_list_type: String(customer.price_list_type || getEmbeddedCustomerPriceListType(customerMeta) || "A") as "" | "A" | "B" | "C" | "Other",
-            portal_c_price_mode: portalCPriceMode,
           }
         : null,
       accountRows,

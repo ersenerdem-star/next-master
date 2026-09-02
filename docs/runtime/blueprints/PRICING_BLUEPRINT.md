@@ -46,7 +46,7 @@ Observed pricing types:
 
 - A and B: margin-driven customer price lists.
 - C: explicit customer-specific price list rows.
-- Portal pricing: customer account settings choose list type and whether C price is preferred when available.
+- Portal pricing: customer account settings choose the list type; C pricing is used only for customer type C.
 
 Evidence:
 
@@ -56,7 +56,7 @@ Evidence:
 - `cPriceApi.fetchCPriceMapForRows()` reads active C lists and items.
 - `quoteImportApi.batchResolveQuoteImportRows()` reads `catalog_products`, `supplier_prices`, and C price maps.
 - `salesOrderCatalogSync.ts` uses `supplier_prices`, catalog metadata, and C price maps.
-- `portal-access.mts` and `portal-orders.mts` project `price_list_type` and `portal_c_price_mode`.
+- `portal-access.mts` and `portal-orders.mts` project `price_list_type` without a portal-specific C-price mode.
 
 ## 3. Runtime Map
 
@@ -64,7 +64,7 @@ Evidence:
 
 - `SalesPage` hosts `PriceListsPage` as the `"Price Lists"` tab.
 - `QuotesPage` resolves quote lines and applies C-price / margin pricing.
-- `PortalPage` shows pricing profile, portal C-price mode, and customer-specific price list downloads.
+- `PortalPage` shows the pricing profile and customer-specific price list downloads.
 - `MasterPage` and reporting screens surface pricing comparisons and priced catalog views.
 
 Evidence:
@@ -126,7 +126,6 @@ Observed pricing tables and views:
 Observed pricing-linked account fields:
 
 - `price_list_type`
-- `portal_c_price_mode`
 - `price_list_margin_percent`
 - `payment_terms`
 
@@ -176,9 +175,9 @@ Evidence:
 Observed rules:
 
 - Margin lists A/B compute sales price from supplier buy price and a margin percentage.
-- C-price is used for customerType `C`, or when the account pricing mode is `prefer_c_when_available`.
-- Portal pricing follows the account `price_list_type` and `portal_c_price_mode`.
-- Quote and sales synchronization reuse the same C-price preference rule.
+- C-price is used only for customerType `C`.
+- Portal pricing follows the account `price_list_type`; there is no portal-specific C-price preference override.
+- Quote and sales synchronization reuse the same customer-type-only C-price rule.
 - Supplier rollups determine cheapest supplier, second supplier, price gap, and gap percent.
 - Values are rounded to money precision before display or export.
 

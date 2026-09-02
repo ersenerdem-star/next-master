@@ -597,7 +597,6 @@ export function CustomersPage() {
                               const nextType = event.target.value as LocalCustomer["price_list_type"];
                               updateDraft({
                                 price_list_type: nextType,
-                                portal_c_price_mode: nextType === "C" ? "standard" : draft.portal_c_price_mode,
                               });
                             }}
                           >
@@ -612,22 +611,6 @@ export function CustomersPage() {
                   </div>
                   {legacyCPriceList ? (
                     <div className="warning-text">{t("sales.customers.legacyPricingProfileWarning")}</div>
-                  ) : draft.price_list_type ? (
-                    <div className="customers-form-row">
-                      <div className="customers-form-row__label">{t("sales.customers.cPriceRule")}</div>
-                      <div className="customers-field-wrap customers-field-wrap--wide">
-                        <label className="field customer-field">
-                          <select
-                            className="field__input"
-                            value={draft.portal_c_price_mode}
-                            onChange={(event) => updateDraft({ portal_c_price_mode: event.target.value as LocalCustomer["portal_c_price_mode"] })}
-                          >
-                            <option value="standard">{t("sales.customers.cPriceRules.standard")}</option>
-                            <option value="prefer_c_when_available">{t("sales.customers.cPriceRules.preferCWhenAvailable")}</option>
-                          </select>
-                        </label>
-                      </div>
-                    </div>
                   ) : null}
                   {draft.price_list_type === "Other" ? (
                     <div className="customers-form-row">

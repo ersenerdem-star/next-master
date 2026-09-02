@@ -26,7 +26,6 @@ const CUSTOMER_COLUMNS = [
   "seller_company_profile_id",
   "seller_company_profile_ids",
   "price_list_type",
-  "portal_c_price_mode",
   "price_list_margin_percent",
   "billing_address",
   "shipping_address",
@@ -57,7 +56,6 @@ function parseEmbeddedCustomerMeta(raw: unknown) {
     seller_company_profile_id?: string;
     seller_company_profile_ids?: string[];
         price_list_type?: LocalCustomer["price_list_type"];
-        portal_c_price_mode?: LocalCustomer["portal_c_price_mode"];
         price_list_margin_percent?: number | null;
       },
     };
@@ -69,7 +67,6 @@ function parseEmbeddedCustomerMeta(raw: unknown) {
       seller_company_profile_id?: string;
       seller_company_profile_ids?: string[];
       price_list_type?: LocalCustomer["price_list_type"];
-      portal_c_price_mode?: LocalCustomer["portal_c_price_mode"];
       price_list_margin_percent?: number | null;
     };
     return { clean, meta: parsed || {} };
@@ -79,7 +76,6 @@ function parseEmbeddedCustomerMeta(raw: unknown) {
       meta: {} as {
         seller_company_profile_id?: string;
         price_list_type?: LocalCustomer["price_list_type"];
-        portal_c_price_mode?: LocalCustomer["portal_c_price_mode"];
         price_list_margin_percent?: number | null;
       },
     };
@@ -91,7 +87,6 @@ function embedCustomerMeta(
   meta: {
     seller_company_profile_id?: string | null;
     price_list_type?: LocalCustomer["price_list_type"] | null;
-    portal_c_price_mode?: LocalCustomer["portal_c_price_mode"] | null;
     price_list_margin_percent?: number | null;
   },
 ) {
@@ -99,7 +94,6 @@ function embedCustomerMeta(
   const nextMeta: Record<string, unknown> = {};
   if (meta.seller_company_profile_id) nextMeta.seller_company_profile_id = meta.seller_company_profile_id;
   if (meta.price_list_type) nextMeta.price_list_type = meta.price_list_type;
-  if (meta.portal_c_price_mode) nextMeta.portal_c_price_mode = meta.portal_c_price_mode;
   if (meta.price_list_margin_percent != null) nextMeta.price_list_margin_percent = Number(meta.price_list_margin_percent);
   if (!Object.keys(nextMeta).length) return parsed.clean;
   return parsed.clean ? `${parsed.clean}\n${CUSTOMER_META_PREFIX}${JSON.stringify(nextMeta)}` : `${CUSTOMER_META_PREFIX}${JSON.stringify(nextMeta)}`;
@@ -132,7 +126,6 @@ function mapCustomerRow(row: Record<string, unknown>): LocalCustomer {
         ? [String(row.seller_company_profile_id || parsedCustomFields.meta.seller_company_profile_id || "").trim()]
         : [],
     price_list_type: String(row.price_list_type || parsedCustomFields.meta.price_list_type || "A") as LocalCustomer["price_list_type"],
-    portal_c_price_mode: String(row.portal_c_price_mode || parsedCustomFields.meta.portal_c_price_mode || "standard") as LocalCustomer["portal_c_price_mode"],
     price_list_margin_percent:
       row.price_list_margin_percent == null
         ? parsedCustomFields.meta.price_list_margin_percent == null
@@ -177,7 +170,6 @@ function mapCustomerPayload(input: LocalCustomer, organizationId: string) {
     seller_company_profile_id: sellerCompanyProfileId,
     seller_company_profile_ids: sellerCompanyProfileIds,
     price_list_type: input.price_list_type,
-    portal_c_price_mode: input.portal_c_price_mode || "standard",
     price_list_margin_percent: input.price_list_margin_percent,
     billing_address: input.billing_address,
     shipping_address: input.shipping_address,
@@ -185,7 +177,6 @@ function mapCustomerPayload(input: LocalCustomer, organizationId: string) {
     custom_fields: embedCustomerMeta(input.custom_fields, {
       seller_company_profile_id: sellerCompanyProfileId,
       price_list_type: input.price_list_type,
-      portal_c_price_mode: input.portal_c_price_mode || "standard",
       price_list_margin_percent: input.price_list_margin_percent,
     }),
     reporting_tags: input.reporting_tags,

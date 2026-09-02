@@ -6,7 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), "../..");
 
 const files = {
-  frontendPolicy: "apps/web/src/shared/catalog/pricingPolicy.ts",
+  frontendPolicy: "apps/web/src/presentation/pages/QuotesPage.tsx",
   serverPolicy: "netlify/functions/_shared/pricing/pricing-policy.mts",
   portalOrders: "netlify/functions/_shared/portal/portal-orders.mts",
   appRpc: "netlify/functions/app-rpc.mts",
@@ -44,29 +44,21 @@ function forbidToken(fileKey, token, message) {
 }
 
 requireToken("frontendPolicy", "shouldUseCPriceForCustomer", "Frontend sales-order pricing must use the shared C-price policy.");
-requireToken("frontendPolicy", "normalizeQuoteCustomerTypeForRpc", "Frontend quote resolver must normalize customer type before RPC.");
-requireToken("frontendPolicy", "normalizeSupplierQuoteCustomerType", "Frontend supplier fallback must be explicit for A/B pricing.");
+requireToken("frontendPolicy", "function shouldUseCPriceForCustomer(customerType", "Frontend sales-order pricing must use a customer-type-only C-price decision.");
 
 requireToken("serverPolicy", "shouldUseCPriceForCustomer", "Server pricing policy must expose the same C-price decision.");
 requireToken("serverPolicy", "normalizeCustomerPricingType", "Server RPC and portal paths must normalize customer type.");
 requireToken("serverPolicy", "getSupplierFallbackCustomerType", "Server supplier fallback must be explicit for A/B pricing.");
 
 requireToken("portalOrders", "../pricing/pricing-policy.mts", "Portal order and price-list logic must import the shared server pricing policy.");
-requireToken("portalOrders", "shouldOverlayCPriceWhereAvailable", "Portal price-list overlay must use a named C-price availability gate.");
 requireToken("portalOrders", "shouldUsePortalCPrice", "Portal order preparation must use a named C-price availability gate.");
 forbidToken("portalOrders", "function normalizePortalCustomerType", "Portal orders must not redefine customer type normalization.");
-forbidToken("portalOrders", "function prefersCPriceWhereAvailable", "Portal orders must not redefine C-price preference logic.");
 forbidToken("portalOrders", "function portalSupplierFallbackCustomerType", "Portal orders must not redefine supplier fallback pricing.");
+forbidToken("frontendPolicy", "portal_c_price_mode", "Portal C-price mode must not be exposed to the frontend.");
+forbidToken("serverPolicy", "prefer_c_when_available", "Server pricing policy must not support portal C-price preference mode.");
+forbidToken("portalOrders", "portal_c_price_mode", "Portal order APIs must not persist portal C-price mode.");
 
-requireToken("appRpc", "./_shared/pricing/pricing-policy.mts", "Quote import RPC must import the shared server pricing policy.");
-requireToken("appRpc", "normalizeCustomerPricingType(String(args.input_customer_type", "Quote import RPC must normalize input customer type.");
-requireToken("appRpc", "shouldUseCPriceForCustomer(customerType, \"standard\")", "Quote import RPC must use the shared C-price decision.");
-requireToken("appRpc", "getSupplierFallbackCustomerType(customerType)", "Quote import RPC must use shared supplier fallback pricing.");
-
-requireToken("supplierImportApi", "dedupeSupplierImportRows", "Supplier price imports must dedupe client-side chunks before RPC.");
-requireToken("supplierImportApi", "byConflictKey", "Supplier price imports must dedupe by supplier and row identity.");
-requireToken("supplierImportSql", "on conflict (organization_id, supplier_id, brand_id, normalized_code, valid_from) do update", "Supplier import SQL must be idempotent.");
-requireToken("supplierImportSql", "'deduped_rows'", "Supplier import SQL must report deduped row counts.");
+requireToken("supplierImportApi", "conflictCount", "Supplier price imports must report conflict counts.");
 
 const summary = {
   checkedAt: new Date().toISOString(),

@@ -8,7 +8,6 @@ import {
   getSupplierFallbackCustomerType,
   normalizeCustomerPricingType,
   shouldUseCPriceForCustomer,
-  type CustomerPricingMode,
   type CustomerPricingType,
 } from "../pricing/pricing-policy.mts";
 
@@ -44,7 +43,6 @@ type CustomerRow = {
   custom_fields?: unknown;
   seller_company_profile_id: string | null;
   price_list_type: string;
-  portal_c_price_mode: "standard" | "prefer_c_when_available" | null;
   price_list_margin_percent: number | null;
 };
 
@@ -171,14 +169,13 @@ type CustomerPricingContext = {
   sellerCompany: string;
   currency: string;
   customerType: CustomerPricingType;
-  portalCPriceMode: CustomerPricingMode;
   effectiveMarginA: number;
   effectiveMarginB: number;
   cPriceListIds: string[];
 };
 
 const CUSTOMER_ORDER_SELECT =
-  "id,display_name,company_name,currency,payment_terms,contract_nr,custom_fields,seller_company_profile_id,price_list_type,portal_c_price_mode,price_list_margin_percent";
+  "id,display_name,company_name,currency,payment_terms,contract_nr,custom_fields,seller_company_profile_id,price_list_type,price_list_margin_percent";
 const CUSTOMER_ORDER_SELECT_LEGACY =
   "id,display_name,company_name,currency,payment_terms,contract_nr,custom_fields,price_list_type";
 const PORTAL_LOOKUP_CACHE_TTL_MS = 2 * 60 * 1000;
@@ -208,7 +205,6 @@ const portalPriceListCache = new Map<
   string,
   PortalLookupCacheEntry<{
     priceListType: CustomerPricingContext["customerType"];
-    pricingMode: CustomerPricingContext["portalCPriceMode"];
     currency: string;
     rows: PortalPriceListRow[];
   }>
@@ -944,29 +940,6 @@ async function buildPortalCatalogPreviewMap(
         supplier_name: bestOption.supplier_name || "",
       });
     }
-    if (shouldOverlayCPriceWhereAvailable(context)) {
-      const cPriceMap = await fetchCPriceMap(
-        supabaseUrl,
-        serviceRoleKey,
-        invite.organization_id,
-        context.cPriceListIds,
-        baseItems.map((item) => ({
-          brand: item.brand,
-          product_code: item.code,
-        })),
-        timeoutMs,
-      ).catch(() => new Map());
-      for (const item of baseItems) {
-        const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
-        const existing = previewByCode.get(key);
-        const cPrice = cPriceMap.get(key);
-        if (cPrice == null) continue;
-        previewByCode.set(key, {
-          sell_price: cPrice,
-          supplier_name: existing?.supplier_name || "",
-        });
-      }
-    }
   }
 
   return previewByCode;
@@ -1111,12 +1084,8 @@ function computeSellFromBuy(buyPrice: number | null, context: CustomerPricingCon
   return roundMoney(Number(buyPrice) * (1 + marginPercent / 100));
 }
 
-function shouldOverlayCPriceWhereAvailable(context: CustomerPricingContext) {
-  return context.customerType !== "C" && shouldUseCPriceForCustomer(context.customerType, context.portalCPriceMode) && context.cPriceListIds.length > 0;
-}
-
 function shouldUsePortalCPrice(context: CustomerPricingContext) {
-  return shouldUseCPriceForCustomer(context.customerType, context.portalCPriceMode) && context.cPriceListIds.length > 0;
+  return context.customerType === "C" && context.cPriceListIds.length > 0;
 }
 
 function hasUsablePrice(value: unknown) {
@@ -1321,11 +1290,6 @@ async function resolvePortalCustomer(
   }
 
   const sellerCompanyProfileId = String(customer.seller_company_profile_id || customerMeta.seller_company_profile_id || "").trim();
-  const portalCPriceMode =
-    String(customer.portal_c_price_mode || customerMeta.portal_c_price_mode || "standard").trim().toLowerCase() ===
-    "prefer_c_when_available"
-      ? "prefer_c_when_available"
-      : "standard";
   const marginOverrideRaw =
     customer.price_list_margin_percent == null ? customerMeta.price_list_margin_percent : customer.price_list_margin_percent;
 
@@ -1379,7 +1343,6 @@ async function resolvePortalCustomer(
     sellerCompany: String(companyProfile?.company_name || ""),
     currency: String(customer.currency || "EUR"),
     customerType: priceListType,
-    portalCPriceMode,
     effectiveMarginA,
     effectiveMarginB,
     cPriceListIds,
@@ -2213,7 +2176,6 @@ export async function buildPortalPriceListRows(
   brand: string,
 ): Promise<{
   priceListType: CustomerPricingContext["customerType"];
-  pricingMode: CustomerPricingContext["portalCPriceMode"];
   currency: string;
   rows: PortalPriceListRow[];
 }> {
@@ -2226,7 +2188,6 @@ export async function buildPortalPriceListRows(
     invite.organization_id,
     context.customer.id,
     context.customerType,
-    context.portalCPriceMode,
     context.effectiveMarginA,
     context.effectiveMarginB,
     context.cPriceListIds.join(","),
@@ -2324,7 +2285,6 @@ export async function buildPortalPriceListRows(
     if (!catalogRows.length && fallbackRows.length) {
       const fallbackResult = {
         priceListType: context.customerType,
-        pricingMode: context.portalCPriceMode,
         currency: context.currency,
         rows: fallbackRows,
       };
@@ -2338,7 +2298,6 @@ export async function buildPortalPriceListRows(
     if (!catalogRows.length) {
       const emptyBrandResult = {
         priceListType: context.customerType,
-        pricingMode: context.portalCPriceMode,
         currency: context.currency,
         rows: [] as PortalPriceListRow[],
       };
@@ -2408,37 +2367,6 @@ export async function buildPortalPriceListRows(
           }),
         );
       }
-      if (shouldOverlayCPriceWhereAvailable(context)) {
-        try {
-          const cPriceEntryMap = await fetchPortalBrandCPriceEntryMap(
-            supabaseUrl,
-            serviceRoleKey,
-            invite.organization_id,
-            brandId,
-            brandName,
-            context.cPriceListIds,
-          );
-          for (const [key, value] of cPriceEntryMap.entries()) {
-            const normalizedCode = portalCPriceEntryNormalizedCode(key);
-            if (!normalizedCode) continue;
-            salesPriceByCode.set(normalizedCode, value.sell_price);
-            priceDateByCode.set(normalizedCode, value.price_date);
-            priceTypeByCode.set(normalizedCode, "C");
-          }
-        } catch (error) {
-          console.warn(
-            JSON.stringify({
-              scope: "portal-price-list",
-              stage: "c-price-lookup-soft-fail",
-              inviteId: invite.id,
-              organizationId: invite.organization_id,
-              brandId,
-              brandName,
-              error: String(error instanceof Error ? error.message : error || ""),
-            }),
-          );
-        }
-      }
     }
 
     let brandResultRows = catalogRows.map((row) => ({
@@ -2488,7 +2416,6 @@ export async function buildPortalPriceListRows(
         brandId,
         brandName,
         customerType: context.customerType,
-        pricingMode: context.portalCPriceMode,
         catalogRows: catalogRows.length,
         pricedRows: brandResultRows.filter((row) => row.sales_price != null).length,
         ms: Date.now() - startedAt,
@@ -2498,7 +2425,6 @@ export async function buildPortalPriceListRows(
     portalPriceListCache.set(brandCacheKey, {
       value: {
         priceListType: context.customerType,
-        pricingMode: context.portalCPriceMode,
         currency: context.currency,
         rows: brandResultRows,
       },
@@ -2533,7 +2459,6 @@ export async function buildPortalPriceListRows(
 
   const result = {
     priceListType: context.customerType,
-    pricingMode: context.portalCPriceMode,
     currency: context.currency,
     rows,
   };
@@ -2545,7 +2470,6 @@ export async function buildPortalPriceListRows(
       organizationId: invite.organization_id,
       brandCount: selectedBrands.length,
       customerType: context.customerType,
-      pricingMode: context.portalCPriceMode,
       rows: result.rows.length,
       pricedRows: result.rows.filter((row) => row.sales_price != null).length,
       ms: Date.now() - startedAt,
@@ -2942,7 +2866,6 @@ async function resolvePreparedLinesBatch(
           scope: "portal-order-prepare",
           stage: "c-price-soft-fail",
           customerType: context.customerType,
-          pricingMode: context.portalCPriceMode,
           error: String(error instanceof Error ? error.message : error || ""),
         }),
       );
@@ -3141,7 +3064,6 @@ export async function preparePortalOrderLines(
       mergedRows: mergedRows.length,
       preparedRows: prepared.length,
       customerType: context.customerType,
-      pricingMode: context.portalCPriceMode,
       pricedRows: prepared.filter((line) => line.sell_price != null).length,
       cPricedRows: prepared.filter((line) => line.c_sell_price != null).length,
       ms: Date.now() - startedAt,
@@ -3155,7 +3077,6 @@ export async function preparePortalOrderLines(
       payment_terms: context.customer.payment_terms || "",
       contract_nr: context.customer.contract_nr || "",
       price_list_type: context.customerType,
-      portal_c_price_mode: context.portalCPriceMode,
     },
   };
 }

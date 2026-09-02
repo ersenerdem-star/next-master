@@ -214,7 +214,6 @@ export type PortalSnapshot = {
     payment_terms?: string;
     contract_nr?: string;
     price_list_type?: "" | "A" | "B" | "C" | "Other";
-    portal_c_price_mode?: "standard" | "prefer_c_when_available";
   } | null;
   accountRows: PortalAccountRow[];
 };

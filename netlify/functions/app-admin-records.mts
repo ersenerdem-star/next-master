@@ -26,7 +26,6 @@ const CUSTOMER_COLUMNS = [
   "seller_company_profile_id",
   "seller_company_profile_ids",
   "price_list_type",
-  "portal_c_price_mode",
   "price_list_margin_percent",
   "billing_address",
   "shipping_address",
@@ -210,7 +209,6 @@ function parseEmbeddedCustomerMeta(raw: unknown) {
 function embedCustomerMeta(raw: unknown, metaPatch: {
   seller_company_profile_id?: string | null;
   price_list_type?: string | null;
-  portal_c_price_mode?: string | null;
   price_list_margin_percent?: unknown;
 }) {
   const parsed = parseEmbeddedCustomerMeta(raw);
@@ -220,9 +218,6 @@ function embedCustomerMeta(raw: unknown, metaPatch: {
   }
   if (typeof metaPatch.price_list_type === "string" && metaPatch.price_list_type.trim()) {
     nextMeta.price_list_type = metaPatch.price_list_type.trim();
-  }
-  if (typeof metaPatch.portal_c_price_mode === "string" && metaPatch.portal_c_price_mode.trim()) {
-    nextMeta.portal_c_price_mode = metaPatch.portal_c_price_mode.trim();
   }
   if (metaPatch.price_list_margin_percent != null && Number.isFinite(Number(metaPatch.price_list_margin_percent))) {
     nextMeta.price_list_margin_percent = Number(metaPatch.price_list_margin_percent);
@@ -253,7 +248,6 @@ async function sanitizeCustomerPayload(input: {
     next.custom_fields = embedCustomerMeta(next.custom_fields, {
       seller_company_profile_id: null,
       price_list_type: String(next.price_list_type || ""),
-      portal_c_price_mode: String(next.portal_c_price_mode || "standard"),
       price_list_margin_percent: next.price_list_margin_percent,
     });
     return next;
@@ -279,7 +273,6 @@ async function sanitizeCustomerPayload(input: {
   next.custom_fields = embedCustomerMeta(next.custom_fields, {
     seller_company_profile_id: String(next.seller_company_profile_id || ""),
     price_list_type: String(next.price_list_type || ""),
-    portal_c_price_mode: String(next.portal_c_price_mode || "standard"),
     price_list_margin_percent: next.price_list_margin_percent,
   });
   return next;
@@ -771,7 +764,6 @@ function stripCustomerOptionalFields(payload: Record<string, unknown>) {
   const next = { ...payload };
   delete next.seller_company_profile_id;
   delete next.seller_company_profile_ids;
-  delete next.portal_c_price_mode;
   delete next.price_list_margin_percent;
   return next;
 }

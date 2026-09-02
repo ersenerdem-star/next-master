@@ -1,5 +1,4 @@
 export type CustomerPricingType = "A" | "B" | "C" | "Other";
-export type CustomerPricingMode = "standard" | "prefer_c_when_available";
 
 export function normalizeCustomerPricingType(value: string): CustomerPricingType {
   const normalized = String(value || "").trim().toLowerCase();
@@ -10,8 +9,8 @@ export function normalizeCustomerPricingType(value: string): CustomerPricingType
   return "A";
 }
 
-export function shouldUseCPriceForCustomer(customerType: CustomerPricingType, pricingMode: CustomerPricingMode) {
-  return customerType === "C" || pricingMode === "prefer_c_when_available";
+export function shouldUseCPriceForCustomer(customerType: CustomerPricingType) {
+  return customerType === "C";
 }
 
 export function getSupplierFallbackCustomerType(customerType: CustomerPricingType) {
