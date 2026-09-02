@@ -1988,6 +1988,8 @@ export const enMessages = {
     "suppliers.errors.brandRequiredForImport": "Select a brand for import.",
     "suppliers.errors.invalidCsvHeaders": "Invalid CSV headers. Required: {required}. Found: {found}.",
     "suppliers.errors.invalidCsvValues": "Upload blocked before staging. Fix the following format issues: {details}{suffix}",
+    "suppliers.errors.csvBrandMismatch": "Upload blocked: selected brand is {selected}, but the CSV Brand column contains {found}{suffix}. Select the correct brand or file.",
+    "suppliers.errors.mixedCsvBrands": "Upload blocked: the CSV contains multiple brands ({brands}{suffix}). Supplier imports must contain one brand per upload.",
     "suppliers.warnings.normalizedCsvValues": "Format normalized before upload: {details}{suffix}",
     "suppliers.errors.noValidRows": "No valid supplier price rows found.",
     "suppliers.errors.importFailed": "Supplier price import failed",

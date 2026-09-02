@@ -1964,6 +1964,8 @@ export const trMessages = {
     "suppliers.errors.brandRequiredForImport": "İçe aktarma için marka seçin.",
     "suppliers.errors.invalidCsvHeaders": "Geçersiz CSV başlıkları. Gerekli: {required}. Bulunan: {found}.",
     "suppliers.errors.invalidCsvValues": "Yükleme staging öncesinde durduruldu. Şu format hatalarını düzeltin: {details}{suffix}",
+    "suppliers.errors.csvBrandMismatch": "Yükleme durduruldu: seçilen marka {selected}, ancak CSV Brand sütununda {found}{suffix} bulundu. Doğru marka veya dosyayı seçin.",
+    "suppliers.errors.mixedCsvBrands": "Yükleme durduruldu: CSV birden fazla marka içeriyor ({brands}{suffix}). Her tedarikçi yüklemesi tek marka içermelidir.",
     "suppliers.warnings.normalizedCsvValues": "Yükleme öncesi format düzeltildi: {details}{suffix}",
     "suppliers.errors.noValidRows": "Geçerli tedarikçi fiyat satırı bulunamadı.",
     "suppliers.errors.importFailed": "Tedarikçi fiyat içe aktarımı başarısız",

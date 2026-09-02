@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { normalizePartCode } from "../../domain/shared/normalize";
+import { normalizeBrandName, normalizePartCode } from "../../domain/shared/normalize";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCloudCatalog } from "../../infrastructure/api/catalogApi";
 import { bulkImportSupplierPrices } from "../../infrastructure/api/importApi";
@@ -388,6 +388,41 @@ export function SuppliersPage() {
           p("suppliers.errors.invalidCsvHeaders", {
             missing: missingRequiredHeaders.join(", "),
             columns: SUPPLIER_IMPORT_COLUMNS.join(", "),
+          }),
+        );
+      }
+
+      // A supplier import is scoped to one selected brand. Previously the
+      // selected brand was written onto every row while the CSV Brand column
+      // was only parsed and ignored. That allowed a Mahle file to be uploaded
+      // as Gates (or vice versa) without any warning. Stop before staging when
+      // the file declares a different or mixed brand.
+      const fileBrands = brandIndex === -1
+        ? []
+        : Array.from(new Set(
+          dataRows
+            .map((row) => normalizeText(row[brandIndex]))
+            .filter((value): value is string => Boolean(value)),
+        ));
+      const selectedBrandKey = normalizeBrandName(activeImportBrand).toLowerCase();
+      const fileBrandKeys = new Set(fileBrands.map((value) => normalizeBrandName(value).toLowerCase()));
+      const mismatchedFileBrands = fileBrands.filter(
+        (value) => normalizeBrandName(value).toLowerCase() !== selectedBrandKey,
+      );
+      if (fileBrands.length > 1) {
+        throw new Error(
+          p("suppliers.errors.mixedCsvBrands", {
+            brands: fileBrands.slice(0, 6).join(", "),
+            suffix: fileBrands.length > 6 ? ` (+${fileBrands.length - 6} more)` : "",
+          }),
+        );
+      }
+      if (fileBrandKeys.size && mismatchedFileBrands.length) {
+        throw new Error(
+          p("suppliers.errors.csvBrandMismatch", {
+            selected: activeImportBrand,
+            found: mismatchedFileBrands.slice(0, 6).join(", "),
+            suffix: mismatchedFileBrands.length > 6 ? ` (+${mismatchedFileBrands.length - 6} more)` : "",
           }),
         );
       }
