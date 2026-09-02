@@ -6714,14 +6714,17 @@ textarea {
 }
 
 .app-shell {
-  grid-template-columns: clamp(252px, 19vw, 304px) minmax(0, 1fr);
+  --app-sidebar-width: clamp(252px, 19vw, 304px);
+  grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr);
 }
 
 .sidebar {
   align-self: start;
-  position: sticky;
+  position: fixed;
+  left: 0;
   top: 16px;
   z-index: 20;
+  width: var(--app-sidebar-width);
   height: calc(100vh - 32px);
   max-height: calc(100vh - 32px);
   min-height: 0;
@@ -6796,12 +6799,16 @@ textarea {
 }
 
 .portal-layout {
-  grid-template-columns: minmax(200px, 220px) minmax(0, 1fr);
+  --portal-sidebar-width: 220px;
+  grid-template-columns: var(--portal-sidebar-width) minmax(0, 1fr);
   gap: 14px;
 }
 
 .portal-sidebar {
+  position: fixed;
+  left: 0;
   top: 16px;
+  width: var(--portal-sidebar-width);
   align-self: start;
   z-index: 20;
   height: calc(100vh - 32px);
@@ -6847,11 +6854,13 @@ textarea {
 
 @media (max-width: 1280px) {
   .app-shell {
-    grid-template-columns: clamp(230px, 22vw, 280px) minmax(0, 1fr);
+    --app-sidebar-width: clamp(230px, 22vw, 280px);
+    grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr);
   }
 
   .portal-layout {
-    grid-template-columns: minmax(190px, 210px) minmax(0, 1fr);
+    --portal-sidebar-width: 210px;
+    grid-template-columns: var(--portal-sidebar-width) minmax(0, 1fr);
   }
 }
 
