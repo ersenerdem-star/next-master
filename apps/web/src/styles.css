@@ -6718,6 +6718,14 @@ textarea {
 }
 
 .sidebar {
+  align-self: start;
+  position: sticky;
+  top: 16px;
+  z-index: 20;
+  height: calc(100vh - 32px);
+  max-height: calc(100vh - 32px);
+  min-height: 0;
+  overflow: hidden;
   padding: 20px 16px;
 }
 
@@ -6794,6 +6802,12 @@ textarea {
 
 .portal-sidebar {
   top: 16px;
+  align-self: start;
+  z-index: 20;
+  height: calc(100vh - 32px);
+  max-height: calc(100vh - 32px);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .portal-kpi-strip {
