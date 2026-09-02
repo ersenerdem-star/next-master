@@ -123,8 +123,20 @@ export function AppShell({
   }, [activePage, activeSubPage, children, notice, shouldScaleAppDesktop]);
 
   useEffect(() => {
-    if (!activeSubmenuRef.current) return;
-    activeSubmenuRef.current.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const submenu = activeSubmenuRef.current;
+    const nav = submenu?.closest<HTMLElement>(".sidebar-nav");
+    if (!submenu || !nav) return;
+
+    // Keep the page position untouched when a submenu opens. Only the
+    // navigation's own scroll container should move enough to reveal it.
+    const submenuTop = submenu.offsetTop;
+    const submenuBottom = submenuTop + submenu.offsetHeight;
+    const visibleTop = nav.scrollTop;
+    const visibleBottom = visibleTop + nav.clientHeight;
+    if (submenuTop < visibleTop || submenuBottom > visibleBottom) {
+      const centeredTop = submenuTop - Math.max(0, (nav.clientHeight - submenu.offsetHeight) / 2);
+      nav.scrollTo({ top: Math.max(0, centeredTop), behavior: "smooth" });
+    }
   }, [activePage, activeSubPage, subNavItems.length]);
 
   return (
