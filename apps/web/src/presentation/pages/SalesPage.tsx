@@ -407,7 +407,7 @@ export function SalesPage({
     const customer = findCustomerByNameInList(customers, row.customer_name);
     if (!customer) return row.customer_name || "-";
     const displayName = customer.company_name || customer.display_name || row.customer_name || "-";
-    return [displayName, customer.billing_address || "", customer.company_id ? `Company ID ${customer.company_id}` : "", customer.work_phone ? `Phone: ${customer.work_phone}` : "", customer.email || ""]
+    return [displayName, customer.billing_address || "", customer.company_id ? `Company ID ${customer.company_id}` : "", customer.work_phone ? `Phone: ${customer.work_phone}` : ""]
       .filter(Boolean)
       .join("\n");
   }
@@ -416,7 +416,7 @@ export function SalesPage({
     const customer = findCustomerByNameInList(customers, row.customer_name);
     if (!customer) return row.customer_name || "-";
     const displayName = customer.company_name || customer.display_name || row.customer_name || "-";
-    return [displayName, customer.shipping_address || customer.billing_address || "", customer.company_id ? `Company ID ${customer.company_id}` : "", customer.mobile_phone ? `Phone: ${customer.mobile_phone}` : customer.work_phone ? `Phone: ${customer.work_phone}` : "", customer.email || ""]
+    return [displayName, customer.shipping_address || customer.billing_address || "", customer.company_id ? `Company ID ${customer.company_id}` : "", customer.mobile_phone ? `Phone: ${customer.mobile_phone}` : customer.work_phone ? `Phone: ${customer.work_phone}` : ""]
       .filter(Boolean)
       .join("\n");
   }

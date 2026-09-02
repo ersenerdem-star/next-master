@@ -342,18 +342,18 @@ function parseQuoteImportRows(text: string) {
     .filter((row) => row.code);
 }
 
-function buildCustomerAddressBlock(customer: LocalCustomer | null, fallbackName: string) {
+function buildCustomerAddressBlock(customer: LocalCustomer | null, fallbackName: string, includeEmail = true) {
   if (!customer) return fallbackName || "-";
   const displayName = customer.company_name || customer.display_name || `${customer.first_name} ${customer.last_name}`.trim() || fallbackName || "-";
-  return [displayName, customer.billing_address || "", customer.company_id ? `Company ID ${customer.company_id}` : "", customer.work_phone ? `Phone: ${customer.work_phone}` : "", customer.email || ""]
+  return [displayName, customer.billing_address || "", customer.company_id ? `Company ID ${customer.company_id}` : "", customer.work_phone ? `Phone: ${customer.work_phone}` : "", includeEmail ? customer.email || "" : ""]
     .filter(Boolean)
     .join("\n");
 }
 
-function buildCustomerShippingBlock(customer: LocalCustomer | null, fallbackName: string) {
+function buildCustomerShippingBlock(customer: LocalCustomer | null, fallbackName: string, includeEmail = true) {
   if (!customer) return fallbackName || "-";
   const displayName = customer.company_name || customer.display_name || `${customer.first_name} ${customer.last_name}`.trim() || fallbackName || "-";
-  return [displayName, customer.shipping_address || customer.billing_address || "", customer.company_id ? `Company ID ${customer.company_id}` : "", customer.mobile_phone ? `Phone: ${customer.mobile_phone}` : customer.work_phone ? `Phone: ${customer.work_phone}` : "", customer.email || ""]
+  return [displayName, customer.shipping_address || customer.billing_address || "", customer.company_id ? `Company ID ${customer.company_id}` : "", customer.mobile_phone ? `Phone: ${customer.mobile_phone}` : customer.work_phone ? `Phone: ${customer.work_phone}` : "", includeEmail ? customer.email || "" : ""]
     .filter(Boolean)
     .join("\n");
 }
@@ -651,8 +651,8 @@ function buildDraftQuoteHtml(input: {
   lines: QuoteBuilderLine[];
 }) {
   const currency = input.currency || "EUR";
-  const billingBlock = buildCustomerAddressBlock(input.customer || null, input.customerName);
-  const shippingBlock = buildCustomerShippingBlock(input.customer || null, input.customerName);
+  const billingBlock = buildCustomerAddressBlock(input.customer || null, input.customerName, false);
+  const shippingBlock = buildCustomerShippingBlock(input.customer || null, input.customerName, false);
   const showShipping = Boolean(input.customer?.shipping_address?.trim()) && shippingBlock !== billingBlock;
   const totalQty = input.lines.reduce((sum, line) => sum + line.qty, 0);
   const totalWeight = roundMoney(input.lines.reduce((sum, line) => sum + (Number(line.weight_kg ?? 0) || 0) * line.qty, 0));
