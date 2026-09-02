@@ -1963,6 +1963,8 @@ export const trMessages = {
     "suppliers.errors.supplierRequiredForImport": "İçe aktarma için tedarikçi seçin.",
     "suppliers.errors.brandRequiredForImport": "İçe aktarma için marka seçin.",
     "suppliers.errors.invalidCsvHeaders": "Geçersiz CSV başlıkları. Gerekli: {required}. Bulunan: {found}.",
+    "suppliers.errors.invalidCsvValues": "Yükleme staging öncesinde durduruldu. Şu format hatalarını düzeltin: {details}{suffix}",
+    "suppliers.warnings.normalizedCsvValues": "Yükleme öncesi format düzeltildi: {details}{suffix}",
     "suppliers.errors.noValidRows": "Geçerli tedarikçi fiyat satırı bulunamadı.",
     "suppliers.errors.importFailed": "Tedarikçi fiyat içe aktarımı başarısız",
     "suppliers.errors.supplierRequired": "Tedarikçi seçin.",

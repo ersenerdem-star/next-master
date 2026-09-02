@@ -18,7 +18,16 @@ import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { BrandPill } from "../components/common/BrandPill";
-import { downloadCsv, normalizeNumber, normalizeText, parseCsv, toCsv } from "../../shared/csv";
+import {
+  downloadCsv,
+  normalizeImportDate,
+  normalizeInteger,
+  normalizeNumber,
+  normalizeStockQuantity,
+  normalizeText,
+  parseCsv,
+  toCsv,
+} from "../../shared/csv";
 import { formatBrandAwareProductCode } from "../../shared/productCodeDisplay";
 import { downloadSupplierTemplate } from "../../shared/importTemplates";
 import { useI18n } from "../../i18n/I18nProvider";
@@ -367,6 +376,9 @@ export function SuppliersPage() {
       const orderMultipleIndex = findSupplierImportHeaderIndex(header, "Order_Multiple");
       const leadIndex = findSupplierImportHeaderIndex(header, "Lead_Time_Days");
       const notesIndex = findSupplierImportHeaderIndex(header, "Notes");
+      const stockQtyIndex = header.findIndex((cell) =>
+        ["stock_qty", "stock qty", "stock_quantity", "stock quantity"].includes(cell.trim().toLowerCase()),
+      );
 
       const missingRequiredHeaders = SUPPLIER_IMPORT_REQUIRED_COLUMNS.filter(
         (column) => findSupplierImportHeaderIndex(header, column) === -1,
@@ -380,23 +392,77 @@ export function SuppliersPage() {
         );
       }
 
+      const invalidFormats: string[] = [];
+      const normalizedFormats: string[] = [];
       const payload = dataRows
-        .map((row) => ({
-          supplier_name: activeSupplierName,
-          brand: activeImportBrand || normalizeText(brandIndex === -1 ? "" : row[brandIndex]) || "Unbranded",
-          product_code: normalizeText(row[codeIndex]),
-          description: normalizeText(nameIndex === -1 ? "" : row[nameIndex]),
-          oem_no: normalizeText(oemIndex === -1 ? "" : row[oemIndex]),
-          buy_price: normalizeNumber(row[priceIndex]),
-          currency: "EUR",
-          moq: normalizeNumber(moqIndex === -1 ? "" : row[moqIndex]),
-          order_multiple: normalizeNumber(orderMultipleIndex === -1 ? "" : row[orderMultipleIndex]),
-          lead_time_days: normalizeNumber(leadIndex === -1 ? "" : row[leadIndex]),
-          notes: normalizeText(notesIndex === -1 ? "" : row[notesIndex]),
-          valid_from: normalizeText(dateIndex === -1 ? "" : row[dateIndex]),
-          is_active: true,
-        }))
+        .map((row, rowIndex) => {
+          const spreadsheetRow = rowIndex + 2;
+          const rawDate = normalizeText(dateIndex === -1 ? "" : row[dateIndex]);
+          const rawMoq = normalizeText(moqIndex === -1 ? "" : row[moqIndex]);
+          const rawOrderMultiple = normalizeText(orderMultipleIndex === -1 ? "" : row[orderMultipleIndex]);
+          const rawLeadTime = normalizeText(leadIndex === -1 ? "" : row[leadIndex]);
+          const rawStockQty = normalizeText(stockQtyIndex === -1 ? "" : row[stockQtyIndex]);
+          const validFrom = rawDate ? normalizeImportDate(rawDate) : null;
+          const moq = rawMoq ? normalizeInteger(rawMoq) : null;
+          const orderMultiple = rawOrderMultiple ? normalizeInteger(rawOrderMultiple) : null;
+          const leadTimeDays = rawLeadTime ? normalizeInteger(rawLeadTime) : null;
+          const stockQty = rawStockQty ? normalizeStockQuantity(rawStockQty) : null;
+
+          if (rawDate && !validFrom) invalidFormats.push(`row ${spreadsheetRow}: Price_Date "${rawDate}"`);
+          if (rawDate && validFrom && rawDate !== validFrom) {
+            normalizedFormats.push(`row ${spreadsheetRow}: Price_Date "${rawDate}" → ${validFrom}`);
+          }
+          if (rawMoq && moq === null) invalidFormats.push(`row ${spreadsheetRow}: MOQ "${rawMoq}" (integer required)`);
+          if (rawOrderMultiple && orderMultiple === null) {
+            invalidFormats.push(`row ${spreadsheetRow}: Order_Multiple "${rawOrderMultiple}" (integer required)`);
+          }
+          if (rawLeadTime && leadTimeDays === null) {
+            invalidFormats.push(`row ${spreadsheetRow}: Lead_Time_Days "${rawLeadTime}" (integer required)`);
+          }
+          if (rawStockQty && stockQty === null) {
+            invalidFormats.push(`row ${spreadsheetRow}: Stock_Qty "${rawStockQty}" (integer required)`);
+          } else if (rawStockQty && /^\d+[.,]\d{2}$/.test(rawStockQty)) {
+            normalizedFormats.push(`row ${spreadsheetRow}: Stock_Qty "${rawStockQty}" → ${stockQty}`);
+          }
+
+          return {
+            supplier_name: activeSupplierName,
+            brand: activeImportBrand || normalizeText(brandIndex === -1 ? "" : row[brandIndex]) || "Unbranded",
+            product_code: normalizeText(row[codeIndex]),
+            description: normalizeText(nameIndex === -1 ? "" : row[nameIndex]),
+            oem_no: normalizeText(oemIndex === -1 ? "" : row[oemIndex]),
+            buy_price: normalizeNumber(row[priceIndex]),
+            currency: "EUR",
+            moq,
+            order_multiple: orderMultiple,
+            lead_time_days: leadTimeDays,
+            notes: normalizeText(notesIndex === -1 ? "" : row[notesIndex]),
+            valid_from: validFrom,
+            // Current supplier-price RPCs ignore this optional field, but
+            // normalising it here prevents legacy/import-worker variants from
+            // receiving a decimal string such as "1.64".
+            ...(stockQtyIndex === -1 ? {} : { stock_qty: stockQty }),
+            is_active: true,
+          };
+        })
         .filter((row) => row.product_code && row.buy_price !== null);
+
+      if (invalidFormats.length) {
+        throw new Error(
+          p("suppliers.errors.invalidCsvValues", {
+            details: invalidFormats.slice(0, 8).join("; "),
+            suffix: invalidFormats.length > 8 ? ` (+${invalidFormats.length - 8} more)` : "",
+          }),
+        );
+      }
+      if (normalizedFormats.length) {
+        setWarning(
+          p("suppliers.warnings.normalizedCsvValues", {
+            details: normalizedFormats.slice(0, 8).join("; "),
+            suffix: normalizedFormats.length > 8 ? ` (+${normalizedFormats.length - 8} more)` : "",
+          }),
+        );
+      }
 
       if (!payload.length) {
         throw new Error(p("suppliers.errors.noValidRows"));

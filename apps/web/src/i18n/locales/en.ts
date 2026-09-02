@@ -1987,6 +1987,8 @@ export const enMessages = {
     "suppliers.errors.supplierRequiredForImport": "Select a supplier for import.",
     "suppliers.errors.brandRequiredForImport": "Select a brand for import.",
     "suppliers.errors.invalidCsvHeaders": "Invalid CSV headers. Required: {required}. Found: {found}.",
+    "suppliers.errors.invalidCsvValues": "Upload blocked before staging. Fix the following format issues: {details}{suffix}",
+    "suppliers.warnings.normalizedCsvValues": "Format normalized before upload: {details}{suffix}",
     "suppliers.errors.noValidRows": "No valid supplier price rows found.",
     "suppliers.errors.importFailed": "Supplier price import failed",
     "suppliers.errors.supplierRequired": "Select a supplier.",
