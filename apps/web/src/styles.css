@@ -6715,7 +6715,7 @@ textarea {
 
 .app-shell {
   --app-sidebar-width: clamp(252px, 19vw, 304px);
-  grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .sidebar {
@@ -6759,6 +6759,8 @@ textarea {
 }
 
 .main {
+  margin-left: var(--app-sidebar-width);
+  min-width: 0;
   padding: clamp(20px, 2vw, 32px);
 }
 
@@ -6800,7 +6802,7 @@ textarea {
 
 .portal-layout {
   --portal-sidebar-width: 220px;
-  grid-template-columns: var(--portal-sidebar-width) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -6815,6 +6817,11 @@ textarea {
   max-height: calc(100vh - 32px);
   min-height: 0;
   overflow: hidden;
+}
+
+.portal-content {
+  margin-left: var(--portal-sidebar-width);
+  min-width: 0;
 }
 
 .portal-kpi-strip {
@@ -6855,12 +6862,10 @@ textarea {
 @media (max-width: 1280px) {
   .app-shell {
     --app-sidebar-width: clamp(230px, 22vw, 280px);
-    grid-template-columns: var(--app-sidebar-width) minmax(0, 1fr);
   }
 
   .portal-layout {
     --portal-sidebar-width: 210px;
-    grid-template-columns: var(--portal-sidebar-width) minmax(0, 1fr);
   }
 }
 
@@ -7227,6 +7232,11 @@ textarea {
   .sidebar,
   .portal-sidebar {
     display: none;
+  }
+
+  .main,
+  .portal-content {
+    margin-left: 0;
   }
 
   .main,
