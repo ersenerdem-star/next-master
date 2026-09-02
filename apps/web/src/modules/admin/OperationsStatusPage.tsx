@@ -123,8 +123,21 @@ export function OperationsStatusPage() {
   }
 
   function enrichmentStatus(row: CatalogOperationsBrandStatus) {
-    if ((row.incomplete_count || 0) === 0) return { label: t("catalog.integrity.enrichmentComplete"), tone: "complete" };
-    if ((row.complete_count || 0) === 0) return { label: t("catalog.integrity.enrichmentNotStarted"), tone: "idle" };
+    const total = row.total_products || 0;
+    const missing = [
+      row.missing_ean_count,
+      row.missing_oem_count,
+      row.missing_vehicle_count,
+      row.missing_vehicle_model_count,
+      row.missing_description_tr_count,
+      row.missing_market_segment_count,
+      row.missing_image_count,
+    ];
+    const populatedFieldCount = missing.reduce((count, value) => count + Math.max(0, total - (value || 0)), 0);
+    if (total > 0 && populatedFieldCount === total * missing.length) {
+      return { label: t("catalog.integrity.enrichmentComplete"), tone: "complete" };
+    }
+    if (populatedFieldCount > 0) return { label: t("catalog.integrity.enrichmentPartial"), tone: "partial" };
     return { label: t("catalog.integrity.enrichmentNotStarted"), tone: "idle" };
   }
 
@@ -427,6 +440,15 @@ export function OperationsStatusPage() {
           <div><span>{t("catalog.integrity.evaluatedProducts")}</span><strong>{formatIntegrityCount(catalogIntegrity?.evaluated_products)}</strong></div>
           <div><span>{t("catalog.integrity.queueDepth")}</span><strong>{formatIntegrityCount(catalogIntegrity?.queue_depth)}</strong></div>
         </div>
+        <div className="catalog-operations-explainer" role="note">
+          <strong>{t("catalog.integrity.scorecardHowToReadTitle")}</strong>
+          <p>{t("catalog.integrity.scorecardHowToReadBody")}</p>
+          <div className="catalog-operations-explainer__rules">
+            <span><b>{t("catalog.integrity.scorecardCoreLabel")}</b> {t("catalog.integrity.scorecardCoreRule")}</span>
+            <span><b>{t("catalog.integrity.scorecardMissingLabel")}</b> {t("catalog.integrity.scorecardMissingRule")}</span>
+            <span><b>{t("catalog.integrity.scorecardEnrichmentLabel")}</b> {t("catalog.integrity.scorecardEnrichmentRule")}</span>
+          </div>
+        </div>
         <div className="catalog-field-health">
           <span><small>{t("catalog.integrity.missingDescription")}</small><strong>{formatIntegrityCount(catalogIntegrity?.missing_description_count)}</strong></span>
           <span><small>{t("catalog.integrity.missingOrigin")}</small><strong>{formatIntegrityCount(catalogIntegrity?.missing_origin_count)}</strong></span>
@@ -482,6 +504,13 @@ export function OperationsStatusPage() {
                             <div className="catalog-enrichment-table__brand">
                               <BrandPill brand={row.brand} compact />
                               <small>{status.label}</small>
+                              <small className="catalog-enrichment-table__summary">
+                                {t("catalog.integrity.brandCoreSummary", {
+                                  complete: formatCount(row.complete_count),
+                                  total: formatCount(row.total_products),
+                                  percent: formatPercent(row.data_completeness_percent),
+                                })}
+                              </small>
                             </div>
                           </td>
                           <td>{formatCount(row.total_products)}</td>
