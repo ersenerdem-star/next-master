@@ -992,8 +992,8 @@ export default async (req: Request, _context: Context) => {
     const action = String(body?.action || "").trim();
     const payload = isObject(body?.payload) ? body.payload : {};
     const id = String(body?.id || "").trim();
-    const canUseCustomerRecords = canAccessCustomerOps(caller.role);
-    const canUseOperationsModules = canAccessOperationsModules(caller.role);
+    const canUseCustomerRecords = canAccessCustomerOps(caller.role, caller.department);
+    const canUseOperationsModules = canAccessOperationsModules(caller.role, caller.department);
     const isSuperadmin = isSuperadminRole(caller.role);
 
     if (resource === "customers") {
