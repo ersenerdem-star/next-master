@@ -18,6 +18,7 @@ import {
   isSuperadminRole,
   normalizeAppRole,
   type AppRole,
+  type AppDepartment,
 } from "../shared/roles";
 
 const CATALOG_OBSERVATION_REVIEW_PATH = "/catalog/observation-review";
@@ -137,47 +138,47 @@ const allNavItems = [
   { key: "Mira", code: "08", labelKey: "nav.mira", captionKey: "nav.miraCaption" },
 ] as const;
 
-function getAllowedNavItems(role: AppRole) {
+function getAllowedNavItems(role: AppRole, department: AppDepartment = "") {
   if (isSuperadminRole(role)) return allNavItems;
-  if (canAccessOperationsModules(role)) {
+  if (canAccessOperationsModules(role, department)) {
     return allNavItems.filter((item) => item.key === "Home" || item.key === "CatalogReview" || item.key === "Inventory" || item.key === "Sales" || item.key === "Purchases" || item.key === "Reports" || item.key === "Settings");
   }
-  if (canAccessSalesModules(role)) {
+  if (canAccessSalesModules(role, department)) {
     return allNavItems.filter((item) => item.key === "Home" || item.key === "Sales" || item.key === "Settings");
   }
   return allNavItems.filter((item) => item.key === "Home" || item.key === "Settings");
 }
 
-function getSalesSubNav(role: AppRole) {
-  if (!canAccessSalesModules(role)) return [] as const;
+function getSalesSubNav(role: AppRole, department: AppDepartment = "") {
+  if (!canAccessSalesModules(role, department)) return [] as const;
   return salesSubNav.filter((item) => item.key !== "Price Lists" || isSuperadminRole(role));
 }
 
-function getInventorySubNav(role: AppRole) {
-  if (!canAccessInventoryModules(role)) return [] as const;
+function getInventorySubNav(role: AppRole, department: AppDepartment = "") {
+  if (!canAccessInventoryModules(role, department)) return [] as const;
   return inventorySubNav;
 }
 
-function getPurchasesSubNav(role: AppRole) {
-  if (!canAccessPurchasingModules(role)) return [] as const;
+function getPurchasesSubNav(role: AppRole, department: AppDepartment = "") {
+  if (!canAccessPurchasingModules(role, department)) return [] as const;
   return purchasesSubNav;
 }
 
-function getReportsSubNav(role: AppRole) {
-  if (!canAccessReportModules(role)) return [] as const;
+function getReportsSubNav(role: AppRole, department: AppDepartment = "") {
+  if (!canAccessReportModules(role, department)) return [] as const;
   return reportsSubNav;
 }
 
-function getSettingsSubNav(role: AppRole) {
+function getSettingsSubNav(role: AppRole, department: AppDepartment = "") {
   if (isSuperadminRole(role)) return settingsSubNav;
-  if (canAccessSalesModules(role)) {
+  if (canAccessSalesModules(role, department)) {
     return settingsSubNav.filter((item) => item.key === "session" || item.key === "portals");
   }
   return settingsSubNav.filter((item) => item.key === "session");
 }
 
-function getDefaultPage(role: AppRole) {
-  return canAccessSalesModules(role) ? "Sales" : "Home";
+function getDefaultPage(role: AppRole, department: AppDepartment = "") {
+  return canAccessSalesModules(role, department) ? "Sales" : "Home";
 }
 
 class PageErrorBoundary extends Component<
@@ -217,9 +218,11 @@ export function App() {
   const initialWorkspacePath = typeof window === "undefined" ? "/" : window.location.pathname;
   const initialAppSession = typeof window === "undefined" || isPortalRoute ? null : getCachedAppSessionSnapshot();
   const initialAppRole = normalizeAppRole(initialAppSession?.role || "");
+  const initialAppDepartment = String(initialAppSession?.department || "viewer");
   const [sessionReady, setSessionReady] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [appRole, setAppRole] = useState<AppRole>(initialAppRole);
+  const [appDepartment, setAppDepartment] = useState<AppDepartment>(initialAppDepartment);
   const [appRoleReady, setAppRoleReady] = useState(Boolean(initialAppRole));
   const appRoleRef = useRef<AppRole>(initialAppRole);
   const [appSessionReloadTick, setAppSessionReloadTick] = useState(0);
@@ -293,6 +296,7 @@ export function App() {
       if (event === "PASSWORD_RECOVERY") {
         clearCachedAppSession();
         setAppRole("");
+        setAppDepartment("viewer");
         setAppRoleReady(true);
         setRecoveryMode(true);
         setLoggedIn(false);
@@ -302,6 +306,7 @@ export function App() {
       if (event === "SIGNED_OUT") {
         clearCachedAppSession();
         setAppRole("");
+        setAppDepartment("viewer");
         setAppRoleReady(true);
         setRecoveryMode(false);
         setLoggedIn(false);
@@ -312,6 +317,7 @@ export function App() {
       if (!session) {
         clearCachedAppSession();
         setAppRole("");
+        setAppDepartment("viewer");
         setAppRoleReady(true);
         setLoggedIn(false);
         setSessionReady(true);
@@ -346,6 +352,7 @@ export function App() {
   useEffect(() => {
     if (!loggedIn || isPortalRoute) {
       setAppRole("");
+      setAppDepartment("viewer");
       setAppRoleReady(true);
       return;
     }
@@ -365,6 +372,7 @@ export function App() {
         const session = await fetchAppSession(true);
         if (cancelled) return;
         setAppRole(normalizeAppRole(session.role));
+        setAppDepartment(String(session.department || "viewer"));
       } catch {
         if (!cancelled) {
           setAppRole((current) => current || appRoleRef.current || "");
@@ -489,7 +497,7 @@ export function App() {
   }
 
   function openSalesOrder(salesOrderId: string) {
-    if (!canAccessSalesModules(appRole)) {
+    if (!canAccessSalesModules(appRole, appDepartment)) {
       showAccessNotice(t("errors.salesAccessDenied"));
       return;
     }
@@ -503,7 +511,7 @@ export function App() {
   }
 
   function openPurchaseOrder(purchaseOrderId: string) {
-    if (!canAccessPurchasingModules(appRole)) {
+    if (!canAccessPurchasingModules(appRole, appDepartment)) {
       showAccessNotice(t("errors.purchaseAccessDenied"));
       return;
     }
@@ -517,7 +525,7 @@ export function App() {
   }
 
   function openInvoice(invoiceId: string) {
-    if (!canAccessSalesModules(appRole)) {
+    if (!canAccessSalesModules(appRole, appDepartment)) {
       showAccessNotice(t("errors.invoiceAccessDenied"));
       return;
     }
@@ -531,7 +539,7 @@ export function App() {
   }
 
   function openBill(billId: string) {
-    if (!canAccessPurchasingModules(appRole)) {
+    if (!canAccessPurchasingModules(appRole, appDepartment)) {
       showAccessNotice(t("errors.billAccessDenied"));
       return;
     }
@@ -545,7 +553,7 @@ export function App() {
   }
 
   function openInventoryWarehouse(warehouseId: string) {
-    if (!canAccessInventoryModules(appRole)) {
+    if (!canAccessInventoryModules(appRole, appDepartment)) {
       showAccessNotice(t("errors.warehouseAccessDenied"));
       return;
     }
@@ -556,7 +564,7 @@ export function App() {
   }
 
   function openInventoryTab(tab: "Warehouses" | "On Hand") {
-    if (!canAccessInventoryModules(appRole)) {
+    if (!canAccessInventoryModules(appRole, appDepartment)) {
       showAccessNotice(t("errors.warehouseAccessDenied"));
       return;
     }
@@ -567,7 +575,7 @@ export function App() {
   }
 
   function openInventoryItem(codeSearch: string, warehouseId?: string) {
-    if (!canAccessInventoryModules(appRole)) {
+    if (!canAccessInventoryModules(appRole, appDepartment)) {
       showAccessNotice(t("errors.warehouseAccessDenied"));
       return;
     }
@@ -678,12 +686,12 @@ export function App() {
     showAccessNotice(t("errors.detailAccessDenied"));
   }
 
-  const salesSubNavItems = useMemo(() => getSalesSubNav(appRole), [appRole]);
-  const inventorySubNavItems = useMemo(() => getInventorySubNav(appRole), [appRole]);
-  const purchasesSubNavItems = useMemo(() => getPurchasesSubNav(appRole), [appRole]);
-  const reportsSubNavItems = useMemo(() => getReportsSubNav(appRole), [appRole]);
-  const settingsSubNavItems = useMemo(() => getSettingsSubNav(appRole), [appRole]);
-  const allowedNavItems = useMemo(() => getAllowedNavItems(appRole), [appRole]);
+  const salesSubNavItems = useMemo(() => getSalesSubNav(appRole, appDepartment), [appRole, appDepartment]);
+  const inventorySubNavItems = useMemo(() => getInventorySubNav(appRole, appDepartment), [appRole, appDepartment]);
+  const purchasesSubNavItems = useMemo(() => getPurchasesSubNav(appRole, appDepartment), [appRole, appDepartment]);
+  const reportsSubNavItems = useMemo(() => getReportsSubNav(appRole, appDepartment), [appRole, appDepartment]);
+  const settingsSubNavItems = useMemo(() => getSettingsSubNav(appRole, appDepartment), [appRole, appDepartment]);
+  const allowedNavItems = useMemo(() => getAllowedNavItems(appRole, appDepartment), [appRole, appDepartment]);
   const isCatalogReviewRoute = workspacePath.startsWith(CATALOG_OBSERVATION_REVIEW_PATH);
   const isCatalogReadRoute = isCatalogReviewRoute;
   const shellActivePage = isCatalogReadRoute ? "CatalogReview" : activePage;
@@ -701,9 +709,9 @@ export function App() {
   useEffect(() => {
     if (!appRoleReady || !allowedNavItems.length) return;
     if (!allowedNavItems.some((item) => item.key === activePage)) {
-      setActivePage(getDefaultPage(appRole));
+      setActivePage(getDefaultPage(appRole, appDepartment));
     }
-  }, [activePage, allowedNavItems, appRole, appRoleReady]);
+  }, [activePage, allowedNavItems, appRole, appDepartment, appRoleReady]);
 
   useEffect(() => {
     if (salesSubNavItems.length && !salesSubNavItems.some((item) => item.key === salesTab)) {
@@ -755,13 +763,13 @@ export function App() {
       ? catalogReviewSubNav
       : activePage === "Items" && canAccessSystemModules(appRole)
       ? itemSubNav
-      : activePage === "Inventory" && canAccessInventoryModules(appRole)
+      : activePage === "Inventory" && canAccessInventoryModules(appRole, appDepartment)
         ? inventorySubNavItems
       : activePage === "Sales"
           ? salesSubNavItems
-          : activePage === "Purchases" && canAccessPurchasingModules(appRole)
+          : activePage === "Purchases" && canAccessPurchasingModules(appRole, appDepartment)
             ? purchasesSubNavItems
-            : activePage === "Reports" && canAccessReportModules(appRole)
+            : activePage === "Reports" && canAccessReportModules(appRole, appDepartment)
               ? reportsSubNavItems
               : activePage === "Settings"
                 ? settingsSubNavItems
@@ -829,7 +837,7 @@ export function App() {
     return <div className="loading-screen">{t("common.loadingWorkspace")}</div>;
   }
 
-  if (isCatalogReadRoute && !canAccessCatalogReviewModules(appRole)) {
+  if (isCatalogReadRoute && !canAccessCatalogReviewModules(appRole, appDepartment)) {
     return <div className="loading-screen">{t("errors.catalogReviewAccessDenied")}</div>;
   }
 
@@ -838,9 +846,9 @@ export function App() {
       <CatalogObservationReviewPage />
     ) : activePage === "Items" && canAccessSystemModules(appRole) ? (
       <ItemsPage activeTab={itemsTab} />
-    ) : activePage === "Inventory" && canAccessInventoryModules(appRole) ? (
+    ) : activePage === "Inventory" && canAccessInventoryModules(appRole, appDepartment) ? (
       <InventoryPage initialTab={inventoryInitialTab} selectedWarehouseId={inventorySelectedWarehouseId} stockSearch={inventoryStockSearch} />
-    ) : activePage === "Sales" && canAccessSalesModules(appRole) ? (
+    ) : activePage === "Sales" && canAccessSalesModules(appRole, appDepartment) ? (
       <SalesPage
         activeTab={salesTab}
         salesOrdersNavTick={salesOrdersNavTick}
@@ -852,9 +860,9 @@ export function App() {
         selectedInvoiceId={selectedInvoiceId}
         onSelectedInvoiceChange={setSelectedInvoiceId}
       />
-    ) : activePage === "Purchases" && canAccessPurchasingModules(appRole) ? (
+    ) : activePage === "Purchases" && canAccessPurchasingModules(appRole, appDepartment) ? (
       <PurchasesPage activeTab={purchasesTab} selectedPurchaseOrderId={selectedPurchaseOrderId} selectedBillId={selectedBillId} />
-    ) : activePage === "Reports" && canAccessReportModules(appRole) ? (
+    ) : activePage === "Reports" && canAccessReportModules(appRole, appDepartment) ? (
       <ReportsPage
         activeTab={reportsTab}
         onOpenSalesOrder={openSalesOrder}
