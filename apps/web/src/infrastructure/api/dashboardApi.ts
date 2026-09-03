@@ -241,7 +241,10 @@ async function fetchQuoteRevenueSnapshot(): Promise<RevenueSnapshot> {
 }
 
 async function fetchTableCount(table: "catalog_products" | "brands" | "suppliers" | "sales_orders") {
-  const { count, error } = await supabaseClient.from(table).select("id", { count: "planned", head: true });
+  // Planned counts use PostgreSQL's table statistics and can be stale by a
+  // large margin after bulk catalog imports. Dashboard cards are operational
+  // totals, so they must use the exact tenant-scoped count on every refresh.
+  const { count, error } = await supabaseClient.from(table).select("id", { count: "exact", head: true });
   if (error) {
     throw new Error(error.message || `Failed to load ${table} count`);
   }
