@@ -5,6 +5,7 @@ export type AppCaller = {
   email: string;
   organizationId: string;
   role: string;
+  department: string;
 };
 
 type AuthUserResponse = {
@@ -43,8 +44,8 @@ export async function resolveCaller(
     throw new Error("Session user not found");
   }
 
-  const profiles = await getJson<Array<{ organization_id?: string | null; role?: string | null }>>(
-    `${supabaseUrl}/rest/v1/profiles?select=organization_id,role&id=eq.${encodeURIComponent(userId)}&limit=1`,
+  const profiles = await getJson<Array<{ organization_id?: string | null; role?: string | null; department?: string | null }>>(
+    `${supabaseUrl}/rest/v1/profiles?select=organization_id,role,department&id=eq.${encodeURIComponent(userId)}&limit=1`,
     {
       headers: serviceRoleHeaders(serviceRoleKey),
       timeoutMs: 8_000,
@@ -62,5 +63,6 @@ export async function resolveCaller(
     email: String(user.email || ""),
     organizationId,
     role: String(profile.role || ""),
+    department: String(profile.department || "viewer"),
   } satisfies AppCaller;
 }

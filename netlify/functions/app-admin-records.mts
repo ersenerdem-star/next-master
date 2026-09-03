@@ -25,6 +25,7 @@ const CUSTOMER_COLUMNS = [
   "contract_nr",
   "seller_company_profile_id",
   "seller_company_profile_ids",
+  "owner_profile_id",
   "price_list_type",
   "price_list_margin_percent",
   "billing_address",
@@ -456,12 +457,14 @@ async function listRows<T>(input: {
   select: string;
   organizationId: string;
   order: string;
+  extraParams?: Record<string, string>;
 }) {
   return getJson<T[]>(
     buildRestUrl(input.supabaseUrl, input.table, {
       select: input.select,
       organization_id: `eq.${input.organizationId}`,
       order: input.order,
+      ...(input.extraParams || {}),
     }),
     {
       headers: serviceRoleHeaders(input.serviceRoleKey),
@@ -768,14 +771,42 @@ function stripCustomerOptionalFields(payload: Record<string, unknown>) {
   return next;
 }
 
-async function listCustomers(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
+async function listScopedCustomerIds(supabaseUrl: string, serviceRoleKey: string, caller: { id: string; organizationId: string; role: string }) {
+  if (caller.role === "admin" || caller.role === "superadmin") return null;
+  const accessRows = await getJson<Array<{ customer_id?: string }>>(
+    buildRestUrl(supabaseUrl, "profile_customer_access", {
+      select: "customer_id",
+      organization_id: `eq.${caller.organizationId}`,
+      profile_id: `eq.${caller.id}`,
+      limit: "5000",
+    }),
+    { headers: serviceRoleHeaders(serviceRoleKey) },
+  ).catch(() => []);
+  const ownedRows = await getJson<Array<{ id?: string }>>(
+    buildRestUrl(supabaseUrl, "customers", {
+      select: "id",
+      organization_id: `eq.${caller.organizationId}`,
+      owner_profile_id: `eq.${caller.id}`,
+      limit: "5000",
+    }),
+    { headers: serviceRoleHeaders(serviceRoleKey) },
+  ).catch(() => []);
+  const ids = [...new Set([...accessRows.map((row) => String(row.customer_id || "")), ...ownedRows.map((row) => String(row.id || ""))].filter(Boolean))];
+  // Preserve legacy visibility until an administrator assigns the first scope.
+  return ids.length ? ids : null;
+}
+
+async function listCustomers(supabaseUrl: string, serviceRoleKey: string, caller: { id: string; organizationId: string; role: string }) {
+  const scopedIds = await listScopedCustomerIds(supabaseUrl, serviceRoleKey, caller);
+  const scopeFilter = scopedIds ? { id: `in.(${scopedIds.join(",")})` } : {};
   try {
     return await listRows<Record<string, unknown>>({
       supabaseUrl,
       serviceRoleKey,
       table: "customers",
       select: CUSTOMER_COLUMNS,
-      organizationId,
+      organizationId: caller.organizationId,
+      extraParams: scopeFilter,
       order: "display_name.asc",
     });
   } catch (primaryError) {
@@ -785,12 +816,21 @@ async function listCustomers(supabaseUrl: string, serviceRoleKey: string, organi
         serviceRoleKey,
         table: "customers",
         select: LEGACY_CUSTOMER_COLUMNS,
-        organizationId,
+        organizationId: caller.organizationId,
+        extraParams: scopeFilter,
         order: "display_name.asc",
       });
     } catch (legacyError) {
       throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Customers load failed")));
     }
+  }
+}
+
+async function assertCustomerScope(input: { supabaseUrl: string; serviceRoleKey: string; caller: { id: string; organizationId: string; role: string }; customerId: string }) {
+  if (!input.customerId || input.caller.role === "admin" || input.caller.role === "superadmin") return;
+  const scopedIds = await listScopedCustomerIds(input.supabaseUrl, input.serviceRoleKey, input.caller);
+  if (scopedIds && !scopedIds.includes(input.customerId)) {
+    throw new Error("You do not have access to this customer card.");
   }
 }
 
@@ -959,16 +999,20 @@ export default async (req: Request, _context: Context) => {
     if (resource === "customers") {
       if (!canUseCustomerRecords) return json({ error: "Staff access required" }, 403);
       if (action === "list") {
-        const data = await listCustomers(supabaseUrl, serviceRoleKey, caller.organizationId);
+        const data = await listCustomers(supabaseUrl, serviceRoleKey, caller);
         return json({ ok: true, data });
       }
       if (action === "upsert") {
+        await assertCustomerScope({ supabaseUrl, serviceRoleKey, caller, customerId: id });
         const nextPayload = await sanitizeCustomerPayload({
           supabaseUrl,
           serviceRoleKey,
           organizationId: caller.organizationId,
           payload,
         });
+        if (!isSuperadmin && caller.role !== "admin") {
+          nextPayload.owner_profile_id = id ? nextPayload.owner_profile_id || undefined : caller.id;
+        }
         const data = await upsertCustomerRecord({
           supabaseUrl,
           serviceRoleKey,

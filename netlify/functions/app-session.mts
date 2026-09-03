@@ -24,6 +24,7 @@ export default async (req: Request, _context: Context) => {
       profile: {
         organization_id: caller.organizationId,
         role: caller.role,
+        department: caller.department,
       },
     });
   } catch (error) {

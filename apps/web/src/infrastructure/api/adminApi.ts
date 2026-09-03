@@ -74,6 +74,7 @@ export async function createOrgUser(input: {
   email: string;
   fullName: string;
   role: "admin" | "sales" | "viewer";
+  department: "sales" | "purchasing" | "accounting" | "warehouse" | "viewer";
   isActive: boolean;
 }) {
   const accessToken = await getCallerAccessToken();
@@ -125,6 +126,7 @@ export async function updateOrgUser(input: {
   email: string;
   fullName: string;
   role: "superadmin" | "admin" | "sales" | "viewer";
+  department: "management" | "sales" | "purchasing" | "accounting" | "warehouse" | "viewer";
   isActive: boolean;
 }) {
   const accessToken = await getCallerAccessToken();

@@ -10,6 +10,7 @@ type AppSessionResponse = {
   profile?: {
     organization_id?: string;
     role?: string;
+    department?: string;
   };
   error?: string;
 };
@@ -19,6 +20,7 @@ type AppSessionSnapshot = {
   email: string;
   organizationId: string;
   role: string;
+  department: string;
 };
 
 const APP_SESSION_CACHE_KEY = "next-master-app-session-cache";
@@ -72,6 +74,7 @@ export async function fetchAppSession(forceRefresh = false): Promise<AppSessionS
     email: String(data.user?.email || ""),
     organizationId: String(data.profile?.organization_id || ""),
     role: String(data.profile?.role || ""),
+    department: String(data.profile?.department || "viewer"),
   };
   if (!next.userId || !next.organizationId) {
     throw new Error("Session details could not be loaded right now.");
