@@ -5,6 +5,7 @@ import { buildRestUrl, getJson, json, sendJson, serviceRoleHeaders } from "./_sh
 import { sanitizeUserFacingError, sanitizeUserFacingMessage } from "./_shared/user-message.mts";
 
 const allowedRoles = new Set(["admin", "sales", "viewer"]);
+const allowedDepartments = new Set(["sales", "purchasing", "accounting", "warehouse", "viewer"]);
 const welcomeTemplateKey = "internal_user_welcome";
 const defaultWelcomeTemplate = {
   template_name: "Internal User Welcome",
@@ -159,10 +160,12 @@ export default async (req: Request, _context: Context) => {
     const email = normalizeEmail(payload?.email);
     const fullName = String(payload?.fullName || "").trim();
     const role = String(payload?.role || "sales").trim().toLowerCase();
+    const department = String(payload?.department || (role === "sales" ? "sales" : "viewer")).trim().toLowerCase();
     const isActive = payload?.isActive !== false;
 
     if (!email) return json({ error: "Email is required" }, 400);
     if (!allowedRoles.has(role)) return json({ error: "Invalid role" }, 400);
+    if (!allowedDepartments.has(department)) return json({ error: "Invalid department" }, 400);
 
     const temporaryPassword = generateTemporaryPassword();
     const siteUrl = resolveSiteUrl(req);
@@ -219,6 +222,8 @@ export default async (req: Request, _context: Context) => {
               email,
               full_name: fullName || null,
               role,
+              department,
+              permissions: {},
               is_active: isActive,
             },
           ]),

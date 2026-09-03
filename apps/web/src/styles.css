@@ -4765,6 +4765,29 @@ select {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
 }
 
+/* Master Data catalog intentionally uses the same airy product-card language
+   as the customer portal search. Procurement prices stay in the restricted
+   Supplier Comparison report and are never rendered here. */
+.catalog-portal-search-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.catalog-portal-search-card {
+  cursor: pointer;
+  min-height: 100%;
+}
+
+.catalog-portal-search-card:focus-within,
+.catalog-portal-search-card:hover {
+  border-color: #bfd1e2;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+}
+
+.catalog-portal-results {
+  width: 100%;
+}
+
 .portal-search-card--active {
   border-color: #f59e0b;
   box-shadow: 0 16px 32px rgba(245, 158, 11, 0.14);

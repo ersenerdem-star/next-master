@@ -3,6 +3,8 @@ export type OrgUser = {
   email: string;
   full_name: string | null;
   role: string;
+  department: "management" | "sales" | "purchasing" | "accounting" | "warehouse" | "viewer" | string;
+  permissions?: Record<string, boolean> | null;
   is_active: boolean;
   created_at: string | null;
   last_login_at: string | null;

@@ -8,6 +8,7 @@ import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 const ALLOWED_RPCS = new Set([
   "admin_list_org_users",
+  "admin_list_org_users_with_access",
   "begin_catalog_import",
   "begin_supplier_price_import",
   "begin_customer_price_list_replace",
@@ -75,6 +76,7 @@ const ALLOWED_RPCS = new Set([
 
 const SUPERADMIN_RPCS = new Set([
   "admin_list_org_users",
+  "admin_list_org_users_with_access",
   "bulk_import_catalog",
   "cloud_catalog_page",
   "cloud_catalog_integrity_page",

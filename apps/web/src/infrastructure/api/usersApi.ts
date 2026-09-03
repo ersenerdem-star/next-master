@@ -2,7 +2,7 @@ import { callAppRpc } from "./appRpcApi";
 import type { OrgUser } from "../../types/users";
 
 export async function fetchOrgUsers(): Promise<OrgUser[]> {
-  const data = await callAppRpc<OrgUser[]>("admin_list_org_users");
+  const data = await callAppRpc<OrgUser[]>("admin_list_org_users_with_access");
   return (data || []) as OrgUser[];
 }
 

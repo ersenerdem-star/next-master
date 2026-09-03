@@ -56,6 +56,7 @@ type NewUserDraft = {
   email: string;
   fullName: string;
   role: "admin" | "sales" | "viewer";
+  department: "sales" | "purchasing" | "accounting" | "warehouse" | "viewer";
   isActive: boolean;
 };
 
@@ -64,6 +65,7 @@ type EditUserDraft = {
   email: string;
   fullName: string;
   role: "superadmin" | "admin" | "sales" | "viewer";
+  department: "management" | "sales" | "purchasing" | "accounting" | "warehouse" | "viewer";
   isActive: boolean;
 };
 
@@ -89,6 +91,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     email: "",
     fullName: "",
     role: "sales",
+    department: "sales",
     isActive: true,
   });
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(emptyCompanyProfile);
@@ -259,6 +262,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
       email: row.email,
       fullName: row.full_name || "",
       role: (row.role === "superadmin" || row.role === "admin" || row.role === "sales" || row.role === "viewer" ? row.role : "sales") as EditUserDraft["role"],
+      department: (row.department || (row.role === "admin" || row.role === "superadmin" ? "management" : row.role)) as EditUserDraft["department"],
       isActive: row.is_active,
     });
     setUserActionStatus(s("users.feedback.editing", { email: row.email }));
@@ -311,6 +315,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
       },
     },
     { key: "role", header: s("columns.role"), render: (row: OrgUser) => s(`roles.${String(row.role || "viewer").toLowerCase()}`) },
+    { key: "department", header: s("users.fields.department"), render: (row: OrgUser) => s(`departments.${String(row.department || "viewer")}`) },
     { key: "active", header: s("columns.active"), render: (row: OrgUser) => (row.is_active ? s("values.yes") : s("values.no")) },
     { key: "quotes", header: s("columns.quotes"), render: (row: OrgUser) => row.quote_count ?? 0 },
     { key: "lastSeen", header: s("columns.lastSeen"), render: (row: OrgUser) => row.last_seen_at || "-" },
@@ -874,6 +879,19 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                   setEditUserDraft((current) => (current ? { ...current, role: value as EditUserDraft["role"] } : current))
                 }
               />
+              <Select
+                label={s("users.fields.department")}
+                value={editUserDraft.department}
+                options={[
+                  { value: "management", label: s("departments.management") },
+                  { value: "sales", label: s("departments.sales") },
+                  { value: "purchasing", label: s("departments.purchasing") },
+                  { value: "accounting", label: s("departments.accounting") },
+                  { value: "warehouse", label: s("departments.warehouse") },
+                  { value: "viewer", label: s("departments.viewer") },
+                ]}
+                onChange={(value) => setEditUserDraft((current) => (current ? { ...current, department: value as EditUserDraft["department"] } : current))}
+              />
               <label className="field checkbox-field">
                 <input
                   type="checkbox"
@@ -906,6 +924,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                           email: editUserEmail,
                           fullName: editUserDraft.fullName.trim(),
                           role: editUserDraft.role,
+                          department: editUserDraft.department,
                           isActive: editUserDraft.isActive,
                         });
                         const nextUsers = await fetchOrgUsers();
@@ -969,6 +988,18 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               ]}
               onChange={(value) => setNewUserDraft((current) => ({ ...current, role: value as NewUserDraft["role"] }))}
             />
+            <Select
+              label={s("users.fields.department")}
+              value={newUserDraft.department}
+              options={[
+                { value: "sales", label: s("departments.sales") },
+                { value: "purchasing", label: s("departments.purchasing") },
+                { value: "accounting", label: s("departments.accounting") },
+                { value: "warehouse", label: s("departments.warehouse") },
+                { value: "viewer", label: s("departments.viewer") },
+              ]}
+              onChange={(value) => setNewUserDraft((current) => ({ ...current, department: value as NewUserDraft["department"] }))}
+            />
             <label className="field checkbox-field">
               <input
                 type="checkbox"
@@ -998,6 +1029,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                       email: newUserEmail,
                       fullName: newUserDraft.fullName.trim(),
                       role: newUserDraft.role,
+                      department: newUserDraft.department,
                       isActive: newUserDraft.isActive,
                     });
                     if (created.welcomeEmailId) {
@@ -1010,6 +1042,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                       email: "",
                       fullName: "",
                       role: "sales",
+                      department: "sales",
                       isActive: true,
                     });
                     const message =

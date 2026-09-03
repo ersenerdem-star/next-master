@@ -5,6 +5,7 @@ import { buildRestUrl, getJson, json, sendJson, serviceRoleHeaders } from "./_sh
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 const allowedRoles = new Set(["superadmin", "admin", "sales", "viewer"]);
+const allowedDepartments = new Set(["management", "sales", "purchasing", "accounting", "warehouse", "viewer"]);
 
 function normalizeEmail(value: unknown) {
   return String(value || "").trim().toLowerCase();
@@ -22,11 +23,13 @@ export default async (req: Request, _context: Context) => {
     const email = normalizeEmail(payload?.email);
     const fullName = String(payload?.fullName || "").trim();
     const role = String(payload?.role || "sales").trim().toLowerCase();
+    const department = String(payload?.department || (role === "superadmin" || role === "admin" ? "management" : role)).trim().toLowerCase();
     const isActive = payload?.isActive !== false;
 
     if (!targetUserId) return json({ error: "User id is required" }, 400);
     if (!email) return json({ error: "Email is required" }, 400);
     if (!allowedRoles.has(role)) return json({ error: "Invalid role" }, 400);
+    if (!allowedDepartments.has(department)) return json({ error: "Invalid department" }, 400);
 
     const targetProfiles = await getJson<Array<{ id: string; email: string; full_name?: string | null; role: string; organization_id: string; is_active: boolean }>>(
       buildRestUrl(caller.supabaseUrl, "profiles", {
@@ -112,6 +115,7 @@ export default async (req: Request, _context: Context) => {
           email,
           full_name: fullName || null,
           role,
+          department,
           is_active: isActive,
         }),
       },

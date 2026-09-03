@@ -31,7 +31,6 @@ import { Button } from "../components/common/Button";
 import { BrandPill } from "../components/common/BrandPill";
 import { DraggableSurface } from "../components/common/DraggableSurface";
 import { useActionFeedback } from "../components/common/ActionFeedback";
-import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 import { ProductVisual, type ProductMediaItem } from "../components/common/ProductVisual";
 import { Select } from "../components/common/Select";
@@ -274,10 +273,6 @@ export function CatalogPage() {
   });
   const numberLocale = locale === "tr" ? "tr-TR" : "en-US";
   const formatCount = (value: number) => value.toLocaleString(numberLocale);
-  const formatCatalogPrice = (value: number | null | undefined) =>
-    value == null || !Number.isFinite(Number(value))
-      ? "-"
-      : Number(value).toLocaleString(numberLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const getSegmentLabel = (value: string | null | undefined) => {
     const normalized = normalizeCatalogMarketSegment(value);
     return normalized ? t(`catalog.segments.${normalized}`) : t("catalog.segments.unassigned");
@@ -996,189 +991,6 @@ export function CatalogPage() {
     return null;
   }
 
-  const columns = useMemo(
-    () => [
-      {
-        key: "image",
-        header: t("catalog.table.image"),
-        render: (row: CatalogRow) => (
-          <ProductVisual
-            imageUrl={row.image_url}
-            brand={drafts[row.product_id]?.brand ?? row.brand}
-            alt={row.product_code}
-            onPreview={
-              row.image_url
-                ? () =>
-                    setPreviewImage({
-                      src: row.image_url || "",
-                      code: row.product_code,
-                      name: row.description || "",
-                    })
-                : null
-            }
-          />
-        ),
-      },
-      {
-        key: "code",
-        header: t("catalog.common.code"),
-        render: (row: CatalogRow) => (
-          <div className="catalog-cell catalog-cell--code">
-            <strong className="catalog-code">{drafts[row.product_id]?.product_code ?? row.product_code}</strong>
-          </div>
-        ),
-      },
-      {
-        key: "ean",
-        header: t("catalog.common.ean"),
-        render: (row: CatalogRow) => (
-          <div className="catalog-cell">
-            <span className="catalog-mono">{drafts[row.product_id]?.ean ?? row.ean ?? "-"}</span>
-          </div>
-        ),
-      },
-      {
-        key: "brand",
-        header: t("catalog.common.brand"),
-        render: (row: CatalogRow) => (
-          <div className="catalog-cell">
-            <BrandPill brand={drafts[row.product_id]?.brand ?? row.brand} compact logoOnly />
-          </div>
-        ),
-      },
-      {
-        key: "segment",
-        header: t("catalog.common.segment"),
-        render: (row: CatalogRow) => (
-          <div className="catalog-cell">
-            <span className="catalog-segment-badge">
-              {getSegmentLabel(drafts[row.product_id]?.market_segment ?? row.market_segment)}
-            </span>
-          </div>
-        ),
-      },
-      {
-        key: "name",
-        header: t("catalog.common.name"),
-        render: (row: CatalogRow) => (
-          <div className="catalog-cell catalog-cell--stack">
-            <strong className="catalog-name">{drafts[row.product_id]?.description ?? row.description ?? "-"}</strong>
-            {row.replacement_warning ? <span className="catalog-inline-flag">{t("catalog.table.replacementMapped")}</span> : null}
-            {row.lifecycle_status === "discontinued" && row.lifecycle_note ? <span className="catalog-inline-flag catalog-inline-flag--danger">{row.lifecycle_note}</span> : null}
-          </div>
-        ),
-      },
-      {
-        key: "bestBuyPrice",
-        header: t("catalog.common.bestBuyPrice"),
-        render: (row: CatalogRow) => (
-          <div className="catalog-cell">
-            <strong className="catalog-mono">{formatCatalogPrice(row.best_buy_price)}</strong>
-          </div>
-        ),
-      },
-      {
-        key: "oem",
-        header: t("catalog.common.oem"),
-        render: (row: CatalogRow) => (
-          <div className="catalog-cell catalog-cell--stack">
-            <span className="catalog-mono catalog-clip">{drafts[row.product_id]?.oem_no ?? row.oem_no ?? "-"}</span>
-          </div>
-        ),
-      },
-      {
-        key: "vehicle",
-        header: t("catalog.common.vehicle"),
-        render: (row: CatalogRow) => (
-          <div className="catalog-cell catalog-cell--stack">
-            <VehicleBadges value={drafts[row.product_id]?.vehicle ?? row.vehicle ?? ""} limit={3} expandable logoOnly />
-          </div>
-        ),
-      },
-      {
-        key: "hs",
-        header: t("catalog.common.hs"),
-        render: (row: CatalogRow) => (
-          <div className="catalog-cell">
-            <span className="catalog-mono">{drafts[row.product_id]?.hs_code ?? row.hs_code ?? "-"}</span>
-          </div>
-        ),
-      },
-      {
-        key: "origin",
-        header: t("catalog.common.origin"),
-        render: (row: CatalogRow) => (
-          <div className="catalog-cell">
-            <span className="catalog-origin-chip">{drafts[row.product_id]?.origin ?? row.origin ?? "-"}</span>
-          </div>
-        ),
-      },
-      {
-        key: "weight",
-        header: t("catalog.common.weight"),
-        render: (row: CatalogRow) => (
-          <div className="catalog-cell">
-            <span className="catalog-mono">{String(drafts[row.product_id]?.weight_kg ?? row.weight_kg ?? "-")}</span>
-          </div>
-        ),
-      },
-      {
-        key: "lifecycle",
-        header: t("catalog.common.lifecycle"),
-        render: (row: CatalogRow) => (
-          <div className="catalog-cell">
-            <span className={`catalog-state-badge ${(drafts[row.product_id]?.lifecycle_status ?? row.lifecycle_status ?? "active") === "discontinued" ? "is-danger" : "is-live"}`}>
-              {getLifecycleLabel(drafts[row.product_id]?.lifecycle_status ?? row.lifecycle_status ?? "active")}
-            </span>
-          </div>
-        ),
-      },
-      {
-        key: "lifecycleNote",
-        header: t("catalog.common.lifecycleNote"),
-        render: (row: CatalogRow) => (
-          <div className="catalog-cell catalog-cell--stack">
-            <span className="catalog-clip">{drafts[row.product_id]?.lifecycle_note ?? row.lifecycle_note ?? "-"}</span>
-          </div>
-        ),
-      },
-      {
-        key: "ref",
-        header: t("catalog.table.ref"),
-        render: (row: CatalogRow) => {
-          const key = `${row.brand.trim().toLowerCase()}::${normalizePartCode(row.product_code)}`;
-          const count = referenceCoverage[key] || 0;
-          return <span className={count ? "status-badge status-badge--success" : "status-badge"}>{count ? t("catalog.table.mappedCount", { count }) : "-"}</span>;
-        },
-      },
-      {
-        key: "integrity",
-        header: t("catalog.integrity.column"),
-        render: (row: CatalogRow) => (
-          <span className={`catalog-state-badge ${getIntegrityTone(row.integrity_status)}`}>
-            {getIntegrityLabel(row.integrity_status)}
-          </span>
-        ),
-      },
-      {
-        key: "actions",
-        header: t("catalog.table.actions"),
-        render: (row: CatalogRow) => (
-          <div className="inline-actions">
-            <Button
-              variant="secondary"
-              className="button--compact"
-              onClick={() => setSelectedCatalogProductId((current) => (current === row.product_id ? "" : row.product_id))}
-            >
-              {selectedCatalogProductId === row.product_id ? t("catalog.actions.close") : t("catalog.actions.inspect")}
-            </Button>
-          </div>
-        ),
-      },
-    ],
-    [drafts, referenceCoverage, selectedCatalogProductId, t, locale],
-  );
-
   async function reloadCatalog(nextSearch = submittedSearch, nextBrand = submittedCatalogBrand, nextSegment = submittedCatalogSegment) {
     if (!isOnline) {
       const cached = readCatalogCache();
@@ -1767,16 +1579,83 @@ export function CatalogPage() {
           </div>
           {!isOnline ? <div className="warning-text">{t("catalog.search.offlineWarning")}</div> : null}
           <div className="workbench-main-layout catalog-workbench-layout">
-            <div className="workbench-main-layout__table">
-              <DataTable
-                wrapClassName="table-wrap--catalog"
-                className="data-table--catalog"
-                rows={rows}
-                columns={columns}
-                emptyText={loading ? t("catalog.empty.loading") : !submittedSearch.trim() && !submittedCatalogBrand && !submittedCatalogSegment && !submittedIntegrityFilter ? t("catalog.empty.prompt") : t("catalog.empty.noProducts")}
-                onRowClick={(row) => setSelectedCatalogProductId((current) => (current === row.product_id ? "" : row.product_id))}
-                rowClassName={(row) => (row.product_id === selectedCatalogProductId ? "data-table__row--active" : "")}
-              />
+            <div className="workbench-main-layout__table catalog-portal-results">
+              {loading ? <div className="empty-state">{t("catalog.empty.loading")}</div> : null}
+              {!loading && !rows.length ? (
+                <div className="empty-state">
+                  {!submittedSearch.trim() && !submittedCatalogBrand && !submittedCatalogSegment && !submittedIntegrityFilter
+                    ? t("catalog.empty.prompt")
+                    : t("catalog.empty.noProducts")}
+                </div>
+              ) : null}
+              {!loading && rows.length ? (
+                <div className="portal-search-card-grid catalog-portal-search-grid">
+                  {rows.map((row) => {
+                    const draft = drafts[row.product_id];
+                    const code = draft?.product_code || row.product_code;
+                    const brand = draft?.brand || row.brand;
+                    const description = draft?.description || row.description;
+                    const isSelected = row.product_id === selectedCatalogProductId;
+                    const lifecycle = draft?.lifecycle_status || row.lifecycle_status || "active";
+                    return (
+                      <article
+                        key={row.product_id}
+                        className={`portal-search-card catalog-portal-search-card${isSelected ? " portal-search-card--active" : ""}`}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={isSelected}
+                        onClick={() => setSelectedCatalogProductId((current) => (current === row.product_id ? "" : row.product_id))}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setSelectedCatalogProductId((current) => (current === row.product_id ? "" : row.product_id));
+                          }
+                        }}
+                      >
+                        <div className="portal-search-card__top">
+                          <div className="portal-search-card__media">
+                            <ProductVisual imageUrl={row.image_url} brand={brand} alt={code} detail />
+                          </div>
+                          <div className="portal-search-card__meta">
+                            <div className="portal-search-card__code">{code || "-"}</div>
+                            <BrandPill brand={brand} compact withLogo />
+                            <span className={`catalog-state-badge ${lifecycle === "discontinued" ? "is-danger" : "is-live"}`}>
+                              {getLifecycleLabel(lifecycle)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="portal-search-card__body">
+                          <strong>{description || "-"}</strong>
+                          {row.vehicle ? <VehicleBadges value={draft?.vehicle || row.vehicle} compact limit={3} logoOnly /> : null}
+                          <div className="portal-search-card__specs">
+                            <span>OEM {draft?.oem_no || row.oem_no || "-"}</span>
+                            <span>HS {draft?.hs_code || row.hs_code || "-"}</span>
+                            <span>{draft?.origin || row.origin || "No origin"}</span>
+                            <span>{draft?.weight_kg ?? row.weight_kg ?? "-"} kg</span>
+                          </div>
+                          {row.replacement_warning ? <div className="portal-search-card__warning portal-search-card__warning--accent">{t("catalog.table.replacementMapped")}</div> : null}
+                          {lifecycle === "discontinued" && (draft?.lifecycle_note || row.lifecycle_note) ? (
+                            <div className="portal-search-card__warning">{draft?.lifecycle_note || row.lifecycle_note}</div>
+                          ) : null}
+                        </div>
+                        <div className="portal-search-card__actions">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="button--compact"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedCatalogProductId((current) => (current === row.product_id ? "" : row.product_id));
+                            }}
+                          >
+                            {isSelected ? t("catalog.actions.close") : t("catalog.actions.inspect")}
+                          </Button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1933,7 +1812,6 @@ export function CatalogPage() {
               <div><span>{t("catalog.common.hs")}</span><strong>{selectedCatalogDraft.hs_code || "-"}</strong></div>
               <div><span>{t("catalog.common.origin")}</span><strong>{selectedCatalogDraft.origin || "-"}</strong></div>
               <div><span>{t("catalog.common.weight")}</span><strong>{selectedCatalogDraft.weight_kg ?? "-"}</strong></div>
-              <div><span>{t("catalog.common.bestBuyPrice")}</span><strong>{formatCatalogPrice(selectedCatalogDraft.best_buy_price)}</strong></div>
               <div><span>{t("catalog.detail.referenceLinks")}</span><strong>{referenceCoverage[`${selectedCatalogRow.brand.trim().toLowerCase()}::${normalizePartCode(selectedCatalogRow.product_code)}`] || 0}</strong></div>
               {selectedCatalogDraft.replacement_warning ? <div><span>{t("catalog.detail.replacement")}</span><strong>{selectedCatalogDraft.replacement_warning}</strong></div> : null}
             </div>
