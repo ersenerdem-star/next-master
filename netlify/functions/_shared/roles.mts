@@ -12,20 +12,22 @@ export function isSuperadminRole(role: string | null | undefined) {
   return normalizeAppRole(role) === "superadmin";
 }
 
-export function isAdminLikeRole(role: string | null | undefined) {
+export function isAdminLikeRole(role: string | null | undefined, department?: string | null) {
   const normalized = normalizeAppRole(role);
-  return normalized === "superadmin" || normalized === "admin";
+  return normalized === "superadmin" || normalized === "admin" || String(department || "").toLowerCase() === "management";
 }
 
-export function isCustomerStaffRole(role: string | null | undefined) {
+export function isCustomerStaffRole(role: string | null | undefined, department?: string | null) {
   const normalized = normalizeAppRole(role);
-  return normalized === "superadmin" || normalized === "admin" || normalized === "sales";
+  const normalizedDepartment = String(department || "").toLowerCase();
+  return normalized === "superadmin" || normalized === "admin" || normalized === "sales" || normalizedDepartment === "sales" || normalizedDepartment === "accounting";
 }
 
-export function canAccessCustomerOps(role: string | null | undefined) {
-  return isCustomerStaffRole(role);
+export function canAccessCustomerOps(role: string | null | undefined, department?: string | null) {
+  return isCustomerStaffRole(role, department);
 }
 
-export function canAccessOperationsModules(role: string | null | undefined) {
-  return isAdminLikeRole(role);
+export function canAccessOperationsModules(role: string | null | undefined, department?: string | null) {
+  const normalizedDepartment = String(department || "").toLowerCase();
+  return isAdminLikeRole(role, department) || ["purchasing", "accounting", "warehouse"].includes(normalizedDepartment);
 }
