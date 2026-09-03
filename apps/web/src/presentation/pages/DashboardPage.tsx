@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchCustomerOpsDashboardSnapshot,
   fetchDashboardLatestQuotes,
@@ -42,6 +42,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
   });
   const [inventoryPulseErrorKey, setInventoryPulseErrorKey] = useState<string | null>(null);
   const [revenuePeriod, setRevenuePeriod] = useState<RevenuePeriodKey>("thisMonth");
+  const dashboardLoadInFlight = useRef(false);
   const showSystemPanels = canAccessSystemModules(role);
   const canLoadDashboard = showSystemPanels || canAccessCustomerOps(role);
   const portalAlertCutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -62,6 +63,8 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
     let cancelled = false;
 
     async function run() {
+      if (dashboardLoadInFlight.current) return;
+      dashboardLoadInFlight.current = true;
       setSnapshotErrorKey(null);
       try {
         const result = showSystemPanels ? await fetchDashboardSnapshot() : await fetchCustomerOpsDashboardSnapshot();
@@ -71,12 +74,19 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab 
           console.error(caught);
           setSnapshotErrorKey("dashboard.errors.snapshotLoadFailed");
         }
+      } finally {
+        dashboardLoadInFlight.current = false;
       }
     }
 
-    run();
+    void run();
+    const intervalId = window.setInterval(() => void run(), 60 * 1000);
+    const handleFocus = () => void run();
+    window.addEventListener("focus", handleFocus);
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
     };
   }, [canLoadDashboard, showSystemPanels]);
 
