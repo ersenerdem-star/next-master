@@ -921,27 +921,6 @@ async function hydratePortalCatalogItems(
           bestOption.buy_price == null ? null : roundMoney(Number(bestOption.buy_price) * (1 + marginPercent / 100)),
       });
     }
-    if (prefersCPriceWhereAvailable(context)) {
-      const cPriceMap = await fetchCPriceMap(
-        supabaseUrl,
-        serviceRoleKey,
-        invite.organization_id,
-        context.cPriceListIds,
-        baseItems.map((item) => ({
-          brand: item.brand,
-          product_code: item.code,
-        })),
-        timeoutMs,
-      ).catch(() => new Map());
-      for (const item of baseItems) {
-        const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
-        const cPrice = cPriceMap.get(key);
-        if (cPrice == null) continue;
-        previewByCode.set(key, {
-          sell_price: cPrice,
-        });
-      }
-    }
   }
 
   return baseItems.map((item) => {
@@ -2277,7 +2256,7 @@ export async function preparePortalOrderLines(
     prepared.push(...resolvedChunk);
   }
 
-  if ((context.customerType === "C" || prefersCPriceWhereAvailable(context)) && prepared.length) {
+  if (context.customerType === "C" && prepared.length) {
     const cPriceMap = await fetchCPriceMap(
       supabaseUrl,
       serviceRoleKey,
