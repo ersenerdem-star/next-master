@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const DEFAULT_SITE_NAME = "ersen-quote-desk";
-const DEFAULT_SITE_URL = "https://ersen-quote-desk.netlify.app";
+const DEFAULT_SITE_URL = "https://portal.next-master.com";
 
 function read(command, args, options = {}) {
   return String(execFileSync(command, args, { encoding: "utf8", ...options }) || "").trim();
@@ -57,7 +57,10 @@ function resolveNetlifyState(repoRoot) {
     siteId,
     localLinked: Boolean(siteId),
     siteName: process.env.NETLIFY_SITE_NAME || localState.siteName || DEFAULT_SITE_NAME,
-    siteUrl: trimSlash(process.env.NETLIFY_SITE_URL || process.env.URL || localState.siteUrl || DEFAULT_SITE_URL),
+    // Verify the public production domain, not Netlify's technical fallback
+    // URL. NETLIFY_PUBLIC_SITE_URL can be used by CI when the custom domain
+    // is not present in local Netlify state.
+    siteUrl: trimSlash(process.env.NETLIFY_PUBLIC_SITE_URL || "https://portal.next-master.com"),
   };
 }
 
