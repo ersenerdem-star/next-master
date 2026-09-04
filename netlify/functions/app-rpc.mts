@@ -1120,11 +1120,11 @@ export default async (req: Request, context: Context) => {
       return json({ error: "Superadmin access required" }, 403);
     }
 
-    if (OPERATIONS_RPCS.has(name) && !canAccessOperationsModules(caller.role, caller.department)) {
+    if (OPERATIONS_RPCS.has(name) && !canAccessOperationsModules(caller.role, caller.department, caller.permissions)) {
       return json({ error: "This area is not enabled for your user. Ask superadmin to open the required permission." }, 403);
     }
 
-    if (CUSTOMER_STAFF_RPCS.has(name) && !canAccessCustomerOps(caller.role, caller.department)) {
+    if (CUSTOMER_STAFF_RPCS.has(name) && !canAccessCustomerOps(caller.role, caller.department, caller.permissions)) {
       return json({ error: "Staff access required" }, 403);
     }
 

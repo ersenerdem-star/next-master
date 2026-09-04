@@ -25,6 +25,8 @@ export default async (req: Request, _context: Context) => {
         organization_id: caller.organizationId,
         role: caller.role,
         department: caller.department,
+        permissions: caller.permissions,
+        customer_scope_mode: caller.customerScopeMode,
       },
     });
   } catch (error) {

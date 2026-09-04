@@ -771,8 +771,9 @@ function stripCustomerOptionalFields(payload: Record<string, unknown>) {
   return next;
 }
 
-async function listScopedCustomerIds(supabaseUrl: string, serviceRoleKey: string, caller: { id: string; organizationId: string; role: string }) {
+async function listScopedCustomerIds(supabaseUrl: string, serviceRoleKey: string, caller: { id: string; organizationId: string; role: string; customerScopeMode?: "all" | "assigned" }) {
   if (caller.role === "admin" || caller.role === "superadmin") return null;
+  if (caller.customerScopeMode !== "assigned") return null;
   const accessRows = await getJson<Array<{ customer_id?: string }>>(
     buildRestUrl(supabaseUrl, "profile_customer_access", {
       select: "customer_id",
@@ -792,13 +793,13 @@ async function listScopedCustomerIds(supabaseUrl: string, serviceRoleKey: string
     { headers: serviceRoleHeaders(serviceRoleKey) },
   ).catch(() => []);
   const ids = [...new Set([...accessRows.map((row) => String(row.customer_id || "")), ...ownedRows.map((row) => String(row.id || ""))].filter(Boolean))];
-  // Preserve legacy visibility until an administrator assigns the first scope.
-  return ids.length ? ids : null;
+  return ids;
 }
 
-async function listCustomers(supabaseUrl: string, serviceRoleKey: string, caller: { id: string; organizationId: string; role: string }) {
+async function listCustomers(supabaseUrl: string, serviceRoleKey: string, caller: { id: string; organizationId: string; role: string; customerScopeMode?: "all" | "assigned" }) {
   const scopedIds = await listScopedCustomerIds(supabaseUrl, serviceRoleKey, caller);
-  const scopeFilter = scopedIds ? { id: `in.(${scopedIds.join(",")})` } : {};
+  if (scopedIds && scopedIds.length === 0) return [];
+  const scopeFilter = scopedIds !== null ? { id: `in.(${scopedIds.join(",")})` } : {};
   try {
     return await listRows<Record<string, unknown>>({
       supabaseUrl,
@@ -826,10 +827,10 @@ async function listCustomers(supabaseUrl: string, serviceRoleKey: string, caller
   }
 }
 
-async function assertCustomerScope(input: { supabaseUrl: string; serviceRoleKey: string; caller: { id: string; organizationId: string; role: string }; customerId: string }) {
+async function assertCustomerScope(input: { supabaseUrl: string; serviceRoleKey: string; caller: { id: string; organizationId: string; role: string; customerScopeMode?: "all" | "assigned" }; customerId: string }) {
   if (!input.customerId || input.caller.role === "admin" || input.caller.role === "superadmin") return;
   const scopedIds = await listScopedCustomerIds(input.supabaseUrl, input.serviceRoleKey, input.caller);
-  if (scopedIds && !scopedIds.includes(input.customerId)) {
+  if (scopedIds !== null && !scopedIds.includes(input.customerId)) {
     throw new Error("You do not have access to this customer card.");
   }
 }
@@ -992,8 +993,8 @@ export default async (req: Request, _context: Context) => {
     const action = String(body?.action || "").trim();
     const payload = isObject(body?.payload) ? body.payload : {};
     const id = String(body?.id || "").trim();
-    const canUseCustomerRecords = canAccessCustomerOps(caller.role, caller.department);
-    const canUseOperationsModules = canAccessOperationsModules(caller.role, caller.department);
+    const canUseCustomerRecords = canAccessCustomerOps(caller.role, caller.department, caller.permissions);
+    const canUseOperationsModules = canAccessOperationsModules(caller.role, caller.department, caller.permissions);
     const isSuperadmin = isSuperadminRole(caller.role);
 
     if (resource === "customers") {

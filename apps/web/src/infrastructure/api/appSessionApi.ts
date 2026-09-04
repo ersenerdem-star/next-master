@@ -11,6 +11,8 @@ type AppSessionResponse = {
     organization_id?: string;
     role?: string;
     department?: string;
+    permissions?: Record<string, boolean>;
+    customer_scope_mode?: "all" | "assigned" | string;
   };
   error?: string;
 };
@@ -21,6 +23,8 @@ type AppSessionSnapshot = {
   organizationId: string;
   role: string;
   department: string;
+  permissions: Record<string, boolean>;
+  customerScopeMode: "all" | "assigned";
 };
 
 const APP_SESSION_CACHE_KEY = "next-master-app-session-cache";
@@ -75,6 +79,8 @@ export async function fetchAppSession(forceRefresh = false): Promise<AppSessionS
     organizationId: String(data.profile?.organization_id || ""),
     role: String(data.profile?.role || ""),
     department: String(data.profile?.department || "viewer"),
+    permissions: data.profile?.permissions && typeof data.profile.permissions === "object" ? data.profile.permissions : {},
+    customerScopeMode: (data.profile?.customer_scope_mode === "assigned" ? "assigned" : "all") as "all" | "assigned",
   };
   if (!next.userId || !next.organizationId) {
     throw new Error("Session details could not be loaded right now.");
