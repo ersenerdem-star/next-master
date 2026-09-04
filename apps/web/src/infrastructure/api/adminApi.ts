@@ -9,6 +9,21 @@ const testEmailUrl = import.meta.env.VITE_ADMIN_TEST_EMAIL_URL || "/api/admin-te
 const syncBrandCatalogUrl = import.meta.env.VITE_ADMIN_SYNC_BRAND_CATALOG_URL || "/api/admin-sync-brand-catalog";
 const bulkSyncBrandCatalogUrl =
   import.meta.env.VITE_ADMIN_BULK_SYNC_BRAND_CATALOG_URL || "/api/admin-sync-brand-catalog-background";
+const userAccessUrl = import.meta.env.VITE_ADMIN_USER_ACCESS_URL || "/api/admin-user-access";
+
+export const STAFF_PERMISSION_KEYS = [
+  "customers.view", "customers.manage", "catalog.view", "catalog.manage",
+  "sales.orders", "sales.invoices", "purchasing.orders", "purchasing.receive",
+  "supplier_prices.view", "supplier_prices.manage", "inventory.view",
+  "finance.view", "finance.manage", "reports.view",
+] as const;
+export type StaffPermissionKey = (typeof STAFF_PERMISSION_KEYS)[number];
+export type OrgUserAccess = {
+  userId: string;
+  scopeMode: "all" | "assigned";
+  permissions: Record<StaffPermissionKey, boolean>;
+  customerIds: string[];
+};
 
 export type AdminDiagnostics = {
   runtime: {
@@ -151,6 +166,35 @@ export async function updateOrgUser(input: {
     role: string;
     isActive: boolean;
   };
+}
+
+export async function fetchOrgUserAccess(userId: string): Promise<OrgUserAccess> {
+  const accessToken = await getCallerAccessToken();
+  const response = await fetch(userAccessUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ action: "get", userId }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || "User access settings could not be loaded");
+  return payload as OrgUserAccess;
+}
+
+export async function saveOrgUserAccess(input: {
+  userId: string;
+  scopeMode: "all" | "assigned";
+  permissions: Record<StaffPermissionKey, boolean>;
+  customerIds: string[];
+}) {
+  const accessToken = await getCallerAccessToken();
+  const response = await fetch(userAccessUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ action: "save", ...input }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || "User access settings could not be saved");
+  return payload as OrgUserAccess & { ok: boolean };
 }
 
 export async function fetchAdminDiagnostics(): Promise<AdminDiagnostics> {

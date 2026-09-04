@@ -19,6 +19,7 @@ import {
   normalizeAppRole,
   type AppRole,
   type AppDepartment,
+  type AppPermissionMap,
 } from "../shared/roles";
 
 const CATALOG_OBSERVATION_REVIEW_PATH = "/catalog/observation-review";
@@ -138,34 +139,37 @@ const allNavItems = [
   { key: "Mira", code: "08", labelKey: "nav.mira", captionKey: "nav.miraCaption" },
 ] as const;
 
-function getAllowedNavItems(role: AppRole, department: AppDepartment = "") {
+function getAllowedNavItems(role: AppRole, department: AppDepartment = "", permissions?: AppPermissionMap) {
   if (isSuperadminRole(role)) return allNavItems;
-  if (canAccessOperationsModules(role, department)) {
+  if (canAccessOperationsModules(role, department, permissions)) {
     return allNavItems.filter((item) => item.key === "Home" || item.key === "CatalogReview" || item.key === "Inventory" || item.key === "Sales" || item.key === "Purchases" || item.key === "Reports" || item.key === "Settings");
   }
-  if (canAccessSalesModules(role, department)) {
+  if (canAccessSalesModules(role, department, permissions)) {
     return allNavItems.filter((item) => item.key === "Home" || item.key === "Sales" || item.key === "Settings");
+  }
+  if (permissions?.["catalog.view"] === true) {
+    return allNavItems.filter((item) => item.key === "Home" || item.key === "Items" || item.key === "Settings");
   }
   return allNavItems.filter((item) => item.key === "Home" || item.key === "Settings");
 }
 
-function getSalesSubNav(role: AppRole, department: AppDepartment = "") {
-  if (!canAccessSalesModules(role, department)) return [] as const;
+function getSalesSubNav(role: AppRole, department: AppDepartment = "", permissions?: AppPermissionMap) {
+  if (!canAccessSalesModules(role, department, permissions)) return [] as const;
   return salesSubNav.filter((item) => item.key !== "Price Lists" || isSuperadminRole(role));
 }
 
-function getInventorySubNav(role: AppRole, department: AppDepartment = "") {
-  if (!canAccessInventoryModules(role, department)) return [] as const;
+function getInventorySubNav(role: AppRole, department: AppDepartment = "", permissions?: AppPermissionMap) {
+  if (!canAccessInventoryModules(role, department, permissions)) return [] as const;
   return inventorySubNav;
 }
 
-function getPurchasesSubNav(role: AppRole, department: AppDepartment = "") {
-  if (!canAccessPurchasingModules(role, department)) return [] as const;
+function getPurchasesSubNav(role: AppRole, department: AppDepartment = "", permissions?: AppPermissionMap) {
+  if (!canAccessPurchasingModules(role, department, permissions)) return [] as const;
   return purchasesSubNav;
 }
 
-function getReportsSubNav(role: AppRole, department: AppDepartment = "") {
-  if (!canAccessReportModules(role, department)) return [] as const;
+function getReportsSubNav(role: AppRole, department: AppDepartment = "", permissions?: AppPermissionMap) {
+  if (!canAccessReportModules(role, department, permissions)) return [] as const;
   return reportsSubNav;
 }
 
@@ -223,6 +227,7 @@ export function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [appRole, setAppRole] = useState<AppRole>(initialAppRole);
   const [appDepartment, setAppDepartment] = useState<AppDepartment>(initialAppDepartment);
+  const [appPermissions, setAppPermissions] = useState<AppPermissionMap>(initialAppSession?.permissions || {});
   const [appRoleReady, setAppRoleReady] = useState(Boolean(initialAppRole));
   const appRoleRef = useRef<AppRole>(initialAppRole);
   const [appSessionReloadTick, setAppSessionReloadTick] = useState(0);
@@ -297,6 +302,7 @@ export function App() {
         clearCachedAppSession();
         setAppRole("");
         setAppDepartment("viewer");
+        setAppPermissions({});
         setAppRoleReady(true);
         setRecoveryMode(true);
         setLoggedIn(false);
@@ -307,6 +313,7 @@ export function App() {
         clearCachedAppSession();
         setAppRole("");
         setAppDepartment("viewer");
+        setAppPermissions({});
         setAppRoleReady(true);
         setRecoveryMode(false);
         setLoggedIn(false);
@@ -318,6 +325,7 @@ export function App() {
         clearCachedAppSession();
         setAppRole("");
         setAppDepartment("viewer");
+        setAppPermissions({});
         setAppRoleReady(true);
         setLoggedIn(false);
         setSessionReady(true);
@@ -353,6 +361,7 @@ export function App() {
     if (!loggedIn || isPortalRoute) {
       setAppRole("");
       setAppDepartment("viewer");
+      setAppPermissions({});
       setAppRoleReady(true);
       return;
     }
@@ -373,6 +382,7 @@ export function App() {
         if (cancelled) return;
         setAppRole(normalizeAppRole(session.role));
         setAppDepartment(String(session.department || "viewer"));
+        setAppPermissions(session.permissions || {});
       } catch {
         if (!cancelled) {
           setAppRole((current) => current || appRoleRef.current || "");
@@ -686,12 +696,12 @@ export function App() {
     showAccessNotice(t("errors.detailAccessDenied"));
   }
 
-  const salesSubNavItems = useMemo(() => getSalesSubNav(appRole, appDepartment), [appRole, appDepartment]);
-  const inventorySubNavItems = useMemo(() => getInventorySubNav(appRole, appDepartment), [appRole, appDepartment]);
-  const purchasesSubNavItems = useMemo(() => getPurchasesSubNav(appRole, appDepartment), [appRole, appDepartment]);
-  const reportsSubNavItems = useMemo(() => getReportsSubNav(appRole, appDepartment), [appRole, appDepartment]);
+  const salesSubNavItems = useMemo(() => getSalesSubNav(appRole, appDepartment, appPermissions), [appRole, appDepartment, appPermissions]);
+  const inventorySubNavItems = useMemo(() => getInventorySubNav(appRole, appDepartment, appPermissions), [appRole, appDepartment, appPermissions]);
+  const purchasesSubNavItems = useMemo(() => getPurchasesSubNav(appRole, appDepartment, appPermissions), [appRole, appDepartment, appPermissions]);
+  const reportsSubNavItems = useMemo(() => getReportsSubNav(appRole, appDepartment, appPermissions), [appRole, appDepartment, appPermissions]);
   const settingsSubNavItems = useMemo(() => getSettingsSubNav(appRole, appDepartment), [appRole, appDepartment]);
-  const allowedNavItems = useMemo(() => getAllowedNavItems(appRole, appDepartment), [appRole, appDepartment]);
+  const allowedNavItems = useMemo(() => getAllowedNavItems(appRole, appDepartment, appPermissions), [appRole, appDepartment, appPermissions]);
   const isCatalogReviewRoute = workspacePath.startsWith(CATALOG_OBSERVATION_REVIEW_PATH);
   const isCatalogReadRoute = isCatalogReviewRoute;
   const shellActivePage = isCatalogReadRoute ? "CatalogReview" : activePage;
@@ -761,7 +771,7 @@ export function App() {
   const subNavItems =
     isCatalogReadRoute
       ? catalogReviewSubNav
-      : activePage === "Items" && canAccessSystemModules(appRole)
+      : activePage === "Items" && (canAccessSystemModules(appRole) || Boolean(appPermissions["catalog.view"]))
       ? itemSubNav
       : activePage === "Inventory" && canAccessInventoryModules(appRole, appDepartment)
         ? inventorySubNavItems
@@ -837,14 +847,14 @@ export function App() {
     return <div className="loading-screen">{t("common.loadingWorkspace")}</div>;
   }
 
-  if (isCatalogReadRoute && !canAccessCatalogReviewModules(appRole, appDepartment)) {
+  if (isCatalogReadRoute && !canAccessCatalogReviewModules(appRole, appDepartment, appPermissions)) {
     return <div className="loading-screen">{t("errors.catalogReviewAccessDenied")}</div>;
   }
 
   const pageContent =
     isCatalogReviewRoute ? (
       <CatalogObservationReviewPage />
-    ) : activePage === "Items" && canAccessSystemModules(appRole) ? (
+    ) : activePage === "Items" && (canAccessSystemModules(appRole) || Boolean(appPermissions["catalog.view"])) ? (
       <ItemsPage activeTab={itemsTab} />
     ) : activePage === "Inventory" && canAccessInventoryModules(appRole, appDepartment) ? (
       <InventoryPage initialTab={inventoryInitialTab} selectedWarehouseId={inventorySelectedWarehouseId} stockSearch={inventoryStockSearch} />

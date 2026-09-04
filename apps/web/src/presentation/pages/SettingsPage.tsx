@@ -7,6 +7,10 @@ import {
   resetOrgUserPassword,
   sendAdminTestEmail,
   updateOrgUser,
+  fetchOrgUserAccess,
+  saveOrgUserAccess,
+  STAFF_PERMISSION_KEYS,
+  type StaffPermissionKey,
   type AdminDiagnostics,
 } from "../../infrastructure/api/adminApi";
 import { createEmptyCloudCompanyProfile, deleteCompanyProfileById, fetchCompanyProfiles, upsertCompanyProfile } from "../../infrastructure/api/companyProfilesApi";
@@ -131,6 +135,8 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const [emailDateFrom, setEmailDateFrom] = useState("");
   const [emailDateTo, setEmailDateTo] = useState("");
   const [editUserDraft, setEditUserDraft] = useState<EditUserDraft | null>(null);
+  const [editUserAccess, setEditUserAccess] = useState<{ scopeMode: "all" | "assigned"; permissions: Record<StaffPermissionKey, boolean>; customerIds: string[] } | null>(null);
+  const [loadingUserAccess, setLoadingUserAccess] = useState(false);
   const passwordResetAvailable = isPasswordResetAvailable();
   const newUserEmail = newUserDraft.email.trim().toLowerCase();
   const newUserValidationMessage = !newUserEmail ? s("users.validation.emailRequired") : "";
@@ -266,6 +272,11 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
       isActive: row.is_active,
     });
     setUserActionStatus(s("users.feedback.editing", { email: row.email }));
+    setEditUserAccess(null);
+    setLoadingUserAccess(true);
+    void fetchOrgUserAccess(row.user_id).then((access) => setEditUserAccess(access)).catch((caught) => {
+      setUserActionStatus(caught instanceof Error ? caught.message : s("users.errors.loadFailed"));
+    }).finally(() => setLoadingUserAccess(false));
   }
 
   const userColumns = [
@@ -892,6 +903,48 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                 ]}
                 onChange={(value) => setEditUserDraft((current) => (current ? { ...current, department: value as EditUserDraft["department"] } : current))}
               />
+              <div className="field" style={{ gridColumn: "1 / -1" }}>
+                <span className="field__label">Customer scope / Cari kapsamı</span>
+                {loadingUserAccess ? <div className="meta-row">Loading access settings…</div> : editUserAccess ? (
+                  <>
+                    <Select
+                      value={editUserAccess.scopeMode}
+                      options={[{ value: "all", label: "All customers / Tüm cariler" }, { value: "assigned", label: "Assigned or owned only / Atanmış veya kendi carileri" }]}
+                      onChange={(value) => setEditUserAccess((current) => current ? { ...current, scopeMode: value as "all" | "assigned" } : current)}
+                    />
+                    <div className="settings-grid" style={{ marginTop: 12 }}>
+                      {STAFF_PERMISSION_KEYS.map((permission) => (
+                        <label className="field checkbox-field" key={permission}>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(editUserAccess.permissions[permission])}
+                            onChange={(event) => setEditUserAccess((current) => current ? { ...current, permissions: { ...current.permissions, [permission]: event.target.checked } } : current)}
+                          />
+                          <span className="field__label">{permission}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {editUserAccess.scopeMode === "assigned" ? (
+                      <div className="settings-grid" style={{ marginTop: 12, maxHeight: 220, overflowY: "auto" }}>
+                        {customers.map((customer) => (
+                          <label className="field checkbox-field" key={customer.id}>
+                            <input
+                              type="checkbox"
+                              checked={editUserAccess.customerIds.includes(customer.id)}
+                              onChange={(event) => setEditUserAccess((current) => {
+                                if (!current) return current;
+                                const ids = event.target.checked ? [...new Set([...current.customerIds, customer.id])] : current.customerIds.filter((id) => id !== customer.id);
+                                return { ...current, customerIds: ids };
+                              })}
+                            />
+                            <span className="field__label">{customer.display_name || customer.company_name || customer.email || customer.id}</span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
+                ) : <div className="meta-row">Access settings could not be loaded.</div>}
+              </div>
               <label className="field checkbox-field">
                 <input
                   type="checkbox"
@@ -927,6 +980,14 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                           department: editUserDraft.department,
                           isActive: editUserDraft.isActive,
                         });
+                        if (editUserAccess) {
+                          await saveOrgUserAccess({
+                            userId: editUserDraft.userId,
+                            scopeMode: editUserAccess.scopeMode,
+                            permissions: editUserAccess.permissions,
+                            customerIds: editUserAccess.customerIds,
+                          });
+                        }
                         const nextUsers = await fetchOrgUsers();
                         setUsers(nextUsers);
                         setEditUserDraft(null);
