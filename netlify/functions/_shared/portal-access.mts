@@ -137,8 +137,15 @@ function normalizePortalInviteRow(row: PortalInviteRow | null | undefined) {
 }
 
 async function fetchPortalInvitesByEmail(supabaseUrl: string, serviceRoleKey: string, email: string, organizationId = "", sellerCompanyProfileId = "") {
+  // Email is an attacker-controlled lookup key. A raw `ilike.<input>` value
+  // turns `%` and `_` into SQL wildcards, which can make an unscoped login
+  // select another tenant's invite. Invite creation normalizes addresses to
+  // lowercase, so use strict equality and never let user input become a LIKE
+  // pattern.
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!normalizedEmail) return [];
   const params = {
-    email: `ilike.${String(email || "").trim().toLowerCase()}`,
+    email: `eq.${normalizedEmail}`,
     ...(String(organizationId || "").trim() ? { organization_id: `eq.${String(organizationId).trim()}` } : {}),
     ...(String(sellerCompanyProfileId || "").trim() ? { seller_company_profile_id: `eq.${String(sellerCompanyProfileId).trim()}` } : {}),
     order: "updated_at.desc",
@@ -213,18 +220,30 @@ async function fetchPortalNotifications(supabaseUrl: string, serviceRoleKey: str
   const rows = await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "portal_audit_logs", {
     select: "id,event_type,status,details,created_at",
     invite_id: `eq.${inviteId}`,
-    event_type: "eq.sales_order_deleted_by_admin",
+    event_type: "in.(sales_order_deleted_by_admin,portal_catalog_brand_added,portal_price_list_updated)",
     status: "eq.ok",
     order: "created_at.desc",
     limit: "20",
   });
   return rows.map((row) => {
     const details = row.details && typeof row.details === "object" ? (row.details as Record<string, unknown>) : {};
+    const eventType = String(row.event_type || "portal_update");
+    const title = eventType === "portal_catalog_brand_added"
+      ? "New catalog brand available"
+      : eventType === "portal_price_list_updated"
+        ? "New price list available"
+        : "Sales order deleted by seller";
     return {
       id: String(row.id || `${inviteId}-${row.created_at || "notification"}`),
-      type: String(row.event_type || "portal_update"),
-      title: "Sales order deleted by seller",
-      message: String(details.message || "The seller deleted this confirmed order. You can now delete this order from your portal."),
+      type: eventType,
+      title,
+      message: String(details.message || (
+        eventType === "portal_catalog_brand_added"
+          ? "A new catalog brand is now available in your customer portal."
+          : eventType === "portal_price_list_updated"
+            ? "A new customer price list is now available in your customer portal."
+            : "The seller deleted this confirmed order. You can now delete this order from your portal."
+      )),
       created_at: String(row.created_at || ""),
       order_id: String(details.order_id || "") || undefined,
       order_no: String(details.sales_order_no || "") || undefined,
@@ -235,22 +254,21 @@ async function fetchPortalNotifications(supabaseUrl: string, serviceRoleKey: str
 function buildPortalCustomerHistoryParams(
   organizationId: string,
   customerId: string,
-  customerName: string,
   sellerCompanyName: string,
 ) {
   const normalizedCustomerId = String(customerId || "").trim();
-  const normalizedCustomerName = String(customerName || "").trim();
-  const customerFilter = normalizedCustomerId && normalizedCustomerName
-    ? { or: `(customer_id.eq.${normalizedCustomerId},customer_name.eq.${normalizedCustomerName})` }
-    : normalizedCustomerId
-      ? { customer_id: `eq.${normalizedCustomerId}` }
-      : normalizedCustomerName
-        ? { customer_name: `eq.${normalizedCustomerName}` }
-        : {};
+  // Customer names are presentation data and are not unique. Once an invite
+  // carries a customer UUID, every commercial history query must use that
+  // immutable identifier. Falling back to `customer_name` creates a same-name
+  // customer IDOR within one organization. A missing UUID is a configuration
+  // error and must fail closed rather than broaden the query.
+  if (!normalizedCustomerId) {
+    throw new Error("Portal invite is missing its customer scope.");
+  }
 
   return {
     organization_id: `eq.${organizationId}`,
-    ...customerFilter,
+    customer_id: `eq.${normalizedCustomerId}`,
     ...(sellerCompanyName ? { seller_company: `eq.${sellerCompanyName}` } : {}),
     order: "updated_at.desc",
     limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
@@ -327,28 +345,10 @@ async function fetchPortalHistoryRows(
 
   if (compactRows.length) return attachDetailLines(compactRows);
 
-  // If the combined OR filter was the expensive part under load, retry the
-  // same tenant-scoped request as two simple indexed lookups and deduplicate
-  // by document id. This still never broadens the customer/seller scope.
-  const customerFilter = params.or;
-  if (!customerFilter) return compactRows;
-  const match = customerFilter.match(/^\(customer_id\.eq\.([^,]+),customer_name\.eq\.(.*)\)$/);
-  if (!match) return compactRows;
-  const [, customerId, customerName] = match;
-  const { or: _or, ...baseParams } = params;
-  const [byId, byName] = await Promise.all([
-    fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
-      select: compactSelect,
-      ...baseParams,
-      customer_id: `eq.${customerId}`,
-    }),
-    fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, table, {
-      select: compactSelect,
-      ...baseParams,
-      customer_name: `eq.${customerName}`,
-    }),
-  ]);
-  return attachDetailLines(dedupeById([...byId, ...byName]));
+  // There is deliberately no name-based retry here.  A customer name is not
+  // an authorization boundary; if the UUID-scoped query is unavailable or
+  // empty, return an empty history rather than broadening it by name.
+  return compactRows;
 }
 
 async function fetchFirstOptional<T>(supabaseUrl: string, serviceRoleKey: string, table: string, params: Record<string, string>) {
@@ -447,6 +447,10 @@ function getEmbeddedCustomerPriceListType(meta: Record<string, unknown>) {
   const value = String(meta.price_list_type || "").trim();
   if (value === "A" || value === "B" || value === "C" || value === "Other") return value;
   return "";
+}
+
+function normalizePortalDisplayPriceListType(value: unknown): "A" | "B" {
+  return String(value || "").trim().toUpperCase() === "B" ? "B" : "A";
 }
 
 function readCustomerPortalMetadata(customer: Record<string, unknown> | null) {
@@ -662,7 +666,15 @@ async function fetchPortalInviteByEmailPreview(supabaseUrl: string, serviceRoleK
   const normalizedEmail = String(email || "").trim().toLowerCase();
   if (!normalizedEmail) return null;
   const invites = await fetchPortalInvitesByEmail(supabaseUrl, serviceRoleKey, normalizedEmail, organizationId, sellerCompanyProfileId);
-  return invites.find((invite) => isPortalInviteUsable(invite)) || invites.find((invite) => isPortalInvitePasswordReady(invite)) || null;
+  const candidates = invites.filter((invite) => isPortalInviteUsable(invite) || isPortalInvitePasswordReady(invite));
+  // An address can legitimately have multiple historical rows in one tenant,
+  // but an unscoped address that resolves to multiple organizations is
+  // ambiguous. Refuse to issue a session until the seller domain supplies the
+  // tenant context.
+  if (!organizationId && new Set(candidates.map((invite) => String(invite.organization_id || "").trim()).filter(Boolean)).size > 1) {
+    return null;
+  }
+  return candidates.find((invite) => isPortalInviteUsable(invite)) || candidates.find((invite) => isPortalInvitePasswordReady(invite)) || null;
 }
 
 export async function fetchPortalInviteByEmail(supabaseUrl: string, serviceRoleKey: string, email: string, organizationId = "", sellerCompanyProfileId = "") {
@@ -688,15 +700,19 @@ export async function validatePortalInvite(supabaseUrl: string, serviceRoleKey: 
 
   try {
     fallbackInvites = await fetchPortalInvitesByEmail(supabaseUrl, serviceRoleKey, normalizedEmail, organizationId, sellerCompanyProfileId);
+    const matchingInvites = fallbackInvites.filter(
+      (row) =>
+        (isPortalInviteUsable(row) || isPortalInvitePasswordReady(row)) &&
+        String(row.invite_token_hash || "").trim().toLowerCase() === tokenHash,
+    );
+    // Never choose an arbitrary tenant when the same address/token exists in
+    // multiple organizations and no seller domain constrained the lookup.
+    if (!organizationId && new Set(matchingInvites.map((row) => String(row.organization_id || "").trim()).filter(Boolean)).size > 1) {
+      throw new Error("Portal invite cannot be resolved without a seller domain.");
+    }
     invite =
-      fallbackInvites.find(
-        (row) =>
-          isPortalInviteUsable(row) && String(row.invite_token_hash || "").trim().toLowerCase() === tokenHash,
-      ) ||
-      fallbackInvites.find(
-        (row) =>
-          isPortalInvitePasswordReady(row) && String(row.invite_token_hash || "").trim().toLowerCase() === tokenHash,
-      ) ||
+      matchingInvites.find((row) => isPortalInviteUsable(row)) ||
+      matchingInvites.find((row) => isPortalInvitePasswordReady(row)) ||
       null;
   } catch {
     fallbackInvites = [];
@@ -848,16 +864,13 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
     const sellerCompanyProfileId = String(invite.seller_company_profile_id || customerSellerCompanyProfileId || "").trim();
     const companyProfile = await fetchPortalCompanyProfile(supabaseUrl, serviceRoleKey, invite.organization_id, sellerCompanyProfileId);
 
-    const customerName = String(customer?.display_name || customer?.company_name || invite.party_name);
     const customerId = String(customer?.id || invite.customer_id || "");
-    // Orders and invoices are tenant-scoped by seller company as well as customer.
-    // Older records may only have customer_name populated, so the seller filter
-    // must be applied to both the id and name lookup paths.
+    // Orders and invoices are tenant-scoped by seller company as well as the
+    // immutable customer UUID. Display names are never used as an access key.
     const sellerCompanyName = String(companyProfile?.company_name || "").trim();
     const historyParams = buildPortalCustomerHistoryParams(
       invite.organization_id,
       customerId,
-      customerName,
       sellerCompanyName,
     );
     const salesOrderCompactSelect =
@@ -891,18 +904,9 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       ? dedupeById([
           ...(customerId
             ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_received", {
-                select: "id,invoice_no,customer_name,status,received_date,method,reference_no,amount,currency,updated_at",
+                select: "id,customer_id,invoice_no,customer_name,status,received_date,method,reference_no,amount,currency,updated_at",
                 organization_id: `eq.${invite.organization_id}`,
                 customer_id: `eq.${customerId}`,
-                order: "updated_at.desc",
-                limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
-              })
-            : []),
-          ...((!customerId || customerName)
-            ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "payments_received", {
-                select: "id,invoice_no,customer_name,status,received_date,method,reference_no,amount,currency,updated_at",
-                organization_id: `eq.${invite.organization_id}`,
-                customer_name: `eq.${customerName}`,
                 order: "updated_at.desc",
                 limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
               })
@@ -910,15 +914,16 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         ])
       : [];
 
-    const notifications = invite.access_can_view_orders
-      ? await fetchPortalNotifications(supabaseUrl, serviceRoleKey, invite.id)
-      : [];
+    // Catalog and price-list announcements are useful even for a portal user
+    // who only has price-list/account permissions, so notifications are not
+    // gated by the sales-order permission.
+    const notifications = await fetchPortalNotifications(supabaseUrl, serviceRoleKey, invite.id);
 
     const creditNotes = invite.access_can_view_invoices
       ? await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "credit_notes", {
-          select: "id,credit_note_no,customer_name,status,credit_date,due_date,notes,total_amount,currency,updated_at",
+          select: "id,customer_id,credit_note_no,customer_name,status,credit_date,due_date,notes,total_amount,currency,updated_at",
           organization_id: `eq.${invite.organization_id}`,
-          customer_name: `eq.${customerName}`,
+          customer_id: `eq.${customerId}`,
           order: "updated_at.desc",
           limit: PORTAL_SNAPSHOT_HISTORY_LIMIT,
         })
@@ -932,51 +937,62 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       portalAllowedBrandIds(invite),
     );
 
-    const accountRows = [
-      ...invoices.map((row) => ({
-        document_no: String(row.id || row.sales_order_no || ""),
-        document_type: "Invoice",
-        document_date: String(row.quote_date || ""),
-        due_date: String(row.due_date || ""),
-        status: String(row.status || ""),
-        amount: toNumber(row.total_amount),
-        currency: String(row.currency || customer?.currency || "EUR"),
-        subtotal: toNumber(row.total_amount),
-        discount: 0,
-        shipping: 0,
-        total: toNumber(row.total_amount),
-      })),
-      ...creditNotes.map((row) => ({
-        document_no: String(row.credit_note_no || row.id || ""),
-        document_type: "Credit Note",
-        document_date: String(row.credit_date || ""),
-        due_date: String(row.due_date || ""),
-        status: String(row.status || ""),
-        amount: -Math.abs(toNumber(row.total_amount)),
-        currency: String(row.currency || customer?.currency || "EUR"),
-        subtotal: -Math.abs(toNumber(row.total_amount)),
-        discount: 0,
-        shipping: 0,
-        total: -Math.abs(toNumber(row.total_amount)),
-      })),
-      ...paymentsReceived.map((row) => ({
-        document_no: String(row.id || row.invoice_no || ""),
-        document_type: "Payment",
-        document_date: String(row.received_date || ""),
-        due_date: "",
-        status: String(row.status || ""),
-        amount: -Math.abs(toNumber(row.amount)),
-        currency: String(row.currency || customer?.currency || "EUR"),
-        subtotal: -Math.abs(toNumber(row.amount)),
-        discount: 0,
-        shipping: 0,
-        total: -Math.abs(toNumber(row.amount)),
-      })),
-    ];
+    // Invoice/payment permissions govern their detailed collections above;
+    // the account permission independently governs the financial statement
+    // projection and all aggregate totals derived from it.
+    const accountRows = invite.access_can_view_account
+      ? [
+          ...invoices.map((row) => ({
+            document_no: String(row.id || row.sales_order_no || ""),
+            document_type: "Invoice",
+            document_date: String(row.quote_date || ""),
+            due_date: String(row.due_date || ""),
+            status: String(row.status || ""),
+            amount: toNumber(row.total_amount),
+            currency: String(row.currency || customer?.currency || "EUR"),
+            subtotal: toNumber(row.total_amount),
+            discount: 0,
+            shipping: 0,
+            total: toNumber(row.total_amount),
+          })),
+          ...creditNotes.map((row) => ({
+            document_no: String(row.credit_note_no || row.id || ""),
+            document_type: "Credit Note",
+            document_date: String(row.credit_date || ""),
+            due_date: String(row.due_date || ""),
+            status: String(row.status || ""),
+            amount: -Math.abs(toNumber(row.total_amount)),
+            currency: String(row.currency || customer?.currency || "EUR"),
+            subtotal: -Math.abs(toNumber(row.total_amount)),
+            discount: 0,
+            shipping: 0,
+            total: -Math.abs(toNumber(row.total_amount)),
+          })),
+          ...paymentsReceived.map((row) => ({
+            document_no: String(row.id || row.invoice_no || ""),
+            document_type: "Payment",
+            document_date: String(row.received_date || ""),
+            due_date: "",
+            status: String(row.status || ""),
+            amount: -Math.abs(toNumber(row.amount)),
+            currency: String(row.currency || customer?.currency || "EUR"),
+            subtotal: -Math.abs(toNumber(row.amount)),
+            discount: 0,
+            shipping: 0,
+            total: -Math.abs(toNumber(row.amount)),
+          })),
+        ]
+      : [];
 
-    const invoiceAmount = invoices.reduce((sum, row) => sum + toNumber(row.total_amount), 0);
-    const creditAmount = creditNotes.reduce((sum, row) => sum + toNumber(row.total_amount), 0);
-    const paymentAmount = paymentsReceived.reduce((sum, row) => sum + toNumber(row.amount), 0);
+    const invoiceAmount = invite.access_can_view_account
+      ? invoices.reduce((sum, row) => sum + toNumber(row.total_amount), 0)
+      : 0;
+    const creditAmount = invite.access_can_view_account
+      ? creditNotes.reduce((sum, row) => sum + toNumber(row.total_amount), 0)
+      : 0;
+    const paymentAmount = invite.access_can_view_account
+      ? paymentsReceived.reduce((sum, row) => sum + toNumber(row.amount), 0)
+      : 0;
 
     return {
       invite: {
@@ -1033,14 +1049,14 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
         creditAmount,
         paymentAmount,
         openAmount: accountRows.filter((row) => !["void"].includes(row.status.toLowerCase())).reduce((sum, row) => sum + row.amount, 0),
-        paymentCount: paymentsReceived.length,
+        paymentCount: invite.access_can_view_account ? paymentsReceived.length : 0,
       },
       pricingProfile: customer
         ? {
             currency: String(customer.currency || invoices[0]?.currency || "EUR"),
             payment_terms: String(customer.payment_terms || ""),
             contract_nr: String(customer.contract_nr || ""),
-            price_list_type: String(customer.price_list_type || getEmbeddedCustomerPriceListType(customerMeta) || "A") as "" | "A" | "B" | "C" | "Other",
+            price_list_type: normalizePortalDisplayPriceListType(customer.price_list_type || getEmbeddedCustomerPriceListType(customerMeta) || "A"),
           }
         : null,
       accountRows,
@@ -1152,51 +1168,59 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       })
     : [];
 
-  const accountRows = [
-    ...bills.map((row) => ({
-      document_no: String(row.id || row.purchase_order_no || ""),
-      document_type: "Bill",
-      document_date: String(row.bill_date || ""),
-      due_date: String(row.due_date || ""),
-      status: String(row.status || ""),
-      amount: toNumber(row.total_amount),
-      currency: String(row.currency || vendor?.currency || "EUR"),
-      subtotal: toNumber(row.subtotal ?? row.total_amount),
-      discount: toNumber(row.discount_amount),
-      shipping: toNumber(row.shipping_cost),
-      total: toNumber(row.total_amount),
-    })),
-    ...vendorCredits.map((row) => ({
-      document_no: String(row.vendor_credit_no || row.id || ""),
-      document_type: "Vendor Credit",
-      document_date: String(row.credit_date || ""),
-      due_date: String(row.due_date || ""),
-      status: String(row.status || ""),
-      amount: -Math.abs(toNumber(row.total_amount)),
-      currency: String(row.currency || vendor?.currency || "EUR"),
-      subtotal: -Math.abs(toNumber(row.total_amount)),
-      discount: 0,
-      shipping: 0,
-      total: -Math.abs(toNumber(row.total_amount)),
-    })),
-    ...paymentsMade.map((row) => ({
-      document_no: String(row.id || row.bill_no || ""),
-      document_type: "Payment",
-      document_date: String(row.payment_date || ""),
-      due_date: "",
-      status: String(row.status || ""),
-      amount: -Math.abs(toNumber(row.amount)),
-      currency: String(row.currency || vendor?.currency || "EUR"),
-      subtotal: -Math.abs(toNumber(row.amount)),
-      discount: 0,
-      shipping: 0,
-      total: -Math.abs(toNumber(row.amount)),
-    })),
-  ];
+  const accountRows = invite.access_can_view_account
+    ? [
+        ...bills.map((row) => ({
+          document_no: String(row.id || row.purchase_order_no || ""),
+          document_type: "Bill",
+          document_date: String(row.bill_date || ""),
+          due_date: String(row.due_date || ""),
+          status: String(row.status || ""),
+          amount: toNumber(row.total_amount),
+          currency: String(row.currency || vendor?.currency || "EUR"),
+          subtotal: toNumber(row.subtotal ?? row.total_amount),
+          discount: toNumber(row.discount_amount),
+          shipping: toNumber(row.shipping_cost),
+          total: toNumber(row.total_amount),
+        })),
+        ...vendorCredits.map((row) => ({
+          document_no: String(row.vendor_credit_no || row.id || ""),
+          document_type: "Vendor Credit",
+          document_date: String(row.credit_date || ""),
+          due_date: String(row.due_date || ""),
+          status: String(row.status || ""),
+          amount: -Math.abs(toNumber(row.total_amount)),
+          currency: String(row.currency || vendor?.currency || "EUR"),
+          subtotal: -Math.abs(toNumber(row.total_amount)),
+          discount: 0,
+          shipping: 0,
+          total: -Math.abs(toNumber(row.total_amount)),
+        })),
+        ...paymentsMade.map((row) => ({
+          document_no: String(row.id || row.bill_no || ""),
+          document_type: "Payment",
+          document_date: String(row.payment_date || ""),
+          due_date: "",
+          status: String(row.status || ""),
+          amount: -Math.abs(toNumber(row.amount)),
+          currency: String(row.currency || vendor?.currency || "EUR"),
+          subtotal: -Math.abs(toNumber(row.amount)),
+          discount: 0,
+          shipping: 0,
+          total: -Math.abs(toNumber(row.amount)),
+        })),
+      ]
+    : [];
 
-  const billAmount = bills.reduce((sum, row) => sum + toNumber(row.total_amount), 0);
-  const vendorCreditAmount = vendorCredits.reduce((sum, row) => sum + toNumber(row.total_amount), 0);
-  const paymentAmount = paymentsMade.reduce((sum, row) => sum + toNumber(row.amount), 0);
+  const billAmount = invite.access_can_view_account
+    ? bills.reduce((sum, row) => sum + toNumber(row.total_amount), 0)
+    : 0;
+  const vendorCreditAmount = invite.access_can_view_account
+    ? vendorCredits.reduce((sum, row) => sum + toNumber(row.total_amount), 0)
+    : 0;
+  const paymentAmount = invite.access_can_view_account
+    ? paymentsMade.reduce((sum, row) => sum + toNumber(row.amount), 0)
+    : 0;
 
   return {
     invite: {
@@ -1255,7 +1279,7 @@ export async function buildPortalSnapshot(supabaseUrl: string, serviceRoleKey: s
       creditAmount: vendorCreditAmount,
       paymentAmount,
       openAmount: accountRows.filter((row) => !["void"].includes(row.status.toLowerCase())).reduce((sum, row) => sum + row.amount, 0),
-      paymentCount: paymentsMade.length,
+      paymentCount: invite.access_can_view_account ? paymentsMade.length : 0,
     },
     pricingProfile: null,
     accountRows,
@@ -1277,7 +1301,6 @@ export async function fetchPortalSalesOrderDetail(
   const sellerCompanyProfileId = String(invite.seller_company_profile_id || customerSellerCompanyProfileId || "").trim();
   const companyProfile = await fetchPortalCompanyProfile(supabaseUrl, serviceRoleKey, invite.organization_id, sellerCompanyProfileId);
   const customerId = String(customer?.id || invite.customer_id || "").trim();
-  const customerName = String(customer?.display_name || customer?.company_name || invite.party_name || "").trim().toLowerCase();
   const sellerCompany = String(companyProfile?.company_name || "").trim().toLowerCase();
   const row = await fetchFirstOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
     select: "id,sales_order_no,customer_id,customer_name,seller_company,quote_date,currency,status,sales_total,source_channel,portal_submitted_at,portal_seen_at,delivery_term,payment_terms,packing_details,notes,discount_amount,shipping_cost,updated_at,lines",
@@ -1288,9 +1311,11 @@ export async function fetchPortalSalesOrderDetail(
   if (!row) return null;
 
   const rowCustomerId = String(row.customer_id || "").trim();
-  const rowCustomerName = String(row.customer_name || "").trim().toLowerCase();
   const rowSellerCompany = String(row.seller_company || "").trim().toLowerCase();
-  const customerMatches = (customerId && rowCustomerId === customerId) || (customerName && rowCustomerName === customerName);
+  // The customer UUID is the authorization boundary.  Matching only the
+  // display name would let a portal customer open another customer's order
+  // when both cards share the same name.
+  const customerMatches = Boolean(customerId) && rowCustomerId === customerId;
   const sellerMatches = !sellerCompany || !rowSellerCompany || rowSellerCompany === sellerCompany;
   if (!customerMatches || !sellerMatches) return null;
 
@@ -1381,7 +1406,6 @@ export async function buildPortalFallbackSnapshot(supabaseUrl: string, serviceRo
       const fallbackHistoryParams = buildPortalCustomerHistoryParams(
         invite.organization_id,
         String(invite.customer_id || "").trim(),
-        String(invite.party_name || "").trim(),
         sellerCompanyName,
       );
       const orderSelect =
@@ -1409,20 +1433,24 @@ export async function buildPortalFallbackSnapshot(supabaseUrl: string, serviceRo
     }
   }
 
-  const fallbackAccountRows = fallbackInvoices.map((row) => ({
-    document_no: String(row.id || row.sales_order_no || ""),
-    document_type: "Invoice",
-    document_date: String(row.quote_date || ""),
-    due_date: String(row.due_date || ""),
-    status: String(row.status || ""),
-    amount: toNumber(row.total_amount),
-    currency: String(row.currency || "EUR"),
-    subtotal: toNumber(row.total_amount),
-    discount: 0,
-    shipping: 0,
-    total: toNumber(row.total_amount),
-  }));
-  const fallbackInvoiceAmount = fallbackInvoices.reduce((sum, row) => sum + toNumber(row.total_amount), 0);
+  const fallbackAccountRows = invite.access_can_view_account
+    ? fallbackInvoices.map((row) => ({
+        document_no: String(row.id || row.sales_order_no || ""),
+        document_type: "Invoice",
+        document_date: String(row.quote_date || ""),
+        due_date: String(row.due_date || ""),
+        status: String(row.status || ""),
+        amount: toNumber(row.total_amount),
+        currency: String(row.currency || "EUR"),
+        subtotal: toNumber(row.total_amount),
+        discount: 0,
+        shipping: 0,
+        total: toNumber(row.total_amount),
+      }))
+    : [];
+  const fallbackInvoiceAmount = invite.access_can_view_account
+    ? fallbackInvoices.reduce((sum, row) => sum + toNumber(row.total_amount), 0)
+    : 0;
 
   return {
     invite: {
@@ -1474,9 +1502,7 @@ export async function buildPortalFallbackSnapshot(supabaseUrl: string, serviceRo
     vendorCredits: [],
     paymentsReceived: [],
     paymentsMade: [],
-    notifications: invite.access_can_view_orders
-      ? await fetchPortalNotifications(supabaseUrl, serviceRoleKey, invite.id)
-      : [],
+    notifications: await fetchPortalNotifications(supabaseUrl, serviceRoleKey, invite.id),
     accountSummary: {
       currency: "EUR",
       totalDocuments: fallbackAccountRows.length,

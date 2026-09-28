@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
+import { ActionFeedbackDialog } from "../../../presentation/components/common/ActionFeedbackDialog";
+import { emptyPortalFeedback, portalFeedbackReducer } from "../portalFeedback";
 import {
   confirmPortalPasswordReset,
   fetchPortalBranding,
@@ -19,17 +21,20 @@ import { ProductVisual } from "../../../presentation/components/common/ProductVi
 import { VehicleBadges } from "../../../presentation/components/common/VehicleBadges";
 import { buildBusinessDocumentHtml } from "../../../shared/documentPrint";
 import { openAccountStatementPrintWindow } from "../../../shared/accountStatementPrint";
-import { buildXlsxBlob, downloadBlob } from "../../../shared/xlsx";
+import { buildXlsxBlob, downloadBlob, downloadUrl } from "../../../shared/xlsx";
 import { formatBrandAwareProductCode } from "../../../shared/productCodeDisplay";
 import { matchesOriginalNumberSearch, normalizePartCode } from "../../../domain/shared/normalize";
 import { downloadQuoteTemplate } from "../../../shared/importTemplates";
 import {
   deletePortalDraftOrder,
-  downloadPortalPriceList,
+  describePortalExportJobStatus,
+  downloadPortalExportJob,
   fetchPortalSalesOrderDetail,
   preparePortalOrderLines as preparePortalOrderLinesApi,
   searchPortalCatalogItems,
+  startPortalPriceListExport,
   submitPortalOrder,
+  waitForPortalExportJob,
   type PortalCatalogSearchItem,
   type PortalPreparedLine,
   type PortalSearchField,
@@ -601,8 +606,11 @@ export function PortalPage() {
   const [statementDateFrom, setStatementDateFrom] = useState("");
   const [statementDateTo, setStatementDateTo] = useState("");
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("");
-  const [error, setError] = useState("");
+  const [{ status, error, notice, backgroundMessage }, dispatchFeedback] = useReducer(portalFeedbackReducer, emptyPortalFeedback);
+  const setStatus = useCallback((message: string) => dispatchFeedback({ type: "status", message }), []);
+  const setError = useCallback((message: string) => dispatchFeedback({ type: "error", message }), []);
+  const setBackgroundMessage = useCallback((message: string) => dispatchFeedback({ type: "background", message }), []);
+  const notifyPortal = useCallback((message: string, kind: "success" | "warning" = "success") => dispatchFeedback({ type: "notify", message, kind }), []);
   const [portalForgotMode, setPortalForgotMode] = useState(false);
   const [portalResetPassword, setPortalResetPassword] = useState("");
   const [portalResetConfirmPassword, setPortalResetConfirmPassword] = useState("");
@@ -635,6 +643,13 @@ export function PortalPage() {
   const [confirmingPortalOrder, setConfirmingPortalOrder] = useState(false);
   const [downloadingPortalPriceList, setDownloadingPortalPriceList] = useState(false);
   const [portalOverlay, setPortalOverlay] = useState<{ title: string; message: string } | null>(null);
+  const feedbackOverlay = error
+    ? <ActionFeedbackDialog kind="error" message={error} onClose={() => dispatchFeedback({ type: "dismiss" })} />
+    : portalOverlay
+      ? <ActionFeedbackDialog kind="progress" title={portalOverlay.title} message={portalOverlay.message} />
+      : notice
+        ? <ActionFeedbackDialog kind={notice.kind} message={notice.message} onClose={() => dispatchFeedback({ type: "dismiss" })} />
+        : null;
   const [portalAddTarget, setPortalAddTarget] = useState<PortalAddTarget | null>(null);
   const [portalAddTargetLoading, setPortalAddTargetLoading] = useState(false);
   const [selectedCatalogCode, setSelectedCatalogCode] = useState("");
@@ -766,8 +781,7 @@ export function PortalPage() {
     setDocumentSearch("");
     setBrandFilter("");
     setPaymentStatusFilter("");
-    setStatus(isOnline ? "Cached portal workspace loaded." : "Offline mode active. Showing cached portal data and local sales order.");
-    setError("");
+    setBackgroundMessage(isOnline ? "" : "Offline mode active. Showing cached portal data and local sales order.");
   }, [credentials.email, isOnline, portalResetToken, snapshot]);
 
   useEffect(() => {
@@ -789,12 +803,8 @@ export function PortalPage() {
         const nextCredentials = { email: credentials.email, password: "", sessionToken: "" };
         setCredentials(nextCredentials);
         writeStoredCredentials(nextCredentials);
-        setError("");
-        setStatus((current) =>
-          current && current.toLowerCase().includes("offline")
-            ? "Portal data refreshed."
-            : current || "Portal data refreshed.",
-        );
+        // Background work owns only its own status, never a user's open warning.
+        setBackgroundMessage("");
       })
       .catch((caught) => {
         if (cancelled) return;
@@ -804,15 +814,14 @@ export function PortalPage() {
           const nextCredentials = { email: credentials.email, password: "", sessionToken: "" };
           setCredentials(nextCredentials);
           writeStoredCredentials(null);
-          setError("");
-          setStatus("");
+          setBackgroundMessage("Your portal session expired. Please sign in again.");
           return;
         }
         // A successful login or a cached workspace already provides a usable
         // tenant-scoped snapshot. The opportunistic refresh must never turn
         // that working portal into a blocking error state; the user can keep
         // working and explicitly refresh later.
-        setStatus("Portal is open. The latest background refresh could not be completed; retry with Refresh when ready.");
+        setBackgroundMessage("Portal is open. The latest background refresh could not be completed; retry with Refresh when ready.");
       });
 
     return () => {
@@ -833,11 +842,11 @@ export function PortalPage() {
           Date.now() - portalOrderMutationSettledAtRef.current < 15_000
         ) return;
         setSnapshot((current) => mergePortalSnapshotOrderDetails(current, next));
-        setError("");
+        setBackgroundMessage("");
       } catch (caught) {
         if (cancelled) return;
         const message = caught instanceof Error ? caught.message : "Portal refresh failed";
-        setStatus(message.toLowerCase().includes("session expired") ? "Your portal session expired. Please sign in again." : "The latest portal update is temporarily unavailable. Select Refresh to retry.");
+        setBackgroundMessage(message.toLowerCase().includes("session expired") ? "Your portal session expired. Please sign in again." : "The latest portal update is temporarily unavailable. Select Refresh to retry.");
       }
     };
     const interval = window.setInterval(() => void refreshInBackground(), PORTAL_BACKGROUND_REFRESH_MS);
@@ -1128,8 +1137,7 @@ export function PortalPage() {
   async function handleLogin() {
     try {
       setLoading(true);
-      setError("");
-      setStatus("");
+      dispatchFeedback({ type: "reset" });
       const { snapshot: next } = await loginPortal({
         email: credentials.email,
         password: credentials.password || "",
@@ -1165,7 +1173,7 @@ export function PortalPage() {
       setLoading(true);
       setError("");
       const response = await requestPortalPasswordReset(credentials.email);
-      setStatus(response.message);
+      notifyPortal(response.message);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal password reset request failed");
     } finally {
@@ -1210,7 +1218,7 @@ export function PortalPage() {
       setPortalResetPassword("");
       setPortalResetConfirmPassword("");
       setPortalForgotMode(false);
-      setStatus("Portal password updated.");
+      notifyPortal("Portal password updated.");
       const nextCredentials = { email: credentials.email, password: "", sessionToken: "" };
       setCredentials(nextCredentials);
       writeStoredCredentials(nextCredentials);
@@ -1226,16 +1234,18 @@ export function PortalPage() {
   async function handleRefresh() {
     if (!isOnline) {
       setError("");
-      setStatus("Connect to the internet to refresh portal data.");
+      notifyPortal("Connect to the internet to refresh portal data.", "warning");
       return;
     }
     try {
       setLoading(true);
       setError("");
       setStatus("Refreshing portal data...");
+      setPortalOverlay({ title: "Refreshing portal", message: "Loading your latest account information." });
       const { snapshot: next } = await fetchPortalSnapshot(credentials);
       setSnapshot((current) => mergePortalSnapshotOrderDetails(current, next));
-      setStatus("Portal data refreshed.");
+      setBackgroundMessage("");
+      notifyPortal("Portal data refreshed.");
       const nextCredentials = { email: credentials.email, password: "", sessionToken: "" };
       setCredentials(nextCredentials);
       writeStoredCredentials(nextCredentials);
@@ -1243,6 +1253,7 @@ export function PortalPage() {
       setError(caught instanceof Error ? caught.message : "Portal refresh failed");
     } finally {
       setLoading(false);
+      setPortalOverlay(null);
     }
   }
 
@@ -1254,8 +1265,7 @@ export function PortalPage() {
     setPortalOrderDetailsById({});
     setSelection(null);
     setActiveSection("desk");
-    setStatus("");
-    setError("");
+    dispatchFeedback({ type: "reset" });
     writeStoredCredentials(null);
     clearPortalQueryParams();
   }
@@ -1344,7 +1354,18 @@ export function PortalPage() {
     if (!snapshot || !credentials.email || snapshot.invite.party_type !== "customer") return;
     const previous = readPortalActivityFingerprint(credentials.email);
     const events = buildPortalActivityNotifications(previous, snapshot);
-    if (events.length) setPortalNotifications((current) => [...events, ...current.filter((item) => !events.some((event) => event.id === item.id))].slice(0, 8));
+    const serverEvents: PortalActivityNotification[] = (snapshot.notifications || []).map((notification) => ({
+      id: `server:${notification.id}`,
+      title: notification.title,
+      detail: notification.message,
+    }));
+    if (events.length || serverEvents.length) {
+      const incoming = [...serverEvents, ...events];
+      setPortalNotifications((current) => [
+        ...incoming,
+        ...current.filter((item) => !incoming.some((event) => event.id === item.id)),
+      ].slice(0, 8));
+    }
     writePortalActivityFingerprint(credentials.email, snapshot);
   }, [credentials.email, snapshot]);
 
@@ -1446,6 +1467,7 @@ export function PortalPage() {
     const loginBrandInitials = buildPortalLoginInitials(loginBrandName);
     return (
       <div className="portal-shell portal-shell--login">
+        {feedbackOverlay}
         <div className="portal-login-layout">
           <section className="portal-login-visual" aria-label="Customer Desk introduction">
             <div className="portal-login-visual__copy">
@@ -1543,8 +1565,7 @@ export function PortalPage() {
                   {portalResetToken ? "Save New Password" : portalForgotMode ? "Send Reset Link" : "Sign In"}
                 </Button>
               </div>
-              {error ? <div className="warning-text">{error}</div> : null}
-              {status ? <div className="success-text">{status}</div> : null}
+              {status ? <div className="portal-feedback-status" role="status">{status}</div> : null}
               {!portalResetToken ? (
                 <button
                   type="button"
@@ -1845,9 +1866,9 @@ export function PortalPage() {
           setSelectedCatalogCode(catalogResults[0].code);
           setPortalPreview({ kind: "catalog", item: catalogResults[0] });
         }
-        setStatus("Offline mode active. Showing cached search results. Reconnect to refresh search.");
+        notifyPortal("Offline mode active. Showing cached search results. Reconnect to refresh search.", "warning");
       } else {
-        setStatus("Connect to the internet to search new products.");
+        notifyPortal("Connect to the internet to search new products.", "warning");
       }
       return;
     }
@@ -2130,7 +2151,7 @@ export function PortalPage() {
       setError("");
       setPortalSalesOrderNo((current) => current || "Local sales order");
       setPortalOrderStatus("Sales order saved on this device. Connect later to send it.");
-      setStatus("Sales order saved offline on this device.");
+      notifyPortal("Sales order saved offline on this device. Reconnect before sending it to your seller.", "warning");
       return;
     }
     if (mode === "confirm" && orderHasMissingPrices) {
@@ -2245,7 +2266,7 @@ export function PortalPage() {
       setSelection({ kind: "sales-order", id: result.orderId });
       // Keep the newly saved draft visible in the same Sales Orders view as a confirmed order.
       setActiveSection("orders");
-      setStatus(
+      notifyPortal(
         mode === "confirm"
           ? `Sales order ${result.orderId} submitted. Internal team can prepare proforma and next documents.`
           : `Sales order ${result.orderId} saved. Use Confirm order to send it.`,
@@ -2329,7 +2350,7 @@ export function PortalPage() {
       if (selection?.kind === "sales-order" && selection.id === row.id) {
         setSelection(null);
       }
-      setStatus(`Sales order ${row.sales_order_no || row.id} deleted.`);
+      notifyPortal(`Sales order ${row.sales_order_no || row.id} deleted.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal sales order delete failed");
     } finally {
@@ -2352,23 +2373,26 @@ export function PortalPage() {
       setError("");
       setPortalOverlay({
         title: "Preparing Price List",
-        message: `Building ${portalPriceListBrand} price list for this customer account.`,
+        message: `Queuing ${portalPriceListBrand} price list for this customer account.`,
       });
-      const result = await downloadPortalPriceList(credentials, portalPriceListBrand);
-      const rows: Array<Array<string | number | null>> = [
-        ["Part_No", "Description", `Price_${result.currency}`, "Price_Date", "Lifecycle"],
-        ...result.rows.map((row) => [
-          formatBrandAwareProductCode(row.product_code, row.brand || portalPriceListBrand),
-          row.description || "",
-          row.sales_price ?? "",
-          row.price_date || "",
-          row.lifecycle_status === "discontinued" ? row.lifecycle_note || "Discontinued" : "Active",
-        ]),
-      ];
-      const blob = buildXlsxBlob(`${portalPriceListBrand} Price List`, rows, [2]);
-      const fileSuffix = result.priceListType;
-      downloadBlob(`${sanitizeFileName(`portal-price-list-${portalPriceListBrand}-${fileSuffix}`)}.xlsx`, blob);
-      setStatus(`${portalPriceListBrand} ${result.priceListType} price list downloaded.`);
+      const initialJob = await startPortalPriceListExport(credentials, portalPriceListBrand);
+      const readyJob = await waitForPortalExportJob(credentials, initialJob, (job) => {
+        const message = describePortalExportJobStatus(job);
+        setStatus(message);
+        setPortalOverlay({
+          title: "Preparing Price List",
+          message,
+        });
+      });
+      const result = await downloadPortalExportJob(credentials, readyJob.id);
+      await downloadUrl(
+        result.fileName || `${sanitizeFileName(`portal-price-list-${portalPriceListBrand}`)}.xlsx`,
+        result.signedUrl,
+        result.fallbackUrl,
+      );
+      const rowCount = result.rowCount || readyJob.rowCount;
+      const rowCountLabel = rowCount ? ` (${rowCount.toLocaleString()} rows)` : "";
+      notifyPortal(`${portalPriceListBrand} price list download started${rowCountLabel}. Check your browser downloads for the file.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Portal price list download failed");
     } finally {
@@ -2471,7 +2495,7 @@ export function PortalPage() {
       settlePortalOrderMutation();
       setSelection({ kind: "sales-order", id: result.orderId || row.id });
       setPortalDetailQtyEdits({});
-      setStatus(`Sales order ${row.sales_order_no || row.id} quantities updated.`);
+      notifyPortal(`Sales order ${row.sales_order_no || row.id} quantities updated.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Sales order quantity update failed");
     } finally {
@@ -2563,10 +2587,11 @@ export function PortalPage() {
       setPortalDetailManualCode("");
       setPortalDetailManualQty("1");
       const savedLine = optimisticLines.find((line) => String(line.code || line.requested_code || "").trim() === code);
-      setStatus(
+      notifyPortal(
         savedLine?.sell_price == null
           ? `${code} added. Catalog and price not available; admin can complete it in Sales Orders.`
           : `${code} added to sales order ${row.sales_order_no || row.id}.`,
+        savedLine?.sell_price == null ? "warning" : "success",
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Manual part could not be added to the sales order");
@@ -2639,7 +2664,7 @@ export function PortalPage() {
         // Keep the optimistic removal visible; Refresh can retry the detail read.
       });
       setPortalDetailQtyEdits({});
-      setStatus("Order line removed and total recalculated.");
+      notifyPortal("Order line removed and total recalculated.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Order line could not be removed");
     } finally {
@@ -2683,7 +2708,7 @@ export function PortalPage() {
       settlePortalOrderMutation();
       setSelection({ kind: "sales-order", id: result.orderId || row.id });
       setPortalDetailQtyEdits({});
-      setStatus(`Sales order ${row.sales_order_no || row.id} confirmed.`);
+      notifyPortal(`Sales order ${row.sales_order_no || row.id} confirmed.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Sales order confirmation failed");
     } finally {
@@ -3242,6 +3267,7 @@ export function PortalPage() {
         className={`portal-desktop-frame${shouldScalePortalDesktop ? " portal-desktop-frame--scaled" : ""}`}
       >
     <div className="portal-shell portal-shell--workspace">
+      {feedbackOverlay}
       <div className="portal-header">
         <div className="portal-brand">
           {activeSnapshot.companyProfile?.logo_data_url ? <img src={activeSnapshot.companyProfile.logo_data_url} alt="Portal logo" className="portal-brand__logo" /> : null}
@@ -3328,8 +3354,8 @@ export function PortalPage() {
               </button>
             ))}
           </div>
-          {status ? <div className="success-text" role="status">{status}</div> : null}
-          {error ? <div className="warning-text" role="alert">{error}</div> : null}
+          {status ? <div className="portal-feedback-status" role="status">{status}</div> : null}
+          {backgroundMessage ? <div className="portal-feedback-status portal-feedback-status--warning" role="status">{backgroundMessage}</div> : null}
           {portalNotifications.length ? (
             <section className="portal-notification-panel" aria-label="Portal updates">
               <div className="portal-notification-panel__header">
@@ -3712,7 +3738,7 @@ export function PortalPage() {
                 <strong>Use the middle field for part number or OEM code. Import Brand, Part Code, and Qty files with Excel or CSV; exact matches stay on top and alternatives appear below.</strong>
               </div>
 
-              {portalOrderStatus && !catalogResults.length ? <div className="success-text">{portalOrderStatus}</div> : null}
+              {portalOrderStatus && !catalogResults.length ? <div className="portal-feedback-status" role="status">{portalOrderStatus}</div> : null}
               {portalDraftHasMissingPrices ? <div className="warning-text">Items without live price can be saved in the sales order but cannot be confirmed.</div> : null}
               {portalDraftDiscontinuedCount > 0 ? (
                 <div className="warning-text">
@@ -4043,17 +4069,6 @@ export function PortalPage() {
               <Button type="button" variant="secondary" disabled={portalAddTargetLoading} onClick={() => setPortalAddTarget(null)}>
                 Cancel
               </Button>
-            </div>
-          </DraggableSurface>
-        </div>
-      ) : null}
-
-      {portalOverlay ? (
-        <div className="modal-backdrop">
-          <DraggableSurface className="modal-card modal-card--compact" dragHandleSelector=".draggable-surface__handle">
-            <div className="modal-card__header draggable-surface__handle">
-              <h3>{portalOverlay.title}</h3>
-              <p>{portalOverlay.message}</p>
             </div>
           </DraggableSurface>
         </div>
