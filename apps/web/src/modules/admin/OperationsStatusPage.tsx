@@ -350,6 +350,9 @@ export function OperationsStatusPage() {
                         <div className="list-stack">
                           <span>{t("dashboard.operationsStatus.staged")}: {formatCount(row.supplier_import_staged_rows)}</span>
                           <span>{t("dashboard.operationsStatus.processed")}: {formatCount(row.supplier_import_processed_rows)}</span>
+                          <span className="operations-subtle">
+                            {t("dashboard.operationsStatus.activePriceSource")}: {formatDateTime(row.last_successful_import_at)}
+                          </span>
                         </div>
                       </td>
                       <td>
@@ -378,7 +381,14 @@ export function OperationsStatusPage() {
                       <td>
                         <div className="list-stack">
                           <span className={`mark-badge mark-badge--${statusTone(row.customer_price_status)}`}>{t(`statuses.${row.customer_price_status}`)}</span>
-                          <span className="operations-subtle">{row.customer_price_waiting_message || t("dashboard.operationsStatus.readyToGenerate")}</span>
+                          <span className="operations-subtle">
+                            {row.supplier_import_status === "failed"
+                              ? t("dashboard.operationsStatus.latestUploadFailed")
+                              : row.customer_price_waiting_message || t("dashboard.operationsStatus.readyToGenerate")}
+                          </span>
+                          {row.supplier_import_status === "failed" && row.last_successful_import_at ? (
+                            <span className="warning-text">{t("dashboard.operationsStatus.previousPricesRemain")}</span>
+                          ) : null}
                         </div>
                       </td>
                       <td>

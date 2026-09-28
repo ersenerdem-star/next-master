@@ -68,6 +68,8 @@ export type SupplierOperationsStatusRow = SupplierBrandSummaryRow & {
   rollup_refresh_error_message: string | null;
   customer_price_status: SupplierOperationsReadyStatus;
   customer_price_waiting_message: string | null;
+  last_successful_import_at: string | null;
+  last_successful_import_run_id: string | null;
   last_successful_refresh_at: string | null;
   last_successful_refresh_source: "supplier import" | "rollup refresh" | null;
 };
