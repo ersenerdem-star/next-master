@@ -220,7 +220,7 @@ async function fetchPortalNotifications(supabaseUrl: string, serviceRoleKey: str
   const rows = await fetchAllOptional<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "portal_audit_logs", {
     select: "id,event_type,status,details,created_at",
     invite_id: `eq.${inviteId}`,
-    event_type: "in.(sales_order_deleted_by_admin,portal_catalog_brand_added,portal_price_list_updated)",
+    event_type: "in.(sales_order_deleted_by_admin,portal_catalog_brand_added,portal_catalog_updated,portal_price_list_updated)",
     status: "eq.ok",
     order: "created_at.desc",
     limit: "20",
@@ -230,16 +230,18 @@ async function fetchPortalNotifications(supabaseUrl: string, serviceRoleKey: str
     const eventType = String(row.event_type || "portal_update");
     const title = eventType === "portal_catalog_brand_added"
       ? "New catalog brand available"
-      : eventType === "portal_price_list_updated"
-        ? "New price list available"
-        : "Sales order deleted by seller";
+      : eventType === "portal_catalog_updated"
+        ? "New catalog data available"
+        : eventType === "portal_price_list_updated"
+          ? "New price list available"
+          : "Sales order deleted by seller";
     return {
       id: String(row.id || `${inviteId}-${row.created_at || "notification"}`),
       type: eventType,
       title,
       message: String(details.message || (
-        eventType === "portal_catalog_brand_added"
-          ? "A new catalog brand is now available in your customer portal."
+        eventType === "portal_catalog_brand_added" || eventType === "portal_catalog_updated"
+          ? "New catalog data is now available in your customer portal."
           : eventType === "portal_price_list_updated"
             ? "A new customer price list is now available in your customer portal."
             : "The seller deleted this confirmed order. You can now delete this order from your portal."
