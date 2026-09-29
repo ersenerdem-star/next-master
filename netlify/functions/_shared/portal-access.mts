@@ -228,12 +228,13 @@ async function fetchPortalNotifications(supabaseUrl: string, serviceRoleKey: str
   return rows.map((row) => {
     const details = row.details && typeof row.details === "object" ? (row.details as Record<string, unknown>) : {};
     const eventType = String(row.event_type || "portal_update");
+    const brandLabel = String(details.brand_name || "").trim();
     const title = eventType === "portal_catalog_brand_added"
-      ? "New catalog brand available"
+      ? brandLabel ? `New ${brandLabel} catalog brand available` : "New catalog brand available"
       : eventType === "portal_catalog_updated"
-        ? "New catalog data available"
+        ? brandLabel ? `New ${brandLabel} catalog data available` : "New catalog data available"
         : eventType === "portal_price_list_updated"
-          ? "New price list available"
+          ? brandLabel ? `New ${brandLabel} price list available` : "New price list available"
           : "Sales order deleted by seller";
     return {
       id: String(row.id || `${inviteId}-${row.created_at || "notification"}`),
