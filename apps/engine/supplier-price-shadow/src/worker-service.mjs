@@ -6,6 +6,21 @@ import {requireShadowStagingHost} from './shadow-batch-contract.mjs';
 import {supabaseApiHeaders} from './supabase-headers.mjs';
 
 export const SERVICE_QUEUE_LIMITS = Object.freeze({globalConcurrency:1,workerConcurrency:1});
+const SERVICE_OPT_INS = ['SUPPLIER_PRICE_SERVICE_ENABLED','SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED',
+  'SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED','SUPPLIER_PRICE_SHARED_PREPARED_ENABLED',
+  'SUPPLIER_PRICE_SHADOW_PERSIST','SUPPLIER_PRICE_UPLOAD_VERIFICATION_ENABLED'];
+const STARTUP_CODES = new Set(['SHADOW_PERSIST_STAGING_HOST_REQUIRED','SERVICE_STAGING_ORIGIN',
+  'SERVICE_OPT_IN_REQUIRED','SERVICE_STAGING_SECRET_REQUIRED','SERVICE_STABLE_EXECUTOR_REQUIRED',
+  'SERVICE_CANARY_CONFIG_DENIED','SERVICE_PRIVATE_HISTORY_REQUIRED','SERVICE_BATCH_LIMIT',
+  'SERVICE_PORT','SERVICE_ARGUMENTS','SERVICE_CAPABILITY_NOT_CONFIRMED']);
+// Fixed codes and known nonsecret flag names only. Never serialize an Error,
+// provider message, stack, connection URL or environment value into host logs.
+export function serviceStartupFailure(error) {
+  const code=STARTUP_CODES.has(error?.message)?error.message:'SERVICE_STARTUP_UNCONFIRMED';
+  return {stage:'worker-service',status:'startup-failed',errorCode:code,
+    ...(code==='SERVICE_OPT_IN_REQUIRED'&&SERVICE_OPT_INS.includes(error?.configKey)?{configKey:error.configKey}:{}),
+    published:false};
+}
 export function serviceLogger(log=console.error) {
   const emit=level=>()=>log(JSON.stringify({stage:'dbos-service',level,errorCode:'DBOS_OPERATION_REQUIRES_REVIEW',published:false}));
   return {debug(){},info(){},warn:emit('warn'),error:emit('error')};
@@ -23,10 +38,8 @@ export function serviceConfig(env) {
   const url=new URL(env.SUPABASE_URL||'https://invalid.invalid');
   requireShadowStagingHost(url.href);
   if(url.pathname!=='/'||url.search||url.hash)throw Error('SERVICE_STAGING_ORIGIN');
-  for(const name of ['SUPPLIER_PRICE_SERVICE_ENABLED','SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED',
-    'SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED','SUPPLIER_PRICE_SHARED_PREPARED_ENABLED',
-    'SUPPLIER_PRICE_SHADOW_PERSIST','SUPPLIER_PRICE_UPLOAD_VERIFICATION_ENABLED']) {
-    if(env[name]!=='1')throw Error('SERVICE_OPT_IN_REQUIRED');
+  for(const name of SERVICE_OPT_INS) {
+    if(env[name]!=='1')throw Object.assign(Error('SERVICE_OPT_IN_REQUIRED'),{configKey:name});
   }
   if(!/^sb_secret_[A-Za-z0-9_-]+$/.test(env.SUPABASE_SERVICE_ROLE_KEY||''))throw Error('SERVICE_STAGING_SECRET_REQUIRED');
   const executorId=env.SUPPLIER_PRICE_EXECUTOR_ID||'';

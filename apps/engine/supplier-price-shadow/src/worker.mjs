@@ -10,7 +10,7 @@ import {createVerifiedReleaseWorkflow} from "./verified-release-workflow.mjs";
 import {createSharedPreparedSource} from "./shared-prepared-source.mjs";
 import {createPartitionedVerifiedWorkflow} from "./partitioned-verified-workflow.mjs";
 import {consumeUploadVerification} from './upload-verification-consumer.mjs';
-import {serviceConfig,servicePreflight,serviceLogger,createWorkerService,startServiceHealth,SERVICE_QUEUE_LIMITS,SERVICE_RPC_NAMES} from './worker-service.mjs';
+import {serviceConfig,servicePreflight,serviceLogger,serviceStartupFailure,createWorkerService,startServiceHealth,SERVICE_QUEUE_LIMITS,SERVICE_RPC_NAMES} from './worker-service.mjs';
 import { requireShadowStagingHost, requireCompleteShadowScan, requireShadowStageReceipt,
   requireShadowHeartbeatReceipt, requireShadowDrainProgress } from "./shadow-batch-contract.mjs";
 
@@ -340,7 +340,10 @@ async function main() {
 }
 
 main().catch((error) => {
-  if(process.argv[2]==='--service')console.error('Supplier staging worker service stopped; check private operational status. No publication enabled.');
+  if(process.argv[2]==='--service'){
+    console.error(JSON.stringify(serviceStartupFailure(error)));
+    console.error('Supplier staging worker service stopped; check private operational status. No publication enabled.');
+  }
   else console.error("supplier price shadow worker failed", error);
   process.exitCode = 1;
 });
