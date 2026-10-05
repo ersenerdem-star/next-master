@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node src/worker.mjs",
     "worker:service:staging": "node src/worker.mjs --service",
+    "recover:staging:operator": "node src/worker.mjs --operator-recover",
     "worker:verify:staging": "node src/upload-verification-worker.mjs",
     "canary:staging": "node src/staging-canary.mjs",
     "canary:staging:file": "node src/full-staging-canary.mjs",

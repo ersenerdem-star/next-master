@@ -208,11 +208,20 @@ const verifiedPartitionedWorkflow=DBOS.registerWorkflow(async input=>{
 },{name:'supplier-price-verified-release-v3'});
 
 async function main() {
-  const releaseId = String(process.argv[2] || "").trim();
+  const operatorRecovery = process.argv[2] === "--operator-recover";
+  const releaseId = operatorRecovery
+    ? String(process.env.SUPPLIER_PRICE_OPERATOR_RECOVERY_RELEASE_ID || "").trim()
+    : String(process.argv[2] || "").trim();
+  const handoffId = operatorRecovery
+    ? String(process.env.SUPPLIER_PRICE_OPERATOR_RECOVERY_HANDOFF_ID || "").trim()
+    : "";
   const serviceMode=releaseId==='--service';
   const config=serviceMode?serviceConfig(process.env):null;
   if(serviceMode&&process.argv.length!==3)throw Error('SERVICE_ARGUMENTS');
-  const verified = serviceMode || releaseId === "--verified-handoff";
+  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if(operatorRecovery && (!uuid.test(releaseId) || !uuid.test(handoffId)))
+    throw Error('OPERATOR_RECOVERY_RELEASE_AND_HANDOFF_REQUIRED');
+  const verified = serviceMode || releaseId === "--verified-handoff" || operatorRecovery;
   if(verified)requireVerifiedMode();
   if(serviceMode)await servicePreflight({origin:config.origin,key:SERVICE_ROLE_KEY});
   if (!releaseId) throw new Error("Usage: npm start -- <release-id> | --check-only");
@@ -239,6 +248,27 @@ async function main() {
     await DBOS.launch();
     launched = true;
     await DBOS.registerQueue(queueName,serviceMode?SERVICE_QUEUE_LIMITS:undefined);
+    if (operatorRecovery) {
+      // DBOS ERROR workflows are terminal and cannot be resumed in place.
+      // Use a new, explicit operator identity so the verified SQL lease RPC
+      // can reclaim only the expired batch for this exact handoff. This path
+      // never publishes commercial data.
+      const workflowId = `supplier-price-operator-recovery:v1:${releaseId}:${Date.now()}`;
+      const handle = await DBOS.startWorkflow(verifiedPartitionedWorkflow, {
+        workflowID: workflowId,
+        queueName: VERIFIED_QUEUE,
+      })({ releaseId, handoffId });
+      const result = await handle.getResult();
+      console.log(JSON.stringify({
+        mode: "operator-recovery",
+        workflowId,
+        releaseId,
+        handoffId,
+        result,
+        published: false,
+      }));
+      return;
+    }
     if(serviceMode){
       service=createWorkerService({pollMs:config.pollMs,
         verify:()=>consumeUploadVerification({rpc:callRpc,workerId:config.executorId+':verify',
