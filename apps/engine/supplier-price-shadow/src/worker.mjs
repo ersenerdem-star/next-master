@@ -280,11 +280,27 @@ async function main() {
               throw Error('VERIFIED_VERSION_DRAIN_REQUIRED');
             return DBOS.startWorkflow(verifiedPartitionedWorkflow,{workflowID,queueName})(input);
           }}),
-        probe:async()=>{
-          const scope={workflowName:VERIFIED_WORKFLOW_NAME,applicationVersion:VERIFIED_APP_VERSION,limit:1,loadInput:false};
+      probe:async()=>{
+          const scope={workflowName:VERIFIED_WORKFLOW_NAME,applicationVersion:VERIFIED_APP_VERSION,limit:100,loadInput:true};
           const busy=await DBOS.listWorkflows({...scope,status:['PENDING','ENQUEUED','DELAYED']});
           const failed=await DBOS.listWorkflows({...scope,status:['ERROR','MAX_RECOVERY_ATTEMPTS_EXCEEDED']});
-          return {busy:busy.length>0,failed:failed.length>0};
+          // A terminal DBOS error remains in history after an explicit operator
+          // recovery succeeds. Keep the audit trail, but do not leave the
+          // intake service degraded when that exact release is already staged.
+          const failedReleaseIds=[...new Set(failed.map(workflow=>workflow.input?.[0]?.releaseId)
+            .filter(value=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value||'')))];
+          let unresolvedFailed=failed;
+          if(failedReleaseIds.length){
+            const response=await fetch(`${SUPABASE_URL}/rest/v1/supplier_price_releases?id=in.(${failedReleaseIds.join(',')})&select=id,status`,{
+              headers:supabaseApiHeaders(SERVICE_ROLE_KEY),redirect:'error',signal:AbortSignal.timeout(15000),
+            });
+            if(!response.ok)throw Error('SERVICE_RELEASE_STATUS_UNCONFIRMED');
+            const rows=await response.json();
+            const resolved=new Set((Array.isArray(rows)?rows:[])
+              .filter(row=>['staged','published'].includes(row?.status)).map(row=>row.id));
+            unresolvedFailed=failed.filter(workflow=>!resolved.has(workflow.input?.[0]?.releaseId));
+          }
+          return {busy:busy.length>0,failed:unresolvedFailed.length>0};
         }});
       closeHealth=await startServiceHealth({service,port:config.port});
       stop=()=>{
