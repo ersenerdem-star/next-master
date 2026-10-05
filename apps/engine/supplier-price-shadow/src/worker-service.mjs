@@ -106,7 +106,9 @@ export function createWorkerService({verify,dispatch,probe,wait=delay,log=consol
         try{await cycle();}
         catch(error){
           state.ready=false;state.phase='degraded';
-          state.errorCode=error?.message==='SERVICE_WORKFLOW_REQUIRES_REVIEW'?'WORKFLOW_REQUIRES_REVIEW':'WORKER_CYCLE_UNCONFIRMED';
+          const message=String(error?.message||'');
+          const knownCode=message.match(/^(SERVICE_[A-Z0-9_]+|UPLOAD_[A-Z0-9_]+|VERIFIED_[A-Z0-9_]+|WORKFLOW_[A-Z0-9_]+)/)?.[1];
+          state.errorCode=message==='SERVICE_WORKFLOW_REQUIRES_REVIEW'?'WORKFLOW_REQUIRES_REVIEW':knownCode||'WORKER_CYCLE_UNCONFIRMED';
           // Never emit raw provider bodies/credentials/customer data or stacks.
           log(JSON.stringify({stage:'worker-service',status:'degraded',errorCode:state.errorCode,published:false}));
         }
