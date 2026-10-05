@@ -1,0 +1,30 @@
+{
+  "name": "next-master-supplier-price-shadow",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/worker.mjs",
+    "worker:service:staging": "node src/worker.mjs --service",
+    "worker:verify:staging": "node src/upload-verification-worker.mjs",
+    "canary:staging": "node src/staging-canary.mjs",
+    "canary:staging:file": "node src/full-staging-canary.mjs",
+    "canary:staging:vag:persist": "node src/vag-persistence-canary.mjs",
+    "canary:staging:recovery": "node src/staging-recovery-canary.mjs",
+    "canary:staging:expiry": "node src/staging-expiry-canary.mjs",
+    "canary:staging:publication": "node src/staging-publication-canary.mjs",
+    "canary:staging:upload": "node --import tsx src/staging-upload-e2e.mjs",
+    "canary:staging:upload:resume": "node src/staging-upload-worker-resume.mjs",
+    "canary:staging:upload:security": "node --import tsx src/staging-upload-e2e.mjs --security",
+    "validate:staging": "node src/staging-validate.mjs",
+    "test:xlsx": "node --test ../../../scripts/tests/supplier-price-xlsx-parser.test.mjs"
+  },
+  "dependencies": {
+    "@dbos-inc/dbos-sdk": "^5.2.11",
+    "archiver": "^7.0.1",
+    "exceljs": "^4.4.0",
+    "unzipper": "^0.10.14"
+  }
+}

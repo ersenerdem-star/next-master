@@ -1,0 +1,24 @@
+*
+!package.json
+!package-lock.json
+!src/
+src/**
+!src/worker.mjs
+!src/worker-service.mjs
+!src/expiry-test-fixture.mjs
+!src/partitioned-verified-workflow.mjs
+!src/prepared-partitions.mjs
+!src/recovery-test-fixture.mjs
+!src/shadow-batch-contract.mjs
+!src/shadow-expiry-test-hook.mjs
+!src/shadow-recovery-test-hook.mjs
+!src/shadow-worker-queue.mjs
+!src/shared-prepared-source.mjs
+!src/storage-scan.mjs
+!src/streaming-csv.mjs
+!src/streaming-xlsx.mjs
+!src/supabase-headers.mjs
+!src/upload-verification-consumer.mjs
+!src/verified-release-workflow.mjs
+!src/verified-upload-handoff.mjs
+# Never send env/secrets, source files, evidence, node_modules or Git history.

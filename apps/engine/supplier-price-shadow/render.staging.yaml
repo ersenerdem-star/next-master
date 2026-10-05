@@ -1,0 +1,64 @@
+# Approved budget: approximately $45-50/month, excluding taxes/overages.
+# NOT deployed. Select only the reviewed scoped deployment branch before Apply.
+# No web app/domain, production secret or production database definition here.
+previews:
+  generation: off
+
+services:
+  - type: worker
+    name: next-master-supplier-price-staging-worker
+    runtime: docker
+    plan: 1c-2g
+    region: frankfurt
+    repo: https://github.com/ersenerdem-star/next-master
+    branch: codex/supplier-price-render-staging
+    dockerContext: apps/engine/supplier-price-shadow
+    dockerfilePath: apps/engine/supplier-price-shadow/Dockerfile
+    autoDeployTrigger: off
+    numInstances: 1
+    maxShutdownDelaySeconds: 60
+    # Render disk-backed services stop the old instance BEFORE replacement.
+    # This 1 GB scheduling guard is not DBOS history or price data storage.
+    # Mount need not be written; no root entrypoint/permission change required.
+    disk:
+      name: staging-single-instance-guard
+      mountPath: /var/lib/next-master-deployment-guard
+      sizeGB: 1
+    envVars:
+      - key: SUPABASE_URL
+        value: https://ztzxxogozgaojgabnvpg.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DBOS_SYSTEM_DATABASE_URL
+        fromDatabase:
+          name: next-master-supplier-price-staging-history
+          property: connectionString
+      - key: SUPPLIER_PRICE_EXECUTOR_ID
+        value: supplier-price-staging-01
+      - key: SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED
+        sync: false
+      - key: SUPPLIER_PRICE_SERVICE_ENABLED
+        value: "1"
+      - key: SUPPLIER_PRICE_UPLOAD_VERIFICATION_ENABLED
+        value: "1"
+      - key: SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED
+        value: "1"
+      - key: SUPPLIER_PRICE_SHARED_PREPARED_ENABLED
+        value: "1"
+      - key: SUPPLIER_PRICE_SHADOW_PERSIST
+        value: "1"
+      - key: SUPPLIER_PRICE_SHADOW_BATCH_SIZE
+        value: "1000"
+      - key: PORT
+        value: "3000"
+
+databases:
+  - name: next-master-supplier-price-staging-history
+    plan: 0.5c-1g
+    region: frankfurt
+    postgresMajorVersion: "17"
+    databaseName: nm_supplier_staging_history
+    user: nm_supplier_staging_worker
+    diskSizeGB: 5
+    storageAutoscalingEnabled: false
+    ipAllowList: []
