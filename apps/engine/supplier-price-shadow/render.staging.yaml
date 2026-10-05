@@ -16,7 +16,6 @@ services:
     dockerfilePath: apps/engine/supplier-price-shadow/Dockerfile
     autoDeployTrigger: off
     numInstances: 1
-    maxShutdownDelaySeconds: 60
     # Render disk-backed services stop the old instance BEFORE replacement.
     # This 1 GB scheduling guard is not DBOS history or price data storage.
     # Mount need not be written; no root entrypoint/permission change required.

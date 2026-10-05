@@ -262,7 +262,7 @@ async function main() {
         // Stop intake immediately; allow bounded completion. If source I/O or
         // shutdown stalls, exit non-successfully and preserve SQL leases/history
         // for the SAME executor/database to recover. Never reset/re-upload.
-        shutdownDeadline??=setTimeout(()=>process.exit(1),config.shutdownMs+10000);
+        shutdownDeadline??=setTimeout(()=>process.exit(1),config.shutdownMs+5000);
         shutdownDeadline.unref();
       };
       process.on('SIGINT',stop);process.on('SIGTERM',stop);

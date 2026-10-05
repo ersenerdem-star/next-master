@@ -42,7 +42,9 @@ export function serviceConfig(env) {
   const port=Number(env.PORT||3000);
   if(!Number.isInteger(batchSize)||batchSize<1||batchSize>1000)throw Error('SERVICE_BATCH_LIMIT');
   if(!Number.isInteger(port)||port<1||port>65535)throw Error('SERVICE_PORT');
-  return Object.freeze({executorId,port,batchSize,pollMs:10000,shutdownMs:30000,origin:url.origin});
+  // Disk-backed Render services use the default 30s termination window.
+  // Leave 10s for cleanup; the CLI hard deadline remains below that window.
+  return Object.freeze({executorId,port,batchSize,pollMs:10000,shutdownMs:20000,origin:url.origin});
 }
 
 // Same exact non-mutating service privilege probe as the real staging canary.
