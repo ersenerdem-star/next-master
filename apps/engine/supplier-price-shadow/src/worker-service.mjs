@@ -30,6 +30,7 @@ export const SERVICE_RPC_NAMES = new Set([
   'begin_supplier_price_upload_verification','complete_supplier_price_verified_upload',
   'claim_supplier_price_verified_handoff','ack_supplier_price_verified_handoff',
   'get_supplier_price_verified_manifest','claim_supplier_price_verified_release_batch',
+  'get_supplier_price_release_status',
   'stage_supplier_price_release_batch','heartbeat_supplier_price_release_batch',
   'finalize_supplier_price_release_shadow_batch',
 ]);

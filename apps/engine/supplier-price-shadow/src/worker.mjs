@@ -291,11 +291,7 @@ async function main() {
             .filter(value=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value||'')))];
           let unresolvedFailed=failed;
           if(failedReleaseIds.length){
-            const response=await fetch(`${SUPABASE_URL}/rest/v1/supplier_price_releases?id=in.(${failedReleaseIds.join(',')})&select=id,status`,{
-              headers:supabaseApiHeaders(SERVICE_ROLE_KEY),redirect:'error',signal:AbortSignal.timeout(15000),
-            });
-            if(!response.ok)throw Error('SERVICE_RELEASE_STATUS_UNCONFIRMED');
-            const rows=await response.json();
+            const rows=await callRpc('get_supplier_price_release_status',{input_release_ids:failedReleaseIds});
             const resolved=new Set((Array.isArray(rows)?rows:[])
               .filter(row=>['staged','published'].includes(row?.status)).map(row=>row.id));
             unresolvedFailed=failed.filter(workflow=>!resolved.has(workflow.input?.[0]?.releaseId));
