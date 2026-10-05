@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {Readable,Transform} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
+import {setTimeout as delay} from 'node:timers/promises';
 import {prepareSupplierPricePartitions,scanPreparedSupplierPriceBatch} from './prepared-partitions.mjs';
 import {supabaseApiHeaders} from './supabase-headers.mjs';
 
@@ -14,6 +15,7 @@ export const PREPARED_BUCKET='supplier-price-prepared';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA=/^[0-9a-f]{64}$/;
 const MAX_MANIFEST=8*1024*1024,MAX_PART=32*1024*1024;
+const MAX_READ_ATTEMPTS=5,READ_BACKOFF_MS=250;
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const positive=(n,max)=>Number.isSafeInteger(n)&&n>0&&n<=max;
 function binding(release,batchSize){
@@ -65,16 +67,37 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
   finally{stream.destroy?.();}
   return Buffer.concat(chunks,size);
  }
+ const transientStatus=status=>status===408||status===425||status===429||status>=500&&status<=599;
+ const transientError=error=>/AbortError|TimeoutError|ETIMEDOUT|ECONNRESET|ECONNREFUSED|UND_ERR/i.test(String(error?.name||'')+' '+String(error?.code||''));
  async function get(path,max){
-  const r=await request(objectUrl(PREPARED_BUCKET,path));
-  if(!r.ok){
-   const raw=(await boundedBody(r,4096)).toString();let b;try{b=JSON.parse(raw);}catch{}
-   // Storage can report object-not-found as HTTP 400 with an internal 404.
-   // Never interpret auth, bucket-not-found or an arbitrary 400 as absence.
-   if(r.status===404||r.status===400&&String(b?.statusCode)==='404'&&/Object not found|not_found|NoSuchKey/i.test(String(b?.error)+' '+String(b?.message)))return null;
-   throw Error(`SHARED_PREPARED_READ_FAILED:${r.status}`);
+  let lastStatus=null;
+  for(let attempt=1;attempt<=MAX_READ_ATTEMPTS;attempt++){
+   let r;
+   try{r=await request(objectUrl(PREPARED_BUCKET,path));}
+   catch(error){
+    if(!transientError(error)||attempt===MAX_READ_ATTEMPTS)throw Error('SHARED_PREPARED_READ_FAILED:NETWORK');
+    await delay(READ_BACKOFF_MS*2**(attempt-1));continue;
+   }
+   if(!r.ok){
+    lastStatus=r.status;
+    if(transientStatus(r.status)){
+     await r.body?.cancel?.();
+     if(attempt<MAX_READ_ATTEMPTS){await delay(READ_BACKOFF_MS*2**(attempt-1));continue;}
+     throw Error(`SHARED_PREPARED_READ_FAILED:${r.status}`);
+    }
+    const raw=(await boundedBody(r,4096)).toString();let b;try{b=JSON.parse(raw);}catch{}
+    // Storage can report object-not-found as HTTP 400 with an internal 404.
+    // Never interpret auth, bucket-not-found or an arbitrary 400 as absence.
+    if(r.status===404||r.status===400&&String(b?.statusCode)==='404'&&/Object not found|not_found|NoSuchKey/i.test(String(b?.error)+' '+String(b?.message)))return null;
+    throw Error(`SHARED_PREPARED_READ_FAILED:${r.status}`);
+   }
+   try{return await boundedBody(r,max);}
+   catch(error){
+    if(!transientError(error)||attempt===MAX_READ_ATTEMPTS)throw Error('SHARED_PREPARED_READ_FAILED:NETWORK');
+    await delay(READ_BACKOFF_MS*2**(attempt-1));
+   }
   }
-  return boundedBody(r,max);
+  throw Error(`SHARED_PREPARED_READ_FAILED:${lastStatus||'NETWORK'}`);
  }
  async function privateBucket(){
   const r=await request(`${origin.origin}/storage/v1/bucket/${PREPARED_BUCKET}`);
