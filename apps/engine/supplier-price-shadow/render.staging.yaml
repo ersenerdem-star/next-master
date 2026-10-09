@@ -25,7 +25,9 @@ services:
       sizeGB: 1
     envVars:
       - key: SUPABASE_URL
-        value: https://ztzxxogozgaojgabnvpg.supabase.co
+        value: https://kaxsqafdevabkxofwdod.supabase.co
+      - key: SUPPLIER_PRICE_EXPECTED_HOST
+        value: kaxsqafdevabkxofwdod.supabase.co
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: DBOS_SYSTEM_DATABASE_URL

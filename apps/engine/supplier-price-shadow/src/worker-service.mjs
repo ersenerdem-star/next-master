@@ -64,12 +64,22 @@ export function serviceConfig(env) {
 // Same exact non-mutating service privilege probe as the real staging canary.
 // An HTTP 200 at the API root is insufficient and does not validate a secret.
 export async function servicePreflight({origin,key,fetchImpl=fetch}) {
-  const response=await fetchImpl(origin+'/rest/v1/rpc/inspect_supplier_price_staging_fixture',{
+  const parsed = new URL(origin);
+  const v3 = parsed.hostname === 'kaxsqafdevabkxofwdod.supabase.co';
+  const rpc = v3 ? 'get_supplier_price_verified_manifest' : 'inspect_supplier_price_staging_fixture';
+  const body = v3
+    ? {input_release_id:'00000000-0000-0000-0000-000000000000',input_handoff_id:'00000000-0000-0000-0000-000000000000'}
+    : {input_run_id:'00000000-0000-0000-0000-000000000000'};
+  const response=await fetchImpl(origin+'/rest/v1/rpc/'+rpc,{
     method:'POST',headers:supabaseApiHeaders(key,'application/json'),redirect:'error',
-    body:JSON.stringify({input_run_id:'00000000-0000-0000-0000-000000000000'}),signal:AbortSignal.timeout(15000),
+    body:JSON.stringify(body),signal:AbortSignal.timeout(15000),
   });
   const data=await response.json().catch(()=>null);
-  if(response.status!==400||data?.message!=='STAGING_FIXTURE_NOT_FOUND')throw Error('SERVICE_CAPABILITY_NOT_CONFIRMED');
+  if (v3) {
+    if(response.status!==400 || data?.code==='PGRST202')throw Error('SERVICE_CAPABILITY_NOT_CONFIRMED');
+  } else if(response.status!==400||data?.message!=='STAGING_FIXTURE_NOT_FOUND') {
+    throw Error('SERVICE_CAPABILITY_NOT_CONFIRMED');
+  }
 }
 
 export function createWorkerService({verify,dispatch,probe,wait=delay,log=console.log,now=Date.now,pollMs=10000}) {

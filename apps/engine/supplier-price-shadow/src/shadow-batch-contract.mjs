@@ -1,9 +1,15 @@
-const STAGING_HOST = "ztzxxogozgaojgabnvpg.supabase.co";
+const DEFAULT_STAGING_HOST = "ztzxxogozgaojgabnvpg.supabase.co";
+const APPROVED_STAGING_HOSTS = new Set([
+  DEFAULT_STAGING_HOST,
+  "kaxsqafdevabkxofwdod.supabase.co",
+]);
 const first = (response) => Array.isArray(response) ? response[0] : response;
 
-export function requireShadowStagingHost(url) {
+export function requireShadowStagingHost(url, expectedHost = process.env.SUPPLIER_PRICE_EXPECTED_HOST || DEFAULT_STAGING_HOST) {
   const parsed = new URL(url);
-  if (parsed.protocol !== "https:" || parsed.host !== STAGING_HOST || parsed.username || parsed.password) {
+  if (!APPROVED_STAGING_HOSTS.has(expectedHost)
+      || parsed.protocol !== "https:" || parsed.host !== expectedHost
+      || parsed.username || parsed.password) {
     throw new Error("SHADOW_PERSIST_STAGING_HOST_REQUIRED");
   }
 }

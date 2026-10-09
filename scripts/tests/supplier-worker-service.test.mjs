@@ -39,6 +39,16 @@ test('Exact privilege preflight is non-mutating; generic HTTP errors/200 cannot 
  await assert.rejects(servicePreflight({origin:env.SUPABASE_URL,key:'synthetic',
   fetchImpl:async()=>({status:400,json:async()=>({message:'Invalid API key'})})}),/CAPABILITY/);
 });
+test('Full V3 preflight checks the verified manifest RPC without mutating data',async()=>{
+ let called=0;
+ await servicePreflight({origin:'https://kaxsqafdevabkxofwdod.supabase.co',key:'sb_secret_synthetic_only',fetchImpl:async(url,opts)=>{
+  called++;assert.ok(url.endsWith('/get_supplier_price_verified_manifest'));assert.equal(opts.redirect,'error');
+  assert.deepEqual(JSON.parse(opts.body),{input_release_id:'00000000-0000-0000-0000-000000000000',input_handoff_id:'00000000-0000-0000-0000-000000000000'});
+  return {status:400,json:async()=>({code:'PGRST116',message:'not found'})};
+ }});
+ assert.equal(called,1);
+ await assert.rejects(servicePreflight({origin:'https://kaxsqafdevabkxofwdod.supabase.co',key:'synthetic',fetchImpl:async()=>({status:404,json:async()=>({code:'PGRST202'})})}),/CAPABILITY/);
+});
 const empty={status:'empty',published:false};
 test('Startup diagnosis identifies only known guard codes and nonsecret opt-in names',()=>{
  try{serviceConfig({...env,SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED:'0'});}catch(error){
