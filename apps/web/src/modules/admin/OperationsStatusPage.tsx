@@ -21,10 +21,15 @@ import { SectionCard } from "../../presentation/components/common/SectionCard";
 import { Select } from "../../presentation/components/common/Select";
 import { PageHeader, PageShell } from "../../presentation/components/common/VisualPrimitives";
 import { useActionFeedback } from "../../presentation/components/common/ActionFeedback";
+import { SupplierReleaseReviewPanel } from "./SupplierReleaseReviewPanel";
 
 export function OperationsStatusPage() {
   const actionFeedback = useActionFeedback();
   const { locale, t } = useI18n();
+  // The review tables are introduced with the verified-upload cutover. Keep the
+  // panel closed until the corresponding schema and worker route are live in
+  // this environment; the legacy status centre must remain usable on its own.
+  const releaseReviewEnabled = import.meta.env.VITE_SUPPLIER_RELEASE_REVIEW_ENABLED === "true";
   const numberLocale = locale === "tr" ? "tr-TR" : "en-US";
   const [operationsRows, setOperationsRows] = useState<SupplierOperationsStatusRow[]>([]);
   const [catalogIntegrity, setCatalogIntegrity] = useState<CatalogIntegritySummary | null>(null);
@@ -179,22 +184,41 @@ export function OperationsStatusPage() {
     return mapImportStatusToTone(toImportEngineStatus(status));
   }
 
-  function catalogWorkerState(row: SupplierOperationsStatusRow) {
-    const state = String(row.catalog_sync_worker_state || "queued");
-    if (state === "running" && row.catalog_sync_last_progress_at) {
-      const lastProgress = new Date(row.catalog_sync_last_progress_at).getTime();
+  function resolveWorkerState(
+    stateValue: string | null | undefined,
+    heartbeatAt: string | null | undefined,
+  ) {
+    const state = String(stateValue || "queued");
+    if (state === "running" && heartbeatAt) {
+      const lastProgress = new Date(heartbeatAt).getTime();
       if (Number.isFinite(lastProgress) && Date.now() - lastProgress > 15 * 60 * 1000) return "stalled";
     }
     return state;
   }
 
+  function supplierWorkerState(row: SupplierOperationsStatusRow) {
+    return resolveWorkerState(row.supplier_import_worker_state, row.supplier_import_last_heartbeat_at);
+  }
+
+  function supplierWorkerStateLabel(row: SupplierOperationsStatusRow) {
+    return t(`dashboard.operationsStatus.workerState.${supplierWorkerState(row)}`);
+  }
+
+  function supplierWorkerStateTone(row: SupplierOperationsStatusRow) {
+    const state = supplierWorkerState(row);
+    if (state === "completed") return "completed";
+    if (state === "failed" || state === "stalled") return "failed";
+    if (state === "lock_waiting" || state === "queued") return "pending";
+    return "running";
+  }
+
   function catalogWorkerStateLabel(row: SupplierOperationsStatusRow) {
-    const state = catalogWorkerState(row);
+    const state = resolveWorkerState(row.catalog_sync_worker_state, row.catalog_sync_last_progress_at);
     return t(`dashboard.operationsStatus.workerState.${state}`);
   }
 
   function catalogWorkerStateTone(row: SupplierOperationsStatusRow) {
-    const state = catalogWorkerState(row);
+    const state = resolveWorkerState(row.catalog_sync_worker_state, row.catalog_sync_last_progress_at);
     if (state === "completed") return "completed";
     if (state === "failed" || state === "stalled") return "failed";
     if (state === "lock_waiting" || state === "queued") return "pending";
@@ -276,8 +300,9 @@ export function OperationsStatusPage() {
   }
 
   return (
-    <PageShell className="operations-status-page">
+      <PageShell className="operations-status-page">
       <PageHeader title={t("dashboard.operationsStatus.title")} subtitle={t("reports.statusCenterSubtitle")} />
+      {releaseReviewEnabled ? <SupplierReleaseReviewPanel locale={locale} /> : null}
       <SectionCard
         title={t("dashboard.operationsStatus.title")}
         className="operations-status-center"
@@ -343,6 +368,13 @@ export function OperationsStatusPage() {
                       <td>
                         <div className="list-stack">
                           <span className={`mark-badge mark-badge--${statusTone(row.supplier_import_status)}`}>{t(`statuses.${row.supplier_import_status}`)}</span>
+                          <span className={`mark-badge mark-badge--${supplierWorkerStateTone(row)}`}>{supplierWorkerStateLabel(row)}</span>
+                          <span className="operations-subtle">
+                            {formatCount(row.supplier_import_processed_rows)} / {formatCount(row.supplier_import_staged_rows)} · {formatCount(row.supplier_import_batches)} batches
+                          </span>
+                          <span className="operations-subtle">
+                            {t("dashboard.operationsStatus.catalogSyncLastProgress")}: {formatDateTime(row.supplier_import_last_progress_at || row.supplier_import_last_heartbeat_at)}
+                          </span>
                           {row.supplier_import_status === "failed" ? <span className="error-text">{row.supplier_import_error_message || t("dashboard.operationsStatus.failed")}</span> : null}
                         </div>
                       </td>
