@@ -57,10 +57,12 @@ test('Failed history from another staging target does not block current-target i
 });
 test('Resolved current-target history is ignored but active failure remains review-blocking',()=>{
  const staged=workflow('f45a8e17-c47d-44de-9dd6-a5c52a0387e0');
+  const validated=workflow('8a3d4c6b-0c13-4f77-9b5e-4c2fd9b3a1e7');
  const active=workflow('3928c266-be8c-427f-9289-24e3c87cc361');
  const malformed=workflow('not-a-uuid');
- assert.deepEqual(reconcileFailedWorkflowHistory([staged,active,malformed],[
+  assert.deepEqual(reconcileFailedWorkflowHistory([staged,validated,active,malformed],[
   {id:staged.input[0].releaseId,status:'staged'},
+  {id:validated.input[0].releaseId,status:'validated'},
   {id:active.input[0].releaseId,status:'received'},
  ]),[active,malformed]);
 });

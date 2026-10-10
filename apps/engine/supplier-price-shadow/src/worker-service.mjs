@@ -36,7 +36,11 @@ export const SERVICE_RPC_NAMES = new Set([
 ]);
 
 const RELEASE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const TERMINAL_RELEASE_STATUSES = new Set(['staged', 'published']);
+// A validated release has completed source verification and is waiting for a
+// separate publication decision. It is terminal for worker backpressure: the
+// failed DBOS execution must not keep the intake service degraded while the
+// release remains safely unpublished.
+const TERMINAL_RELEASE_STATUSES = new Set(['validated', 'staged', 'published']);
 
 // DBOS history is private and can outlive a Supabase staging target.  The
 // status RPC is executed against the worker's current target; a successful
