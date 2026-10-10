@@ -35,6 +35,27 @@ export const SERVICE_RPC_NAMES = new Set([
   'finalize_supplier_price_release_shadow_batch',
 ]);
 
+const RELEASE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TERMINAL_RELEASE_STATUSES = new Set(['staged', 'published']);
+
+// DBOS history is private and can outlive a Supabase staging target.  The
+// status RPC is executed against the worker's current target; a successful
+// lookup with no matching row therefore identifies an orphan from a previous
+// target, not an unresolved release in the current target.  Keep malformed
+// history fail-closed, and let RPC errors propagate so an outage never clears
+// review backpressure.
+export function reconcileFailedWorkflowHistory(failed, releaseStatusRows) {
+  const statusByRelease = new Map((Array.isArray(releaseStatusRows) ? releaseStatusRows : [])
+    .filter(row => RELEASE_ID.test(row?.id || ''))
+    .map(row => [row.id.toLowerCase(), row.status]));
+  return (Array.isArray(failed) ? failed : []).filter(workflow => {
+    const releaseId = workflow?.input?.[0]?.releaseId;
+    if (!RELEASE_ID.test(releaseId || '')) return true;
+    const status = statusByRelease.get(releaseId.toLowerCase());
+    return status !== undefined && !TERMINAL_RELEASE_STATUSES.has(status);
+  });
+}
+
 export function serviceConfig(env) {
   const url=new URL(env.SUPABASE_URL||'https://invalid.invalid');
   requireShadowStagingHost(url.href);

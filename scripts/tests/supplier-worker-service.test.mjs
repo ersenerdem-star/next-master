@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {serviceConfig,servicePreflight,serviceLogger,serviceStartupFailure,createWorkerService,startServiceHealth,SERVICE_QUEUE_LIMITS,SERVICE_RPC_NAMES}
+import {serviceConfig,servicePreflight,serviceLogger,serviceStartupFailure,createWorkerService,startServiceHealth,SERVICE_QUEUE_LIMITS,SERVICE_RPC_NAMES,reconcileFailedWorkflowHistory}
   from '../../apps/engine/supplier-price-shadow/src/worker-service.mjs';
 
 const env={SUPABASE_URL:'https://ztzxxogozgaojgabnvpg.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'sb_secret_synthetic_only',
@@ -50,6 +50,20 @@ test('Full V3 preflight checks the verified manifest RPC without mutating data',
  await assert.rejects(servicePreflight({origin:'https://kaxsqafdevabkxofwdod.supabase.co',key:'synthetic',fetchImpl:async()=>({status:404,json:async()=>({code:'PGRST202'})})}),/CAPABILITY/);
 });
 const empty={status:'empty',published:false};
+const workflow=(releaseId)=>({input:[{releaseId}]});
+test('Failed history from another staging target does not block current-target intake',()=>{
+ const orphan=workflow('8ee663f6-a571-4c1d-82d4-cd87a62b1356');
+ assert.deepEqual(reconcileFailedWorkflowHistory([orphan],[]),[]);
+});
+test('Resolved current-target history is ignored but active failure remains review-blocking',()=>{
+ const staged=workflow('f45a8e17-c47d-44de-9dd6-a5c52a0387e0');
+ const active=workflow('3928c266-be8c-427f-9289-24e3c87cc361');
+ const malformed=workflow('not-a-uuid');
+ assert.deepEqual(reconcileFailedWorkflowHistory([staged,active,malformed],[
+  {id:staged.input[0].releaseId,status:'staged'},
+  {id:active.input[0].releaseId,status:'received'},
+ ]),[active,malformed]);
+});
 test('Startup diagnosis identifies only known guard codes and nonsecret opt-in names',()=>{
  try{serviceConfig({...env,SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED:'0'});}catch(error){
   assert.deepEqual(serviceStartupFailure(error),{stage:'worker-service',status:'startup-failed',

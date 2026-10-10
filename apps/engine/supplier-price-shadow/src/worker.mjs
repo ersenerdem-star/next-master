@@ -10,7 +10,7 @@ import {createVerifiedReleaseWorkflow} from "./verified-release-workflow.mjs";
 import {createSharedPreparedSource} from "./shared-prepared-source.mjs";
 import {createPartitionedVerifiedWorkflow} from "./partitioned-verified-workflow.mjs";
 import {consumeUploadVerification} from './upload-verification-consumer.mjs';
-import {serviceConfig,servicePreflight,serviceLogger,serviceStartupFailure,createWorkerService,startServiceHealth,SERVICE_QUEUE_LIMITS,SERVICE_RPC_NAMES} from './worker-service.mjs';
+import {serviceConfig,servicePreflight,serviceLogger,serviceStartupFailure,createWorkerService,startServiceHealth,SERVICE_QUEUE_LIMITS,SERVICE_RPC_NAMES,reconcileFailedWorkflowHistory} from './worker-service.mjs';
 import { requireShadowStagingHost, requireCompleteShadowScan, requireShadowStageReceipt,
   requireShadowHeartbeatReceipt, requireShadowDrainProgress } from "./shadow-batch-contract.mjs";
 
@@ -292,9 +292,7 @@ async function main() {
           let unresolvedFailed=failed;
           if(failedReleaseIds.length){
             const rows=await callRpc('get_supplier_price_release_status',{input_release_ids:failedReleaseIds});
-            const resolved=new Set((Array.isArray(rows)?rows:[])
-              .filter(row=>['staged','published'].includes(row?.status)).map(row=>row.id));
-            unresolvedFailed=failed.filter(workflow=>!resolved.has(workflow.input?.[0]?.releaseId));
+            unresolvedFailed=reconcileFailedWorkflowHistory(failed, rows);
           }
           return {busy:busy.length>0,failed:unresolvedFailed.length>0};
         }});
