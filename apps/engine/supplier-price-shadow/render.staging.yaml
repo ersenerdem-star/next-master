@@ -14,7 +14,9 @@ services:
     branch: codex/supplier-price-render-staging
     dockerContext: apps/engine/supplier-price-shadow
     dockerfilePath: apps/engine/supplier-price-shadow/Dockerfile
-    autoDeployTrigger: off
+    # The staging service is Blueprint-managed; keep the dashboard setting
+    # reproducible and deploy every commit to this explicitly isolated branch.
+    autoDeployTrigger: commit
     numInstances: 1
     # Render disk-backed services stop the old instance BEFORE replacement.
     # This 1 GB scheduling guard is not DBOS history or price data storage.
