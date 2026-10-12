@@ -26,6 +26,8 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+  external_node_modules = ["@duckdb/node-api", "@duckdb/node-bindings", "@duckdb/node-bindings-linux-x64"]
+  included_files = ["node_modules/@duckdb/node-bindings-linux-x64/**"]
 
 [[headers]]
   for = "/*"
