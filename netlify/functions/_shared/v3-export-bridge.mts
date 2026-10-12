@@ -28,6 +28,9 @@ const POOL_HOSTS = new Set([
   "db.zjgueqijumzlfioihnkt.supabase.co",
 ]);
 const MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+// Keep the snapshot/export page count bounded for million-row releases while
+// staying within the database function's 5,000-row limit.
+const EXPORT_PAGE_SIZE = 5000;
 const WORKER_LEASE_SECONDS = 120;
 const WORKER_TIMESTAMP_WINDOW_MS = 60_000;
 
@@ -278,7 +281,7 @@ export async function runV3PriceExportJob(jobId: string) {
       progress_total: null, progress_message: "V3 snapshot worker is preparing rows.", error_message: null,
     }, { leaseOwner });
     const reader = createJobPriceSnapshotReader({
-      pool, mode: "hosted-v3", pageSize: 1000,
+      pool, mode: "hosted-v3", pageSize: EXPORT_PAGE_SIZE,
       operationsAllowed: (role: string, department: string, permissions: Record<string, boolean>) => canAccessOperationsModules(role, department, permissions),
       resolvePortalContext: async ({ invite, brandName }: any) => {
         const context = await resolvePortalPriceListExportContext(supabaseUrl, serviceRoleKey, inviteFromActor(invite), brandName);
@@ -300,11 +303,11 @@ export async function runV3PriceExportJob(jobId: string) {
     const binding = exportBinding(spec);
     duckdbExportDirectory = await mkdtemp(join("/tmp", "nm-duckdb-export-"));
     const duckdbMaterialized = await materializePagedExportWithDuckDB({
-      fetchPage: (args: any) => reader.fetchPage({ ...args, spec }), binding, expectedRows: spec.expectedRows, pageSize: 1000,
+      fetchPage: (args: any) => reader.fetchPage({ ...args, spec }), binding, expectedRows: spec.expectedRows, pageSize: EXPORT_PAGE_SIZE,
       outputDir: duckdbExportDirectory, tempDirectory: duckdbExportDirectory,
     });
     const duckdbFetchPage = createDuckDbPagedExportSource({
-      sortedPath: duckdbMaterialized.sortedPath, binding, expectedRows: spec.expectedRows, pageSize: 1000,
+      sortedPath: duckdbMaterialized.sortedPath, binding, expectedRows: spec.expectedRows, pageSize: EXPORT_PAGE_SIZE,
     });
     const stores = await (async () => ({
       parts: createExportPartsStore({ supabaseUrl, serviceRoleKey, input: spec,
