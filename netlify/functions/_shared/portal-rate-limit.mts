@@ -22,6 +22,7 @@ const PORTAL_RATE_LIMITS: Record<string, PortalRateLimitConfig> = {
   submit: { limit: 20, windowSeconds: 600, blockSeconds: 1200 },
   delete: { limit: 20, windowSeconds: 600, blockSeconds: 1200 },
   price_list: { limit: 10, windowSeconds: 600, blockSeconds: 1800 },
+  export_status: { limit: 120, windowSeconds: 600, blockSeconds: 900 },
   password_reset_request: { limit: 8, windowSeconds: 1800, blockSeconds: 3600 },
   password_reset_confirm: { limit: 10, windowSeconds: 1800, blockSeconds: 3600 },
 };
