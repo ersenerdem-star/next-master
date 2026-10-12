@@ -9,6 +9,7 @@ import {dispatchVerifiedSupplierPriceHandoff,VERIFIED_QUEUE} from "./verified-up
 import {createVerifiedReleaseWorkflow} from "./verified-release-workflow.mjs";
 import {createSharedPreparedSource} from "./shared-prepared-source.mjs";
 import {createPartitionedVerifiedWorkflow} from "./partitioned-verified-workflow.mjs";
+import {runDirectVerifiedRelease} from './direct-verified-release-runner.mjs';
 import {consumeUploadVerification} from './upload-verification-consumer.mjs';
 import {serviceConfig,servicePreflight,serviceLogger,serviceStartupFailure,createWorkerService,startServiceHealth,SERVICE_QUEUE_LIMITS,SERVICE_RPC_NAMES,reconcileFailedWorkflowHistory} from './worker-service.mjs';
 import { requireShadowStagingHost, requireCompleteShadowScan, requireShadowStageReceipt,
@@ -268,20 +269,11 @@ async function main() {
       // Use a new, explicit operator identity so the verified SQL lease RPC
       // can reclaim only the expired batch for this exact handoff. This path
       // never publishes commercial data.
-      const workflowId = `supplier-price-operator-recovery:v1:${releaseId}:${Date.now()}`;
-      const handle = await DBOS.startWorkflow(verifiedPartitionedWorkflow, {
-        workflowID: workflowId,
-        queueName: VERIFIED_QUEUE,
-      })({ releaseId, handoffId });
-      const result = await handle.getResult();
-      console.log(JSON.stringify({
-        mode: "operator-recovery",
-        workflowId,
-        releaseId,
-        handoffId,
-        result,
-        published: false,
-      }));
+      const result = await runDirectVerifiedRelease({
+        rpc:callRpc, source:createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY}),
+        releaseId, handoffId, workerId:`operator-recovery:${process.pid}`, batchSize:BATCH_SIZE,
+      });
+      console.log(JSON.stringify({mode:'direct-operator-recovery',releaseId,handoffId,result,published:false}));
       return;
     }
     if(serviceMode){
