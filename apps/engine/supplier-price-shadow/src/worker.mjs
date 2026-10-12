@@ -206,7 +206,7 @@ const verifiedWorkflow = DBOS.registerWorkflow(async input => {
 
 // New durable step order requires a separate application/workflow version.
 // Do not resume an old 0.5.0 execution under v2 or rewrite its recorded steps.
-const VERIFIED_APP_VERSION=SHARED_PREPARED?'0.7.0-shared-prepared':'0.6.0-verified-recovery';
+const VERIFIED_APP_VERSION=SHARED_PREPARED?'0.7.1-shared-prepared':'0.6.0-verified-recovery';
 const VERIFIED_WORKFLOW_NAME=SHARED_PREPARED?'supplier-price-verified-release-v3':'supplier-price-verified-release-v2';
 const verifiedRecoveryWorkflow=DBOS.registerWorkflow(createVerifiedReleaseWorkflow({DBOS,rpc:callRpc,
   requireMode:requireVerifiedMode,batchSize:BATCH_SIZE,
