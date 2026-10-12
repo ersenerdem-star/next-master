@@ -111,7 +111,7 @@ export async function servicePreflight({origin,key,fetchImpl=fetch}) {
   }
 }
 
-export function createWorkerService({verify,dispatch,probe,validate,wait=delay,log=console.log,now=Date.now,pollMs=10000}) {
+export function createWorkerService({verify,dispatch,probe,validate,wait=delay,log=console.log,now=Date.now,pollMs=10000,historyTimeoutMs=5000}) {
   const controller=new AbortController();
   const state={phase:'starting',ready:false,stopping:false,completedCycles:0,lastSuccessAt:null,errorCode:null};
   const snapshot=()=>({...state,published:false});
@@ -120,7 +120,11 @@ export function createWorkerService({verify,dispatch,probe,validate,wait=delay,l
     if(state.stopping)return;
     state.ready=false;
     state.phase='checking-history';
-    const history=await probe();
+    const history=await Promise.race([
+      probe(),
+      delay(historyTimeoutMs).then(()=>({busy:false,failed:false,timeout:true})),
+    ]);
+    if(history?.timeout)log(JSON.stringify({stage:'worker-service',status:'history-degraded',errorCode:'SERVICE_HISTORY_TIMEOUT',published:false}));
     if(typeof history?.busy!=='boolean'||typeof history?.failed!=='boolean')throw Error('SERVICE_HISTORY_RESPONSE');
     if(state.stopping)return;
     // Failed history is retained for operator review, but it is not global
