@@ -119,22 +119,12 @@ export function createWorkerService({verify,dispatch,probe,validate,wait=delay,l
   async function cycle() {
     if(state.stopping)return;
     state.ready=false;
-    state.phase='checking-history';
-    const history=await Promise.race([
-      probe(),
-      delay(historyTimeoutMs).then(()=>({busy:false,failed:false,timeout:true})),
-    ]);
-    if(history?.timeout)log(JSON.stringify({stage:'worker-service',status:'history-degraded',errorCode:'SERVICE_HISTORY_TIMEOUT',published:false}));
-    if(typeof history?.busy!=='boolean'||typeof history?.failed!=='boolean')throw Error('SERVICE_HISTORY_RESPONSE');
+    // Intake is protected by SQL claim/lease RPCs and immutable workflow IDs.
+    // Do not make it depend on a DBOS history read: one orphaned or slow history
+    // query must never starve every later upload. Existing DBOS work remains
+    // durable and the queue limit still bounds execution.
     if(state.stopping)return;
-    // Failed history is retained for operator review, but it is not global
-    // intake backpressure. Each release has an immutable workflow identity;
-    // blocking a new upload here would let one orphaned execution starve all
-    // later files. Active work (history.busy) still applies backpressure below.
-    // Backpressure: one accepted v3 workflow at a time, including recovered work.
-    // Do not start another large-source parse while that workflow is active.
-    if(history.busy){state.phase='processing';}
-    else {
+    {
       // Always drain source-verification first. A validation lookup or review
       // failure must never prevent a newly completed upload from being claimed.
       state.phase='verifying-source';

@@ -107,9 +107,9 @@ test('Validation failure does not stop future source admission',async()=>{
  await s.cycle();assert.deepEqual(calls,['verify','dispatch','validate']);
  assert.equal(s.snapshot().ready,true);assert.equal(s.snapshot().published,false);
 });
-test('Recovered work applies backpressure before any new source parse/admission',async()=>{
- let calls=0;const s=setup({probe:async()=>({busy:true,failed:false}),verify:async()=>{calls++;},dispatch:async()=>{calls++;}});
- await s.cycle();assert.equal(calls,0);assert.equal(s.snapshot().phase,'processing');
+test('Intake does not wait on recovered history before source admission',async()=>{
+ const calls=[];const s=setup({probe:async()=>({busy:true,failed:false}),verify:async()=>{calls.push('verify');return empty;},dispatch:async()=>{calls.push('dispatch');return empty;}});
+ await s.cycle();assert.deepEqual(calls,['verify','dispatch']);assert.equal(s.snapshot().ready,true);
 });
 test('Failed durable history does not block a new source intake',async()=>{
  const calls=[];const s=setup({probe:async()=>({busy:false,failed:true}),verify:async()=>{calls.push('verify');return empty;},dispatch:async()=>{calls.push('dispatch');return empty;}});
@@ -126,10 +126,10 @@ test('Shutdown during verify prohibits subsequent dispatch; no profile/object cl
  await s.cycle();assert.equal(dispatched,false);assert.equal(s.snapshot().ready,false);assert.equal(s.snapshot().stopping,true);
 });
 test('Continuous loop contains outage, backs off, recovers, stops; raw data not logged',async()=>{
- let probes=0,waits=0;const logs=[];let s;
- s=setup({probe:async()=>{if(++probes===1)throw Error('sb_secret_private customer price=99');return {busy:false,failed:false};},
-  log:x=>logs.push(x),wait:async()=>{if(++waits===2)s.stop();}});
- await s.run();assert.equal(probes,2);assert.equal(waits,2);assert.equal(s.snapshot().completedCycles,1);
+ let attempts=0,waits=0;const logs=[];let s;
+ s=setup({verify:async()=>{if(++attempts===1)throw Error('sb_secret_private customer price=99');return empty;},
+  dispatch:async()=>empty,log:x=>logs.push(x),wait:async()=>{if(++waits===2)s.stop();}});
+ await s.run();assert.equal(attempts,2);assert.equal(waits,2);assert.equal(s.snapshot().completedCycles,1);
  assert.equal(s.snapshot().phase,'stopped');assert.ok(logs[0].includes('WORKER_CYCLE_UNCONFIRMED'));
  assert.doesNotMatch(logs.join(''),/private|price=99/);
 });
