@@ -15,6 +15,7 @@ src/**
 !src/shadow-recovery-test-hook.mjs
 !src/shadow-worker-queue.mjs
 !src/shared-prepared-source.mjs
+!src/duckdb-validation.mjs
 !src/storage-scan.mjs
 !src/streaming-csv.mjs
 !src/streaming-xlsx.mjs
