@@ -30,9 +30,9 @@ export const SERVICE_RPC_NAMES = new Set([
   'begin_supplier_price_upload_verification','complete_supplier_price_verified_upload',
   'claim_supplier_price_verified_handoff','ack_supplier_price_verified_handoff',
   'get_supplier_price_verified_manifest','claim_supplier_price_verified_release_batch',
-  'get_supplier_price_release_status',
+  'get_supplier_price_release_status','get_supplier_price_validation_candidate',
   'stage_supplier_price_release_batch','heartbeat_supplier_price_release_batch',
-  'finalize_supplier_price_release_shadow_batch',
+  'finalize_supplier_price_release_shadow_batch','validate_supplier_price_release',
 ]);
 
 const RELEASE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -79,11 +79,15 @@ export function serviceConfig(env) {
     ||database.hostname.includes('zjgueqijumzlfioihnkt'))throw Error('SERVICE_PRIVATE_HISTORY_REQUIRED');
   const batchSize=Number(env.SUPPLIER_PRICE_SHADOW_BATCH_SIZE||1000);
   const port=Number(env.PORT||3000);
+  // This service is already hard-bound to the approved staging Supabase host.
+  // Automatic validation is on by default there and can be stopped explicitly
+  // without affecting upload admission or publication safety.
+  const autoValidate=env.SUPPLIER_PRICE_AUTO_VALIDATE_ENABLED!=='0';
   if(!Number.isInteger(batchSize)||batchSize<1||batchSize>1000)throw Error('SERVICE_BATCH_LIMIT');
   if(!Number.isInteger(port)||port<1||port>65535)throw Error('SERVICE_PORT');
   // Disk-backed Render services use the default 30s termination window.
   // Leave 10s for cleanup; the CLI hard deadline remains below that window.
-  return Object.freeze({executorId,port,batchSize,pollMs:10000,shutdownMs:20000,origin:url.origin});
+  return Object.freeze({executorId,port,batchSize,autoValidate,pollMs:10000,shutdownMs:20000,origin:url.origin});
 }
 
 // Same exact non-mutating service privilege probe as the real staging canary.
@@ -107,7 +111,7 @@ export async function servicePreflight({origin,key,fetchImpl=fetch}) {
   }
 }
 
-export function createWorkerService({verify,dispatch,probe,wait=delay,log=console.log,now=Date.now,pollMs=10000}) {
+export function createWorkerService({verify,dispatch,probe,validate,wait=delay,log=console.log,now=Date.now,pollMs=10000}) {
   const controller=new AbortController();
   const state={phase:'starting',ready:false,stopping:false,completedCycles:0,lastSuccessAt:null,errorCode:null};
   const snapshot=()=>({...state,published:false});
@@ -124,6 +128,8 @@ export function createWorkerService({verify,dispatch,probe,wait=delay,log=consol
     // Do not start another large-source parse while that workflow is active.
     if(history.busy){state.phase='processing';}
     else {
+      // Always drain source-verification first. A validation lookup or review
+      // failure must never prevent a newly completed upload from being claimed.
       state.phase='verifying-source';
       const verified=await verify();
       if(!['empty','exhausted','verified'].includes(verified?.status)||verified.published!==false)
@@ -133,6 +139,20 @@ export function createWorkerService({verify,dispatch,probe,wait=delay,log=consol
       const receipt=await dispatch();
       if(!['empty','enqueued'].includes(receipt?.status)||receipt.published!==false)throw Error('SERVICE_DISPATCH_RESPONSE');
       state.phase=receipt.status==='enqueued'?'enqueued':'idle'; // NEVER staged/published from ACK.
+      // Only when no source/handoff work was found may the service advance a
+      // staged release through idempotent validation. Errors are observable
+      // but non-blocking: the next verification cycle remains available.
+      if(verified.status!=='verified' && receipt.status==='empty' && typeof validate==='function'){
+        state.phase='validating-release';
+        try{
+          const validation=await validate();
+          if(validation?.status==='validated') state.phase='validated';
+          else if(validation?.status!=='empty') state.errorCode='SERVICE_VALIDATION_RESPONSE';
+        }catch{
+          state.errorCode='SERVICE_VALIDATION_UNCONFIRMED';
+          log(JSON.stringify({stage:'worker-service',status:'validation-degraded',errorCode:state.errorCode,published:false}));
+        }
+      }
     }
     state.lastSuccessAt=now();state.completedCycles++;state.errorCode=null;state.ready=true;
   }

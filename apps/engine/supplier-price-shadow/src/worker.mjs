@@ -65,6 +65,21 @@ async function callRpc(name, args) {
   return body;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function validateOneStagedRelease() {
+  const rows = await callRpc("get_supplier_price_validation_candidate", {});
+  if (!Array.isArray(rows)) throw Error("SERVICE_VALIDATION_CANDIDATE_RESPONSE");
+  const releaseId = rows[0]?.id;
+  if (releaseId === undefined) return { status: "empty", published: false };
+  if (!UUID.test(releaseId)) throw Error("SERVICE_VALIDATION_RELEASE_ID");
+  const result = await callRpc("validate_supplier_price_release", { input_release_id: releaseId });
+  if (result?.status !== "validated" || result.release_id !== releaseId) {
+    throw Error("SERVICE_VALIDATION_RESPONSE");
+  }
+  return { status: "validated", releaseId, result, published: false };
+}
+
 async function claimReleaseBatch(releaseId, handoffId, workerId = WORKER_ID) {
   return callRpc(handoffId ? "claim_supplier_price_verified_release_batch" : "claim_supplier_price_release_batch", {
     input_release_id: releaseId,
@@ -273,6 +288,7 @@ async function main() {
       service=createWorkerService({pollMs:config.pollMs,
         verify:()=>consumeUploadVerification({rpc:callRpc,workerId:config.executorId+':verify',
           supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY}),
+        validate:config.autoValidate?validateOneStagedRelease:undefined,
         dispatch:()=>dispatchVerifiedSupplierPriceHandoff({rpc:callRpc,workerId:config.executorId+':dispatch',
           startWorkflow:async({workflowID,queueName,input})=>{
             const existing=await DBOS.getWorkflowStatus(workflowID);
@@ -307,7 +323,7 @@ async function main() {
       };
       process.on('SIGINT',stop);process.on('SIGTERM',stop);
       console.log(JSON.stringify({stage:'worker-service',status:'started',applicationVersion:VERIFIED_APP_VERSION,
-        executionLimit:1,batchSize:config.batchSize,published:false}));
+        executionLimit:1,batchSize:config.batchSize,autoValidate:config.autoValidate,published:false}));
       await service.run();
       return;
     }

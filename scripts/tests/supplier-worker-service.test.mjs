@@ -10,10 +10,15 @@ const env={SUPABASE_URL:'https://ztzxxogozgaojgabnvpg.supabase.co',SUPABASE_SERV
     'SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED','SUPPLIER_PRICE_SHARED_PREPARED_ENABLED','SUPPLIER_PRICE_SHADOW_PERSIST',
     'SUPPLIER_PRICE_UPLOAD_VERIFICATION_ENABLED'].map(k=>[k,'1']))};
 test('Operational config retains exact staging, stable identity, bounded execution and no publication RPC',()=>{
- const c=serviceConfig(env);assert.equal(c.batchSize,1000);assert.equal(c.port,3000);
+ const c=serviceConfig(env);assert.equal(c.batchSize,1000);assert.equal(c.port,3000);assert.equal(c.autoValidate,true);
  assert.equal(c.executorId,env.SUPPLIER_PRICE_EXECUTOR_ID);assert.equal(c.shutdownMs,20000);
  assert.deepEqual(SERVICE_QUEUE_LIMITS,{globalConcurrency:1,workerConcurrency:1});
  assert.equal([...SERVICE_RPC_NAMES].some(x=>/publish|activate|delete|bootstrap|close/.test(x)),false);
+ assert.equal(SERVICE_RPC_NAMES.has('get_supplier_price_validation_candidate'),true);
+ assert.equal(SERVICE_RPC_NAMES.has('validate_supplier_price_release'),true);
+});
+test('Automatic validation can be explicitly disabled without weakening the staging guard',()=>{
+ assert.equal(serviceConfig({...env,SUPPLIER_PRICE_AUTO_VALIDATE_ENABLED:'0'}).autoValidate,false);
 });
 for(const [name,patch] of Object.entries({production:{SUPABASE_URL:'https://zjgueqijumzlfioihnkt.supabase.co'},
   extraPath:{SUPABASE_URL:env.SUPABASE_URL+'/rest/v1'},query:{SUPABASE_URL:env.SUPABASE_URL+'?other=1'},
@@ -87,6 +92,19 @@ test('Same verifier then same outbox; ACK remains enqueued, not staged/published
  const calls=[];const s=setup({verify:async()=>{calls.push('verify');return {status:'verified',published:false};},
  dispatch:async()=>{calls.push('dispatch');return {status:'enqueued',published:false};}});
  await s.cycle();assert.deepEqual(calls,['verify','dispatch']);assert.equal(s.snapshot().phase,'enqueued');
+ assert.equal(s.snapshot().ready,true);assert.equal(s.snapshot().published,false);
+});
+test('Source verification and handoff drain before staged validation',async()=>{
+ const calls=[];const s=setup({validate:async()=>{calls.push('validate');return {status:'validated',published:false};},
+  verify:async()=>{calls.push('verify');return empty;},
+  dispatch:async()=>{calls.push('dispatch');return empty;}});
+ await s.cycle();assert.deepEqual(calls,['verify','dispatch','validate']);assert.equal(s.snapshot().phase,'validated');
+ assert.equal(s.snapshot().ready,true);assert.equal(s.snapshot().published,false);
+});
+test('Validation failure does not stop future source admission',async()=>{
+ const calls=[];const s=setup({validate:async()=>{calls.push('validate');throw Error('SERVICE_VALIDATION_LOOKUP');},
+  verify:async()=>{calls.push('verify');return empty;},dispatch:async()=>{calls.push('dispatch');return empty;}});
+ await s.cycle();assert.deepEqual(calls,['verify','dispatch','validate']);
  assert.equal(s.snapshot().ready,true);assert.equal(s.snapshot().published,false);
 });
 test('Recovered work applies backpressure before any new source parse/admission',async()=>{
