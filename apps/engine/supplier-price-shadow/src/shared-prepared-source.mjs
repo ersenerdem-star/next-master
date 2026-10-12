@@ -10,6 +10,7 @@ import {pipeline} from 'node:stream/promises';
 import {setTimeout as delay} from 'node:timers/promises';
 import {prepareSupplierPricePartitions,scanPreparedSupplierPriceBatch} from './prepared-partitions.mjs';
 import {supabaseApiHeaders} from './supabase-headers.mjs';
+import {validateCsvWithDuckDB} from './duckdb-validation.mjs';
 
 export const PREPARED_BUCKET='supplier-price-prepared';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -131,11 +132,11 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
   return {manifest,receipt:{bucket:PREPARED_BUCKET,key,sha256:digest(bytes)}};
  }
  return {
-  async prepare({release,batchSize}){
+  async prepare({release,batchSize,validateExisting=false}){
    const {context,prefix,key}=binding(release,batchSize);
    await privateBucket();
    const ready=await load(release,batchSize);
-   if(ready)return ready.receipt;
+   if(ready&&!validateExisting)return ready.receipt;
    const dir=await mkdtemp(join(tmpdir(),'supplier-price-shared-'));
    try{
     const file=join(dir,/\.xlsx$/i.test(context.source_path)?'source.xlsx':'source.csv');
@@ -148,6 +149,8 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
      hash.update(chunk);done(null,chunk);
     }}),createWriteStream(file,{flags:'wx',mode:0o600}));
     if(bytes!==context.source_bytes||hash.digest('hex')!==context.source_sha256)throw Error('SHARED_PREPARED_SOURCE_MISMATCH');
+    const validation=await validateCsvWithDuckDB({inputPath:file,delimiter:';',memoryLimit:'512MB',threads:4,tempDirectory:dir});
+    if(ready)return {...ready.receipt,validation};
     const prepared=await prepareSupplierPricePartitions({inputPath:file,outputDir:join(dir,'parts'),batchSize,
      sourceDate:context.source_date,expectedRows:context.total_rows,expectedChecksum:context.source_sha256,
      releaseId:context.release_id,sourcePath:context.source_path});
@@ -162,7 +165,7 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
     }
     // Ready marker LAST. A partial upload cannot be used by the row worker.
     await putExact(key,Buffer.from(JSON.stringify(manifest)+'\n'),'application/json',MAX_MANIFEST);
-    return (await load(release,batchSize)).receipt;
+    return {...(await load(release,batchSize)).receipt,validation};
    }finally{await rm(dir,{recursive:true,force:true});} // Only owned invocation tempfile.
   },
   async scan({release,claim,batchSize,receipt}){
