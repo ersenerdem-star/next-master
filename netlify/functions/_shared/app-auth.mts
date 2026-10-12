@@ -1,4 +1,19 @@
-import { getJson, serviceRoleHeaders } from "./http.mts";
+import { getJson, HttpRequestError, serviceRoleHeaders } from "./http.mts";
+import { isTokenRevoked } from "./auth/session-revocation.mts";
+
+export class AppAuthError extends Error {
+  readonly status: 401 | 403;
+
+  constructor(message: string, status: 401 | 403 = 401) {
+    super(message);
+    this.name = "AppAuthError";
+    this.status = status;
+  }
+}
+
+export function getAppAuthStatus(error: unknown): 401 | 403 | undefined {
+  return error instanceof AppAuthError ? error.status : undefined;
+}
 
 export type AppCaller = {
   id: string;
@@ -29,35 +44,80 @@ export async function resolveCaller(
 ) {
   const accessToken = getBearerToken(req);
   if (!accessToken) {
-    throw new Error("Missing session token");
+    throw new AppAuthError("Your session has expired. Sign in again.");
   }
 
-  const user = await getJson<AuthUserResponse>(`${supabaseUrl}/auth/v1/user`, {
-    headers: {
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    timeoutMs: 8_000,
-  });
+  let user: AuthUserResponse;
+  try {
+    user = await getJson<AuthUserResponse>(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      timeoutMs: 8_000,
+    });
+  } catch (error) {
+    // Invalid/signed-out credentials are an Auth failure, not a malformed RPC.
+    // Do not misclassify rate limits, network failures or upstream outages.
+    if (error instanceof HttpRequestError && [401, 403].includes(error.status)) {
+      throw new AppAuthError("Your session has expired. Sign in again.");
+    }
+    throw error;
+  }
 
   const userId = String(user.id || "");
   if (!userId) {
-    throw new Error("Session user not found");
+    throw new AppAuthError("Your session has expired. Sign in again.");
   }
 
-  const profiles = await getJson<Array<{ organization_id?: string | null; role?: string | null; department?: string | null; permissions?: Record<string, boolean> | null; customer_scope_mode?: string | null }>>(
-    `${supabaseUrl}/rest/v1/profiles?select=organization_id,role,department,permissions,customer_scope_mode&id=eq.${encodeURIComponent(userId)}&limit=1`,
-    {
-      headers: serviceRoleHeaders(serviceRoleKey),
-      timeoutMs: 8_000,
-    },
-  );
+  type ProfileRow = {
+    organization_id?: string | null;
+    role?: string | null;
+    department?: string | null;
+    permissions?: Record<string, boolean> | null;
+    customer_scope_mode?: string | null;
+    is_active?: boolean | null;
+    session_revoked_at?: string | null;
+  };
 
-  const profile = profiles[0] || {};
-  const organizationId = String(profile.organization_id || "");
+  let profiles: ProfileRow[];
+  try {
+    profiles = await getJson<ProfileRow[]>(
+      `${supabaseUrl}/rest/v1/profiles?select=organization_id,role,department,permissions,customer_scope_mode,is_active,session_revoked_at&id=eq.${encodeURIComponent(userId)}&limit=1`,
+      {
+        headers: serviceRoleHeaders(serviceRoleKey),
+        timeoutMs: 8_000,
+      },
+    );
+  } catch (error) {
+    // Compatibility is ONLY for the absent optional column. A timeout,
+    // outage or denied SELECT must not retry with revocation omitted.
+    if (!(error instanceof HttpRequestError) ||
+        !["42703", "PGRST204"].includes(error.code) ||
+        !error.rawMessage.includes("session_revoked_at")) throw error;
+    // Keep the application available while the session-revocation migration
+    // is being rolled out. The active flag remains enforced; only the
+    // optional revocation timestamp is unavailable on older schemas.
+    profiles = await getJson<ProfileRow[]>(
+      `${supabaseUrl}/rest/v1/profiles?select=organization_id,role,department,permissions,customer_scope_mode,is_active&id=eq.${encodeURIComponent(userId)}&limit=1`,
+      {
+        headers: serviceRoleHeaders(serviceRoleKey),
+        timeoutMs: 8_000,
+      },
+    );
+  }
+
+  const profile = profiles[0];
+  const organizationId = String(profile?.organization_id || "");
   if (!organizationId) {
-    throw new Error("No organization found for current user");
+    throw new AppAuthError("Your session has expired. Sign in again.");
+  }
+  if (profile.is_active !== true) {
+    throw new AppAuthError("Your session has expired. Sign in again.");
+  }
+  if (isTokenRevoked(accessToken, profile.session_revoked_at || null)) {
+    throw new AppAuthError("Your session has expired. Sign in again.");
   }
 
   return {
