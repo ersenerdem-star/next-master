@@ -12,7 +12,7 @@ test('direct runner drains leased batches without DBOS',async()=>{
   if(name==='finalize_supplier_price_release_shadow_batch'){finalized++;return {status:'finalized',release_id:release,batch_id:args.input_batch_id,current_cursor:2,processed_rows:2,release_status:'staged'};}
   throw Error(name);
  };
- const source={prepare:async()=>({bucket:'supplier-price-prepared',key:'manifest',sha256:'a'.repeat(64)}),scan:async()=>({rows:[{product_code:'X'}],batchRows:2,cursorEnd:2,acceptedRows:2,warningRows:0,rejectedRows:0})};
+ const source={prepare:async()=>({bucket:'supplier-price-prepared',key:'manifest',sha256:'a'.repeat(64)}),scan:async()=>({rows:[{source_row_number:1,product_code:'X'},{source_row_number:2,product_code:'Y'}],batchRows:2,cursorEnd:2,acceptedRows:2,warningRows:0,rejectedRows:0})};
  const result=await runDirectVerifiedRelease({rpc,source,releaseId:release,handoffId:handoff,workerId:'test-direct'});
  assert.equal(result.status,'staged');assert.equal(staged,1);assert.equal(finalized,1);assert.equal(cursor,0);
 });

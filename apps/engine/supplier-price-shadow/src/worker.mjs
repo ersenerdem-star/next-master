@@ -261,9 +261,6 @@ async function main() {
     requireExpiryTestHook({ role: process.env.SUPPLIER_PRICE_EXPIRY_TEST_ROLE || "",
       releaseId, supabaseUrl: SUPABASE_URL, canSend: typeof process.send === "function" });
     if (PERSIST_SHADOW_ROWS) requireShadowStagingHost(SUPABASE_URL);
-    await DBOS.launch();
-    launched = true;
-    await DBOS.registerQueue(queueName,serviceMode?SERVICE_QUEUE_LIMITS:undefined);
     if (operatorRecovery) {
       // DBOS ERROR workflows are terminal and cannot be resumed in place.
       // Use a new, explicit operator identity so the verified SQL lease RPC
@@ -276,6 +273,9 @@ async function main() {
       console.log(JSON.stringify({mode:'direct-operator-recovery',releaseId,handoffId,result,published:false}));
       return;
     }
+    await DBOS.launch();
+    launched = true;
+    await DBOS.registerQueue(queueName,serviceMode?SERVICE_QUEUE_LIMITS:undefined);
     if(serviceMode){
       service=createWorkerService({pollMs:config.pollMs,
         verify:()=>consumeUploadVerification({rpc:callRpc,workerId:config.executorId+':verify',

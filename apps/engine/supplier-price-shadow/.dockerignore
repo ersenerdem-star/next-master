@@ -3,6 +3,7 @@
 !package-lock.json
 !src/
 src/**
+!src/direct-verified-release-runner.mjs
 !src/worker.mjs
 !src/worker-service.mjs
 !src/expiry-test-fixture.mjs

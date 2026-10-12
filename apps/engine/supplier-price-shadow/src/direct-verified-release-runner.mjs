@@ -1,4 +1,4 @@
-import {requireShadowDrainProgress,requireShadowStageReceipt,requireShadowHeartbeatReceipt} from './shadow-batch-contract.mjs';
+import {requireCompleteShadowScan,requireShadowDrainProgress,requireShadowStageReceipt,requireShadowHeartbeatReceipt} from './shadow-batch-contract.mjs';
 const first=value=>Array.isArray(value)?value[0]:value;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -16,7 +16,7 @@ export async function runDirectVerifiedRelease({rpc,source,releaseId,handoffId,w
   if(claim?.status==='complete')return {status:'staged',releaseId,handoffId,published:false};
   if(claim?.status!=='claimed'||claim.release_id!==releaseId)throw Error('DIRECT_RUNNER_CLAIM');
   const scan=await source.scan({release:manifest,claim,batchSize,receipt:prepared});
-  if(scan?.releaseId&&scan.releaseId!==releaseId)throw Error('DIRECT_RUNNER_SCAN_IDENTITY');
+  requireCompleteShadowScan(claim,scan,true);
   const staged=await rpc('stage_supplier_price_release_batch',{input_batch_id:claim.batch_id,input_worker_id:workerId,input_rows:scan.rows});
   if(first(staged)?.status==='stale')continue;
   requireShadowStageReceipt(staged,claim,scan.batchRows);
