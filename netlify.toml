@@ -26,6 +26,24 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+
+[functions."portal-export-start"]
+  external_node_modules = ["@duckdb/node-api", "@duckdb/node-bindings", "@duckdb/node-bindings-linux-x64"]
+  included_files = ["node_modules/@duckdb/node-bindings-linux-x64/**"]
+
+[functions."portal-export-status"]
+  external_node_modules = ["@duckdb/node-api", "@duckdb/node-bindings", "@duckdb/node-bindings-linux-x64"]
+  included_files = ["node_modules/@duckdb/node-bindings-linux-x64/**"]
+
+[functions."portal-export-worker-background"]
+  external_node_modules = ["@duckdb/node-api", "@duckdb/node-bindings", "@duckdb/node-bindings-linux-x64"]
+  included_files = ["node_modules/@duckdb/node-bindings-linux-x64/**"]
+
+[functions."portal-export-download"]
+  external_node_modules = ["@duckdb/node-api", "@duckdb/node-bindings", "@duckdb/node-bindings-linux-x64"]
+  included_files = ["node_modules/@duckdb/node-bindings-linux-x64/**"]
+
+[functions."portal-export-file"]
   external_node_modules = ["@duckdb/node-api", "@duckdb/node-bindings", "@duckdb/node-bindings-linux-x64"]
   included_files = ["node_modules/@duckdb/node-bindings-linux-x64/**"]
 
