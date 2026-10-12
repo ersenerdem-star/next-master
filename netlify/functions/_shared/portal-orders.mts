@@ -1,14 +1,16 @@
 import { buildRestUrl, getJson, sendJson, serviceRoleHeaders } from "./http.mts";
 import { buildPortalSnapshot } from "./portal-access.mts";
 import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./catalog-standardization.mts";
+import { roundMoney, multiplyMoney, sumMoney, marginPercent as orderMarginPercent, markupMoney } from "../../../shared/order-money.mjs";
 
-type PortalInviteRow = {
+export type PortalInviteRow = {
   id: string;
   organization_id: string;
   party_type: "customer" | "vendor";
   party_name: string;
   customer_id: string | null;
   vendor_id: string | null;
+  seller_company_profile_id?: string | null;
   email: string;
   contact_name: string;
   status: "draft" | "invited" | "active" | "disabled";
@@ -17,6 +19,8 @@ type PortalInviteRow = {
   access_can_view_invoices: boolean;
   access_can_view_payments: boolean;
   access_can_view_orders: boolean;
+  allowed_brand_ids?: string[] | null;
+  updated_at?: string | null;
 };
 
 type CustomerRow = {
@@ -87,7 +91,7 @@ type PortalCatalogSearchResponse = {
   recommendations: PortalCatalogSearchItem[];
 };
 
-type PortalPriceListRow = {
+export type PortalPriceListRow = {
   product_code: string;
   brand: string;
   description: string;
@@ -170,6 +174,19 @@ type CustomerPricingContext = {
   cPriceListIds: string[];
 };
 
+export type PortalPriceListExportContext = {
+  organizationId: string;
+  inviteId: string;
+  customerId: string;
+  brandId: string;
+  brandName: string;
+  priceListType: CustomerPricingContext["customerType"];
+  currency: string;
+  effectiveMarginA: number;
+  effectiveMarginB: number;
+  cPriceListIds: string[];
+};
+
 const CUSTOMER_ORDER_SELECT =
   "id,display_name,company_name,currency,payment_terms,contract_nr,custom_fields,seller_company_profile_id,price_list_type,price_list_margin_percent";
 const CUSTOMER_ORDER_SELECT_LEGACY =
@@ -177,9 +194,13 @@ const CUSTOMER_ORDER_SELECT_LEGACY =
 const PORTAL_LOOKUP_CACHE_TTL_MS = 2 * 60 * 1000;
 const PORTAL_PRICE_LIST_CACHE_TTL_MS = 5 * 60 * 1000;
 const PORTAL_PRICE_LIST_MAX_ROWS = 100000;
-const PORTAL_PRICE_LIST_CATALOG_PAGE_SIZE = 5000;
-const PORTAL_PRICE_LIST_SUPPLIER_PAGE_SIZE = 5000;
-const PORTAL_PRICE_LIST_ITEM_PAGE_SIZE = 5000;
+// Supabase REST applies the project's max-rows setting to every response. In
+// production that cap is 1,000, even when a larger `limit` is requested. Keep
+// these page sizes at the effective cap so the loops below advance through all
+// pages instead of treating the first truncated response as the final page.
+const PORTAL_PRICE_LIST_CATALOG_PAGE_SIZE = 1000;
+const PORTAL_PRICE_LIST_SUPPLIER_PAGE_SIZE = 1000;
+const PORTAL_PRICE_LIST_ITEM_PAGE_SIZE = 1000;
 const PORTAL_SEARCH_REST_TIMEOUT_MS = 2800;
 const PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS = 900;
 // Search results may need one tenant-scoped supplier-price lookup in addition
@@ -273,7 +294,6 @@ function applyPortalBrandScope(params: Record<string, string>, invite: PortalInv
 
 function assertPortalRowsWithinBrandScope(invite: PortalInviteRow, brandMap: { byId: Map<string, string>; byName: Map<string, string> }, rows: PortalOrderInputRow[]) {
   const allowedBrandIds = portalAllowedBrandIds(invite);
-  if (!allowedBrandIds.length) return;
   const allowedSet = new Set(allowedBrandIds);
   for (const row of rows) {
     const brandId = brandMap.byName.get(String(row.brand || "").trim().toLowerCase()) || "";
@@ -918,29 +938,8 @@ async function hydratePortalCatalogItems(
       if (!bestOption) continue;
       previewByCode.set(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`, {
         sell_price:
-          bestOption.buy_price == null ? null : roundMoney(Number(bestOption.buy_price) * (1 + marginPercent / 100)),
+          bestOption.buy_price == null ? null : markupMoney(bestOption.buy_price, marginPercent),
       });
-    }
-    if (prefersCPriceWhereAvailable(context)) {
-      const cPriceMap = await fetchCPriceMap(
-        supabaseUrl,
-        serviceRoleKey,
-        invite.organization_id,
-        context.cPriceListIds,
-        baseItems.map((item) => ({
-          brand: item.brand,
-          product_code: item.code,
-        })),
-        timeoutMs,
-      ).catch(() => new Map());
-      for (const item of baseItems) {
-        const key = `${item.brand.trim().toLowerCase()}::${item.normalized_code}`;
-        const cPrice = cPriceMap.get(key);
-        if (cPrice == null) continue;
-        previewByCode.set(key, {
-          sell_price: cPrice,
-        });
-      }
     }
   }
 
@@ -982,6 +981,7 @@ async function fetchPortalCatalogRecommendations(
   timeoutMs = PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS,
 ) {
   if (!search || !baseItems.length || !shouldStrictlyFilterCodeSearch(search)) return [] as SearchCatalogBaseItem[];
+  const allowedBrandIds = portalAllowedBrandIds(invite);
 
   const anchorRows = baseItems.slice(0, 6).map((item) => ({ description: item.description }));
   const anchorDescriptionTokens = resolveCatalogFamilyAnchor(anchorRows);
@@ -994,7 +994,7 @@ async function fetchPortalCatalogRecommendations(
   const candidateRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
     select: "product_code,description,oem_no,vehicle,hs_code,origin,weight_kg,image_url,brand_id,normalized_code,lifecycle_status,lifecycle_note",
     organization_id: `eq.${invite.organization_id}`,
-    ...(portalAllowedBrandIds(invite).length ? { brand_id: `in.(${portalAllowedBrandIds(invite).join(",")})` } : {}),
+    ...(allowedBrandIds.length ? { brand_id: `in.(${allowedBrandIds.join(",")})` } : {}),
     or: `(${anchorDescriptionTokens.slice(0, 3).map((token) => `description.ilike.*${token}*`).join(",")})`,
     order: "product_code.asc",
     limit: "120",
@@ -1042,10 +1042,6 @@ async function fetchPortalCatalogRecommendations(
     .map(({ __score: _score, __descriptionMatches: _descriptionMatches, __vehicleMatches: _vehicleMatches, ...item }) => item);
 }
 
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
 function parseEmbeddedCustomerMeta(raw: unknown) {
   const text = String(raw || "");
   const markerIndex = text.lastIndexOf(CUSTOMER_META_PREFIX);
@@ -1068,8 +1064,8 @@ function normalizePortalCustomerType(value: string): CustomerPricingContext["cus
   const normalized = String(value || "").trim().toLowerCase();
   if (normalized === "a" || normalized === "a price list") return "A";
   if (normalized === "b" || normalized === "b price list") return "B";
-  if (normalized === "c" || normalized === "c price list") return "C";
-  if (normalized === "other" || normalized === "other margin") return "Other";
+  if (normalized === "c" || normalized === "c price list") return "A";
+  if (normalized === "other" || normalized === "other margin") return "A";
   return "A";
 }
 
@@ -1080,7 +1076,7 @@ function portalSupplierFallbackCustomerType(context: CustomerPricingContext): "A
 function computeSellFromBuy(buyPrice: number | null, context: CustomerPricingContext) {
   if (buyPrice == null) return null;
   const marginPercent = portalSupplierFallbackCustomerType(context) === "B" ? context.effectiveMarginB : context.effectiveMarginA;
-  return roundMoney(Number(buyPrice) * (1 + marginPercent / 100));
+  return markupMoney(buyPrice, marginPercent);
 }
 
 function portalFallbackPriceType(context: CustomerPricingContext) {
@@ -1137,11 +1133,12 @@ async function fetchAll<T>(supabaseUrl: string, serviceRoleKey: string, table: s
   });
 }
 
-async function callRpc<T>(supabaseUrl: string, serviceRoleKey: string, fn: string, payload: Record<string, unknown>) {
+async function callRpc<T>(supabaseUrl: string, serviceRoleKey: string, fn: string, payload: Record<string, unknown>, timeoutMs?: number) {
   return sendJson<T>(rpcUrl(supabaseUrl, fn), {
     method: "POST",
     headers: serviceRoleHeaders(serviceRoleKey),
     body: JSON.stringify(payload),
+    timeoutMs,
   });
 }
 
@@ -1275,6 +1272,38 @@ async function resolvePortalCustomer(
     expiresAt: Date.now() + PORTAL_LOOKUP_CACHE_TTL_MS,
   });
   return context;
+}
+
+export async function resolvePortalPriceListExportContext(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  invite: PortalInviteRow,
+  brand: string,
+): Promise<PortalPriceListExportContext> {
+  const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
+  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
+  const allowedBrandIds = portalAllowedBrandIds(invite);
+  const brandId = brandMap.byName.get(String(brand || "").trim().toLowerCase()) || "";
+  const brandName = brandMap.byId.get(brandId) || "";
+  if (!brandId || !brandName) {
+    throw new Error("Brand not found for portal price list");
+  }
+  if (allowedBrandIds.length && !allowedBrandIds.includes(brandId)) {
+    throw new Error("Brand is outside this portal scope.");
+  }
+
+  return {
+    organizationId: invite.organization_id,
+    inviteId: invite.id,
+    customerId: context.customer.id,
+    brandId,
+    brandName,
+    priceListType: context.customerType,
+    currency: context.currency,
+    effectiveMarginA: context.effectiveMarginA,
+    effectiveMarginB: context.effectiveMarginB,
+    cPriceListIds: context.cPriceListIds,
+  };
 }
 
 async function resolveBrandMap(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
@@ -1834,6 +1863,96 @@ async function fetchPortalBestSupplierOptionMap(
   return bestByCode;
 }
 
+function coercePortalFastExportRows(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload;
+  if (typeof payload === "string") {
+    const parsed = JSON.parse(payload) as unknown;
+    if (Array.isArray(parsed)) return parsed;
+  }
+  const boxedRows = (payload as { rows?: unknown } | null)?.rows;
+  if (Array.isArray(boxedRows)) return boxedRows;
+  throw new Error("Fast price-list export returned an unexpected response shape.");
+}
+
+function readPortalFastExportValue(row: unknown, compactIndex: number, objectKey: string) {
+  if (Array.isArray(row)) return row[compactIndex];
+  return (row as Record<string, unknown> | null)?.[objectKey];
+}
+
+function mapPortalFastExportRows(
+  rows: unknown[],
+  brandName: string,
+  priceListType: "A" | "B" | "Other",
+) {
+  return rows.reduce<PortalPriceListRow[]>((mappedRows, row) => {
+    const productCode = String(readPortalFastExportValue(row, 0, "product_code") || "").trim();
+    if (!productCode) return mappedRows;
+    const description = readPortalFastExportValue(row, 2, "description");
+    const salesPrice = readPortalFastExportValue(row, 4, "sales_price");
+    const priceDate = readPortalFastExportValue(row, 5, "price_date");
+    const lifecycleStatus = readPortalFastExportValue(row, 6, "lifecycle_status");
+    const lifecycleNote = readPortalFastExportValue(row, 7, "lifecycle_note");
+    mappedRows.push({
+      product_code: productCode,
+      brand: String(readPortalFastExportValue(row, 1, "brand") || brandName).trim() || brandName,
+      description: description == null ? "" : String(description),
+      price_list_type: priceListType === "B" ? "B" : priceListType === "Other" ? "Other" : "A",
+      sales_price: salesPrice == null ? null : Number(salesPrice),
+      price_date: priceDate == null ? null : String(priceDate),
+      lifecycle_status: normalizeLifecycleStatus(String(lifecycleStatus || "active")),
+      lifecycle_note: String(lifecycleNote || "").trim() || null,
+    });
+    return mappedRows;
+  }, []);
+}
+
+/**
+ * Build an A/B customer price list from the precomputed rollup index.
+ *
+ * The previous path downloaded every catalog row and then scanned every active
+ * supplier price row.  Large brands such as Bosch need a single database-side
+ * export instead of dozens of function-to-DB round trips.
+ */
+async function fetchPortalFastPriceListRows(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  brandId: string,
+  priceListType: "A" | "B" | "Other",
+  marginPercent: number,
+  brandName: string,
+) {
+  const payload = await callRpc<unknown>(
+    supabaseUrl,
+    serviceRoleKey,
+    "cloud_portal_customer_price_list_export_fast",
+    {
+      input_organization_id: organizationId,
+      input_brand_id: brandId,
+      input_price_list_type: priceListType === "B" ? "B" : "A",
+      input_margin_percent: Number.isFinite(marginPercent) ? marginPercent : 0,
+    },
+    25_000,
+  );
+  const rows = mapPortalFastExportRows(coercePortalFastExportRows(payload), brandName, priceListType);
+  if (rows.length > PORTAL_PRICE_LIST_MAX_ROWS) {
+    throw new Error("This brand price list is too large to download right now.");
+  }
+
+  console.info(
+    JSON.stringify({
+      scope: "portal-price-list",
+      stage: "fast-rollup-json-export",
+      organizationId,
+      brandId,
+      brandName,
+      priceListType,
+      rows: rows.length,
+    }),
+  );
+  return rows;
+}
+
 async function fetchPortalBestSupplierPreviewMap(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -1897,12 +2016,12 @@ export async function buildPortalPriceListRows(
 }> {
   const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
   const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
+  const allowedBrandIds = portalAllowedBrandIds(invite);
   const brandId = brandMap.byName.get(String(brand || "").trim().toLowerCase()) || "";
   const brandName = brandMap.byId.get(brandId) || "";
   if (!brandId || !brandName) {
     throw new Error("Brand not found for portal price list");
   }
-  const allowedBrandIds = portalAllowedBrandIds(invite);
   if (allowedBrandIds.length && !allowedBrandIds.includes(brandId)) {
     throw new Error("Brand is outside this portal scope.");
   }
@@ -1922,6 +2041,56 @@ export async function buildPortalPriceListRows(
       throw new Error(`Price list is not available for ${brandName}.`);
     }
     return cached.value;
+  }
+
+  // A/B (and the legacy "Other" margin) lists can be built directly from
+  // supplier_price_rollups.  This avoids the N+1-style catalog and supplier
+  // scans that made large-brand downloads such as Bosch exceed the portal
+  // request budget.  C-price lists intentionally keep their customer-list
+  // path because they are not represented by the supplier rollup.
+  if (context.customerType !== "C") {
+    const marginPercent = context.customerType === "B" ? context.effectiveMarginB : context.effectiveMarginA;
+    try {
+      const fastRows = await fetchPortalFastPriceListRows(
+        supabaseUrl,
+        serviceRoleKey,
+        invite.organization_id,
+        brandId,
+        context.customerType,
+        marginPercent,
+        brandName,
+      );
+      const fastResult = {
+        priceListType: context.customerType,
+        currency: context.currency,
+        rows: fastRows,
+      };
+      portalPriceListCache.set(cacheKey, {
+        value: fastResult,
+        expiresAt: Date.now() + PORTAL_PRICE_LIST_CACHE_TTL_MS,
+      });
+      if (!fastRows.length) {
+        throw new Error(`Price list is not available for ${brandName}.`);
+      }
+      return fastResult;
+    } catch (error) {
+      if (String(error instanceof Error ? error.message : error || "").includes("Price list is not available")) {
+        throw error;
+      }
+      // Keep the existing REST implementation as a compatibility fallback if
+      // an older project has not applied the fast RPC yet.
+      console.warn(
+        JSON.stringify({
+          scope: "portal-price-list",
+          stage: "fast-rollup-export-fallback",
+          inviteId: invite.id,
+          organizationId: invite.organization_id,
+          brandId,
+          brandName,
+          error: String(error instanceof Error ? error.message : error || ""),
+        }),
+      );
+    }
   }
 
   const catalogRows = await fetchPortalCatalogBrandRows(supabaseUrl, serviceRoleKey, invite.organization_id, brandId, brandName);
@@ -1978,7 +2147,7 @@ export async function buildPortalPriceListRows(
     const marginPercent = context.customerType === "B" ? context.effectiveMarginB : context.effectiveMarginA;
     for (const [normalizedCode, bestOption] of bestOptionMap.entries()) {
       if (bestOption.buy_price == null) continue;
-      salesPriceByCode.set(normalizedCode, roundMoney(Number(bestOption.buy_price) * (1 + marginPercent / 100)));
+      salesPriceByCode.set(normalizedCode, markupMoney(bestOption.buy_price, marginPercent));
       priceDateByCode.set(normalizedCode, bestOption.price_date || null);
       priceTypeByCode.set(normalizedCode, portalFallbackPriceType(context));
     }
@@ -2277,7 +2446,7 @@ export async function preparePortalOrderLines(
     prepared.push(...resolvedChunk);
   }
 
-  if ((context.customerType === "C" || prefersCPriceWhereAvailable(context)) && prepared.length) {
+  if (context.customerType === "C" && prepared.length) {
     const cPriceMap = await fetchCPriceMap(
       supabaseUrl,
       serviceRoleKey,
@@ -2358,16 +2527,16 @@ export async function submitPortalSalesOrder(
     throw new Error("Confirmed sales orders cannot be edited from portal");
   }
 
-  const purchaseTotal = roundMoney(lines.reduce((sum, line) => sum + Number(line.buy_price || 0) * line.qty, 0));
-  const subtotal = roundMoney(lines.reduce((sum, line) => sum + Number(line.sell_price || 0) * line.qty, 0));
+  const purchaseTotal = sumMoney(lines.map((line) => multiplyMoney(line.buy_price ?? 0, line.qty)));
+  const subtotal = sumMoney(lines.map((line) => multiplyMoney(line.sell_price ?? 0, line.qty)));
   // Discounts and shipping are seller-controlled fields. A portal quantity
   // edit must preserve values already set by the admin instead of silently
   // resetting them to zero.
   const discountAmount = existing ? roundMoney(Number(existing.discount_amount || 0)) : 0;
   const shippingCost = existing ? roundMoney(Number(existing.shipping_cost || 0)) : 0;
-  const totalAmount = roundMoney(subtotal - discountAmount + shippingCost);
-  const profitTotal = roundMoney(totalAmount - purchaseTotal);
-  const marginPercent = totalAmount > 0 ? roundMoney((profitTotal / totalAmount) * 100) : 0;
+  const totalAmount = sumMoney([subtotal, -discountAmount, shippingCost]);
+  const profitTotal = sumMoney([totalAmount, -purchaseTotal]);
+  const marginPercent = orderMarginPercent(profitTotal, totalAmount);
   const today = new Date().toISOString().slice(0, 10);
   const salesOrderNo =
     String(existing?.sales_order_no || input.salesOrderNo || "").trim() ||
@@ -2480,7 +2649,7 @@ export async function submitPortalSalesOrder(
         weight_kg: safeLine.weight_kg,
         image_url: safeLine.image_url,
         sell_price: safeLine.sell_price,
-        line_total: safeLine.sell_price == null ? null : roundMoney(Number(safeLine.sell_price) * Number(safeLine.qty || 0)),
+        line_total: safeLine.sell_price == null ? null : multiplyMoney(safeLine.sell_price, safeLine.qty),
         price_date: safeLine.price_date,
         lifecycle_status: safeLine.lifecycle_status,
         lifecycle_note: safeLine.lifecycle_note,

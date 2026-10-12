@@ -26,11 +26,17 @@
     "bosch:lifecycle-sync": "node scripts/catalog/sync-bosch-official-lifecycle.mjs"
   },
   "devDependencies": {
+    "tsx": "4.23.13",
     "yaml": "^2.9.0"
   },
   "dependencies": {
+    "@duckdb/node-api": "1.5.6-r.1",
+    "archiver": "5.3.2",
+    "exceljs": "4.4.0",
     "jimp": "^1.6.1",
+    "pg": "8.23.1",
     "sharp": "^0.34.5",
-    "tesseract.js": "^7.0.0"
+    "tesseract.js": "^7.0.0",
+    "tus-js-client": "4.3.1"
   }
 }
