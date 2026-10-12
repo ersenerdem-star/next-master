@@ -36,7 +36,7 @@ export async function materializePagedExportWithDuckDB({fetchPage,binding,expect
   const instance=await DuckDBInstance.create(':memory:',{memory_limit:'512MB',threads:'4',temp_directory:tempDirectory});
   const connection=await instance.connect();
   try{
-   await connection.run(`copy (select cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand from read_csv_auto(${q(inputPath)},header=true,ignore_errors=false) order by case when nullif(cursor_key,'') is null then 1 else 0 end,cursor_key,code) to ${q(sortedPath)} (header,delimiter ',')`);
+   await connection.run(`copy (select cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand from read_csv_auto(${q(inputPath)},header=true,all_varchar=true,ignore_errors=false) order by case when nullif(cursor_key,'') is null then 1 else 0 end,cursor_key,code) to ${q(sortedPath)} (header,delimiter ',')`);
   }finally{connection.disconnectSync();}
   return {engine:'duckdb',binding,expectedRows,processedRows:processed,pageCount,inputPath,sortedPath};
  }catch(error){stream.destroy();throw error;}
@@ -60,13 +60,13 @@ export function createDuckDbPagedExportSource({sortedPath,binding,expectedRows,p
    const next=await source.next();
    if(next.done){done=true;break;}
    const raw=next.value?.row;
-   rows.push({cursorKey:String(raw.cursor_key||'')||undefined,code:raw.code,description:raw.description,price:String(raw.price),currency:raw.currency,priceDate:raw.price_date,discontinued:String(raw.discontinued)==='true',replacementCode:raw.replacement_code||'',brand:raw.brand});
+   rows.push({cursorKey:String(raw.cursor_key||'')||undefined,code:raw.product_code,description:raw.description,price:String(raw.buy_price),currency:raw.currency,priceDate:raw.valid_from,discontinued:String(raw.discontinued)==='true',replacementCode:raw.replacement_code||'',brand:raw.brand});
    consumed++;
   }
   if(!rows.length||consumed>expectedRows)throw Error('DUCKDB_EXPORT_SOURCE_COUNT_INVALID');
   const complete=consumed===expectedRows; if(complete)done=true;
   lastCursor=complete?null:String(rows.at(-1).cursorKey||rows.at(-1).code);
-  return {binding,rows,done:complete,nextCursor:lastCursor};
+  return {binding,expectedRows,rows,done:complete,nextCursor:lastCursor};
  };
 }
 

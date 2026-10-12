@@ -300,7 +300,7 @@ export async function runV3PriceExportJob(jobId: string) {
     const binding = exportBinding(spec);
     duckdbExportDirectory = await mkdtemp(join("/tmp", "nm-duckdb-export-"));
     const duckdbMaterialized = await materializePagedExportWithDuckDB({
-      fetchPage: reader.fetchPage, binding, expectedRows: spec.expectedRows, pageSize: 1000,
+      fetchPage: (args: any) => reader.fetchPage({ ...args, spec }), binding, expectedRows: spec.expectedRows, pageSize: 1000,
       outputDir: duckdbExportDirectory, tempDirectory: duckdbExportDirectory,
     });
     const duckdbFetchPage = createDuckDbPagedExportSource({
