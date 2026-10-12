@@ -123,7 +123,10 @@ export function createWorkerService({verify,dispatch,probe,validate,wait=delay,l
     const history=await probe();
     if(typeof history?.busy!=='boolean'||typeof history?.failed!=='boolean')throw Error('SERVICE_HISTORY_RESPONSE');
     if(state.stopping)return;
-    if(history.failed)throw Error('SERVICE_WORKFLOW_REQUIRES_REVIEW');
+    // Failed history is retained for operator review, but it is not global
+    // intake backpressure. Each release has an immutable workflow identity;
+    // blocking a new upload here would let one orphaned execution starve all
+    // later files. Active work (history.busy) still applies backpressure below.
     // Backpressure: one accepted v3 workflow at a time, including recovered work.
     // Do not start another large-source parse while that workflow is active.
     if(history.busy){state.phase='processing';}

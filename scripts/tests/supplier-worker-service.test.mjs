@@ -111,9 +111,9 @@ test('Recovered work applies backpressure before any new source parse/admission'
  let calls=0;const s=setup({probe:async()=>({busy:true,failed:false}),verify:async()=>{calls++;},dispatch:async()=>{calls++;}});
  await s.cycle();assert.equal(calls,0);assert.equal(s.snapshot().phase,'processing');
 });
-test('Failed durable execution requires review, not automatic replay/reset',async()=>{
- let calls=0;const s=setup({probe:async()=>({busy:false,failed:true}),verify:async()=>{calls++;}});
- await assert.rejects(s.cycle(),/REQUIRES_REVIEW/);assert.equal(calls,0);assert.equal(s.snapshot().ready,false);
+test('Failed durable history does not block a new source intake',async()=>{
+ const calls=[];const s=setup({probe:async()=>({busy:false,failed:true}),verify:async()=>{calls.push('verify');return empty;},dispatch:async()=>{calls.push('dispatch');return empty;}});
+ await s.cycle();assert.deepEqual(calls,['verify','dispatch']);assert.equal(s.snapshot().ready,true);
 });
 test('Malformed or falsely published response fails closed',async()=>{
  for(const status of ['empty','verified','published']) {
