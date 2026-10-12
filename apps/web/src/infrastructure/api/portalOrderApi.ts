@@ -33,6 +33,23 @@ export type PortalOrderInputRow = {
   market_segment?: string | null;
 };
 
+export type PortalExportJobStatus = {
+  id: string;
+  exportType: string;
+  status: "queued" | "running" | "finalized" | "failed" | "expired";
+  fileName: string | null;
+  rowCount: number;
+  byteSize: number;
+  progressDone: number;
+  progressTotal: number | null;
+  progressMessage: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  finalizedAt: string | null;
+  cached: boolean;
+};
+
 export type PortalPreparedLine = {
   lineId: string;
   requestedCode: string;
@@ -83,13 +100,24 @@ type PortalOrderResponse = {
     lifecycle_status: "active" | "discontinued";
     lifecycle_note: string | null;
   }>;
+  rowsCompact?: Array<[string, string, string, "A" | "B" | "C" | "Other", number | null, string | null, "active" | "discontinued", string | null]>;
+  job?: PortalExportJobStatus;
+  signedUrl?: string;
+  url?: string;
+  fallbackUrl?: string;
+  fileName?: string;
+  rowCount?: number;
+  byteSize?: number;
+  expiresIn?: number;
 };
 
 type PortalRequestOptions = {
   signal?: AbortSignal;
 };
 
-const PORTAL_ORDER_REQUEST_TIMEOUT_MS = 25_000;
+// Large customer price lists are generated from a paged server-side rollup.
+// Keep enough time for the first cold page while still failing predictably.
+const PORTAL_ORDER_REQUEST_TIMEOUT_MS = 90_000;
 
 async function postPortalOrderJson(path: string, payload: Record<string, unknown>, options: PortalRequestOptions = {}) {
   const controller = new AbortController();
@@ -209,14 +237,85 @@ export async function deletePortalDraftOrder(credentials: PortalCredentials, ord
   };
 }
 
-export async function downloadPortalPriceList(credentials: PortalCredentials, brand: string) {
-  const data = await postPortalOrderJson("/api/portal-price-list", {
+const PORTAL_EXPORT_STATUS_TIMEOUT_MS = 10 * 60 * 1000;
+const PORTAL_EXPORT_STATUS_POLL_MS = 1_500;
+const PORTAL_EXPORT_START_RETRY_MS = 800;
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+export function describePortalExportJobStatus(job: PortalExportJobStatus) {
+  const rowInfo = job.rowCount ? ` · ${job.rowCount.toLocaleString("en-US")} rows` : "";
+  if (job.status === "finalized") return `Price list file is ready${rowInfo}.`;
+  if (job.status === "failed") return job.errorMessage || "Price list export failed.";
+  if (job.status === "running") return job.progressMessage || `Preparing price list${rowInfo}.`;
+  return job.progressMessage || "Price list export queued.";
+}
+
+export async function startPortalPriceListExport(credentials: PortalCredentials, brand: string) {
+  const payload = {
     ...credentials,
+    exportType: "portal_price_list",
     brand,
-  });
-  return {
-    priceListType: data.priceListType || "A",
-    currency: data.currency || "EUR",
-    rows: data.rows || [],
   };
+  let data = await postPortalOrderJson("/api/portal-export-start", payload);
+  // The export is idempotent by organization, customer, brand and pricing
+  // snapshot. If the edge response is lost after the server creates the job,
+  // retry once so the active or finalized job is returned instead of showing
+  // a false "job response is missing" error to the customer.
+  if (!data.job) {
+    await delay(PORTAL_EXPORT_START_RETRY_MS);
+    data = await postPortalOrderJson("/api/portal-export-start", payload);
+  }
+  if (!data.job) throw new Error("Portal export job response is missing.");
+  return data.job;
+}
+
+export async function getPortalExportJobStatus(credentials: PortalCredentials, jobId: string) {
+  const data = await postPortalOrderJson("/api/portal-export-status", {
+    ...credentials,
+    jobId,
+  });
+  if (!data.job) throw new Error("Portal export status response is missing.");
+  return data.job;
+}
+
+export async function downloadPortalExportJob(credentials: PortalCredentials, jobId: string) {
+  const data = await postPortalOrderJson("/api/portal-export-download", {
+    ...credentials,
+    jobId,
+  });
+  const signedUrl = String(data.signedUrl || data.url || "").trim();
+  if (!signedUrl) throw new Error("Portal price list download link is missing.");
+  return {
+    signedUrl,
+    fallbackUrl: data.fallbackUrl || "",
+    fileName: data.fileName || "portal-price-list.xlsx",
+    rowCount: Number(data.rowCount || 0),
+    byteSize: Number(data.byteSize || 0),
+    expiresIn: Number(data.expiresIn || 0),
+  };
+}
+
+export async function waitForPortalExportJob(
+  credentials: PortalCredentials,
+  initialJob: PortalExportJobStatus,
+  onProgress?: (job: PortalExportJobStatus) => void,
+) {
+  let job = initialJob;
+  const startedAt = Date.now();
+  onProgress?.(job);
+  while (job.status === "queued" || job.status === "running") {
+    if (Date.now() - startedAt > PORTAL_EXPORT_STATUS_TIMEOUT_MS) {
+      throw new Error("Price list is still preparing in the background. Try download again in a moment.");
+    }
+    await delay(PORTAL_EXPORT_STATUS_POLL_MS);
+    job = await getPortalExportJobStatus(credentials, job.id);
+    onProgress?.(job);
+  }
+  if (job.status !== "finalized") {
+    throw new Error(job.errorMessage || "Price list export failed.");
+  }
+  return job;
 }

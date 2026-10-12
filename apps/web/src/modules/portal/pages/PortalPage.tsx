@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
 import { ActionFeedbackDialog } from "../../../presentation/components/common/ActionFeedbackDialog";
 import { emptyPortalFeedback, portalFeedbackReducer } from "../portalFeedback";
+import { portalSnapshotFeedback } from "../portalSnapshotFeedback";
 import {
   confirmPortalPasswordReset,
   fetchPortalBranding,
@@ -21,7 +22,8 @@ import { ProductVisual } from "../../../presentation/components/common/ProductVi
 import { VehicleBadges } from "../../../presentation/components/common/VehicleBadges";
 import { buildBusinessDocumentHtml } from "../../../shared/documentPrint";
 import { openAccountStatementPrintWindow } from "../../../shared/accountStatementPrint";
-import { buildXlsxBlob, downloadBlob, downloadUrl } from "../../../shared/xlsx";
+import { buildXlsxBlob, buildXlsxBlobAsync, downloadBlob, downloadUrl } from "../../../shared/xlsx";
+import { buildDocumentWorksheet } from "../../../shared/documentExport";
 import { formatBrandAwareProductCode } from "../../../shared/productCodeDisplay";
 import { matchesOriginalNumberSearch, normalizePartCode } from "../../../domain/shared/normalize";
 import { downloadQuoteTemplate } from "../../../shared/importTemplates";
@@ -804,7 +806,7 @@ export function PortalPage() {
         setCredentials(nextCredentials);
         writeStoredCredentials(nextCredentials);
         // Background work owns only its own status, never a user's open warning.
-        setBackgroundMessage("");
+        setBackgroundMessage(portalSnapshotFeedback(next, "").message);
       })
       .catch((caught) => {
         if (cancelled) return;
@@ -842,7 +844,7 @@ export function PortalPage() {
           Date.now() - portalOrderMutationSettledAtRef.current < 15_000
         ) return;
         setSnapshot((current) => mergePortalSnapshotOrderDetails(current, next));
-        setBackgroundMessage("");
+        setBackgroundMessage(portalSnapshotFeedback(next, "").message);
       } catch (caught) {
         if (cancelled) return;
         const message = caught instanceof Error ? caught.message : "Portal refresh failed";
@@ -1150,7 +1152,9 @@ export function PortalPage() {
       setDocumentSearch("");
       setBrandFilter("");
       setPaymentStatusFilter("");
-      setStatus("Portal session active.");
+      const loginFeedback = portalSnapshotFeedback(next, "Portal session active.");
+      setStatus(loginFeedback.message);
+      if (loginFeedback.kind === "warning") notifyPortal(loginFeedback.message, "warning");
       const nextCredentials = { email: credentials.email, password: "", sessionToken: "" };
       setCredentials(nextCredentials);
       writeStoredCredentials(nextCredentials);
@@ -1244,8 +1248,9 @@ export function PortalPage() {
       setPortalOverlay({ title: "Refreshing portal", message: "Loading your latest account information." });
       const { snapshot: next } = await fetchPortalSnapshot(credentials);
       setSnapshot((current) => mergePortalSnapshotOrderDetails(current, next));
-      setBackgroundMessage("");
-      notifyPortal("Portal data refreshed.");
+      const refreshFeedback = portalSnapshotFeedback(next, "Portal data refreshed.");
+      setBackgroundMessage(refreshFeedback.kind === "warning" ? refreshFeedback.message : "");
+      notifyPortal(refreshFeedback.message, refreshFeedback.kind);
       const nextCredentials = { email: credentials.email, password: "", sessionToken: "" };
       setCredentials(nextCredentials);
       writeStoredCredentials(nextCredentials);
@@ -2902,13 +2907,13 @@ export function PortalPage() {
   }
 
   function openPortalDocumentPrint(kind?: PortalSelection["kind"], id?: string) {
+    try { writePortalDocumentPrint(kind, id); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Document PDF export failed."); }
+  }
+
+  function writePortalDocumentPrint(kind?: PortalSelection["kind"], id?: string) {
     const documentToPrint = kind && id ? getPortalDocumentSelection(kind, id) : selectedDocument;
     if (!documentToPrint) return;
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      setError("Popup blocked while opening PDF view.");
-      return;
-    }
 
     const isCustomerDoc = documentToPrint.kind === "sales-order" || documentToPrint.kind === "invoice";
     const currency = documentToPrint.row.currency || activeSnapshot.accountSummary.currency || "EUR";
@@ -2933,6 +2938,7 @@ export function PortalPage() {
     }));
 
     const html = buildBusinessDocumentHtml({
+      sourceOrderColumn: documentToPrint.kind === "invoice" || documentToPrint.kind === "bill",
       docType:
         documentToPrint.kind === "sales-order"
           ? "Sales Order"
@@ -2987,11 +2993,13 @@ export function PortalPage() {
         shipping: "shipping_cost" in documentToPrint.row ? Number(documentToPrint.row.shipping_cost || 0) : undefined,
         total: Number(("sales_total" in documentToPrint.row ? documentToPrint.row.sales_total : documentToPrint.row.total_amount) || 0),
       },
-      notes: documentToPrint.row.notes || "",
+      notes: "",
       totalQty: lines.reduce((sum, line) => sum + Number(line.qty || 0), 0),
-      totalWeight: (documentToPrint.row.lines || []).reduce((sum, line) => sum + Number(line.weight_kg || 0), 0),
+      totalWeight: (documentToPrint.row.lines || []).reduce((sum, line) => sum + Number(line.weight_kg || 0) * Number(line.qty || 0), 0),
     });
 
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) throw new Error("Popup blocked while opening PDF view.");
     printWindow.document.open();
     printWindow.document.write(html);
     printWindow.document.close();
@@ -3001,66 +3009,38 @@ export function PortalPage() {
     openPortalDocumentPrint();
   }
 
-  function handlePortalExportExcelRow(kind?: PortalSelection["kind"], id?: string) {
-    const documentToExport = kind && id ? getPortalDocumentSelection(kind, id) : selectedDocument;
-    if (!documentToExport) return;
-    const isCustomerDoc = documentToExport.kind === "sales-order" || documentToExport.kind === "invoice";
-    const isSalesOrderExport = documentToExport.kind === "sales-order";
-    const currency = documentToExport.row.currency || activeSnapshot.accountSummary.currency || "EUR";
-    const docNo =
-      documentToExport.kind === "sales-order"
-        ? documentToExport.row.sales_order_no || documentToExport.row.id
-        : documentToExport.kind === "invoice"
-          ? documentToExport.row.id
-          : documentToExport.kind === "purchase-order"
-            ? documentToExport.row.id
-            : documentToExport.row.id;
-    const rows: Array<Array<string | number | null | undefined>> = [
-      [documentToExport.kind === "sales-order" ? "Sales Order" : documentToExport.kind === "invoice" ? "Invoice" : documentToExport.kind === "purchase-order" ? "Purchase Order" : "Bill", docNo],
-      ["Party", activeSnapshot.invite.party_name],
-      ["Currency", currency],
-      [
-        "Date",
-        documentToExport.kind === "bill"
-          ? documentToExport.row.bill_date || ""
-          : "quote_date" in documentToExport.row
-            ? documentToExport.row.quote_date || ""
-            : "",
-      ],
-      ["Status", documentToExport.row.status || ""],
-      [],
-      [
-        "Code",
-        "Brand",
-        "Description",
-        "Qty",
-        ...(isSalesOrderExport ? [] : ["OEM"]),
-        "Origin",
-        "Weight",
-        isCustomerDoc ? `Unit Price ${currency}` : `Buy Price ${currency}`,
-        `Line Total ${currency}`,
-        ...(isCustomerDoc ? [] : ["Notes"]),
-      ],
-      ...(documentToExport.row.lines || []).map((line) => [
-        line.code || line.requested_code || line.old_code || "-",
-        line.brand || "",
-        line.description || "",
-        Number(line.qty || 0),
-        ...(isSalesOrderExport ? [] : [line.oem_no || ""]),
-        line.origin || "",
-        line.weight_kg == null ? "" : Number(line.weight_kg),
-        Number(isCustomerDoc ? line.sell_price || 0 : line.buy_price || 0),
-        Number(isCustomerDoc ? line.line_total || line.sales_total || 0 : line.line_total || 0),
-        ...(isCustomerDoc ? [] : [line.notes || ""]),
-      ]),
-      [],
-      ["Subtotal", "", "", "", "", "", "", "", Number(("subtotal" in documentToExport.row ? documentToExport.row.subtotal : documentToExport.row.total_amount) || 0)],
-      ["Discount", "", "", "", "", "", "", "", Number(("discount_amount" in documentToExport.row ? documentToExport.row.discount_amount : 0) || 0)],
-      ["Shipping", "", "", "", "", "", "", "", Number(("shipping_cost" in documentToExport.row ? documentToExport.row.shipping_cost : 0) || 0)],
-      ["Total Amount", "", "", "", "", "", "", "", Number(("sales_total" in documentToExport.row ? documentToExport.row.sales_total : documentToExport.row.total_amount) || 0)],
-    ];
-    const blob = buildXlsxBlob(docNo.slice(0, 31) || "Document", rows, [3, 6, 7, 8]);
-    downloadBlob(`${sanitizeFileName(docNo || documentToExport.kind)}.xlsx`, blob);
+  async function handlePortalExportExcelRow(kind?: PortalSelection["kind"], id?: string) {
+    const doc = kind && id ? getPortalDocumentSelection(kind, id) : selectedDocument;
+    if (!doc) return;
+    try {
+      setPortalOverlay({ title: "Preparing Excel", message: "Checking document totals and preparing the file." });
+      const buying = doc.kind === "purchase-order" || doc.kind === "bill";
+      const row = doc.row;
+      const model = buildDocumentWorksheet({
+        kind: doc.kind, audience: buying ? "supplier" : "customer",
+        number: doc.kind === "sales-order" ? doc.row.sales_order_no || row.id : row.id,
+        party: activeSnapshot.invite.party_name, currency: row.currency || activeSnapshot.accountSummary.currency || "EUR",
+        date: doc.kind === "bill" ? doc.row.bill_date || "" : "quote_date" in row ? row.quote_date || "" : "",
+        status: row.status,
+        lines: (row.lines || []).map((line) => ({
+          code: line.code || line.requested_code || line.old_code || "-",
+          brand: line.brand || "", description: line.description || "", qty: Number(line.qty),
+          unitPrice: Number(buying ? line.buy_price ?? 0 : line.sell_price ?? 0),
+          amount: buying ? line.line_total ?? undefined : line.sales_total ?? line.line_total ?? undefined,
+          origin: line.origin || "", weight: line.weight_kg == null ? null : Number(line.weight_kg),
+          tariff: line.hs_code || "",
+          orderNo: ("sales_order_no" in row ? String(row.sales_order_no || "") : "purchase_order_no" in row ? String(row.purchase_order_no || "") : ""),
+        })),
+        shipping: "shipping_cost" in row ? Number(row.shipping_cost || 0) : 0,
+        discount: "discount_amount" in row ? Number(row.discount_amount || 0) : 0,
+        total: Number("sales_total" in row ? row.sales_total : row.total_amount),
+      });
+      const blob = await buildXlsxBlobAsync(model.rows[0][1] as string, model.rows, model.numericColumns, model.options);
+      downloadBlob(`${sanitizeFileName(String(model.rows[0][1]))}.xlsx`, blob);
+      notifyPortal("Document Excel download started. Check your browser downloads.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Document Excel export failed.");
+    } finally { setPortalOverlay(null); }
   }
 
   function handlePortalExportExcel() {

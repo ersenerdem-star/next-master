@@ -1,3 +1,5 @@
+import { documentAmounts } from "./documentExport";
+
 type PrintCompany = {
   companyName: string;
   address: string;
@@ -55,6 +57,7 @@ type BuildBusinessDocumentInput = {
   notes?: string;
   totalQty?: number;
   totalWeight?: number | null;
+  sourceOrderColumn?: boolean;
 };
 
 function safeText(value: unknown) {
@@ -70,32 +73,47 @@ function safeMultiline(value: unknown) {
   return safeText(value).replaceAll("\n", "<br />");
 }
 
+// Contact emails are not part of commercial PDF/print address blocks.
+// Apply at the shared output boundary as well as omitting structured email fields.
+function printPartyDetails(value: string) {
+  return value.split("\n")
+    .map((line) => line.replace(/[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9-]+(?:\.[A-Z0-9-]+)+/gi, "").trim())
+    .filter((line) => line && !/^(?:e-?mail|contact)\s*:\s*$/i.test(line))
+    .join("\n");
+}
+
 const currencyFormatterCache = new Map<string, Intl.NumberFormat>();
 
-function formatMoney(value: number, currency = "EUR") {
-  let formatter = currencyFormatterCache.get(currency);
+function formatMoney(value: number, currency = "EUR", unitPrice = false) {
+  const key = `${currency}:${unitPrice}`;
+  let formatter = currencyFormatterCache.get(key);
   if (!formatter) {
     formatter = new Intl.NumberFormat("en-US", {
       style: "currency",
       currency,
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      maximumFractionDigits: unitPrice ? 6 : 2,
     });
-    currencyFormatterCache.set(currency, formatter);
+    currencyFormatterCache.set(key, formatter);
   }
   return formatter.format(Number(value || 0));
 }
 
 export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
   const currency = input.totals.currency || "EUR";
+  if (!/^[A-Z]{3}$/.test(currency)) throw new Error("Document currency is invalid.");
+  const checked = documentAmounts(input.lines, input.totals.shipping, input.totals.discount, input.totals.total);
+  if (input.totals.subtotal != null && input.totals.subtotal !== checked.subtotal) throw new Error("Document subtotal is inconsistent. Refresh before exporting.");
   const logo = input.company.logoDataUrl
     ? `<img src="${safeText(input.company.logoDataUrl)}" alt="Logo" style="max-height:52px; max-width:138px; object-fit:contain;" />`
     : "";
   const footerLine = [input.company.address || "", input.company.taxNumber ? `Tax ID: ${input.company.taxNumber}` : ""]
     .filter(Boolean)
     .join("   ");
-  const showShipping = Boolean(input.party.shippingDetails && input.party.shippingDetails.trim());
-  const showLineOrderNo = input.docType.trim().toLowerCase() !== "sales order";
+  const partyDetails = printPartyDetails(input.party.details);
+  const shippingDetails = printPartyDetails(input.party.shippingDetails || "");
+  const showShipping = Boolean(shippingDetails);
+  const showLineOrderNo = input.sourceOrderColumn ?? ["invoice", "bill", "purchase invoice"].includes(input.docType.trim().toLowerCase());
   const totalQty = input.totalQty ?? input.lines.reduce((sum, line) => sum + Number(line.qty || 0), 0);
   const totalWeight = input.totalWeight ?? null;
   const rowsHtml = input.lines
@@ -119,7 +137,7 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
           <td>${safeText(line.weight || "")}</td>
           <td>${safeText(line.gtip || "")}</td>
           <td>${safeText(line.qty)}</td>
-          <td>${formatMoney(line.unitPrice, currency)}</td>
+          <td>${formatMoney(line.unitPrice, currency, true)}</td>
           <td>${formatMoney(line.amount, currency)}</td>
         </tr>
       `;
@@ -157,7 +175,7 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
       <meta charset="utf-8" />
       <title>${safeText(input.docNo || input.docType)}</title>
       <style>
-        @page { margin: 14mm 12mm 18mm; }
+        @page { size: A4; margin: 14mm 12mm 18mm; }
         body { font-family: "Helvetica Neue", Arial, sans-serif; color: #111827; margin: 0; font-size: 8.6pt; }
         .page { padding: 0; }
         .header-shell { display:flex; justify-content:space-between; align-items:stretch; gap:10mm; margin-bottom:4mm; width:100%; }
@@ -186,7 +204,7 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
         tfoot { display:table-footer-group; }
         tbody { page-break-inside:auto; }
         tr { page-break-inside:avoid; break-inside:avoid-page; page-break-after:auto; }
-        th, td { border:0.25mm solid #d7dee8; padding:1.5mm 1.7mm; text-align:left; vertical-align:top; font-size:7.2pt; word-break:normal; overflow-wrap:break-word; }
+        th, td { border:0.25mm solid #d7dee8; padding:1.5mm 1.2mm; text-align:left; vertical-align:top; font-size:7.2pt; word-break:normal; overflow-wrap:break-word; }
         th { background:#f4f7fa; font-weight:700; line-height:1.18; }
         th:nth-child(1), td:nth-child(1) { white-space:nowrap; }
         .document-lines--with-order th:nth-child(5), .document-lines--with-order td:nth-child(5) { white-space:normal; overflow-wrap:anywhere; }
@@ -211,6 +229,8 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
         .line-alert--warning { color:#b45309; }
         .line-alert--danger { color:#b91c1c; }
         .line-alert--muted { color:#475569; font-weight:600; }
+        .document-notes { margin-top:4mm; font-size:7.4pt; line-height:1.42; overflow-wrap:anywhere; }
+        .document-closing { page-break-inside:avoid; break-inside:avoid-page; }
         .totals { display:flex; justify-content:space-between; align-items:flex-start; gap:6mm; margin-top:4mm; }
         .totals-note { flex:1; min-height:10mm; font-size:7.4pt; line-height:1.42; padding-top:0.5mm; }
         .totals-card { min-width:60mm; max-width:68mm; }
@@ -222,7 +242,7 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
         .signature-grid { display:grid; grid-template-columns:1fr 1fr; gap:10mm; margin-top:7mm; }
         .signature-box { padding-top:6mm; border-top:1px solid #9ca3af; text-align:center; font-weight:700; font-size:7.4pt; }
         .page-counter { position:fixed; right:0; bottom:0; font-size:6.9pt; color:#64748b; letter-spacing:0.03em; }
-        .page-counter::before { content:"Page " counter(page) " / " attr(data-total-pages); }
+        .page-counter::before { content:""; }
         @media screen {
           body { margin: 24px 28px 46px; }
           .page-counter::before { content:"Page 1 / " attr(data-total-pages); }
@@ -243,11 +263,11 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
               <div class="billto-grid" style="${showShipping ? "" : "grid-template-columns: 1fr;"}">
                 <div>
                   <div class="billto-title">${safeText(input.party.title)}</div>
-                  <div class="billto-box">${safeMultiline(input.party.details)}</div>
+                  <div class="billto-box">${safeMultiline(partyDetails)}</div>
                 </div>
                 ${showShipping ? `<div>
                   <div class="billto-title">${safeText(input.party.shippingTitle || "Shipping Address")}</div>
-                  <div class="billto-box">${safeMultiline(input.party.shippingDetails || "")}</div>
+                  <div class="billto-box">${safeMultiline(shippingDetails)}</div>
                 </div>` : ""}
               </div>
             </div>
@@ -266,8 +286,8 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
         </div>
         <table class="document-lines ${showLineOrderNo ? "document-lines--with-order" : "document-lines--sales-order"}">
           <colgroup>${showLineOrderNo
-            ? '<col style="width:13%;" /><col style="width:24%;" /><col style="width:7%;" /><col style="width:8%;" /><col style="width:9%;" /><col style="width:8%;" /><col style="width:8%;" /><col style="width:6%;" /><col style="width:9%;" /><col style="width:8%;" />'
-            : '<col style="width:14%;" /><col style="width:28%;" /><col style="width:7%;" /><col style="width:9%;" /><col style="width:8%;" /><col style="width:9%;" /><col style="width:6%;" /><col style="width:10%;" /><col style="width:9%;" />'}</colgroup>
+            ? '<col style="width:13%;" /><col style="width:19%;" /><col style="width:6%;" /><col style="width:7%;" /><col style="width:9%;" /><col style="width:7%;" /><col style="width:11%;" /><col style="width:5%;" /><col style="width:12%;" /><col style="width:11%;" />'
+            : '<col style="width:14%;" /><col style="width:24%;" /><col style="width:6%;" /><col style="width:7%;" /><col style="width:7%;" /><col style="width:11%;" /><col style="width:5%;" /><col style="width:14%;" /><col style="width:12%;" />'}</colgroup>
           <thead>
             <tr>
               <th># Item</th>
@@ -284,31 +304,22 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
           </thead>
           <tbody>${rowsHtml}</tbody>
         </table>
+        ${input.notes ? `<div class="document-notes"><strong>Notes</strong><br/>${safeMultiline(input.notes)}</div>` : ""}
+        <div class="document-closing">
         <div class="totals">
           <div class="totals-note">
-            ${input.notes ? `<strong>Notes</strong><br/>${safeMultiline(input.notes)}<br/><br/>` : ""}
             Total ${totalQty.toLocaleString("en-US")} Items${typeof totalWeight === "number" ? ` | Net Weight ${totalWeight.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kg` : ""}
           </div>
           <div class="totals-card">${totalsRows}</div>
         </div>
-        <div class="footer">
+        ${footerLine || input.company.bankDetails ? `<div class="footer">
           <div class="footer-company-meta">${safeText(footerLine)}${input.company.bankDetails ? `<br />${safeMultiline(input.company.bankDetails)}` : ""}</div>
-        </div>
+        </div>` : ""}
         <div class="signature-grid">
           <div class="signature-box">Authorized Signature</div>
           <div class="signature-box">Receiver Signature</div>
         </div>
-        <div class="page-counter" data-total-pages="1"></div>
-        <script>
-          (function () {
-            var counter = document.querySelector('.page-counter');
-            if (!counter) return;
-            var pxPerMm = 96 / 25.4;
-            var printableHeight = (297 - 14 - 18) * pxPerMm;
-            var totalPages = Math.max(1, Math.ceil(document.body.scrollHeight / printableHeight));
-            counter.setAttribute('data-total-pages', String(totalPages));
-          })();
-        </script>
+        </div>
       </div>
     </body>
   </html>`;
@@ -317,11 +328,14 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
 export function openBusinessDocumentPreview(html: string) {
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const objectUrl = URL.createObjectURL(blob);
-  const previewWindow = window.open(objectUrl, "_blank", "noopener,noreferrer");
+  // noopener in window.open returns null even when the browser opens the tab.
+  // Keep a handle for blocked-popup detection, then detach the opener explicitly.
+  const previewWindow = window.open(objectUrl, "_blank");
   if (!previewWindow) {
     URL.revokeObjectURL(objectUrl);
     throw new Error("Popup blocked while opening PDF view.");
   }
+  previewWindow.opener = null;
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
   previewWindow.focus();
   return previewWindow;

@@ -185,6 +185,7 @@ export type PortalNotification = {
 };
 
 export type PortalSnapshot = {
+  dataStatus?: "degraded";
   invite: PortalInviteSnapshot;
   companyProfile: PortalCompanyProfile | null;
   customer: PortalPartyProfile | null;
