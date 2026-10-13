@@ -7,7 +7,7 @@ import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSe
 import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 import { runPortalPriceListExportJob, startPortalPriceListExport, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
-import { dispatchV3PriceExportWorker, isProductionExportPaused, isV3ExportBridgeEnabled } from "./_shared/v3-export-bridge.mts";
+import { dispatchV3PriceExportWorker, isProductionExportPaused, isV3ExportBridgeEnabled } from "./_shared/v3-export-dispatch.mts";
 
 export default async (req: Request, context: Context) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);

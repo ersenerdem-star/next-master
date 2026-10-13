@@ -1,7 +1,7 @@
 // V3-only server bridge for the C3 immutable snapshot/export path.
 // Feature-flagged by NM_V3_EXPORT_BRIDGE=1; never selected by production defaults.
 import { Pool } from "pg";
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { createJobPriceSnapshotReader } from "../../../apps/engine/supplier-price-shadow/src/export/job-price-snapshot-reader.mjs";
@@ -11,15 +11,8 @@ import { createDuckDbPagedExportSource, materializeSealedSnapshotWithDuckDB } fr
 import { resolvePortalPriceListExportContext } from "./portal-orders.mts";
 import { canAccessOperationsModules } from "./roles.mts";
 import { getJson, serviceRoleHeaders } from "./http.mts";
+import { V3_REF, PROD_REF, targetConfig, assertV3ExportAllowed, required } from "./v3-export-dispatch.mts";
 
-const V3_REF = "kaxsqafdevabkxofwdod";
-const V3_URL = `https://${V3_REF}.supabase.co`;
-const PROD_REF = "zjgueqijumzlfioihnkt";
-const PROD_URL = `https://${PROD_REF}.supabase.co`;
-const TARGETS = {
-  v3: { ref: V3_REF, url: V3_URL, flag: "NM_V3_EXPORT_BRIDGE", targetError: "EXACT_V3_REQUIRED" },
-  production: { ref: PROD_REF, url: PROD_URL, flag: "NM_PRODUCTION_EXPORT_BRIDGE", targetError: "EXACT_PRODUCTION_REQUIRED" },
-} as const;
 const POOL_HOSTS = new Set([
   "aws-0-eu-west-1.pooler.supabase.com",
   "db.kaxsqafdevabkxofwdod.supabase.co",
@@ -30,35 +23,9 @@ const MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 // staying within the database function's 5,000-row limit.
 const EXPORT_PAGE_SIZE = 5000;
 const WORKER_LEASE_SECONDS = 120;
-const WORKER_TIMESTAMP_WINDOW_MS = 60_000;
 // Leave time for one slow DB page, the lease handoff and Netlify shutdown.
 // A fresh million-row snapshot is resumed by another signed background call.
 const SNAPSHOT_SEGMENT_MAX_MS = 7 * 60 * 1000;
-
-function targetConfig() {
-  const url = Netlify.env.get("SUPABASE_URL");
-  for (const target of Object.values(TARGETS)) {
-    if (Netlify.env.get(target.flag) === "1" && url === target.url) return target;
-  }
-  return null;
-}
-
-// Production is fail-closed until the staging size gates have passed and the
-// bridge is explicitly reopened with NM_PRODUCTION_EXPORT_PAUSED=0.
-export function isProductionExportPaused() {
-  const target = targetConfig();
-  return Boolean(target?.ref === PROD_REF && Netlify.env.get("NM_PRODUCTION_EXPORT_PAUSED") !== "0");
-}
-
-export function assertV3ExportAllowed() {
-  if (isProductionExportPaused()) throw new Error("V3_EXPORT_PRODUCTION_PAUSED");
-}
-
-function required(name: string) {
-  const value = Netlify.env.get(name) || "";
-  if (!value.trim()) throw new Error(`V3_EXPORT_${name}_MISSING`);
-  return value.trim();
-}
 
 function assertTargetConnection(value: string, target: { targetError: string }) {
   const url = new URL(value);
@@ -201,61 +168,6 @@ function inviteFromActor(actor: any) {
     seller_company_profile_id: actor.seller_company_profile_id || null,
     email: "", party_name: "", updated_at: String(actor.updated_at || ""), expires_at: null,
   } as any;
-}
-
-export function isV3ExportBridgeEnabled() { return Boolean(targetConfig()); }
-
-function workerSignature(serviceRoleKey: string, jobId: string, timestamp: string) {
-  return createHmac("sha256", serviceRoleKey)
-    .update(`v3-export-worker.v1\n${jobId}\n${timestamp}`)
-    .digest("hex");
-}
-
-function signaturesEqual(left: string, right: string) {
-  if (!/^[a-f0-9]{64}$/.test(left) || !/^[a-f0-9]{64}$/.test(right)) return false;
-  return timingSafeEqual(Buffer.from(left, "hex"), Buffer.from(right, "hex"));
-}
-
-/**
- * Dispatch a long-running export to the Netlify Background Function. The
- * service-role key signs the short-lived handoff; it is never sent in the
- * request body or exposed to the browser.
- */
-export async function dispatchV3PriceExportWorker(req: Request, jobId: string) {
-  const target = targetConfig();
-  if (!target) throw new Error("EXPORT_BRIDGE_DISABLED");
-  const serviceRoleKey = required("SUPABASE_SERVICE_ROLE_KEY");
-  const timestamp = String(Date.now());
-  // Netlify's configured function path is the public /api route. Using the
-  // internal /.netlify/functions path is intercepted by the SPA fallback on
-  // the Drop-deployed staging site, so the worker never receives the handoff.
-  const endpoint = new URL("/api/portal-export-worker-background", req.url);
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-v3-export-worker-time": timestamp,
-      "x-v3-export-worker-signature": workerSignature(serviceRoleKey, jobId, timestamp),
-    },
-    body: JSON.stringify({ jobId }),
-    redirect: "error",
-    signal: AbortSignal.timeout(5_000),
-  });
-  if (!response.ok && response.status !== 202) {
-    const body = (await response.text().catch(() => "")).slice(0, 240);
-    throw new Error(`V3_EXPORT_WORKER_DISPATCH_${response.status}${body ? `: ${body}` : ""}`);
-  }
-  return { accepted: true, status: response.status };
-}
-
-export function assertV3PriceExportWorkerRequest(req: Request, jobId: string) {
-  const serviceRoleKey = required("SUPABASE_SERVICE_ROLE_KEY");
-  const timestamp = req.headers.get("x-v3-export-worker-time") || "";
-  const signature = req.headers.get("x-v3-export-worker-signature") || "";
-  if (!/^\d{13}$/.test(timestamp) || Math.abs(Date.now() - Number(timestamp)) > WORKER_TIMESTAMP_WINDOW_MS
-    || !signaturesEqual(signature, workerSignature(serviceRoleKey, jobId, timestamp))) {
-    throw new Error("V3_EXPORT_WORKER_UNAUTHORIZED");
-  }
 }
 
 export async function runV3PriceExportJob(jobId: string) {

@@ -4,8 +4,8 @@ import {
   assertV3PriceExportWorkerRequest,
   dispatchV3PriceExportWorker,
   isV3ExportBridgeEnabled,
-  runV3PriceExportJob,
-} from "./_shared/v3-export-bridge.mts";
+} from "./_shared/v3-export-dispatch.mts";
+import { runV3PriceExportJob } from "./_shared/v3-export-bridge.mts";
 
 /**
  * Durable staging/production-gated worker for large V3 exports. Netlify

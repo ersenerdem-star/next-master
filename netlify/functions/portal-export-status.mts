@@ -7,7 +7,7 @@ import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
 import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
-import { dispatchV3PriceExportWorker, isProductionExportPaused, isV3ExportBridgeEnabled } from "./_shared/v3-export-bridge.mts";
+import { dispatchV3PriceExportWorker, isProductionExportPaused, isV3ExportBridgeEnabled } from "./_shared/v3-export-dispatch.mts";
 
 function isStaleExportJob(jobStatus: string, jobUpdatedAt: string | null | undefined) {
   const updatedAt = Date.parse(String(jobUpdatedAt || ""));

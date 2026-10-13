@@ -3,7 +3,7 @@ import { getAppAuthStatus, resolveCaller } from "./_shared/app-auth.mts";
 import { canAccessOperationsModules } from "./_shared/roles.mts";
 import { exportJson, fetchExportJobById, runAdminPriceListExportJob, runCatalogExportJob, runCatalogMasterExportJob, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
-import { dispatchV3PriceExportWorker, isProductionExportPaused, isV3ExportBridgeEnabled } from "./_shared/v3-export-bridge.mts";
+import { dispatchV3PriceExportWorker, isProductionExportPaused, isV3ExportBridgeEnabled } from "./_shared/v3-export-dispatch.mts";
 
 function isStaleExportJob(jobStatus: string, jobUpdatedAt: string | null | undefined) {
   const updatedAt = Date.parse(String(jobUpdatedAt || ""));
