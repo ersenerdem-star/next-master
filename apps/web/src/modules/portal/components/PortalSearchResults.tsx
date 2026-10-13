@@ -188,6 +188,15 @@ export function PortalSearchResults({
             <span>{orderStatus || "Import a file or add a search result to build a sales order."}</span>
           </div>
         </div>
+        <div className="portal-inline-note portal-inline-note--soft portal-inline-note--compact portal-search-result-view__import-limit-note" role="note">
+          <span>Price lookup limit</span>
+          <strong>Price lookups run in batches of up to 200 rows. Larger files are split automatically; save or send each sales order with 200 lines or fewer.</strong>
+        </div>
+        {basketCount > 200 ? (
+          <div className="portal-search-result-view__order-limit-warning" role="alert">
+            This sales order has {basketCount.toLocaleString("en-US")} lines. Split it into 200-line lists before saving or sending.
+          </div>
+        ) : null}
       </div>
 
       <div className="portal-search-result-view__layout">

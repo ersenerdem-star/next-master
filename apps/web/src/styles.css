@@ -7697,6 +7697,27 @@ textarea {
   white-space: nowrap;
 }
 
+.portal-search-result-view__import-limit-note {
+  border-color: #f4c27a;
+  background: #fffaf0;
+}
+
+.portal-search-result-view__import-limit-note span,
+.portal-search-result-view__import-limit-note strong {
+  color: #7c4a03;
+}
+
+.portal-search-result-view__order-limit-warning {
+  padding: 10px 12px;
+  border: 1px solid #f4c27a;
+  border-radius: 8px;
+  background: #fff8e7;
+  color: #8a4b08;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
 .portal-search-result-view__layout {
   display: grid;
   grid-template-columns: minmax(250px, 0.8fr) minmax(430px, 1.65fr) minmax(235px, 0.72fr);
