@@ -16,7 +16,7 @@ import {
 import { fetchCatalogProductMedia } from "../../infrastructure/api/catalogMediaApi";
 import { fetchCatalogProductDetails } from "../../infrastructure/api/catalogDetailsApi";
 import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenceUsage } from "../../infrastructure/api/codeReferencesApi";
-import { bulkImportCatalog, type CatalogImportResult, type CatalogImportStageOnlyResult } from "../../infrastructure/api/importApi";
+import { bulkImportCatalogStream, type CatalogImportResult, type CatalogImportStageOnlyResult } from "../../infrastructure/api/importApi";
 import { stageBilsteinGroupProducts } from "../../infrastructure/api/bilsteinGroupProductStageApi";
 import { matchesOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import type { BrandOption } from "../../types/brand";
@@ -35,7 +35,7 @@ import { Input } from "../components/common/Input";
 import { ProductVisual, type ProductMediaItem } from "../components/common/ProductVisual";
 import { Select } from "../components/common/Select";
 import { VehicleBadges } from "../components/common/VehicleBadges";
-import { downloadCsv, normalizeNumber, normalizeText, parseCsv, toCsv } from "../../shared/csv";
+import { downloadCsv, normalizeNumber, normalizeText, streamCsvRows, toCsv } from "../../shared/csv";
 import { downloadCatalogLifecycleTemplate, downloadCatalogTemplate } from "../../shared/importTemplates";
 import { dispatchAppNavigation, PENDING_CATALOG_PURCHASE_ITEM_KEY, PENDING_CATALOG_SALES_ITEM_KEY, storeCatalogTransfer } from "../../shared/catalogTransfer";
 import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
@@ -1051,71 +1051,66 @@ export function CatalogPage() {
     setCatalogImportSummary(null);
     setImportingCatalog(true);
     try {
-      const text = await file.text();
-      const parsedRows = parseCsv(text);
-      const [header = [], ...dataRows] = parsedRows;
-      const indexOfAny = (...names: string[]) =>
+      const selectedImportBrand = importBrand === "__new__" ? importBrandName.trim() : importBrand.trim();
+      const selectedImportSegment = normalizeCatalogMarketSegment(importCatalogSegment);
+      setStatus("Catalog file is being scanned without loading the full file into memory…");
+
+      const indexOfAny = (header: string[], ...names: string[]) =>
         header.findIndex((cell) => {
           const value = cell.trim().toLowerCase();
           return names.some((name) => value === name.toLowerCase());
         });
+      const columnsForHeader = (header: string[]) => ({
+        codeIndex: indexOfAny(header, "Product_Code", "Part_No", "Code"),
+        brandIndex: indexOfAny(header, "Brand"),
+        eanIndex: indexOfAny(header, "EAN", "GTIN", "Barcode"),
+        nameIndex: indexOfAny(header, "Product_Name", "Name", "Description"),
+        nameTrIndex: indexOfAny(header, "Product_Name_TR", "Product_Name_Turkish", "Description_TR", "Description_Turkish", "Name_TR"),
+        oemIndex: indexOfAny(header, "OEM_No", "OEM", "Original_Number"),
+        hsIndex: indexOfAny(header, "HS_Code", "HS", "GTIP"),
+        vehicleIndex: indexOfAny(header, "Vehicle", "Vehicles", "Fit_Vehicles", "Fit Vehicles", "Applications"),
+        vehicleModelIndex: indexOfAny(header, "Vehicle_Model", "Vehicle Model", "Model"),
+        originIndex: indexOfAny(header, "Origin", "Country_Of_Origin"),
+        segmentIndex: indexOfAny(header, "Market_Segment", "Market Segment", "Segment", "Catalog_Segment"),
+        weightIndex: indexOfAny(header, "Weight_kg", "Weight", "Net_Weight"),
+        imageUrlIndex: indexOfAny(header, "Image_URL", "Image Url", "Image"),
+        lifecycleStatusIndex: indexOfAny(header, "Lifecycle_Status", "Lifecycle"),
+        lifecycleNoteIndex: indexOfAny(header, "Lifecycle_Note", "Lifecycle Note", "Discontinued_Note", "Discontinued Note"),
+        productTypeIndex: indexOfAny(header, "Product_Type", "Product Type"),
+        sourceUrlIndex: indexOfAny(header, "Source_URL", "Source URL"),
+        sourceAsOfIndex: indexOfAny(header, "Source_As_Of", "Source As Of", "As_Of"),
+        sourceRetrievedAtIndex: indexOfAny(header, "Source_Retrieved_At", "Source Retrieved At", "Retrieved_At"),
+        sourceFingerprintIndex: indexOfAny(header, "Source_Fingerprint", "Source Fingerprint", "Payload_Fingerprint"),
+      });
 
-      const codeIndex = indexOfAny("Product_Code", "Part_No", "Code");
-      const brandIndex = indexOfAny("Brand");
-      const eanIndex = indexOfAny("EAN", "GTIN", "Barcode");
-      const nameIndex = indexOfAny("Product_Name", "Name", "Description");
-      const nameTrIndex = indexOfAny("Product_Name_TR", "Product_Name_Turkish", "Description_TR", "Description_Turkish", "Name_TR");
-      const oemIndex = indexOfAny("OEM_No", "OEM", "Original_Number");
-      const hsIndex = indexOfAny("HS_Code", "HS", "GTIP");
-      const vehicleIndex = indexOfAny("Vehicle", "Vehicles", "Fit_Vehicles", "Fit Vehicles", "Applications");
-      const vehicleModelIndex = indexOfAny("Vehicle_Model", "Vehicle Model", "Model");
-      const originIndex = indexOfAny("Origin", "Country_Of_Origin");
-      const segmentIndex = indexOfAny("Market_Segment", "Market Segment", "Segment", "Catalog_Segment");
-      const weightIndex = indexOfAny("Weight_kg", "Weight", "Net_Weight");
-      const imageUrlIndex = indexOfAny("Image_URL", "Image Url", "Image");
-      const lifecycleStatusIndex = indexOfAny("Lifecycle_Status", "Lifecycle");
-      const lifecycleNoteIndex = indexOfAny("Lifecycle_Note", "Lifecycle Note", "Discontinued_Note", "Discontinued Note");
-      const productTypeIndex = indexOfAny("Product_Type", "Product Type");
-      const sourceUrlIndex = indexOfAny("Source_URL", "Source URL");
-      const sourceAsOfIndex = indexOfAny("Source_As_Of", "Source As Of", "As_Of");
-      const sourceRetrievedAtIndex = indexOfAny("Source_Retrieved_At", "Source Retrieved At", "Retrieved_At");
-      const sourceFingerprintIndex = indexOfAny("Source_Fingerprint", "Source Fingerprint", "Payload_Fingerprint");
-      const selectedImportBrand = importBrand === "__new__" ? importBrandName.trim() : importBrand.trim();
-      const selectedImportSegment = normalizeCatalogMarketSegment(importCatalogSegment);
-      const rowBrands = dataRows.map((row) => normalizeText(row[brandIndex]) ?? "");
-      const rowSegments = dataRows.map((row) => normalizeCatalogMarketSegment(normalizeText(row[segmentIndex]) || "") || "");
-      const detectedBrands = Array.from(
-        new Set(
-          rowBrands
-            .filter((value) => value.length > 0)
-            .map((value) => value.toLowerCase()),
-        ),
-      );
-      const detectedSegments = Array.from(new Set(rowSegments.filter(Boolean)));
-      const activeImportBrand =
-        selectedImportBrand ||
-        (detectedBrands.length === 1
-          ? rowBrands.find((value) => value.length > 0) || ""
-          : "");
-      const activeImportSegment =
-        selectedImportSegment ||
-        (detectedSegments.length === 1
-          ? detectedSegments[0] || ""
-          : "");
+      let columns: ReturnType<typeof columnsForHeader> | null = null;
+      const detectedBrands = new Map<string, string>();
+      const detectedSegments = new Set<string>();
+      let rowCount = 0;
+      let rowsMissingSegment = 0;
+      for await (const row of streamCsvRows(file)) {
+        if (!columns) {
+          columns = columnsForHeader(row);
+          continue;
+        }
+        if (!row.some((cell) => normalizeText(cell))) continue;
+        rowCount += 1;
+        const rowBrand = normalizeText(row[columns.brandIndex]) || "";
+        if (rowBrand && !detectedBrands.has(rowBrand.toLowerCase())) detectedBrands.set(rowBrand.toLowerCase(), rowBrand);
+        const rowSegment = normalizeCatalogMarketSegment(normalizeText(row[columns.segmentIndex]) || "") || "";
+        if (rowSegment) detectedSegments.add(rowSegment);
+        if (!selectedImportSegment && columns.segmentIndex >= 0 && !rowSegment) rowsMissingSegment += 1;
+      }
+      if (!columns) throw new Error("Catalog import file does not contain a header row.");
+
+      const activeImportBrand = selectedImportBrand || (detectedBrands.size === 1 ? Array.from(detectedBrands.values())[0] || "" : "");
+      const activeImportSegment = selectedImportSegment || (detectedSegments.size === 1 ? Array.from(detectedSegments)[0] || "" : "");
 
       if (!activeImportBrand) {
         throw new Error(t("catalog.errors.importBrandRequired"));
       }
-      const hasSegmentColumn = segmentIndex >= 0;
-      const rowsMissingSegment = hasSegmentColumn
-        ? dataRows.filter((row) => {
-            const hasData = row.some((cell) => normalizeText(cell));
-            const rowSegment = normalizeCatalogMarketSegment(normalizeText(row[segmentIndex]) || "");
-            return hasData && !rowSegment && !selectedImportSegment;
-          }).length
-        : 0;
 
-      if (!selectedImportSegment && !hasSegmentColumn) {
+      if (!selectedImportSegment && columns.segmentIndex < 0) {
         throw new Error(t("catalog.errors.importSegmentRequired"));
       }
       if (!selectedImportSegment && rowsMissingSegment > 0) {
@@ -1124,44 +1119,57 @@ export function CatalogPage() {
 
       actionFeedback.begin(t("catalog.status.importingForBrand", { brand: activeImportBrand }));
 
-      const payload = dataRows
-        .map((row) => ({
-          product_code: normalizeText(row[codeIndex]),
-          brand: normalizeText(row[brandIndex]) || activeImportBrand || "Unbranded",
-          ean: normalizeText(row[eanIndex]),
-          description: normalizeText(row[nameIndex]),
-          description_tr: normalizeText(row[nameTrIndex]),
-          oem_no: normalizeText(row[oemIndex]),
-          vehicle: normalizeText(row[vehicleIndex]),
-          vehicle_model: normalizeText(row[vehicleModelIndex]),
-          hs_code: normalizeText(row[hsIndex]),
-          origin: normalizeText(row[originIndex]),
-          market_segment: normalizeCatalogMarketSegment(normalizeText(row[segmentIndex]) || activeImportSegment) || activeImportSegment,
-          weight_kg: normalizeNumber(row[weightIndex]),
-          image_url: normalizeText(row[imageUrlIndex]),
-          lifecycle_status: normalizeCatalogLifecycleStatus(normalizeText(row[lifecycleStatusIndex])),
-          lifecycle_note: normalizeText(row[lifecycleNoteIndex]),
-          product_type: normalizeText(row[productTypeIndex]),
-          source_url: normalizeText(row[sourceUrlIndex]),
-          source_as_of: normalizeText(row[sourceAsOfIndex]),
-          source_retrieved_at: normalizeText(row[sourceRetrievedAtIndex]),
-          source_fingerprint: normalizeText(row[sourceFingerprintIndex]),
-        }))
-        .filter((row) => Object.values(row).some((value) => value != null && String(value).trim().length > 0));
-
-      if (!payload.length) {
-        throw new Error(t("catalog.errors.noValidImportRows"));
+      const importedCodeSet = new Set<string>();
+      let importedCodesTruncated = false;
+      const importedCodeLimit = 10_000;
+      const mapCatalogRow = (row: string[], rowIndex: number) => ({
+          product_code: normalizeText(row[columns!.codeIndex]),
+          brand: normalizeText(row[columns!.brandIndex]) || activeImportBrand || "Unbranded",
+          ean: normalizeText(row[columns!.eanIndex]),
+          description: normalizeText(row[columns!.nameIndex]),
+          description_tr: normalizeText(row[columns!.nameTrIndex]),
+          oem_no: normalizeText(row[columns!.oemIndex]),
+          vehicle: normalizeText(row[columns!.vehicleIndex]),
+          vehicle_model: normalizeText(row[columns!.vehicleModelIndex]),
+          hs_code: normalizeText(row[columns!.hsIndex]),
+          origin: normalizeText(row[columns!.originIndex]),
+          market_segment: normalizeCatalogMarketSegment(normalizeText(row[columns!.segmentIndex]) || activeImportSegment) || activeImportSegment,
+          weight_kg: normalizeNumber(row[columns!.weightIndex]),
+          image_url: normalizeText(row[columns!.imageUrlIndex]),
+          lifecycle_status: normalizeCatalogLifecycleStatus(normalizeText(row[columns!.lifecycleStatusIndex])),
+          lifecycle_note: normalizeText(row[columns!.lifecycleNoteIndex]),
+          product_type: normalizeText(row[columns!.productTypeIndex]),
+          source_url: normalizeText(row[columns!.sourceUrlIndex]),
+          source_as_of: normalizeText(row[columns!.sourceAsOfIndex]),
+          source_retrieved_at: normalizeText(row[columns!.sourceRetrievedAtIndex]),
+          source_fingerprint: normalizeText(row[columns!.sourceFingerprintIndex]),
+          row_index: rowIndex,
+        });
+      async function* mappedRows() {
+        let headerSkipped = false;
+        let rowIndex = 0;
+        for await (const row of streamCsvRows(file)) {
+          if (!headerSkipped) {
+            headerSkipped = true;
+            continue;
+          }
+          if (!row.some((cell) => normalizeText(cell))) continue;
+          const mapped = mapCatalogRow(row, rowIndex);
+          rowIndex += 1;
+          if (!Object.values(mapped).some((value) => value != null && String(value).trim().length > 0)) continue;
+          const code = mapped.product_code || "";
+          if (code) {
+            if (importedCodeSet.size < importedCodeLimit) importedCodeSet.add(code);
+            else importedCodesTruncated = true;
+          }
+          yield mapped;
+        }
       }
 
-      const importedCodes = Array.from(
-        new Set(
-          payload
-            .map((row) => row.product_code ?? "")
-            .filter((code) => code.length > 0),
-        ),
-      );
+      if (!rowCount) throw new Error(t("catalog.errors.noValidImportRows"));
 
-      const importResult = await bulkImportCatalog(payload, {
+      const importResult = await bulkImportCatalogStream(mappedRows(), {
+        totalRows: rowCount,
         brandName: activeImportBrand,
         marketSegment: activeImportSegment,
         onProgress: ({ processedChunks, totalChunks, processedRows, totalRows }) => {
@@ -1183,6 +1191,15 @@ export function CatalogPage() {
         actionFeedback.succeed("Catalog upload accepted. Processing continues in the background.");
         setShowImportDialog(false);
         setImportFile(null);
+        return;
+      }
+
+      const importedCodes = Array.from(importedCodeSet);
+      if (importedCodesTruncated) {
+        setShowImportDialog(false);
+        setImportFile(null);
+        setStatus(`${summaryText} Import finalized; the preview is omitted for files over ${importedCodeLimit.toLocaleString("en-US")} unique codes.`);
+        actionFeedback.succeed(`Catalog import finalized for ${activeImportBrand}.`);
         return;
       }
 

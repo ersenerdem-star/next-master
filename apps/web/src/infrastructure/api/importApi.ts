@@ -408,6 +408,18 @@ function buildAdaptiveCatalogImportBatches(payload: Array<Record<string, unknown
   return batches;
 }
 
+function normalizeCatalogImportRow(row: Record<string, unknown>, rowIndex: number, brandName?: string, marketSegment?: string) {
+  return {
+    ...row,
+    row_index: Number.isFinite(Number(row.row_index)) ? Number(row.row_index) : rowIndex,
+    product_code: normalizeCatalogImportProductCode(row, brandName),
+    description: row.description == null ? null : normalizeCatalogDescription(String(row.description || "")),
+    description_tr: row.description_tr == null ? null : String(row.description_tr || "").trim() || null,
+    vehicle: row.vehicle == null ? null : String(row.vehicle || "").trim() || null,
+    market_segment: normalizeCatalogMarketSegment(String(row.market_segment || marketSegment || "")),
+  };
+}
+
 async function importCatalogChunkWithRetry(input: {
   chunk: Array<Record<string, unknown>>;
   chunkNumber: number;
@@ -555,15 +567,7 @@ export async function stageCatalogImportOnly(
     throw new Error("Catalog staging did not contain any rows.");
   }
 
-  const normalizedPayload = payload.map((row, rowIndex) => ({
-    ...row,
-    row_index: Number.isFinite(Number(row.row_index)) ? Number(row.row_index) : rowIndex,
-    product_code: normalizeCatalogImportProductCode(row, options.brandName),
-    description: row.description == null ? null : normalizeCatalogDescription(String(row.description || "")),
-    description_tr: row.description_tr == null ? null : String(row.description_tr || "").trim() || null,
-    vehicle: row.vehicle == null ? null : String(row.vehicle || "").trim() || null,
-    market_segment: normalizeCatalogMarketSegment(String(row.market_segment || "")),
-  }));
+  const normalizedPayload = payload.map((row, rowIndex) => normalizeCatalogImportRow(row, rowIndex, options.brandName, options.marketSegment));
   const batches = buildAdaptiveCatalogImportBatches(normalizedPayload);
   const totalChunks = Math.max(1, batches.length);
   const importRun = await callImportRpc<CatalogImportRunResult>(
@@ -649,15 +653,7 @@ export async function bulkImportCatalog(
     };
   }
 
-  const normalizedPayload = payload.map((row, rowIndex) => ({
-    ...row,
-    row_index: Number.isFinite(Number(row.row_index)) ? Number(row.row_index) : rowIndex,
-    product_code: normalizeCatalogImportProductCode(row, options?.brandName),
-    description: row.description == null ? null : normalizeCatalogDescription(String(row.description || "")),
-    description_tr: row.description_tr == null ? null : String(row.description_tr || "").trim() || null,
-    vehicle: row.vehicle == null ? null : String(row.vehicle || "").trim() || null,
-    market_segment: normalizeCatalogMarketSegment(String(row.market_segment || "")),
-  }));
+  const normalizedPayload = payload.map((row, rowIndex) => normalizeCatalogImportRow(row, rowIndex, options?.brandName, options?.marketSegment));
   const batches = buildAdaptiveCatalogImportBatches(normalizedPayload);
   const totalChunks = Math.max(1, batches.length);
   const importRun = await beginCatalogImport({
@@ -700,6 +696,118 @@ export async function bulkImportCatalog(
       runId,
       totalRows,
       totalChunks,
+      stagedRows,
+      insertCount: 0,
+      updateCount: 0,
+      skipCount: 0,
+      errorCount: 0,
+      duplicateCount: 0,
+      conflictCount: 0,
+      validationStatus: "processing",
+      finalized: false,
+      message: "Catalog upload completed. Validation and finalization are processing in the background.",
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "Catalog import failed");
+    await failCatalogImport(runId, message).catch(() => undefined);
+    throw error;
+  }
+}
+
+/**
+ * Stream catalog rows into the existing staged import contract. The caller
+ * owns parsing and supplies a bounded AsyncIterable; this function never
+ * materializes the full file or payload in memory.
+ */
+export async function bulkImportCatalogStream(
+  rows: AsyncIterable<Record<string, unknown>>,
+  options: {
+    totalRows: number;
+    brandName?: string;
+    marketSegment?: string;
+    onProgress?: (input: { processedChunks: number; totalChunks: number; processedRows: number; totalRows: number }) => void;
+  },
+): Promise<CatalogImportResult> {
+  const totalRows = Math.max(0, Math.floor(Number(options.totalRows || 0)));
+  if (!totalRows) {
+    return {
+      runId: null,
+      totalRows: 0,
+      totalChunks: 0,
+      stagedRows: 0,
+      insertCount: 0,
+      updateCount: 0,
+      skipCount: 0,
+      errorCount: 0,
+      duplicateCount: 0,
+      conflictCount: 0,
+      validationStatus: "validated",
+      finalized: false,
+      message: "Catalog import did not contain any rows.",
+    };
+  }
+
+  const estimatedTotalChunks = Math.max(1, Math.ceil(totalRows / CATALOG_IMPORT_MAX_BATCH_ROWS));
+  const importRun = await beginCatalogImport({
+    brandName: options.brandName,
+    marketSegment: options.marketSegment,
+  });
+  const runId = importRun.run_id;
+  let batch: Array<Record<string, unknown>> = [];
+  let batchBytes = 2;
+  let batchStartRowIndex = 0;
+  let chunkNumber = 0;
+  let processedRows = 0;
+  let stagedRows = 0;
+
+  const flush = async () => {
+    if (!batch.length) return;
+    chunkNumber += 1;
+    const currentBatch = batch;
+    const currentStartRowIndex = batchStartRowIndex;
+    batch = [];
+    batchBytes = 2;
+    const data = await importCatalogChunkWithAdaptiveRetry({
+      chunk: currentBatch,
+      chunkNumber,
+      totalChunks: Math.max(estimatedTotalChunks, chunkNumber),
+      processedRowsBeforeFailure: currentStartRowIndex,
+      runId,
+    });
+    stagedRows += Number(data.staged_count || currentBatch.length);
+    options.onProgress?.({
+      processedChunks: chunkNumber,
+      totalChunks: Math.max(estimatedTotalChunks, chunkNumber),
+      processedRows,
+      totalRows,
+    });
+  };
+
+  try {
+    let inputRowIndex = 0;
+    for await (const row of rows) {
+      const normalized = normalizeCatalogImportRow(row, inputRowIndex, options.brandName, options.marketSegment);
+      const rowBytes = Math.max(estimateJsonBytes(normalized), 1);
+      const wouldExceedRowCount = batch.length >= CATALOG_IMPORT_MAX_BATCH_ROWS;
+      const wouldExceedByteTarget = batch.length > 0 && batchBytes + rowBytes + 1 > CATALOG_IMPORT_TARGET_BATCH_BYTES;
+      if (wouldExceedRowCount || wouldExceedByteTarget) await flush();
+      if (!batch.length) batchStartRowIndex = Number(normalized.row_index || inputRowIndex);
+      batch.push(normalized);
+      batchBytes += rowBytes + 1;
+      inputRowIndex += 1;
+      processedRows += 1;
+    }
+    await flush();
+
+    // Do not keep the browser request open for validation/finalization. Both
+    // operations can legitimately exceed the app gateway timeout on large
+    // files. The queue marker is idempotent and a background worker resumes
+    // the run from its persisted cursor.
+    await queueCatalogImportProcessing(runId);
+    return {
+      runId,
+      totalRows,
+      totalChunks: Math.max(estimatedTotalChunks, chunkNumber),
       stagedRows,
       insertCount: 0,
       updateCount: 0,

@@ -1,29 +1,168 @@
 export function detectDelimiter(text: string) {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 5);
   const candidates = [",", ";", "\t", "\x1b"];
   const scored = candidates
     .map((delimiter) => {
-      const counts = lines.map((line) => line.split(delimiter).length);
-      const min = counts.length ? Math.min(...counts) : 0;
-      const avg = counts.length ? counts.reduce((sum, count) => sum + count, 0) / counts.length : 0;
-      const consistent = counts.length && counts.every((count) => count === counts[0]) ? 1 : 0;
-      return { delimiter, min, avg, consistent };
+      const scanner = createCsvStreamScanner(delimiter);
+      let rows = scanner.push(text);
+      try {
+        rows = rows.concat(scanner.finish());
+      } catch {
+        // A bounded sniff sample may end inside a quoted field. Rows already
+        // emitted are still sufficient to identify the delimiter.
+      }
+      const fieldCounts = rows
+        .filter((row) => row.some((value) => value.trim()))
+        .slice(0, 5)
+        .map((row) => row.length);
+      const headerFields = fieldCounts[0] || 0;
+      const dataCounts = fieldCounts.slice(1);
+      const matchingDataRows = dataCounts.filter((count) => count === headerFields).length;
+      const consistent = dataCounts.length > 0 && matchingDataRows === dataCounts.length ? 1 : 0;
+      const totalFields = fieldCounts.reduce((sum, count) => sum + count, 0);
+      return { delimiter, headerFields, matchingDataRows, consistent, totalFields };
     })
     .sort((a, b) => {
-      if (b.min !== a.min) return b.min - a.min;
+      if (b.headerFields !== a.headerFields) return b.headerFields - a.headerFields;
+      if (b.matchingDataRows !== a.matchingDataRows) return b.matchingDataRows - a.matchingDataRows;
       if (b.consistent !== a.consistent) return b.consistent - a.consistent;
-      if (b.avg !== a.avg) return b.avg - a.avg;
-      return 0;
+      return b.totalFields - a.totalFields;
     });
-  const best = scored[0]?.delimiter || ",";
-  const hasDecimalComma = lines.some((line) => /\d,\d/.test(line));
-  const hasSemicolon = lines.some((line) => line.includes(";"));
-  if (best === "," && hasDecimalComma && hasSemicolon) return ";";
-  return best;
+  return scored[0]?.delimiter || ",";
+}
+
+function createCsvStreamScanner(delimiter: string) {
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  let pendingQuote = false;
+  let skipLf = false;
+  let firstCell = true;
+
+  function emitRow(rows: string[][]) {
+    const emitted = row.map((value, index) => index === 0 && firstCell ? value.replace(/^\uFEFF/, "") : value);
+    if (emitted.some((value) => value.trim())) {
+      rows.push(emitted);
+      firstCell = false;
+    }
+    row = [];
+    cell = "";
+  }
+
+  return {
+    push(input: string) {
+      const rows: string[][] = [];
+      for (let index = 0; index < input.length; index += 1) {
+        const char = input[index];
+        const next = input[index + 1];
+
+        if (pendingQuote) {
+          pendingQuote = false;
+          if (char === '"') {
+            cell += '"';
+            continue;
+          }
+          quoted = false;
+        }
+
+        if (skipLf) {
+          skipLf = false;
+          if (char === "\n") continue;
+        }
+
+        if (char === '"' && quoted && next === '"') {
+          cell += '"';
+          index += 1;
+        } else if (char === '"' && quoted && next === undefined) {
+          pendingQuote = true;
+        } else if (char === '"') {
+          quoted = !quoted;
+        } else if (quoted) {
+          cell += char;
+        } else if (char === delimiter) {
+          row.push(cell);
+          cell = "";
+        } else if (char === "\r" || char === "\n") {
+          row.push(cell);
+          if (char === "\r") skipLf = true;
+          emitRow(rows);
+        } else {
+          cell += char;
+        }
+      }
+      return rows;
+    },
+    finish() {
+      if (pendingQuote) {
+        pendingQuote = false;
+        quoted = false;
+      }
+      if (quoted) throw new Error("CSV_UNTERMINATED_QUOTE");
+      const rows: string[][] = [];
+      if (cell.length > 0 || row.length > 0) {
+        row.push(cell);
+        emitRow(rows);
+      }
+      return rows;
+    },
+  };
+}
+
+/**
+ * Read CSV rows from a Blob without materializing the whole file or all rows
+ * in browser memory. The scanner preserves quoted delimiters/newlines and
+ * handles UTF-8 characters split across stream chunks.
+ */
+export async function* streamCsvRows(source: Blob): AsyncGenerator<string[]> {
+  const reader = source.stream().getReader();
+  const decoder = new TextDecoder();
+  let sample = "";
+  let scanner: ReturnType<typeof createCsvStreamScanner> | null = null;
+  let bufferedInput = "";
+
+  const initializeScanner = () => {
+    if (scanner) return;
+    scanner = createCsvStreamScanner(detectDelimiter(sample || bufferedInput || ","));
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      if (!scanner) {
+        sample += chunk;
+        bufferedInput += chunk;
+        // Five complete physical lines or 64 KiB is enough to identify the
+        // delimiter without retaining the rest of a large upload.
+        const lineCount = (sample.match(/[\r\n]/g) || []).length;
+        if (lineCount >= 5 || sample.length >= 64 * 1024) initializeScanner();
+      } else {
+        bufferedInput += chunk;
+      }
+      const activeScanner = scanner as ReturnType<typeof createCsvStreamScanner> | null;
+      if (activeScanner) {
+        const input = bufferedInput;
+        bufferedInput = "";
+        for (const row of activeScanner.push(input)) yield row;
+      }
+    }
+
+    const tail = decoder.decode();
+    if (!scanner) {
+      sample += tail;
+      bufferedInput += tail;
+      initializeScanner();
+    } else if (tail) {
+      bufferedInput += tail;
+    }
+    const activeScanner = scanner as ReturnType<typeof createCsvStreamScanner> | null;
+    if (!activeScanner) throw new Error("CSV_SCANNER_NOT_INITIALIZED");
+    for (const row of activeScanner.push(bufferedInput)) yield row;
+    for (const row of activeScanner.finish()) yield row;
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
 }
 
 export function parseCsv(text: string) {
