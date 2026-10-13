@@ -1976,6 +1976,7 @@ export const trMessages = {
     "suppliers.errors.requestFailed": "Tedarikçi isteği başarısız",
     "suppliers.errors.linesRequestFailed": "Tedarikçi fiyat isteği başarısız",
     "suppliers.errors.supplierRequiredForImport": "İçe aktarma için tedarikçi seçin.",
+    "suppliers.errors.supplierRequiredForExport": "Tüm tedarikçi fiyat satırlarını dışa aktarmak için tedarikçi seçin.",
     "suppliers.errors.brandRequiredForImport": "İçe aktarma için marka seçin.",
     "suppliers.errors.invalidCsvHeaders": "Geçersiz CSV başlıkları. Gerekli: {required}. Bulunan: {found}.",
     "suppliers.errors.invalidCsvValues": "Yükleme staging öncesinde durduruldu. Şu format hatalarını düzeltin: {details}{suffix}",

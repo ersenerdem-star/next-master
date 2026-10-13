@@ -6,6 +6,7 @@ import { assertLegacySupplierPriceWriteAllowed, bulkImportSupplierPrices } from 
 import {
   fetchCloudSupplierPrices,
   fetchCloudSupplierPricesAcrossSuppliers,
+  fetchAllCloudSupplierPrices,
   fetchCloudSuppliers,
 } from "../../infrastructure/api/suppliersApi";
 import type { BrandOption } from "../../types/brand";
@@ -664,28 +665,55 @@ export function SuppliersPage() {
     setSubmittedSearch(search);
   }
 
-  function handleSupplierExport() {
+  async function handleSupplierExport() {
+    if (!selectedSupplierId) {
+      const message = p("suppliers.errors.supplierRequiredForExport");
+      setError(message);
+      actionFeedback.fail(message);
+      return;
+    }
+
     setExportingSuppliers(true);
+    setError("");
     actionFeedback.begin(p("suppliers.feedback.preparingCsvExport"));
-    const exportRows = [
-      ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes"],
-      ...rows.map((row) => [
-        row.supplier_name || suppliers.find((supplier) => supplier.supplier_id === selectedSupplierId)?.name || "",
-        formatBrandAwareProductCode(row.product_code, row.brand || row.supplier_name || ""),
-        row.brand || "",
-        row.is_placeholder ? p("suppliers.empty.noPriceForSupplier") : row.description || "",
-        row.oem_no || "",
-        row.buy_price ?? "",
-        row.price_date || "",
-        row.moq ?? "",
-        row.order_multiple ?? "",
-        row.lead_time_days ?? "",
-        row.notes || "",
-      ]),
-    ];
-    downloadCsv("supplier-export.csv", toCsv(exportRows));
-    actionFeedback.succeed(p("suppliers.feedback.csvDownloaded"));
-    setExportingSuppliers(false);
+    try {
+      const exportRows = await fetchAllCloudSupplierPrices({
+        supplierId: selectedSupplierId,
+        search: submittedSearch,
+        freshness,
+      });
+      if (!exportRows.length) {
+        const message = p("suppliers.empty.noRows");
+        setError(message);
+        actionFeedback.fail(message);
+        return;
+      }
+      const supplierName = suppliers.find((supplier) => supplier.supplier_id === selectedSupplierId)?.name || "";
+      const csvRows = [
+        ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes"],
+        ...exportRows.map((row) => [
+          supplierName,
+          formatBrandAwareProductCode(row.product_code, row.brand || supplierName),
+          row.brand || "",
+          row.description || "",
+          row.oem_no || "",
+          row.buy_price ?? "",
+          row.price_date || "",
+          row.moq ?? "",
+          row.order_multiple ?? "",
+          row.lead_time_days ?? "",
+          row.notes || "",
+        ]),
+      ];
+      downloadCsv("supplier-export.csv", toCsv(csvRows));
+      actionFeedback.succeed(p("suppliers.feedback.csvDownloaded"));
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : p("suppliers.errors.linesRequestFailed");
+      setError(message);
+      actionFeedback.fail(message);
+    } finally {
+      setExportingSuppliers(false);
+    }
   }
 
   return (
@@ -718,7 +746,7 @@ export function SuppliersPage() {
             >
               {t("common.search")}
             </Button>
-            <Button variant="secondary" onClick={handleSupplierExport} disabled={!rows.length} busy={exportingSuppliers} busyLabel={p("busy.preparing")}>
+            <Button variant="secondary" onClick={() => void handleSupplierExport()} disabled={!selectedSupplierId || !rows.length} busy={exportingSuppliers} busyLabel={p("busy.preparing")}>
               {p("actions.exportCsv")}
             </Button>
             <Button

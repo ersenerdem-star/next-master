@@ -2000,6 +2000,7 @@ export const enMessages = {
     "suppliers.errors.requestFailed": "Supplier request failed",
     "suppliers.errors.linesRequestFailed": "Supplier price request failed",
     "suppliers.errors.supplierRequiredForImport": "Select a supplier for import.",
+    "suppliers.errors.supplierRequiredForExport": "Select a supplier before exporting all supplier price rows.",
     "suppliers.errors.brandRequiredForImport": "Select a brand for import.",
     "suppliers.errors.invalidCsvHeaders": "Invalid CSV headers. Required: {required}. Found: {found}.",
     "suppliers.errors.invalidCsvValues": "Upload blocked before staging. Fix the following format issues: {details}{suffix}",

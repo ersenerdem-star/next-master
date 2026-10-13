@@ -132,32 +132,37 @@ async function mergeCatalogProductOptionalFields<T extends CatalogOptionalFields
     }));
   }
 
-  const { data, error } = await supabaseClient
-    .from("catalog_products")
-    .select("id,ean,description_tr,vehicle,vehicle_model")
-    .eq("organization_id", organizationId)
-    .in("id", ids);
+  const descriptions = new Map<string, { ean: string; description_tr: string; vehicle: string; vehicle_model: string }>();
+  const idPageSize = 500;
+  for (let from = 0; from < ids.length; from += idPageSize) {
+    const idBatch = ids.slice(from, from + idPageSize);
+    const { data, error } = await supabaseClient
+      .from("catalog_products")
+      .select("id,ean,description_tr,vehicle,vehicle_model")
+      .eq("organization_id", organizationId)
+      .in("id", idBatch);
 
-  // Keep catalog browsing available if an older environment does not expose
-  // one of these additive columns yet; the RPC values remain usable.
-  if (error) {
-    return rows.map((row) => ({
-      ...row,
-      ean: String(row.ean || "").trim(),
-      description_tr: String(row.description_tr || "").trim(),
-      vehicle: String(row.vehicle || "").trim(),
-      vehicle_model: String(row.vehicle_model || "").trim(),
-    }));
+    // Keep catalog browsing available if an older environment does not expose
+    // one of these additive columns yet; the RPC values remain usable.
+    if (error) {
+      return rows.map((row) => ({
+        ...row,
+        ean: String(row.ean || "").trim(),
+        description_tr: String(row.description_tr || "").trim(),
+        vehicle: String(row.vehicle || "").trim(),
+        vehicle_model: String(row.vehicle_model || "").trim(),
+      }));
+    }
+
+    for (const row of data || []) {
+      descriptions.set(String(row.id), {
+        ean: String(row.ean || "").trim(),
+        description_tr: String(row.description_tr || "").trim(),
+        vehicle: String(row.vehicle || "").trim(),
+        vehicle_model: String(row.vehicle_model || "").trim(),
+      });
+    }
   }
-
-  const descriptions = new Map(
-    (data || []).map((row) => [String(row.id), {
-      ean: String(row.ean || "").trim(),
-      description_tr: String(row.description_tr || "").trim(),
-      vehicle: String(row.vehicle || "").trim(),
-      vehicle_model: String(row.vehicle_model || "").trim(),
-    }]),
-  );
 
   return rows.map((row) => ({
     ...row,
