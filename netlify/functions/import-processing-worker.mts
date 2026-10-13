@@ -1,5 +1,6 @@
 import type { Config, Context } from "@netlify/functions";
 import { json, getJson, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
+import { cleanupCompletedCatalogStorageSources } from "./_shared/catalog-storage.mts";
 
 type QueuedCatalogRun = {
   id: string;
@@ -80,6 +81,9 @@ async function processCatalogRun(supabaseUrl: string, serviceRoleKey: string, ru
   // successful finalize branch so failed runs cannot remain queued forever.
   if (TERMINAL_CATALOG_STATUSES.has(status)) {
     await clearQueueMarker(supabaseUrl, serviceRoleKey, "catalog_import_runs", run.id);
+    await cleanupCompletedCatalogStorageSources(supabaseUrl, serviceRoleKey).catch((error) => {
+      console.error("catalog storage cleanup after terminal run deferred", run.id, error);
+    });
     return { runId: run.id, status, queueMarkerCleared: true };
   }
 
@@ -99,6 +103,9 @@ async function processCatalogRun(supabaseUrl: string, serviceRoleKey: string, ru
 
   if (TERMINAL_CATALOG_STATUSES.has(status)) {
     await clearQueueMarker(supabaseUrl, serviceRoleKey, "catalog_import_runs", run.id);
+    await cleanupCompletedCatalogStorageSources(supabaseUrl, serviceRoleKey).catch((error) => {
+      console.error("catalog storage cleanup after validation deferred", run.id, error);
+    });
     return { runId: run.id, status, queueMarkerCleared: true };
   }
 
@@ -120,6 +127,9 @@ async function processCatalogRun(supabaseUrl: string, serviceRoleKey: string, ru
     const latestStatus = String(latest?.status || "");
     if (TERMINAL_CATALOG_STATUSES.has(latestStatus) || latest?.has_more === false) {
       await clearQueueMarker(supabaseUrl, serviceRoleKey, "catalog_import_runs", run.id);
+      await cleanupCompletedCatalogStorageSources(supabaseUrl, serviceRoleKey).catch((error) => {
+        console.error("catalog storage cleanup after finalization deferred", run.id, error);
+      });
       break;
     }
   }
@@ -223,6 +233,9 @@ export default async (_request: Request, context: Context) => {
   catalogSyncPendingUrl.searchParams.set("limit", String(MAX_RUNS_PER_TICK));
 
   const task = (async () => {
+    await cleanupCompletedCatalogStorageSources(supabaseUrl, serviceRoleKey).catch((error) => {
+      console.error("catalog storage cleanup scan deferred", error);
+    });
     // A terminal run is intentionally excluded from the active queue below,
     // so clean old markers in a bounded pass before claiming new work.
     await clearTerminalCatalogQueueMarkers(supabaseUrl, serviceRoleKey).catch((error) => {

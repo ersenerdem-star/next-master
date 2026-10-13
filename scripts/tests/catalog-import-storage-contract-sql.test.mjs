@@ -10,7 +10,15 @@ const hardeningSql = fs.readFileSync(
   new URL("../../supabase/migrations/20261014100000_catalog_import_storage_hardening.sql", import.meta.url),
   "utf8",
 );
-const sql = `${baseSql}\n${hardeningSql}`;
+const runtimeFenceSql = fs.readFileSync(
+  new URL("../../supabase/migrations/20261014110000_catalog_import_storage_runtime_fence.sql", import.meta.url),
+  "utf8",
+);
+const apiCleanupSql = fs.readFileSync(
+  new URL("../../supabase/migrations/20261014120000_catalog_import_storage_api_cleanup.sql", import.meta.url),
+  "utf8",
+);
+const sql = `${baseSql}\n${hardeningSql}\n${runtimeFenceSql}\n${apiCleanupSql}`;
 
 const functionBlock = (name) => {
   const start = sql.indexOf(`create or replace function public.${name}`);
@@ -134,11 +142,13 @@ test("failure handoff is fenced, terminal, and clears the queue marker", () => {
   assert.match(body, /error_code/i);
 });
 
-test("browser upload failure is authenticated and cleans the private object", () => {
+test("browser upload failure is authenticated and hands private object cleanup to Storage API", () => {
   const body = latestFunctionBlock("fail_catalog_import_storage_upload");
   assert.match(sql, /status in \('created','uploading','uploaded','processing','staged','completed','failed','expired','cancelled'\)/i);
   assert.match(body, /auth\.uid\(\)/i);
-  assert.match(body, /delete from storage\.objects/i);
+  assert.doesNotMatch(body, /delete from storage\.objects/i);
+  assert.match(body, /storage_object_id is not null/i);
+  assert.match(body, /cleanup_required/i);
   assert.match(body, /CATALOG_STORAGE_UPLOAD_FAILED/i);
   assert.match(body, /public\.fail_catalog_import\(/i);
   assert.match(sql, /grant execute on function public\.fail_catalog_import_storage_upload\(uuid,text\)\s+to authenticated/i);
@@ -161,7 +171,8 @@ test("queued catalog runs retain the system finalization bridge", () => {
   assert.match(body, /to_regprocedure\('public\.finalize_catalog_import_batch\(uuid,integer\)'\)/i);
   assert.match(body, /public\.finalize_catalog_import\(\$1\)/i);
   assert.match(body, /least\(coalesce\(input_batch_size, 500\), 1000\)/i);
-  assert.match(body, /delete from storage\.objects/i);
+  assert.doesNotMatch(body, /delete from storage\.objects/i);
+  assert.match(body, /storage_cleanup_required/i);
   assert.match(sql, /grant execute on function public\.finalize_catalog_import_batch_system\([^)]*\) to service_role/i);
   assert.match(body, /status = 'completed'/i);
 });

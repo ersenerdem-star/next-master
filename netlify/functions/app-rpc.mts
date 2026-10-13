@@ -5,6 +5,7 @@ import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./_shared/c
 import { normalizeCatalogMarketSegment } from "./_shared/catalog/catalog-segments.mts";
 import { canAccessCustomerOps, canAccessOperationsModules, isSuperadminRole } from "./_shared/roles.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
+import { cleanupCatalogStorageSource } from "./_shared/catalog-storage.mts";
 
 const ALLOWED_RPCS = new Set([
   "admin_list_org_users",
@@ -1264,6 +1265,43 @@ export default async (req: Request, context: Context) => {
           organization_id: caller.organizationId,
         },
       });
+    }
+
+    if (name === "fail_catalog_import_storage_upload") {
+      const data = await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/${name}`, {
+        method: "POST",
+        headers: {
+          apikey: supabaseAnonKey,
+          Authorization: authorizationHeader,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(args),
+      });
+      const runId = String(args.input_run_id || "").trim();
+      let cleanupRequired = false;
+      if (runId) {
+        const sources = await getJson<Array<{
+          id: string;
+          storage_bucket: string;
+          storage_object_path: string;
+          storage_object_id: string | null;
+        }>>(buildRestUrl(supabaseUrl, "catalog_import_sources", {
+          select: "id,storage_bucket,storage_object_path,storage_object_id",
+          run_id: `eq.${runId}`,
+          organization_id: `eq.${caller.organizationId}`,
+          limit: "1",
+        }), { headers: serviceRoleHeaders(serviceRoleKey), timeoutMs: 12_000 });
+        const source = sources[0];
+        if (source?.storage_object_id) {
+          try {
+            await cleanupCatalogStorageSource(supabaseUrl, serviceRoleKey, source);
+          } catch (error) {
+            cleanupRequired = true;
+            console.error("catalog storage upload cleanup deferred", runId, error);
+          }
+        }
+      }
+      return json({ ok: true, data: { ...(data && typeof data === "object" ? data : {}), cleanup_required: cleanupRequired } });
     }
 
     if (name === "get_catalog_product_details") {
