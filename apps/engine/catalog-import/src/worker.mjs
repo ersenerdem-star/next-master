@@ -43,8 +43,10 @@ async function supabaseJson(path, init = {}) {
 
 async function listSources() {
   const query = new URLSearchParams({
-    select: "id,run_id,organization_id,storage_bucket,storage_object_path,total_bytes,checksum_sha256,created_by,status,cursor_row,lease_expires_at,updated_at",
+    select: "id,run_id,organization_id,storage_bucket,storage_object_path,total_bytes,checksum_sha256,created_by,status,cursor_row,lease_expires_at,updated_at,catalog_import_runs!inner(status,processing_queued_at)",
     status: "in.(uploaded,processing,staged)",
+    "catalog_import_runs.status": "in.(running,validating,validated,finalizing)",
+    "catalog_import_runs.processing_queued_at": "not.is.null",
     order: "created_at.asc",
     limit: "4",
   });
@@ -89,6 +91,9 @@ async function dispatchSource(source) {
     input_lease_seconds: 3600,
   });
   const claim = Array.isArray(claimed) ? claimed[0] : claimed;
+  if (claim?.status === "terminal" || claim?.status === "finalized" || claim?.status === "succeeded") {
+    return { status: "terminal", sourceId: source.id };
+  }
   if (!claim?.claimed) return { status: claim?.status || "busy", sourceId: source.id };
   const run = await getRun(claim.run_id);
   if (!run) throw new Error("CATALOG_IMPORT_RUN_NOT_FOUND");

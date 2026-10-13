@@ -851,66 +851,75 @@ export async function bulkImportCatalogStorage(
   if (!file || file.size < 1) throw new Error("Catalog import file is empty.");
   if (!/\.(csv|tsv|txt)$/i.test(file.name)) throw new Error("Catalog Storage import currently accepts CSV files only.");
   const idempotencyKey = options.idempotencyKey || (typeof globalThis.crypto?.randomUUID === "function" ? globalThis.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
-  const started = await callAppRpc<{
-    run_id: string;
-    source_id: string;
-    storage_object_path: string;
-    total_bytes: number;
-    status: string;
-  }>("begin_catalog_import_storage", {
-    input_scope: {
-      source: "catalog_storage",
-      brand: options.brandName || null,
-      market_segment: options.marketSegment || null,
-      file_name: file.name,
-    },
-    input_mode: "upsert",
-    input_file_name: file.name,
-    input_content_type: file.type || "text/csv",
-    input_total_bytes: file.size,
-    input_checksum_sha256: null,
-    input_idempotency_key: idempotencyKey,
-  });
-  if (!started?.run_id || !started.storage_object_path) throw new Error("Catalog Storage import admission was not confirmed.");
-  const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
-  if (sessionError || !sessionData.session?.access_token) {
-    throw new Error("Catalog upload session could not be confirmed.");
-  }
-  const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || "").replace(/\/+$/, "");
-  if (!/^https:\/\//.test(supabaseUrl)) throw new Error("Catalog upload endpoint is not configured.");
-  const endpoint = `${supabaseUrl}/storage/v1/upload/resumable`;
-  await new Promise<void>((resolve, reject) => {
-    const upload = new tus.Upload(file, {
-      endpoint,
-      uploadSize: file.size,
-      chunkSize: 6 * 1024 * 1024,
-      retryDelays: [0, 3000, 5000, 10000, 20000],
-      removeFingerprintOnSuccess: true,
-      metadata: {
-        bucketName: "catalog-imports",
-        objectName: started.storage_object_path,
-        contentType: file.type || "text/csv",
-        cacheControl: "3600",
+  let started: { run_id: string; source_id: string; storage_object_path: string; total_bytes: number; status: string } | null = null;
+  try {
+    started = await callAppRpc<{
+      run_id: string;
+      source_id: string;
+      storage_object_path: string;
+      total_bytes: number;
+      status: string;
+    }>("begin_catalog_import_storage", {
+      input_scope: {
+        source: "catalog_storage",
+        brand: options.brandName || null,
+        market_segment: options.marketSegment || null,
+        file_name: file.name,
       },
-      headers: {
-        Authorization: `Bearer ${sessionData.session.access_token}`,
-        apikey: String(import.meta.env.VITE_SUPABASE_ANON_KEY || ""),
-        "x-upsert": "false",
-      },
-      onError: (error) => reject(new Error(sanitizeUserFacingMessage(error.message, "Catalog file could not be uploaded to private Storage."))),
-      onSuccess: () => resolve(),
+      input_mode: "upsert",
+      input_file_name: file.name,
+      input_content_type: file.type || "text/csv",
+      input_total_bytes: file.size,
+      input_checksum_sha256: null,
+      input_idempotency_key: idempotencyKey,
     });
-    upload.start();
-  });
-  await callImportRpc("complete_catalog_import_storage_upload", { input_run_id: started.run_id }, "Catalog upload verification");
-  await queueCatalogImportProcessing(started.run_id);
-  return {
-    runId: started.run_id,
-    sourceId: started.source_id,
-    storageObjectPath: started.storage_object_path,
-    totalBytes: Number(started.total_bytes || file.size),
-    status: "queued",
-  };
+    if (!started?.run_id || !started.storage_object_path) throw new Error("Catalog Storage import admission was not confirmed.");
+    const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
+    if (sessionError || !sessionData.session?.access_token) {
+      throw new Error("Catalog upload session could not be confirmed.");
+    }
+    const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || "").replace(/\/+$/, "");
+    if (!/^https:\/\//.test(supabaseUrl)) throw new Error("Catalog upload endpoint is not configured.");
+    const endpoint = `${supabaseUrl}/storage/v1/upload/resumable`;
+    await new Promise<void>((resolve, reject) => {
+      const upload = new tus.Upload(file, {
+        endpoint,
+        uploadSize: file.size,
+        chunkSize: 6 * 1024 * 1024,
+        retryDelays: [0, 3000, 5000, 10000, 20000],
+        removeFingerprintOnSuccess: true,
+        metadata: {
+          bucketName: "catalog-imports",
+          objectName: started!.storage_object_path,
+          contentType: file.type || "text/csv",
+          cacheControl: "3600",
+        },
+        headers: {
+          Authorization: `Bearer ${sessionData.session.access_token}`,
+          apikey: String(import.meta.env.VITE_SUPABASE_ANON_KEY || ""),
+          "x-upsert": "false",
+        },
+        onError: (error) => reject(new Error(sanitizeUserFacingMessage(error.message, "Catalog file could not be uploaded to private Storage."))),
+        onSuccess: () => resolve(),
+      });
+      upload.start();
+    });
+    await callImportRpc("complete_catalog_import_storage_upload", { input_run_id: started.run_id }, "Catalog upload verification");
+    await queueCatalogImportProcessing(started.run_id);
+    return {
+      runId: started.run_id,
+      sourceId: started.source_id,
+      storageObjectPath: started.storage_object_path,
+      totalBytes: Number(started.total_bytes || file.size),
+      status: "queued",
+    };
+  } catch (error) {
+    if (started?.run_id) {
+      const message = error instanceof Error ? error.message : String(error || "Catalog storage upload failed");
+      await callImportRpc("fail_catalog_import_storage_upload", { input_run_id: started.run_id, input_message: message }, "Catalog upload failure recording").catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 async function waitForSupplierPriceRollupRefresh(

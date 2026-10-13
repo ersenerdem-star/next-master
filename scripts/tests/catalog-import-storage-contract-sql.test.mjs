@@ -2,13 +2,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const sql = fs.readFileSync(
+const baseSql = fs.readFileSync(
   new URL("../../supabase/migrations/20261014090000_catalog_import_storage_pipeline.sql", import.meta.url),
   "utf8",
 );
+const hardeningSql = fs.readFileSync(
+  new URL("../../supabase/migrations/20261014100000_catalog_import_storage_hardening.sql", import.meta.url),
+  "utf8",
+);
+const sql = `${baseSql}\n${hardeningSql}`;
 
 const functionBlock = (name) => {
   const start = sql.indexOf(`create or replace function public.${name}`);
+  assert.notEqual(start, -1, `${name} function must exist`);
+  const end = sql.indexOf("$$;", start);
+  assert.notEqual(end, -1, `${name} function body must be closed`);
+  return sql.slice(start, end);
+};
+
+const latestFunctionBlock = (name) => {
+  const start = sql.lastIndexOf(`create or replace function public.${name}`);
   assert.notEqual(start, -1, `${name} function must exist`);
   const end = sql.indexOf("$$;", start);
   assert.notEqual(end, -1, `${name} function body must be closed`);
@@ -121,6 +134,16 @@ test("failure handoff is fenced, terminal, and clears the queue marker", () => {
   assert.match(body, /error_code/i);
 });
 
+test("browser upload failure is authenticated and cleans the private object", () => {
+  const body = latestFunctionBlock("fail_catalog_import_storage_upload");
+  assert.match(sql, /status in \('created','uploading','uploaded','processing','staged','completed','failed','expired','cancelled'\)/i);
+  assert.match(body, /auth\.uid\(\)/i);
+  assert.match(body, /delete from storage\.objects/i);
+  assert.match(body, /CATALOG_STORAGE_UPLOAD_FAILED/i);
+  assert.match(body, /public\.fail_catalog_import\(/i);
+  assert.match(sql, /grant execute on function public\.fail_catalog_import_storage_upload\(uuid,text\)\s+to authenticated/i);
+});
+
 test("transient release clears only the matching lease and preserves queue retry", () => {
   const body = functionBlock("release_catalog_import_storage_source_system");
   assert.match(body, /lease_owner=null/i);
@@ -131,10 +154,11 @@ test("transient release clears only the matching lease and preserves queue retry
 });
 
 test("queued catalog runs retain the system finalization bridge", () => {
-  const body = functionBlock("finalize_catalog_import_batch_system");
+  const body = latestFunctionBlock("finalize_catalog_import_batch_system");
   assert.match(body, /input_organization_id/i);
   assert.match(body, /input_actor_id/i);
-  assert.match(body, /public\.finalize_catalog_import\(/i);
+  assert.match(body, /public\.finalize_catalog_import_batch\(/i);
   assert.match(body, /least\(coalesce\(input_batch_size, 500\), 1000\)/i);
   assert.match(sql, /grant execute on function public\.finalize_catalog_import_batch_system\([^)]*\) to service_role/i);
+  assert.match(body, /status = 'completed'/i);
 });

@@ -13,6 +13,7 @@ const ALLOWED_RPCS = new Set([
   "begin_catalog_import",
   "begin_catalog_import_storage",
   "complete_catalog_import_storage_upload",
+  "fail_catalog_import_storage_upload",
   "begin_supplier_price_import",
   "begin_customer_price_list_replace",
   "bulk_import_catalog",
@@ -108,6 +109,7 @@ const OPERATIONS_RPCS = new Set([
   "begin_catalog_import",
   "begin_catalog_import_storage",
   "complete_catalog_import_storage_upload",
+  "fail_catalog_import_storage_upload",
   "begin_customer_price_list_replace",
   "begin_supplier_price_import",
   "bulk_import_supplier_prices",
@@ -1132,7 +1134,7 @@ export default async (req: Request, context: Context) => {
       return json({ error: "RPC is not allowed through app gateway" }, 403);
     }
 
-    if (name === "begin_catalog_import_storage" || name === "complete_catalog_import_storage_upload") {
+    if (name === "begin_catalog_import_storage" || name === "complete_catalog_import_storage_upload" || name === "fail_catalog_import_storage_upload") {
       const storageGateEnabled = Netlify.env.get("CATALOG_STORAGE_IMPORT_ENABLED") === "1";
       const stagingTarget = Netlify.env.get("NM_FULL_STAGING_TARGET") === "kaxsqafdevabkxofwdod";
       if (!storageGateEnabled || !stagingTarget) {
