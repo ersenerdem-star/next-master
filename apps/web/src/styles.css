@@ -1340,6 +1340,43 @@ select {
   background: #f8fafc;
 }
 
+.supplier-release-history {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-color, #d8e1ee);
+  padding-top: 10px;
+}
+
+.supplier-release-history > summary,
+.supplier-release-technical-details > summary {
+  cursor: pointer;
+  color: #52657d;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.supplier-release-review-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.supplier-release-review-summary span {
+  border: 1px solid #d8e1ee;
+  border-radius: 999px;
+  padding: 5px 10px;
+  color: #52657d;
+  font-size: 12px;
+}
+
+.supplier-release-review-summary strong { color: #10233f; }
+
+.supplier-release-technical-details {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+}
+
 .operations-secondary-details > summary {
   display: flex;
   align-items: center;
@@ -1357,6 +1394,17 @@ select {
 .operations-secondary-details[open] > summary::after { content: "−"; }
 .operations-secondary-details > summary small { margin-left: auto; color: #64748b; font-size: 11px; font-weight: 600; }
 .operations-secondary-details > .section-card { margin: 0; border: 0; border-top: 1px solid #dce5ee; border-radius: 0 0 12px 12px; box-shadow: none; }
+
+.operations-data-state {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid #f2d59b;
+  border-radius: 9px;
+  background: #fffaf0;
+  color: #8a4b08;
+  font-size: 12px;
+  line-height: 1.45;
+}
 
 .quote-picker {
   display: flex;

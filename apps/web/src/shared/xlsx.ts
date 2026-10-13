@@ -92,32 +92,27 @@ async function downloadPortalUrl(name: string, signedUrl: string, expectedByteSi
     throw new Error(`Portal download was incomplete (${receivedBytes} of ${expectedBytes} bytes).`);
   }
   const blob = new Blob(chunks, { type: XLSX_TYPE });
-  if (blob.size !== receivedBytes || blob.size < 4) {
+  if (blob.size !== receivedBytes || blob.size < 1) {
     throw new Error("Portal download returned an invalid workbook.");
   }
-  const signature = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
-  if (signature[0] !== 0x50 || signature[1] !== 0x4b || signature[2] !== 0x03 || signature[3] !== 0x04) {
-    throw new Error("Portal download returned an invalid workbook.");
+  if (/\.xlsx?$/i.test(name)) {
+    const signature = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+    if (signature[0] !== 0x50 || signature[1] !== 0x4b || signature[2] !== 0x03 || signature[3] !== 0x04) {
+      throw new Error("Portal download returned an invalid workbook.");
+    }
   }
   downloadBlob(name, blob);
 }
 
 export async function downloadUrl(name: string, url: string, fallbackUrl?: string, expectedByteSize?: number) {
-  if (fallbackUrl) {
-    // Portal exports carry an authenticated job ticket with a short-lived
-    // signed Storage URL and an expected byte count. Verify the complete
-    // workbook before reporting that download began.
+  const signed = new URL(url, window.location.href);
+  if (signed.protocol === "https:" && signed.pathname.includes("/storage/v1/object/sign/")
+    && !signed.username && !signed.password) {
+    // Portal and admin exports both carry a short-lived signed Storage URL.
+    // Verify the complete workbook before reporting that download began so a
+    // browser extension or partial transfer cannot be mistaken for success.
     await downloadPortalUrl(name, url, expectedByteSize);
     return;
-  }
-  const signed = new URL(url, window.location.href);
-  if (signed.protocol === "https:" && signed.pathname.includes("/storage/v1/object/sign/") && !signed.username && !signed.password) {
-    // Let the browser download manager stream from Storage: do not buffer the
-    // entire large artifact in tab memory or proxy it through Netlify.
-    const link = document.createElement("a");
-    link.href = signed.href; link.download = name; link.rel = "noopener noreferrer";
-    document.body.appendChild(link); link.click(); link.remove();
-    return; // Download initiated, not proof the remote transfer finished.
   }
   let lastError: unknown = null;
   for (const target of [url, fallbackUrl].filter((value): value is string => Boolean(String(value || "").trim()))) {

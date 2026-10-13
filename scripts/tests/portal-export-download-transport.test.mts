@@ -106,11 +106,51 @@ test("portal rejects oversized or invalid workbook responses before saving", asy
   });
 });
 
-test("admin signed Storage URLs retain direct browser streaming", async () => {
+test("admin signed Storage URLs verify the full workbook before saving", async () => {
   await withBrowserMocks(async ({ clicks, blobs, setFetch }) => {
-    setFetch(async () => { throw new Error("admin download must not use fetch"); });
-    await downloadUrl("admin.xlsx", signedUrl);
-    assert.deepEqual(clicks, [{ href: signedUrl, name: "admin.xlsx" }]);
-    assert.equal(blobs.length, 0);
+    let finishTransfer!: () => void;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(workbook.slice(0, 4));
+        finishTransfer = () => { controller.enqueue(workbook.slice(4)); controller.close(); };
+      },
+    });
+    setFetch(async (url, options) => {
+      assert.equal(url, signedUrl);
+      assert.equal(options?.credentials, "omit");
+      assert.equal(options?.cache, "no-store");
+      assert.equal(options?.redirect, "error");
+      assert.equal(options?.mode, "cors");
+      return new Response(body, { status: 200, headers: { "Content-Length": "8" } });
+    });
+    const downloading = downloadUrl("admin.xlsx", signedUrl, undefined, workbook.byteLength);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(clicks.length, 0);
+    finishTransfer();
+    await downloading;
+    assert.deepEqual(clicks, [{ href: `blob:${site}/1`, name: "admin.xlsx" }]);
+    assert.deepEqual(new Uint8Array(await blobs[0].arrayBuffer()), workbook);
+  });
+});
+
+test("admin signed Storage URL rejects incomplete transfers before saving", async () => {
+  await withBrowserMocks(async ({ clicks, setFetch }) => {
+    setFetch(async () => new Response(workbook.slice(0, 4), {
+      status: 200, headers: { "Content-Length": "8" },
+    }));
+    await assert.rejects(downloadUrl("admin.xlsx", signedUrl, undefined, workbook.byteLength), /incomplete/);
+    assert.equal(clicks.length, 0);
+  });
+});
+
+test("signed CSV exports do not require an XLSX container signature", async () => {
+  await withBrowserMocks(async ({ clicks, blobs, setFetch }) => {
+    const csv = new TextEncoder().encode("Product_Code,Brand\nABC-1,Bosch\n");
+    setFetch(async () => new Response(csv, {
+      status: 200, headers: { "Content-Length": String(csv.byteLength) },
+    }));
+    await downloadUrl("catalog.csv", signedUrl, undefined, csv.byteLength);
+    assert.deepEqual(clicks, [{ href: `blob:${site}/1`, name: "catalog.csv" }]);
+    assert.deepEqual(new Uint8Array(await blobs[0].arrayBuffer()), csv);
   });
 });

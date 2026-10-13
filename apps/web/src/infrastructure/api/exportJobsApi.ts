@@ -167,7 +167,7 @@ export async function getExportJobStatus(jobId: string) {
 
 export async function downloadExportJob(jobId: string) {
   const result = await postExportDownloadJson("/api/admin-export-download", { jobId });
-  await downloadUrl(result.fileName, result.signedUrl);
+  await downloadUrl(result.fileName, result.signedUrl, undefined, result.byteSize);
   return result;
 }
 

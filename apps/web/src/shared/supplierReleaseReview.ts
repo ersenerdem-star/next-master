@@ -4,12 +4,24 @@ export type ReleaseAudit = {
   brands: {id: string; name: string; matches: number; percent: number; samples: string[]}[];
 };
 export type ReleaseReviewRow = {
-  id: string; brandId: string; brand: string; supplier: string; status: string;
+  id: string; brandId: string; supplierId: string; brand: string; supplier: string; status: string;
   createdAt: string; totalRows: number; processedRows: number;
   acceptedRows: number | null; rejectedRows: number | null; warningRows: number | null; conflictRows: number | null;
   errorCode: string | null; errorMessage: string | null;
   audit: ReleaseAudit | null; current: boolean;
 };
+// The page is ordered newest first by the API. Scope identity uses UUIDs so
+// equal display names never combine releases from different suppliers.
+export function splitReleaseReviewHistory(rows: ReleaseReviewRow[]) {
+  const scopes = new Set<string>();
+  const latest: ReleaseReviewRow[] = [], history: ReleaseReviewRow[] = [];
+  for (const row of rows) {
+    const scope = `${row.supplierId}:${row.brandId}`;
+    if (scopes.has(scope)) history.push(row);
+    else { scopes.add(scope); latest.push(row); }
+  }
+  return { latest, history };
+}
 const record=(v: unknown): Record<string,unknown> | null => v && typeof v==='object' && !Array.isArray(v) ? v as Record<string,unknown> : null;
 const count=(v:unknown)=>typeof v==='number' && Number.isSafeInteger(v) && v>=0 ? v : null;
 export function parseReleaseAudit(value:unknown,brandId:string): ReleaseAudit | null {

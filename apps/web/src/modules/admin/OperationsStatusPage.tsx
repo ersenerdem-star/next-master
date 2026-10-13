@@ -315,13 +315,14 @@ export function OperationsStatusPage() {
       ["running", "pending"].includes(String(row.rollup_refresh_status || "").toLowerCase()),
     ).length,
   };
+  const showLegacyDataNotice = releaseReviewEnabled && operationsLoadedOnce.current && !loadingOperations && !operationsErrorKey && !operationsRows.length;
 
   return (
       <PageShell className="operations-status-page">
       <PageHeader title={t("dashboard.operationsStatus.title")} subtitle={t("reports.statusCenterSubtitle")} />
       {releaseReviewEnabled ? <SupplierReleaseReviewPanel locale={locale} /> : null}
       <SectionCard
-        title={t("dashboard.operationsStatus.title")}
+        title={releaseReviewEnabled ? t("dashboard.operationsStatus.legacyPipelineTitle") : t("dashboard.operationsStatus.title")}
         className="operations-status-center"
         actions={
           <Button variant="secondary" className="button--compact" onClick={() => void reloadOperationsStatus()} busy={loadingOperations} busyLabel={t("dashboard.operationsStatus.refreshing")}>
@@ -337,7 +338,7 @@ export function OperationsStatusPage() {
           </Button>
         </div>
         {operationsErrorKey ? <div className="error-text">{t(operationsErrorKey)}</div> : null}
-        <div className="operations-summary-strip" aria-label={t("dashboard.operationsStatus.overviewTitle")}>
+        {operationsRows.length ? <div className="operations-summary-strip" aria-label={t("dashboard.operationsStatus.overviewTitle")}>
           <div className="operations-summary-card">
             <span>{t("dashboard.operationsStatus.totalScopes")}</span>
             <strong>{formatCount(operationsSummary.total)}</strong>
@@ -354,7 +355,8 @@ export function OperationsStatusPage() {
             <span>{t("dashboard.operationsStatus.attentionNeeded")}</span>
             <strong>{formatCount(operationsSummary.attention)}</strong>
           </div>
-        </div>
+        </div> : null}
+        {showLegacyDataNotice ? <div className="operations-data-state operations-data-state--warning" role="status">{t("dashboard.operationsStatus.releaseRowsSeparateSource")}</div> : null}
         {filteredOperationsRows.length ? (
           <div className="supplier-operation-list">
             {filteredOperationsRows.map((row) => {
@@ -427,7 +429,7 @@ export function OperationsStatusPage() {
               );
             })}
           </div>
-        ) : !operationsErrorKey ? (
+        ) : !operationsErrorKey && !showLegacyDataNotice ? (
           <div className="chart-placeholder">
             {loadingOperations ? t("dashboard.operationsStatus.loading") : t("dashboard.operationsStatus.noRowsMatchCurrentFilters")}
           </div>
@@ -447,6 +449,7 @@ export function OperationsStatusPage() {
             </Button>
           }
         >
+        {operationsLoadedOnce.current && !catalogIntegrity ? <div className="operations-data-state operations-data-state--warning" role="status">{t("catalog.integrity.dataUnavailable")}</div> : null}
         {catalogIntegrity?.initialization_state === "not_initialized" ? <div className="warning-text">{t("catalog.integrity.notInitialized")}</div> : null}
         {catalogIntegrity?.initialization_state === "partial" ? <div className="warning-text">{t("catalog.integrity.partial")}</div> : null}
         {catalogIntegrity?.initialization_state === "running" ? (
@@ -458,6 +461,7 @@ export function OperationsStatusPage() {
           </div>
         ) : null}
         {catalogIntegrity?.initialization_state === "failed" ? <div className="error-text">{catalogIntegrity.backfill_error || t("catalog.integrity.syncFailed")}</div> : null}
+        {catalogIntegrity ? <>
         <div className="metric-strip catalog-integrity-summary">
           <div className="metric-tile metric-tile--info"><span className="metric-tile__label">{t("catalog.integrity.total")}</span><strong className="metric-tile__value">{formatIntegrityCount(catalogIntegrity?.total_products)}</strong></div>
           <div className="metric-tile metric-tile--success"><span className="metric-tile__label">{t("catalog.integrity.clear")}</span><strong className="metric-tile__value">{formatIntegrityCount(catalogIntegrity?.clear_count)}</strong></div>
@@ -491,6 +495,7 @@ export function OperationsStatusPage() {
           <span><small>{t("catalog.integrity.missingVehicle")}</small><strong>{formatIntegrityCount(catalogIntegrity?.missing_vehicle_count)}</strong></span>
           <span><small>{t("catalog.integrity.missingImage")}</small><strong>{formatIntegrityCount(catalogIntegrity?.missing_image_count)}</strong></span>
         </div>
+        </> : null}
         {catalogBrandOperations.length ? (
           <div className="catalog-brand-operations">
             <div className="catalog-brand-operations__heading">

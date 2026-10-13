@@ -210,11 +210,16 @@ export function SuppliersPage() {
 
   const total = selectedSupplierId ? rows[0]?.total_count ?? 0 : rows.length;
 
+  function supplierOptionLabel(supplier: SupplierSummary) {
+    const lineCount = Number(supplier.line_count || 0);
+    return lineCount > 0 ? `${supplier.name} (${lineCount.toLocaleString("en-US")})` : supplier.name;
+  }
+
   const supplierOptions = [
     { value: "", label: p("suppliers.filters.allSuppliers") },
     ...suppliers.map((supplier) => ({
       value: supplier.supplier_id,
-      label: `${supplier.name} (${supplier.line_count.toLocaleString("en-US")})`,
+      label: supplierOptionLabel(supplier),
     })),
   ];
   const brandOptions = [
@@ -232,7 +237,7 @@ export function SuppliersPage() {
   ];
   const selectableSupplierOptions = suppliers.map((supplier) => ({
     value: supplier.supplier_id,
-    label: `${supplier.name} (${supplier.line_count.toLocaleString("en-US")})`,
+    label: supplierOptionLabel(supplier),
   }));
   const importSupplierOptions = [...selectableSupplierOptions, { value: "__new__", label: p("suppliers.filters.newSupplier") }];
 

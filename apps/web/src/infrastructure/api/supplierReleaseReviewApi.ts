@@ -6,7 +6,7 @@ export type ReleaseReviewCursor={createdAt:string;id:string};
 export async function fetchSupplierReleaseReviewPage(cursor:ReleaseReviewCursor|null, signal:AbortSignal):Promise<{rows:ReleaseReviewRow[];next:ReleaseReviewCursor|null}> {
   const org=await getCurrentOrgId();
   if(signal.aborted) throw new DOMException('Cancelled','AbortError');
-  let query=supabaseClient.from('supplier_price_releases').select('id,brand_id,status,created_at,total_rows,processed_rows,accepted_rows,rejected_rows,warning_rows,conflict_rows,error_code,error_message,brand_identity_audit,brands(name),suppliers(name)')
+  let query=supabaseClient.from('supplier_price_releases').select('id,brand_id,supplier_id,status,created_at,total_rows,processed_rows,accepted_rows,rejected_rows,warning_rows,conflict_rows,error_code,error_message,brand_identity_audit,brands(name),suppliers(name)')
     .eq('organization_id',org).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(26);
   if(cursor){
     if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cursor.id)
@@ -32,7 +32,7 @@ export async function fetchSupplierReleaseReviewPage(cursor:ReleaseReviewCursor|
     if(!Number.isSafeInteger(r.total_rows) || r.total_rows<0 || !Number.isSafeInteger(r.processed_rows) || r.processed_rows<0) throw new Error('Invalid release counts');
     const countOrNull=(value:unknown)=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0 ? value : null;
     const textOrNull=(value:unknown)=>typeof value==='string'&&value.length<=1000 ? value : null;
-    return {id:r.id,brandId:r.brand_id,brand:relationName(r.brands),supplier:relationName(r.suppliers),status:r.status,
+    return {id:r.id,brandId:r.brand_id,supplierId:r.supplier_id,brand:relationName(r.brands),supplier:relationName(r.suppliers),status:r.status,
       createdAt:r.created_at,totalRows:r.total_rows,processedRows:r.processed_rows,
       acceptedRows:countOrNull(r.accepted_rows),rejectedRows:countOrNull(r.rejected_rows),
       warningRows:countOrNull(r.warning_rows),conflictRows:countOrNull(r.conflict_rows),
