@@ -61,12 +61,12 @@ function fakeDatabase(){
   return {state,pool};
 }
 
-function reader({state,pool,owner,shouldYieldSnapshot=()=>false}){
+function reader({state,pool,owner,shouldYieldSnapshot=()=>false,onPageTiming=()=>{}}){
   return createJobPriceSnapshotReader({pool,mode:'local-only',pageSize:2,
     operationsAllowed:()=>true,resolvePortalContext:()=>{throw Error('unexpected portal context');},
     assertWriteLease:()=>{if(state.owner!==owner)throw Error('V3_EXPORT_LEASE_LOST');},
     checkpoint:({processed,total})=>{state.job.progress_total=total;state.job.progress_done=processed;},
-    shouldYieldSnapshot});
+    shouldYieldSnapshot,onPageTiming});
 }
 
 test('committed snapshot pages resume once under a new lease and seal at exact row count',async()=>{
@@ -101,4 +101,23 @@ test('a changed source version blocks continuation before writing another page',
   await assert.rejects(reader({state,pool,owner:'worker-2'}).resolveAuthorizedInput(jobId),/EXPORT_SNAPSHOT_SOURCE_CHANGED/);
   assert.equal(state.rows.length,2);
   assert.equal(state.snapshot.status,'building');
+});
+
+test('snapshot timing reports committed page phases without affecting the export',async()=>{
+  const {state,pool}=fakeDatabase();
+  const timings=[];
+  const spec=await reader({state,pool,owner:'worker-1',onPageTiming:event=>{
+    timings.push(event);
+    throw Error('telemetry sink failed');
+  }}).resolveAuthorizedInput(jobId);
+  assert.equal(spec.expectedRows,5);
+  assert.deepEqual(timings.map(event=>[event.pageRows,event.processed,event.total,event.checkpointOk]),
+    [[2,2,5,true],[2,4,5,true],[1,5,5,true]]);
+  for(const event of timings){
+    for(const field of ['pricingRpcMs','replacementLookupMs','snapshotInsertMs','transactionMs','checkpointMs','pageMs']){
+      assert.ok(Number.isFinite(event[field])&&event[field]>=0,field);
+    }
+    assert.equal('rows' in event,false);
+    assert.equal('scope' in event,false);
+  }
 });

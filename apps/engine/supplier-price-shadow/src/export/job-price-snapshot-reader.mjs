@@ -1,6 +1,7 @@
 // C3 LOCAL integration gate only. No import-time launch, provisioning or API.
 // Reuses existing pricing RPCs; application Auth/context bridge is injected.
 import {randomUUID,createHash} from 'node:crypto';
+import {performance} from 'node:perf_hooks';
 import {exportSpec,exportBinding,customerSafeExportRow} from './partitioned-price-export.mjs';
 const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const stableStringify=value=>{
@@ -17,7 +18,7 @@ const normalizeVersionTimestamp=value=>{
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const fail=code=>{throw Error(`EXPORT_SNAPSHOT_${code}`);};
 const cursor=n=>String(n).padStart(12,'0');
-export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolvePortalContext,pageSize=1000,checkpoint=()=>{},shouldYieldSnapshot=()=>false,assertWriteLease=()=>{}}){
+export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolvePortalContext,pageSize=1000,checkpoint=()=>{},shouldYieldSnapshot=()=>false,assertWriteLease=()=>{},onPageTiming=()=>{}}){
   const url=new URL(pool?.options?.connectionString??'invalid:');
   const localTarget=mode==='local-only'&&url.protocol==='postgresql:'&&url.hostname==='127.0.0.1'
     &&/^\/nm_export_reader_[a-f0-9]{32}$/.test(url.pathname)&&Boolean(url.port)&&!url.search&&!url.hash;
@@ -26,7 +27,7 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
     &&(url.port==='6543'||url.port==='5432')&&url.pathname==='/postgres'&&!url.hash;
   if(!localTarget&&!hostedV3Target)fail(mode==='hosted-v3'?'V3_HOSTED_TARGET_REQUIRED':'LOCAL_TARGET_REQUIRED');
   if(typeof operationsAllowed!=='function'||typeof resolvePortalContext!=='function'||typeof checkpoint!=='function'
-    ||typeof shouldYieldSnapshot!=='function'||typeof assertWriteLease!=='function'
+    ||typeof shouldYieldSnapshot!=='function'||typeof assertWriteLease!=='function'||typeof onPageTiming!=='function'
     ||!Number.isInteger(pageSize)||pageSize<1||pageSize>5000
     ||!Number.isInteger(pool.options.max)||pool.options.max<2||pool.options.max>5)fail('CONFIG_INVALID');
   async function authority(client,jobId){
@@ -136,12 +137,17 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
       total=Number(header?.total_count??0)||null;if(total!=null) spec=makeSpec(total);
     }
     while(total==null||processed<total){
+      const pageStarted=performance.now();
       const live=await assertAuthorized(jobId);if(live.authorityDigest!==a.authorityDigest)fail('AUTHORITY_CHANGED');
+      const transactionStarted=performance.now();
       const pageResult=await withShortTransaction(async client=>{
+        const timing={pricingRpcMs:0,replacementLookupMs:0,snapshotInsertMs:0};
         await assertWriteLease(client,jobId);
         await assertSourceVersion(client,live);
+        const pricingStarted=performance.now();
         const page=(await client.query(`select normalized_code,product_code,brand,description,sales_price::text,price_date::text,lifecycle_status,total_count::text
           from public.${fn}($1,$2,$3,$4,null,$5,$6)`,[a.job.organization_id,a.brand.id,a.context.priceListType,a.context.margin,after,pageSize])).rows;
+        timing.pricingRpcMs=performance.now()-pricingStarted;
         if(!page.length)fail('SOURCE_EMPTY');
         if(page.length>pageSize)fail('SOURCE_COVERAGE');
         // The optimized RPC emits total_count only on the first keyset page.
@@ -165,7 +171,9 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
         if(reportedTotals.some(value=>value!==expectedTotal)||(reportedCount!=null&&reportedCount!==expectedTotal)||processed+page.length>expectedTotal)fail('SOURCE_COVERAGE');
         const keys=page.map(r=>r.normalized_code);
         if(new Set(keys).size!==keys.length)fail('SOURCE_CURSOR');
+        const replacementStarted=performance.now();
         const replacementRows=(await client.query('select normalized_old_code,new_code from public.item_code_references where organization_id=$1 and brand_id=$2 and is_active=true and normalized_old_code=any($3::text[])',[a.job.organization_id,a.brand.id,keys])).rows;
+        timing.replacementLookupMs=performance.now()-replacementStarted;
         const replacements=new Map(replacementRows.map(r=>[r.normalized_old_code,r.new_code]));
         if(replacements.size!==replacementRows.length)fail('REPLACEMENT_CONFLICT');
         const records=[];let nextAfter=after,nextProcessed=processed;
@@ -178,12 +186,26 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
           records.push({ordinal:nextProcessed,source_key:row.normalized_code,payload:safe});nextAfter=row.normalized_code;
         }
         if(Buffer.byteLength(JSON.stringify(records))>8*1024*1024)fail('PAGE_BYTE_BUDGET');
+        const insertStarted=performance.now();
         await client.query(`insert into export_snapshot_private.rows(snapshot_id,ordinal,source_key,payload)
           select $1,x.ordinal,x.source_key,x.payload from jsonb_to_recordset($2::jsonb) x(ordinal bigint,source_key text,payload jsonb)`,[id,JSON.stringify(records)]);
-        return {nextAfter,nextProcessed,expectedTotal,nextSpec};
+        timing.snapshotInsertMs=performance.now()-insertStarted;
+        return {nextAfter,nextProcessed,expectedTotal,nextSpec,pageRows:page.length,timing};
       });
+      const transactionMs=performance.now()-transactionStarted;
       after=pageResult.nextAfter;processed=pageResult.nextProcessed;total=pageResult.expectedTotal;spec=pageResult.nextSpec;
-      await checkpoint({jobId,processed,total});
+      const checkpointStarted=performance.now();
+      let checkpointOk=false;
+      try{
+        await checkpoint({jobId,processed,total});
+        checkpointOk=true;
+      }finally{
+        // Telemetry cannot change the export result, including when a progress
+        // update fails. Emit only timing/count metadata, never priced rows.
+        try{onPageTiming({jobId,processed,total,pageRows:pageResult.pageRows,...pageResult.timing,
+          transactionMs,checkpointMs:performance.now()-checkpointStarted,pageMs:performance.now()-pageStarted,checkpointOk});}
+        catch{/* diagnostic observer failure must not fail a committed page */}
+      }
       // Every committed page is a resumable checkpoint. Yield only after the
       // progress/lease update succeeds, and seal here if this was the last page.
       if(processed<total&&await shouldYieldSnapshot({jobId,snapshotId:id,processed,total})){

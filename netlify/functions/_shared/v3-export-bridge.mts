@@ -224,6 +224,20 @@ export async function runV3PriceExportJob(jobId: string) {
           progress_message: `V3 snapshot prepared ${processed.toLocaleString("en-US")}${total ? ` / ${total.toLocaleString("en-US")}` : ""} rows.`,
         }, { leaseOwner });
       },
+      onPageTiming: ({ processed, total, pageRows, pricingRpcMs, replacementLookupMs, snapshotInsertMs,
+        transactionMs, checkpointMs, pageMs, checkpointOk }: any) => {
+        // One bounded record per committed 5,000-row page. IDs/counts/timing
+        // only: never log customer scope, pricing parameters or row payloads.
+        console.info("V3_EXPORT_SNAPSHOT_PAGE_TIMING", JSON.stringify({
+          jobId: job.id, workerRunId: leaseOwner, processed, total, pageRows,
+          pricingRpcMs: Math.round(pricingRpcMs),
+          replacementLookupMs: Math.round(replacementLookupMs),
+          snapshotInsertMs: Math.round(snapshotInsertMs),
+          transactionMs: Math.round(transactionMs),
+          checkpointMs: Math.round(checkpointMs),
+          pageMs: Math.round(pageMs), checkpointOk,
+        }));
+      },
     });
     const spec = await reader.resolveAuthorizedInput(job.id);
     if (spec.status === "building" || Date.now() >= snapshotDeadline) {
