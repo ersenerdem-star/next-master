@@ -13,6 +13,7 @@ const [adminRecords, brandsApi, priceLists] = await Promise.all([
 
 test("admin price-list brand scope is limited to current published pointers", () => {
   assert.match(adminRecords, /resource === "priceListBrands"/);
+  assert.match(adminRecords, /canAccessSalesModules\(caller\.role/);
   assert.match(adminRecords, /supplier_current_price_pointers/);
   assert.match(adminRecords, /supplier_price_publications/);
   assert.match(adminRecords, /status: "eq\.published"/);

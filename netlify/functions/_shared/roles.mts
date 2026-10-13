@@ -38,3 +38,10 @@ export function canAccessOperationsModules(role: string | null | undefined, depa
   if (permissions && keys.some((key) => Object.prototype.hasOwnProperty.call(permissions, key))) return keys.some((key) => permissionAllows(permissions, key) === true);
   return isAdminLikeRole(role, department) || ["purchasing", "accounting", "warehouse"].includes(normalizedDepartment);
 }
+
+export function canAccessSalesModules(role: string | null | undefined, department?: string | null, permissions?: AppPermissionMap) {
+  if (isAdminLikeRole(role, department)) return true;
+  return permissionAllows(permissions, "sales.orders") === true
+    || permissionAllows(permissions, "sales.invoices") === true
+    || (permissionAllows(permissions, "customers.view") ?? isCustomerStaffRole(role, department));
+}

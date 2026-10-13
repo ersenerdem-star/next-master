@@ -1,7 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { buildRestUrl, getJson, json, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
 import { resolveCaller } from "./_shared/app-auth.mts";
-import { canAccessCustomerOps, canAccessOperationsModules, isSuperadminRole } from "./_shared/roles.mts";
+import { canAccessCustomerOps, canAccessOperationsModules, canAccessSalesModules, isSuperadminRole } from "./_shared/roles.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 import { listTecAllianceBrandEntries } from "./_shared/catalog/tecalliance-brand-registry.mts";
 
@@ -1285,7 +1285,7 @@ export default async (req: Request, _context: Context) => {
     }
 
     if (resource === "priceListBrands") {
-      if (!canUseOperationsModules) return json({ error: "Operations access required" }, 403);
+      if (!canAccessSalesModules(caller.role, caller.department, caller.permissions)) return json({ error: "Sales access required" }, 403);
       if (action === "list") {
         const data = await listPriceListBrands(supabaseUrl, serviceRoleKey, caller.organizationId);
         return json({ ok: true, data });
