@@ -16,6 +16,7 @@ src/**
 !src/shadow-worker-queue.mjs
 !src/shared-prepared-source.mjs
 !src/duckdb-validation.mjs
+!src/supplier-price-validation-gate.mjs
 !src/storage-scan.mjs
 !src/streaming-csv.mjs
 !src/streaming-xlsx.mjs
