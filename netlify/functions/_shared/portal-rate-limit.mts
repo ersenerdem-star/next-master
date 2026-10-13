@@ -18,7 +18,9 @@ const PORTAL_RATE_LIMITS: Record<string, PortalRateLimitConfig> = {
   branding: { limit: 30, windowSeconds: 600, blockSeconds: 900 },
   data: { limit: 60, windowSeconds: 600, blockSeconds: 900 },
   search: { limit: 90, windowSeconds: 300, blockSeconds: 900 },
-  prepare: { limit: 45, windowSeconds: 600, blockSeconds: 900 },
+  // A prepare request accepts up to 200 rows. Allow a bounded 40k-row import
+  // (200 requests per ten minutes) without making the portal retry storm-prone.
+  prepare: { limit: 200, windowSeconds: 600, blockSeconds: 900 },
   submit: { limit: 20, windowSeconds: 600, blockSeconds: 1200 },
   delete: { limit: 20, windowSeconds: 600, blockSeconds: 1200 },
   price_list: { limit: 10, windowSeconds: 600, blockSeconds: 1800 },

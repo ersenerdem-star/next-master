@@ -27,6 +27,11 @@ import { buildDocumentWorksheet } from "../../../shared/documentExport";
 import { formatBrandAwareProductCode } from "../../../shared/productCodeDisplay";
 import { matchesOriginalNumberSearch, normalizePartCode } from "../../../domain/shared/normalize";
 import { downloadQuoteTemplate } from "../../../shared/importTemplates";
+
+// Keep portal pricing requests aligned with the server-side row ceiling. The
+// previous 40-row client chunks made a 30k-row import consume hundreds of
+// rate-limit slots before the server could finish pricing it.
+const PORTAL_ORDER_PREPARE_CHUNK_SIZE = 200;
 import {
   deletePortalDraftOrder,
   describePortalExportJobStatus,
@@ -1980,7 +1985,7 @@ export function PortalPage() {
     try {
       setPreparingPortalOrder(true);
       setError("");
-      const chunks = chunkRows(rows, 40);
+      const chunks = chunkRows(rows, PORTAL_ORDER_PREPARE_CHUNK_SIZE);
       let preparedLines: PortalPreparedLine[] = [];
       let latestPricingProfile: PortalSnapshot["pricingProfile"] | null = null;
       let processed = 0;
