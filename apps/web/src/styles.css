@@ -7523,13 +7523,9 @@ textarea {
   color: #10233f;
 }
 
-/* Order creation and editing live in Documents > Orders. Search remains a
- * spacious, read-only product discovery surface for customer users. */
-.portal-search-result-view__actions,
-.portal-search-result-main__actions,
-.portal-search-result-view > .portal-order-workspace {
-  display: none;
-}
+/* Search also owns the customer import and pricing workspace. Keep the
+ * actions, selected-part quantity control, and order workspace visible so a
+ * customer can review and save a file import from the same flow. */
 
 /* Keep the other customer views in the same airy blue/white visual system as
  * the Search screen instead of switching back to the denser beige surface. */
