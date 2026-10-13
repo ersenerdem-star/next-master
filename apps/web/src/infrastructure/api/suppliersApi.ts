@@ -398,39 +398,6 @@ export async function fetchCloudSupplierPrices({
   return (data || []) as SupplierPriceRow[];
 }
 
-export async function fetchAllCloudSupplierPrices(input: {
-  supplierId: string;
-  search: string;
-  freshness: string;
-}): Promise<SupplierPriceRow[]> {
-  if (!input.supplierId) {
-    throw new Error("Supplier is required for supplier export");
-  }
-
-  const pageSize = 1000;
-  const allRows: SupplierPriceRow[] = [];
-  let page = 1;
-
-  while (true) {
-    const batch = await fetchCloudSupplierPrices({
-      supplierId: input.supplierId,
-      search: input.search,
-      freshness: input.freshness,
-      page,
-      pageSize,
-    });
-    allRows.push(...batch);
-
-    const totalCount = Number(batch[0]?.total_count || 0);
-    if (!batch.length || batch.length < pageSize || (totalCount > 0 && allRows.length >= totalCount)) {
-      break;
-    }
-    page += 1;
-  }
-
-  return allRows;
-}
-
 export async function fetchCloudSupplierPricesAcrossSuppliers(input: {
   suppliers: SupplierSummary[];
   search: string;
@@ -524,7 +491,7 @@ export async function deleteSupplierBrandSummaryRow(input: { supplierId: string;
   return Number(data || 0);
 }
 
-export async function fetchSupplierExportRows(input: { supplierId: string; brandName: string; search?: string }) {
+export async function fetchSupplierExportRows(input: { supplierId: string; brandName: string; search?: string; freshness?: string }) {
   if (!input.supplierId) {
     throw new Error("Supplier is required for supplier export");
   }
@@ -571,6 +538,23 @@ export async function fetchSupplierExportRows(input: { supplierId: string; brand
         query = query.or(buildSupplierSearchOr(search, normalizedSearch, mode));
       }
 
+      const freshness = String(input.freshness || "all").trim().toLowerCase();
+      const now = new Date();
+      const daysAgo = (days: number) => {
+        const value = new Date(now);
+        value.setUTCDate(value.getUTCDate() - days);
+        return value.toISOString().slice(0, 10);
+      };
+      if (freshness === "fresh") {
+        query = query.gte("valid_from", daysAgo(90));
+      } else if (freshness === "aging") {
+        query = query.gte("valid_from", daysAgo(180)).lt("valid_from", daysAgo(90));
+      } else if (freshness === "stale") {
+        query = query.lt("valid_from", daysAgo(180));
+      } else if (freshness === "unknown") {
+        query = query.is("valid_from", null);
+      }
+
       return query;
     };
 
@@ -596,7 +580,7 @@ export async function fetchSupplierExportRows(input: { supplierId: string; brand
       order_multiple: (row.order_multiple as number | null) ?? null,
       lead_time_days: (row.lead_time_days as number | null) ?? null,
       notes: (row.notes as string | null) || "",
-      freshness: null,
+      freshness: input.freshness || null,
     })) as SupplierPriceRow[];
 
     allRows.push(...batch);

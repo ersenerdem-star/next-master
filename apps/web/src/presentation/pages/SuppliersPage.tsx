@@ -6,8 +6,8 @@ import { assertLegacySupplierPriceWriteAllowed, bulkImportSupplierPrices } from 
 import {
   fetchCloudSupplierPrices,
   fetchCloudSupplierPricesAcrossSuppliers,
-  fetchAllCloudSupplierPrices,
   fetchCloudSuppliers,
+  fetchSupplierExportRows,
 } from "../../infrastructure/api/suppliersApi";
 import type { BrandOption } from "../../types/brand";
 import type { CatalogRow } from "../../types/catalog";
@@ -70,6 +70,7 @@ export function SuppliersPage() {
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [importBrand, setImportBrand] = useState("");
   const [importBrandName, setImportBrandName] = useState("");
+  const [exportBrand, setExportBrand] = useState("");
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showManualPriceDialog, setShowManualPriceDialog] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -219,6 +220,10 @@ export function SuppliersPage() {
   const brandOptions = [
     ...brands.map((item) => ({ value: item.name, label: item.name })),
     { value: "__new__", label: p("suppliers.filters.newBrand") },
+  ];
+  const exportBrandOptions = [
+    { value: "", label: p("suppliers.filters.selectBrand") },
+    ...brands.map((item) => ({ value: item.name, label: item.name })),
   ];
   const freshnessOptions = freshnessValues.map((value) => ({ value, label: p(`suppliers.freshness.${value}`) }));
   const importModeOptions = [
@@ -672,13 +677,20 @@ export function SuppliersPage() {
       actionFeedback.fail(message);
       return;
     }
+    if (!exportBrand) {
+      const message = p("suppliers.errors.brandRequiredForExport");
+      setError(message);
+      actionFeedback.fail(message);
+      return;
+    }
 
     setExportingSuppliers(true);
     setError("");
     actionFeedback.begin(p("suppliers.feedback.preparingCsvExport"));
     try {
-      const exportRows = await fetchAllCloudSupplierPrices({
+      const exportRows = await fetchSupplierExportRows({
         supplierId: selectedSupplierId,
+        brandName: exportBrand,
         search: submittedSearch,
         freshness,
       });
@@ -693,8 +705,8 @@ export function SuppliersPage() {
         ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes"],
         ...exportRows.map((row) => [
           supplierName,
-          formatBrandAwareProductCode(row.product_code, row.brand || supplierName),
-          row.brand || "",
+          formatBrandAwareProductCode(row.product_code, row.brand || exportBrand),
+          row.brand || exportBrand,
           row.description || "",
           row.oem_no || "",
           row.buy_price ?? "",
@@ -731,6 +743,7 @@ export function SuppliersPage() {
               options={supplierOptions}
               onChange={setSelectedSupplierId}
             />
+            <Select label={p("fields.brand")} value={exportBrand} options={exportBrandOptions} onChange={setExportBrand} />
             <Input
               label={t("common.search")}
               value={search}
@@ -746,7 +759,7 @@ export function SuppliersPage() {
             >
               {t("common.search")}
             </Button>
-            <Button variant="secondary" onClick={() => void handleSupplierExport()} disabled={!selectedSupplierId || !rows.length} busy={exportingSuppliers} busyLabel={p("busy.preparing")}>
+            <Button variant="secondary" onClick={() => void handleSupplierExport()} disabled={!selectedSupplierId || !exportBrand || !rows.length} busy={exportingSuppliers} busyLabel={p("busy.preparing")}>
               {p("actions.exportCsv")}
             </Button>
             <Button
