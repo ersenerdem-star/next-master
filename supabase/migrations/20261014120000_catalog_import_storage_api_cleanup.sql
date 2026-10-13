@@ -2,6 +2,12 @@
 -- state transitions transactional, and let the trusted Netlify worker use the
 -- Storage API to retire the private object after a terminal transition.
 
+-- The scheduled worker uses the service-role REST API for its bounded queue
+-- scan and marker cleanup. Keep these grants narrow; authenticated callers
+-- continue to receive read-only source visibility through the policies above.
+grant select, update on table public.catalog_import_runs to service_role;
+grant select, update on table public.catalog_import_sources to service_role;
+
 create or replace function public.fail_catalog_import_storage_upload(
   input_run_id uuid,
   input_message text default null
