@@ -112,7 +112,11 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
     const id=existing?.id??randomUUID();
     if(!existing) await withShortTransaction(client=>client.query("insert into export_snapshot_private.snapshots(id,job_id,status,authority_digest) values($1,$2,'building',$3)",[id,jobId,a.authorityDigest]));
     const fn=a.job.audience==='admin'?'cloud_admin_price_list_page_fast':'cloud_portal_customer_price_list_page_fast';
-    const existingProgress=existing?await withShortTransaction(client=>client.query("select count(*)::bigint as count,max(ordinal)::bigint as last_ordinal,(array_agg(source_key order by ordinal desc))[1] as last_source_key from export_snapshot_private.rows where snapshot_id=$1",[id]).then(result=>result.rows[0])):null;
+    const existingProgress=existing?await withShortTransaction(client=>client.query(`
+      select
+        (select count(*)::bigint from export_snapshot_private.rows where snapshot_id=$1) as count,
+        (select source_key from export_snapshot_private.rows where snapshot_id=$1 order by ordinal desc limit 1) as last_source_key
+    `,[id]).then(result=>result.rows[0])):null;
     let after=existingProgress?.last_source_key??null,processed=Number(existingProgress?.count??0),total=Number(a.job.progress_total??0)||null,spec;
     const makeSpec=expectedRows=>{
       const candidate={tenantId:a.job.organization_id,requesterId:a.requesterId,audience:a.job.audience==='portal'?'customer':'admin',
