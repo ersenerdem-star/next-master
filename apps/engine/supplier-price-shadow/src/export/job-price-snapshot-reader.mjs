@@ -48,13 +48,15 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
     }else if(job.audience==='portal'&&job.export_type==='portal_price_list'){
       if(!uuid.test(s.inviteId)||!uuid.test(s.customerId))fail('INVITE_DENIED');
       actor=(await client.query('select id,organization_id,customer_id,party_type,status,access_can_view_orders,allowed_brand_ids,seller_company_profile_id,updated_at::text,expires_at is null or expires_at>clock_timestamp() as unexpired from public.portal_invites where id=$1 and organization_id=$2',[s.inviteId,job.organization_id])).rows[0];
+      // Portal access normalizes NULL brand scopes to []; both mean all brands.
+      const allowedBrandIds=Array.isArray(actor?.allowed_brand_ids)?actor.allowed_brand_ids:[];
       if(!actor||!['active','invited'].includes(actor.status)||!actor.unexpired||actor.party_type!=='customer'
-        ||actor.customer_id!==s.customerId||!actor.access_can_view_orders||!Array.isArray(actor.allowed_brand_ids)
-        ||actor.allowed_brand_ids.length&&!actor.allowed_brand_ids.includes(brand.id))fail('INVITE_DENIED');
-      const customer=(await client.query('select id,organization_id,seller_company_profile_id,updated_at::text from public.customers where id=$1 and organization_id=$2',[s.customerId,job.organization_id])).rows[0];
-      if(!customer||actor.seller_company_profile_id&&actor.seller_company_profile_id!==customer.seller_company_profile_id)fail('CUSTOMER_DENIED');
+        ||actor.customer_id!==s.customerId||!actor.access_can_view_orders
+        ||allowedBrandIds.length&&!allowedBrandIds.includes(brand.id))fail('INVITE_DENIED');
+      const customer=(await client.query("select id,organization_id,seller_company_profile_id,to_jsonb(c)->'seller_company_profile_ids' as seller_company_profile_ids,updated_at::text,custom_fields,price_list_type,price_list_margin_percent,currency from public.customers c where id=$1 and organization_id=$2",[s.customerId,job.organization_id])).rows[0];
+      if(!customer)fail('CUSTOMER_DENIED');
       // Must be the existing server-owned context resolver, never browser fields.
-      const p=await resolvePortalContext({client,invite:actor,brandName:brand.name});
+      const p=await resolvePortalContext({client,invite:actor,brandId:brand.id,brandName:brand.name,customer});
       if(p?.organizationId!==job.organization_id||p.inviteId!==actor.id||p.customerId!==customer.id||p.brandId!==brand.id||p.brandName!==brand.name)fail('CONTEXT_SCOPE');
       if(!['A','B','Other'].includes(p.priceListType))fail('PRICING_TYPE_UNSUPPORTED');
       margin=p.priceListType==='B'?p.effectiveMarginB:p.effectiveMarginA;currency=p.currency;
@@ -139,10 +141,12 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
     }
     while(total==null||processed<total){
       const pageStarted=performance.now();
-      const live=await assertAuthorized(jobId);if(live.authorityDigest!==a.authorityDigest)fail('AUTHORITY_CHANGED');
       const transactionStarted=performance.now();
       const pageResult=await withShortTransaction(async client=>{
         const timing={pricingRpcMs:0,replacementLookupMs:0,snapshotInsertMs:0};
+        // Resolve account pricing and permissions in the same repeatable-read
+        // transaction as the rows being captured for this page.
+        const live=await authority(client,jobId);if(live.authorityDigest!==a.authorityDigest)fail('AUTHORITY_CHANGED');
         await assertWriteLease(client,jobId);
         await assertSourceVersion(client,live);
         const pricingStarted=performance.now();
@@ -218,8 +222,8 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
         return Object.freeze({status:'building',snapshotId:id,processed,total});
       }
     }
-    const current=await assertAuthorized(jobId);if(current.authorityDigest!==a.authorityDigest)fail('AUTHORITY_CHANGED');
     await withShortTransaction(async client=>{
+      const current=await authority(client,jobId);if(current.authorityDigest!==a.authorityDigest)fail('AUTHORITY_CHANGED');
       await assertWriteLease(client,jobId);
       await assertSourceVersion(client,current);
       const sealed=await client.query("update export_snapshot_private.snapshots set status='sealed',descriptor=$2::jsonb,binding=$3 where id=$1 and status='building' and authority_digest=$4 returning id",[id,JSON.stringify(spec),exportBinding(spec),a.authorityDigest]);

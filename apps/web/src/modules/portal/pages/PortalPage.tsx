@@ -32,6 +32,7 @@ import {
   describePortalExportJobStatus,
   downloadPortalExportJob,
   fetchPortalSalesOrderDetail,
+  PortalExportStillPreparingError,
   preparePortalOrderLines as preparePortalOrderLinesApi,
   searchPortalCatalogItems,
   startPortalPriceListExport,
@@ -2462,7 +2463,12 @@ export function PortalPage() {
       const rowCountLabel = rowCount ? ` (${rowCount.toLocaleString()} rows)` : "";
       notifyPortal(`${portalPriceListBrand} price list download started${rowCountLabel}. Check your browser downloads for the file.`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Portal price list download failed");
+      if (caught instanceof PortalExportStillPreparingError) {
+        setStatus(caught.message);
+        notifyPortal(caught.message, "warning");
+      } else {
+        setError(caught instanceof Error ? caught.message : "Portal price list download failed");
+      }
     } finally {
       setDownloadingPortalPriceList(false);
       setPortalOverlay(null);

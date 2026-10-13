@@ -143,6 +143,7 @@ export type LocalInvoice = {
   id: string;
   sales_order_id: string;
   sales_order_ids?: string[];
+  customer_id?: string | null;
   warehouse_id?: string | null;
   warehouse_code: string;
   warehouse_name: string;

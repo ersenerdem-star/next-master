@@ -24,6 +24,7 @@ function fakeDatabase({portal=false,currency='EUR',sourceRows=source,replacement
       status:'running',scope:{brandId,brandName:'Clevite',priceListType:'A',marginPercent:0.1,currency:'EUR'},
       data_version:'v1',progress_total:null,created_at:'2026-10-13T00:00:00Z',unexpired:true},
     sourceVersion:'v1',owner:'worker-1',snapshot:null,rows:[],pageReads:0,rpcPriceListTypes:[],rpcMargins:[],
+    portalInviteStatus:'active',portalMargin:12.5,portalAllowedBrandIds:[brandId],customerSelectSql:'',
   };
   if(portal){
     Object.assign(state.job,{requested_by:null,audience:'portal',export_type:'portal_price_list',
@@ -38,10 +39,13 @@ function fakeDatabase({portal=false,currency='EUR',sourceRows=source,replacement
     if(sql.includes('from public.profiles where id=$1'))return {rows:[{id:actorId,organization_id:organizationId,
       role:'admin',department:'operations',permissions:{},is_active:true,session_revoked_at:null}]};
     if(sql.includes('from public.portal_invites where id=$1'))return {rows:[{id:actorId,organization_id:organizationId,
-      customer_id:customerId,party_type:'customer',status:'active',access_can_view_orders:true,
-      allowed_brand_ids:[brandId],seller_company_profile_id:null,updated_at:inviteUpdatedAt,unexpired:true}]};
-    if(sql.includes('from public.customers where id=$1'))return {rows:[{id:customerId,organization_id:organizationId,
-      seller_company_profile_id:null,updated_at:inviteUpdatedAt}]};
+      customer_id:customerId,party_type:'customer',status:state.portalInviteStatus,access_can_view_orders:true,
+      allowed_brand_ids:state.portalAllowedBrandIds,seller_company_profile_id:null,updated_at:inviteUpdatedAt,unexpired:true}]};
+    if(sql.includes('from public.customers c where id=$1')){
+      state.customerSelectSql=sql;
+      return {rows:[{id:customerId,organization_id:organizationId,
+        seller_company_profile_id:null,seller_company_profile_ids:[],updated_at:inviteUpdatedAt}]};
+    }
     if(sql.includes('get_admin_price_list_export_version'))return {rows:[{version:state.sourceVersion}]};
     if(sql.includes('from export_snapshot_private.snapshots where job_id=$1'))return {rows:state.snapshot?[{...state.snapshot}]:[]};
     if(sql.includes('insert into export_snapshot_private.snapshots')){
@@ -89,7 +93,7 @@ function reader({state,pool,owner,shouldYieldSnapshot=()=>false,onPageTiming=()=
   return createJobPriceSnapshotReader({pool,mode:'local-only',pageSize:2,
     operationsAllowed:()=>true,resolvePortalContext:()=>state.job.audience==='portal'
       ?{organizationId,inviteId:actorId,customerId,brandId,brandName:'Clevite',priceListType:'Other',
-        effectiveMarginA:12.5,effectiveMarginB:15,currency:state.job.scope.currency,cPriceListIds:[]}
+        effectiveMarginA:state.portalMargin,effectiveMarginB:15,currency:state.job.scope.currency,cPriceListIds:[]}
       :(()=>{throw Error('unexpected portal context')})(),
     assertWriteLease:()=>{if(state.owner!==owner)throw Error('V3_EXPORT_LEASE_LOST');},
     checkpoint:({processed,total})=>{state.job.progress_total=total;state.job.progress_done=processed;},
@@ -128,6 +132,31 @@ test('a changed source version blocks continuation before writing another page',
   await assert.rejects(reader({state,pool,owner:'worker-2'}).resolveAuthorizedInput(jobId),/EXPORT_SNAPSHOT_SOURCE_CHANGED/);
   assert.equal(state.rows.length,2);
   assert.equal(state.snapshot.status,'building');
+});
+
+test('portal revocation blocks continuation before writing or sealing another page',async()=>{
+  const {state,pool}=fakeDatabase({portal:true});
+  await reader({state,pool,owner:'worker-1',shouldYieldSnapshot:()=>true}).resolveAuthorizedInput(jobId);
+  state.owner='worker-2';state.portalInviteStatus='disabled';
+  await assert.rejects(reader({state,pool,owner:'worker-2'}).resolveAuthorizedInput(jobId),/EXPORT_SNAPSHOT_INVITE_DENIED/);
+  assert.equal(state.rows.length,2);assert.equal(state.snapshot.status,'building');
+});
+
+test('portal account-margin change blocks continuation before writing another page',async()=>{
+  const {state,pool}=fakeDatabase({portal:true});
+  await reader({state,pool,owner:'worker-1',shouldYieldSnapshot:()=>true}).resolveAuthorizedInput(jobId);
+  state.owner='worker-2';state.portalMargin=13;
+  await assert.rejects(reader({state,pool,owner:'worker-2'}).resolveAuthorizedInput(jobId),/EXPORT_SNAPSHOT_PRICING_CHANGED/);
+  assert.equal(state.rows.length,2);assert.equal(state.snapshot.status,'building');
+});
+
+test('portal NULL brand scope matches unrestricted portal access',async()=>{
+  const {state,pool}=fakeDatabase({portal:true});
+  state.portalAllowedBrandIds=null;
+  const result=await reader({state,pool,owner:'worker-1'}).resolveAuthorizedInput(jobId);
+  assert.equal(result.expectedRows,source.length);
+  assert.equal(state.snapshot.status,'sealed');
+  assert.match(state.customerSelectSql,/to_jsonb\(c\)->'seller_company_profile_ids'/);
 });
 
 test('snapshot timing reports committed page phases without affecting the export',async()=>{

@@ -2,7 +2,7 @@ import { buildRestUrl, getJson, sendJson, serviceRoleHeaders } from "./http.mts"
 import { buildPortalSnapshot } from "./portal-access.mts";
 import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./catalog-standardization.mts";
 import { roundMoney, multiplyMoney, sumMoney, marginPercent as orderMarginPercent, markupMoney } from "../../../shared/order-money.mjs";
-import { normalizeCustomerPricingType, requireActiveCustomerPricing } from "./pricing/pricing-policy.mts";
+import { deriveCustomerPriceListSettings, parseEmbeddedCustomerMeta } from "./pricing/customer-pricing-context.mts";
 
 export type PortalInviteRow = {
   id: string;
@@ -26,6 +26,7 @@ export type PortalInviteRow = {
 
 type CustomerRow = {
   id: string;
+  custom_fields?: unknown;
   display_name: string;
   company_name: string;
   currency: string;
@@ -216,7 +217,6 @@ const PORTAL_SEARCH_OPTIONAL_REST_TIMEOUT_MS = 900;
 // to the catalog query. The previous 900 ms budget caused valid prices to be
 // discarded on a cold Supabase request, leaving the UI at "Price on request".
 const PORTAL_SEARCH_PRICE_REST_TIMEOUT_MS = 3000;
-const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 
 type PortalLookupCacheEntry<T> = {
   value: T;
@@ -995,28 +995,6 @@ async function fetchPortalCatalogRecommendations(
     .map(({ __score: _score, __descriptionMatches: _descriptionMatches, __vehicleMatches: _vehicleMatches, ...item }) => item);
 }
 
-function parseEmbeddedCustomerMeta(raw: unknown) {
-  const text = String(raw || "");
-  const markerIndex = text.lastIndexOf(CUSTOMER_META_PREFIX);
-  if (markerIndex < 0) return {} as Record<string, unknown>;
-  const jsonText = text.slice(markerIndex + CUSTOMER_META_PREFIX.length).trim();
-  try {
-    return (JSON.parse(jsonText) as Record<string, unknown>) || {};
-  } catch {
-    return {} as Record<string, unknown>;
-  }
-}
-
-function getEmbeddedCustomerPriceListType(meta: Record<string, unknown>) {
-  const value = String(meta.price_list_type || "").trim();
-  if (value === "A" || value === "B" || value === "C" || value === "Other") return value;
-  return "";
-}
-
-function normalizePortalCustomerType(value: string): CustomerPricingContext["customerType"] {
-  return normalizeCustomerPricingType(value);
-}
-
 function portalSupplierFallbackCustomerType(context: CustomerPricingContext): "A" | "B" {
   return context.customerType === "B" ? "B" : "A";
 }
@@ -1159,9 +1137,6 @@ async function resolvePortalCustomer(
   }
 
   const sellerCompanyProfileId = String(invite.seller_company_profile_id || customer.seller_company_profile_id || customerMeta.seller_company_profile_id || "").trim();
-  const marginOverrideRaw =
-    customer.price_list_margin_percent == null ? customerMeta.price_list_margin_percent : customer.price_list_margin_percent;
-
   const companyProfile =
     (sellerCompanyProfileId
       ? await fetchFirst<CompanyProfileRow>(supabaseUrl, serviceRoleKey, "company_profiles", {
@@ -1184,35 +1159,13 @@ async function resolvePortalCustomer(
     order: "updated_at.desc,created_at.desc",
   });
 
-  const byType = new Map<string, Record<string, unknown>>();
-  for (const row of priceLists) {
-    const type = String(row.list_type || "");
-    if (!type || byType.has(type)) continue;
-    byType.set(type, row);
-  }
-
-  const defaultMarginA = byType.get("A")?.margin_percent == null ? 10 : Number(byType.get("A")?.margin_percent);
-  const defaultMarginB = byType.get("B")?.margin_percent == null ? 15 : Number(byType.get("B")?.margin_percent);
-  const priceListType = normalizePortalCustomerType(String(customer.price_list_type || getEmbeddedCustomerPriceListType(customerMeta) || "A"));
-  const marginOverride = marginOverrideRaw == null || String(marginOverrideRaw).trim() === "" ? null : Number(marginOverrideRaw);
-  requireActiveCustomerPricing(priceListType, marginOverride);
-  const currency = String(customer.currency || "EUR").trim().toUpperCase();
-  if (currency !== "EUR") {
-    throw new Error("Live supplier prices are in EUR. Customer currency conversion is required before pricing this account.");
-  }
-  const effectiveMarginA = (priceListType === "A" || priceListType === "Other") && marginOverride != null ? marginOverride : defaultMarginA;
-  const effectiveMarginB = priceListType === "B" && marginOverride != null ? marginOverride : defaultMarginB;
-  const cPriceListIds: string[] = [];
+  const pricing = deriveCustomerPriceListSettings(customer, priceLists);
 
   const context = {
     organizationId: invite.organization_id,
     customer,
     sellerCompany: String(companyProfile?.company_name || ""),
-    currency,
-    customerType: priceListType,
-    effectiveMarginA,
-    effectiveMarginB,
-    cPriceListIds,
+    ...pricing,
   };
   portalCustomerContextCache.set(cacheKey, {
     value: context,

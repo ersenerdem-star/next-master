@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastructure/api/companyProfilesApi";
-import { fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
+import { fetchCustomerForInvoicePriceRefresh, fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
 import {
   deleteInvoice,
   deletePaymentReceived,
@@ -580,8 +580,7 @@ export function SalesPage({
       let currentCustomerType = salesOrderCustomerType;
       let accountMarginPercent: number | null = null;
       if (!invoiceResyncKeepPrices) {
-        const accountRows = await fetchCustomers();
-        const account = findCustomerByNameInList(accountRows, invoiceDraft.customer_name);
+        const account = await fetchCustomerForInvoicePriceRefresh(invoiceDraft.id, invoiceDraft.customer_name);
         if (!account) throw new Error("Customer account is required to refresh invoice prices.");
         if (account.price_list_type !== "A" && account.price_list_type !== "B" && account.price_list_type !== "Other") {
           throw new Error("Set A, B, or Other on the customer account before refreshing invoice prices.");

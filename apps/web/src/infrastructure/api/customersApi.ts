@@ -1,7 +1,14 @@
 import type { LocalCustomer } from "../../types/customers";
 import { createEmptyCustomer } from "../../shared/localCustomers";
+import {
+  assertInvoiceCustomerBinding,
+  assertInvoiceCustomerNameUnchanged,
+  resolveCustomerIdFromLinkedSalesOrders,
+  resolveUniqueCustomerIdFromMatches,
+} from "../../shared/customerAccountMatching";
 import { callAppAdminRecords } from "./appAdminRecordsApi";
 import { getCurrentOrgId, isUuid } from "./organizationApi";
+import { supabaseClient } from "./supabaseClient";
 
 const CUSTOMER_META_PREFIX = "[[NEXT_MASTER_META]]";
 
@@ -214,6 +221,77 @@ export async function fetchCustomers(): Promise<LocalCustomer[]> {
   return customersCachePromise;
 }
 
+export async function fetchCustomerForInvoicePriceRefresh(invoiceId: string, draftCustomerName: string): Promise<LocalCustomer | null> {
+  const savedInvoiceId = invoiceId.trim();
+  if (!savedInvoiceId) throw new Error("Save the invoice before refreshing prices.");
+  const organizationId = await getCurrentOrgId();
+  const { data: invoice, error: invoiceError } = await supabaseClient
+    .from("invoices")
+    .select("customer_id,customer_name,sales_order_id,sales_order_ids")
+    .eq("organization_id", organizationId)
+    .eq("id", savedInvoiceId)
+    .maybeSingle();
+  if (invoiceError) throw new Error(invoiceError.message || "Invoice customer lookup failed");
+  if (!invoice) throw new Error("Saved invoice was not found.");
+
+  const savedCustomerName = String(invoice.customer_name || "");
+  assertInvoiceCustomerNameUnchanged(savedCustomerName, draftCustomerName);
+  if (!savedCustomerName.trim()) throw new Error("Invoice customer name is required to refresh prices.");
+
+  const boundCustomerId = String(invoice.customer_id || "").trim();
+  const { data: matches, error: matchError } = await supabaseClient.rpc("find_invoice_price_customer_name_matches", {
+    p_organization_id: organizationId,
+    p_customer_name: savedCustomerName,
+  });
+  if (matchError) {
+    if (String(matchError.message || "").includes("AMBIGUOUS_CUSTOMER_ACCOUNT")) {
+      throw new Error("Multiple customer accounts match this invoice name. Give them distinct display names before refreshing prices.");
+    }
+    throw new Error(matchError.message || "Customer account lookup failed");
+  }
+  const uniqueCurrentNameCustomerId = resolveUniqueCustomerIdFromMatches((matches || []) as Array<{ customer_id: string }>);
+  if (boundCustomerId && uniqueCurrentNameCustomerId && uniqueCurrentNameCustomerId !== boundCustomerId) {
+    assertInvoiceCustomerBinding(boundCustomerId, uniqueCurrentNameCustomerId, null);
+  }
+
+  let linkedSalesOrderCustomerId: string | null = null;
+  if (!uniqueCurrentNameCustomerId) {
+    const linkedSalesOrderIds = [...new Set([
+      String(invoice.sales_order_id || ""),
+      ...(Array.isArray(invoice.sales_order_ids) ? invoice.sales_order_ids.map((id) => String(id || "")) : []),
+    ].map((id) => id.trim()).filter(Boolean))];
+    if (linkedSalesOrderIds.length) {
+      const { data: orders, error: orderError } = await supabaseClient
+        .from("sales_orders")
+        .select("id,customer_id,customer_name")
+        .eq("organization_id", organizationId)
+        .in("id", linkedSalesOrderIds)
+        .limit(linkedSalesOrderIds.length);
+      if (orderError) throw new Error(orderError.message || "Sales order customer lookup failed");
+      linkedSalesOrderCustomerId = resolveCustomerIdFromLinkedSalesOrders(
+        savedCustomerName,
+        linkedSalesOrderIds,
+        (orders || []) as Array<{ id: string; customer_id: string | null; customer_name: string }>,
+      );
+    }
+  }
+  if (boundCustomerId) {
+    assertInvoiceCustomerBinding(boundCustomerId, uniqueCurrentNameCustomerId, linkedSalesOrderCustomerId);
+  }
+  const customerId = boundCustomerId || uniqueCurrentNameCustomerId || linkedSalesOrderCustomerId;
+  if (!customerId) return null;
+
+  const { data: customer, error: customerError } = await supabaseClient
+    .from("customers")
+    .select(CUSTOMER_COLUMNS)
+    .eq("organization_id", organizationId)
+    .eq("id", customerId)
+    .maybeSingle();
+  if (customerError) throw new Error(customerError.message || "Customer account lookup failed");
+  if (!customer) throw new Error("The invoice's customer account is no longer available.");
+  return mapCustomerRow(customer as unknown as Record<string, unknown>);
+}
+
 export function createEmptyCloudCustomer(existingRows: LocalCustomer[] = []) {
   const nextNumber = `CUS-${String(existingRows.length + 1).padStart(5, "0")}`;
   return {
@@ -248,9 +326,4 @@ export async function deleteCustomer(customerId: string) {
   clearCustomersCache();
 }
 
-export function findCustomerByNameInList(customers: LocalCustomer[], name: string) {
-  const key = name.trim().toLowerCase();
-  return (
-    customers.find((item) => item.display_name.trim().toLowerCase() === key || item.company_name.trim().toLowerCase() === key) || null
-  );
-}
+export { findCustomerByNameInList } from "../../shared/customerAccountMatching";

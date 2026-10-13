@@ -237,7 +237,7 @@ export async function deletePortalDraftOrder(credentials: PortalCredentials, ord
   };
 }
 
-const PORTAL_EXPORT_STATUS_TIMEOUT_MS = 10 * 60 * 1000;
+const PORTAL_EXPORT_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
 const PORTAL_EXPORT_STATUS_POLL_MS = 1_500;
 const PORTAL_EXPORT_START_RETRY_MS = 800;
 
@@ -298,6 +298,16 @@ export async function downloadPortalExportJob(credentials: PortalCredentials, jo
   };
 }
 
+export class PortalExportStillPreparingError extends Error {
+  readonly job: PortalExportJobStatus;
+
+  constructor(job: PortalExportJobStatus) {
+    super("Price list is still preparing in the background. Click Download Excel again later to resume the same export.");
+    this.name = "PortalExportStillPreparingError";
+    this.job = job;
+  }
+}
+
 export async function waitForPortalExportJob(
   credentials: PortalCredentials,
   initialJob: PortalExportJobStatus,
@@ -308,7 +318,15 @@ export async function waitForPortalExportJob(
   onProgress?.(job);
   while (job.status === "queued" || job.status === "running") {
     if (Date.now() - startedAt > PORTAL_EXPORT_STATUS_TIMEOUT_MS) {
-      throw new Error("Price list is still preparing in the background. Try download again in a moment.");
+      // The server keeps the durable job after the browser stops waiting. One
+      // final status read avoids reporting a timeout just as the file becomes
+      // ready; the next click reuses this job through the idempotent start API.
+      job = await getPortalExportJobStatus(credentials, job.id).catch(() => job);
+      onProgress?.(job);
+      if (job.status === "queued" || job.status === "running") {
+        throw new PortalExportStillPreparingError(job);
+      }
+      break;
     }
     await delay(PORTAL_EXPORT_STATUS_POLL_MS);
     job = await getPortalExportJobStatus(credentials, job.id);

@@ -8,7 +8,7 @@ import { createJobPriceSnapshotReader } from "../../../apps/engine/supplier-pric
 import { createExportArtifactStore } from "../../../apps/engine/supplier-price-shadow/src/export/shared-export-artifact.mjs";
 import { exportBinding, preparePriceExport, assemblePriceExport } from "../../../apps/engine/supplier-price-shadow/src/export/partitioned-price-export.mjs";
 import { createDuckDbPagedExportSource, materializeSealedSnapshotWithDuckDB } from "../../../apps/engine/supplier-price-shadow/src/export/duckdb-export-source.mjs";
-import { resolvePortalPriceListExportContext } from "./portal-orders.mts";
+import { resolvePortalPriceListExportContextFromDb } from "./v3-export-pricing-context.mts";
 import { canAccessOperationsModules } from "./roles.mts";
 import { getJson, serviceRoleHeaders } from "./http.mts";
 import { V3_REF, PROD_REF, targetConfig, assertV3ExportAllowed, required } from "./v3-export-dispatch.mts";
@@ -160,16 +160,6 @@ async function claimJob(pool: Pool, jobId: string, leaseOwner: string) {
   }
 }
 
-function inviteFromActor(actor: any) {
-  return {
-    id: String(actor.id), organization_id: String(actor.organization_id), customer_id: String(actor.customer_id),
-    party_type: String(actor.party_type), status: String(actor.status), access_can_view_orders: Boolean(actor.access_can_view_orders),
-    allowed_brand_ids: Array.isArray(actor.allowed_brand_ids) ? actor.allowed_brand_ids : [],
-    seller_company_profile_id: actor.seller_company_profile_id || null,
-    email: "", party_name: "", updated_at: String(actor.updated_at || ""), expires_at: null,
-  } as any;
-}
-
 export async function runV3PriceExportJob(jobId: string) {
   const target = targetConfig();
   if (!target) throw new Error("EXPORT_BRIDGE_DISABLED");
@@ -212,15 +202,7 @@ export async function runV3PriceExportJob(jobId: string) {
         if (!lease || lease.worker_lease_owner !== leaseOwner || !lease.live) throw new Error("V3_EXPORT_LEASE_LOST");
       },
       operationsAllowed: (role: string, department: string, permissions: Record<string, boolean>) => canAccessOperationsModules(role, department, permissions),
-      resolvePortalContext: async ({ invite, brandName }: any) => {
-        const context = await resolvePortalPriceListExportContext(supabaseUrl, serviceRoleKey, inviteFromActor(invite), brandName);
-        return {
-          organizationId: context.organizationId, inviteId: context.inviteId, customerId: context.customerId,
-          brandId: context.brandId, brandName: context.brandName, priceListType: context.priceListType,
-          effectiveMarginA: context.effectiveMarginA, effectiveMarginB: context.effectiveMarginB,
-          currency: context.currency, cPriceListIds: context.cPriceListIds,
-        };
-      },
+      resolvePortalContext: resolvePortalPriceListExportContextFromDb,
       checkpoint: async ({ processed, total }: any) => {
         await patchJob(supabaseUrl, serviceRoleKey, job.id, {
           progress_done: processed, progress_total: total, row_count: processed,
