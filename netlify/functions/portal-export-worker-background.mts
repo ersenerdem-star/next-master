@@ -2,6 +2,7 @@ import type { Config } from "@netlify/functions";
 import { readJson, json } from "./_shared/http.mts";
 import {
   assertV3PriceExportWorkerRequest,
+  dispatchV3PriceExportWorker,
   isV3ExportBridgeEnabled,
   runV3PriceExportJob,
 } from "./_shared/v3-export-bridge.mts";
@@ -21,8 +22,18 @@ export default async (req: Request) => {
     const jobId = String(body.jobId || "").trim();
     if (!jobId) return json({ error: "jobId is required." }, 400);
     assertV3PriceExportWorkerRequest(req, jobId);
-    await runV3PriceExportJob(jobId);
-    return json({ ok: true, jobId }, 200);
+    const result = await runV3PriceExportJob(jobId);
+    if (result.status === "continuation") {
+      // The first invocation committed a page checkpoint and released its
+      // lease. Re-enter through the same signed background handoff. If this
+      // network call fails, the authenticated status poll remains a retry path.
+      try {
+        await dispatchV3PriceExportWorker(req, jobId);
+      } catch (error) {
+        console.error("portal export continuation dispatch failed", jobId, error);
+      }
+    }
+    return json({ ok: true, jobId, status: result.status }, 200);
   } catch (error) {
     console.error("portal export background worker failed", error);
     return json({ error: error instanceof Error ? error.message : String(error) }, 500);

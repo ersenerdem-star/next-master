@@ -12,7 +12,7 @@ import {
   toPublicExportJobStatus,
 } from "./_shared/export-jobs.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
-import { isProductionExportPaused, isV3ExportBridgeEnabled, runV3PriceExportJob } from "./_shared/v3-export-bridge.mts";
+import { dispatchV3PriceExportWorker, isProductionExportPaused, isV3ExportBridgeEnabled } from "./_shared/v3-export-bridge.mts";
 
 export default async (req: Request, context: Context) => {
   if (req.method !== "POST") return exportJson({ error: "Method not allowed" }, 405);
@@ -62,7 +62,7 @@ export default async (req: Request, context: Context) => {
     if (job.status === "queued") {
       context.waitUntil(
         (isV3ExportBridgeEnabled() && exportType === "admin_price_list"
-          ? runV3PriceExportJob(job.id)
+          ? dispatchV3PriceExportWorker(req, job.id)
           : exportType === "catalog_master"
           ? runCatalogMasterExportJob(supabaseUrl, serviceRoleKey, job.id)
           : exportType === "catalog_export"

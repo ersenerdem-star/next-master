@@ -17,7 +17,7 @@ const normalizeVersionTimestamp=value=>{
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const fail=code=>{throw Error(`EXPORT_SNAPSHOT_${code}`);};
 const cursor=n=>String(n).padStart(12,'0');
-export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolvePortalContext,pageSize=1000,checkpoint=()=>{}}){
+export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolvePortalContext,pageSize=1000,checkpoint=()=>{},shouldYieldSnapshot=()=>false,assertWriteLease=()=>{}}){
   const url=new URL(pool?.options?.connectionString??'invalid:');
   const localTarget=mode==='local-only'&&url.protocol==='postgresql:'&&url.hostname==='127.0.0.1'
     &&/^\/nm_export_reader_[a-f0-9]{32}$/.test(url.pathname)&&Boolean(url.port)&&!url.search&&!url.hash;
@@ -26,6 +26,7 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
     &&(url.port==='6543'||url.port==='5432')&&url.pathname==='/postgres'&&!url.hash;
   if(!localTarget&&!hostedV3Target)fail(mode==='hosted-v3'?'V3_HOSTED_TARGET_REQUIRED':'LOCAL_TARGET_REQUIRED');
   if(typeof operationsAllowed!=='function'||typeof resolvePortalContext!=='function'||typeof checkpoint!=='function'
+    ||typeof shouldYieldSnapshot!=='function'||typeof assertWriteLease!=='function'
     ||!Number.isInteger(pageSize)||pageSize<1||pageSize>5000
     ||!Number.isInteger(pool.options.max)||pool.options.max<2||pool.options.max>5)fail('CONFIG_INVALID');
   async function authority(client,jobId){
@@ -110,14 +111,19 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
       if(existing.status!=='building')fail('AUTHORITY_CHANGED');
     }
     const id=existing?.id??randomUUID();
-    if(!existing) await withShortTransaction(client=>client.query("insert into export_snapshot_private.snapshots(id,job_id,status,authority_digest) values($1,$2,'building',$3)",[id,jobId,a.authorityDigest]));
+    if(!existing) await withShortTransaction(async client=>{
+      await assertWriteLease(client,jobId);
+      return client.query("insert into export_snapshot_private.snapshots(id,job_id,status,authority_digest) values($1,$2,'building',$3)",[id,jobId,a.authorityDigest]);
+    });
     const fn=a.job.audience==='admin'?'cloud_admin_price_list_page_fast':'cloud_portal_customer_price_list_page_fast';
     const existingProgress=existing?await withShortTransaction(client=>client.query(`
       select
         (select count(*)::bigint from export_snapshot_private.rows where snapshot_id=$1) as count,
+        (select max(ordinal)::bigint from export_snapshot_private.rows where snapshot_id=$1) as last_ordinal,
         (select source_key from export_snapshot_private.rows where snapshot_id=$1 order by ordinal desc limit 1) as last_source_key
     `,[id]).then(result=>result.rows[0])):null;
     let after=existingProgress?.last_source_key??null,processed=Number(existingProgress?.count??0),total=Number(a.job.progress_total??0)||null,spec;
+    if(existingProgress&&(processed!==Number(existingProgress.last_ordinal??0)||processed>0&&!after))fail('READ_COVERAGE');
     const makeSpec=expectedRows=>{
       const candidate={tenantId:a.job.organization_id,requesterId:a.requesterId,audience:a.job.audience==='portal'?'customer':'admin',
         customerId:a.customerId,snapshotId:id,pricingVersion:digest({context:a.context,dataVersion:a.job.data_version}),
@@ -132,6 +138,7 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
     while(total==null||processed<total){
       const live=await assertAuthorized(jobId);if(live.authorityDigest!==a.authorityDigest)fail('AUTHORITY_CHANGED');
       const pageResult=await withShortTransaction(async client=>{
+        await assertWriteLease(client,jobId);
         await assertSourceVersion(client,live);
         const page=(await client.query(`select normalized_code,product_code,brand,description,sales_price::text,price_date::text,lifecycle_status,total_count::text
           from public.${fn}($1,$2,$3,$4,null,$5,$6)`,[a.job.organization_id,a.brand.id,a.context.priceListType,a.context.margin,after,pageSize])).rows;
@@ -177,9 +184,19 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
       });
       after=pageResult.nextAfter;processed=pageResult.nextProcessed;total=pageResult.expectedTotal;spec=pageResult.nextSpec;
       await checkpoint({jobId,processed,total});
+      // Every committed page is a resumable checkpoint. Yield only after the
+      // progress/lease update succeeds, and seal here if this was the last page.
+      if(processed<total&&await shouldYieldSnapshot({jobId,snapshotId:id,processed,total})){
+        return Object.freeze({status:'building',snapshotId:id,processed,total});
+      }
     }
     const current=await assertAuthorized(jobId);if(current.authorityDigest!==a.authorityDigest)fail('AUTHORITY_CHANGED');
-    await withShortTransaction(async client=>{await assertSourceVersion(client,current);return client.query("update export_snapshot_private.snapshots set status='sealed',descriptor=$2::jsonb,binding=$3 where id=$1",[id,JSON.stringify(spec),exportBinding(spec)]);});
+    await withShortTransaction(async client=>{
+      await assertWriteLease(client,jobId);
+      await assertSourceVersion(client,current);
+      const sealed=await client.query("update export_snapshot_private.snapshots set status='sealed',descriptor=$2::jsonb,binding=$3 where id=$1 and status='building' and authority_digest=$4 returning id",[id,JSON.stringify(spec),exportBinding(spec),a.authorityDigest]);
+      if(sealed.rowCount!==1)fail('AUTHORITY_CHANGED');
+    });
     return Object.freeze(spec);
   }
   async function fetchPage({spec,binding,after,limit}){

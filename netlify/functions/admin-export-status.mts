@@ -3,7 +3,7 @@ import { getAppAuthStatus, resolveCaller } from "./_shared/app-auth.mts";
 import { canAccessOperationsModules } from "./_shared/roles.mts";
 import { exportJson, fetchExportJobById, runAdminPriceListExportJob, runCatalogExportJob, runCatalogMasterExportJob, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
-import { isProductionExportPaused, isV3ExportBridgeEnabled, runV3PriceExportJob } from "./_shared/v3-export-bridge.mts";
+import { dispatchV3PriceExportWorker, isProductionExportPaused, isV3ExportBridgeEnabled } from "./_shared/v3-export-bridge.mts";
 
 function isStaleExportJob(jobStatus: string, jobUpdatedAt: string | null | undefined) {
   const updatedAt = Date.parse(String(jobUpdatedAt || ""));
@@ -36,7 +36,7 @@ export default async (req: Request, context: Context) => {
     if ((job.status === "queued" || job.status === "running") && isStaleExportJob(job.status, job.updated_at)) {
       if (job.export_type === "admin_price_list" && !(isV3ExportBridgeEnabled() && isProductionExportPaused())) {
         const retry = isV3ExportBridgeEnabled()
-          ? runV3PriceExportJob(job.id)
+          ? dispatchV3PriceExportWorker(req, job.id)
           : runAdminPriceListExportJob(supabaseUrl, serviceRoleKey, job.id);
         context.waitUntil(retry.catch((error) => console.error("admin price export retry failed", job.id, error)));
       } else if (job.export_type === "catalog_export") {

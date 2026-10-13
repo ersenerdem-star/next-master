@@ -4,10 +4,8 @@ import { Pool } from "pg";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { createDurablePriceExportWorkflow, priceExportWorkflowId } from "../../../apps/engine/supplier-price-shadow/src/export/durable-price-export-workflow.mjs";
 import { createJobPriceSnapshotReader } from "../../../apps/engine/supplier-price-shadow/src/export/job-price-snapshot-reader.mjs";
 import { createExportArtifactStore } from "../../../apps/engine/supplier-price-shadow/src/export/shared-export-artifact.mjs";
-import { createExportPartsStore } from "../../../apps/engine/supplier-price-shadow/src/export/shared-export-parts.mjs";
 import { exportBinding, preparePriceExport, assemblePriceExport } from "../../../apps/engine/supplier-price-shadow/src/export/partitioned-price-export.mjs";
 import { createDuckDbPagedExportSource, materializeSealedSnapshotWithDuckDB } from "../../../apps/engine/supplier-price-shadow/src/export/duckdb-export-source.mjs";
 import { resolvePortalPriceListExportContext } from "./portal-orders.mts";
@@ -33,6 +31,9 @@ const MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 const EXPORT_PAGE_SIZE = 5000;
 const WORKER_LEASE_SECONDS = 120;
 const WORKER_TIMESTAMP_WINDOW_MS = 60_000;
+// Leave time for one slow DB page, the lease handoff and Netlify shutdown.
+// A fresh million-row snapshot is resumed by another signed background call.
+const SNAPSHOT_SEGMENT_MAX_MS = 7 * 60 * 1000;
 
 function targetConfig() {
   const url = Netlify.env.get("SUPABASE_URL");
@@ -277,11 +278,24 @@ export async function runV3PriceExportJob(jobId: string) {
   try {
     if (!await claimJob(pool, job.id, leaseOwner)) return { status: "in-progress", jobId: job.id };
     await patchJob(supabaseUrl, serviceRoleKey, job.id, {
-      status: "running", started_at: job.started_at || new Date().toISOString(), progress_done: 0,
-      progress_total: null, progress_message: "V3 snapshot worker is preparing rows.", error_message: null,
+      status: "running", started_at: job.started_at || new Date().toISOString(),
+      progress_message: Number(job.progress_done || 0) > 0 ? "V3 snapshot worker resumed." : "V3 snapshot worker is preparing rows.",
+      error_message: null,
     }, { leaseOwner });
+    const snapshotDeadline = Date.now() + SNAPSHOT_SEGMENT_MAX_MS;
     const reader = createJobPriceSnapshotReader({
       pool, mode: "hosted-v3", pageSize: EXPORT_PAGE_SIZE,
+      shouldYieldSnapshot: () => Date.now() >= snapshotDeadline,
+      // Hold the job row lock through each page insert (and seal). A worker
+      // whose lease was replaced cannot write another page after a retry.
+      assertWriteLease: async (client: any, writerJobId: string) => {
+        const lease = (await client.query(
+          `select worker_lease_owner, worker_lease_expires_at > clock_timestamp() as live
+           from public.app_export_jobs where id=$1 and status='running' for update`,
+          [writerJobId],
+        )).rows[0];
+        if (!lease || lease.worker_lease_owner !== leaseOwner || !lease.live) throw new Error("V3_EXPORT_LEASE_LOST");
+      },
       operationsAllowed: (role: string, department: string, permissions: Record<string, boolean>) => canAccessOperationsModules(role, department, permissions),
       resolvePortalContext: async ({ invite, brandName }: any) => {
         const context = await resolvePortalPriceListExportContext(supabaseUrl, serviceRoleKey, inviteFromActor(invite), brandName);
@@ -300,6 +314,19 @@ export async function runV3PriceExportJob(jobId: string) {
       },
     });
     const spec = await reader.resolveAuthorizedInput(job.id);
+    if (spec.status === "building" || Date.now() >= snapshotDeadline) {
+      // The snapshot rows are already committed. Release ownership before
+      // dispatching the next invocation. Also yield if the final page was
+      // sealed near the deadline, so XLSX assembly gets a fresh time window.
+      const rows = spec.status === "building" ? spec.processed : spec.expectedRows;
+      const total = spec.status === "building" ? spec.total : spec.expectedRows;
+      await patchJob(supabaseUrl, serviceRoleKey, job.id, {
+        status: "queued", progress_done: rows, progress_total: total, row_count: rows,
+        progress_message: `V3 snapshot checkpoint ${rows.toLocaleString("en-US")} / ${total.toLocaleString("en-US")} rows; continuing.`,
+        worker_lease_owner: null, worker_lease_expires_at: null,
+      }, { leaseOwner, renewLease: false });
+      return { status: "continuation", jobId: job.id, snapshotId: spec.snapshotId, rows, total };
+    }
     const binding = exportBinding(spec);
     duckdbExportDirectory = await mkdtemp(join("/tmp", "nm-duckdb-export-"));
     const duckdbMaterialized = await materializeSealedSnapshotWithDuckDB({
