@@ -1175,6 +1175,189 @@ select {
   line-height: 1.3;
 }
 
+.operations-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.operations-summary-card {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #dce5ee;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.operations-summary-card span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.operations-summary-card strong {
+  color: #10233f;
+  font-size: 24px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.operations-summary-card--success { border-color: #b7e1c4; background: #f3fbf5; }
+.operations-summary-card--warning { border-color: #f2d59b; background: #fffaf0; }
+.operations-summary-card--danger { border-color: #f2c1c1; background: #fff7f7; }
+
+.supplier-operation-list {
+  display: grid;
+  gap: 12px;
+  max-height: 660px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.supplier-operation-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #dce5ee;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(15, 35, 63, 0.04);
+}
+
+.supplier-operation-card--attention {
+  border-color: #efc5c5;
+  background: linear-gradient(180deg, #fff 0%, #fffafa 100%);
+}
+
+.supplier-operation-card__header,
+.supplier-operation-card__footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.supplier-operation-card__identity {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.supplier-operation-card__identity strong { color: #10233f; font-size: 16px; }
+
+.supplier-operation-card__meta {
+  display: grid;
+  gap: 3px;
+  min-width: 150px;
+  color: #64748b;
+  font-size: 11px;
+  text-align: right;
+}
+
+.supplier-operation-card__meta strong { color: #183b69; font-size: 12px; }
+.supplier-operation-card__meta small { color: #94a3b8; }
+
+.supplier-operation-card__stages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.supplier-operation-stage {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #e3eaf1;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.supplier-operation-stage__label {
+  color: #52667d;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.supplier-operation-stage__value {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.supplier-operation-stage small {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.supplier-operation-card__footer {
+  align-items: center;
+  padding-top: 2px;
+  border-top: 1px solid #edf2f7;
+}
+
+.supplier-operation-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.supplier-operation-card__details {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.supplier-operation-card__details summary {
+  cursor: pointer;
+  color: #8a4b08;
+  font-weight: 800;
+}
+
+.supplier-operation-card__details div {
+  max-width: 520px;
+  margin-top: 8px;
+  padding: 9px 10px;
+  border: 1px solid #f1d2a5;
+  border-radius: 8px;
+  background: #fffaf0;
+}
+
+.supplier-operation-card__details p { margin: 0 0 5px; overflow-wrap: anywhere; }
+.supplier-operation-card__details p:last-child { margin-bottom: 0; }
+
+.operations-secondary-details {
+  margin-top: 14px;
+  border: 1px solid #dce5ee;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.operations-secondary-details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  cursor: pointer;
+  color: #183b69;
+  font-weight: 900;
+  list-style: none;
+}
+
+.operations-secondary-details > summary::-webkit-details-marker { display: none; }
+.operations-secondary-details > summary::after { content: "+"; color: #64748b; font-size: 18px; }
+.operations-secondary-details[open] > summary::after { content: "−"; }
+.operations-secondary-details > summary small { margin-left: auto; color: #64748b; font-size: 11px; font-weight: 600; }
+.operations-secondary-details > .section-card { margin: 0; border: 0; border-top: 1px solid #dce5ee; border-radius: 0 0 12px 12px; box-shadow: none; }
+
 .quote-picker {
   display: flex;
   flex-wrap: wrap;
@@ -9010,6 +9193,26 @@ textarea {
 }
 
 @media (max-width: 720px) {
+  .operations-summary-strip,
+  .supplier-operation-card__stages {
+    grid-template-columns: 1fr;
+  }
+
+  .supplier-operation-card__header,
+  .supplier-operation-card__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .supplier-operation-card__meta {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .supplier-operation-card__actions {
+    justify-content: space-between;
+  }
+
   .procurement-page-header {
     flex-direction: column;
     align-items: stretch;

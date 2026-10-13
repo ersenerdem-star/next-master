@@ -299,6 +299,23 @@ export function OperationsStatusPage() {
     actionFeedback.succeed(t("dashboard.operationsStatus.csvDownloaded"));
   }
 
+  const operationsSummary = {
+    total: operationsRows.length,
+    ready: operationsRows.filter((row) => row.customer_price_status === "ready").length,
+    attention: operationsRows.filter((row) =>
+      isOperationsFailedStatus(row.supplier_import_status) ||
+      isOperationsFailedStatus(row.catalog_sync_status) ||
+      isOperationsFailedStatus(row.rollup_refresh_status) ||
+      supplierWorkerStateTone(row) === "failed" ||
+      catalogWorkerStateTone(row) === "failed",
+    ).length,
+    inProgress: operationsRows.filter((row) =>
+      ["running", "pending"].includes(String(row.supplier_import_status || "").toLowerCase()) ||
+      ["running", "pending"].includes(String(row.catalog_sync_status || "").toLowerCase()) ||
+      ["running", "pending"].includes(String(row.rollup_refresh_status || "").toLowerCase()),
+    ).length,
+  };
+
   return (
       <PageShell className="operations-status-page">
       <PageHeader title={t("dashboard.operationsStatus.title")} subtitle={t("reports.statusCenterSubtitle")} />
@@ -320,127 +337,95 @@ export function OperationsStatusPage() {
           </Button>
         </div>
         {operationsErrorKey ? <div className="error-text">{t(operationsErrorKey)}</div> : null}
+        <div className="operations-summary-strip" aria-label={t("dashboard.operationsStatus.overviewTitle")}>
+          <div className="operations-summary-card">
+            <span>{t("dashboard.operationsStatus.totalScopes")}</span>
+            <strong>{formatCount(operationsSummary.total)}</strong>
+          </div>
+          <div className="operations-summary-card operations-summary-card--success">
+            <span>{t("dashboard.operationsStatus.readyScopes")}</span>
+            <strong>{formatCount(operationsSummary.ready)}</strong>
+          </div>
+          <div className="operations-summary-card operations-summary-card--warning">
+            <span>{t("dashboard.operationsStatus.inProgress")}</span>
+            <strong>{formatCount(operationsSummary.inProgress)}</strong>
+          </div>
+          <div className="operations-summary-card operations-summary-card--danger">
+            <span>{t("dashboard.operationsStatus.attentionNeeded")}</span>
+            <strong>{formatCount(operationsSummary.attention)}</strong>
+          </div>
+        </div>
         {filteredOperationsRows.length ? (
-          <div className="table-wrap table-wrap--tall">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{t("dashboard.operationsStatus.brand")}</th>
-                  <th>{t("dashboard.operationsStatus.lastImport")}</th>
-                  <th>{t("dashboard.operationsStatus.supplierImport")}</th>
-                  <th>{t("dashboard.operationsStatus.rows")}</th>
-                  <th>{t("dashboard.operationsStatus.catalogSync")}</th>
-                  <th>{t("dashboard.operationsStatus.rollupRefresh")}</th>
-                  <th>{t("dashboard.operationsStatus.customerPrice")}</th>
-                  <th>{t("dashboard.operationsStatus.lastSuccessfulRefresh")}</th>
-                  <th>{t("dashboard.operationsStatus.action")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOperationsRows.map((row) => {
-                  const rowKey = `${row.supplier_id}-${row.brand}`;
-                  const retryEnabled =
-                    (supportsRegisteredRetry("supplier_import") && isOperationsFailedStatus(row.supplier_import_status)) ||
-                    (supportsRegisteredRetry("supplier_catalog_sync") && isOperationsFailedStatus(row.catalog_sync_status)) ||
-                    (supportsRegisteredRetry("supplier_rollup_refresh") && isOperationsFailedStatus(row.rollup_refresh_status));
-                  return (
-                    <tr key={rowKey}>
-                      <td>
-                        <div className="list-stack">
-                          <BrandPill brand={row.brand} compact />
-                          <strong>{row.supplier_name}</strong>
-                          <span className="operations-subtle">
-                            {t("dashboard.operationsStatus.partsAndLines", {
-                              parts: formatCount(row.part_count),
-                              lines: formatCount(row.line_count),
-                            })}
-                            {row.latest_price_date ? ` · ${t("dashboard.operationsStatus.latestPrice")} ${row.latest_price_date}` : ""}
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="list-stack">
-                          <span>{t("dashboard.operationsStatus.started")}: {formatDateTime(row.supplier_import_started_at)}</span>
-                          <span>{t("dashboard.operationsStatus.finished")}: {formatDateTime(row.supplier_import_finished_at)}</span>
-                          <span>{t("dashboard.operationsStatus.duration")}: {formatDurationMs(row.supplier_import_duration_ms)}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="list-stack">
-                          <span className={`mark-badge mark-badge--${statusTone(row.supplier_import_status)}`}>{t(`statuses.${row.supplier_import_status}`)}</span>
-                          <span className={`mark-badge mark-badge--${supplierWorkerStateTone(row)}`}>{supplierWorkerStateLabel(row)}</span>
-                          <span className="operations-subtle">
-                            {formatCount(row.supplier_import_processed_rows)} / {formatCount(row.supplier_import_staged_rows)} · {formatCount(row.supplier_import_batches)} batches
-                          </span>
-                          <span className="operations-subtle">
-                            {t("dashboard.operationsStatus.catalogSyncLastProgress")}: {formatDateTime(row.supplier_import_last_progress_at || row.supplier_import_last_heartbeat_at)}
-                          </span>
-                          {row.supplier_import_status === "failed" ? <span className="error-text">{row.supplier_import_error_message || t("dashboard.operationsStatus.failed")}</span> : null}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="list-stack">
-                          <span>{t("dashboard.operationsStatus.staged")}: {formatCount(row.supplier_import_staged_rows)}</span>
-                          <span>{t("dashboard.operationsStatus.processed")}: {formatCount(row.supplier_import_processed_rows)}</span>
-                          <span className="operations-subtle">
-                            {t("dashboard.operationsStatus.activePriceSource")}: {formatDateTime(row.last_successful_import_at)}
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="list-stack">
-                          <span className={`mark-badge mark-badge--${statusTone(row.catalog_sync_status)}`}>{t(`statuses.${row.catalog_sync_status}`)}</span>
-                          <span className={`mark-badge mark-badge--${catalogWorkerStateTone(row)}`}>{catalogWorkerStateLabel(row)}</span>
-                          <span className="operations-subtle">
-                            {t("dashboard.operationsStatus.catalogSyncProgressValue", {
-                              processed: formatCount(row.catalog_sync_processed),
-                              total: formatCount(row.supplier_import_staged_rows),
-                              batches: formatCount(row.catalog_sync_batches),
-                            })}
-                          </span>
-                          <span className="operations-subtle">
-                            {t("dashboard.operationsStatus.catalogSyncLastProgress")}: {formatDateTime(row.catalog_sync_last_progress_at)} · {t("dashboard.operationsStatus.catalogSyncCursor")}: {row.catalog_sync_cursor || "-"}
-                          </span>
-                          {row.catalog_sync_status === "failed" ? <span className="error-text">{row.catalog_sync_error_message || t("dashboard.operationsStatus.failed")}</span> : null}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="list-stack">
-                          <span className={`mark-badge mark-badge--${statusTone(row.rollup_refresh_status)}`}>{t(`statuses.${row.rollup_refresh_status}`)}</span>
-                          {row.rollup_refresh_status === "failed" ? <span className="error-text">{row.rollup_refresh_error_message || t("dashboard.operationsStatus.failed")}</span> : null}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="list-stack">
-                          <span className={`mark-badge mark-badge--${statusTone(row.customer_price_status)}`}>{t(`statuses.${row.customer_price_status}`)}</span>
-                          <span className="operations-subtle">
-                            {row.supplier_import_status === "failed"
-                              ? t("dashboard.operationsStatus.latestUploadFailed")
-                              : row.customer_price_waiting_message || t("dashboard.operationsStatus.readyToGenerate")}
-                          </span>
-                          {row.supplier_import_status === "failed" && row.last_successful_import_at ? (
-                            <span className="warning-text">{t("dashboard.operationsStatus.previousPricesRemain")}</span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="list-stack">
-                          <span>{formatDateTime(row.last_successful_refresh_at)}</span>
-                          <span className="operations-subtle">
-                            {row.last_successful_refresh_source
-                              ? `${t("dashboard.operationsStatus.source")}: ${row.last_successful_refresh_source === "supplier import" ? t("dashboard.operationsStatus.supplierImport") : t("dashboard.operationsStatus.rollupRefresh")}`
-                              : "-"}
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        {retryEnabled ? <Button variant="secondary" className="button--compact" onClick={() => void handleRetryRow(row)}>{t("common.retry")}</Button> : <span className="operations-subtle">-</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="supplier-operation-list">
+            {filteredOperationsRows.map((row) => {
+              const rowKey = `${row.supplier_id}-${row.brand}`;
+              const retryEnabled =
+                (supportsRegisteredRetry("supplier_import") && isOperationsFailedStatus(row.supplier_import_status)) ||
+                (supportsRegisteredRetry("supplier_catalog_sync") && isOperationsFailedStatus(row.catalog_sync_status)) ||
+                (supportsRegisteredRetry("supplier_rollup_refresh") && isOperationsFailedStatus(row.rollup_refresh_status));
+              const hasAttention = retryEnabled || supplierWorkerStateTone(row) === "failed" || catalogWorkerStateTone(row) === "failed";
+              return (
+                <article key={rowKey} className={`supplier-operation-card${hasAttention ? " supplier-operation-card--attention" : ""}`}>
+                  <div className="supplier-operation-card__header">
+                    <div className="supplier-operation-card__identity">
+                      <BrandPill brand={row.brand} compact />
+                      <strong>{row.supplier_name}</strong>
+                      <span className="operations-subtle">
+                        {t("dashboard.operationsStatus.partsAndLines", { parts: formatCount(row.part_count), lines: formatCount(row.line_count) })}
+                        {row.latest_price_date ? ` · ${t("dashboard.operationsStatus.latestPrice")} ${row.latest_price_date}` : ""}
+                      </span>
+                    </div>
+                    <div className="supplier-operation-card__meta">
+                      <span>{t("dashboard.operationsStatus.lastSuccessfulRefresh")}</span>
+                      <strong>{formatDateTime(row.last_successful_refresh_at)}</strong>
+                      <small>{row.last_successful_refresh_source || "-"}</small>
+                    </div>
+                  </div>
+                  <div className="supplier-operation-card__stages">
+                    <div className="supplier-operation-stage">
+                      <span className="supplier-operation-stage__label">{t("dashboard.operationsStatus.supplierImport")}</span>
+                      <div className="supplier-operation-stage__value">
+                        <span className={`mark-badge mark-badge--${statusTone(row.supplier_import_status)}`}>{t(`statuses.${row.supplier_import_status}`)}</span>
+                        <span className={`mark-badge mark-badge--${supplierWorkerStateTone(row)}`}>{supplierWorkerStateLabel(row)}</span>
+                      </div>
+                      <small>{formatCount(row.supplier_import_processed_rows)} / {formatCount(row.supplier_import_staged_rows)} · {formatCount(row.supplier_import_batches)} batches</small>
+                    </div>
+                    <div className="supplier-operation-stage">
+                      <span className="supplier-operation-stage__label">{t("dashboard.operationsStatus.catalogSync")}</span>
+                      <div className="supplier-operation-stage__value">
+                        <span className={`mark-badge mark-badge--${statusTone(row.catalog_sync_status)}`}>{t(`statuses.${row.catalog_sync_status}`)}</span>
+                        <span className={`mark-badge mark-badge--${catalogWorkerStateTone(row)}`}>{catalogWorkerStateLabel(row)}</span>
+                      </div>
+                      <small>{formatCount(row.catalog_sync_processed)} / {formatCount(row.supplier_import_staged_rows)} · {formatCount(row.catalog_sync_batches)} batches</small>
+                    </div>
+                    <div className="supplier-operation-stage">
+                      <span className="supplier-operation-stage__label">{t("dashboard.operationsStatus.customerPrice")}</span>
+                      <div className="supplier-operation-stage__value">
+                        <span className={`mark-badge mark-badge--${statusTone(row.customer_price_status)}`}>{t(`statuses.${row.customer_price_status}`)}</span>
+                      </div>
+                      <small>{row.customer_price_waiting_message || t("dashboard.operationsStatus.readyToGenerate")}</small>
+                    </div>
+                  </div>
+                  <div className="supplier-operation-card__footer">
+                    <span className="operations-subtle">{t("dashboard.operationsStatus.activePriceSource")}: {formatDateTime(row.last_successful_import_at)}</span>
+                    <div className="supplier-operation-card__actions">
+                      {hasAttention ? (
+                        <details className="supplier-operation-card__details">
+                          <summary>{t("dashboard.operationsStatus.viewTechnicalDetails")}</summary>
+                          <div>
+                            {row.supplier_import_error_message ? <p>{row.supplier_import_error_message}</p> : null}
+                            {row.catalog_sync_error_message ? <p>{row.catalog_sync_error_message}</p> : null}
+                            {row.rollup_refresh_error_message ? <p>{row.rollup_refresh_error_message}</p> : null}
+                            <p>{t("dashboard.operationsStatus.lastProgress")}: {formatDateTime(row.supplier_import_last_progress_at || row.supplier_import_last_heartbeat_at)}</p>
+                          </div>
+                        </details>
+                      ) : null}
+                      {retryEnabled ? <Button variant="secondary" className="button--compact" onClick={() => void handleRetryRow(row)}>{t("common.retry")}</Button> : null}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         ) : !operationsErrorKey ? (
           <div className="chart-placeholder">
@@ -448,15 +433,20 @@ export function OperationsStatusPage() {
           </div>
         ) : null}
       </SectionCard>
-      <SectionCard
-        title={t("catalog.integrity.title")}
-        className="catalog-operations-center"
-        actions={
-          <Button variant="secondary" className="button--compact" onClick={() => void reloadOperationsStatus()} busy={loadingOperations} busyLabel={t("dashboard.operationsStatus.refreshing")}>
-            {t("catalog.integrity.refresh")}
-          </Button>
-        }
-      >
+      <details className="operations-secondary-details">
+        <summary>
+          <span>{t("catalog.integrity.title")}</span>
+          <small>{t("catalog.integrity.scorecardHowToReadTitle")}</small>
+        </summary>
+        <SectionCard
+          title={t("catalog.integrity.title")}
+          className="catalog-operations-center"
+          actions={
+            <Button variant="secondary" className="button--compact" onClick={() => void reloadOperationsStatus()} busy={loadingOperations} busyLabel={t("dashboard.operationsStatus.refreshing")}>
+              {t("catalog.integrity.refresh")}
+            </Button>
+          }
+        >
         {catalogIntegrity?.initialization_state === "not_initialized" ? <div className="warning-text">{t("catalog.integrity.notInitialized")}</div> : null}
         {catalogIntegrity?.initialization_state === "partial" ? <div className="warning-text">{t("catalog.integrity.partial")}</div> : null}
         {catalogIntegrity?.initialization_state === "running" ? (
@@ -585,7 +575,8 @@ export function OperationsStatusPage() {
           {catalogIntegrity?.last_catalog_change_at ? <span>{t("catalog.integrity.lastCatalogChange")}: <strong>{new Date(catalogIntegrity.last_catalog_change_at).toLocaleString(locale)}</strong></span> : null}
           {catalogIntegrity?.last_evaluated_at ? <span>{t("catalog.integrity.lastEvaluation")}: <strong>{new Date(catalogIntegrity.last_evaluated_at).toLocaleString(locale)}</strong></span> : null}
         </div>
-      </SectionCard>
+        </SectionCard>
+      </details>
     </PageShell>
   );
 }
