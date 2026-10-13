@@ -14,11 +14,17 @@ const [adminRecords, brandsApi, priceListsApi, priceLists] = await Promise.all([
 ]);
 
 test("admin price-list brand scope is limited to current published pointers", () => {
+  const listPriceListBrands = adminRecords.slice(
+    adminRecords.indexOf("async function listPriceListBrands"),
+    adminRecords.indexOf("async function listPriceListSettings"),
+  );
   assert.match(adminRecords, /resource === "priceListBrands"/);
   assert.match(adminRecords, /isAdminLikeRole\(caller\.role/);
-  assert.match(adminRecords, /supplier_current_price_pointers/);
-  assert.match(adminRecords, /supplier_price_publications/);
-  assert.match(adminRecords, /status: "eq\.published"/);
+  assert.match(listPriceListBrands, /supplier_current_price_pointers/);
+  assert.match(listPriceListBrands, /supplier_price_publications/);
+  assert.match(listPriceListBrands, /status: "eq\.published"/);
+  assert.match(listPriceListBrands, /buildRestUrl\(supabaseUrl, "brands", \{[\s\S]*id: `in\.\(\$\{brandIds\.join/);
+  assert.doesNotMatch(listPriceListBrands, /buildRestUrl\(supabaseUrl, "brands", \{[\s\S]*organization_id:/);
   assert.match(brandsApi, /fetchCloudPriceListBrands/);
   assert.match(priceLists, /fetchCloudPriceListBrands/);
   assert.match(priceLists, /downloadEligibilityHint/);

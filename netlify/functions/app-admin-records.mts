@@ -540,7 +540,6 @@ async function listPriceListBrands(supabaseUrl: string, serviceRoleKey: string, 
   return getJson<Array<Record<string, unknown>>>(
     buildRestUrl(supabaseUrl, "brands", {
       select: BRAND_COLUMNS,
-      organization_id: `eq.${organizationId}`,
       id: `in.(${brandIds.join(",")})`,
       order: "name.asc",
       limit: "5000",
