@@ -1388,6 +1388,14 @@ export function PortalPage() {
     }
 
     const latestPortalDraft = snapshot.salesOrders.find((row) => row.source_channel === "portal" && !row.portal_submitted_at);
+    // A file import is intentionally local until the customer saves it. A
+    // background snapshot can arrive while pricing chunks are still settling;
+    // never replace those unsaved lines with an empty history projection.
+    if (!latestPortalDraft && portalDraftLines.length) {
+      setPortalPriceListBrand((current) => current || snapshot.availableBrands[0] || "");
+      setOrderSearchBrand((current) => (current && snapshot.availableBrands.includes(current) ? current : ""));
+      return;
+    }
     setPortalOrderId(latestPortalDraft?.id || "");
     setPortalSalesOrderNo(latestPortalDraft?.sales_order_no || "");
     setPortalDraftLines(latestPortalDraft ? mapPortalSalesOrderToPreparedLines(latestPortalDraft) : []);
