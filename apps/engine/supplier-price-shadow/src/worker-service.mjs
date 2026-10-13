@@ -1,0 +1,195 @@
+// Operational lifecycle only. Reuses the verified v3 workflow and SQL outbox;
+// never publishes, creates fixtures, alters profiles or resets DBOS history.
+import {createServer} from 'node:http';
+import {setTimeout as delay} from 'node:timers/promises';
+import {requireShadowStagingHost} from './shadow-batch-contract.mjs';
+import {supabaseApiHeaders} from './supabase-headers.mjs';
+
+export const SERVICE_QUEUE_LIMITS = Object.freeze({globalConcurrency:1,workerConcurrency:1});
+const SERVICE_OPT_INS = ['SUPPLIER_PRICE_SERVICE_ENABLED','SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED',
+  'SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED','SUPPLIER_PRICE_SHARED_PREPARED_ENABLED',
+  'SUPPLIER_PRICE_SHADOW_PERSIST','SUPPLIER_PRICE_UPLOAD_VERIFICATION_ENABLED'];
+const STARTUP_CODES = new Set(['SHADOW_PERSIST_STAGING_HOST_REQUIRED','SERVICE_STAGING_ORIGIN',
+  'SERVICE_OPT_IN_REQUIRED','SERVICE_STAGING_SECRET_REQUIRED','SERVICE_STABLE_EXECUTOR_REQUIRED',
+  'SERVICE_CANARY_CONFIG_DENIED','SERVICE_PRIVATE_HISTORY_REQUIRED','SERVICE_BATCH_LIMIT',
+  'SERVICE_PORT','SERVICE_ARGUMENTS','SERVICE_CAPABILITY_NOT_CONFIRMED']);
+// Fixed codes and known nonsecret flag names only. Never serialize an Error,
+// provider message, stack, connection URL or environment value into host logs.
+export function serviceStartupFailure(error) {
+  const code=STARTUP_CODES.has(error?.message)?error.message:'SERVICE_STARTUP_UNCONFIRMED';
+  return {stage:'worker-service',status:'startup-failed',errorCode:code,
+    ...(code==='SERVICE_OPT_IN_REQUIRED'&&SERVICE_OPT_INS.includes(error?.configKey)?{configKey:error.configKey}:{}),
+    published:false};
+}
+export function serviceLogger(log=console.error) {
+  const emit=level=>()=>log(JSON.stringify({stage:'dbos-service',level,errorCode:'DBOS_OPERATION_REQUIRES_REVIEW',published:false}));
+  return {debug(){},info(){},warn:emit('warn'),error:emit('error')};
+}
+export const SERVICE_RPC_NAMES = new Set([
+  'claim_supplier_price_upload_verification','settle_supplier_price_upload_verification',
+  'begin_supplier_price_upload_verification','complete_supplier_price_verified_upload',
+  'claim_supplier_price_verified_handoff','ack_supplier_price_verified_handoff',
+  'get_supplier_price_verified_manifest','claim_supplier_price_verified_release_batch',
+  'get_supplier_price_release_status','get_supplier_price_validation_candidate',
+  'stage_supplier_price_release_batch','heartbeat_supplier_price_release_batch',
+  'finalize_supplier_price_release_shadow_batch','validate_supplier_price_release',
+]);
+
+const RELEASE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// A validated release has completed source verification and is waiting for a
+// separate publication decision. It is terminal for worker backpressure: the
+// failed DBOS execution must not keep the intake service degraded while the
+// release remains safely unpublished.
+const TERMINAL_RELEASE_STATUSES = new Set(['validated', 'staged', 'published']);
+
+// DBOS history is private and can outlive a Supabase staging target.  The
+// status RPC is executed against the worker's current target; a successful
+// lookup with no matching row therefore identifies an orphan from a previous
+// target, not an unresolved release in the current target.  Keep malformed
+// history fail-closed, and let RPC errors propagate so an outage never clears
+// review backpressure.
+export function reconcileFailedWorkflowHistory(failed, releaseStatusRows) {
+  const statusByRelease = new Map((Array.isArray(releaseStatusRows) ? releaseStatusRows : [])
+    .filter(row => RELEASE_ID.test(row?.id || ''))
+    .map(row => [row.id.toLowerCase(), row.status]));
+  return (Array.isArray(failed) ? failed : []).filter(workflow => {
+    const releaseId = workflow?.input?.[0]?.releaseId;
+    if (!RELEASE_ID.test(releaseId || '')) return true;
+    const status = statusByRelease.get(releaseId.toLowerCase());
+    return status !== undefined && !TERMINAL_RELEASE_STATUSES.has(status);
+  });
+}
+
+export function serviceConfig(env) {
+  const url=new URL(env.SUPABASE_URL||'https://invalid.invalid');
+  requireShadowStagingHost(url.href);
+  if(url.pathname!=='/'||url.search||url.hash)throw Error('SERVICE_STAGING_ORIGIN');
+  for(const name of SERVICE_OPT_INS) {
+    if(env[name]!=='1')throw Object.assign(Error('SERVICE_OPT_IN_REQUIRED'),{configKey:name});
+  }
+  if(!/^sb_secret_[A-Za-z0-9_-]+$/.test(env.SUPABASE_SERVICE_ROLE_KEY||''))throw Error('SERVICE_STAGING_SECRET_REQUIRED');
+  const executorId=env.SUPPLIER_PRICE_EXECUTOR_ID||'';
+  if(!/^[a-z][a-z0-9-]{5,79}$/.test(executorId)||executorId==='local')throw Error('SERVICE_STABLE_EXECUTOR_REQUIRED');
+  if(env.SUPPLIER_PRICE_EXPECTED_RELEASE_ID||env.SUPPLIER_PRICE_WORKFLOW_ID||env.SUPPLIER_PRICE_EXPIRY_TEST_ROLE
+    ||env.SUPPLIER_PRICE_SHADOW_PARTITION_MANIFEST||env.SUPPLIER_PRICE_RECOVERY_TEST_PAUSE_AFTER_STAGE==='1'
+    ||env.SUPPLIER_PRICE_SHADOW_DRAIN==='1')throw Error('SERVICE_CANARY_CONFIG_DENIED');
+  const database=new URL(env.DBOS_SYSTEM_DATABASE_URL||'https://invalid.invalid');
+  if(!['postgres:','postgresql:'].includes(database.protocol)||!database.hostname||!database.username
+    ||!database.password||database.pathname.length<2||database.hash
+    ||database.hostname.includes('zjgueqijumzlfioihnkt'))throw Error('SERVICE_PRIVATE_HISTORY_REQUIRED');
+  const batchSize=Number(env.SUPPLIER_PRICE_SHADOW_BATCH_SIZE||1000);
+  const port=Number(env.PORT||3000);
+  // This service is already hard-bound to the approved staging Supabase host.
+  // Automatic validation is on by default there and can be stopped explicitly
+  // without affecting upload admission or publication safety.
+  const autoValidate=env.SUPPLIER_PRICE_AUTO_VALIDATE_ENABLED!=='0';
+  if(!Number.isInteger(batchSize)||batchSize<1||batchSize>1000)throw Error('SERVICE_BATCH_LIMIT');
+  if(!Number.isInteger(port)||port<1||port>65535)throw Error('SERVICE_PORT');
+  // Disk-backed Render services use the default 30s termination window.
+  // Leave 10s for cleanup; the CLI hard deadline remains below that window.
+  return Object.freeze({executorId,port,batchSize,autoValidate,pollMs:10000,shutdownMs:20000,origin:url.origin});
+}
+
+// Same exact non-mutating service privilege probe as the real staging canary.
+// An HTTP 200 at the API root is insufficient and does not validate a secret.
+export async function servicePreflight({origin,key,fetchImpl=fetch}) {
+  const parsed = new URL(origin);
+  const v3 = parsed.hostname === 'kaxsqafdevabkxofwdod.supabase.co';
+  const rpc = v3 ? 'get_supplier_price_verified_manifest' : 'inspect_supplier_price_staging_fixture';
+  const body = v3
+    ? {input_release_id:'00000000-0000-0000-0000-000000000000',input_handoff_id:'00000000-0000-0000-0000-000000000000'}
+    : {input_run_id:'00000000-0000-0000-0000-000000000000'};
+  const response=await fetchImpl(origin+'/rest/v1/rpc/'+rpc,{
+    method:'POST',headers:supabaseApiHeaders(key,'application/json'),redirect:'error',
+    body:JSON.stringify(body),signal:AbortSignal.timeout(15000),
+  });
+  const data=await response.json().catch(()=>null);
+  if (v3) {
+    if(response.status!==400 || data?.code==='PGRST202')throw Error('SERVICE_CAPABILITY_NOT_CONFIRMED');
+  } else if(response.status!==400||data?.message!=='STAGING_FIXTURE_NOT_FOUND') {
+    throw Error('SERVICE_CAPABILITY_NOT_CONFIRMED');
+  }
+}
+
+export function createWorkerService({verify,dispatch,probe,validate,wait=delay,log=console.log,now=Date.now,pollMs=10000,historyTimeoutMs=5000}) {
+  const controller=new AbortController();
+  const state={phase:'starting',ready:false,stopping:false,completedCycles:0,lastSuccessAt:null,errorCode:null};
+  const snapshot=()=>({...state,published:false});
+  const stop=()=>{state.stopping=true;state.ready=false;state.phase='stopping';controller.abort();};
+  async function cycle() {
+    if(state.stopping)return;
+    state.ready=false;
+    // Intake is protected by SQL claim/lease RPCs and immutable workflow IDs.
+    // Do not make it depend on a DBOS history read: one orphaned or slow history
+    // query must never starve every later upload. Existing DBOS work remains
+    // durable and the queue limit still bounds execution.
+    if(state.stopping)return;
+    {
+      // Always drain source-verification first. A validation lookup or review
+      // failure must never prevent a newly completed upload from being claimed.
+      state.phase='verifying-source';
+      const verified=await verify();
+      if(!['empty','exhausted','verified'].includes(verified?.status)||verified.published!==false)
+        throw Error('SERVICE_VERIFICATION_RESPONSE');
+      if(state.stopping)return;
+      state.phase='dispatching';
+      const receipt=await dispatch();
+      if(!['empty','enqueued'].includes(receipt?.status)||receipt.published!==false)throw Error('SERVICE_DISPATCH_RESPONSE');
+      state.phase=receipt.status==='enqueued'?'enqueued':'idle'; // NEVER staged/published from ACK.
+      // Only when no source/handoff work was found may the service advance a
+      // staged release through idempotent validation. Errors are observable
+      // but non-blocking: the next verification cycle remains available.
+      if(verified.status!=='verified' && receipt.status==='empty' && typeof validate==='function'){
+        state.phase='validating-release';
+        try{
+          const validation=await validate();
+          if(validation?.status==='validated') state.phase='validated';
+          else if(validation?.status!=='empty') state.errorCode='SERVICE_VALIDATION_RESPONSE';
+        }catch{
+          state.errorCode='SERVICE_VALIDATION_UNCONFIRMED';
+          log(JSON.stringify({stage:'worker-service',status:'validation-degraded',errorCode:state.errorCode,published:false}));
+        }
+      }
+    }
+    state.lastSuccessAt=now();state.completedCycles++;state.errorCode=null;state.ready=true;
+  }
+  async function run() {
+    try {
+      while(!state.stopping) {
+        try{await cycle();}
+        catch(error){
+          state.ready=false;state.phase='degraded';
+          const message=String(error?.message||'');
+          const knownCode=message.match(/^(SERVICE_[A-Z0-9_]+|UPLOAD_[A-Z0-9_]+|VERIFIED_[A-Z0-9_]+|WORKFLOW_[A-Z0-9_]+)/)?.[1];
+          state.errorCode=message==='SERVICE_WORKFLOW_REQUIRES_REVIEW'?'WORKFLOW_REQUIRES_REVIEW':knownCode||'WORKER_CYCLE_UNCONFIRMED';
+          // Never emit raw provider bodies/credentials/customer data or stacks.
+          log(JSON.stringify({stage:'worker-service',status:'degraded',errorCode:state.errorCode,published:false}));
+        }
+        if(!state.stopping)await wait(pollMs,undefined,{signal:controller.signal}).catch(error=>{
+          if(!controller.signal.aborted)throw error;
+        });
+      }
+    }finally{state.ready=false;state.phase='stopped';}
+  }
+  return {run,cycle,stop,snapshot};
+}
+
+export async function startServiceHealth({service,port,host='0.0.0.0'}) {
+  const server=createServer((request,response)=>{
+    const route=request.url,known=route==='/healthz'||route==='/readyz';
+    const state=service.snapshot();
+    const ok=route==='/healthz'?!state.stopping:state.ready&&!state.stopping;
+    response.setHeader('Content-Type','application/json');response.setHeader('Cache-Control','no-store');
+    if(!['GET','HEAD'].includes(request.method)){response.writeHead(405);response.end();return;}
+    response.writeHead(known?(ok?200:503):404);
+    // Internal infrastructure probe, not a customer API or a publication receipt.
+    response.end(request.method==='HEAD'?undefined:JSON.stringify(known?{
+      status:ok?'ok':'unavailable',phase:state.phase,published:false,
+    }:{status:'not-found'}));
+  });
+  server.requestTimeout=5000;server.headersTimeout=5000;
+  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,host,resolve);});
+  const close=()=>new Promise((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
+  close.port=server.address().port;
+  return close;
+}
