@@ -27,6 +27,15 @@ const MAX_CATALOG_BATCHES = 2;
 const MAX_SUPPLIER_BATCHES = 2;
 const MAX_CATALOG_SYNC_BATCHES = 2;
 const MAX_RUNS_PER_TICK = 1;
+const MAX_TERMINAL_CATALOG_MARKERS_PER_TICK = 25;
+const TERMINAL_CATALOG_STATUSES = new Set([
+  "validation_failed",
+  "failed",
+  "cancelled",
+  "finalized",
+  "finalize_failed",
+  "succeeded",
+]);
 
 async function clearQueueMarker(supabaseUrl: string, serviceRoleKey: string, table: string, runId: string) {
   const url = new URL(`/rest/v1/${table}`, supabaseUrl);
@@ -39,8 +48,40 @@ async function clearQueueMarker(supabaseUrl: string, serviceRoleKey: string, tab
   });
 }
 
+async function clearTerminalCatalogQueueMarkers(supabaseUrl: string, serviceRoleKey: string) {
+  const url = new URL("/rest/v1/catalog_import_runs", supabaseUrl);
+  url.searchParams.set("select", "id,status");
+  url.searchParams.set("processing_queued_at", "not.is.null");
+  url.searchParams.set("status", "in.(validation_failed,failed,cancelled,finalized,finalize_failed,succeeded)");
+  url.searchParams.set("order", "processing_queued_at.asc");
+  url.searchParams.set("limit", String(MAX_TERMINAL_CATALOG_MARKERS_PER_TICK));
+
+  const runs = await getJson<Array<{ id: string; status: string }>>(url.toString(), {
+    headers: serviceRoleHeaders(serviceRoleKey),
+    timeoutMs: 12_000,
+  });
+  let cleared = 0;
+  for (const run of runs || []) {
+    try {
+      await clearQueueMarker(supabaseUrl, serviceRoleKey, "catalog_import_runs", run.id);
+      cleared += 1;
+    } catch (error) {
+      console.error("catalog import terminal queue marker cleanup deferred", run.id, error);
+    }
+  }
+  return cleared;
+}
+
 async function processCatalogRun(supabaseUrl: string, serviceRoleKey: string, run: QueuedCatalogRun) {
   let status = run.status;
+
+  // Validation/finalization can transition a run to a terminal state after
+  // the queue query has selected it. Clear the marker here as well as in the
+  // successful finalize branch so failed runs cannot remain queued forever.
+  if (TERMINAL_CATALOG_STATUSES.has(status)) {
+    await clearQueueMarker(supabaseUrl, serviceRoleKey, "catalog_import_runs", run.id);
+    return { runId: run.id, status, queueMarkerCleared: true };
+  }
 
   if (status === "running") {
     const validation = await sendJson<{ status?: string }>(`${supabaseUrl}/rest/v1/rpc/validate_catalog_import_system`, {
@@ -54,6 +95,11 @@ async function processCatalogRun(supabaseUrl: string, serviceRoleKey: string, ru
       timeoutMs: 55_000,
     });
     status = String(validation?.status || "");
+  }
+
+  if (TERMINAL_CATALOG_STATUSES.has(status)) {
+    await clearQueueMarker(supabaseUrl, serviceRoleKey, "catalog_import_runs", run.id);
+    return { runId: run.id, status, queueMarkerCleared: true };
   }
 
   if (status !== "validated" && status !== "finalizing") return { runId: run.id, status };
@@ -71,7 +117,8 @@ async function processCatalogRun(supabaseUrl: string, serviceRoleKey: string, ru
       }),
       timeoutMs: 55_000,
     });
-    if (latest?.status === "finalized" || latest?.has_more === false) {
+    const latestStatus = String(latest?.status || "");
+    if (TERMINAL_CATALOG_STATUSES.has(latestStatus) || latest?.has_more === false) {
       await clearQueueMarker(supabaseUrl, serviceRoleKey, "catalog_import_runs", run.id);
       break;
     }
@@ -176,6 +223,11 @@ export default async (_request: Request, context: Context) => {
   catalogSyncPendingUrl.searchParams.set("limit", String(MAX_RUNS_PER_TICK));
 
   const task = (async () => {
+    // A terminal run is intentionally excluded from the active queue below,
+    // so clean old markers in a bounded pass before claiming new work.
+    await clearTerminalCatalogQueueMarkers(supabaseUrl, serviceRoleKey).catch((error) => {
+      console.error("catalog import terminal queue marker scan deferred", error);
+    });
     const catalogRuns = await getJson<QueuedCatalogRun[]>(catalogUrl.toString(), { headers, timeoutMs: 12_000 });
     const supplierRuns = await getJson<QueuedSupplierRun[]>(supplierUrl.toString(), { headers, timeoutMs: 12_000 });
     const [catalogSyncRunningRuns, catalogSyncPendingRuns] = await Promise.all([

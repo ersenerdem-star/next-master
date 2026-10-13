@@ -41,6 +41,17 @@ test("scheduled worker owns catalog validation and finalization", () => {
   assert.match(worker, /processing_queued_at/);
 });
 
+test("terminal catalog runs clear stale queue markers", () => {
+  assert.match(worker, /validation_failed/);
+  assert.match(worker, /finalize_failed/);
+  assert.match(worker, /clearTerminalCatalogQueueMarkers/);
+  assert.match(worker, /processing_queued_at/);
+  assert.match(worker, /not\.is\.null/);
+  assert.match(worker, /TERMINAL_CATALOG_STATUSES\.has\(status\)/);
+  assert.match(worker, /queueMarkerCleared: true/);
+  assert.match(worker, /TERMINAL_CATALOG_STATUSES\.has\(latestStatus\)/);
+});
+
 test("catalog queue marker is tenant-scoped and idempotent", () => {
   const markerFunction = blockBetween(
     migration,
