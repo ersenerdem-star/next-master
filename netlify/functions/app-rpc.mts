@@ -1211,58 +1211,10 @@ export default async (req: Request, context: Context) => {
         timeoutMs: 8_000,
       });
 
-      const processingTask = (async () => {
-        try {
-          const run = await getJson<{
-            organization_id: string;
-            created_by: string | null;
-            status: string;
-          }[]>(`${supabaseUrl}/rest/v1/catalog_import_runs?select=organization_id,created_by,status&id=eq.${encodeURIComponent(runId)}&limit=1`, {
-            headers: serviceRoleHeaders(serviceRoleKey),
-            timeoutMs: 12_000,
-          });
-          const current = run[0];
-          if (!current?.organization_id || !current.created_by) return;
-
-          let latestStatus = current.status;
-          if (latestStatus === "running") {
-            const validation = await sendJson<{ status?: string }>(`${supabaseUrl}/rest/v1/rpc/validate_catalog_import_system`, {
-              method: "POST",
-              headers: serviceRoleHeaders(serviceRoleKey),
-              body: JSON.stringify({
-                input_run_id: runId,
-                input_organization_id: current.organization_id,
-                input_actor_id: current.created_by,
-              }),
-              timeoutMs: 55_000,
-            });
-            latestStatus = String(validation?.status || "");
-          }
-
-          if (latestStatus === "validated" || latestStatus === "finalizing") {
-            for (let batch = 0; batch < 4; batch += 1) {
-              const result = await sendJson<{ status?: string; has_more?: boolean }>(`${supabaseUrl}/rest/v1/rpc/finalize_catalog_import_batch_system`, {
-                method: "POST",
-                headers: serviceRoleHeaders(serviceRoleKey),
-                body: JSON.stringify({
-                  input_run_id: runId,
-                  input_organization_id: current.organization_id,
-                  input_actor_id: current.created_by,
-                  input_batch_size: 100,
-                }),
-                timeoutMs: 55_000,
-              });
-              if (result?.has_more === false || result?.status === "finalized") break;
-            }
-          }
-        } catch (error) {
-          // Never convert a transient background timeout into a user-visible
-          // failure. The persisted queue marker is the recovery source.
-          console.error("catalog import background processing deferred", runId, error);
-        }
-      })();
-
-      context.waitUntil(processingTask);
+      // The scheduled import-processing-worker is the sole owner of catalog
+      // validation and finalization. Do not start a second in-process task
+      // here: a slow Netlify invocation can overlap the worker and race on the
+      // same run lock, turning a recoverable queue hand-off into a timeout.
       return json({ ok: true, data: { queued: true, status: "queued", run_id: runId, organization_id: caller.organizationId } });
     }
 
