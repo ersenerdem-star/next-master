@@ -29,7 +29,7 @@
 
 [functions."portal-export-worker-background"]
   external_node_modules = ["@duckdb/node-api", "@duckdb/node-bindings", "@duckdb/node-bindings-linux-x64"]
-  included_files = ["node_modules/@duckdb/node-bindings-linux-x64/**"]
+  included_files = ["node_modules/@duckdb/node-bindings-linux-x64/**", "!node_modules/@duckdb/node-bindings-darwin-arm64/**"]
 
 [[headers]]
   for = "/*"
