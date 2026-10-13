@@ -32,3 +32,14 @@ export async function fetchCloudBrands(): Promise<BrandOption[]> {
 
   return brandsCachePromise;
 }
+
+/** Brands that can actually produce an admin A/B price-list export. */
+export async function fetchCloudPriceListBrands(): Promise<BrandOption[]> {
+  const data = await callAppAdminRecords<Array<Record<string, unknown>>>({
+    resource: "priceListBrands",
+    action: "list",
+  });
+  return (data || [])
+    .map((row) => ({ id: String(row.id || ""), name: String(row.name || "") }))
+    .filter((row) => row.id && row.name);
+}

@@ -1310,6 +1310,9 @@ export function CatalogPage() {
 
     try {
       const exportData = await fetchCatalogExportRows({ brandName: exportBrand, marketSegment: catalogSegment || undefined });
+      if (!exportData.length) {
+        throw new Error(t("catalog.errors.exportNoRows", { brand: exportBrand }));
+      }
       const exportRows = [
         ["Product_Code", "Brand", "EAN", "Product_Name", "Product_Name_TR", "OEM_No", "Vehicle", "Vehicle_Model", "HS_Code", "Origin", "Market_Segment", "Weight_kg", "Image_URL", "Lifecycle_Status", "Lifecycle_Note"],
         ...exportData.map((row) => [

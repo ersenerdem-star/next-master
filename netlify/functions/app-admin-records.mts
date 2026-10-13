@@ -486,6 +486,59 @@ async function listRows<T>(input: {
   );
 }
 
+/**
+ * Return only brands that have a current, published supplier-price pointer.
+ * The general brands resource intentionally includes every catalog brand, but
+ * the admin price-list export can only operate on a published release scope.
+ */
+async function listPriceListBrands(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
+  const pointers = await getJson<Array<{ brand_id?: string | null; publication_id?: string | null }>>(
+    buildRestUrl(supabaseUrl, "supplier_current_price_pointers", {
+      select: "brand_id,publication_id",
+      organization_id: `eq.${organizationId}`,
+      limit: "5000",
+    }),
+    { headers: serviceRoleHeaders(serviceRoleKey) },
+  );
+
+  const publicationIds = [...new Set(
+    pointers
+      .map((row) => String(row.publication_id || "").trim())
+      .filter(Boolean),
+  )];
+  if (!publicationIds.length) return [];
+
+  const published = await getJson<Array<{ id?: string | null }>>(
+    buildRestUrl(supabaseUrl, "supplier_price_publications", {
+      select: "id",
+      organization_id: `eq.${organizationId}`,
+      status: "eq.published",
+      id: `in.(${publicationIds.join(",")})`,
+      limit: "5000",
+    }),
+    { headers: serviceRoleHeaders(serviceRoleKey) },
+  );
+  const publishedIds = new Set(published.map((row) => String(row.id || "").trim()).filter(Boolean));
+  const brandIds = [...new Set(
+    pointers
+      .filter((row) => publishedIds.has(String(row.publication_id || "").trim()))
+      .map((row) => String(row.brand_id || "").trim())
+      .filter(Boolean),
+  )];
+  if (!brandIds.length) return [];
+
+  return getJson<Array<Record<string, unknown>>>(
+    buildRestUrl(supabaseUrl, "brands", {
+      select: BRAND_COLUMNS,
+      organization_id: `eq.${organizationId}`,
+      id: `in.(${brandIds.join(",")})`,
+      order: "name.asc",
+      limit: "5000",
+    }),
+    { headers: serviceRoleHeaders(serviceRoleKey) },
+  );
+}
+
 async function updateSingleRow<T>(input: {
   supabaseUrl: string;
   serviceRoleKey: string;
@@ -1227,6 +1280,14 @@ export default async (req: Request, _context: Context) => {
           organizationId: caller.organizationId,
           order: "name.asc",
         });
+        return json({ ok: true, data });
+      }
+    }
+
+    if (resource === "priceListBrands") {
+      if (!canUseCustomerRecords) return json({ error: "Staff access required" }, 403);
+      if (action === "list") {
+        const data = await listPriceListBrands(supabaseUrl, serviceRoleKey, caller.organizationId);
         return json({ ok: true, data });
       }
     }

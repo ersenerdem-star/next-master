@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
+import { fetchCloudPriceListBrands } from "../../infrastructure/api/brandsApi";
 import { fetchPriceListSettings, updateMarginPriceList } from "../../infrastructure/api/priceListsApi";
 import { downloadExportJob, startAdminPriceListExport, waitForExportJob } from "../../infrastructure/api/exportJobsApi";
 import type { BrandOption } from "../../types/brand";
@@ -28,7 +28,7 @@ export function PriceListsPage() {
 
     async function run() {
       try {
-        const [settings, brandRows] = await Promise.all([fetchPriceListSettings(), fetchCloudBrands()]);
+        const [settings, brandRows] = await Promise.all([fetchPriceListSettings(), fetchCloudPriceListBrands()]);
         if (cancelled) return;
         const a = settings.find((item) => item.listType === "A");
         const b = settings.find((item) => item.listType === "B");
@@ -145,6 +145,7 @@ export function PriceListsPage() {
           <Input value={marginB} placeholder={t("sales.priceLists.marginPlaceholder")} onChange={setMarginB} />
         </div>
       </div>
+      <p className="muted-text">{t("sales.priceLists.downloadEligibilityHint")}</p>
       <div className="toolbar toolbar--wrap">
         <Button onClick={() => void handleSaveMargins()} busy={savingMargins} busyLabel={t("common.saving")}>
           {t("sales.priceLists.saveMargins")}
