@@ -502,49 +502,13 @@ async function listRows<T>(input: {
  * the admin price-list export can only operate on a published release scope.
  */
 async function listPriceListBrands(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
-  const pointers = await getJson<Array<{ brand_id?: string | null; publication_id?: string | null }>>(
-    buildRestUrl(supabaseUrl, "supplier_current_price_pointers", {
-      select: "brand_id,publication_id",
-      organization_id: `eq.${organizationId}`,
-      limit: "5000",
-    }),
-    { headers: serviceRoleHeaders(serviceRoleKey) },
-  );
-
-  const publicationIds = [...new Set(
-    pointers
-      .map((row) => String(row.publication_id || "").trim())
-      .filter(Boolean),
-  )];
-  if (!publicationIds.length) return [];
-
-  const published = await getJson<Array<{ id?: string | null }>>(
-    buildRestUrl(supabaseUrl, "supplier_price_publications", {
-      select: "id",
-      organization_id: `eq.${organizationId}`,
-      status: "eq.published",
-      id: `in.(${publicationIds.join(",")})`,
-      limit: "5000",
-    }),
-    { headers: serviceRoleHeaders(serviceRoleKey) },
-  );
-  const publishedIds = new Set(published.map((row) => String(row.id || "").trim()).filter(Boolean));
-  const brandIds = [...new Set(
-    pointers
-      .filter((row) => publishedIds.has(String(row.publication_id || "").trim()))
-      .map((row) => String(row.brand_id || "").trim())
-      .filter(Boolean),
-  )];
-  if (!brandIds.length) return [];
-
-  return getJson<Array<Record<string, unknown>>>(
-    buildRestUrl(supabaseUrl, "brands", {
-      select: BRAND_COLUMNS,
-      id: `in.(${brandIds.join(",")})`,
-      order: "name.asc",
-      limit: "5000",
-    }),
-    { headers: serviceRoleHeaders(serviceRoleKey) },
+  return sendJson<Array<Record<string, unknown>>>(
+    `${supabaseUrl}/rest/v1/rpc/cloud_admin_price_list_brands`,
+    {
+      method: "POST",
+      headers: serviceRoleHeaders(serviceRoleKey),
+      body: JSON.stringify({ input_organization_id: organizationId }),
+    },
   );
 }
 
@@ -567,47 +531,23 @@ async function upsertPriceListSetting(
   payload: Record<string, unknown>,
 ) {
   const listType = String(payload.listType || "").trim().toUpperCase();
-  if (listType !== "A" && listType !== "B") throw new Error("Price list type must be A or B");
   const marginPercent = Number(payload.marginPercent);
+  if (listType !== "A" && listType !== "B") throw new Error("Price list type must be A or B");
   if (!Number.isFinite(marginPercent)) throw new Error("Price list margin must be numeric");
-
-  const existing = await listRows<Record<string, unknown>>({
-    supabaseUrl,
-    serviceRoleKey,
-    table: "customer_price_lists",
-    select: PRICE_LIST_COLUMNS,
-    organizationId,
-    order: "updated_at.desc",
-    extraParams: { is_active: "eq.true", list_type: `eq.${listType}`, limit: "1" },
-  });
-  const nextPayload = {
-    name: String(payload.name || `${listType} Price List`).trim() || `${listType} Price List`,
-    list_type: listType,
-    margin_percent: marginPercent,
-    is_manual: Boolean(payload.isManual),
-    is_active: true,
-    updated_at: new Date().toISOString(),
-  };
-  if (existing[0]?.id) {
-    const rows = await updateSingleRow<Record<string, unknown>>({
-      supabaseUrl,
-      serviceRoleKey,
-      table: "customer_price_lists",
-      select: PRICE_LIST_COLUMNS,
-      organizationId,
-      id: String(existing[0].id),
-      payload: nextPayload,
-    });
-    return rows[0] || null;
-  }
-
-  const rows = await insertSingleRow<Record<string, unknown>>({
-    supabaseUrl,
-    serviceRoleKey,
-    table: "customer_price_lists",
-    select: PRICE_LIST_COLUMNS,
-    payload: { organization_id: organizationId, ...nextPayload },
-  });
+  const rows = await sendJson<Array<Record<string, unknown>>>(
+    `${supabaseUrl}/rest/v1/rpc/cloud_admin_price_list_setting_upsert`,
+    {
+      method: "POST",
+      headers: serviceRoleHeaders(serviceRoleKey),
+      body: JSON.stringify({
+        input_organization_id: organizationId,
+        input_list_type: listType,
+        input_margin_percent: marginPercent,
+        input_name: String(payload.name || `${listType} Price List`),
+        input_is_manual: Boolean(payload.isManual),
+      }),
+    },
+  );
   return rows[0] || null;
 }
 
