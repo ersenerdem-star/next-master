@@ -42,6 +42,38 @@ export async function materializePagedExportWithDuckDB({fetchPage,binding,expect
  }catch(error){stream.destroy();throw error;}
 }
 
+// Read a sealed snapshot in large server-side batches. The normal page reader
+// is intentionally capped at the public export page size; the worker already
+// sealed and authorized this snapshot, so the private server path can avoid
+// repeating hundreds of Postgres round trips while building the same CSV.
+export async function materializeSealedSnapshotWithDuckDB({pool,snapshotId,binding,expectedRows,outputDir,tempDirectory=outputDir,batchSize=50000}){
+ if(!pool||typeof pool.connect!=='function'||typeof snapshotId!=='string'||typeof binding!=='string'||!Number.isSafeInteger(expectedRows)||expectedRows<1||expectedRows>10_000_000||!Number.isSafeInteger(batchSize)||batchSize<1||batchSize>100_000||typeof outputDir!=='string'||!outputDir||typeof tempDirectory!=='string'||!tempDirectory)throw Error('DUCKDB_SNAPSHOT_CONFIG_INVALID');
+ const inputPath=join(tempDirectory,'authorized-snapshot-input.csv');
+ const sortedPath=join(outputDir,'duckdb-export-sorted.csv');
+ const stream=createWriteStream(inputPath,{flags:'wx',mode:0o600});
+ stream.write('cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand\n');
+ const client=await pool.connect(); let processed=0,lastOrdinal=0;
+ try{
+  while(processed<expectedRows){
+   const result=await client.query('select ordinal::bigint as ordinal,payload from export_snapshot_private.rows where snapshot_id=$1 and ordinal>$2 order by ordinal limit $3',[snapshotId,lastOrdinal,batchSize]);
+   if(!result.rows.length)throw Error('DUCKDB_SNAPSHOT_COUNT_INVALID');
+   for(const row of result.rows){
+    const ordinal=Number(row.ordinal),payload=row.payload;
+    if(ordinal!==lastOrdinal+1||payload?.cursorKey!==String(ordinal).padStart(12,'0')||typeof payload.code!=='string'||typeof payload.brand!=='string'||typeof payload.currency!=='string'||typeof payload.price!=='string'||typeof payload.priceDate!=='string'||typeof payload.discontinued!=='boolean')throw Error('DUCKDB_SNAPSHOT_ROW_INVALID');
+    const line=[payload.cursorKey,payload.code,payload.description??'',payload.price,payload.currency,payload.priceDate,payload.discontinued?'true':'false',payload.replacementCode??'',payload.brand].map(csv).join(',')+'\n';
+    if(!stream.write(line))await once(stream,'drain');
+    lastOrdinal=ordinal; processed++;
+   }
+  }
+  stream.end(); await once(stream,'close');
+  const instance=await DuckDBInstance.create(':memory:',{memory_limit:'512MB',threads:'4',temp_directory:tempDirectory});
+  const connection=await instance.connect();
+  try{await connection.run(`copy (select cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand from read_csv_auto(${q(inputPath)},header=true,all_varchar=true,ignore_errors=false) order by cursor_key,code) to ${q(sortedPath)} (header,delimiter ',')`);}
+  finally{connection.disconnectSync();}
+  return {engine:'duckdb',binding,expectedRows,processedRows:processed,pageCount:Math.ceil(processed/batchSize),inputPath,sortedPath};
+ }finally{client.release();}
+}
+
 export async function readDuckDbExportCsv(path){
  if(typeof path!=='string'||!path)throw Error('DUCKDB_EXPORT_PATH_INVALID');
  return readFile(path,'utf8');

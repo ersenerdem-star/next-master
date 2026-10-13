@@ -8,8 +8,8 @@ import { createDurablePriceExportWorkflow, priceExportWorkflowId } from "../../.
 import { createJobPriceSnapshotReader } from "../../../apps/engine/supplier-price-shadow/src/export/job-price-snapshot-reader.mjs";
 import { createExportArtifactStore } from "../../../apps/engine/supplier-price-shadow/src/export/shared-export-artifact.mjs";
 import { createExportPartsStore } from "../../../apps/engine/supplier-price-shadow/src/export/shared-export-parts.mjs";
-import { exportBinding } from "../../../apps/engine/supplier-price-shadow/src/export/partitioned-price-export.mjs";
-import { createDuckDbPagedExportSource, materializePagedExportWithDuckDB } from "../../../apps/engine/supplier-price-shadow/src/export/duckdb-export-source.mjs";
+import { exportBinding, preparePriceExport, assemblePriceExport } from "../../../apps/engine/supplier-price-shadow/src/export/partitioned-price-export.mjs";
+import { createDuckDbPagedExportSource, materializeSealedSnapshotWithDuckDB } from "../../../apps/engine/supplier-price-shadow/src/export/duckdb-export-source.mjs";
 import { resolvePortalPriceListExportContext } from "./portal-orders.mts";
 import { canAccessOperationsModules } from "./roles.mts";
 import { getJson, serviceRoleHeaders } from "./http.mts";
@@ -302,40 +302,27 @@ export async function runV3PriceExportJob(jobId: string) {
     const spec = await reader.resolveAuthorizedInput(job.id);
     const binding = exportBinding(spec);
     duckdbExportDirectory = await mkdtemp(join("/tmp", "nm-duckdb-export-"));
-    const duckdbMaterialized = await materializePagedExportWithDuckDB({
-      fetchPage: (args: any) => reader.fetchPage({ ...args, spec }), binding, expectedRows: spec.expectedRows, pageSize: EXPORT_PAGE_SIZE,
+    const duckdbMaterialized = await materializeSealedSnapshotWithDuckDB({
+      pool, snapshotId: spec.snapshotId, binding, expectedRows: spec.expectedRows,
       outputDir: duckdbExportDirectory, tempDirectory: duckdbExportDirectory,
     });
     const duckdbFetchPage = createDuckDbPagedExportSource({
       sortedPath: duckdbMaterialized.sortedPath, binding, expectedRows: spec.expectedRows, pageSize: EXPORT_PAGE_SIZE,
     });
-    const stores = await (async () => ({
-      parts: createExportPartsStore({ supabaseUrl, serviceRoleKey, input: spec,
-        expectedSupabaseUrl: target.url, expectedProjectRef: target.ref, targetError: target.targetError }),
-      artifact: createExportArtifactStore({ supabaseUrl, serviceRoleKey, input: spec,
-        expectedSupabaseUrl: target.url, expectedProjectRef: target.ref, targetError: target.targetError }),
-    }))();
-    const DBOS = { workflowID: priceExportWorkflowId(job.id, binding), runStep: async (fn: any) => fn() } as any;
-    const workflow = createDurablePriceExportWorkflow({
-      DBOS,
-      resolveAuthorizedInput: reader.resolveAuthorizedInput,
-      createStores: async () => stores,
-      fetchPage: duckdbFetchPage,
-      progress: async (event: any) => {
-        if (event.stage === "ready") {
-          await patchJob(supabaseUrl, serviceRoleKey, job.id, {
-            progress_done: event.processedRows, progress_total: event.totalRows, row_count: event.totalRows,
-            progress_message: "V3 export file is ready.",
-          }, { leaseOwner });
-        } else if (event.processedRows != null) {
-          await patchJob(supabaseUrl, serviceRoleKey, job.id, {
-            progress_done: event.processedRows, progress_total: event.totalRows ?? null, row_count: event.processedRows,
-            progress_message: `V3 export ${event.stage || "processing"}: ${Number(event.processedRows).toLocaleString("en-US")} rows.`,
-          }, { leaseOwner });
-        }
-      },
-    });
-    const ready = await workflow({ jobId: job.id, binding });
+    const artifact = createExportArtifactStore({ supabaseUrl, serviceRoleKey, input: spec,
+      expectedSupabaseUrl: target.url, expectedProjectRef: target.ref, targetError: target.targetError });
+    const localProgress = async (event: any) => {
+      if (event.processedRows != null) {
+        await patchJob(supabaseUrl, serviceRoleKey, job.id, {
+          progress_done: event.processedRows, progress_total: event.totalRows ?? spec.expectedRows, row_count: event.processedRows,
+          progress_message: `V3 export ${event.stage || "processing"}: ${Number(event.processedRows).toLocaleString("en-US")} rows.`,
+        }, { leaseOwner });
+      }
+    };
+    const prepared = await preparePriceExport({ input: spec, directory: duckdbExportDirectory, fetchPage: duckdbFetchPage, progress: localProgress });
+    if (!prepared?.manifest || prepared.manifest.rows !== spec.expectedRows) throw new Error("V3_EXPORT_PREPARED_METADATA_INVALID");
+    const receipt = await assemblePriceExport({ input: spec, directory: duckdbExportDirectory, progress: localProgress });
+    const ready = await artifact.commit({ file: join(duckdbExportDirectory, receipt.file), receipt });
     if (!ready || ready.contentType !== MIME || ready.rows !== spec.expectedRows) throw new Error("V3_EXPORT_RECEIPT_INVALID");
     const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
     const brandName = String(job.scope?.brandName || spec.brand);
