@@ -7,12 +7,12 @@ const migrationPath = new URL(
   import.meta.url,
 );
 const rpcPath = new URL("../../netlify/functions/app-rpc.mts", import.meta.url);
-const catalogPagePath = new URL("../../apps/web/src/presentation/pages/CatalogPage.tsx", import.meta.url);
+const operationsPagePath = new URL("../../apps/web/src/modules/admin/OperationsStatusPage.tsx", import.meta.url);
 
-const [migration, rpcGateway, catalogPage] = await Promise.all([
+const [migration, rpcGateway, operationsPage] = await Promise.all([
   readFile(migrationPath, "utf8"),
   readFile(rpcPath, "utf8"),
-  readFile(catalogPagePath, "utf8"),
+  readFile(operationsPagePath, "utf8"),
 ]);
 
 test("Catalog Operations Status keeps full-catalog health separate from projection coverage", () => {
@@ -40,7 +40,7 @@ test("catalog writes maintain operations counters transactionally", () => {
 
 test("gateway and UI expose brand operations analysis", () => {
   assert.match(rpcGateway, /"get_catalog_operations_brand_status"/);
-  assert.match(catalogPage, /fetchCatalogOperationsBrandStatus/);
-  assert.match(catalogPage, /catalog-brand-operations/);
-  assert.match(catalogPage, /missing_vehicle_count/);
+  assert.match(operationsPage, /fetchCatalogOperationsBrandStatus/);
+  assert.match(operationsPage, /catalog-brand-operations/);
+  assert.match(operationsPage, /missing_vehicle_count/);
 });
