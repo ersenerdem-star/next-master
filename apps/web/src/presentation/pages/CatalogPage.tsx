@@ -16,7 +16,7 @@ import {
 import { fetchCatalogProductMedia } from "../../infrastructure/api/catalogMediaApi";
 import { fetchCatalogProductDetails } from "../../infrastructure/api/catalogDetailsApi";
 import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenceUsage } from "../../infrastructure/api/codeReferencesApi";
-import { bulkImportCatalogStream, type CatalogImportResult, type CatalogImportStageOnlyResult } from "../../infrastructure/api/importApi";
+import { bulkImportCatalogStorage, bulkImportCatalogStream, catalogStorageImportEnabled, type CatalogImportResult, type CatalogImportStageOnlyResult } from "../../infrastructure/api/importApi";
 import { stageBilsteinGroupProducts } from "../../infrastructure/api/bilsteinGroupProductStageApi";
 import { matchesOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import type { BrandOption } from "../../types/brand";
@@ -1053,6 +1053,25 @@ export function CatalogPage() {
     try {
       const selectedImportBrand = importBrand === "__new__" ? importBrandName.trim() : importBrand.trim();
       const selectedImportSegment = normalizeCatalogMarketSegment(importCatalogSegment);
+
+      // Large files use the private Storage/worker path once the operator has
+      // supplied an explicit scope. Small files and auto-detected scopes keep
+      // the existing browser stream until the staging worker is enabled.
+      if (catalogStorageImportEnabled && file.size >= 5 * 1024 * 1024 && (!selectedImportBrand || !selectedImportSegment)) {
+        throw new Error("Large catalog files require a selected brand and market segment before upload.");
+      }
+      if (catalogStorageImportEnabled && file.size >= 5 * 1024 * 1024 && selectedImportBrand && selectedImportSegment) {
+        actionFeedback.begin(t("catalog.status.importingForBrand", { brand: selectedImportBrand }));
+        const storageResult = await bulkImportCatalogStorage(file, {
+          brandName: selectedImportBrand,
+          marketSegment: selectedImportSegment,
+        });
+        setShowImportDialog(false);
+        setImportFile(null);
+        setStatus(`Catalog file uploaded to private Storage for ${selectedImportBrand}. Run ${storageResult.runId} is being processed by the catalog worker.`);
+        actionFeedback.succeed("Catalog upload accepted. Background processing continues.");
+        return;
+      }
       setStatus("Catalog file is being scanned without loading the full file into memory…");
 
       const indexOfAny = (header: string[], ...names: string[]) =>

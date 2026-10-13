@@ -1,0 +1,19 @@
+services:
+  - type: worker
+    name: next-master-catalog-import-staging
+    runtime: docker
+    dockerfilePath: ./apps/engine/catalog-import/Dockerfile
+    dockerContext: .
+    branch: codex/price-engine-integration
+    autoDeploy: false
+    envVars:
+      - key: NM_FULL_STAGING_TARGET
+        value: kaxsqafdevabkxofwdod
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DBOS_SYSTEM_DATABASE_URL
+        sync: false
+      - key: CATALOG_IMPORT_WORKER_ID
+        sync: false
