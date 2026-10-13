@@ -528,6 +528,7 @@ export async function fetchSupplierExportRows(input: { supplierId: string; brand
   if (!input.supplierId) {
     throw new Error("Supplier is required for supplier export");
   }
+  const organizationId = await getCurrentOrgId();
   const brandName = normalizeBrandName(input.brandName);
   if (!brandName) {
     throw new Error("Brand is required for supplier export");
@@ -536,6 +537,7 @@ export async function fetchSupplierExportRows(input: { supplierId: string; brand
   const { data: brandRow, error: brandError } = await supabaseClient
     .from("brands")
     .select("id,name")
+    .eq("organization_id", organizationId)
     .ilike("name", brandName)
     .limit(1)
     .maybeSingle();
@@ -558,6 +560,7 @@ export async function fetchSupplierExportRows(input: { supplierId: string; brand
       let query = supabaseClient
         .from("supplier_prices")
         .select("id,product_code,description,oem_no,buy_price,currency,valid_from,moq,order_multiple,lead_time_days,notes")
+        .eq("organization_id", organizationId)
         .eq("supplier_id", input.supplierId)
         .eq("brand_id", brandRow.id)
         .eq("is_active", true)
