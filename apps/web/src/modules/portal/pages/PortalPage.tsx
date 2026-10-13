@@ -2458,6 +2458,7 @@ export function PortalPage() {
         result.fileName || `${sanitizeFileName(`portal-price-list-${portalPriceListBrand}`)}.xlsx`,
         result.signedUrl,
         result.fallbackUrl,
+        result.byteSize,
       );
       const rowCount = result.rowCount || readyJob.rowCount;
       const rowCountLabel = rowCount ? ` (${rowCount.toLocaleString()} rows)` : "";

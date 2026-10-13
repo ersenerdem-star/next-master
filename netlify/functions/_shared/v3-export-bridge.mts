@@ -9,6 +9,7 @@ import { createExportArtifactStore } from "../../../apps/engine/supplier-price-s
 import { exportBinding, preparePriceExport, assemblePriceExport } from "../../../apps/engine/supplier-price-shadow/src/export/partitioned-price-export.mjs";
 import { createDuckDbPagedExportSource, materializeSealedSnapshotWithDuckDB } from "../../../apps/engine/supplier-price-shadow/src/export/duckdb-export-source.mjs";
 import { resolvePortalPriceListExportContextFromDb } from "./v3-export-pricing-context.mts";
+import { createThrottledExportProgress } from "./v3-export-progress.mts";
 import { canAccessOperationsModules } from "./roles.mts";
 import { getJson, serviceRoleHeaders } from "./http.mts";
 import { V3_REF, PROD_REF, targetConfig, assertV3ExportAllowed, required } from "./v3-export-dispatch.mts";
@@ -268,19 +269,23 @@ export async function runV3PriceExportJob(jobId: string) {
     });
     const artifact = createExportArtifactStore({ supabaseUrl, serviceRoleKey, input: spec,
       expectedSupabaseUrl: target.url, expectedProjectRef: target.ref, targetError: target.targetError });
+    const throttledProgress = createThrottledExportProgress({
+      expectedRows: spec.expectedRows,
+      report: async (event) => {
+        await patchJob(supabaseUrl, serviceRoleKey, job.id, {
+          progress_done: event.processedRows, progress_total: event.totalRows, row_count: event.processedRows,
+          progress_message: `V3 export ${event.stage}: ${Number(event.processedRows).toLocaleString("en-US")} rows.`,
+        }, { leaseOwner });
+      },
+    });
     const localProgress = async (event: any) => {
-      if (event.processedRows != null) {
-        try {
-          await patchJob(supabaseUrl, serviceRoleKey, job.id, {
-            progress_done: event.processedRows, progress_total: event.totalRows ?? spec.expectedRows, row_count: event.processedRows,
-            progress_message: `V3 export ${event.stage || "processing"}: ${Number(event.processedRows).toLocaleString("en-US")} rows.`,
-          }, { leaseOwner });
-        } catch (error) {
-          if (error instanceof Error && error.message === "V3_EXPORT_LEASE_LOST") throw error;
-          // Telemetry is advisory. The sealed snapshot, local receipt and
-          // final fenced update determine whether the export succeeded.
-          console.warn("V3_EXPORT_PROGRESS_RETRY", job.id);
-        }
+      try {
+        await throttledProgress(event);
+      } catch (error) {
+        if (error instanceof Error && error.message === "V3_EXPORT_LEASE_LOST") throw error;
+        // Telemetry is advisory. The sealed snapshot, local receipt and
+        // final fenced update determine whether the export succeeded.
+        console.warn("V3_EXPORT_PROGRESS_RETRY", job.id);
       }
     };
     const prepared = await preparePriceExport({ input: spec, directory: duckdbExportDirectory, fetchPage: duckdbFetchPage, progress: localProgress });
