@@ -46,6 +46,7 @@ import type { ProductMediaItem } from "../../../presentation/components/common/P
 import { parseOrderImportFile } from "../../../shared/orderImport";
 import { CustomerDeskHome } from "../components/CustomerDeskHome";
 import { PortalSearchResults } from "../components/PortalSearchResults";
+import { isPortalSnapshotForEmail } from "../portalSessionIdentity";
 
 const buildMeta = __APP_BUILD_META__;
 const buildContextMeta = {
@@ -585,15 +586,24 @@ export function PortalPage() {
     portalOrderMutationSettledAtRef.current = Date.now();
   }
   const portalDesktopFrameRef = useRef<HTMLDivElement | null>(null);
+  const [storedSessionEmail] = useState(() =>
+    typeof window === "undefined" ? "" : readStoredCredentials()?.email || "",
+  );
   const [credentials, setCredentials] = useState<PortalCredentials>(() => {
-    const stored = typeof window !== "undefined" ? readStoredCredentials() : null;
     return {
-      email: portalLinkEmail || stored?.email || "",
+      email: portalLinkEmail || storedSessionEmail,
       password: "",
       sessionToken: "",
     };
   });
   const [snapshot, setSnapshot] = useState<PortalSnapshot | null>(null);
+  const [restoringSession, setRestoringSession] = useState(() =>
+    Boolean(
+      storedSessionEmail &&
+      !portalResetToken &&
+      (!portalLinkEmail || portalLinkEmail.trim().toLowerCase() === storedSessionEmail.trim().toLowerCase()),
+    ),
+  );
   // Order history is intentionally compact. Keep hydrated/optimistic order
   // details outside the snapshot so a background refresh can never blank an
   // open order while it replaces metadata.
@@ -703,6 +713,49 @@ export function PortalPage() {
       window.removeEventListener("offline", syncOnlineState);
     };
   }, []);
+
+  useEffect(() => {
+    if (!restoringSession) return;
+    if (!isOnline) {
+      setRestoringSession(false);
+      return;
+    }
+
+    let cancelled = false;
+    // The browser keeps the HttpOnly session cookie across a build reload.
+    // Restore from the server instead of asking for the password again.
+    fetchPortalSnapshot({ email: storedSessionEmail, password: "", sessionToken: "" })
+      .then(({ snapshot: next }) => {
+        if (cancelled) return;
+        if (!isPortalSnapshotForEmail(next, storedSessionEmail)) {
+          // A different portal account may have replaced this origin's cookie
+          // in another tab. Never attach its data to this tab's saved email
+          // or account-scoped draft.
+          portalCachedDraftRef.current = null;
+          writeStoredCredentials(null);
+          setError("Portal account changed. Sign in again.");
+          return;
+        }
+        portalAutoRefreshKeyRef.current = storedSessionEmail;
+        setSnapshot(next);
+        setActiveSection(getDefaultPortalSection(next));
+        setBackgroundMessage(portalSnapshotFeedback(next, "").message);
+      })
+      .catch((caught) => {
+        if (cancelled) return;
+        const message = caught instanceof Error ? caught.message : "";
+        if (/session (expired|is no longer active)|email and password are required/i.test(message)) {
+          writeStoredCredentials(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setRestoringSession(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOnline, restoringSession, storedSessionEmail, setBackgroundMessage]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1464,6 +1517,16 @@ export function PortalPage() {
       cancelled = true;
     };
   }, [portalPreview]);
+
+  if (!snapshot && restoringSession) {
+    return (
+      <div className="portal-shell portal-shell--login">
+        <div className="portal-login-layout">
+          <div className="portal-login-card" role="status">Restoring your portal session...</div>
+        </div>
+      </div>
+    );
+  }
 
   if (!snapshot) {
     const loginBrandLogo = loginBranding?.companyProfile?.logo_data_url || "";

@@ -92,6 +92,14 @@ type PortalCatalogSearchResponse = {
   recommendations: PortalCatalogSearchItem[];
 };
 
+type PublishedPortalPriceSearchRow = {
+  product_code: string;
+  normalized_code: string;
+  description: string | null;
+  buy_price: number | string;
+  price_date: string;
+};
+
 export type PortalPriceListRow = {
   product_code: string;
   brand: string;
@@ -1273,6 +1281,65 @@ async function resolveBrandMap(supabaseUrl: string, serviceRoleKey: string, orga
   return value;
 }
 
+async function searchPublishedPortalPricesWithoutCatalog(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  invite: PortalInviteRow,
+  brandId: string,
+  brandName: string,
+  search: string,
+): Promise<PortalCatalogSearchResponse | null> {
+  // Only a selected brand and an ASCII SKU prefix can use the release index.
+  // OEM, vehicle and description searches still require governed catalog data.
+  if (search && !/^[A-Za-z0-9][A-Za-z0-9._/+-]{0,63}$/.test(search)) return null;
+
+  // A normal catalog brand must keep its existing search and lifecycle rules,
+  // including when the particular query has no catalog matches.
+  const catalogRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "catalog_products", {
+    select: "id",
+    organization_id: `eq.${invite.organization_id}`,
+    brand_id: `eq.${brandId}`,
+    limit: "1",
+  }, PORTAL_SEARCH_REST_TIMEOUT_MS);
+  if (catalogRows.length) return null;
+
+  const released = await callRpc<PublishedPortalPriceSearchRow[]>(
+    supabaseUrl, serviceRoleKey, "cloud_portal_published_price_search_page_v3", {
+      input_organization_id: invite.organization_id,
+      input_brand_id: brandId,
+      input_code_prefix: search,
+      input_limit: 24,
+    }, PORTAL_SEARCH_PRICE_REST_TIMEOUT_MS,
+  );
+  if (!Array.isArray(released) || !released.length) return { items: [], recommendations: [] };
+
+  const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite, "fresh");
+  const prefix = exactSkuKey(search);
+  const seen = new Set<string>();
+  const items: PortalCatalogSearchItem[] = [];
+  for (const row of released) {
+    const code = String(row.product_code || "").trim();
+    const key = exactSkuKey(code);
+    const buyPrice = Number(row.buy_price);
+    if (!key || seen.has(key) || (prefix && !key.startsWith(prefix))
+      || String(row.normalized_code || "") !== key
+      || !Number.isFinite(buyPrice) || buyPrice <= 0) continue;
+    seen.add(key);
+    items.push({
+      code,
+      brand: brandName,
+      description: String(row.description || ""),
+      oem_no: "", vehicle: "", tariff: "", origin: "", weight_kg: null, image_url: "",
+      sell_price: computeSellFromBuy(buyPrice, context),
+      currency: context.currency,
+      // The release has no governed lifecycle or warehouse availability data.
+      lifecycle_status: null, lifecycle_note: null, available_qty: null,
+    });
+    if (items.length >= 24) break;
+  }
+  return { items, recommendations: [] };
+}
+
 export async function searchPortalCatalog(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -1538,7 +1605,16 @@ export async function searchPortalCatalog(
   }
   rows = filterCatalogRowsBySearchRelevance(rows, search, replacementRowsByKey);
   const baseItems = mapCatalogRowsToBaseItems(rows, brandMap, replacementRowsByKey).slice(0, 24);
-  if (!baseItems.length) return { items: [], recommendations: [] };
+  if (!baseItems.length) {
+    if (selectedBrandId && searchField === "part_number") {
+      const published = await searchPublishedPortalPricesWithoutCatalog(
+        supabaseUrl, serviceRoleKey, invite, selectedBrandId,
+        brandMap.byId.get(selectedBrandId) || brand, search,
+      );
+      if (published) return published;
+    }
+    return { items: [], recommendations: [] };
+  }
   const pricingContext = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
   const items = await hydratePortalCatalogItems(
     supabaseUrl, serviceRoleKey, invite, pricingContext, baseItems, PORTAL_SEARCH_PRICE_REST_TIMEOUT_MS,

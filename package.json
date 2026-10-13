@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "npm --workspace apps/web run dev",
     "build": "npm --workspace apps/web run build",
+    "prepare:netlify:duckdb-linux": "node scripts/ops/prepare-netlify-duckdb-linux.mjs",
+    "deploy:staging:v3": "npm run build && node scripts/ops/with-netlify-linux-duckdb.mjs -- ./node_modules/.bin/netlify deploy --prod --site 6778214b-94e6-4e4a-8a01-99afc80200bd --context production --json",
     "preview": "npm --workspace apps/web run preview",
     "audit:hygiene": "node scripts/check-worktree-hygiene.mjs",
     "audit:hygiene:strict": "node scripts/check-worktree-hygiene.mjs --strict",
