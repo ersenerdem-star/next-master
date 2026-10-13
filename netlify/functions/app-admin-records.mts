@@ -1285,7 +1285,7 @@ export default async (req: Request, _context: Context) => {
     }
 
     if (resource === "priceListBrands") {
-      if (!canUseCustomerRecords) return json({ error: "Staff access required" }, 403);
+      if (!canUseOperationsModules) return json({ error: "Operations access required" }, 403);
       if (action === "list") {
         const data = await listPriceListBrands(supabaseUrl, serviceRoleKey, caller.organizationId);
         return json({ ok: true, data });
