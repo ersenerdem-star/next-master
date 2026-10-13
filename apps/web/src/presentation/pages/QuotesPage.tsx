@@ -1830,6 +1830,7 @@ export function QuotesPage({
         customerType,
         marginA: effectiveMarginA,
         marginB: effectiveMarginB,
+        currency,
         onlyFillBlanks: resyncOnlyFillBlanks,
         keepPrices: resyncKeepPrices,
       });

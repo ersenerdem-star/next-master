@@ -20,6 +20,7 @@ export type SalesOrderCatalogSyncOptions = {
   customerType: "A" | "B" | "C" | "Other";
   marginA: number;
   marginB: number;
+  currency?: string;
   onlyFillBlanks?: boolean;
   keepPrices?: boolean;
   hydrateMissingPricesIfKeepingPrices?: boolean;
@@ -146,6 +147,7 @@ export async function resyncSalesOrderLinesFromCatalog(
 ): Promise<QuoteBuilderLine[]> {
   const onlyFillBlanks = options.onlyFillBlanks !== false;
   const keepPrices = options.keepPrices !== false;
+  if (!keepPrices) requireRepricingCurrency(options.currency);
 
   // Code References are applied when a new quote line is resolved. A saved
   // order can outlive that lookup, so resync must explicitly re-read the
@@ -227,6 +229,8 @@ async function refreshLinePricesFromCatalog(
   options: SalesOrderCatalogSyncOptions,
   onlyFillBlanks: boolean,
 ) {
+  const reprice = options.keepPrices === false;
+  const itemName = `${canonicalizeBrandName(line.brand || "") || line.brand} ${line.resolvedCode || line.requestedCode}`.trim();
   try {
     const { resolved, supplierOptions } = await resolveQuoteLine({
       code: line.resolvedCode || line.requestedCode,
@@ -237,14 +241,33 @@ async function refreshLinePricesFromCatalog(
       includeSupplierOptions: true,
     });
 
-    const selectedSupplierName = getSelectedSupplierName(line);
-    const selected =
-      supplierOptions.find((option) => String(option.supplier_name || "").trim().toLowerCase() === selectedSupplierName) ||
-      supplierOptions[0] ||
-      null;
+    const selectedFromSavedOptions = line.supplierOptions.find((option, index) =>
+      `${option.supplier_name}-${index}` === line.selectedSupplierKey) || null;
+    const savedSupplierName = String(line.supplier_name || "").trim().toLowerCase();
+    const selectedSupplierName = reprice
+      ? savedSupplierName || String(selectedFromSavedOptions?.supplier_name || "").trim().toLowerCase()
+      : getSelectedSupplierName(line);
+    const selectedSupplierId = reprice ? String(selectedFromSavedOptions?.supplier_id || "").trim() : "";
+    if (reprice && selectedFromSavedOptions && savedSupplierName
+        && String(selectedFromSavedOptions.supplier_name || "").trim().toLowerCase() !== savedSupplierName) {
+      throw new Error("The saved supplier selection is inconsistent.");
+    }
+    const matchingOptions = supplierOptions.filter((option) => selectedSupplierId
+      ? String(option.supplier_id || "").trim() === selectedSupplierId
+      : String(option.supplier_name || "").trim().toLowerCase() === selectedSupplierName);
+    const selected = reprice
+      ? matchingOptions.length === 1 ? matchingOptions[0] : null
+      : matchingOptions[0] || supplierOptions[0] || null;
+    if (reprice && (!resolved.found
+        || exactProductCode(resolved.product_code) !== exactProductCode(line.resolvedCode || line.requestedCode)
+        || !selectedSupplierName || !selected
+        || !Number.isFinite(Number(selected.buy_price)) || Number(selected.buy_price) <= 0
+        || !Number.isFinite(Number(selected.sell_price)) || Number(selected.sell_price) <= 0)) {
+      throw new Error("No exact current price exists for the saved supplier and SKU.");
+    }
     const quantityAdjustment = normalizeOrderQuantity(line.qty, selected || {});
 
-    const nextSellPrice = selected?.sell_price ?? resolved.sell_price ?? line.sell_price;
+    const nextSellPrice = reprice ? selected!.sell_price : selected?.sell_price ?? resolved.sell_price ?? line.sell_price;
 
     const refreshed = mergeCatalogMetadata(
       {
@@ -268,7 +291,7 @@ async function refreshLinePricesFromCatalog(
       ...refreshed,
       brand: canonicalizeBrandName(resolved.brand || refreshed.brand || line.brand || "") || refreshed.brand || line.brand,
       supplier_name: selected?.supplier_name || resolved.supplier_name || line.supplier_name,
-      buy_price: selected?.buy_price ?? resolved.buy_price ?? line.buy_price,
+      buy_price: reprice ? selected!.buy_price : selected?.buy_price ?? resolved.buy_price ?? line.buy_price,
       sell_price: nextSellPrice,
       qty: quantityAdjustment.corrected,
       requested_qty: quantityAdjustment.adjusted ? quantityAdjustment.requested : null,
@@ -278,12 +301,16 @@ async function refreshLinePricesFromCatalog(
       quantity_adjustment_note: quantityAdjustment.adjusted
         ? `Order amount ${quantityAdjustment.requested} pcs corrected to ${quantityAdjustment.corrected} pcs by supplier quantity rule.`
         : null,
-      c_sell_price: line.c_sell_price,
-      price_date: selected?.price_date || resolved.price_date || line.price_date,
-      supplierOptions: supplierOptions.length ? supplierOptions : line.supplierOptions,
+      c_sell_price: reprice ? null : line.c_sell_price,
+      price_date: reprice ? String(selected!.price_date || "") : selected?.price_date || resolved.price_date || line.price_date,
+      supplierOptions: reprice ? supplierOptions : supplierOptions.length ? supplierOptions : line.supplierOptions,
       selectedSupplierKey: selected ? `${selected.supplier_name}-${supplierOptions.indexOf(selected)}` : line.selectedSupplierKey,
     } satisfies QuoteBuilderLine;
-  } catch {
+  } catch (error) {
+    if (reprice) {
+      const reason = error instanceof Error ? error.message : "Current price lookup failed.";
+      throw new Error(`Current supplier price refresh failed for ${itemName}: ${reason}`);
+    }
     return line;
   }
 }
