@@ -56,8 +56,9 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
       // Must be the existing server-owned context resolver, never browser fields.
       const p=await resolvePortalContext({client,invite:actor,brandName:brand.name});
       if(p?.organizationId!==job.organization_id||p.inviteId!==actor.id||p.customerId!==customer.id||p.brandId!==brand.id||p.brandName!==brand.name)fail('CONTEXT_SCOPE');
-      if(!['A','B'].includes(p.priceListType))fail('PRICING_TYPE_UNSUPPORTED'); // no C/Other -> A coercion
+      if(!['A','B','Other'].includes(p.priceListType))fail('PRICING_TYPE_UNSUPPORTED');
       margin=p.priceListType==='B'?p.effectiveMarginB:p.effectiveMarginA;currency=p.currency;
+      if(currency!=='EUR')fail('CURRENCY_UNSUPPORTED');
       if(typeof margin!=='number'||!Number.isFinite(margin)||s.priceListType!==p.priceListType||s.marginPercent!==margin||s.currency!==currency)fail('PRICING_CHANGED');
       requesterId=actor.id;customerId=customer.id;
       context={priceListType:p.priceListType,margin,currency,unit:'percent',customerUpdatedAt:customer.updated_at,
@@ -133,7 +134,7 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
     };
     if(total!=null) spec=makeSpec(total);
     if(processed>0&&total==null){
-      const header=await withShortTransaction(client=>client.query(`select total_count::text from public.${fn}($1,$2,$3,$4,null,null,$5) limit 1`,[a.job.organization_id,a.brand.id,a.context.priceListType,a.context.margin,pageSize]).then(result=>result.rows[0]));
+      const header=await withShortTransaction(client=>client.query(`select total_count::text from public.${fn}($1,$2,$3,$4,null,null,$5) limit 1`,[a.job.organization_id,a.brand.id,a.context.priceListType==='Other'?'A':a.context.priceListType,a.context.margin,pageSize]).then(result=>result.rows[0]));
       total=Number(header?.total_count??0)||null;if(total!=null) spec=makeSpec(total);
     }
     while(total==null||processed<total){
@@ -146,7 +147,7 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
         await assertSourceVersion(client,live);
         const pricingStarted=performance.now();
         const page=(await client.query(`select normalized_code,product_code,brand,description,sales_price::text,price_date::text,lifecycle_status,total_count::text
-          from public.${fn}($1,$2,$3,$4,null,$5,$6)`,[a.job.organization_id,a.brand.id,a.context.priceListType,a.context.margin,after,pageSize])).rows;
+          from public.${fn}($1,$2,$3,$4,null,$5,$6)`,[a.job.organization_id,a.brand.id,a.context.priceListType==='Other'?'A':a.context.priceListType,a.context.margin,after,pageSize])).rows;
         timing.pricingRpcMs=performance.now()-pricingStarted;
         if(!page.length)fail('SOURCE_EMPTY');
         if(page.length>pageSize)fail('SOURCE_COVERAGE');
@@ -172,9 +173,14 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
         const keys=page.map(r=>r.normalized_code);
         if(new Set(keys).size!==keys.length)fail('SOURCE_CURSOR');
         const replacementStarted=performance.now();
-        const replacementRows=(await client.query('select normalized_old_code,new_code from public.item_code_references where organization_id=$1 and brand_id=$2 and is_active=true and normalized_old_code=any($3::text[])',[a.job.organization_id,a.brand.id,keys])).rows;
+        const replacementRows=(await client.query(`select public.normalize_catalog_product_code(ref.old_code) as exact_old_code,ref.new_code
+          from public.item_code_references ref
+          join unnest($3::text[]) as requested(code)
+            on ref.normalized_old_code=public.normalize_part_code(requested.code)
+           and public.normalize_catalog_product_code(ref.old_code)=requested.code
+          where ref.organization_id=$1 and ref.brand_id=$2 and ref.is_active=true`,[a.job.organization_id,a.brand.id,keys])).rows;
         timing.replacementLookupMs=performance.now()-replacementStarted;
-        const replacements=new Map(replacementRows.map(r=>[r.normalized_old_code,r.new_code]));
+        const replacements=new Map(replacementRows.map(r=>[r.exact_old_code,r.new_code]));
         if(replacements.size!==replacementRows.length)fail('REPLACEMENT_CONFLICT');
         const records=[];let nextAfter=after,nextProcessed=processed;
         for(const row of page){

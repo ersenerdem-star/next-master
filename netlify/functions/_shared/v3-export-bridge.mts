@@ -100,7 +100,7 @@ async function patchJob(
 ) {
   let lastStatus = 500;
   let lastBody = "";
-  const query = `${supabaseUrl}/rest/v1/app_export_jobs?id=eq.${encodeURIComponent(jobId)}${options.leaseOwner ? `&worker_lease_owner=eq.${encodeURIComponent(options.leaseOwner)}` : ""}&select=*`;
+  const query = `${supabaseUrl}/rest/v1/app_export_jobs?id=eq.${encodeURIComponent(jobId)}${options.leaseOwner ? `&worker_lease_owner=eq.${encodeURIComponent(options.leaseOwner)}&worker_lease_expires_at=gt.${encodeURIComponent(new Date().toISOString())}` : ""}&select=*`;
   const bodyPatch = { ...patch };
   if (options.leaseOwner && options.renewLease !== false) {
     bodyPatch.worker_lease_expires_at = new Date(Date.now() + WORKER_LEASE_SECONDS * 1000).toISOString();
@@ -187,6 +187,9 @@ export async function runV3PriceExportJob(jobId: string) {
   const pool = new Pool({ connectionString, max: 2, idleTimeoutMillis: 10000, connectionTimeoutMillis: 10000, ssl: postgresSsl(target) });
   const leaseOwner = randomUUID();
   let duckdbExportDirectory: string | null = null;
+  let leaseHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let leaseHeartbeatInFlight: Promise<void> | null = null;
+  let leaseHeartbeatError: Error | null = null;
   try {
     if (!await claimJob(pool, job.id, leaseOwner)) return { status: "in-progress", jobId: job.id };
     await patchJob(supabaseUrl, serviceRoleKey, job.id, {
@@ -255,10 +258,29 @@ export async function runV3PriceExportJob(jobId: string) {
     }
     const binding = exportBinding(spec);
     duckdbExportDirectory = await mkdtemp(join("/tmp", "nm-duckdb-export-"));
+    // Snapshot materialization can exceed the two-minute job lease without
+    // emitting export progress. Renew ownership independently while DuckDB
+    // reads and sorts; a competing worker must not publish this artifact.
+    leaseHeartbeatTimer = setInterval(() => {
+      if (leaseHeartbeatInFlight || leaseHeartbeatError) return;
+      leaseHeartbeatInFlight = patchJob(supabaseUrl, serviceRoleKey, job.id, {}, { leaseOwner })
+        .then(() => {})
+        .catch((error) => {
+          if (error instanceof Error && error.message === "V3_EXPORT_LEASE_LOST") leaseHeartbeatError = error;
+          else console.warn("V3_EXPORT_LEASE_HEARTBEAT_RETRY", job.id);
+        })
+        .finally(() => { leaseHeartbeatInFlight = null; });
+    }, 30_000);
     const duckdbMaterialized = await materializeSealedSnapshotWithDuckDB({
       pool, snapshotId: spec.snapshotId, binding, expectedRows: spec.expectedRows,
       outputDir: duckdbExportDirectory, tempDirectory: duckdbExportDirectory,
+      assertActive: () => { if (leaseHeartbeatError) throw leaseHeartbeatError; },
     });
+    if (leaseHeartbeatInFlight) await leaseHeartbeatInFlight;
+    if (leaseHeartbeatError) throw leaseHeartbeatError;
+    // This fenced write verifies that the same live lease still owns the job
+    // after materialization, before any artifact can become downloadable.
+    await patchJob(supabaseUrl, serviceRoleKey, job.id, {}, { leaseOwner });
     const duckdbFetchPage = createDuckDbPagedExportSource({
       sortedPath: duckdbMaterialized.sortedPath, binding, expectedRows: spec.expectedRows, pageSize: EXPORT_PAGE_SIZE,
     });
@@ -266,10 +288,17 @@ export async function runV3PriceExportJob(jobId: string) {
       expectedSupabaseUrl: target.url, expectedProjectRef: target.ref, targetError: target.targetError });
     const localProgress = async (event: any) => {
       if (event.processedRows != null) {
-        await patchJob(supabaseUrl, serviceRoleKey, job.id, {
-          progress_done: event.processedRows, progress_total: event.totalRows ?? spec.expectedRows, row_count: event.processedRows,
-          progress_message: `V3 export ${event.stage || "processing"}: ${Number(event.processedRows).toLocaleString("en-US")} rows.`,
-        }, { leaseOwner });
+        try {
+          await patchJob(supabaseUrl, serviceRoleKey, job.id, {
+            progress_done: event.processedRows, progress_total: event.totalRows ?? spec.expectedRows, row_count: event.processedRows,
+            progress_message: `V3 export ${event.stage || "processing"}: ${Number(event.processedRows).toLocaleString("en-US")} rows.`,
+          }, { leaseOwner });
+        } catch (error) {
+          if (error instanceof Error && error.message === "V3_EXPORT_LEASE_LOST") throw error;
+          // Telemetry is advisory. The sealed snapshot, local receipt and
+          // final fenced update determine whether the export succeeded.
+          console.warn("V3_EXPORT_PROGRESS_RETRY", job.id);
+        }
       }
     };
     const prepared = await preparePriceExport({ input: spec, directory: duckdbExportDirectory, fetchPage: duckdbFetchPage, progress: localProgress });
@@ -281,6 +310,11 @@ export async function runV3PriceExportJob(jobId: string) {
     const brandName = String(job.scope?.brandName || spec.brand);
     const priceListType = String(job.scope?.priceListType || "A");
     const fileName = `portal-price-list-${brandName}-${priceListType}-${stamp}.xlsx`;
+    // Stop renewal before clearing ownership in the final fenced update.
+    clearInterval(leaseHeartbeatTimer);
+    leaseHeartbeatTimer = null;
+    if (leaseHeartbeatInFlight) await leaseHeartbeatInFlight;
+    if (leaseHeartbeatError) throw leaseHeartbeatError;
     await patchJob(supabaseUrl, serviceRoleKey, job.id, {
       status: "finalized", finalized_at: new Date().toISOString(), file_name: fileName, content_type: MIME,
       storage_bucket: "app-exports", storage_path: ready.path, row_count: ready.rows, byte_size: ready.bytes,
@@ -289,12 +323,17 @@ export async function runV3PriceExportJob(jobId: string) {
     }, { leaseOwner, renewLease: false });
     return { status: "finalized", jobId: job.id, rows: ready.rows, bytes: ready.bytes, path: ready.path };
   } catch (error) {
+    if (leaseHeartbeatTimer) clearInterval(leaseHeartbeatTimer);
+    leaseHeartbeatTimer = null;
+    if (leaseHeartbeatInFlight) await leaseHeartbeatInFlight;
     await patchJob(supabaseUrl, serviceRoleKey, job.id, {
       status: "failed", failed_at: new Date().toISOString(), error_message: error instanceof Error ? error.message : String(error), progress_message: "V3 export failed.",
       worker_lease_owner: null, worker_lease_expires_at: null,
     }, { leaseOwner, renewLease: false }).catch(() => {});
     throw error;
   } finally {
+    if (leaseHeartbeatTimer) clearInterval(leaseHeartbeatTimer);
+    if (leaseHeartbeatInFlight) await leaseHeartbeatInFlight;
     if (duckdbExportDirectory) await rm(duckdbExportDirectory, { recursive: true, force: true }).catch(() => {});
     await pool.end().catch(() => {});
   }

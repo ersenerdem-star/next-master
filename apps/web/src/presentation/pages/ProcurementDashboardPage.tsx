@@ -81,7 +81,6 @@ function itemToMasterRow(item: ProcurementDashboardSummaryItem, supplierCount: n
     price_date: null,
     sales_a: null,
     sales_b: null,
-    sales_c: null,
     supplier_count: supplierCount,
     catalog_status: null,
     notes: null,

@@ -3,10 +3,12 @@ import { canonicalizeInternalBrandName, normalizeBrandKey } from "../catalog/bra
 import { normalizeCatalogMarketSegment } from "../catalog/catalog-segments.mts";
 import { buildPortalSnapshot } from "./portal-access.mts";
 import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "../catalog/catalog-standardization.mts";
+import { markupMoney } from "../../../../shared/order-money.mjs";
 import {
   getDisplayPriceListType,
   getSupplierFallbackCustomerType,
   normalizeCustomerPricingType,
+  requireActiveCustomerPricing,
   shouldUseCPriceForCustomer,
   type CustomerPricingType,
 } from "../pricing/pricing-policy.mts";
@@ -936,7 +938,7 @@ async function buildPortalCatalogPreviewMap(
       if (!bestOption) continue;
       previewByCode.set(`${item.brand.trim().toLowerCase()}::${item.normalized_code}`, {
         sell_price:
-          bestOption.buy_price == null ? null : roundMoney(Number(bestOption.buy_price) * (1 + marginPercent / 100)),
+          bestOption.buy_price == null ? null : markupMoney(bestOption.buy_price, marginPercent),
         supplier_name: bestOption.supplier_name || "",
       });
     }
@@ -1081,7 +1083,7 @@ function getEmbeddedCustomerPriceListType(meta: Record<string, unknown>) {
 function computeSellFromBuy(buyPrice: number | null, context: CustomerPricingContext) {
   if (buyPrice == null) return null;
   const marginPercent = getSupplierFallbackCustomerType(context.customerType) === "B" ? context.effectiveMarginB : context.effectiveMarginA;
-  return roundMoney(Number(buyPrice) * (1 + marginPercent / 100));
+  return markupMoney(buyPrice, marginPercent);
 }
 
 function shouldUsePortalCPrice(context: CustomerPricingContext) {
@@ -1322,26 +1324,24 @@ async function resolvePortalCustomer(
     byType.set(type, row);
   }
 
-  const defaultMarginA = byType.get("A")?.margin_percent == null ? 10 : Number(byType.get("A")?.margin_percent || 10);
-  const defaultMarginB = byType.get("B")?.margin_percent == null ? 15 : Number(byType.get("B")?.margin_percent || 15);
+  const defaultMarginA = byType.get("A")?.margin_percent == null ? 10 : Number(byType.get("A")?.margin_percent);
+  const defaultMarginB = byType.get("B")?.margin_percent == null ? 15 : Number(byType.get("B")?.margin_percent);
   const priceListType = normalizeCustomerPricingType(String(customer.price_list_type || getEmbeddedCustomerPriceListType(customerMeta) || "A"));
-  const marginOverride = marginOverrideRaw == null ? null : Number(marginOverrideRaw);
+  const marginOverride = marginOverrideRaw == null || String(marginOverrideRaw).trim() === "" ? null : Number(marginOverrideRaw);
+  requireActiveCustomerPricing(priceListType, marginOverride);
+  const currency = String(customer.currency || "EUR").trim().toUpperCase();
+  if (currency !== "EUR") {
+    throw new Error("Live supplier prices are in EUR. Customer currency conversion is required before pricing this account.");
+  }
   const effectiveMarginA = (priceListType === "A" || priceListType === "Other") && marginOverride != null ? marginOverride : defaultMarginA;
   const effectiveMarginB = priceListType === "B" && marginOverride != null ? marginOverride : defaultMarginB;
-  const cPriceListIds = [
-    ...new Set(
-      priceLists
-        .filter((row) => String(row.list_type || "").trim().toUpperCase() === "C")
-        .map((row) => String(row.id || "").trim())
-        .filter(Boolean),
-    ),
-  ];
+  const cPriceListIds: string[] = [];
 
   const context: CustomerPricingContext = {
     organizationId: invite.organization_id,
     customer,
     sellerCompany: String(companyProfile?.company_name || ""),
-    currency: String(customer.currency || "EUR"),
+    currency,
     customerType: priceListType,
     effectiveMarginA,
     effectiveMarginB,
@@ -2092,7 +2092,7 @@ async function fetchPortalSupplierPriceFallbackRows(
       product_code: String(row.product_code || normalizedCode),
       description: String(row.description || ""),
       oem_no: String(row.oem_no || ""),
-      sell_price: roundMoney(buyPrice * (1 + marginPercent / 100)),
+      sell_price: markupMoney(buyPrice, marginPercent),
       price_date: row.valid_from == null ? null : String(row.valid_from),
       notes: String(row.notes || "").trim(),
     };
@@ -2350,7 +2350,7 @@ export async function buildPortalPriceListRows(
         const marginPercent = getSupplierFallbackCustomerType(context.customerType) === "B" ? context.effectiveMarginB : context.effectiveMarginA;
         for (const [normalizedCode, bestOption] of bestOptionMap.entries()) {
           if (bestOption.buy_price == null) continue;
-          salesPriceByCode.set(normalizedCode, roundMoney(Number(bestOption.buy_price) * (1 + marginPercent / 100)));
+          salesPriceByCode.set(normalizedCode, markupMoney(bestOption.buy_price, marginPercent));
           priceDateByCode.set(normalizedCode, bestOption.price_date || null);
           priceTypeByCode.set(normalizedCode, getDisplayPriceListType(context.customerType));
         }

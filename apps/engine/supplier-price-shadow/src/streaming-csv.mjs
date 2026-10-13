@@ -53,6 +53,13 @@ export function canonicalizeHeader(value) {
   return ALIAS_TO_CANONICAL.get(normalized) || normalized;
 }
 
+export function requireSupplierPriceHeaders(headers,format="CSV") {
+  const nonempty=headers.filter(Boolean);
+  if(new Set(nonempty).size!==nonempty.length)throw Error(`${format}_DUPLICATE_HEADER`);
+  if(!nonempty.includes('product_code')||!nonempty.includes('buy_price'))
+    throw Error(`${format}_REQUIRED_HEADER_MISSING`);
+}
+
 export function inferCurrencyFromHeaders(headers) {
   const currencyHeader = headers.find((value) => /^buy_price_(eur|usd|gbp|try)$/.test(normalizeHeader(value)));
   return currencyHeader ? normalizeHeader(currencyHeader).split("_").at(-1).toUpperCase() : null;
@@ -147,6 +154,7 @@ export async function* parseCsvRows(readable, options = {}) {
       const rawHeaders = parseRecord(record, delimiter).map((value) => normalizeHeader(value));
       inferredCurrency = inferCurrencyFromHeaders(rawHeaders);
       header = rawHeaders.map(canonicalizeHeader);
+      requireSupplierPriceHeaders(header);
       continue;
     }
     if (!record.trim()) continue;
@@ -161,15 +169,19 @@ export async function* parseCsvRows(readable, options = {}) {
   if (header === null) throw new Error("CSV_MISSING_HEADER");
 }
 
-export function normalizeSupplierPriceRow({ sourceRowNumber, row }) {
+export function normalizeSupplierPriceRow({ sourceRowNumber, row, buyPriceIsNumeric = false }) {
   const value = (name) => String(row[name] ?? "").trim();
   const productCode = value("product_code");
+  // Keep supplier punctuation significant: 61/1 and 611 are distinct SKUs.
   const normalizedCode = productCode.replace(/\s+/g, "").toUpperCase();
   const errors = [];
   const warnings = [];
-  if (!productCode) errors.push("MISSING_PRODUCT_CODE");
-  const buyPrice = parseDecimal(value("buy_price"));
-  if (value("buy_price") && buyPrice === null) errors.push("INVALID_BUY_PRICE");
+  if (!/[A-Z0-9]/.test(normalizedCode)) errors.push("MISSING_PRODUCT_CODE");
+  const parsedBuyPrice = parseSupplierPriceAmount(value("buy_price"), { typedNumeric: buyPriceIsNumeric });
+  const buyPrice = parsedBuyPrice.value;
+  if (!value("buy_price")) errors.push("MISSING_BUY_PRICE");
+  else if (parsedBuyPrice.ambiguous) errors.push("AMBIGUOUS_BUY_PRICE_FORMAT");
+  else if (buyPrice === null || buyPrice <= 0) errors.push("INVALID_BUY_PRICE");
   const weight = parseDecimal(value("weight"));
   if (value("weight") && weight === null) warnings.push("INVALID_WEIGHT");
   const moq = parseInteger(value("moq"));
@@ -177,7 +189,10 @@ export function normalizeSupplierPriceRow({ sourceRowNumber, row }) {
   const leadTimeDays = parseInteger(value("lead_time_days"));
   if (value("lead_time_days") && leadTimeDays === null) warnings.push("INVALID_LEAD_TIME");
   const validFrom = normalizeDate(value("valid_from"));
-  if (value("valid_from") && validFrom === null) warnings.push("INVALID_VALID_FROM");
+  if (value("valid_from") && validFrom === null) errors.push("INVALID_VALID_FROM");
+  const currency = value("currency").toUpperCase();
+  if (!currency) errors.push("MISSING_CURRENCY");
+  else if (!/^[A-Z]{3}$/.test(currency)) errors.push("INVALID_CURRENCY");
   const normalized = {
     source_row_number: sourceRowNumber,
     brand: value("brand") || null,
@@ -196,14 +211,16 @@ export function normalizeSupplierPriceRow({ sourceRowNumber, row }) {
     tariff: value("tariff") || null,
     image_url: value("image_url") || null,
     buy_price: buyPrice,
-    currency: value("currency") || null,
+    currency: currency || null,
     moq,
     lead_time_days: leadTimeDays,
     notes: value("notes") || null,
     valid_from: validFrom,
     row_status: errors.length ? "rejected" : warnings.length ? "warning" : "accepted",
     error_code: errors[0] || null,
-    error_message: errors.length ? errors.join(",") : warnings.length ? warnings.join(",") : null,
+    error_message: errors.length
+      ? `${errors.join(",")}${errors.includes("AMBIGUOUS_BUY_PRICE_FORMAT") ? ": write 1234 for a whole amount or 1.2340 for a fractional amount" : ""}`
+      : warnings.length ? warnings.join(",") : null,
   };
   normalized.row_hash = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
   return normalized;
@@ -244,6 +261,48 @@ function parseDecimal(value) {
   const text = value.replace(/\s+/g, "").replace(/,(?=\d{1,2}$)/, ".").replace(/\.(?=\d{3}(?:\D|$))/g, "");
   const parsed = Number(text);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+// A single separator followed by exactly three digits has two valid locale
+// meanings: 1.234 may be 1.234 or 1234. Never guess a supplier buy price.
+// An XLSX numeric cell is already typed by the workbook and has no ambiguity.
+export function parseSupplierPriceAmount(value, { typedNumeric = false } = {}) {
+  const text = String(value ?? "").trim();
+  if (!text) return { value: null, ambiguous: false };
+  if (typedNumeric) {
+    const number = Number(text);
+    return { value: Number.isFinite(number) ? number : null, ambiguous: false };
+  }
+
+  const plainNumber = /^[+-]?\d+$/;
+  const leadingDecimal = /^[+-]?[.,]\d+$/;
+  const singleSeparator = /^([+-]?\d+)([.,])(\d+)$/;
+  const spaceGrouped = /^[+-]?\d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d+)?$/;
+  const commaGrouped = /^[+-]?\d{1,3}(?:,\d{3}){2,}$/;
+  const dotGrouped = /^[+-]?\d{1,3}(?:\.\d{3}){2,}$/;
+  const commaGroupsDotDecimal = /^[+-]?\d{1,3}(?:,\d{3})+\.\d+$/;
+  const dotGroupsCommaDecimal = /^[+-]?\d{1,3}(?:\.\d{3})+,\d+$/;
+  let canonical = null;
+  if (plainNumber.test(text)) canonical = text;
+  else if (leadingDecimal.test(text)) canonical = text.replace(",", ".");
+  else if (spaceGrouped.test(text)) canonical = text.replace(/[ \u00a0\u202f]/g, "").replace(",", ".");
+  else if (commaGrouped.test(text)) canonical = text.replaceAll(",", "");
+  else if (dotGrouped.test(text)) canonical = text.replaceAll(".", "");
+  else if (commaGroupsDotDecimal.test(text)) canonical = text.replaceAll(",", "");
+  else if (dotGroupsCommaDecimal.test(text)) canonical = text.replaceAll(".", "").replace(",", ".");
+  else {
+    const match = text.match(singleSeparator);
+    if (match) {
+      const integerDigits = match[1].replace(/^[+-]/, "");
+      if (integerDigits.length <= 3 && match[3].length === 3) {
+        return { value: null, ambiguous: true };
+      }
+      canonical = `${match[1]}.${match[3]}`;
+    }
+  }
+  if (canonical === null) return { value: null, ambiguous: false };
+  const number = Number(canonical);
+  return { value: Number.isFinite(number) ? number : null, ambiguous: false };
 }
 
 function parseInteger(value) {

@@ -251,13 +251,14 @@ export async function importCodeReferences(
 export async function findCodeReferenceMatch(input: { code: string; brand?: string }): Promise<CodeReferenceMatch | null> {
   const normalized = normalizePartCode(input.code);
   if (!normalized) return null;
+  const exactRequestedCode = String(input.code || "").trim().replace(/\s+/g, "").toUpperCase();
 
   let query = supabaseClient
     .from("item_code_references")
     .select("id,brand_id,old_code,new_code,original_number,reason,brands!inner(name)")
     .eq("is_active", true)
     .eq("normalized_old_code", normalized)
-    .limit(input.brand?.trim() ? 1 : 2);
+    .limit(input.brand?.trim() ? 1 : 100);
 
   if (input.brand?.trim()) {
     const brandRow = await resolveBrandRow(input.brand);
@@ -276,10 +277,14 @@ export async function findCodeReferenceMatch(input: { code: string; brand?: stri
     brands?: { name?: string } | null;
   }>;
 
-  if (!rows.length) return null;
-  if (!input.brand?.trim() && rows.length > 1) return null;
+  // normalized_old_code is alphanumeric: 61/1 and 611 share its lookup key.
+  // Only a punctuation-preserving old-code match may redirect a live SKU.
+  const exactRows = rows.filter((row) =>
+    String(row.old_code || "").trim().replace(/\s+/g, "").toUpperCase() === exactRequestedCode);
+  if (!exactRows.length) return null;
+  if (!input.brand?.trim() && exactRows.length !== 1) return null;
 
-  const match = rows[0];
+  const match = exactRows[0];
   return {
     id: match.id,
     brand_id: match.brand_id,

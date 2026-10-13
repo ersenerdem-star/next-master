@@ -33,6 +33,7 @@ import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
 import { consumeCatalogTransfer, PENDING_CATALOG_PURCHASE_ITEM_KEY } from "../../shared/catalogTransfer";
 import { normalizePartCode } from "../../domain/shared/normalize";
 import { resyncPurchaseOrderLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
+import { exactProductCode } from "../../shared/currentSupplierPriceSync.mjs";
 import type { CompanyProfile } from "../../types/company";
 import type { LocalCustomer } from "../../types/customers";
 import type { LocalBill, LocalBillLine, LocalPaymentMade, LocalPurchaseOrder, LocalPurchaseOrderLine } from "../../types/orders";
@@ -82,9 +83,16 @@ function buildPurchaseOrderBrandSummary(lines: Array<{ brand: string }>) {
   };
 }
 
-function mergeCatalogLineIntoPurchaseDraft(draft: LocalPurchaseOrder, nextLine: LocalPurchaseOrderLine) {
-  const nextKey = `${String(nextLine.brand || "").trim().toLowerCase()}::${normalizePartCode(nextLine.product_code || nextLine.old_code || "")}`;
-  const existingIndex = draft.lines.findIndex((line) => `${String(line.brand || "").trim().toLowerCase()}::${normalizePartCode(line.product_code || line.old_code || "")}` === nextKey);
+function purchaseDraftLineKey(line: LocalPurchaseOrderLine) {
+  return JSON.stringify([
+    String(line.brand || "").trim().toLowerCase(),
+    exactProductCode(line.product_code || line.old_code || ""),
+  ]);
+}
+
+export function mergeCatalogLineIntoPurchaseDraft(draft: LocalPurchaseOrder, nextLine: LocalPurchaseOrderLine) {
+  const nextKey = purchaseDraftLineKey(nextLine);
+  const existingIndex = draft.lines.findIndex((line) => purchaseDraftLineKey(line) === nextKey);
   const nextLines =
     existingIndex < 0
       ? [nextLine, ...draft.lines]
@@ -411,7 +419,7 @@ export function PurchasesPage({
       sales_order_id: "",
       sales_order_no: "",
       product_code: pending.product_code,
-      old_code: pending.requested_code && normalizePartCode(pending.requested_code) !== normalizePartCode(pending.product_code) ? pending.requested_code : "",
+      old_code: pending.requested_code && exactProductCode(pending.requested_code) !== exactProductCode(pending.product_code) ? pending.requested_code : "",
       brand: pending.brand,
       description: pending.description || "",
       qty: 1,
@@ -432,7 +440,7 @@ export function PurchasesPage({
           createCatalogPurchaseOrderDraft(
             {
               product_code: pending.product_code,
-              old_code: pending.requested_code && normalizePartCode(pending.requested_code) !== normalizePartCode(pending.product_code) ? pending.requested_code : "",
+              old_code: pending.requested_code && exactProductCode(pending.requested_code) !== exactProductCode(pending.product_code) ? pending.requested_code : "",
               brand: pending.brand,
               description: pending.description || "",
               oem_no: pending.oem_no || "",
@@ -806,6 +814,7 @@ export function PurchasesPage({
       setResyncingPurchaseOrder(true);
       actionFeedback.begin(p("feedback.resyncingPurchaseOrder", { id: purchaseOrderDraft.id }));
       const nextLines = await resyncPurchaseOrderLinesFromCatalog(purchaseOrderDraft.lines, {
+        currency: purchaseOrderDraft.currency,
         onlyFillBlanks: purchaseOrderResyncOnlyFillBlanks,
         keepPrices: purchaseOrderResyncKeepPrices,
       });

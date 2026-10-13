@@ -59,8 +59,10 @@ type MasterExportInput = {
   marginB: number;
 };
 
-const EXPORT_STATUS_TIMEOUT_MS = 180_000;
-const EXPORT_STATUS_POLL_MS = 1_200;
+// Million-row jobs may span multiple background invocations. Keep polling
+// while the worker checkpoints instead of timing out after three minutes.
+const EXPORT_STATUS_TIMEOUT_MS = 20 * 60_000;
+const EXPORT_STATUS_POLL_MS = 3_000;
 
 async function getAccessToken() {
   const { data, error } = await supabaseClient.auth.getSession();

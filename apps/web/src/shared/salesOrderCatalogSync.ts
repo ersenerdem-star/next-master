@@ -1,10 +1,17 @@
-import { fetchCPriceMapForRows, getCPriceForRow } from "../infrastructure/api/cPriceApi";
+import { markupMoney } from "../../../../shared/order-money.mjs";
 import { canonicalizeBrandName, normalizeBrandKey, normalizePartCode } from "../domain/shared/normalize";
-import { getCurrentOrgId } from "../infrastructure/api/organizationApi";
 import { fetchCatalogMetadataForRows } from "../infrastructure/api/quoteImportApi";
 import { fetchCodeReferenceMatchesForRows } from "../infrastructure/api/codeReferencesApi";
 import { resolveQuoteLine } from "../infrastructure/api/quoteResolverApi";
-import { supabaseClient } from "../infrastructure/api/supabaseClient";
+import { callAppRpc } from "../infrastructure/api/appRpcApi";
+import {
+  currentSupplierPriceKey,
+  exactProductCode,
+  fetchCurrentSupplierPriceMap,
+  type CurrentSupplierPriceBatchRow,
+  type CurrentSupplierPriceRequest,
+  type SelectedSupplierPrice,
+} from "./currentSupplierPriceSync.mjs";
 import { normalizeOrderQuantity } from "../domain/shared/orderQuantityRules";
 import type { QuoteBuilderLine } from "../types/quoteBuilder";
 import type { LocalBillLine, LocalInvoiceLine, LocalPurchaseOrderLine } from "../types/orders";
@@ -22,21 +29,20 @@ export type InvoiceCatalogSyncOptions = {
   customerType: "A" | "B" | "C" | "Other";
   marginA: number;
   marginB: number;
+  accountMarginPercent?: number | null;
+  currency?: string;
   onlyFillBlanks?: boolean;
   keepPrices?: boolean;
 };
 
 export type PurchaseOrderCatalogSyncOptions = {
+  currency?: string;
   onlyFillBlanks?: boolean;
   keepPrices?: boolean;
 };
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
-}
-
-function shouldUseCPriceForSalesOrder(customerType: "A" | "B" | "C" | "Other") {
-  return customerType === "C";
 }
 
 function isBlankText(value: string | null | undefined) {
@@ -55,14 +61,6 @@ function fillText(current: string, next: string, onlyFillBlanks: boolean) {
 function fillNumber(current: number | null, next: number | null, onlyFillBlanks: boolean) {
   if (!onlyFillBlanks) return next ?? current;
   return isBlankNumber(current) ? next ?? current : current;
-}
-
-function chunk<T>(items: T[], size: number) {
-  const batches: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    batches.push(items.slice(index, index + size));
-  }
-  return batches;
 }
 
 function mergeCatalogMetadata(
@@ -112,73 +110,34 @@ function lineHasVisiblePrices(line: QuoteBuilderLine) {
   return Number(line.buy_price ?? 0) > 0 || Number(line.sell_price ?? 0) > 0;
 }
 
-type SupplierPriceMapRow = {
-  brand: string;
-  product_code: string;
-  supplier_name: string;
-};
-
-function supplierPriceKey(brand: string, productCode: string, supplierName: string) {
-  return `${normalizeBrandKey(brand)}::${normalizePartCode(productCode)}::${supplierName.trim().toLowerCase()}`;
+async function fetchSupplierPriceMap(rows: CurrentSupplierPriceRequest[]): Promise<Map<string, SelectedSupplierPrice>> {
+  return fetchCurrentSupplierPriceMap(rows, (batch) =>
+    callAppRpc<CurrentSupplierPriceBatchRow[]>("cloud_current_supplier_price_options_batch", {
+      input_requests: batch,
+    }));
 }
 
-async function fetchSupplierPriceMap(rows: SupplierPriceMapRow[]) {
-  const organizationId = await getCurrentOrgId();
-  const requestedBrandKeys = new Set(rows.map((row) => normalizeBrandKey(row.brand)).filter(Boolean));
-  const normalizedCodes = [...new Set(rows.map((row) => normalizePartCode(row.product_code)).filter(Boolean))];
-  const supplierNames = [...new Set(rows.map((row) => row.supplier_name.trim().toLowerCase()).filter(Boolean))];
-  if (!requestedBrandKeys.size || !normalizedCodes.length || !supplierNames.length) return new Map<string, { buy_price: number | null; price_date: string | null; notes: string | null }>();
-
-  const { data: brandRows, error: brandError } = await supabaseClient
-    .from("brands")
-    .select("id,name")
-    .eq("organization_id", organizationId);
-
-  if (brandError) throw new Error(brandError.message || "Brand lookup failed");
-
-  const brandIdToName = new Map<string, string>();
-  const brandIds = (brandRows || [])
-    .filter((row) => requestedBrandKeys.has(normalizeBrandKey(String(row.name || ""))))
-    .map((row) => {
-      const id = String(row.id || "");
-      const name = String(row.name || "").trim();
-      brandIdToName.set(id, name);
-      return id;
-    });
-
-  const result = new Map<string, { buy_price: number | null; price_date: string | null; notes: string | null }>();
-  if (!brandIds.length) return result;
-
-  for (const codeChunk of chunk(normalizedCodes, 200)) {
-    const { data, error } = await supabaseClient
-      .from("supplier_prices")
-      .select("brand_id,product_code,normalized_code,buy_price,valid_from,notes,suppliers(name)")
-      .eq("organization_id", organizationId)
-      .eq("is_active", true)
-      .in("brand_id", brandIds)
-      .in("normalized_code", codeChunk);
-
-    if (error) throw new Error(error.message || "Supplier price lookup failed");
-
-    for (const row of (data || []) as Array<any>) {
-      const supplierName = String(row.suppliers?.name || "").trim();
-      const brandName = brandIdToName.get(String(row.brand_id || "")) || "";
-      const productCode = String(row.product_code || "");
-      if (!supplierName || !brandName || !productCode) continue;
-      const key = supplierPriceKey(brandName, productCode, supplierName);
-      const current = result.get(key);
-      const nextBuyPrice = row.buy_price == null ? null : Number(row.buy_price);
-      if (!current || Number(nextBuyPrice ?? Number.MAX_SAFE_INTEGER) < Number(current.buy_price ?? Number.MAX_SAFE_INTEGER)) {
-        result.set(key, {
-          buy_price: nextBuyPrice,
-          price_date: String(row.valid_from || "").trim() || null,
-          notes: String(row.notes || "").trim() || null,
-        });
-      }
-    }
+function requireRepricingCurrency(currency: string | undefined) {
+  if (String(currency || "").trim().toUpperCase() !== "EUR") {
+    throw new Error("Current supplier prices are in EUR. Set the document currency to EUR before refreshing prices.");
   }
+}
 
-  return result;
+function getInvoiceMarkupPercent(options: InvoiceCatalogSyncOptions): number {
+  if (options.customerType === "C") {
+    throw new Error("The retired C price list cannot be refreshed. Set A, B, or Other on the customer account.");
+  }
+  const override = options.accountMarginPercent;
+  if (override != null) {
+    if (!Number.isFinite(override)) throw new Error("Customer account margin must be a valid number.");
+    return override;
+  }
+  if (options.customerType === "Other") {
+    throw new Error("Other pricing requires a margin on the customer account.");
+  }
+  const margin = options.customerType === "B" ? options.marginB : options.marginA;
+  if (!Number.isFinite(margin)) throw new Error("Customer price-list margin must be a valid number.");
+  return margin;
 }
 
 export async function resyncSalesOrderLinesFromCatalog(
@@ -199,10 +158,11 @@ export async function resyncSalesOrderLinesFromCatalog(
   );
 
   const mappedLines = lines.map((line) => {
+    const requestedCode = line.requestedCode || line.resolvedCode;
     const referenceMatch = referenceMatches.get(
-      `${normalizeBrandKey(line.brand || "")}::${normalizePartCode(line.requestedCode || line.resolvedCode)}`,
+      `${normalizeBrandKey(line.brand || "")}::${normalizePartCode(requestedCode)}`,
     );
-    if (!referenceMatch) return line;
+    if (!referenceMatch || exactProductCode(referenceMatch.old_code) !== exactProductCode(requestedCode)) return line;
 
     return {
       ...line,
@@ -222,7 +182,10 @@ export async function resyncSalesOrderLinesFromCatalog(
   );
 
   const patchedLines = mappedLines.map((line) => {
-    const metadata = metadataMap.get(`${normalizeBrandKey(line.brand || "")}::${normalizePartCode(line.resolvedCode || line.requestedCode)}`);
+    const rawCode = line.resolvedCode || line.requestedCode;
+    const candidateMetadata = metadataMap.get(`${normalizeBrandKey(line.brand || "")}::${normalizePartCode(rawCode)}`);
+    const metadata = candidateMetadata && exactProductCode(candidateMetadata.product_code) === exactProductCode(rawCode)
+      ? candidateMetadata : undefined;
     return mergeCatalogMetadata(
       {
         ...line,
@@ -232,6 +195,12 @@ export async function resyncSalesOrderLinesFromCatalog(
       onlyFillBlanks,
     );
   });
+
+  const refreshesCurrentPrice = !keepPrices
+    || (options.hydrateMissingPricesIfKeepingPrices && patchedLines.some((line) => !lineHasVisiblePrices(line)));
+  if (refreshesCurrentPrice && options.customerType === "C") {
+    throw new Error("The retired C price list cannot be refreshed. Set A, B, or Other on the customer account.");
+  }
 
   if (keepPrices) {
     if (!options.hydrateMissingPricesIfKeepingPrices) {
@@ -268,16 +237,6 @@ async function refreshLinePricesFromCatalog(
       includeSupplierOptions: true,
     });
 
-    const cPriceMap =
-      shouldUseCPriceForSalesOrder(options.customerType)
-        ? await fetchCPriceMapForRows([
-            {
-              brand: canonicalizeBrandName(resolved.brand || line.brand || ""),
-              product_code: resolved.product_code || line.resolvedCode || line.requestedCode,
-            },
-          ])
-        : null;
-
     const selectedSupplierName = getSelectedSupplierName(line);
     const selected =
       supplierOptions.find((option) => String(option.supplier_name || "").trim().toLowerCase() === selectedSupplierName) ||
@@ -285,13 +244,7 @@ async function refreshLinePricesFromCatalog(
       null;
     const quantityAdjustment = normalizeOrderQuantity(line.qty, selected || {});
 
-    const cSellPrice = shouldUseCPriceForSalesOrder(options.customerType)
-      ? getCPriceForRow(cPriceMap || new Map<string, number>(), {
-          brand: resolved.brand || line.brand || "",
-          product_code: resolved.product_code || line.resolvedCode || line.requestedCode,
-        })
-      : null;
-    const nextSellPrice = cSellPrice ?? selected?.sell_price ?? resolved.sell_price ?? line.sell_price;
+    const nextSellPrice = selected?.sell_price ?? resolved.sell_price ?? line.sell_price;
 
     const refreshed = mergeCatalogMetadata(
       {
@@ -325,7 +278,7 @@ async function refreshLinePricesFromCatalog(
       quantity_adjustment_note: quantityAdjustment.adjusted
         ? `Order amount ${quantityAdjustment.requested} pcs corrected to ${quantityAdjustment.corrected} pcs by supplier quantity rule.`
         : null,
-      c_sell_price: cSellPrice ?? line.c_sell_price,
+      c_sell_price: line.c_sell_price,
       price_date: selected?.price_date || resolved.price_date || line.price_date,
       supplierOptions: supplierOptions.length ? supplierOptions : line.supplierOptions,
       selectedSupplierKey: selected ? `${selected.supplier_name}-${supplierOptions.indexOf(selected)}` : line.selectedSupplierKey,
@@ -341,6 +294,8 @@ export async function resyncInvoiceLinesFromCatalog(
 ): Promise<LocalInvoiceLine[]> {
   const onlyFillBlanks = options.onlyFillBlanks !== false;
   const keepPrices = options.keepPrices !== false;
+  const markupPercent = keepPrices ? null : getInvoiceMarkupPercent(options);
+  if (!keepPrices) requireRepricingCurrency(options.currency);
   const metadataMap = await fetchCatalogMetadataForRows(
     lines.map((line) => ({
       brand: canonicalizeBrandName(line.brand || ""),
@@ -349,35 +304,30 @@ export async function resyncInvoiceLinesFromCatalog(
   );
 
   const supplierPriceMap = keepPrices
-    ? new Map<string, { buy_price: number | null; price_date: string | null; notes: string | null }>()
+    ? new Map<string, SelectedSupplierPrice>()
     : await fetchSupplierPriceMap(
         lines.map((line) => ({
-          brand: line.brand || "",
-          product_code: line.product_code || line.old_code,
-          supplier_name: line.supplier_name || "",
+          brand: canonicalizeBrandName(line.brand || "") || line.brand,
+          productCode: line.product_code || line.old_code,
+          supplierName: line.supplier_name || "",
         })),
       );
 
-  const cPriceMap =
-    !keepPrices && options.customerType === "C"
-      ? await fetchCPriceMapForRows(lines.map((line) => ({ brand: canonicalizeBrandName(line.brand || ""), product_code: line.product_code || line.old_code })))
-      : null;
-
   return lines.map((line) => {
-    const metadata = metadataMap.get(`${normalizeBrandKey(line.brand || "")}::${normalizePartCode(line.product_code || line.old_code)}`);
+    const rawCode = line.product_code || line.old_code;
+    const candidateMetadata = metadataMap.get(`${normalizeBrandKey(line.brand || "")}::${normalizePartCode(rawCode)}`);
+    const metadata = candidateMetadata && exactProductCode(candidateMetadata.product_code) === exactProductCode(rawCode)
+      ? candidateMetadata : undefined;
     const canonicalBrand = canonicalizeBrandName(line.brand || "") || line.brand;
     const supplierPrice = keepPrices
       ? null
-      : supplierPriceMap.get(supplierPriceKey(canonicalBrand, metadata?.product_code || line.product_code || line.old_code, line.supplier_name || ""));
-    const nextBuyPrice = keepPrices ? line.buy_price : supplierPrice?.buy_price ?? line.buy_price;
+      : supplierPriceMap.get(currentSupplierPriceKey({ brand: canonicalBrand, productCode: rawCode, supplierName: line.supplier_name || "" }));
+    if (!keepPrices && !supplierPrice) throw new Error(`Current supplier price is missing for ${canonicalBrand} ${rawCode}.`);
+    const nextBuyPrice = keepPrices ? line.buy_price : supplierPrice!.buy_price;
     const nextBuyPriceValue = Number(nextBuyPrice ?? 0) || 0;
     const nextSellPriceRaw = keepPrices
       ? line.sell_price
-      : options.customerType === "C"
-        ? getCPriceForRow(cPriceMap || new Map<string, number>(), { brand: canonicalBrand, product_code: metadata?.product_code || line.product_code || line.old_code })
-        : nextBuyPrice != null
-          ? roundMoney(Number(nextBuyPrice) * (1 + ((options.customerType === "B" ? options.marginB : options.marginA) / 100)))
-          : line.sell_price;
+      : markupMoney(nextBuyPriceValue, markupPercent!);
     const nextSellPrice = Number(nextSellPriceRaw ?? 0) || 0;
     const qty = Math.max(1, Number(line.qty || 1) || 1);
     const purchaseTotal = roundMoney(nextBuyPriceValue * qty);
@@ -388,7 +338,7 @@ export async function resyncInvoiceLinesFromCatalog(
     return {
       ...line,
       brand: canonicalBrand,
-      product_code: onlyFillBlanks ? line.product_code || metadata?.product_code || "" : metadata?.product_code || line.product_code,
+      product_code: onlyFillBlanks ? line.product_code || metadata?.product_code || line.old_code : metadata?.product_code || line.product_code || line.old_code,
       description: fillText(line.description, metadata?.description || "", onlyFillBlanks),
       oem_no: fillText(line.oem_no, metadata?.oem_no || "", onlyFillBlanks),
       hs_code: fillText(line.hs_code, metadata?.hs_code || "", onlyFillBlanks),
@@ -417,6 +367,7 @@ export async function resyncPurchaseOrderLinesFromCatalog(
 ): Promise<LocalPurchaseOrderLine[]> {
   const onlyFillBlanks = options.onlyFillBlanks !== false;
   const keepPrices = options.keepPrices !== false;
+  if (!keepPrices) requireRepricingCurrency(options.currency);
   const metadataMap = await fetchCatalogMetadataForRows(
     lines.map((line) => ({
       brand: canonicalizeBrandName(line.brand || ""),
@@ -425,33 +376,38 @@ export async function resyncPurchaseOrderLinesFromCatalog(
   );
 
   const supplierPriceMap = keepPrices
-    ? new Map<string, { buy_price: number | null; price_date: string | null; notes: string | null }>()
+    ? new Map<string, SelectedSupplierPrice>()
     : await fetchSupplierPriceMap(
         lines.map((line) => ({
-          brand: canonicalizeBrandName(line.brand || ""),
-          product_code: line.product_code || line.old_code,
-          supplier_name: line.supplier_name || "",
+          brand: canonicalizeBrandName(line.brand || "") || line.brand,
+          productCode: line.product_code || line.old_code,
+          supplierName: line.supplier_name || "",
         })),
       );
 
   return lines.map((line) => {
-    const metadata = metadataMap.get(`${normalizeBrandKey(line.brand || "")}::${normalizePartCode(line.product_code || line.old_code)}`);
+    const rawCode = line.product_code || line.old_code;
+    const candidateMetadata = metadataMap.get(`${normalizeBrandKey(line.brand || "")}::${normalizePartCode(rawCode)}`);
+    const metadata = candidateMetadata && exactProductCode(candidateMetadata.product_code) === exactProductCode(rawCode)
+      ? candidateMetadata : undefined;
     const canonicalBrand = canonicalizeBrandName(line.brand || "") || line.brand;
     const supplierPrice = keepPrices
       ? null
-      : supplierPriceMap.get(supplierPriceKey(canonicalBrand, metadata?.product_code || line.product_code || line.old_code, line.supplier_name || ""));
-    const nextBuyPrice = keepPrices ? line.buy_price : supplierPrice?.buy_price ?? line.buy_price;
+      : supplierPriceMap.get(currentSupplierPriceKey({ brand: canonicalBrand, productCode: rawCode, supplierName: line.supplier_name || "" }));
+    if (!keepPrices && !supplierPrice) throw new Error(`Current supplier price is missing for ${canonicalBrand} ${rawCode}.`);
+    const nextBuyPrice = keepPrices ? line.buy_price : supplierPrice!.buy_price;
     const nextBuyPriceValue = Number(nextBuyPrice ?? 0) || 0;
     return {
       ...line,
       brand: canonicalBrand,
-      product_code: onlyFillBlanks ? line.product_code || metadata?.product_code || "" : metadata?.product_code || line.product_code,
+      product_code: onlyFillBlanks ? line.product_code || metadata?.product_code || line.old_code : metadata?.product_code || line.product_code || line.old_code,
       description: fillText(line.description, metadata?.description || "", onlyFillBlanks),
       oem_no: fillText(line.oem_no, metadata?.oem_no || "", onlyFillBlanks),
       hs_code: fillText(line.hs_code, metadata?.hs_code || "", onlyFillBlanks),
       weight_kg: fillNumber(line.weight_kg ?? null, metadata?.weight_kg ?? null, onlyFillBlanks),
       origin: fillText(line.origin, metadata?.origin || "", onlyFillBlanks),
       buy_price: nextBuyPriceValue,
+      line_total: keepPrices ? line.line_total : roundMoney(nextBuyPriceValue * Math.max(1, Number(line.qty || 1) || 1)),
       notes: keepPrices ? line.notes : supplierPrice?.notes || line.notes,
     } satisfies LocalPurchaseOrderLine;
   });
@@ -470,7 +426,10 @@ export async function resyncBillLinesFromCatalog(
   );
 
   return lines.map((line) => {
-    const metadata = metadataMap.get(`${normalizeBrandKey(line.brand || "")}::${normalizePartCode(line.product_code || line.old_code)}`);
+    const rawCode = line.product_code || line.old_code;
+    const candidateMetadata = metadataMap.get(`${normalizeBrandKey(line.brand || "")}::${normalizePartCode(rawCode)}`);
+    const metadata = candidateMetadata && exactProductCode(candidateMetadata.product_code) === exactProductCode(rawCode)
+      ? candidateMetadata : undefined;
     const canonicalBrand = canonicalizeBrandName(line.brand || "") || line.brand;
     return {
       ...line,

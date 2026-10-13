@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { markupMoney } from "../../../../../shared/order-money.mjs";
 import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastructure/api/companyProfilesApi";
 import { findCodeReferenceMatch } from "../../infrastructure/api/codeReferencesApi";
 import { fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
+import { callAppRpc } from "../../infrastructure/api/appRpcApi";
 import {
   deleteSalesOrder,
   fetchInvoiceSalesLinkSummaries,
@@ -248,6 +250,96 @@ function toNumber(value: number | null | undefined) {
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+type ConfirmationPriceOption = {
+  supplier_id?: string | null;
+  supplier_name?: string | null;
+  product_code?: string | null;
+  buy_price?: number | string | null;
+};
+
+type ConfirmationPriceBatchRow = {
+  request_index: number;
+  has_published_scope: boolean;
+  options: ConfirmationPriceOption[];
+};
+
+function confirmationSku(value: unknown) {
+  return String(value || "").trim().replace(/\s+/g, "").toUpperCase();
+}
+
+async function assertCurrentPricesBeforeConfirmation(
+  lines: QuoteBuilderLine[],
+  customerType: "A" | "B" | "C" | "Other",
+  marginA: number,
+  marginB: number,
+  currency: string,
+) {
+  if (customerType === "C") {
+    throw new Error("The retired C price list cannot be used to confirm a sales order.");
+  }
+  const staleLine = (line: QuoteBuilderLine) =>
+    new Error(`Current supplier or customer price changed for ${line.brand} ${line.resolvedCode || line.requestedCode}. Refresh this line before confirming the sales order.`);
+
+  for (let offset = 0; offset < lines.length; offset += 25) {
+    const batch = lines.slice(offset, offset + 25);
+    const response = await callAppRpc<ConfirmationPriceBatchRow[]>("cloud_current_supplier_price_options_batch", {
+      input_requests: batch.map((line) => ({
+        code: String(line.resolvedCode || line.requestedCode || "").trim(),
+        brand: String(line.brand || "").trim(),
+      })),
+    });
+    if (!Array.isArray(response) || response.length !== batch.length) {
+      throw new Error("Current supplier prices could not be verified. Retry before confirming the sales order.");
+    }
+
+    const results = new Map<number, ConfirmationPriceBatchRow>();
+    for (const row of response) {
+      if (!Number.isInteger(row?.request_index) || row.request_index < 0 || row.request_index >= batch.length
+        || results.has(row.request_index) || !Array.isArray(row.options)
+        || typeof row.has_published_scope !== "boolean") {
+        throw new Error("Current supplier prices could not be verified. Retry before confirming the sales order.");
+      }
+      results.set(row.request_index, row);
+    }
+
+    batch.forEach((line, index) => {
+      const result = results.get(index);
+      if (!result) throw staleLine(line);
+      // Older brands still use the established quote workflow until a
+      // supplier release is published for their brand.
+      if (!result.has_published_scope) return;
+      if (currency.trim().toUpperCase() !== "EUR") {
+        throw new Error("Published supplier prices are in EUR. Convert the order currency before confirming it.");
+      }
+      const sku = confirmationSku(line.resolvedCode || line.requestedCode);
+      const currentOptions = result.options.filter((option) => confirmationSku(option.product_code) === sku);
+      const selectedStoredOption = line.supplierOptions.find((option, optionIndex) =>
+        `${option.supplier_name}-${optionIndex}` === line.selectedSupplierKey) || line.supplierOptions[0] || null;
+      const selectedSupplierId = String(selectedStoredOption?.supplier_id || "").trim();
+      const selectedSupplierName = String(line.supplier_name || selectedStoredOption?.supplier_name || "").trim().toLowerCase();
+      const matchingOptions = selectedSupplierId
+        ? currentOptions.filter((option) => String(option.supplier_id || "") === selectedSupplierId)
+        : currentOptions.filter((option) => String(option.supplier_name || "").trim().toLowerCase() === selectedSupplierName);
+      if (!sku || !selectedSupplierName || matchingOptions.length !== 1) throw staleLine(line);
+
+      const current = matchingOptions[0];
+      const currentBuy = Number(current.buy_price);
+      const storedBuy = Number(line.buy_price);
+      const storedSell = Number(line.sell_price);
+      if (!Number.isFinite(currentBuy) || currentBuy <= 0 || !Number.isFinite(storedBuy) || storedBuy <= 0
+        || !Number.isFinite(storedSell) || storedSell <= 0
+        || Math.abs(currentBuy - storedBuy) > 0.000001
+        || String(current.supplier_name || "").trim().toLowerCase() !== selectedSupplierName) {
+        throw staleLine(line);
+      }
+      if (!line.manual_sell_price) {
+        const expectedSell = markupMoney(currentBuy, customerType === "B" ? marginB : marginA);
+        if (roundMoney(storedSell) !== expectedSell) throw staleLine(line);
+      }
+    });
+  }
 }
 
 function shouldUseCPriceForCustomer(customerType: "A" | "B" | "C" | "Other") {
@@ -818,7 +910,16 @@ export function QuotesPage({
   const effectiveMarginA =
     (customerType === "A" || customerType === "Other") && customerMarginOverride != null ? customerMarginOverride : marginA;
   const effectiveMarginB = customerType === "B" && customerMarginOverride != null ? customerMarginOverride : marginB;
-  const otherMarginActive = customerType === "Other" && customerMarginOverride != null;
+  const accountMarginActive = customerType !== "C" && customerMarginOverride != null && Number.isFinite(customerMarginOverride);
+  const customerPricingIssue =
+    customerType === "C" || selectedCustomerProfile?.price_list_type === "C"
+      ? t("sales.orders.legacyPricingRequiresAccountUpdate")
+      : (customerType === "Other" || selectedCustomerProfile?.price_list_type === "Other") &&
+          (customerMarginOverride == null || !Number.isFinite(customerMarginOverride))
+        ? t("sales.orders.otherMarginRequiresAccount")
+        : customerMarginOverride != null && !Number.isFinite(customerMarginOverride)
+          ? t("sales.orders.invalidAccountMargin")
+          : "";
   const inventoryAvailabilityLookup = useMemo(() => buildInventoryAvailabilityLookup(inventoryAvailabilityRows), [inventoryAvailabilityRows]);
 
   useEffect(() => {
@@ -1278,7 +1379,7 @@ export function QuotesPage({
           const fallbackSellPrice =
             customerType === "C"
               ? line.sell_price
-              : roundMoney(Number(buyPrice) * (1 + marginPercent / 100));
+              : markupMoney(buyPrice, marginPercent);
           return {
             ...line,
             supplier_name: line.supplier_name || selected?.supplier_name || "",
@@ -1294,7 +1395,7 @@ export function QuotesPage({
           ...line,
           supplier_name: line.supplier_name || selected?.supplier_name || "",
           buy_price: buyPrice,
-          sell_price: line.manual_sell_price ? line.sell_price : roundMoney(Number(buyPrice) * (1 + marginPercent / 100)),
+          sell_price: line.manual_sell_price ? line.sell_price : markupMoney(buyPrice, marginPercent),
           price_date: line.price_date || selected?.price_date || "",
           notes: line.notes || selected?.notes || "",
         };
@@ -1331,7 +1432,7 @@ export function QuotesPage({
             customerType === "C"
               ? line.sell_price
               : line.buy_price != null
-                ? roundMoney(Number(line.buy_price) * (1 + marginPercent / 100))
+                ? markupMoney(line.buy_price, marginPercent)
                 : line.sell_price;
           return {
             ...line,
@@ -1722,6 +1823,7 @@ export function QuotesPage({
       return;
     }
     try {
+      if (customerPricingIssue) throw new Error(customerPricingIssue);
       setResyncingCatalog(true);
       actionFeedback.begin(t("sales.orders.resyncingOrder", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
       const syncedLines = await resyncSalesOrderLinesFromCatalog(quoteBuilderLines, {
@@ -1905,6 +2007,7 @@ export function QuotesPage({
   ]);
 
   async function persistSalesOrderDraft() {
+    if (customerPricingIssue) throw new Error(customerPricingIssue);
     if (!quoteBuilderLines.length) {
       actionFeedback.fail(t("sales.orders.addLinesBeforeSavingDraft"));
       return null;
@@ -2049,7 +2152,7 @@ export function QuotesPage({
                           : shouldUseCPricePricing
                           ? item.c_sell_price ?? item.sell_price
                           : selected.buy_price != null
-                            ? roundMoney(Number(selected.buy_price) * (1 + (customerType === "B" ? effectiveMarginB : effectiveMarginA) / 100))
+                            ? markupMoney(selected.buy_price, customerType === "B" ? effectiveMarginB : effectiveMarginA)
                             : selected.sell_price ?? null,
                       price_date: selected.price_date || "",
                       notes: selected.notes || "",
@@ -2192,7 +2295,11 @@ export function QuotesPage({
       includeSupplierOptions?: boolean;
     },
   ) {
-    const referenceMatch = options?.referenceMatch ?? (await findCodeReferenceMatch({ code: input.code, brand: input.brand || "" }));
+    if (customerPricingIssue) throw new Error(customerPricingIssue);
+    const candidateReferenceMatch = options?.referenceMatch ?? (await findCodeReferenceMatch({ code: input.code, brand: input.brand || "" }));
+    const referenceMatch = candidateReferenceMatch
+      && confirmationSku(candidateReferenceMatch.old_code) === confirmationSku(input.code)
+      ? candidateReferenceMatch : null;
     const codeToResolve = referenceMatch?.new_code || input.code;
     const { resolved, supplierOptions } = await resolveQuoteLine({
       code: codeToResolve,
@@ -2297,6 +2404,7 @@ export function QuotesPage({
     rows: QuoteImportRow[],
     onChunkResolved?: (resolvedLines: QuoteBuilderLine[], detail: { processedRows: number; totalRows: number }) => void,
   ) {
+    if (customerPricingIssue) throw new Error(customerPricingIssue);
     const batches = chunkRows(rows, SALES_ORDER_IMPORT_CHUNK_SIZE);
     const allLines: QuoteBuilderLine[] = [];
     let processedRows = 0;
@@ -2926,6 +3034,10 @@ export function QuotesPage({
   }
 
   async function handleMarkConfirmed() {
+    if (customerPricingIssue) {
+      actionFeedback.fail(customerPricingIssue);
+      return;
+    }
     if (!quoteBuilderLines.length) {
       actionFeedback.fail(t("sales.orders.addLinesBeforeConfirming"));
       return;
@@ -2951,6 +3063,7 @@ export function QuotesPage({
     try {
       setConfirmingOrder(true);
       actionFeedback.begin(t("sales.orders.confirmingAndCreatingPurchaseOrders", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
+      await assertCurrentPricesBeforeConfirmation(quoteBuilderLines, customerType, effectiveMarginA, effectiveMarginB, currency);
       const order = buildSalesOrderPayload("confirmed");
       const saved = await upsertSalesOrder(order);
       const purchaseOrders = buildPurchaseOrdersFromSalesOrder(saved);
@@ -3289,7 +3402,7 @@ export function QuotesPage({
                         }}
                       />
                     </div>
-                    {otherMarginActive ? <span className="mark-badge mark-badge--accent">{t("sales.orders.otherMarginActive", { margin: customerMarginOverride ?? 0 })}</span> : null}
+                    {accountMarginActive ? <span className="mark-badge mark-badge--accent">{t("sales.orders.customMarginActive", { margin: customerMarginOverride ?? 0 })}</span> : null}
                     <Select
                       label={t("sales.orders.currency")}
                       value={currency}
@@ -3397,12 +3510,13 @@ export function QuotesPage({
                         options={[
                           { value: "A", label: t("sales.orders.aPriceList") },
                           { value: "B", label: t("sales.orders.bPriceList") },
-                          { value: "C", label: t("sales.orders.cPriceList") },
+                          ...(customerType === "C" ? [{ value: "C", label: t("sales.orders.legacyPricingProfile") }] : []),
                           { value: "Other", label: t("sales.orders.otherMargin") },
                         ]}
                         onChange={(value) => setCustomerType(value as "A" | "B" | "C" | "Other")}
                       />
-                      {otherMarginActive ? <div className="field"><span className="field__label">{t("sales.orders.customMargin")}</span><span className="mark-badge mark-badge--accent">{t("sales.orders.customMarginActive", { margin: customerMarginOverride ?? 0 })}</span></div> : null}
+                      {customerPricingIssue ? <div className="warning-text">{customerPricingIssue}</div> : null}
+                      {accountMarginActive ? <div className="field"><span className="field__label">{t("sales.orders.customMargin")}</span><span className="mark-badge mark-badge--accent">{t("sales.orders.customMarginActive", { margin: customerMarginOverride ?? 0 })}</span></div> : null}
                       <Select
                         label={t("sales.orders.deliveryTerms")}
                         value={deliveryTermSelection}

@@ -6,6 +6,10 @@ import { supabaseClient } from "./supabaseClient";
 
 type SupplierOrderRuleRow = { supplier_name?: string | null; moq?: number | null; order_multiple?: number | null };
 
+function exactSku(value: string | null | undefined) {
+  return String(value || "").trim().replace(/\s+/g, "").toUpperCase();
+}
+
 async function enrichLifecycle(resolved: QuoteResolveResult): Promise<QuoteResolveResult> {
   if (!resolved.product_id) {
     const lifecycleStatus = normalizeCatalogLifecycleStatus(resolved.lifecycle_status);
@@ -73,12 +77,14 @@ export async function resolveQuoteLine(input: {
   marginB: number;
   includeSupplierOptions?: boolean;
 }): Promise<{ resolved: QuoteResolveResult; supplierOptions: QuoteSupplierOption[] }> {
-  const code = normalizePartCode(input.code) || input.code.trim();
+  // Preserve the supplier's SKU punctuation. `61/1` and `611` can carry
+  // different prices even though the legacy loose lookup maps both to `611`.
+  const code = input.code.trim();
   const brand = canonicalizeBrandName(input.brand || "");
   const rpcCustomerType = input.customerType === "Other" ? "A" : input.customerType;
   const supplierRpcCustomerType = input.customerType === "B" ? "B" : "A";
 
-  const data = await callAppRpc<QuoteResolveResult[]>("cloud_resolve_quote_line", {
+  const data = await callAppRpc<QuoteResolveResult[]>("cloud_resolve_quote_line_v3", {
     input_code: code,
     input_brand: brand,
     input_customer_type: rpcCustomerType,
@@ -86,16 +92,22 @@ export async function resolveQuoteLine(input: {
     input_margin_b: input.marginB / 100,
   });
 
-  const resolved = await enrichLifecycle(((data || [])[0] || {
+  const rawResolved = ((data || [])[0] || {
     found: false,
     product_code: code,
-  }) as QuoteResolveResult);
+  }) as QuoteResolveResult;
+  // The caller applies an approved old-code reference before this lookup.
+  // A price lookup itself may never replace 61/1 with the distinct SKU 611.
+  if (rawResolved.found && exactSku(rawResolved.product_code) !== exactSku(code)) {
+    throw new Error(`Supplier price lookup returned a different product code for ${brand} ${code}.`);
+  }
+  const resolved = await enrichLifecycle(rawResolved);
 
   let supplierOptions: QuoteSupplierOption[] = [];
   const includeSupplierOptions = input.includeSupplierOptions !== false;
 
   if (resolved.found && includeSupplierOptions) {
-    const optionRows = await callAppRpc<QuoteSupplierOption[]>("cloud_quote_supplier_options", {
+    const optionRows = await callAppRpc<QuoteSupplierOption[]>("cloud_quote_supplier_options_v3", {
       input_code: code,
       input_brand: brand || resolved.brand || "",
       input_customer_type: supplierRpcCustomerType,

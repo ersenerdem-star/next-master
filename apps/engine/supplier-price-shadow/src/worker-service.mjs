@@ -1,4 +1,4 @@
-// Operational lifecycle only. Reuses the verified v3 workflow and SQL outbox;
+// Operational lifecycle only. Reuses the verified v4 workflow and SQL outbox;
 // never publishes, creates fixtures, alters profiles or resets DBOS history.
 import {createServer} from 'node:http';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -30,17 +30,16 @@ export const SERVICE_RPC_NAMES = new Set([
   'begin_supplier_price_upload_verification','complete_supplier_price_verified_upload',
   'claim_supplier_price_verified_handoff','ack_supplier_price_verified_handoff',
   'get_supplier_price_verified_manifest','claim_supplier_price_verified_release_batch',
-  'get_supplier_price_release_status','get_supplier_price_validation_candidate',
+  'get_supplier_price_release_status',
   'stage_supplier_price_release_batch','heartbeat_supplier_price_release_batch',
-  'finalize_supplier_price_release_shadow_batch','validate_supplier_price_release',
+  'finalize_supplier_price_release_shadow_batch',
+  'complete_supplier_price_release_duckdb_validation',
 ]);
 
 const RELEASE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// A validated release has completed source verification and is waiting for a
-// separate publication decision. It is terminal for worker backpressure: the
-// failed DBOS execution must not keep the intake service degraded while the
-// release remains safely unpublished.
-const TERMINAL_RELEASE_STATUSES = new Set(['validated', 'staged', 'published']);
+// Staged alone is not enough: the final persisted-row integrity gate may have
+// failed after staging. Only validation or publication clears failed history.
+const TERMINAL_RELEASE_STATUSES = new Set(['validated', 'published']);
 
 // DBOS history is private and can outlive a Supabase staging target.  The
 // status RPC is executed against the worker's current target; a successful
@@ -80,9 +79,9 @@ export function serviceConfig(env) {
   const batchSize=Number(env.SUPPLIER_PRICE_SHADOW_BATCH_SIZE||1000);
   const port=Number(env.PORT||3000);
   // This service is already hard-bound to the approved staging Supabase host.
-  // Automatic validation is on by default there and can be stopped explicitly
-  // without affecting upload admission or publication safety.
-  const autoValidate=env.SUPPLIER_PRICE_AUTO_VALIDATE_ENABLED!=='0';
+  // The v4 workflow validates its own persisted rows. Do not silently run the
+  // legacy SQL-only validator on an old staged release after an upgrade.
+  const autoValidate=false;
   if(!Number.isInteger(batchSize)||batchSize<1||batchSize>1000)throw Error('SERVICE_BATCH_LIMIT');
   if(!Number.isInteger(port)||port<1||port>65535)throw Error('SERVICE_PORT');
   // Disk-backed Render services use the default 30s termination window.
@@ -119,6 +118,7 @@ export function createWorkerService({verify,dispatch,probe,validate,wait=delay,l
   async function cycle() {
     if(state.stopping)return;
     state.ready=false;
+    let validationDegraded=false;
     // Intake is protected by SQL claim/lease RPCs and immutable workflow IDs.
     // Do not make it depend on a DBOS history read: one orphaned or slow history
     // query must never starve every later upload. Existing DBOS work remains
@@ -147,11 +147,27 @@ export function createWorkerService({verify,dispatch,probe,validate,wait=delay,l
           else if(validation?.status!=='empty') state.errorCode='SERVICE_VALIDATION_RESPONSE';
         }catch{
           state.errorCode='SERVICE_VALIDATION_UNCONFIRMED';
+          validationDegraded=true;
           log(JSON.stringify({stage:'worker-service',status:'validation-degraded',errorCode:state.errorCode,published:false}));
         }
       }
     }
-    state.lastSuccessAt=now();state.completedCycles++;state.errorCode=null;state.ready=true;
+    // Probe after intake, so a history lookup cannot hold up new uploads. It
+    // still determines readiness: unresolved durable failures are not healthy.
+    const historyTimer=new AbortController();
+    let history;
+    try{
+      history=await Promise.race([
+        probe(),delay(historyTimeoutMs,undefined,{signal:historyTimer.signal})
+          .then(()=>{throw Error('SERVICE_HISTORY_TIMEOUT');}),
+      ]);
+    }finally{historyTimer.abort();}
+    if(!history||typeof history.busy!=='boolean'||typeof history.failed!=='boolean')
+      throw Error('SERVICE_HISTORY_RESPONSE');
+    if(history.failed)throw Error('SERVICE_WORKFLOW_REQUIRES_REVIEW');
+    state.completedCycles++;
+    if(validationDegraded){state.phase='validation-degraded';return;}
+    state.lastSuccessAt=now();state.errorCode=null;state.ready=true;
   }
   async function run() {
     try {

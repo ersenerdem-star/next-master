@@ -4,10 +4,9 @@ import { assertCompleteExport, advanceExportPage } from "../../../shared/export-
 import { getJson, json, readJson, sendJson, serviceRoleHeaders } from "./http.mts";
 import type { AppCaller } from "./app-auth.mts";
 import {
-  buildPortalPriceListRows,
   resolvePortalPriceListExportContext,
   type PortalInviteRow,
-  type PortalPriceListRow,
+  type PortalPriceListExportContext,
 } from "./portal-orders.mts";
 
 export const EXPORT_STORAGE_BUCKET = "app-exports";
@@ -182,7 +181,6 @@ type CatalogMasterExportWorkbookRow = {
   priceDate: string;
   salesA: number | string | null;
   salesB: number | string | null;
-  salesC: number | string | null;
   supplierCount: number | string | null;
   catalogStatus: string;
   notes: string;
@@ -224,7 +222,6 @@ const CATALOG_MASTER_EXPORT_HEADERS = [
   "Price_Date",
   "A_Sales_EUR",
   "B_Sales_EUR",
-  "C_Sales_EUR",
   "Supplier_Count",
   "Catalog_Status",
   "Notes",
@@ -242,17 +239,19 @@ const PORTAL_PRICE_LIST_EXPORT_PAGE_SIZE = 1_000;
 const EXPORT_SIGNED_URL_TTL_SECONDS = 5 * 60;
 
 export function toPublicExportJobStatus(job: ExportJobRow, cached = false): ExportJobPublicStatus {
+  const expired = !isExportJobUnexpired(job);
+  const incomplete = job.status === "finalized" && isIncompleteFinalizedExportJob(job);
   return {
     id: job.id,
     exportType: job.export_type,
-    status: job.status,
+    status: expired ? "expired" : incomplete ? "failed" : job.status,
     fileName: job.file_name,
     rowCount: Number(job.row_count || 0),
     byteSize: Number(job.byte_size || 0),
     progressDone: Number(job.progress_done || 0),
     progressTotal: job.progress_total == null ? null : Number(job.progress_total),
     progressMessage: job.progress_message,
-    errorMessage: job.error_message,
+    errorMessage: expired ? "Export expired. Start a new download." : incomplete ? "Export file is incomplete. Start a new download." : job.error_message,
     createdAt: job.created_at,
     updatedAt: job.updated_at,
     finalizedAt: job.finalized_at,
@@ -350,20 +349,37 @@ async function fetchJobRows(supabaseUrl: string, serviceRoleKey: string, query: 
   });
 }
 
-function maxRowsForExportJob(job: ExportJobRow) {
-  if (job.export_type === "admin_price_list") return ADMIN_PRICE_LIST_EXPORT_MAX_ROWS;
-  if (job.export_type === "catalog_master") return CATALOG_MASTER_EXPORT_MAX_ROWS;
-  if (job.export_type === "portal_price_list") return PORTAL_PRICE_LIST_EXPORT_MAX_ROWS;
-  return 0;
+export function isExportJobUnexpired(job: ExportJobRow) {
+  const expiresAt = Date.parse(String(job.expires_at || ""));
+  return Number.isFinite(expiresAt) && expiresAt > Date.now();
 }
 
 function isIncompleteFinalizedExportJob(job: ExportJobRow) {
   if (job.status !== "finalized") return false;
-  const maxRows = maxRowsForExportJob(job);
-  if (!maxRows) return false;
   const rowCount = Number(job.row_count || 0);
-  const progressTotal = Number(job.progress_total || 0);
-  return Number.isFinite(progressTotal) && progressTotal > 0 && rowCount < Math.min(progressTotal, maxRows);
+  const progressTotal = Number(job.progress_total);
+  const byteSize = Number(job.byte_size);
+  return !Number.isSafeInteger(rowCount) || rowCount < 1
+    || !Number.isSafeInteger(progressTotal) || progressTotal < 1
+    || rowCount !== progressTotal || !Number.isSafeInteger(byteSize) || byteSize < 1
+    || /limited to/i.test(job.progress_message || "")
+    || !job.storage_bucket || !job.storage_path || !job.file_name || !job.content_type;
+}
+
+type ReadyExportJob = ExportJobRow & {
+  storage_bucket: string;
+  storage_path: string;
+  file_name: string;
+  content_type: string;
+};
+
+export function assertExportArtifactReady(job: ExportJobRow): asserts job is ReadyExportJob {
+  if (job.status !== "finalized") throw new Error("Export file is not ready yet.");
+  if (!isExportJobUnexpired(job)) throw new Error("Export expired. Start a new download.");
+  if (isIncompleteFinalizedExportJob(job)) throw new Error("Export file is incomplete. Start a new download.");
+  // The V3 writer splits large exports across Excel sheets; a download is not
+  // subject to the single-sheet 1,048,575-row limit once the receipt is sealed.
+  assertCompleteExport(Number(job.row_count), Number(job.progress_total), 10_000_000);
 }
 
 export async function fetchExportJobById(supabaseUrl: string, serviceRoleKey: string, organizationId: string, jobId: string) {
@@ -416,8 +432,8 @@ async function findReusableExportJob(supabaseUrl: string, serviceRoleKey: string
       await patchExportJob(supabaseUrl, serviceRoleKey, finalizedJob.id, {
         status: "expired",
         expires_at: new Date().toISOString(),
-        progress_message: "Expired incomplete export cache; regenerating full paged export.",
-      }).catch((error) => console.error("failed to expire incomplete export cache", finalizedJob.id, error));
+        progress_message: "Expired incomplete export cache; regenerating full export.",
+      });
       return null;
     }
     return { job: finalizedJob, cached: true };
@@ -609,7 +625,6 @@ function coerceCatalogMasterExportRows(payload: unknown): CatalogMasterExportWor
         priceDate: String(row.price_date || ""),
         salesA: row.sales_a == null ? null : (row.sales_a as number | string),
         salesB: row.sales_b == null ? null : (row.sales_b as number | string),
-        salesC: row.sales_c == null ? null : (row.sales_c as number | string),
         supplierCount: row.supplier_count == null ? null : (row.supplier_count as number | string),
         catalogStatus: String(row.catalog_status || ""),
         notes: String(row.notes || ""),
@@ -758,41 +773,6 @@ function normalizePortalExportProductCode(productCode: string, brandName = "") {
     return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
   }
   return raw;
-}
-
-function buildPortalPriceListWorkbook(
-  result: {
-    priceListType: "A" | "B" | "C" | "Other";
-    currency: string;
-    rows: PortalPriceListRow[];
-  },
-  brandName: string,
-) {
-  const rows: Array<Array<string | number | null>> = [
-    ["Part_No", "Description", `Price_${result.currency}`, "Price_Date", "Lifecycle"],
-    ...result.rows.map((row) => [
-      normalizePortalExportProductCode(row.product_code, row.brand || brandName),
-      row.description || "",
-      row.sales_price ?? "",
-      row.price_date || "",
-      row.lifecycle_status === "discontinued" ? row.lifecycle_note || "Discontinued" : "Active",
-    ]),
-  ];
-  const worksheet = XLSX.utils.aoa_to_sheet(rows);
-  worksheet["!cols"] = [
-    { wch: 22 },
-    { wch: 44 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 24 },
-  ];
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, sanitizeSheetName(`${brandName} Price List`));
-  return XLSX.write(workbook, {
-    bookType: "xlsx",
-    type: "buffer",
-    compression: true,
-  }) as Buffer;
 }
 
 type PortalPriceListPageRow = {
@@ -1021,7 +1001,6 @@ function catalogMasterExportSheetRows(rows: CatalogMasterExportWorkbookRow[]) {
       row.priceDate,
       row.salesA ?? "",
       row.salesB ?? "",
-      row.salesC ?? "",
       row.supplierCount ?? "",
       row.catalogStatus,
       row.notes,
@@ -1042,7 +1021,6 @@ function buildCatalogMasterExportWorkbook(rows: CatalogMasterExportWorkbookRow[]
     { wch: 22 },
     { wch: 14 },
     { wch: 22 },
-    { wch: 14 },
     { wch: 14 },
     { wch: 14 },
     { wch: 14 },
@@ -1091,9 +1069,7 @@ async function uploadExportArtifact(
 }
 
 export async function downloadExportArtifact(supabaseUrl: string, serviceRoleKey: string, job: ExportJobRow) {
-  if (!job.storage_bucket || !job.storage_path || !job.file_name || !job.content_type) {
-    throw new Error("Export file is not ready yet.");
-  }
+  assertExportArtifactReady(job);
   const response = await fetchWithTimeout(`${supabaseUrl}/storage/v1/object/${encodeURIComponent(job.storage_bucket)}/${encodeStoragePath(job.storage_path)}`, {
     headers: {
       apikey: serviceRoleKey,
@@ -1105,7 +1081,8 @@ export async function downloadExportArtifact(supabaseUrl: string, serviceRoleKey
     const data = await readJson<{ error?: string; message?: string }>(response);
     throw new Error(data.message || data.error || `Export file download failed: ${response.status}`);
   }
-  return new Response(await response.arrayBuffer(), {
+  if (!response.body) throw new Error("Export file download returned no content.");
+  return new Response(response.body, {
     status: 200,
     headers: {
       "Content-Type": job.content_type,
@@ -1123,11 +1100,7 @@ export async function createExportArtifactSignedDownload(
   serviceRoleKey: string,
   job: ExportJobRow,
 ) {
-  if (job.status !== "finalized" || !job.byte_size || /limited to/i.test(job.progress_message || "")) throw new Error("Export file is incomplete or not ready.");
-  assertCompleteExport(Number(job.row_count), job.progress_total == null ? null : Number(job.progress_total));
-  if (!job.storage_bucket || !job.storage_path || !job.file_name || !job.content_type) {
-    throw new Error("Export file is not ready yet.");
-  }
+  assertExportArtifactReady(job);
 
   const storageBaseUrl = `${supabaseUrl.replace(/\/+$/, "")}/storage/v1`;
   const response = await fetchWithTimeout(
@@ -1222,6 +1195,24 @@ async function getAdminPriceListDataVersion(supabaseUrl: string, serviceRoleKey:
   return String(version || "");
 }
 
+async function getPortalPriceListDataVersion(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  context: PortalPriceListExportContext,
+  invite: PortalInviteRow,
+) {
+  const baseDataVersion = await getAdminPriceListDataVersion(supabaseUrl, serviceRoleKey, context.organizationId, context.brandId);
+  return hashObject({
+    baseDataVersion,
+    customerId: context.customerId,
+    priceListType: context.priceListType,
+    effectiveMarginA: context.effectiveMarginA,
+    effectiveMarginB: context.effectiveMarginB,
+    cPriceListIds: context.cPriceListIds,
+    inviteUpdatedAt: normalizeExportVersionTimestamp(invite.updated_at || ""),
+  });
+}
+
 async function getCatalogExportDataVersion(supabaseUrl: string, serviceRoleKey: string, organizationId: string, brandId: string, marketSegment: string) {
   const version = await rpcJson<string>(
     supabaseUrl,
@@ -1261,7 +1252,7 @@ function isPortalInviteUsableForExport(invite: PortalInviteRow & { expires_at?: 
   const expiresAt = String(invite.expires_at || "").trim();
   if (!expiresAt) return true;
   const timestamp = Date.parse(expiresAt);
-  return !Number.isFinite(timestamp) || timestamp > Date.now();
+  return Number.isFinite(timestamp) && timestamp > Date.now();
 }
 
 async function fetchPortalInviteForExport(supabaseUrl: string, serviceRoleKey: string, organizationId: string, inviteId: string) {
@@ -1286,11 +1277,54 @@ export function assertPortalExportJobForInvite(job: ExportJobRow, invite: Portal
   const scope = job.scope || {};
   const inviteId = String(scope.inviteId || "");
   const customerId = String(scope.customerId || "");
-  if (job.audience !== "portal" || job.export_type !== "portal_price_list") {
+  const brandId = String(scope.brandId || "");
+  const allowedBrandIds = Array.isArray(invite.allowed_brand_ids) ? invite.allowed_brand_ids.map(String) : [];
+  if (job.audience !== "portal" || job.export_type !== "portal_price_list"
+    || job.organization_id !== invite.organization_id || !isPortalInviteUsableForExport(invite)
+    || invite.party_type !== "customer" || !invite.access_can_view_orders || !brandId
+    || (allowedBrandIds.length > 0 && !allowedBrandIds.includes(brandId))) {
     throw new Error("Export job not found.");
   }
   if (inviteId !== String(invite.id || "") || customerId !== String(invite.customer_id || "")) {
     throw new Error("Export job not found.");
+  }
+}
+
+export async function assertPortalExportJobCurrentContext(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  job: ExportJobRow,
+  invite: PortalInviteRow,
+) {
+  assertPortalExportJobForInvite(job, invite);
+  // Legacy files may contain a retired C price or an obsolete account margin.
+  // Require regeneration under the current published-price contract.
+  if (job.scope?.schemaVersion !== 4) {
+    throw new Error("Customer price export is outdated. Start a new export.");
+  }
+  const context = await resolvePortalPriceListExportContext(
+    supabaseUrl, serviceRoleKey, invite, String(job.scope.brandName || ""),
+  );
+  assertPortalExportJobPricingContext(job, invite, context);
+  const currentDataVersion = await getPortalPriceListDataVersion(supabaseUrl, serviceRoleKey, context, invite);
+  if (currentDataVersion !== job.data_version) {
+    throw new Error("Customer prices changed. Start a new export.");
+  }
+}
+
+export function assertPortalExportJobPricingContext(
+  job: ExportJobRow,
+  invite: PortalInviteRow,
+  context: PortalPriceListExportContext,
+) {
+  const margin = context.priceListType === "B" ? context.effectiveMarginB : context.effectiveMarginA;
+  if (context.currency !== "EUR" || job.scope.currency !== "EUR") {
+    throw new Error("Customer price export requires an EUR account until currency conversion is available.");
+  }
+  if (context.organizationId !== job.organization_id || context.inviteId !== invite.id
+    || context.customerId !== job.scope.customerId || context.brandId !== job.scope.brandId
+    || context.priceListType !== job.scope.priceListType || margin !== job.scope.marginPercent) {
+    throw new Error("Customer price settings changed. Start a new export.");
   }
 }
 
@@ -1313,7 +1347,7 @@ export async function startAdminPriceListExport(
     priceListType,
     marginPercent,
     format: "xlsx",
-    schemaVersion: 3,
+    schemaVersion: 4,
   };
   const cacheKey = hashObject({
     exportType,
@@ -1346,18 +1380,16 @@ export async function startPortalPriceListExport(
   const requestedBrand = String(input.brand || "").trim();
   if (!requestedBrand) throw new Error("Select a brand before downloading the price list.");
   const context = await resolvePortalPriceListExportContext(supabaseUrl, serviceRoleKey, invite, requestedBrand);
-  const priceListType: "A" | "B" = context.priceListType === "B" ? "B" : "A";
+  if (context.currency !== "EUR") {
+    throw new Error("Customer price export requires an EUR account until currency conversion is available.");
+  }
+  if (context.priceListType !== "A" && context.priceListType !== "B" && context.priceListType !== "Other") {
+    throw new Error("Customer price list type is no longer supported.");
+  }
+  const priceListType: "A" | "B" | "Other" = context.priceListType;
   const marginPercent = priceListType === "B" ? context.effectiveMarginB : context.effectiveMarginA;
-  const baseDataVersion = await getAdminPriceListDataVersion(supabaseUrl, serviceRoleKey, context.organizationId, context.brandId);
-  const dataVersion = hashObject({
-    baseDataVersion,
-    customerId: context.customerId,
-    priceListType,
-    effectiveMarginA: context.effectiveMarginA,
-    effectiveMarginB: context.effectiveMarginB,
-    cPriceListIds: context.cPriceListIds,
-    inviteUpdatedAt: normalizeExportVersionTimestamp(invite.updated_at || ""),
-  });
+  if (!Number.isFinite(marginPercent)) throw new Error("Customer price margin is missing.");
+  const dataVersion = await getPortalPriceListDataVersion(supabaseUrl, serviceRoleKey, context, invite);
   const exportType = "portal_price_list";
   const scope = {
     inviteId: context.inviteId,
@@ -1368,7 +1400,7 @@ export async function startPortalPriceListExport(
     currency: context.currency,
     marginPercent,
     format: "xlsx",
-    schemaVersion: 3,
+    schemaVersion: 4,
   };
   const cacheKey = hashObject({
     exportType,
@@ -1459,7 +1491,7 @@ export async function startCatalogMasterExport(
     marginB,
     format: "xlsx",
     maxRows: CATALOG_MASTER_EXPORT_MAX_ROWS,
-    schemaVersion: 3,
+    schemaVersion: 4,
   };
   const cacheKey = hashObject({
     exportType,
@@ -1622,7 +1654,7 @@ export async function runPortalPriceListExportJob(
   const priceListType = normalizePortalPriceListType(scope.priceListType);
   const currency = String(scope.currency || "EUR").trim() || "EUR";
   const marginPercent = Number(scope.marginPercent || 0);
-  if (!inviteId || !brandName) throw new Error("Portal export job is missing its scope.");
+  if (!inviteId || !brandId || !brandName || !Number.isFinite(marginPercent)) throw new Error("Portal export job is missing its scope.");
 
   const startedAt = new Date().toISOString();
   await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
@@ -1630,31 +1662,18 @@ export async function runPortalPriceListExportJob(
     started_at: job.started_at || startedAt,
     progress_done: 0,
     progress_total: null,
-    progress_message: "Building customer price rows from rollups.",
+    progress_message: "Building customer price rows from published prices.",
     error_message: null,
   });
 
   try {
     const invite = await fetchPortalInviteForExport(supabaseUrl, serviceRoleKey, job.organization_id, inviteId);
+    await assertPortalExportJobCurrentContext(supabaseUrl, serviceRoleKey, job, invite);
     let rowCount = 0;
     let progressTotal: number | null = null;
     let workbook: Buffer;
 
-    if (priceListType === "Other" || !brandId) {
-      const result = await buildPortalPriceListRows(supabaseUrl, serviceRoleKey, invite, brandName);
-      if (!result.rows.length) {
-        throw new Error(`Price list is not available for ${brandName}.`);
-      }
-      rowCount = result.rows.length;
-      progressTotal = result.rows.length;
-      await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
-        progress_done: rowCount,
-        progress_total: progressTotal,
-        row_count: rowCount,
-        progress_message: `Building customer XLSX workbook for ${rowCount.toLocaleString("en-US")} rows.`,
-      });
-      workbook = buildPortalPriceListWorkbook(result, brandName);
-    } else {
+    {
       const worksheet = createPortalPriceListWorksheet(currency);
       let afterNormalizedCode = "";
 

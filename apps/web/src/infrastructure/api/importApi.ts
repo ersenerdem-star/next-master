@@ -902,6 +902,14 @@ async function beginSupplierPriceImport(input: {
   );
 }
 
+export async function assertLegacySupplierPriceWriteAllowed(brandName: string) {
+  await callImportRpc<boolean>(
+    "assert_legacy_supplier_price_write_allowed",
+    { input_brand: brandName },
+    "Supplier price write check",
+  );
+}
+
 async function finalizeSupplierPriceImport(runId: string) {
   let latest: SupplierImportBatchFinalizeResult | null = null;
 

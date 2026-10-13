@@ -10,7 +10,7 @@ import {pipeline} from 'node:stream/promises';
 import {setTimeout as delay} from 'node:timers/promises';
 import {prepareSupplierPricePartitions,scanPreparedSupplierPriceBatch} from './prepared-partitions.mjs';
 import {supabaseApiHeaders} from './supabase-headers.mjs';
-import {validateCsvWithDuckDB} from './duckdb-validation.mjs';
+import {validateCsvWithDuckDB,requirePublishableSupplierPriceValidation} from './duckdb-validation.mjs';
 
 export const PREPARED_BUCKET='supplier-price-prepared';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -28,7 +28,7 @@ function binding(release,batchSize){
   ||! /\.(csv|tsv|txt|xlsx)$/i.test(path))throw Error('SHARED_PREPARED_BINDING_INVALID');
  const date=release.source_date?String(release.source_date).slice(0,10):null;
  if(date&&!/^\d{4}-\d{2}-\d{2}$/.test(date))throw Error('SHARED_PREPARED_DATE_INVALID');
- const context={contract:'supplier-price-normalized-parts-v1',release_id:release.id,handoff_id:release.handoff_id,
+ const context={contract:'supplier-price-normalized-parts-v2',release_id:release.id,handoff_id:release.handoff_id,
   source_path:path,source_sha256:release.source_file_sha256,source_bytes:Number(release.source_file_bytes),
   total_rows:Number(release.total_rows),source_date:date,batch_size:batchSize};
  const prefix=`${path.split('/')[0]}/${release.id}/${digest(JSON.stringify(context))}`;
@@ -132,11 +132,10 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
   return {manifest,receipt:{bucket:PREPARED_BUCKET,key,sha256:digest(bytes)}};
  }
  return {
-  async prepare({release,batchSize,validateExisting=false}){
+  async prepare({release,batchSize}){
    const {context,prefix,key}=binding(release,batchSize);
    await privateBucket();
    const ready=await load(release,batchSize);
-   if(ready&&!validateExisting)return ready.receipt;
    const dir=await mkdtemp(join(tmpdir(),'supplier-price-shared-'));
    try{
     const file=join(dir,/\.xlsx$/i.test(context.source_path)?'source.xlsx':'source.csv');
@@ -149,7 +148,9 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
      hash.update(chunk);done(null,chunk);
     }}),createWriteStream(file,{flags:'wx',mode:0o600}));
     if(bytes!==context.source_bytes||hash.digest('hex')!==context.source_sha256)throw Error('SHARED_PREPARED_SOURCE_MISMATCH');
-    const validation=await validateCsvWithDuckDB({inputPath:file,delimiter:';',memoryLimit:'512MB',threads:4,tempDirectory:dir});
+    const validation=await validateCsvWithDuckDB({inputPath:file,sourceDate:context.source_date,
+      memoryLimit:'512MB',threads:4,tempDirectory:dir});
+    requirePublishableSupplierPriceValidation(validation,context.total_rows);
     if(ready)return {...ready.receipt,validation};
     const prepared=await prepareSupplierPricePartitions({inputPath:file,outputDir:join(dir,'parts'),batchSize,
      sourceDate:context.source_date,expectedRows:context.total_rows,expectedChecksum:context.source_sha256,

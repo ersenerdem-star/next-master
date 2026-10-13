@@ -66,21 +66,6 @@ async function callRpc(name, args) {
   return body;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-async function validateOneStagedRelease() {
-  const rows = await callRpc("get_supplier_price_validation_candidate", {});
-  if (!Array.isArray(rows)) throw Error("SERVICE_VALIDATION_CANDIDATE_RESPONSE");
-  const releaseId = rows[0]?.id;
-  if (releaseId === undefined) return { status: "empty", published: false };
-  if (!UUID.test(releaseId)) throw Error("SERVICE_VALIDATION_RELEASE_ID");
-  const result = await callRpc("validate_supplier_price_release", { input_release_id: releaseId });
-  if (result?.status !== "validated" || result.release_id !== releaseId) {
-    throw Error("SERVICE_VALIDATION_RESPONSE");
-  }
-  return { status: "validated", releaseId, result, published: false };
-}
-
 async function claimReleaseBatch(releaseId, handoffId, workerId = WORKER_ID) {
   return callRpc(handoffId ? "claim_supplier_price_verified_release_batch" : "claim_supplier_price_release_batch", {
     input_release_id: releaseId,
@@ -207,21 +192,22 @@ const verifiedWorkflow = DBOS.registerWorkflow(async input => {
 
 // New durable step order requires a separate application/workflow version.
 // Do not resume an old 0.5.0 execution under v2 or rewrite its recorded steps.
-const VERIFIED_APP_VERSION=SHARED_PREPARED?'0.7.0-shared-prepared':'0.6.0-verified-recovery';
-const VERIFIED_WORKFLOW_NAME=SHARED_PREPARED?'supplier-price-verified-release-v3':'supplier-price-verified-release-v2';
+const VERIFIED_APP_VERSION=SHARED_PREPARED?'0.8.0-verified-integrity':'0.6.0-verified-recovery';
+const VERIFIED_WORKFLOW_NAME=SHARED_PREPARED?'supplier-price-verified-release-v4':'supplier-price-verified-release-v2';
 const verifiedRecoveryWorkflow=DBOS.registerWorkflow(createVerifiedReleaseWorkflow({DBOS,rpc:callRpc,
   requireMode:requireVerifiedMode,batchSize:BATCH_SIZE,
   scanSource:({release,claim})=>scanSupplierPriceStorageBatch({release,claim,supabaseUrl:SUPABASE_URL,
     serviceRoleKey:SERVICE_ROLE_KEY,bucket:STORAGE_BUCKET,includeRows:true})
 }),{name:'supplier-price-verified-release-v2'});
-// Separate v3 step history: preparation is durable and precedes SQL batch leases.
+// Separate v4 step history: preparation precedes leases and persisted-row
+// validation follows the final staged batch.
 // Provision private bucket/client-deny policy first; never activate by default.
 const verifiedPartitionedWorkflow=DBOS.registerWorkflow(async input=>{
   requireVerifiedMode();
   if(!SHARED_PREPARED)throw Error('SHARED_PREPARED_DISABLED');
   const source=createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY});
   return createPartitionedVerifiedWorkflow({DBOS,rpc:callRpc,source,requireMode:requireVerifiedMode,batchSize:BATCH_SIZE})(input);
-},{name:'supplier-price-verified-release-v3'});
+},{name:'supplier-price-verified-release-v4'});
 
 async function main() {
   const operatorRecovery = process.argv[2] === "--operator-recover";
@@ -280,7 +266,6 @@ async function main() {
       service=createWorkerService({pollMs:config.pollMs,
         verify:()=>consumeUploadVerification({rpc:callRpc,workerId:config.executorId+':verify',
           supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY}),
-        validate:config.autoValidate?validateOneStagedRelease:undefined,
         dispatch:()=>dispatchVerifiedSupplierPriceHandoff({rpc:callRpc,workerId:config.executorId+':dispatch',
           startWorkflow:async({workflowID,queueName,input})=>{
             const existing=await DBOS.getWorkflowStatus(workflowID);

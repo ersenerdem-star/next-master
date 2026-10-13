@@ -235,6 +235,20 @@ async function sanitizeCustomerPayload(input: {
   payload: Record<string, unknown>;
 }) {
   const next = { ...input.payload };
+  const priceListType = String(next.price_list_type || "").trim();
+  if (priceListType !== "A" && priceListType !== "B" && priceListType !== "Other") {
+    throw new Error("Select A, B, or Other on the customer account. The C price list is retired.");
+  }
+  const rawMargin = next.price_list_margin_percent;
+  const margin = rawMargin == null || String(rawMargin).trim() === "" ? null : Number(rawMargin);
+  if (margin != null && !Number.isFinite(margin)) {
+    throw new Error("Customer account margin must be a valid number.");
+  }
+  if (priceListType === "Other" && margin == null) {
+    throw new Error("Other pricing requires a customer account margin.");
+  }
+  next.price_list_type = priceListType;
+  next.price_list_margin_percent = margin;
   const rawProfileId = String(next.seller_company_profile_id || "").trim();
   const rawProfileIds = Array.isArray(next.seller_company_profile_ids)
     ? next.seller_company_profile_ids.map((value) => String(value || "").trim()).filter(isUuid)

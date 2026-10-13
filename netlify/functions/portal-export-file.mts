@@ -1,7 +1,7 @@
 import type { Config } from "@netlify/functions";
 import { resolvePortalInvite } from "./_shared/portal-access.mts";
 import { writePortalAuditEvent } from "./_shared/portal-audit.mts";
-import { assertPortalExportJobForInvite, downloadExportArtifact, fetchExportJobById } from "./_shared/export-jobs.mts";
+import { assertPortalExportJobCurrentContext, downloadExportArtifact, fetchExportJobById } from "./_shared/export-jobs.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
 import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
@@ -30,9 +30,10 @@ export default async (req: Request) => {
     if (!rateLimit.allowed) return new Response("Too many portal refresh attempts. Try again later.", { status: 429 });
     const job = await fetchExportJobById(supabaseUrl, serviceRoleKey, invite.organization_id, jobId);
     if (!job) return new Response("Export job not found.", { status: 404 });
-    assertPortalExportJobForInvite(job, invite);
+    await assertPortalExportJobCurrentContext(supabaseUrl, serviceRoleKey, job, invite);
     if (job.status !== "finalized") return new Response("Export file is not ready yet.", { status: 409 });
 
+    const response = await downloadExportArtifact(supabaseUrl, serviceRoleKey, job);
     await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       organizationId: invite.organization_id,
       inviteId: invite.id,
@@ -43,7 +44,6 @@ export default async (req: Request) => {
       details: { jobId, rowCount: job.row_count, transport: "same_origin" },
     });
 
-    const response = await downloadExportArtifact(supabaseUrl, serviceRoleKey, job);
     response.headers.set("Cache-Control", "no-store");
     response.headers.set("Set-Cookie", buildPortalSessionCookie(nextSessionToken));
     return response;

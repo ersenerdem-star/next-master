@@ -2,7 +2,7 @@ import type { Config, Context } from "@netlify/functions";
 import { json } from "./_shared/http.mts";
 import { resolvePortalInvite } from "./_shared/portal-access.mts";
 import { writePortalAuditEvent } from "./_shared/portal-audit.mts";
-import { assertPortalExportJobForInvite, fetchExportJobById, runPortalPriceListExportJob, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
+import { assertPortalExportJobCurrentContext, fetchExportJobById, isExportJobUnexpired, runPortalPriceListExportJob, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
 import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
@@ -47,8 +47,8 @@ export default async (req: Request, context: Context) => {
     });
     const job = await fetchExportJobById(supabaseUrl, serviceRoleKey, invite.organization_id, jobId);
     if (!job) return json({ error: "Export job not found." }, 404, { "Set-Cookie": buildPortalSessionCookie(nextSessionToken) });
-    assertPortalExportJobForInvite(job, invite);
-    if ((job.status === "queued" || job.status === "running") && isStaleExportJob(job.status, job.updated_at)
+    await assertPortalExportJobCurrentContext(supabaseUrl, serviceRoleKey, job, invite);
+    if (isExportJobUnexpired(job) && (job.status === "queued" || job.status === "running") && isStaleExportJob(job.status, job.updated_at)
       && !(isV3ExportBridgeEnabled() && isProductionExportPaused())) {
       context.waitUntil(
         (isV3ExportBridgeEnabled()

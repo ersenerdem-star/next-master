@@ -11,16 +11,10 @@ import { supabaseApiHeaders } from "./supabase-headers.mjs";
 
 export function applyReleaseSourceDate(row, sourceDate) {
   const normalizedDate = String(sourceDate || "").slice(0, 10);
-  if (!normalizedDate || row.valid_from || !String(row.error_message || "").includes("INVALID_VALID_FROM")) return row;
-  const remainingWarnings = String(row.error_message)
-    .split(",")
-    .filter((code) => code && code !== "INVALID_VALID_FROM");
+  // A release date can fill an omitted row date, never mask an invalid one.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate) || row.valid_from
+      || String(row.error_message || "").includes("INVALID_VALID_FROM")) return row;
   row.valid_from = normalizedDate;
-  row.error_message = remainingWarnings.length ? remainingWarnings.join(",") : null;
-  if (row.row_status === "warning" && remainingWarnings.length === 0) {
-    row.row_status = "accepted";
-    row.error_code = null;
-  }
   const { row_hash: _oldHash, ...hashable } = row;
   row.row_hash = createHash("sha256").update(JSON.stringify(hashable)).digest("hex");
   return row;

@@ -2,7 +2,7 @@ import type { Config } from "@netlify/functions";
 import { json } from "./_shared/http.mts";
 import { resolvePortalInvite } from "./_shared/portal-access.mts";
 import { writePortalAuditEvent } from "./_shared/portal-audit.mts";
-import { assertPortalExportJobForInvite, createExportArtifactSignedDownload, fetchExportJobById } from "./_shared/export-jobs.mts";
+import { assertPortalExportJobCurrentContext, createExportArtifactSignedDownload, fetchExportJobById } from "./_shared/export-jobs.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
 import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
@@ -37,9 +37,10 @@ export default async (req: Request) => {
     });
     const job = await fetchExportJobById(supabaseUrl, serviceRoleKey, invite.organization_id, jobId);
     if (!job) return json({ error: "Export job not found." }, 404, { "Set-Cookie": buildPortalSessionCookie(nextSessionToken) });
-    assertPortalExportJobForInvite(job, invite);
+    await assertPortalExportJobCurrentContext(supabaseUrl, serviceRoleKey, job, invite);
     if (job.status !== "finalized") return json({ error: "Export file is not ready yet." }, 409, { "Set-Cookie": buildPortalSessionCookie(nextSessionToken) });
 
+    const download = await createExportArtifactSignedDownload(supabaseUrl, serviceRoleKey, job);
     await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       organizationId: invite.organization_id,
       inviteId: invite.id,
@@ -49,7 +50,6 @@ export default async (req: Request) => {
       status: "ok",
       details: { jobId, rowCount: job.row_count },
     });
-    const download = await createExportArtifactSignedDownload(supabaseUrl, serviceRoleKey, job);
     return json({ ok: true, ...download, fallbackUrl: `/api/portal-export-file?jobId=${encodeURIComponent(job.id)}` }, 200, {
       "Cache-Control": "no-store",
       "Set-Cookie": buildPortalSessionCookie(nextSessionToken),

@@ -86,6 +86,11 @@ type MasterSupplierStats = {
 
 type MasterSearchMode = "strict" | "loose";
 
+type PublishedPriceMasterPage = {
+  has_published_scope: boolean;
+  rows: MasterRow[];
+};
+
 function shouldRunLooseOriginalNumberSearch(search: string) {
   return normalizeOriginalNumberSearch(search).length >= 6;
 }
@@ -581,6 +586,23 @@ async function fetchCloudMasterPricedFastPage(params: MasterParams): Promise<Mas
   }
 
   try {
+    // A published pointer owns this brand. Read its current release first so a
+    // stale legacy rollup can never win merely because it has catalog rows.
+    const published = await callAppRpc<PublishedPriceMasterPage>("cloud_master_published_price_page_v3", {
+      input_search: params.search,
+      input_brand_id: brandId,
+      input_page: params.page ?? 1,
+      input_page_size: params.pageSize ?? 50,
+      input_margin_a: params.marginA ?? 0.1,
+      input_margin_b: params.marginB ?? 0.15,
+    });
+    if (published?.has_published_scope === true) {
+      if (!Array.isArray(published.rows)) throw new Error("Published price page is invalid. Please retry.");
+      return normalizeFastMasterRows(published.rows);
+    }
+    if (published?.has_published_scope !== false) {
+      throw new Error("Published price scope could not be verified. Please retry.");
+    }
     const data = await callAppRpc<MasterRow[]>("cloud_master_priced_page_fast", {
       input_search: params.search,
       input_brand_id: brandId,
@@ -591,7 +613,11 @@ async function fetchCloudMasterPricedFastPage(params: MasterParams): Promise<Mas
     });
     return normalizeFastMasterRows(data);
   } catch (error) {
-    throw createPricedFastError(error, "Priced supplier comparison could not be loaded.");
+    throw createPricedFastError(
+      error,
+      "Priced supplier comparison could not be loaded.",
+      "Published supplier prices are not available yet. Apply the current staging migrations and retry.",
+    );
   }
 }
 

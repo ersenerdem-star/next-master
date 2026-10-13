@@ -1,15 +1,14 @@
 import { useEffect, useState } from "react";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
-import { fetchCustomerPriceListExportRows, fetchPriceListSettings, updateMarginPriceList } from "../../infrastructure/api/priceListsApi";
+import { fetchPriceListSettings, updateMarginPriceList } from "../../infrastructure/api/priceListsApi";
+import { downloadExportJob, startAdminPriceListExport, waitForExportJob } from "../../infrastructure/api/exportJobsApi";
 import type { BrandOption } from "../../types/brand";
 import { Button } from "../components/common/Button";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { Input } from "../components/common/Input";
 import { SectionCard } from "../components/common/SectionCard";
 import { Select } from "../components/common/Select";
-import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { useI18n } from "../../i18n/I18nProvider";
-import { formatBrandAwareProductCode } from "../../shared/productCodeDisplay";
 
 export function PriceListsPage() {
   const { t } = useI18n();
@@ -96,39 +95,31 @@ export function PriceListsPage() {
       setStatusTone("error");
       return;
     }
+    const marginPercent = downloadListType === "A" ? Number(marginA) / 100 : Number(marginB) / 100;
+    if (!Number.isFinite(marginPercent)) {
+      setStatus(t("sales.priceLists.marginsMustBeNumeric"));
+      setStatusTone("error");
+      return;
+    }
 
     try {
       setStatus("");
       setStatusTone(null);
       setDownloadingPriceList(true);
       actionFeedback.begin(t("sales.priceLists.preparingDownload", { listType: downloadListType, brandName }));
-      const marginPercent = downloadListType === "A" ? Number(marginA) / 100 : Number(marginB) / 100;
-      const catalogRows = await fetchCustomerPriceListExportRows({
+      const initialJob = await startAdminPriceListExport({
         brandId: selectedDownloadBrand.id,
+        brandName,
         priceListType: downloadListType,
         marginPercent,
-        pageSize: 1000,
       });
-      const sheetRows: Array<Array<string | number | null>> = [["New_Code", "Old_Codes", "Brand", "Product_Name", "OEM_No", "HS_Code", "Origin", "Weight_kg", "Price_List_Type", "Sales_Price_EUR", "Notes"]];
-
-      sheetRows.push(
-        ...catalogRows.map((row) => [
-          formatBrandAwareProductCode(row.product_code, row.brand || brandName),
-          "",
-          row.brand || brandName,
-          row.description || "",
-          row.oem_no || "",
-          row.hs_code || "",
-          row.origin || "",
-          row.weight_kg ?? "",
-          `${row.price_list_type || downloadListType} Price List`,
-          row.sales_price ?? "",
-          row.notes || "",
-        ]),
-      );
-
-      const blob = buildXlsxBlob(`${brandName} ${downloadListType}`, sheetRows, [8, 10, 13]);
-      downloadBlob(`price-list-${brandName.toLowerCase().replace(/\s+/g, "-")}-${downloadListType.toLowerCase()}.xlsx`, blob);
+      const readyJob = await waitForExportJob(initialJob, (job) => {
+        const progress = job.progressTotal
+          ? ` ${job.progressDone.toLocaleString("en-US")} / ${job.progressTotal.toLocaleString("en-US")}`
+          : job.progressDone ? ` ${job.progressDone.toLocaleString("en-US")}` : "";
+        setStatus(`${t("sales.priceLists.preparingDownload", { listType: downloadListType, brandName })}${progress}`);
+      });
+      await downloadExportJob(readyJob.id);
       setStatus(t("sales.priceLists.downloaded", { listType: downloadListType, brandName }));
       setStatusTone("success");
       actionFeedback.succeed(t("sales.priceLists.downloaded", { listType: downloadListType, brandName }));
@@ -174,7 +165,7 @@ export function PriceListsPage() {
           {t("sales.priceLists.downloadPriceList")}
         </Button>
       </div>
-      {status ? <div className={statusTone === "success" ? "success-text" : "error-text"}>{status}</div> : null}
+      {status ? <div className={statusTone === "success" ? "success-text" : statusTone === "error" ? "error-text" : undefined}>{status}</div> : null}
     </SectionCard>
   );
 }

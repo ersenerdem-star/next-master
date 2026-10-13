@@ -1,7 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { getAppAuthStatus, resolveCaller } from "./_shared/app-auth.mts";
 import { canAccessOperationsModules } from "./_shared/roles.mts";
-import { exportJson, fetchExportJobById, runAdminPriceListExportJob, runCatalogExportJob, runCatalogMasterExportJob, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
+import { exportJson, fetchExportJobById, isExportJobUnexpired, runAdminPriceListExportJob, runCatalogExportJob, runCatalogMasterExportJob, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 import { dispatchV3PriceExportWorker, isProductionExportPaused, isV3ExportBridgeEnabled } from "./_shared/v3-export-dispatch.mts";
 
@@ -33,7 +33,7 @@ export default async (req: Request, context: Context) => {
     if (!jobId) return exportJson({ error: "jobId is required." }, 400);
     const job = await fetchExportJobById(supabaseUrl, serviceRoleKey, caller.organizationId, jobId);
     if (!job) return exportJson({ error: "Export job not found." }, 404);
-    if ((job.status === "queued" || job.status === "running") && isStaleExportJob(job.status, job.updated_at)) {
+    if (isExportJobUnexpired(job) && (job.status === "queued" || job.status === "running") && isStaleExportJob(job.status, job.updated_at)) {
       if (job.export_type === "admin_price_list" && !(isV3ExportBridgeEnabled() && isProductionExportPaused())) {
         const retry = isV3ExportBridgeEnabled()
           ? dispatchV3PriceExportWorker(req, job.id)

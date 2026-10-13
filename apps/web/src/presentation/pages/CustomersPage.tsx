@@ -22,6 +22,7 @@ export function CustomersPage() {
   const [customers, setCustomers] = useState<LocalCustomer[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [draft, setDraft] = useState<LocalCustomer | null>(null);
+  const [marginInput, setMarginInput] = useState("");
   const [activeTab, setActiveTab] = useState<CustomerTab>("Other Details");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -67,6 +68,10 @@ export function CustomersPage() {
 
   const tabs: CustomerTab[] = ["Other Details", "Address", "Contact Persons", "Custom Fields", "Reporting Tags", "Remarks"];
   const selectedCustomer = useMemo(() => customers.find((item) => item.id === selectedId) || null, [customers, selectedId]);
+
+  useEffect(() => {
+    setMarginInput(draft?.price_list_margin_percent == null ? "" : String(draft.price_list_margin_percent));
+  }, [draft?.id]);
 
   const customerTabLabels: Record<CustomerTab, string> = {
     "Other Details": t("sales.customers.tabs.otherDetails"),
@@ -274,8 +279,12 @@ export function CustomersPage() {
       actionFeedback.fail(t("sales.customers.displayOrCompanyRequired"));
       return;
     }
-    if (!draft.price_list_type) {
+    if (!draft.price_list_type || draft.price_list_type === "C") {
       actionFeedback.fail(t("sales.customers.priceListRequired"));
+      return;
+    }
+    if (draft.price_list_margin_percent != null && !Number.isFinite(draft.price_list_margin_percent)) {
+      actionFeedback.fail(t("sales.customers.priceListMarginRequired"));
       return;
     }
     if (draft.price_list_type === "Other" && draft.price_list_margin_percent == null) {
@@ -296,6 +305,7 @@ export function CustomersPage() {
       setCustomers(rows);
       setSelectedId(saved.id);
       setDraft(saved);
+      setMarginInput(saved.price_list_margin_percent == null ? "" : String(saved.price_list_margin_percent));
       actionFeedback.succeed(t("sales.customers.customerSaved", { customerName: displayName }));
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.customers.saveFailed"));
@@ -586,45 +596,37 @@ export function CustomersPage() {
                   <div className="customers-form-row">
                     <div className="customers-form-row__label">{t("sales.customers.priceList")}</div>
                     <div className="customers-field-wrap customers-field-wrap--wide">
-                      {legacyCPriceList ? (
-                        <Input value={t("sales.customers.legacyPricingProfile")} onChange={() => undefined} disabled />
-                      ) : (
-                        <label className="field customer-field">
-                          <select
-                            className="field__input"
-                            value={draft.price_list_type}
-                            onChange={(event) => {
-                              const nextType = event.target.value as LocalCustomer["price_list_type"];
-                              updateDraft({
-                                price_list_type: nextType,
-                              });
-                            }}
-                          >
-                            <option value="">{t("sales.customers.selectPriceList")}</option>
-                            <option value="A">{t("sales.customers.priceLists.a")}</option>
-                            <option value="B">{t("sales.customers.priceLists.b")}</option>
-                            <option value="Other">{t("sales.customers.priceLists.other")}</option>
-                          </select>
-                        </label>
-                      )}
+                      <label className="field customer-field">
+                        <select
+                          className="field__input"
+                          value={legacyCPriceList ? "" : draft.price_list_type}
+                          onChange={(event) => updateDraft({ price_list_type: event.target.value as LocalCustomer["price_list_type"] })}
+                        >
+                          <option value="">{t("sales.customers.selectPriceList")}</option>
+                          <option value="A">{t("sales.customers.priceLists.a")}</option>
+                          <option value="B">{t("sales.customers.priceLists.b")}</option>
+                          <option value="Other">{t("sales.customers.priceLists.other")}</option>
+                        </select>
+                      </label>
                     </div>
                   </div>
                   {legacyCPriceList ? (
                     <div className="warning-text">{t("sales.customers.legacyPricingProfileWarning")}</div>
                   ) : null}
-                  {draft.price_list_type === "Other" ? (
+                  {draft.price_list_type === "A" || draft.price_list_type === "B" || draft.price_list_type === "Other" ? (
                     <div className="customers-form-row">
                       <div className="customers-form-row__label customers-form-row__label--required">{t("sales.customers.priceListMargin")}</div>
                       <div className="customers-field-wrap customers-field-wrap--medium">
                         <Input
-                          value={draft.price_list_margin_percent == null ? "" : String(draft.price_list_margin_percent)}
-                          onChange={(value) =>
+                          value={marginInput}
+                          onChange={(value) => {
+                            setMarginInput(value);
+                            const trimmed = value.trim();
+                            const parsed = trimmed ? Number(trimmed.replace(",", ".")) : null;
                             updateDraft({
-                              price_list_margin_percent: value.trim()
-                                ? Number(value.replace(",", ".")) || 0
-                                : null,
-                            })
-                          }
+                              price_list_margin_percent: parsed,
+                            });
+                          }}
                           placeholder="12,50"
                         />
                       </div>

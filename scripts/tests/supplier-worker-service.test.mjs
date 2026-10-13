@@ -5,27 +5,28 @@ import {serviceConfig,servicePreflight,serviceLogger,serviceStartupFailure,creat
   from '../../apps/engine/supplier-price-shadow/src/worker-service.mjs';
 
 const env={SUPABASE_URL:'https://ztzxxogozgaojgabnvpg.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'sb_secret_synthetic_only',
-  SUPPLIER_PRICE_EXECUTOR_ID:'supplier-price-staging-01',DBOS_SYSTEM_DATABASE_URL:'postgresql://worker:synthetic@private.invalid/history',
+  SUPPLIER_PRICE_EXECUTOR_ID:'supplier-price-staging-01',DBOS_SYSTEM_DATABASE_URL:'postgresql://worker:example@private.invalid/history',
   ...Object.fromEntries(['SUPPLIER_PRICE_SERVICE_ENABLED','SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED',
     'SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED','SUPPLIER_PRICE_SHARED_PREPARED_ENABLED','SUPPLIER_PRICE_SHADOW_PERSIST',
     'SUPPLIER_PRICE_UPLOAD_VERIFICATION_ENABLED'].map(k=>[k,'1']))};
 test('Operational config retains exact staging, stable identity, bounded execution and no publication RPC',()=>{
- const c=serviceConfig(env);assert.equal(c.batchSize,1000);assert.equal(c.port,3000);assert.equal(c.autoValidate,true);
+ const c=serviceConfig(env);assert.equal(c.batchSize,1000);assert.equal(c.port,3000);assert.equal(c.autoValidate,false);
  assert.equal(c.executorId,env.SUPPLIER_PRICE_EXECUTOR_ID);assert.equal(c.shutdownMs,20000);
  assert.deepEqual(SERVICE_QUEUE_LIMITS,{globalConcurrency:1,workerConcurrency:1});
  assert.equal([...SERVICE_RPC_NAMES].some(x=>/publish|activate|delete|bootstrap|close/.test(x)),false);
- assert.equal(SERVICE_RPC_NAMES.has('get_supplier_price_validation_candidate'),true);
- assert.equal(SERVICE_RPC_NAMES.has('validate_supplier_price_release'),true);
+ assert.equal(SERVICE_RPC_NAMES.has('get_supplier_price_validation_candidate'),false);
+ assert.equal(SERVICE_RPC_NAMES.has('validate_supplier_price_release'),false);
+  assert.equal(SERVICE_RPC_NAMES.has('complete_supplier_price_release_duckdb_validation'),true);
 });
-test('Automatic validation can be explicitly disabled without weakening the staging guard',()=>{
- assert.equal(serviceConfig({...env,SUPPLIER_PRICE_AUTO_VALIDATE_ENABLED:'0'}).autoValidate,false);
+test('Legacy automatic SQL validation cannot be re-enabled by stale Render config',()=>{
+ assert.equal(serviceConfig({...env,SUPPLIER_PRICE_AUTO_VALIDATE_ENABLED:'1'}).autoValidate,false);
 });
 for(const [name,patch] of Object.entries({production:{SUPABASE_URL:'https://zjgueqijumzlfioihnkt.supabase.co'},
   extraPath:{SUPABASE_URL:env.SUPABASE_URL+'/rest/v1'},query:{SUPABASE_URL:env.SUPABASE_URL+'?other=1'},
   credentials:{SUPABASE_URL:'https://user:secret@ztzxxogozgaojgabnvpg.supabase.co'},noKey:{SUPABASE_SERVICE_ROLE_KEY:''},
   publicKey:{SUPABASE_SERVICE_ROLE_KEY:'sb_publishable_fake'},historyUnconfirmed:{SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED:'0'},
   noExecutor:{SUPPLIER_PRICE_EXECUTOR_ID:''},pidExecutor:{SUPPLIER_PRICE_EXECUTOR_ID:'dbos-shadow:123'},
-  missingHistory:{DBOS_SYSTEM_DATABASE_URL:''},prodHistory:{DBOS_SYSTEM_DATABASE_URL:'postgresql://x:y@db.zjgueqijumzlfioihnkt.supabase.co/postgres'},
+  missingHistory:{DBOS_SYSTEM_DATABASE_URL:''},prodHistory:{DBOS_SYSTEM_DATABASE_URL:'postgresql://x:example@db.zjgueqijumzlfioihnkt.supabase.co/postgres'},
   noHistoryPassword:{DBOS_SYSTEM_DATABASE_URL:'postgresql://worker@private.invalid/history'},
   excessiveBatch:{SUPPLIER_PRICE_SHADOW_BATCH_SIZE:'10000'},nanBatch:{SUPPLIER_PRICE_SHADOW_BATCH_SIZE:'bad'},
   expectedFixture:{SUPPLIER_PRICE_EXPECTED_RELEASE_ID:'fixture'},localManifest:{SUPPLIER_PRICE_SHADOW_PARTITION_MANIFEST:'/tmp/manifest'},
@@ -60,7 +61,7 @@ test('Failed history from another staging target does not block current-target i
  const orphan=workflow('8ee663f6-a571-4c1d-82d4-cd87a62b1356');
  assert.deepEqual(reconcileFailedWorkflowHistory([orphan],[]),[]);
 });
-test('Resolved current-target history is ignored but active failure remains review-blocking',()=>{
+test('Only validated current-target history clears failed workflow backpressure',()=>{
  const staged=workflow('f45a8e17-c47d-44de-9dd6-a5c52a0387e0');
   const validated=workflow('8a3d4c6b-0c13-4f77-9b5e-4c2fd9b3a1e7');
  const active=workflow('3928c266-be8c-427f-9289-24e3c87cc361');
@@ -69,7 +70,7 @@ test('Resolved current-target history is ignored but active failure remains revi
   {id:staged.input[0].releaseId,status:'staged'},
   {id:validated.input[0].releaseId,status:'validated'},
   {id:active.input[0].releaseId,status:'received'},
- ]),[active,malformed]);
+ ]),[staged,active,malformed]);
 });
 test('Startup diagnosis identifies only known guard codes and nonsecret opt-in names',()=>{
  try{serviceConfig({...env,SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED:'0'});}catch(error){
@@ -79,7 +80,7 @@ test('Startup diagnosis identifies only known guard codes and nonsecret opt-in n
  assert.equal(serviceStartupFailure(Error('SERVICE_CAPABILITY_NOT_CONFIRMED')).errorCode,'SERVICE_CAPABILITY_NOT_CONFIRMED');
 });
 test('Unknown startup diagnostics cannot leak secret-bearing messages, stacks or config values',()=>{
- for(const message of ['sb_secret_private','postgresql://worker:password@host/history','SERVICE_sb_secret_private']){
+ for(const message of ['sb_secret_private','postgresql://worker:example@host/history','SERVICE_sb_secret_private']){
   const diagnostic=serviceStartupFailure(Object.assign(Error(message),{configKey:'sb_secret_private',stack:'private stack'}));
   assert.equal(diagnostic.errorCode,'SERVICE_STARTUP_UNCONFIRMED');
   assert.doesNotMatch(JSON.stringify(diagnostic),/private|password|postgresql/);
@@ -101,19 +102,21 @@ test('Source verification and handoff drain before staged validation',async()=>{
  await s.cycle();assert.deepEqual(calls,['verify','dispatch','validate']);assert.equal(s.snapshot().phase,'validated');
  assert.equal(s.snapshot().ready,true);assert.equal(s.snapshot().published,false);
 });
-test('Validation failure does not stop future source admission',async()=>{
+test('Validation failure does not stop future source admission but is not ready',async()=>{
  const calls=[];const s=setup({validate:async()=>{calls.push('validate');throw Error('SERVICE_VALIDATION_LOOKUP');},
   verify:async()=>{calls.push('verify');return empty;},dispatch:async()=>{calls.push('dispatch');return empty;}});
  await s.cycle();assert.deepEqual(calls,['verify','dispatch','validate']);
- assert.equal(s.snapshot().ready,true);assert.equal(s.snapshot().published,false);
+ assert.equal(s.snapshot().ready,false);assert.equal(s.snapshot().phase,'validation-degraded');
+ assert.equal(s.snapshot().errorCode,'SERVICE_VALIDATION_UNCONFIRMED');assert.equal(s.snapshot().published,false);
 });
 test('Intake does not wait on recovered history before source admission',async()=>{
  const calls=[];const s=setup({probe:async()=>({busy:true,failed:false}),verify:async()=>{calls.push('verify');return empty;},dispatch:async()=>{calls.push('dispatch');return empty;}});
  await s.cycle();assert.deepEqual(calls,['verify','dispatch']);assert.equal(s.snapshot().ready,true);
 });
-test('Failed durable history does not block a new source intake',async()=>{
+test('Failed durable history does not block a new source intake but blocks readiness',async()=>{
  const calls=[];const s=setup({probe:async()=>({busy:false,failed:true}),verify:async()=>{calls.push('verify');return empty;},dispatch:async()=>{calls.push('dispatch');return empty;}});
- await s.cycle();assert.deepEqual(calls,['verify','dispatch']);assert.equal(s.snapshot().ready,true);
+ await assert.rejects(s.cycle(),/SERVICE_WORKFLOW_REQUIRES_REVIEW/);
+ assert.deepEqual(calls,['verify','dispatch']);assert.equal(s.snapshot().ready,false);
 });
 test('Malformed or falsely published response fails closed',async()=>{
  for(const status of ['empty','verified','published']) {
@@ -140,7 +143,7 @@ test('Stop interrupts idle wait immediately; no second claim',async()=>{
 });
 test('SDK logging never passes connection URLs, SQL bodies, price data or metadata stacks',()=>{
  const logs=[];const logger=serviceLogger(x=>logs.push(x));
- for(const level of ['debug','info','warn','error'])logger[level]('postgres://worker:secret@host sb_secret_hidden price=99',{stack:'private stack'});
+ for(const level of ['debug','info','warn','error'])logger[level]('postgres://worker:example@host sb_secret_hidden price=99',{stack:'private stack'});
  assert.equal(logs.length,2);assert.doesNotMatch(logs.join(''),/secret|postgres|price=99|private stack/);
 });
 test('Actual HTTP probes are private-data-free and distinguish readiness from process liveness',async()=>{

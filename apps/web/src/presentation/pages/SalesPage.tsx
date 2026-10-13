@@ -577,10 +577,24 @@ export function SalesPage({
       setResyncingInvoice(true);
       actionFeedback.begin(t("sales.invoices.resyncingFromCatalog", { invoiceNo: invoiceDraft.id }));
       const salesOrderCustomerType = salesOrders.find((row) => row.id === invoiceDraft.sales_order_id)?.customer_type || "A";
+      let currentCustomerType = salesOrderCustomerType;
+      let accountMarginPercent: number | null = null;
+      if (!invoiceResyncKeepPrices) {
+        const accountRows = await fetchCustomers();
+        const account = findCustomerByNameInList(accountRows, invoiceDraft.customer_name);
+        if (!account) throw new Error("Customer account is required to refresh invoice prices.");
+        if (account.price_list_type !== "A" && account.price_list_type !== "B" && account.price_list_type !== "Other") {
+          throw new Error("Set A, B, or Other on the customer account before refreshing invoice prices.");
+        }
+        currentCustomerType = account.price_list_type;
+        accountMarginPercent = account.price_list_margin_percent;
+      }
       const nextLines = await resyncInvoiceLinesFromCatalog(invoiceDraft.lines, {
-        customerType: salesOrderCustomerType,
+        customerType: currentCustomerType,
         marginA,
         marginB,
+        accountMarginPercent,
+        currency: invoiceDraft.currency,
         onlyFillBlanks: invoiceResyncOnlyFillBlanks,
         keepPrices: invoiceResyncKeepPrices,
       });

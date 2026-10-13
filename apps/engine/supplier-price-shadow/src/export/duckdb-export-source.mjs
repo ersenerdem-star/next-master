@@ -46,7 +46,7 @@ export async function materializePagedExportWithDuckDB({fetchPage,binding,expect
 // is intentionally capped at the public export page size; the worker already
 // sealed and authorized this snapshot, so the private server path can avoid
 // repeating hundreds of Postgres round trips while building the same CSV.
-export async function materializeSealedSnapshotWithDuckDB({pool,snapshotId,binding,expectedRows,outputDir,tempDirectory=outputDir,batchSize=50000}){
+export async function materializeSealedSnapshotWithDuckDB({pool,snapshotId,binding,expectedRows,outputDir,tempDirectory=outputDir,batchSize=50000,assertActive}){
  if(!pool||typeof pool.connect!=='function'||typeof snapshotId!=='string'||typeof binding!=='string'||!Number.isSafeInteger(expectedRows)||expectedRows<1||expectedRows>10_000_000||!Number.isSafeInteger(batchSize)||batchSize<1||batchSize>100_000||typeof outputDir!=='string'||!outputDir||typeof tempDirectory!=='string'||!tempDirectory)throw Error('DUCKDB_SNAPSHOT_CONFIG_INVALID');
  const inputPath=join(tempDirectory,'authorized-snapshot-input.csv');
  const sortedPath=join(outputDir,'duckdb-export-sorted.csv');
@@ -55,6 +55,7 @@ export async function materializeSealedSnapshotWithDuckDB({pool,snapshotId,bindi
  const client=await pool.connect(); let processed=0,lastOrdinal=0;
  try{
   while(processed<expectedRows){
+   if(assertActive)await assertActive();
    const result=await client.query('select ordinal::bigint as ordinal,payload from export_snapshot_private.rows where snapshot_id=$1 and ordinal>$2 order by ordinal limit $3',[snapshotId,lastOrdinal,batchSize]);
    if(!result.rows.length)throw Error('DUCKDB_SNAPSHOT_COUNT_INVALID');
    for(const row of result.rows){
@@ -70,8 +71,10 @@ export async function materializeSealedSnapshotWithDuckDB({pool,snapshotId,bindi
   const connection=await instance.connect();
   try{await connection.run(`copy (select cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand from read_csv_auto(${q(inputPath)},header=true,all_varchar=true,ignore_errors=false) order by cursor_key,code) to ${q(sortedPath)} (header,delimiter ',')`);}
   finally{connection.disconnectSync();}
+  if(assertActive)await assertActive();
   return {engine:'duckdb',binding,expectedRows,processedRows:processed,pageCount:Math.ceil(processed/batchSize),inputPath,sortedPath};
- }finally{client.release();}
+ }catch(error){stream.destroy();throw error;}
+ finally{client.release();}
 }
 
 export async function readDuckDbExportCsv(path){

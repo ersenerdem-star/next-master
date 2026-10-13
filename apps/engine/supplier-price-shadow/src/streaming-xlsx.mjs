@@ -11,6 +11,7 @@ import {
   canonicalizeHeader,
   inferCurrencyFromHeaders,
   normalizeSupplierPriceRow,
+  requireSupplierPriceHeaders,
 } from "./streaming-csv.mjs";
 
 function cellText(value) {
@@ -118,12 +119,16 @@ export async function* parseNormalizedSupplierPriceRowsFromXlsx(input, options =
           const rawHeaders = values.map(cellText);
           inferredCurrency = inferCurrencyFromHeaders(rawHeaders);
           headers = rawHeaders.map(canonicalizeHeader);
+          requireSupplierPriceHeaders(headers,'XLSX');
           continue;
         }
         sourceRowNumber += 1;
         const record = Object.fromEntries(headers.map((name, index) => [name, cellText(values[index] ?? "")]));
         if (inferredCurrency && !String(record.currency || "").trim()) record.currency = inferredCurrency;
-        yield normalizeSupplierPriceRow({ sourceRowNumber, row: record });
+        const rawBuyPrice = values[headers.indexOf("buy_price")];
+        const buyPriceIsNumeric = typeof rawBuyPrice === "number"
+          || (rawBuyPrice && typeof rawBuyPrice === "object" && typeof rawBuyPrice.result === "number");
+        yield normalizeSupplierPriceRow({ sourceRowNumber, row: record, buyPriceIsNumeric });
         if (options.maxRows && sourceRowNumber >= options.maxRows) return;
       }
       if (!headers) throw new Error("XLSX_MISSING_HEADER");

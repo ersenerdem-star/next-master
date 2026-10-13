@@ -9,6 +9,7 @@ import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 const ALLOWED_RPCS = new Set([
   "admin_list_org_users",
   "admin_list_org_users_with_access",
+  "assert_legacy_supplier_price_write_allowed",
   "begin_catalog_import",
   "begin_supplier_price_import",
   "begin_customer_price_list_replace",
@@ -21,6 +22,7 @@ const ALLOWED_RPCS = new Set([
   "cloud_master_page_fast",
   "cloud_master_priced_export_page_fast",
   "cloud_master_priced_page_fast",
+  "cloud_master_published_price_page_v3",
   "delete_bill_guarded",
   "delete_invoice_guarded",
   "delete_payment_made_guarded",
@@ -39,8 +41,12 @@ const ALLOWED_RPCS = new Set([
   "post_invoice_stock_movements",
   "search_catalog_products",
   "cloud_quote_supplier_options",
+  "cloud_quote_supplier_options_v3",
+  "cloud_current_supplier_price_options",
+  "cloud_current_supplier_price_options_batch",
   "cloud_supplier_order_rules",
   "cloud_resolve_quote_line",
+  "cloud_resolve_quote_line_v3",
   "cloud_supplier_brand_summary",
   "cloud_supplier_price_page",
   "cloud_supplier_price_page_with_rules",
@@ -96,6 +102,7 @@ const SUPERADMIN_RPCS = new Set([
 ]);
 
 const OPERATIONS_RPCS = new Set([
+  "assert_legacy_supplier_price_write_allowed",
   "begin_catalog_import",
   "begin_customer_price_list_replace",
   "begin_supplier_price_import",
@@ -105,6 +112,7 @@ const OPERATIONS_RPCS = new Set([
   "cloud_master_page_fast",
   "cloud_master_priced_export_page_fast",
   "cloud_master_priced_page_fast",
+  "cloud_master_published_price_page_v3",
   "cancel_catalog_import",
   "cancel_customer_price_list_replace",
   "delete_bill_guarded",
@@ -137,8 +145,12 @@ const OPERATIONS_RPCS = new Set([
 
 const CUSTOMER_STAFF_RPCS = new Set([
   "cloud_quote_supplier_options",
+  "cloud_quote_supplier_options_v3",
+  "cloud_current_supplier_price_options",
+  "cloud_current_supplier_price_options_batch",
   "cloud_supplier_order_rules",
   "cloud_resolve_quote_line",
+  "cloud_resolve_quote_line_v3",
   "delete_purchase_order_guarded",
   "delete_sales_order_guarded",
   "get_cloud_quote",

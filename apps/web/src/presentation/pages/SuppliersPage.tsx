@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { normalizeBrandName, normalizePartCode } from "../../domain/shared/normalize";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCloudCatalog } from "../../infrastructure/api/catalogApi";
-import { bulkImportSupplierPrices } from "../../infrastructure/api/importApi";
+import { assertLegacySupplierPriceWriteAllowed, bulkImportSupplierPrices } from "../../infrastructure/api/importApi";
 import {
   fetchCloudSupplierPrices,
   fetchCloudSupplierPricesAcrossSuppliers,
@@ -363,6 +363,7 @@ export function SuppliersPage() {
     setImportingSupplier(true);
     actionFeedback.begin(p("suppliers.feedback.importingCsv", { supplier: activeSupplierName, brand: activeImportBrand }));
     try {
+      await assertLegacySupplierPriceWriteAllowed(activeImportBrand);
       const text = await file.text();
       const parsedRows = parseCsv(text);
       const [header = [], ...dataRows] = parsedRows;
@@ -555,7 +556,10 @@ export function SuppliersPage() {
       );
       actionFeedback.succeed(p("suppliers.feedback.importCompleted", { supplier: activeSupplierName, brand: activeImportBrand }));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : p("suppliers.errors.importFailed");
+      const rawMessage = caught instanceof Error ? caught.message : p("suppliers.errors.importFailed");
+      const message = rawMessage.includes("LEGACY_SUPPLIER_PRICE_WRITE_BLOCKED")
+        ? p("suppliers.errors.verifiedUploadRequired")
+        : rawMessage;
       setError(message);
       setWarning("");
       actionFeedback.fail(message);
@@ -594,6 +598,7 @@ export function SuppliersPage() {
       setError("");
       setStatus("");
       actionFeedback.begin(p("suppliers.feedback.savingSupplierPrice", { code: productCode }));
+      await assertLegacySupplierPriceWriteAllowed(activeBrand);
       await bulkImportSupplierPrices([
         {
           supplier_name: supplier.name,
@@ -635,7 +640,10 @@ export function SuppliersPage() {
       setStatus(p("suppliers.feedback.supplierPriceSaved", { code: productCode }));
       actionFeedback.succeed(p("suppliers.feedback.supplierPriceSaved", { code: productCode }));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : p("suppliers.errors.manualPriceSaveFailed");
+      const rawMessage = caught instanceof Error ? caught.message : p("suppliers.errors.manualPriceSaveFailed");
+      const message = rawMessage.includes("LEGACY_SUPPLIER_PRICE_WRITE_BLOCKED")
+        ? p("suppliers.errors.verifiedUploadRequired")
+        : rawMessage;
       setError(message);
       actionFeedback.fail(message);
     } finally {

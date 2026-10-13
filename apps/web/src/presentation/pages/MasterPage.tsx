@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
-import { fetchCPriceMapForRows, getCPriceForRow } from "../../infrastructure/api/cPriceApi";
 import { CLOUD_MASTER_EXPORT_MAX_ROWS, CLOUD_MASTER_PRICED_EXPORT_MAX_ROWS, fetchAllCloudMaster, fetchCloudMasterFast } from "../../infrastructure/api/masterApi";
 import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
 import type { BrandOption } from "../../types/brand";
@@ -43,13 +42,6 @@ export function MasterPage() {
   const [exportNotice, setExportNotice] = useState("");
   const [searching, setSearching] = useState(false);
   const [exportingMaster, setExportingMaster] = useState(false);
-
-  function applyCPrices(baseRows: MasterRow[], priceMap: Map<string, number>) {
-    return baseRows.map((row) => ({
-      ...row,
-      sales_c: getCPriceForRow(priceMap, row),
-    }));
-  }
 
   const selectedBrand = brands.find((item) => item.id === brandId) || null;
   const brandName = selectedBrand?.name || "";
@@ -129,8 +121,7 @@ export function MasterPage() {
           marginA,
           marginB,
         });
-        const cPriceMap = await fetchCPriceMapForRows(result);
-        if (!cancelled) setRows(applyCPrices(result, cPriceMap));
+        if (!cancelled) setRows(result);
       } catch (caught) {
         if (!cancelled) {
           setRows([]);
@@ -253,7 +244,6 @@ export function MasterPage() {
           <div className="sales-price-stack">
             <span><strong>A</strong><MoneyCell value={row.sales_a} /></span>
             <span><strong>B</strong><MoneyCell value={row.sales_b} /></span>
-            <span><strong>C</strong><MoneyCell value={row.sales_c} /></span>
           </div>
         ),
       },
@@ -286,8 +276,7 @@ export function MasterPage() {
       marginB,
       maxRows,
     });
-    const cPriceMap = await fetchCPriceMapForRows(exportRows);
-    return applyCPrices(exportRows, cPriceMap);
+    return exportRows;
   }
 
   async function handleMasterExport() {
@@ -320,7 +309,6 @@ export function MasterPage() {
         "Price_Date",
         "A_Sales_EUR",
         "B_Sales_EUR",
-        "C_Sales_EUR",
         "Supplier_Count",
         "Catalog_Status",
         "Notes",
@@ -344,7 +332,6 @@ export function MasterPage() {
           row.price_date || "",
           row.sales_a ?? "",
           row.sales_b ?? "",
-          row.sales_c ?? "",
           row.supplier_count ?? "",
           row.catalog_status || "",
           row.notes || "",

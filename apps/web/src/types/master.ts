@@ -17,7 +17,6 @@ export type MasterRow = {
   price_date: string | null;
   sales_a: number | null;
   sales_b: number | null;
-  sales_c?: number | null;
   supplier_count: number | null;
   catalog_status: string | null;
   notes: string | null;
