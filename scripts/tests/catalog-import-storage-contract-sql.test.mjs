@@ -158,7 +158,10 @@ test("queued catalog runs retain the system finalization bridge", () => {
   assert.match(body, /input_organization_id/i);
   assert.match(body, /input_actor_id/i);
   assert.match(body, /public\.finalize_catalog_import_batch\(/i);
+  assert.match(body, /to_regprocedure\('public\.finalize_catalog_import_batch\(uuid,integer\)'\)/i);
+  assert.match(body, /public\.finalize_catalog_import\(\$1\)/i);
   assert.match(body, /least\(coalesce\(input_batch_size, 500\), 1000\)/i);
+  assert.match(body, /delete from storage\.objects/i);
   assert.match(sql, /grant execute on function public\.finalize_catalog_import_batch_system\([^)]*\) to service_role/i);
   assert.match(body, /status = 'completed'/i);
 });

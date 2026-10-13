@@ -43,10 +43,8 @@ async function supabaseJson(path, init = {}) {
 
 async function listSources() {
   const query = new URLSearchParams({
-    select: "id,run_id,organization_id,storage_bucket,storage_object_path,total_bytes,checksum_sha256,created_by,status,cursor_row,lease_expires_at,updated_at,catalog_import_runs!inner(status,processing_queued_at)",
+    select: "id,run_id,organization_id,storage_bucket,storage_object_path,total_bytes,checksum_sha256,created_by,status,cursor_row,lease_expires_at,updated_at",
     status: "in.(uploaded,processing,staged)",
-    "catalog_import_runs.status": "in.(running,validating,validated,finalizing)",
-    "catalog_import_runs.processing_queued_at": "not.is.null",
     order: "created_at.asc",
     limit: "4",
   });
@@ -54,7 +52,7 @@ async function listSources() {
 }
 
 async function getRun(runId) {
-  const query = new URLSearchParams({ select: "id,organization_id,input_scope,created_by", id: `eq.${runId}`, limit: "1" });
+  const query = new URLSearchParams({ select: "id,organization_id,input_scope,created_by,status,processing_queued_at", id: `eq.${runId}`, limit: "1" });
   const rows = await supabaseJson(`/rest/v1/catalog_import_runs?${query}`);
   return Array.isArray(rows) ? rows[0] : null;
 }
@@ -83,6 +81,17 @@ const catalogWorkflow = DBOS.registerWorkflow(async (input) => {
 }, { name: "catalog-import-storage-v1" });
 
 async function dispatchSource(source) {
+  const run = await getRun(source.run_id);
+  const terminalStatuses = new Set(["failed", "cancelled", "finalized", "finalize_failed", "validation_failed", "succeeded"]);
+  if (!run || terminalStatuses.has(String(run.status || ""))) {
+    return { status: "terminal", sourceId: source.id };
+  }
+  // A staged source with a missing queue marker is the explicit recovery case:
+  // staging committed but the queue handoff response was lost. Other sources
+  // require the durable queue marker before they may be claimed.
+  if (!run.processing_queued_at && source.status !== "staged") {
+    return { status: "awaiting-queue", sourceId: source.id };
+  }
   const claimed = await callRpc("claim_catalog_import_storage_source_system", {
     input_source_id: source.id,
     input_organization_id: source.organization_id,
@@ -95,8 +104,6 @@ async function dispatchSource(source) {
     return { status: "terminal", sourceId: source.id };
   }
   if (!claim?.claimed) return { status: claim?.status || "busy", sourceId: source.id };
-  const run = await getRun(claim.run_id);
-  if (!run) throw new Error("CATALOG_IMPORT_RUN_NOT_FOUND");
   const scope = run.input_scope && typeof run.input_scope === "object" ? run.input_scope : {};
   const workflowId = `catalog-storage:${claim.run_id}:attempt-${Number(claim.attempt_count || 1)}`;
   const existing = await DBOS.getWorkflowStatus(workflowId);

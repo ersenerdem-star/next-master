@@ -59,6 +59,22 @@ begin
     );
   end if;
 
+  -- A queue timeout may arrive after the queue marker was committed or after
+  -- the worker claimed the source. In that case leave the durable run alone;
+  -- the worker owns recovery and this browser cleanup must be idempotent.
+  if v_run.processing_queued_at is not null
+     or v_source.status in ('processing','staged')
+     or v_source.processing_started_at is not null then
+    return jsonb_build_object(
+      'status', v_run.status,
+      'run_id', v_run.id,
+      'source_id', v_source.id,
+      'cleaned', false,
+      'replayed', true,
+      'queue_preserved', true
+    );
+  end if;
+
   -- The function is security definer and owns the private bucket cleanup;
   -- browser callers never receive a service-role or Storage delete capability.
   delete from storage.objects
@@ -124,11 +140,18 @@ begin
   end if;
   perform set_config('request.jwt.claim.sub', input_actor_id::text, true);
   -- Preserve the cursor-native finalizer already present in staging. The
-  -- Storage source must never switch the queue back to the old monolithic RPC.
-  v_result := public.finalize_catalog_import_batch(
-    input_run_id,
-    greatest(1, least(coalesce(input_batch_size, 500), 1000))
-  );
+  -- dynamic fallback keeps a fresh database with older migrations callable;
+  -- staging and upgraded targets take the bounded path when it exists.
+  if to_regprocedure('public.finalize_catalog_import_batch(uuid,integer)') is not null then
+    execute 'select public.finalize_catalog_import_batch($1,$2)'
+      into v_result
+      using input_run_id, greatest(1, least(coalesce(input_batch_size, 500), 1000));
+  else
+    execute 'select public.finalize_catalog_import($1)'
+      into v_result
+      using input_run_id;
+    v_result := v_result || jsonb_build_object('has_more', false);
+  end if;
 
   -- The old finalizer does the canonical write. Retire only the corresponding
   -- Storage source after that write succeeds; no source is retired early.
@@ -144,6 +167,13 @@ begin
     where run_id = input_run_id
       and organization_id = input_organization_id
       and status in ('uploaded','processing','staged');
+    delete from storage.objects o
+    using public.catalog_import_sources s
+    where s.run_id = input_run_id
+      and s.organization_id = input_organization_id
+      and s.status = 'completed'
+      and o.bucket_id = s.storage_bucket
+      and o.name = s.storage_object_path;
   end if;
 
   return v_result || jsonb_build_object(
