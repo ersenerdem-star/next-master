@@ -108,6 +108,16 @@ const COMPANY_PROFILE_COLUMNS = [
   "logo_data_url",
 ].join(",");
 
+const PRICE_LIST_COLUMNS = [
+  "id",
+  "name",
+  "list_type",
+  "margin_percent",
+  "is_manual",
+  "is_active",
+  "updated_at",
+].join(",");
+
 const PORTAL_INVITE_COLUMNS = [
   "id",
   "party_type",
@@ -537,6 +547,69 @@ async function listPriceListBrands(supabaseUrl: string, serviceRoleKey: string, 
     }),
     { headers: serviceRoleHeaders(serviceRoleKey) },
   );
+}
+
+async function listPriceListSettings(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
+  return listRows<Record<string, unknown>>({
+    supabaseUrl,
+    serviceRoleKey,
+    table: "customer_price_lists",
+    select: PRICE_LIST_COLUMNS,
+    organizationId,
+    order: "updated_at.desc",
+    extraParams: { is_active: "eq.true", list_type: "in.(A,B)" },
+  });
+}
+
+async function upsertPriceListSetting(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  payload: Record<string, unknown>,
+) {
+  const listType = String(payload.listType || "").trim().toUpperCase();
+  if (listType !== "A" && listType !== "B") throw new Error("Price list type must be A or B");
+  const marginPercent = Number(payload.marginPercent);
+  if (!Number.isFinite(marginPercent)) throw new Error("Price list margin must be numeric");
+
+  const existing = await listRows<Record<string, unknown>>({
+    supabaseUrl,
+    serviceRoleKey,
+    table: "customer_price_lists",
+    select: PRICE_LIST_COLUMNS,
+    organizationId,
+    order: "updated_at.desc",
+    extraParams: { is_active: "eq.true", list_type: `eq.${listType}`, limit: "1" },
+  });
+  const nextPayload = {
+    name: String(payload.name || `${listType} Price List`).trim() || `${listType} Price List`,
+    list_type: listType,
+    margin_percent: marginPercent,
+    is_manual: Boolean(payload.isManual),
+    is_active: true,
+    updated_at: new Date().toISOString(),
+  };
+  if (existing[0]?.id) {
+    const rows = await updateSingleRow<Record<string, unknown>>({
+      supabaseUrl,
+      serviceRoleKey,
+      table: "customer_price_lists",
+      select: PRICE_LIST_COLUMNS,
+      organizationId,
+      id: String(existing[0].id),
+      payload: nextPayload,
+    });
+    return rows[0] || null;
+  }
+
+  const rows = await insertSingleRow<Record<string, unknown>>({
+    supabaseUrl,
+    serviceRoleKey,
+    table: "customer_price_lists",
+    select: PRICE_LIST_COLUMNS,
+    payload: { organization_id: organizationId, ...nextPayload },
+  });
+  return rows[0] || null;
 }
 
 async function updateSingleRow<T>(input: {
@@ -1289,6 +1362,20 @@ export default async (req: Request, _context: Context) => {
       if (!isAdminLikeRole(caller.role, caller.department) && !staffDepartment) return json({ error: "Staff access required" }, 403);
       if (action === "list") {
         const data = await listPriceListBrands(supabaseUrl, serviceRoleKey, caller.organizationId);
+        return json({ ok: true, data });
+      }
+    }
+
+    if (resource === "priceListSettings") {
+      const staffDepartment = ["sales", "purchasing", "accounting", "warehouse"].includes(String(caller.department || "").toLowerCase());
+      if (!isAdminLikeRole(caller.role, caller.department) && !staffDepartment) return json({ error: "Staff access required" }, 403);
+      if (action === "list") {
+        const data = await listPriceListSettings(supabaseUrl, serviceRoleKey, caller.organizationId);
+        return json({ ok: true, data });
+      }
+      if (action === "upsert") {
+        if (!isAdminLikeRole(caller.role, caller.department)) return json({ error: "Admin access required" }, 403);
+        const data = await upsertPriceListSetting(supabaseUrl, serviceRoleKey, caller.organizationId, payload);
         return json({ ok: true, data });
       }
     }
