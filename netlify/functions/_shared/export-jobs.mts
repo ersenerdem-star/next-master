@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { assertCompleteExport, advanceExportPage } from "../../../shared/export-integrity.mjs";
 import { getJson, json, readJson, sendJson, serviceRoleHeaders } from "./http.mts";
 import type { AppCaller } from "./app-auth.mts";
+import { claimRemainingExportJob, startExportJobHeartbeat, assertAndTouchExportJobLease } from "./admin-export-worker.mts";
+import { createCsvExportStream, createXlsxExportStream, type StreamingExportWriter } from "./admin-export-stream.mts";
 import {
   resolvePortalPriceListExportContext,
   type PortalInviteRow,
@@ -114,24 +116,6 @@ type CompactAdminPriceRow = [
   string | null,
 ];
 
-type CompactCatalogExportRow = [
-  string | null,
-  string | null,
-  string | null,
-  string | null,
-  string | null,
-  string | null,
-  string | null,
-  string | null,
-  string | null,
-  string | null,
-  string | null,
-  number | string | null,
-  string | null,
-  string | null,
-  string | null,
-];
-
 type AdminPriceListWorkbookRow = {
   productCode: string;
   brand: string;
@@ -153,6 +137,8 @@ type AdminPriceListPageRow = AdminPriceListWorkbookRow & {
 };
 
 type CatalogExportWorkbookRow = {
+  productId: string;
+  totalCount: number | null;
   productCode: string;
   brand: string;
   ean: string;
@@ -171,6 +157,8 @@ type CatalogExportWorkbookRow = {
 };
 
 type CatalogMasterExportWorkbookRow = {
+  cursorCode: string;
+  cursorId: string | null;
   totalCount: number | null;
   productId: string;
   productCode: string;
@@ -244,7 +232,6 @@ const CATALOG_EXPORT_MAX_ROWS = 1_048_575;
 // Supabase Data API responses are capped by the project API max rows setting
 // (commonly 1,000). Keep RPC export pages at 1,000 so the cursor loop advances
 // through every page instead of treating the first capped response as complete.
-const CATALOG_MASTER_EXPORT_PAGE_SIZE = 1_000;
 const ADMIN_PRICE_LIST_EXPORT_PAGE_SIZE = 1_000;
 const PORTAL_PRICE_LIST_EXPORT_MAX_ROWS = 100_000;
 const PORTAL_PRICE_LIST_EXPORT_PAGE_SIZE = 1_000;
@@ -493,8 +480,13 @@ async function insertExportJob(
   return rows[0];
 }
 
-async function patchExportJob(supabaseUrl: string, serviceRoleKey: string, jobId: string, patch: Partial<ExportJobRow>) {
-  const rows = await sendJson<ExportJobRow[]>(`${supabaseUrl}/rest/v1/app_export_jobs?id=eq.${encodeURIComponent(jobId)}&select=*`, {
+async function patchExportJob(supabaseUrl: string, serviceRoleKey: string, jobId: string, patch: Partial<ExportJobRow>, leaseStartedAt?: string) {
+  const query = new URLSearchParams({ id: `eq.${jobId}`, select: "*" });
+  if (leaseStartedAt) {
+    query.set("status", "eq.running");
+    query.set("started_at", `eq.${leaseStartedAt}`);
+  }
+  const rows = await sendJson<ExportJobRow[]>(`${supabaseUrl}/rest/v1/app_export_jobs?${query}`, {
     method: "PATCH",
     headers: {
       ...serviceRoleHeaders(serviceRoleKey),
@@ -503,6 +495,7 @@ async function patchExportJob(supabaseUrl: string, serviceRoleKey: string, jobId
     body: JSON.stringify(patch),
     timeoutMs: 10_000,
   });
+  if (leaseStartedAt && !rows.length) throw new Error("ADMIN_EXPORT_LEASE_LOST");
   return rows[0] || null;
 }
 
@@ -583,27 +576,29 @@ function coerceCatalogExportRows(payload: unknown): CatalogExportWorkbookRow[] {
   if (!Array.isArray(payload)) return [];
   return payload
     .map((raw) => {
-      if (!Array.isArray(raw)) return null;
-      const row = raw as CompactCatalogExportRow;
-      const productCode = String(row[0] || "").trim();
-      const brand = String(row[1] || "").trim();
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+      const row = raw as Record<string, unknown>;
+      const productCode = String(row.product_code || "").trim();
+      const brand = String(row.brand || "").trim();
       if (!productCode || !brand) return null;
       return {
+        productId: String(row.product_id || ""),
+        totalCount: row.total_count == null ? null : Number(row.total_count),
         productCode,
         brand,
-        ean: String(row[2] || ""),
-        description: String(row[3] || ""),
-        descriptionTr: String(row[4] || ""),
-        oemNo: String(row[5] || ""),
-        vehicle: String(row[6] || ""),
-        vehicleModel: String(row[7] || ""),
-        hsCode: String(row[8] || ""),
-        origin: String(row[9] || ""),
-        marketSegment: String(row[10] || ""),
-        weightKg: row[11] == null ? null : row[11],
-        imageUrl: String(row[12] || ""),
-        lifecycleStatus: String(row[13] || "active"),
-        lifecycleNote: String(row[14] || ""),
+        ean: String(row.ean || ""),
+        description: String(row.description || ""),
+        descriptionTr: String(row.description_tr || ""),
+        oemNo: String(row.oem_no || ""),
+        vehicle: String(row.vehicle || ""),
+        vehicleModel: String(row.vehicle_model || ""),
+        hsCode: String(row.hs_code || ""),
+        origin: String(row.origin || ""),
+        marketSegment: String(row.market_segment || ""),
+        weightKg: row.weight_kg == null ? null : row.weight_kg as number | string,
+        imageUrl: String(row.image_url || ""),
+        lifecycleStatus: String(row.lifecycle_status || "active"),
+        lifecycleNote: String(row.lifecycle_note || ""),
       } satisfies CatalogExportWorkbookRow;
     })
     .filter(Boolean) as CatalogExportWorkbookRow[];
@@ -619,6 +614,8 @@ function coerceCatalogMasterExportRows(payload: unknown): CatalogMasterExportWor
       const brand = String(row.brand || "").trim();
       if (!productCode || !brand) return null;
       return {
+        cursorCode: String(row.cursor_code || ""),
+        cursorId: row.cursor_id == null ? null : String(row.cursor_id),
         totalCount: row.total_count == null ? null : Number(row.total_count),
         productId: String(row.product_id || ""),
         productCode,
@@ -949,50 +946,6 @@ function catalogExportSheetRows(rows: CatalogExportWorkbookRow[]) {
   ];
 }
 
-function buildCatalogExportWorkbook(rows: CatalogExportWorkbookRow[], brandName: string) {
-  const worksheet = XLSX.utils.aoa_to_sheet(catalogExportSheetRows(rows));
-  worksheet["!cols"] = [
-    { wch: 22 },
-    { wch: 18 },
-    { wch: 18 },
-    { wch: 44 },
-    { wch: 34 },
-    { wch: 32 },
-    { wch: 34 },
-    { wch: 34 },
-    { wch: 14 },
-    { wch: 12 },
-    { wch: 18 },
-    { wch: 12 },
-    { wch: 44 },
-    { wch: 16 },
-    { wch: 28 },
-  ];
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, sanitizeSheetName(`${brandName} Catalog`));
-  return XLSX.write(workbook, {
-    bookType: "xlsx",
-    type: "buffer",
-    compression: true,
-  }) as Buffer;
-}
-
-function csvEscape(value: string | number | null | undefined) {
-  const raw = value == null ? "" : String(value);
-  const text = typeof value === "string" && /^[\s]*[=+\-@]/.test(raw) ? `'${raw}` : raw;
-  if (/[",\r\n]/.test(text)) {
-    return `"${text.replaceAll('"', '""')}"`;
-  }
-  return text;
-}
-
-function buildCatalogExportCsv(rows: CatalogExportWorkbookRow[]) {
-  const body = catalogExportSheetRows(rows)
-    .map((row) => row.map((value) => csvEscape(value)).join(","))
-    .join("\n");
-  return Buffer.from(`${body}\n`, "utf8");
-}
-
 function catalogMasterExportSheetRows(rows: CatalogMasterExportWorkbookRow[]) {
   return [
     [...CATALOG_MASTER_EXPORT_HEADERS],
@@ -1018,38 +971,6 @@ function catalogMasterExportSheetRows(rows: CatalogMasterExportWorkbookRow[]) {
       row.notes,
     ]),
   ];
-}
-
-function buildCatalogMasterExportWorkbook(rows: CatalogMasterExportWorkbookRow[], brandName: string) {
-  const worksheet = XLSX.utils.aoa_to_sheet(catalogMasterExportSheetRows(rows));
-  worksheet["!cols"] = [
-    { wch: 22 },
-    { wch: 18 },
-    { wch: 44 },
-    { wch: 32 },
-    { wch: 14 },
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 22 },
-    { wch: 14 },
-    { wch: 22 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 16 },
-    { wch: 34 },
-  ];
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, sanitizeSheetName(`${brandName} Master`));
-  return XLSX.write(workbook, {
-    bookType: "xlsx",
-    type: "buffer",
-    compression: true,
-  }) as Buffer;
 }
 
 async function uploadExportArtifact(
@@ -1470,7 +1391,7 @@ export async function startCatalogExport(
     brandName: brand.name || input.brandName || "",
     marketSegment,
     format,
-    schemaVersion: 3,
+    schemaVersion: 4,
   };
   const cacheKey = hashObject({
     exportType,
@@ -1518,7 +1439,7 @@ export async function startCatalogMasterExport(
     marginB,
     format: "xlsx",
     maxRows: CATALOG_MASTER_EXPORT_MAX_ROWS,
-    schemaVersion: 4,
+    schemaVersion: 5,
   };
   const cacheKey = hashObject({
     exportType,
@@ -1569,7 +1490,7 @@ export async function startSupplierPriceListExport(
     search,
     freshness,
     format: "csv",
-    schemaVersion: 1,
+    schemaVersion: 2,
   };
   const cacheKey = hashObject({ exportType, organizationId: caller.organizationId, scope, dataVersion });
   const reusable = await findReusableExportJob(supabaseUrl, serviceRoleKey, caller.organizationId, exportType, cacheKey);
@@ -1818,16 +1739,6 @@ export async function runPortalPriceListExportJob(
   }
 }
 
-async function countCatalogExportRows(supabaseUrl: string, serviceRoleKey: string, organizationId: string, brandId: string, marketSegment: string) {
-  const query = new URLSearchParams({ select: "id", organization_id: `eq.${organizationId}`, brand_id: `eq.${brandId}`, limit: "1" });
-  if (marketSegment.trim()) query.set("market_segment", `eq.${marketSegment.trim()}`);
-  const response = await fetchWithTimeout(`${supabaseUrl}/rest/v1/catalog_products?${query}`, { method: "HEAD", headers: { ...serviceRoleHeaders(serviceRoleKey), Prefer: "count=exact" }, timeoutMs: EXPORT_REQUEST_TIMEOUT_MS });
-  if (!response.ok) throw new Error("Catalog export count could not be verified.");
-  const count = response.headers.get("content-range")?.match(/\/(\d+)$/)?.[1];
-  if (count == null) throw new Error("Catalog export count is missing.");
-  return Number(count);
-}
-
 type SupplierPriceExportPageRow = {
   total_count?: number | string | null;
   price_id?: string | null;
@@ -1855,6 +1766,7 @@ async function fetchSupplierPriceExportPage(input: {
   freshness: string;
   afterProductCode: string | null;
   afterId: string | null;
+  pageSize: number;
 }) {
   const payload = await rpcJson<unknown>(input.supabaseUrl, input.serviceRoleKey, "cloud_supplier_price_export_page", {
     input_organization_id: input.organizationId,
@@ -1864,353 +1776,178 @@ async function fetchSupplierPriceExportPage(input: {
     input_freshness: input.freshness,
     input_after_product_code: input.afterProductCode,
     input_after_id: input.afterId,
-    input_page_size: 1000,
+    input_page_size: input.pageSize,
   }, EXPORT_REQUEST_TIMEOUT_MS);
-  if (!Array.isArray(payload)) return [] as SupplierPriceExportPageRow[];
-  return payload.filter((row): row is SupplierPriceExportPageRow => Boolean(row && typeof row === "object"))
-    .map((row) => row as SupplierPriceExportPageRow);
-}
-
-function buildSupplierPriceExportCsv(rows: SupplierPriceExportPageRow[], supplierName: string, brandName: string, includeHeader = true) {
-  const lines: string[] = [];
-  if (includeHeader) lines.push(["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes"].map(csvEscape).join(","));
-  for (const row of rows) {
-    lines.push([
-      supplierName,
-      normalizeAdminExportProductCode(String(row.product_code || ""), String(row.brand || brandName)),
-      String(row.brand || brandName),
-      String(row.description || ""),
-      String(row.oem_no || ""),
-      row.buy_price == null ? "" : row.buy_price,
-      String(row.price_date || ""),
-      row.moq == null ? "" : row.moq,
-      row.order_multiple == null ? "" : row.order_multiple,
-      row.lead_time_days == null ? "" : row.lead_time_days,
-      String(row.notes || ""),
-    ].map(csvEscape).join(","));
+  if (!Array.isArray(payload) || payload.some((row) => !row || typeof row !== "object" || Array.isArray(row))) {
+    throw new Error("Invalid supplier price export page.");
   }
-  return lines.join("\n") + (lines.length ? "\n" : "");
+  return payload as SupplierPriceExportPageRow[];
 }
 
-export async function runSupplierPriceListExportJob(
+type RemainingAdminExportType = "supplier_price_list" | "catalog_export" | "catalog_master";
+
+function verifiedSourceTotal(value: unknown, previousTotal: number | null, rowLimit: number) {
+  const total = value == null ? previousTotal : Number(value);
+  if (total == null || !Number.isSafeInteger(total) || total < 1) {
+    throw new Error("Export row count could not be verified. No complete file is available.");
+  }
+  if (previousTotal != null && total !== previousTotal) throw new Error("Export data changed during pagination. Retry with a fresh snapshot.");
+  assertCompleteExport(total, total, rowLimit);
+  return total;
+}
+
+function compareExportCursor(left: readonly [string, string | null], right: readonly [string, string | null]) {
+  return Buffer.compare(Buffer.from(left[0], "utf8"), Buffer.from(right[0], "utf8"))
+    || Buffer.compare(Buffer.from(left[1] || "", "utf8"), Buffer.from(right[1] || "", "utf8"));
+}
+
+async function runPagedRemainingAdminExportJob(
   supabaseUrl: string,
   serviceRoleKey: string,
   jobId: string,
+  exportType: RemainingAdminExportType,
 ) {
-  const job = await fetchJobRows(supabaseUrl, serviceRoleKey, new URLSearchParams({ select: "*", id: `eq.${jobId}`, limit: "1" }).toString()).then((rows) => rows[0] || null);
-  if (!job || job.status === "finalized") return;
-  if (job.export_type !== "supplier_price_list" || job.audience !== "admin") throw new Error("Unsupported supplier price export job.");
-  const scope = job.scope || {};
-  const supplierId = String(scope.supplierId || "");
-  const supplierName = String(scope.supplierName || "Supplier");
-  const brandId = String(scope.brandId || "");
-  const brandName = String(scope.brandName || "Brand");
-  const search = String(scope.search || "");
-  const freshness = String(scope.freshness || "all");
-  if (!supplierId || !brandId) throw new Error("Supplier price export job is missing its supplier and brand scope.");
-  await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
-    status: "running", started_at: job.started_at || new Date().toISOString(), progress_done: 0,
-    progress_total: null, progress_message: "Loading supplier price rows in keyset batches.", error_message: null,
-  });
+  const candidate = await fetchJobRows(supabaseUrl, serviceRoleKey, new URLSearchParams({ select: "*", id: `eq.${jobId}`, limit: "1" }).toString()).then((rows) => rows[0] || null);
+  if (!candidate || candidate.status === "finalized") return;
+  if (candidate.export_type !== exportType || candidate.audience !== "admin") throw new Error("Unsupported admin export job.");
+  const job = await claimRemainingExportJob(supabaseUrl, serviceRoleKey, candidate);
+  if (!job) return;
+  const leaseStartedAt = job.started_at!;
+  const stopHeartbeat = startExportJobHeartbeat(supabaseUrl, serviceRoleKey, job.id, leaseStartedAt);
+  const patch = (values: Partial<ExportJobRow>) => patchExportJob(supabaseUrl, serviceRoleKey, job.id, values, leaseStartedAt);
+  let writer: StreamingExportWriter | null = null;
   try {
-    const chunks: string[] = [];
+    const scope = job.scope || {};
+    const brandId = String(scope.brandId || "");
+    const brandName = String(scope.brandName || "Brand");
+    const supplierId = String(scope.supplierId || "");
+    const supplierName = String(scope.supplierName || "Supplier");
+    const search = String(scope.search || "");
+    const freshness = String(scope.freshness || "all");
+    const marketSegment = String(scope.marketSegment || "");
+    const exportScope = String(scope.scope || "priced") === "catalog" ? "catalog" : "priced";
+    const marginA = Number(scope.marginA ?? 0.1);
+    const marginB = Number(scope.marginB ?? 0.15);
+    const format = exportType === "catalog_master" || (exportType === "catalog_export" && scope.format === "xlsx") ? "xlsx" : "csv";
+    if (!brandId || (exportType === "supplier_price_list" && !supplierId)) throw new Error("Export job is missing its supplier or brand scope.");
+    const headers = exportType === "supplier_price_list"
+      ? ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes"]
+      : exportType === "catalog_export" ? CATALOG_EXPORT_HEADERS : CATALOG_MASTER_EXPORT_HEADERS;
+    writer = format === "csv"
+      ? await createCsvExportStream(headers, { bom: true })
+      : await createXlsxExportStream(headers, sanitizeSheetName(`${brandName} ${exportType === "catalog_master" ? "Master" : "Catalog"}`));
     let rowCount = 0;
-    let progressTotal: number | null = null;
-    let afterProductCode: string | null = null;
-    let afterId: string | null = null;
-    let first = true;
-    while (rowCount < 1_048_575) {
-      const pageRows = await fetchSupplierPriceExportPage({ supabaseUrl, serviceRoleKey, organizationId: job.organization_id, supplierId, brandId, search, freshness, afterProductCode, afterId });
-      if (!pageRows.length) break;
-      const firstTotal = Number(pageRows[0]?.total_count);
-      if (Number.isSafeInteger(firstTotal) && firstTotal > 0) progressTotal = firstTotal;
-      chunks.push(buildSupplierPriceExportCsv(pageRows, supplierName, brandName, first));
-      first = false;
-      rowCount += pageRows.length;
-      const last = pageRows.at(-1)!;
-      afterProductCode = String(last.product_code || "");
-      afterId = String(last.price_id || "");
-      await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
-        progress_done: rowCount, progress_total: progressTotal, row_count: rowCount,
-        progress_message: `Prepared ${rowCount.toLocaleString("en-US")}${progressTotal ? ` / ${progressTotal.toLocaleString("en-US")}` : ""} supplier price rows.`,
-      });
-      if (progressTotal != null && rowCount >= progressTotal) break;
-      if (pageRows.length < 1000) break;
-    }
-    if (!rowCount) throw new Error(`No supplier price rows found for ${brandName}.`);
-    assertCompleteExport(rowCount, progressTotal ?? rowCount, 1_048_575);
-    if (job.data_version && await getSupplierPriceExportDataVersion(supabaseUrl, serviceRoleKey, job.organization_id, supplierId, brandId) !== job.data_version) throw new Error("Supplier prices changed during export. Retry with a fresh snapshot.");
-    const body = Buffer.from(chunks.join(""), "utf8");
-    const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-    const fileName = `${sanitizeDownloadFileName(`supplier-${supplierName}-${brandName}-${stamp}`)}.csv`;
-    const storagePath = `${job.organization_id}/supplier-price/${job.cache_key}/${fileName}`;
-    await uploadExportArtifact(supabaseUrl, serviceRoleKey, { bucket: EXPORT_STORAGE_BUCKET, path: storagePath, contentType: "text/csv", body });
-    await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
-      status: "finalized", finalized_at: new Date().toISOString(), file_name: fileName, content_type: "text/csv",
-      storage_bucket: EXPORT_STORAGE_BUCKET, storage_path: storagePath, row_count: rowCount, byte_size: body.byteLength,
-      progress_done: rowCount, progress_total: progressTotal ?? rowCount, progress_message: "Export file is ready.",
-    });
-  } catch (error) {
-    await patchExportJob(supabaseUrl, serviceRoleKey, job.id, { status: "failed", failed_at: new Date().toISOString(), error_message: error instanceof Error ? error.message : String(error || "Export failed."), progress_message: "Export failed." }).catch((patchError) => console.error("failed to mark supplier export failed", patchError));
-    throw error;
-  }
-}
-
-export async function runCatalogExportJob(
-  supabaseUrl: string,
-  serviceRoleKey: string,
-  jobId: string,
-) {
-  const job = await fetchJobRows(
-    supabaseUrl,
-    serviceRoleKey,
-    new URLSearchParams({
-      select: "*",
-      id: `eq.${jobId}`,
-      limit: "1",
-    }).toString(),
-  ).then((rows) => rows[0] || null);
-  if (!job || job.status === "finalized") return;
-  if (job.export_type !== "catalog_export" || job.audience !== "admin") {
-    throw new Error("Unsupported catalog export job.");
-  }
-
-  const scope = job.scope || {};
-  const brandId = String(scope.brandId || "");
-  const brandName = String(scope.brandName || "Catalog");
-  const marketSegment = String(scope.marketSegment || "");
-  const format = String(scope.format || "csv") === "xlsx" ? "xlsx" : "csv";
-  if (!brandId) throw new Error("Catalog export job is missing its brand scope.");
-
-  const startedAt = new Date().toISOString();
-  await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
-    status: "running",
-    started_at: job.started_at || startedAt,
-    progress_done: 0,
-    progress_total: null,
-    progress_message: "Loading compact catalog rows.",
-    error_message: null,
-  });
-
-  try {
-    const expectedRows = await countCatalogExportRows(supabaseUrl, serviceRoleKey, job.organization_id, brandId, marketSegment);
-    assertCompleteExport(expectedRows, expectedRows, CATALOG_EXPORT_MAX_ROWS);
-    const payload = await rpcJson<unknown>(
-      supabaseUrl,
-      serviceRoleKey,
-      "cloud_catalog_export_fast",
-      {
-        input_organization_id: job.organization_id,
-        input_brand_id: brandId,
-        input_market_segment: marketSegment,
-      },
-      EXPORT_REQUEST_TIMEOUT_MS,
-    );
-    const rows = coerceCatalogExportRows(payload);
-    assertCompleteExport(rows.length, expectedRows, CATALOG_EXPORT_MAX_ROWS);
-    if (job.data_version && await getCatalogExportDataVersion(supabaseUrl, serviceRoleKey, job.organization_id, brandId, marketSegment) !== job.data_version) throw new Error("Catalog changed during export. Retry with a fresh snapshot.");
-    if (!rows.length) {
-      throw new Error(`No catalog rows found for ${brandName}.`);
-    }
-    await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
-      progress_done: rows.length,
-      progress_total: rows.length,
-      row_count: rows.length,
-      progress_message: `Building ${format.toUpperCase()} catalog file for ${rows.length.toLocaleString("en-US")} rows.`,
-    });
-    const fileBuffer = format === "xlsx" ? buildCatalogExportWorkbook(rows, brandName) : buildCatalogExportCsv(rows);
-    const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-    const fileName = `${sanitizeDownloadFileName(`catalog-${brandName}-${stamp}`)}.${format}`;
-    const storagePath = `${job.organization_id}/catalog-export/${job.cache_key}/${fileName}`;
-    const contentType = format === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "text/csv";
-    await uploadExportArtifact(supabaseUrl, serviceRoleKey, {
-      bucket: EXPORT_STORAGE_BUCKET,
-      path: storagePath,
-      contentType,
-      body: fileBuffer,
-    });
-    await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
-      status: "finalized",
-      finalized_at: new Date().toISOString(),
-      file_name: fileName,
-      content_type: contentType,
-      storage_bucket: EXPORT_STORAGE_BUCKET,
-      storage_path: storagePath,
-      row_count: rows.length,
-      byte_size: fileBuffer.byteLength,
-      progress_done: rows.length,
-      progress_total: rows.length,
-      progress_message: "Export file is ready.",
-    });
-  } catch (error) {
-    await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
-      status: "failed",
-      failed_at: new Date().toISOString(),
-      error_message: error instanceof Error ? error.message : String(error || "Export failed."),
-      progress_message: "Export failed.",
-    }).catch((patchError) => console.error("failed to mark catalog export failed", patchError));
-    throw error;
-  }
-}
-
-export async function runCatalogMasterExportJob(
-  supabaseUrl: string,
-  serviceRoleKey: string,
-  jobId: string,
-) {
-  const job = await fetchJobRows(
-    supabaseUrl,
-    serviceRoleKey,
-    new URLSearchParams({
-      select: "*",
-      id: `eq.${jobId}`,
-      limit: "1",
-    }).toString(),
-  ).then((rows) => rows[0] || null);
-  if (!job || job.status === "finalized") return;
-  if (job.export_type !== "catalog_master" || job.audience !== "admin") {
-    throw new Error("Unsupported master export job.");
-  }
-
-  const scope = job.scope || {};
-  const brandId = String(scope.brandId || "");
-  const brandName = String(scope.brandName || "Master");
-  const search = String(scope.search || "");
-  const exportScope = String(scope.scope || "priced") === "catalog" ? "catalog" : "priced";
-  const marginA = Number(scope.marginA ?? 0.1);
-  const marginB = Number(scope.marginB ?? 0.15);
-  const maxRows = CATALOG_MASTER_EXPORT_MAX_ROWS;
-  if (!brandId) throw new Error("Master export job is missing its brand scope.");
-
-  const startedAt = new Date().toISOString();
-  await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
-    status: "running",
-    started_at: job.started_at || startedAt,
-    progress_done: 0,
-    progress_total: null,
-    progress_message: "Loading master rows in compact batches.",
-    error_message: null,
-  });
-
-  try {
-    const rows: CatalogMasterExportWorkbookRow[] = [];
     let totalCount: number | null = null;
-    for (let page = 1; rows.length < maxRows; page += 1) {
-      const pageSize = Math.min(CATALOG_MASTER_EXPORT_PAGE_SIZE, maxRows - rows.length);
-      const payload = await rpcJson<unknown>(
-        supabaseUrl,
-        serviceRoleKey,
-        "cloud_catalog_master_export_page_fast",
-        {
-          input_organization_id: job.organization_id,
-          input_brand_id: brandId,
-          input_scope: exportScope,
-          input_search: search,
-          input_page: page,
-          input_page_size: pageSize,
-          input_margin_a: Number.isFinite(marginA) ? marginA : 0.1,
-          input_margin_b: Number.isFinite(marginB) ? marginB : 0.15,
-        },
-        EXPORT_REQUEST_TIMEOUT_MS,
-      );
-      const pageRows = coerceCatalogMasterExportRows(payload);
-      if (pageRows[0]?.totalCount != null && Number.isFinite(pageRows[0].totalCount)) {
-        totalCount = pageRows[0].totalCount;
+    let afterCode: string | null = null;
+    let afterId: string | null = null;
+    let previousCursor: readonly [string, string | null] | null = null;
+    await patch({ progress_done: 0, progress_total: null, row_count: 0, progress_message: "Loading export rows in keyset batches.", error_message: null });
+    while (rowCount < CATALOG_EXPORT_MAX_ROWS) {
+      const pageSize = totalCount != null && totalCount > 10_000 ? 5_000 : 1_000;
+      let sheetRows: unknown[][];
+      let cursors: Array<readonly [string, string | null]>;
+      let nextCode: string | null = null;
+      let nextId: string | null = null;
+      let pageTotal: unknown;
+      if (exportType === "supplier_price_list") {
+        const page = await fetchSupplierPriceExportPage({ supabaseUrl, serviceRoleKey, organizationId: job.organization_id, supplierId, brandId, search, freshness, afterProductCode: afterCode, afterId, pageSize });
+        if (!page.length) break;
+        pageTotal = page[0].total_count;
+        cursors = page.map((r) => [String(r.product_code), String(r.price_id)]);
+        const last = page.at(-1)!;
+        nextCode = String(last.product_code || "");
+        nextId = String(last.price_id || "");
+        if (page.some((r) => !r.product_code || !r.price_id || !r.brand)) throw new Error("Invalid supplier export source row.");
+        sheetRows = page.map((r) => [supplierName, normalizeAdminExportProductCode(String(r.product_code), String(r.brand || brandName)), String(r.brand || brandName), r.description || "", r.oem_no || "", r.buy_price ?? "", r.price_date || "", r.moq ?? "", r.order_multiple ?? "", r.lead_time_days ?? "", r.notes || ""]);
+      } else if (exportType === "catalog_export") {
+        const payload = await rpcJson<unknown>(supabaseUrl, serviceRoleKey, "cloud_catalog_export_page_v3", {
+          input_organization_id: job.organization_id, input_brand_id: brandId, input_market_segment: marketSegment,
+          input_after_id: afterId, input_page_size: pageSize,
+        }, EXPORT_REQUEST_TIMEOUT_MS);
+        if (!Array.isArray(payload)) throw new Error("Invalid catalog export page.");
+        if (!payload.length) break;
+        const page = coerceCatalogExportRows(payload);
+        if (page.length !== payload.length || page.some((r) => !r.productId)) throw new Error("Invalid catalog export source row.");
+        pageTotal = page[0].totalCount;
+        cursors = page.map((r) => ["", r.productId]);
+        nextId = page.at(-1)!.productId;
+        sheetRows = catalogExportSheetRows(page).slice(1);
+      } else {
+        const payload = await rpcJson<unknown>(supabaseUrl, serviceRoleKey, "cloud_catalog_master_export_page_v3", {
+          input_organization_id: job.organization_id, input_brand_id: brandId, input_scope: exportScope, input_search: search,
+          input_after_code: afterCode, input_after_id: afterId, input_page_size: pageSize,
+          input_margin_a: marginA, input_margin_b: marginB,
+        }, EXPORT_REQUEST_TIMEOUT_MS);
+        if (!Array.isArray(payload)) throw new Error("Invalid master export page.");
+        if (!payload.length) break;
+        const page = coerceCatalogMasterExportRows(payload);
+        if (page.length !== payload.length || page.some((r) => !r.cursorCode)) throw new Error("Invalid master export source row.");
+        pageTotal = page[0].totalCount;
+        cursors = page.map((r) => [r.cursorCode, r.cursorId]);
+        nextCode = page.at(-1)!.cursorCode;
+        nextId = page.at(-1)!.cursorId;
+        sheetRows = catalogMasterExportSheetRows(page).slice(1);
       }
-      rows.push(...pageRows);
-      const boundedTotal = totalCount;
-      await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
-        progress_done: rows.length,
-        progress_total: boundedTotal,
-        row_count: rows.length,
-        progress_message: `Loaded ${rows.length.toLocaleString("en-US")}${boundedTotal ? ` / ${boundedTotal.toLocaleString("en-US")}` : ""} master rows.`,
-      });
-      if (pageRows.length < pageSize) break;
+      totalCount = verifiedSourceTotal(pageTotal, totalCount, CATALOG_EXPORT_MAX_ROWS);
+      for (const cursor of cursors) {
+        if (previousCursor && compareExportCursor(previousCursor, cursor) >= 0) throw new Error("Export cursor did not advance uniquely. Refresh the export snapshot.");
+        previousCursor = cursor;
+      }
+      afterCode = nextCode;
+      afterId = nextId;
+      rowCount += sheetRows.length;
+      if (rowCount > totalCount) throw new Error("Export source returned more rows than its verified count.");
+      await writer.append(sheetRows);
+      await patch({ progress_done: rowCount, progress_total: totalCount, row_count: rowCount, progress_message: `Prepared ${rowCount.toLocaleString("en-US")} / ${totalCount.toLocaleString("en-US")} export rows.` });
+      if (rowCount === totalCount || sheetRows.length < pageSize) break;
     }
-
-    if (!rows.length) {
-      throw new Error(`No master rows found for ${brandName}.`);
-    }
-
-    assertCompleteExport(rows.length, totalCount, maxRows);
-    const expectedRows = totalCount!;
-    await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
-      progress_done: rows.length,
-      progress_total: expectedRows,
-      row_count: rows.length,
-      progress_message: `Building XLSX master workbook for ${rows.length.toLocaleString("en-US")} rows.`,
-    });
-    const workbook = buildCatalogMasterExportWorkbook(rows, brandName);
+    assertCompleteExport(rowCount, totalCount, CATALOG_EXPORT_MAX_ROWS);
+    const currentVersion = exportType === "supplier_price_list"
+      ? await getSupplierPriceExportDataVersion(supabaseUrl, serviceRoleKey, job.organization_id, supplierId, brandId)
+      : exportType === "catalog_export"
+        ? await getCatalogExportDataVersion(supabaseUrl, serviceRoleKey, job.organization_id, brandId, marketSegment)
+        : await getCatalogMasterExportDataVersion(supabaseUrl, serviceRoleKey, job.organization_id, brandId, exportScope);
+    if (!job.data_version || currentVersion !== job.data_version) throw new Error("Export source changed during preparation. Retry with a fresh snapshot.");
+    const body = await writer.finish();
     const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-    const fileName = `${sanitizeDownloadFileName(`master-${brandName}-${exportScope}-${stamp}`)}.xlsx`;
-    const storagePath = `${job.organization_id}/catalog-master/${job.cache_key}/${fileName}`;
-    const contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    await uploadExportArtifact(supabaseUrl, serviceRoleKey, {
-      bucket: EXPORT_STORAGE_BUCKET,
-      path: storagePath,
-      contentType,
-      body: workbook,
-    });
-    await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
-      status: "finalized",
-      finalized_at: new Date().toISOString(),
-      file_name: fileName,
-      content_type: contentType,
-      storage_bucket: EXPORT_STORAGE_BUCKET,
-      storage_path: storagePath,
-      row_count: rows.length,
-      byte_size: workbook.byteLength,
-      progress_done: rows.length,
-      progress_total: rows.length,
-      progress_message: "Export file is ready.",
-    });
+    const stem = exportType === "supplier_price_list" ? `supplier-${supplierName}-${brandName}-${stamp}`
+      : exportType === "catalog_export" ? `catalog-${brandName}-${stamp}` : `master-${brandName}-${exportScope}-${stamp}`;
+    const fileName = `${sanitizeDownloadFileName(stem)}.${format}`;
+    const folder = exportType === "supplier_price_list" ? "supplier-price" : exportType === "catalog_export" ? "catalog-export" : "catalog-master";
+    const storagePath = `${job.organization_id}/${folder}/${job.cache_key}/${leaseStartedAt.replaceAll(":", "-")}/${fileName}`;
+    const contentType = format === "csv" ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    await assertAndTouchExportJobLease(supabaseUrl, serviceRoleKey, job.id, leaseStartedAt);
+    await uploadExportArtifact(supabaseUrl, serviceRoleKey, { bucket: EXPORT_STORAGE_BUCKET, path: storagePath, contentType, body });
+    await stopHeartbeat();
+    await patch({ status: "finalized", finalized_at: new Date().toISOString(), file_name: fileName, content_type: contentType,
+      storage_bucket: EXPORT_STORAGE_BUCKET, storage_path: storagePath, row_count: rowCount, byte_size: body.byteLength,
+      progress_done: rowCount, progress_total: totalCount, progress_message: "Export file is ready." });
   } catch (error) {
-    await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
-      status: "failed",
-      failed_at: new Date().toISOString(),
-      error_message: error instanceof Error ? error.message : String(error || "Export failed."),
-      progress_message: "Export failed.",
-    }).catch((patchError) => console.error("failed to mark master export failed", patchError));
+    await stopHeartbeat().catch(() => {});
+    await patch({ status: "failed", failed_at: new Date().toISOString(), error_message: error instanceof Error ? error.message : String(error || "Export failed."), progress_message: "Export failed." })
+      .catch((patchError) => console.error("failed to mark admin export failed", patchError));
     throw error;
+  } finally {
+    await stopHeartbeat().catch(() => {});
+    await writer?.cleanup().catch((cleanupError) => console.error("failed to clean export temp file", cleanupError));
   }
 }
 
-/**
- * Common worker entry point for admin exports that are still served by the
- * compact RPC implementations.  Keeping the dispatch in one place lets the
- * background endpoint and stale-job recovery use the same validation and
- * failure handling as the synchronous path.  Each implementation pages its
- * source (catalog master) or verifies the complete source count (catalog),
- * and writes progress to app_export_jobs after every bounded operation.
- */
-export async function runRemainingAdminExportJob(
-  supabaseUrl: string,
-  serviceRoleKey: string,
-  jobId: string,
-) {
-  const job = await fetchJobRows(
-    supabaseUrl,
-    serviceRoleKey,
-    new URLSearchParams({ select: "export_type", id: `eq.${jobId}`, limit: "1" }).toString(),
-  ).then((rows) => rows[0] || null);
-  if (!job) return { status: "ignored", reason: "job-not-found" } as const;
-  if (job.export_type === "catalog_export") {
-    await runCatalogExportJob(supabaseUrl, serviceRoleKey, jobId);
-    return { status: "finalized", jobId } as const;
-  }
-  if (job.export_type === "catalog_master") {
-    await runCatalogMasterExportJob(supabaseUrl, serviceRoleKey, jobId);
-    return { status: "finalized", jobId } as const;
-  }
-  if (job.export_type === "supplier_price_list") {
-    await runSupplierPriceListExportJob(supabaseUrl, serviceRoleKey, jobId);
-    return { status: "finalized", jobId } as const;
-  }
-  throw new Error("Unsupported remaining admin export job.");
+export async function runSupplierPriceListExportJob(supabaseUrl: string, serviceRoleKey: string, jobId: string) {
+  return runPagedRemainingAdminExportJob(supabaseUrl, serviceRoleKey, jobId, "supplier_price_list");
 }
 
-export function exportJson(body: unknown, status = 200) {
+export async function runCatalogExportJob(supabaseUrl: string, serviceRoleKey: string, jobId: string) {
+  return runPagedRemainingAdminExportJob(supabaseUrl, serviceRoleKey, jobId, "catalog_export");
+}
+
+export async function runCatalogMasterExportJob(supabaseUrl: string, serviceRoleKey: string, jobId: string) {
+  return runPagedRemainingAdminExportJob(supabaseUrl, serviceRoleKey, jobId, "catalog_master");
+}
+
+export function exportJson(body: unknown, status = 200, headers: Record<string, string> = {}) {
   return json(body, status, {
     "Cache-Control": "no-store",
+    ...headers,
   });
 }

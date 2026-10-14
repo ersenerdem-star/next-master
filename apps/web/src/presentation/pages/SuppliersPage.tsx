@@ -208,16 +208,11 @@ export function SuppliersPage() {
 
   const total = selectedSupplierId ? rows[0]?.total_count ?? 0 : rows.length;
 
-  function supplierOptionLabel(supplier: SupplierSummary) {
-    const lineCount = Number(supplier.line_count || 0);
-    return lineCount > 0 ? `${supplier.name} (${lineCount.toLocaleString("en-US")})` : supplier.name;
-  }
-
   const supplierOptions = [
     { value: "", label: p("suppliers.filters.allSuppliers") },
     ...suppliers.map((supplier) => ({
       value: supplier.supplier_id,
-      label: supplierOptionLabel(supplier),
+      label: supplier.name,
     })),
   ];
   const brandOptions = [
@@ -235,7 +230,7 @@ export function SuppliersPage() {
   ];
   const selectableSupplierOptions = suppliers.map((supplier) => ({
     value: supplier.supplier_id,
-    label: supplierOptionLabel(supplier),
+    label: supplier.name,
   }));
   const importSupplierOptions = [...selectableSupplierOptions, { value: "__new__", label: p("suppliers.filters.newSupplier") }];
 
@@ -730,7 +725,7 @@ export function SuppliersPage() {
               options={supplierOptions}
               onChange={setSelectedSupplierId}
             />
-            <Select label={p("fields.brand")} value={exportBrand} options={exportBrandOptions} onChange={setExportBrand} />
+            <Select label={p("suppliers.filters.exportBrand")} value={exportBrand} options={exportBrandOptions} onChange={setExportBrand} />
             <Input
               label={t("common.search")}
               value={search}
@@ -778,6 +773,7 @@ export function SuppliersPage() {
           </div>
         </div>
         <div className="section-card__body">
+          <p className="muted-text">{p("suppliers.export.scopeHint")}</p>
           <div className="meta-row">
             <span>
             {loadingSuppliers
@@ -790,7 +786,7 @@ export function SuppliersPage() {
             {warning ? <span className="warning-text">{warning}</span> : null}
             {error ? <span className="error-text">{error}</span> : null}
           </div>
-          <DataTable rows={rows} columns={columns} emptyText={loadingRows ? t("common.loadingPage") : p("suppliers.empty.noRows")} />
+          <DataTable rows={rows} columns={columns} emptyText={loadingRows ? t("common.loadingPage") : p("suppliers.empty.noPreviewRows")} />
         </div>
       </section>
 

@@ -31,6 +31,10 @@
   external_node_modules = ["@duckdb/node-api", "@duckdb/node-bindings", "@duckdb/node-bindings-linux-x64"]
   included_files = ["node_modules/@duckdb/node-bindings-linux-x64/**", "!node_modules/@duckdb/node-bindings-darwin-arm64/**"]
 
+[functions."admin-export-background"]
+  background = true
+  memory = "2gb"
+
 [[headers]]
   for = "/*"
   [headers.values]

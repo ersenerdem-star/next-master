@@ -4,8 +4,6 @@ import { canAccessOperationsModules } from "./_shared/roles.mts";
 import {
   exportJson,
   runAdminPriceListExportJob,
-  runCatalogExportJob,
-  runCatalogMasterExportJob,
   startAdminPriceListExport,
   startCatalogExport,
   startCatalogMasterExport,
@@ -14,6 +12,7 @@ import {
 } from "./_shared/export-jobs.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 import { dispatchV3PriceExportWorker, isProductionExportPaused, isV3ExportBridgeEnabled } from "./_shared/v3-export-dispatch.mts";
+import { dispatchAdminExportWorker } from "./_shared/admin-export-worker.mts";
 
 export default async (req: Request, context: Context) => {
   if (req.method !== "POST") return exportJson({ error: "Method not allowed" }, 405);
@@ -72,13 +71,9 @@ export default async (req: Request, context: Context) => {
       context.waitUntil(
         (isV3ExportBridgeEnabled() && exportType === "admin_price_list"
           ? dispatchV3PriceExportWorker(req, job.id)
-          : exportType === "catalog_master"
-          ? runCatalogMasterExportJob(supabaseUrl, serviceRoleKey, job.id)
-          : exportType === "catalog_export"
-            ? runCatalogExportJob(supabaseUrl, serviceRoleKey, job.id)
-            : exportType === "supplier_price_list"
-              ? runSupplierPriceListExportJob(supabaseUrl, serviceRoleKey, job.id)
-              : runAdminPriceListExportJob(supabaseUrl, serviceRoleKey, job.id)
+          : exportType === "catalog_master" || exportType === "catalog_export" || exportType === "supplier_price_list"
+          ? dispatchAdminExportWorker(req, job.id)
+          : runAdminPriceListExportJob(supabaseUrl, serviceRoleKey, job.id)
         ).catch((error) => {
           console.error("admin export job failed", job.id, error);
         }),
