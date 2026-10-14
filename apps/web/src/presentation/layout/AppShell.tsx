@@ -51,6 +51,20 @@ const contextMeta = {
   local: { labelKey: "statuses.local", className: "is-local" },
 } as const;
 
+function navSectionFor(key: string) {
+  if (key === "Home" || key === "Items" || key === "CatalogReview" || key === "Inventory") return "workspace";
+  if (key === "Sales" || key === "Purchases") return "commercial";
+  if (key === "Reports") return "insight";
+  return "system";
+}
+
+const navSectionLabels = {
+  workspace: "nav.groupWorkspace",
+  commercial: "nav.groupCommercial",
+  insight: "nav.groupInsight",
+  system: "nav.groupSystem",
+} as const;
+
 export function AppShell({
   children,
   activePage = "Home",
@@ -102,6 +116,7 @@ export function AppShell({
         "--app-desktop-base-width": `${APP_DESKTOP_BASE_WIDTH_PX}px`,
       } as CSSProperties
     : undefined;
+  let lastNavSection = "";
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -153,8 +168,13 @@ export function AppShell({
           <div className="brand-panel__sub">{t("nav.operationalCockpit")}</div>
         </div>
         <nav className="sidebar-nav">
-          {navItems.map((item) => (
+          {navItems.map((item) => {
+            const navSection = navSectionFor(item.key);
+            const showSectionLabel = navSection !== lastNavSection;
+            lastNavSection = navSection;
+            return (
             <div key={item.key} className={`nav-group${item.key === activePage ? " active" : ""}`}>
+              {showSectionLabel ? <div className="sidebar-nav__section-label">{t(navSectionLabels[navSection as keyof typeof navSectionLabels])}</div> : null}
               <button className={`nav-item${item.key === activePage ? " active" : ""}`} onClick={() => onNavigate?.(item.key)}>
                 <span className="nav-item__code">{item.code}</span>
                 <span className="nav-item__body">
@@ -183,7 +203,8 @@ export function AppShell({
                 </div>
               ) : null}
             </div>
-          ))}
+            );
+          })}
         </nav>
       </aside>
       <main className="main">

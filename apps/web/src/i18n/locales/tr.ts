@@ -119,6 +119,10 @@ export const trMessages = {
     diagnostics: "Tanılama",
     driveConsole: "Kontrol Konsolu",
     operationalCockpit: "Operasyon kokpiti",
+    groupWorkspace: "Çalışma alanı",
+    groupCommercial: "Ticari akış",
+    groupInsight: "İçgörü",
+    groupSystem: "Sistem",
   },
   mira: {
     "missionDesk.eyebrow": "Online görev kontrolü",

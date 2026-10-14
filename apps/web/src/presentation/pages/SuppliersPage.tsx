@@ -775,15 +775,29 @@ export function SuppliersPage() {
     setImportBrandName("");
   }
 
+  const visibleSupplierRows = total ?? rows.length;
+
   return (
     <div className="page-stack">
-      <section className="section-card">
+      <section className="supplier-command-hero">
+        <div>
+          <span className="supplier-command-hero__eyebrow">{p("suppliers.title")}</span>
+          <h2>{p("suppliers.subtitle")}</h2>
+          <p>Upload, validate and publish supplier prices from one controlled workspace.</p>
+        </div>
+        <div className="supplier-command-hero__metrics" aria-label="Supplier upload summary">
+          <div><strong>{visibleSupplierRows.toLocaleString("en-US")}</strong><span>visible rows</span></div>
+          <div><strong>{suppliers.length.toLocaleString("en-US")}</strong><span>suppliers</span></div>
+          <div><strong>{verifiedUploadEnabled ? "3" : "2"}</strong><span>release gates</span></div>
+        </div>
+      </section>
+      <section className="section-card supplier-workspace-card">
         <div className="section-card__header section-card__header--row">
           <div>
             <h2>{p("suppliers.title")}</h2>
             <p>{p("suppliers.subtitle")}</p>
           </div>
-          <div className="toolbar toolbar--wrap">
+          <div className="supplier-toolbar supplier-toolbar--browse">
             <Select
               label={p("fields.supplier")}
               value={selectedSupplierId}
@@ -809,6 +823,8 @@ export function SuppliersPage() {
             <Button variant="secondary" onClick={() => void handleSupplierExport()} disabled={!selectedSupplierId || !exportBrand} busy={exportingSuppliers} busyLabel={p("busy.preparing")}>
               {p("actions.exportCsv")}
             </Button>
+          </div>
+          <div className="supplier-toolbar supplier-toolbar--actions">
             <Button
               variant="secondary"
               onClick={() => {
@@ -839,6 +855,13 @@ export function SuppliersPage() {
         </div>
         <div className="section-card__body">
           <p className="muted-text">{p("suppliers.export.scopeHint")}</p>
+          <div className="supplier-release-rail" aria-label="Supplier price release path">
+            <div className="supplier-release-rail__step is-active"><span>01</span><strong>{locale === "tr" ? "Alındı" : "Received"}</strong><small>{locale === "tr" ? "Dosya kabulü" : "File accepted"}</small></div>
+            <div className="supplier-release-rail__line" />
+            <div className="supplier-release-rail__step"><span>02</span><strong>{locale === "tr" ? "Doğrulandı" : "Validated"}</strong><small>{locale === "tr" ? "Marka ve satır kontrolü" : "Brand and row checks"}</small></div>
+            <div className="supplier-release-rail__line" />
+            <div className="supplier-release-rail__step"><span>03</span><strong>{locale === "tr" ? "Yayınlandı" : "Published"}</strong><small>{locale === "tr" ? "Müşteri fiyatı" : "Customer price"}</small></div>
+          </div>
           <div className="meta-row">
             <span>
             {loadingSuppliers

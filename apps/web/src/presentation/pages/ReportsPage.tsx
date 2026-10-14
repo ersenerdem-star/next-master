@@ -4,6 +4,7 @@ import { ItemTransactionsPage } from "./ItemTransactionsPage";
 import { MasterPage } from "./MasterPage";
 import { ProcurementDashboardPage } from "./ProcurementDashboardPage";
 import { OperationsStatusPage } from "./OperationsStatusPage";
+import { useI18n } from "../../i18n/I18nProvider";
 
 type ReportsPageProps = {
   activeTab?: "Procurement Dashboard" | "Master" | "Core Reports" | "Item Transactions" | "Inventory Analytics" | "Status Center";
@@ -26,8 +27,20 @@ export function ReportsPage({
   onOpenInventoryItem,
   onOpenSupplierComparison,
 }: ReportsPageProps) {
+  const { locale } = useI18n();
   return (
-    <div className="page-stack">
+    <div className="page-stack reports-workspace">
+      <section className="reports-command-banner">
+        <div>
+          <span className="reports-command-banner__eyebrow">{locale === "tr" ? "İçgörü merkezi" : "Insight workspace"}</span>
+          <h2>{locale === "tr" ? "Karar vermek için tek rapor görünümü" : "One reporting view for faster decisions"}</h2>
+          <p>{locale === "tr" ? "Tedarik, satış, stok ve durum sinyallerini aynı çalışma yüzeyinde karşılaştırın." : "Compare procurement, sales, inventory and operational signals in one focused workspace."}</p>
+        </div>
+        <div className="reports-command-banner__active">
+          <span>{locale === "tr" ? "Açık görünüm" : "Active view"}</span>
+          <strong>{activeTab}</strong>
+        </div>
+      </section>
       {activeTab === "Procurement Dashboard" ? <ProcurementDashboardPage onOpenSupplierComparison={onOpenSupplierComparison} /> : null}
       {activeTab === "Master" ? <MasterPage /> : null}
       {activeTab === "Core Reports" ? <CoreReportsPage /> : null}

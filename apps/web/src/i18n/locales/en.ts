@@ -139,6 +139,10 @@ export const enMessages = {
     diagnostics: "Diagnostics",
     driveConsole: "Drive Console",
     operationalCockpit: "Operational cockpit",
+    groupWorkspace: "Workspace",
+    groupCommercial: "Commercial",
+    groupInsight: "Insight",
+    groupSystem: "System",
   },
   mira: {
     "missionDesk.eyebrow": "Online mission control",
