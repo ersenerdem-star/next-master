@@ -275,7 +275,7 @@ function normalizeCommercialFields(row, sourceRowNumber, validFrom) {
   const stock_qty = quantity("stock_qty", 0);
   const order_multiple = quantity("order_multiple", 1);
   const valid_to = normalizeDate(text("valid_to"));
-  if (text("valid_to") && (!valid_to || validFrom && valid_to < validFrom)) invalidCommercial("valid_to", sourceRowNumber);
+  if (text("valid_to") && (!valid_to || !validFrom || valid_to < validFrom)) invalidCommercial("valid_to", sourceRowNumber);
   return { stock_qty, order_multiple, valid_to };
 }
 
@@ -284,7 +284,7 @@ export function requireNormalizedCommercialFields(row) {
     || row.stock_qty !== null && (!Number.isInteger(row.stock_qty) || row.stock_qty < 0 || row.stock_qty > 2147483647)
     || row.order_multiple !== null && (!Number.isInteger(row.order_multiple) || row.order_multiple < 1 || row.order_multiple > 2147483647)
     || row.valid_to !== null && (typeof row.valid_to !== "string" || normalizeDate(row.valid_to) !== row.valid_to
-      || row.valid_from && row.valid_to < row.valid_from)) throw Error("PREPARED_COMMERCIAL_ROW_INVALID");
+      || !row.valid_from || normalizeDate(row.valid_from) !== row.valid_from || row.valid_to < row.valid_from)) throw Error("PREPARED_COMMERCIAL_ROW_INVALID");
   return row;
 }
 

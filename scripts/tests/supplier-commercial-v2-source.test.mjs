@@ -40,6 +40,16 @@ test('invalid quantities/dates reject without rounding, clamping or exposing sou
  const [max]=await rows(csv('2147483647','2147483647','2030-12-31'));assert.equal(max.stock_qty,2147483647);assert.equal(max.order_multiple,2147483647);
 });
 
+test('nonempty end date requires an actual effective start date before handoff or receipt',async()=>{
+ await assert.rejects(rows(csv('0','3','2026-10-15'),{commercialFields:true}),
+  e=>e.code==='SUPPLIER_INVALID_COMMERCIAL_FIELD'&&e.fields[0]==='valid_to');
+ await assert.rejects(rows(csv('0','3','2026-10-15','2026-02-30')),
+  e=>e.code==='SUPPLIER_INVALID_COMMERCIAL_FIELD'&&e.fields[0]==='valid_to');
+ const [row]=await rows(csv('0','3','2026-10-15'));
+ for(const valid_from of [null,'',undefined,'2026-02-30'])assert.throws(
+  ()=>requireNormalizedCommercialFields({...row,valid_from}),/PREPARED_COMMERCIAL_ROW_INVALID/);
+});
+
 test('XLSX typed dates and numeric serial dates (1900/1904 workbooks) retain all three fields',async t=>{
  for(const date1904 of [false,true])await t.test(String(date1904),async()=>{
   const book=new ExcelJS.Workbook();book.properties.date1904=date1904;const sheet=book.addWorksheet('Prices');
