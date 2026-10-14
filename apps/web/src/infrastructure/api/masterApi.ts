@@ -91,6 +91,10 @@ type PublishedPriceMasterPage = {
   rows: MasterRow[];
 };
 
+export type MasterPreviewRow = MasterRow & {
+  total_count_is_estimate?: boolean;
+};
+
 function shouldRunLooseOriginalNumberSearch(search: string) {
   return normalizeOriginalNumberSearch(search).length >= 6;
 }
@@ -579,7 +583,7 @@ async function fetchCloudMasterCatalogFast(params: MasterParams): Promise<Master
   }
 }
 
-async function fetchCloudMasterPricedFastPage(params: MasterParams): Promise<MasterRow[]> {
+async function fetchCloudMasterPricedFastPage(params: MasterParams): Promise<MasterPreviewRow[]> {
   const brandId = String(params.brandId || "").trim();
   if (!brandId) {
     throw new Error("Select a brand first.");
@@ -598,7 +602,12 @@ async function fetchCloudMasterPricedFastPage(params: MasterParams): Promise<Mas
     });
     if (published?.has_published_scope === true) {
       if (!Array.isArray(published.rows)) throw new Error("Published price page is invalid. Please retry.");
-      return normalizeFastMasterRows(published.rows);
+      // Unfiltered published pages use accepted-row metadata as an upper bound,
+      // while an exact SKU search returns a verified zero/one match count.
+      return normalizeFastMasterRows(published.rows).map((row) => ({
+        ...row,
+        total_count_is_estimate: !params.search.trim(),
+      }));
     }
     if (published?.has_published_scope !== false) {
       throw new Error("Published price scope could not be verified. Please retry.");
@@ -621,11 +630,11 @@ async function fetchCloudMasterPricedFastPage(params: MasterParams): Promise<Mas
   }
 }
 
-export async function fetchCloudMasterPricedFast(params: MasterParams): Promise<MasterRow[]> {
+export async function fetchCloudMasterPricedFast(params: MasterParams): Promise<MasterPreviewRow[]> {
   return fetchCloudMasterPricedFastPage(params);
 }
 
-export async function fetchCloudMasterFast(params: MasterParams): Promise<MasterRow[]> {
+export async function fetchCloudMasterFast(params: MasterParams): Promise<MasterPreviewRow[]> {
   if (params.scope === "priced") {
     return fetchCloudMasterPricedFast(params);
   }

@@ -324,3 +324,35 @@ The correct next move is not a rewrite. The safe path is adapter-first platformi
 Proceed to PLAT-002A Operations Engine Blueprint.
 
 Do not build generic execution first. Start with a read-only contract and adapter model. Supplier operations should remain the pilot because they already contain the richest status, retry, and readiness behavior.
+
+## V3 Staging Admin Export Verification — 2026-10-14
+
+This dated evidence supplements the assessment above; it does not mark the generic Operations Engine slices complete. The verified environment is `https://next-master-v3-staging-20261006.netlify.app/`, Supabase project `kaxsqafdevabkxofwdod`, and the `codex/price-engine-integration` checkout. No production deployment is represented by this evidence.
+
+Catalog, Master/Supplier Comparison, and supplier-plus-brand exports now use background jobs. The source RPCs use stable keyset cursors, verified complete counts, and source-version checks. JSON chunk RPCs carry up to 5,000 rows without silently inheriting the PostgREST 1,000-row response cap. A fenced lease and heartbeat prevent stale workers from publishing another attempt's result. Files are streamed to temporary storage and finalized only after complete artifact upload.
+
+Published supplier-price pointers determine purchase-price sources and A/B sales prices. A legacy source is permitted only when the selected brand has no published pointer. Invalid pointers fail closed. Eligible published rows must have accepted status, a positive EUR price, an effective date, and matching punctuation-preserving product identity. New import validation rejects duplicate normalized identities before publication. Preview totals from accepted-row metadata are labelled estimates; export preparation independently verifies the exact count.
+
+Artifacts over 40 MiB are stored as bounded private objects and signed together. The browser verifies each part and the total size before saving one complete file. Missing parts, stale sources, cursor gaps, and incomplete counts fail the export. The current browser download guard is 128 MiB; these admin XLSX exports enforce Excel's 1,048,575-data-row worksheet capacity explicitly.
+
+### Browser and File Evidence
+
+All filenames below refer to actual Chrome downloads under `/Users/ersen/Downloads`.
+
+| Surface | File | Data rows | Bytes | Staging job |
+| --- | --- | ---: | ---: | --- |
+| Supplier + brand, published Clevite/Sood | `supplier-Sood-Clevite-20261014.csv` | 999,997 | 48,752,699 | `373a8860-7687-4e5b-af72-ef5b855a8169` |
+| Supplier + brand, legacy Euroricambi/Sood | `supplier-Sood-Euroricambi-20261014.csv` | 542 | 26,282 | `d9f1b718-1ebf-4c04-84c3-8255a5a0a848` |
+| Master / Supplier Comparison, priced Clevite | `master-Clevite-priced-20261014.xlsx` | 999,997 | 86,499,232 | `1dbf9ab3-1937-4c76-83b9-efca879872cc` |
+| Catalog CSV, staging fixture data labelled Clevite | `catalog-Clevite-20261014.csv` | 145,050 | 18,422,895 | `f276efbb-b119-4066-94a1-0a92b9fc79aa` |
+| Catalog XLSX, same staging fixture data | `catalog-Clevite-20261014.xlsx` | 145,050 | 10,157,203 | `6fe7ce9c-58dd-47d8-874c-85a0b869ca50` |
+
+Full-file scans found no empty or duplicate product codes, malformed CSV rows, or unsafe formula text. The supplier CSV preserves 147,440 leading-zero codes and 165 punctuated codes. The catalog rows are staging fixtures, not verified commercial Clevite catalog content. The legacy supplier artifact also exercises cached paths with reserved characters through the batch signer.
+
+The complete Master workbook has text product-code cells and numeric purchase/A/B price cells, with no formula or error cells. Its entire code-and-purchase-price fingerprint matches the supplier CSV: `2a144d7f52d1ff5bf62197dee78826131a474a6f7e7ce1f6cda680a3db1edd75`. Every row's A/B price matches 10%/15% markup with decimal half-up rounding. Example: `00-701615301C`, purchase EUR 76.59, A EUR 84.25, B EUR 88.08. The background worker finalized in 338.8 seconds; Storage part sizes were 41,943,040, 41,943,040, and 2,613,152 bytes, and the saved file matches their total exactly.
+
+The catalog XLSX finalized in 46.7 seconds. Its complete code set and all 15-column record fingerprints match the catalog CSV, with no formula or error cells. Chrome's download history visibly confirms all five downloads; the browser proof was captured at `/tmp/nm-staging-export-downloads.png`.
+
+### Regression Evidence
+
+The export download guards, browser transport, lease, source-integrity, and actual multipart-worker suites passed 40/40 tests. The PostgreSQL fixture checks cover 150,001 catalog rows, eligibility and punctuation, bounded JSON chunks, exact source counts, service-only RPC execution, and A/B calculations. The embedded PostgreSQL execution passed; the separate Docker runner is available but is not claimed as executed. Frontend TypeScript/Vite and Netlify function builds passed. These are local and staging results, not production proof.
