@@ -24,8 +24,10 @@ function functionSignature(fn) {
   }).join(",")})`;
 }
 
-export async function createFullReplayDb() {
-  const db=new PGlite({extensions:{unaccent,pgcrypto,pg_trgm}});
+export async function createFullReplayDb({db: suppliedDb} = {}) {
+  // Optional isolated pg.Client-compatible adapter lets the same captured schema
+  // exercise real PostgreSQL; ordinary callers retain the PGlite fixture.
+  const db=suppliedDb ?? new PGlite({extensions:{unaccent,pgcrypto,pg_trgm}});
   try {
     await db.exec("CREATE SCHEMA auth; CREATE SCHEMA storage; CREATE SCHEMA extensions; SET search_path=public,extensions,pg_catalog; SET check_function_bodies=false");
     for(const item of fullReplaySource.roles) await db.exec(`CREATE ROLE ${quote(item.name)} ${item.bypassRls?"BYPASSRLS":"NOBYPASSRLS"}`);
