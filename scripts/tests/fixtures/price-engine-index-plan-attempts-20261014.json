@@ -1,0 +1,285 @@
+{
+  "schema_version": 1,
+  "project_ref": "zjgueqijumzlfioihnkt",
+  "action": "offline-concurrent-index-prebuild-plan",
+  "manifest_file": "scripts/ops/price-engine-production-manifest.json",
+  "manifest_sha256": "d5c965bb7f975d91343d0fae6b844a908b31c8318514397ac24e8e5b590195ea",
+  "captured_schema_file": "scripts/tests/fixtures/price-engine-full-replay-production-source.json",
+  "captured_schema_sha256": "09e2d2ccff7f2ee6bb0e55a3aa0deff7df4a7c7f2c89b139f084dfd9a2fa02db",
+  "normalizer": {
+    "present": true,
+    "volatility": "i",
+    "definition_md5": "be15cebd4bce2b1a79a3bf544984069a"
+  },
+  "execution_policy": {
+    "remote_mutation_performed": false,
+    "parallelism": 1,
+    "outer_transaction": false,
+    "automatic_drop_or_reindex": false,
+    "use_dedicated_direct_or_session_pooled_connection": true,
+    "verify_tls_certificate": true,
+    "each_sql_is_a_separate_client_query": true,
+    "verify_all_before_start": true,
+    "verify_before_and_after_each_index": true,
+    "stop_on_any_error_or_definition_drift": true,
+    "migration_files_modified": false
+  },
+  "session_setup_sql": [
+    "SET search_path = pg_catalog",
+    "SET lock_timeout = '5s'",
+    "SET statement_timeout = '30min'",
+    "SET idle_in_transaction_session_timeout = '30s'",
+    "SET application_name = 'nm-price-index-prebuild-20261014'"
+  ],
+  "verification_sql": "WITH wanted(name,table_name) AS (VALUES ('idx_catalog_products_export_exact_code','catalog_products'),\n    ('idx_supplier_prices_export_keyset','supplier_prices'),\n    ('idx_supplier_prices_export_search','supplier_prices'),\n    ('idx_catalog_products_export_id','catalog_products'),\n    ('idx_catalog_products_export_code_id','catalog_products'),\n    ('idx_supplier_prices_export_keyset_coalesced','supplier_prices'),\n    ('idx_catalog_products_export_exact_identity','catalog_products'),\n    ('idx_catalog_products_export_code_c_id','catalog_products'),\n    ('idx_supplier_price_rollups_export_code_c','supplier_price_rollups'),\n    ('idx_supplier_prices_export_code_c','supplier_prices'),\n    ('idx_catalog_import_stage_run_validation','catalog_import_stage'),\n    ('idx_catalog_import_stage_run_code_brand','catalog_import_stage'))\nSELECT jsonb_build_object(\n  'snapshot_version',1,'collected_at',clock_timestamp(),\n  'server_version_num',current_setting('server_version_num'),\n  'search_path',current_setting('search_path'),\n  'lock_timeout',current_setting('lock_timeout'),'statement_timeout',current_setting('statement_timeout'),\n  'idle_in_transaction_session_timeout',current_setting('idle_in_transaction_session_timeout'),\n  'normalizer',jsonb_build_object('present',p.oid IS NOT NULL,'volatility',p.provolatile,\n    'definition_md5',CASE WHEN p.oid IS NOT NULL THEN md5(pg_get_functiondef(p.oid)) END),\n  'indexes',(SELECT jsonb_agg(jsonb_build_object(\n    'name',w.name,'schema','public','table',w.table_name,\n    'table_present',tc.oid IS NOT NULL,'table_kind',tc.relkind,\n    'present',ic.oid IS NOT NULL,'kind',ic.relkind,\n    'actual_table_schema',tn.nspname,'actual_table',it.relname,\n    'valid',i.indisvalid,'ready',i.indisready,'live',i.indislive,'unique',i.indisunique,\n    'definition',CASE WHEN i.indexrelid IS NOT NULL THEN pg_get_indexdef(i.indexrelid) END\n  ) ORDER BY w.name)\n  FROM wanted w\n  LEFT JOIN pg_namespace ns ON ns.nspname='public'\n  LEFT JOIN pg_class tc ON tc.relnamespace=ns.oid AND tc.relname=w.table_name\n  LEFT JOIN pg_class ic ON ic.relnamespace=ns.oid AND ic.relname=w.name\n  LEFT JOIN pg_index i ON i.indexrelid=ic.oid\n  LEFT JOIN pg_class it ON it.oid=i.indrelid\n  LEFT JOIN pg_namespace tn ON tn.oid=it.relnamespace)\n) AS index_prebuild_snapshot\nFROM (SELECT 1) seed LEFT JOIN pg_proc p ON p.oid=to_regprocedure('public.normalize_catalog_product_code(text)');",
+  "operations": [
+    {
+      "sequence": 1,
+      "name": "idx_catalog_products_export_exact_code",
+      "schema": "public",
+      "table": "catalog_products",
+      "source": {
+        "file": "supabase/migrations/20261013140012_supplier_price_export_exact_catalog_identity.sql",
+        "sha256": "01f42051b82270a9cb69203d69c21da5950a47ce498ee8e4395119e4f3f96968",
+        "migration_position": 21
+      },
+      "source_sql": "create index if not exists idx_catalog_products_export_exact_code\n  on public.catalog_products\n  (organization_id, brand_id, public.normalize_catalog_product_code(product_code));",
+      "source_sql_sha256": "b5b07021b16e8ace4df8a732d9e6ae9805227ec1ab77b952556f9173a466bad8",
+      "sql": "create index concurrently if not exists idx_catalog_products_export_exact_code\n  on public.catalog_products\n  (organization_id, brand_id, public.normalize_catalog_product_code(product_code));",
+      "sql_sha256": "bf6b8bfde964ec3d3fb81851dd0e62e2f65bdd0bf0e1e4c42c7b145c24544486",
+      "repeated_in": [],
+      "expected_definition": "CREATE INDEX idx_catalog_products_export_exact_code ON public.catalog_products USING btree (organization_id, brand_id, public.normalize_catalog_product_code(product_code))"
+    },
+    {
+      "sequence": 2,
+      "name": "idx_supplier_prices_export_keyset",
+      "schema": "public",
+      "table": "supplier_prices",
+      "source": {
+        "file": "supabase/migrations/20261014072055_supplier_price_export_keyset_page.sql",
+        "sha256": "61601e15328df84ed97b0c7d94312ee3537b20355139fe9d117433da90d4a726",
+        "migration_position": 36
+      },
+      "source_sql": "create index if not exists idx_supplier_prices_export_keyset\n  on public.supplier_prices (\n    organization_id,\n    supplier_id,\n    brand_id,\n    product_code,\n    id\n  )\n  where is_active;",
+      "source_sql_sha256": "d5000e57bf0ef7cc814ff979c623603e6fea2c342c3f79782ba59bb043f46ca6",
+      "sql": "create index concurrently if not exists idx_supplier_prices_export_keyset\n  on public.supplier_prices (\n    organization_id,\n    supplier_id,\n    brand_id,\n    product_code,\n    id\n  )\n  where is_active;",
+      "sql_sha256": "613be708a48780a50de63cc586b997c66fa491d3da03beef3975bbb6dbec0f99",
+      "repeated_in": [],
+      "expected_definition": "CREATE INDEX idx_supplier_prices_export_keyset ON public.supplier_prices USING btree (organization_id, supplier_id, brand_id, product_code, id) WHERE is_active"
+    },
+    {
+      "sequence": 3,
+      "name": "idx_supplier_prices_export_search",
+      "schema": "public",
+      "table": "supplier_prices",
+      "source": {
+        "file": "supabase/migrations/20261014072055_supplier_price_export_keyset_page.sql",
+        "sha256": "61601e15328df84ed97b0c7d94312ee3537b20355139fe9d117433da90d4a726",
+        "migration_position": 36
+      },
+      "source_sql": "create index if not exists idx_supplier_prices_export_search\n  on public.supplier_prices (\n    organization_id,\n    supplier_id,\n    brand_id,\n    normalized_code,\n    normalized_oem,\n    product_code,\n    id\n  )\n  where is_active;",
+      "source_sql_sha256": "1bee78a279b7d809b35aa2f162eac2f39b3f731e3666a800013ef8e6cce45fcc",
+      "sql": "create index concurrently if not exists idx_supplier_prices_export_search\n  on public.supplier_prices (\n    organization_id,\n    supplier_id,\n    brand_id,\n    normalized_code,\n    normalized_oem,\n    product_code,\n    id\n  )\n  where is_active;",
+      "sql_sha256": "08116627f529a6d8623731b2c2f6e1dff5fabc3de0a3ed07210504dea03a40dc",
+      "repeated_in": [],
+      "expected_definition": "CREATE INDEX idx_supplier_prices_export_search ON public.supplier_prices USING btree (organization_id, supplier_id, brand_id, normalized_code, normalized_oem, product_code, id) WHERE is_active"
+    },
+    {
+      "sequence": 4,
+      "name": "idx_catalog_products_export_id",
+      "schema": "public",
+      "table": "catalog_products",
+      "source": {
+        "file": "supabase/migrations/20261014085226_catalog_export_source_contracts.sql",
+        "sha256": "be8f561b279aba5d31485d330155d915e8e035128bc880c8caa68845e42f47ca",
+        "migration_position": 37
+      },
+      "source_sql": "create index if not exists idx_catalog_products_export_id\n  on public.catalog_products(organization_id,brand_id,id);",
+      "source_sql_sha256": "151ae3abb60ce0d589730b914925c9eb32cb00a6eac6d5ce340a16af2b9a7ba6",
+      "sql": "create index concurrently if not exists idx_catalog_products_export_id\n  on public.catalog_products(organization_id,brand_id,id);",
+      "sql_sha256": "9fe6927f3b3e8f43ffd7a416858e075f7b13bdfe8f4f4824dfcd95552ef48ae6",
+      "repeated_in": [],
+      "expected_definition": "CREATE INDEX idx_catalog_products_export_id ON public.catalog_products USING btree (organization_id, brand_id, id)"
+    },
+    {
+      "sequence": 5,
+      "name": "idx_catalog_products_export_code_id",
+      "schema": "public",
+      "table": "catalog_products",
+      "source": {
+        "file": "supabase/migrations/20261014085226_catalog_export_source_contracts.sql",
+        "sha256": "be8f561b279aba5d31485d330155d915e8e035128bc880c8caa68845e42f47ca",
+        "migration_position": 37
+      },
+      "source_sql": "create index if not exists idx_catalog_products_export_code_id\n  on public.catalog_products(organization_id,brand_id,product_code,id);",
+      "source_sql_sha256": "21e8084b4128c437af5c313ef7eee463040fc4cba4e816ce84e96840d6241bbc",
+      "sql": "create index concurrently if not exists idx_catalog_products_export_code_id\n  on public.catalog_products(organization_id,brand_id,product_code,id);",
+      "sql_sha256": "02044ab317729cc981bf9c1f9ff6c8c68a240b64a2b02e0a6467275f9cb7b865",
+      "repeated_in": [],
+      "expected_definition": "CREATE INDEX idx_catalog_products_export_code_id ON public.catalog_products USING btree (organization_id, brand_id, product_code, id)"
+    },
+    {
+      "sequence": 6,
+      "name": "idx_supplier_prices_export_keyset_coalesced",
+      "schema": "public",
+      "table": "supplier_prices",
+      "source": {
+        "file": "supabase/migrations/20261014085547_supplier_price_export_published_source.sql",
+        "sha256": "b24393e32e6c386245e265a07bc4f8e5fc2f0d6cbc0eeab1c28ce54269263807",
+        "migration_position": 38
+      },
+      "source_sql": "create index if not exists idx_supplier_prices_export_keyset_coalesced\n  on public.supplier_prices(organization_id,supplier_id,brand_id,(coalesce(product_code,'')),id)\n  where is_active;",
+      "source_sql_sha256": "e1af6c742eee1fc598b3ec55c9f22a9d7fc1647d089e65763247a81a646a331f",
+      "sql": "create index concurrently if not exists idx_supplier_prices_export_keyset_coalesced\n  on public.supplier_prices(organization_id,supplier_id,brand_id,(coalesce(product_code,'')),id)\n  where is_active;",
+      "sql_sha256": "8247c960d328e81f806623e616b6fbac3e938b623ccc058ea4500f58bf97f5c4",
+      "repeated_in": [],
+      "expected_definition": "CREATE INDEX idx_supplier_prices_export_keyset_coalesced ON public.supplier_prices USING btree (organization_id, supplier_id, brand_id, COALESCE(product_code, ''::text), id) WHERE is_active"
+    },
+    {
+      "sequence": 7,
+      "name": "idx_catalog_products_export_exact_identity",
+      "schema": "public",
+      "table": "catalog_products",
+      "source": {
+        "file": "supabase/migrations/20261014090241_export_source_keyset_collation.sql",
+        "sha256": "a36788a5e5910c2c584d0cb3b227972f56b93ebd7eb9a98cc940ded42e6d7ae5",
+        "migration_position": 39
+      },
+      "source_sql": "create index if not exists idx_catalog_products_export_exact_identity\n  on public.catalog_products(organization_id,brand_id,public.normalize_catalog_product_code(product_code),product_code,id);",
+      "source_sql_sha256": "f340caaabd7350f2b26716c71e65a468cabd1758ed710e19fe4dbf8a03aac700",
+      "sql": "create index concurrently if not exists idx_catalog_products_export_exact_identity\n  on public.catalog_products(organization_id,brand_id,public.normalize_catalog_product_code(product_code),product_code,id);",
+      "sql_sha256": "56dbaed2fc9aff756303848758421852415d1b9772ccec3ee8f19b8088ac02dc",
+      "repeated_in": [],
+      "expected_definition": "CREATE INDEX idx_catalog_products_export_exact_identity ON public.catalog_products USING btree (organization_id, brand_id, public.normalize_catalog_product_code(product_code), product_code, id)"
+    },
+    {
+      "sequence": 8,
+      "name": "idx_catalog_products_export_code_c_id",
+      "schema": "public",
+      "table": "catalog_products",
+      "source": {
+        "file": "supabase/migrations/20261014090241_export_source_keyset_collation.sql",
+        "sha256": "a36788a5e5910c2c584d0cb3b227972f56b93ebd7eb9a98cc940ded42e6d7ae5",
+        "migration_position": 39
+      },
+      "source_sql": "create index if not exists idx_catalog_products_export_code_c_id\n  on public.catalog_products(organization_id,brand_id,product_code collate \"C\",id);",
+      "source_sql_sha256": "86f7f7afa7619ef229dd68cf47ba57dee45c8238f9ccb1c1ef90f6c37b531c75",
+      "sql": "create index concurrently if not exists idx_catalog_products_export_code_c_id\n  on public.catalog_products(organization_id,brand_id,product_code collate \"C\",id);",
+      "sql_sha256": "8aa0219a0ae8dde2803f9b7a38af35705cb6772ef2ac27167b63994f9811e5e2",
+      "repeated_in": [],
+      "expected_definition": "CREATE INDEX idx_catalog_products_export_code_c_id ON public.catalog_products USING btree (organization_id, brand_id, product_code COLLATE \"C\", id)"
+    },
+    {
+      "sequence": 9,
+      "name": "idx_supplier_price_rollups_export_code_c",
+      "schema": "public",
+      "table": "supplier_price_rollups",
+      "source": {
+        "file": "supabase/migrations/20261014090241_export_source_keyset_collation.sql",
+        "sha256": "a36788a5e5910c2c584d0cb3b227972f56b93ebd7eb9a98cc940ded42e6d7ae5",
+        "migration_position": 39
+      },
+      "source_sql": "create index if not exists idx_supplier_price_rollups_export_code_c\n  on public.supplier_price_rollups(organization_id,brand_id,normalized_code collate \"C\") where cheapest_price is not null;",
+      "source_sql_sha256": "bae938d5eb6a4bace6589c79f5cf0ec393929e63b8c94ddbe803977085a5a02b",
+      "sql": "create index concurrently if not exists idx_supplier_price_rollups_export_code_c\n  on public.supplier_price_rollups(organization_id,brand_id,normalized_code collate \"C\") where cheapest_price is not null;",
+      "sql_sha256": "70ca8a5685c2c0d2cd9b5c57aedbd6dc66424c9b2ff143d32587dde55676b162",
+      "repeated_in": [],
+      "expected_definition": "CREATE INDEX idx_supplier_price_rollups_export_code_c ON public.supplier_price_rollups USING btree (organization_id, brand_id, normalized_code COLLATE \"C\") WHERE (cheapest_price IS NOT NULL)"
+    },
+    {
+      "sequence": 10,
+      "name": "idx_supplier_prices_export_code_c",
+      "schema": "public",
+      "table": "supplier_prices",
+      "source": {
+        "file": "supabase/migrations/20261014090241_export_source_keyset_collation.sql",
+        "sha256": "a36788a5e5910c2c584d0cb3b227972f56b93ebd7eb9a98cc940ded42e6d7ae5",
+        "migration_position": 39
+      },
+      "source_sql": "create index if not exists idx_supplier_prices_export_code_c\n  on public.supplier_prices(organization_id,supplier_id,brand_id,(coalesce(product_code,'') collate \"C\"),id) where is_active;",
+      "source_sql_sha256": "9757397928d25ae3a2abe1b75716f3a9e107ca4945920efb50614af567483b4d",
+      "sql": "create index concurrently if not exists idx_supplier_prices_export_code_c\n  on public.supplier_prices(organization_id,supplier_id,brand_id,(coalesce(product_code,'') collate \"C\"),id) where is_active;",
+      "sql_sha256": "6da2d994fc445fb5cbe58af1a5ebbf383c990e056cf8240d77ba6408f315689d",
+      "repeated_in": [],
+      "expected_definition": "CREATE INDEX idx_supplier_prices_export_code_c ON public.supplier_prices USING btree (organization_id, supplier_id, brand_id, COALESCE(product_code, ''::text) COLLATE \"C\", id) WHERE is_active"
+    },
+    {
+      "sequence": 11,
+      "name": "idx_catalog_import_stage_run_validation",
+      "schema": "public",
+      "table": "catalog_import_stage",
+      "source": {
+        "file": "supabase/migrations/20261014132000_catalog_import_storage_validation_batches.sql",
+        "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
+        "migration_position": 55
+      },
+      "source_sql": "create index if not exists idx_catalog_import_stage_run_validation\n  on public.catalog_import_stage (run_id, row_index)\n  where validation_status = 'pending';",
+      "source_sql_sha256": "e6a305016efdce5cf39d2c22411f8f5513f53fb56a4cfe3dea75befde885757a",
+      "sql": "create index concurrently if not exists idx_catalog_import_stage_run_validation\n  on public.catalog_import_stage (run_id, row_index)\n  where validation_status = 'pending';",
+      "sql_sha256": "db04d163fb7b04b45e69e2776c485455daf2eb124afff3c283f444aa85126684",
+      "repeated_in": [
+        {
+          "file": "supabase/migrations/20261014133000_catalog_import_storage_validation_ambiguity_fix.sql",
+          "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
+          "migration_position": 56
+        },
+        {
+          "file": "supabase/migrations/20261014134000_catalog_import_storage_validation_aggregate_fix.sql",
+          "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
+          "migration_position": 57
+        },
+        {
+          "file": "supabase/migrations/20261014135000_catalog_import_storage_validation_projection_fix.sql",
+          "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
+          "migration_position": 58
+        }
+      ],
+      "expected_definition": "CREATE INDEX idx_catalog_import_stage_run_validation ON public.catalog_import_stage USING btree (run_id, row_index) WHERE (validation_status = 'pending'::text)"
+    },
+    {
+      "sequence": 12,
+      "name": "idx_catalog_import_stage_run_code_brand",
+      "schema": "public",
+      "table": "catalog_import_stage",
+      "source": {
+        "file": "supabase/migrations/20261014132000_catalog_import_storage_validation_batches.sql",
+        "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
+        "migration_position": 55
+      },
+      "source_sql": "create index if not exists idx_catalog_import_stage_run_code_brand\n  on public.catalog_import_stage (run_id, normalized_code, brand);",
+      "source_sql_sha256": "0101110bb712f813beb9d67280d843c49c0bb355ab671c3348a0f76a0567a59d",
+      "sql": "create index concurrently if not exists idx_catalog_import_stage_run_code_brand\n  on public.catalog_import_stage (run_id, normalized_code, brand);",
+      "sql_sha256": "a7aa2b759cfe398661140aee0325b53d815bce895b5d1b716e17d12a21900f3e",
+      "repeated_in": [
+        {
+          "file": "supabase/migrations/20261014133000_catalog_import_storage_validation_ambiguity_fix.sql",
+          "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
+          "migration_position": 56
+        },
+        {
+          "file": "supabase/migrations/20261014134000_catalog_import_storage_validation_aggregate_fix.sql",
+          "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
+          "migration_position": 57
+        },
+        {
+          "file": "supabase/migrations/20261014135000_catalog_import_storage_validation_projection_fix.sql",
+          "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
+          "migration_position": 58
+        }
+      ],
+      "expected_definition": "CREATE INDEX idx_catalog_import_stage_run_code_brand ON public.catalog_import_stage USING btree (run_id, normalized_code, brand)"
+    }
+  ],
+  "operator_notes": [
+    "Validate the actual client configuration with assertConnectionTarget, retain its sanitized result, and use that same dedicated session for every query.",
+    "Run each setup statement separately; do not concatenate SET and CREATE INDEX into one query, BEGIN block, migration wrapper or transaction pool.",
+    "Bind the snapshot envelope project_ref to the verified connection. Query metadata and inspect all 12 indexes before starting, then before and after each individual operation.",
+    "Execute an operation only when its before check returns create-concurrently; skip only a valid, ready, live exact-definition match.",
+    "Run one CREATE INDEX CONCURRENTLY at a time. The only change from each original source statement is insertion of the CONCURRENTLY keyword.",
+    "A timeout or disconnect may leave an invalid index. Stop, capture fresh metadata and review it; never retry blindly or automatically DROP/REINDEX.",
+    "Concurrent creation reduces write blocking but still uses I/O, disk, CPU and short locks; verify provider capacity and long transactions immediately before execution.",
+    "A concurrent DDL name race cannot be made atomic with this precheck; postcheck must pass even when IF NOT EXISTS reports a skip.",
+    "Keep all reviewed migration bytes unchanged. After all 12 exact indexes verify, their later CREATE INDEX IF NOT EXISTS statements will skip them.",
+    "This plan does not execute SQL, authorize a production change, prove production readiness or activate any import/export/catalog workflow."
+  ]
+}

@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { OWNED_INDEX_NAME, OWNED_INDEX_OID, OWNED_ATTEMPT_SHA256, DROP_OWNED_INDEX_SQL,
+import { OWNED_INDEX_NAME, OWNED_INDEX_OID, OWNED_ATTEMPT_SHA256, SECOND_OWNED_INDEX_OID, SECOND_OWNED_ATTEMPT_SHA256, DROP_OWNED_INDEX_SQL,
   validateOwnedIndexAttempt, validateOwnedIndexMetadata } from '../ops/price-engine-owned-index-recovery.mjs';
 
-const plan = JSON.parse(await readFile(new URL('../ops/price-engine-production-index-prebuild-plan.json', import.meta.url)));
+// Historical cleanup proofs stay bound to the exact plan they ran under. A
+// later manifest must not silently reauthorize either completed cleanup.
+const plan = JSON.parse(await readFile(new URL('./fixtures/price-engine-index-plan-attempts-20261014.json', import.meta.url)));
 // Exact original sanitized runner journal; contains fingerprints and public
 // object identities, never credentials, raw provider errors or business data.
 const journalBytes = await readFile(new URL('./fixtures/price-engine-owned-index-attempt-20261014.jsonl', import.meta.url));
@@ -50,4 +52,31 @@ test('valid, replaced, constrained, rebuilding, dead, malformed or unrelated ind
   ]) assert.throws(() => validateOwnedIndexMetadata({ item, indexOid: OWNED_INDEX_OID, metadata: { ...metadata, ...change } }),
     /OWNED_INDEX_METADATA_UNCONFIRMED/);
   assert.throws(() => validateOwnedIndexMetadata({ item, indexOid: OWNED_INDEX_OID, metadata: undefined }), /OWNED_INDEX_METADATA_UNCONFIRMED/);
+});
+
+test('second finite cleanup proof binds its own journal, confirmed cancellation, OID and not-ready state', async () => {
+  const secondBytes = await readFile(new URL('./fixtures/price-engine-owned-index-attempt-20261014b.jsonl', import.meta.url));
+  const secondProof = { plan, journalBytes: secondBytes, journalSha256: SECOND_OWNED_ATTEMPT_SHA256, indexOid: SECOND_OWNED_INDEX_OID };
+  assert.equal(createHash('sha256').update(secondBytes).digest('hex'), SECOND_OWNED_ATTEMPT_SHA256);
+  const secondMetadata = { ...metadata, index_oid: String(SECOND_OWNED_INDEX_OID), ready: false };
+  assert.equal(validateOwnedIndexAttempt(secondProof).indexOid, SECOND_OWNED_INDEX_OID);
+  assert.deepEqual(validateOwnedIndexMetadata({ item, indexOid: SECOND_OWNED_INDEX_OID, metadata: secondMetadata }),
+    { index_oid: SECOND_OWNED_INDEX_OID, table_oid: 20000 });
+  for (const change of [{ indexOid: OWNED_INDEX_OID }, { indexOid: SECOND_OWNED_INDEX_OID + 1 },
+    { journalSha256: OWNED_ATTEMPT_SHA256 }, { journalBytes },
+    { plan: { ...plan, manifest_sha256: 'a'.repeat(64) } }])
+    assert.throws(() => validateOwnedIndexAttempt({ ...secondProof, ...change }), /OWNED_INDEX_ATTEMPT_UNCONFIRMED/);
+  assert.throws(() => validateOwnedIndexAttempt({ ...proof, indexOid: SECOND_OWNED_INDEX_OID }), /OWNED_INDEX_ATTEMPT_UNCONFIRMED/);
+  for (const change of [{ ready: true }, { valid: true }, { live: false }, { index_oid: OWNED_INDEX_OID },
+    { index_oid: SECOND_OWNED_INDEX_OID + 1 }, { definition: 'different' }, { constraint_count: 1 }, { active_build_count: 1 }])
+    assert.throws(() => validateOwnedIndexMetadata({ item, indexOid: SECOND_OWNED_INDEX_OID, metadata: { ...secondMetadata, ...change } }),
+      /OWNED_INDEX_METADATA_UNCONFIRMED/);
+  const events = secondBytes.toString().trim().split('\n').map(JSON.parse);
+  for (const change of [e => { e[7].own_query_cancel_confirmed = false; }, e => { e[7].backend_pid = 9; },
+    e => { e[8].schema_ddl_attempted = 2; }, e => { e[2].indexes[0].present = true; }]) {
+    const altered = structuredClone(events); change(altered);
+    const alteredBytes = Buffer.from(altered.map(JSON.stringify).join('\n') + '\n');
+    assert.throws(() => validateOwnedIndexAttempt({ ...secondProof, journalBytes: alteredBytes,
+      journalSha256: createHash('sha256').update(alteredBytes).digest('hex') }), /OWNED_INDEX_ATTEMPT_UNCONFIRMED/);
+  }
 });

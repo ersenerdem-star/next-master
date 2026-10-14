@@ -17,7 +17,7 @@ const defaultPlan = resolve(root, 'scripts/ops/price-engine-production-index-pre
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 export const SESSION_IDENTITY_SQL = "SELECT current_database()='postgres' AS database_ok, session_user='postgres' AS role_ok, pg_backend_pid() AS backend_pid";
 const publicErrorCodes = new Set([
-  '23505','25001','40P01','42501','42P01','42703','42710','55P03','57014','08001','08003','08004','08006',
+  '23505','25001','40P01','42501','42P01','42703','42710','54000','55P03','57014','08001','08003','08004','08006',
   '28P01','28000','53300','53400','57P01','57P02','57P03','53200','53100','XX000',
   'ENOTFOUND','ECONNRESET','ECONNREFUSED','ETIMEDOUT','EPIPE','ENOENT','EACCES','EPERM','ELOOP','EEXIST',
   'CERT_HAS_EXPIRED','UNABLE_TO_VERIFY_LEAF_SIGNATURE','SELF_SIGNED_CERT_IN_CHAIN',
@@ -221,7 +221,7 @@ export function parseRunnerArgs(args) {
   return options;
 }
 
-async function readPrivatePassword(path) {
+export async function readPrivatePassword(path) {
   const file = await open(resolve(path), constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const stat = await file.stat();
@@ -240,7 +240,7 @@ async function main(args) {
       '  --host <exact production direct/session host> --password-file <private file>\n' +
       '  --ca-file <verified PEM CA bundle> --evidence <new JSONL file> [--apply [--allow-snapshot-wait]]\n' +
       '  Cleanup only: --apply --recover-owned-invalid --attempt-journal <original JSONL>\n' +
-      '    --attempt-journal-sha256 <reviewed hash> --expected-index-oid 264797\n' +
+      '    --attempt-journal-sha256 <reviewed hash> --expected-index-oid <264797 or 264840, matching exact journal>\n' +
       'Password file must be owned by this user with mode 0600. No credentials belong in command arguments.\n' +
       'Apply performs the 12 reviewed operations sequentially. Existing invalid indexes stop the run.');
     return;

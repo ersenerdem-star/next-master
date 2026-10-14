@@ -5,7 +5,19 @@ export const RELATION_WAIT_LIMIT_MS = 5000;
 export const SNAPSHOT_WAIT_LIMIT_MS = 120000;
 export const WATCHDOG_POLL_MS = 500;
 export class IndexWatchdogError extends Error {
-  constructor(code) { super(code); this.safeCode = code; }
+  constructor(code, diagnostic) { super(code); this.safeCode = code; this.diagnostic = diagnostic; }
+}
+// Return fixed classifications/codes only; provider messages, SQL and connection
+// data must never become evidence. Keep timeout classification separate from a
+// network failure: their recovery decisions differ.
+export function safeMonitorCause(error) {
+  const networkCode = ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', 'ENOTFOUND'].includes(error?.code) ? error.code : null;
+  const sqlstate = !networkCode && typeof error?.code === 'string' && error.code.length === 5 && /^[0-9A-Z]{5}$/.test(error.code) ? error.code : null;
+  const kind = error?.message === 'Query read timeout' ? 'client_read_timeout'
+    : sqlstate === '57014' && error?.message === 'canceling statement due to statement timeout' ? 'server_statement_timeout'
+    : sqlstate === '55P03' ? 'server_lock_timeout'
+    : networkCode ? 'network_error' : sqlstate ? 'database_error' : 'unknown_error';
+  return { kind, sqlstate, network_code: networkCode };
 }
 export const WATCHDOG_IDENTITY_SQL = `SELECT pg_backend_pid() AS pid,
   (SELECT extract(epoch FROM backend_start)::text FROM pg_stat_activity WHERE pid=pg_backend_pid()) AS backend_start`;
@@ -23,7 +35,7 @@ export const WATCHDOG_CANCEL_SQL = `SELECT pg_cancel_backend(a.pid) AS cancelled
   AND btrim(regexp_replace(a.query,'[[:space:]]+',' ','g'))=$3`;
 export const normalizeIndexStatement = sql => sql.replace(/\s+/g, ' ').trim();
 const extendedPhases = new Set(['waiting for old snapshots', 'waiting for writers before build', 'waiting for writers before validation']);
-const fail = code => { throw new IndexWatchdogError(code); };
+const fail = (code, diagnostic) => { throw new IndexWatchdogError(code, diagnostic); };
 
 // The SQL cancellation guard binds PID + backend birth + exact statement. It
 // never uses current_locker_pid, pg_terminate_backend or a user-session PID.
@@ -58,10 +70,11 @@ export async function runPhaseAwareIndexQuery({ client, monitor, openMonitor, sq
   await record({ event: 'index-watchdog-start', index: indexName, backend_pid: identity.pid,
     relation_wait_limit_ms: RELATION_WAIT_LIMIT_MS, snapshot_wait_limit_ms: SNAPSHOT_WAIT_LIMIT_MS,
     poll_ms: WATCHDOG_POLL_MS, statement_timeout: '30min' });
-  let settled = false, outcome, stopped = false, monitorError = false;
-  const onMonitorError = () => { monitorError = true; };
+  let settled = false, outcome, stopped = false, monitorError = null;
+  const onMonitorError = error => { monitorError ??= { stage: 'monitor_error_event', ...safeMonitorCause(error) }; };
+  const onMonitorEnd = () => { monitorError ??= { stage: 'monitor_end_event', kind: 'connection_ended', sqlstate: null, network_code: null }; };
   monitor.on?.('error', onMonitorError);
-  monitor.on?.('end', onMonitorError);
+  monitor.on?.('end', onMonitorEnd);
   let operation;
   try {
     await client.query("SET lock_timeout = '0'");
@@ -71,16 +84,19 @@ export async function runPhaseAwareIndexQuery({ client, monitor, openMonitor, sq
     try {
       while (!settled) {
         if (signal?.aborted) fail('INDEX_WATCHDOG_ABORTED');
-        if (monitorError) fail('INDEX_WATCHDOG_MONITOR_FAILED');
+        if (monitorError) fail('INDEX_WATCHDOG_MONITOR_FAILED', monitorError);
         let row;
+        const observationStarted = now();
         try { row = (await monitor.query(WATCHDOG_OBSERVATION_SQL, [identity.pid])).rows?.[0]; }
-        catch { fail('INDEX_WATCHDOG_MONITOR_FAILED'); }
+        catch (error) { fail('INDEX_WATCHDOG_MONITOR_FAILED', { stage: 'observation_query',
+          elapsed_ms: Math.max(0, now() - observationStarted), ...safeMonitorCause(error) }); }
         if (settled) break;
         if (!row || row.pid !== identity.pid || row.backend_start !== identity.backendStart)
           fail('INDEX_WATCHDOG_IDENTITY_CHANGED');
         if (row.state !== 'active' || normalizeIndexStatement(row.query || '') !== statement)
           fail('INDEX_WATCHDOG_STATEMENT_CHANGED');
-        if (!Array.isArray(row.waits)) fail('INDEX_WATCHDOG_MONITOR_FAILED');
+        if (!Array.isArray(row.waits)) fail('INDEX_WATCHDOG_MONITOR_FAILED', {
+          stage: 'observation_result', kind: 'invalid_waits_shape', sqlstate: null, network_code: null });
         const currentAt = now();
         const lockWait = row.wait_event_type === 'Lock' || row.waits.length > 0;
         const waitMs = Math.max(0, ...row.waits.map(lock => Number(lock.wait_ms) || 0));
@@ -98,19 +114,22 @@ export async function runPhaseAwareIndexQuery({ client, monitor, openMonitor, sq
         const observation = { phase: row.phase || null, wait_type: row.wait_event_type || null,
           wait_event: row.wait_event || null, lock_types: row.waits.map(lock => lock.type), extended_wait_allowed: extended };
         if (JSON.stringify(observation) !== lastObservation) {
-          await record({ event: 'index-watchdog-observation', index: indexName, backend_pid: identity.pid,
-            ...observation, wait_ms: Math.round(waitMs) });
+          try { await record({ event: 'index-watchdog-observation', index: indexName, backend_pid: identity.pid,
+            ...observation, wait_ms: Math.round(waitMs) }); }
+          catch (error) { fail('INDEX_WATCHDOG_MONITOR_FAILED', { stage: 'observation_record', ...safeMonitorCause(error) }); }
           lastObservation = JSON.stringify(observation);
         }
         previousExtended = extended; previousAt = currentAt;
         await wait(WATCHDOG_POLL_MS);
       }
     } catch (error) {
-      const failure = error instanceof IndexWatchdogError ? error : new IndexWatchdogError('INDEX_WATCHDOG_MONITOR_FAILED');
+      const failure = error instanceof IndexWatchdogError ? error : new IndexWatchdogError('INDEX_WATCHDOG_MONITOR_FAILED', {
+        stage: 'monitor_loop', ...safeMonitorCause(error) });
       if (!settled) {
         const cancelled = await cancelOwnQuery({ monitor, openMonitor, identity, statement });
         await record({ event: 'index-watchdog-cancel', index: indexName, backend_pid: identity.pid,
-          reason: failure.safeCode, own_query_cancel_confirmed: cancelled }).catch(() => {});
+          reason: failure.safeCode, ...(failure.diagnostic ? { diagnostic: failure.diagnostic } : {}),
+          own_query_cancel_confirmed: cancelled }).catch(() => {});
         if (!cancelled) {
           stopped = true;
           // A broken network can prevent server-side cancellation confirmation.
@@ -127,7 +146,7 @@ export async function runPhaseAwareIndexQuery({ client, monitor, openMonitor, sq
     if (outcome?.error) throw outcome.error;
     return outcome?.value;
   } finally {
-    monitor.off?.('error', onMonitorError); monitor.off?.('end', onMonitorError);
+    monitor.off?.('error', onMonitorError); monitor.off?.('end', onMonitorEnd);
     if (!stopped) await client.query("SET lock_timeout = '5s'");
   }
 }
