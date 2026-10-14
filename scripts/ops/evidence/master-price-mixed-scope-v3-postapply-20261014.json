@@ -1,0 +1,245 @@
+{
+  "schemaVersion": 1,
+  "scope": "Actual V3 read-only post-apply verification",
+  "projectRef": "kaxsqafdevabkxofwdod",
+  "migration": "20261014171235_master_price_mixed_supplier_scopes.sql",
+  "migrationSha256": "1467fd587ce9f3bd0580e67dd9eb381e9a5b71021d2165e1267d48c82ef958a0",
+  "sourceCommit": "cfa576ce922c738178d6a389b9cc1c88b47bc46d",
+  "metadata": [
+    {
+      "name": "cloud_catalog_master_export_page_v3",
+      "md5": "c79c89523348a31818098a0b908ec0e7",
+      "config": [
+        "search_path=\"\""
+      ],
+      "security_definer": true,
+      "volatility": "s",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "name": "cloud_master_page_fast",
+      "md5": "7866904a58e1f88753e28522c195614c",
+      "config": [
+        "search_path=\"\""
+      ],
+      "security_definer": true,
+      "volatility": "s",
+      "anon": false,
+      "authenticated": true,
+      "service_role": false
+    },
+    {
+      "name": "cloud_master_published_price_page_v3",
+      "md5": "0ff885d2aecdff1553ee98f6ab03ab5a",
+      "config": [
+        "search_path=\"\""
+      ],
+      "security_definer": true,
+      "volatility": "s",
+      "anon": false,
+      "authenticated": true,
+      "service_role": false
+    },
+    {
+      "name": "get_admin_price_list_export_version",
+      "md5": "fba77b48656072997d4899d2d1c0db0b",
+      "config": [
+        "search_path=\"\""
+      ],
+      "security_definer": true,
+      "volatility": "s",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "name": "get_catalog_master_export_version",
+      "md5": "24cc2622d274ee460af0bd84770d0ad8",
+      "config": [
+        "search_path=\"\""
+      ],
+      "security_definer": true,
+      "volatility": "s",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    }
+  ],
+  "checks": [
+    {
+      "brand": "Clevite",
+      "after": null,
+      "scope": "priced",
+      "returned": 1000,
+      "c_nonnull": 0,
+      "captured_at": "2026-10-14T17:48:52.762187+00:00",
+      "catalog_total": 145056,
+      "reported_total": 999997,
+      "price_mismatches": 0,
+      "distinct_products": 1000,
+      "current_pointer_count": 1,
+      "newest_publication_version": 2,
+      "connectorRoundTripMs": 6270
+    },
+    {
+      "brand": "Clevite",
+      "after": null,
+      "scope": "catalog",
+      "returned": 1000,
+      "c_nonnull": 0,
+      "captured_at": "2026-10-14T17:49:14.469045+00:00",
+      "catalog_total": 145056,
+      "reported_total": 145056,
+      "price_mismatches": 0,
+      "distinct_products": 1000,
+      "current_pointer_count": 1,
+      "newest_publication_version": 2,
+      "connectorRoundTripMs": 1301
+    },
+    {
+      "brand": "Euroricambi",
+      "after": null,
+      "scope": "priced",
+      "returned": 542,
+      "c_nonnull": 0,
+      "captured_at": "2026-10-14T17:48:47.817134+00:00",
+      "catalog_total": 542,
+      "reported_total": 542,
+      "price_mismatches": 0,
+      "distinct_products": 542,
+      "current_pointer_count": 0,
+      "newest_publication_version": null,
+      "connectorRoundTripMs": 1490
+    },
+    {
+      "brand": "Euroricambi",
+      "after": null,
+      "scope": "catalog",
+      "returned": 542,
+      "c_nonnull": 0,
+      "captured_at": "2026-10-14T17:49:16.824872+00:00",
+      "catalog_total": 542,
+      "reported_total": 542,
+      "price_mismatches": 0,
+      "distinct_products": 542,
+      "current_pointer_count": 0,
+      "newest_publication_version": null,
+      "connectorRoundTripMs": 3721
+    },
+    {
+      "brand": "Corteco",
+      "after": null,
+      "scope": "priced",
+      "returned": 0,
+      "c_nonnull": 0,
+      "captured_at": "2026-10-14T17:48:49.228451+00:00",
+      "catalog_total": 0,
+      "reported_total": null,
+      "price_mismatches": 0,
+      "distinct_products": 0,
+      "current_pointer_count": 0,
+      "newest_publication_version": null,
+      "connectorRoundTripMs": 2572
+    },
+    {
+      "brand": "Corteco",
+      "after": null,
+      "scope": "catalog",
+      "returned": 0,
+      "c_nonnull": 0,
+      "captured_at": "2026-10-14T17:49:15.682368+00:00",
+      "catalog_total": 0,
+      "reported_total": null,
+      "price_mismatches": 0,
+      "distinct_products": 0,
+      "current_pointer_count": 0,
+      "newest_publication_version": null,
+      "connectorRoundTripMs": 2491
+    },
+    {
+      "brand": "Clevite",
+      "after": "3C0959433S",
+      "scope": "priced",
+      "returned": 5000,
+      "c_nonnull": 0,
+      "captured_at": "2026-10-14T17:50:08.011834+00:00",
+      "catalog_total": 145056,
+      "reported_total": null,
+      "price_mismatches": 0,
+      "distinct_products": 5000,
+      "current_pointer_count": 1,
+      "newest_publication_version": 2
+    }
+  ],
+  "authenticatedRoleProbe": {
+    "role": "authenticated",
+    "catalog": [
+      {
+        "rows": 50,
+        "label": "Clevite",
+        "priced_rows": 0,
+        "non_null_totals": 0
+      },
+      {
+        "rows": 50,
+        "label": "Euroricambi",
+        "priced_rows": 50,
+        "non_null_totals": 0
+      }
+    ],
+    "published": [
+      {
+        "rows": 50,
+        "has_c": false,
+        "label": "Clevite",
+        "has_published_scope": true
+      },
+      {
+        "rows": 0,
+        "has_c": false,
+        "label": "Euroricambi",
+        "has_published_scope": false
+      },
+      {
+        "rows": 0,
+        "has_c": false,
+        "label": "Corteco",
+        "has_published_scope": false
+      }
+    ],
+    "actor_scope_matches": true
+  },
+  "serverTiming": {
+    "first": {
+      "returned": 1000,
+      "serverExecutionMs": 1460.961,
+      "functionActualTotalMs": 1460.385,
+      "sharedReadBlocks": 35150,
+      "tempReadBlocks": 2011,
+      "tempWrittenBlocks": 2017
+    },
+    "middle": {
+      "returned": 5000,
+      "serverExecutionMs": 138.419,
+      "functionActualTotalMs": 137.672,
+      "sharedReadBlocks": 0,
+      "tempReadBlocks": 0,
+      "tempWrittenBlocks": 0
+    }
+  },
+  "method": [
+    "Read-only SELECT parity compares actual Master output against independently ranked current published rows and unowned raw legacy prices, using exact SKU, eligible EUR/date, per-supplier latest legacy row and original published price/id ordering.",
+    "Compared cheapest and second prices, supplier counts, price dates, A/B margins and absence of C values. Euroricambi all542 rows covered in both scopes; Clevite first1000 in each scope plus5000 priced rows after verified midpoint cursor.",
+    "Preview ran BEGIN READ ONLY, SET LOCAL ROLE authenticated with known existing staging actor identity, then ROLLBACK. This proves DB role/identity and NULL-total contract, not a browser login or session-token test.",
+    "Metadata hashes, empty search paths, stable/security-definer flags and grants match exact locally tested migration; only authenticated can execute previews and only service_role can execute exports/version helpers."
+  ],
+  "limits": [
+    "No source, price, pointer, publication, historical workflow or July catalog-run mutation performed.",
+    "Corteco staging has no eligible legacy rows or active pointer; empty result is expected and unpublished uploads remain excluded.",
+    "Clevite catalog contains145056 records while active price release contains999997 eligible records; they are separate domains.",
+    "EXPLAIN first page includes exact source count and temporary disk blocks; measured subsequent5000-row page has zero temporary blocks. Timings are individual server observations, not SLA.",
+    "Golden parity does not claim exhaustive equality across all999997 Clevite prices or all145056 catalog records. Browser download and production checks remain separate."
+  ]
+}
