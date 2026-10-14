@@ -1,3 +1,5 @@
+-- Exercise prepared/generic plans used by long-lived PostgREST sessions.
+set plan_cache_mode='force_generic_plan';
 do $test$
 declare
   org uuid := '00000000-0000-0000-0000-000000000001';
@@ -30,6 +32,7 @@ begin
   assert page_row.product_code='61/1' and page_row.buy_price=100 and page_row.total_count=2, 'supplier current published scope';
   select * into page_row from public.cloud_supplier_price_export_page(org,supplier_id,brand_id,'','all',page_row.product_code,page_row.price_id,1);
   assert page_row.product_code='611' and page_row.total_count is null, 'supplier published cursor';
+  assert (select proconfig @> array['statement_timeout=35s'] from pg_proc where oid='public.cloud_catalog_master_export_chunk_v3(uuid,uuid,text,text,text,uuid,integer,numeric,numeric)'::regprocedure), 'bounded protected RPC request budget';
   assert public.cloud_catalog_master_export_chunk_v3(org,brand_id,'priced','','611',null,1000,.1,.2)='[]'::jsonb, 'empty master chunk';
   assert jsonb_array_length(public.cloud_supplier_price_export_chunk_v3(org,supplier_id,brand_id))=2, 'supplier JSON chunk';
   assert public.cloud_catalog_master_export_chunk_v3(org,brand_id)->0->>'product_code'='61/1', 'JSON chunk retains byte order';
@@ -59,6 +62,26 @@ begin
   assert has_function_privilege('service_role','public.cloud_catalog_export_page_v3(uuid,uuid,text,uuid,integer)','execute'), 'worker catalog access';
 end;
 $test$;
+
+-- Legacy suppliers can contain null/blank display codes. The index lower
+-- bound must not remove those first-page rows or repeat their UUID cursors.
+insert into public.brands values('00000000-0000-0000-0000-000000000204','00000000-0000-0000-0000-000000000001','Legacy Fixture');
+insert into public.supplier_prices(id,organization_id,supplier_id,brand_id,product_code,buy_price,currency,is_active)
+values
+('00000000-0000-0000-0000-000000000301','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000204',null,10,'EUR',true),
+('00000000-0000-0000-0000-000000000302','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000204','',20,'EUR',true),
+('00000000-0000-0000-0000-000000000303','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000204','A',30,'EUR',true);
+do $legacy$
+declare p record;
+begin
+  select * into p from public.cloud_supplier_price_export_page('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000204','','all',null,null,1);
+  assert p.total_count=3 and p.price_id='00000000-0000-0000-0000-000000000301'::uuid,'legacy null code included';
+  select * into p from public.cloud_supplier_price_export_page('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000204','','all','',p.price_id,1);
+  assert p.total_count is null and p.price_id='00000000-0000-0000-0000-000000000302'::uuid,'legacy duplicate blank cursor advances by UUID';
+  select * into p from public.cloud_supplier_price_export_page('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000204','','all','',p.price_id,1);
+  assert p.total_count is null and p.product_code='A','legacy following code advances';
+end;
+$legacy$;
 
 -- Above the former 150,000-row catalog ceiling: page every row and verify the
 -- compatibility source no longer returns a truncated JSON document.
