@@ -1,6 +1,7 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { runCatalogStorageImport } from "./catalog-worker.mjs";
 import { requireCatalogWorkerTarget } from "./catalog-target-config.mjs";
+import { isTransientCatalogTransportError, readCatalogQueue, runCatalogPollLoop } from "./catalog-poll-loop.mjs";
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
 const SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
@@ -20,6 +21,7 @@ function headers(contentType = "application/json") {
 }
 
 function isTransientCatalogError(error) {
+  if (isTransientCatalogTransportError(error)) return true;
   const code = String(error?.code || error?.message || "").toLowerCase();
   return code.includes("fetch") || code.includes("network") || code.includes("timeout")
     || code.includes("connection") || /catalog_(supabase_)?http_(408|425|429|5\d\d)/.test(code)
@@ -31,7 +33,7 @@ async function supabaseJson(path, init = {}) {
     ...init,
     headers: { ...headers(), ...(init.headers || {}) },
     redirect: "error",
-    signal: AbortSignal.timeout(30_000),
+    signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
   });
   const body = await response.text();
   let data = {};
@@ -40,14 +42,14 @@ async function supabaseJson(path, init = {}) {
   return data;
 }
 
-async function listSources() {
+async function listSources(signal) {
   const query = new URLSearchParams({
     select: "id,run_id,organization_id,storage_bucket,storage_object_path,total_bytes,checksum_sha256,created_by,status,cursor_row,lease_expires_at,updated_at",
     status: "in.(uploaded,processing,staged)",
     order: "created_at.asc",
     limit: "4",
   });
-  return supabaseJson(`/rest/v1/catalog_import_sources?${query}`);
+  return readCatalogQueue("sources", () => supabaseJson(`/rest/v1/catalog_import_sources?${query}`, { signal }), { signal });
 }
 
 async function getRun(runId) {
@@ -56,7 +58,7 @@ async function getRun(runId) {
   return Array.isArray(rows) ? rows[0] : null;
 }
 
-async function listQueuedFinalizationRuns() {
+async function listQueuedFinalizationRuns(signal) {
   const query = new URLSearchParams({
     select: "id,organization_id,created_by,status,processing_queued_at",
     processing_queued_at: "not.is.null",
@@ -64,7 +66,7 @@ async function listQueuedFinalizationRuns() {
     order: "processing_queued_at.asc",
     limit: "1",
   });
-  return supabaseJson(`/rest/v1/catalog_import_runs?${query}`);
+  return readCatalogQueue("finalization", () => supabaseJson(`/rest/v1/catalog_import_runs?${query}`, { signal }), { signal });
 }
 
 async function clearRunQueueMarker(runId) {
@@ -169,10 +171,11 @@ async function dispatchSource(source) {
   }
 }
 
-export async function pollCatalogImportSources() {
-  const sources = await listSources();
+export async function pollCatalogImportSources({ signal } = {}) {
+  const sources = await listSources(signal);
   const results = [];
   for (const source of Array.isArray(sources) ? sources : []) {
+    if (signal?.aborted) break;
     try { results.push(await dispatchSource(source)); }
     catch (error) { results.push({ status: "failed", sourceId: source.id, errorCode: String(error?.message || "CATALOG_SOURCE_WORKFLOW_FAILED").slice(0, 120) }); }
   }
@@ -226,8 +229,8 @@ async function finalizeQueuedCatalogRun(run) {
   return { runId: run.id, status: String(value?.status || status), hasMore: value?.has_more !== false };
 }
 
-async function pollCatalogFinalization() {
-  const runs = await listQueuedFinalizationRuns();
+export async function pollCatalogFinalization({ signal } = {}) {
+  const runs = await listQueuedFinalizationRuns(signal);
   const run = Array.isArray(runs) ? runs[0] : null;
   if (!run) return { status: "idle" };
   try {
@@ -251,24 +254,48 @@ async function main() {
   });
   await DBOS.launch();
   await DBOS.registerQueue(QUEUE_NAME, { globalConcurrency: 1, workerConcurrency: 1 });
+  const controller = new AbortController();
+  let shutdownDeadline;
+  const stop = () => {
+    controller.abort();
+    // Stop queue reads/sleeps immediately. Active workflows retain their
+    // durable receipts and leases; bound shutdown below Render's 30s deadline.
+    shutdownDeadline ??= setTimeout(() => process.exit(1), 25_000);
+    shutdownDeadline.unref();
+  };
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
   try {
     if (process.argv.includes("--once")) {
-      const ingestion = await pollCatalogImportSources();
-      const finalization = await pollCatalogFinalization();
+      const ingestion = await pollCatalogImportSources({ signal: controller.signal });
+      controller.signal.throwIfAborted();
+      const finalization = await pollCatalogFinalization({ signal: controller.signal });
       console.log(JSON.stringify({ ingestion, finalization }));
       return;
     }
-    while (true) {
-      console.log(JSON.stringify({ worker: "catalog-import", status: "polling", workerId: WORKER_ID }));
-      await pollCatalogImportSources();
-      const finalization = await pollCatalogFinalization();
-      if (finalization?.status !== "idle") {
-        console.log(JSON.stringify({ worker: "catalog-import", status: "finalization", ...finalization }));
-      }
-      await new Promise((resolve) => setTimeout(resolve, POLL_MS));
-    }
+    await runCatalogPollLoop({ signal: controller.signal, pollMs: POLL_MS,
+      log: (event) => console.log(JSON.stringify({ worker: "catalog-import", workerId: WORKER_ID, ...event })),
+      poll: async (signal) => {
+        console.log(JSON.stringify({ worker: "catalog-import", status: "polling", workerId: WORKER_ID }));
+        const ingestion = await pollCatalogImportSources({ signal });
+        for (const source of ingestion) {
+          if (source.status === "failed") console.error(JSON.stringify({ worker: "catalog-import", status: "source-failed", sourceId: source.sourceId, errorCode: source.errorCode }));
+        }
+        if (signal.aborted) return;
+        const finalization = await pollCatalogFinalization({ signal });
+        if (finalization?.status !== "idle") {
+          console.log(JSON.stringify({ worker: "catalog-import", status: "finalization", ...finalization }));
+        }
+      },
+    });
   } finally {
-    await DBOS.shutdown({ deregister: false, workflowCompletionTimeoutMS: 10_000 });
+    try {
+      await DBOS.shutdown({ deregister: false, workflowCompletionTimeoutMS: 10_000 });
+    } finally {
+      clearTimeout(shutdownDeadline);
+      process.off("SIGINT", stop);
+      process.off("SIGTERM", stop);
+    }
   }
 }
 
