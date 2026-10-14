@@ -11304,7 +11304,11 @@ select.field__input {
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 768px) {
+  .portal-shell--workspace {
+    padding-bottom: calc(104px + env(safe-area-inset-bottom));
+  }
+
   .portal-shell--workspace .portal-header {
     position: relative;
     padding: 14px 18px;
@@ -11327,8 +11331,9 @@ select.field__input {
     min-width: 0;
   }
 
+  .portal-shell--workspace .portal-mobile-subnav,
   .portal-shell--workspace .portal-mobile-bottom-nav {
-    display: grid;
+    display: flex;
   }
 
   .supplier-command-hero__metrics {

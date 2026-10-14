@@ -11,10 +11,10 @@ state: production deploy `6ad00e795150d063af7cc4dc` was inspected in authenticat
 ## Findings
 
 - [x] The authenticated admin overview and Supplier Prices surface now use the selected light brake-disc/technical-drawing direction.
-- [x] The authenticated customer home and both login surfaces now use the selected dark networked-vehicle/parts direction instead of the shared legacy brake image.
+- [x] The authenticated customer home and customer login use the selected dark networked-vehicle/parts direction. The admin login uses the light admin asset.
 - [x] The customer workspace navigation is explicitly horizontal, so the menu no longer expands into a vertical block under the header.
 - [x] Production Chrome verification confirmed the new assets load with HTTP 200 and the customer search hero, admin supplier hero, and admin overview hero render after session restoration.
-- [x] Responsive mobile CSS smoke check completed after a temporary 390 x 844 viewport override; the browser viewport was restored afterward.
+- [ ] Recheck responsive navigation at 390 and 768 pixels after restoring mobile subsection controls and the horizontal bottom navigation.
 
 ## Implementation checklist
 
@@ -30,4 +30,4 @@ state: production deploy `6ad00e795150d063af7cc4dc` was inspected in authenticat
 - [x] Capture authenticated production admin and customer views after login/session setup.
 - [x] Run visual comparison at desktop and mobile breakpoints.
 
-final result: passed
+final result: desktop visuals verified; responsive navigation verification pending
