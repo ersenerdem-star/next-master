@@ -3,6 +3,7 @@
 !package-lock.json
 !src/
 src/**
+!src/admin-release-review-worker.mjs
 !src/compact-rpc-retry.mjs
 !src/compact-verified-workflow.mjs
 !src/direct-verified-release-runner.mjs

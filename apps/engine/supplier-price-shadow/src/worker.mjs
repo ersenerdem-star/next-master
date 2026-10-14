@@ -12,6 +12,7 @@ import {createPartitionedVerifiedWorkflow} from "./partitioned-verified-workflow
 import {createCompactVerifiedWorkflow} from './compact-verified-workflow.mjs';
 import {compactRpcTransportError,compactRpcHttpError} from './compact-rpc-retry.mjs';
 import {observeFailedVerifiedWorkflows,WORKFLOW_HISTORY_LIMIT} from './workflow-failure-observer.mjs';
+import {createAdminReleaseActionConsumer} from './admin-release-review-worker.mjs';
 import {verifiedWorkflowVersion,requireCompactHistoryConfig,startVersionedVerifiedWorkflow,requireCompactHistoryDrained} from './verified-workflow-version.mjs';
 import {runDirectVerifiedRelease} from './direct-verified-release-runner.mjs';
 import {consumeUploadVerification} from './upload-verification-consumer.mjs';
@@ -302,6 +303,7 @@ async function main() {
     await DBOS.registerQueue(queueName,serviceMode?SERVICE_QUEUE_LIMITS:undefined);
     if(serviceMode){
       service=createWorkerService({pollMs:config.pollMs,
+        consumeAdminAction:createAdminReleaseActionConsumer({env:process.env}),
         verify:()=>consumeUploadVerification({rpc:callRpc,workerId:config.executorId+':verify',
           supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY}),
         dispatch:()=>dispatchVerifiedSupplierPriceHandoff({rpc:callRpc,workerId:config.executorId+':dispatch',

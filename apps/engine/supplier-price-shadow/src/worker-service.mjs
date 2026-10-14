@@ -1,4 +1,5 @@
 // Operational lifecycle only. Reuses the versioned verified workflow and SQL outbox;
+// Admin decisions use a separately enabled, fenced SQL queue. Intake itself
 // never publishes, creates fixtures, alters profiles or resets DBOS history.
 import {createServer} from 'node:http';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -134,7 +135,7 @@ export async function servicePreflight({origin,key,environment='staging',fetchIm
   }
 }
 
-export function createWorkerService({verify,dispatch,probe,validate,wait=delay,log=console.log,now=Date.now,pollMs=10000,historyTimeoutMs=5000}) {
+export function createWorkerService({verify,dispatch,probe,validate,consumeAdminAction,wait=delay,log=console.log,now=Date.now,pollMs=10000,historyTimeoutMs=5000}) {
   const controller=new AbortController();
   const state={phase:'starting',ready:false,stopping:false,completedCycles:0,lastSuccessAt:null,errorCode:null};
   const snapshot=()=>({...state,published:false});
@@ -142,7 +143,7 @@ export function createWorkerService({verify,dispatch,probe,validate,wait=delay,l
   async function cycle() {
     if(state.stopping)return;
     state.ready=false;
-    let validationDegraded=false;
+    let validationDegraded=false,intakeIdle=false;
     // Intake is protected by SQL claim/lease RPCs and immutable workflow IDs.
     // Do not make it depend on a DBOS history read: one orphaned or slow history
     // query must never starve every later upload. Existing DBOS work remains
@@ -159,6 +160,7 @@ export function createWorkerService({verify,dispatch,probe,validate,wait=delay,l
       state.phase='dispatching';
       const receipt=await dispatch();
       if(!['empty','enqueued'].includes(receipt?.status)||receipt.published!==false)throw Error('SERVICE_DISPATCH_RESPONSE');
+      intakeIdle=verified.status!=='verified'&&receipt.status==='empty';
       state.phase=receipt.status==='enqueued'?'enqueued':'idle'; // NEVER staged/published from ACK.
       // Only when no source/handoff work was found may the service advance a
       // staged release through idempotent validation. Errors are observable
@@ -189,6 +191,19 @@ export function createWorkerService({verify,dispatch,probe,validate,wait=delay,l
     if(!history||typeof history.busy!=='boolean'||typeof history.failed!=='boolean')
       throw Error('SERVICE_HISTORY_RESPONSE');
     if(history.failed)throw Error('SERVICE_WORKFLOW_REQUIRES_REVIEW');
+    // The optional action consumer runs only while verified ingestion is idle.
+    // Its SQL queue persists the admin's exact decision and survives shutdown.
+    if(intakeIdle&&!history.busy&&!state.stopping&&typeof consumeAdminAction==='function'){
+      state.phase='admin-release-action';
+      const action=await consumeAdminAction();
+      if(!['empty','completed','failed','pending'].includes(action?.status)
+        ||action.status==='pending'&&action.published!==null
+        ||action.status!=='pending'&&typeof action.published!=='boolean')throw Error('SERVICE_ADMIN_ACTION_RESPONSE');
+      if(action.status!=='empty')log(JSON.stringify({stage:'admin-release-action',status:action.status,
+        decisionId:action.decisionId,releaseId:action.releaseId,published:action.published}));
+      state.phase=action.status==='empty'?'idle':`admin-action-${action.status}`;
+    }
+    if(state.stopping)return;
     state.completedCycles++;
     if(validationDegraded){state.phase='validation-degraded';return;}
     state.lastSuccessAt=now();state.errorCode=null;state.ready=true;

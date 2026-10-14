@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "target": "v3-staging",
+  "project_ref": "kaxsqafdevabkxofwdod",
+  "observed_at": "2026-10-14T16:10:14.881331Z",
+  "evidence_kind": "authorized_database_review_measurement",
+  "release_id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+  "decision_id": "6a19aea1-89c7-45b2-8c89-9c8d2c9aa51e",
+  "organization_id": "b0000000-0000-4000-8000-000000000001",
+  "supplier_id": "786cbe53-6086-4782-a81f-7da95c6a1236",
+  "brand_id": "0e9fa984-fbbf-45d2-9a60-e7aa633dc928",
+  "total_rows": 999997,
+  "accepted_rows": 999997,
+  "distinct_incoming_codes": 999982,
+  "action": "recheck",
+  "reason": "comparison_repaired",
+  "before": {
+    "status": "validated",
+    "review_revision": 0,
+    "error_code": "BRAND_IDENTITY_COMPARISON_PENDING",
+    "brand_identity_audit": null
+  },
+  "result": {
+    "action": "recheck",
+    "status": "rechecked_clear",
+    "replayed": false,
+    "published": false,
+    "error_code": null,
+    "review_revision": 1
+  },
+  "timing": {
+    "sql_elapsed_ms": 35423.367,
+    "client_elapsed_ms": 36777,
+    "statement_timeout_ms": 55000,
+    "lock_timeout_ms": 2000
+  },
+  "publication": {
+    "before_id": "5f255b1f-63b0-49d8-8b2b-314bfab1a77b",
+    "after_id": "5f255b1f-63b0-49d8-8b2b-314bfab1a77b",
+    "current_release_id": "fed8b4fe-402e-40c5-967c-df587c91acdd",
+    "unchanged": true,
+    "new_release_has_publication": false
+  },
+  "validation": {
+    "identity_policy": "cross-brand-v1",
+    "checked": true,
+    "review_required": false,
+    "matching_brand_count": 0
+  },
+  "safeguards": [
+    "Exact release, organization, actor, revision, status, error and audit preconditions",
+    "Existing current pointer checked before and after in the same transaction",
+    "Published=false asserted before commit",
+    "Independent read-only result and pointer reconciliation"
+  ],
+  "limitation": "Direct database SQL timing only. Does not prove the queued API/worker or PostgREST execution timeout budget.",
+  "consequence": "Review and publish are accepted asynchronously; HTTP acceptance must not run the full row audit."
+}
