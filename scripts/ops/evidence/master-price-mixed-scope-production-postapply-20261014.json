@@ -1,0 +1,207 @@
+{
+  "schemaVersion": 1,
+  "scope": "Actual production read-only Master post-apply verification before first publication",
+  "projectRef": "zjgueqijumzlfioihnkt",
+  "migration": "20261014171235_master_price_mixed_supplier_scopes.sql",
+  "migrationSha256": "1467fd587ce9f3bd0580e67dd9eb381e9a5b71021d2165e1267d48c82ef958a0",
+  "sourceCommit": "cfa576ce922c738178d6a389b9cc1c88b47bc46d",
+  "metadata": [
+    {
+      "name": "cloud_catalog_master_export_page_v3",
+      "md5": "c79c89523348a31818098a0b908ec0e7",
+      "config": [
+        "search_path=\"\""
+      ],
+      "security_definer": true,
+      "volatility": "s",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "name": "cloud_master_page_fast",
+      "md5": "7866904a58e1f88753e28522c195614c",
+      "config": [
+        "search_path=\"\""
+      ],
+      "security_definer": true,
+      "volatility": "s",
+      "anon": false,
+      "authenticated": true,
+      "service_role": true
+    },
+    {
+      "name": "cloud_master_published_price_page_v3",
+      "md5": "0ff885d2aecdff1553ee98f6ab03ab5a",
+      "config": [
+        "search_path=\"\""
+      ],
+      "security_definer": true,
+      "volatility": "s",
+      "anon": false,
+      "authenticated": true,
+      "service_role": true
+    },
+    {
+      "name": "get_admin_price_list_export_version",
+      "md5": "fba77b48656072997d4899d2d1c0db0b",
+      "config": [
+        "search_path=\"\""
+      ],
+      "security_definer": true,
+      "volatility": "s",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    },
+    {
+      "name": "get_catalog_master_export_version",
+      "md5": "24cc2622d274ee460af0bd84770d0ad8",
+      "config": [
+        "search_path=\"\""
+      ],
+      "security_definer": true,
+      "volatility": "s",
+      "anon": false,
+      "authenticated": false,
+      "service_role": true
+    }
+  ],
+  "defaultFunctionAcl": [
+    {
+      "schema": "public",
+      "owner": "postgres",
+      "grantee": "service_role",
+      "privilege_type": "EXECUTE",
+      "is_grantable": false
+    },
+    {
+      "schema": "public",
+      "owner": "supabase_admin",
+      "grantee": "service_role",
+      "privilege_type": "EXECUTE",
+      "is_grantable": false
+    }
+  ],
+  "checks": [
+    {
+      "brand": "Corteco",
+      "after": null,
+      "scope": "priced",
+      "returned": 30328,
+      "c_nonnull": 0,
+      "captured_at": "2026-10-14T17:52:56.436533+00:00",
+      "page_anchors": 7,
+      "catalog_total": 37526,
+      "missing_codes": 0,
+      "reported_total": 30328,
+      "price_mismatches": 0,
+      "unexpected_codes": 0,
+      "distinct_products": 30328,
+      "current_pointer_count": 0,
+      "newest_publication_version": null,
+      "expected_distinct_source_count": 30328
+    },
+    {
+      "brand": "Corteco",
+      "after": null,
+      "scope": "catalog",
+      "returned": 1000,
+      "c_nonnull": 0,
+      "captured_at": "2026-10-14T17:53:14.807017+00:00",
+      "catalog_total": 37526,
+      "reported_total": 37526,
+      "price_mismatches": 0,
+      "distinct_products": 1000,
+      "current_pointer_count": 0,
+      "newest_publication_version": null
+    },
+    {
+      "brand": "Geba",
+      "after": null,
+      "scope": "priced",
+      "returned": 108,
+      "c_nonnull": 0,
+      "captured_at": "2026-10-14T17:52:35.820929+00:00",
+      "page_anchors": 1,
+      "catalog_total": 108,
+      "missing_codes": 0,
+      "reported_total": 108,
+      "price_mismatches": 0,
+      "unexpected_codes": 0,
+      "distinct_products": 108,
+      "current_pointer_count": 0,
+      "newest_publication_version": null,
+      "expected_distinct_source_count": 108
+    },
+    {
+      "brand": "Geba",
+      "after": null,
+      "scope": "catalog",
+      "returned": 108,
+      "c_nonnull": 0,
+      "captured_at": "2026-10-14T17:53:15.850996+00:00",
+      "catalog_total": 108,
+      "reported_total": 108,
+      "price_mismatches": 0,
+      "distinct_products": 108,
+      "current_pointer_count": 0,
+      "newest_publication_version": null
+    }
+  ],
+  "authenticatedRoleProbe": {
+    "verifiedCurrentUiActor": {
+      "active": true,
+      "role": "superadmin",
+      "organizationMatches": true
+    },
+    "role": "authenticated",
+    "catalog": [
+      {
+        "rows": 50,
+        "label": "Geba",
+        "priced_rows": 50,
+        "non_null_totals": 0
+      },
+      {
+        "rows": 50,
+        "label": "Corteco",
+        "priced_rows": 49,
+        "non_null_totals": 0
+      }
+    ],
+    "published": [
+      {
+        "rows": 0,
+        "label": "Corteco",
+        "has_published_scope": false
+      },
+      {
+        "rows": 0,
+        "label": "Geba",
+        "has_published_scope": false
+      }
+    ],
+    "actor_scope_matches": true
+  },
+  "endState": {
+    "captured_at": "2026-10-14 17:53:59.010226+00",
+    "pointer_count": 0,
+    "publication_count": 0,
+    "publication_enabled": false
+  },
+  "method": [
+    "Complete current supplier-price code set independently derived from eligible raw legacy rows and any valid current published scopes. Generated7 true keyset anchors for30328 Corteco codes, and1 for108 Geba codes; compared every returned Master priced row against independent per-supplier/latest and cheapest/second ranking.",
+    "Entire30328/108 priced sets have zero missing or unexpected codes, zero price/date/supplier-count/A/B discrepancies, zero C values, and matching exact source totals.",
+    "Catalog check covers first1000 Corteco rows of37526, and all108 Geba rows; compares exact matched price source fields and reported catalog totals.",
+    "After confirming the current production UI actor was active same-organization superadmin, read-only transaction SET LOCAL ROLE authenticated verified catalog preview returns50 rows withNULL totals. No data/schema/control mutation; ROLLBACK closed the role probe.",
+    "All5 function bodies match exact tested migration fingerprints. Anonymous execute is denied throughout; export/version helpers deny authenticated and permit service. Production retains existing service_role execute on the two authenticated preview functions under captured public function default ACL, while explicit preview actor/org guards remain present."
+  ],
+  "limits": [
+    "Evidence is before first GEBA publication; pending upload does not alter prices or pointers. Later publication acceptance is separate.",
+    "Preview DB role/identity proof does not substitute for browser session or download proof.",
+    "Catalog parity is sampled for Corteco, complete for Geba; priced parity is complete for both.",
+    "No source/history deletion, provider control change, or July catalog-run action performed by these checks.",
+    "Logical parity reports commercial price fields and exact SKU coverage; it does not claim byte-for-byte spreadsheet metadata equivalence."
+  ]
+}
