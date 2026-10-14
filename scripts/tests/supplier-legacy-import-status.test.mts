@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 import {build} from 'esbuild';
+import appRpc from '../../netlify/functions/app-rpc.mts';
 import {SUPPLIER_LEGACY_IMPORT_COLUMNS,legacySupplierImportTelemetry,loadLegacySupplierOperations,legacyCustomerPriceReadiness} from '../../apps/web/src/shared/supplierLegacyImportStatus.ts';
 
 const baseline=JSON.parse(await readFile(new URL('./fixtures/price-engine-full-replay-production-source.json',import.meta.url),'utf8'));
@@ -27,6 +28,39 @@ async function withRpcResponse<T>(status:number,body:unknown,fn:(load:()=>Promis
  (globalThis as any).window={setTimeout,clearTimeout};
  try{return await fn(()=>{const request=actualRpc.callAppRpc('get_latest_supplier_price_rollup_refresh_run');pending.push(request);return request;});}
  finally{await Promise.allSettled(pending);globalThis.fetch=previousFetch;(globalThis as any).window=previousWindow;}
+}
+
+async function withActualGateway<T>(options:{role?:string;status?:number;code?:string;denyProfile?:boolean;rpcName?:string},fn:(load:()=>Promise<unknown>,envelopes:any[],reads:string[])=>Promise<T>){
+ const previousFetch=globalThis.fetch,previousWindow=(globalThis as any).window,previousNetlify=(globalThis as any).Netlify;
+ const pending:Promise<unknown>[]=[],envelopes:any[]=[],reads:string[]=[];
+ const rpcName=options.rpcName||'get_latest_supplier_price_rollup_refresh_run';
+ const env={SUPABASE_URL:'https://fixture.supabase.co',SUPABASE_ANON_KEY:'fixture-anon',SUPABASE_SERVICE_ROLE_KEY:'fixture-service'};
+ (globalThis as any).Netlify={env:{get:(key:keyof typeof env)=>env[key]}};
+ (globalThis as any).window={setTimeout,clearTimeout};
+ globalThis.fetch=async(input,init)=>{
+  if(input==='/api/app-rpc'){
+   const response=await appRpc(new Request('https://fixture.invalid/api/app-rpc',init),{} as any);
+   envelopes.push({status:response.status,body:await response.clone().json()});return response;
+  }
+  const url=new URL(String(input));reads.push(url.pathname);
+  assert.equal(url.origin,'https://fixture.supabase.co');
+  if(url.pathname==='/auth/v1/user')return Response.json({id:'admin-1'});
+  if(url.pathname==='/rest/v1/profiles'){
+   if(options.denyProfile)return Response.json({code:'42501',message:'permission denied for table profiles'},{status:403});
+   return Response.json([{organization_id:'org-1',role:options.role||'superadmin',is_active:true,permissions:{},session_revoked_at:null}]);
+  }
+  const status=options.status??403;
+  if(rpcName==='get_latest_supplier_price_rollup_refresh_run'){
+   assert.equal(url.pathname,'/rest/v1/supplier_price_rollup_refresh_runs');
+   assert.equal(url.searchParams.get('organization_id'),'eq.org-1');assert.equal(url.searchParams.get('limit'),'1');
+   assert.equal(new Headers(init?.headers).get('Authorization'),'Bearer fixture-service');
+  }
+  return Response.json(status===200?[{id:'rollup-1',status:'completed'}]:{
+   code:options.code||'42501',message:'permission denied for table supplier_price_rollup_refresh_runs',
+  },{status});
+ };
+ try{return await fn(()=>{const request=actualRpc.callAppRpc(rpcName,{code:'ROLLUP_STATUS_ACCESS_DENIED'});pending.push(request);return request;},envelopes,reads);}
+ finally{await Promise.allSettled(pending);globalThis.fetch=previousFetch;(globalThis as any).window=previousWindow;(globalThis as any).Netlify=previousNetlify;}
 }
 
 test('legacy history projection executes against independently captured production/staging schema',async()=>{
@@ -77,7 +111,7 @@ test('terminal success uses only committed completion timestamp and never invent
 
 test('optional superadmin rollup denial preserves actual import history and errors',async()=>{
  const imports=[{...run,id:'failed-import',status:'failed',error_message:'real import error'}];
- const result=await withRpcResponse(403,{error:'Superadmin access required'},async load=>{
+ const result=await withRpcResponse(403,{error:'Superadmin access required',code:'SUPERADMIN_ACCESS_REQUIRED'},async load=>{
   await assert.rejects(load(),(error:any)=>{
    assert.equal(error.status,403);assert.equal(error.code,'SUPERADMIN_ACCESS_REQUIRED');
    assert.notEqual(error.message,'Superadmin access required');
@@ -95,7 +129,7 @@ test('optional superadmin rollup denial preserves actual import history and erro
 
 test('required import failure still rejects when optional rollup read is forbidden',async()=>{
  const failure=new Error('Import history could not be read');
- await withRpcResponse(403,{error:'Superadmin access required'},load=>
+ await withRpcResponse(403,{error:'Superadmin access required',code:'SUPERADMIN_ACCESS_REQUIRED'},load=>
   assert.rejects(loadLegacySupplierOperations(async()=>{throw failure;},load),error=>error===failure));
 });
 
@@ -103,13 +137,53 @@ test('actual RPC sanitizer cannot turn other denials into the optional rollup co
  for(const [status,body] of [
   [401,{error:'Superadmin access required'}],
   [500,{error:'Superadmin access required'}],
-  [403,{error:'Permission denied',code:'SUPERADMIN_ACCESS_REQUIRED'}],
+  [403,{error:'Permission denied',code:'UNRECOGNIZED_PERMISSION_CODE'}],
+  [400,{error:'Permission denied',code:'ROLLUP_STATUS_ACCESS_DENIED'}],
+  [403,{error:'Superadmin access required'}],
   [403,{error:'Superadmin access required for a different scope'}],
  ] as const){
   await withRpcResponse(status,body,load=>assert.rejects(loadLegacySupplierOperations(async()=>[],load),(error:any)=>{
    assert.equal(error.status,status);assert.equal(error.code,undefined);return true;
   }));
  }
+});
+
+test('real authenticated gateway HTTP sanitizer and browser preserve only the optional table denial',async()=>{
+ await withActualGateway({},async(load,envelopes,reads)=>{
+  const imports=[{id:'original-import',status:'failed',error_message:'original business error'}];
+  const result=await loadLegacySupplierOperations(async()=>imports,load);
+  assert.equal(result.importRuns,imports);assert.equal(result.rollupUnavailable,true);assert.equal(result.rollupRun,null);
+  assert.deepEqual(envelopes,[{status:403,body:{error:'You do not have permission for this action.',code:'ROLLUP_STATUS_ACCESS_DENIED'}}]);
+  assert.deepEqual(reads,['/auth/v1/user','/rest/v1/profiles','/rest/v1/supplier_price_rollup_refresh_runs']);
+  assert.doesNotMatch(JSON.stringify(envelopes),/supplier_price_rollup_refresh_runs|fixture-service|42501/);
+ });
+});
+
+test('real gateway superadmin check emits its own code without a privileged table read',async()=>{
+ await withActualGateway({role:'admin'},async(load,envelopes,reads)=>{
+  const result=await loadLegacySupplierOperations(async()=>[],load);
+  assert.equal(result.rollupUnavailable,true);
+  assert.equal(envelopes[0].status,403);assert.equal(envelopes[0].body.code,'SUPERADMIN_ACCESS_REQUIRED');
+  assert.deepEqual(reads,['/auth/v1/user','/rest/v1/profiles']);
+ });
+});
+
+test('real gateway does not downgrade Auth/profile, other RPC, SQLSTATE, or server failures',async()=>{
+ for(const options of [
+  {denyProfile:true}, {status:401}, {status:500}, {status:403,code:'OTHER_DENIAL'},
+  {rpcName:'get_catalog_integrity_summary'},
+ ])await withActualGateway(options,async(load,envelopes)=>{
+  await assert.rejects(loadLegacySupplierOperations(async()=>[],load));
+  assert.equal(envelopes[0].status,400);assert.equal(envelopes[0].body.code,undefined);
+ });
+});
+
+test('real gateway authorized telemetry keeps its actual completed result',async()=>{
+ await withActualGateway({status:200},async(load,envelopes)=>{
+  const result=await loadLegacySupplierOperations(async()=>[],load);
+  assert.deepEqual(result.rollupRun,{id:'rollup-1',status:'completed'});assert.equal(result.rollupUnavailable,false);
+  assert.equal(envelopes[0].status,200);
+ });
 });
 
 test('unrelated rollup auth, server and transport failures are not swallowed',async()=>{

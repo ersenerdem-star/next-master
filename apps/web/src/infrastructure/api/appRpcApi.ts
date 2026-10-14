@@ -5,6 +5,7 @@ type RpcResponse<T> = {
   ok?: boolean;
   data?: T;
   error?: string;
+  code?: string;
 };
 
 // Supplier imports use the same gateway as ordinary RPCs, but a busy
@@ -41,8 +42,10 @@ export async function callAppRpc<T>(name: string, args: Record<string, unknown> 
     if (!response.ok) {
       // Preserve the known gateway denial before its display text is sanitized.
       // Consumers must not branch on translated or user-facing error messages.
-      const code = response.status === 403 && data.error === "Superadmin access required"
-        ? "SUPERADMIN_ACCESS_REQUIRED" : undefined;
+      const code = response.status === 403 && data.code === "SUPERADMIN_ACCESS_REQUIRED"
+        ? data.code
+        : response.status === 403 && name === "get_latest_supplier_price_rollup_refresh_run" && data.code === "ROLLUP_STATUS_ACCESS_DENIED"
+          ? data.code : undefined;
       throw Object.assign(new Error(sanitizeUserFacingMessage(data.error || `App RPC failed: ${response.status}`, "The request could not be completed right now.")), { status: response.status, code });
     }
     return data.data as T;

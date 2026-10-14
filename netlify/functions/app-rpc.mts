@@ -1,5 +1,5 @@
 import type { Config, Context } from "@netlify/functions";
-import { buildRestUrl, getJson, json, readJson, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
+import { buildRestUrl, getJson, HttpRequestError, json, readJson, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
 import { resolveCaller } from "./_shared/app-auth.mts";
 import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./_shared/catalog-standardization.mts";
 import { normalizeCatalogMarketSegment } from "./_shared/catalog/catalog-segments.mts";
@@ -1152,7 +1152,7 @@ export default async (req: Request, context: Context) => {
     }
 
     if (SUPERADMIN_RPCS.has(name) && !isSuperadminRole(caller.role)) {
-      return json({ error: "Superadmin access required" }, 403);
+      return json({ error: "Superadmin access required", code: "SUPERADMIN_ACCESS_REQUIRED" }, 403);
     }
 
     if (OPERATIONS_RPCS.has(name) && !canAccessOperationsModules(caller.role, caller.department, caller.permissions)) {
@@ -1391,18 +1391,29 @@ export default async (req: Request, context: Context) => {
 
     if (name === "get_latest_supplier_price_rollup_refresh_run") {
       const startedAfter = String(args.started_after || "").trim();
-      const latestRuns = await getJson<Array<Record<string, unknown>>>(
-        buildRestUrl(supabaseUrl, "supplier_price_rollup_refresh_runs", {
-          select: "id,organization_id,started_at,finished_at,duration_ms,status,error_message,supplier_price_rollups_count",
-          organization_id: `eq.${caller.organizationId}`,
-          ...(startedAfter ? { started_at: `gte.${startedAfter}` } : {}),
-          order: "started_at.desc",
-          limit: "1",
-        }),
-        {
-          headers: serviceRoleHeaders(serviceRoleKey),
-        },
-      );
+      let latestRuns: Array<Record<string, unknown>>;
+      try {
+        latestRuns = await getJson<Array<Record<string, unknown>>>(
+          buildRestUrl(supabaseUrl, "supplier_price_rollup_refresh_runs", {
+            select: "id,organization_id,started_at,finished_at,duration_ms,status,error_message,supplier_price_rollups_count",
+            organization_id: `eq.${caller.organizationId}`,
+            ...(startedAfter ? { started_at: `gte.${startedAfter}` } : {}),
+            order: "started_at.desc",
+            limit: "1",
+          }),
+          {
+            headers: serviceRoleHeaders(serviceRoleKey),
+          },
+        );
+      } catch (error) {
+        // This optional telemetry table is unavailable under some preserved
+        // staging ACLs. Keep the denial explicit; never retry with more rights
+        // or classify authentication/other RPC failures as optional telemetry.
+        if (error instanceof HttpRequestError && error.status === 403 && error.code === "42501") {
+          return json({ error: error.message, code: "ROLLUP_STATUS_ACCESS_DENIED" }, 403);
+        }
+        throw error;
+      }
 
       return json({ ok: true, data: latestRuns[0] || null });
     }

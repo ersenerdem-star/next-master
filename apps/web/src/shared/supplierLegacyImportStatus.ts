@@ -15,7 +15,7 @@ export async function loadLegacySupplierOperations<ImportRun, RollupRun>(
     loadRollup().then((run) => ({ run, unavailable: false })).catch((error: unknown) => {
       const denial = error as Error & { status?: number; code?: string };
       if (error instanceof Error && denial.status === 403
-        && denial.code === "SUPERADMIN_ACCESS_REQUIRED") {
+        && (denial.code === "SUPERADMIN_ACCESS_REQUIRED" || denial.code === "ROLLUP_STATUS_ACCESS_DENIED")) {
         return { run: null, unavailable: true };
       }
       throw error;
