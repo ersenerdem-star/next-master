@@ -1,0 +1,825 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Fresh production baseline before supplier commercial-fields v2 forward migrations and worker activation",
+  "projectRef": "zjgueqijumzlfioihnkt",
+  "organizationId": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+  "observation": {
+    "agent": "production_runtime_inventory",
+    "method": "Supabase execute_sql connector; SELECT statements only",
+    "remoteMutationsPerformed": false,
+    "personallyObservedDatabaseFacts": true,
+    "priceRowsOrSecretsStored": false
+  },
+  "priorEvidence": [
+    "scripts/ops/evidence/price-engine-production-geba-v2-commercial-receipt-20261014.json",
+    "scripts/ops/evidence/price-list-legacy-scope-production-postapply-20261014.json"
+  ],
+  "preapplySchema": {
+    "pointer": {
+      "brand_id": "72cb646e-658d-4775-b3bb-b0799eaa9913",
+      "release_id": "06ffd737-36a6-4b0c-8b5a-f61657bd1552",
+      "updated_at": "2026-10-14T19:11:41.829842+00:00",
+      "supplier_id": "bbd25101-b14a-4967-ac5d-fa78054d4f2e",
+      "publication_id": "a7578e86-2f62-482f-9ff2-d671406aec68",
+      "organization_id": "1e4c5e99-e387-41aa-a6d3-cbe74558f766"
+    },
+    "stage_v2": null,
+    "functions": [
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "cloud_admin_price_list_page_fast(uuid,uuid,text,numeric,text,text,integer)",
+        "anon_execute": false,
+        "definition_md5": "91e8efbc5059ef0df3f4599723e40b1b",
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "cloud_current_supplier_price_options_core(uuid,text,text)",
+        "anon_execute": false,
+        "definition_md5": "d9ba262350aa8fb9d465738d8c6b933d",
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "cloud_portal_customer_price_list_page_fast(uuid,uuid,text,numeric,text,text,integer)",
+        "anon_execute": false,
+        "definition_md5": "f651598902f88c8041c00e291b9eaaa4",
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "cloud_price_list_source_page(uuid,uuid,text,integer)",
+        "anon_execute": false,
+        "definition_md5": "107025403b3d2301ca8c478c490fe537",
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "get_admin_price_list_export_version(uuid,uuid)",
+        "anon_execute": false,
+        "definition_md5": "fba77b48656072997d4899d2d1c0db0b",
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "get_supplier_price_export_version(uuid,uuid,uuid)",
+        "anon_execute": false,
+        "definition_md5": "4705de99b9c17704e889f7d9dcfe9194",
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": false
+      }
+    ],
+    "captured_at": "2026-10-14T19:49:33.858081+00:00",
+    "database_date": "2026-10-14",
+    "commercial_columns": 0
+  },
+  "currentSourceMetadata": {
+    "captured_at": "2026-10-14T19:45:33.525827+00:00",
+    "database_date": "2026-10-14",
+    "current_pointers": [
+      {
+        "brand_id": "72cb646e-658d-4775-b3bb-b0799eaa9913",
+        "release_id": "06ffd737-36a6-4b0c-8b5a-f61657bd1552",
+        "updated_at": "2026-10-14T19:11:41.829842+00:00",
+        "supplier_id": "bbd25101-b14a-4967-ac5d-fa78054d4f2e",
+        "publication_id": "a7578e86-2f62-482f-9ff2-d671406aec68",
+        "organization_id": "1e4c5e99-e387-41aa-a6d3-cbe74558f766"
+      }
+    ],
+    "current_release_context": [
+      {
+        "id": "06ffd737-36a6-4b0c-8b5a-f61657bd1552",
+        "rows": 108,
+        "cursor": 108,
+        "status": "published",
+        "source_date": "2026-07-20",
+        "source_hash": "7ed51a80a89d7d6548df91d33b4ffd521d0c3980b2f50f2dcfd4cddf75673c68",
+        "receipt_policy": "supplier-price-commercial-fields-v1"
+      }
+    ],
+    "legacy_commercial_inventory": [
+      {
+        "brand": "ATE",
+        "all_rows": 11546,
+        "brand_id": "e8c04c45-be8c-452d-bbee-65a315b99a1c",
+        "active_rows": 11546,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "BF",
+        "all_rows": 609,
+        "brand_id": "85ab226d-c331-4228-bb21-d9dbe1ef4256",
+        "active_rows": 609,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Boge",
+        "all_rows": 993,
+        "brand_id": "563e69b5-f83d-47e5-a0fc-b7aa13784fae",
+        "active_rows": 532,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Bosch",
+        "all_rows": 363490,
+        "brand_id": "089669ff-5855-4abd-9bb7-e13b8d3f940f",
+        "active_rows": 89334,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Brembo",
+        "all_rows": 8836,
+        "brand_id": "91a10520-60c6-41e5-927c-391f594a6575",
+        "active_rows": 8836,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Corteco",
+        "all_rows": 60656,
+        "brand_id": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+        "active_rows": 60656,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Dayco",
+        "all_rows": 11997,
+        "brand_id": "87c6e030-511a-4a07-a383-b3b8828789b6",
+        "active_rows": 11997,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Donaldson",
+        "all_rows": 3099,
+        "brand_id": "c05dad30-9144-443e-8cd7-23454ddca7c8",
+        "active_rows": 1548,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Euroricambi",
+        "all_rows": 542,
+        "brand_id": "450c00cf-f0c5-4973-a039-cbb349a70419",
+        "active_rows": 542,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "FAG",
+        "all_rows": 22402,
+        "brand_id": "367ef6e3-b47f-4c85-a33c-e4835664b6bc",
+        "active_rows": 14919,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Febi",
+        "all_rows": 61062,
+        "brand_id": "f6827605-2ad4-4a3d-8e82-e0c9cf335edf",
+        "active_rows": 61062,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "FTE",
+        "all_rows": 14374,
+        "brand_id": "a79782a5-c431-44ce-af02-096f0812b972",
+        "active_rows": 14374,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Gates",
+        "all_rows": 35586,
+        "brand_id": "eaa19839-679d-41ff-9562-c2f107f654f6",
+        "active_rows": 0,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Geba",
+        "all_rows": 216,
+        "brand_id": "72cb646e-658d-4775-b3bb-b0799eaa9913",
+        "active_rows": 108,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Hella",
+        "all_rows": 8396,
+        "brand_id": "a8a28902-df57-4f0b-8789-cfb0a4538d61",
+        "active_rows": 8396,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Hengst",
+        "all_rows": 7373,
+        "brand_id": "38fcca76-3207-411b-bfa7-ddc95c44fa34",
+        "active_rows": 3658,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Hepu",
+        "all_rows": 5531,
+        "brand_id": "125b006c-f3b3-4efd-a92e-c71c6c3d8c7f",
+        "active_rows": 5531,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "INA",
+        "all_rows": 10457,
+        "brand_id": "9ce44915-560d-45e0-90e3-6b86ea04258f",
+        "active_rows": 10457,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Kolbenschmidt",
+        "all_rows": 4599,
+        "brand_id": "3b059d13-b8e4-4c5d-afd0-7c76b5a4434b",
+        "active_rows": 4599,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Lemforder",
+        "all_rows": 67362,
+        "brand_id": "5826b167-718e-4ac4-a319-9ae189be06c0",
+        "active_rows": 18981,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "LUK",
+        "all_rows": 9443,
+        "brand_id": "67187ad9-f12d-43c5-8dd9-e2d5e4270f70",
+        "active_rows": 9443,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Mahle",
+        "all_rows": 75688,
+        "brand_id": "5134498a-09c0-4114-8e31-02d9fe9adb4c",
+        "active_rows": 0,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Mann",
+        "all_rows": 43267,
+        "brand_id": "7622e981-9d58-4717-89da-48e63e7f7458",
+        "active_rows": 15737,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Monroe",
+        "all_rows": 714,
+        "brand_id": "22086f61-4f34-4c99-a2ee-bbf91ba7d0f0",
+        "active_rows": 714,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Nissens",
+        "all_rows": 19584,
+        "brand_id": "c412b370-80da-4d94-ab93-696dd38d8f70",
+        "active_rows": 19584,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "NRF",
+        "all_rows": 78466,
+        "brand_id": "54b45b6a-f791-4fc7-868d-9204da91d007",
+        "active_rows": 46560,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Sachs",
+        "all_rows": 68767,
+        "brand_id": "bb0eb4cc-6c0e-4985-8327-9c4ea61510b1",
+        "active_rows": 27862,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "SKF",
+        "all_rows": 49700,
+        "brand_id": "d2dc72e1-02db-42a6-9660-e074d6bcd8dc",
+        "active_rows": 28506,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "SWF",
+        "all_rows": 427,
+        "brand_id": "0d23b59a-a533-4fe0-8834-bdc1e4a26ea6",
+        "active_rows": 427,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "TRW",
+        "all_rows": 32806,
+        "brand_id": "745d5ada-6345-4bef-9468-b2b42477bfe9",
+        "active_rows": 16364,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "Valeo",
+        "all_rows": 68458,
+        "brand_id": "f779e841-272a-4fca-aca7-157478137a17",
+        "active_rows": 34414,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      },
+      {
+        "brand": "ZF",
+        "all_rows": 156,
+        "brand_id": "b77229c6-ca2d-478b-95db-96aa2f02e318",
+        "active_rows": 156,
+        "active_expired": 0,
+        "active_stock_zero": 0,
+        "active_expires_today": 0,
+        "active_stock_nonnull": 0,
+        "active_multiple_nonnull": 0,
+        "active_valid_to_nonnull": 0,
+        "potentially_invalid_legacy_fields": 0
+      }
+    ]
+  },
+  "sourceHashes": {
+    "scopes": [
+      {
+        "brand": "Corteco",
+        "legacy": {
+          "rows": 60656,
+          "full_md5": "07126d9ffa09f83f788bafeefb2d8cb6"
+        },
+        "catalog": {
+          "rows": 37526,
+          "full_md5": "871c16eac26601bfe31ae4094e9d8d63"
+        },
+        "brand_id": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+        "current_release_rows": {
+          "rows": 0,
+          "pre_v2_projection_md5": null
+        }
+      },
+      {
+        "brand": "Geba",
+        "legacy": {
+          "rows": 216,
+          "full_md5": "d421251ab35a546651537b0c892905e9"
+        },
+        "catalog": {
+          "rows": 108,
+          "full_md5": "aa5a878057287d92f8e9df966c3a1148"
+        },
+        "brand_id": "72cb646e-658d-4775-b3bb-b0799eaa9913",
+        "current_release_rows": {
+          "rows": 108,
+          "pre_v2_projection_md5": "5d6ab77238d3ce9e197caac583d48e2c"
+        }
+      }
+    ],
+    "captured_at": "2026-10-14T19:46:29.08576+00:00"
+  },
+  "legacyActiveFieldPreflight": {
+    "active_rows": 527452,
+    "captured_at": "2026-10-14T19:49:33.079303+00:00",
+    "stock_nonnull": 0,
+    "total_invalid": 0,
+    "stock_negative": 0,
+    "multiple_nonnull": 0,
+    "valid_to_nonnull": 0,
+    "valid_to_nonfinite": 0,
+    "valid_to_out_of_range": 0,
+    "order_multiple_nonpositive": 0,
+    "valid_to_before_valid_from": 0,
+    "valid_to_without_valid_from": 0
+  },
+  "customerPricing": {
+    "capturedAt": "2026-10-14 19:46:44.143766+00",
+    "id": "be450451-78d4-43cf-b35c-66239eccfc38",
+    "priceListType": "Other",
+    "typedMarginPercent": null,
+    "embeddedMarginPercent": 20,
+    "pricingResolverSource": "netlify/functions/_shared/pricing/customer-pricing-context.mts",
+    "effectiveMarginPercent": 20
+  },
+  "priceProfiles": [
+    {
+      "results": [
+        {
+          "audience": "admin",
+          "mismatches": 0,
+          "actual_rows": 108,
+          "semantic_md5": "7f555609845204e0c96f667fb01e080b",
+          "distinct_codes": 108,
+          "reported_total": 108
+        },
+        {
+          "audience": "portal",
+          "mismatches": 0,
+          "actual_rows": 108,
+          "semantic_md5": "8eb28dcfe5eb962d36a3aabf9018ec61",
+          "distinct_codes": 108,
+          "reported_total": 108
+        }
+      ],
+      "brand_id": "72cb646e-658d-4775-b3bb-b0799eaa9913",
+      "list_type": "A",
+      "price_case": "A10",
+      "captured_at": "2026-10-14T19:47:21.181752+00:00",
+      "expected_codes": 108,
+      "keyset_anchors": 1,
+      "margin_percent": 10,
+      "source_supplier_rows": 108,
+      "golden_price_date_md5": "b0ae34b47d6df9ca3e687184ed978a44"
+    },
+    {
+      "results": [
+        {
+          "audience": "admin",
+          "mismatches": 0,
+          "actual_rows": 108,
+          "semantic_md5": "16ee53ea793ec7d78fdd7692982bb2ec",
+          "distinct_codes": 108,
+          "reported_total": 108
+        },
+        {
+          "audience": "portal",
+          "mismatches": 0,
+          "actual_rows": 108,
+          "semantic_md5": "3f3330988a120731d2200bd0ada56fde",
+          "distinct_codes": 108,
+          "reported_total": 108
+        }
+      ],
+      "brand_id": "72cb646e-658d-4775-b3bb-b0799eaa9913",
+      "list_type": "B",
+      "price_case": "B15",
+      "captured_at": "2026-10-14T19:47:39.746454+00:00",
+      "expected_codes": 108,
+      "keyset_anchors": 1,
+      "margin_percent": 15,
+      "source_supplier_rows": 108,
+      "golden_price_date_md5": "b0ae34b47d6df9ca3e687184ed978a44"
+    },
+    {
+      "results": [
+        {
+          "audience": "admin",
+          "mismatches": 0,
+          "actual_rows": 108,
+          "semantic_md5": "69e0d04ab954362bd0397c728e7a155c",
+          "distinct_codes": 108,
+          "reported_total": 108
+        },
+        {
+          "audience": "portal",
+          "mismatches": 0,
+          "actual_rows": 108,
+          "semantic_md5": "f10a320643e266deef433440c56ce94d",
+          "distinct_codes": 108,
+          "reported_total": 108
+        }
+      ],
+      "brand_id": "72cb646e-658d-4775-b3bb-b0799eaa9913",
+      "list_type": "A",
+      "price_case": "custom20",
+      "captured_at": "2026-10-14T19:47:40.562597+00:00",
+      "expected_codes": 108,
+      "keyset_anchors": 1,
+      "margin_percent": 20,
+      "source_supplier_rows": 108,
+      "golden_price_date_md5": "b0ae34b47d6df9ca3e687184ed978a44"
+    },
+    {
+      "results": [
+        {
+          "audience": "admin",
+          "mismatches": 0,
+          "actual_rows": 30328,
+          "semantic_md5": "94d904b19e30bd471ad7de8b7f320043",
+          "distinct_codes": 30328,
+          "reported_total": 30328
+        },
+        {
+          "audience": "portal",
+          "mismatches": 0,
+          "actual_rows": 30328,
+          "semantic_md5": "bf84b14c6a85b450c8735e883a45bf80",
+          "distinct_codes": 30328,
+          "reported_total": 30328
+        }
+      ],
+      "brand_id": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+      "list_type": "A",
+      "price_case": "A10",
+      "captured_at": "2026-10-14T19:47:41.601036+00:00",
+      "expected_codes": 30328,
+      "keyset_anchors": 7,
+      "margin_percent": 10,
+      "source_supplier_rows": 60656,
+      "golden_price_date_md5": "78afd90cafc3f7702dd71e09c416d37f"
+    },
+    {
+      "results": [
+        {
+          "audience": "admin",
+          "mismatches": 0,
+          "actual_rows": 30328,
+          "semantic_md5": "74b224d3e1cca434a55f9f09fe692e3a",
+          "distinct_codes": 30328,
+          "reported_total": 30328
+        },
+        {
+          "audience": "portal",
+          "mismatches": 0,
+          "actual_rows": 30328,
+          "semantic_md5": "8c49bd3c008303bf244a11ee3e1720b6",
+          "distinct_codes": 30328,
+          "reported_total": 30328
+        }
+      ],
+      "brand_id": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+      "list_type": "B",
+      "price_case": "B15",
+      "captured_at": "2026-10-14T19:48:03.572763+00:00",
+      "expected_codes": 30328,
+      "keyset_anchors": 7,
+      "margin_percent": 15,
+      "source_supplier_rows": 60656,
+      "golden_price_date_md5": "78afd90cafc3f7702dd71e09c416d37f"
+    },
+    {
+      "results": [
+        {
+          "audience": "admin",
+          "mismatches": 0,
+          "actual_rows": 30328,
+          "semantic_md5": "a070facbeba9ce809ed8448b45797e0e",
+          "distinct_codes": 30328,
+          "reported_total": 30328
+        },
+        {
+          "audience": "portal",
+          "mismatches": 0,
+          "actual_rows": 30328,
+          "semantic_md5": "eefc88bc1dc78b47d489f5ffa620ef5b",
+          "distinct_codes": 30328,
+          "reported_total": 30328
+        }
+      ],
+      "brand_id": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+      "list_type": "A",
+      "price_case": "custom20",
+      "captured_at": "2026-10-14T19:48:23.934278+00:00",
+      "expected_codes": 30328,
+      "keyset_anchors": 7,
+      "margin_percent": 20,
+      "source_supplier_rows": 60656,
+      "golden_price_date_md5": "78afd90cafc3f7702dd71e09c416d37f"
+    }
+  ],
+  "checks": {
+    "allSixBrandCasesCaptured": true,
+    "allTwelveProfilesCompleteAndExact": true,
+    "currentGebaReleasePreserved": true,
+    "v2SchemaAbsent": true,
+    "activeLegacyUnsupportedValuesAbsent": true,
+    "activeLegacyInvalidValuesAbsent": true
+  },
+  "method": [
+    "Each pricing statement derives eligible latest legacy rows per exact SKU/supplier, suppressing only supplier scopes with any pointer; valid published rows from the current pointer are included. All comparisons use PostgreSQL numeric, with a single round(buy_price*(1+margin/100),2).",
+    "Complete expected code sets generate true5000-row keyset anchors. Each of three rates is checked independently through BOTH existing admin(decimal margin) and portal(percentage margin) readers for108Geba and30328Corteco rows.",
+    "Per-audience semantic_md5 hashes all returned fields except total_count, in exact code order. Audience shapes differ, so admin and portal hashes are not expected to match each other. Before/after comparison must compare the same audience/profile.",
+    "Legacy and catalog hashes cover entire exact-brand tables; current release row hash excludes new commercial columns so additive NULL columns do not create a false data-change signal.",
+    "Juventa rate is freshly read from the exact customer row and resolved according to the current embedded-metadata fallback source. Only profile, customer UUID and typed/embedded numeric rate are stored.",
+    "All32 existing legacy brand scopes in this organization were inventoried; total historical rows=1146602. The strict-field preflight scans all527452 active rows."
+  ],
+  "conceptualMigrationAssessment": {
+    "newHistoricalReleaseColumns": "Additive nullable columns leave current v1 publication fields NULL; existing v1 immutable receipt and workflow history remain unchanged.",
+    "legacySourceRows": "Migration does not update supplier_prices. All active old stock/multiple/expiry fields are currently NULL. Inclusive expiry predicates therefore retain the same eligible source set for this baseline date.",
+    "stockZero": "New v2 stock0 is informational, distinct fromNULL; current legacy source has no nonnull stock value.",
+    "orderQuantity": "New nonnull order_multiple only affects newly supplied commercial terms; existing active source has no such term to alter current behavior.",
+    "rawExport": "Supplier raw-source download/preview intentionally includes future and expired fields; effective price/quote readers enforce inclusive valid_to and retain pointer ownership.",
+    "versionInvalidation": "New source-version prefixes may change cache keys after apply even when logical prices remain equal; compare semantic hashes, not version-key equality."
+  },
+  "runtimeParityObservation": {
+    "coordinatorReportedNativeStaging": "Root observed native V3 Render selecting Node26.12 from catalog engines>=20; this agent did not inspect provider UI.",
+    "sourceInspectedBeforePin": {
+      "catalogProductionDocker": "node:20-bookworm-slim",
+      "supplierWorkerDocker": "node:24.15.0-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d"
+    },
+    "recommendation": "Pin both catalog native and Docker runtimes to the same exact tested24.15.0, preserving supplier digest for Docker; then rerun catalog crash/recovery tests and deploy staging first.",
+    "coordinatorFollowup": "Root reported owning package/lock/Docker pin and nativeV3redeploy; no catalog edit or provider mutation by this agent."
+  },
+  "replayQueries": {
+    "priceTemplate": "with p as(select '1e4c5e99-e387-41aa-a6d3-cbe74558f766'::uuid org,'BRAND_UUID'::uuid brand,'CASE_LABEL'::text label,'LIST_TYPE'::text list_type,MARGIN_VALUE::numeric margin),\nptr as materialized(select t.* from public.supplier_current_price_pointers t cross join p where t.organization_id=p.org and t.brand_id=p.brand),\npub as materialized(select t.* from ptr t join public.supplier_price_publications x on x.id=t.publication_id and x.release_id=t.release_id and x.organization_id=t.organization_id and x.supplier_id=t.supplier_id and x.brand_id=t.brand_id and x.status='published'),\nlegacy_ranked as materialized(select sp.*,public.normalize_catalog_product_code(sp.product_code) exact_code,\n row_number() over(partition by sp.supplier_id,public.normalize_catalog_product_code(sp.product_code) order by sp.valid_from desc,sp.id::text desc) rn\n from public.supplier_prices sp cross join p where sp.organization_id=p.org and sp.brand_id=p.brand and sp.is_active and sp.buy_price>0 and sp.currency='EUR'\n and sp.valid_from<=current_date and(sp.valid_to is null or sp.valid_to>=current_date)\n and public.normalize_catalog_product_code(sp.product_code)~'[A-Z0-9]'\n and not exists(select 1 from ptr t where t.supplier_id=sp.supplier_id)),\nsource_rows as materialized(select exact_code normalized_code,product_code,buy_price,valid_from,supplier_id from legacy_ranked where rn=1\n union all select rr.normalized_code,rr.product_code,rr.buy_price,rr.valid_from,t.supplier_id from pub t join public.supplier_price_release_rows rr on rr.release_id=t.release_id\n where rr.row_status='accepted' and rr.buy_price>0 and rr.currency='EUR' and rr.valid_from<=current_date\n and rr.normalized_code=public.normalize_catalog_product_code(rr.product_code) and rr.normalized_code~'[A-Z0-9]'),\ngolden as materialized(select distinct on(normalized_code collate \"C\") normalized_code,product_code,buy_price,valid_from,supplier_id\n from source_rows order by normalized_code collate \"C\",buy_price,valid_from desc,supplier_id),\nnumbered as(select normalized_code,row_number()over(order by normalized_code collate \"C\") n,count(*)over() total from golden),\nanchors as(select null::text after_code union all select normalized_code from numbered where n%5000=0 and n<total),\nactual as materialized(select 'admin' audience,to_jsonb(a) payload from p cross join anchors k cross join lateral public.cloud_admin_price_list_page_fast(p.org,p.brand,p.list_type,p.margin/100,null,k.after_code,5000)a\n union all select 'portal',to_jsonb(a) from p cross join anchors k cross join lateral public.cloud_portal_customer_price_list_page_fast(p.org,p.brand,p.list_type,p.margin,null,k.after_code,5000)a),\nstats as(select a.audience,count(*) actual_rows,count(distinct a.payload->>'normalized_code') distinct_codes,\n count(*)filter(where g.normalized_code is null or (a.payload->>'sales_price')::numeric is distinct from round(g.buy_price*(1+p.margin/100),2)\n or (a.payload->>'price_date')::date is distinct from g.valid_from or a.payload->>'price_list_type' is distinct from p.list_type) mismatches,\n max((a.payload->>'total_count')::bigint) reported_total,\n md5(string_agg(md5((a.payload-'total_count')::text),'|' order by a.payload->>'normalized_code' collate \"C\")) semantic_md5\n from actual a cross join p left join golden g on g.normalized_code=a.payload->>'normalized_code' group by a.audience)\nselect jsonb_build_object('captured_at',clock_timestamp(),'brand_id',p.brand,'price_case',p.label,'list_type',p.list_type,'margin_percent',p.margin,\n 'expected_codes',(select count(*)from golden),'source_supplier_rows',(select count(*)from source_rows),'keyset_anchors',(select count(*)from anchors),\n 'golden_price_date_md5',(select md5(string_agg(md5(jsonb_build_array(normalized_code,buy_price,valid_from)::text),'|' order by normalized_code collate \"C\"))from golden),\n 'results',(select jsonb_agg(to_jsonb(s)order by audience)from stats s)) evidence from p;",
+    "sourceHashes": "with p as (select '1e4c5e99-e387-41aa-a6d3-cbe74558f766'::uuid org), scopes(label,brand) as(values ('Geba','72cb646e-658d-4775-b3bb-b0799eaa9913'::uuid),('Corteco','821a7c95-dd21-4ae8-b55b-fe463fa0b7ca'::uuid))\nselect jsonb_build_object('captured_at',clock_timestamp(),'scopes',(select jsonb_agg(jsonb_build_object(\n'brand',s.label,'brand_id',s.brand,\n'legacy',(select jsonb_build_object('rows',count(*),'full_md5',md5(string_agg(md5(to_jsonb(l)::text),'|' order by l.id))) from public.supplier_prices l where l.organization_id=p.org and l.brand_id=s.brand),\n'catalog',(select jsonb_build_object('rows',count(*),'full_md5',md5(string_agg(md5(to_jsonb(c)::text),'|' order by c.id))) from public.catalog_products c where c.organization_id=p.org and c.brand_id=s.brand),\n'current_release_rows',(select jsonb_build_object('rows',count(*),'pre_v2_projection_md5',md5(string_agg(md5((to_jsonb(r)-'stock_qty'-'order_multiple'-'valid_to'-'commercial_policy')::text),'|' order by r.id))) from public.supplier_price_release_rows r join public.supplier_current_price_pointers ptr on ptr.release_id=r.release_id where ptr.organization_id=p.org and ptr.brand_id=s.brand)\n)order by s.label)from scopes s cross join p),\n'customer_rate',(select jsonb_agg(jsonb_build_object('id',c.id,'price_list_type',c.price_list_type,'margin',c.price_list_margin_percent,'price_list_metadata',to_jsonb(c)->'notes')) from public.customers c cross join p where c.organization_id=p.org and coalesce(c.company_name,c.display_name) ilike '%Juventa%')) evidence;",
+    "activeLegacyValidation": "with p as(select '1e4c5e99-e387-41aa-a6d3-cbe74558f766'::uuid org), s as materialized(\nselect sp.* from public.supplier_prices sp cross join p where sp.organization_id=p.org and sp.is_active)\nselect jsonb_build_object('captured_at',clock_timestamp(),'active_rows',count(*),\n'stock_nonnull',count(*)filter(where stock_qty is not null),'multiple_nonnull',count(*)filter(where order_multiple is not null),'valid_to_nonnull',count(*)filter(where valid_to is not null),\n'stock_negative',count(*)filter(where stock_qty<0),'order_multiple_nonpositive',count(*)filter(where order_multiple<=0),\n'valid_to_nonfinite',count(*)filter(where valid_to is not null and not isfinite(valid_to)),\n'valid_to_out_of_range',count(*)filter(where valid_to is not null and (valid_to<date '0001-01-01' or valid_to>date '9999-12-31')),\n'valid_to_before_valid_from',count(*)filter(where valid_to is not null and valid_from is not null and valid_to<valid_from),\n'valid_to_without_valid_from',count(*)filter(where valid_to is not null and valid_from is null),\n'total_invalid',count(*)filter(where stock_qty<0 or order_multiple<=0 or(valid_to is not null and(not isfinite(valid_to)or valid_to<date '0001-01-01'or valid_to>date '9999-12-31'or(valid_from is not null and valid_to<valid_from)))))\nevidence from s;",
+    "schema": "select jsonb_build_object('captured_at',clock_timestamp(),'database_date',current_date,\n'commercial_columns',(select count(*)from information_schema.columns where table_schema='public'and table_name='supplier_price_release_rows'and column_name in('stock_qty','order_multiple','valid_to','commercial_policy')),\n'stage_v2',to_regprocedure('public.stage_supplier_price_release_batch_v2(uuid,text,jsonb)')::text,\n'functions',(select jsonb_agg(jsonb_build_object('signature',p.oid::regprocedure::text,'definition_md5',md5(pg_get_functiondef(p.oid)),'security_definer',p.prosecdef,'config',p.proconfig,\n'anon_execute',has_function_privilege('anon',p.oid,'EXECUTE'),'authenticated_execute',has_function_privilege('authenticated',p.oid,'EXECUTE'),'service_execute',has_function_privilege('service_role',p.oid,'EXECUTE')) order by p.oid::regprocedure::text)\nfrom pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public'and p.proname in('cloud_admin_price_list_page_fast','cloud_portal_customer_price_list_page_fast','cloud_price_list_source_page','cloud_current_supplier_price_options_core','get_admin_price_list_export_version','get_supplier_price_export_version')),\n'pointer',(select to_jsonb(p)from public.supplier_current_price_pointers p where p.organization_id='1e4c5e99-e387-41aa-a6d3-cbe74558f766'and p.brand_id='72cb646e-658d-4775-b3bb-b0799eaa9913'and p.supplier_id='bbd25101-b14a-4967-ac5d-fa78054d4f2e')) evidence;"
+  },
+  "limits": [
+    "Database result parity is not authenticated browser/download delivery proof.",
+    "Each statement has its own database snapshot; no long transaction or source lock spans all cases.",
+    "Baseline database_date is2026-10-14; crossing a date boundary can legitimately alter eligibility/freshness. Recheck expected date and pointers before comparing hashes.",
+    "Full profile checks cover the two requested brands; global inventory checks counts/commercial-field validity, not all-brand price parity.",
+    "No orders, source files, releases, decisions, publications, provider configuration or schema were created or changed by these checks.",
+    "Postapply rerun must first confirm unchangedGEBA pointer and source hashes; a deliberately published new source requires separate acceptance rather than claiming baseline equality."
+  ]
+}
