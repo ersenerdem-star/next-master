@@ -6,6 +6,7 @@ import status from '../../netlify/functions/supplier-price-upload-status.mts';
 import options from '../../netlify/functions/supplier-price-upload-options.mts';
 import { supplierVerifiedUploadTargetEnabled } from '../../netlify/functions/_shared/supplier-upload-target.mts';
 import { supplierVerifiedUploadTargetEnabled as clientTarget } from '../../apps/web/src/infrastructure/api/supplierVerifiedUploadTargetGate.ts';
+import {parseUploadStatus,supplierUploadStatusView,SUPPLIER_SOURCE_UNSUPPORTED_FIELDS} from '../../apps/web/src/shared/supplierUploadProtocol.ts';
 
 const prod='zjgueqijumzlfioihnkt', v3='kaxsqafdevabkxofwdod';
 const base=`https://${prod}.supabase.co`, portal='https://portal.next-master.com';
@@ -85,6 +86,27 @@ test('status exposes operational code and release freshness while preserving sou
   assert.doesNotMatch(JSON.stringify(r.data),/private provider diagnostic/);
   for(const receipt of [{error_code:'private provider diagnostic'},{release_updated_at:'invalid'}])
     assert.equal((await invoke('status',{receipt})).code,503);
+});
+
+test('terminal commercial-field failures survive actual status API and typed parser with exact localized rejection',async()=>{
+ for(const [code,field] of Object.entries(SUPPLIER_SOURCE_UNSUPPORTED_FIELDS)){
+  const r=await invoke('status',{receipt:{verification_status:'failed',release_status:'received',
+   total_rows:0,processed_rows:0,error_code:code,last_error:'private provider URL/token must never reach the client'}});
+  assert.equal(r.code,200);assert.equal(r.data.errorCode,code);assert.equal(r.data.published,false);
+  assert.doesNotMatch(JSON.stringify(r.data),/private provider|last_error/);
+  const parsed=parseUploadStatus(r.data,session,100);
+  for(const tr of [false,true]){
+   const view=supplierUploadStatusView(parsed,tr);
+   assert.equal(view.phase,'failed');assert.ok(view.message.includes(field.column));assert.ok(view.message.includes(tr?field.tr:field.en));
+   assert.match(view.message,tr?/Dosya reddedildi/:/File rejected/);
+   assert.match(view.message,tr?/Fiyatlar yayımlanmadı/:/Prices were not published/);
+   assert.match(view.message,tr?/gerekli bilgiyi silmeyin/:/Do not delete meaningful commercial data/);
+   assert.doesNotMatch(view.message,/kuyruğunda|queued|running|Check this same upload later|re-upload|yeniden yükle/i);
+  }
+  assert.equal(r.calls.filter(c=>c.url.pathname.includes('/rpc/')).length,1,'Status observation only; no retry or handoff mutation');
+ }
+ const unknown=await invoke('status',{receipt:{verification_status:'failed',error_code:'SOURCE_UNSUPPORTED_UNKNOWN'}});
+ assert.equal(supplierUploadStatusView(parseUploadStatus(unknown.data,session)).phase,'attention','Unknown codes do not masquerade as a known commercial-field rejection');
 });
 
 test('all new routes stay closed before authentication or any remote call when production flag is absent',async()=>{

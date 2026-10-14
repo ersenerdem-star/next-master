@@ -394,8 +394,10 @@ export function SuppliersPage() {
         const result=await uploadVerifiedSupplierFile(file,{supplierId:importSupplierId,brandId:brand.id,
           mode:importMode,sourceDate:uploadSourceDate},controller.signal,
           progress=>{setVerifiedProgress(progress);setStatus(progress.message);});
-        setVerifiedProgress(current=>current?{...current,...supplierUploadStatusView(result,locale==='tr')}:current);
-        if(result.verificationStatus==='failed') actionFeedback.fail('Source verification failed. Check this upload; do not create another one.');
+        const resultView=supplierUploadStatusView(result,locale==='tr');
+        setVerifiedProgress(current=>current?{...current,...resultView}:current);
+        setStatus(resultView.message);
+        if(resultView.phase==='failed') actionFeedback.fail(resultView.message);
         // Intentionally do not close the dialog, refresh commercial prices,
         // or announce an import/publication success from a source receipt.
       } catch(caught) {
@@ -928,7 +930,10 @@ export function SuppliersPage() {
                 {verifiedProgress.sessionId&&!importingSupplier?<Button variant="secondary" onClick={async()=>{
                   const controller=new AbortController();uploadController.current=controller;setImportingSupplier(true);
                   try {const result=await fetchVerifiedUploadStatus(verifiedProgress.sessionId!,controller.signal);
-                    setVerifiedProgress(current=>current?{...current,...supplierUploadStatusView(result,locale==='tr')}:current);
+                    const resultView=supplierUploadStatusView(result,locale==='tr');
+                    setVerifiedProgress(current=>current?{...current,...resultView}:current);
+                    setStatus(resultView.message);
+                    if(resultView.phase==='failed') actionFeedback.fail(resultView.message);
                     setError('');
                   }catch(e){setError(e instanceof Error?e.message:'Status unavailable.');}
                   finally{uploadController.current=null;setImportingSupplier(false);}

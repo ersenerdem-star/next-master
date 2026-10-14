@@ -4,11 +4,26 @@ export type UploadStatus={sessionId:string;releaseId:string;uploadStatus:string;
  totalBytes:number;totalRows:number;processedRows:number;releaseStatus:string;errorCode:string|null;releaseUpdatedAt:string;
  expiresAt:string;updatedAt:string;published:false};
 export const SUPPLIER_PROCESSING_INTERRUPTED='SUPPLIER_PROCESSING_INTERRUPTED';
+export const SUPPLIER_SOURCE_UNSUPPORTED_FIELDS={
+ SOURCE_UNSUPPORTED_STOCK_QTY:{column:'Stock_Qty',en:'stock quantity',tr:'stok miktarı'},
+ SOURCE_UNSUPPORTED_ORDER_MULTIPLE:{column:'Order_Multiple',en:'order multiple',tr:'sipariş katı'},
+ SOURCE_UNSUPPORTED_VALID_TO:{column:'Valid_To',en:'validity end date',tr:'geçerlilik bitiş tarihi'},
+} as const;
+export type SupplierSourceUnsupportedCode=keyof typeof SUPPLIER_SOURCE_UNSUPPORTED_FIELDS;
+function sourceUnsupportedMessage(code:string|null,tr:boolean):string|null {
+ if(!code||!Object.hasOwn(SUPPLIER_SOURCE_UNSUPPORTED_FIELDS,code))return null;
+ const field=SUPPLIER_SOURCE_UNSUPPORTED_FIELDS[code as SupplierSourceUnsupportedCode];
+ return tr
+  ?`Dosya reddedildi: ${field.column} (${field.tr}) alanında değer var ve doğrulanmış fiyat yükleme bu alanı henüz desteklemiyor. Fiyatlar yayımlanmadı. Ticari açıdan gerekli bilgiyi silmeyin; bu alanı destekleyen aktarım düzeni değerlendirilmelidir.`
+  :`File rejected: ${field.column} (${field.en}) contains a value that verified price upload does not yet support. Prices were not published. Do not delete meaningful commercial data; an import path that supports this field must be agreed.`;
+}
 export function supplierProcessingInterruptedMessage(tr=false) {
  return tr?'Dosyanın işlenmesi durdu; operasyon kontrolü gerekiyor. Yükleme ve işlenen satırlar korunuyor. Aynı yüklemenin durumunu kontrol edin.'
   :'File processing stopped and needs operational review. The upload and processed rows are preserved. Check this same upload.';
 }
 export function supplierUploadStatusView(status:UploadStatus,tr=false):{phase:UploadPhase;message:string} {
+ const unsupported=sourceUnsupportedMessage(status.errorCode,tr);
+ if(unsupported)return {phase:'failed',message:unsupported};
  const progress=`${status.processedRows.toLocaleString(tr?'tr-TR':'en-US')} / ${status.totalRows.toLocaleString(tr?'tr-TR':'en-US')}`;
  const activity=new Date(status.releaseUpdatedAt).toLocaleString(tr?'tr-TR':'en-US');
  if(status.errorCode===SUPPLIER_PROCESSING_INTERRUPTED)return {phase:'attention',
