@@ -73,6 +73,7 @@ test("portal download waits for the complete signed Storage workbook before clic
     finishTransfer();
     await downloading;
     assert.deepEqual(clicks, [{ href: `blob:${site}/1`, name: "price-list.xlsx" }]);
+    assert.equal(blobs[0].type, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     assert.deepEqual(new Uint8Array(await blobs[0].arrayBuffer()), workbook);
   });
 });
@@ -151,6 +152,85 @@ test("signed CSV exports do not require an XLSX container signature", async () =
     }));
     await downloadUrl("catalog.csv", signedUrl, undefined, csv.byteLength);
     assert.deepEqual(clicks, [{ href: `blob:${site}/1`, name: "catalog.csv" }]);
+    assert.equal(blobs[0].type, "text/csv;charset=utf-8");
     assert.deepEqual(new Uint8Array(await blobs[0].arrayBuffer()), csv);
+  });
+});
+
+test("signed CSV exports reject incomplete transfers with a neutral export error", async () => {
+  await withBrowserMocks(async ({ clicks, blobs, setFetch }) => {
+    const csv = new TextEncoder().encode("Product_Code,Brand\nABC-1,Bosch\n");
+    setFetch(async () => new Response(csv.slice(0, csv.byteLength - 2), {
+      status: 200, headers: { "Content-Length": String(csv.byteLength) },
+    }));
+    await assert.rejects(downloadUrl("catalog.csv", signedUrl, undefined, csv.byteLength), /Export download was incomplete/);
+    assert.equal(clicks.length, 0);
+    assert.equal(blobs.length, 0);
+  });
+});
+
+test("multipart download fetches three pieces sequentially and saves the exact assembled workbook", async () => {
+  await withBrowserMocks(async ({ clicks, blobs, setFetch }) => {
+    const pieces = [workbook.slice(0, 2), workbook.slice(2, 5), workbook.slice(5)];
+    const parts = pieces.map((piece, index) => ({ signedUrl: signedUrl.replace("file.xlsx", `part-${index + 1}`), byteSize: piece.byteLength }));
+    const requests: string[] = [];
+    let finishFirst!: () => void;
+    setFetch(async (input) => {
+      const index = requests.length;
+      requests.push(String(input));
+      assert.equal(input, parts[index].signedUrl);
+      const body = index === 0 ? new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(pieces[0].slice(0, 1));
+          finishFirst = () => { controller.enqueue(pieces[0].slice(1)); controller.close(); };
+        },
+      }) : pieces[index];
+      return new Response(body, { status: 200, headers: { "Content-Length": String(pieces[index].byteLength) } });
+    });
+    const downloading = downloadUrl("master.xlsx", parts[0].signedUrl, undefined, workbook.byteLength, parts);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(requests.length, 1);
+    assert.equal(clicks.length, 0);
+    finishFirst();
+    await downloading;
+    assert.deepEqual(requests, parts.map((part) => part.signedUrl));
+    assert.deepEqual(clicks, [{ href: `blob:${site}/1`, name: "master.xlsx" }]);
+    assert.equal(blobs[0].size, workbook.byteLength);
+    assert.deepEqual(new Uint8Array(await blobs[0].arrayBuffer()), workbook);
+  });
+});
+
+test("multipart download never saves or fetches later pieces after an incomplete part", async () => {
+  await withBrowserMocks(async ({ clicks, blobs, setFetch }) => {
+    const pieces = [workbook.slice(0, 2), workbook.slice(2, 5), workbook.slice(5)];
+    const parts = pieces.map((piece, index) => ({ signedUrl: signedUrl.replace("file.xlsx", `part-${index + 1}`), byteSize: piece.byteLength }));
+    let requests = 0;
+    setFetch(async () => {
+      const index = requests++;
+      return new Response(index === 1 ? pieces[index].slice(0, 2) : pieces[index], {
+        status: 200, headers: { "Content-Length": String(pieces[index].byteLength) },
+      });
+    });
+    await assert.rejects(downloadUrl("master.xlsx", parts[0].signedUrl, undefined, workbook.byteLength, parts), /incomplete/);
+    assert.equal(requests, 2);
+    assert.equal(clicks.length, 0);
+    assert.equal(blobs.length, 0);
+  });
+});
+
+test("multipart download rejects a wrong total or different Storage origin before fetching", async () => {
+  await withBrowserMocks(async ({ clicks, setFetch }) => {
+    const parts = [
+      { signedUrl, byteSize: 4 },
+      { signedUrl: signedUrl.replace("file.xlsx", "part-2"), byteSize: 4 },
+    ];
+    let requests = 0;
+    setFetch(async () => { requests += 1; throw new Error("Fetch must not start"); });
+    await assert.rejects(downloadUrl("master.xlsx", signedUrl, undefined, 9, parts), /complete file size/);
+    await assert.rejects(downloadUrl("master.xlsx", signedUrl, undefined, 8, [
+      parts[0], { ...parts[1], signedUrl: parts[1].signedUrl.replace("storage.example.test", "other.example.test") },
+    ]), /parts are invalid/);
+    assert.equal(requests, 0);
+    assert.equal(clicks.length, 0);
   });
 });

@@ -15,6 +15,7 @@ export const EXPORT_STORAGE_BUCKET = "app-exports";
 const EXPORT_JOB_TTL_DAYS = 7;
 const EXPORT_REQUEST_TIMEOUT_MS = 45_000;
 const EXPORT_STORAGE_TIMEOUT_MS = 45_000;
+const EXPORT_ARTIFACT_PART_BYTES = 40 * 1024 * 1024;
 
 export type ExportJobRow = {
   id: string;
@@ -1003,6 +1004,9 @@ async function uploadExportArtifact(
 
 export async function downloadExportArtifact(supabaseUrl: string, serviceRoleKey: string, job: ExportJobRow) {
   assertExportArtifactReady(job);
+  if (job.scope.artifactParts !== undefined) {
+    throw new Error("Multipart export requires signed-part download.");
+  }
   const response = await fetchWithTimeout(`${supabaseUrl}/storage/v1/object/${encodeURIComponent(job.storage_bucket)}/${encodeStoragePath(job.storage_path)}`, {
     headers: {
       apikey: serviceRoleKey,
@@ -1035,27 +1039,79 @@ export async function createExportArtifactSignedDownload(
 ) {
   assertExportArtifactReady(job);
 
+  const rawParts = job.scope.artifactParts;
+  const multipart = rawParts !== undefined;
+  let artifacts: Array<{ path: string; byteSize: number }> = [{ path: job.storage_path, byteSize: Number(job.byte_size) }];
+  if (multipart) {
+    if (!Array.isArray(rawParts) || rawParts.length < 2) throw new Error("Export artifact parts are invalid.");
+    const prefix = job.storage_path.slice(0, job.storage_path.lastIndexOf("/") + 1);
+    const paths = new Set<string>();
+    let totalBytes = 0;
+    artifacts = rawParts.map((part: unknown) => {
+      const value = part as { path?: unknown; byteSize?: unknown } | null;
+      const path = value?.path;
+      const byteSize = value?.byteSize;
+      if (typeof path !== "string" || !path.startsWith(`${job.organization_id}/`) || !path.startsWith(prefix)
+        || /[\\\u0000-\u001f\u007f]/.test(path) || path.split("/").some((segment) => !segment || segment === "." || segment === "..")
+        || paths.has(path) || typeof byteSize !== "number" || !Number.isSafeInteger(byteSize) || byteSize <= 0) {
+        throw new Error("Export artifact parts are invalid.");
+      }
+      paths.add(path);
+      totalBytes += byteSize;
+      return { path, byteSize };
+    });
+    if (artifacts[0].path !== job.storage_path || !Number.isSafeInteger(totalBytes) || totalBytes !== Number(job.byte_size)) {
+      throw new Error("Export artifact parts do not match the complete file size.");
+    }
+  }
+
   const storageBaseUrl = `${supabaseUrl.replace(/\/+$/, "")}/storage/v1`;
   const response = await fetchWithTimeout(
-    `${storageBaseUrl}/object/sign/${encodeURIComponent(job.storage_bucket)}/${encodeStoragePath(job.storage_path)}`,
+    `${storageBaseUrl}/object/sign/${encodeURIComponent(job.storage_bucket)}`,
     {
       method: "POST",
       headers: serviceRoleHeaders(serviceRoleKey),
-      body: JSON.stringify({ expiresIn: EXPORT_SIGNED_URL_TTL_SECONDS }),
+      // The single-object endpoint signs decodeURI(request.url), which leaves
+      // reserved path octets such as %2B encoded in its JWT claim. Passing the
+      // raw path in JSON makes the batch endpoint sign the stored object name.
+      body: JSON.stringify({ expiresIn: EXPORT_SIGNED_URL_TTL_SECONDS, paths: artifacts.map((artifact) => artifact.path) }),
       timeoutMs: EXPORT_STORAGE_TIMEOUT_MS,
     },
   );
-  const data = await readJson<{ signedURL?: string; signedUrl?: string; error?: string; message?: string }>(response);
+  type SignedStorageResponse = { path?: string; signedURL?: string; signedUrl?: string; error?: string | null; message?: string };
+  const data = await readJson<SignedStorageResponse[] | SignedStorageResponse>(response);
   if (!response.ok) {
-    throw new Error(data.message || data.error || `Export signed URL failed: ${response.status}`);
+    const errorData = Array.isArray(data) ? data[0] : data;
+    throw new Error(errorData?.message || errorData?.error || `Export signed URL failed: ${response.status}`);
   }
 
-  const signedPath = String(data.signedURL || data.signedUrl || "").trim();
-  if (!signedPath) throw new Error("Export signed URL response is missing.");
-  const signedUrl = new URL(signedPath.startsWith("https://") ? signedPath : `${storageBaseUrl}${signedPath}`);
-  signedUrl.searchParams.set("download", sanitizeDownloadFileName(job.file_name));
+  if (!Array.isArray(data) || data.length !== artifacts.length) throw new Error("Export signed URL response is invalid.");
+  const signedByPath = new Map<string, SignedStorageResponse>();
+  for (const artifact of data) {
+    if (!artifact || artifact.error || typeof artifact.path !== "string" || signedByPath.has(artifact.path)
+      || !artifacts.some((part) => part.path === artifact.path)) {
+      throw new Error(artifact?.error || "Export signed URL response is invalid.");
+    }
+    signedByPath.set(artifact.path, artifact);
+  }
+  const signedParts = artifacts.map((part) => {
+    const artifact = signedByPath.get(part.path)!;
+    const signedPath = String(artifact.signedURL || artifact.signedUrl || "").trim();
+    if (!signedPath) throw new Error("Export signed URL response is missing.");
+    // Storage may return raw reserved characters in this path. Build the URL
+    // from the verified artifact path so '?' or '#' cannot swallow the token,
+    // and already escaped response octets cannot be encoded twice.
+    const tokenQueryIndex = signedPath.lastIndexOf("?token=");
+    const token = tokenQueryIndex < 0 ? "" : new URLSearchParams(signedPath.slice(tokenQueryIndex + 1)).get("token");
+    if (!token) throw new Error("Export signed URL response is missing its token.");
+    const signedUrl = new URL(`${storageBaseUrl}/object/sign/${encodeURIComponent(job.storage_bucket)}/${encodeStoragePath(part.path)}`);
+    signedUrl.searchParams.set("token", token);
+    signedUrl.searchParams.set("download", sanitizeDownloadFileName(job.file_name));
+    return { signedUrl: signedUrl.toString(), byteSize: part.byteSize };
+  });
   return {
-    signedUrl: signedUrl.toString(),
+    signedUrl: signedParts[0].signedUrl,
+    ...(multipart ? { parts: signedParts } : {}),
     fileName: sanitizeDownloadFileName(job.file_name),
     contentType: job.content_type,
     rowCount: Number(job.row_count || 0),
@@ -1917,11 +1973,29 @@ async function runPagedRemainingAdminExportJob(
     const attemptFolder = createHash("sha256").update(leaseStartedAt).digest("hex").slice(0, 24);
     const storagePath = `${job.organization_id}/${folder}/${job.cache_key}/${attemptFolder}/${fileName}`;
     const contentType = format === "csv" ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    await assertAndTouchExportJobLease(supabaseUrl, serviceRoleKey, job.id, leaseStartedAt);
-    await uploadExportArtifact(supabaseUrl, serviceRoleKey, { bucket: EXPORT_STORAGE_BUCKET, path: storagePath, contentType, body });
+    await patch({ byte_size: body.byteLength, progress_message: "Saving the complete export file." });
+    const artifactParts: Array<{ path: string; byteSize: number }> = [];
+    if (body.byteLength > EXPORT_ARTIFACT_PART_BYTES) {
+      const partCount = Math.ceil(body.byteLength / EXPORT_ARTIFACT_PART_BYTES);
+      for (let offset = 0, part = 1; offset < body.byteLength; offset += EXPORT_ARTIFACT_PART_BYTES, part += 1) {
+        const chunk = body.subarray(offset, Math.min(offset + EXPORT_ARTIFACT_PART_BYTES, body.byteLength));
+        const path = `${storagePath}.part-${String(part).padStart(3, "0")}`;
+        await assertAndTouchExportJobLease(supabaseUrl, serviceRoleKey, job.id, leaseStartedAt);
+        await uploadExportArtifact(supabaseUrl, serviceRoleKey, { bucket: EXPORT_STORAGE_BUCKET, path, contentType: "application/octet-stream", body: chunk });
+        artifactParts.push({ path, byteSize: chunk.byteLength });
+        await patch({ progress_message: `Saving export file part ${part} of ${partCount}.` });
+      }
+    } else {
+      await assertAndTouchExportJobLease(supabaseUrl, serviceRoleKey, job.id, leaseStartedAt);
+      await uploadExportArtifact(supabaseUrl, serviceRoleKey, { bucket: EXPORT_STORAGE_BUCKET, path: storagePath, contentType, body });
+    }
     await stopHeartbeat();
+    const finalizedScope = { ...scope };
+    delete finalizedScope.artifactParts;
+    if (artifactParts.length) finalizedScope.artifactParts = artifactParts;
     await patch({ status: "finalized", finalized_at: new Date().toISOString(), file_name: fileName, content_type: contentType,
-      storage_bucket: EXPORT_STORAGE_BUCKET, storage_path: storagePath, row_count: rowCount, byte_size: body.byteLength,
+      scope: finalizedScope, storage_bucket: EXPORT_STORAGE_BUCKET, storage_path: artifactParts[0]?.path || storagePath,
+      row_count: rowCount, byte_size: body.byteLength,
       progress_done: rowCount, progress_total: totalCount, progress_message: "Export file is ready." });
   } catch (error) {
     await stopHeartbeat().catch(() => {});

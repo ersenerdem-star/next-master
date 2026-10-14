@@ -1,5 +1,5 @@
 import { supabaseClient } from "./supabaseClient";
-import { downloadUrl } from "../../shared/xlsx";
+import { downloadUrl, type ExportDownloadPart } from "../../shared/xlsx";
 import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 
 export type ExportJobStatus = {
@@ -33,6 +33,7 @@ type ExportDownloadResponse = {
   rowCount?: number;
   byteSize?: number;
   expiresIn?: number;
+  parts?: ExportDownloadPart[];
   error?: string;
 };
 
@@ -121,6 +122,7 @@ async function postExportDownloadJson(path: string, body: Record<string, unknown
     rowCount: Number(data.rowCount || 0),
     byteSize: Number(data.byteSize || 0),
     expiresIn: Number(data.expiresIn || 0),
+    parts: data.parts,
   };
 }
 
@@ -185,7 +187,7 @@ export async function getExportJobStatus(jobId: string) {
 
 export async function downloadExportJob(jobId: string) {
   const result = await postExportDownloadJson("/api/admin-export-download", { jobId });
-  await downloadUrl(result.fileName, result.signedUrl, undefined, result.byteSize);
+  await downloadUrl(result.fileName, result.signedUrl, undefined, result.byteSize, result.parts);
   return result;
 }
 

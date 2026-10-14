@@ -171,7 +171,7 @@ test("complete export signs a short-lived URL and fallback streams the stored fi
     const url = String(input);
     requests.push(url);
     return url.includes("/object/sign/")
-      ? Response.json({ signedURL: "/object/sign/app-exports/org-1/price-list.xlsx?token=test" })
+      ? Response.json([{ path: "org-1/price-list.xlsx", error: null, signedURL: "/object/sign/app-exports/org-1/price-list.xlsx?token=test" }])
       : new Response("workbook-content", { status: 200 });
   };
   try {
@@ -189,20 +189,22 @@ test("complete export signs a short-lived URL and fallback streams the stored fi
 
 test("signed download preserves escaped path octets and safely attaches the download name", async () => {
   const previousFetch = globalThis.fetch;
-  const requests: Array<{ url: URL; authorization: string | null }> = [];
+  const requests: Array<{ url: URL; authorization: string | null; body: { paths: string[]; expiresIn: number } }> = [];
+  const storagePath = "org-1/supplier-price/2026-10-14T05-20-00.000+00:00/Supplier file.csv";
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
-    requests.push({ url, authorization: new Headers(init?.headers).get("authorization") });
-    return Response.json({
+    requests.push({ url, authorization: new Headers(init?.headers).get("authorization"), body: JSON.parse(String(init?.body)) });
+    return Response.json([{
+      path: storagePath, error: null,
       signedURL: "/object/sign/app-exports/org-1/supplier-price/2026-10-14T05-20-00.000%2B00%3A00/Supplier%20file.csv?token=signed-only-token",
-    });
+    }]);
   };
   try {
     const signed = await createExportArtifactSignedDownload("https://example.invalid", "service-role-secret", job({
       audience: "admin",
       export_type: "supplier_price_list",
       file_name: "Supplier file.csv",
-      storage_path: "org-1/supplier-price/2026-10-14T05-20-00.000+00:00/Supplier file.csv",
+      storage_path: storagePath,
     }));
     const parsed = new URL(signed.signedUrl);
     assert.equal(parsed.pathname, "/storage/v1/object/sign/app-exports/org-1/supplier-price/2026-10-14T05-20-00.000%2B00%3A00/Supplier%20file.csv");
@@ -211,9 +213,108 @@ test("signed download preserves escaped path octets and safely attaches the down
     assert.doesNotMatch(parsed.pathname, /%25(?:2B|3A|20)/i);
     assert.doesNotMatch(signed.signedUrl, /service-role-secret|Bearer/i);
     assert.equal(requests.length, 1);
-    assert.match(requests[0].url.pathname, /2026-10-14T05-20-00\.000%2B00%3A00\/Supplier%20file\.csv$/);
+    assert.equal(requests[0].url.pathname, "/storage/v1/object/sign/app-exports");
+    assert.deepEqual(requests[0].body, { expiresIn: 300, paths: [storagePath] });
     assert.equal(requests[0].authorization, "Bearer service-role-secret");
     assert.equal(signed.fileName, "Supplier-file.csv");
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("batch signing keeps reserved object characters equal to the download token claim", async () => {
+  const previousFetch = globalThis.fetch;
+  const storagePath = "org-1/supplier-price/2026-10-14T05-20-00.000+00:00/Supplier #1?latest%.csv";
+  let tokenClaim = "";
+  globalThis.fetch = async (input, init) => {
+    assert.equal(new URL(String(input)).pathname, "/storage/v1/object/sign/app-exports");
+    const body = JSON.parse(String(init?.body));
+    assert.deepEqual(body.paths, [storagePath]);
+    // Supabase's batch signer uses the JSON path directly in its JWT claim.
+    tokenClaim = `app-exports/${body.paths[0]}`;
+    return Response.json([{ path: storagePath, error: null, signedURL: `/object/sign/${tokenClaim}?token=batch-token` }]);
+  };
+  try {
+    const signed = await createExportArtifactSignedDownload("https://example.invalid", "secret", job({
+      file_name: "Supplier #1?latest%.csv", storage_path: storagePath,
+    }));
+    const parsed = new URL(signed.signedUrl);
+    const downloadObject = decodeURIComponent(parsed.pathname.slice("/storage/v1/object/sign/".length));
+    assert.equal(downloadObject, tokenClaim);
+    assert.equal(parsed.searchParams.get("token"), "batch-token");
+    assert.equal(parsed.hash, "");
+    assert.match(parsed.pathname, /%2B00%3A00\/Supplier%20%231%3Flatest%25\.csv$/);
+    // The former single-object signer would leave '+' encoded in its claim.
+    assert.notEqual(decodeURI(parsed.pathname.slice("/storage/v1/object/sign/".length)), tokenClaim);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("batch signing rejects per-object errors or a mismatched response path", async () => {
+  const previousFetch = globalThis.fetch;
+  try {
+    for (const response of [
+      [{ path: "org-1/price-list.xlsx", error: "Either the object does not exist or you do not have access to it", signedURL: null }],
+      [{ path: "org-2/price-list.xlsx", error: null, signedURL: "/object/sign/app-exports/org-2/price-list.xlsx?token=test" }],
+      [],
+    ]) {
+      globalThis.fetch = async () => Response.json(response);
+      await assert.rejects(createExportArtifactSignedDownload("https://example.invalid", "secret", job()), /does not exist|invalid/);
+    }
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("multipart artifacts batch-sign every part and preserve assembly order", async () => {
+  const previousFetch = globalThis.fetch;
+  const parts = [
+    { path: "org-1/export/part-1", byteSize: 2 },
+    { path: "org-1/export/part-2", byteSize: 3 },
+    { path: "org-1/export/part-3", byteSize: 3 },
+  ];
+  const multipartJob = job({ storage_path: parts[0].path, byte_size: 8, scope: { artifactParts: parts } });
+  globalThis.fetch = async (input, init) => {
+    assert.equal(new URL(String(input)).pathname, "/storage/v1/object/sign/app-exports");
+    assert.deepEqual(JSON.parse(String(init?.body)), { expiresIn: 300, paths: parts.map((part) => part.path) });
+    return Response.json(parts.slice().reverse().map((part) => ({
+      path: part.path, error: null, signedURL: `/object/sign/app-exports/${part.path}?token=${part.path.split("/").at(-1)}`,
+    })));
+  };
+  try {
+    const signed = await createExportArtifactSignedDownload("https://example.invalid", "secret", multipartJob);
+    assert.equal(signed.byteSize, 8);
+    assert.equal(signed.parts?.length, 3);
+    assert.equal(signed.signedUrl, signed.parts?.[0].signedUrl);
+    assert.deepEqual(signed.parts?.map((part) => part.byteSize), [2, 3, 3]);
+    assert.deepEqual(signed.parts?.map((part) => new URL(part.signedUrl).searchParams.get("token")), ["part-1", "part-2", "part-3"]);
+    await assert.rejects(downloadExportArtifact("https://example.invalid", "secret", multipartJob), /requires signed-part download/);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("multipart signing rejects incomplete, duplicate or out-of-scope parts before Storage access", async () => {
+  const previousFetch = globalThis.fetch;
+  const first = { path: "org-1/export/part-1", byteSize: 4 };
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; throw new Error("Storage must not be called"); };
+  try {
+    for (const parts of [
+      [first, { path: "org-1/export/part-2", byteSize: 3 }],
+      [first, first],
+      [first, { path: "org-2/export/part-2", byteSize: 4 }],
+      [first, { path: "org-1/other-job/part-2", byteSize: 4 }],
+      [first, { path: "org-1/export/../part-2", byteSize: 4 }],
+      [first, { path: "org-1/export/part-2", byteSize: 0 }],
+      [{ path: "org-1/export/part-2", byteSize: 4 }, first],
+    ]) {
+      await assert.rejects(createExportArtifactSignedDownload("https://example.invalid", "secret", job({
+        storage_path: first.path, byte_size: 8, scope: { artifactParts: parts },
+      })), /artifact parts/);
+    }
+    assert.equal(calls, 0);
   } finally {
     globalThis.fetch = previousFetch;
   }
