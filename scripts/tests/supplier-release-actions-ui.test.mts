@@ -209,6 +209,21 @@ test('rendered stale/held/unknown cases keep publication disabled despite an ear
   assert.match(html,/Aynı işlemin sonucunu kontrol et/);assert.match(html,new RegExp(id(26)));
 });
 
+test('commercial compatibility blockers invalidate confirmation and explain the exact hold',()=>{
+ for(const publicationBlocker of ['SOURCE_COMPATIBILITY_REQUIRED','LEGACY_COMMERCIAL_FIELDS_UNSUPPORTED'] as const){
+  const held=parseReleaseActionEvidence({...evidence,publicationBlocker,canPublish:false},evidence.releaseId);
+  assert.equal(releasePublicationReady(held),false);
+  assert.notEqual(publicationConfirmationKey(evidence),publicationConfirmationKey(held));
+  assert.throws(()=>parseReleaseActionEvidence({...evidence,publicationBlocker},evidence.releaseId),/ACTION_EVIDENCE_INVALID/);
+  const html=render({evidence:held,confirmed:true}),index=html.indexOf('Onayla ve yayınla');
+  assert.match(html.slice(html.lastIndexOf('<button',index),index),/disabled/);
+  assert.match(html,publicationBlocker==='SOURCE_COMPATIBILITY_REQUIRED'?/Kaynak dosyanın desteklenmeyen/:/ticari alanlar var/);
+  assert.doesNotMatch(html,/yayına hazır olduğunu doğruladı/);
+ }
+ for(const publicationBlocker of ['arbitrary provider text',['SOURCE_COMPATIBILITY_REQUIRED'],{}])assert.throws(()=>parseReleaseActionEvidence({...evidence,publicationBlocker},evidence.releaseId),/ACTION_EVIDENCE_INVALID/);
+ assert.equal(parseReleaseActionEvidence(evidence,evidence.releaseId).publicationBlocker,null);
+});
+
 test('initial review uses neutral completion language and remote operations remain visible without local receipts',()=>{
   const initial=render({evidence:held});
   assert.match(initial,/Marka ve dosya kontrolünü tamamla/);assert.match(initial,/Kontrolü tamamla/);

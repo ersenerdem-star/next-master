@@ -1,0 +1,41 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {SupplierLegacyHistory} from '../../apps/web/src/modules/admin/SupplierLegacyHistory.tsx';
+import {downloadSupplierTemplate,VERIFIED_SUPPLIER_IMPORT_COLUMNS} from '../../apps/web/src/shared/importTemplates.ts';
+import {parseCsv} from '../../apps/web/src/shared/csv.ts';
+
+test('verified template actual download omits unsupported order multiple and keeps every value aligned',async()=>{
+ const original={document:globalThis.document,window:globalThis.window,create:URL.createObjectURL,revoke:URL.revokeObjectURL};
+ const blobs:Blob[]=[],names:string[]=[];
+ try {
+  URL.createObjectURL=(blob)=>{blobs.push(blob as Blob);return 'blob:template-test';};URL.revokeObjectURL=()=>{};
+  globalThis.document={createElement:()=>({href:'',download:'',click(){names.push(this.download);},remove(){}}),body:{appendChild(){}}} as unknown as Document;
+  globalThis.window={setTimeout:(fn:()=>void)=>{fn();return 0;}} as unknown as Window&typeof globalThis;
+  downloadSupplierTemplate({verified:true});downloadSupplierTemplate();
+  assert.deepEqual(names,['supplier-import-template.csv','supplier-import-template.csv']);
+  const verified=parseCsv(await blobs[0].text()),legacy=parseCsv(await blobs[1].text());
+  assert.deepEqual(verified[0],[...VERIFIED_SUPPLIER_IMPORT_COLUMNS]);
+  assert.equal(verified[0].length,verified[1].length);
+  assert.equal(verified[1][verified[0].indexOf('MOQ')],'1');
+  assert.equal(verified[1][verified[0].indexOf('Lead_Time_Days')],'7');
+  assert.equal(verified[1][verified[0].indexOf('Notes')],'Sample row');
+  for(const unsupported of ['Order_Multiple','Stock_Qty','Valid_To'])assert(!verified[0].includes(unsupported));
+  assert(legacy[0].includes('Order_Multiple'));assert.equal(legacy[1][legacy[0].indexOf('Order_Multiple')],'');
+  assert.equal(legacy[0].length,legacy[1].length);
+ } finally {globalThis.document=original.document;globalThis.window=original.window;URL.createObjectURL=original.create;URL.revokeObjectURL=original.revoke;}
+});
+
+test('verified status center history starts collapsed while retaining all cards and retry controls',()=>{
+ const cards=Array.from({length:49},(_,i)=>React.createElement('article',{key:i},`Historical row ${i+1}`,React.createElement('button',{type:'button'},'Retry')));
+ const html=renderToStaticMarkup(React.createElement(SupplierLegacyHistory,{enabled:true,title:'Earlier upload history',summary:'49 supplier / brand records',children:cards}));
+ assert.match(html,/^<details[^>]*supplier-legacy-history/);assert.doesNotMatch(html,/<details[^>]*\sopen(?:=|\s|>)/);
+ assert.match(html,/<summary><span>Earlier upload history<\/span><small>49 supplier \/ brand records<\/small><\/summary>/);
+ assert.equal((html.match(/<article>/g)||[]).length,49);assert.equal((html.match(/>Retry<\/button>/g)||[]).length,49);
+});
+
+test('environments without verified release review keep legacy operations immediately visible',()=>{
+ const html=renderToStaticMarkup(React.createElement(SupplierLegacyHistory,{enabled:false,title:'Earlier upload history',summary:'1 record',children:React.createElement('button',{},'Retry existing upload')}));
+ assert.doesNotMatch(html,/<details|<summary/);assert.match(html,/>Retry existing upload<\/button>/);
+});

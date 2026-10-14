@@ -28,7 +28,7 @@ import {
   parseCsv,
 } from "../../shared/csv";
 import { formatBrandAwareProductCode } from "../../shared/productCodeDisplay";
-import { downloadSupplierTemplate } from "../../shared/importTemplates";
+import { downloadSupplierTemplate, VERIFIED_SUPPLIER_IMPORT_COLUMNS } from "../../shared/importTemplates";
 import { useI18n } from "../../i18n/I18nProvider";
 import {uploadVerifiedSupplierFile,fetchVerifiedUploadStatus,fetchVerifiedSupplierUploadOptions,isVerifiedSupplierUploadEnabled,verifiedSupplierUploadRequested} from "../../infrastructure/api/supplierVerifiedUploadApi";
 import {supplierUploadStatusView,type UploadProgress} from "../../shared/supplierUploadProtocol";
@@ -825,7 +825,7 @@ export function SuppliersPage() {
             <Button
               variant="secondary"
               onClick={() => {
-                downloadSupplierTemplate();
+                downloadSupplierTemplate({ verified: verifiedUploadEnabled });
                 actionFeedback.succeed(p("suppliers.feedback.templateDownloaded"));
               }}
             >
@@ -936,13 +936,14 @@ export function SuppliersPage() {
               </div>
             </section>:null}
             <div className="modal-hint">{p(verifiedUploadEnabled ? "suppliers.import.verifiedRequiredHint" : "suppliers.import.requiredHint")}</div>
-            <div className="modal-hint">{p("suppliers.import.expectedColumns", { columns: SUPPLIER_IMPORT_COLUMNS.join(", ") })}</div>
+            <div className="modal-hint">{p("suppliers.import.expectedColumns", { columns: (verifiedUploadEnabled ? VERIFIED_SUPPLIER_IMPORT_COLUMNS : SUPPLIER_IMPORT_COLUMNS).join(", ") })}</div>
+            {verifiedUploadEnabled ? <div className="modal-hint">{p("suppliers.import.verifiedMetadataHint")}</div> : null}
             <div className="toolbar">
               <Button
                 variant="secondary"
                 className="button--compact"
                 onClick={() => {
-                  downloadSupplierTemplate();
+                  downloadSupplierTemplate({ verified: verifiedUploadEnabled });
                   actionFeedback.succeed(p("suppliers.feedback.sampleTemplateDownloaded"));
                 }}
               >

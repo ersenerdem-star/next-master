@@ -8,6 +8,8 @@ import {actionScope,prepareDurableAction,publicationConfirmationKey,publishComma
 type Records={review:DurableAction|null;publish:DurableAction|null};
 const unresolved=(r:DurableAction|null)=>Boolean(r&&['pending','unknown'].includes(r.phase));
 export function releaseActionErrorMessage(code:string,tr:boolean) {
+  if(code.includes('LEGACY_COMMERCIAL_FIELDS_UNSUPPORTED'))return tr?'Mevcut fiyatlarda bu motorun koruyamadığı ticari alanlar var. Yayın engellendi; bu alanlar korunacak şekilde uyumlu içe aktarma gerekiyor.':'Current prices contain commercial fields this engine cannot preserve. Publication is blocked until a compatible import preserves those fields.';
+  if(code.includes('SOURCE_COMPATIBILITY_REQUIRED'))return tr?'Kaynak dosyanın desteklenmeyen ticari alanlar açısından kontrolü tamamlanmadı. Fiyat yayını bekletiliyor.':'The source file has not completed the check for unsupported commercial fields. Publication is on hold.';
   if(code.includes('NOT_ENABLED'))return tr?'İnceleme ve yayın işlemleri bu ortamda henüz etkin değil.':'Review and publication actions are not enabled in this environment.';
   if(code.includes('AUTH')||code.includes('ACTOR'))return tr?'Oturum değişti veya doğrulanamadı. Kendi hesabınızla giriş yapıp kontrolü yenileyin.':'Your session changed or could not be verified. Sign in and refresh the evidence.';
   if(code.includes('STORAGE'))return tr?'İşlem kimliği bu tarayıcıda güvenle saklanamıyor. Gönderim durduruldu; mevcut işlem kaydını silmeyin.':'This browser cannot safely retain the decision receipt. Submission is blocked; keep the existing receipt.';
@@ -34,6 +36,7 @@ export function SupplierReleaseActionView(p:ViewProps) {
       <span>{tr?'Dosya satırları':'Source rows'}: {e.totalRows.toLocaleString(tr?'tr-TR':'en-US')} · {tr?'Kabul':'Accepted'}: {e.acceptedRows.toLocaleString(tr?'tr-TR':'en-US')}</span>
       <span>{tr?'Çakışma':'Conflicts'}: {e.conflictRows.toLocaleString()} · {tr?'Reddedilen':'Rejected'}: {e.rejectedRows.toLocaleString()} · {tr?'Uyarı':'Warnings'}: {e.warningRows.toLocaleString()}</span>
       <span>{e.sourceVerified?(tr?'Dosya kaynağı doğrulandı.':'Source file verified.'):(tr?'Dosya kaynağı henüz doğrulanmadı.':'Source file has not been verified.')}</span>
+      {e.publicationBlocker?<p role="status">{releaseActionErrorMessage(e.publicationBlocker,tr)}</p>:null}
       <span>{tr?'Şu anki yayın':'Current publication'}: {e.currentPublicationVersion===null?(tr?'Önceki yayın yok':'No previous publication'):`v${e.currentPublicationVersion}`}</span>
       {e.currentPublicationId?<details><summary>{tr?'Teknik ayrıntılar':'Technical details'}</summary><span className="operations-subtle">{e.currentPublicationId}</span></details>:null}
       {remotePending?<p role="status">{e.publishOperation&&['queued','running'].includes(e.publishOperation.status)
@@ -51,7 +54,7 @@ export function SupplierReleaseActionView(p:ViewProps) {
         </Button>
       </div>:null}
       {ready?<p role="status">{tr?'Güncel sunucu kontrolü yayına hazır olduğunu doğruladı.':'The current server check confirms that this release is ready to publish.'}</p>
-        :!e.isCurrent?<p>{tr?'Yayın için temiz ve güncel kontrol sonucu gerekiyor.':'Publication requires clear, current evidence.'}</p>:null}
+        :!e.isCurrent&&!e.publicationBlocker?<p>{tr?'Yayın için temiz ve güncel kontrol sonucu gerekiyor.':'Publication requires clear, current evidence.'}</p>:null}
       {!e.isCurrent?<>
         <p>{tr?`${e.supplier} / ${e.brand} kapsamındaki fiyat listesinin tamamı bu dosyanın ${e.totalRows.toLocaleString('tr-TR')} satırıyla değiştirilecek.`
           :`The complete price list for ${e.supplier} / ${e.brand} will be replaced by the ${e.totalRows.toLocaleString('en-US')} rows in this file.`}</p>

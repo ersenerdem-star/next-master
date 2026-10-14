@@ -22,6 +22,7 @@ import { Select } from "../../presentation/components/common/Select";
 import { PageHeader, PageShell } from "../../presentation/components/common/VisualPrimitives";
 import { useActionFeedback } from "../../presentation/components/common/ActionFeedback";
 import { SupplierReleaseReviewPanel } from "./SupplierReleaseReviewPanel";
+import { SupplierLegacyHistory } from "./SupplierLegacyHistory";
 
 export function OperationsStatusPage() {
   const actionFeedback = useActionFeedback();
@@ -322,6 +323,9 @@ export function OperationsStatusPage() {
       <PageShell className="operations-status-page">
       <PageHeader title={t("dashboard.operationsStatus.title")} subtitle={t("reports.statusCenterSubtitle")} />
       {releaseReviewEnabled ? <SupplierReleaseReviewPanel locale={locale} /> : null}
+      <SupplierLegacyHistory enabled={releaseReviewEnabled}
+        title={t("dashboard.operationsStatus.legacyPipelineTitle")}
+        summary={t("dashboard.operationsStatus.legacyHistorySummary", { count: formatCount(operationsRows.length) })}>
       <SectionCard
         title={releaseReviewEnabled ? t("dashboard.operationsStatus.legacyPipelineTitle") : t("dashboard.operationsStatus.title")}
         className="operations-status-center"
@@ -436,6 +440,7 @@ export function OperationsStatusPage() {
           </div>
         ) : null}
       </SectionCard>
+      </SupplierLegacyHistory>
       <details className="operations-secondary-details">
         <summary>
           <span>{t("catalog.integrity.title")}</span>

@@ -83,7 +83,10 @@ export function safeSupplierReleaseEvidence(value:unknown,releaseId:string,calle
   ||!['reviewRevision','totalRows','processedRows','acceptedRows','rejectedRows','warningRows','conflictRows'].every(k=>count(value[k]))
   ||!['sourceVerified','isCurrent','canReview','canPublish'].every(k=>typeof value[k]==='boolean')||!code(value.errorCode)||!boundedAudit(value.brandIdentityAudit)
   ||!nullableUuid(value.currentPublicationId)||!nullableUuid(value.currentReleaseId)||!(value.currentPublicationVersion===null||count(value.currentPublicationVersion)))throw Error('ACTION_EVIDENCE_INVALID');
- const result:RecordValue={};
+ const publicationBlocker=value.publicationBlocker??null;
+ if(publicationBlocker!==null&&(typeof publicationBlocker!=='string'||!['SOURCE_COMPATIBILITY_REQUIRED','LEGACY_COMMERCIAL_FIELDS_UNSUPPORTED'].includes(publicationBlocker))
+  ||publicationBlocker!==null&&value.canPublish!==false)throw Error('ACTION_EVIDENCE_INVALID');
+ const result:RecordValue={publicationBlocker};
  for(const key of ['actorId','organizationId','releaseId','supplierId','brandId','supplier','brand','mode','status','reviewRevision','errorCode','brandIdentityAudit',
   'totalRows','processedRows','acceptedRows','rejectedRows','warningRows','conflictRows','sourceVerified','currentPublicationId','currentReleaseId','currentPublicationVersion','isCurrent','canReview','canPublish'])result[key]=clone(value[key]);
  return {...result,reviewOperation:safeOperation(value.reviewOperation,releaseId,'review'),publishOperation:safeOperation(value.publishOperation,releaseId,'publish')};

@@ -130,6 +130,16 @@ test('publication receipts require exact IDs and cannot be reported by the revie
  const held=await invoke('publish',{receipt:{status:'review_required',errorCode:'CROSS_BRAND_BULK_OVERLAP'}});
  assert.equal(held.status,200);assert.equal(held.data.published,false);
 });
+test('evidence preserves only known publication blockers and rejects a contradictory publish grant',async()=>{
+ for(const publicationBlocker of ['SOURCE_COMPATIBILITY_REQUIRED','LEGACY_COMMERCIAL_FIELDS_UNSUPPORTED']){
+  const result=await invoke('evidence',{receipt:{publicationBlocker,canPublish:false}});
+  assert.equal(result.status,200);assert.equal(result.data.publicationBlocker,publicationBlocker);assert.equal(result.data.canPublish,false);
+  assert.equal((await invoke('evidence',{receipt:{publicationBlocker,canPublish:true}})).status,503);
+ }
+ for(const publicationBlocker of ['provider private details',['SOURCE_COMPATIBILITY_REQUIRED'],{}])assert.equal((await invoke('evidence',{receipt:{publicationBlocker}})).status,503);
+ assert.equal((await invoke('evidence')).data.publicationBlocker,null);
+});
+
 test('evidence operation and terminal failures preserve action kind and never invent success',async()=>{
  const failed={releaseId:release,decisionId:decision,action:'recheck',status:'failed',errorCode:'ACTION_EXECUTION_TIMEOUT',published:false,replayed:true};
  const operation={decisionId:decision,status:'failed',receipt:failed,errorCode:failed.errorCode};

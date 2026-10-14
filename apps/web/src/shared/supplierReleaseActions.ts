@@ -20,6 +20,7 @@ export type ReleaseActionEvidence = {
   totalRows:number; processedRows:number; acceptedRows:number; rejectedRows:number; warningRows:number; conflictRows:number;
   sourceVerified:boolean; currentPublicationId:string|null; currentReleaseId:string|null; currentPublicationVersion:number|null;
   isCurrent:boolean; canReview:boolean; canPublish:boolean; reviewOperation:ReleaseOperation|null; publishOperation:ReleaseOperation|null;
+  publicationBlocker?:'SOURCE_COMPATIBILITY_REQUIRED'|'LEGACY_COMMERCIAL_FIELDS_UNSUPPORTED'|null;
 };
 export type ActionScope = {origin:string; actorId:string; organizationId:string; releaseId:string};
 export type DurableAction = {
@@ -81,18 +82,21 @@ export function parseReleaseActionEvidence(value:unknown,releaseId:string):Relea
     ||!['reviewRevision','totalRows','processedRows','acceptedRows','rejectedRows','warningRows','conflictRows'].every(k=>count(e[k]))
     ||!code(e.errorCode)||!audit(e.brandIdentityAudit)||!nullableUuid(e.currentPublicationId)||!nullableUuid(e.currentReleaseId)
     ||!(e.currentPublicationVersion===null||count(e.currentPublicationVersion)))throw new Error('ACTION_EVIDENCE_INVALID');
-  return {...clone(e),reviewOperation:parseOperation(e.reviewOperation,releaseId),publishOperation:parseOperation(e.publishOperation,releaseId)} as ReleaseActionEvidence;
+  const publicationBlocker=e.publicationBlocker??null;
+  if(publicationBlocker!==null&&(typeof publicationBlocker!=='string'||!['SOURCE_COMPATIBILITY_REQUIRED','LEGACY_COMMERCIAL_FIELDS_UNSUPPORTED'].includes(publicationBlocker))
+    ||publicationBlocker!==null&&e.canPublish!==false)throw new Error('ACTION_EVIDENCE_INVALID');
+  return {...clone(e),publicationBlocker,reviewOperation:parseOperation(e.reviewOperation,releaseId),publishOperation:parseOperation(e.publishOperation,releaseId)} as ReleaseActionEvidence;
 }
 
 export function releasePublicationReady(e:ReleaseActionEvidence|null) {
-  return Boolean(e&&e.canPublish===true&&e.sourceVerified===true&&e.status==='validated'&&e.mode==='replace'
+  return Boolean(e&&e.canPublish===true&&!e.publicationBlocker&&e.sourceVerified===true&&e.status==='validated'&&e.mode==='replace'
     &&e.errorCode===null&&e.totalRows>0&&e.processedRows===e.totalRows&&e.acceptedRows===e.totalRows&&e.rejectedRows===0&&e.conflictRows===0
     &&e.brandIdentityAudit?.checked===true&&e.brandIdentityAudit?.review_required===false
     &&![e.reviewOperation,e.publishOperation].some(op=>op&&['queued','running'].includes(op.status)));
 }
 export function publicationConfirmationKey(e:ReleaseActionEvidence) {
   return JSON.stringify([e.actorId,e.organizationId,e.releaseId,e.supplierId,e.brandId,e.supplier,e.brand,e.mode,e.totalRows,
-    e.reviewRevision,e.status,e.errorCode,e.brandIdentityAudit,e.currentPublicationId,e.currentPublicationVersion,e.canPublish,e.sourceVerified]);
+    e.reviewRevision,e.status,e.errorCode,e.brandIdentityAudit,e.currentPublicationId,e.currentPublicationVersion,e.canPublish,e.sourceVerified,e.publicationBlocker??null]);
 }
 export function actionScope(e:ReleaseActionEvidence,origin:string):ActionScope {
   if(!['https://portal.next-master.com','https://next-master-v3-staging-20261006.netlify.app'].includes(origin))throw new Error('ACTION_SCOPE_INVALID');
