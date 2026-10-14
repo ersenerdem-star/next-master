@@ -56,7 +56,13 @@ export function createSupplierReleaseActionsClient(deps:ClientDependencies) {
     },
     async submit(action:DurableAction,signal?:AbortSignal) {
       const {data}=await request(`/api/supplier-price-release-${action.kind}`,{action,signal});
-      try{return parseActionReceipt(data,action.scope.releaseId,action.command.decisionId);}
+      try{
+        const receipt=parseActionReceipt(data,action.scope.releaseId,action.command.decisionId);
+        if(action.kind==='review'&&(receipt.status==='published'||receipt.action!==('action' in action.command?action.command.action:undefined)))throw new Error('ACTION_RECEIPT_INVALID');
+        if(action.kind==='publish'&&(['rechecked_clear','rejected'].includes(receipt.status)
+          ||['queued','running'].includes(receipt.status)&&receipt.action!=='publish'))throw new Error('ACTION_RECEIPT_INVALID');
+        return receipt;
+      }
       catch{throw new SupplierReleaseActionError('ACTION_OUTCOME_UNKNOWN','unknown');}
     },
   };

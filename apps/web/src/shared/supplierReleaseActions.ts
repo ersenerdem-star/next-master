@@ -7,7 +7,7 @@ export type ReviewCommand = {
 export type PublishCommand = {releaseId:string; decisionId:string; expectedReviewRevision:number; expectedPreviousPublicationId:string|null};
 export type ActionKind = 'review' | 'publish';
 export type ActionReceipt = {
-  releaseId:string; decisionId:string; status:'queued'|'running'|'rechecked_clear'|'review_required'|'rejected'|'published';
+  releaseId:string; decisionId:string; status:'queued'|'running'|'rechecked_clear'|'review_required'|'rejected'|'published'|'failed';
   published:boolean; replayed:boolean; action?:ReviewAction|'publish'; reviewRevision?:number;
   publicationId?:string; version?:number; expectedPreviousPublicationId?:string|null; isCurrent?:boolean; errorCode?:string|null;
 };
@@ -33,7 +33,7 @@ const count=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v
 const uuid=(v:unknown):v is string=>typeof v==='string'&&UUID.test(v);
 const nullableUuid=(v:unknown)=>v===null||uuid(v);
 const code=(v:unknown)=>v===null||typeof v==='string'&&/^[A-Z][A-Z0-9_]{0,159}$/.test(v);
-const audit=(v:unknown)=>v===null||record(v)!==null&&JSON.stringify(v).length<=32000;
+const audit=(v:unknown)=>v===null||record(v)!==null&&new TextEncoder().encode(JSON.stringify(v)).byteLength<=16384;
 const clone=<T,>(v:T):T=>JSON.parse(JSON.stringify(v));
 
 export function releaseActionsTargetEnabled(config:{enabled?:string;productionEnabled?:string;productionTarget?:string;supabaseUrl?:string;origin?:string}) {
@@ -47,12 +47,15 @@ export function releaseActionsTargetEnabled(config:{enabled?:string;productionEn
 export function parseActionReceipt(value:unknown, releaseId:string, decisionId:string):ActionReceipt {
   const r=record(value);
   if(!r||r.releaseId!==releaseId||r.decisionId!==decisionId||typeof r.published!=='boolean'||typeof r.replayed!=='boolean'
-    ||!['queued','running','rechecked_clear','review_required','rejected','published'].includes(String(r.status)))throw new Error('ACTION_RECEIPT_INVALID');
-  if(r.status==='published'&&(!r.published||!uuid(r.publicationId)||!count(r.version)||!count(r.reviewRevision)
+    ||!['queued','running','rechecked_clear','review_required','rejected','published','failed'].includes(String(r.status)))throw new Error('ACTION_RECEIPT_INVALID');
+  if(r.status==='published'&&(!r.published||!uuid(r.publicationId)||!count(r.version)||r.version<1||!count(r.reviewRevision)
     ||!nullableUuid(r.expectedPreviousPublicationId)||typeof r.isCurrent!=='boolean'))throw new Error('ACTION_RECEIPT_INVALID');
   if(r.status!=='published'&&r.published!==false)throw new Error('ACTION_RECEIPT_INVALID');
   if(r.reviewRevision!==undefined&&!count(r.reviewRevision)||r.errorCode!==undefined&&!code(r.errorCode))throw new Error('ACTION_RECEIPT_INVALID');
   if(r.action!==undefined&&!['recheck','reject','publish'].includes(String(r.action)))throw new Error('ACTION_RECEIPT_INVALID');
+  if(['queued','running'].includes(String(r.status))&&!['recheck','reject','publish'].includes(String(r.action)))throw new Error('ACTION_RECEIPT_INVALID');
+  if(['rechecked_clear','rejected'].includes(String(r.status))&&(!count(r.reviewRevision)||!['recheck','reject'].includes(String(r.action))))throw new Error('ACTION_RECEIPT_INVALID');
+  if(r.status==='failed'&&typeof r.errorCode!=='string')throw new Error('ACTION_RECEIPT_INVALID');
   // Persist only the decision receipt; never copy arbitrary server fields.
   const result:ActionReceipt={releaseId,decisionId,status:r.status as ActionReceipt['status'],published:r.published,replayed:r.replayed};
   for(const key of ['action','reviewRevision','publicationId','version','expectedPreviousPublicationId','isCurrent','errorCode'] as const)
@@ -65,7 +68,8 @@ function parseOperation(v:unknown,releaseId:string):ReleaseOperation|null {
   const r=record(v);
   if(!r||!uuid(r.decisionId)||!['queued','running','completed','failed'].includes(String(r.status))||!code(r.errorCode))throw new Error('ACTION_EVIDENCE_INVALID');
   const receipt=r.receipt===null?null:parseActionReceipt(r.receipt,releaseId,r.decisionId);
-  if(r.status==='completed'&&(!receipt||['queued','running'].includes(receipt.status)))throw new Error('ACTION_EVIDENCE_INVALID');
+  if(r.status==='completed'&&(!receipt||['queued','running','failed'].includes(receipt.status)))throw new Error('ACTION_EVIDENCE_INVALID');
+  if(r.status==='failed'&&typeof r.errorCode!=='string')throw new Error('ACTION_EVIDENCE_INVALID');
   return {decisionId:r.decisionId,status:r.status as ReleaseOperation['status'],receipt,errorCode:r.errorCode as string|null};
 }
 
@@ -128,8 +132,8 @@ export function prepareDurableAction(storage:ReceiptStorage,scope:ActionScope,ki
 }
 export function updateDurableAction(storage:ReceiptStorage,r:DurableAction,result:{receipt?:ActionReceipt;errorCode?:string;unknown?:boolean}):DurableAction {
   const receipt=result.receipt?parseActionReceipt(result.receipt,r.scope.releaseId,r.command.decisionId):null;
-  return saveDurableAction(storage,{...r,receipt,errorCode:result.errorCode||null,
-    phase:receipt?(['queued','running'].includes(receipt.status)?'pending':'completed'):result.unknown?'unknown':'failed'});
+  return saveDurableAction(storage,{...r,receipt,errorCode:result.errorCode||receipt?.errorCode||null,
+    phase:receipt?(receipt.status==='failed'?'failed':['queued','running'].includes(receipt.status)?'pending':'completed'):result.unknown?'unknown':'failed'});
 }
 export function reconcileDurableAction(storage:ReceiptStorage,r:DurableAction,e:ReleaseActionEvidence):DurableAction {
   if(e.actorId!==r.scope.actorId||e.organizationId!==r.scope.organizationId||e.releaseId!==r.scope.releaseId)throw new Error('ACTION_ACTOR_CHANGED');

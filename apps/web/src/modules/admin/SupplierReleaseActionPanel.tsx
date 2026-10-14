@@ -35,16 +35,19 @@ export function SupplierReleaseActionView(p:ViewProps) {
       <span>{tr?'Çakışma':'Conflicts'}: {e.conflictRows.toLocaleString()} · {tr?'Reddedilen':'Rejected'}: {e.rejectedRows.toLocaleString()} · {tr?'Uyarı':'Warnings'}: {e.warningRows.toLocaleString()}</span>
       <span>{e.sourceVerified?(tr?'Dosya kaynağı doğrulandı.':'Source file verified.'):(tr?'Dosya kaynağı henüz doğrulanmadı.':'Source file has not been verified.')}</span>
       <span>{tr?'Şu anki yayın':'Current publication'}: {e.currentPublicationVersion===null?(tr?'Önceki yayın yok':'No previous publication'):`v${e.currentPublicationVersion}`}</span>
-      {e.currentPublicationId?<span className="operations-subtle">{e.currentPublicationId}</span>:null}
+      {e.currentPublicationId?<details><summary>{tr?'Teknik ayrıntılar':'Technical details'}</summary><span className="operations-subtle">{e.currentPublicationId}</span></details>:null}
+      {remotePending?<p role="status">{e.publishOperation&&['queued','running'].includes(e.publishOperation.status)
+        ?(tr?'Fiyat yayını sürüyor. Sonuç otomatik kontrol ediliyor.':'Price publication is in progress. Its result is checked automatically.')
+        :(tr?'Kontrol sürüyor. Sonuç otomatik kontrol ediliyor.':'Review is in progress. Its result is checked automatically.')}</p>:null}
       {e.canReview?<div className="list-stack">
         <label>{tr?'İnceleme kararı':'Review decision'}<select value={p.reason} disabled={p.busy||pending||remotePending||Boolean(p.error)} onChange={event=>p.onReason(event.target.value as ReviewReason)}>
-          <option value="comparison_repaired">{tr?'Karşılaştırma verisi düzeltildi — yeniden kontrol et':'Comparison data repaired — recheck'}</option>
+          <option value="comparison_repaired">{tr?'Marka ve dosya kontrolünü tamamla':'Complete brand and file checks'}</option>
           <option value="wrong_brand_file">{tr?'Yanlış marka dosyası — reddet':'Wrong brand file — reject'}</option>
           <option value="wrong_source_file">{tr?'Yanlış kaynak dosyası — reddet':'Wrong source file — reject'}</option>
         </select></label>
-        <p>{tr?'Yeniden kontrol, marka ve dosya doğrulamasını tekrar çalıştırır. Bu adım fiyatları yayınlamaz.':'Rechecking repeats brand and source validation. This step does not publish prices.'}</p>
+        <p>{tr?'Bu adım marka ve dosya doğrulamasını çalıştırır. Fiyat yayını için ayrıca onay gerekir.':'This step checks the brand and source file. Publication requires a separate confirmation.'}</p>
         <Button variant="secondary" disabled={p.busy||p.loading||pending||remotePending||Boolean(p.error)} onClick={p.onReview}>
-          {p.reason==='comparison_repaired'?(tr?'Yeniden kontrol et':'Recheck'):(tr?'Dosyayı reddet':'Reject source')}
+          {p.reason==='comparison_repaired'?(tr?'Kontrolü tamamla':'Complete checks'):(tr?'Dosyayı reddet':'Reject source')}
         </Button>
       </div>:null}
       {ready?<p role="status">{tr?'Güncel sunucu kontrolü yayına hazır olduğunu doğruladı.':'The current server check confirms that this release is ready to publish.'}</p>
@@ -69,7 +72,7 @@ export function SupplierReleaseActionView(p:ViewProps) {
         :r.receipt?.status==='rejected'?(tr?'Dosya reddedildi; yayınlanmadı.':'Source rejected; not published.')
         :(tr?'İnceleme gerekli; yayınlanmadı.':'Review required; not published.');
       return <div key={kind} role="status" className="list-stack"><strong>{label}: {status}</strong>
-        <span className="operations-subtle">{tr?'İşlem kimliği':'Decision ID'}: {r.command.decisionId}</span>
+        <details><summary>{tr?'Teknik ayrıntılar':'Technical details'}</summary><span className="operations-subtle">{tr?'İşlem kimliği':'Decision ID'}: {r.command.decisionId}</span></details>
         {unresolved(r)?<Button variant="secondary" disabled={p.busy||p.loading||!e||Boolean(p.error)} onClick={()=>p.onRetry(kind)}>
           {tr?'Aynı işlemin sonucunu kontrol et':'Check the same decision'}
         </Button>:null}

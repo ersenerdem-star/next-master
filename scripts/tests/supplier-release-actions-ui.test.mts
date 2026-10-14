@@ -135,6 +135,21 @@ test('ambiguous response body is unknown and extra server fields are excluded fr
   assert.doesNotMatch([...s.map.values()].join(''),/must-not-persist|priceRows|buy_price/);
 });
 
+test('a terminal failed queued action remains visible and does not masquerade as missing evidence',()=>{
+  const s=storage(),scope=actionScope(evidence,origin),r=prepareDurableAction(s,scope,'publish',publishCommand(evidence,id(23)));
+  const failed=parseReleaseActionEvidence({...evidence,publishOperation:{decisionId:id(23),status:'failed',errorCode:'ACTION_SESSION_EXPIRED',
+    receipt:{releaseId:evidence.releaseId,decisionId:id(23),action:'publish',status:'failed',errorCode:'ACTION_SESSION_EXPIRED',published:false,replayed:false}}},evidence.releaseId);
+  const result=reconcileDurableAction(s,r,failed);
+  assert.equal(result.phase,'failed');assert.equal(result.errorCode,'ACTION_SESSION_EXPIRED');
+});
+
+test('review audit uses the same UTF-8 byte limit as the API and mismatched action receipts are unknown',async()=>{
+  assert.throws(()=>parseReleaseActionEvidence({...evidence,brandIdentityAudit:{note:'ü'.repeat(8200)}},id(3)),/ACTION_EVIDENCE_INVALID/);
+  const s=storage(),r=prepareDurableAction(s,actionScope(evidence,origin),'publish',publishCommand(evidence,id(24)));
+  await assert.rejects(client(async()=>Response.json({releaseId:id(3),decisionId:id(24),action:'recheck',status:'rechecked_clear',
+    reviewRevision:3,published:false,replayed:false})).submit(r),(e:SupplierReleaseActionError)=>e.outcome==='unknown');
+});
+
 test('evidence cannot enable publication from validated status alone, incomplete counters, held audit, or another pending operation',()=>{
   assert.equal(releasePublicationReady(parseReleaseActionEvidence(evidence,id(3))),true);
   for(const patch of [{canPublish:false},{sourceVerified:false},{mode:'merge'},{status:'staged'},{errorCode:'VALIDATION_REVIEW_REQUIRED'},
@@ -173,4 +188,18 @@ test('rendered stale/held/unknown cases keep publication disabled despite an ear
   }
   const html=render({records:{review:null,publish:unknown}});
   assert.match(html,/Aynı işlemin sonucunu kontrol et/);assert.match(html,new RegExp(id(26)));
+});
+
+test('initial review uses neutral completion language and remote operations remain visible without local receipts',()=>{
+  const initial=render({evidence:held});
+  assert.match(initial,/Marka ve dosya kontrolünü tamamla/);assert.match(initial,/Kontrolü tamamla/);
+  assert.doesNotMatch(initial,/verisi düzeltildi/);
+  for(const kind of ['review','publish'] as const) {
+    const html=render({evidence:{...held,[`${kind}Operation`]:{decisionId:id(30),status:'running',receipt:null,errorCode:null}}});
+    assert.match(html,kind==='review'?/Kontrol sürüyor/:/Fiyat yayını sürüyor/);
+  }
+  const s=storage(),r=prepareDurableAction(s,actionScope(evidence,origin),'publish',publishCommand(evidence,id(31)));
+  const html=render({records:{review:null,publish:r}});
+  const details=html.match(/<details>[\s\S]*?<\/details>/g)||[];
+  assert.ok(details.some(text=>text.includes(id(6))));assert.ok(details.some(text=>text.includes(id(31))));
 });
