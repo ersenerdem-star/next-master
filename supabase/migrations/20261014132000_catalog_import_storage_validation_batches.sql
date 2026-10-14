@@ -212,9 +212,9 @@ begin
     where run_id = v_run.id and organization_id = input_organization_id;
 
     update public.catalog_import_runs
-    set status = case when v_error > 0 then 'validation_failed' else 'validated' end,
-        finished_at = case when v_error > 0 then now() else null end,
-        error_message = case when v_error > 0 then 'Catalog import validation failed' else null end,
+    set status = case when v_total = 0 or v_error > 0 then 'validation_failed' else 'validated' end,
+        finished_at = case when v_total = 0 or v_error > 0 then now() else null end,
+        error_message = case when v_total = 0 then 'Catalog import run has no staged rows' when v_error > 0 then 'Catalog import validation failed' else null end,
         staged_rows = v_total,
         valid_rows = greatest(v_total - v_error, 0),
         error_rows = v_error,
@@ -227,7 +227,7 @@ begin
   end if;
 
   return jsonb_build_object(
-    'status', case when v_has_more then 'validating' when v_error > 0 then 'validation_failed' else 'validated' end,
+    'status', case when v_has_more then 'validating' when v_total = 0 or v_error > 0 then 'validation_failed' else 'validated' end,
     'run_id', v_run.id,
     'batch_processed', v_batch_count,
     'validation_cursor', v_next_cursor,
