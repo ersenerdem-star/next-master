@@ -1983,6 +1983,7 @@ export const trMessages = {
     "suppliers.import.cloudTarget": "Bulut tedarikçi fiyat hedefi",
     "suppliers.import.expectedColumns": "Beklenen kolonlar: Product_Code, Buy_Price_EUR. Opsiyonel: Brand, Product_Name, OEM_No, Price_Date, MOQ, Order_Multiple, Lead_Time_Days, Notes, EAN, Vehicle, Vehicle_Model, Market_Segment, Weight_kg, Description_TR, Origin.",
     "suppliers.import.requiredHint": "Değiştir modu doğrulamadan sonra bu tedarikçi/marka için mevcut aktif satırları emekliye ayırır.",
+    "suppliers.import.verifiedRequiredHint": "Seçili tedarikçi ve markanın tam fiyat listesini yükleyin. Dosyanın yüklenmesi veya doğrulanması fiyatları değiştirmez; fiyatlar ayrı bir yayınlama adımından sonra etkinleşir.",
     "suppliers.manual.title": "Manuel Tedarikçi Fiyatı",
     "suppliers.manual.subtitle": "Tek bir tedarikçi alış fiyatı oluşturun veya güncelleyin.",
     "suppliers.manual.pipelineHint": "Manuel fiyatlar içe aktarılan fiyatlarla aynı aktif tedarikçi fiyat görünümünü kullanır.",

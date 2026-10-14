@@ -935,7 +935,7 @@ export function SuppliersPage() {
                 }}>Check this upload</Button>:null}
               </div>
             </section>:null}
-            <div className="modal-hint">{p("suppliers.import.requiredHint")}</div>
+            <div className="modal-hint">{p(verifiedUploadEnabled ? "suppliers.import.verifiedRequiredHint" : "suppliers.import.requiredHint")}</div>
             <div className="modal-hint">{p("suppliers.import.expectedColumns", { columns: SUPPLIER_IMPORT_COLUMNS.join(", ") })}</div>
             <div className="toolbar">
               <Button

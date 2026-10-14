@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { build } from 'esbuild';
 import { requireVerifiedSupplierReplaceMode } from '../../apps/web/src/shared/supplierUploadProtocol.ts';
+import { enMessages } from '../../apps/web/src/i18n/locales/en.ts';
+import { trMessages } from '../../apps/web/src/i18n/locales/tr.ts';
 
 test('verified snapshot mode accepts exactly replace, without converting merge or unknown modes',()=>{
   assert.doesNotThrow(()=>requireVerifiedSupplierReplaceMode('replace'));
@@ -44,4 +46,19 @@ test('verified UI hides merge while the legacy branch retains its merge selectio
   assert.match(page.slice(end),/mode: importMode === "merge" \? "merge" : "replace"/);
   assert.match(page,/await startSupplierPriceListExport\(\{/);
   assert.match(page,/await downloadExportJob\(readyJob.id/);
+});
+
+test('verified upload hints require a complete scoped list and distinguish validation from publication in both languages',()=>{
+  const page=readFileSync(new URL('../../apps/web/src/presentation/pages/SuppliersPage.tsx',import.meta.url),'utf8');
+  assert.match(page,/p\(verifiedUploadEnabled \? "suppliers.import.verifiedRequiredHint" : "suppliers.import.requiredHint"\)/);
+  const tr=trMessages.purchases['suppliers.import.verifiedRequiredHint'];
+  assert.match(tr,/tedarikçi ve markanın tam fiyat listesini/);
+  assert.match(tr,/yüklenmesi veya doğrulanması fiyatları değiştirmez/);
+  assert.match(tr,/ayrı bir yayınlama adımından/);
+  const en=enMessages.purchases['suppliers.import.verifiedRequiredHint'];
+  assert.match(en,/complete price list for the selected supplier and brand/);
+  assert.match(en,/Uploading or validating the file does not change active prices/);
+  assert.match(en,/separate publication step is required/);
+  assert.equal(trMessages.purchases['suppliers.import.requiredHint'],'Değiştir modu doğrulamadan sonra bu tedarikçi/marka için mevcut aktif satırları emekliye ayırır.');
+  assert.equal(enMessages.purchases['suppliers.import.requiredHint'],'Replace mode retires current active rows for this supplier/brand after validation.');
 });

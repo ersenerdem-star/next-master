@@ -2007,6 +2007,7 @@ export const enMessages = {
     "suppliers.import.cloudTarget": "Cloud supplier price target",
     "suppliers.import.expectedColumns": "Expected columns: Product_Code, Buy_Price_EUR. Optional: Brand, Product_Name, OEM_No, Price_Date, MOQ, Order_Multiple, Lead_Time_Days, Notes, EAN, Vehicle, Vehicle_Model, Market_Segment, Weight_kg, Description_TR, Origin.",
     "suppliers.import.requiredHint": "Replace mode retires current active rows for this supplier/brand after validation.",
+    "suppliers.import.verifiedRequiredHint": "Upload the complete price list for the selected supplier and brand. Uploading or validating the file does not change active prices; a separate publication step is required.",
     "suppliers.manual.title": "Manual Supplier Price",
     "suppliers.manual.subtitle": "Create or update a single supplier buying price.",
     "suppliers.manual.pipelineHint": "Manual prices use the same active supplier price view as imported prices.",

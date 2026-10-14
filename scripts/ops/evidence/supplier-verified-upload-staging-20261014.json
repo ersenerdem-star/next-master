@@ -1,0 +1,56 @@
+{
+  "target": {
+    "site": "next-master-v3-staging-20261006",
+    "project_ref": "kaxsqafdevabkxofwdod",
+    "url": "https://next-master-v3-staging-20261006.netlify.app/"
+  },
+  "deployment": {
+    "commit": "2f5327b952de5f601c2fc40a70366ebda74e74e3",
+    "deploy_id": "6acf6cbaba9f77e87bd2ddc6"
+  },
+  "method": "Authenticated native Chrome UI admission, SHA-256, TUS private Storage transfer, finish and same-session status; read-only Supabase verification.",
+  "source": {
+    "file": "supplier-preparation-staging-canary-20261014.csv",
+    "bytes": 482,
+    "sha256": "b22d2fdebb17fd046665be08ccf26fdc5bdc65af5b8fd8e95a6d149cf504be0a",
+    "rows": 3,
+    "purpose": "Staging preparation only, no publication"
+  },
+  "pointer_before": {
+    "brand_id": "0e9fa984-fbbf-45d2-9a60-e7aa633dc928",
+    "release_id": "fed8b4fe-402e-40c5-967c-df587c91acdd",
+    "updated_at": "2026-10-12T22:13:30.27536+00:00",
+    "supplier_id": "786cbe53-6086-4782-a81f-7da95c6a1236",
+    "publication_id": "5f255b1f-63b0-49d8-8b2b-314bfab1a77b",
+    "organization_id": "b0000000-0000-4000-8000-000000000001"
+  },
+  "result": {
+    "session_id": "ffb6319f-4060-464c-b870-9f81ed8e2f8b",
+    "release_id": "c76682ae-673d-4066-a18d-00670eed6fe0",
+    "upload_status": "uploaded",
+    "total_bytes": 482,
+    "uploaded_bytes": 482,
+    "checksum_sha256": "b22d2fdebb17fd046665be08ccf26fdc5bdc65af5b8fd8e95a6d149cf504be0a",
+    "completed_at": "2026-10-14 11:55:15.063377+00",
+    "release_status": "validated",
+    "total_rows": 3,
+    "processed_rows": 3,
+    "accepted_rows": 3,
+    "conflict_rows": 0,
+    "rejected_rows": 0,
+    "error_code": "BRAND_IDENTITY_COMPARISON_PENDING",
+    "persisted_rows": 3,
+    "current_pointer": {
+      "release_id": "fed8b4fe-402e-40c5-967c-df587c91acdd",
+      "updated_at": "2026-10-12T22:13:30.27536+00:00",
+      "publication_id": "5f255b1f-63b0-49d8-8b2b-314bfab1a77b"
+    }
+  },
+  "browser_confirmation": "Verification: verified. Release: validated. 3 source rows. This is not publication confirmation.",
+  "screenshot": "/tmp/nm-staging-preparation-verified-upload.png",
+  "production": {
+    "unchanged_deploy_id": "6ac57511d27a107c6c49cff3",
+    "mutations_performed": false
+  },
+  "limits": "Brand identity comparison remains pending. No publication acceptance is claimed; current Clevite 1M pointer stayed unchanged."
+}
