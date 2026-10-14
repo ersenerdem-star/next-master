@@ -1,0 +1,1020 @@
+{
+  "schemaVersion": 1,
+  "scope": "local synthetic PostgreSQL17 read performance",
+  "migrationSha256": "1467fd587ce9f3bd0580e67dd9eb381e9a5b71021d2165e1267d48c82ef958a0",
+  "capturedAt": "2026-10-14T17:44:25.574Z",
+  "resources": {
+    "setupCpu": 2,
+    "measurementCpu": 0.5,
+    "memoryBytes": 1073741824
+  },
+  "fixture": {
+    "publishedRows": 1000000,
+    "catalogRows": 1000000,
+    "rawLegacyRows": 60656,
+    "legacySuppliers": 2,
+    "unownedEligibleLegacyRows": 30328,
+    "legacyCodesOverlapPublication": true
+  },
+  "limits": [
+    "Synthetic projection fixture; no provider connections or production rows.",
+    "Warm-cache local timings and forced generic plans are not production SLA. Autovacuum is disabled only on the three local fixture data tables; explicit VACUUM ANALYZE runs before measurement.",
+    "Source/ACL/full62 compatibility is separately verified by functional tests.",
+    "Fixture installs the seven relevant existing read indexes listed in indexNames, not unrelated production indexes.",
+    "Substring searches and offset-depth scaling are outside this default-preview performance proof; an earlier substring diagnostic performed one full catalog search scan.",
+    "Legacy candidate work scans60656 local rows per page; this proves bounded publication/catalog access, not an incremental legacy index redesign.",
+    "No remote deployment, provider query, authenticated browser, or production SLA is established by this local artifact."
+  ],
+  "indexNames": [
+    "idx_catalog_products_export_code_id",
+    "idx_catalog_products_export_exact_identity",
+    "idx_catalog_products_export_code_c_id",
+    "idx_supplier_prices_export_code_c",
+    "idx_release_rows_export_exact_eligible_count",
+    "idx_supplier_price_release_rows_portal_prefix",
+    "idx_supplier_price_release_rows_release_code"
+  ],
+  "priced": {
+    "rows": 5000,
+    "ms": 10759.62,
+    "plan": {
+      "executionMs": 1893.355,
+      "planningMs": 6.344,
+      "tempReadBlocks": 0,
+      "tempWrittenBlocks": 0,
+      "cteWork": [
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "pointers",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "releases",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "pointers",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "release_candidates",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "legacy_codes",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "price_codes",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "catalog_page",
+          "rows": 0,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "releases",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "page_codes",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "page_codes",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "pointers",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "published_best",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "legacy_best",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "supplier_best",
+          "rows": 10000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "ranked",
+          "rows": 10000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "price_summary",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "price_summary",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "catalog_page",
+          "rows": 0,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "releases",
+          "rows": 0,
+          "loops": 0,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 0,
+          "loops": 0,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "pointers",
+          "rows": 0,
+          "loops": 0,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "source_total",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "priced_rows",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "catalog_rows",
+          "rows": 0,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        }
+      ],
+      "scans": [
+        {
+          "relation": "supplier_current_price_pointers",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 1,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_price_publications",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 1,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_price_release_rows",
+          "node": "Index Scan",
+          "index": "idx_release_rows_export_exact_eligible_count",
+          "rows": 5000,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_prices",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 60656,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "catalog_products",
+          "node": "Index Scan",
+          "index": "idx_catalog_products_export_code_c_id",
+          "rows": 0,
+          "loops": 0,
+          "removed": 0
+        },
+        {
+          "relation": "catalog_products",
+          "node": "Index Scan",
+          "index": "idx_catalog_products_export_code_c_id",
+          "rows": 0,
+          "loops": 0,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_price_release_rows",
+          "node": "Index Scan",
+          "index": "idx_supplier_price_release_rows_portal_prefix",
+          "rows": 1,
+          "loops": 5000,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_prices",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 60656,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "suppliers",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 2,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "catalog_products",
+          "node": "Index Scan",
+          "index": "idx_catalog_products_export_exact_identity",
+          "rows": 1,
+          "loops": 5000,
+          "removed": 0
+        },
+        {
+          "relation": "catalog_products",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 0,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_price_release_rows",
+          "node": "Index Scan",
+          "index": "idx_release_rows_export_exact_eligible_count",
+          "rows": 0,
+          "loops": 0,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_prices",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 0,
+          "removed": 0
+        },
+        {
+          "relation": "brands",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 1,
+          "loops": 1,
+          "removed": 0
+        }
+      ]
+    }
+  },
+  "catalog": {
+    "rows": 5000,
+    "ms": 7360.95,
+    "plan": {
+      "executionMs": 749.826,
+      "planningMs": 0.427,
+      "tempReadBlocks": 0,
+      "tempWrittenBlocks": 0,
+      "cteWork": [
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "pointers",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "releases",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 0,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "pointers",
+          "rows": 0,
+          "loops": 0,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "release_candidates",
+          "rows": 0,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "legacy_codes",
+          "rows": 0,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "price_codes",
+          "rows": 0,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "catalog_page",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "releases",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "page_codes",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "page_codes",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "pointers",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "published_best",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "legacy_best",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "supplier_best",
+          "rows": 10000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "ranked",
+          "rows": 10000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 0,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "price_summary",
+          "rows": 0,
+          "loops": 0,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "price_summary",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "catalog_page",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "releases",
+          "rows": 0,
+          "loops": 0,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 0,
+          "loops": 0,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "pointers",
+          "rows": 0,
+          "loops": 0,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "source_total",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "priced_rows",
+          "rows": 0,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "catalog_rows",
+          "rows": 5000,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        }
+      ],
+      "scans": [
+        {
+          "relation": "supplier_current_price_pointers",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 1,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_price_publications",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 1,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_price_release_rows",
+          "node": "Index Scan",
+          "index": "idx_release_rows_export_exact_eligible_count",
+          "rows": 0,
+          "loops": 0,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_prices",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 0,
+          "removed": 0
+        },
+        {
+          "relation": "catalog_products",
+          "node": "Index Scan",
+          "index": "idx_catalog_products_export_code_c_id",
+          "rows": 0,
+          "loops": 0,
+          "removed": 0
+        },
+        {
+          "relation": "catalog_products",
+          "node": "Index Scan",
+          "index": "idx_catalog_products_export_code_c_id",
+          "rows": 5000,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_price_release_rows",
+          "node": "Index Scan",
+          "index": "idx_supplier_price_release_rows_portal_prefix",
+          "rows": 1,
+          "loops": 5000,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_prices",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 60656,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "suppliers",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 2,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "catalog_products",
+          "node": "Index Scan",
+          "index": "idx_catalog_products_export_exact_identity",
+          "rows": 0,
+          "loops": 0,
+          "removed": 0
+        },
+        {
+          "relation": "catalog_products",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 0,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_price_release_rows",
+          "node": "Index Scan",
+          "index": "idx_release_rows_export_exact_eligible_count",
+          "rows": 0,
+          "loops": 0,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_prices",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 0,
+          "removed": 0
+        },
+        {
+          "relation": "brands",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 1,
+          "loops": 1,
+          "removed": 0
+        }
+      ]
+    }
+  },
+  "catalogPreview": {
+    "rows": 50,
+    "ms": 185.15,
+    "plan": {
+      "executionMs": 404.029,
+      "planningMs": 2.374,
+      "tempReadBlocks": 0,
+      "tempWrittenBlocks": 0,
+      "cteWork": [
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "pointers",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "catalog_page",
+          "rows": 50,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "releases",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "page_codes",
+          "rows": 50,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "page_codes",
+          "rows": 50,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "pointers",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "published_best",
+          "rows": 50,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "legacy_best",
+          "rows": 0,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "supplier_best",
+          "rows": 50,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "ranked",
+          "rows": 50,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "price_summary",
+          "rows": 50,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "params",
+          "rows": 1,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        },
+        {
+          "node": "CTE Scan",
+          "cte": "catalog_page",
+          "rows": 50,
+          "loops": 1,
+          "removedByJoinFilter": 0
+        }
+      ],
+      "scans": [
+        {
+          "relation": "catalog_products",
+          "node": "Index Scan",
+          "index": "idx_catalog_products_export_code_c_id",
+          "rows": 50,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_current_price_pointers",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 1,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_price_publications",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 1,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_price_release_rows",
+          "node": "Index Scan",
+          "index": "idx_supplier_price_release_rows_release_code",
+          "rows": 1,
+          "loops": 50,
+          "removed": 0
+        },
+        {
+          "relation": "supplier_prices",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 60656,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "suppliers",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 2,
+          "loops": 1,
+          "removed": 0
+        },
+        {
+          "relation": "brands",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 1,
+          "loops": 1,
+          "removed": 0
+        }
+      ]
+    }
+  },
+  "salesCompatibility": {
+    "rows": 1000,
+    "ms": 532.44,
+    "catalogRows": 1000000
+  },
+  "server": {
+    "version": "PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "work_mem": "4MB",
+    "plan_cache_mode": "force_generic_plan"
+  },
+  "completedAt": "2026-10-14T17:45:48.528Z",
+  "reproduction": {
+    "command": "RUN_MASTER_MIXED_PG_PERF=1 node --test scripts/tests/master-price-mixed-scope-performance.test.mjs",
+    "freshContainerTestPassed": true,
+    "testDurationMs": 84389.335459
+  },
+  "timingInterpretation": "Fresh fixture first RPC and later warm EXPLAIN timings are reported separately. They are not production latency guarantees; correctness gates use actual scan cardinality and statement completion, not a fragile elapsed-time threshold.",
+  "retainedFixtureWarmComparison": {
+    "migrationSha256": "1467fd587ce9f3bd0580e67dd9eb381e9a5b71021d2165e1267d48c82ef958a0",
+    "pricedRpcMs": 2040.54,
+    "pricedExplainMs": 750.291,
+    "catalogRpcMs": 586.9,
+    "catalogExplainMs": 497.525,
+    "previewRpcMs": 166.93,
+    "previewExplainMs": 114.473,
+    "sales1000RpcMs": 204.85
+  },
+  "regressionsPrevented": [
+    {
+      "beforeSha256": "553e1d82a0226060e52887d688be3faab23829166783deff20ac9bdfad040f28",
+      "failure": "Priced5000 continuation exceeded30s. Explicit C code collation prevented catalog exact-identity expression index lookup; generic plan used per-code SeqScan over1M catalog rows.",
+      "fix": "Explicit default collation on catalog exact-code equality matches the existing immutable index; no new index added."
+    },
+    {
+      "failure": "Flat catalog preview join scanned1M catalog rows for default50-row page under generic plan.",
+      "fix": "Move ORDER/LIMIT/OFFSET into correlated LATERAL lookup; measured50 catalog rows plus50 indexed publication lookups."
+    }
+  ]
+}
