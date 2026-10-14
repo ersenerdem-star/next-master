@@ -2006,7 +2006,7 @@ export const enMessages = {
     "suppliers.import.title": "Import Supplier Prices",
     "suppliers.import.subtitle": "Upload supplier buying prices into the selected supplier and brand.",
     "suppliers.import.cloudTarget": "Cloud supplier price target",
-    "suppliers.import.expectedColumns": "Expected columns: Product_Code, Buy_Price_EUR. Optional: Brand, Product_Name, OEM_No, Price_Date, MOQ, Order_Multiple, Lead_Time_Days, Notes, EAN, Vehicle, Vehicle_Model, Market_Segment, Weight_kg, Description_TR, Origin.",
+    "suppliers.import.expectedColumns": "Supported price fields: {columns}. Required: Product_Code, Buy_Price_EUR. Additional product fields: EAN, Vehicle, Vehicle_Model, Market_Segment, Weight_kg, Description_TR, Origin.",
     "suppliers.import.requiredHint": "Replace mode retires current active rows for this supplier/brand after validation.",
     "suppliers.import.verifiedRequiredHint": "Upload the complete price list for the selected supplier and brand. Uploading or validating the file does not change active prices; a separate publication step is required.",
     "suppliers.import.verifiedMetadataHint": "Order_Multiple, Stock_Qty and Valid_To are not supported in this upload. If your source uses them, stop and request a compatible import; do not remove meaningful values. Additional product details are retained with the supplier price source. Update catalog information separately through Catalog Import.",

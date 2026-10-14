@@ -5,6 +5,7 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {SupplierLegacyHistory} from '../../apps/web/src/modules/admin/SupplierLegacyHistory.tsx';
 import {downloadSupplierTemplate,VERIFIED_SUPPLIER_IMPORT_COLUMNS} from '../../apps/web/src/shared/importTemplates.ts';
 import {parseCsv} from '../../apps/web/src/shared/csv.ts';
+import {I18nProvider,useI18n} from '../../apps/web/src/i18n/I18nProvider.tsx';
 
 test('verified template actual download omits unsupported order multiple and keeps every value aligned',async()=>{
  const original={document:globalThis.document,window:globalThis.window,create:URL.createObjectURL,revoke:URL.revokeObjectURL};
@@ -38,4 +39,19 @@ test('verified status center history starts collapsed while retaining all cards 
 test('environments without verified release review keep legacy operations immediately visible',()=>{
  const html=renderToStaticMarkup(React.createElement(SupplierLegacyHistory,{enabled:false,title:'Earlier upload history',summary:'1 record',children:React.createElement('button',{},'Retry existing upload')}));
  assert.doesNotMatch(html,/<details|<summary/);assert.match(html,/>Retry existing upload<\/button>/);
+});
+
+test('actual Turkish and English translations interpolate verified fields instead of advertising legacy order multiple',()=>{
+ function Hint({columns}:{columns:string}){const {t}=useI18n();return React.createElement('p',{},t('purchases.suppliers.import.expectedColumns',{columns}));}
+ const previous=(globalThis as any).React;(globalThis as any).React=React;
+ try{
+  for(const preferredLocale of ['tr','en']){
+   const render=(columns:string)=>renderToStaticMarkup(React.createElement(I18nProvider,{preferredLocale,children:React.createElement(Hint,{columns})}));
+   const verified=render(VERIFIED_SUPPLIER_IMPORT_COLUMNS.join(', '));
+   assert.doesNotMatch(verified,/Order_Multiple|Stock_Qty|Valid_To|\{columns\}/);
+   assert.match(verified,/Product_Code, Brand, Product_Name, OEM_No, Buy_Price_EUR/);assert.match(verified,/Lead_Time_Days, Notes/);
+   assert.match(verified,/EAN, Vehicle, Vehicle_Model/);
+   const legacy=render([...VERIFIED_SUPPLIER_IMPORT_COLUMNS,'Order_Multiple'].join(', '));assert.match(legacy,/Order_Multiple/);
+  }
+ }finally{(globalThis as any).React=previous;}
 });

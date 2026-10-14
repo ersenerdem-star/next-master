@@ -1982,7 +1982,7 @@ export const trMessages = {
     "suppliers.import.title": "Tedarikçi Fiyatlarını İçe Aktar",
     "suppliers.import.subtitle": "Tedarikçi alış fiyatlarını seçili tedarikçi ve markaya yükleyin.",
     "suppliers.import.cloudTarget": "Bulut tedarikçi fiyat hedefi",
-    "suppliers.import.expectedColumns": "Beklenen kolonlar: Product_Code, Buy_Price_EUR. Opsiyonel: Brand, Product_Name, OEM_No, Price_Date, MOQ, Order_Multiple, Lead_Time_Days, Notes, EAN, Vehicle, Vehicle_Model, Market_Segment, Weight_kg, Description_TR, Origin.",
+    "suppliers.import.expectedColumns": "Desteklenen fiyat alanları: {columns}. Zorunlu: Product_Code, Buy_Price_EUR. Ek ürün alanları: EAN, Vehicle, Vehicle_Model, Market_Segment, Weight_kg, Description_TR, Origin.",
     "suppliers.import.requiredHint": "Değiştir modu doğrulamadan sonra bu tedarikçi/marka için mevcut aktif satırları emekliye ayırır.",
     "suppliers.import.verifiedRequiredHint": "Seçili tedarikçi ve markanın tam fiyat listesini yükleyin. Dosyanın yüklenmesi veya doğrulanması fiyatları değiştirmez; fiyatlar ayrı bir yayınlama adımından sonra etkinleşir.",
     "suppliers.import.verifiedMetadataHint": "Order_Multiple, Stock_Qty ve Valid_To bu yüklemede desteklenmez. Kaynağınız bu alanları kullanıyorsa işlemi durdurup uyumlu içe aktarma talep edin; anlamlı değerleri silmeyin. Ek ürün bilgileri tedarikçi fiyat kaynağıyla saklanır. Katalog bilgilerini Katalog İçe Aktarma üzerinden ayrıca güncelleyin.",
