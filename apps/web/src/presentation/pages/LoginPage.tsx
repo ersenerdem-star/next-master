@@ -169,105 +169,136 @@ export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
     : t("auth.loginDescription");
   const brandingLabel = branding.label || t("auth.adminWorkspace");
   const loginInitials = buildLoginInitials(branding.companyName);
+  const adminEyebrow = locale === "tr" ? "Next Master operasyon konsolu" : "Next Master operations console";
+  const adminHeadline = recoveryMode
+    ? locale === "tr"
+      ? "Erişiminizi güvenli şekilde yenileyin."
+      : "Restore access securely."
+    : locale === "tr"
+      ? "Parçalar, fiyatlar ve operasyonlar tek akışta."
+      : "Parts, pricing and operations in one flow.";
+  const adminDescription = recoveryMode
+    ? locale === "tr"
+      ? "Yönetim çalışma alanınıza dönmek için yeni parolanızı belirleyin."
+      : "Set a new password to return to your operations workspace."
+    : locale === "tr"
+      ? "Tedarikçi yüklemeleri, katalog senkronu ve ticari kararlar için merkez çalışma alanı."
+      : "The command center for supplier uploads, catalog sync and commercial decisions.";
 
   return (
     <div className="login-shell login-shell--admin">
-      <div className="login-card">
-        {!recoveryMode ? (
-          <div className="login-brand">
-            <div className={`login-brand__logo${branding.logoDataUrl ? " login-brand__logo--image" : ""}`} aria-hidden="true">
-              {branding.logoDataUrl ? <img src={branding.logoDataUrl} alt="" className="login-brand__logo-image" /> : loginInitials}
-            </div>
-            <div className="login-brand__copy">
-              <span>{brandingLabel}</span>
-              <strong>{branding.companyName}</strong>
-            </div>
+      <div className="login-shell__grid">
+        <section className="login-shell__visual" aria-label={adminEyebrow}>
+          <div className="login-shell__visual-copy">
+            <span className="login-shell__eyebrow">{adminEyebrow}</span>
+            <h1>{adminHeadline}</h1>
+            <p>{adminDescription}</p>
           </div>
-        ) : null}
-        <div>
-          <h1>{title}</h1>
-          <p>{description}</p>
-        </div>
-        {!recoveryMode ? (
-          <Input
-            label={t("auth.emailOrUserName")}
-            value={email}
-            onChange={setEmail}
-            placeholder={t("auth.emailOrUserNamePlaceholder")}
-          />
-        ) : null}
-        <Input
-          label={recoveryMode ? t("auth.newPassword") : t("auth.password")}
-          type={showPassword ? "text" : "password"}
-          value={password}
-          onChange={setPassword}
-          placeholder={recoveryMode ? t("auth.newPassword") : t("auth.password")}
-        />
-        {recoveryMode ? (
-          <Input
-            label={t("auth.confirmPassword")}
-            type="password"
-            value={confirmPassword}
-            onChange={setConfirmPassword}
-            placeholder={t("auth.confirmPassword")}
-          />
-        ) : null}
-        <div className="login-options">
-          <Select
-            label={t("common.language")}
-            value={locale}
-            options={localeOptions}
-            onChange={(value) => setLocale(value as LocaleCode)}
-            fieldClassName="field--mini"
-          />
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={showPassword}
-              onChange={(event) => setShowPassword(event.target.checked)}
+          <div className="login-shell__signals" aria-label={locale === "tr" ? "Çalışma alanı sinyalleri" : "Workspace signals"}>
+            <span>{locale === "tr" ? "Canlı veri akışı" : "Live data flow"}</span>
+            <span>{locale === "tr" ? "İzlenebilir işlemler" : "Traceable operations"}</span>
+            <span>{locale === "tr" ? "Tek ekip çalışma alanı" : "One team workspace"}</span>
+          </div>
+        </section>
+
+        <div className="login-card login-card--admin">
+          {!recoveryMode ? (
+            <div className="login-brand">
+              <div className={`login-brand__logo${branding.logoDataUrl ? " login-brand__logo--image" : ""}`} aria-hidden="true">
+                {branding.logoDataUrl ? <img src={branding.logoDataUrl} alt="" className="login-brand__logo-image" /> : loginInitials}
+              </div>
+              <div className="login-brand__copy">
+                <span>{brandingLabel}</span>
+                <strong>{branding.companyName}</strong>
+              </div>
+            </div>
+          ) : null}
+          <div className="login-card__intro">
+            <span>{recoveryMode ? t("auth.resetPassword") : t("auth.adminWorkspace")}</span>
+            <h2>{title}</h2>
+            <p>{description}</p>
+          </div>
+          {!recoveryMode ? (
+            <Input
+              label={t("auth.emailOrUserName")}
+              value={email}
+              onChange={setEmail}
+              placeholder={t("auth.emailOrUserNamePlaceholder")}
             />
-            <span>{t("auth.showPassword")}</span>
-          </label>
+          ) : null}
+          <Input
+            label={recoveryMode ? t("auth.newPassword") : t("auth.password")}
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={setPassword}
+            placeholder={recoveryMode ? t("auth.newPassword") : t("auth.password")}
+          />
+          {recoveryMode ? (
+            <Input
+              label={t("auth.confirmPassword")}
+              type="password"
+              value={confirmPassword}
+              onChange={setConfirmPassword}
+              placeholder={t("auth.confirmPassword")}
+            />
+          ) : null}
+          <div className="login-options">
+            <Select
+              label={t("common.language")}
+              value={locale}
+              options={localeOptions}
+              onChange={(value) => setLocale(value as LocaleCode)}
+              fieldClassName="field--mini"
+            />
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={showPassword}
+                onChange={(event) => setShowPassword(event.target.checked)}
+              />
+              <span>{t("auth.showPassword")}</span>
+            </label>
+          </div>
+          {error ? <div className="error-text">{error}</div> : null}
+          {message ? <div className="success-text">{message}</div> : null}
+          {recoveryMode ? (
+            <Button onClick={handleResetPassword} disabled={loading}>
+              {loading ? t("common.saving") : t("auth.saveNewPassword")}
+            </Button>
+          ) : forgotMode ? (
+            <>
+              <Button onClick={handleForgotPassword} disabled={loading}>
+                {loading ? t("common.sending") : t("auth.sendResetEmail")}
+              </Button>
+              <button
+                className="text-button"
+                onClick={() => {
+                  setForgotMode(false);
+                  setError("");
+                  setMessage("");
+                }}
+              >
+                {t("auth.backToSignIn")}
+              </button>
+            </>
+          ) : (
+            <>
+              <Button onClick={handleLogin} disabled={loading}>
+                {loading ? t("auth.signingIn") : t("auth.signIn")}
+              </Button>
+              <button
+                className="text-button"
+                onClick={() => {
+                  setForgotMode(true);
+                  setError("");
+                  setMessage("");
+                }}
+              >
+                {t("auth.forgotPassword")}
+              </button>
+            </>
+          )}
         </div>
-        {error ? <div className="error-text">{error}</div> : null}
-        {message ? <div className="success-text">{message}</div> : null}
-        {recoveryMode ? (
-          <Button onClick={handleResetPassword} disabled={loading}>
-            {loading ? t("common.saving") : t("auth.saveNewPassword")}
-          </Button>
-        ) : forgotMode ? (
-          <>
-            <Button onClick={handleForgotPassword} disabled={loading}>
-              {loading ? t("common.sending") : t("auth.sendResetEmail")}
-            </Button>
-            <button
-              className="text-button"
-              onClick={() => {
-                setForgotMode(false);
-                setError("");
-                setMessage("");
-              }}
-            >
-              {t("auth.backToSignIn")}
-            </button>
-          </>
-        ) : (
-          <>
-            <Button onClick={handleLogin} disabled={loading}>
-              {loading ? t("auth.signingIn") : t("auth.signIn")}
-            </Button>
-            <button
-              className="text-button"
-              onClick={() => {
-                setForgotMode(true);
-                setError("");
-                setMessage("");
-              }}
-            >
-              {t("auth.forgotPassword")}
-            </button>
-          </>
-        )}
       </div>
     </div>
   );

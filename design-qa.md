@@ -6,11 +6,11 @@ source visual truth:
 
 implementation target: `http://localhost:4173/`
 intended viewport: 1440 x 1024 CSS px
-state: local build opened successfully, but the local origin is unauthenticated and renders the sign-in gate. An authenticated admin/customer session was not transferred from the production origin.
+state: local build opened successfully. The admin login surface was visually inspected locally; the portal route remains on its local session bootstrap and an authenticated customer session was not transferred from the production origin.
 
 ## Findings
 
-- [P1] Authenticated visual comparison is blocked. The selected designs target the admin supplier/report workspace and the authenticated customer portal; the local preview currently shows `Loading sign-in...` and cannot reach either state without credentials. A production screenshot was inspected for the current portal, but it cannot serve as the local implementation capture.
+- [P1] Authenticated visual comparison is blocked. The selected designs target the admin supplier/report workspace and the authenticated customer portal; the local preview can render the admin login but cannot reach authenticated workspaces, while the portal route remains on its local session bootstrap. A production screenshot was inspected for the current portal, but it cannot serve as the local implementation capture.
 - [P2] Responsive and interactive state comparison remains pending. The local build needs an authenticated capture for the supplier upload modal, report tabs, portal search, and mobile navigation.
 
 ## Implementation checklist
@@ -21,6 +21,8 @@ state: local build opened successfully, but the local origin is unauthenticated 
 - [x] Add reports command banner.
 - [x] Replace the portal fixed-sidebar presentation with a single top navigation treatment on desktop.
 - [x] Hide build/branch metadata from the customer workspace header.
+- [x] Recompose the admin login around the selected operations-console concept.
+- [x] Recompose the customer login around the selected customer pricing concept.
 - [x] Run `npm run build --workspace apps/web` successfully.
 - [ ] Capture authenticated local admin and customer views after login/session setup.
 - [ ] Run visual comparison at desktop and mobile breakpoints.
