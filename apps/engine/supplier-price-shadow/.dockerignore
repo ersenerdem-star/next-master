@@ -3,6 +3,7 @@
 !package-lock.json
 !src/
 src/**
+!src/compact-rpc-retry.mjs
 !src/compact-verified-workflow.mjs
 !src/direct-verified-release-runner.mjs
 !src/worker.mjs

@@ -10,6 +10,7 @@ import {createVerifiedReleaseWorkflow} from "./verified-release-workflow.mjs";
 import {createSharedPreparedSource} from "./shared-prepared-source.mjs";
 import {createPartitionedVerifiedWorkflow} from "./partitioned-verified-workflow.mjs";
 import {createCompactVerifiedWorkflow} from './compact-verified-workflow.mjs';
+import {compactRpcTransportError,compactRpcHttpError} from './compact-rpc-retry.mjs';
 import {verifiedWorkflowVersion,requireCompactHistoryConfig,startVersionedVerifiedWorkflow,requireCompactHistoryDrained} from './verified-workflow-version.mjs';
 import {runDirectVerifiedRelease} from './direct-verified-release-runner.mjs';
 import {consumeUploadVerification} from './upload-verification-consumer.mjs';
@@ -44,17 +45,26 @@ function requireEnv(name, value) {
 async function callRpc(name, args) {
   const serviceMode=process.argv[2]==='--service';
   if(serviceMode&&!SERVICE_RPC_NAMES.has(name))throw Error('SERVICE_RPC_DENIED');
-  const response = await fetch(`${requireEnv("SUPABASE_URL", SUPABASE_URL)}/rest/v1/rpc/${name}`, {
-    method: "POST",
-    headers: supabaseApiHeaders(
-      requireEnv("SUPABASE_SERVICE_ROLE_KEY", SERVICE_ROLE_KEY),
-      "application/json",
-    ),
-    body: JSON.stringify(args),
-    redirect: 'error',
-    signal: AbortSignal.timeout(60000),
-  });
-  const rawBody = await response.text();
+  let response,rawBody;
+  try {
+    response = await fetch(`${requireEnv("SUPABASE_URL", SUPABASE_URL)}/rest/v1/rpc/${name}`, {
+      method: "POST",
+      headers: supabaseApiHeaders(
+        requireEnv("SUPABASE_SERVICE_ROLE_KEY", SERVICE_ROLE_KEY),
+        "application/json",
+      ),
+      body: JSON.stringify(args),
+      redirect: 'error',
+      signal: AbortSignal.timeout(60000),
+    });
+    rawBody = await response.text();
+  } catch(error) {
+    // A failed error-body read must not hide an already-known auth/domain
+    // response behind a retryable transport timeout.
+    if(serviceMode&&COMPACT_HISTORY&&response?.ok===false)
+      throw Error(`SERVICE_RPC_HTTP_${response.status}`);
+    throw serviceMode&&COMPACT_HISTORY?compactRpcTransportError(name,error):error;
+  }
   let body = {};
   try {
     body = rawBody ? JSON.parse(rawBody) : {};
@@ -62,6 +72,7 @@ async function callRpc(name, args) {
     body = { raw: rawBody.slice(0, 500) };
   }
   if (!response.ok) {
+    if(serviceMode&&COMPACT_HISTORY)throw compactRpcHttpError(name,response.status,body);
     if(serviceMode)throw Error(`SERVICE_RPC_HTTP_${response.status}`);
     const detail = [body?.message, body?.error, body?.hint, body?.details]
       .filter(Boolean)
