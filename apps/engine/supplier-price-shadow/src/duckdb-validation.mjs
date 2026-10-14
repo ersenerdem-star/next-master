@@ -4,6 +4,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {basename,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {once} from 'node:events';
+import {finished} from 'node:stream/promises';
 import {parseNormalizedSupplierPriceRowsFromXlsx} from './streaming-xlsx.mjs';
 import {parseNormalizedSupplierPriceRows} from './streaming-csv.mjs';
 import {applyReleaseSourceDate} from './storage-scan.mjs';
@@ -29,6 +30,10 @@ async function writeNormalizedCsv(inputPath,outputPath,sourceDate){
  // header must fail without destroying a stream with an in-flight write.
  const first=await rows.next();
  const output=createWriteStream(outputPath,{flags:'wx',mode:0o600});
+ const completed=finished(output);
+ // Observe an asynchronous open/write error even if the source parser fails
+ // before the first drain. Cleanup must wait for this owned stream to close.
+ completed.catch(()=>{});
  try{
   output.write('normalized_code,buy_price,currency,valid_from,row_status,error_message\n');
   const emit=async parsed=>{
@@ -42,8 +47,8 @@ async function writeNormalizedCsv(inputPath,outputPath,sourceDate){
    await emit(parsed);
   }
   output.end();
-  await once(output,'close');
- }catch(error){output.destroy();throw error;}
+  await completed;
+ }catch(error){output.destroy();await completed.catch(()=>{});throw error;}
 }
 
 // Current commercial prices and exports are EUR-only. Other currencies need

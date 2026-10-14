@@ -1,5 +1,16 @@
 import { createHash } from "node:crypto";
 
+export const SUPPLIER_SOURCE_COMPATIBILITY_POLICY = "supplier-price-commercial-fields-v1";
+// These fields affect commercial behavior but are not stored by release rows.
+// Never accept a nonempty value and silently replace it with an absent value.
+const UNSUPPORTED_COMMERCIAL_HEADERS = {
+  stock_qty: ["stock_qty", "stock_quantity", "stock", "qty_in_stock", "quantity_in_stock", "available_stock", "available_quantity"],
+  order_multiple: ["order_multiple", "order_qty_multiple", "pack_multiple", "case_qty", "case_quantity"],
+  valid_to: ["valid_to", "valid_until", "valid_through", "price_valid_to", "expiry_date", "expiration_date", "end_date"],
+};
+const UNSUPPORTED_HEADER_TO_FIELD = new Map(Object.entries(UNSUPPORTED_COMMERCIAL_HEADERS)
+  .flatMap(([field, aliases]) => aliases.map((alias) => [normalizeHeader(alias), field])));
+
 const HEADER_ALIASES = {
   brand: ["brand", "make_brand", "manufacturer", "marque"],
   product_code: ["product_code", "part_no", "part_number", "partno", "code", "sku", "article_number", "article_no"],
@@ -50,7 +61,7 @@ export function normalizeHeader(value) {
 
 export function canonicalizeHeader(value) {
   const normalized = normalizeHeader(value);
-  return ALIAS_TO_CANONICAL.get(normalized) || normalized;
+  return ALIAS_TO_CANONICAL.get(normalized) || UNSUPPORTED_HEADER_TO_FIELD.get(normalized) || normalized;
 }
 
 export function requireSupplierPriceHeaders(headers,format="CSV") {
@@ -170,6 +181,15 @@ export async function* parseCsvRows(readable, options = {}) {
 }
 
 export function normalizeSupplierPriceRow({ sourceRowNumber, row, buyPriceIsNumeric = false }) {
+  const unsupportedFields = [...new Set(Object.entries(row)
+    .filter(([header, value]) => UNSUPPORTED_HEADER_TO_FIELD.has(normalizeHeader(header))
+      && String(value ?? "").trim() !== "")
+    .map(([header]) => UNSUPPORTED_HEADER_TO_FIELD.get(normalizeHeader(header))))].sort();
+  if (unsupportedFields.length) {
+    throw Object.assign(new Error(`SUPPLIER_UNSUPPORTED_COMMERCIAL_FIELD:${unsupportedFields.join(",")}:row=${sourceRowNumber}`), {
+      code: "SUPPLIER_UNSUPPORTED_COMMERCIAL_FIELD", fields: unsupportedFields, sourceRowNumber,
+    });
+  }
   const value = (name) => String(row[name] ?? "").trim();
   const productCode = value("product_code");
   // Keep supplier punctuation significant: 61/1 and 611 are distinct SKUs.

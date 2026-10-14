@@ -7,6 +7,7 @@ import {join} from 'node:path';
 import {Readable} from 'node:stream';
 import {setTimeout as delay} from 'node:timers/promises';
 import {performance} from 'node:perf_hooks';
+import ExcelJS from 'exceljs';
 import {createSharedPreparedSource,PREPARED_BUCKET,validateSharedPreparedManifest}
  from '../../apps/engine/supplier-price-shadow/src/shared-prepared-source.mjs';
 
@@ -23,17 +24,28 @@ function streamed(bytes,onRead=()=>{}){
   onRead();
  })())));
 }
-function fixture({count=12,latency=0}={}){
- const csv=Buffer.from('Product_Code,Buy_Price_EUR,Price_Date\n'+
+function fixture({count=12,latency=0,sourceBytes,sourceExtension='csv'}={}){
+ const csv=sourceBytes||Buffer.from('Product_Code,Buy_Price_EUR,Price_Date\n'+
   Array.from({length:count},(_,i)=>`CODE${i+1},10.50,2026-10-14\n`).join(''));
- const release={id:randomUUID(),handoff_id:randomUUID(),source_file_path:randomUUID()+'/source.csv',
+ const release={id:randomUUID(),handoff_id:randomUUID(),source_file_path:randomUUID()+'/source.'+sourceExtension,
   source_file_sha256:sha(csv),source_file_bytes:csv.length,total_rows:count,source_date:'2026-10-14'};
  const storage=new Map(),events=[],active=new Set(),readBacks=new Set();
- const state={maxActive:0,hook:null,firstPartAt:null,lastPartReadAt:null};
+ const state={maxActive:0,hook:null,firstPartAt:null,lastPartReadAt:null,sourceReads:0,compatibilityCalls:[],compatibilityHook:null};
  const fetchImpl=async(url,options={})=>{
   const path=decodeURIComponent(new URL(url).pathname),method=options.method||'GET';
   if(path===`/storage/v1/bucket/${PREPARED_BUCKET}`)return Response.json({id:PREPARED_BUCKET,public:false});
-  if(path===`/storage/v1/object/supplier-price-imports/${release.source_file_path}`)return streamed(csv);
+  if(path===`/storage/v1/object/supplier-price-imports/${release.source_file_path}`)return streamed(csv,()=>{state.sourceReads++;});
+  if(path==='/rest/v1/rpc/record_supplier_price_source_compatibility'){
+   assert.equal(method,'POST');assert.ok(state.sourceReads>0,'receipt requires a complete source read');
+   const payload=JSON.parse(options.body);state.compatibilityCalls.push(payload);
+   assert.deepEqual(payload,{input_release_id:release.id,input_handoff_id:release.handoff_id,
+    input_source_sha256:release.source_file_sha256,input_total_rows:release.total_rows,
+    input_policy:'supplier-price-commercial-fields-v1'});
+   const overridden=await state.compatibilityHook?.(payload);if(overridden)return overridden;
+   return Response.json({status:state.compatibilityCalls.length===1?'recorded':'replayed',
+    release_id:payload.input_release_id,source_sha256:payload.input_source_sha256,
+    total_rows:payload.input_total_rows,policy:payload.input_policy});
+  }
   const prefix=`/storage/v1/object/${PREPARED_BUCKET}/`;
   assert.ok(path.startsWith(prefix),'only the intended private bucket is used');
   const key=path.slice(prefix.length),part=Number(/\/part-(\d+)-/.exec(key)?.[1]||0);
@@ -165,7 +177,7 @@ test('a same-length corrupt upload readback prevents readiness',{timeout:15000},
  assert.equal(await ownedDirectory(f.release.id),null);
 });
 
-test('ambiguous accepted uploads recover by streamed exact readback, and ready restart writes nothing',{timeout:15000},async()=>{
+test('ambiguous accepted uploads recover by exact readback; cached readiness still rescans the original and replays its receipt',{timeout:15000},async()=>{
  const f=fixture({count:8});let ambiguous=false,retried=false;
  f.state.hook=({part,method,key,storage,options})=>{
   if(part===2&&method==='GET'&&!retried){retried=true;return Response.json({message:'retry'},{status:503});}
@@ -182,5 +194,61 @@ test('ambiguous accepted uploads recover by streamed exact readback, and ready r
  assert.deepEqual(replay,receipt);
  assert.equal(f.events.slice(split).some(e=>e.method==='POST'),false);
  assert.equal(f.events.slice(split).some(e=>e.part),false);
+ assert.equal(f.state.sourceReads,2);
+ assert.equal(f.state.compatibilityCalls.length,2);
+ assert.deepEqual(f.state.compatibilityCalls[0],f.state.compatibilityCalls[1]);
  assert.equal(await ownedDirectory(f.release.id),null);
+});
+
+test('unsupported last-row commercial value cannot produce a compatibility receipt or prepared artifact',async()=>{
+ const f=fixture({count:2,sourceBytes:Buffer.from('Product_Code,Buy_Price_EUR,Price_Date,Order Multiple\nA,10.50,2026-10-14,\nB,11.50,2026-10-14,0\n')});
+ await assert.rejects(f.prepare(),error=>error.code==='SUPPLIER_UNSUPPORTED_COMMERCIAL_FIELD'
+  &&error.sourceRowNumber===2&&error.fields.join(',')==='order_multiple');
+ assert.equal(f.state.sourceReads,1);
+ assert.equal(f.state.compatibilityCalls.length,0);
+ assert.equal(f.storage.size,0);
+});
+
+test('original XLSX full scan records a bound receipt only when every commercial field is empty',async()=>{
+ const book=new ExcelJS.Workbook();const sheet=book.addWorksheet('Prices');
+ sheet.addRows([['Product_Code','Buy_Price_EUR','Price_Date','Stock Quantity'],
+  ['A',10.5,'2026-10-14',''],['B',11.5,'2026-10-14','']]);
+ const allowed=fixture({count:2,sourceExtension:'xlsx',sourceBytes:Buffer.from(await book.xlsx.writeBuffer())});
+ await allowed.prepare();assert.equal(allowed.state.compatibilityCalls.length,1);
+ sheet.getCell('D3').value=0;
+ const blocked=fixture({count:2,sourceExtension:'xlsx',sourceBytes:Buffer.from(await book.xlsx.writeBuffer())});
+ await assert.rejects(blocked.prepare(),error=>error.code==='SUPPLIER_UNSUPPORTED_COMMERCIAL_FIELD'&&error.sourceRowNumber===2);
+ assert.equal(blocked.state.sourceReads,1);assert.equal(blocked.state.compatibilityCalls.length,0);assert.equal(blocked.storage.size,0);
+});
+
+test('source hash, total rows and business validation are checked before any compatibility receipt',async t=>{
+ for(const kind of ['hash','count','validation'])await t.test(kind,async()=>{
+  const f=kind==='validation'?fixture({count:1,sourceBytes:Buffer.from('Product_Code,Buy_Price_EUR,Price_Date\nA,0,2026-10-14\n')}):fixture({count:1});
+  if(kind==='hash')f.release.source_file_sha256='a'.repeat(64);
+  if(kind==='count')f.release.total_rows=2;
+  await assert.rejects(f.prepare());
+  assert.equal(f.state.compatibilityCalls.length,0);assert.equal(f.storage.size,0);
+ });
+});
+
+test('unknown receipt outcome stops preparation; recovery rescans and reuses the exact immutable request',async()=>{
+ const f=fixture({count:1});
+ f.state.compatibilityHook=()=>{throw Error('synthetic lost response after receipt acceptance');};
+ await assert.rejects(f.prepare(),/SHARED_PREPARED_SOURCE_COMPATIBILITY_UNCONFIRMED/);
+ assert.equal(f.storage.size,0);assert.equal(f.state.compatibilityCalls.length,1);
+ f.state.compatibilityHook=null;
+ await f.prepare();
+ assert.equal(f.state.sourceReads,2);
+ assert.deepEqual(f.state.compatibilityCalls[1],f.state.compatibilityCalls[0]);
+});
+
+test('a successful HTTP response with a foreign or incomplete compatibility receipt fails closed',async t=>{
+ for(const mutation of [{release_id:randomUUID()},{source_sha256:'b'.repeat(64)},
+  {total_rows:2},{policy:'old-policy'},{status:'queued'}])await t.test(Object.keys(mutation)[0],async()=>{
+   const f=fixture({count:1});
+   f.state.compatibilityHook=payload=>Response.json({status:'recorded',release_id:payload.input_release_id,
+    source_sha256:payload.input_source_sha256,total_rows:payload.input_total_rows,policy:payload.input_policy,...mutation});
+   await assert.rejects(f.prepare(),/SHARED_PREPARED_SOURCE_COMPATIBILITY_UNCONFIRMED/);
+   assert.equal(f.storage.size,0);
+  });
 });

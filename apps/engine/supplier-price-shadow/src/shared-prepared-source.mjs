@@ -1,5 +1,5 @@
-// Backend-only immutable Storage adapter. No publication, browser API or SQL
-// Storage metadata writes. Reuses the existing parser/partition/row contracts.
+// Backend-only immutable Storage adapter. No publication or Storage metadata
+// writes. A private SQL receipt records a verified full source compatibility scan.
 import {createHash} from 'node:crypto';
 import {createWriteStream} from 'node:fs';
 import {mkdtemp,readFile,writeFile,rm,stat} from 'node:fs/promises';
@@ -11,6 +11,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {prepareSupplierPricePartitions,scanPreparedSupplierPriceBatch} from './prepared-partitions.mjs';
 import {supabaseApiHeaders} from './supabase-headers.mjs';
 import {validateCsvWithDuckDB,requirePublishableSupplierPriceValidation} from './duckdb-validation.mjs';
+import {SUPPLIER_SOURCE_COMPATIBILITY_POLICY} from './streaming-csv.mjs';
 
 export const PREPARED_BUCKET='supplier-price-prepared';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -119,6 +120,21 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
   const b=JSON.parse((await boundedBody(r,4096)).toString());
   if(b.id!==PREPARED_BUCKET||b.public!==false)throw Error('SHARED_PREPARED_BUCKET_NOT_PRIVATE');
  }
+ async function recordCompatibility(context){
+  const payload={input_release_id:context.release_id,input_handoff_id:context.handoff_id,
+   input_source_sha256:context.source_sha256,input_total_rows:context.total_rows,
+   input_policy:SUPPLIER_SOURCE_COMPATIBILITY_POLICY};
+  let r,receipt;
+  try{
+   r=await request(`${origin.origin}/rest/v1/rpc/record_supplier_price_source_compatibility`,{
+    method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+   receipt=JSON.parse((await boundedBody(r,4096)).toString());
+  }catch{throw Error('SHARED_PREPARED_SOURCE_COMPATIBILITY_UNCONFIRMED');}
+  if(!r.ok||!['recorded','replayed'].includes(receipt?.status)
+   ||receipt.release_id!==context.release_id||receipt.source_sha256!==context.source_sha256
+   ||receipt.total_rows!==context.total_rows||receipt.policy!==SUPPLIER_SOURCE_COMPATIBILITY_POLICY)
+   throw Error('SHARED_PREPARED_SOURCE_COMPATIBILITY_UNCONFIRMED');
+ }
  async function putExact(path,bytes,type,max){
   if(!bytes.length||bytes.length>max)throw Error('SHARED_PREPARED_SIZE_EXCEEDED');
   // Exact streamed readback avoids a second whole-part buffer per uploader.
@@ -165,6 +181,10 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
     const validation=await validateCsvWithDuckDB({inputPath:file,sourceDate:context.source_date,
       memoryLimit:'512MB',threads:4,tempDirectory:dir});
     requirePublishableSupplierPriceValidation(validation,context.total_rows);
+    // This runs only after downloading/checksumming and parsing ALL original
+    // CSV/XLSX rows. A cached manifest or replayed DBOS step is not scan proof.
+    // Retry uses the same immutable receipt identity; unknown outcomes stop.
+    await recordCompatibility(context);
     if(ready)return {...ready.receipt,validation};
     const prepared=await prepareSupplierPricePartitions({inputPath:file,outputDir:join(dir,'parts'),batchSize,
      sourceDate:context.source_date,expectedRows:context.total_rows,expectedChecksum:context.source_sha256,
