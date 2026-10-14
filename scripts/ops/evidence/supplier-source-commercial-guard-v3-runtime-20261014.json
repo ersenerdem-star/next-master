@@ -1,0 +1,952 @@
+{
+  "schemaVersion": 1,
+  "purpose": "V3 source-commercial compatibility guard browser/runtime acceptance",
+  "projectRef": "kaxsqafdevabkxofwdod",
+  "environment": "V3 staging",
+  "observer": {
+    "method": "Supabase connector SELECT-only",
+    "remoteMutations": false,
+    "browserActionsOwner": "root",
+    "rootDeploymentReportsPersonallyObserved": false
+  },
+  "deploymentReportedByRoot": {
+    "workerSource": "ddcf09e8896dcf32ea2aeab17c152a3fd921de9d",
+    "workerDeployId": "dep-db7seoei0phs73ag96c0",
+    "workerServiceId": "srv-db1m4vvavr4c73cjm1b0",
+    "uiDeployId": "6acfc7503d2237214ee811f5",
+    "schemaPostcheckPassed": true
+  },
+  "scope": {
+    "organizationId": "b0000000-0000-4000-8000-000000000001",
+    "supplierId": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+    "supplier": "V3 Test Vendor",
+    "brandId": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+    "brand": "Mahle",
+    "sourceDate": "2026-10-06",
+    "testOnly": true
+  },
+  "sourcePolicy": {
+    "policy": "supplier-price-commercial-fields-v1",
+    "unsupported": [
+      "stock_qty",
+      "order_multiple",
+      "valid_to"
+    ],
+    "nonemptyZeroRejected": true,
+    "sourceScan": "Complete original CSV or selected import worksheet, after source byte count and SHA verification; cached prepared output alone cannot mint attestation."
+  },
+  "before": {
+    "capturedAt": "2026-10-14T18:12:50.749355Z",
+    "pointers": [],
+    "legacyScope": {
+      "rows": 1,
+      "shaMd5": "b0cdf9c27d583a5573872bab4243c1da"
+    },
+    "catalogScope": {
+      "rows": 1,
+      "shaMd5": "053873101a98b5b3632947a7c8f2e5b2"
+    }
+  },
+  "phases": [
+    {
+      "name": "prepared_before_review",
+      "personallyObserved": true,
+      "state": {
+        "canaries": [
+          {
+            "audit": null,
+            "sha256": "dea1778c5ac680a503c90895c30dfa306592760428539493a35dbfd9e39f6d93",
+            "status": "validated",
+            "actions": [],
+            "handoff": {
+              "id": "11f5a553-5e02-421a-9316-b1b64a796135",
+              "status": "enqueued",
+              "workflowId": "supplier-price-verified:v1:d65df77a-81ce-4261-bf8b-494e0f3165f8"
+            },
+            "receipt": {
+              "policy": "supplier-price-commercial-fields-v1",
+              "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+              "created_at": "2026-10-14T18:22:29.865623+00:00",
+              "handoff_id": "11f5a553-5e02-421a-9316-b1b64a796135",
+              "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+              "total_rows": 1,
+              "source_path": "b0000000-0000-4000-8000-000000000001/supplier-price/6e190723-7caa-40d4-997c-f5e14422531e/v3-mahle-accepted.csv",
+              "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+              "source_bytes": 295,
+              "source_sha256": "dea1778c5ac680a503c90895c30dfa306592760428539493a35dbfd9e39f6d93",
+              "organization_id": "b0000000-0000-4000-8000-000000000001"
+            },
+            "createdAt": "2026-10-14T18:22:21.502673+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": "BRAND_IDENTITY_COMPARISON_PENDING",
+            "releaseId": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+            "totalRows": 1,
+            "acceptedRows": 1,
+            "publications": [],
+            "persistedRows": 1,
+            "processedRows": 1
+          }
+        ],
+        "pointers": [],
+        "capturedAt": "2026-10-14T18:23:19.430875+00:00",
+        "legacyScope": {
+          "rows": 1,
+          "shaMd5": "b0cdf9c27d583a5573872bab4243c1da"
+        },
+        "catalogScope": {
+          "rows": 1,
+          "shaMd5": "053873101a98b5b3632947a7c8f2e5b2"
+        }
+      }
+    },
+    {
+      "name": "published_after_explicit_ui_review_and_confirmation",
+      "personallyObserved": true,
+      "state": {
+        "canaries": [
+          {
+            "audit": {
+              "brands": [],
+              "policy": "cross-brand-v1",
+              "checked": true,
+              "checked_at": "2026-10-14T18:25:25.391862+00:00",
+              "ratio_min_codes": 100,
+              "review_required": false,
+              "threshold_codes": 5000,
+              "selected_brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+              "selected_brand_name": "Mahle",
+              "matching_brand_count": 0,
+              "distinct_incoming_codes": 1,
+              "ratio_threshold_percent": 80
+            },
+            "sha256": "dea1778c5ac680a503c90895c30dfa306592760428539493a35dbfd9e39f6d93",
+            "status": "published",
+            "actions": [
+              {
+                "action": "review",
+                "status": "completed",
+                "receipt": {
+                  "action": "recheck",
+                  "status": "rechecked_clear",
+                  "replayed": false,
+                  "errorCode": null,
+                  "published": false,
+                  "releaseId": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+                  "decisionId": "b295349e-4139-41c9-8730-b68c75600f65",
+                  "reviewRevision": 1
+                },
+                "errorCode": null,
+                "decisionId": "b295349e-4139-41c9-8730-b68c75600f65"
+              },
+              {
+                "action": "publish",
+                "status": "completed",
+                "receipt": {
+                  "status": "published",
+                  "version": 1,
+                  "replayed": false,
+                  "isCurrent": true,
+                  "published": true,
+                  "releaseId": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+                  "decisionId": "16572492-a091-443a-9119-b0a8b2e9f5b8",
+                  "publicationId": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+                  "reviewRevision": 1,
+                  "expectedPreviousPublicationId": null
+                },
+                "errorCode": null,
+                "decisionId": "16572492-a091-443a-9119-b0a8b2e9f5b8"
+              }
+            ],
+            "handoff": {
+              "id": "11f5a553-5e02-421a-9316-b1b64a796135",
+              "status": "enqueued",
+              "workflowId": "supplier-price-verified:v1:d65df77a-81ce-4261-bf8b-494e0f3165f8"
+            },
+            "receipt": {
+              "policy": "supplier-price-commercial-fields-v1",
+              "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+              "created_at": "2026-10-14T18:22:29.865623+00:00",
+              "handoff_id": "11f5a553-5e02-421a-9316-b1b64a796135",
+              "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+              "total_rows": 1,
+              "source_path": "b0000000-0000-4000-8000-000000000001/supplier-price/6e190723-7caa-40d4-997c-f5e14422531e/v3-mahle-accepted.csv",
+              "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+              "source_bytes": 295,
+              "source_sha256": "dea1778c5ac680a503c90895c30dfa306592760428539493a35dbfd9e39f6d93",
+              "organization_id": "b0000000-0000-4000-8000-000000000001"
+            },
+            "createdAt": "2026-10-14T18:22:21.502673+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+            "totalRows": 1,
+            "acceptedRows": 1,
+            "publications": [
+              {
+                "id": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+                "status": "published",
+                "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+                "created_at": "2026-10-14T18:25:25.372955+00:00",
+                "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+                "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+                "published_at": "2026-10-14T18:25:25.372955+00:00",
+                "superseded_at": null,
+                "organization_id": "b0000000-0000-4000-8000-000000000001",
+                "publication_version": 1
+              }
+            ],
+            "persistedRows": 1,
+            "processedRows": 1
+          }
+        ],
+        "pointers": [
+          {
+            "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+            "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+            "updated_at": "2026-10-14T18:25:25.372955+00:00",
+            "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+            "publication_id": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+            "organization_id": "b0000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "capturedAt": "2026-10-14T18:26:03.120502+00:00",
+        "legacyScope": {
+          "rows": 1,
+          "shaMd5": "b0cdf9c27d583a5573872bab4243c1da"
+        },
+        "catalogScope": {
+          "rows": 1,
+          "shaMd5": "053873101a98b5b3632947a7c8f2e5b2"
+        }
+      }
+    },
+    {
+      "name": "pre_fix_rejections_preserve_data_but_retry_deterministic_source_error",
+      "personallyObserved": true,
+      "state": {
+        "canaries": [
+          {
+            "audit": {
+              "brands": [],
+              "policy": "cross-brand-v1",
+              "checked": true,
+              "checked_at": "2026-10-14T18:25:25.391862+00:00",
+              "ratio_min_codes": 100,
+              "review_required": false,
+              "threshold_codes": 5000,
+              "selected_brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+              "selected_brand_name": "Mahle",
+              "matching_brand_count": 0,
+              "distinct_incoming_codes": 1,
+              "ratio_threshold_percent": 80
+            },
+            "sha256": "dea1778c5ac680a503c90895c30dfa306592760428539493a35dbfd9e39f6d93",
+            "status": "published",
+            "actions": [
+              {
+                "action": "review",
+                "status": "completed",
+                "receipt": {
+                  "action": "recheck",
+                  "status": "rechecked_clear",
+                  "replayed": false,
+                  "errorCode": null,
+                  "published": false,
+                  "releaseId": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+                  "decisionId": "b295349e-4139-41c9-8730-b68c75600f65",
+                  "reviewRevision": 1
+                },
+                "errorCode": null,
+                "decisionId": "b295349e-4139-41c9-8730-b68c75600f65"
+              },
+              {
+                "action": "publish",
+                "status": "completed",
+                "receipt": {
+                  "status": "published",
+                  "version": 1,
+                  "replayed": false,
+                  "isCurrent": true,
+                  "published": true,
+                  "releaseId": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+                  "decisionId": "16572492-a091-443a-9119-b0a8b2e9f5b8",
+                  "publicationId": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+                  "reviewRevision": 1,
+                  "expectedPreviousPublicationId": null
+                },
+                "errorCode": null,
+                "decisionId": "16572492-a091-443a-9119-b0a8b2e9f5b8"
+              }
+            ],
+            "handoff": {
+              "id": "11f5a553-5e02-421a-9316-b1b64a796135",
+              "status": "enqueued",
+              "workflowId": "supplier-price-verified:v1:d65df77a-81ce-4261-bf8b-494e0f3165f8"
+            },
+            "receipt": {
+              "policy": "supplier-price-commercial-fields-v1",
+              "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+              "created_at": "2026-10-14T18:22:29.865623+00:00",
+              "handoff_id": "11f5a553-5e02-421a-9316-b1b64a796135",
+              "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+              "total_rows": 1,
+              "source_path": "b0000000-0000-4000-8000-000000000001/supplier-price/6e190723-7caa-40d4-997c-f5e14422531e/v3-mahle-accepted.csv",
+              "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+              "source_bytes": 295,
+              "source_sha256": "dea1778c5ac680a503c90895c30dfa306592760428539493a35dbfd9e39f6d93",
+              "organization_id": "b0000000-0000-4000-8000-000000000001"
+            },
+            "createdAt": "2026-10-14T18:22:21.502673+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+            "totalRows": 1,
+            "acceptedRows": 1,
+            "publications": [
+              {
+                "id": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+                "status": "published",
+                "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+                "created_at": "2026-10-14T18:25:25.372955+00:00",
+                "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+                "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+                "published_at": "2026-10-14T18:25:25.372955+00:00",
+                "superseded_at": null,
+                "organization_id": "b0000000-0000-4000-8000-000000000001",
+                "publication_version": 1
+              }
+            ],
+            "persistedRows": 1,
+            "processedRows": 1
+          },
+          {
+            "audit": null,
+            "sha256": "e05cc176959059b04bf39aae1cd8d52cf5a79ca45933e23e9da5aa52ec272a9a",
+            "status": "received",
+            "actions": [],
+            "handoff": null,
+            "receipt": null,
+            "createdAt": "2026-10-14T18:26:45.18741+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "aa356fb0-a491-4d77-bb92-8b7a4d6db6e0",
+            "totalRows": 0,
+            "acceptedRows": 0,
+            "publications": [],
+            "persistedRows": 0,
+            "processedRows": 0
+          },
+          {
+            "audit": null,
+            "sha256": "d231df7561f7aa466f029fe65134049f24bb8f82dfa4475075ddbd8667e97b2f",
+            "status": "received",
+            "actions": [],
+            "handoff": null,
+            "receipt": null,
+            "createdAt": "2026-10-14T18:28:36.961478+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "0b71b91e-8e7f-46a2-9aa6-2500bc8e01d9",
+            "totalRows": 0,
+            "acceptedRows": 0,
+            "publications": [],
+            "persistedRows": 0,
+            "processedRows": 0
+          }
+        ],
+        "pointers": [
+          {
+            "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+            "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+            "updated_at": "2026-10-14T18:25:25.372955+00:00",
+            "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+            "publication_id": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+            "organization_id": "b0000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "capturedAt": "2026-10-14T18:28:51.722053+00:00",
+        "legacyScope": {
+          "rows": 1,
+          "shaMd5": "b0cdf9c27d583a5573872bab4243c1da"
+        },
+        "catalogScope": {
+          "rows": 1,
+          "shaMd5": "053873101a98b5b3632947a7c8f2e5b2"
+        }
+      }
+    },
+    {
+      "name": "pre_fix_terminal_failures_preserved",
+      "personallyObserved": true,
+      "state": {
+        "canaries": [
+          {
+            "audit": {
+              "brands": [],
+              "policy": "cross-brand-v1",
+              "checked": true,
+              "checked_at": "2026-10-14T18:25:25.391862+00:00",
+              "ratio_min_codes": 100,
+              "review_required": false,
+              "threshold_codes": 5000,
+              "selected_brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+              "selected_brand_name": "Mahle",
+              "matching_brand_count": 0,
+              "distinct_incoming_codes": 1,
+              "ratio_threshold_percent": 80
+            },
+            "sha256": "dea1778c5ac680a503c90895c30dfa306592760428539493a35dbfd9e39f6d93",
+            "status": "published",
+            "actions": [
+              {
+                "action": "review",
+                "status": "completed",
+                "receipt": {
+                  "action": "recheck",
+                  "status": "rechecked_clear",
+                  "replayed": false,
+                  "errorCode": null,
+                  "published": false,
+                  "releaseId": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+                  "decisionId": "b295349e-4139-41c9-8730-b68c75600f65",
+                  "reviewRevision": 1
+                },
+                "errorCode": null,
+                "decisionId": "b295349e-4139-41c9-8730-b68c75600f65"
+              },
+              {
+                "action": "publish",
+                "status": "completed",
+                "receipt": {
+                  "status": "published",
+                  "version": 1,
+                  "replayed": false,
+                  "isCurrent": true,
+                  "published": true,
+                  "releaseId": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+                  "decisionId": "16572492-a091-443a-9119-b0a8b2e9f5b8",
+                  "publicationId": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+                  "reviewRevision": 1,
+                  "expectedPreviousPublicationId": null
+                },
+                "errorCode": null,
+                "decisionId": "16572492-a091-443a-9119-b0a8b2e9f5b8"
+              }
+            ],
+            "handoff": {
+              "id": "11f5a553-5e02-421a-9316-b1b64a796135",
+              "status": "enqueued",
+              "workflowId": "supplier-price-verified:v1:d65df77a-81ce-4261-bf8b-494e0f3165f8"
+            },
+            "receipt": {
+              "policy": "supplier-price-commercial-fields-v1",
+              "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+              "created_at": "2026-10-14T18:22:29.865623+00:00",
+              "handoff_id": "11f5a553-5e02-421a-9316-b1b64a796135",
+              "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+              "total_rows": 1,
+              "source_path": "b0000000-0000-4000-8000-000000000001/supplier-price/6e190723-7caa-40d4-997c-f5e14422531e/v3-mahle-accepted.csv",
+              "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+              "source_bytes": 295,
+              "source_sha256": "dea1778c5ac680a503c90895c30dfa306592760428539493a35dbfd9e39f6d93",
+              "organization_id": "b0000000-0000-4000-8000-000000000001"
+            },
+            "createdAt": "2026-10-14T18:22:21.502673+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+            "totalRows": 1,
+            "acceptedRows": 1,
+            "publications": [
+              {
+                "id": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+                "status": "published",
+                "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+                "created_at": "2026-10-14T18:25:25.372955+00:00",
+                "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+                "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+                "published_at": "2026-10-14T18:25:25.372955+00:00",
+                "superseded_at": null,
+                "organization_id": "b0000000-0000-4000-8000-000000000001",
+                "publication_version": 1
+              }
+            ],
+            "verification": {
+              "id": "154ede2a-66df-4d59-a474-0be9326acede",
+              "status": "verified",
+              "lastError": null,
+              "sessionId": "6e190723-7caa-40d4-997c-f5e14422531e",
+              "updatedAt": "2026-10-14T18:22:28.728024+00:00",
+              "attemptCount": 1
+            },
+            "persistedRows": 1,
+            "processedRows": 1
+          },
+          {
+            "audit": null,
+            "sha256": "e05cc176959059b04bf39aae1cd8d52cf5a79ca45933e23e9da5aa52ec272a9a",
+            "status": "received",
+            "actions": [],
+            "handoff": null,
+            "receipt": null,
+            "createdAt": "2026-10-14T18:26:45.18741+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "aa356fb0-a491-4d77-bb92-8b7a4d6db6e0",
+            "totalRows": 0,
+            "acceptedRows": 0,
+            "publications": [],
+            "verification": {
+              "id": "4c880e1c-a568-43dc-bc15-12f86b8ed294",
+              "status": "failed",
+              "lastError": "SOURCE_VERIFICATION_UNCONFIRMED",
+              "sessionId": "a419051a-1641-4aa7-b322-0d703d43e292",
+              "updatedAt": "2026-10-14T18:29:42.410807+00:00",
+              "attemptCount": 5
+            },
+            "persistedRows": 0,
+            "processedRows": 0
+          },
+          {
+            "audit": null,
+            "sha256": "d231df7561f7aa466f029fe65134049f24bb8f82dfa4475075ddbd8667e97b2f",
+            "status": "received",
+            "actions": [],
+            "handoff": null,
+            "receipt": null,
+            "createdAt": "2026-10-14T18:28:36.961478+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "0b71b91e-8e7f-46a2-9aa6-2500bc8e01d9",
+            "totalRows": 0,
+            "acceptedRows": 0,
+            "publications": [],
+            "verification": {
+              "id": "55a23e6b-e181-4a19-a59b-1089f0420f24",
+              "status": "failed",
+              "lastError": "SOURCE_VERIFICATION_UNCONFIRMED",
+              "sessionId": "362eeb01-0bf7-48af-a60e-b67049253642",
+              "updatedAt": "2026-10-14T18:31:41.144455+00:00",
+              "attemptCount": 5
+            },
+            "persistedRows": 0,
+            "processedRows": 0
+          }
+        ],
+        "pointers": [
+          {
+            "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+            "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+            "updated_at": "2026-10-14T18:25:25.372955+00:00",
+            "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+            "publication_id": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+            "organization_id": "b0000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "capturedAt": "2026-10-14T18:41:04.118938+00:00",
+        "legacyScope": {
+          "rows": 1,
+          "shaMd5": "b0cdf9c27d583a5573872bab4243c1da"
+        },
+        "catalogScope": {
+          "rows": 1,
+          "shaMd5": "053873101a98b5b3632947a7c8f2e5b2"
+        }
+      }
+    },
+    {
+      "name": "post_fix_three_fields_rejected_at_first_attempt",
+      "personallyObserved": true,
+      "state": {
+        "canaries": [
+          {
+            "audit": {
+              "brands": [],
+              "policy": "cross-brand-v1",
+              "checked": true,
+              "checked_at": "2026-10-14T18:25:25.391862+00:00",
+              "ratio_min_codes": 100,
+              "review_required": false,
+              "threshold_codes": 5000,
+              "selected_brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+              "selected_brand_name": "Mahle",
+              "matching_brand_count": 0,
+              "distinct_incoming_codes": 1,
+              "ratio_threshold_percent": 80
+            },
+            "sha256": "dea1778c5ac680a503c90895c30dfa306592760428539493a35dbfd9e39f6d93",
+            "status": "published",
+            "actions": [
+              {
+                "action": "review",
+                "status": "completed",
+                "receipt": {
+                  "action": "recheck",
+                  "status": "rechecked_clear",
+                  "replayed": false,
+                  "errorCode": null,
+                  "published": false,
+                  "releaseId": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+                  "decisionId": "b295349e-4139-41c9-8730-b68c75600f65",
+                  "reviewRevision": 1
+                },
+                "errorCode": null,
+                "decisionId": "b295349e-4139-41c9-8730-b68c75600f65"
+              },
+              {
+                "action": "publish",
+                "status": "completed",
+                "receipt": {
+                  "status": "published",
+                  "version": 1,
+                  "replayed": false,
+                  "isCurrent": true,
+                  "published": true,
+                  "releaseId": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+                  "decisionId": "16572492-a091-443a-9119-b0a8b2e9f5b8",
+                  "publicationId": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+                  "reviewRevision": 1,
+                  "expectedPreviousPublicationId": null
+                },
+                "errorCode": null,
+                "decisionId": "16572492-a091-443a-9119-b0a8b2e9f5b8"
+              }
+            ],
+            "handoff": {
+              "id": "11f5a553-5e02-421a-9316-b1b64a796135",
+              "status": "enqueued",
+              "workflowId": "supplier-price-verified:v1:d65df77a-81ce-4261-bf8b-494e0f3165f8"
+            },
+            "receipt": {
+              "policy": "supplier-price-commercial-fields-v1",
+              "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+              "created_at": "2026-10-14T18:22:29.865623+00:00",
+              "handoff_id": "11f5a553-5e02-421a-9316-b1b64a796135",
+              "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+              "total_rows": 1,
+              "source_path": "b0000000-0000-4000-8000-000000000001/supplier-price/6e190723-7caa-40d4-997c-f5e14422531e/v3-mahle-accepted.csv",
+              "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+              "source_bytes": 295,
+              "source_sha256": "dea1778c5ac680a503c90895c30dfa306592760428539493a35dbfd9e39f6d93",
+              "organization_id": "b0000000-0000-4000-8000-000000000001"
+            },
+            "createdAt": "2026-10-14T18:22:21.502673+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+            "totalRows": 1,
+            "acceptedRows": 1,
+            "publications": [
+              {
+                "id": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+                "status": "published",
+                "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+                "created_at": "2026-10-14T18:25:25.372955+00:00",
+                "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+                "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+                "published_at": "2026-10-14T18:25:25.372955+00:00",
+                "superseded_at": null,
+                "organization_id": "b0000000-0000-4000-8000-000000000001",
+                "publication_version": 1
+              }
+            ],
+            "verification": {
+              "id": "154ede2a-66df-4d59-a474-0be9326acede",
+              "status": "verified",
+              "lastError": null,
+              "sessionId": "6e190723-7caa-40d4-997c-f5e14422531e",
+              "updatedAt": "2026-10-14T18:22:28.728024+00:00",
+              "attemptCount": 1
+            },
+            "persistedRows": 1,
+            "processedRows": 1
+          },
+          {
+            "audit": null,
+            "sha256": "e05cc176959059b04bf39aae1cd8d52cf5a79ca45933e23e9da5aa52ec272a9a",
+            "status": "received",
+            "actions": [],
+            "handoff": null,
+            "receipt": null,
+            "createdAt": "2026-10-14T18:26:45.18741+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "aa356fb0-a491-4d77-bb92-8b7a4d6db6e0",
+            "totalRows": 0,
+            "acceptedRows": 0,
+            "publications": [],
+            "verification": {
+              "id": "4c880e1c-a568-43dc-bc15-12f86b8ed294",
+              "status": "failed",
+              "lastError": "SOURCE_VERIFICATION_UNCONFIRMED",
+              "sessionId": "a419051a-1641-4aa7-b322-0d703d43e292",
+              "updatedAt": "2026-10-14T18:29:42.410807+00:00",
+              "attemptCount": 5
+            },
+            "persistedRows": 0,
+            "processedRows": 0
+          },
+          {
+            "audit": null,
+            "sha256": "d231df7561f7aa466f029fe65134049f24bb8f82dfa4475075ddbd8667e97b2f",
+            "status": "received",
+            "actions": [],
+            "handoff": null,
+            "receipt": null,
+            "createdAt": "2026-10-14T18:28:36.961478+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "0b71b91e-8e7f-46a2-9aa6-2500bc8e01d9",
+            "totalRows": 0,
+            "acceptedRows": 0,
+            "publications": [],
+            "verification": {
+              "id": "55a23e6b-e181-4a19-a59b-1089f0420f24",
+              "status": "failed",
+              "lastError": "SOURCE_VERIFICATION_UNCONFIRMED",
+              "sessionId": "362eeb01-0bf7-48af-a60e-b67049253642",
+              "updatedAt": "2026-10-14T18:31:41.144455+00:00",
+              "attemptCount": 5
+            },
+            "persistedRows": 0,
+            "processedRows": 0
+          },
+          {
+            "audit": null,
+            "sha256": "2c91f79a4bff13404e63a71445e9218aaace10048b549346bfcf8499d898965e",
+            "status": "received",
+            "actions": [],
+            "handoff": null,
+            "receipt": null,
+            "createdAt": "2026-10-14T18:51:14.29001+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "e859eaba-86d4-42ba-9c53-05a6e15384b4",
+            "totalRows": 0,
+            "acceptedRows": 0,
+            "publications": [],
+            "verification": {
+              "id": "ce18c342-05ae-4ee8-a910-fff255f0d3a3",
+              "status": "failed",
+              "lastError": "SOURCE_UNSUPPORTED_STOCK_QTY",
+              "sessionId": "aaa1daa2-cd49-4380-9414-88492fd30440",
+              "updatedAt": "2026-10-14T18:51:30.03114+00:00",
+              "attemptCount": 1
+            },
+            "persistedRows": 0,
+            "processedRows": 0
+          },
+          {
+            "audit": null,
+            "sha256": "d88066879b9bd4a76f44b75d4cf64f6084544c5364e14ee81e4b39d4aed8e891",
+            "status": "received",
+            "actions": [],
+            "handoff": null,
+            "receipt": null,
+            "createdAt": "2026-10-14T18:52:59.388954+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "d5b2f5ca-5608-49eb-935d-3bae70fc0cd2",
+            "totalRows": 0,
+            "acceptedRows": 0,
+            "publications": [],
+            "verification": {
+              "id": "6c56f38a-92ce-461c-a847-b5223f61cd17",
+              "status": "failed",
+              "lastError": "SOURCE_UNSUPPORTED_ORDER_MULTIPLE",
+              "sessionId": "05c65d8d-b69c-4684-ae17-47f1732bf335",
+              "updatedAt": "2026-10-14T18:53:06.553116+00:00",
+              "attemptCount": 1
+            },
+            "persistedRows": 0,
+            "processedRows": 0
+          },
+          {
+            "audit": null,
+            "sha256": "6fcf7de05194c15231a41ce3d000e7136c0e495e2210b5b3f93bc2c1e37c7c34",
+            "status": "received",
+            "actions": [],
+            "handoff": null,
+            "receipt": null,
+            "createdAt": "2026-10-14T18:53:48.456134+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "8773d40f-07a0-4b42-86c2-00785acf5e2f",
+            "totalRows": 0,
+            "acceptedRows": 0,
+            "publications": [],
+            "verification": {
+              "id": "1458a198-a4c7-4ffb-ab53-5ef88fcd3366",
+              "status": "failed",
+              "lastError": "SOURCE_UNSUPPORTED_VALID_TO",
+              "sessionId": "6a0cb745-c225-4708-a343-aeac2d1bf784",
+              "updatedAt": "2026-10-14T18:54:00.605983+00:00",
+              "attemptCount": 1
+            },
+            "persistedRows": 0,
+            "processedRows": 0
+          }
+        ],
+        "pointers": [
+          {
+            "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+            "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+            "updated_at": "2026-10-14T18:25:25.372955+00:00",
+            "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+            "publication_id": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+            "organization_id": "b0000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "capturedAt": "2026-10-14T18:54:44.38951+00:00",
+        "legacyScope": {
+          "rows": 1,
+          "shaMd5": "b0cdf9c27d583a5573872bab4243c1da"
+        },
+        "catalogScope": {
+          "rows": 1,
+          "shaMd5": "053873101a98b5b3632947a7c8f2e5b2"
+        }
+      }
+    }
+  ],
+  "acceptedPersistedRow": {
+    "productCode": "V3-PO-UUID-20261006-001",
+    "normalizedCode": "V3-PO-UUID-20261006-001",
+    "buyPriceDecimal": "7.5",
+    "currency": "EUR",
+    "validFrom": "2026-10-06",
+    "moq": null,
+    "leadTimeDays": null,
+    "descriptionAndNotesPreserved": true,
+    "rowHash": "89ec6b226c92428154a765fbaeb1cc0c2cbf411d4487f90e11e8af8de6853be0"
+  },
+  "pending": [],
+  "limitations": [
+    "One-row accepted test and two-row rejection canaries are not throughput benchmarks or production acceptance claims.",
+    "Legacy stored normalized_code omitted punctuation; verified canonical exact code preserves punctuation. No general same-data parity claim; NULL MOQ and lead time remained NULL.",
+    "Root deployment/browser observations are distinguished from independent SQL observations.",
+    "Initial pre-fix stock/order files were safely blocked before handoff but retried five times and ended with a generic verification error. Their history is preserved, not relabeled or rerun.",
+    "This runtime test stores observed UI decision receipts; it does not invoke a publication replay.",
+    "Artifact-tool prefixed OOXML was rejected as missing header by the existing ExcelJS reader; actual runtime canaries use CSV. Local ExcelJS-authored XLSX policy tests passed."
+  ],
+  "productionMutations": false,
+  "implementation": {
+    "sourceGuardCommit": "c38be3f963a313b6bb2096ec6a3c94d115d915b6",
+    "cachedOriginalScanRegressionCommit": "b2b232ede61b7cd1c2e6ef5313f17f42e1cd2274",
+    "commercialGuardSqlCommit": "e5864a2",
+    "commercialGuardSqlSha256": "5e4da92699a01f8a71375efd3f97a401a0731546a98141be1578f4ff1ddbe7f5",
+    "terminalVerificationCommit": "bf736613c414723edc5672bba3aa35fd1f2b60c2",
+    "safeStatusSqlSha256": "5071891230d3af3ba840162b1349e37b1509f832ff872616cd49442c9c9febfb",
+    "safeStatusCommit": "4cff392"
+  },
+  "acceptancePassed": true,
+  "acceptanceScope": "V3 source-commercial guard plus healthy first-attempt terminal rejection, test-only Mahle scope; production guard deployment and fresh production receipt remain separate",
+  "finalQueue": {
+    "capturedAt": "2026-10-14T18:55:50.231656+00:00",
+    "pendingHandoffs": 0,
+    "adminActionPending": 0,
+    "uploadStatusRpcMd5": "a5c8a349eca50701b64c26dc62877a25",
+    "verificationPending": 0,
+    "verificationActiveLease": 0
+  },
+  "finalDeploymentReportedByRoot": {
+    "personallyObservedByThisAgent": false,
+    "source": "fa8e8be412c47f88ca70b2c6e5de12fa73212dd5",
+    "workerDeployId": "dep-db7st47f3r2c73998f7g",
+    "workerServiceId": "srv-db1m4vvavr4c73cjm1b0",
+    "workerInstanceSuffix": "rxljv",
+    "startedAt": "2026-10-14T18:49:30Z",
+    "liveAt": "2026-10-14T18:49:31Z",
+    "uiDeployId": "6acfcdd0aeec91eb9a26f7de",
+    "uiSessionPreservedOnReload": true,
+    "uiEnvironmentLabel": "Preview",
+    "logs": [
+      {
+        "time": "2026-10-14T18:51:30Z",
+        "releaseId": "e859eaba-86d4-42ba-9c53-05a6e15384b4",
+        "status": "rejected",
+        "errorCode": "SOURCE_UNSUPPORTED_STOCK_QTY"
+      },
+      {
+        "time": "2026-10-14T18:53:06Z",
+        "releaseId": "d5b2f5ca-5608-49eb-935d-3bae70fc0cd2",
+        "status": "rejected",
+        "errorCode": "SOURCE_UNSUPPORTED_ORDER_MULTIPLE"
+      },
+      {
+        "time": "2026-10-14T18:54:00Z",
+        "releaseId": "8773d40f-07a0-4b42-86c2-00785acf5e2f",
+        "status": "rejected",
+        "errorCode": "SOURCE_UNSUPPORTED_VALID_TO"
+      }
+    ],
+    "noNewDegradedLinesObserved": true,
+    "historicalPreviousInstanceErrorsRetained": true
+  },
+  "browserReportedByRoot": {
+    "personallyObservedByThisAgent": false,
+    "acceptedExplicitReviewAndPublish": true,
+    "allThreeRetestsShowTerminalFailed": true,
+    "allThreeRetestsShowCorrectTurkishFieldMessage": true,
+    "stockScreenshotPath": "/private/tmp/next-master-v3-source-stock-rejection-20261014.png",
+    "stockScreenshotSha256": "8a77438dd760c7036f43d124803d538a780e87bfbf32ca637c42db7efcbe9dab"
+  },
+  "assertions": {
+    "allThreeFirstAttemptRejections": [
+      {
+        "sha256": "2c91f79a4bff13404e63a71445e9218aaace10048b549346bfcf8499d898965e",
+        "releaseId": "e859eaba-86d4-42ba-9c53-05a6e15384b4",
+        "errorCode": "SOURCE_UNSUPPORTED_STOCK_QTY",
+        "attemptCount": 1,
+        "passed": true
+      },
+      {
+        "sha256": "d88066879b9bd4a76f44b75d4cf64f6084544c5364e14ee81e4b39d4aed8e891",
+        "releaseId": "d5b2f5ca-5608-49eb-935d-3bae70fc0cd2",
+        "errorCode": "SOURCE_UNSUPPORTED_ORDER_MULTIPLE",
+        "attemptCount": 1,
+        "passed": true
+      },
+      {
+        "sha256": "6fcf7de05194c15231a41ce3d000e7136c0e495e2210b5b3f93bc2c1e37c7c34",
+        "releaseId": "8773d40f-07a0-4b42-86c2-00785acf5e2f",
+        "errorCode": "SOURCE_UNSUPPORTED_VALID_TO",
+        "attemptCount": 1,
+        "passed": true
+      }
+    ],
+    "acceptedPointerUnchanged": true,
+    "legacyScopeUnchanged": true,
+    "catalogScopeUnchanged": true
+  },
+  "freshRetestSources": [
+    {
+      "name": "retest-reject-stock-zero",
+      "rows": 2,
+      "bytes": 551,
+      "sha256": "2c91f79a4bff13404e63a71445e9218aaace10048b549346bfcf8499d898965e",
+      "expected": "SUPPLIER_UNSUPPORTED_COMMERCIAL_FIELD:stock_qty:row=2; no receipt, no staged rows, no publication"
+    },
+    {
+      "name": "retest-reject-order-multiple-zero",
+      "rows": 2,
+      "bytes": 551,
+      "sha256": "d88066879b9bd4a76f44b75d4cf64f6084544c5364e14ee81e4b39d4aed8e891",
+      "expected": "SUPPLIER_UNSUPPORTED_COMMERCIAL_FIELD:order_multiple:row=2; no receipt, no staged rows, no publication"
+    },
+    {
+      "name": "retest-reject-valid-to",
+      "rows": 2,
+      "bytes": 560,
+      "sha256": "6fcf7de05194c15231a41ce3d000e7136c0e495e2210b5b3f93bc2c1e37c7c34",
+      "expected": "SUPPLIER_UNSUPPORTED_COMMERCIAL_FIELD:valid_to:row=2; no receipt, no staged rows, no publication"
+    }
+  ],
+  "localRegression": {
+    "command": "node --test --test-concurrency=1 scripts/tests/supplier-upload-verification-commercial-failure.test.mjs scripts/tests/supplier-worker-service.test.mjs scripts/tests/supplier-source-commercial-fields.test.mjs scripts/tests/supplier-worker-packaging.test.mjs",
+    "passed": 77,
+    "failed": 0,
+    "skipped": 1,
+    "skipReason": "Actual Docker packaging test requires explicit opt-in; local import closure check passed."
+  }
+}
