@@ -39,7 +39,7 @@ export async function callAppRpc<T>(name: string, args: Record<string, unknown> 
     });
     const data = (await response.json()) as RpcResponse<T>;
     if (!response.ok) {
-      throw new Error(sanitizeUserFacingMessage(data.error || `App RPC failed: ${response.status}`, "The request could not be completed right now."));
+      throw Object.assign(new Error(sanitizeUserFacingMessage(data.error || `App RPC failed: ${response.status}`, "The request could not be completed right now.")), { status: response.status });
     }
     return data.data as T;
   } catch (error) {

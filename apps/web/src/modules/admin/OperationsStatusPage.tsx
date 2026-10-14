@@ -404,9 +404,9 @@ export function OperationsStatusPage() {
                     <div className="supplier-operation-stage">
                       <span className="supplier-operation-stage__label">{t("dashboard.operationsStatus.customerPrice")}</span>
                       <div className="supplier-operation-stage__value">
-                        <span className={`mark-badge mark-badge--${statusTone(row.customer_price_status)}`}>{t(`statuses.${row.customer_price_status}`)}</span>
+                        <span className={`mark-badge mark-badge--${statusTone(row.customer_price_status)}`}>{row.customer_price_status === "unavailable" ? (locale === "tr" ? "Durum görüntülenemiyor" : "Status unavailable") : t(`statuses.${row.customer_price_status}`)}</span>
                       </div>
-                      <small>{row.customer_price_waiting_message || t("dashboard.operationsStatus.readyToGenerate")}</small>
+                      <small>{row.customer_price_status === "unavailable" ? (locale === "tr" ? "Fiyat özetinin durumu bu hesapla görüntülenemiyor." : "Rollup status cannot be viewed with this account.") : row.customer_price_waiting_message || t("dashboard.operationsStatus.readyToGenerate")}</small>
                     </div>
                   </div>
                   <div className="supplier-operation-card__footer">

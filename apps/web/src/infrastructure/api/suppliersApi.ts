@@ -1,7 +1,7 @@
 import { callAppRpc } from "./appRpcApi";
 import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
-import { SUPPLIER_LEGACY_IMPORT_COLUMNS, legacySupplierImportTelemetry } from "../../shared/supplierLegacyImportStatus";
+import { SUPPLIER_LEGACY_IMPORT_COLUMNS, legacySupplierImportTelemetry, loadLegacySupplierOperations, legacyCustomerPriceReadiness } from "../../shared/supplierLegacyImportStatus";
 import type {
   SupplierBrandSummaryRow,
   SupplierOperationsReadyStatus,
@@ -194,10 +194,10 @@ export async function fetchCloudSupplierOperationsStatusAll(inputSuppliers?: Sup
   }
 
   const organizationId = await getCurrentOrgId();
-  const [importRuns, rollupRun] = await Promise.all([
-    fetchLatestSupplierImportRuns(organizationId),
-    fetchLatestSupplierPriceRollupRefreshRun(),
-  ]);
+  const { importRuns, rollupRun, rollupUnavailable } = await loadLegacySupplierOperations(
+    () => fetchLatestSupplierImportRuns(organizationId),
+    () => fetchLatestSupplierPriceRollupRefreshRun(),
+  );
   const { data: brandRows, error: brandRowsError } = await supabaseClient
     .from("brands")
     .select("id,name")
@@ -232,7 +232,7 @@ export async function fetchCloudSupplierOperationsStatusAll(inputSuppliers?: Sup
     }
   }
 
-  const rollupStatus = normalizeOperationsStatus(rollupRun?.status, rollupRun ? "pending" : "pending");
+  const rollupStatus: SupplierOperationsStatusRow["rollup_refresh_status"] = rollupUnavailable ? "unavailable" : normalizeOperationsStatus(rollupRun?.status, "pending");
   const rollupDurationMs = typeof rollupRun?.duration_ms === "number" && Number.isFinite(rollupRun.duration_ms) ? rollupRun.duration_ms : null;
 
   const mappedRows = brandSummaryRows.map((row) => {
@@ -246,7 +246,7 @@ export async function fetchCloudSupplierOperationsStatusAll(inputSuppliers?: Sup
     const catalogSyncCompleted = catalogSyncStatus === "completed";
     const rollupCompleted = rollupStatus === "completed";
     const customerPriceStatus: SupplierOperationsReadyStatus =
-      supplierImportCompleted && catalogSyncCompleted && rollupCompleted ? "ready" : "waiting";
+      legacyCustomerPriceReadiness(supplierImportCompleted, catalogSyncCompleted, rollupStatus);
     const lastSuccessfulImportAt = successfulImportRun?.finished_at || successfulImportRun?.started_at || null;
     const lastSuccessfulRollupAt = rollupStatus === "completed" ? rollupRun?.finished_at || rollupRun?.started_at || null : null;
     const lastSuccessfulSource = latestTimestampSource(
@@ -260,6 +260,8 @@ export async function fetchCloudSupplierOperationsStatusAll(inputSuppliers?: Sup
         ? "Waiting for supplier import to complete."
         : !catalogSyncCompleted
           ? "Waiting for catalog sync to complete."
+          : rollupUnavailable
+            ? "Rollup status is unavailable for this account."
           : !rollupCompleted
             ? "Waiting for rollup refresh to complete."
             : "Waiting for the latest refresh to settle.";

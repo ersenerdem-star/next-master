@@ -38,7 +38,7 @@ export type SupplierBrandSummaryRow = {
 
 export type SupplierOperationsStatus = "idle" | "pending" | "running" | "failed" | "completed";
 
-export type SupplierOperationsReadyStatus = "ready" | "waiting";
+export type SupplierOperationsReadyStatus = "ready" | "waiting" | "unavailable";
 
 export type SupplierOperationsStatusRow = SupplierBrandSummaryRow & {
   brand_id: string | null;
@@ -66,7 +66,7 @@ export type SupplierOperationsStatusRow = SupplierBrandSummaryRow & {
   superseded_by: string | null;
   superseded_at: string | null;
   rollup_refresh_run_id: string | null;
-  rollup_refresh_status: SupplierOperationsStatus;
+  rollup_refresh_status: SupplierOperationsStatus | "unavailable";
   rollup_refresh_started_at: string | null;
   rollup_refresh_finished_at: string | null;
   rollup_refresh_duration_ms: number | null;

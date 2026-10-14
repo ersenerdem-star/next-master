@@ -3,6 +3,32 @@
 // contract aligned with the stored schema instead of inventing telemetry.
 export const SUPPLIER_LEGACY_IMPORT_COLUMNS = "id,supplier_id,brand_id,status,started_at,finished_at,error_message,staged_rows,processed_rows,finalize_error_message,finalized_at,catalog_synced,catalog_sync_status,catalog_sync_finished_at,catalog_sync_error_message,catalog_sync_cursor,catalog_sync_processed,catalog_sync_last_progress_at,catalog_sync_last_batch_processed,catalog_sync_batches,catalog_sync_worker_state,superseded_by,superseded_at";
 
+// Rollup telemetry has a stricter read permission than supplier import history.
+// Only that specific denial is optional; authentication/network/source errors
+// must continue to reach the status page's existing error handling.
+export async function loadLegacySupplierOperations<ImportRun, RollupRun>(
+  loadImports: () => Promise<ImportRun[]>,
+  loadRollup: () => Promise<RollupRun | null>,
+) {
+  const [importRuns, rollup] = await Promise.all([
+    loadImports(),
+    loadRollup().then((run) => ({ run, unavailable: false })).catch((error: unknown) => {
+      if (error instanceof Error && (error as Error & { status?: number }).status === 403
+        && error.message === "Superadmin access required") {
+        return { run: null, unavailable: true };
+      }
+      throw error;
+    }),
+  ]);
+  return { importRuns, rollupRun: rollup.run, rollupUnavailable: rollup.unavailable };
+}
+
+export function legacyCustomerPriceReadiness(importCompleted: boolean, catalogCompleted: boolean, rollupStatus: string) {
+  if (!importCompleted || !catalogCompleted) return "waiting" as const;
+  if (rollupStatus === "unavailable") return "unavailable" as const;
+  return rollupStatus === "completed" ? "ready" as const : "waiting" as const;
+}
+
 type LegacyImportState = {
   status: string;
   error_message: string | null;
