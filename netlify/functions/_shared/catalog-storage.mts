@@ -23,7 +23,12 @@ export async function deleteCatalogStorageObject(
 ) {
   const response = await fetch(storageObjectUrl(supabaseUrl, source.storage_bucket, source.storage_object_path), {
     method: "DELETE",
-    headers: serviceRoleHeaders(serviceRoleKey),
+    // Storage's DELETE endpoint rejects an empty request body when a JSON
+    // content type is present. Keep the auth headers, but omit Content-Type.
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+    },
   });
   if (!response.ok && response.status !== 404) {
     const body = await response.text().catch(() => "");
