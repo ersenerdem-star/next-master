@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Production browser supplier export exact full-scope roundtrip verification",
+  "environment": "production",
+  "projectRef": "zjgueqijumzlfioihnkt",
+  "scope": {
+    "organizationId": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+    "supplierId": "bbd25101-b14a-4967-ac5d-fa78054d4f2e",
+    "supplier": "GEBA",
+    "brandId": "72cb646e-658d-4775-b3bb-b0799eaa9913",
+    "brand": "Geba",
+    "activeOnly": true
+  },
+  "rootReportedBrowserObservation": {
+    "personallyObservedByThisAgent": false,
+    "fileName": "supplier-GEBA-Geba-20261014.csv",
+    "downloadLocalTime": "2026-10-14T19:41:18+03:00",
+    "action": "Authenticated production admin supplier export selected GEBA/Geba and downloaded CSV"
+  },
+  "personallyVerified": {
+    "source": {
+      "method": "Supabase connector SELECT only; numeric values cast to text before transport",
+      "observedAt": "2026-10-14T16:45:01.529901+00:00",
+      "activeRows": 108,
+      "distinctExactCodes": 108,
+      "logicalMd5": "4237935b4fc06832cd0960fbb0116a23"
+    },
+    "exportJob": {
+      "id": "8e434cac-4d67-4b92-8ba5-8df0117ad204",
+      "scope": {
+        "format": "csv",
+        "search": "",
+        "brandId": "72cb646e-658d-4775-b3bb-b0799eaa9913",
+        "brandName": "Geba",
+        "freshness": "all",
+        "supplierId": "bbd25101-b14a-4967-ac5d-fa78054d4f2e",
+        "supplierName": "GEBA",
+        "schemaVersion": 2
+      },
+      "status": "finalized",
+      "audience": "admin",
+      "byte_size": 5759,
+      "failed_at": null,
+      "file_name": "supplier-GEBA-Geba-20261014.csv",
+      "row_count": 108,
+      "created_at": "2026-10-14T16:41:08.553394+00:00",
+      "started_at": "2026-10-14T16:41:11.589+00:00",
+      "updated_at": "2026-10-14T16:41:14.074829+00:00",
+      "export_type": "supplier_price_list",
+      "content_type": "text/csv",
+      "finalized_at": "2026-10-14T16:41:13.796+00:00",
+      "progress_done": 108,
+      "progress_total": 108,
+      "storage_bucket": "app-exports"
+    },
+    "download": {
+      "fileName": "supplier-GEBA-Geba-20261014.csv",
+      "bytes": 5759,
+      "sha256": "5c1d0a043b7f97b84e3eec7bf5ae1229274dc9e8c97089a2e64ff37468a99927",
+      "encoding": "UTF-8 with BOM",
+      "delimiter": ",",
+      "headers": [
+        "Supplier",
+        "Product_Code",
+        "Brand",
+        "Product_Name",
+        "OEM_No",
+        "Buy_Price_EUR",
+        "Price_Date",
+        "MOQ",
+        "Order_Multiple",
+        "Lead_Time_Days",
+        "Notes"
+      ],
+      "dataRows": 108,
+      "distinctProductCodes": 108
+    },
+    "equality": {
+      "method": "Two-way multiset equality of all exported semantic fields; Python Decimal from raw CSV and PostgreSQL numeric::text; no floating point comparison",
+      "logicalDifferenceRows": 0,
+      "fields": [
+        "product_code",
+        "normalized_code",
+        "description",
+        "oem_no",
+        "buy_price",
+        "currency",
+        "moq",
+        "lead_time_days",
+        "notes",
+        "valid_from",
+        "order_multiple",
+        "stock_qty",
+        "valid_to"
+      ],
+      "allCurrency": "EUR",
+      "currencySource": "Buy_Price_EUR header inferred by actual import parser and checked against every source row",
+      "priceDates": [
+        "2026-07-20"
+      ],
+      "nullCounts": {
+        "oem_no": 108,
+        "notes": 108,
+        "order_multiple": 108,
+        "stock_qty": 108,
+        "valid_to": 108
+      },
+      "scopePreservation": "No CSV field omits a non-null active-source value in this selected scope. stock_qty and valid_to are absent from CSV but source values are all NULL. order_multiple is exported but ignored by the verified parser; source values are all NULL."
+    },
+    "importCompatibility": {
+      "kind": "Local execution of repository parser and DuckDB validator; no production upload/publication",
+      "sourceCommit": "b9e6c82217d2e7ed02f49d374de0f3c52f9478db",
+      "parser": "apps/engine/supplier-price-shadow/src/streaming-csv.mjs",
+      "duckdb": "apps/engine/supplier-price-shadow/src/duckdb-validation.mjs",
+      "acceptedRows": 108,
+      "warningRows": 0,
+      "rejectedRows": 0,
+      "duplicateRows": 0,
+      "distinctCodes": 108,
+      "publishableFileValidation": true,
+      "actualNormalizedRowsComparedByDecimal": true,
+      "normalizedLogicalDifferenceRows": 0,
+      "sourceDateUsed": "2026-07-20",
+      "artifactToolReadRows": 108
+    },
+    "roundtrip": {
+      "fileName": "next-master-GEBA-full-scope-roundtrip-20261014.csv",
+      "location": "Private operator temporary directory; source data not committed",
+      "creation": "Byte-for-byte copy of verified browser download; no spreadsheet reserialization",
+      "bytes": 5759,
+      "sha256": "5c1d0a043b7f97b84e3eec7bf5ae1229274dc9e8c97089a2e64ff37468a99927",
+      "mode": "0600"
+    }
+  },
+  "limitations": [
+    "This verifies the complete 108-row active GEBA/Geba scope, not a large-file throughput benchmark.",
+    "No supplier import, validation workflow, customer A/B/custom pricing or publication has been proved by this file check.",
+    "Before publication, repeat the current-source versus staged-release exact equality gate and check current pointer, actor, clean audit and legacy queue state. Use source date 2026-07-20.",
+    "UI click/download timestamp is root-reported. File bytes, database rows and local parser results were independently observed."
+  ],
+  "productionWritesByThisTask": false
+}
