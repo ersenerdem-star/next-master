@@ -84,10 +84,14 @@ test("shutdown cancels an idle read without retry and cancels a pending backoff"
 // Load the real worker wiring with only DBOS replaced. No database/provider is
 // contacted; the real queue reads and source failure/lease RPC paths execute.
 let workflowFailure;
+let startedWorkflowIds = [];
 globalThis.__catalogPollTestDbos = {
   registerWorkflow: (fn) => fn,
   getWorkflowStatus: async () => undefined,
-  startWorkflow: () => async () => ({ getResult: async () => { throw workflowFailure; } }),
+  startWorkflow: (_workflow, options) => async () => {
+    startedWorkflowIds.push(options.workflowID);
+    return { getResult: async () => { if (workflowFailure) throw workflowFailure; return { processedRows: 3 }; } };
+  },
 };
 register(`data:text/javascript,${encodeURIComponent(`
   export function resolve(specifier, context, nextResolve) {
@@ -95,7 +99,7 @@ register(`data:text/javascript,${encodeURIComponent(`
     return nextResolve(specifier, context);
   }
 `)}`, import.meta.url);
-const { pollCatalogImportSources, pollCatalogFinalization } = await import("../src/worker.mjs");
+const { pollCatalogImportSources, pollCatalogFinalization, catalogWorkflowId } = await import("../src/worker.mjs");
 delete globalThis.__catalogPollTestDbos;
 
 test("actual source and finalization discovery GET timeouts retry, with no mutation RPC", async () => {
@@ -117,6 +121,36 @@ test("actual source and finalization discovery GET timeouts retry, with no mutat
       assert.equal(reads, 2);
     }
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test("a retry uses the SQL lease generation even when the claim has no attempt_count", async () => {
+  assert.notEqual(catalogWorkflowId({ run_id: "r", lease_generation: 1 }), catalogWorkflowId({ run_id: "r", lease_generation: 2 }));
+  assert.throws(() => catalogWorkflowId({ run_id: "r", attempt_count: 5 }), /LEASE_CONTEXT_REQUIRED/);
+  const originalFetch = globalThis.fetch;
+  const source = { id: "source-retry", run_id: "run-retry", organization_id: "org", created_by: "actor" };
+  const mutations = [];
+  let generation = 0;
+  startedWorkflowIds = [];
+  try {
+    globalThis.fetch = async (url, init) => {
+      const path = new URL(url, "https://test.invalid").pathname;
+      if (path.endsWith("/catalog_import_sources")) return Response.json([source]);
+      if (path.endsWith("/catalog_import_runs")) return Response.json([{ id: source.run_id, status: "running", processing_queued_at: "2026-10-14", input_scope: {} }]);
+      const args = JSON.parse(init.body);
+      mutations.push({ path, args });
+      if (path.endsWith("/claim_catalog_import_storage_source_system")) return Response.json({ claimed: true,
+        source_id: source.id, run_id: source.run_id, organization_id: source.organization_id, created_by: source.created_by,
+        lease_owner: "worker", lease_token: `token-${++generation}`, lease_generation: generation });
+      assert.ok(path.endsWith("/release_catalog_import_storage_source_system"));
+      return Response.json({ released: true });
+    };
+    workflowFailure = timeout();
+    assert.equal((await pollCatalogImportSources())[0].status, "failed");
+    workflowFailure = undefined;
+    assert.equal((await pollCatalogImportSources())[0].status, "started");
+    assert.deepEqual(startedWorkflowIds, ["catalog-storage:run-retry:lease-1", "catalog-storage:run-retry:lease-2"]);
+    assert.equal(mutations.filter(({ path }) => path.endsWith("/release_catalog_import_storage_source_system")).length, 1);
+  } finally { globalThis.fetch = originalFetch; workflowFailure = undefined; }
 });
 
 test("shutdown winning a successful queue response prevents new source or finalization work", async () => {

@@ -38,7 +38,12 @@ async function supabaseJson(path, init = {}) {
   const body = await response.text();
   let data = {};
   try { data = body ? JSON.parse(body) : {}; } catch { data = { raw: body.slice(0, 500) }; }
-  if (!response.ok) throw new Error(`CATALOG_SUPABASE_HTTP_${response.status}`);
+  if (!response.ok) {
+    // PostgREST uses HTTP 400 for a stale SQL lease. Preserve only this known
+    // retryable domain code; arbitrary database messages never enter logs.
+    if (response.status === 400 && data?.message === "CATALOG_STORAGE_LEASE_FENCE") throw new Error("CATALOG_STORAGE_LEASE_FENCE");
+    throw new Error(`CATALOG_SUPABASE_HTTP_${response.status}`);
+  }
   return data;
 }
 
@@ -82,7 +87,7 @@ async function callRpc(name, args) {
   return supabaseJson(`/rest/v1/rpc/${name}`, { method: "POST", body: JSON.stringify(args) });
 }
 
-const catalogWorkflow = DBOS.registerWorkflow(async (input) => {
+export const catalogWorkflow = DBOS.registerWorkflow(async (input) => {
   return DBOS.runStep(
     () => runCatalogStorageImport({
       supabaseUrl: SUPABASE_URL,
@@ -100,6 +105,17 @@ const catalogWorkflow = DBOS.registerWorkflow(async (input) => {
     { name: `catalog-source:${input.runId}` },
   );
 }, { name: "catalog-import-storage-v1" });
+
+export function catalogWorkflowId(claim) {
+  const generation = Number(claim?.lease_generation);
+  if (!claim?.run_id || !Number.isSafeInteger(generation) || generation < 1) {
+    throw new Error("CATALOG_STORAGE_LEASE_CONTEXT_REQUIRED");
+  }
+  // The SQL claim returns lease_generation, not attempt_count. Falling back to
+  // attempt-1 reattached every retry to the first terminal DBOS failure.
+  // Old workflow IDs/history remain untouched; each new claim gets its own ID.
+  return `catalog-storage:${claim.run_id}:lease-${generation}`;
+}
 
 async function dispatchSource(source) {
   const run = await getRun(source.run_id);
@@ -126,30 +142,30 @@ async function dispatchSource(source) {
   }
   if (!claim?.claimed) return { status: claim?.status || "busy", sourceId: source.id };
   const scope = run.input_scope && typeof run.input_scope === "object" ? run.input_scope : {};
-  const workflowId = `catalog-storage:${claim.run_id}:attempt-${Number(claim.attempt_count || 1)}`;
-  const existing = await DBOS.getWorkflowStatus(workflowId);
-  if (existing && ["PENDING", "ENQUEUED", "RUNNING", "SUCCESS"].includes(existing.status)) return { status: "already-dispatched", workflowId };
-  const handle = await DBOS.startWorkflow(catalogWorkflow, { workflowID: workflowId, queueName: QUEUE_NAME })({
-    runId: claim.run_id,
-    organizationId: claim.organization_id,
-    actorId: claim.created_by,
-    resumeAfter: Number(claim.cursor_row ?? -1),
-    source: {
-      sourcePath: claim.storage_object_path,
-      sourceBytes: Number(claim.total_bytes),
-      ...(claim.checksum_sha256 ? { sourceSha256: claim.checksum_sha256 } : {}),
-    },
-    fallbackBrand: String(scope.brand || scope.brand_name || ""),
-    fallbackMarketSegment: String(scope.market_segment || scope.marketSegment || ""),
-    lease: {
-      sourceId: claim.source_id,
-      workerId: claim.lease_owner,
-      leaseToken: claim.lease_token,
-      leaseGeneration: Number(claim.lease_generation),
-      leaseSeconds: 3600,
-    },
-  });
+  const workflowId = catalogWorkflowId(claim);
   try {
+    const existing = await DBOS.getWorkflowStatus(workflowId);
+    if (existing && ["PENDING", "ENQUEUED", "RUNNING", "SUCCESS"].includes(existing.status)) return { status: "already-dispatched", workflowId };
+    const handle = await DBOS.startWorkflow(catalogWorkflow, { workflowID: workflowId, queueName: QUEUE_NAME })({
+      runId: claim.run_id,
+      organizationId: claim.organization_id,
+      actorId: claim.created_by,
+      resumeAfter: Number(claim.cursor_row ?? -1),
+      source: {
+        sourcePath: claim.storage_object_path,
+        sourceBytes: Number(claim.total_bytes),
+        ...(claim.checksum_sha256 ? { sourceSha256: claim.checksum_sha256 } : {}),
+      },
+      fallbackBrand: String(scope.brand || scope.brand_name || ""),
+      fallbackMarketSegment: String(scope.market_segment || scope.marketSegment || ""),
+      lease: {
+        sourceId: claim.source_id,
+        workerId: claim.lease_owner,
+        leaseToken: claim.lease_token,
+        leaseGeneration: Number(claim.lease_generation),
+        leaseSeconds: 3600,
+      },
+    });
     return { status: "started", workflowId, result: await handle.getResult() };
   } catch (error) {
     try {
