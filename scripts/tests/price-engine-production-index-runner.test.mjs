@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
 import { buildPlan, PRODUCTION_PROJECT } from '../ops/price-engine-production-index-prebuild.mjs';
 import { runIndexPrebuild, parseRunnerArgs, SESSION_IDENTITY_SQL, safeFailure } from '../ops/run-price-engine-production-index-prebuild.mjs';
+import { OWNED_ATTEMPT_SHA256, OWNED_INDEX_OID, OWNED_INDEX_METADATA_SQL, DROP_OWNED_INDEX_SQL } from '../ops/price-engine-owned-index-recovery.mjs';
 
 const plan = JSON.parse(await readFile(new URL('../ops/price-engine-production-index-prebuild-plan.json', import.meta.url), 'utf8'));
 const actualRegeneratedPlan = await buildPlan();
@@ -179,4 +180,33 @@ test('connection and cleanup errors are sanitized; apply requires an explicit un
   assert.equal(parseRunnerArgs([...args, '--apply']).apply, true);
   assert.throws(() => parseRunnerArgs([...args, '--apply', '--inspect']), /RUNNER_ARGUMENT_INVALID/);
   assert.throws(() => parseRunnerArgs([...args, '--password', secret]), /RUNNER_ARGUMENT_INVALID/);
+  assert.throws(() => parseRunnerArgs([...args, '--allow-snapshot-wait']), /RUNNER_ARGUMENT_INVALID/);
+  assert.equal(parseRunnerArgs([...args, '--apply', '--allow-snapshot-wait']).allowSnapshotWait, true);
+  assert.throws(() => parseRunnerArgs([...args, '--apply', '--recover-owned-invalid']), /RUNNER_ARGUMENT_INVALID/);
+  assert.throws(() => parseRunnerArgs([...args, '--apply', '--attempt-journal', '/fixture']), /RUNNER_ARGUMENT_INVALID/);
+});
+
+test('explicit owned-index cleanup drops only its verified OID and stops before every CREATE', async () => {
+  const recovery = { journalBytes: await readFile(new URL('./fixtures/price-engine-owned-index-attempt-20261014.jsonl', import.meta.url)),
+    journalSha256: OWNED_ATTEMPT_SHA256, indexOid: OWNED_INDEX_OID };
+  const h = harness({ present: 1, onQuery({ sql, rows }) {
+    if (sql === OWNED_INDEX_METADATA_SQL) return { rows: [{ index_oid: String(OWNED_INDEX_OID), index_kind: 'i',
+      index_schema: 'public', index_name: plan.operations[0].name, table_oid: '12345', table_schema: 'public',
+      table_name: 'catalog_products', valid: false, ready: true, live: true, unique: false,
+      definition: plan.operations[0].expected_definition, constraint_count: 0, active_build_count: 0 }] };
+    if (sql === DROP_OWNED_INDEX_SQL) { rows[0].present = false; return { rows: [] }; }
+    if (sql.startsWith("SELECT to_regclass('public.idx_catalog_products_export_exact_code')")) return { rows: [{ absent: true }] };
+  } });
+  h.rows[0].valid = false;
+  const result = await h.run({ apply: true, recoverOwnedInvalid: recovery });
+  assert.equal(result.status, 'owned-invalid-removed');
+  assert.equal(result.schema_ddl_attempted, 1);
+  assert.equal(h.counters.ddl, 0);
+  assert.deepEqual(h.queries.filter(sql => /^(?:drop|create|reindex)/i.test(sql)), [DROP_OWNED_INDEX_SQL]);
+  assert.equal(h.queries.includes("SET lock_timeout = '0'"), false);
+  assert.equal(h.counters.connects, 1);
+
+  const denied = harness({ present: 1 }); denied.rows[0].valid = false; denied.rows[1].present = true; denied.rows[1].valid = false;
+  assert.equal((await denied.run({ apply: true, recoverOwnedInvalid: recovery })).failure.code, 'INDEX_METADATA_GATE_FAILED');
+  assert.equal(denied.queries.includes(DROP_OWNED_INDEX_SQL), false);
 });
