@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "purpose": "V3 real browser download handoff acceptance",
+  "sourceCommit": "fa8e8be412c47f88ca70b2c6e5de12fa73212dd5",
+  "environment": "v3-staging",
+  "projectRef": "kaxsqafdevabkxofwdod",
+  "rootReportedDeployment": {
+    "netlify": "6acfcdd0aeec91eb9a26f7de",
+    "worker": "dep-db7st47f3r2c73998f7g",
+    "workerInstance": "rxljv"
+  },
+  "rootReportedBrowserObservation": {
+    "personallyObservedByThisAgent": false,
+    "automaticDownloadNativeSaveCompleted": true,
+    "preparedFileCardVisible": true,
+    "nativeBlobAnchorVisible": true,
+    "truthfulDownloadStartedMessage": true,
+    "filePath": "/Users/ersen/Downloads/portal-price-list-Euroricambi-B-20261014 (1).xlsx"
+  },
+  "exportJob": {
+    "id": "78a43447-1b39-4f51-9e76-0da0df8b9bb4",
+    "organization_id": "b0000000-0000-4000-8000-000000000001",
+    "audience": "admin",
+    "export_type": "admin_price_list",
+    "status": "finalized",
+    "scope": {
+      "format": "xlsx",
+      "brandId": "ddbeb595-853a-407d-91d7-25f1fd410ccd",
+      "brandName": "Euroricambi",
+      "marginPercent": 0.15,
+      "priceListType": "B",
+      "schemaVersion": 4
+    },
+    "row_count": 542,
+    "byte_size": 20389,
+    "file_name": "portal-price-list-Euroricambi-B-20261014.xlsx",
+    "created_at": "2026-10-14 18:56:01.288111+00",
+    "started_at": "2026-10-14 18:56:05.091+00",
+    "finalized_at": "2026-10-14 18:56:17.844+00",
+    "error_message": null,
+    "data_version": "b6e23b2d5cf3284f52167729e5c68cfc",
+    "snapshot_id": "ade822c3-e5ba-4f90-bb99-ef4b758a24d2",
+    "snapshot_status": "sealed"
+  },
+  "jobQuery": "select j.id,j.organization_id,j.audience,j.export_type,j.status,j.scope,j.row_count,j.byte_size,j.file_name,j.created_at,j.started_at,j.finalized_at,j.error_message,j.data_version,s.id snapshot_id,s.status snapshot_status from public.app_export_jobs j left join export_snapshot_private.snapshots s on s.job_id=j.id where j.id='78a43447-1b39-4f51-9e76-0da0df8b9bb4';",
+  "download": {
+    "fileName": "portal-price-list-Euroricambi-B-20261014 (1).xlsx",
+    "bytes": 20389,
+    "sha256": "3575a4857fecb299fbbf8ea2b96d421b3fca9f71fd3fbc9088b75c49da7d85c6",
+    "headers": [
+      "Part_No",
+      "Description",
+      "Price_EUR",
+      "Price_Date",
+      "Lifecycle"
+    ],
+    "dataRows": 542,
+    "distinctProductCodes": 542,
+    "duplicateCodes": 0,
+    "blankCodes": 0,
+    "formulaCells": 0,
+    "sheetNames": [
+      "Price List 1"
+    ],
+    "sheetDataRows": [
+      542
+    ],
+    "numericPriceCells": 542,
+    "chunks": [
+      {
+        "start": 1,
+        "end": 542,
+        "rows": 542,
+        "md5": "cdc5b23072e037846b4eaff1790cb1ba"
+      }
+    ],
+    "reader": "Bundled Python standard-library streaming ZIP/XML; no workbook edits or floating-point pricing comparisons"
+  },
+  "source": {
+    "query": "with job as materialized(select * from public.app_export_jobs where id='78a43447-1b39-4f51-9e76-0da0df8b9bb4'),\n  legacy as materialized(select public.normalize_catalog_product_code(sp.product_code) collate \"C\" code,sp.supplier_id,sp.id::text source_id,sp.buy_price,sp.valid_from from public.supplier_prices sp cross join job j where sp.organization_id=j.organization_id and sp.brand_id=(j.scope->>'brandId')::uuid and sp.is_active and sp.buy_price>0 and sp.currency='EUR' and sp.valid_from<=current_date and (sp.valid_to is null or sp.valid_to>=current_date) and public.normalize_catalog_product_code(sp.product_code) ~ '[A-Z0-9]' and not exists(select 1 from public.supplier_current_price_pointers ptr where ptr.organization_id=sp.organization_id and ptr.brand_id=sp.brand_id and ptr.supplier_id=sp.supplier_id)),\n  latest as materialized(select distinct on(code,supplier_id) * from legacy order by code,supplier_id,valid_from desc,source_id desc),\n  winners as materialized(select distinct on(code) * from latest order by code,buy_price,valid_from desc,supplier_id),\n  snapshot_rows as materialized(select r.* from export_snapshot_private.rows r where r.snapshot_id='ade822c3-e5ba-4f90-bb99-ef4b758a24d2'),\n  checked as(select p.*,w.buy_price,w.valid_from,j.scope,md5((select string_agg(octet_length(v)::text||':'||v,'' order by ord) from unnest(array[coalesce(payload->>'code',''),coalesce(payload->>'description',''),trim_scale((payload->>'price')::numeric)::text,coalesce(payload->>'priceDate',''),case when payload->>'discontinued'='true' then 'Discontinued'||case when coalesce(payload->>'replacementCode','')<>'' then '; replacement: '||(payload->>'replacementCode') else '' end else 'Active' end]) with ordinality f(v,ord))) row_hash from snapshot_rows p cross join job j left join winners w on w.code=p.source_key)\n  select clock_timestamp() observed_at,count(*) row_count,md5(string_agg(row_hash,'' order by ordinal)) ordered_fields_md5,count(*) filter(where payload->>'brand' is distinct from scope->>'brandName' or payload->>'currency' is distinct from 'EUR') scope_mismatches,count(*) filter(where buy_price is null) missing_prices,count(*) filter(where (payload->>'price')::numeric is distinct from round(buy_price*(1+(scope->>'marginPercent')::numeric),2)) price_mismatches,count(*) filter(where payload->>'priceDate' is distinct from valid_from::text) date_mismatches,(select count(*) from winners) eligible_source_keys,(select count(*) from public.supplier_current_price_pointers ptr cross join job j where ptr.organization_id=j.organization_id and ptr.brand_id=(j.scope->>'brandId')::uuid) pointer_count,(select public.get_admin_price_list_export_version(j.organization_id,(j.scope->>'brandId')::uuid) from job j) current_data_version from checked;",
+    "verification": {
+      "observed_at": "2026-10-14 19:00:34.391112+00",
+      "row_count": 542,
+      "ordered_fields_md5": "cdc5b23072e037846b4eaff1790cb1ba",
+      "scope_mismatches": 0,
+      "missing_prices": 0,
+      "price_mismatches": 0,
+      "date_mismatches": 0,
+      "eligible_source_keys": 542,
+      "pointer_count": 0,
+      "current_data_version": "b6e23b2d5cf3284f52167729e5c68cfc"
+    }
+  },
+  "baseline": {
+    "evidenceFile": "scripts/ops/evidence/price-engine-export-matrix-20261014.json",
+    "jobId": "726c11a8-fbba-4f90-b041-138eeb767d16",
+    "sameSha256": true,
+    "sha256": "3575a4857fecb299fbbf8ea2b96d421b3fca9f71fd3fbc9088b75c49da7d85c6",
+    "sameAllFiveColumnDigest": true
+  },
+  "explicitRetryNativeSave": {
+    "passed": true,
+    "rootReportedActualNativeSave": true,
+    "personallyObservedByThisAgent": false,
+    "filePath": "/Users/ersen/Downloads/portal-price-list-Euroricambi-B-20261014 (2).xlsx",
+    "bytes": 20389,
+    "sha256": "3575a4857fecb299fbbf8ea2b96d421b3fca9f71fd3fbc9088b75c49da7d85c6",
+    "byteIdenticalToAutomaticSaveAndPriorBaseline": true,
+    "validatedRows": 542,
+    "validationMethod": "Full byte equality to both independently parsed 542-row automatic-save workbook and prior source-verified baseline",
+    "noRegenerationOrRefetch": {
+      "sourceContractAndLocalTestsVerified": true,
+      "browserNetworkReceiptSupplied": false
+    }
+  },
+  "productionWritesByThisAgent": false,
+  "acceptancePassed": true,
+  "coverage": "Actual V3 automatic Save and direct native retry link Save, with complete file/source parity. Production B and global cutover acceptance remain separate."
+}
