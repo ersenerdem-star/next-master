@@ -1,0 +1,39 @@
+{
+  "project_ref": "kaxsqafdevabkxofwdod",
+  "site": "https://next-master-v3-staging-20261006.netlify.app/",
+  "worker_commit": "afcf81e5128b530fda01c7330ff8eb95a116a3f3",
+  "worker_deploy": "dep-db7o1bgu01pc739g60ng",
+  "frontend_commit": "df39596f3c0de348b1c2bcbd05d209d13096eed1",
+  "method": "Authenticated Chrome catalog CSV import, worker finalization and read-only database verification. Small CSV browser-staging path; no large-source Storage proof.",
+  "before_repair": {
+    "run": "983aac7e-ccaa-475e-9f7c-f98a6ea4f6f7",
+    "status": "finalized",
+    "rows": 3,
+    "insert_rows": 6,
+    "inserted_count": 3,
+    "seconds": 12.088573
+  },
+  "repair": {
+    "migration": "20261014132434_catalog_finalize_preserve_validation_counts.sql",
+    "function_md5_before": "b6c02073f9dd230457e1901e3598c2c9",
+    "function_md5_after": "62438b8bbf47eeba619f9ec937ed64a2",
+    "historical_rows_rewritten": false
+  },
+  "after_repair": {
+    "run": "861832b1-438c-4d92-828a-281bff81e106",
+    "status": "finalized",
+    "started_at": "2026-10-14T13:41:11.234197Z",
+    "finished_at": "2026-10-14T13:41:20.546433Z",
+    "staged_rows": 3,
+    "valid_rows": 3,
+    "error_rows": 0,
+    "insert_rows": 3,
+    "inserted_count": 3,
+    "processed_rows": 3,
+    "seconds": 9.312236,
+    "browser_search": "NMV3COUNT20261014",
+    "visible_products": 3,
+    "screenshot": "/private/tmp/next-master-catalog-count-canary-20261014.jpg"
+  },
+  "production_changed": false
+}

@@ -3,9 +3,11 @@
 !package-lock.json
 !src/
 src/**
+!src/compact-verified-workflow.mjs
 !src/direct-verified-release-runner.mjs
 !src/worker.mjs
 !src/worker-service.mjs
+!src/worker-target.mjs
 !src/expiry-test-fixture.mjs
 !src/partitioned-verified-workflow.mjs
 !src/prepared-partitions.mjs
@@ -24,4 +26,5 @@ src/**
 !src/upload-verification-consumer.mjs
 !src/verified-release-workflow.mjs
 !src/verified-upload-handoff.mjs
+!src/verified-workflow-version.mjs
 # Never send env/secrets, source files, evidence, node_modules or Git history.
