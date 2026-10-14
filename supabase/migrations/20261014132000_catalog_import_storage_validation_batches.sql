@@ -177,11 +177,11 @@ begin
   )
   select count(*)::integer,
          coalesce(max((select max(row_index) from batch_rows)), v_cursor),
-         count(*) filter (where proposed_action = 'insert')::integer,
-         count(*) filter (where proposed_action = 'update')::integer,
-         count(*) filter (where proposed_action = 'skip')::integer,
-         count(*) filter (where proposed_action = 'error')::integer,
-         count(*) filter (where duplicate_in_run)::integer
+         count(*) filter (where updated.proposed_action = 'insert')::integer,
+         count(*) filter (where updated.proposed_action = 'update')::integer,
+         count(*) filter (where updated.proposed_action = 'skip')::integer,
+         count(*) filter (where updated.proposed_action = 'error')::integer,
+         count(*) filter (where updated.duplicate_in_run)::integer
   into v_batch_count, v_next_cursor, v_insert, v_update, v_skip, v_error, v_duplicate
   from updated;
 
