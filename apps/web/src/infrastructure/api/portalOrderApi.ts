@@ -58,6 +58,11 @@ export type PortalPreparedLine = {
   market_segment: string | null;
   description: string;
   qty: number;
+  requested_qty?: number | null;
+  moq?: number | null;
+  order_multiple?: number | null;
+  quantity_adjusted?: boolean;
+  quantity_adjustment_note?: string | null;
   oem_no: string;
   hs_code: string;
   origin: string;

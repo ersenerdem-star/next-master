@@ -22,18 +22,21 @@ export function downloadCatalogLifecycleTemplate() {
 }
 
 export const VERIFIED_SUPPLIER_IMPORT_COLUMNS = [
-  "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Lead_Time_Days", "Notes",
+  "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes", "Stock_Qty", "Valid_To",
 ] as const;
 
 export function downloadSupplierTemplate(options: { verified?: boolean } = {}) {
   const headers = ["Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes"];
   const sample = ["0986332404", "Bosch", "Starter", "1519524", "52.43", "2026-05-11", "1", "", "7", "Sample row"];
-  const selected = headers.map((header, index) => ({ header, index })).filter(({ header }) => !options.verified || header !== "Order_Multiple");
+  const selectedHeaders = options.verified ? [...VERIFIED_SUPPLIER_IMPORT_COLUMNS] : headers;
+  const sampleByColumn = Object.fromEntries(headers.map((header, index) => [header, sample[index]]));
+  // Blank supplier stock is unknown; do not invent availability in the template.
+  const values = selectedHeaders.map((header) => sampleByColumn[header] ?? "");
   downloadCsv(
     "supplier-import-template.csv",
     toCsv([
-      selected.map(({ header }) => header),
-      selected.map(({ index }) => sample[index]),
+      selectedHeaders,
+      values,
     ]),
   );
 }

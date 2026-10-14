@@ -19,7 +19,7 @@ test("portal keeps published SKUs separate and prices exact order/search request
       data = [{ id: "brand-1", name: "Clevite" }];
     } else if (url.pathname.endsWith("/supplier_current_price_pointers")) {
       data = [{ release_id: "published-release-1" }];
-    } else if (url.pathname.endsWith("/cloud_current_supplier_price_options_service")) {
+    } else if (url.pathname.endsWith("/cloud_current_supplier_commercial_options_service")) {
       const body = JSON.parse(String(init?.body || "{}")) as Record<string, string>;
       assert.equal(body.input_organization_id, "org-1");
       assert.equal(body.input_brand, "Clevite");
@@ -28,7 +28,7 @@ test("portal keeps published SKUs separate and prices exact order/search request
       // reject it instead of pricing 61-1 from 611's published row.
       const productCode = body.input_code === "61-1" ? "611" : body.input_code;
       const price = productCode === "61/1" ? 8.34 : productCode === "611" ? 405.72 : null;
-      data = price == null ? [] : [{ supplier_id: "supplier-1", supplier_name: "Supplier", brand_id: "brand-1", brand: "Clevite", product_code: productCode, description: "Part", buy_price: price, price_date: "2026-10-13", notes: "" }];
+      data = price == null ? [] : [{ supplier_id: "supplier-1", supplier_name: "Supplier", brand_id: "brand-1", brand: "Clevite", product_code: productCode, description: "Part", buy_price: price, price_date: "2026-10-13", notes: "", moq: null, order_multiple: null, stock_qty: null, valid_to: null }];
     }
     return new Response(JSON.stringify(data), { status: 200, headers: { "Content-Type": "application/json" } });
   };

@@ -9,6 +9,8 @@ export type QuoteSupplierOption = {
   notes: string | null;
   moq?: number | null;
   order_multiple?: number | null;
+  stock_qty?: number | null;
+  valid_to?: string | null;
   lifecycle_status?: CatalogLifecycleStatus | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
@@ -32,6 +34,8 @@ export type QuoteResolveResult = {
   notes: string | null;
   moq?: number | null;
   order_multiple?: number | null;
+  stock_qty?: number | null;
+  valid_to?: string | null;
   lifecycle_status?: CatalogLifecycleStatus | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
@@ -49,6 +53,8 @@ export type QuoteBuilderLine = {
   requested_qty?: number | null;
   moq?: number | null;
   order_multiple?: number | null;
+  stock_qty?: number | null;
+  valid_to?: string | null;
   quantity_adjusted?: boolean;
   quantity_adjustment_note?: string | null;
   oem_no: string;

@@ -295,8 +295,8 @@ async function refreshLinePricesFromCatalog(
       sell_price: nextSellPrice,
       qty: quantityAdjustment.corrected,
       requested_qty: quantityAdjustment.adjusted ? quantityAdjustment.requested : null,
-      moq: selected?.moq ?? line.moq ?? null,
-      order_multiple: selected?.order_multiple ?? line.order_multiple ?? null,
+      moq: selected ? selected.moq ?? null : line.moq ?? null,
+      order_multiple: selected ? selected.order_multiple ?? null : line.order_multiple ?? null,
       quantity_adjusted: quantityAdjustment.adjusted,
       quantity_adjustment_note: quantityAdjustment.adjusted
         ? `Order amount ${quantityAdjustment.requested} pcs corrected to ${quantityAdjustment.corrected} pcs by supplier quantity rule.`

@@ -77,7 +77,7 @@ test("published quote import keeps 61/1 distinct from 611 and ignores a collidin
         options: [{
           supplier_id: "supplier-1", supplier_name: "Clevite supplier", brand_id: "brand-1", brand: "Clevite",
           product_code: code, description: "", buy_price: code === "61/1" ? "8.34" : "405.72",
-          price_date: "2026-10-10", notes: null,
+          price_date: "2026-10-10", notes: null, moq: null, order_multiple: null, stock_qty: null, valid_to: null,
         }],
       }));
     },
@@ -95,7 +95,7 @@ test("published quote import keeps 61/1 distinct from 611 and ignores a collidin
   assert.equal(calls.includes("supplier_prices"), false);
 });
 
-test("quote import retains legacy supplier lookup when no publication exists", async () => {
+test("quote import uses canonical legacy supplier options when no publication exists", async () => {
   const calls = [];
   globalThis.__quoteImportMocks = {
     organizationId: async () => "org-1",
@@ -106,7 +106,7 @@ test("quote import retains legacy supplier lookup when no publication exists", a
       supplier_prices: [{ supplier_id: "supplier-2", brand_id: "brand-2", product_code: "123-4", normalized_code: "1234", normalized_oem: "", buy_price: 10, valid_from: "2026-10-01", is_active: true, organization_id: "org-1", suppliers: { name: "Legacy supplier" } }],
     }, calls),
     callAppRpc: async (_name, args) => args.input_requests.map((_, request_index) => ({
-      request_index, has_published_scope: false, options: [],
+      request_index, has_published_scope: false, options: [{ supplier_id: "supplier-2", supplier_name: "Legacy supplier", product_code: "123-4", buy_price: 10, price_date: "2026-10-01", moq: 5, order_multiple: 4, stock_qty: 0, valid_to: "2026-12-31" }],
     })),
   };
   const { batchResolveQuoteImportRows } = await loadQuoteImport();
@@ -116,7 +116,11 @@ test("quote import retains legacy supplier lookup when no publication exists", a
   });
   assert.equal(line.buy_price, 10);
   assert.equal(line.sell_price, 11.5);
-  assert.equal(calls.includes("supplier_prices"), true);
+  assert.equal(calls.includes("supplier_prices"), false);
+  assert.equal(line.qty, 8);
+  assert.equal(line.requested_qty, 1);
+  assert.match(line.quantity_adjustment_note, /prepared 8 pcs/);
+  assert.equal(line.supplierOptions[0].stock_qty, 0);
 });
 
 test("legacy bulk quote import does not borrow 611 catalog, reference, or price for 61/1", async () => {
@@ -130,8 +134,8 @@ test("legacy bulk quote import does not borrow 611 catalog, reference, or price 
       catalog_products: [{ id: "catalog-611", product_code: "611", normalized_code: "611", normalized_oem: "611", brand_id: "brand-1", organization_id: "org-1" }],
       supplier_prices: [{ supplier_id: "supplier-1", brand_id: "brand-1", product_code: "611", normalized_code: "611", normalized_oem: "611", buy_price: 405.72, valid_from: "2026-10-01", is_active: true, organization_id: "org-1", suppliers: { name: "Legacy supplier" } }],
     }, []),
-    callAppRpc: async (_name, args) => args.input_requests.map((_, request_index) => ({
-      request_index, has_published_scope: false, options: [],
+    callAppRpc: async (_name, args) => args.input_requests.map(({ code }, request_index) => ({
+      request_index, has_published_scope: false, options: code === "611" ? [{ supplier_id: "supplier-1", supplier_name: "Legacy supplier", product_code: "611", buy_price: 405.72, moq: null, order_multiple: null, stock_qty: null, valid_to: null }] : [],
     })),
   };
   const { batchResolveQuoteImportRows } = await loadQuoteImport();
@@ -182,4 +186,22 @@ test("retired C pricing cannot be used for a new quote import", async () => {
     }),
     /price list is retired/,
   );
+});
+
+
+test("expired legacy source cannot resurrect through direct supplier table reads during bulk import", async () => {
+  const calls = [];
+  globalThis.__quoteImportMocks = {
+    organizationId: async () => "org-1", codeReferences: async () => new Map(),
+    supabaseClient: tableClient({
+      brands: [{ id: "brand-2", name: "Bosch", organization_id: "org-1" }],
+      supplier_prices: [{ supplier_id: "supplier-2", brand_id: "brand-2", product_code: "123-4", normalized_code: "1234", buy_price: 10, valid_to: "2020-01-01", is_active: true, organization_id: "org-1", suppliers: { name: "Expired supplier" } }],
+    }, calls),
+    callAppRpc: async (_name, args) => args.input_requests.map((_, request_index) => ({ request_index, has_published_scope: false, options: [] })),
+  };
+  const { batchResolveQuoteImportRows } = await loadQuoteImport();
+  const [line] = await batchResolveQuoteImportRows({ rows: [{ code: "123-4", brand: "Bosch", qty: 1 }], customerType: "A", marginA: 10, marginB: 15 });
+  assert.equal(line.buy_price, null);
+  assert.equal(line.sell_price, null);
+  assert.equal(calls.includes("supplier_prices"), false);
 });

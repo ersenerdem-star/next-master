@@ -1,4 +1,6 @@
 import { buildDiscontinuedWarning, normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
+import { readSupplierCommercialTerms, type SupplierCommercialTerms } from "../../domain/shared/supplierCommercialTerms";
+import { normalizeOrderQuantity } from "../../domain/shared/orderQuantityRules";
 import { markupMoney } from "../../../../../shared/order-money.mjs";
 import { canonicalizeBrandName, normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
 import type { QuoteBuilderLine, QuoteSupplierOption } from "../../types/quoteBuilder";
@@ -24,7 +26,7 @@ type CatalogMetadataRow = {
   lifecycle_note?: string | null;
 };
 
-type CurrentSupplierPriceOption = {
+type CurrentSupplierPriceOption = SupplierCommercialTerms & {
   supplier_id: string | null;
   supplier_name: string;
   brand_id: string;
@@ -62,7 +64,7 @@ async function fetchCurrentSupplierPriceBatch(rows: Array<{ code: string; brand:
           || typeof row?.has_published_scope !== "boolean" || !Array.isArray(row?.options)) {
         throw new Error("Published supplier price lookup returned invalid data.");
       }
-      if (row.has_published_scope && row.options.some((option) =>
+      if (row.options.some((option) =>
         !String(option?.supplier_id || "").trim()
         || !String(option?.supplier_name || "").trim()
         || !String(option?.product_code || "").trim()
@@ -71,7 +73,7 @@ async function fetchCurrentSupplierPriceBatch(rows: Array<{ code: string; brand:
         || Number(option?.buy_price) <= 0)) {
         throw new Error("Published supplier price lookup returned an invalid price.");
       }
-      ordered[index] = row;
+      ordered[index] = { ...row, options: row.options.map((option) => ({ ...option, ...readSupplierCommercialTerms(option) })) };
     }
     if (ordered.some((row) => !row)) throw new Error("Published supplier price lookup omitted a row.");
     resolved.push(...ordered);
@@ -159,13 +161,13 @@ async function resolveQuoteImportRowsOnce(input: {
   });
 
   const redirectedPublishedRows = preparedRows.filter((row) =>
-    row.publishedPrice?.has_published_scope && exactSku(row.targetCode) !== exactSku(row.code));
+    row.brandId && exactSku(row.targetCode) !== exactSku(row.code));
   if (redirectedPublishedRows.length) {
     const redirectedPrices = await fetchCurrentSupplierPriceBatch(
       redirectedPublishedRows.map((row) => ({ code: row.targetCode, brand: row.brand })),
     );
     redirectedPublishedRows.forEach((row, index) => {
-      if (!redirectedPrices[index].has_published_scope) {
+      if (row.publishedPrice?.has_published_scope && !redirectedPrices[index].has_published_scope) {
         throw new Error("Published supplier price scope changed during quote import.");
       }
       row.publishedPrice = redirectedPrices[index];
@@ -204,8 +206,6 @@ async function resolveQuoteImportRowsOnce(input: {
 
   const catalogExact = new Map<string, Array<any>>();
   const catalogOem = new Map<string, any>();
-  const supplierExact = new Map<string, Array<any>>();
-  const supplierOem = new Map<string, Array<any>>();
 
   for (const codeChunk of chunk(normalizedCodes, 150)) {
     const [catalogExactResult, catalogOemResult] = await Promise.all([
@@ -237,44 +237,6 @@ async function resolveQuoteImportRowsOnce(input: {
     }
   }
 
-  const legacyRows = preparedRows.filter((row) => !row.publishedPrice?.has_published_scope);
-  const legacyBrandIds = [...new Set(legacyRows.map((row) => row.brandId).filter(Boolean))];
-  const legacyNormalizedCodes = [...new Set(legacyRows.map((row) => row.normalizedTargetCode).filter(Boolean))];
-  for (const codeChunk of chunk(legacyNormalizedCodes, 150)) {
-    const [supplierExactResult, supplierOemResult] = await Promise.all([
-      supabaseClient
-        .from("supplier_prices")
-        .select("supplier_id,brand_id,product_code,normalized_code,normalized_oem,description,oem_no,buy_price,valid_from,notes,suppliers(name)")
-        .eq("organization_id", organizationId)
-        .eq("is_active", true)
-        .not("buy_price", "is", null)
-        .in("brand_id", legacyBrandIds)
-        .in("normalized_code", codeChunk),
-      supabaseClient
-        .from("supplier_prices")
-        .select("supplier_id,brand_id,product_code,normalized_code,normalized_oem,description,oem_no,buy_price,valid_from,notes,suppliers(name)")
-        .eq("organization_id", organizationId)
-        .eq("is_active", true)
-        .not("buy_price", "is", null)
-        .in("brand_id", legacyBrandIds)
-        .in("normalized_oem", codeChunk),
-    ]);
-    if (supplierExactResult.error) throw new Error(supplierExactResult.error.message || "Supplier exact lookup failed");
-    if (supplierOemResult.error) throw new Error(supplierOemResult.error.message || "Supplier OEM lookup failed");
-    for (const row of (supplierExactResult.data || []) as Array<any>) {
-      const key = codeKey(String(row.brand_id), String(row.normalized_code || normalizePartCode(String(row.product_code || ""))));
-      const bucket = supplierExact.get(key) || [];
-      bucket.push(row);
-      supplierExact.set(key, bucket);
-    }
-    for (const row of (supplierOemResult.data || []) as Array<any>) {
-      const key = codeKey(String(row.brand_id), String(row.normalized_oem || normalizePartCode(String(row.oem_no || ""))));
-      const bucket = supplierOem.get(key) || [];
-      bucket.push(row);
-      supplierOem.set(key, bucket);
-    }
-  }
-
   const resolvedCatalogRows = preparedRows.map((row) => {
     const key = codeKey(row.brandId, row.normalizedTargetCode);
     const candidates = catalogExact.get(key) || [];
@@ -290,14 +252,13 @@ async function resolveQuoteImportRowsOnce(input: {
   });
 
   return resolvedCatalogRows.map(({ row, key, catalogMatch }) => {
-    const supplierMatchesRaw = row.publishedPrice?.has_published_scope
-      ? row.publishedPrice.options.filter((option) => exactSku(option.product_code) === exactSku(row.targetCode))
-      : [...(supplierExact.get(key) || []), ...(supplierOem.get(key) || [])]
-        .filter((option) => exactSku(option.product_code) === exactSku(row.targetCode));
+    // Canonical RPC owns pointer fencing, expiry and atomic supplier terms for both sources.
+    const supplierMatchesRaw = (row.publishedPrice?.options || [])
+      .filter((option) => exactSku(option.product_code) === exactSku(row.targetCode));
     const uniqueSupplierMatches = new Map<string, any>();
     supplierMatchesRaw.forEach((item) => {
       const supplierId = String(item.supplier_id || "");
-      const supplierName = String(item.supplier_name || item.suppliers?.name || "");
+      const supplierName = String(item.supplier_name || "");
       const key = `${supplierId}::${supplierName}`;
       const current = uniqueSupplierMatches.get(key);
       if (!current || Number(item.buy_price ?? Number.MAX_SAFE_INTEGER) < Number(current.buy_price ?? Number.MAX_SAFE_INTEGER)) {
@@ -307,8 +268,9 @@ async function resolveQuoteImportRowsOnce(input: {
 
     const supplierMatches = [...uniqueSupplierMatches.values()]
       .map((item) => ({
+        ...readSupplierCommercialTerms(item),
         supplier_id: item.supplier_id || null,
-        supplier_name: (item.supplier_name || item.suppliers?.name || "") as string,
+        supplier_name: (item.supplier_name || "") as string,
         buy_price: item.buy_price == null ? null : Number(item.buy_price),
         price_date: item.price_date || item.valid_from || null,
         sell_price:
@@ -322,6 +284,7 @@ async function resolveQuoteImportRowsOnce(input: {
 
     const selected = supplierMatches[0] || null;
     const sellPrice = selected?.sell_price ?? null;
+    const quantityAdjustment = normalizeOrderQuantity(row.qty, selected || {});
     const lifecycleStatus = normalizeCatalogLifecycleStatus(String(catalogMatch?.lifecycle_status || ""));
     const lifecycleNote = String(catalogMatch?.lifecycle_note || "").trim() || null;
 
@@ -333,8 +296,15 @@ async function resolveQuoteImportRowsOnce(input: {
         : catalogMatch?.product_code || row.targetCode || row.code),
       brand: row.brand,
       description: String(catalogMatch?.description || supplierMatchesRaw[0]?.description || ""),
-      qty: row.qty,
-      oem_no: String(catalogMatch?.oem_no || supplierMatchesRaw[0]?.oem_no || ""),
+      qty: quantityAdjustment.corrected,
+      requested_qty: quantityAdjustment.adjusted ? quantityAdjustment.requested : null,
+      moq: selected?.moq ?? null,
+      order_multiple: selected?.order_multiple ?? null,
+      quantity_adjusted: quantityAdjustment.adjusted,
+      quantity_adjustment_note: quantityAdjustment.adjusted
+        ? `Requested ${quantityAdjustment.requested} pcs; prepared ${quantityAdjustment.corrected} pcs (minimum ${quantityAdjustment.moq}, order multiple ${quantityAdjustment.orderMultiple}). Review this quantity before saving.`
+        : null,
+      oem_no: String(catalogMatch?.oem_no || ""),
       hs_code: String(catalogMatch?.hs_code || ""),
       origin: String(catalogMatch?.origin || ""),
       weight_kg: (catalogMatch?.weight_kg as number | null) ?? null,

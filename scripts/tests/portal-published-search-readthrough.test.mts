@@ -26,7 +26,7 @@ test("catalogless published brand supports bounded SKU browse and prefix search 
       data = url.searchParams.get("brand_id") === "eq.brand-bosch" && url.searchParams.get("select") === "id"
         ? [{ id: "bosch-product" }]
         : [];
-    } else if (url.pathname.endsWith("/cloud_current_supplier_price_options_service")) {
+    } else if (url.pathname.endsWith("/cloud_current_supplier_commercial_options_service")) {
       data = [];
     } else if (url.pathname.endsWith("/cloud_portal_published_price_search_page_v3")) {
       const request = JSON.parse(String(init?.body || "{}")) as Record<string, unknown>;

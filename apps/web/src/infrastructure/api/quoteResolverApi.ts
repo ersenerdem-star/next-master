@@ -4,7 +4,7 @@ import type { QuoteResolveResult, QuoteSupplierOption } from "../../types/quoteB
 import { callAppRpc } from "./appRpcApi";
 import { supabaseClient } from "./supabaseClient";
 
-type SupplierOrderRuleRow = { supplier_name?: string | null; moq?: number | null; order_multiple?: number | null };
+import { readSupplierCommercialTerms } from "../../domain/shared/supplierCommercialTerms";
 
 function exactSku(value: string | null | undefined) {
   return String(value || "").trim().replace(/\s+/g, "").toUpperCase();
@@ -107,39 +107,25 @@ export async function resolveQuoteLine(input: {
   const includeSupplierOptions = input.includeSupplierOptions !== false;
 
   if (resolved.found && includeSupplierOptions) {
-    const optionRows = await callAppRpc<QuoteSupplierOption[]>("cloud_quote_supplier_options_v3", {
+    const optionRows = await callAppRpc<QuoteSupplierOption[]>("cloud_quote_supplier_commercial_options_v3", {
       input_code: code,
       input_brand: brand || resolved.brand || "",
       input_customer_type: supplierRpcCustomerType,
       input_margin_a: input.marginA / 100,
       input_margin_b: input.marginB / 100,
     });
-    supplierOptions = (optionRows || []).map((option) => ({
-      supplier_id: option.supplier_id || null,
-      supplier_name: option.supplier_name || "",
-      buy_price: option.buy_price ?? null,
-      price_date: option.price_date || null,
-      sell_price: option.sell_price ?? null,
-      notes: option.notes || null,
-    }));
-
-    try {
-      const ruleRows = await callAppRpc<SupplierOrderRuleRow[]>("cloud_supplier_order_rules", {
-        input_code: code,
-        input_brand: brand || resolved.brand || "",
-      });
-      const rulesBySupplier = new Map(
-        (ruleRows || []).map((row) => [String(row.supplier_name || "").trim().toLowerCase(), row]),
-      );
-      supplierOptions = supplierOptions.map((option) => {
-        const rule = rulesBySupplier.get(String(option.supplier_name || "").trim().toLowerCase());
-        return rule
-          ? { ...option, moq: rule.moq ?? null, order_multiple: rule.order_multiple ?? null }
-          : option;
-      });
-    } catch {
-      // Quantity rules are additive; quote resolution remains usable until the migration is applied.
-    }
+    supplierOptions = (optionRows || []).map((option) => {
+      if (!String(option.supplier_id || "").trim()) throw new Error("Supplier commercial rules could not be verified.");
+      return {
+        ...readSupplierCommercialTerms(option),
+        supplier_id: option.supplier_id || null,
+        supplier_name: option.supplier_name || "",
+        buy_price: option.buy_price ?? null,
+        price_date: option.price_date || null,
+        sell_price: option.sell_price ?? null,
+        notes: option.notes || null,
+      };
+    });
   }
 
   const normalizedRequested = normalizePartCode(code);
@@ -150,6 +136,12 @@ export async function resolveQuoteLine(input: {
     resolved: {
       ...resolved,
       product_code: resolved.product_code || code,
+      ...(includeSupplierOptions && resolved.found ? {
+        supplier_id: supplierOptions[0]?.supplier_id ?? null, supplier_name: supplierOptions[0]?.supplier_name ?? null,
+        buy_price: supplierOptions[0]?.buy_price ?? null, sell_price: supplierOptions[0]?.sell_price ?? null,
+        price_date: supplierOptions[0]?.price_date ?? null, notes: supplierOptions[0]?.notes ?? null,
+        moq: supplierOptions[0]?.moq ?? null, order_multiple: supplierOptions[0]?.order_multiple ?? null,
+      } : {}),
     },
     supplierOptions,
   };

@@ -8,7 +8,7 @@ export type SupplierSummary = {
 };
 
 export type SupplierPriceRow = {
-  total_count: number;
+  total_count: number | null;
   price_id: string;
   supplier_name?: string | null;
   product_code: string;
@@ -20,6 +20,8 @@ export type SupplierPriceRow = {
   price_date: string | null;
   moq: number | null;
   order_multiple: number | null;
+  stock_qty?: number | null;
+  valid_to?: string | null;
   lead_time_days: number | null;
   notes: string | null;
   freshness: string | null;

@@ -1,3 +1,4 @@
+import { readSupplierCommercialTerms } from "../../domain/shared/supplierCommercialTerms";
 import { callAppRpc } from "./appRpcApi";
 import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
@@ -381,14 +382,8 @@ export async function fetchCloudSupplierPrices({
     input_page_size: pageSize,
     input_freshness: freshness,
   };
-  let data: SupplierPriceRow[];
-  try {
-    data = await callAppRpc<SupplierPriceRow[]>("cloud_supplier_price_page_with_rules", input);
-  } catch {
-    data = await callAppRpc<SupplierPriceRow[]>("cloud_supplier_price_page", input);
-  }
-
-  return (data || []) as SupplierPriceRow[];
+  const data = await callAppRpc<SupplierPriceRow[]>("cloud_supplier_price_commercial_page_v3", input);
+  return (data || []).map((row) => ({ ...row, ...readSupplierCommercialTerms(row) }));
 }
 
 export async function fetchCloudSupplierPricesAcrossSuppliers(input: {
@@ -519,7 +514,7 @@ export async function fetchSupplierExportRows(input: { supplierId: string; brand
     const buildQuery = (mode: SupplierSearchMode) => {
       let query = supabaseClient
         .from("supplier_prices")
-        .select("id,product_code,description,oem_no,buy_price,currency,valid_from,moq,order_multiple,lead_time_days,notes")
+        .select("id,product_code,description,oem_no,buy_price,currency,valid_from,moq,order_multiple,lead_time_days,notes,stock_qty,valid_to")
         .eq("organization_id", organizationId)
         .eq("supplier_id", input.supplierId)
         .eq("brand_id", brandRow.id)
@@ -571,6 +566,8 @@ export async function fetchSupplierExportRows(input: { supplierId: string; brand
       price_date: (row.valid_from as string | null) || "",
       moq: (row.moq as number | null) ?? null,
       order_multiple: (row.order_multiple as number | null) ?? null,
+      stock_qty: (row.stock_qty as number | null) ?? null,
+      valid_to: (row.valid_to as string | null) ?? null,
       lead_time_days: (row.lead_time_days as number | null) ?? null,
       notes: (row.notes as string | null) || "",
       freshness: input.freshness || null,

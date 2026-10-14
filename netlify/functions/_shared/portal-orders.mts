@@ -2,6 +2,8 @@ import { buildRestUrl, getJson, sendJson, serviceRoleHeaders } from "./http.mts"
 import { buildPortalSnapshot } from "./portal-access.mts";
 import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./catalog-standardization.mts";
 import { roundMoney, multiplyMoney, sumMoney, marginPercent as orderMarginPercent, markupMoney } from "../../../shared/order-money.mjs";
+import { normalizeOrderQuantity } from "../../../apps/web/src/domain/shared/orderQuantityRules.ts";
+import { readSupplierCommercialTerms, type SupplierCommercialTerms } from "../../../apps/web/src/domain/shared/supplierCommercialTerms.ts";
 import { deriveCustomerPriceListSettings, parseEmbeddedCustomerMeta } from "./pricing/customer-pricing-context.mts";
 
 export type PortalInviteRow = {
@@ -125,6 +127,11 @@ type PreparedPortalLine = {
   brand: string;
   description: string;
   qty: number;
+  requested_qty?: number | null;
+  moq?: number | null;
+  order_multiple?: number | null;
+  quantity_adjusted?: boolean;
+  quantity_adjustment_note?: string | null;
   oem_no: string;
   hs_code: string;
   origin: string;
@@ -146,7 +153,7 @@ type PreparedPortalLine = {
   replacement_old_code?: string | null;
   replacement_reason?: string | null;
   replacement_warning?: string | null;
-  supplierOptions: Array<{
+  supplierOptions: Array<SupplierCommercialTerms & {
     supplier_id?: string | null;
     supplier_name: string;
     buy_price: number | null;
@@ -1583,12 +1590,16 @@ function mergeInputRows(rows: PortalOrderInputRow[]) {
   for (const row of rows) {
     const code = String(row.code || "").trim();
     const brand = String(row.brand || "").trim();
-    const qty = Math.max(1, Number(row.qty || 1) || 1);
+    const qty = Number(row.qty);
+    if (!Number.isSafeInteger(qty) || qty < 1 || qty > 2147483647) {
+      throw new Error("Order quantity must be a whole number from 1 to 2147483647.");
+    }
     if (!code || !brand) continue;
     const key = `${brand.toLowerCase()}::${exactSkuKey(code)}`;
     const current = grouped.get(key);
     if (current) {
       current.qty += qty;
+      if (current.qty > 2147483647) throw new Error("Combined order quantity exceeds 2147483647.");
     } else {
       grouped.set(key, { code, brand, qty });
     }
@@ -1611,7 +1622,7 @@ async function fetchCurrentSupplierPriceOptions(
   return callRpc<Array<Record<string, unknown>>>(
     supabaseUrl,
     serviceRoleKey,
-    "cloud_current_supplier_price_options_service",
+    "cloud_current_supplier_commercial_options_service",
     { input_organization_id: organizationId, input_code: code, input_brand: brand },
     timeoutMs,
   );
@@ -2212,7 +2223,7 @@ async function resolvePortalCatalogSupplierData(
   if (!brandId || !normalizedCode) {
     return {
       catalogMatch: null as Record<string, unknown> | null,
-      supplierOptions: [] as Array<{
+      supplierOptions: [] as Array<SupplierCommercialTerms & {
         supplier_id?: string | null;
         supplier_name: string;
         buy_price: number | null;
@@ -2253,7 +2264,9 @@ async function resolvePortalCatalogSupplierData(
     )
     .map((item) => {
       const buyPrice = Number(item.buy_price);
+      if (!String(item.supplier_id || "").trim()) throw new Error("Supplier commercial rules could not be verified.");
       return {
+        ...readSupplierCommercialTerms(item),
         supplier_id: item.supplier_id == null ? null : String(item.supplier_id),
         supplier_name: String(item.supplier_name || ""),
         product_code: String(item.product_code || ""),
@@ -2388,6 +2401,8 @@ async function resolvePreparedLine(
     fallbackSupplier?.sell_price ?? computeSellFromBuy(buyPrice, context);
   const lifecycleStatus = normalizeLifecycleStatus(`${String(catalogMatch?.lifecycle_status || "")} ${String(catalogMatch?.lifecycle_note || "")}`);
   const lifecycleNote = String(catalogMatch?.lifecycle_note || "").trim() || null;
+  const quantityAdjustment = normalizeOrderQuantity(row.qty, fallbackSupplier || {});
+  if (quantityAdjustment.corrected > 2147483647) throw new Error("Required order quantity exceeds 2147483647.");
 
   return {
     lineId: makeId("portal-line"),
@@ -2395,7 +2410,14 @@ async function resolvePreparedLine(
     resolvedCode,
     brand: row.brand || "",
     description: String(catalogMatch?.description || ""),
-    qty: row.qty,
+    qty: quantityAdjustment.corrected,
+    requested_qty: quantityAdjustment.adjusted ? row.qty : null,
+    moq: fallbackSupplier?.moq ?? null,
+    order_multiple: fallbackSupplier?.order_multiple ?? null,
+    quantity_adjusted: quantityAdjustment.adjusted,
+    quantity_adjustment_note: quantityAdjustment.adjusted
+      ? `Requested ${row.qty} pcs; prepared ${quantityAdjustment.corrected} pcs (minimum ${quantityAdjustment.moq}, order multiple ${quantityAdjustment.orderMultiple}). Review this quantity before submitting.`
+      : null,
     oem_no: sanitizeCatalogOemNumbers(catalogMatch?.oem_no),
     hs_code: String(catalogMatch?.hs_code || ""),
     origin: String(catalogMatch?.origin || ""),
@@ -2507,6 +2529,10 @@ export async function submitPortalSalesOrder(
   const prepared = await preparePortalOrderLines(supabaseUrl, serviceRoleKey, invite, input.rows);
   const lines = prepared.lines.filter((line) => line.qty > 0 && line.resolvedCode);
   if (!lines.length) throw new Error("No valid order lines found");
+  const adjustedLine = lines.find((line) => line.quantity_adjusted);
+  if (adjustedLine) {
+    throw new Error(`Quantity rules changed or were not applied for ${adjustedLine.brand} ${adjustedLine.resolvedCode}: requested ${adjustedLine.requested_qty}, required ${adjustedLine.qty}. Prepare the lines again and review the quantity before saving or submitting.`);
+  }
   if (input.mode === "confirm" && lines.some((line) =>
     line.buy_price == null || !Number.isFinite(line.buy_price) || line.buy_price <= 0 ||
     line.sell_price == null || !Number.isFinite(line.sell_price) || line.sell_price <= 0

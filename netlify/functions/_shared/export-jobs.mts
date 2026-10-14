@@ -1,3 +1,4 @@
+import { readSupplierCommercialTerms } from "../../../apps/web/src/domain/shared/supplierCommercialTerms.ts";
 import * as XLSX from "xlsx";
 import { createHash } from "node:crypto";
 import { assertCompleteExport, advanceExportPage } from "../../../shared/export-integrity.mjs";
@@ -1546,7 +1547,7 @@ export async function startSupplierPriceListExport(
     search,
     freshness,
     format: "csv",
-    schemaVersion: 2,
+    schemaVersion: 3,
   };
   const cacheKey = hashObject({ exportType, organizationId: caller.organizationId, scope, dataVersion });
   const reusable = await findReusableExportJob(supabaseUrl, serviceRoleKey, caller.organizationId, exportType, cacheKey);
@@ -1807,6 +1808,8 @@ type SupplierPriceExportPageRow = {
   price_date?: string | null;
   moq?: number | string | null;
   order_multiple?: number | string | null;
+  stock_qty?: number | string | null;
+  valid_to?: string | null;
   lead_time_days?: number | string | null;
   notes?: string | null;
   freshness?: string | null;
@@ -1823,8 +1826,9 @@ async function fetchSupplierPriceExportPage(input: {
   afterProductCode: string | null;
   afterId: string | null;
   pageSize: number;
+  includeCommercialTerms: boolean;
 }) {
-  const payload = await rpcJson<unknown>(input.supabaseUrl, input.serviceRoleKey, "cloud_supplier_price_export_chunk_v3", {
+  const payload = await rpcJson<unknown>(input.supabaseUrl, input.serviceRoleKey, input.includeCommercialTerms ? "cloud_supplier_price_export_commercial_chunk_v3" : "cloud_supplier_price_export_chunk_v3", {
     input_organization_id: input.organizationId,
     input_supplier_id: input.supplierId,
     input_brand_id: input.brandId,
@@ -1886,8 +1890,9 @@ async function runPagedRemainingAdminExportJob(
     const marginB = Number(scope.marginB ?? 0.15);
     const format = exportType === "catalog_master" || (exportType === "catalog_export" && scope.format === "xlsx") ? "xlsx" : "csv";
     if (!brandId || (exportType === "supplier_price_list" && !supplierId)) throw new Error("Export job is missing its supplier or brand scope.");
+    const includeSupplierTerms = exportType === "supplier_price_list" && Number(scope.schemaVersion || 2) >= 3;
     const headers = exportType === "supplier_price_list"
-      ? ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes"]
+      ? ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes", ...(includeSupplierTerms ? ["Stock_Qty", "Valid_To"] : [])]
       : exportType === "catalog_export" ? CATALOG_EXPORT_HEADERS : CATALOG_MASTER_EXPORT_HEADERS;
     writer = format === "csv"
       ? await createCsvExportStream(headers, { bom: true })
@@ -1906,7 +1911,7 @@ async function runPagedRemainingAdminExportJob(
       let nextId: string | null = null;
       let pageTotal: unknown;
       if (exportType === "supplier_price_list") {
-        const page = await fetchSupplierPriceExportPage({ supabaseUrl, serviceRoleKey, organizationId: job.organization_id, supplierId, brandId, search, freshness, afterProductCode: afterCode, afterId, pageSize });
+        const page = await fetchSupplierPriceExportPage({ supabaseUrl, serviceRoleKey, organizationId: job.organization_id, supplierId, brandId, search, freshness, afterProductCode: afterCode, afterId, pageSize, includeCommercialTerms: includeSupplierTerms });
         if (!page.length) break;
         pageTotal = page[0].total_count;
         cursors = page.map((r) => [String(r.product_code), String(r.price_id)]);
@@ -1914,7 +1919,10 @@ async function runPagedRemainingAdminExportJob(
         nextCode = String(last.product_code || "");
         nextId = String(last.price_id || "");
         if (page.some((r) => !r.product_code || !r.price_id || !r.brand)) throw new Error("Invalid supplier export source row.");
-        sheetRows = page.map((r) => [supplierName, normalizeAdminExportProductCode(String(r.product_code), String(r.brand || brandName)), String(r.brand || brandName), r.description || "", r.oem_no || "", r.buy_price ?? "", r.price_date || "", r.moq ?? "", r.order_multiple ?? "", r.lead_time_days ?? "", r.notes || ""]);
+        sheetRows = page.map((r) => {
+          const terms = includeSupplierTerms ? readSupplierCommercialTerms(r) : null;
+          return [supplierName, normalizeAdminExportProductCode(String(r.product_code), String(r.brand || brandName)), String(r.brand || brandName), r.description || "", r.oem_no || "", r.buy_price ?? "", r.price_date || "", r.moq ?? "", r.order_multiple ?? "", r.lead_time_days ?? "", r.notes || "", ...(terms ? [terms.stock_qty ?? "", terms.valid_to ?? ""] : [])];
+        });
       } else if (exportType === "catalog_export") {
         const payload = await rpcJson<unknown>(supabaseUrl, serviceRoleKey, "cloud_catalog_export_chunk_v3", {
           input_organization_id: job.organization_id, input_brand_id: brandId, input_market_segment: marketSegment,

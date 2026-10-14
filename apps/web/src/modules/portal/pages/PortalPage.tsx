@@ -2031,8 +2031,9 @@ export function PortalPage() {
       const missingPriceCount = preparedLines.filter((line) => line.sell_price == null).length;
       const discontinuedCount = preparedLines.filter((line) => line.lifecycle_status === "discontinued").length;
       const pricedCount = preparedLines.length - missingPriceCount;
+      const adjustedQuantityCount = preparedLines.filter((line) => line.quantity_adjusted).length;
       setPortalOrderStatus(
-        `${statusText.replace("{count}", preparedLines.length.toLocaleString("en-US"))} ${pricedCount > 0 ? `${pricedCount.toLocaleString("en-US")} priced.` : ""}${missingPriceCount > 0 ? ` ${missingPriceCount.toLocaleString("en-US")} need live pricing.` : ""}${discontinuedCount > 0 ? ` ${discontinuedCount.toLocaleString("en-US")} discontinued item(s) detected.` : ""}`.trim(),
+        `${statusText.replace("{count}", preparedLines.length.toLocaleString("en-US"))} ${pricedCount > 0 ? `${pricedCount.toLocaleString("en-US")} priced.` : ""}${missingPriceCount > 0 ? ` ${missingPriceCount.toLocaleString("en-US")} need live pricing.` : ""}${discontinuedCount > 0 ? ` ${discontinuedCount.toLocaleString("en-US")} discontinued item(s) detected.` : ""}${adjustedQuantityCount > 0 ? ` ${adjustedQuantityCount} quantities adjusted to minimum/order multiples; review the shown quantities before submitting.` : ""}`.trim(),
       );
       return preparedLines;
     } catch (caught) {
@@ -3842,7 +3843,7 @@ export function PortalPage() {
                   onDeliveryTermChange={setPortalDeliveryTerm}
                   onPaymentTermsChange={setPortalPaymentTerms}
                   onPackingDetailsChange={setPortalPackingDetails}
-                  onQuantityChange={(lineId, quantity) => setPortalDraftLines((current) => current.map((line) => (line.lineId === lineId ? { ...line, qty: quantity } : line)))}
+                  onQuantityChange={(lineId, quantity) => setPortalDraftLines((current) => current.map((line) => (line.lineId === lineId ? { ...line, qty: quantity, quantity_adjusted: false, quantity_adjustment_note: null, requested_qty: null } : line)))}
                   onSaveBasket={() => void handleSubmitPortalOrder("draft")}
                   onClearBasket={handleClearPortalBuilder}
                   onConfirmBasket={() => void handleSubmitPortalOrder("confirm")}

@@ -7,7 +7,7 @@ import {downloadSupplierTemplate,VERIFIED_SUPPLIER_IMPORT_COLUMNS} from '../../a
 import {parseCsv} from '../../apps/web/src/shared/csv.ts';
 import {I18nProvider,useI18n} from '../../apps/web/src/i18n/I18nProvider.tsx';
 
-test('verified template actual download omits unsupported order multiple and keeps every value aligned',async()=>{
+test('verified template round-trips supported commercial fields without inventing supplier stock',async()=>{
  const original={document:globalThis.document,window:globalThis.window,create:URL.createObjectURL,revoke:URL.revokeObjectURL};
  const blobs:Blob[]=[],names:string[]=[];
  try {
@@ -22,7 +22,8 @@ test('verified template actual download omits unsupported order multiple and kee
   assert.equal(verified[1][verified[0].indexOf('MOQ')],'1');
   assert.equal(verified[1][verified[0].indexOf('Lead_Time_Days')],'7');
   assert.equal(verified[1][verified[0].indexOf('Notes')],'Sample row');
-  for(const unsupported of ['Order_Multiple','Stock_Qty','Valid_To'])assert(!verified[0].includes(unsupported));
+  for(const supported of ['Order_Multiple','Stock_Qty','Valid_To']){assert(verified[0].includes(supported));assert.equal(verified[1][verified[0].indexOf(supported)],'');}
+  assert(!legacy[0].includes('Stock_Qty'));assert(!legacy[0].includes('Valid_To'));
   assert(legacy[0].includes('Order_Multiple'));assert.equal(legacy[1][legacy[0].indexOf('Order_Multiple')],'');
   assert.equal(legacy[0].length,legacy[1].length);
  } finally {globalThis.document=original.document;globalThis.window=original.window;URL.createObjectURL=original.create;URL.revokeObjectURL=original.revoke;}
@@ -41,17 +42,22 @@ test('environments without verified release review keep legacy operations immedi
  assert.doesNotMatch(html,/<details|<summary/);assert.match(html,/>Retry existing upload<\/button>/);
 });
 
-test('actual Turkish and English translations interpolate verified fields instead of advertising legacy order multiple',()=>{
+test('actual Turkish and English translations advertise only supported verified fields and distinguish supplier from warehouse stock',()=>{
  function Hint({columns}:{columns:string}){const {t}=useI18n();return React.createElement('p',{},t('purchases.suppliers.import.expectedColumns',{columns}));}
  const previous=(globalThis as any).React;(globalThis as any).React=React;
  try{
   for(const preferredLocale of ['tr','en']){
    const render=(columns:string)=>renderToStaticMarkup(React.createElement(I18nProvider,{preferredLocale,children:React.createElement(Hint,{columns})}));
    const verified=render(VERIFIED_SUPPLIER_IMPORT_COLUMNS.join(', '));
-   assert.doesNotMatch(verified,/Order_Multiple|Stock_Qty|Valid_To|\{columns\}/);
+   assert.doesNotMatch(verified,/\{columns\}/);for(const field of ['Order_Multiple','Stock_Qty','Valid_To'])assert.match(verified,new RegExp(field));
    assert.match(verified,/Product_Code, Brand, Product_Name, OEM_No, Buy_Price_EUR/);assert.match(verified,/Lead_Time_Days, Notes/);
    assert.match(verified,/EAN, Vehicle, Vehicle_Model/);
-   const legacy=render([...VERIFIED_SUPPLIER_IMPORT_COLUMNS,'Order_Multiple'].join(', '));assert.match(legacy,/Order_Multiple/);
+   function Guidance(){const {t}=useI18n();return React.createElement('p',{},t('purchases.suppliers.import.verifiedMetadataHint'));}
+   const guidance=renderToStaticMarkup(React.createElement(I18nProvider,{preferredLocale,children:React.createElement(Guidance)}));
+   assert.match(guidance,preferredLocale==='tr'?/bizim depo mevcudumuz değildir/:/not our warehouse availability/);
+   assert.match(guidance,/0–2147483647/);assert.match(guidance,/1–2147483647/);assert.match(guidance,/YYYY-MM-DD/);
+   assert.match(guidance,preferredLocale==='tr'?/günü dahildir/:/inclusive/);
+   assert.doesNotMatch(guidance,/not supported|desteklenmez/);
   }
  }finally{(globalThis as any).React=previous;}
 });

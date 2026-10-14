@@ -38,6 +38,7 @@ type Scenario = {
   pages?: Record<string, unknown>[][];
   pageSizes?: number[];
   version?: string;
+  schemaVersion?: number;
 };
 
 async function withExportSource(scenario: Scenario, check: (state: {
@@ -51,8 +52,8 @@ async function withExportSource(scenario: Scenario, check: (state: {
   const job = exportJob();
   const kind = scenario.kind || "supplier_price_list";
   job.export_type = kind;
-  job.scope = { ...job.scope, marketSegment: "PC", scope: "catalog", marginA: 0.1, marginB: 0.15 };
-  const pageRpc = kind === "supplier_price_list" ? "cloud_supplier_price_export_chunk_v3"
+  job.scope = { ...job.scope, marketSegment: "PC", scope: "catalog", marginA: 0.1, marginB: 0.15, schemaVersion: scenario.schemaVersion || 2 };
+  const pageRpc = kind === "supplier_price_list" ? (scenario.schemaVersion === 3 ? "cloud_supplier_price_export_commercial_chunk_v3" : "cloud_supplier_price_export_chunk_v3")
     : kind === "catalog_export" ? "cloud_catalog_export_chunk_v3" : "cloud_catalog_master_export_chunk_v3";
   const versionRpc = kind === "supplier_price_list" ? "get_supplier_price_export_version"
     : kind === "catalog_export" ? "get_catalog_export_version" : "get_catalog_master_export_version";
@@ -264,4 +265,42 @@ test("master export refuses stale purchase and sale prices before uploading its 
     assert.equal(job.status, "failed");
     assert.equal(uploads.length, 0);
   });
+});
+
+
+test("supplier export v3 preserves real zero, unknown stock, pack rules and expired source dates", async () => {
+  const pages = [[
+    { ...priceRow(1, 2), stock_qty: 0, order_multiple: 4, valid_to: "2020-01-31" },
+    { ...priceRow(2, null), stock_qty: null, order_multiple: null, valid_to: null },
+  ]];
+  await withExportSource({ pages, schemaVersion: 3 }, async ({ run, job, uploads }) => {
+    await run();
+    assert.equal(job.status, "finalized");
+    const workbook = XLSX.read(uploads[0], { type: "array", raw: true });
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[workbook.SheetNames[0]], { defval: "", raw: true });
+    assert.equal(rows.length, 2);
+    assert.deepEqual(Object.keys(rows[0]), ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes", "Stock_Qty", "Valid_To"]);
+    assert.equal(String(rows[0].Stock_Qty), "0");
+    assert.equal(String(rows[0].Order_Multiple), "4");
+    assert.equal(rows[0].Valid_To, "2020-01-31");
+    assert.equal(rows[1].Stock_Qty, "");
+    assert.equal(rows[1].Order_Multiple, "");
+    assert.equal(rows[1].Valid_To, "");
+    assert.equal(Object.hasOwn(rows[0], "available_qty"), false);
+  });
+  await withExportSource({ pages, schemaVersion: 2 }, async ({ run, uploads }) => {
+    await run();
+    const header = new TextDecoder().decode(uploads[0]).split(/\r?\n/)[0];
+    assert.doesNotMatch(header, /Stock_Qty|Valid_To/);
+  });
+});
+
+test("supplier export v3 rejects missing or invalid commercial contracts before artifact publication", async () => {
+  for (const fields of [{}, { stock_qty: -1, valid_to: null }, { stock_qty: 0, valid_to: "2026-02-30" }]) {
+    await withExportSource({ pages: [[{ ...priceRow(1, 1), ...fields }]], schemaVersion: 3 }, async ({ run, uploads, job }) => {
+      await assert.rejects(run(), /could not be verified/);
+      assert.equal(job.status, "failed");
+      assert.equal(uploads.length, 0);
+    });
+  }
 });

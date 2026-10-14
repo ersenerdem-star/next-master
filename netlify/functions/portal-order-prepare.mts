@@ -2,7 +2,7 @@ import type { Config, Context } from "@netlify/functions";
 import { json } from "./_shared/http.mts";
 import { resolvePortalInvite } from "./_shared/portal-access.mts";
 import { writePortalAuditEvent } from "./_shared/portal-audit.mts";
-import { preparePortalOrderLines } from "./_shared/portal-orders.mts";
+import { prepareCustomerPortalOrderLines } from "./_shared/portal-orders.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
@@ -53,7 +53,7 @@ export default async (req: Request, _context: Context) => {
       sessionToken,
       hostname: getPortalRequestHostname(req),
     });
-    const prepared = await preparePortalOrderLines(supabaseUrl, serviceRoleKey, invite, rows);
+    const prepared = await prepareCustomerPortalOrderLines(supabaseUrl, serviceRoleKey, invite, rows);
     await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       organizationId: invite.organization_id,
       inviteId: invite.id,

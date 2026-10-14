@@ -10,18 +10,31 @@ export const SUPPLIER_SOURCE_UNSUPPORTED_FIELDS={
  SOURCE_UNSUPPORTED_VALID_TO:{column:'Valid_To',en:'validity end date',tr:'geçerlilik bitiş tarihi'},
 } as const;
 export type SupplierSourceUnsupportedCode=keyof typeof SUPPLIER_SOURCE_UNSUPPORTED_FIELDS;
+export const SUPPLIER_SOURCE_INVALID_FIELDS={
+ SOURCE_INVALID_STOCK_QTY:{column:'Stock_Qty',en:'Use a whole number from 0 to 2147483647, or leave unknown supplier stock blank.',tr:'0–2147483647 arasında bir tam sayı kullanın; bilinmeyen tedarikçi stoğunu boş bırakın.'},
+ SOURCE_INVALID_ORDER_MULTIPLE:{column:'Order_Multiple',en:'Use a whole number from 1 to 2147483647, or leave an unspecified order multiple blank.',tr:'1–2147483647 arasında bir tam sayı kullanın; belirtilmemiş sipariş katını boş bırakın.'},
+ SOURCE_INVALID_VALID_TO:{column:'Valid_To',en:'Use a valid YYYY-MM-DD date on or after Price_Date (or the selected source date when Price_Date is blank), or leave an open-ended price blank.',tr:'Price_Date (boşsa seçilen kaynak tarihi) tarihinden önce olmayan, geçerli bir YYYY-MM-DD tarihi kullanın; bitiş tarihi olmayan fiyatı boş bırakın.'},
+} as const;
+function sourceInvalidMessage(code:string|null,tr:boolean):string|null {
+ if(!code||!Object.hasOwn(SUPPLIER_SOURCE_INVALID_FIELDS,code))return null;
+ const field=SUPPLIER_SOURCE_INVALID_FIELDS[code as keyof typeof SUPPLIER_SOURCE_INVALID_FIELDS];
+ return tr?`Dosya reddedildi: ${field.column}. ${field.tr} Fiyatlar yayımlanmadı. Kaynaktaki değeri doğrulayın; anlamlı ticari bilgiyi silmeyin.`
+  :`File rejected: ${field.column}. ${field.en} Prices were not published. Verify the source value; do not delete meaningful commercial data.`;
+}
 function sourceUnsupportedMessage(code:string|null,tr:boolean):string|null {
  if(!code||!Object.hasOwn(SUPPLIER_SOURCE_UNSUPPORTED_FIELDS,code))return null;
  const field=SUPPLIER_SOURCE_UNSUPPORTED_FIELDS[code as SupplierSourceUnsupportedCode];
  return tr
-  ?`Dosya reddedildi: ${field.column} (${field.tr}) alanında değer var ve doğrulanmış fiyat yükleme bu alanı henüz desteklemiyor. Fiyatlar yayımlanmadı. Ticari açıdan gerekli bilgiyi silmeyin; bu alanı destekleyen aktarım düzeni değerlendirilmelidir.`
-  :`File rejected: ${field.column} (${field.en}) contains a value that verified price upload does not yet support. Prices were not published. Do not delete meaningful commercial data; an import path that supports this field must be agreed.`;
+  ?`Dosya reddedildi: ${field.column} (${field.tr}) bu yüklemenin işlendiği önceki sürümde desteklenmiyordu. Fiyatlar yayımlanmadı. Ticari açıdan gerekli bilgiyi silmeyin; bu kayıt önceki yüklemenin sonucunu korur.`
+  :`File rejected: ${field.column} (${field.en}) was unsupported by the earlier version that processed this upload. Prices were not published. Do not delete meaningful commercial data; this record preserves that earlier upload's outcome.`;
 }
 export function supplierProcessingInterruptedMessage(tr=false) {
  return tr?'Dosyanın işlenmesi durdu; operasyon kontrolü gerekiyor. Yükleme ve işlenen satırlar korunuyor. Aynı yüklemenin durumunu kontrol edin.'
   :'File processing stopped and needs operational review. The upload and processed rows are preserved. Check this same upload.';
 }
 export function supplierUploadStatusView(status:UploadStatus,tr=false):{phase:UploadPhase;message:string} {
+ const invalid=sourceInvalidMessage(status.errorCode,tr);
+ if(invalid)return {phase:'failed',message:invalid};
  const unsupported=sourceUnsupportedMessage(status.errorCode,tr);
  if(unsupported)return {phase:'failed',message:unsupported};
  const progress=`${status.processedRows.toLocaleString(tr?'tr-TR':'en-US')} / ${status.totalRows.toLocaleString(tr?'tr-TR':'en-US')}`;

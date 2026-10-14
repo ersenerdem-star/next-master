@@ -209,7 +209,7 @@ export function SuppliersPage() {
 
   useEffect(() => {
     if (!searchingSuppliers || loadingRows) return;
-    const nextTotal = selectedSupplierId ? rows[0]?.total_count ?? 0 : rows.length;
+    const nextTotal = rows.length;
     if (error) {
       actionFeedback.fail(error);
     } else {
@@ -218,7 +218,7 @@ export function SuppliersPage() {
     setSearchingSuppliers(false);
   }, [searchingSuppliers, loadingRows, error, rows, actionFeedback, selectedSupplierId]);
 
-  const total = selectedSupplierId ? rows[0]?.total_count ?? 0 : rows.length;
+  const total = selectedSupplierId && rows.length ? rows[0].total_count : rows.length;
 
   const supplierOptions = [
     { value: "", label: p("suppliers.filters.allSuppliers") },
@@ -266,6 +266,8 @@ export function SuppliersPage() {
       { key: "currency", header: p("columns.currency"), render: (row: SupplierPriceRow) => row.currency || "-" },
       { key: "moq", header: p("fields.moq"), render: (row: SupplierPriceRow) => row.moq ?? "-" },
       { key: "orderMultiple", header: p("fields.orderMultiple"), render: (row: SupplierPriceRow) => row.order_multiple ?? "-" },
+      { key: "supplierStock", header: p("fields.supplierStockQty"), render: (row: SupplierPriceRow) => row.stock_qty ?? "-" },
+      { key: "validTo", header: p("fields.priceValidTo"), render: (row: SupplierPriceRow) => row.valid_to || "-" },
       { key: "date", header: p("columns.priceDate"), render: (row: SupplierPriceRow) => row.price_date || "-" },
       { key: "freshness", header: p("columns.freshness"), render: (row: SupplierPriceRow) => (row.freshness ? p(`suppliers.freshness.${row.freshness}`) : "-") },
     ],
@@ -843,7 +845,9 @@ export function SuppliersPage() {
                 ? p("suppliers.loading.suppliers")
                 : loadingRows
                   ? p("suppliers.loading.rows")
-                  : p("suppliers.meta.rows", { count: total.toLocaleString("en-US") })}
+                  : total == null
+                    ? p("suppliers.meta.previewRows", { count: rows.length.toLocaleString("en-US") })
+                    : p("suppliers.meta.rows", { count: total.toLocaleString("en-US") })}
             </span>
             {status ? <span className="success-text">{status}</span> : null}
             {warning ? <span className="warning-text">{warning}</span> : null}

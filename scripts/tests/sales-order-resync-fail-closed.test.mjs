@@ -105,3 +105,17 @@ test("explicit keepPrices preserves saved prices without a lookup", async () => 
   assert.equal(kept.buy_price, 8.34);
   assert.equal(kept.sell_price, 9.17);
 });
+
+
+test("explicit repricing clears a removed supplier pack rule without mutating the saved document", async () => {
+  const original = { ...savedLine(), moq: 5, order_multiple: 4 };
+  const before = structuredClone(original);
+  const resync = makeResync(async () => ({
+    resolved: { found: true, product_code: "61/1", brand: "Clevite" },
+    supplierOptions: [{ supplier_id: "supplier-1", supplier_name: "Sood", buy_price: 10, sell_price: 11, moq: null, order_multiple: null }],
+  }));
+  const [updated] = await resync([original], repriceOptions);
+  assert.equal(updated.moq, null);
+  assert.equal(updated.order_multiple, null);
+  assert.deepEqual(original, before);
+});
