@@ -134,13 +134,12 @@ export async function runCatalogStorageImport({
 }) {
   if (typeof rpc !== "function") throw new Error("CATALOG_RPC_REQUIRED");
   const sourceMetadata = { ...(typeof source === "string" ? { sourcePath: source } : source), ...(sourceSha256 ? { sourceSha256 } : {}) };
+  const pinnedSource = validateCatalogImportSource(sourceMetadata, {
+    requireChecksum: Boolean(sourceMetadata.sourceSha256 || sourceMetadata.checksum), maxBytes,
+  });
   const sourceBytes = Number(sourceMetadata.sourceBytes || 0);
   const transferTimeoutMs = Math.min(30 * 60 * 1000, Math.max(120_000,
     Math.ceil((sourceBytes > 0 ? sourceBytes / (4 * 1024 * 1024) : 0) * 1000 + 120_000)));
-  const downloaded = await downloadAndVerifyCatalogSource({
-    supabaseUrl, serviceRoleKey, bucket, source: sourceMetadata, fetchImpl, maxBytes,
-    timeoutMs: transferTimeoutMs,
-  });
   const activeRunId = String(runId || "").trim();
   if (!activeRunId || !organizationId || !actorId) throw new Error("CATALOG_STORAGE_RUN_CONTEXT_REQUIRED");
   let processedRows = 0;
@@ -168,7 +167,40 @@ export async function runCatalogStorageImport({
       input_lease_seconds: Number(lease.leaseSeconds || 900),
     });
   };
+  let downloaded;
   try {
+    const completion = await rpc("get_catalog_import_storage_read_completion_system", {
+      input_run_id: activeRunId, input_organization_id: organizationId, input_actor_id: actorId,
+      input_source_id: String(lease.sourceId || ""), input_source_sha256: pinnedSource.sourceSha256 || null,
+      input_source_bytes: pinnedSource.sourceBytes,
+    });
+    const proof = Array.isArray(completion) ? completion[0] : completion;
+    if (proof?.read_complete === true) {
+      const total = Number(proof.total_rows);
+      if (proof.run_id !== activeRunId || proof.source_id !== lease.sourceId
+          || proof.source_path !== pinnedSource.sourcePath || Number(proof.source_bytes) !== pinnedSource.sourceBytes
+          || !/^[0-9a-f]{64}$/.test(proof.source_sha256 || "")
+          || (pinnedSource.sourceSha256 && proof.source_sha256 !== pinnedSource.sourceSha256)
+          || !Number.isSafeInteger(total) || total < 1 || Number(proof.cursor_row) !== total - 1
+          || durableResumeCursor >= total || !["staged", "completed"].includes(proof.source_status)
+          || typeof proof.read_completed_at !== "string" || !Number.isFinite(Date.parse(proof.read_completed_at))) {
+        throw new Error("CATALOG_SOURCE_READ_RECEIPT_INVALID");
+      }
+      // Finalization can commit after EOF but before this DBOS step checkpoints.
+      // The immutable proof binds the workflow's source identity, path and bytes
+      // to the verified SHA. Its object may already have been cleaned up; replay
+      // completed ingestion without downloading or touching terminal data.
+      return { runId: activeRunId, processedRows: total - Math.max(0, durableResumeCursor + 1),
+        cursorEnd: total - 1, sourceSha256: proof.source_sha256, batches: 0,
+        preflight: { engine: "durable-read-receipt", totalRows: total }, result: null,
+        queued: { queued: true, status: "queued", run_id: activeRunId, source_id: lease.sourceId,
+          read_complete_rows: total, read_completed_at: proof.read_completed_at, replayed: true }, replayed: true };
+    }
+    if (proof?.read_complete !== false) throw new Error("CATALOG_SOURCE_READ_RECEIPT_INVALID");
+    downloaded = await downloadAndVerifyCatalogSource({
+      supabaseUrl, serviceRoleKey, bucket, source: sourceMetadata, fetchImpl, maxBytes,
+      timeoutMs: transferTimeoutMs,
+    });
     await rpc("complete_catalog_import_storage_upload_system", {
       input_run_id: activeRunId,
       input_organization_id: organizationId,
@@ -222,16 +254,25 @@ export async function runCatalogStorageImport({
     const expectedProcessed = preflight.totalRows - Math.max(0, durableResumeCursor + 1);
     if (expectedProcessed !== processedRows) throw new Error("CATALOG_SOURCE_ROW_COUNT_MISMATCH");
     // A retry after the last stage receipt may legitimately have no rows left.
-    // Queue handoff is idempotent and is the durable completion of ingestion.
+    // A queue marker exists before ingestion. A separate durable full-file
+    // acknowledgement, after the parser/preflight count agrees, authorizes
+    // validation. A final staged batch alone must never authorize it.
     await heartbeat();
-    const queued = await rpc("mark_catalog_import_storage_processing_queued_system", {
+    const queued = await rpc("complete_catalog_import_storage_read_system", {
       input_run_id: activeRunId,
       input_organization_id: organizationId,
       input_actor_id: actorId,
       ...fence,
+      input_total_rows: preflight.totalRows,
     });
+    const receipt = Array.isArray(queued) ? queued[0] : queued;
+    if (receipt?.queued !== true || receipt.status !== "queued" || receipt.run_id !== activeRunId
+        || receipt.source_id !== lease.sourceId || Number(receipt.read_complete_rows) !== preflight.totalRows
+        || typeof receipt.read_completed_at !== "string" || !Number.isFinite(Date.parse(receipt.read_completed_at))) {
+      throw new Error("CATALOG_SOURCE_READ_RECEIPT_INVALID");
+    }
     return { runId: activeRunId, processedRows, cursorEnd: lastCursor, sourceSha256: downloaded.sha256, batches: calls.batches, preflight, result: completed, queued };
   } finally {
-    await rm(downloaded.workDir, { recursive: true, force: true });
+    if (downloaded) await rm(downloaded.workDir, { recursive: true, force: true });
   }
 }

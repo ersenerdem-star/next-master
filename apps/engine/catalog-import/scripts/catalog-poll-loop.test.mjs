@@ -99,7 +99,7 @@ register(`data:text/javascript,${encodeURIComponent(`
     return nextResolve(specifier, context);
   }
 `)}`, import.meta.url);
-const { pollCatalogImportSources, pollCatalogFinalization, catalogWorkflowId } = await import("../src/worker.mjs");
+const { pollCatalogImportSources, pollCatalogFinalization, catalogWorkflowId, requireCatalogReadCompletionContract } = await import("../src/worker.mjs");
 delete globalThis.__catalogPollTestDbos;
 
 test("actual source and finalization discovery GET timeouts retry, with no mutation RPC", async () => {
@@ -179,7 +179,7 @@ test("active workflow timeout releases its exact durable lease; invalid source f
   const claim = { claimed: true, source_id: source.id, run_id: source.run_id, organization_id: source.organization_id,
     created_by: source.created_by, lease_owner: "worker-1", lease_token: "lease-1", lease_generation: 7, attempt_count: 2 };
   try {
-    for (const [failure, expected] of [[timeout(), "release"], [new Error("CATALOG_SOURCE_CHECKSUM_MISMATCH"), "fail"]]) {
+    for (const [failure, expected] of [[timeout(), "release"], [new Error("CATALOG_STORAGE_SOURCE_NOT_READY"), "release"], [new Error("CATALOG_SOURCE_CHECKSUM_MISMATCH"), "fail"]]) {
       workflowFailure = failure;
       const mutations = [];
       globalThis.fetch = async (url, init) => {
@@ -197,6 +197,119 @@ test("active workflow timeout releases its exact durable lease; invalid source f
       assert.equal(mutations.length, 2);
       assert.deepEqual([mutations[1].args.input_source_id, mutations[1].args.input_worker_id,
         mutations[1].args.input_lease_token, mutations[1].args.input_lease_generation], ["source-1", "worker-1", "lease-1", 7]);
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+const finalizationRun = { id: 'run-ready', organization_id: 'org-ready', created_by: 'actor-ready',
+  status: 'running', processing_queued_at: '2026-10-14T20:00:00Z', input_scope: { source_kind: 'storage_csv', source_id: 'source-ready' } };
+const readySource = { id: 'source-ready', run_id: 'run-ready', organization_id: 'org-ready', created_by: 'actor-ready',
+  status: 'staged', cursor_row: 2500, rows_parsed: 2501, rows_staged: 2501,
+  read_complete_rows: 2501, read_completed_at: '2026-10-14T20:00:00Z' };
+
+function finalizationFetch({ runs = [finalizationRun], source = readySource, sourceForRun, calls }) {
+  return async (rawUrl, init) => {
+    const url = new URL(rawUrl, 'https://test.invalid');
+    if (!init.method) {
+      if (url.pathname.endsWith('/catalog_import_runs')) return Response.json(runs);
+      if (url.pathname.endsWith('/catalog_import_sources')) {
+        const selected = sourceForRun ? sourceForRun(url.searchParams.get('run_id').slice(3)) : source;
+        return Response.json(selected ? [selected] : []);
+      }
+      throw Error('UNEXPECTED_READ');
+    }
+    calls.push({ path: url.pathname, args: JSON.parse(init.body) });
+    if (url.pathname.endsWith('/validate_catalog_import_storage_batch_system')) return Response.json({ status: 'validated' });
+    if (url.pathname.endsWith('/finalize_catalog_import_batch_system')) return Response.json({ status: 'finalized', has_more: false });
+    if (url.pathname.endsWith('/catalog_import_runs') && init.method === 'PATCH') return new Response(null, { status: 204 });
+    throw Error('UNEXPECTED_MUTATION');
+  };
+}
+
+test('restarted polling never validates a queued source until the full-file durable EOF receipt exists', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    const cases = [
+      { ...readySource, status: 'processing', cursor_row: 86, rows_parsed: 87, rows_staged: 87, read_complete_rows: null, read_completed_at: null },
+      { ...readySource, read_complete_rows: null, read_completed_at: null },
+      { ...readySource, read_complete_rows: 2500 },
+      { ...readySource, rows_staged: 87 },
+      { ...readySource, read_completed_at: 'invalid' },
+      { ...readySource, created_by: 'other-actor' },
+      null,
+    ];
+    for (const source of cases) {
+      const calls = [];
+      globalThis.fetch = finalizationFetch({ source, calls });
+      assert.deepEqual(await pollCatalogFinalization(), { runId: finalizationRun.id, status: 'awaiting-source-completion' });
+      assert.deepEqual(calls, [], 'no validation/finalization/queue-marker mutation while ingestion is incomplete');
+    }
+    const calls = [];
+    globalThis.fetch = finalizationFetch({ calls });
+    assert.equal((await pollCatalogFinalization()).status, 'finalized');
+    assert.deepEqual(calls.map(x => x.path.split('/').at(-1)), [
+      'validate_catalog_import_storage_batch_system', 'finalize_catalog_import_batch_system', 'catalog_import_runs',
+    ]);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('a busy oldest source does not block a ready candidate; source-less browser imports retain finalization', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    const browserRun = { ...finalizationRun, id: 'browser-run', input_scope: { source_kind: 'browser' } };
+    const calls = [];
+    globalThis.fetch = finalizationFetch({ runs: [finalizationRun, browserRun], calls,
+      sourceForRun: id => id === finalizationRun.id ? { ...readySource, status: 'processing' } : null });
+    assert.deepEqual(await pollCatalogFinalization(), { runId: browserRun.id, status: 'finalized', hasMore: false });
+    assert.equal(calls.length, 3);
+    assert.ok(calls.slice(0, 2).every(x => x.args.input_run_id === browserRun.id));
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('source readiness transport error or cancellation cannot proceed to a mutation', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const cancel of [false, true]) {
+      const controller = new AbortController();
+      let reads = 0;
+      globalThis.fetch = async (_url, init) => {
+        assert.equal(init.method, undefined);
+        reads++;
+        if (reads === 1) return Response.json([finalizationRun]);
+        if (!cancel) throw timeout();
+        controller.abort();
+        return Response.json([readySource]);
+      };
+      if (cancel) await assert.rejects(pollCatalogFinalization({ signal: controller.signal }), /abort/i);
+      else await assert.rejects(pollCatalogFinalization(), /CATALOG_QUEUE_READ_TEMPORARILY_UNAVAILABLE/);
+      assert.equal(reads, 2);
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('startup requires the exact all-null EOF contract rejection before recovery or intake', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const [status, body, passes] of [
+      [400, { code: 'P0001', message: 'CATALOG_STORAGE_READ_INPUT_INVALID' }, true],
+      [404, { code: 'PGRST202' }, false],
+      [400, { code: 'other', message: 'CATALOG_STORAGE_READ_INPUT_INVALID' }, false],
+      [200, { queued: true }, false],
+    ]) {
+      const probed = [];
+      globalThis.fetch = async (url, init) => {
+        assert.match(String(url), /\/rpc\/(complete_catalog_import_storage_read_system|get_catalog_import_storage_read_completion_system)$/);
+        probed.push(String(url).split('/').at(-1));
+        const args = JSON.parse(init.body);
+        assert.equal(Object.keys(args).length, String(url).includes('/rpc/get_') ? 6 : 7);
+        assert.ok(Object.values(args).every(x => x === null));
+        return Response.json(body, { status });
+      };
+      if (passes) {
+        await requireCatalogReadCompletionContract();
+        assert.deepEqual(probed, ['complete_catalog_import_storage_read_system', 'get_catalog_import_storage_read_completion_system']);
+      }
+      else await assert.rejects(requireCatalogReadCompletionContract(), /CATALOG_STORAGE_READ_CONTRACT_UNAVAILABLE/);
     }
   } finally { globalThis.fetch = originalFetch; }
 });

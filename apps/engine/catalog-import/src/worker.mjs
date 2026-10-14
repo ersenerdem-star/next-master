@@ -25,7 +25,8 @@ function isTransientCatalogError(error) {
   const code = String(error?.code || error?.message || "").toLowerCase();
   return code.includes("fetch") || code.includes("network") || code.includes("timeout")
     || code.includes("connection") || /catalog_(supabase_)?http_(408|425|429|5\d\d)/.test(code)
-    || code.includes("temporarily unavailable") || code.includes("lease_fence");
+    || code.includes("temporarily unavailable") || code.includes("lease_fence")
+    || code === "catalog_storage_source_not_ready";
 }
 
 async function supabaseJson(path, init = {}) {
@@ -39,9 +40,10 @@ async function supabaseJson(path, init = {}) {
   let data = {};
   try { data = body ? JSON.parse(body) : {}; } catch { data = { raw: body.slice(0, 500) }; }
   if (!response.ok) {
-    // PostgREST uses HTTP 400 for a stale SQL lease. Preserve only this known
-    // retryable domain code; arbitrary database messages never enter logs.
-    if (response.status === 400 && data?.message === "CATALOG_STORAGE_LEASE_FENCE") throw new Error("CATALOG_STORAGE_LEASE_FENCE");
+    // Preserve known lease/readiness fences and all-null schema probe rejection.
+    // Arbitrary database messages never enter logs.
+    if (response.status === 400 && (data?.message === "CATALOG_STORAGE_LEASE_FENCE"
+      || (data?.code === "P0001" && ["CATALOG_STORAGE_READ_INPUT_INVALID", "CATALOG_STORAGE_SOURCE_NOT_READY"].includes(data?.message)))) throw new Error(data.message);
     throw new Error(`CATALOG_SUPABASE_HTTP_${response.status}`);
   }
   return data;
@@ -65,13 +67,39 @@ async function getRun(runId) {
 
 async function listQueuedFinalizationRuns(signal) {
   const query = new URLSearchParams({
-    select: "id,organization_id,created_by,status,processing_queued_at",
+    select: "id,organization_id,created_by,status,processing_queued_at,input_scope",
     processing_queued_at: "not.is.null",
     status: "in.(running,validating,validated,finalizing)",
     order: "processing_queued_at.asc",
-    limit: "1",
+    limit: "4",
   });
   return readCatalogQueue("finalization", () => supabaseJson(`/rest/v1/catalog_import_runs?${query}`, { signal }), { signal });
+}
+
+async function catalogFinalizationSourceReady(run, signal) {
+  const query = new URLSearchParams({
+    select: "id,run_id,organization_id,created_by,status,cursor_row,rows_parsed,rows_staged,read_completed_at,read_complete_rows",
+    run_id: `eq.${run.id}`, organization_id: `eq.${run.organization_id}`, limit: "2",
+  });
+  const sources = await readCatalogQueue("finalization-source", () =>
+    supabaseJson(`/rest/v1/catalog_import_sources?${query}`, { signal }), { signal });
+  if (!Array.isArray(sources) || sources.length > 1) throw new Error("CATALOG_FINALIZATION_SOURCE_RESPONSE_INVALID");
+  const scope = run.input_scope && typeof run.input_scope === "object" ? run.input_scope : {};
+  const source = sources[0];
+  // Source-less browser imports retain their existing finalization path. A
+  // storage run cannot become a browser run because its source read was absent.
+  if (!source) return scope.source_kind !== "storage_csv" && !scope.source_id && !scope.storage_object_path;
+  if (source.run_id !== run.id || source.organization_id !== run.organization_id
+      || source.created_by !== run.created_by || (scope.source_id && scope.source_id !== source.id)) return false;
+  const total = Number(source.read_complete_rows);
+  // The queue marker also admits ingestion. Only the durable full-file read
+  // acknowledgement makes a staged source eligible; DBOS recovery runs in
+  // parallel with this poll after launch. SQL rechecks this under row locks.
+  return source.status === "staged" && typeof source.read_completed_at === "string"
+    && Number.isFinite(Date.parse(source.read_completed_at))
+    && Number.isSafeInteger(total) && total > 0
+    && Number(source.cursor_row) === total - 1
+    && Number(source.rows_parsed) === total && Number(source.rows_staged) === total;
 }
 
 async function clearRunQueueMarker(runId) {
@@ -85,6 +113,28 @@ async function clearRunQueueMarker(runId) {
 
 async function callRpc(name, args) {
   return supabaseJson(`/rest/v1/rpc/${name}`, { method: "POST", body: JSON.stringify(args) });
+}
+
+export async function requireCatalogReadCompletionContract() {
+  const probes = [
+    ["complete_catalog_import_storage_read_system", {
+      input_run_id: null, input_organization_id: null, input_actor_id: null,
+      input_worker_id: null, input_lease_token: null, input_lease_generation: null, input_total_rows: null,
+    }],
+    ["get_catalog_import_storage_read_completion_system", {
+      input_run_id: null, input_organization_id: null, input_actor_id: null,
+      input_source_id: null, input_source_sha256: null, input_source_bytes: null,
+    }],
+  ];
+  for (const [name, args] of probes) {
+    try {
+      await callRpc(name, args);
+    } catch (error) {
+      if (error?.message === "CATALOG_STORAGE_READ_INPUT_INVALID") continue;
+      throw new Error("CATALOG_STORAGE_READ_CONTRACT_UNAVAILABLE");
+    }
+    throw new Error("CATALOG_STORAGE_READ_CONTRACT_UNAVAILABLE");
+  }
 }
 
 export const catalogWorkflow = DBOS.registerWorkflow(async (input) => {
@@ -247,19 +297,30 @@ async function finalizeQueuedCatalogRun(run) {
 
 export async function pollCatalogFinalization({ signal } = {}) {
   const runs = await listQueuedFinalizationRuns(signal);
-  const run = Array.isArray(runs) ? runs[0] : null;
-  if (!run) return { status: "idle" };
-  try {
-    return await finalizeQueuedCatalogRun(run);
-  } catch (error) {
-    // Leave the durable queue marker intact. The next poll retries the same
-    // run; deterministic RPC failures already transition the run terminally.
-    return { runId: run.id, status: "deferred", errorCode: String(error?.message || "CATALOG_FINALIZATION_DEFERRED").slice(0, 160) };
+  let waiting;
+  for (const run of Array.isArray(runs) ? runs : []) {
+    if (signal?.aborted) break;
+    if (!await catalogFinalizationSourceReady(run, signal)) {
+      waiting ??= { runId: run.id, status: "awaiting-source-completion" };
+      continue;
+    }
+    if (signal?.aborted) break;
+    try {
+      return await finalizeQueuedCatalogRun(run);
+    } catch (error) {
+      // Leave the durable queue marker intact. The next poll retries the same
+      // run; deterministic RPC failures already transition the run terminally.
+      return { runId: run.id, status: "deferred", errorCode: String(error?.message || "CATALOG_FINALIZATION_DEFERRED").slice(0, 160) };
+    }
   }
+  return waiting || { status: "idle" };
 }
 
 async function main() {
   requireConfig();
+  // Invalid all-null input is rejected before locks/writes. Never claim a new
+  // source or recover an old step against a DB missing the EOF safety guard.
+  await requireCatalogReadCompletionContract();
   DBOS.setConfig({
     name: "next-master-catalog-import",
     applicationVersion: APP_VERSION,
