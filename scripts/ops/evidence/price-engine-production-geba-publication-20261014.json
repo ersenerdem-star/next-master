@@ -113,12 +113,135 @@
       }
     ]
   },
-  "exports": [],
-  "supplierExport": null,
+  "exports": [
+    {
+      "kind": "admin_A",
+      "job": {
+        "id": "49743c00-90a7-4e5a-9864-927df9231a6f",
+        "scope": {
+          "format": "xlsx",
+          "brandId": "72cb646e-658d-4775-b3bb-b0799eaa9913",
+          "brandName": "Geba",
+          "marginPercent": 0.1,
+          "priceListType": "A",
+          "schemaVersion": 4
+        },
+        "status": "finalized",
+        "audience": "admin",
+        "byte_size": 8923,
+        "failed_at": null,
+        "file_name": "portal-price-list-Geba-A-20261014.xlsx",
+        "row_count": 108,
+        "created_at": "2026-10-14T18:00:16.527737+00:00",
+        "started_at": "2026-10-14T18:00:20.725+00:00",
+        "export_type": "admin_price_list",
+        "snapshot_id": "3496b81b-a1ee-4337-a20f-31bddebd470a",
+        "data_version": "34906ed1f52a90c78422bf799de4e55c",
+        "finalized_at": "2026-10-14T18:00:32.281+00:00",
+        "error_message": null,
+        "progress_done": 108,
+        "progress_total": 108,
+        "organization_id": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+        "snapshot_status": "sealed"
+      },
+      "source": {
+        "row_count": 108,
+        "observed_at": "2026-10-14T18:04:51.383998+00:00",
+        "distinct_codes": 108,
+        "missing_prices": 0,
+        "date_mismatches": 0,
+        "price_mismatches": 0,
+        "scope_mismatches": 0,
+        "ordered_fields_md5": "2230169f07199e2b4a22e8b97bcc69f6",
+        "finalized_job_bound": true,
+        "eligible_source_keys": 108,
+        "exact_current_pointer": true,
+        "presentation_mismatches": 0
+      },
+      "databaseQuery": "-- READ ONLY. Actual final UI job and publication receipt UUIDs only.\nwith params as (\n select '49743c00-90a7-4e5a-9864-927df9231a6f'::uuid job_id,'c6db3eac-ee98-404b-b07a-35de65abb463'::uuid release_id,\n '1345a117-51e5-4913-90b7-130c211da303'::uuid publication_id,\n '1e4c5e99-e387-41aa-a6d3-cbe74558f766'::uuid org_id,\n 'bbd25101-b14a-4967-ac5d-fa78054d4f2e'::uuid supplier_id,\n '72cb646e-658d-4775-b3bb-b0799eaa9913'::uuid brand_id\n), job as materialized (\n select j.id,j.organization_id,j.audience,j.export_type,j.status,j.scope,j.row_count,j.progress_done,j.progress_total,\n j.byte_size,j.file_name,j.created_at,j.started_at,j.finalized_at,j.failed_at,j.error_message,j.data_version,\n s.id snapshot_id,s.status snapshot_status\n from public.app_export_jobs j cross join params p\n left join export_snapshot_private.snapshots s on s.job_id=j.id\n where j.id=p.job_id\n), source as materialized (\n select r.normalized_code,r.product_code,r.buy_price,r.valid_from\n from public.supplier_price_release_rows r cross join params p\n where r.release_id=p.release_id and r.row_status='accepted'\n), page as materialized (\n select a.* from params p cross join job j cross join lateral public.cloud_admin_price_list_page_fast(\n p.org_id,p.brand_id,j.scope->>'priceListType',\n (j.scope->>'marginPercent')::numeric/case when j.audience='portal' then 100 else 1 end,null,null,1000) a\n), checked as (\n select r.*,src.buy_price,src.valid_from,pg.product_code expected_code,pg.description expected_description,\n pg.lifecycle_status expected_lifecycle,j.scope,j.audience,\n md5((select string_agg(octet_length(v)::text||':'||v,'' order by ord)\n from unnest(array[coalesce(payload->>'code',''),coalesce(payload->>'description',''),\n trim_scale((payload->>'price')::numeric)::text,coalesce(payload->>'priceDate',''),\n case when payload->>'discontinued'='true' then 'Discontinued'||case when coalesce(payload->>'replacementCode','')<>''\n then '; replacement: '||(payload->>'replacementCode') else '' end else 'Active' end]) with ordinality f(v,ord))) row_hash\n from export_snapshot_private.rows r cross join job j left join source src on src.normalized_code=r.source_key\n left join page pg on pg.normalized_code=r.source_key where r.snapshot_id=j.snapshot_id\n), summary as (\n select clock_timestamp() observed_at,count(*) row_count,count(distinct source_key) distinct_codes,\n md5(string_agg(row_hash,'' order by ordinal)) ordered_fields_md5,\n count(*) filter(where payload->>'brand' is distinct from 'Geba' or payload->>'currency' is distinct from 'EUR') scope_mismatches,\n count(*) filter(where buy_price is null) missing_prices,\n count(*) filter(where (payload->>'price')::numeric is distinct from round(buy_price*(1+(scope->>'marginPercent')::numeric/case when audience='portal' then 100 else 1 end),2)) price_mismatches,\n count(*) filter(where payload->>'priceDate' is distinct from valid_from::text) date_mismatches,\n count(*) filter(where payload->>'code' is distinct from expected_code or payload->>'description' is distinct from expected_description\n or coalesce(payload->>'discontinued','false') is distinct from case when expected_lifecycle='discontinued' then 'true' else 'false' end) presentation_mismatches,\n (select count(*) from source) eligible_source_keys,\n (select count(*)=1 and bool_and(ptr.publication_id=p.publication_id and ptr.release_id=p.release_id)\n from public.supplier_current_price_pointers ptr cross join params p where ptr.organization_id=p.org_id and ptr.supplier_id=p.supplier_id and ptr.brand_id=p.brand_id) exact_current_pointer,\n (select count(*)=1 and bool_and(j.organization_id=p.org_id and j.status='finalized' and j.error_message is null\n and j.row_count=108 and j.progress_done=108 and j.progress_total=108 and j.byte_size>0 and j.finalized_at is not null\n and j.scope->>'brandId'=p.brand_id::text and j.scope->>'brandName'='Geba' and j.scope->>'format'='xlsx'\n and j.snapshot_status='sealed' and ((j.audience='admin' and j.export_type='admin_price_list') or (j.audience='portal' and j.export_type='portal_price_list'))\n and j.created_at>=pub.published_at) from job j cross join params p left join public.supplier_price_publications pub on pub.id=p.publication_id) finalized_job_bound\n from checked\n)\nselect jsonb_build_object('job',(select to_jsonb(j) from job j),'source',to_jsonb(s),\n 'snapshot_acceptance_passed',coalesce(row_count=108 and distinct_codes=108 and eligible_source_keys=108 and scope_mismatches=0\n and missing_prices=0 and price_mismatches=0 and date_mismatches=0 and presentation_mismatches=0\n and exact_current_pointer and finalized_job_bound,false)) evidence from summary s;\n",
+      "download": {
+        "fileName": "portal-price-list-Geba-A-20261014.xlsx",
+        "bytes": 8923,
+        "sha256": "3660be7f170be9c619744d3c0df01b3057cfd30eeb66478b4906e1bd0581fbd2",
+        "headers": [
+          "Part_No",
+          "Description",
+          "Price_EUR",
+          "Price_Date",
+          "Lifecycle"
+        ],
+        "dataRows": 108,
+        "distinctProductCodes": 108,
+        "duplicateCodes": 0,
+        "blankCodes": 0,
+        "formulaCells": 0,
+        "sheetNames": [
+          "Price List 1"
+        ],
+        "sheetDataRows": [
+          108
+        ],
+        "numericPriceCells": 108,
+        "chunks": [
+          {
+            "start": 1,
+            "end": 108,
+            "rows": 108,
+            "md5": "2230169f07199e2b4a22e8b97bcc69f6"
+          }
+        ],
+        "reader": "Bundled Python standard-library streaming ZIP/XML; no workbook edits or floating-point pricing comparisons"
+      },
+      "actualFileSha256": "3660be7f170be9c619744d3c0df01b3057cfd30eeb66478b4906e1bd0581fbd2",
+      "browserObservation": "Not supplied; file and database verification only"
+    }
+  ],
+  "supplierExport": {
+    "postPublication": true,
+    "releaseId": "c6db3eac-ee98-404b-b07a-35de65abb463",
+    "commercialDifferenceRows": 0,
+    "rows": 108,
+    "job": {
+      "id": "aaf916c9-f194-40cc-8eb1-1d7d8e8ff702",
+      "scope": {
+        "format": "csv",
+        "search": "",
+        "brandId": "72cb646e-658d-4775-b3bb-b0799eaa9913",
+        "brandName": "Geba",
+        "freshness": "all",
+        "supplierId": "bbd25101-b14a-4967-ac5d-fa78054d4f2e",
+        "supplierName": "GEBA",
+        "schemaVersion": 2
+      },
+      "status": "finalized",
+      "audience": "admin",
+      "byte_size": 5759,
+      "file_name": "supplier-GEBA-Geba-20261014.csv",
+      "row_count": 108,
+      "created_at": "2026-10-14T17:58:42.563739+00:00",
+      "export_type": "supplier_price_list",
+      "data_version": "b42b9ae3741065b018e49a9719521eb1",
+      "finalized_at": "2026-10-14T17:58:46.784+00:00",
+      "error_message": null,
+      "progress_done": 108,
+      "progress_total": 108,
+      "organization_id": "1e4c5e99-e387-41aa-a6d3-cbe74558f766"
+    },
+    "createdAfterPublication": true,
+    "exactCurrentPointer": true,
+    "filePath": "/Users/ersen/Downloads/supplier-GEBA-Geba-20261014 (1).csv",
+    "sha256": "5c1d0a043b7f97b84e3eec7bf5ae1229274dc9e8c97089a2e64ff37468a99927",
+    "method": "Actual downloaded file SHA256 equals both original fully parsed 108-row source and exact uploaded source; all bytes and commercial fields identical. Postpublication job independently read from database.",
+    "sourceEvidence": "scripts/ops/evidence/price-engine-production-geba-export-20261014.json",
+    "browserObservation": {
+      "personallyObservedByThisAgent": false,
+      "rootReported": true,
+      "action": "Authenticated production supplier export and native Chrome Save completed"
+    },
+    "query": "select jsonb_build_object('id',j.id,'organization_id',j.organization_id,'audience',j.audience,'export_type',j.export_type,'status',j.status,'scope',j.scope,'row_count',j.row_count,'progress_done',j.progress_done,'progress_total',j.progress_total,'byte_size',j.byte_size,'file_name',j.file_name,'created_at',j.created_at,'finalized_at',j.finalized_at,'error_message',j.error_message,'data_version',j.data_version) job,\n j.created_at>=pub.published_at created_after_publication,\n exists(select 1 from public.supplier_current_price_pointers ptr where ptr.organization_id=j.organization_id and ptr.supplier_id='bbd25101-b14a-4967-ac5d-fa78054d4f2e' and ptr.brand_id='72cb646e-658d-4775-b3bb-b0799eaa9913' and ptr.release_id='c6db3eac-ee98-404b-b07a-35de65abb463' and ptr.publication_id=pub.id) exact_current_pointer\n from public.app_export_jobs j cross join public.supplier_price_publications pub\n where j.id='aaf916c9-f194-40cc-8eb1-1d7d8e8ff702' and pub.id='1345a117-51e5-4913-90b7-130c211da303';"
+  },
   "authenticatedQuote": null,
   "pending": [
-    "Postpublication supplier export actual job/file",
-    "admin_A actual job/file",
     "admin_B actual job/file",
     "customer_A actual job/file",
     "Actual authenticated quote API/UI receipt (DB core already verified)"
