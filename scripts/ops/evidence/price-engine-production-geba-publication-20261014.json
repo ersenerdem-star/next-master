@@ -390,5 +390,17 @@
     "Database core checks do not assert authenticated API/UI execution.",
     "Browser observations are reported by the operator; files and database receipts are independently verified.",
     "108-row same-data scope proves commercial parity, not large-file throughput."
-  ]
+  ],
+  "checkpointStatus": "Historical v1 checkpoint; its remaining browser-download gap is resolved by the separately verified v2 follow-up.",
+  "followupAcceptance": {
+    "evidencePath": "scripts/ops/evidence/price-engine-production-geba-v2-downloads-20261014.json",
+    "evidenceSha256": "46be0721c4e546cce3147fb620a7691fbf30e1d474b6a5be7ca7fb690d7b6510",
+    "acceptancePassed": true,
+    "resolvedHistoricalPending": [
+      "admin_B actual job/file"
+    ],
+    "releaseId": "06ffd737-36a6-4b0c-8b5a-f61657bd1552",
+    "publicationId": "a7578e86-2f62-482f-9ff2-d671406aec68",
+    "note": "The original v1 pending list and pointer-current observation remain historical. New v2 admin B and customer A jobs, sealed snapshots and complete actual files pass; original v1 checks were not rerun or relabeled as current."
+  }
 }
