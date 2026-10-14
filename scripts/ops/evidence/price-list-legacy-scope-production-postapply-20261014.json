@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 1,
+  "projectRef": "zjgueqijumzlfioihnkt",
+  "scope": "read-only actual production first-forward post-apply verification",
+  "remoteMutationsPerformed": false,
+  "migration": {
+    "file": "supabase/migrations/20261014165817_price_list_legacy_scope_compatibility.sql",
+    "sha256": "572788a71f2e548575760ac44542d29fbf04994bd8762ed2fcd6b42ba78c2cc9"
+  },
+  "metadata": {
+    "collected_at": "2026-10-14 17:19:47.924842+00",
+    "functions": [
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "cloud_admin_price_list_brands(uuid)",
+        "volatility": "s",
+        "anonExecute": false,
+        "definitionMd5": "b8b2a4b03c055323ae27bd93dc2f5841",
+        "serviceExecute": true,
+        "securityDefiner": true,
+        "authenticatedExecute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "cloud_admin_price_list_page_fast(uuid,uuid,text,numeric,text,text,integer)",
+        "volatility": "s",
+        "anonExecute": false,
+        "definitionMd5": "91e8efbc5059ef0df3f4599723e40b1b",
+        "serviceExecute": true,
+        "securityDefiner": true,
+        "authenticatedExecute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "cloud_portal_customer_price_list_page_fast(uuid,uuid,text,numeric,text,text,integer)",
+        "volatility": "s",
+        "anonExecute": false,
+        "definitionMd5": "f651598902f88c8041c00e291b9eaaa4",
+        "serviceExecute": true,
+        "securityDefiner": true,
+        "authenticatedExecute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "cloud_price_list_source_page(uuid,uuid,text,integer)",
+        "volatility": "s",
+        "anonExecute": false,
+        "definitionMd5": "107025403b3d2301ca8c478c490fe537",
+        "serviceExecute": true,
+        "securityDefiner": true,
+        "authenticatedExecute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "get_admin_price_list_export_version(uuid,uuid)",
+        "volatility": "s",
+        "anonExecute": false,
+        "definitionMd5": "34c153786735d84dd79076cb4ee6e836",
+        "serviceExecute": true,
+        "securityDefiner": true,
+        "authenticatedExecute": false
+      }
+    ],
+    "pointers": 0,
+    "releases": 0,
+    "publication_enabled": false,
+    "exactSourceAndV3FunctionHashesMatch": true
+  },
+  "method": "Within each statement, select latest eligible unowned legacy price by exact SKU/supplier, effective date and UUID; then select cheapest supplier. Enumerate every exact code with 5,000-row keyset anchors and compare every admin and portal RPC output price to raw numeric buy_price * (1 + decimal margin), rounded once. Compare both actual and distinct counts to the independently derived expected count. No prices/customer names exported to evidence.",
+  "Corteco": [
+    {
+      "collected_at": "2026-10-14 17:20:18.226196+00",
+      "price_case": "A",
+      "latest_supplier_rows": 60656,
+      "expected_codes": 30328,
+      "keyset_anchors": 7,
+      "results": [
+        {
+          "audience": "admin",
+          "actual_rows": 30328,
+          "distinct_codes": 30328,
+          "price_mismatch": 0,
+          "reported_total": 30328
+        },
+        {
+          "audience": "portal",
+          "actual_rows": 30328,
+          "distinct_codes": 30328,
+          "price_mismatch": 0,
+          "reported_total": 30328
+        }
+      ],
+      "listed": true
+    },
+    {
+      "collected_at": "2026-10-14 17:20:58.393985+00",
+      "price_case": "B",
+      "latest_supplier_rows": 60656,
+      "expected_codes": 30328,
+      "keyset_anchors": 7,
+      "results": [
+        {
+          "audience": "admin",
+          "actual_rows": 30328,
+          "distinct_codes": 30328,
+          "price_mismatch": 0,
+          "reported_total": 30328
+        },
+        {
+          "audience": "portal",
+          "actual_rows": 30328,
+          "distinct_codes": 30328,
+          "price_mismatch": 0,
+          "reported_total": 30328
+        }
+      ],
+      "listed": true
+    },
+    {
+      "collected_at": "2026-10-14 17:21:33.164327+00",
+      "price_case": "custom20",
+      "latest_supplier_rows": 60656,
+      "expected_codes": 30328,
+      "keyset_anchors": 7,
+      "results": [
+        {
+          "audience": "admin",
+          "actual_rows": 30328,
+          "distinct_codes": 30328,
+          "price_mismatch": 0,
+          "reported_total": 30328
+        },
+        {
+          "audience": "portal",
+          "actual_rows": 30328,
+          "distinct_codes": 30328,
+          "price_mismatch": 0,
+          "reported_total": 30328
+        }
+      ],
+      "listed": true
+    }
+  ],
+  "Geba": [
+    {
+      "collected_at": "2026-10-14 17:21:18.477127+00",
+      "price_case": "A",
+      "latest_supplier_rows": 108,
+      "expected_codes": 108,
+      "keyset_anchors": 1,
+      "results": [
+        {
+          "audience": "admin",
+          "actual_rows": 108,
+          "distinct_codes": 108,
+          "price_mismatch": 0,
+          "reported_total": 108
+        },
+        {
+          "audience": "portal",
+          "actual_rows": 108,
+          "distinct_codes": 108,
+          "price_mismatch": 0,
+          "reported_total": 108
+        }
+      ],
+      "listed": true
+    },
+    {
+      "collected_at": "2026-10-14 17:21:53.577899+00",
+      "price_case": "B",
+      "latest_supplier_rows": 108,
+      "expected_codes": 108,
+      "keyset_anchors": 1,
+      "results": [
+        {
+          "audience": "admin",
+          "actual_rows": 108,
+          "distinct_codes": 108,
+          "price_mismatch": 0,
+          "reported_total": 108
+        },
+        {
+          "audience": "portal",
+          "actual_rows": 108,
+          "distinct_codes": 108,
+          "price_mismatch": 0,
+          "reported_total": 108
+        }
+      ],
+      "listed": true
+    },
+    {
+      "collected_at": "2026-10-14 17:21:55.491843+00",
+      "price_case": "custom20",
+      "latest_supplier_rows": 108,
+      "expected_codes": 108,
+      "keyset_anchors": 1,
+      "results": [
+        {
+          "audience": "admin",
+          "actual_rows": 108,
+          "distinct_codes": 108,
+          "price_mismatch": 0,
+          "reported_total": 108
+        },
+        {
+          "audience": "portal",
+          "actual_rows": 108,
+          "distinct_codes": 108,
+          "price_mismatch": 0,
+          "reported_total": 108
+        }
+      ],
+      "listed": true
+    }
+  ],
+  "endState": {
+    "collected_at": "2026-10-14 17:22:27.560962+00",
+    "pointers": 0,
+    "releases": 0,
+    "publications": 0,
+    "publication_enabled": false,
+    "admin_actions_enabled": true
+  },
+  "limits": [
+    "This verifies complete SQL counts and numeric prices, not file formatting or browser download delivery.",
+    "Custom20 checks numeric percentage semantics; separate API/browser account-resolution tests remain authoritative for selecting a customer's rate.",
+    "Separate statements each use their own coherent database snapshot; no long-lived transaction or source lock was held between cases.",
+    "Publication/admission controls were not changed and no new source, release, pointer, publication or fixture was created."
+  ]
+}
