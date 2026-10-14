@@ -1,4 +1,5 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
+import { registerInternalQueue } from "@dbos-inc/dbos-sdk/eventreceiver";
 import { runCatalogStorageImport } from "./catalog-worker.mjs";
 import { requireCatalogWorkerTarget } from "./catalog-target-config.mjs";
 import { isTransientCatalogTransportError, readCatalogQueue, runCatalogPollLoop } from "./catalog-poll-loop.mjs";
@@ -7,6 +8,11 @@ const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
 const SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
 const WORKER_ID = String(process.env.CATALOG_IMPORT_WORKER_ID || `catalog-storage:${process.pid}`);
 const QUEUE_NAME = "catalog-import-storage";
+// DBOS recovers interrupted workflows onto this process-local queue before
+// the application queue is registered. Keep recovery serialized so several
+// large imports cannot all resume at once and exhaust worker memory.
+const DBOS_INTERNAL_QUEUE_NAME = "_dbos_internal_queue";
+const CATALOG_RECOVERY_QUEUE_LIMITS = Object.freeze({ globalConcurrency: 1, workerConcurrency: 1 });
 const APP_VERSION = "0.1.0-catalog-storage";
 const POLL_MS = Math.max(2_000, Math.min(60_000, Number(process.env.CATALOG_IMPORT_POLL_MS || 10_000)));
 const FINALIZE_BATCH_SIZE = Math.max(100, Math.min(1000, Number(process.env.CATALOG_IMPORT_FINALIZE_BATCH_SIZE || 1000)));
@@ -165,6 +171,15 @@ export function catalogWorkflowId(claim) {
   // attempt-1 reattached every retry to the first terminal DBOS failure.
   // Old workflow IDs/history remain untouched; each new claim gets its own ID.
   return `catalog-storage:${claim.run_id}:lease-${generation}`;
+}
+
+/**
+ * Apply the same single-import budget to DBOS's pre-launch recovery queue.
+ * DBOS 5.2.11 registers this queue with no limits during launch unless it
+ * already exists, so this must run before DBOS.launch().
+ */
+export function configureCatalogRecoveryQueue() {
+  return registerInternalQueue(DBOS_INTERNAL_QUEUE_NAME, CATALOG_RECOVERY_QUEUE_LIMITS);
 }
 
 async function dispatchSource(source) {
@@ -329,6 +344,7 @@ async function main() {
     executorID: WORKER_ID,
     logLevel: "error",
   });
+  configureCatalogRecoveryQueue();
   await DBOS.launch();
   await DBOS.registerQueue(QUEUE_NAME, { globalConcurrency: 1, workerConcurrency: 1 });
   const controller = new AbortController();

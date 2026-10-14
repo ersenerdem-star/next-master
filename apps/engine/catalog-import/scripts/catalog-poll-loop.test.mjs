@@ -99,8 +99,15 @@ register(`data:text/javascript,${encodeURIComponent(`
     return nextResolve(specifier, context);
   }
 `)}`, import.meta.url);
-const { pollCatalogImportSources, pollCatalogFinalization, catalogWorkflowId, requireCatalogReadCompletionContract } = await import("../src/worker.mjs");
+const { pollCatalogImportSources, pollCatalogFinalization, catalogWorkflowId, configureCatalogRecoveryQueue, requireCatalogReadCompletionContract } = await import("../src/worker.mjs");
 delete globalThis.__catalogPollTestDbos;
+
+test("DBOS recovery queue is capped before launch so imports resume one at a time", () => {
+  const queue = configureCatalogRecoveryQueue();
+  assert.equal(queue.name, "_dbos_internal_queue");
+  assert.equal(queue.concurrency, 1);
+  assert.equal(queue.workerConcurrency, 1);
+});
 
 test("actual source and finalization discovery GET timeouts retry, with no mutation RPC", async () => {
   const originalFetch = globalThis.fetch;

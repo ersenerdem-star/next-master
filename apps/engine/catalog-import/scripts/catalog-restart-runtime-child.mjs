@@ -135,10 +135,11 @@ async function main() {
   process.env.SUPABASE_URL = 'https://catalog-local.invalid';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'local-test-placeholder';
   process.env.CATALOG_IMPORT_WORKER_ID = input.lease.workerId;
-  const { catalogWorkflow, pollCatalogImportSources, pollCatalogFinalization } = await import('../src/worker.mjs');
+  const { catalogWorkflow, configureCatalogRecoveryQueue, pollCatalogImportSources, pollCatalogFinalization } = await import('../src/worker.mjs');
   pollFinalization = pollCatalogFinalization;
   DBOS.setConfig({ name: 'catalog-restart-local', applicationVersion: '0.1.0-catalog-storage',
     executorID: 'catalog-local-01', systemDatabaseUrl: connection.href, logLevel: 'error', listenQueues: [queueName] });
+  configureCatalogRecoveryQueue();
   await DBOS.launch();
   await DBOS.registerQueue(queueName, { globalConcurrency: 1, workerConcurrency: 1 });
   try {
