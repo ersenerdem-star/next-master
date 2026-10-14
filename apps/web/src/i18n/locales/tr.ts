@@ -809,7 +809,7 @@ export const trMessages = {
     "priceLists.downloadPriceList": "Fiyat Listesini İndir",
     "priceLists.selectBrand": "Marka seçin",
     "priceLists.noBrandsAvailable": "Kullanılabilir marka yok",
-    "priceLists.downloadEligibilityHint": "İndirmede yalnızca güncel yayımlanmış tedarikçi fiyat kapsamı bulunan markalar gösterilir.",
+    "priceLists.downloadEligibilityHint": "İndirmede güncel, kullanılabilir tedarikçi fiyatı bulunan markalar gösterilir.",
     "priceLists.aPriceList": "A Fiyat Listesi",
     "priceLists.bPriceList": "B Fiyat Listesi",
     "priceLists.loadFailed": "Fiyat listesi ayarları yüklenemedi",

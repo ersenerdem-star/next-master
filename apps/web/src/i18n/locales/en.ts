@@ -833,7 +833,7 @@ export const enMessages = {
     "priceLists.downloadPriceList": "Download Price List",
     "priceLists.selectBrand": "Select brand",
     "priceLists.noBrandsAvailable": "No brands available",
-    "priceLists.downloadEligibilityHint": "Only brands with a current published supplier-price scope are available for download.",
+    "priceLists.downloadEligibilityHint": "Brands with current, usable supplier prices are available for download.",
     "priceLists.aPriceList": "A Price List",
     "priceLists.bPriceList": "B Price List",
     "priceLists.loadFailed": "Price list settings load failed",

@@ -1,0 +1,257 @@
+{
+  "schemaVersion": 1,
+  "scope": "local-synthetic-postgresql17",
+  "capturedAt": "2026-10-14T17:09:01.382Z",
+  "migrationSha256": "572788a71f2e548575760ac44542d29fbf04994bd8762ed2fcd6b42ba78c2cc9",
+  "resources": {
+    "cpu": 0.5,
+    "memoryBytes": 1073741824
+  },
+  "limits": [
+    "Synthetic commercial projection, not copied production rows",
+    "Warm local cache, no network/provider or concurrent workload",
+    "Only read-path indexes and columns are modeled; RLS/auth correctness is covered by the separate functional replay test",
+    "Timings are observations, not a production SLA",
+    "Initial cold version call is retained in versionSamplesMs; CPU scheduling/JIT/caches can change observed latency. All-page timing excludes initial warm-up samples."
+  ],
+  "legacy": {
+    "inputRows": 60656,
+    "expectedExactCodes": 30328,
+    "suppliers": 2,
+    "versionSamplesMs": [
+      5498.2,
+      1387.19,
+      586.16
+    ],
+    "firstPlan": {
+      "executionMs": 466.178,
+      "planningMs": 5.86,
+      "sharedHitBlocks": 3568,
+      "sharedReadBlocks": 0,
+      "tempReadBlocks": 452,
+      "tempWrittenBlocks": 1363,
+      "scans": [
+        {
+          "relation": "supplier_current_price_pointers",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 1,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_price_publications",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 0,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_price_release_rows",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 0,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_prices",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 60656,
+          "loops": 1,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_price_release_rows",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 0,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_prices",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 60656,
+          "loops": 1,
+          "removedByFilter": 0
+        }
+      ]
+    },
+    "middlePlan": {
+      "executionMs": 168.187,
+      "planningMs": 0.09,
+      "sharedHitBlocks": 1784,
+      "sharedReadBlocks": 0,
+      "tempReadBlocks": 494,
+      "tempWrittenBlocks": 688,
+      "scans": [
+        {
+          "relation": "supplier_current_price_pointers",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 1,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_price_publications",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 0,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_price_release_rows",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 0,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_prices",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 60656,
+          "loops": 1,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_price_release_rows",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 0,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_prices",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 0,
+          "removedByFilter": 0
+        }
+      ]
+    },
+    "fullExport": {
+      "rows": 30328,
+      "pages": 31,
+      "wallMs": 25116.61,
+      "versionMs": 17899.18,
+      "pageMs": 7076.89,
+      "maxPageMs": 799.28,
+      "maxVersionMs": 1188.35
+    }
+  },
+  "published": {
+    "inputRows": 1000000,
+    "suppliers": 1,
+    "versionMs": 129.23,
+    "firstPageMs": 1365.89,
+    "middlePageMs": 49.71,
+    "middlePlan": {
+      "executionMs": 3.205,
+      "planningMs": 2.14,
+      "sharedHitBlocks": 36,
+      "sharedReadBlocks": 0,
+      "tempReadBlocks": 0,
+      "tempWrittenBlocks": 0,
+      "scans": [
+        {
+          "relation": "supplier_current_price_pointers",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 1,
+          "loops": 1,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_price_publications",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 1,
+          "loops": 1,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_price_release_rows",
+          "node": "Index Scan",
+          "index": "idx_release_rows_export_exact_eligible_count",
+          "rows": 1025,
+          "loops": 1,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_prices",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 1,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_price_release_rows",
+          "node": "Index Only Scan",
+          "index": "idx_release_rows_export_exact_eligible_count",
+          "rows": 0,
+          "loops": 0,
+          "removedByFilter": 0
+        },
+        {
+          "relation": "supplier_prices",
+          "node": "Seq Scan",
+          "index": null,
+          "rows": 0,
+          "loops": 0,
+          "removedByFilter": 0
+        }
+      ]
+    }
+  },
+  "indexNames": [
+    "idx_catalog_products_export_code_c_id",
+    "idx_catalog_products_export_code_id",
+    "idx_catalog_products_export_exact_code",
+    "idx_catalog_products_export_exact_identity",
+    "idx_catalog_products_export_id",
+    "idx_release_rows_export_exact_eligible_count",
+    "idx_release_rows_export_future_eligibility",
+    "idx_release_rows_master_export_code_c",
+    "idx_supplier_price_release_rows_portal_prefix",
+    "idx_supplier_price_release_rows_release_code",
+    "idx_supplier_price_release_rows_release_status",
+    "idx_supplier_prices_brand_code",
+    "idx_supplier_prices_export_code_c",
+    "idx_supplier_prices_export_keyset",
+    "idx_supplier_prices_export_keyset_coalesced",
+    "idx_supplier_prices_export_search",
+    "idx_supplier_prices_master_rollup_active",
+    "idx_supplier_prices_master_rollup_supplier_active",
+    "idx_supplier_prices_order_rules",
+    "idx_supplier_prices_org_brand_normcode_buy_active",
+    "idx_supplier_prices_org_supplier_brand_active",
+    "idx_supplier_prices_org_supplier_brand_normcode_active"
+  ],
+  "server": {
+    "version": "PostgreSQL 17.11 (Debian 17.11-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "work_mem": "4MB",
+    "timezone": "UTC",
+    "statement_timeout": "30s",
+    "plan_cache_mode": "force_generic_plan"
+  },
+  "completedAt": "2026-10-14T17:10:37.205Z",
+  "command": "RUN_PRICE_LIST_LEGACY_PG_PERF=1 node --test scripts/tests/price-list-legacy-scope-performance.test.mjs",
+  "functionalCommand": "node --test scripts/tests/price-list-legacy-scope-compatibility.test.mjs",
+  "functionalTests": {
+    "passed": 11,
+    "failed": 0,
+    "includesFull62Replay": true,
+    "publishedNativeIdParity": true
+  }
+}
