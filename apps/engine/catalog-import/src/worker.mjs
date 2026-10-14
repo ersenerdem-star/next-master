@@ -264,7 +264,10 @@ async function main() {
     while (true) {
       console.log(JSON.stringify({ worker: "catalog-import", status: "polling", workerId: WORKER_ID }));
       await pollCatalogImportSources();
-      await pollCatalogFinalization();
+      const finalization = await pollCatalogFinalization();
+      if (finalization?.status !== "idle") {
+        console.log(JSON.stringify({ worker: "catalog-import", status: "finalization", ...finalization }));
+      }
       await new Promise((resolve) => setTimeout(resolve, POLL_MS));
     }
   } finally {

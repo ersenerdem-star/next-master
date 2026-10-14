@@ -191,5 +191,5 @@ test("large storage runs validate in durable bounded batches", () => {
   assert.match(body, /limit v_batch_size/i);
   assert.match(body, /status = 'validating'/i);
   assert.match(body, /has_more/i);
-  assert.match(validationSql, /grant execute on function public\.validate_catalog_import_storage_batch_system\([^)]*\) to service_role/i);
+  assert.match(validationSql, /grant execute on function public\.validate_catalog_import_storage_batch_system\([^)]*\)\s+to service_role/i);
 });
