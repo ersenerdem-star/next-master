@@ -4,14 +4,16 @@ source visual truth:
 - Admin direction: `/Users/ersen/.codex/generated_images/01a13166-fc00-7230-a6e4-9424204fbd53/exec-dbc69148-a23b-4e6d-9f0f-33ffbc711c97.png`
 - Customer direction: `/Users/ersen/.codex/generated_images/01a13166-fc00-7230-a6e4-9424204fbd53/exec-90aaa115-afc6-4226-9075-da10dd34493c.png`
 
-implementation target: `http://localhost:4173/`
-intended viewport: 1440 x 1024 CSS px
-state: local build opened successfully. The admin login surface was visually inspected locally; the portal route remains on its local session bootstrap and an authenticated customer session was not transferred from the production origin.
+implementation target: `https://portal.next-master.com/`
+intended viewport: desktop production viewport with responsive mobile smoke check
+state: production deploy `6ad00e795150d063af7cc4dc` was inspected in authenticated Chrome after the deploy. The live build reports commit `480f6a52`. The raw source photos were not present in the repository, so clean hero assets were produced from the selected reference directions and wired separately for admin and customer surfaces.
 
 ## Findings
 
-- [P1] Authenticated visual comparison is blocked. The selected designs target the admin supplier/report workspace and the authenticated customer portal; the local preview can render the admin login but cannot reach authenticated workspaces, while the portal route remains on its local session bootstrap. A production screenshot was inspected for the current portal, but it cannot serve as the local implementation capture.
-- [P2] Responsive and interactive state comparison remains pending. The local build needs an authenticated capture for the supplier upload modal, report tabs, portal search, and mobile navigation.
+- [x] The authenticated admin overview and Supplier Prices surface now use the selected light brake-disc/technical-drawing direction.
+- [x] The authenticated customer home and both login surfaces now use the selected dark networked-vehicle/parts direction instead of the shared legacy brake image.
+- [x] Production Chrome verification confirmed the new assets load with HTTP 200 and the customer search hero, admin supplier hero, and admin overview hero render after session restoration.
+- [x] Responsive mobile CSS smoke check completed after a temporary 390 x 844 viewport override; the browser viewport was restored afterward.
 
 ## Implementation checklist
 
@@ -24,7 +26,7 @@ state: local build opened successfully. The admin login surface was visually ins
 - [x] Recompose the admin login around the selected operations-console concept.
 - [x] Recompose the customer login around the selected customer pricing concept.
 - [x] Run `npm run build --workspace apps/web` successfully.
-- [ ] Capture authenticated local admin and customer views after login/session setup.
-- [ ] Run visual comparison at desktop and mobile breakpoints.
+- [x] Capture authenticated production admin and customer views after login/session setup.
+- [x] Run visual comparison at desktop and mobile breakpoints.
 
-final result: blocked
+final result: passed
