@@ -3,6 +3,7 @@ import { readFile,writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { createFullReplayDb,fullReplaySource } from "./fixtures/price-engine-full-replay-db.mjs";
+import { inspectSnapshot } from "../ops/price-engine-production-preflight.mjs";
 
 const manifestPath=new URL("../ops/price-engine-production-manifest.json",import.meta.url);
 const manifest=JSON.parse(await readFile(manifestPath,"utf8"));
@@ -16,6 +17,7 @@ const forwardReplay=forwardReplayFiles.map(file=>{
   return matches[0];
 });
 const repoRoot=new URL("../../",import.meta.url);
+const preflightSql=await readFile(new URL("../ops/price-engine-production-preflight.sql",import.meta.url),"utf8");
 const fixtureOrg="90000000-0000-4000-8000-000000000001";
 const fixtureJob="90000000-0000-4000-8000-000000000002";
 const fixtureObject="90000000-0000-4000-8000-000000000003";
@@ -75,10 +77,18 @@ test("fresh62 chain applies to the captured production schema, then its two new 
       const job=(await db.query("SELECT to_jsonb(j) row FROM app_export_jobs j WHERE id=$1",[fixtureJob])).rows[0].row;
       for(const [field,value] of Object.entries(originalJob)) assert.deepEqual(job[field],value,`Existing job mutated:${field}:pass${pass}`);
       await assertRoleBoundaries(db);
+      const runtimeMetadata=(await db.query(preflightSql)).rows[0].price_engine_preflight;
+      // This is a local fixture, never a fabricated staging reference. Every
+      // local runtime requirement must pass; the real V3 comparison stays external.
+      const runtimeCheck=inspectSnapshot({project_ref:fullReplaySource.source.projectRef,data:runtimeMetadata},
+        {phase:"runtime",expectedProject:fullReplaySource.source.projectRef});
+      assert.deepEqual(runtimeCheck.errors,["STAGING_REFERENCE_UNCONFIRMED"]);
       const schema=(await db.query(logicalSchemaSql)).rows[0].schema_metadata;
       const fingerprint=createHash("sha256").update(JSON.stringify(schema)).digest("hex");
       fingerprints.push(fingerprint);
-      evidence.passes.push({pass,scope:pass===1?"fresh-complete-manifest":"new-forward-migrations-only",migrations:completed,logical_schema_sha256:fingerprint,preexisting_job_business_fields_preserved:true,production_activation_off:true,role_boundaries_preserved:true});
+      evidence.passes.push({pass,scope:pass===1?"fresh-complete-manifest":"new-forward-migrations-only",migrations:completed,logical_schema_sha256:fingerprint,preexisting_job_business_fields_preserved:true,production_activation_off:true,role_boundaries_preserved:true,
+        local_runtime_metadata_requirements_passed:true,runtime_function_count:runtimeMetadata.functions.length,
+        runtime_trigger_count:runtimeMetadata.triggers.length,actual_staging_reference_comparison:"separate-required"});
     }
     assert.equal(evidence.passes.length,2);
     assert.equal(evidence.passes[0].migrations.length,manifest.migration_order.length);

@@ -16,7 +16,7 @@ const MANIFEST='scripts/ops/price-engine-production-manifest.json';
 const PREFLIGHT='scripts/ops/price-engine-production-preflight.sql';
 const ALIGNMENT='scripts/ops/price-engine-production-customer-alignment.sql';
 export const REVIEWED_ORDER_SHA256='866b2fd0af3fe7f287da75c8b55c1dddcecb7cbc76f8aa001f2fb0e3e5c873a0';
-const PREFLIGHT_SHA256='347731de0978db56e067f3451898620c6025908fdb57625f77328195a089cda4';
+const PREFLIGHT_SHA256='fd6f5a001cb8a23dc06d9d651a8de6011dcaef1faeb596b68f233f6ed19fdcf0';
 const ALIGNMENT_SHA256='806b1cb386ec925e0915fa2dc59c973fd7e5b788096ba16feb71baf00520ee98';
 const hash=value=>createHash('sha256').update(value).digest('hex');
 export const IDENTITY_SQL="SELECT current_database()='postgres' AS database_ok, session_user='postgres' AS role_ok, current_user=session_user AS unassumed_role, pg_backend_pid() AS backend_pid, current_setting('server_version_num') AS server_version_num";

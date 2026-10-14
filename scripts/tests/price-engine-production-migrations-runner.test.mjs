@@ -14,7 +14,12 @@ const repo=new URL('../../',import.meta.url),hash=value=>createHash('sha256').up
 const manifestBytes=await readFile(new URL('../ops/price-engine-production-manifest.json',import.meta.url));
 const expectedManifestSha256=hash(manifestBytes);
 const plan=await buildMigrationPlan({manifestBytes,expectedManifestSha256});
-const baseline=JSON.parse(await readFile(new URL('../ops/evidence/price-engine-production-20261014.json',import.meta.url))).data;
+// Derive the current metadata shape from the captured production-schema fixture.
+// Historical remote evidence is immutable; new runtime objects remain absent.
+const baselineDb=await createFullReplayDb();
+let baseline;
+try { baseline=(await baselineDb.query(plan.preflight_sql)).rows[0].price_engine_preflight; }
+finally { await baselineDb.close(); }
 const secret='synthetic-password-must-never-be-output';
 const connection={host:'db.zjgueqijumzlfioihnkt.supabase.co',user:'postgres',database:'postgres',port:5432,
  password:secret,ssl:{ca:'synthetic-private-ca',rejectUnauthorized:true},transaction:false};

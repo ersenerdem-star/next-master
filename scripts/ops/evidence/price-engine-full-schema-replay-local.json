@@ -1,7 +1,7 @@
 {
   "evidence_scope": "Local isolated PG17 schema replay; actual production schema metadata; no remote writes or commercial browser proof",
   "source_project_ref": "zjgueqijumzlfioihnkt",
-  "manifest_sha256": "98a0ef8617db560e8aacb7f6bc50e731ef71a09f2766b703170728bdf6ef5a12",
+  "manifest_sha256": "724820e254f5e4c0d16e1584324f70e78c5bbea4334018cc6fe86fce2602c549",
   "baseline_tables": 38,
   "baseline_functions": 88,
   "replay_policy": "Fresh complete 62-entry chain, then only the two new forward migrations. Historical foundation bytes and MD5 guards are preserved; replaying foundation over the forward-replaced upload-status function is intentionally excluded. Prior 60+60 evidence remains in Git history, not claimed by this run.",
@@ -262,7 +262,11 @@
       "logical_schema_sha256": "d227fde84762f2f9a6c4343d76f08c8c301ad7630b2e51bf2943af8d518587c3",
       "preexisting_job_business_fields_preserved": true,
       "production_activation_off": true,
-      "role_boundaries_preserved": true
+      "role_boundaries_preserved": true,
+      "local_runtime_metadata_requirements_passed": true,
+      "runtime_function_count": 55,
+      "runtime_trigger_count": 1,
+      "actual_staging_reference_comparison": "separate-required"
     },
     {
       "pass": 2,
@@ -280,7 +284,11 @@
       "logical_schema_sha256": "d227fde84762f2f9a6c4343d76f08c8c301ad7630b2e51bf2943af8d518587c3",
       "preexisting_job_business_fields_preserved": true,
       "production_activation_off": true,
-      "role_boundaries_preserved": true
+      "role_boundaries_preserved": true,
+      "local_runtime_metadata_requirements_passed": true,
+      "runtime_function_count": 55,
+      "runtime_trigger_count": 1,
+      "actual_staging_reference_comparison": "separate-required"
     }
   ],
   "remote_mutations": 0,
