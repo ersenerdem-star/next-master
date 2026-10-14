@@ -93,6 +93,7 @@ type PublishedPriceMasterPage = {
 
 export type MasterPreviewRow = MasterRow & {
   total_count_is_estimate?: boolean;
+  total_count_is_unknown?: boolean;
 };
 
 function shouldRunLooseOriginalNumberSearch(search: string) {
@@ -557,6 +558,7 @@ function normalizeFastMasterRows(data: MasterRow[] | null | undefined) {
   return rows.map((row) => ({
     ...row,
     total_count: row.total_count ?? rows.length,
+    total_count_is_unknown: row.total_count == null,
   }));
 }
 

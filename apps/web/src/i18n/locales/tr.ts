@@ -2164,6 +2164,7 @@ export const trMessages = {
     "master.summary.loadingLatestPage": "Son sayfa yükleniyor",
     "master.summary.currentPage": "Mevcut sayfa",
     "master.summary.filteredResultSet": "Filtrelenmiş sonuç seti",
+    "master.summary.countNotLoaded": "Önizleme; indirme eşleşen tüm satırları içerir",
     "master.summary.comparisonReady": "Karşılaştırma hazır",
     "master.summary.gapThreshold": "Fark >= %{percent}",
     "master.summary.rowsWithGapData": "Fark verisi olan satırlar",

@@ -2188,6 +2188,7 @@ export const enMessages = {
     "master.summary.loadingLatestPage": "Loading latest page",
     "master.summary.currentPage": "Current page",
     "master.summary.filteredResultSet": "Filtered result set",
+    "master.summary.countNotLoaded": "Preview only; export includes all matching rows",
     "master.summary.comparisonReady": "Comparison ready",
     "master.summary.gapThreshold": "Gap >= {percent}%",
     "master.summary.rowsWithGapData": "Rows with gap data",

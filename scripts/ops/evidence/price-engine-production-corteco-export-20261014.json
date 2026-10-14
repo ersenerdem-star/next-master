@@ -1,0 +1,27 @@
+{
+  "environment": "production",
+  "project_ref": "zjgueqijumzlfioihnkt",
+  "ui_origin": "https://portal.next-master.com",
+  "build": "49c4fd33",
+  "export_job": "4c247f53-f855-42cc-be0e-07ea62ab7313",
+  "type": "supplier_price_list",
+  "scope": {
+    "supplier": "GroupAuto",
+    "supplier_id": "bb8aa954-5c9c-4edb-8c25-37e170253a1b",
+    "brand": "Corteco",
+    "brand_id": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca"
+  },
+  "source_active_rows": 30328,
+  "job_rows": 30328,
+  "parsed_csv_rows": 30328,
+  "bytes": 2171565,
+  "sha256": "4f9788ce9ab07136b460d4e6030ecdcf14f509898d1412a9d7ae55810edf980f",
+  "file": "/Users/ersen/Downloads/supplier-GroupAuto-Corteco-20261014.csv",
+  "created_at": "2026-10-14T16:44:43.961913Z",
+  "started_at": "2026-10-14T16:44:45.145Z",
+  "finalized_at": "2026-10-14T16:44:53.24Z",
+  "status": "finalized",
+  "error": null,
+  "browser_download": "actual UI click; browser local temporary file completed after user confirmation; named file then independently parsed",
+  "limitations": "row count and artifact integrity proof; full semantic source comparison not performed for this scope"
+}

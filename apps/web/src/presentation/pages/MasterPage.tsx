@@ -140,7 +140,7 @@ export function MasterPage() {
     if (error) {
       actionFeedback.fail(error);
     } else {
-      actionFeedback.succeed(rows[0]?.total_count_is_estimate
+      actionFeedback.succeed(rows[0]?.total_count_is_estimate || rows[0]?.total_count_is_unknown
         ? r("master.meta.rowsShown", { shown: rows.length.toLocaleString("en-US") })
         : r("master.feedback.rowsLoaded", { count: nextTotal.toLocaleString("en-US") }));
     }
@@ -149,6 +149,7 @@ export function MasterPage() {
 
   const total = rows[0]?.total_count ?? rows.length;
   const totalIsEstimate = rows[0]?.total_count_is_estimate === true;
+  const totalIsUnknown = rows[0]?.total_count_is_unknown === true;
   const avgGapPercent = useMemo(() => {
     const values = rows
       .map((row) => Number(row.price_gap_percent))
@@ -349,7 +350,7 @@ export function MasterPage() {
 
       <section className="metric-strip" aria-label={r("master.summary.aria")}>
         <MetricTile label={r("master.summary.rowsShown")} value={summary.rowsShown.toLocaleString("en-US")} detail={loadingRows ? r("master.summary.loadingLatestPage") : r("master.summary.currentPage")} tone="neutral" />
-        <MetricTile label={r(totalIsEstimate ? "master.summary.estimatedItems" : "master.summary.totalItems")} value={total ? total.toLocaleString("en-US") : "-"} detail={r(totalIsEstimate ? "master.summary.estimatedCountHint" : "master.summary.filteredResultSet")} tone="neutral" />
+        <MetricTile label={r(totalIsEstimate ? "master.summary.estimatedItems" : "master.summary.totalItems")} value={!totalIsUnknown && total ? total.toLocaleString("en-US") : "-"} detail={r(totalIsUnknown ? "master.summary.countNotLoaded" : totalIsEstimate ? "master.summary.estimatedCountHint" : "master.summary.filteredResultSet")} tone="neutral" />
         <MetricTile label={r("master.summary.withSecondSupplier")} value={summary.withSecondSupplier.toLocaleString("en-US")} detail={r("master.summary.comparisonReady")} tone="success" />
         <MetricTile label={r("master.summary.highGapItems")} value={summary.highGap.toLocaleString("en-US")} detail={r("master.summary.gapThreshold", { percent: HIGH_GAP_PERCENT })} tone={summary.highGap ? "info" : "neutral"} />
         <MetricTile label={r("master.summary.singleSupplier")} value={summary.singleSupplier.toLocaleString("en-US")} detail={r("master.values.noSecondSupplier")} tone={summary.singleSupplier ? "warning" : "success"} />
@@ -365,7 +366,7 @@ export function MasterPage() {
                 ? r("master.loading.brandContext")
                 : loadingRows
                   ? r("master.loading.refreshingSupplierIntelligence")
-                  : total
+                  : total && !totalIsUnknown
                     ? r(totalIsEstimate ? "master.meta.rowsShownFromEstimatedTotal" : "master.meta.rowsShownFromTotal", { shown: summary.rowsShown.toLocaleString("en-US"), total: total.toLocaleString("en-US") })
                     : r("master.meta.rowsShown", { shown: summary.rowsShown.toLocaleString("en-US") })}
             </p>
