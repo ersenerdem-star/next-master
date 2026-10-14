@@ -45,3 +45,18 @@ test('rendered review card explains operational interruption without the brand-r
  assert.doesNotMatch(html,/Marka karşılaştırması henüz doğrulanmadı|Uyarıyı aç|yeni yükleme başlatın/);
  assert.match(releaseReviewMessage(row,false),/operational review/);
 });
+
+test('published history remains a previous publication when a later version owns the current pointer',()=>{
+ const previous={...row,status:'published',current:false,errorCode:null,errorMessage:null,processedRows:999998,totalRows:999998,audit:{checked:true,reviewRequired:false,totalCodes:999998,brands:[]}};
+ assert.equal(releaseReviewState(previous),'previous_publication');
+ assert.equal(releaseReviewState({...previous,audit:null}),'previous_publication');
+ assert.equal(releaseReviewState({...previous,current:true}),'active');
+ assert.equal(releaseReviewState({...previous,status:'validated'}),'awaiting_publication');
+ for(const tr of [true,false]){
+  const html=renderToStaticMarkup(React.createElement(SupplierReleaseReviewCard,{rows:[previous],tr,onDetails:()=>{}}));
+  assert.match(html,tr?/Önceki yayın — güncel değil/:/Previous publication — not current/);
+  assert.doesNotMatch(html,/İşleniyor|>Processing<|Güncel aktif sürüm|Current active release/);
+ }
+ // An actual stored error still takes priority over a historical success label.
+ assert.equal(releaseReviewState({...previous,errorCode:'VALIDATION_REVIEW_REQUIRED'}),'review_required');
+});

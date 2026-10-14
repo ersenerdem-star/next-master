@@ -47,7 +47,7 @@ export function releaseReviewState(row:ReleaseReviewRow) {
   if (row.errorCode===SUPPLIER_PROCESSING_INTERRUPTED && !row.audit?.reviewRequired) return 'processing_interrupted';
   if (row.errorCode || row.audit?.reviewRequired) return 'review_required';
   if (['failed','cancelled','superseded','archived'].includes(row.status)) return 'inactive';
-  if (row.status==='published' && row.current) return 'active';
+  if (row.status==='published') return row.current ? 'active' : 'previous_publication';
   if (!row.audit?.checked) return 'unverified';
   if (row.status==='validated') return 'awaiting_publication';
   return 'processing';

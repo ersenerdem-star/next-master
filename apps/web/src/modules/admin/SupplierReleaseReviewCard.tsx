@@ -16,13 +16,13 @@ export function releaseReviewMessage(row:ReleaseReviewRow, tr:boolean) {
 }
 export function SupplierReleaseReviewCard({rows,tr,onDetails,actionsEnabled=false,onChanged}:{rows:ReleaseReviewRow[];tr:boolean;onDetails:(message:string)=>void;actionsEnabled?:boolean;onChanged?:()=>void}) {
   const [expanded,setExpanded]=useState<string|null>(null);
-  const labels=tr ? {processing_interrupted:'İşlem durdu — operasyon kontrolü gerekiyor',rejected:'Dosya reddedildi — yayınlanmadı',review_required:'İnceleme gerekli — yayın durduruldu',inactive:'Aktif değil',active:'Güncel aktif sürüm',unverified:'Kontrol doğrulanmadı',awaiting_publication:'Doğrulandı — henüz yayınlanmadı',processing:'İşleniyor'}
-    : {processing_interrupted:'Processing stopped — operational review needed',rejected:'Source rejected — not published',review_required:'Review required — publication held',inactive:'Not active',active:'Current active release',unverified:'Check not verified',awaiting_publication:'Validated — not yet published',processing:'Processing'};
+  const labels=tr ? {processing_interrupted:'İşlem durdu — operasyon kontrolü gerekiyor',rejected:'Dosya reddedildi — yayınlanmadı',review_required:'İnceleme gerekli — yayın durduruldu',inactive:'Aktif değil',active:'Güncel aktif sürüm',previous_publication:'Önceki yayın — güncel değil',unverified:'Kontrol doğrulanmadı',awaiting_publication:'Doğrulandı — henüz yayınlanmadı',processing:'İşleniyor'}
+    : {processing_interrupted:'Processing stopped — operational review needed',rejected:'Source rejected — not published',review_required:'Review required — publication held',inactive:'Not active',active:'Current active release',previous_publication:'Previous publication — not current',unverified:'Check not verified',awaiting_publication:'Validated — not yet published',processing:'Processing'};
   return <div className="list-stack">{rows.map(row=>{
     const state=releaseReviewState(row);
     return <article key={row.id} className="list-stack" style={{border:'1px solid var(--border-color, #d8e1ee)',borderRadius:12,padding:16}}>
       <strong>{row.brand} · {row.supplier}</strong>
-      <span className={`mark-badge mark-badge--${state==='review_required'||state==='rejected'||state==='processing_interrupted'?'failed':state==='active'?'completed':'pending'}`}>{labels[state]}</span>
+      <span className={`mark-badge mark-badge--${state==='review_required'||state==='rejected'||state==='processing_interrupted'?'failed':state==='active'||state==='previous_publication'?'completed':'pending'}`}>{labels[state]}</span>
       <span>{row.processedRows.toLocaleString()} / {row.totalRows.toLocaleString()} · {row.status}</span>
       <span className="operations-subtle">{new Date(row.createdAt).toLocaleString(tr?'tr-TR':'en-US',{dateStyle:'medium',timeStyle:'short'})}</span>
       {state==='processing_interrupted'?<p role="status">{supplierProcessingInterruptedMessage(tr)} {tr?'Son durum':'Last status'}: {new Date(row.updatedAt).toLocaleString(tr?'tr-TR':'en-US')}</p>:null}
@@ -30,7 +30,7 @@ export function SupplierReleaseReviewCard({rows,tr,onDetails,actionsEnabled=fals
         {tr ? `Kabul: ${row.acceptedRows.toLocaleString('tr-TR')} · Çakışma: ${(row.conflictRows||0).toLocaleString('tr-TR')} · Reddedilen: ${(row.rejectedRows||0).toLocaleString('tr-TR')} · Uyarı: ${(row.warningRows||0).toLocaleString('tr-TR')}`
           : `Accepted: ${row.acceptedRows.toLocaleString('en-US')} · Conflicts: ${(row.conflictRows||0).toLocaleString('en-US')} · Rejected: ${(row.rejectedRows||0).toLocaleString('en-US')} · Warnings: ${(row.warningRows||0).toLocaleString('en-US')}`}
       </div> : null}
-      {!row.audit?.checked && state!=='processing_interrupted' ? <span>{tr?'Marka karşılaştırması henüz doğrulanmadı.':'Brand comparison has not yet been verified.'}</span> : null}
+      {!row.audit?.checked && state!=='processing_interrupted' && state!=='previous_publication' ? <span>{tr?'Marka karşılaştırması henüz doğrulanmadı.':'Brand comparison has not yet been verified.'}</span> : null}
       {row.errorCode ? <strong className="error-text">{row.errorCode}</strong> : null}
       {row.errorMessage || row.audit?.brands.length ? <details className="supplier-release-technical-details">
         <summary>{tr?'Teknik ayrıntılar':'Technical details'}</summary>
