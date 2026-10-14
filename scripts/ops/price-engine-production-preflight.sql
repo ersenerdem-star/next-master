@@ -94,6 +94,10 @@ required_functions(phase,name,service_only,signature) as (values
   ('runtime','get_supplier_price_release_manifest',true,'public.get_supplier_price_release_manifest(uuid)'),
   ('runtime','get_supplier_price_release_status',true,'public.get_supplier_price_release_status(uuid[])'),
   ('runtime','get_supplier_price_upload_status',true,'public.get_supplier_price_upload_status(uuid,uuid,uuid,uuid,bigint,bigint)'),
+  ('runtime','get_supplier_price_workflow_failure_context',true,'public.get_supplier_price_workflow_failure_context(uuid[])'),
+  ('runtime','mark_supplier_price_processing_interrupted',true,'public.mark_supplier_price_processing_interrupted(uuid,uuid,text,bigint,timestamptz,timestamptz)'),
+  ('runtime','supplier_price_ingestion_internal.clear_processing_interrupted_on_progress',false,
+    'supplier_price_ingestion_internal.clear_processing_interrupted_on_progress()'),
   ('runtime','recover_expired_supplier_price_release_batches',true,'public.recover_expired_supplier_price_release_batches(integer)'),
   ('runtime','request_supplier_price_upload_verification',true,'public.request_supplier_price_upload_verification(uuid,uuid,uuid,uuid,bigint,bigint)'),
   ('runtime','start_supplier_price_release_batch_validation',true,'public.start_supplier_price_release_batch_validation(uuid)'),
@@ -146,10 +150,13 @@ function_checks as (
   select r.phase,r.name,r.signature,r.service_only,
     r.name not in ('publish_supplier_price_release_production','reverse_supplier_price_publication_production') as reference_required,
     r.name='supplier_price_upload_object_is_sealed' as authenticated_storage_predicate,
-    r.name like 'supplier_price_validation_internal.%' as private_helper,
+    (r.name like 'supplier_price_validation_internal.%' or r.name like 'supplier_price_ingestion_internal.%') as private_helper,
     r.name in ('supplier_price_validation_internal.cross_brand_audit',
       'supplier_price_validation_internal.historical_rows_valid',
-      'supplier_price_validation_internal.validate_supplier_price_release') as owner_only,
+      'supplier_price_validation_internal.validate_supplier_price_release',
+      'supplier_price_ingestion_internal.clear_processing_interrupted_on_progress') as owner_only,
+    case when r.name in ('get_supplier_price_workflow_failure_context','mark_supplier_price_processing_interrupted') then true
+      when r.name='supplier_price_ingestion_internal.clear_processing_interrupted_on_progress' then false end as expected_security_definer,
     count(p.oid)>0 as present,
     bool_and(has_function_privilege('service_role',p.oid,'EXECUTE')) filter(where p.oid is not null) as service_execute,
     bool_or(has_function_privilege('anon',p.oid,'EXECUTE')) filter(where p.oid is not null) as anon_execute,
@@ -162,6 +169,21 @@ function_checks as (
     and p.proname=case when r.name like '%.%' then split_part(r.name,'.',2) else r.name end
     and (r.signature is null or p.oid=to_regprocedure(r.signature))
   group by r.phase,r.name,r.signature,r.service_only
+),
+required_triggers(name,table_name,function_signature) as (values
+  ('supplier_price_clear_processing_interrupted_on_progress','public.supplier_price_releases',
+    'supplier_price_ingestion_internal.clear_processing_interrupted_on_progress()')
+),
+trigger_checks as (
+  select r.*,t.oid is not null as present,
+    t.oid is not null and not t.tgisinternal and t.tgparentid=0 and t.tgenabled='O'
+      and t.tgtype=19 and t.tgfoid=to_regprocedure(r.function_signature)
+      and t.tgconstraint=0 and not t.tgdeferrable and not t.tginitdeferred
+      and t.tgnargs=0 and t.tgattr::text='' and t.tgqual is null
+      and t.tgoldtable is null and t.tgnewtable is null as compatible,
+    case when t.oid is not null then md5(pg_get_triggerdef(t.oid,false)) end as definition_md5
+  from required_triggers r left join pg_trigger t
+    on t.tgrelid=to_regclass(r.table_name) and t.tgname=r.name
 ),
 required_indexes(name) as (values
   ('idx_app_export_jobs_cache_lookup'), ('idx_app_export_jobs_worker_lease'),
@@ -214,6 +236,7 @@ select jsonb_build_object(
   'tables',(select jsonb_agg(to_jsonb(t) order by phase,name) from table_checks t),
   'columns',(select jsonb_agg(to_jsonb(c) order by phase,table_name,column_name) from column_checks c),
   'functions',(select jsonb_agg(to_jsonb(f) order by phase,name) from function_checks f),
+  'triggers',(select jsonb_agg(to_jsonb(t) order by table_name,name) from trigger_checks t),
   'indexes',(select jsonb_agg(to_jsonb(i) order by name) from index_checks i),
   'buckets',(select jsonb_agg(to_jsonb(b) order by name) from bucket_checks b),
   'job_constraints',(select coalesce(jsonb_agg(to_jsonb(j) order by conname),'[]'::jsonb) from job_constraints j),

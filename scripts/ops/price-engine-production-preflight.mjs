@@ -14,9 +14,9 @@ export function inspectSnapshot(envelope, { phase = 'runtime', expectedProject, 
   if (!expectedProject || envelope?.project_ref !== expectedProject) errors.push('PROJECT_TARGET_UNCONFIRMED');
   if (data?.snapshot_version !== 1) errors.push('SNAPSHOT_SCHEMA_UNCONFIRMED');
   if (!['baseline', 'runtime'].includes(phase)) errors.push('PREFLIGHT_PHASE_INVALID');
-  const requiredSections = ['tables','columns','functions','indexes','buckets','job_constraints','policies','schemas'];
+  const requiredSections = ['tables','columns','functions','triggers','indexes','buckets','job_constraints','policies','schemas'];
   for (const section of requiredSections) if (!Array.isArray(data?.[section])) errors.push(`SNAPSHOT_SECTION_MISSING:${section}`);
-  const expectedCounts = { tables:32,columns:36,functions:52,indexes:9,buckets:4,schemas:2 };
+  const expectedCounts = { tables:32,columns:36,functions:55,triggers:1,indexes:9,buckets:4,schemas:2 };
   for (const [section,count] of Object.entries(expectedCounts)) {
     if (data?.[section]?.length !== count) errors.push(`SNAPSHOT_REQUIREMENTS_INCOMPLETE:${section}`);
   }
@@ -42,6 +42,11 @@ export function inspectSnapshot(envelope, { phase = 'runtime', expectedProject, 
       errors.push(`STORAGE_PREDICATE_SCOPE_INCOMPATIBLE:${fn.name}`);
     if (fn.private_helper && fn.present && (fn.anon_execute || fn.authenticated_execute || (fn.owner_only && fn.service_execute)))
       errors.push(`PRIVATE_HELPER_SCOPE_INCOMPATIBLE:${fn.name}`);
+    if (typeof fn.expected_security_definer === 'boolean' && fn.present
+      && (fn.overloads?.length !== 1 || fn.overloads.some(overload =>
+        overload.security_definer !== fn.expected_security_definer
+        || !Array.isArray(overload.config) || overload.config.length !== 1 || overload.config[0] !== 'search_path=""')))
+      errors.push(`FUNCTION_POSTURE_INCOMPATIBLE:${fn.name}`);
   }
   if (phase === 'runtime') {
     for (const schema of data.schemas) {
@@ -50,6 +55,10 @@ export function inspectSnapshot(envelope, { phase = 'runtime', expectedProject, 
     }
     for (const index of data.indexes) {
       if (!index.present || !index.valid || !index.ready) errors.push(`INDEX_UNAVAILABLE:${index.name}`);
+    }
+    for (const trigger of data.triggers) {
+      if (!trigger.present || trigger.compatible !== true || !/^[a-f0-9]{32}$/.test(trigger.definition_md5 || ''))
+        errors.push(`TRIGGER_INCOMPATIBLE:${trigger.name}`);
     }
     for (const bucket of data.buckets) {
       if (!bucket.private || !bucket.size_compatible || !bucket.binary_compatible)
@@ -68,6 +77,13 @@ export function inspectSnapshot(envelope, { phase = 'runtime', expectedProject, 
           .map(o => [o.signature, o.definition_md5, o.security_definer, [...(o.config || [])].sort()]).sort());
         if (!peer?.present || fingerprint(fn) !== fingerprint(peer)) errors.push(`FUNCTION_DRIFT:${fn.name}`);
       }
+      const referenceTriggers = new Map(reference.data.triggers?.map(trigger => [trigger.name, trigger]) || []);
+      for (const trigger of data.triggers.filter(trigger => trigger.present)) {
+        const peer = referenceTriggers.get(trigger.name);
+        if (!peer?.present || peer.compatible !== true || peer.table_name !== trigger.table_name
+          || peer.function_signature !== trigger.function_signature || peer.definition_md5 !== trigger.definition_md5)
+          errors.push(`TRIGGER_DRIFT:${trigger.name}`);
+      }
     }
   }
   return { ready: errors.length === 0, phase, errors, project_ref: envelope.project_ref,
@@ -80,6 +96,9 @@ export function inspectManifest(manifest, { loadFile = file => readFileSync(reso
   if (manifest?.schema_version !== 1 || manifest?.environment !== 'production-preparation') errors.push('MANIFEST_SCHEMA_INVALID');
   const entries = manifest?.migration_order || [];
   const seen = new Set();
+  const supplier = manifest?.runtime_configuration?.filter(item => item.surface === 'Render supplier worker') || [];
+  if (supplier.length !== 1 || supplier[0].variables?.SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED !== '1')
+    errors.push('COMPACT_HISTORY_PRODUCTION_REQUIRED');
   for (const entry of entries) {
     if (!entry.file || !entry.sha256) { errors.push(`MIGRATION_CAPTURE_PENDING:${entry.id}`); continue; }
     if (!/^supabase\/migrations\/[a-z0-9_]+\.sql$/.test(entry.file)) { errors.push(`MIGRATION_PATH_INVALID:${entry.id}`); continue; }
