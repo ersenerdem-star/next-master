@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
-import { CLOUD_MASTER_EXPORT_MAX_ROWS, CLOUD_MASTER_PRICED_EXPORT_MAX_ROWS, fetchAllCloudMaster, fetchCloudMasterFast } from "../../infrastructure/api/masterApi";
+import { fetchCloudMasterFast } from "../../infrastructure/api/masterApi";
+import { downloadExportJob, startMasterExport, waitForExportJob } from "../../infrastructure/api/exportJobsApi";
 import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
 import type { BrandOption } from "../../types/brand";
 import type { MasterRow } from "../../types/master";
@@ -19,8 +20,6 @@ import {
   SupplierComparisonCell,
   formatMasterNumber,
 } from "../components/master/MasterIntelligenceComponents";
-import { formatBrandAwareProductCode } from "../../shared/productCodeDisplay";
-import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { CompactFilterBar, PageHeader, PageShell } from "../components/common/VisualPrimitives";
 import { useI18n } from "../../i18n/I18nProvider";
 
@@ -39,7 +38,6 @@ export function MasterPage() {
   const [loadingBrands, setLoadingBrands] = useState(false);
   const [loadingRows, setLoadingRows] = useState(false);
   const [error, setError] = useState("");
-  const [exportNotice, setExportNotice] = useState("");
   const [searching, setSearching] = useState(false);
   const [exportingMaster, setExportingMaster] = useState(false);
 
@@ -103,13 +101,11 @@ export function MasterPage() {
     async function run() {
       if (!brandId || !brandName) {
         setRows([]);
-        setExportNotice("");
         return;
       }
 
       setLoadingRows(true);
       setError("");
-      setExportNotice("");
       try {
         const result = await fetchCloudMasterFast({
           search: submittedSearch,
@@ -262,99 +258,38 @@ export function MasterPage() {
     [t],
   );
 
-  async function loadMasterExportRows() {
-    if (!brandName) {
-      throw new Error(r("master.errors.selectBrandFirst"));
-    }
-    const maxRows = scope === "priced" ? CLOUD_MASTER_PRICED_EXPORT_MAX_ROWS : CLOUD_MASTER_EXPORT_MAX_ROWS;
-    const exportRows = await fetchAllCloudMaster({
-      search: submittedSearch,
-      brand: brandName,
-      brandId,
-      scope,
-      marginA,
-      marginB,
-      maxRows,
-    });
-    return exportRows;
-  }
-
   async function handleMasterExport() {
+    if (!brandId || !brandName) {
+      const message = r("master.errors.selectBrandFirst");
+      setError(message);
+      actionFeedback.fail(message);
+      return;
+    }
     try {
       setError("");
-      setExportNotice("");
       setExportingMaster(true);
-      actionFeedback.begin(r("master.feedback.preparingExport"));
-      const exportRows = await loadMasterExportRows();
-      if (!exportRows.length) {
-        setError(r("master.errors.noRowsForExport"));
-        actionFeedback.fail(r("master.errors.noRowsForExport"));
-        return;
-      }
-
-      const headers = [
-        "Product_Code",
-        "Brand",
-        "Product_Name",
-        "OEM_No",
-        "HS_Code",
-        "Origin",
-        "Weight_kg",
-        "Cheapest_Supplier",
-        "Cheapest_EUR",
-        "Second_Supplier",
-        "Second_EUR",
-        "Price_Gap_EUR",
-        "Price_Gap_Percent",
-        "Price_Date",
-        "A_Sales_EUR",
-        "B_Sales_EUR",
-        "Supplier_Count",
-        "Catalog_Status",
-        "Notes",
-      ];
-      const rowsForSheet = [
-        headers,
-        ...exportRows.map((row) => [
-          formatBrandAwareProductCode(row.product_code, row.brand),
-          row.brand || "",
-          row.description || "",
-          row.oem_no || "",
-          row.hs_code || "",
-          row.origin || "",
-          row.weight_kg ?? "",
-          row.cheapest_supplier || "",
-          row.cheapest_price ?? "",
-          row.second_supplier_name || "",
-          row.second_price ?? "",
-          row.price_gap ?? "",
-          row.price_gap_percent ?? "",
-          row.price_date || "",
-          row.sales_a ?? "",
-          row.sales_b ?? "",
-          row.supplier_count ?? "",
-          row.catalog_status || "",
-          row.notes || "",
-        ]),
-      ];
-      const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-      const fileBrand = (brandName || "all-brands").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
-      downloadBlob(
-        `${fileBrand}-${stamp}-master.xlsx`,
-        buildXlsxBlob(`${brandName || r("values.all")} ${r("master.export.sheetSuffix")}`, rowsForSheet, [6, 8, 10, 11, 12, 14, 15, 16, 17]),
-      );
-      const maxRows = scope === "priced" ? CLOUD_MASTER_PRICED_EXPORT_MAX_ROWS : CLOUD_MASTER_EXPORT_MAX_ROWS;
-      if (exportRows.length >= maxRows) {
-        const notice = r("master.feedback.exportLimited", { count: maxRows.toLocaleString("en-US") });
-        setExportNotice(notice);
-        actionFeedback.succeed(notice);
-      } else {
-        actionFeedback.succeed(r("master.feedback.exportDownloaded"));
-      }
+      const preparingMessage = r("master.feedback.preparingExport");
+      actionFeedback.begin(preparingMessage);
+      const initialJob = await startMasterExport({
+        brandId,
+        brandName,
+        search: submittedSearch,
+        scope: scope === "priced" ? "priced" : "catalog",
+        marginA,
+        marginB,
+      });
+      const readyJob = await waitForExportJob(initialJob, (job) => {
+        const progress = job.progressTotal
+          ? ` ${job.progressDone.toLocaleString("en-US")} / ${job.progressTotal.toLocaleString("en-US")}`
+          : job.progressDone ? ` ${job.progressDone.toLocaleString("en-US")}` : "";
+        actionFeedback.begin(`${preparingMessage}${progress}`);
+      });
+      if (!readyJob.rowCount) throw new Error(r("master.errors.noRowsForExport"));
+      await downloadExportJob(readyJob.id);
+      actionFeedback.succeed(r("master.feedback.exportDownloaded"));
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : r("master.errors.exportFailed");
       setError(message);
-      setExportNotice("");
       actionFeedback.fail(message);
     } finally {
       setExportingMaster(false);
@@ -362,7 +297,6 @@ export function MasterPage() {
   }
 
   function handleSearch() {
-    setExportNotice("");
     setSearching(true);
     actionFeedback.begin(r("master.feedback.searching", { target: search.trim() || brandName || r("values.allItems") }));
     setSubmittedSearch(search);
@@ -379,6 +313,7 @@ export function MasterPage() {
             variant="secondary"
             className="button--compact procurement-export-button"
             onClick={() => void handleMasterExport()}
+            disabled={!brandId || !brandName}
             busy={exportingMaster}
             busyLabel={r("busy.preparing")}
           >
@@ -433,7 +368,6 @@ export function MasterPage() {
             </p>
           </div>
           {error ? <div className="procurement-error-state">{error}</div> : null}
-          {exportNotice ? <div className="procurement-warning-state">{exportNotice}</div> : null}
         </div>
         <div className="section-card__body">
           {loadingRows ? (

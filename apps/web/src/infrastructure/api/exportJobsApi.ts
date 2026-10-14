@@ -59,6 +59,13 @@ type MasterExportInput = {
   marginB: number;
 };
 
+type SupplierPriceListExportInput = {
+  supplierId: string;
+  brandName: string;
+  search?: string;
+  freshness?: string;
+};
+
 // Million-row jobs may span multiple background invocations. Keep polling
 // while the worker checkpoints instead of timing out after three minutes.
 const EXPORT_STATUS_TIMEOUT_MS = 20 * 60_000;
@@ -158,6 +165,17 @@ export async function startMasterExport(input: MasterExportInput) {
     scope: input.scope === "catalog" ? "catalog" : "priced",
     marginA: input.marginA,
     marginB: input.marginB,
+  });
+}
+
+export async function startSupplierPriceListExport(input: SupplierPriceListExportInput) {
+  return postExportJson("/api/admin-export-start", {
+    exportType: "supplier_price_list",
+    supplierId: input.supplierId,
+    brandName: input.brandName,
+    search: input.search || "",
+    freshness: input.freshness || "all",
+    format: "csv",
   });
 }
 

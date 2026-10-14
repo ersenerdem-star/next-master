@@ -1,7 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { getAppAuthStatus, resolveCaller } from "./_shared/app-auth.mts";
 import { canAccessOperationsModules } from "./_shared/roles.mts";
-import { exportJson, fetchExportJobById, isExportJobUnexpired, runAdminPriceListExportJob, runCatalogExportJob, runCatalogMasterExportJob, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
+import { exportJson, fetchExportJobById, isExportJobUnexpired, runAdminPriceListExportJob, runCatalogExportJob, runCatalogMasterExportJob, runSupplierPriceListExportJob, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 import { dispatchV3PriceExportWorker, isProductionExportPaused, isV3ExportBridgeEnabled } from "./_shared/v3-export-dispatch.mts";
 
@@ -43,6 +43,8 @@ export default async (req: Request, context: Context) => {
         context.waitUntil(runCatalogExportJob(supabaseUrl, serviceRoleKey, job.id).catch((error) => console.error("catalog export retry failed", job.id, error)));
       } else if (job.export_type === "catalog_master") {
         context.waitUntil(runCatalogMasterExportJob(supabaseUrl, serviceRoleKey, job.id).catch((error) => console.error("master export retry failed", job.id, error)));
+      } else if (job.export_type === "supplier_price_list") {
+        context.waitUntil(runSupplierPriceListExportJob(supabaseUrl, serviceRoleKey, job.id).catch((error) => console.error("supplier export retry failed", job.id, error)));
       }
     }
     return exportJson({ ok: true, job: toPublicExportJobStatus(job) });

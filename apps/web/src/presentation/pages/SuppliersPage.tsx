@@ -7,8 +7,8 @@ import {
   fetchCloudSupplierPrices,
   fetchCloudSupplierPricesAcrossSuppliers,
   fetchCloudSuppliers,
-  fetchSupplierExportRows,
 } from "../../infrastructure/api/suppliersApi";
+import { downloadExportJob, startSupplierPriceListExport, waitForExportJob } from "../../infrastructure/api/exportJobsApi";
 import type { BrandOption } from "../../types/brand";
 import type { CatalogRow } from "../../types/catalog";
 import type { SupplierPriceRow, SupplierSummary } from "../../types/suppliers";
@@ -20,14 +20,12 @@ import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { BrandPill } from "../components/common/BrandPill";
 import {
-  downloadCsv,
   normalizeImportDate,
   normalizeInteger,
   normalizeNumber,
   normalizeStockQuantity,
   normalizeText,
   parseCsv,
-  toCsv,
 } from "../../shared/csv";
 import { formatBrandAwareProductCode } from "../../shared/productCodeDisplay";
 import { downloadSupplierTemplate } from "../../shared/importTemplates";
@@ -693,36 +691,20 @@ export function SuppliersPage() {
     setError("");
     actionFeedback.begin(p("suppliers.feedback.preparingCsvExport"));
     try {
-      const exportRows = await fetchSupplierExportRows({
+      const initialJob = await startSupplierPriceListExport({
         supplierId: selectedSupplierId,
         brandName: exportBrand,
         search: submittedSearch,
         freshness,
       });
-      if (!exportRows.length) {
-        const message = p("suppliers.empty.noRows");
-        setError(message);
-        actionFeedback.fail(message);
-        return;
-      }
-      const supplierName = suppliers.find((supplier) => supplier.supplier_id === selectedSupplierId)?.name || "";
-      const csvRows = [
-        ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes"],
-        ...exportRows.map((row) => [
-          supplierName,
-          formatBrandAwareProductCode(row.product_code, row.brand || exportBrand),
-          row.brand || exportBrand,
-          row.description || "",
-          row.oem_no || "",
-          row.buy_price ?? "",
-          row.price_date || "",
-          row.moq ?? "",
-          row.order_multiple ?? "",
-          row.lead_time_days ?? "",
-          row.notes || "",
-        ]),
-      ];
-      downloadCsv("supplier-export.csv", toCsv(csvRows));
+      const readyJob = await waitForExportJob(initialJob, (job) => {
+        const progress = job.progressTotal
+          ? ` ${job.progressDone.toLocaleString("en-US")} / ${job.progressTotal.toLocaleString("en-US")}`
+          : job.progressDone ? ` ${job.progressDone.toLocaleString("en-US")}` : "";
+        actionFeedback.begin(`${p("suppliers.feedback.preparingCsvExport")}${progress}`);
+      });
+      if (!readyJob.rowCount) throw new Error(p("suppliers.empty.noRows"));
+      await downloadExportJob(readyJob.id);
       actionFeedback.succeed(p("suppliers.feedback.csvDownloaded"));
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : p("suppliers.errors.linesRequestFailed");
@@ -764,7 +746,7 @@ export function SuppliersPage() {
             >
               {t("common.search")}
             </Button>
-            <Button variant="secondary" onClick={() => void handleSupplierExport()} disabled={!selectedSupplierId || !exportBrand || !rows.length} busy={exportingSuppliers} busyLabel={p("busy.preparing")}>
+            <Button variant="secondary" onClick={() => void handleSupplierExport()} disabled={!selectedSupplierId || !exportBrand} busy={exportingSuppliers} busyLabel={p("busy.preparing")}>
               {p("actions.exportCsv")}
             </Button>
             <Button

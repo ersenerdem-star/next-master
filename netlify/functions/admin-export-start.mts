@@ -9,6 +9,7 @@ import {
   startAdminPriceListExport,
   startCatalogExport,
   startCatalogMasterExport,
+  startSupplierPriceListExport,
   toPublicExportJobStatus,
 } from "./_shared/export-jobs.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
@@ -30,13 +31,21 @@ export default async (req: Request, context: Context) => {
     }
     const body = await req.json().catch(() => ({}));
     const exportType = String(body?.exportType || "").trim();
-    if (exportType !== "admin_price_list" && exportType !== "catalog_export" && exportType !== "catalog_master") {
+    if (exportType !== "admin_price_list" && exportType !== "catalog_export" && exportType !== "catalog_master" && exportType !== "supplier_price_list") {
       return exportJson({ error: "Unsupported export type." }, 400);
     }
     if (exportType === "admin_price_list" && isV3ExportBridgeEnabled() && isProductionExportPaused()) {
       return exportJson({ error: "V3 export bridge is temporarily paused while the production safety gate is closed." }, 503, { "Retry-After": "300" });
     }
-    const { job, cached } = exportType === "catalog_master"
+    const { job, cached } = exportType === "supplier_price_list"
+      ? await startSupplierPriceListExport(supabaseUrl, serviceRoleKey, caller, {
+          supplierId: String(body?.supplierId || ""),
+          brandName: String(body?.brandName || ""),
+          search: body?.search == null ? "" : String(body.search),
+          freshness: body?.freshness == null ? "all" : String(body.freshness),
+          format: "csv",
+        })
+      : exportType === "catalog_master"
       ? await startCatalogMasterExport(supabaseUrl, serviceRoleKey, caller, {
           brandId: String(body?.brandId || ""),
           brandName: String(body?.brandName || ""),
@@ -67,7 +76,9 @@ export default async (req: Request, context: Context) => {
           ? runCatalogMasterExportJob(supabaseUrl, serviceRoleKey, job.id)
           : exportType === "catalog_export"
             ? runCatalogExportJob(supabaseUrl, serviceRoleKey, job.id)
-            : runAdminPriceListExportJob(supabaseUrl, serviceRoleKey, job.id)
+            : exportType === "supplier_price_list"
+              ? runSupplierPriceListExportJob(supabaseUrl, serviceRoleKey, job.id)
+              : runAdminPriceListExportJob(supabaseUrl, serviceRoleKey, job.id)
         ).catch((error) => {
           console.error("admin export job failed", job.id, error);
         }),

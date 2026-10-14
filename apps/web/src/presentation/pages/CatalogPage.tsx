@@ -7,12 +7,12 @@ import {
   CatalogDeleteBlockedError,
   createCloudCatalogRow,
   deleteCloudCatalogRow,
-  fetchCatalogExportRows,
   fetchCatalogRowsByCodes,
   fetchCloudCatalogIntegrity,
   updateCloudCatalogRow,
   type CatalogDeleteReferenceSummary,
 } from "../../infrastructure/api/catalogApi";
+import { downloadExportJob, startCatalogExport, waitForExportJob } from "../../infrastructure/api/exportJobsApi";
 import { fetchCatalogProductMedia } from "../../infrastructure/api/catalogMediaApi";
 import { fetchCatalogProductDetails } from "../../infrastructure/api/catalogDetailsApi";
 import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenceUsage } from "../../infrastructure/api/codeReferencesApi";
@@ -35,10 +35,9 @@ import { Input } from "../components/common/Input";
 import { ProductVisual, type ProductMediaItem } from "../components/common/ProductVisual";
 import { Select } from "../components/common/Select";
 import { VehicleBadges } from "../components/common/VehicleBadges";
-import { downloadCsv, normalizeNumber, normalizeText, streamCsvRows, toCsv } from "../../shared/csv";
+import { normalizeNumber, normalizeText, streamCsvRows } from "../../shared/csv";
 import { downloadCatalogLifecycleTemplate, downloadCatalogTemplate } from "../../shared/importTemplates";
 import { dispatchAppNavigation, PENDING_CATALOG_PURCHASE_ITEM_KEY, PENDING_CATALOG_SALES_ITEM_KEY, storeCatalogTransfer } from "../../shared/catalogTransfer";
-import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
 import { useI18n } from "../../i18n/I18nProvider";
 import { CompactFilterBar, PageActions, PageHeader, PageShell } from "../components/common/VisualPrimitives";
 
@@ -1320,14 +1319,6 @@ export function CatalogPage() {
     setShowExportDialog(true);
   }
 
-  function buildCatalogExportName(format: CatalogExportFormat) {
-    const brandSlug = exportBrand
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-    return `catalog-${brandSlug || "export"}.${format}`;
-  }
-
   async function handleCatalogExport() {
     if (!isOnline) {
       setError(t("catalog.errors.connectToExport"));
@@ -1345,36 +1336,22 @@ export function CatalogPage() {
     actionFeedback.begin(t("catalog.status.preparingExport", { format: exportLabel, brand: exportBrand }));
 
     try {
-      const exportData = await fetchCatalogExportRows({ brandName: exportBrand, marketSegment: catalogSegment || undefined });
-      if (!exportData.length) {
-        throw new Error(t("catalog.errors.exportNoRows", { brand: exportBrand }));
-      }
-      const exportRows = [
-        ["Product_Code", "Brand", "EAN", "Product_Name", "Product_Name_TR", "OEM_No", "Vehicle", "Vehicle_Model", "HS_Code", "Origin", "Market_Segment", "Weight_kg", "Image_URL", "Lifecycle_Status", "Lifecycle_Note"],
-        ...exportData.map((row) => [
-          row.product_code,
-          row.brand,
-          row.ean || "",
-          row.description || "",
-          row.description_tr || "",
-          row.oem_no || "",
-          row.vehicle || "",
-          row.vehicle_model || "",
-          row.hs_code || "",
-          row.origin || "",
-          row.market_segment || "",
-          row.weight_kg ?? "",
-          row.image_url || "",
-          row.lifecycle_status || "active",
-          row.lifecycle_note || "",
-        ]),
-      ];
-      if (exportFormat === "xlsx") {
-        const sheetName = `${exportBrand} Catalog`.slice(0, 31) || "Catalog";
-        downloadBlob(buildCatalogExportName("xlsx"), buildXlsxBlob(sheetName, exportRows, [8]));
-      } else {
-        downloadCsv(buildCatalogExportName("csv"), toCsv(exportRows));
-      }
+      const initialJob = await startCatalogExport({
+        brandId: brands.find((brand) => brand.name === exportBrand)?.id,
+        brandName: exportBrand,
+        marketSegment: catalogSegment || undefined,
+        format: exportFormat,
+      });
+      const readyJob = await waitForExportJob(initialJob, (job) => {
+        const progress = job.progressTotal
+          ? ` ${job.progressDone.toLocaleString("en-US")} / ${job.progressTotal.toLocaleString("en-US")}`
+          : job.progressDone ? ` ${job.progressDone.toLocaleString("en-US")}` : "";
+        const message = `${t("catalog.status.preparingExport", { format: exportLabel, brand: exportBrand })}${progress}`;
+        setStatus(message);
+        actionFeedback.begin(message);
+      });
+      if (!readyJob.rowCount) throw new Error(t("catalog.errors.exportNoRows", { brand: exportBrand }));
+      await downloadExportJob(readyJob.id);
       setShowExportDialog(false);
       setStatus(t("catalog.status.exportDownloaded", { format: exportLabel, brand: exportBrand }));
       actionFeedback.succeed(t("catalog.status.exportDownloaded", { format: exportLabel, brand: exportBrand }));

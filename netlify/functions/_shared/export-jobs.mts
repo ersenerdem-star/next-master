@@ -86,6 +86,14 @@ export type CatalogMasterExportInput = {
   marginB?: number | null;
 };
 
+export type SupplierPriceListExportInput = {
+  supplierId: string;
+  brandName: string;
+  search?: string | null;
+  freshness?: string | null;
+  format?: "csv";
+};
+
 type BrandRow = {
   id?: string | null;
   name?: string | null;
@@ -227,8 +235,12 @@ const CATALOG_MASTER_EXPORT_HEADERS = [
   "Notes",
 ] as const;
 
-const CATALOG_MASTER_EXPORT_MAX_ROWS = 100_000;
-const ADMIN_PRICE_LIST_EXPORT_MAX_ROWS = 100_000;
+// Excel worksheets support at most 1,048,576 rows including the header. Keep
+// one row for the header and fail closed at the native file limit rather than
+// silently truncating a large export.
+const CATALOG_MASTER_EXPORT_MAX_ROWS = 1_048_575;
+const ADMIN_PRICE_LIST_EXPORT_MAX_ROWS = 1_048_575;
+const CATALOG_EXPORT_MAX_ROWS = 1_048_575;
 // Supabase Data API responses are capped by the project API max rows setting
 // (commonly 1,000). Keep RPC export pages at 1,000 so the cursor loop advances
 // through every page instead of treating the first capped response as complete.
@@ -1243,6 +1255,21 @@ async function getCatalogMasterExportDataVersion(supabaseUrl: string, serviceRol
   return String(version || "");
 }
 
+async function getSupplierPriceExportDataVersion(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  organizationId: string,
+  supplierId: string,
+  brandId: string,
+) {
+  const version = await rpcJson<string>(supabaseUrl, serviceRoleKey, "get_supplier_price_export_version", {
+    input_organization_id: organizationId,
+    input_supplier_id: supplierId,
+    input_brand_id: brandId,
+  }, 15_000);
+  return String(version || "");
+}
+
 const PORTAL_EXPORT_INVITE_SELECT =
   "id,organization_id,party_type,party_name,customer_id,vendor_id,seller_company_profile_id,email,contact_name,status,invite_token_hash,expires_at,access_can_view_account,access_can_view_invoices,access_can_view_payments,access_can_view_orders,allowed_brand_ids,updated_at";
 
@@ -1515,6 +1542,51 @@ export async function startCatalogMasterExport(
   return { job, cached: false };
 }
 
+export async function startSupplierPriceListExport(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  caller: AppCaller,
+  input: SupplierPriceListExportInput,
+) {
+  const supplierId = String(input.supplierId || "").trim();
+  const brand = await resolveCatalogExportBrand(supabaseUrl, serviceRoleKey, caller.organizationId, { brandName: input.brandName });
+  if (!supplierId) throw new Error("Select a supplier before download.");
+  const supplierRows = await getJson<Array<{ id?: string; name?: string }>>(
+    `${supabaseUrl}/rest/v1/suppliers?select=id,name&id=eq.${encodeURIComponent(supplierId)}&organization_id=eq.${encodeURIComponent(caller.organizationId)}&limit=1`,
+    { headers: serviceRoleHeaders(serviceRoleKey), timeoutMs: 10_000 },
+  );
+  if (!supplierRows[0]?.id) throw new Error("Supplier not found for this organization.");
+  const search = String(input.search || "").trim();
+  const freshness = String(input.freshness || "all").trim().toLowerCase() || "all";
+  if (!["all", "fresh", "aging", "stale", "unknown"].includes(freshness)) throw new Error("Invalid freshness filter.");
+  const dataVersion = await getSupplierPriceExportDataVersion(supabaseUrl, serviceRoleKey, caller.organizationId, supplierId, brand.id);
+  const exportType = "supplier_price_list";
+  const scope = {
+    supplierId,
+    supplierName: String(supplierRows[0].name || "Supplier"),
+    brandId: brand.id,
+    brandName: brand.name,
+    search,
+    freshness,
+    format: "csv",
+    schemaVersion: 1,
+  };
+  const cacheKey = hashObject({ exportType, organizationId: caller.organizationId, scope, dataVersion });
+  const reusable = await findReusableExportJob(supabaseUrl, serviceRoleKey, caller.organizationId, exportType, cacheKey);
+  if (reusable) return reusable;
+  const job = await insertExportJob(supabaseUrl, serviceRoleKey, {
+    organizationId: caller.organizationId,
+    requestedBy: caller.id,
+    audience: "admin",
+    exportType,
+    scope,
+    cacheKey,
+    dataVersion,
+    progressMessage: `Queued ${brand.name || "brand"} supplier price export.`,
+  });
+  return { job, cached: false };
+}
+
 export async function runAdminPriceListExportJob(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -1756,6 +1828,134 @@ async function countCatalogExportRows(supabaseUrl: string, serviceRoleKey: strin
   return Number(count);
 }
 
+type SupplierPriceExportPageRow = {
+  total_count?: number | string | null;
+  price_id?: string | null;
+  product_code?: string | null;
+  brand?: string | null;
+  description?: string | null;
+  oem_no?: string | null;
+  buy_price?: number | string | null;
+  currency?: string | null;
+  price_date?: string | null;
+  moq?: number | string | null;
+  order_multiple?: number | string | null;
+  lead_time_days?: number | string | null;
+  notes?: string | null;
+  freshness?: string | null;
+};
+
+async function fetchSupplierPriceExportPage(input: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  organizationId: string;
+  supplierId: string;
+  brandId: string;
+  search: string;
+  freshness: string;
+  afterProductCode: string | null;
+  afterId: string | null;
+}) {
+  const payload = await rpcJson<unknown>(input.supabaseUrl, input.serviceRoleKey, "cloud_supplier_price_export_page", {
+    input_organization_id: input.organizationId,
+    input_supplier_id: input.supplierId,
+    input_brand_id: input.brandId,
+    input_search: input.search,
+    input_freshness: input.freshness,
+    input_after_product_code: input.afterProductCode,
+    input_after_id: input.afterId,
+    input_page_size: 1000,
+  }, EXPORT_REQUEST_TIMEOUT_MS);
+  if (!Array.isArray(payload)) return [] as SupplierPriceExportPageRow[];
+  return payload.filter((row): row is SupplierPriceExportPageRow => Boolean(row && typeof row === "object"))
+    .map((row) => row as SupplierPriceExportPageRow);
+}
+
+function buildSupplierPriceExportCsv(rows: SupplierPriceExportPageRow[], supplierName: string, brandName: string, includeHeader = true) {
+  const lines: string[] = [];
+  if (includeHeader) lines.push(["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes"].map(csvEscape).join(","));
+  for (const row of rows) {
+    lines.push([
+      supplierName,
+      normalizeAdminExportProductCode(String(row.product_code || ""), String(row.brand || brandName)),
+      String(row.brand || brandName),
+      String(row.description || ""),
+      String(row.oem_no || ""),
+      row.buy_price == null ? "" : row.buy_price,
+      String(row.price_date || ""),
+      row.moq == null ? "" : row.moq,
+      row.order_multiple == null ? "" : row.order_multiple,
+      row.lead_time_days == null ? "" : row.lead_time_days,
+      String(row.notes || ""),
+    ].map(csvEscape).join(","));
+  }
+  return lines.join("\n") + (lines.length ? "\n" : "");
+}
+
+export async function runSupplierPriceListExportJob(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  jobId: string,
+) {
+  const job = await fetchJobRows(supabaseUrl, serviceRoleKey, new URLSearchParams({ select: "*", id: `eq.${jobId}`, limit: "1" }).toString()).then((rows) => rows[0] || null);
+  if (!job || job.status === "finalized") return;
+  if (job.export_type !== "supplier_price_list" || job.audience !== "admin") throw new Error("Unsupported supplier price export job.");
+  const scope = job.scope || {};
+  const supplierId = String(scope.supplierId || "");
+  const supplierName = String(scope.supplierName || "Supplier");
+  const brandId = String(scope.brandId || "");
+  const brandName = String(scope.brandName || "Brand");
+  const search = String(scope.search || "");
+  const freshness = String(scope.freshness || "all");
+  if (!supplierId || !brandId) throw new Error("Supplier price export job is missing its supplier and brand scope.");
+  await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
+    status: "running", started_at: job.started_at || new Date().toISOString(), progress_done: 0,
+    progress_total: null, progress_message: "Loading supplier price rows in keyset batches.", error_message: null,
+  });
+  try {
+    const chunks: string[] = [];
+    let rowCount = 0;
+    let progressTotal: number | null = null;
+    let afterProductCode: string | null = null;
+    let afterId: string | null = null;
+    let first = true;
+    while (rowCount < 1_048_575) {
+      const pageRows = await fetchSupplierPriceExportPage({ supabaseUrl, serviceRoleKey, organizationId: job.organization_id, supplierId, brandId, search, freshness, afterProductCode, afterId });
+      if (!pageRows.length) break;
+      const firstTotal = Number(pageRows[0]?.total_count);
+      if (Number.isSafeInteger(firstTotal) && firstTotal > 0) progressTotal = firstTotal;
+      chunks.push(buildSupplierPriceExportCsv(pageRows, supplierName, brandName, first));
+      first = false;
+      rowCount += pageRows.length;
+      const last = pageRows.at(-1)!;
+      afterProductCode = String(last.product_code || "");
+      afterId = String(last.price_id || "");
+      await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
+        progress_done: rowCount, progress_total: progressTotal, row_count: rowCount,
+        progress_message: `Prepared ${rowCount.toLocaleString("en-US")}${progressTotal ? ` / ${progressTotal.toLocaleString("en-US")}` : ""} supplier price rows.`,
+      });
+      if (progressTotal != null && rowCount >= progressTotal) break;
+      if (pageRows.length < 1000) break;
+    }
+    if (!rowCount) throw new Error(`No supplier price rows found for ${brandName}.`);
+    assertCompleteExport(rowCount, progressTotal ?? rowCount, 1_048_575);
+    if (job.data_version && await getSupplierPriceExportDataVersion(supabaseUrl, serviceRoleKey, job.organization_id, supplierId, brandId) !== job.data_version) throw new Error("Supplier prices changed during export. Retry with a fresh snapshot.");
+    const body = Buffer.from(chunks.join(""), "utf8");
+    const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+    const fileName = `${sanitizeDownloadFileName(`supplier-${supplierName}-${brandName}-${stamp}`)}.csv`;
+    const storagePath = `${job.organization_id}/supplier-price/${job.cache_key}/${fileName}`;
+    await uploadExportArtifact(supabaseUrl, serviceRoleKey, { bucket: EXPORT_STORAGE_BUCKET, path: storagePath, contentType: "text/csv", body });
+    await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
+      status: "finalized", finalized_at: new Date().toISOString(), file_name: fileName, content_type: "text/csv",
+      storage_bucket: EXPORT_STORAGE_BUCKET, storage_path: storagePath, row_count: rowCount, byte_size: body.byteLength,
+      progress_done: rowCount, progress_total: progressTotal ?? rowCount, progress_message: "Export file is ready.",
+    });
+  } catch (error) {
+    await patchExportJob(supabaseUrl, serviceRoleKey, job.id, { status: "failed", failed_at: new Date().toISOString(), error_message: error instanceof Error ? error.message : String(error || "Export failed."), progress_message: "Export failed." }).catch((patchError) => console.error("failed to mark supplier export failed", patchError));
+    throw error;
+  }
+}
+
 export async function runCatalogExportJob(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -1794,7 +1994,7 @@ export async function runCatalogExportJob(
 
   try {
     const expectedRows = await countCatalogExportRows(supabaseUrl, serviceRoleKey, job.organization_id, brandId, marketSegment);
-    assertCompleteExport(expectedRows, expectedRows, 150_000); // Existing source RPC cap; never silently truncate.
+    assertCompleteExport(expectedRows, expectedRows, CATALOG_EXPORT_MAX_ROWS);
     const payload = await rpcJson<unknown>(
       supabaseUrl,
       serviceRoleKey,
@@ -1807,7 +2007,7 @@ export async function runCatalogExportJob(
       EXPORT_REQUEST_TIMEOUT_MS,
     );
     const rows = coerceCatalogExportRows(payload);
-    assertCompleteExport(rows.length, expectedRows, 150_000);
+    assertCompleteExport(rows.length, expectedRows, CATALOG_EXPORT_MAX_ROWS);
     if (job.data_version && await getCatalogExportDataVersion(supabaseUrl, serviceRoleKey, job.organization_id, brandId, marketSegment) !== job.data_version) throw new Error("Catalog changed during export. Retry with a fresh snapshot.");
     if (!rows.length) {
       throw new Error(`No catalog rows found for ${brandName}.`);
@@ -1879,7 +2079,7 @@ export async function runCatalogMasterExportJob(
   const exportScope = String(scope.scope || "priced") === "catalog" ? "catalog" : "priced";
   const marginA = Number(scope.marginA ?? 0.1);
   const marginB = Number(scope.marginB ?? 0.15);
-  const maxRows = Math.min(Math.max(Number(scope.maxRows || CATALOG_MASTER_EXPORT_MAX_ROWS), 1), CATALOG_MASTER_EXPORT_MAX_ROWS);
+  const maxRows = CATALOG_MASTER_EXPORT_MAX_ROWS;
   if (!brandId) throw new Error("Master export job is missing its brand scope.");
 
   const startedAt = new Date().toISOString();
@@ -1973,6 +2173,40 @@ export async function runCatalogMasterExportJob(
     }).catch((patchError) => console.error("failed to mark master export failed", patchError));
     throw error;
   }
+}
+
+/**
+ * Common worker entry point for admin exports that are still served by the
+ * compact RPC implementations.  Keeping the dispatch in one place lets the
+ * background endpoint and stale-job recovery use the same validation and
+ * failure handling as the synchronous path.  Each implementation pages its
+ * source (catalog master) or verifies the complete source count (catalog),
+ * and writes progress to app_export_jobs after every bounded operation.
+ */
+export async function runRemainingAdminExportJob(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  jobId: string,
+) {
+  const job = await fetchJobRows(
+    supabaseUrl,
+    serviceRoleKey,
+    new URLSearchParams({ select: "export_type", id: `eq.${jobId}`, limit: "1" }).toString(),
+  ).then((rows) => rows[0] || null);
+  if (!job) return { status: "ignored", reason: "job-not-found" } as const;
+  if (job.export_type === "catalog_export") {
+    await runCatalogExportJob(supabaseUrl, serviceRoleKey, jobId);
+    return { status: "finalized", jobId } as const;
+  }
+  if (job.export_type === "catalog_master") {
+    await runCatalogMasterExportJob(supabaseUrl, serviceRoleKey, jobId);
+    return { status: "finalized", jobId } as const;
+  }
+  if (job.export_type === "supplier_price_list") {
+    await runSupplierPriceListExportJob(supabaseUrl, serviceRoleKey, jobId);
+    return { status: "finalized", jobId } as const;
+  }
+  throw new Error("Unsupported remaining admin export job.");
 }
 
 export function exportJson(body: unknown, status = 200) {
