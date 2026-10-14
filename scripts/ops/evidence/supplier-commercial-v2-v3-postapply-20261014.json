@@ -1,0 +1,791 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Independent read-only V3 postapply verification of supplier commercial fields v2",
+  "environment": "v3-staging",
+  "projectRef": "kaxsqafdevabkxofwdod",
+  "sourceCommit": "403f567",
+  "capturedAt": "2026-10-14T19:55:57.200132+00:00",
+  "migrations": [
+    {
+      "path": "supabase/migrations/20261014193018_supplier_commercial_fields_v2_ingestion.sql",
+      "sha256": "106a91160b039d3f172876ccfb5ef24124653f0776702501fd62fe0f8c74ed2a"
+    },
+    {
+      "path": "supabase/migrations/20261014193456_supplier_commercial_fields_v2_readers.sql",
+      "sha256": "8f21c70f59032123c0469b56de1ef6c80803d52d4b022a5ffa5cc45a4a84f481"
+    }
+  ],
+  "metadataComparison": {
+    "method": "Same pg_catalog query against local full immutable 62 migration replay plus prior deployed forwards and these two source migrations, then actual V3",
+    "exactMatch": true,
+    "functionsCompared": 24,
+    "columnsCompared": 4,
+    "constraintsCompared": 2,
+    "triggersCompared": 2,
+    "scope": [
+      "exact pg_get_functiondef MD5",
+      "function argument and return signatures",
+      "SECURITY DEFINER and search_path/timeouts",
+      "PUBLIC/anon/authenticated/service EXECUTE",
+      "nullable types and defaults",
+      "validated checks",
+      "enabled trigger definitions",
+      "private receipt RLS and direct grants"
+    ],
+    "metadata": {
+      "columns": [
+        {
+          "name": "commercial_policy",
+          "type": "text",
+          "default": null,
+          "not_null": false
+        },
+        {
+          "name": "order_multiple",
+          "type": "integer",
+          "default": null,
+          "not_null": false
+        },
+        {
+          "name": "stock_qty",
+          "type": "integer",
+          "default": null,
+          "not_null": false
+        },
+        {
+          "name": "valid_to",
+          "type": "date",
+          "default": null,
+          "not_null": false
+        }
+      ],
+      "row_rls": true,
+      "functions": [
+        {
+          "md5": "32b4494c16716a44c84eec8c5965f9f6",
+          "name": "public.cloud_admin_price_list_brands",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "TABLE(id uuid, name text)",
+          "signature": "input_organization_id uuid",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "30af1d6d977bffd5265b553730aef0d9",
+          "name": "public.cloud_catalog_master_export_page_v3",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "TABLE(total_count bigint, product_id uuid, product_code text, brand text, description text, oem_no text, hs_code text, origin text, weight_kg numeric, cheapest_supplier text, cheapest_price numeric, second_supplier_name text, second_price numeric, price_gap numeric, price_gap_percent numeric, price_date date, sales_a numeric, sales_b numeric, sales_c numeric, supplier_count bigint, catalog_status text, notes text, has_notes boolean, cursor_code text, cursor_id uuid)",
+          "signature": "input_organization_id uuid, input_brand_id uuid, input_scope text, input_search text, input_after_code text, input_after_id uuid, input_page_size integer, input_margin_a numeric, input_margin_b numeric",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "73cccb8f867ab65cdbf824f82fec5b04",
+          "name": "public.cloud_current_supplier_commercial_options_core",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "TABLE(supplier_id uuid, supplier_name text, brand_id uuid, brand text, product_code text, description text, buy_price numeric, price_date date, notes text, moq integer, order_multiple integer, stock_qty integer, valid_to date)",
+          "signature": "input_organization_id uuid, input_code text, input_brand text",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "1ecb0abfd162f7910fa36e8cc232a499",
+          "name": "public.cloud_current_supplier_commercial_options_service",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "TABLE(supplier_id uuid, supplier_name text, brand_id uuid, brand text, product_code text, description text, buy_price numeric, price_date date, notes text, moq integer, order_multiple integer, stock_qty integer, valid_to date)",
+          "signature": "input_organization_id uuid, input_code text, input_brand text",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "79c4093eb23e7ba134ec1896e976788d",
+          "name": "public.cloud_current_supplier_price_options_batch",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "TABLE(request_index integer, has_published_scope boolean, options jsonb)",
+          "signature": "input_requests jsonb",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": false,
+          "security_definer": true,
+          "authenticated_execute": true
+        },
+        {
+          "md5": "82764ce17a5fc226ffe2dd564a97f83a",
+          "name": "public.cloud_current_supplier_price_options_core",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "TABLE(supplier_id uuid, supplier_name text, brand_id uuid, brand text, product_code text, description text, buy_price numeric, price_date date, notes text)",
+          "signature": "input_organization_id uuid, input_code text, input_brand text",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "472e0a42fa7b3f8ac4f1c0dc50814f14",
+          "name": "public.cloud_master_page_fast",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "TABLE(total_count bigint, product_id uuid, product_code text, brand text, description text, oem_no text, hs_code text, origin text, weight_kg numeric, cheapest_supplier text, cheapest_price numeric, second_supplier_name text, second_price numeric, price_gap numeric, price_gap_percent numeric, price_date date, sales_a numeric, sales_b numeric, supplier_count bigint, catalog_status text, notes text, has_notes boolean)",
+          "signature": "input_search text, input_brand_id uuid, input_page integer, input_page_size integer, input_margin_a numeric, input_margin_b numeric",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": false,
+          "security_definer": true,
+          "authenticated_execute": true
+        },
+        {
+          "md5": "4b99dcd4a660b5065e65d3366d8844c7",
+          "name": "public.cloud_master_published_price_page_v3",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "jsonb",
+          "signature": "input_search text, input_brand_id uuid, input_page integer, input_page_size integer, input_margin_a numeric, input_margin_b numeric",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": false,
+          "security_definer": true,
+          "authenticated_execute": true
+        },
+        {
+          "md5": "2a402fb9052a1486189eb4dafd07e830",
+          "name": "public.cloud_portal_published_price_search_page_v3",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "TABLE(product_code text, normalized_code text, description text, buy_price numeric, price_date date)",
+          "signature": "input_organization_id uuid, input_brand_id uuid, input_code_prefix text, input_limit integer",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "39b2b37085a045edad1b5975ef924270",
+          "name": "public.cloud_price_list_source_page",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "TABLE(normalized_code text, product_code text, description text, buy_price numeric, price_date date, total_count bigint)",
+          "signature": "input_organization_id uuid, input_brand_id uuid, input_after_normalized_code text, input_page_size integer",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "7bd7403ba7a6fea46081f73f69e2c046",
+          "name": "public.cloud_quote_supplier_commercial_options_v3",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "TABLE(supplier_id uuid, supplier_name text, buy_price numeric, price_date date, sell_price numeric, notes text, moq integer, order_multiple integer, stock_qty integer, valid_to date)",
+          "signature": "input_code text, input_brand text, input_customer_type text, input_margin_a numeric, input_margin_b numeric",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": true
+        },
+        {
+          "md5": "d09263427d2bfdeba9cf1549b358b417",
+          "name": "public.cloud_supplier_price_commercial_page_v3",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "TABLE(total_count bigint, price_id uuid, product_code text, brand text, description text, oem_no text, buy_price numeric, currency text, price_date date, moq integer, order_multiple integer, lead_time_days integer, notes text, freshness text, stock_qty integer, valid_to date)",
+          "signature": "input_supplier_id uuid, input_search text, input_page integer, input_page_size integer, input_freshness text",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": false,
+          "security_definer": true,
+          "authenticated_execute": true
+        },
+        {
+          "md5": "f5a3722e3b5b6649b66484622c17c9a9",
+          "name": "public.cloud_supplier_price_export_commercial_chunk_v3",
+          "config": [
+            "search_path=\"\"",
+            "statement_timeout=35s"
+          ],
+          "returns": "jsonb",
+          "signature": "input_organization_id uuid, input_supplier_id uuid, input_brand_id uuid, input_search text, input_freshness text, input_after_product_code text, input_after_id uuid, input_page_size integer",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "8c7a857c687c5a4b2bf7cb67b921f70f",
+          "name": "public.cloud_supplier_price_export_commercial_page_v3",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "TABLE(total_count bigint, price_id uuid, product_code text, brand text, description text, oem_no text, buy_price numeric, currency text, price_date date, moq integer, order_multiple integer, lead_time_days integer, notes text, freshness text, stock_qty integer, valid_to date)",
+          "signature": "input_organization_id uuid, input_supplier_id uuid, input_brand_id uuid, input_search text, input_freshness text, input_after_product_code text, input_after_id uuid, input_page_size integer",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "1eac8f4cdb1e886a2a742de4cefe9d32",
+          "name": "public.get_admin_price_list_export_version",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "text",
+          "signature": "input_organization_id uuid, input_brand_id uuid",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "572c36c72b9656ec6e806ca8f6609a0f",
+          "name": "public.get_supplier_price_export_version",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "text",
+          "signature": "input_organization_id uuid, input_supplier_id uuid, input_brand_id uuid",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "f7547cb4a3c39639595998be9fdb7871",
+          "name": "public.get_supplier_price_upload_status",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "jsonb",
+          "signature": "input_session_id uuid, input_actor_id uuid, input_organization_id uuid, input_auth_session_id uuid, input_token_iat bigint, input_token_exp bigint",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "4acf9fef2b19fc01b135f4bea8285d83",
+          "name": "public.record_supplier_price_source_compatibility",
+          "config": [
+            "search_path=\"\"",
+            "lock_timeout=2s"
+          ],
+          "returns": "jsonb",
+          "signature": "input_release_id uuid, input_handoff_id uuid, input_source_sha256 text, input_total_rows bigint, input_policy text",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "7525d26555ebbf9d93ca639f16505015",
+          "name": "public.record_supplier_price_source_compatibility_v2",
+          "config": [
+            "search_path=\"\"",
+            "lock_timeout=2s"
+          ],
+          "returns": "jsonb",
+          "signature": "input_release_id uuid, input_handoff_id uuid, input_source_sha256 text, input_total_rows bigint, input_policy text",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "5dac6c7cd844153a293f311653fb34da",
+          "name": "public.stage_supplier_price_release_batch",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "TABLE(status text, batch_id uuid, release_id_result uuid, staged_rows bigint, message text)",
+          "signature": "input_batch_id uuid, input_worker_id text, input_rows jsonb",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "51a0c857d6c8d8f35a5278d6be9c1c60",
+          "name": "public.stage_supplier_price_release_batch_v2",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "TABLE(status text, batch_id uuid, release_id_result uuid, staged_rows bigint, message text)",
+          "signature": "input_batch_id uuid, input_worker_id text, input_rows jsonb",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "c7a74aa8c5872b51493b529dc1f195dd",
+          "name": "public.supplier_price_current_snapshot",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "jsonb",
+          "signature": "input_organization_id uuid, input_supplier_id uuid, input_brand_id uuid, input_codes text[]",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": true,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "f9b78bc342de98038e18068feb504228",
+          "name": "supplier_price_ingestion_internal.guard_commercial_release_row",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "trigger",
+          "signature": "",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": false,
+          "security_definer": true,
+          "authenticated_execute": false
+        },
+        {
+          "md5": "6329afd73f6e8c57d1a46aabf47ce1fd",
+          "name": "supplier_price_ingestion_internal.source_publication_blocker",
+          "config": [
+            "search_path=\"\""
+          ],
+          "returns": "text",
+          "signature": "input_release_id uuid",
+          "anon_execute": false,
+          "public_execute": false,
+          "service_execute": false,
+          "security_definer": true,
+          "authenticated_execute": false
+        }
+      ],
+      "constraints": [
+        {
+          "name": "source_compatibility_receipts_policy_check",
+          "validated": true,
+          "definition": "CHECK (policy = ANY (ARRAY['supplier-price-commercial-fields-v1'::text, 'supplier-price-commercial-fields-v2'::text]))"
+        },
+        {
+          "name": "supplier_release_rows_commercial_v2_shape",
+          "validated": true,
+          "definition": "CHECK (commercial_policy IS NULL AND stock_qty IS NULL AND order_multiple IS NULL AND valid_to IS NULL OR commercial_policy IS NOT NULL AND commercial_policy = 'supplier-price-commercial-fields-v2'::text AND (stock_qty IS NULL OR stock_qty >= 0) AND (order_multiple IS NULL OR order_multiple > 0) AND (valid_to IS NULL OR isfinite(valid_to) AND valid_to >= '0001-01-01'::date AND valid_to <= '9999-12-31'::date))"
+        }
+      ],
+      "guard_triggers": [
+        {
+          "name": "source_compatibility_receipts_immutable",
+          "type": 27,
+          "enabled": "O",
+          "function": "supplier_price_ingestion_internal.reject_source_compatibility_change()",
+          "definition": "CREATE TRIGGER source_compatibility_receipts_immutable BEFORE DELETE OR UPDATE ON supplier_price_ingestion_internal.source_compatibility_receipts FOR EACH ROW EXECUTE FUNCTION supplier_price_ingestion_internal.reject_source_compatibility_change()"
+        },
+        {
+          "name": "supplier_release_rows_commercial_policy_guard",
+          "type": 23,
+          "enabled": "O",
+          "function": "supplier_price_ingestion_internal.guard_commercial_release_row()",
+          "definition": "CREATE TRIGGER supplier_release_rows_commercial_policy_guard BEFORE INSERT OR UPDATE OF release_id, stock_qty, order_multiple, valid_to, valid_from, commercial_policy ON public.supplier_price_release_rows FOR EACH ROW EXECUTE FUNCTION supplier_price_ingestion_internal.guard_commercial_release_row()"
+        }
+      ],
+      "private_receipts": {
+        "rls": true,
+        "force_rls": false,
+        "anon_select": false,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": false,
+        "service_update": false,
+        "authenticated_select": false
+      }
+    }
+  },
+  "aclSupplement": {
+    "row_policies": [
+      {
+        "name": "supplier_price_release_rows_admin_select",
+        "check": null,
+        "using": "(EXISTS ( SELECT 1\n   FROM supplier_price_releases release\n  WHERE ((release.id = supplier_price_release_rows.release_id) AND (release.organization_id = current_profile_org_id()) AND (current_profile_role() = ANY (ARRAY['admin'::text, 'superadmin'::text])))))",
+        "command": "r"
+      }
+    ],
+    "receipt_policies": 0,
+    "receipt_role_grants": [
+      {
+        "role": "anon",
+        "allowed": false,
+        "privilege": "SELECT"
+      },
+      {
+        "role": "anon",
+        "allowed": false,
+        "privilege": "INSERT"
+      },
+      {
+        "role": "anon",
+        "allowed": false,
+        "privilege": "UPDATE"
+      },
+      {
+        "role": "anon",
+        "allowed": false,
+        "privilege": "DELETE"
+      },
+      {
+        "role": "anon",
+        "allowed": false,
+        "privilege": "TRUNCATE"
+      },
+      {
+        "role": "anon",
+        "allowed": false,
+        "privilege": "REFERENCES"
+      },
+      {
+        "role": "anon",
+        "allowed": false,
+        "privilege": "TRIGGER"
+      },
+      {
+        "role": "authenticated",
+        "allowed": false,
+        "privilege": "SELECT"
+      },
+      {
+        "role": "authenticated",
+        "allowed": false,
+        "privilege": "INSERT"
+      },
+      {
+        "role": "authenticated",
+        "allowed": false,
+        "privilege": "UPDATE"
+      },
+      {
+        "role": "authenticated",
+        "allowed": false,
+        "privilege": "DELETE"
+      },
+      {
+        "role": "authenticated",
+        "allowed": false,
+        "privilege": "TRUNCATE"
+      },
+      {
+        "role": "authenticated",
+        "allowed": false,
+        "privilege": "REFERENCES"
+      },
+      {
+        "role": "authenticated",
+        "allowed": false,
+        "privilege": "TRIGGER"
+      },
+      {
+        "role": "service_role",
+        "allowed": false,
+        "privilege": "SELECT"
+      },
+      {
+        "role": "service_role",
+        "allowed": false,
+        "privilege": "INSERT"
+      },
+      {
+        "role": "service_role",
+        "allowed": false,
+        "privilege": "UPDATE"
+      },
+      {
+        "role": "service_role",
+        "allowed": false,
+        "privilege": "DELETE"
+      },
+      {
+        "role": "service_role",
+        "allowed": false,
+        "privilege": "TRUNCATE"
+      },
+      {
+        "role": "service_role",
+        "allowed": false,
+        "privilege": "REFERENCES"
+      },
+      {
+        "role": "service_role",
+        "allowed": false,
+        "privilege": "TRIGGER"
+      }
+    ],
+    "row_table_privileges": [
+      {
+        "role": "anon",
+        "delete": false,
+        "insert": false,
+        "select": false,
+        "update": false
+      },
+      {
+        "role": "authenticated",
+        "delete": false,
+        "insert": false,
+        "select": true,
+        "update": false
+      },
+      {
+        "role": "service_role",
+        "delete": false,
+        "insert": false,
+        "select": false,
+        "update": false
+      }
+    ],
+    "receipt_public_privileges": 0
+  },
+  "knownPriorStateComparison": {
+    "wholeHistoryDigestBaselineAvailable": false,
+    "clevitePointer": {
+      "baselineFile": "scripts/ops/evidence/supplier-admin-actions-v3-runtime-20261014.json",
+      "baselinePath": "after_browser_reload.pointer",
+      "exactFieldsMatch": true,
+      "current": {
+        "status": "published",
+        "version": 2,
+        "release_id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+        "publication_id": "99afb6f6-93ca-4256-9f10-86803f476b88"
+      }
+    },
+    "mahleV1Receipt": {
+      "baselineFile": "scripts/ops/evidence/supplier-source-commercial-guard-v3-runtime-20261014.json",
+      "baselinePath": "phases[0].state.canaries[0].receipt",
+      "allReceiptFieldsExactMatch": true,
+      "sanitizedReceipt": {
+        "policy": "supplier-price-commercial-fields-v1",
+        "created_at": "2026-10-14T18:22:29.865623+00:00",
+        "handoff_id": "11f5a553-5e02-421a-9316-b1b64a796135",
+        "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+        "total_rows": 1,
+        "source_bytes": 295,
+        "source_sha256": "dea1778c5ac680a503c90895c30dfa306592760428539493a35dbfd9e39f6d93"
+      }
+    },
+    "localV1FunctionIdentity": "Both old record and stage definitions equal unchanged local predecessor function bodies; distinct from whole historical-data preservation proof."
+  },
+  "currentData": {
+    "scopes": [
+      {
+        "brand": "Clevite",
+        "brand_id": "0e9fa984-fbbf-45d2-9a60-e7aa633dc928",
+        "pointer_count": 1,
+        "reported_total": 999997,
+        "first_page_rows": 5000,
+        "legacy_active_rows": 0,
+        "published_eligible_rows": 999997
+      },
+      {
+        "brand": "Euroricambi",
+        "brand_id": "ddbeb595-853a-407d-91d7-25f1fd410ccd",
+        "pointer_count": 0,
+        "reported_total": 542,
+        "first_page_rows": 542,
+        "legacy_active_rows": 542,
+        "published_eligible_rows": 0
+      }
+    ],
+    "captured_at": "2026-10-14T19:54:44.823671+00:00",
+    "new_v2_rows": 0,
+    "active_actions": 0,
+    "clevite_pointer": {
+      "status": "published",
+      "version": 2,
+      "release_id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+      "publication_id": "99afb6f6-93ca-4256-9f10-86803f476b88"
+    },
+    "active_batch_leases": 0,
+    "clevite_middle_page_rows": 5000,
+    "clevite_original_release": {
+      "id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+      "status": "published",
+      "row_count": 999997,
+      "total_rows": 999997,
+      "accepted_rows": 999997,
+      "nonnull_new_commercial_rows": 0
+    },
+    "clevite_first_page_source_price_mismatches": 0,
+    "clevite_middle_page_source_price_mismatches": 0
+  },
+  "euroricambiFullParity": {
+    "profiles": [
+      {
+        "rows": 542,
+        "profile": "A10",
+        "mismatches": 0
+      },
+      {
+        "rows": 542,
+        "profile": "B15",
+        "mismatches": 0
+      },
+      {
+        "rows": 542,
+        "profile": "custom20",
+        "mismatches": 0
+      }
+    ],
+    "captured_at": "2026-10-14T19:55:57.200132+00:00",
+    "source_count": 542,
+    "expected_count": 542,
+    "atomic_terms_samples": 3,
+    "expected_minus_source": 0,
+    "source_minus_expected": 0,
+    "atomic_terms_mismatches": 0
+  },
+  "safeNullStartupProbes": [
+    {
+      "rpc": "record_supplier_price_source_compatibility_v2",
+      "arguments": "all NULL with service_role JWT claim, rejected before locks or writes",
+      "sqlstate": "P0001",
+      "message": "SOURCE_COMPATIBILITY_INPUT_INVALID",
+      "expectedFailureObserved": true,
+      "transport": "Supabase connector SQL; actual PostgREST HTTP startup proof separate"
+    },
+    {
+      "rpc": "stage_supplier_price_release_batch_v2",
+      "arguments": "all NULL with service_role JWT claim, rejected before locks or writes",
+      "sqlstate": "P0001",
+      "message": "Invalid supplier shadow staging input",
+      "expectedFailureObserved": true,
+      "transport": "Supabase connector SQL; actual PostgREST HTTP startup proof separate"
+    }
+  ],
+  "advisors": {
+    "scopedFindings": [
+      {
+        "type": "security",
+        "name": "rls_enabled_no_policy",
+        "level": "INFO",
+        "object": "source_compatibility_receipts",
+        "classification": "preexisting_in_prior_forward_schema",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+        "observedAt": "2026-10-14T19:53:42.191Z"
+      },
+      {
+        "type": "security",
+        "name": "authenticated_security_definer_function_executable",
+        "level": "WARN",
+        "object": "cloud_current_supplier_price_options_batch",
+        "classification": "preexisting_in_prior_forward_schema",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+        "observedAt": "2026-10-14T19:53:42.191Z"
+      },
+      {
+        "type": "security",
+        "name": "authenticated_security_definer_function_executable",
+        "level": "WARN",
+        "object": "cloud_master_page_fast",
+        "classification": "preexisting_in_prior_forward_schema",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+        "observedAt": "2026-10-14T19:53:42.191Z"
+      },
+      {
+        "type": "security",
+        "name": "authenticated_security_definer_function_executable",
+        "level": "WARN",
+        "object": "cloud_master_published_price_page_v3",
+        "classification": "preexisting_in_prior_forward_schema",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+        "observedAt": "2026-10-14T19:53:42.191Z"
+      },
+      {
+        "type": "security",
+        "name": "authenticated_security_definer_function_executable",
+        "level": "WARN",
+        "object": "cloud_quote_supplier_commercial_options_v3",
+        "classification": "new_intentional_authenticated_readonly_wrapper",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+        "observedAt": "2026-10-14T19:53:42.191Z"
+      },
+      {
+        "type": "security",
+        "name": "authenticated_security_definer_function_executable",
+        "level": "WARN",
+        "object": "cloud_supplier_price_commercial_page_v3",
+        "classification": "new_intentional_authenticated_readonly_wrapper",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+        "observedAt": "2026-10-14T19:53:42.191Z"
+      },
+      {
+        "type": "performance",
+        "name": "unindexed_foreign_keys",
+        "level": "INFO",
+        "object": "source_compatibility_receipts",
+        "classification": "preexisting_in_prior_forward_schema",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0001_unindexed_foreign_keys",
+        "observedAt": "2026-10-14T19:53:42.443Z"
+      },
+      {
+        "type": "performance",
+        "name": "unused_index",
+        "level": "INFO",
+        "object": "supplier_price_release_rows",
+        "classification": "preexisting_in_prior_forward_schema",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index",
+        "observedAt": "2026-10-14T19:53:42.443Z"
+      }
+    ],
+    "newIntentionalAuthenticatedWrapperWarnings": 2,
+    "unexpectedScopedWarnings": 0,
+    "rationale": "New wrappers enforce actual auth.uid/current-profile organization and readonly data scope; no anon or PUBLIC execute. Private receipt RLS has no API-role policies or grants by design. Existing handoff FK/unused-index advisories were introduced before v2 and no indexes were removed.",
+    "globalDatabaseCleanClaim": false
+  },
+  "result": "PASS for independent SQL/schema/readers postapply scope",
+  "limits": [
+    "No remote schema/data writes, leases, source uploads or publications were performed by this observer.",
+    "Clevite count and exact active pointer were verified; source values were compared on first and middle 5000-row pages, not all one million values.",
+    "Euroricambi source values and A10/B15/custom20 sales values were compared across all 542 rows; three atomic commercial-option samples also matched raw legacy terms.",
+    "No immediate full history hash existed before migration, so only known exact Mahle v1 receipt and Clevite publication identity preservation are claimed.",
+    "New v2 rows were zero at capture; full authenticated v6 upload/publication/download and actual deployed HTTP startup proofs remain separate.",
+    "This evidence does not verify production application or production behavior."
+  ]
+}
