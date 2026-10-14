@@ -53,8 +53,8 @@ export type SupplierOperationsStatusRow = SupplierBrandSummaryRow & {
   supplier_import_worker_state: "queued" | "running" | "lock_waiting" | "stalled" | "completed" | "failed" | "superseded" | string;
   supplier_import_last_heartbeat_at: string | null;
   supplier_import_last_progress_at: string | null;
-  supplier_import_last_batch_processed: number;
-  supplier_import_batches: number;
+  supplier_import_last_batch_processed: number | null;
+  supplier_import_batches: number | null;
   catalog_sync_status: SupplierOperationsStatus;
   catalog_sync_error_message: string | null;
   catalog_sync_cursor: string | null;

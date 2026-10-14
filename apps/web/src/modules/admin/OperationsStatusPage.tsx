@@ -201,6 +201,7 @@ export function OperationsStatusPage() {
   }
 
   function supplierWorkerStateLabel(row: SupplierOperationsStatusRow) {
+    if (supplierWorkerState(row) === "unknown") return locale === "tr" ? "Çalışma durumu bilinmiyor" : "Worker activity unknown";
     return t(`dashboard.operationsStatus.workerState.${supplierWorkerState(row)}`);
   }
 
@@ -208,7 +209,7 @@ export function OperationsStatusPage() {
     const state = supplierWorkerState(row);
     if (state === "completed") return "completed";
     if (state === "failed" || state === "stalled") return "failed";
-    if (state === "lock_waiting" || state === "queued") return "pending";
+    if (state === "lock_waiting" || state === "queued" || state === "unknown") return "pending";
     return "running";
   }
 
@@ -390,7 +391,7 @@ export function OperationsStatusPage() {
                         <span className={`mark-badge mark-badge--${statusTone(row.supplier_import_status)}`}>{t(`statuses.${row.supplier_import_status}`)}</span>
                         <span className={`mark-badge mark-badge--${supplierWorkerStateTone(row)}`}>{supplierWorkerStateLabel(row)}</span>
                       </div>
-                      <small>{formatCount(row.supplier_import_processed_rows)} / {formatCount(row.supplier_import_staged_rows)} · {formatCount(row.supplier_import_batches)} batches</small>
+                      <small>{formatCount(row.supplier_import_processed_rows)} / {formatCount(row.supplier_import_staged_rows)}{row.supplier_import_batches == null ? "" : ` · ${formatCount(row.supplier_import_batches)} batches`}</small>
                     </div>
                     <div className="supplier-operation-stage">
                       <span className="supplier-operation-stage__label">{t("dashboard.operationsStatus.catalogSync")}</span>

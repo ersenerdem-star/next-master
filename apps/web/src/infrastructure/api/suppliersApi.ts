@@ -1,6 +1,7 @@
 import { callAppRpc } from "./appRpcApi";
 import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
+import { SUPPLIER_LEGACY_IMPORT_COLUMNS, legacySupplierImportTelemetry } from "../../shared/supplierLegacyImportStatus";
 import type {
   SupplierBrandSummaryRow,
   SupplierOperationsReadyStatus,
@@ -54,11 +55,8 @@ type SupplierPriceImportRunRow = {
   error_message: string | null;
   staged_rows: number;
   processed_rows: number | null;
-  finalize_worker_state: string | null;
-  finalize_last_heartbeat_at: string | null;
-  finalize_last_progress_at: string | null;
-  finalize_last_batch_processed: number | null;
-  finalize_batches: number | null;
+  finalize_error_message: string | null;
+  finalized_at: string | null;
   catalog_synced: number | null;
   catalog_sync_status: string | null;
   catalog_sync_finished_at: string | null;
@@ -140,9 +138,7 @@ function latestTimestampSource(
 async function fetchLatestSupplierImportRuns(inputOrganizationId: string) {
   const { data, error } = await supabaseClient
     .from("supplier_price_import_runs")
-    .select(
-      "id,supplier_id,brand_id,status,started_at,finished_at,error_message,staged_rows,processed_rows,finalize_worker_state,finalize_last_heartbeat_at,finalize_last_progress_at,finalize_last_batch_processed,finalize_batches,catalog_synced,catalog_sync_status,catalog_sync_finished_at,catalog_sync_error_message,catalog_sync_cursor,catalog_sync_processed,catalog_sync_last_progress_at,catalog_sync_last_batch_processed,catalog_sync_batches,catalog_sync_worker_state,superseded_by,superseded_at",
-    )
+    .select(SUPPLIER_LEGACY_IMPORT_COLUMNS)
     .eq("organization_id", inputOrganizationId)
     .order("started_at", { ascending: false });
 
@@ -278,12 +274,7 @@ export async function fetchCloudSupplierOperationsStatusAll(inputSuppliers?: Sup
       supplier_import_duration_ms: durationBetween(importRun?.started_at || null, importRun?.finished_at || null),
       supplier_import_staged_rows: Number(importRun?.staged_rows || 0),
       supplier_import_processed_rows: Number(importRun?.processed_rows ?? 0),
-      supplier_import_error_message: importStatus === "failed" ? importRun?.error_message || "Supplier import failed." : null,
-      supplier_import_worker_state: importRun?.superseded_by ? "superseded" : importRun?.finalize_worker_state || (importStatus === "completed" ? "completed" : importStatus === "running" ? "running" : "queued"),
-      supplier_import_last_heartbeat_at: importRun?.finalize_last_heartbeat_at || null,
-      supplier_import_last_progress_at: importRun?.finalize_last_progress_at || null,
-      supplier_import_last_batch_processed: Number(importRun?.finalize_last_batch_processed || 0),
-      supplier_import_batches: Number(importRun?.finalize_batches || 0),
+      ...legacySupplierImportTelemetry(importRun),
       catalog_sync_status: catalogSyncStatus,
       catalog_sync_error_message: catalogSyncStatus === "failed" ? importRun?.catalog_sync_error_message || "Catalog sync failed." : null,
       catalog_sync_cursor: importRun?.catalog_sync_cursor || null,
