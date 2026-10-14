@@ -11,6 +11,7 @@ import {createSharedPreparedSource} from "./shared-prepared-source.mjs";
 import {createPartitionedVerifiedWorkflow} from "./partitioned-verified-workflow.mjs";
 import {createCompactVerifiedWorkflow} from './compact-verified-workflow.mjs';
 import {compactRpcTransportError,compactRpcHttpError} from './compact-rpc-retry.mjs';
+import {observeFailedVerifiedWorkflows,WORKFLOW_HISTORY_LIMIT} from './workflow-failure-observer.mjs';
 import {verifiedWorkflowVersion,requireCompactHistoryConfig,startVersionedVerifiedWorkflow,requireCompactHistoryDrained} from './verified-workflow-version.mjs';
 import {runDirectVerifiedRelease} from './direct-verified-release-runner.mjs';
 import {consumeUploadVerification} from './upload-verification-consumer.mjs';
@@ -42,7 +43,7 @@ function requireEnv(name, value) {
   return value;
 }
 
-async function callRpc(name, args) {
+async function callRpc(name, args, {signal}={}) {
   const serviceMode=process.argv[2]==='--service';
   if(serviceMode&&!SERVICE_RPC_NAMES.has(name))throw Error('SERVICE_RPC_DENIED');
   let response,rawBody;
@@ -55,7 +56,7 @@ async function callRpc(name, args) {
       ),
       body: JSON.stringify(args),
       redirect: 'error',
-      signal: AbortSignal.timeout(60000),
+      signal: signal ? AbortSignal.any([signal,AbortSignal.timeout(60000)]) : AbortSignal.timeout(60000),
     });
     rawBody = await response.text();
   } catch(error) {
@@ -306,13 +307,13 @@ async function main() {
         dispatch:()=>dispatchVerifiedSupplierPriceHandoff({rpc:callRpc,workerId:config.executorId+':dispatch',
           startWorkflow:({workflowID,queueName,input})=>startVersionedVerifiedWorkflow({DBOS,
             workflow:selectedVerifiedWorkflow,version:VERIFIED_VERSION,workflowID,queueName,input})}),
-      probe:async()=>{
-          const scope={workflowName:VERIFIED_WORKFLOW_NAME,applicationVersion:VERIFIED_APP_VERSION,limit:100,loadInput:true};
+      probe:async({signal})=>{
+          const scope={workflowName:VERIFIED_WORKFLOW_NAME,applicationVersion:VERIFIED_APP_VERSION,limit:WORKFLOW_HISTORY_LIMIT,loadInput:true,loadOutput:false};
           const busy=await DBOS.listWorkflows({...scope,status:['PENDING','ENQUEUED','DELAYED']});
           const failed=await DBOS.listWorkflows({...scope,status:['ERROR','MAX_RECOVERY_ATTEMPTS_EXCEEDED']});
           // A terminal DBOS error remains in history after an explicit operator
-          // recovery succeeds. Keep the audit trail, but do not leave the
-          // intake service degraded when that exact release is already staged.
+          // recovery succeeds. Keep the audit trail; validation/publication
+          // is the terminal proof, not merely staging all source rows.
           const failedReleaseIds=[...new Set(failed.map(workflow=>workflow.input?.[0]?.releaseId)
             .filter(value=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value||'')))];
           let unresolvedFailed=failed;
@@ -320,6 +321,8 @@ async function main() {
             const rows=await callRpc('get_supplier_price_release_status',{input_release_ids:failedReleaseIds});
             unresolvedFailed=reconcileFailedWorkflowHistory(failed, rows);
           }
+          if(COMPACT_HISTORY)await observeFailedVerifiedWorkflows({rpc:(name,args)=>callRpc(name,args,{signal}),
+            failed,busy,workflowName:VERIFIED_WORKFLOW_NAME,applicationVersion:VERIFIED_APP_VERSION,signal});
           return {busy:busy.length>0,failed:unresolvedFailed.length>0};
         }});
       closeHealth=await startServiceHealth({service,port:config.port});

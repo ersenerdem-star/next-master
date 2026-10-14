@@ -66,7 +66,7 @@ test('Pause does not delete upload; auth/conflict errors do not retry; transient
 });
 test('Status proof does not accept foreign session/counters or fake publication',()=>{
  const s={sessionId,releaseId,uploadStatus:'uploaded',verificationStatus:'verified',transferReady:true,totalBytes:3,totalRows:2,
- processedRows:0,releaseStatus:'uploaded',expiresAt:admission.expires_at,updatedAt:new Date().toISOString(),published:false};
+ processedRows:0,releaseStatus:'uploaded',errorCode:null,releaseUpdatedAt:new Date().toISOString(),expiresAt:admission.expires_at,updatedAt:new Date().toISOString(),published:false};
  assert.equal(parseUploadStatus(s,sessionId,3).totalRows,2);
  for(const bad of [{sessionId:releaseId},{totalBytes:4},{published:true},{totalRows:-1},{verificationStatus:'published'}])assert.throws(()=>parseUploadStatus({...s,...bad},sessionId,3));
 });

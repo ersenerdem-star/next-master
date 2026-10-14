@@ -9,6 +9,7 @@ src/**
 !src/worker.mjs
 !src/worker-service.mjs
 !src/worker-target.mjs
+!src/workflow-failure-observer.mjs
 !src/expiry-test-fixture.mjs
 !src/partitioned-verified-workflow.mjs
 !src/prepared-partitions.mjs

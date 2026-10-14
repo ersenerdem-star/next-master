@@ -37,6 +37,7 @@ export const SERVICE_RPC_NAMES = new Set([
   'claim_supplier_price_verified_handoff','ack_supplier_price_verified_handoff',
   'get_supplier_price_verified_manifest','claim_supplier_price_verified_release_batch',
   'get_supplier_price_release_status',
+  'get_supplier_price_workflow_failure_context','mark_supplier_price_processing_interrupted',
   'stage_supplier_price_release_batch','heartbeat_supplier_price_release_batch',
   'finalize_supplier_price_release_shadow_batch',
   'complete_supplier_price_release_duckdb_validation',
@@ -181,7 +182,7 @@ export function createWorkerService({verify,dispatch,probe,validate,wait=delay,l
     let history;
     try{
       history=await Promise.race([
-        probe(),delay(historyTimeoutMs,undefined,{signal:historyTimer.signal})
+        probe({signal:historyTimer.signal}),delay(historyTimeoutMs,undefined,{signal:historyTimer.signal})
           .then(()=>{throw Error('SERVICE_HISTORY_TIMEOUT');}),
       ]);
     }finally{historyTimer.abort();}

@@ -44,7 +44,7 @@ async function invoke(kind:'admission'|'finish'|'status'|'options', overrides:Re
       request_id:'90000000-0000-0000-0000-000000000001',status:'queued',published:false,...overrides.receipt});
     if(url.pathname==='/rest/v1/rpc/get_supplier_price_upload_status') return json({session_id:session,release_id:release,
       upload_status:'uploaded',verification_status:'verified',transfer_ready:true,total_bytes:100,total_rows:2,processed_rows:0,
-      release_status:'uploaded',expires_at:'2099-01-01T00:00:00Z',updated_at:new Date().toISOString(),published:false,...overrides.receipt});
+      release_status:'uploaded',error_code:null,release_updated_at:new Date().toISOString(),expires_at:'2099-01-01T00:00:00Z',updated_at:new Date().toISOString(),published:false,...overrides.receipt});
     throw Error(`Unexpected endpoint ${url.pathname}`);
   };
   try {
@@ -72,6 +72,19 @@ test('production and frontend gates require exact target, canonical portal and e
   assert.equal(clientTarget({enabled:'true',productionTarget:prod,supabaseUrl:base,portalOrigin:portal}),false);
   assert.equal(clientTarget({enabled:'true',supabaseUrl:`https://${v3}.supabase.co`,portalOrigin:'https://next-master-v3-staging-20261006.netlify.app'}),true);
   assert.equal(clientTarget({enabled:'true',supabaseUrl:'https://other.supabase.co',portalOrigin:portal}),false);
+});
+
+test('status exposes operational code and release freshness while preserving source status and row counters',async()=>{
+  const releaseUpdatedAt='2026-10-14T14:00:00.123456+00:00';
+  const r=await invoke('status',{receipt:{release_status:'parsing',total_rows:1000000,processed_rows:25000,
+    error_code:'SUPPLIER_PROCESSING_INTERRUPTED',release_updated_at:releaseUpdatedAt,error_message:'private provider diagnostic'}});
+  assert.equal(r.code,200);assert.equal(r.data.errorCode,'SUPPLIER_PROCESSING_INTERRUPTED');
+  assert.equal(r.data.releaseUpdatedAt,releaseUpdatedAt);assert.equal(r.data.releaseStatus,'parsing');
+  assert.equal(r.data.processedRows,25000);assert.equal(r.data.verificationStatus,'verified');
+  assert.equal(r.data.published,false);assert.equal('errorMessage' in r.data,false);
+  assert.doesNotMatch(JSON.stringify(r.data),/private provider diagnostic/);
+  for(const receipt of [{error_code:'private provider diagnostic'},{release_updated_at:'invalid'}])
+    assert.equal((await invoke('status',{receipt})).code,503);
 });
 
 test('all new routes stay closed before authentication or any remote call when production flag is absent',async()=>{

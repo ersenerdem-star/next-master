@@ -31,7 +31,7 @@ import { formatBrandAwareProductCode } from "../../shared/productCodeDisplay";
 import { downloadSupplierTemplate } from "../../shared/importTemplates";
 import { useI18n } from "../../i18n/I18nProvider";
 import {uploadVerifiedSupplierFile,fetchVerifiedUploadStatus,fetchVerifiedSupplierUploadOptions,isVerifiedSupplierUploadEnabled,verifiedSupplierUploadRequested} from "../../infrastructure/api/supplierVerifiedUploadApi";
-import type {UploadProgress} from "../../shared/supplierUploadProtocol";
+import {supplierUploadStatusView,type UploadProgress} from "../../shared/supplierUploadProtocol";
 
 const freshnessValues = ["all", "fresh", "aging", "stale", "unknown"] as const;
 
@@ -64,7 +64,7 @@ const SUPPLIER_IMPORT_HEADER_ALIASES: Record<(typeof SUPPLIER_IMPORT_COLUMNS)[nu
 const SUPPLIER_IMPORT_REQUIRED_COLUMNS = ["Product_Code", "Buy_Price_EUR"] as const;
 
 export function SuppliersPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const p = (key: string, params?: Record<string, string | number>) => t(`purchases.${key}`, params);
   const actionFeedback = useActionFeedback();
   const [brands, setBrands] = useState<BrandOption[]>([]);
@@ -394,6 +394,7 @@ export function SuppliersPage() {
         const result=await uploadVerifiedSupplierFile(file,{supplierId:importSupplierId,brandId:brand.id,
           mode:importMode,sourceDate:uploadSourceDate},controller.signal,
           progress=>{setVerifiedProgress(progress);setStatus(progress.message);});
+        setVerifiedProgress(current=>current?{...current,...supplierUploadStatusView(result,locale==='tr')}:current);
         if(result.verificationStatus==='failed') actionFeedback.fail('Source verification failed. Check this upload; do not create another one.');
         // Intentionally do not close the dialog, refresh commercial prices,
         // or announce an import/publication success from a source receipt.
@@ -927,8 +928,7 @@ export function SuppliersPage() {
                 {verifiedProgress.sessionId&&!importingSupplier?<Button variant="secondary" onClick={async()=>{
                   const controller=new AbortController();uploadController.current=controller;setImportingSupplier(true);
                   try {const result=await fetchVerifiedUploadStatus(verifiedProgress.sessionId!,controller.signal);
-                    setVerifiedProgress(current=>current?{...current,phase:result.verificationStatus==='verified'?'verified':result.verificationStatus==='failed'?'failed':'queued',
-                      message:`Verification: ${result.verificationStatus}. Release: ${result.releaseStatus}. ${result.totalRows.toLocaleString()} source rows. This is not publication confirmation.`}:current);
+                    setVerifiedProgress(current=>current?{...current,...supplierUploadStatusView(result,locale==='tr')}:current);
                     setError('');
                   }catch(e){setError(e instanceof Error?e.message:'Status unavailable.');}
                   finally{uploadController.current=null;setImportingSupplier(false);}

@@ -1,11 +1,12 @@
 // Read-only, whitelisted evidence. Never infer publication from "validated".
+import {SUPPLIER_PROCESSING_INTERRUPTED} from './supplierUploadProtocol';
 export type ReleaseAudit = {
   checked: boolean; reviewRequired: boolean; totalCodes: number;
   brands: {id: string; name: string; matches: number; percent: number; samples: string[]}[];
 };
 export type ReleaseReviewRow = {
   id: string; brandId: string; supplierId: string; brand: string; supplier: string; status: string;
-  createdAt: string; totalRows: number; processedRows: number;
+  createdAt: string; updatedAt: string; totalRows: number; processedRows: number;
   acceptedRows: number | null; rejectedRows: number | null; warningRows: number | null; conflictRows: number | null;
   errorCode: string | null; errorMessage: string | null;
   audit: ReleaseAudit | null; current: boolean;
@@ -43,6 +44,7 @@ export function parseReleaseAudit(value:unknown,brandId:string): ReleaseAudit | 
 }
 export function releaseReviewState(row:ReleaseReviewRow) {
   if (row.status==='cancelled' && row.errorCode==='REVIEW_REJECTED') return 'rejected';
+  if (row.errorCode===SUPPLIER_PROCESSING_INTERRUPTED && !row.audit?.reviewRequired) return 'processing_interrupted';
   if (row.errorCode || row.audit?.reviewRequired) return 'review_required';
   if (['failed','cancelled','superseded','archived'].includes(row.status)) return 'inactive';
   if (row.status==='published' && row.current) return 'active';

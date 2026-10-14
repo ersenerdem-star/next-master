@@ -30,7 +30,7 @@ export function SupplierReleaseReviewPanel({locale}:{locale:string}){
   },[]);
   const grouped=splitReleaseReviewHistory(rows);
   const stateLabel=(state:string)=>tr
-    ? ({active:'aktif',review_required:'inceleme gerekli',awaiting_publication:'yayın bekliyor',unverified:'kontrol bekliyor',processing:'işleniyor',inactive:'pasif',rejected:'reddedildi'} as Record<string,string>)[state] || state
+    ? ({processing_interrupted:'işlem durdu',active:'aktif',review_required:'inceleme gerekli',awaiting_publication:'yayın bekliyor',unverified:'kontrol bekliyor',processing:'işleniyor',inactive:'pasif',rejected:'reddedildi'} as Record<string,string>)[state] || state
     : state.replaceAll('_',' ');
   const latestSummary=grouped.latest.reduce((counts,row)=>{
     const state=releaseReviewState(row);

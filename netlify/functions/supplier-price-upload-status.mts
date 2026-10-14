@@ -29,11 +29,13 @@ export default async function handler(req:Request) {
    ||!['not_requested','queued','verifying','verified','failed'].includes(String(r.verification_status))
    ||typeof r.transfer_ready!=='boolean'||!Number.isSafeInteger(r.total_bytes)||Number(r.total_bytes)<1
    ||!Number.isSafeInteger(r.total_rows)||Number(r.total_rows)<0||!Number.isSafeInteger(r.processed_rows)||Number(r.processed_rows)<0
-   ||typeof r.release_status!=='string'||!Number.isFinite(Date.parse(String(r.expires_at)))
+   ||typeof r.release_status!=='string'||r.error_code!==null&&(typeof r.error_code!=='string'||! /^[A-Z0-9_]{1,80}$/.test(r.error_code))
+   ||!Number.isFinite(Date.parse(String(r.release_updated_at)))||!Number.isFinite(Date.parse(String(r.expires_at)))
    ||!Number.isFinite(Date.parse(String(r.updated_at)))) throw Error('Invalid status');
   return json({sessionId,releaseId:r.release_id,uploadStatus:r.upload_status,verificationStatus:r.verification_status,
    transferReady:r.transfer_ready,totalBytes:r.total_bytes,totalRows:r.total_rows,processedRows:r.processed_rows,
-   releaseStatus:r.release_status,expiresAt:r.expires_at,updatedAt:r.updated_at,published:false});
+   releaseStatus:r.release_status,errorCode:r.error_code,releaseUpdatedAt:r.release_updated_at,
+   expiresAt:r.expires_at,updatedAt:r.updated_at,published:false});
  }catch(error){
   if(error instanceof SupplierUpgradeError) return json({error:error.message},error.status);
   return json({error:'Upload status could not be confirmed. Keep the same upload session and check again.',sessionId},503);

@@ -1,5 +1,5 @@
 import {supabaseClient} from './supabaseClient';
-import {validateUploadAdmission,directStorageEndpoint,parseUploadStatus,requireVerifiedSupplierReplaceMode,type UploadProgress,type UploadStatus} from '../../shared/supplierUploadProtocol';
+import {validateUploadAdmission,directStorageEndpoint,parseUploadStatus,requireVerifiedSupplierReplaceMode,supplierUploadStatusView,type UploadProgress,type UploadStatus} from '../../shared/supplierUploadProtocol';
 import {transferSupplierUpload} from '../../shared/supplierTusTransfer';
 import {supplierVerifiedUploadTargetEnabled} from './supplierVerifiedUploadTargetGate';
 import {computeSupplierUploadChecksum} from '../../shared/supplierUploadChecksum';
@@ -72,6 +72,7 @@ export async function uploadVerifiedSupplierFile(file:File,input:{supplierId:str
  try{localStorage.setItem(key,JSON.stringify({sessionId,releaseId}));}catch{ /* Server remains authoritative. */ }
  emit('uploading',0,'Checking this upload before transferring bytes.',sessionId,releaseId);
  let status=await fetchVerifiedUploadStatus(sessionId,signal,file.size);
+ if(status.errorCode){const view=supplierUploadStatusView(status);emit(view.phase,file.size,view.message,sessionId,releaseId);return status;}
  if(status.verificationStatus==='failed'||['failed','expired','aborted'].includes(status.uploadStatus)) throw Error('This upload needs review. Check its status; do not create a new upload.');
  if(!status.transferReady&&status.verificationStatus==='not_requested') {
   const {Upload}=await import('tus-js-client');
@@ -96,8 +97,7 @@ export async function uploadVerifiedSupplierFile(file:File,input:{supplierId:str
   await new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>{signal.removeEventListener('abort',abort);resolve();},3000);
    const abort=()=>{clearTimeout(timer);reject(signal.reason);};signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();});
  }while(Date.now()<until);
- emit(status.verificationStatus==='verified'?'verified':status.verificationStatus==='failed'?'failed':'queued',file.size,
-  status.verificationStatus==='verified'?`Source verified: ${status.totalRows.toLocaleString()} rows. Publication is a separate step.`
-   :status.verificationStatus==='failed'?'Source verification failed. No new publication was requested.':'Verification is queued or running. Check the same upload later.',sessionId,releaseId);
+ const view=supplierUploadStatusView(status);
+ emit(view.phase,file.size,view.message,sessionId,releaseId);
  return status;
 }
