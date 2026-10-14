@@ -1,7 +1,8 @@
-import React from 'react';
+import React,{useState} from 'react';
 import {releaseReviewState, type ReleaseReviewRow} from '../../shared/supplierReleaseReview';
 import {Button} from '../../presentation/components/common/Button';
 import {supplierProcessingInterruptedMessage} from '../../shared/supplierUploadProtocol';
+import {SupplierReleaseActionPanel} from './SupplierReleaseActionPanel';
 
 export function releaseReviewMessage(row:ReleaseReviewRow, tr:boolean) {
   if(releaseReviewState(row)==='processing_interrupted')return `${row.brand} / ${row.supplier}: ${supplierProcessingInterruptedMessage(tr)}`;
@@ -13,7 +14,8 @@ export function releaseReviewMessage(row:ReleaseReviewRow, tr:boolean) {
   return tr ? `${row.brand} / ${row.supplier}: ${row.errorCode || 'Marka kimliği incelemesi'}. ${row.errorMessage || ''} ${counts} ${evidence || 'Karşılaştırma henüz doğrulanamadı.'} Yayınlama tamamlandı olarak kabul etmeyin; marka ve dosyayı kontrol edin.`
     : `${row.brand} / ${row.supplier}: ${row.errorCode || 'Brand identity review'}. ${row.errorMessage || ''} ${counts} ${evidence || 'Comparison has not been verified.'} Do not treat this as published; check the brand and source file.`;
 }
-export function SupplierReleaseReviewCard({rows,tr,onDetails}:{rows:ReleaseReviewRow[];tr:boolean;onDetails:(message:string)=>void}) {
+export function SupplierReleaseReviewCard({rows,tr,onDetails,actionsEnabled=false,onChanged}:{rows:ReleaseReviewRow[];tr:boolean;onDetails:(message:string)=>void;actionsEnabled?:boolean;onChanged?:()=>void}) {
+  const [expanded,setExpanded]=useState<string|null>(null);
   const labels=tr ? {processing_interrupted:'İşlem durdu — operasyon kontrolü gerekiyor',rejected:'Dosya reddedildi — yayınlanmadı',review_required:'İnceleme gerekli — yayın durduruldu',inactive:'Aktif değil',active:'Güncel aktif sürüm',unverified:'Kontrol doğrulanmadı',awaiting_publication:'Doğrulandı — henüz yayınlanmadı',processing:'İşleniyor'}
     : {processing_interrupted:'Processing stopped — operational review needed',rejected:'Source rejected — not published',review_required:'Review required — publication held',inactive:'Not active',active:'Current active release',unverified:'Check not verified',awaiting_publication:'Validated — not yet published',processing:'Processing'};
   return <div className="list-stack">{rows.map(row=>{
@@ -40,6 +42,10 @@ export function SupplierReleaseReviewCard({rows,tr,onDetails}:{rows:ReleaseRevie
       </details> : null}
       {state==='rejected' ? <p>{tr?'Doğru marka ve düzeltilmiş dosyayla yeni yükleme başlatın. Mevcut fiyatlar bu kararla değiştirilmedi.':'Start a new upload with the correct brand and corrected file. This decision did not change existing prices.'}</p> : null}
       {state==='review_required' || state==='unverified' ? <Button variant="secondary" onClick={()=>onDetails(releaseReviewMessage(row,tr))}>{tr?'Uyarıyı aç':'Show warning'}</Button> : null}
+      {actionsEnabled?<Button variant="secondary" aria-expanded={expanded===row.id} onClick={()=>setExpanded(expanded===row.id?null:row.id)}>
+        {expanded===row.id?(tr?'İncelemeyi kapat':'Close review'):(tr?'İncele ve yayınla':'Review and publish')}
+      </Button>:null}
+      {actionsEnabled&&expanded===row.id?<SupplierReleaseActionPanel releaseId={row.id} tr={tr} onChanged={onChanged}/>:null}
     </article>;
   })}</div>;
 }
