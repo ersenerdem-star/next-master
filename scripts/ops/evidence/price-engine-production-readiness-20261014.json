@@ -1,0 +1,394 @@
+{
+  "schema_version": 1,
+  "scope": "Read-only post62 metadata and scoped business-state verification; no deployment/runtime/browser claim.",
+  "project_ref": "zjgueqijumzlfioihnkt",
+  "checked_at": "2026-10-14T16:14:05.921Z",
+  "captured_at": "2026-10-14T16:08:08.776818+00:00",
+  "manifest_sha256": "724820e254f5e4c0d16e1584324f70e78c5bbea4334018cc6fe86fce2602c549",
+  "raw_preflight": {
+    "ready": false,
+    "phase": "runtime",
+    "errors": [
+      "FUNCTION_DRIFT:begin_catalog_import_storage",
+      "FUNCTION_DRIFT:finalize_catalog_import_batch_system"
+    ],
+    "project_ref": "zjgueqijumzlfioihnkt",
+    "collected_at": "2026-10-14T16:08:08.776818+00:00",
+    "evidence_scope": "Read-only metadata only; provider env, worker liveness and business canaries remain separate."
+  },
+  "reviewed_metadata_ready": true,
+  "requirements": {
+    "tables": 32,
+    "columns": 36,
+    "functions": 55,
+    "triggers": 1,
+    "indexes": 9,
+    "buckets": 4,
+    "schemas": 2
+  },
+  "functions": {
+    "exact_v3_matches": 51,
+    "reviewed_manifest_variants": [
+      {
+        "name": "begin_catalog_import_storage",
+        "expected_manifest_md5": "d0c6cd023a49aa1d4fec6959ee26c094",
+        "actual_production_md5": "d0c6cd023a49aa1d4fec6959ee26c094",
+        "staging_md5": "59516c400ed343da28f344d2767a49eb",
+        "exact_manifest_match": true,
+        "reason": "Production retains reviewed CSV/TSV/TXT file-extension guard omitted in staging."
+      },
+      {
+        "name": "finalize_catalog_import_batch_system",
+        "expected_manifest_md5": "3cedf9ed8542942ce507347803aac051",
+        "actual_production_md5": "3cedf9ed8542942ce507347803aac051",
+        "staging_md5": "9130c22cb4eb8bb802597204edae666b",
+        "exact_manifest_match": true,
+        "reason": "Same SQL statement sequence; staging version has compressed whitespace and omits comments."
+      }
+    ],
+    "production_only_expected": [
+      "publish_supplier_price_release_production",
+      "reverse_supplier_price_publication_production"
+    ]
+  },
+  "indexes": {
+    "runtime9_ready": true,
+    "concurrent12": {
+      "ready": true,
+      "project_ref": "zjgueqijumzlfioihnkt",
+      "phase": "after",
+      "index_name": null,
+      "errors": [],
+      "actions": [
+        {
+          "name": "idx_catalog_products_export_exact_code",
+          "action": "skip-verified-existing"
+        },
+        {
+          "name": "idx_supplier_prices_export_keyset",
+          "action": "skip-verified-existing"
+        },
+        {
+          "name": "idx_supplier_prices_export_search",
+          "action": "skip-verified-existing"
+        },
+        {
+          "name": "idx_catalog_products_export_id",
+          "action": "skip-verified-existing"
+        },
+        {
+          "name": "idx_catalog_products_export_code_id",
+          "action": "skip-verified-existing"
+        },
+        {
+          "name": "idx_supplier_prices_export_keyset_coalesced",
+          "action": "skip-verified-existing"
+        },
+        {
+          "name": "idx_catalog_products_export_exact_identity",
+          "action": "skip-verified-existing"
+        },
+        {
+          "name": "idx_catalog_products_export_code_c_id",
+          "action": "skip-verified-existing"
+        },
+        {
+          "name": "idx_supplier_price_rollups_export_code_c",
+          "action": "skip-verified-existing"
+        },
+        {
+          "name": "idx_supplier_prices_export_code_c",
+          "action": "skip-verified-existing"
+        },
+        {
+          "name": "idx_catalog_import_stage_run_validation",
+          "action": "skip-verified-existing"
+        },
+        {
+          "name": "idx_catalog_import_stage_run_code_brand",
+          "action": "skip-verified-existing"
+        }
+      ],
+      "evidence_scope": "Supplied read-only PostgreSQL metadata. This helper performed no remote connection or schema mutation."
+    }
+  },
+  "access": {
+    "all32_tables_rls": true,
+    "private_schema_browser_and_service_usage_denied": true,
+    "storage_rls": true,
+    "storage_table_acl_requires_rls": true,
+    "storage_policy_count": 18,
+    "storage_policy_names": [
+      "catalog_import_objects_anon_fence",
+      "catalog_import_objects_delete",
+      "catalog_import_objects_delete_fence",
+      "catalog_import_objects_insert",
+      "catalog_import_objects_insert_fence",
+      "catalog_import_objects_select",
+      "catalog_import_objects_select_fence",
+      "catalog_import_objects_update",
+      "catalog_import_objects_update_fence",
+      "supplier_price_import_objects_anon_fence",
+      "supplier_price_import_objects_delete",
+      "supplier_price_import_objects_insert",
+      "supplier_price_import_objects_scope_fence",
+      "supplier_price_import_objects_select",
+      "supplier_price_import_objects_update",
+      "supplier_price_prepared_browser_fence",
+      "supplier_price_verified_no_delete",
+      "supplier_price_verified_no_overwrite"
+    ],
+    "generic_policies": [
+      {
+        "policyname": "supplier_price_verified_no_delete",
+        "permissive": "RESTRICTIVE",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ]
+      },
+      {
+        "policyname": "supplier_price_verified_no_overwrite",
+        "permissive": "RESTRICTIVE",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ]
+      }
+    ],
+    "generic_permissive_policy_count": 0,
+    "anonymous_permissive_policy_count": 0,
+    "predicate_notes": [
+      "catalog_storage_object_allowed checks active admin/superadmin, same organization, catalog.manage, exact source path; writes additionally require uploader identity and created/uploading source plus running run.",
+      "Supplier source access is scoped by active current_profile_org_id plus supplier_prices.manage; sealed verified objects are protected by generic restrictive UPDATE/DELETE guards.",
+      "Prepared bucket restrictive ALL policy denies anon/authenticated; exports have no browser permissive policy.",
+      "Predicate EXECUTE grants are authenticated-only for catalog and supplier sealing; ordinary storage table grants do not bypass RLS."
+    ],
+    "guards": [
+      {
+        "config": [
+          "search_path=public, pg_temp"
+        ],
+        "signature": "catalog_storage_object_allowed(text,boolean)",
+        "anon_execute": false,
+        "definition_md5": "6369684421958cd5da7de19b4b371257",
+        "service_execute": false,
+        "security_definer": true,
+        "authenticated_execute": true
+      },
+      {
+        "config": [
+          "search_path=public"
+        ],
+        "signature": "current_profile_org_id()",
+        "anon_execute": false,
+        "definition_md5": "a25e504553d64d38e795258e2f453292",
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": true
+      },
+      {
+        "config": [
+          "search_path=public"
+        ],
+        "signature": "current_profile_role()",
+        "anon_execute": false,
+        "definition_md5": "ae3a4585671153b8ff77ba6997d66737",
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": true
+      },
+      {
+        "config": [
+          "search_path=public"
+        ],
+        "signature": "profile_has_permission(text)",
+        "anon_execute": false,
+        "definition_md5": "aa3d95a792407467f85d257318040039",
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": true
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "supplier_price_upload_object_is_sealed(text,text)",
+        "anon_execute": false,
+        "definition_md5": "2957e13e4db880be6dd2f0afbe9c25fe",
+        "service_execute": false,
+        "security_definer": true,
+        "authenticated_execute": true
+      }
+    ],
+    "historical_order_guard": [
+      {
+        "name": "sales_orders_active_customer_pricing_guard",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER sales_orders_active_customer_pricing_guard BEFORE INSERT OR UPDATE ON public.sales_orders FOR EACH ROW EXECUTE FUNCTION sales_order_guard_private.guard_sales_order_active_customer_pricing()",
+        "function_md5": "6ab00b66f29288abc7b66a21024bc5e2"
+      }
+    ]
+  },
+  "buckets": [
+    {
+      "name": "app-exports",
+      "public": false,
+      "present": true,
+      "private": true,
+      "needs_binary": true,
+      "minimum_limit": 41943040,
+      "file_size_limit": 104857600,
+      "size_compatible": true,
+      "binary_compatible": true,
+      "allowed_mime_types": [
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "text/csv",
+        "application/json",
+        "application/octet-stream"
+      ]
+    },
+    {
+      "name": "catalog-imports",
+      "public": false,
+      "present": true,
+      "private": true,
+      "needs_binary": true,
+      "minimum_limit": 1073741824,
+      "file_size_limit": 1073741824,
+      "size_compatible": true,
+      "binary_compatible": true,
+      "allowed_mime_types": [
+        "text/csv",
+        "text/plain",
+        "text/tab-separated-values",
+        "application/csv",
+        "application/vnd.ms-excel",
+        "application/octet-stream"
+      ]
+    },
+    {
+      "name": "supplier-price-imports",
+      "public": false,
+      "present": true,
+      "private": true,
+      "needs_binary": true,
+      "minimum_limit": 1073741824,
+      "file_size_limit": 1073741824,
+      "size_compatible": true,
+      "binary_compatible": true,
+      "allowed_mime_types": [
+        "text/csv",
+        "text/plain",
+        "application/csv",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/octet-stream"
+      ]
+    },
+    {
+      "name": "supplier-price-prepared",
+      "public": false,
+      "present": true,
+      "private": true,
+      "needs_binary": true,
+      "minimum_limit": 33554432,
+      "file_size_limit": null,
+      "size_compatible": true,
+      "binary_compatible": true,
+      "allowed_mime_types": null
+    }
+  ],
+  "prepared_bucket_interpretation": "NULL bucket limit/MIME exactly matches foundation. 32MiB is minimum supported capacity, not configured cap; runtime limits parts to32MiB and manifest to8MiB. Provider global limit is separate.",
+  "publication_control": [
+    {
+      "enabled": false,
+      "activation_empty": true,
+      "reversal_enabled": false,
+      "expected_project_ref": "zjgueqijumzlfioihnkt"
+    }
+  ],
+  "new_motor_counts": {
+    "handoffs": 0,
+    "pointers": 0,
+    "releases": 0,
+    "publications": 0,
+    "release_rows": 0,
+    "catalog_sources": 0,
+    "upload_sessions": 0,
+    "review_decisions": 0,
+    "publication_decisions": 0,
+    "publication_reversals": 0,
+    "verification_requests": 0,
+    "catalog_source_batches": 0
+  },
+  "export_status_counts": {
+    "failed": 91,
+    "expired": 3,
+    "finalized": 69
+  },
+  "customer_pricing": {
+    "customers": [
+      {
+        "id": "fd9f8834-7935-4050-8895-fde8a2eb4914",
+        "embedded_type": "A",
+        "embedded_margin": null,
+        "explicit_margin": null,
+        "organization_id": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+        "price_list_type": "A",
+        "verification": "approved_A_alignment"
+      },
+      {
+        "id": "be450451-78d4-43cf-b35c-66239eccfc38",
+        "embedded_type": null,
+        "embedded_margin": "20",
+        "explicit_margin": null,
+        "organization_id": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+        "price_list_type": "Other",
+        "verification": "existing_explicit_markup_20"
+      }
+    ],
+    "captured_at": "2026-10-14T16:09:51.517229+00:00",
+    "all_customer_pricing_fingerprint": "8797ff87dbc6fad7f1d26eb254495ea4"
+  },
+  "customer_preservation_scope": "Exact Ersen UUID/org CAS operation only. Juventa current embedded markup20 and Other profile confirmed. No all-customer preapply pricing fingerprint exists, so no full before/after hash equality claim.",
+  "retained_history": {
+    "captured_at": "2026-10-14T16:12:50.023954+00:00",
+    "storage_object_counts": {
+      "app-exports": 72
+    },
+    "legacy_catalog_run_status_counts": {
+      "failed": 5,
+      "staged": 168,
+      "finalized": 7,
+      "validation_failed": 2,
+      "provider_collecting": 2
+    },
+    "legacy_supplier_run_status_counts": {
+      "failed": 21,
+      "running": 1,
+      "finalized": 27,
+      "succeeded": 14
+    }
+  },
+  "retention_scope": "Existing legacy runs and export history/objects are present. This audit issued SELECT and session SET only, no deletes. No DBOS history connection used; no complete preapply storage/history counts exist for a deletion comparison.",
+  "local_verification": {
+    "exact62_replayed": true,
+    "catalog_storage_static_contract_tests": 11
+  },
+  "remaining_gaps": [
+    "Ordinary admin review/publication route and UI were absent; queued action implementation and real browser commercial canary remain required.",
+    "Provider global1GiB upload setting, production workers/liveness/history and browser business acceptance are separate from SQL metadata.",
+    "Raw preflight intentionally still flags2V3 drift differences; both have exact reviewed manifest proof, no SQL normalization or prod mutation used."
+  ],
+  "evidence_files": [
+    "next-master-post62-production-preflight-20261014.json",
+    "next-master-post62-v3-preflight-20261014.json",
+    "next-master-post62-supplement-20261014.json",
+    "next-master-post62-customers-20261014.json",
+    "next-master-post62-indexes-20261014.json",
+    "next-master-post62-access-guards-20261014.json",
+    "next-master-post62-exact62-replay-function-evidence-20261014.json",
+    "next-master-post62-retained-history-20261014.json"
+  ]
+}
