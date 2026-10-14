@@ -1,0 +1,203 @@
+{
+  "schemaVersion": 1,
+  "kind": "production-catalog-storage-canary-and-owned-product-cleanup",
+  "date": "2026-10-14",
+  "target": "production",
+  "projectRef": "zjgueqijumzlfioihnkt",
+  "authorization": {
+    "catalogCanaries": 1,
+    "customerPortalNotificationRecords": 9,
+    "source": "Explicit user authorization relayed and executed by root coordinator"
+  },
+  "scope": {
+    "organizationId": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+    "brandId": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+    "brand": "Corteco",
+    "runId": "5a696f49-9ad9-4e03-bfb8-11eee097732a",
+    "sourceId": "cd19c0a5-7b69-48b4-847b-20345c85d916",
+    "temporaryProductId": "ade008ba-b94a-4315-bd4d-dfc68acde09f",
+    "temporaryProductCode": "NMCANARY202610146A71",
+    "lifecycle": "discontinued",
+    "commercialPriceRowsCreated": 0
+  },
+  "source": {
+    "fileBasename": "next-master-catalog-canary-20261014.csv",
+    "bytes": 6291712,
+    "sha256": "2bdc151a548c0b3bcacb72119a14e661ace3223b9d9565d713a2bab0a6da150b",
+    "kind": "storage_csv",
+    "bucket": "catalog-imports",
+    "logicalRows": 1,
+    "blankPadding": true,
+    "verifiedSha256MatchesOriginal": true,
+    "admittedChecksumOptional": true,
+    "admittedChecksumWasNull": true
+  },
+  "execution": {
+    "entry": "Authenticated production admin UI upload and finalization, reported by root and independently verified in SQL",
+    "runStartedAt": "2026-10-14T18:44:09.817284+00:00",
+    "sourceUploadedAndVerifiedAt": "2026-10-14T18:44:19.254755+00:00",
+    "sourceProcessingStartedAt": "2026-10-14T18:44:27.556585+00:00",
+    "sourceCompletedAt": "2026-10-14T18:44:31.53318+00:00",
+    "runFinalizedAt": "2026-10-14T18:44:32.81198+00:00",
+    "sourceAttempts": 1,
+    "status": "finalized",
+    "stagedRows": 1,
+    "processedRows": 1,
+    "insertedRows": 1,
+    "updatedRows": 0,
+    "errorRows": 0,
+    "duplicateRows": 0,
+    "skippedRows": 0,
+    "sourceBatch": {
+      "count": 1,
+      "cursorStart": 0,
+      "cursorEnd": 0,
+      "rows": 1,
+      "isFinal": true,
+      "payloadSha256": "02140ce2d0773034b0dd3cc336c0819c67f616c02b800a5b0ff6ecda4aff640c"
+    }
+  },
+  "notifications": {
+    "kind": "portal_audit_logs / portal_catalog_updated",
+    "count": 9,
+    "distinctCustomerInvites": 9,
+    "safeProjectionMd5": "c3d9cdacddc7ef398003e236d8caf734",
+    "allStatusOk": true,
+    "unchangedAfterCleanup": true,
+    "customerIdentitiesOmitted": true,
+    "deliveryOrReadStatusProven": false
+  },
+  "baseline": {
+    "capturedAt": "2026-10-14T18:43:29.110294Z",
+    "catalog": {
+      "rows": 37526,
+      "fullRowsMd5": "871c16eac26601bfe31ae4094e9d8d63"
+    },
+    "supplierPrices": {
+      "rows": 60656,
+      "fullRowsMd5": "07126d9ffa09f83f788bafeefb2d8cb6"
+    },
+    "fingerprintExpression": "md5(string_agg(md5(to_jsonb(row)::text), '|' order by row.id)), exact organization + brand scope"
+  },
+  "cleanup": {
+    "owner": "root coordinator",
+    "executedAt": "2026-10-14T18:56:39.997129Z",
+    "receiptSource": "Root-reported successful SQL receipt, independently verified afterward",
+    "deletedRows": 1,
+    "deletedOnlyTemporaryProduct": true,
+    "scriptSha256": "a4fc20899bdc799ed39420a22eb43abc68e8aa1a632d747ec89da6bff58ecba6",
+    "firstAttempt": {
+      "result": "Rolled back before DELETE",
+      "reason": "PL/pgSQL row variable r conflicted with SQL table alias r",
+      "source": "Root execution report",
+      "correction": "Renamed row variables p/r/s to v_product/v_run/v_source; safety conditions unchanged"
+    },
+    "correctedReadOnlyPreflightAt": "2026-10-14T18:55:38.398978Z",
+    "preflight": "Exact pre-delete guards and both preservation queries executed under BEGIN READ ONLY / ROLLBACK; DELETE and row-lock clauses excluded",
+    "referenceChecks": {
+      "dynamicIncomingForeignKeys": 24,
+      "additionalCommercialCodeOrJsonChecks": 13,
+      "allZeroBeforeCleanup": true,
+      "parentRowLockedForActualDelete": true,
+      "nonForeignKeyChecksAreSnapshotOnly": true
+    },
+    "preservedAfterCleanup": {
+      "run": true,
+      "sources": true,
+      "stage": true,
+      "batches": true,
+      "notifications": true,
+      "otherCatalog": true,
+      "supplierPrices": true
+    }
+  },
+  "independentFinalVerification": {
+    "beforeCleanupCapturedAt": "2026-10-14T18:50:31.969379+00:00",
+    "afterCleanupCapturedAt": "2026-10-14T18:59:13.781808+00:00",
+    "checks": {
+      "exact_one_stage": true,
+      "run_present_new": true,
+      "canary_product_removed": true,
+      "exact_nine_notifications": true,
+      "run_finalized_one_insert": true,
+      "supplier_prices_unchanged": true,
+      "preexisting_catalog_unchanged": true,
+      "source_complete_exact_original": true
+    },
+    "remainingTemporaryProducts": 0,
+    "catalog": {
+      "rows": 37526,
+      "digest": "871c16eac26601bfe31ae4094e9d8d63"
+    },
+    "supplierPrices": {
+      "rows": 60656,
+      "digest": "07126d9ffa09f83f788bafeefb2d8cb6"
+    }
+  },
+  "rootReportedUI": {
+    "beforeCleanup": "The temporary product was visible in the authenticated production catalog UI.",
+    "afterCleanup": "After reload, searching the exact canary code returned zero matches / no products found.",
+    "beforeScreenshotBasename": "next-master-production-catalog-canary-visible-20261014.png",
+    "afterScreenshotBasename": "next-master-production-catalog-canary-cleaned-20261014.png",
+    "source": "Root coordinator actual browser observation; screenshots retained outside repository."
+  },
+  "safeUploadStatusForward": {
+    "migration": "supabase/migrations/20261014183349_supplier_upload_safe_commercial_error_status.sql",
+    "migrationSha256": "5071891230d3af3ba840162b1349e37b1509f832ff872616cd49442c9c9febfb",
+    "definitionMd5": "a5c8a349eca50701b64c26dc62877a25",
+    "allowedVerificationErrors": [
+      "SOURCE_UNSUPPORTED_STOCK_QTY",
+      "SOURCE_UNSUPPORTED_ORDER_MULTIPLE",
+      "SOURCE_UNSUPPORTED_VALID_TO"
+    ],
+    "production": {
+      "checks": {
+        "securityDefiner": true,
+        "serviceRoleOnly": true,
+        "exactReviewedDefinition": true
+      },
+      "config": [
+        "search_path=\"\""
+      ],
+      "execute": {
+        "anon": false,
+        "public": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "signature": "get_supplier_price_upload_status(uuid,uuid,uuid,uuid,bigint,bigint)",
+      "capturedAt": "2026-10-14T18:59:17.438785+00:00",
+      "definitionMd5": "a5c8a349eca50701b64c26dc62877a25",
+      "functionCount": 1,
+      "securityDefiner": true
+    },
+    "v3": {
+      "checks": {
+        "securityDefiner": true,
+        "serviceRoleOnly": true,
+        "exactReviewedDefinition": true
+      },
+      "config": [
+        "search_path=\"\""
+      ],
+      "execute": {
+        "anon": false,
+        "public": false,
+        "service_role": true,
+        "authenticated": false
+      },
+      "signature": "get_supplier_price_upload_status(uuid,uuid,uuid,uuid,bigint,bigint)",
+      "capturedAt": "2026-10-14T18:59:12.882605+00:00",
+      "definitionMd5": "a5c8a349eca50701b64c26dc62877a25",
+      "functionCount": 1,
+      "securityDefiner": true
+    }
+  },
+  "limits": [
+    "The file is larger than 6 MiB but contains one logical product row plus blank padding. This proves the production large-file storage/worker/finalization path, not high-row-count catalog throughput.",
+    "Nine portal notification records were created and preserved. Email delivery or customer read receipts were not tested.",
+    "Source/import/stage/batch/audit records were preserved. Physical uploaded-object retention is not asserted; normal storage cleanup had already cleared the source storage_object_id before the owned product cleanup.",
+    "Non-FK code/JSON reference checks are snapshot checks; only FK-backed references participate in the parent row lock. No universal concurrent-writer fence is claimed.",
+    "The safe status RPC check proves deployed SQL definition and effective ACL parity in both environments; it does not itself run a new authenticated unsupported-field upload."
+  ]
+}
