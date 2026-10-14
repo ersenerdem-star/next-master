@@ -1,0 +1,411 @@
+{
+  "schema_version": 1,
+  "environment": "V3 staging",
+  "project_ref": "kaxsqafdevabkxofwdod",
+  "migration": {
+    "file": "supabase/migrations/20261014162139_supplier_admin_release_action_queue.sql",
+    "commit": "acdeb250",
+    "sha256": "9a14f1e1aea51c103ac15250d8987fbf0ccc4ead25242a181988ccfa116a88de",
+    "applied_by": "root",
+    "post_apply_metadata_verified": true
+  },
+  "scope": {
+    "production_accessed": false,
+    "operation": "Post-apply read-only metadata/advisors, then authorized V3 action-control activation only",
+    "source_rows_changed": false,
+    "publication_performed": false,
+    "original_62_migrations_modified": false
+  },
+  "pre_activation": {
+    "tables": [
+      {
+        "rls": true,
+        "name": "admin_release_action_control",
+        "anon_write": false,
+        "auth_write": false,
+        "anon_select": false,
+        "auth_select": false,
+        "service_write": false,
+        "service_select": false
+      },
+      {
+        "rls": true,
+        "name": "admin_release_actions",
+        "anon_write": false,
+        "auth_write": false,
+        "anon_select": false,
+        "auth_select": false,
+        "service_write": false,
+        "service_select": false
+      },
+      {
+        "rls": true,
+        "name": "admin_staging_publication_decisions",
+        "anon_write": false,
+        "auth_write": false,
+        "anon_select": false,
+        "auth_select": false,
+        "service_write": false,
+        "service_select": false
+      }
+    ],
+    "control": {
+      "enabled": false,
+      "singleton": true,
+      "expected_project_ref": null
+    },
+    "indexes": [
+      {
+        "live": true,
+        "name": "admin_release_action_control_pkey",
+        "ready": true,
+        "table": "admin_release_action_control",
+        "valid": true,
+        "definition": "CREATE UNIQUE INDEX admin_release_action_control_pkey ON supplier_price_ingestion_internal.admin_release_action_control USING btree (singleton)"
+      },
+      {
+        "live": true,
+        "name": "admin_release_actions_dispatch",
+        "ready": true,
+        "table": "admin_release_actions",
+        "valid": true,
+        "definition": "CREATE INDEX admin_release_actions_dispatch ON supplier_price_ingestion_internal.admin_release_actions USING btree (project_ref, status, created_at)"
+      },
+      {
+        "live": true,
+        "name": "admin_release_actions_one_active",
+        "ready": true,
+        "table": "admin_release_actions",
+        "valid": true,
+        "definition": "CREATE UNIQUE INDEX admin_release_actions_one_active ON supplier_price_ingestion_internal.admin_release_actions USING btree (release_id) WHERE (status = ANY (ARRAY['queued'::text, 'running'::text]))"
+      },
+      {
+        "live": true,
+        "name": "admin_release_actions_pkey",
+        "ready": true,
+        "table": "admin_release_actions",
+        "valid": true,
+        "definition": "CREATE UNIQUE INDEX admin_release_actions_pkey ON supplier_price_ingestion_internal.admin_release_actions USING btree (decision_id)"
+      },
+      {
+        "live": true,
+        "name": "admin_staging_publication_decisions_pkey",
+        "ready": true,
+        "table": "admin_staging_publication_decisions",
+        "valid": true,
+        "definition": "CREATE UNIQUE INDEX admin_staging_publication_decisions_pkey ON supplier_price_ingestion_internal.admin_staging_publication_decisions USING btree (decision_id)"
+      },
+      {
+        "live": true,
+        "name": "admin_staging_publication_decisions_publication_id_key",
+        "ready": true,
+        "table": "admin_staging_publication_decisions",
+        "valid": true,
+        "definition": "CREATE UNIQUE INDEX admin_staging_publication_decisions_publication_id_key ON supplier_price_ingestion_internal.admin_staging_publication_decisions USING btree (publication_id)"
+      },
+      {
+        "live": true,
+        "name": "admin_staging_publication_decisions_release_id_key",
+        "ready": true,
+        "table": "admin_staging_publication_decisions",
+        "valid": true,
+        "definition": "CREATE UNIQUE INDEX admin_staging_publication_decisions_release_id_key ON supplier_price_ingestion_internal.admin_staging_publication_decisions USING btree (release_id)"
+      }
+    ],
+    "triggers": [
+      {
+        "name": "admin_release_actions_immutable",
+        "table": "admin_release_actions",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER admin_release_actions_immutable BEFORE DELETE OR UPDATE ON supplier_price_ingestion_internal.admin_release_actions FOR EACH ROW EXECUTE FUNCTION supplier_price_ingestion_internal.admin_action_immutable()"
+      },
+      {
+        "name": "admin_staging_decisions_immutable",
+        "table": "admin_staging_publication_decisions",
+        "enabled": "O",
+        "definition": "CREATE TRIGGER admin_staging_decisions_immutable BEFORE DELETE OR UPDATE ON supplier_price_ingestion_internal.admin_staging_publication_decisions FOR EACH ROW EXECUTE FUNCTION supplier_price_ingestion_internal.admin_action_immutable()"
+      }
+    ],
+    "functions": [
+      {
+        "md5": "a64656cb7a02825ae7c8aaa951b305a8",
+        "name": "claim_supplier_release_action",
+        "config": [
+          "search_path=\"\"",
+          "lock_timeout=2s"
+        ],
+        "schema": "public",
+        "arguments": "input_project_ref text, input_lease_owner uuid",
+        "anon_execute": false,
+        "auth_execute": false,
+        "service_execute": true,
+        "security_definer": true
+      },
+      {
+        "md5": "d1af8f8699bdc7bf1de5a18f77ec8e04",
+        "name": "execute_supplier_release_action",
+        "config": [
+          "search_path=\"\"",
+          "lock_timeout=2s",
+          "statement_timeout=55s"
+        ],
+        "schema": "public",
+        "arguments": "input_project_ref text, input_decision_id uuid, input_lease_owner uuid",
+        "anon_execute": false,
+        "auth_execute": false,
+        "service_execute": true,
+        "security_definer": true
+      },
+      {
+        "md5": "3ba1c8548d13df215c2596f11dc4d77d",
+        "name": "fail_supplier_release_action",
+        "config": [
+          "search_path=\"\"",
+          "lock_timeout=2s"
+        ],
+        "schema": "public",
+        "arguments": "input_project_ref text, input_decision_id uuid, input_lease_owner uuid, input_error_code text",
+        "anon_execute": false,
+        "auth_execute": false,
+        "service_execute": true,
+        "security_definer": true
+      },
+      {
+        "md5": "dbd9ae93152cfe637643c7bafc09c7e1",
+        "name": "get_supplier_release_action_evidence",
+        "config": [
+          "search_path=\"\"",
+          "lock_timeout=2s"
+        ],
+        "schema": "public",
+        "arguments": "input_project_ref text, input_actor_id uuid, input_organization_id uuid, input_auth_session_id uuid, input_token_iat bigint, input_token_exp bigint, input_release_id uuid",
+        "anon_execute": false,
+        "auth_execute": false,
+        "service_execute": true,
+        "security_definer": true
+      },
+      {
+        "md5": "e40acb47ebcc24df9273c666ecec2523",
+        "name": "request_supplier_release_action",
+        "config": [
+          "search_path=\"\"",
+          "lock_timeout=2s"
+        ],
+        "schema": "public",
+        "arguments": "input_project_ref text, input_actor_id uuid, input_organization_id uuid, input_auth_session_id uuid, input_token_iat bigint, input_token_exp bigint, input_action text, input_request jsonb",
+        "anon_execute": false,
+        "auth_execute": false,
+        "service_execute": true,
+        "security_definer": true
+      },
+      {
+        "md5": "78aef4813a94195667ccc2feff7ef559",
+        "name": "admin_action_immutable",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "supplier_price_ingestion_internal",
+        "arguments": "",
+        "anon_execute": false,
+        "auth_execute": false,
+        "service_execute": false,
+        "security_definer": false
+      },
+      {
+        "md5": "ea8d49c9587a83ae67f803f14d1274bb",
+        "name": "admin_action_receipt",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "supplier_price_ingestion_internal",
+        "arguments": "a supplier_price_ingestion_internal.admin_release_actions, input_replayed boolean",
+        "anon_execute": false,
+        "auth_execute": false,
+        "service_execute": false,
+        "security_definer": false
+      },
+      {
+        "md5": "1ed36cd81ae7b639a77825d55e6de293",
+        "name": "admin_action_session",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "supplier_price_ingestion_internal",
+        "arguments": "input_actor_id uuid, input_organization_id uuid, input_auth_session_id uuid, input_token_iat bigint, input_token_exp bigint",
+        "anon_execute": false,
+        "auth_execute": false,
+        "service_execute": false,
+        "security_definer": true
+      },
+      {
+        "md5": "1fb9d6181109348c6bad4b6cad7c1f5a",
+        "name": "admin_action_source_verified",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "supplier_price_ingestion_internal",
+        "arguments": "input_release_id uuid",
+        "anon_execute": false,
+        "auth_execute": false,
+        "service_execute": false,
+        "security_definer": true
+      },
+      {
+        "md5": "c6e9bb2db9e99aeb49c6ad1d3e7996e6",
+        "name": "admin_action_target",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "supplier_price_ingestion_internal",
+        "arguments": "input_project_ref text",
+        "anon_execute": false,
+        "auth_execute": false,
+        "service_execute": false,
+        "security_definer": true
+      },
+      {
+        "md5": "f6843f5e58603ff25b763fa73f31030e",
+        "name": "admin_publish_staging",
+        "config": [
+          "search_path=\"\""
+        ],
+        "schema": "supplier_price_ingestion_internal",
+        "arguments": "input_project_ref text, input_release_id uuid, input_organization_id uuid, input_supplier_id uuid, input_brand_id uuid, input_actor_id uuid, input_decision_id uuid, input_expected_review_revision bigint, input_expected_previous_publication_id uuid",
+        "anon_execute": false,
+        "auth_execute": false,
+        "service_execute": false,
+        "security_definer": true
+      }
+    ],
+    "captured_at": "2026-10-14T16:41:31.629408+00:00",
+    "action_counts": {
+      "total": 0,
+      "failed": 0,
+      "queued": 0,
+      "running": 0,
+      "completed": 0
+    },
+    "private_schema_access": {
+      "anon": false,
+      "service_role": false,
+      "authenticated": false
+    },
+    "staging_publication_decisions": 0,
+    "production_only_control_absent": true,
+    "production_only_publisher_absent": true
+  },
+  "advisors": {
+    "scope": "Findings matching newly introduced action queue/helper objects only; unrelated existing project findings omitted",
+    "security": [
+      {
+        "name": "rls_enabled_no_policy",
+        "title": "RLS Enabled No Policy",
+        "level": "INFO",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+        "findings": [
+          {
+            "detail": "Table \\`supplier_price_ingestion_internal.admin_release_action_control\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "admin_release_action_control",
+              "type": "table",
+              "schema": "supplier_price_ingestion_internal"
+            },
+            "observed_at": "2026-10-14T16:41:32.980Z"
+          },
+          {
+            "detail": "Table \\`supplier_price_ingestion_internal.admin_release_actions\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "admin_release_actions",
+              "type": "table",
+              "schema": "supplier_price_ingestion_internal"
+            },
+            "observed_at": "2026-10-14T16:41:32.980Z"
+          },
+          {
+            "detail": "Table \\`supplier_price_ingestion_internal.admin_staging_publication_decisions\\` has RLS enabled, but no policies exist",
+            "metadata": {
+              "name": "admin_staging_publication_decisions",
+              "type": "table",
+              "schema": "supplier_price_ingestion_internal"
+            },
+            "observed_at": "2026-10-14T16:41:32.980Z"
+          }
+        ]
+      }
+    ],
+    "performance": [
+      {
+        "name": "unused_index",
+        "title": "Unused Index",
+        "level": "INFO",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index",
+        "findings": [
+          {
+            "detail": "Index \\`admin_release_actions_dispatch\\` on table \\`supplier_price_ingestion_internal.admin_release_actions\\` has not been used",
+            "metadata": {
+              "name": "admin_release_actions",
+              "type": "table",
+              "schema": "supplier_price_ingestion_internal"
+            },
+            "observed_at": "2026-10-14T16:41:32.817Z"
+          }
+        ]
+      }
+    ],
+    "assessment": {
+      "scoped_error_or_warning_findings": 0,
+      "private_rls_no_policy": "Intentional: private schemas/tables have no API role access; service-only SECURITY DEFINER adapters implement the boundary.",
+      "unused_dispatch_index": "Expected before first use: action queue is empty; retain the dispatch index."
+    }
+  },
+  "activation": {
+    "enabled": true,
+    "singleton": true,
+    "captured_at": "2026-10-14T16:42:13.703723+00:00",
+    "expected_project_ref": "kaxsqafdevabkxofwdod",
+    "guard": {
+      "required_previous_enabled": false,
+      "allowed_previous_target": [
+        null,
+        "kaxsqafdevabkxofwdod"
+      ],
+      "exactly_one_row_enforced": true,
+      "lock_timeout": "2s",
+      "statement_timeout": "5s",
+      "explicit_transaction": true
+    }
+  },
+  "independent_post_activation_verification": {
+    "canary": {
+      "status": "validated",
+      "error_code": null,
+      "is_current": false,
+      "release_id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+      "total_rows": 999997,
+      "accepted_rows": 999997,
+      "review_revision": 1,
+      "current_release_id": "fed8b4fe-402e-40c5-967c-df587c91acdd"
+    },
+    "control": {
+      "enabled": true,
+      "singleton": true,
+      "expected_project_ref": "kaxsqafdevabkxofwdod"
+    },
+    "captured_at": "2026-10-14T16:42:29.548582+00:00",
+    "action_count": 0,
+    "control_rows": 1,
+    "staging_publication_decisions": 0
+  },
+  "runtime_limits": {
+    "execute_function_statement_timeout": "55s",
+    "execute_function_lock_timeout": "2s",
+    "worker_http_timeout": "60s",
+    "lease_duration": "120s",
+    "global_or_role_timeouts_changed": false
+  },
+  "remaining_acceptance": [
+    "Deploy/enable the dedicated worker and Netlify flags for V3.",
+    "Exercise the real authenticated admin UI action against the 999997-row release through PostgREST.",
+    "Measure actual execution duration and confirm the final UI receipt; schema checks alone do not prove this path."
+  ]
+}
