@@ -11975,3 +11975,273 @@ select.field__input {
     margin-left: 14px;
   }
 }
+
+/* Final visual tokens must win over the legacy shell refresh blocks above. */
+:root {
+  font-family: "Inter", "Avenir Next", "IBM Plex Sans", "Segoe UI", sans-serif;
+  --nm-navy: #061427;
+  --nm-navy-2: #0b2038;
+  --nm-blue: #1677d2;
+  --nm-cyan: #35b8f2;
+  --nm-ink: #0b1a32;
+  --nm-muted: #5d718c;
+  --nm-line: #dbe5f0;
+  --shell-accent: #1677d2;
+  --shell-accent-soft: rgba(22, 119, 210, 0.12);
+  --shell-accent-strong: #2ea7f4;
+}
+
+body {
+  background: linear-gradient(180deg, #f7fbff 0%, #edf4fb 100%);
+  color: var(--nm-ink);
+}
+
+.main {
+  background:
+    radial-gradient(circle at 92% 0, rgba(53, 184, 242, 0.09), transparent 24%),
+    linear-gradient(180deg, #f7fbff 0%, #edf4fb 100%);
+}
+
+.topbar-panel,
+.topbar-build {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(148, 163, 184, 0.24);
+}
+
+.topbar-panel__code {
+  border-color: rgba(53, 184, 242, 0.22);
+  background: #e5f5ff;
+  color: #1677d2;
+}
+
+.topbar-panel__eyebrow,
+.topbar-build__eyebrow {
+  color: #1677d2;
+}
+
+.button--primary,
+.primary-button {
+  border-color: rgba(22, 119, 210, 0.28);
+  background: linear-gradient(135deg, #1686e3, #145fb8);
+  box-shadow: 0 10px 22px rgba(22, 119, 210, 0.2);
+}
+
+.customer-desk-hero__eyebrow {
+  color: #61c8ff;
+}
+
+.customer-desk-search__control:focus-within {
+  box-shadow: 0 0 0 4px rgba(53, 184, 242, 0.28), 0 18px 36px rgba(0, 0, 0, 0.22);
+}
+
+.customer-desk-search__control .button {
+  background: #1677d2;
+  box-shadow: 0 8px 18px rgba(22, 119, 210, 0.22);
+}
+
+.portal-shell--workspace {
+  background: linear-gradient(180deg, #f7fbff 0%, #edf4fb 100%);
+}
+
+.portal-shell--workspace .portal-header {
+  display: grid;
+  grid-template-columns: minmax(230px, auto) minmax(340px, 1fr) auto;
+  background: #061427;
+}
+
+.portal-shell--workspace .portal-sidebar {
+  display: none;
+}
+
+.portal-shell--workspace .portal-layout {
+  display: block;
+  width: min(1440px, 100%);
+  padding: 0 clamp(20px, 4vw, 58px);
+}
+
+.portal-shell--workspace .portal-content {
+  width: 100%;
+  margin: 0 auto;
+}
+
+.portal-header-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.portal-header-nav__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(236, 246, 255, 0.76);
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.portal-header-nav__item:hover,
+.portal-header-nav__item.active {
+  border-color: rgba(53, 184, 242, 0.34);
+  background: rgba(22, 119, 210, 0.23);
+  color: #fff;
+}
+
+.portal-header-nav__item .nav-glyph {
+  width: 16px;
+  height: 16px;
+  color: #a5c8e7;
+}
+
+.portal-header-nav__item.active .nav-glyph {
+  color: #5cc6fb;
+}
+
+.next-master-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  color: #0b1a32;
+}
+
+.next-master-logo--light { color: #f5f9ff; }
+.next-master-logo--dark { color: #0b1a32; }
+
+.next-master-logo__mark {
+  display: block;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  color: #1677d2;
+}
+
+.next-master-logo__lockup {
+  display: grid;
+  gap: 2px;
+  line-height: 1;
+}
+
+.next-master-logo__lockup strong {
+  color: currentColor;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.055em;
+  white-space: nowrap;
+}
+
+.next-master-logo__lockup small {
+  color: currentColor;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.19em;
+  opacity: 0.64;
+  white-space: nowrap;
+}
+
+.nav-glyph {
+  display: block;
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.sidebar .nav-item {
+  grid-template-columns: 22px minmax(0, 1fr) 8px;
+  gap: 11px;
+  min-height: 43px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: none;
+  color: rgba(231, 242, 253, 0.78);
+  padding: 10px 12px;
+}
+
+.sidebar .nav-item__code,
+.portal-shell--workspace .portal-sidebar-nav .nav-item__code {
+  display: none;
+}
+
+.sidebar .nav-item:hover,
+.sidebar .nav-item.active {
+  transform: none;
+  box-shadow: none;
+}
+
+.sidebar .nav-item:hover {
+  border-color: rgba(53, 184, 242, 0.24);
+  background: rgba(31, 132, 213, 0.12);
+}
+
+.sidebar .nav-item.active {
+  border-color: rgba(53, 184, 242, 0.42);
+  background: linear-gradient(90deg, rgba(22, 119, 210, 0.92), rgba(25, 125, 205, 0.54));
+  color: #fff;
+}
+
+@media (max-width: 1100px) {
+  .portal-shell--workspace .portal-header {
+    grid-template-columns: 1fr auto;
+  }
+
+  .portal-shell--workspace .portal-header-nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    background: #f4f8fc;
+  }
+
+  .sidebar { display: none; }
+
+  .main {
+    margin-left: 0;
+    padding: 14px 14px 104px;
+  }
+
+  .portal-shell--workspace .portal-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .portal-shell--workspace .portal-brand { flex: 1 1 100%; }
+
+  .portal-shell--workspace .portal-header-nav {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .portal-shell--workspace .portal-mobile-bottom-nav { display: flex; }
+
+  .action-feedback__card {
+    min-width: min(440px, calc(100vw - 24px));
+  }
+}
+
+@media (max-width: 480px) {
+  .next-master-logo__lockup { display: none; }
+  .next-master-logo__mark { width: 32px; height: 32px; }
+}
