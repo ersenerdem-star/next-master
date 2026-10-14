@@ -1768,7 +1768,7 @@ async function fetchSupplierPriceExportPage(input: {
   afterId: string | null;
   pageSize: number;
 }) {
-  const payload = await rpcJson<unknown>(input.supabaseUrl, input.serviceRoleKey, "cloud_supplier_price_export_page", {
+  const payload = await rpcJson<unknown>(input.supabaseUrl, input.serviceRoleKey, "cloud_supplier_price_export_chunk_v3", {
     input_organization_id: input.organizationId,
     input_supplier_id: input.supplierId,
     input_brand_id: input.brandId,
@@ -1860,7 +1860,7 @@ async function runPagedRemainingAdminExportJob(
         if (page.some((r) => !r.product_code || !r.price_id || !r.brand)) throw new Error("Invalid supplier export source row.");
         sheetRows = page.map((r) => [supplierName, normalizeAdminExportProductCode(String(r.product_code), String(r.brand || brandName)), String(r.brand || brandName), r.description || "", r.oem_no || "", r.buy_price ?? "", r.price_date || "", r.moq ?? "", r.order_multiple ?? "", r.lead_time_days ?? "", r.notes || ""]);
       } else if (exportType === "catalog_export") {
-        const payload = await rpcJson<unknown>(supabaseUrl, serviceRoleKey, "cloud_catalog_export_page_v3", {
+        const payload = await rpcJson<unknown>(supabaseUrl, serviceRoleKey, "cloud_catalog_export_chunk_v3", {
           input_organization_id: job.organization_id, input_brand_id: brandId, input_market_segment: marketSegment,
           input_after_id: afterId, input_page_size: pageSize,
         }, EXPORT_REQUEST_TIMEOUT_MS);
@@ -1873,7 +1873,7 @@ async function runPagedRemainingAdminExportJob(
         nextId = page.at(-1)!.productId;
         sheetRows = catalogExportSheetRows(page).slice(1);
       } else {
-        const payload = await rpcJson<unknown>(supabaseUrl, serviceRoleKey, "cloud_catalog_master_export_page_v3", {
+        const payload = await rpcJson<unknown>(supabaseUrl, serviceRoleKey, "cloud_catalog_master_export_chunk_v3", {
           input_organization_id: job.organization_id, input_brand_id: brandId, input_scope: exportScope, input_search: search,
           input_after_code: afterCode, input_after_id: afterId, input_page_size: pageSize,
           input_margin_a: marginA, input_margin_b: marginB,

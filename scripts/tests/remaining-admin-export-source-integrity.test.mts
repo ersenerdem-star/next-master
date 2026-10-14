@@ -36,6 +36,7 @@ type ExportKind = "supplier_price_list" | "catalog_export" | "catalog_master";
 type Scenario = {
   kind?: ExportKind;
   pages?: Record<string, unknown>[][];
+  pageSizes?: number[];
   version?: string;
 };
 
@@ -51,8 +52,8 @@ async function withExportSource(scenario: Scenario, check: (state: {
   const kind = scenario.kind || "supplier_price_list";
   job.export_type = kind;
   job.scope = { ...job.scope, marketSegment: "PC", scope: "catalog", marginA: 0.1, marginB: 0.15 };
-  const pageRpc = kind === "supplier_price_list" ? "cloud_supplier_price_export_page"
-    : kind === "catalog_export" ? "cloud_catalog_export_page_v3" : "cloud_catalog_master_export_page_v3";
+  const pageRpc = kind === "supplier_price_list" ? "cloud_supplier_price_export_chunk_v3"
+    : kind === "catalog_export" ? "cloud_catalog_export_chunk_v3" : "cloud_catalog_master_export_chunk_v3";
   const versionRpc = kind === "supplier_price_list" ? "get_supplier_price_export_version"
     : kind === "catalog_export" ? "get_catalog_export_version" : "get_catalog_master_export_version";
   const pages = scenario.pages || [Array.from({ length: 1000 }, (_, index) => priceRow(index + 1)), [priceRow(1001, null)]];
@@ -86,7 +87,7 @@ async function withExportSource(scenario: Scenario, check: (state: {
         assert.equal(body.input_margin_a, 0.1);
         assert.equal(body.input_margin_b, 0.15);
       }
-      assert.equal(body.input_page_size, 1000);
+      assert.equal(body.input_page_size, scenario.pageSizes?.[pageRequests.length] ?? 1000);
       pageRequests.push(body);
       events.push("source-page");
       assert.ok(pageRequests.length <= 3, "the worker must reject a repeated cursor instead of looping");
@@ -131,6 +132,33 @@ test("supplier export follows the full keyset and publishes all rows only after 
     assert.match(lines[0], /Buy_Price_EUR/);
     assert.match(lines.at(-1)!, /SKU-001001/);
     assert.match(lines.at(-1)!, /12\.34/);
+  });
+});
+
+test("supplier export consumes complete 5000-row JSON chunks after its initial count page", async () => {
+  const expectedRows = 11_000;
+  const pages = [
+    Array.from({ length: 1000 }, (_, index) => priceRow(index + 1, expectedRows)),
+    Array.from({ length: 5000 }, (_, index) => priceRow(index + 1001, null)),
+    Array.from({ length: 5000 }, (_, index) => priceRow(index + 6001, null)),
+  ];
+  await withExportSource({ pages, pageSizes: [1000, 5000, 5000] }, async ({ run, job, pageRequests, uploads }) => {
+    await run();
+    assert.deepEqual(pageRequests.map((request) => request.input_page_size), [1000, 5000, 5000]);
+    assert.equal(pageRequests[1].input_after_product_code, priceRow(1000).product_code);
+    assert.equal(pageRequests[1].input_after_id, priceRow(1000).price_id);
+    assert.equal(pageRequests[2].input_after_product_code, priceRow(6000).product_code);
+    assert.equal(pageRequests[2].input_after_id, priceRow(6000).price_id);
+    assert.equal(job.status, "finalized");
+    assert.equal(job.row_count, expectedRows);
+    assert.equal(job.progress_total, expectedRows);
+    assert.equal(uploads.length, 1);
+    const lines = new TextDecoder().decode(uploads[0]).trim().split(/\r?\n/);
+    assert.equal(lines.length, expectedRows + 1);
+    assert.match(lines[1001], /SKU-001001/);
+    assert.match(lines[6001], /SKU-006001/);
+    assert.match(lines.at(-1)!, /SKU-011000/);
+    assert.equal(new Set(lines.slice(1)).size, expectedRows);
   });
 });
 

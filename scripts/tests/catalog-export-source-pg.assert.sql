@@ -30,6 +30,10 @@ begin
   assert page_row.product_code='61/1' and page_row.buy_price=100 and page_row.total_count=2, 'supplier current published scope';
   select * into page_row from public.cloud_supplier_price_export_page(org,supplier_id,brand_id,'','all',page_row.product_code,page_row.price_id,1);
   assert page_row.product_code='611' and page_row.total_count is null, 'supplier published cursor';
+  assert public.cloud_catalog_master_export_chunk_v3(org,brand_id,'priced','','611',null,1000,.1,.2)='[]'::jsonb, 'empty master chunk';
+  assert jsonb_array_length(public.cloud_supplier_price_export_chunk_v3(org,supplier_id,brand_id))=2, 'supplier JSON chunk';
+  assert public.cloud_catalog_master_export_chunk_v3(org,brand_id)->0->>'product_code'='61/1', 'JSON chunk retains byte order';
+  assert not has_function_privilege('authenticated','public.cloud_catalog_master_export_chunk_v3(uuid,uuid,text,text,text,uuid,integer,numeric,numeric)','execute'), 'chunk RPC private';
   select public.get_catalog_export_version(org,brand_id) into fingerprint;
   update public.brands set name='Renamed Clevite' where id=brand_id;
   select public.get_catalog_export_version(org,brand_id) into changed;
@@ -70,6 +74,10 @@ declare
   v_total bigint;
   v_next uuid;
 begin
+  assert jsonb_array_length(public.cloud_catalog_export_chunk_v3('00000000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000202','PC',null,5000))=5000, 'JSON chunk preserves 5000 rows';
+  assert jsonb_array_length(public.cloud_catalog_export_chunk_v3('00000000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000202','PC',null,9000))=5000, 'JSON chunk remains bounded';
   loop
     select count(*),(array_agg(p.product_id order by p.product_id desc))[1],max(p.total_count)
       into v_count,v_next,v_total

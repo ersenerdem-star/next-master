@@ -61,7 +61,7 @@ async function withCasStore(
       Object.assign(job, patch);
       return Response.json([{ ...job }]);
     }
-    if (url.pathname === "/rest/v1/rpc/cloud_supplier_price_export_page") {
+    if (url.pathname === "/rest/v1/rpc/cloud_supplier_price_export_chunk_v3") {
       sources += 1;
       if (scenario.takeOverAt === "source") takeOver();
       return Response.json([{
