@@ -209,6 +209,33 @@ test('unsupported last-row commercial value cannot produce a compatibility recei
  assert.equal(f.storage.size,0);
 });
 
+test('a valid old prepared cache cannot attest away unsupported values in the original source',async()=>{
+ const f=fixture({count:2,sourceBytes:Buffer.from('Product_Code,Buy_Price_EUR,Price_Date,Stock_Qty\nA,10.50,2026-10-14,\nB,11.50,2026-10-14,0\n')});
+ // Model a pre-policy cache that discarded the unsupported field. This is
+ // deliberately bound to the actual original bytes, not a corrupt manifest.
+ const context={contract:'supplier-price-normalized-parts-v2',release_id:f.release.id,handoff_id:f.release.handoff_id,
+  source_path:f.release.source_file_path,source_sha256:f.release.source_file_sha256,source_bytes:f.csv.length,
+  total_rows:2,source_date:'2026-10-14',batch_size:1};
+ const prefix=`${f.release.source_file_path.split('/')[0]}/${f.release.id}/${sha(JSON.stringify(context))}`;
+ const partitions=[];
+ for(let i=1;i<=2;i++){
+  const bytes=Buffer.from(JSON.stringify({source_row_number:i,normalized_code:i===1?'A':'B',buy_price:10.5,
+   currency:'EUR',valid_from:'2026-10-14',row_status:'accepted'})+'\n');
+  const path=`part-${String(i).padStart(6,'0')}-${i}-${i}.jsonl`;
+  f.storage.set(prefix+'/'+path,bytes);
+  partitions.push({batch_number:i,cursor_start:i,cursor_end:i,row_count:1,path,sha256:sha(bytes)});
+ }
+ const manifest={version:1,...context,partitions};
+ validateSharedPreparedManifest(manifest,f.release,1);
+ f.storage.set(prefix+'/manifest.json',Buffer.from(JSON.stringify(manifest)));
+ const before=new Map(f.storage);
+ await assert.rejects(f.prepare(),error=>error.code==='SUPPLIER_UNSUPPORTED_COMMERCIAL_FIELD'
+  &&error.sourceRowNumber===2&&error.fields.join(',')==='stock_qty');
+ assert.equal(f.state.sourceReads,1);assert.equal(f.state.compatibilityCalls.length,0);
+ assert.deepEqual(f.storage,before,'old cache is retained unchanged but cannot supply compatibility proof');
+ assert.equal(f.events.some(e=>e.method==='POST'),false);
+});
+
 test('original XLSX full scan records a bound receipt only when every commercial field is empty',async()=>{
  const book=new ExcelJS.Workbook();const sheet=book.addWorksheet('Prices');
  sheet.addRows([['Product_Code','Buy_Price_EUR','Price_Date','Stock Quantity'],
