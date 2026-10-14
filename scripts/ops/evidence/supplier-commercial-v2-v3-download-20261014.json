@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "environment": "V3 staging",
+  "method": "Root clicked actual supplier CSV download in authenticated Chrome and inspected completed file",
+  "sourceCommit": "403f567b5935ce7cd344cf4d4f95625643e53f6a",
+  "sourceReleaseId": "e748a708-24fb-44fe-886c-90c315a723fb",
+  "path": "/Users/ersen/Downloads/supplier-V3-Test-Vendor-Mahle-20261014.csv",
+  "bytes": 501,
+  "sha256": "bdb31228e8453e0fe9e1ea61fb233f1c7a915e5a586a8cc137e0012ba11ec37d",
+  "rowCount": 5,
+  "headers": [
+    "Supplier",
+    "Product_Code",
+    "Brand",
+    "Product_Name",
+    "OEM_No",
+    "Buy_Price_EUR",
+    "Price_Date",
+    "MOQ",
+    "Order_Multiple",
+    "Lead_Time_Days",
+    "Notes",
+    "Stock_Qty",
+    "Valid_To"
+  ],
+  "rows": [
+    {
+      "Supplier": "V3 Test Vendor",
+      "Product_Code": "NMCV2EXPIRED20261014",
+      "Brand": "Mahle",
+      "Product_Name": "",
+      "OEM_No": "",
+      "Buy_Price_EUR": "10",
+      "Price_Date": "2026-10-06",
+      "MOQ": "1",
+      "Order_Multiple": "5",
+      "Lead_Time_Days": "",
+      "Notes": "",
+      "Stock_Qty": "20",
+      "Valid_To": "2026-10-13"
+    },
+    {
+      "Supplier": "V3 Test Vendor",
+      "Product_Code": "NMCV2FUTURE20261014",
+      "Brand": "Mahle",
+      "Product_Name": "",
+      "OEM_No": "",
+      "Buy_Price_EUR": "11",
+      "Price_Date": "2026-10-15",
+      "MOQ": "1",
+      "Order_Multiple": "2",
+      "Lead_Time_Days": "",
+      "Notes": "",
+      "Stock_Qty": "4",
+      "Valid_To": "2027-10-14"
+    },
+    {
+      "Supplier": "V3 Test Vendor",
+      "Product_Code": "NMCV2NULL20261014",
+      "Brand": "Mahle",
+      "Product_Name": "",
+      "OEM_No": "",
+      "Buy_Price_EUR": "8",
+      "Price_Date": "2026-10-06",
+      "MOQ": "",
+      "Order_Multiple": "",
+      "Lead_Time_Days": "",
+      "Notes": "",
+      "Stock_Qty": "",
+      "Valid_To": ""
+    },
+    {
+      "Supplier": "V3 Test Vendor",
+      "Product_Code": "NMCV2TODAY20261014",
+      "Brand": "Mahle",
+      "Product_Name": "",
+      "OEM_No": "",
+      "Buy_Price_EUR": "9",
+      "Price_Date": "2026-10-06",
+      "MOQ": "1",
+      "Order_Multiple": "1",
+      "Lead_Time_Days": "",
+      "Notes": "",
+      "Stock_Qty": "17",
+      "Valid_To": "2026-10-14"
+    },
+    {
+      "Supplier": "V3 Test Vendor",
+      "Product_Code": "V3POUUID20261006001",
+      "Brand": "Mahle",
+      "Product_Name": "",
+      "OEM_No": "",
+      "Buy_Price_EUR": "7.5",
+      "Price_Date": "2026-10-06",
+      "MOQ": "5",
+      "Order_Multiple": "3",
+      "Lead_Time_Days": "",
+      "Notes": "",
+      "Stock_Qty": "0",
+      "Valid_To": "2027-10-14"
+    }
+  ],
+  "verified": {
+    "zero_stock_distinct_from_null": true,
+    "order_multiple_preserved": true,
+    "valid_to_preserved": true,
+    "raw_export_retains_expired_and_future_rows": true
+  },
+  "scope": "Actual staging supplier raw CSV download. Customer pricing eligibility independently verified in runtime evidence; no production new-field source upload claim.",
+  "adminSalesA": {
+    "path": "/Users/ersen/Downloads/portal-price-list-Mahle-A-20261014.xlsx",
+    "bytes": 6180,
+    "sha256": "27a3a69d23c38c20a475b9777c8bb80d043e06938ca1aa30187a6f43b0e4448b",
+    "headers": [
+      "Part_No",
+      "Description",
+      "Price_EUR",
+      "Price_Date",
+      "Lifecycle"
+    ],
+    "rows": [
+      [
+        "NMCV2NULL20261014",
+        null,
+        8.8,
+        "2026-10-06",
+        "Active"
+      ],
+      [
+        "NMCV2TODAY20261014",
+        null,
+        9.9,
+        "2026-10-06",
+        "Active"
+      ],
+      [
+        "V3-PO-UUID-20261006-001",
+        "Synthetic V3 Purchase Identity Test Product",
+        8.25,
+        "2026-10-06",
+        "Active"
+      ]
+    ],
+    "rowCount": 3,
+    "exactExpectedPrices": true,
+    "expiredAndFuturePricesExcluded": true,
+    "supplierCostAndReportedStockNotExposed": true,
+    "browserClickObserved": true,
+    "completedFileVerified": true,
+    "nativeSaveClickObserved": false
+  }
+}

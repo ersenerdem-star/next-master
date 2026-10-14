@@ -1,0 +1,53 @@
+{
+  "scope": "local actual DBOS with modeled business RPCs; not remote acceptance",
+  "sourceCommit": "545df96f0f82f15827e8cd99874c7304c2e48730",
+  "runtime": "Node24.15.0",
+  "dbos": "5.2.11",
+  "postgres": 17,
+  "sourceRows": 2501,
+  "killedAfterCursor": 613,
+  "killedBeforeCheckpoint": true,
+  "stageCalls": [
+    {
+      "cursor": 613,
+      "inserted": 614
+    },
+    {
+      "cursor": 613,
+      "inserted": 0
+    },
+    {
+      "cursor": 1225,
+      "inserted": 612
+    },
+    {
+      "cursor": 1834,
+      "inserted": 609
+    },
+    {
+      "cursor": 2443,
+      "inserted": 609
+    },
+    {
+      "cursor": 2500,
+      "inserted": 57
+    }
+  ],
+  "uniqueRows": 2501,
+  "uniqueReceipts": 5,
+  "durableOutputBytes": 391,
+  "workflowCallback": "actual catalog-import-storage-v1",
+  "parserAndDuckDb": "actual",
+  "catalogUnitTestsPassed": 22,
+  "sqlContractAndFinalizeTestsPassed": 18,
+  "containerSmoke": {
+    "node": "v24.15.0",
+    "duckdbQueryRows": 2501,
+    "actualWorkflowModuleLinked": true,
+    "image": "next-master-catalog-restart:20261014",
+    "imageDigest": "sha256:df9eeaf9df5cedc4e309bcbb1bab6ed956779d873180afeeecfba91066cce1a2"
+  },
+  "acceptanceStatus": "Historical callback-only local proof; superseded for scheduling/recovery acceptance",
+  "limitation": "This earlier harness did not exercise pollCatalogFinalization racing DBOS recovery. The actual V3 run subsequently exposed partial finalization.",
+  "supersededBy": "scripts/ops/evidence/catalog-restart-v3-premature-finalization-20261014.json#followUpLocalRegression"
+}

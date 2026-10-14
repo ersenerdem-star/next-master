@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-10-14T20:49:43.519475+00:00",
+  "status": "external_provider_deployment_blocker",
+  "notComplete": true,
+  "providerIncident": {
+    "url": "https://status.render.com/incidents/8tsd93r1wbmz",
+    "title": "Builds are not starting in all regions",
+    "latestObservedState": "Monitoring",
+    "latestProviderUpdate": "2026-10-14T19:47:00Z"
+  },
+  "commercial": {
+    "frozenSource": "403f567b5935ce7cd344cf4d4f95625643e53f6a",
+    "v3RuntimeAccepted": true,
+    "v3SupplierRawCsvRows": 5,
+    "v3AdminSalesAXlsxRows": 3,
+    "productionSqlAppliedAndParityVerified": true,
+    "productionSupplierFlagSaved": "SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED=1",
+    "productionWorkerLastVerifiedLiveSource": "fa8e8be412c47f88ca70b2c6e5de12fa73212dd5",
+    "productionUiLastVerifiedLiveSource": "fa8e8be412c47f88ca70b2c6e5de12fa73212dd5",
+    "productionUiArtifact": "/private/tmp/next-master-production-commercial-v2-ready-mr34jy2d/source",
+    "productionUiDeployedForThisChange": false,
+    "deploymentAttempts": [
+      {
+        "id": "dep-db7ucpuq1p3s739jlgb0",
+        "state": "canceled",
+        "durationSeconds": 471,
+        "observedBuildLogs": false
+      },
+      {
+        "id": "dep-db7uh6ks728c739ngec0",
+        "state": "building_without_logs_at_last_observation"
+      }
+    ]
+  },
+  "catalog": {
+    "frozenSource": "3d2a81660e71738ecfafcdc9eb163b9a4c871b72",
+    "migrationSha256": "53152f780a85f249e83d0685ab321f645b14dc48278e4bc7db169bc2dd3f27b7",
+    "v3EofSqlApplied": true,
+    "v3IndependentSqlContractVerified": true,
+    "v3WorkerLastVerifiedLiveSource": "403f567b5935ce7cd344cf4d4f95625643e53f6a",
+    "v3DeployAttemptError": "Internal Server Error",
+    "newV3CrashAcceptancePassed": false,
+    "productionEofSqlApplied": false,
+    "productionCatalogNewSourceDeployed": false,
+    "localActualDbosCrashCasesPassed": 2,
+    "localActualPg17SqlTestsPassed": 13,
+    "unitTestsPassed": 30,
+    "freshFixture": "/private/tmp/next-master-catalog-restart-v3-retry3-20261014.csv",
+    "freshFixtureSha256": "dc48fc099315da8e4d77acf9e2b2e7b5ed5e96cd2b21caf956c4243230fcdf6d",
+    "freshFixtureUploaded": false,
+    "v3Partial87ProductsCleaned": true,
+    "priorV3HistoriesPreserved": true
+  },
+  "remaining": [
+    "Render supplier production403f567 runtime health/readiness",
+    "Production Netlify exact prepared403f567 artifact plus authenticated regression",
+    "Render catalog V3 exact3d2a816 runtime health and actual2501-row SIGKILL/recovery acceptance",
+    "Guarded V3 canary product cleanup with history retained",
+    "Production catalog EOF SQL then exactproven worker deploy/health; no additional notifying production canary authorized"
+  ],
+  "security": {
+    "noNewServicesOrCost": true,
+    "noDbosHistoryDeletion": true,
+    "noSavedOrderFinancialWrites": true,
+    "tlsVerificationPreserved": true
+  }
+}
