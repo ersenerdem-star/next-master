@@ -28,6 +28,7 @@
     "bosch:lifecycle-sync": "node scripts/catalog/sync-bosch-official-lifecycle.mjs"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.3.16",
     "netlify-cli": "27.5.2",
     "tsx": "4.23.13",
     "yaml": "^2.9.0"

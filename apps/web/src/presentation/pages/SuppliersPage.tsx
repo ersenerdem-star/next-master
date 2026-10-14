@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { normalizeBrandName, normalizePartCode } from "../../domain/shared/normalize";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCloudCatalog } from "../../infrastructure/api/catalogApi";
@@ -30,6 +30,8 @@ import {
 import { formatBrandAwareProductCode } from "../../shared/productCodeDisplay";
 import { downloadSupplierTemplate } from "../../shared/importTemplates";
 import { useI18n } from "../../i18n/I18nProvider";
+import {uploadVerifiedSupplierFile,fetchVerifiedUploadStatus,fetchVerifiedSupplierUploadOptions,isVerifiedSupplierUploadEnabled,verifiedSupplierUploadRequested} from "../../infrastructure/api/supplierVerifiedUploadApi";
+import type {UploadProgress} from "../../shared/supplierUploadProtocol";
 
 const freshnessValues = ["all", "fresh", "aging", "stale", "unknown"] as const;
 
@@ -87,6 +89,12 @@ export function SuppliersPage() {
   const [status, setStatus] = useState("");
   const [warning, setWarning] = useState("");
   const [importingSupplier, setImportingSupplier] = useState(false);
+  const verifiedUploadEnabled = isVerifiedSupplierUploadEnabled();
+  const uploadController = useRef<AbortController | null>(null);
+  const [verifiedProgress, setVerifiedProgress] = useState<UploadProgress | null>(null);
+  const [uploadSourceDate, setUploadSourceDate] = useState("");
+  const verifiedUploadComplete = verifiedUploadEnabled && verifiedProgress?.phase === "verified";
+  useEffect(() => () => uploadController.current?.abort(), []);
   const [savingManualPrice, setSavingManualPrice] = useState(false);
   const [resolvingCatalogMatch, setResolvingCatalogMatch] = useState(false);
   const [searchingSuppliers, setSearchingSuppliers] = useState(false);
@@ -111,7 +119,9 @@ export function SuppliersPage() {
 
     async function run() {
       try {
-        const result = await fetchCloudBrands();
+        const result = verifiedUploadEnabled
+          ? (await fetchVerifiedSupplierUploadOptions<{brands: BrandOption[]}>()).brands
+          : await fetchCloudBrands();
         if (!cancelled) setBrands(result);
       } catch {
         if (!cancelled) setBrands([]);
@@ -131,7 +141,9 @@ export function SuppliersPage() {
       setLoadingSuppliers(true);
       setError("");
       try {
-        const result = await fetchCloudSuppliers();
+        const result = verifiedUploadEnabled
+          ? (await fetchVerifiedSupplierUploadOptions<{suppliers: SupplierSummary[]}>()).suppliers
+          : await fetchCloudSuppliers();
         if (cancelled) return;
         setSuppliers(result);
         const defaultSupplierId = result[0]?.supplier_id || "";
@@ -217,7 +229,7 @@ export function SuppliersPage() {
   ];
   const brandOptions = [
     ...brands.map((item) => ({ value: item.name, label: item.name })),
-    { value: "__new__", label: p("suppliers.filters.newBrand") },
+    ...(verifiedUploadEnabled ? [] : [{ value: "__new__", label: p("suppliers.filters.newBrand") }]),
   ];
   const exportBrandOptions = [
     { value: "", label: p("suppliers.filters.selectBrand") },
@@ -226,13 +238,13 @@ export function SuppliersPage() {
   const freshnessOptions = freshnessValues.map((value) => ({ value, label: p(`suppliers.freshness.${value}`) }));
   const importModeOptions = [
     { value: "replace", label: p("suppliers.importModes.replace") },
-    { value: "merge", label: p("suppliers.importModes.merge") },
+    ...(verifiedSupplierUploadRequested ? [] : [{ value: "merge", label: p("suppliers.importModes.merge") }]),
   ];
   const selectableSupplierOptions = suppliers.map((supplier) => ({
     value: supplier.supplier_id,
     label: supplier.name,
   }));
-  const importSupplierOptions = [...selectableSupplierOptions, { value: "__new__", label: p("suppliers.filters.newSupplier") }];
+  const importSupplierOptions = [...selectableSupplierOptions, ...(verifiedUploadEnabled ? [] : [{ value: "__new__", label: p("suppliers.filters.newSupplier") }])];
 
   const columns = useMemo(
     () => [
@@ -357,6 +369,40 @@ export function SuppliersPage() {
     }
     if (!activeImportBrand) {
       setError(p("suppliers.errors.brandRequiredForImport"));
+      return;
+    }
+
+    if (verifiedSupplierUploadRequested && !verifiedUploadEnabled) {
+      const message = "Verified supplier upload is not enabled for this environment.";
+      setError(message); actionFeedback.fail(message); return;
+    }
+
+    if(verifiedUploadEnabled) {
+      if(uploadController.current) return;
+      if(importMode !== 'replace') {
+        const message='Verified supplier upload requires a complete replacement price list. Merge is not supported.';
+        setError(message);actionFeedback.fail(message);return;
+      }
+      const brand=brands.find(b=>b.name===activeImportBrand);
+      if(!brand||importSupplierId==='__new__'||!uploadSourceDate) {
+        const message='Select an existing supplier/brand and a source date for verified upload.';
+        setError(message);actionFeedback.fail(message);return;
+      }
+      const controller=new AbortController();uploadController.current=controller;
+      setImportingSupplier(true);setError('');setStatus('');setWarning('');
+      try {
+        const result=await uploadVerifiedSupplierFile(file,{supplierId:importSupplierId,brandId:brand.id,
+          mode:importMode,sourceDate:uploadSourceDate},controller.signal,
+          progress=>{setVerifiedProgress(progress);setStatus(progress.message);});
+        if(result.verificationStatus==='failed') actionFeedback.fail('Source verification failed. Check this upload; do not create another one.');
+        // Intentionally do not close the dialog, refresh commercial prices,
+        // or announce an import/publication success from a source receipt.
+      } catch(caught) {
+        const paused=controller.signal.aborted;
+        const message=paused?'Upload paused. Select the same file to resume the same session.':caught instanceof Error?caught.message:'Upload outcome is unknown. Check this same upload.';
+        setVerifiedProgress(current=>current?{...current,phase:paused?'paused':'unknown',message}:null);
+        setError(message);if(!paused)actionFeedback.fail(message);
+      } finally {uploadController.current=null;setImportingSupplier(false);}
       return;
     }
 
@@ -710,6 +756,20 @@ export function SuppliersPage() {
     }
   }
 
+  function closeImportDialog() {
+    uploadController.current?.abort();
+    setShowImportDialog(false);
+    setImportFile(null);
+    setVerifiedProgress(null);
+    setUploadSourceDate('');
+    setImportSupplierId(selectedSupplierId || suppliers[0]?.supplier_id || "__new__");
+    setImportSupplierName(
+      suppliers.find((supplier) => supplier.supplier_id === (selectedSupplierId || suppliers[0]?.supplier_id))?.name ?? "",
+    );
+    setImportBrand("");
+    setImportBrandName("");
+  }
+
   return (
     <div className="page-stack">
       <section className="section-card">
@@ -840,13 +900,15 @@ export function SuppliersPage() {
                 disabled={importBrand !== "__new__"}
               />
               <Select label={p("fields.importMode")} value={importMode} options={importModeOptions} onChange={setImportMode} />
+              {verifiedUploadEnabled ? <Input label="Source date" type="date" value={uploadSourceDate} onChange={setUploadSourceDate} disabled={importingSupplier}/> : null}
               <Input label={p("fields.target")} value={p("suppliers.import.cloudTarget")} onChange={() => undefined} disabled />
               <label className="field">
                 <span className="field__label">{p("fields.file")}</span>
                 <input
                   className="field__input"
                   type="file"
-                  accept=".csv,text/csv"
+                  accept={verifiedUploadEnabled ? ".csv,.xlsx" : ".csv,text/csv"}
+                  disabled={importingSupplier}
                   onChange={(event) => {
                     setImportFile(event.target.files?.[0] ?? null);
                   }}
@@ -854,6 +916,25 @@ export function SuppliersPage() {
               </label>
               <Input label={p("fields.selectedFile")} value={importFile?.name ?? ""} onChange={() => undefined} disabled />
             </div>
+            {verifiedUploadEnabled&&verifiedProgress ? <section className="section-card" aria-live="polite">
+              <h4>Verified supplier upload — {verifiedProgress.phase}</h4>
+              <progress style={{width:'100%'}} max={verifiedProgress.totalBytes||1} value={verifiedProgress.bytes}/>
+              <p>{verifiedProgress.message}</p>
+              <p>{verifiedProgress.bytes.toLocaleString()} / {verifiedProgress.totalBytes.toLocaleString()} bytes</p>
+              {verifiedProgress.sessionId?<p>Upload session: {verifiedProgress.sessionId}</p>:null}
+              <div className="toolbar toolbar--wrap">
+                {importingSupplier?<Button variant="secondary" onClick={()=>uploadController.current?.abort()}>Pause upload</Button>:null}
+                {verifiedProgress.sessionId&&!importingSupplier?<Button variant="secondary" onClick={async()=>{
+                  const controller=new AbortController();uploadController.current=controller;setImportingSupplier(true);
+                  try {const result=await fetchVerifiedUploadStatus(verifiedProgress.sessionId!,controller.signal);
+                    setVerifiedProgress(current=>current?{...current,phase:result.verificationStatus==='verified'?'verified':result.verificationStatus==='failed'?'failed':'queued',
+                      message:`Verification: ${result.verificationStatus}. Release: ${result.releaseStatus}. ${result.totalRows.toLocaleString()} source rows. This is not publication confirmation.`}:current);
+                    setError('');
+                  }catch(e){setError(e instanceof Error?e.message:'Status unavailable.');}
+                  finally{uploadController.current=null;setImportingSupplier(false);}
+                }}>Check this upload</Button>:null}
+              </div>
+            </section>:null}
             <div className="modal-hint">{p("suppliers.import.requiredHint")}</div>
             <div className="modal-hint">{p("suppliers.import.expectedColumns", { columns: SUPPLIER_IMPORT_COLUMNS.join(", ") })}</div>
             <div className="toolbar">
@@ -869,39 +950,32 @@ export function SuppliersPage() {
               </Button>
             </div>
             <div className="modal-actions">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setShowImportDialog(false);
-                  setImportFile(null);
-                  setImportSupplierId(selectedSupplierId || suppliers[0]?.supplier_id || "__new__");
-                  setImportSupplierName(
-                    suppliers.find((supplier) => supplier.supplier_id === (selectedSupplierId || suppliers[0]?.supplier_id))?.name ?? "",
-                  );
-                  setImportBrand("");
-                  setImportBrandName("");
-                }}
-              >
-                {p("suppliers.actions.cancelImport")}
-              </Button>
-              <Button
-                onClick={() => {
-                  if (importFile) void handleSupplierImport(importFile);
-                }}
-                disabled={
-                  !importSupplierId ||
-                  !importSupplierName.trim() ||
-                  !importBrand ||
-                  !(importBrand === "__new__" ? importBrandName.trim() : true) ||
-                  !importMode ||
-                  !importFile ||
-                  loadingRows
-                }
-                busy={importingSupplier}
-                busyLabel={p("busy.importing")}
-              >
-                {p("suppliers.actions.import")}
-              </Button>
+              {verifiedUploadComplete ? <Button onClick={closeImportDialog}>
+                {t("common.close")}
+              </Button> : <>
+                <Button variant="secondary" onClick={closeImportDialog}>
+                  {p("suppliers.actions.cancelImport")}
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (importFile) void handleSupplierImport(importFile);
+                  }}
+                  disabled={
+                    !importSupplierId ||
+                    !importSupplierName.trim() ||
+                    !importBrand ||
+                    !(importBrand === "__new__" ? importBrandName.trim() : true) ||
+                    !importMode ||
+                    !importFile ||
+                    (verifiedUploadEnabled&&!uploadSourceDate) ||
+                    loadingRows
+                  }
+                  busy={importingSupplier}
+                  busyLabel={p("busy.importing")}
+                >
+                  {verifiedUploadEnabled?'Upload / resume same file':p("suppliers.actions.import")}
+                </Button>
+              </>}
             </div>
           </DraggableSurface>
         </div>

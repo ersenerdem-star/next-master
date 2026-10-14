@@ -356,3 +356,92 @@ The catalog XLSX finalized in 46.7 seconds. Its complete code set and all 15-col
 ### Regression Evidence
 
 The export download guards, browser transport, lease, source-integrity, and actual multipart-worker suites passed 40/40 tests. The PostgreSQL fixture checks cover 150,001 catalog rows, eligibility and punctuation, bounded JSON chunks, exact source counts, service-only RPC execution, and A/B calculations. The embedded PostgreSQL execution passed; the separate Docker runner is available but is not claimed as executed. Frontend TypeScript/Vite and Netlify function builds passed. These are local and staging results, not production proof.
+
+## Price Engine Production Promotion Preparation — 2026-10-14
+
+Scope: supplier file ingestion, its explicit price-publication boundary, purchase/sales price consumers, customer/admin price exports, supplier-plus-brand exports, Master/Supplier Comparison exports, and catalog import/export. Preparation started from `adafb63d` in the existing `codex/price-engine-integration` worktree. This section does not expand the generic Operations Engine assessment into a platform rewrite. No production schema, environment, worker, data, or deployment change is authorized by this preparation package.
+
+The production target is `https://portal.next-master.com`, Supabase project `zjgueqijumzlfioihnkt`. The reference remains the V3 staging project `kaxsqafdevabkxofwdod`; its fixture prices, catalog rows, job identifiers, and DBOS history must not be copied into production.
+
+### Confirmed Production Differences
+
+The production read-only metadata inspection reported a healthy PostgreSQL 17.6.1.104 project with an existing `app_export_jobs` table. The supplier release, release-row, batch/event, upload-session, validation, publication, and current-pointer foundation is absent. The catalog private-source and source-batch tables are also absent. Consequently, passing staging exports does not establish a deployable production schema baseline.
+
+The private production `app-exports` bucket currently has a 100 MiB object limit and allows XLSX, CSV, and JSON MIME types. It does not allow `application/octet-stream`, which the bounded multipart writer uses. The supplier import and catalog import source buckets are absent. The preparation must reproduce the private-source buckets and policies, and add the binary artifact MIME capability before the new runtime can be opened; it must not alter subscription/global Storage limits without separate evidence that this is needed.
+
+The supplier foundation was created outside the canonical repository migration chain. Minimal table shapes in the export PostgreSQL fixtures are test scaffolding, not a foundation migration. The production bootstrap is now prepared from the real staging PostgreSQL definitions, including their dependent helper functions, constraints, grants, RLS, and Storage seal policies. It includes twelve tables and twenty-nine functions, with 125 captured prerequisite columns and seven helper-function fingerprints. Unsafe direct browser table grants are excluded and the private schemas remain closed. `CREATE TABLE IF NOT EXISTS` for `app_export_jobs` alone does not prove the existing production table has all required columns/types, lease fields, constraints, indexes, or grants.
+
+The production read-only profile inventory reports nine A, one B, one C, and three custom/Other profiles. The Ersen C account has the prior user's explicit A-profile instruction; its exact UUID/organization-scoped alignment is a separate controlled data operation, not an automatic schema migration. Juventa's effective embedded custom markup is 20%, even though the typed markup column is null. Preserve that effective custom value and its provenance rather than resetting the account to A/B.
+
+The supplier verified-upload admission, browser TUS client, and strict Auth/session helper were present only in the dirty `f191e12e` source checkout, while the integration checkout still contained the legacy CSV importer. The eight selected feature modules have now been ported into the canonical integration worktree; source-file hashes and origin paths are recorded in `scripts/ops/evidence/supplier-verified-admission-source-20261014.json`. Only the verified branch and its progress/options wiring were inserted into `SuppliersPage`; its tested supplier-plus-brand background export handler was preserved byte-for-byte. No entire dirty page or unrelated source files were copied.
+
+The prepared admission/options/status/finish routes require `SUPPLIER_PRICE_UPLOAD_VERIFIED_ADMISSION_ENABLED=true`. Production additionally requires `SUPPLIER_PRICE_UPLOAD_PRODUCTION_ENABLED=1`, the exact production `NM_PRODUCTION_TARGET` and Supabase URL, and the canonical portal request origin. The frontend requires its corresponding verified-upload/production/target flags and exact portal origin. A requested but misconfigured verified frontend fails before the legacy writer. The verified flow uploads CSV/XLSX to the same admitted private object, requests source verification, and reads status; it never invokes price publication. Browser pause aborts transfer with `abort(false)` and preserves the resumable object. Status and finish also need `SUPPLIER_PRICE_UPLOAD_VERIFICATION_ENABLED=true`; these Netlify `true` flags are distinct from the worker service's `1` opt-ins.
+
+The browser checksum uses exact-pinned `@noble/hashes@2.4.0` pure JavaScript SHA-256, following its [incremental API](https://github.com/paulmillr/noble-hashes#implementations). The actual transfer hashes raw file bytes in 1 MiB slices, reports monotonic progress, yields between slices and honors cancellation before another read. It retains the admitted 1 GiB size cap without making a whole-file browser buffer. No WebAssembly, eval permission or CSP weakening is required. The existing TUS SDK remains pinned to 4.3.1. Embedded PostgreSQL verification is reproducible through the root dev dependency `@electric-sql/pglite@0.3.16`.
+
+Verified supplier imports currently support complete **replace** snapshots only. A partial merge file cannot become the complete current-price source: doing so would silently drop prior rows absent from that file. The verified UI therefore hides merge, the actual client rejects it before hashing/Auth/admission, the authenticated server rejects it before a session RPC, and production publication independently checks `mode='replace'`. No layer silently converts a requested merge into replacement. The existing legacy importer retains its merge behavior when the verified feature is not requested. Supporting verified merge later requires materializing and validating the complete prior-plus-delta snapshot before moving the current pointer; it is outside this promotion.
+
+### Saved Preparation Artifacts
+
+| Artifact | Purpose |
+| --- | --- |
+| `scripts/ops/price-engine-production-manifest.json` | Fifty-seven explicitly ordered and hashed schema files, including the captured foundation and production publication/reversal. Customer alignment SQL is separately hashed and never auto-applied as a schema file. Includes target-specific runtime configuration and pending acceptance evidence slots. |
+| `scripts/ops/price-engine-production-preflight.sql` | A single read-only metadata query. Reports required object presence, column types, RLS/grants, RPC signatures/body fingerprints, indexes, private buckets, job constraints, and relevant policies; executes no domain RPC or business query. |
+| `scripts/ops/price-engine-production-preflight.mjs` | Offline analyzer. It has no provider/database/deploy client. Missing metadata, a wrong recorded target, incompatible grants/MIME/indexes, or runtime function drift fail closed. |
+| `scripts/tests/price-engine-production-preflight.test.mjs` | Verifies missing-schema reporting without object creation, target and omitted-snapshot rejection, binary MIME/browser grant blockers, function-body drift, and migration hash/acceptance closure. |
+
+Snapshot transport records the connector's actual project target in an envelope: `{ "project_ref": "<target>", "data": <price_engine_preflight SQL result> }`. The SQL database name alone cannot establish a Supabase project identity. Envelopes contain metadata, never service keys or database connection strings.
+
+The baseline check tests the existing legacy prerequisites and reports absent feature foundation as preparation work. The runtime check requires all feature capabilities and the reviewed staging reference. It reports metadata compatibility separately from provider readiness and commercial canaries.
+
+```sh
+node scripts/ops/price-engine-production-preflight.mjs \
+  --snapshot /absolute/path/production-metadata.json \
+  --project-ref zjgueqijumzlfioihnkt --phase baseline
+
+node scripts/ops/price-engine-production-preflight.mjs \
+  --snapshot /absolute/path/production-metadata.json \
+  --reference /absolute/path/v3-staging-metadata.json \
+  --project-ref zjgueqijumzlfioihnkt --phase runtime
+```
+
+These commands analyze saved snapshots only. Neither command applies SQL, changes an environment variable, dispatches a worker, or deploys a site. Runtime `production_ready` also remains false while any required acceptance result is pending in the manifest.
+
+### Ordered Promotion Contract
+
+1. Record the exact current production Netlify deployment and Render image revisions. Capture baseline metadata and source definitions before any change; retain existing customer profiles, jobs, catalog, supplier prices, and publication provenance.
+2. Replay the captured supplier foundation and its helper/policy dependencies first on a disposable production-shaped database. Add the separately reviewed exact-production publication interface; the two `publish_supplier_price_release_staging` migration files are explicitly excluded. Their function bodies contain no actual project guard, despite the staging-only comments.
+3. Replay the supplier validation upgrades, published-price consumer bridges and their A/B/customer-identity guards, bounded export source/index/job contract upgrades, and catalog private-source/validation/finalization chain in the manifest's explicit dependency order. Do not run every branch migration or the automatic "apply all staged migrations" ship path.
+4. Check the upgraded schema and grants against the runtime snapshot contract. Preserve the production authenticator timeout; only the three bounded JSON export chunk RPCs carry their reviewed 35-second budget. Confirm complete keyset counts and current-pointer fail-closed behavior before opening work admission.
+5. Prepare distinct production supplier and catalog Render services and DBOS history databases using the reviewed production target/origin opt-ins. Staging service/history definitions and operator-recovery IDs are not production configuration. Netlify export DB credentials must target production with TLS certificate verification retained.
+6. Activate the reviewed build and admissions only after schema/provider checks pass. Run the small authorized production canaries described below before declaring full integration complete. The preparation itself performs none of these production mutations.
+
+### Commercial Acceptance
+
+Acceptance must follow one scoped source file through bytes/hash/row sealing, persisted validation, explicit publication, the supplier current pointer, purchase-price lookup, A/B or customer explicit markup, quotation and linked sales/invoice identity, and the final exported file. Use leading-zero and punctuated product identities, one valid row, a duplicate normalized identity, and an ineligible currency/date/price case. Replayed admission/publication must not duplicate truth records. A validated release is distinct from a published release.
+
+For a valid EUR purchase price, Master, supplier export and quotation must select the same published source. A and B use their active settings with decimal half-up rounding; a nonempty explicit customer markup overrides that customer's list profile. C must not be offered or silently selected. The existing Ersen-account A-profile instruction must be verified on the production account before customer acceptance; staging account state does not resolve production customer data.
+
+The customer upload-for-price-query limit remains 200 lines with a visible warning. It is a separate bounded query workflow, not the million-row supplier import or export. Verify that the warning and splitting guidance remain available rather than increasing the query limit during this promotion.
+
+Catalog acceptance uses an authorized scoped catalog CSV, source verification and a worker restart/resume, then exact single finalization. Its completed source must no longer be pollable. Export acceptance covers customer/admin A/B, supplier plus brand, Master/Supplier Comparison, and catalog CSV/XLSX through the authenticated browser. Confirm full counts, source versions, complete multipart byte totals, product-code identity, numeric prices, and the explicit XLSX row/browser-size guard; a successful API response alone is insufficient.
+
+### Rollback Boundary
+
+Before activation, record the prior Netlify deploy ID and production worker image revisions in the acceptance evidence. Stop new supplier/catalog admissions through their exact-production opt-ins, stop or drain the corresponding workers, and retain leases/history so an old process cannot publish a different attempt's result. Restore the prior reviewed Netlify/Render builds as needed.
+
+The prepared catalog, Master and supplier export routes now require the exact production Supabase URL/`NM_PRODUCTION_TARGET`, no staging target, `NM_PRODUCTION_ADMIN_EXPORT_ENABLED=1`, and `NM_PRODUCTION_EXPORT_PAUSED=0`. Closing that gate blocks new starts, worker entry, retries, and newly signed downloads. An already-running background function and a previously issued five-minute signed URL can still complete; closing the gate does not revoke them mid-flight. Persisted finalized artifacts and completed operations remain available for trusted operational inspection.
+
+The verified current production baseline is Netlify deployment `6ac57511d27a107c6c49cff3` (public version: branch `master`, git `local`, build time `2026-10-06T22:24:25Z`). Its export bridge is disabled (`NM_PRODUCTION_EXPORT_BRIDGE=0`) and paused (`NM_PRODUCTION_EXPORT_PAUSED=1`); catalog storage and supplier verified-admission/verification flags are unset. This records the prior production build and closed flags, not a promotion of the prepared code.
+
+Rollback does not delete DBOS history, upload source evidence, completed export objects, supplier publications, finalized catalog data, or existing prices. The separately prepared production publication/reversal migration keeps both database controls disabled by default. Reviewed operator decisions bind actor, tenant/supplier/brand, review revision, target publication and expected current pointer, and persist immutable receipts. Historical publication replay does not move a newer pointer backward. Reversal is a separate audited domain operation; it does not rewrite historical sales orders, purchase orders or quotation snapshots. If additive migration changes introduce a defect, keep admissions closed and apply a reviewed forward repair.
+
+### Preparation Verification
+
+The local read-only preflight and offline gate suites passed 5/5 tests, including actual metadata SQL execution in embedded PostgreSQL against a database with none of the feature tables. It returned absent capabilities without creating an object. This verifies the preparation tooling only. Foundation replay, production worker readiness, authenticated production canaries and deployment remain separate evidence slots; pending slots prevent the manifest from reporting production ready.
+
+The final metadata snapshot shape covers 32 tables, 36 required columns, 52 exact public/private function capabilities, nine performance/lease indexes, four private buckets and two private schema boundaries. Production-specific publication/reversal functions are checked independently of the staging function fingerprints, since they are intentionally absent from the staging contract.
+
+The supplier admission target/Auth/session/object-scope tests, ported browser transport suites, replace-only guards and pure-JavaScript checksum suites passed 53/53 tests, including the actual TUS SDK resuming an interrupted PATCH with HEAD at the exact offset into the same object. Foreign hosts/receipts, revoked/expired sessions, unknown revocation state, tenant denials, missing production flags, and oversized finish bodies were rejected before the relevant mutation. The actual compiled client rejects merge without a file read, progress event, Auth lookup or network request; the server rejects authenticated merge before any session RPC. Checksum tests compare Node crypto across SHA block and 1 MiB chunk boundaries, non-UTF8 and zero bytes; empty or aborted inputs are rejected, and a timer can pause work before the second read. No fixture network request escaped the mocked transport; these are local contract tests, not real production Auth/browser evidence. Frontend TypeScript passed, and the existing complete-export regression suites still passed 40/40 after the scoped supplier upload port.
+
+The captured foundation's migration/grant/type/tenant/lease/Storage fixture suites passed 5/5 tests, and its actual production publication integration with the captured cross-brand validator passed 3/3 tests. The exact Ersen customer alignment's compare-and-set fixtures passed 2/2. These results do not establish that all 57 schema entries have been replayed together on a full production-shaped clone: that ordered-chain acceptance remains pending, along with provider readiness and authenticated production business canaries.

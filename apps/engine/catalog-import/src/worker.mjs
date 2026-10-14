@@ -1,9 +1,9 @@
 import { DBOS } from "@dbos-inc/dbos-sdk";
 import { runCatalogStorageImport } from "./catalog-worker.mjs";
+import { requireCatalogWorkerTarget } from "./catalog-target-config.mjs";
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/+$/, "");
 const SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
-const EXPECTED_STAGING_TARGET = "kaxsqafdevabkxofwdod";
 const WORKER_ID = String(process.env.CATALOG_IMPORT_WORKER_ID || `catalog-storage:${process.pid}`);
 const QUEUE_NAME = "catalog-import-storage";
 const APP_VERSION = "0.1.0-catalog-storage";
@@ -12,10 +12,7 @@ const FINALIZE_BATCH_SIZE = Math.max(100, Math.min(1000, Number(process.env.CATA
 const MAX_FINALIZATION_BATCHES = Math.max(1, Math.min(50, Number(process.env.CATALOG_IMPORT_MAX_FINALIZATION_BATCHES || 12)));
 
 function requireConfig() {
-  if (!/^https:\/\//.test(SUPABASE_URL)) throw new Error("CATALOG_SUPABASE_URL_REQUIRED");
-  if (new URL(SUPABASE_URL).hostname !== `${EXPECTED_STAGING_TARGET}.supabase.co` && process.env.CATALOG_IMPORT_ALLOW_PRODUCTION !== "1") throw new Error("CATALOG_STAGING_TARGET_REQUIRED");
-  if (!SERVICE_ROLE_KEY) throw new Error("CATALOG_SUPABASE_SERVICE_ROLE_REQUIRED");
-  if (!process.env.DBOS_SYSTEM_DATABASE_URL) throw new Error("CATALOG_DBOS_SYSTEM_DATABASE_REQUIRED");
+  requireCatalogWorkerTarget(process.env);
 }
 
 function headers(contentType = "application/json") {

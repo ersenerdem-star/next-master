@@ -1,0 +1,69 @@
+# PREPARATION ONLY: not applied, deployed or approved for new expenditure.
+# Applying this Blueprint provisions a paid worker, disk and private Postgres.
+# Review the release commit and database/API/storage preflight before activation.
+# Production intake never publishes prices; publication remains a separate gate.
+previews:
+  generation: off
+
+services:
+  - type: worker
+    name: next-master-supplier-price-production-worker
+    runtime: docker
+    plan: 1c-2g
+    region: frankfurt
+    repo: https://github.com/ersenerdem-star/next-master
+    branch: codex/price-engine-integration
+    dockerContext: apps/engine/supplier-price-shadow
+    dockerfilePath: apps/engine/supplier-price-shadow/Dockerfile
+    autoDeployTrigger: off
+    numInstances: 1
+    disk:
+      name: production-single-instance-guard
+      mountPath: /var/lib/next-master-deployment-guard
+      sizeGB: 1
+    envVars:
+      - key: SUPABASE_URL
+        value: https://zjgueqijumzlfioihnkt.supabase.co
+      - key: SUPPLIER_PRICE_EXPECTED_HOST
+        value: zjgueqijumzlfioihnkt.supabase.co
+      - key: SUPPLIER_PRICE_TARGET_ENVIRONMENT
+        value: production
+      # Fill "1" only during the reviewed production activation.
+      # These gates are deliberately absent from the committed Blueprint.
+      - key: SUPPLIER_PRICE_PRODUCTION_ENABLED
+        sync: false
+      - key: SUPPLIER_PRICE_SERVICE_ENABLED
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: DBOS_SYSTEM_DATABASE_URL
+        fromDatabase:
+          name: next-master-supplier-price-production-history
+          property: connectionString
+      - key: SUPPLIER_PRICE_EXECUTOR_ID
+        value: supplier-price-production-01
+      - key: SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED
+        sync: false
+      - key: SUPPLIER_PRICE_UPLOAD_VERIFICATION_ENABLED
+        value: "1"
+      - key: SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED
+        value: "1"
+      - key: SUPPLIER_PRICE_SHARED_PREPARED_ENABLED
+        value: "1"
+      - key: SUPPLIER_PRICE_SHADOW_PERSIST
+        value: "1"
+      - key: SUPPLIER_PRICE_SHADOW_BATCH_SIZE
+        value: "1000"
+      - key: PORT
+        value: "3000"
+
+databases:
+  - name: next-master-supplier-price-production-history
+    plan: 0.5c-1g
+    region: frankfurt
+    postgresMajorVersion: "17"
+    databaseName: nm_supplier_production_history
+    user: nm_supplier_production_worker
+    diskSizeGB: 5
+    storageAutoscalingEnabled: false
+    ipAllowList: []

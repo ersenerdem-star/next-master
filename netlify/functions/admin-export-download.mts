@@ -3,6 +3,7 @@ import { getAppAuthStatus, resolveCaller } from "./_shared/app-auth.mts";
 import { canAccessOperationsModules } from "./_shared/roles.mts";
 import { createExportArtifactSignedDownload, exportJson, fetchExportJobById } from "./_shared/export-jobs.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
+import { isRemainingAdminExportType, remainingAdminExportsEnabled, remainingAdminExportPauseMessage } from "./_shared/admin-export-target.mts";
 
 export default async (req: Request) => {
   if (req.method !== "POST") return exportJson({ error: "Method not allowed" }, 405);
@@ -23,6 +24,9 @@ export default async (req: Request) => {
     if (!jobId) return exportJson({ error: "jobId is required." }, 400);
     const job = await fetchExportJobById(supabaseUrl, serviceRoleKey, caller.organizationId, jobId);
     if (!job) return exportJson({ error: "Export job not found." }, 404);
+    if (isRemainingAdminExportType(job.export_type) && !remainingAdminExportsEnabled()) {
+      return exportJson({ error: remainingAdminExportPauseMessage }, 503, { "Retry-After": "300" });
+    }
     if (job.status !== "finalized") return exportJson({ error: "Export file is not ready yet." }, 409);
     const download = await createExportArtifactSignedDownload(supabaseUrl, serviceRoleKey, job);
     return exportJson({ ok: true, ...download }, 200);

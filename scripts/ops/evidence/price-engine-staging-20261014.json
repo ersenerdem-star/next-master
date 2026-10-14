@@ -1,0 +1,2423 @@
+{
+  "project_ref": "kaxsqafdevabkxofwdod",
+  "source": "Supabase MCP execute_sql; metadata only; no domain RPC called",
+  "data": {
+    "tables": [
+      {
+        "rls": true,
+        "name": "brands",
+        "phase": "baseline",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": true,
+        "service_insert": true,
+        "service_select": true,
+        "service_update": true,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "catalog_import_runs",
+        "phase": "baseline",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": true,
+        "service_update": true,
+        "restricted_browser": false,
+        "authenticated_access": false
+      },
+      {
+        "rls": true,
+        "name": "catalog_import_stage",
+        "phase": "baseline",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": false,
+        "service_update": false,
+        "restricted_browser": false,
+        "authenticated_access": false
+      },
+      {
+        "rls": true,
+        "name": "catalog_products",
+        "phase": "baseline",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": true,
+        "service_insert": true,
+        "service_select": true,
+        "service_update": true,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "customer_price_lists",
+        "phase": "baseline",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": true,
+        "service_update": false,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "customers",
+        "phase": "baseline",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": true,
+        "service_insert": true,
+        "service_select": true,
+        "service_update": true,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "invoices",
+        "phase": "baseline",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": true,
+        "service_insert": true,
+        "service_select": true,
+        "service_update": true,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "organizations",
+        "phase": "baseline",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": true,
+        "service_insert": true,
+        "service_select": true,
+        "service_update": true,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "profiles",
+        "phase": "baseline",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": true,
+        "service_insert": true,
+        "service_select": true,
+        "service_update": true,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "sales_orders",
+        "phase": "baseline",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": true,
+        "service_insert": true,
+        "service_select": true,
+        "service_update": true,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "supplier_price_import_runs",
+        "phase": "baseline",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": true,
+        "service_update": true,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "supplier_price_rollups",
+        "phase": "baseline",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": true,
+        "service_update": false,
+        "restricted_browser": false,
+        "authenticated_access": false
+      },
+      {
+        "rls": true,
+        "name": "supplier_prices",
+        "phase": "baseline",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": true,
+        "service_insert": true,
+        "service_select": true,
+        "service_update": true,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "suppliers",
+        "phase": "baseline",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": true,
+        "service_update": false,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "app_export_jobs",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": true,
+        "service_select": true,
+        "service_update": true,
+        "restricted_browser": true,
+        "authenticated_access": false
+      },
+      {
+        "rls": true,
+        "name": "catalog_import_source_batches",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": true,
+        "service_update": false,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "catalog_import_sources",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": true,
+        "service_update": true,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "supplier_current_price_pointers",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": false,
+        "service_update": false,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "supplier_price_ingestion_internal.handoffs",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": false,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": false,
+        "service_update": false,
+        "restricted_browser": true,
+        "authenticated_access": false
+      },
+      {
+        "rls": null,
+        "name": "supplier_price_ingestion_internal.production_publication_control",
+        "phase": "runtime",
+        "present": false,
+        "anon_access": null,
+        "exposed_schema": false,
+        "service_delete": null,
+        "service_insert": null,
+        "service_select": null,
+        "service_update": null,
+        "restricted_browser": true,
+        "authenticated_access": null
+      },
+      {
+        "rls": null,
+        "name": "supplier_price_ingestion_internal.production_publication_decisions",
+        "phase": "runtime",
+        "present": false,
+        "anon_access": null,
+        "exposed_schema": false,
+        "service_delete": null,
+        "service_insert": null,
+        "service_select": null,
+        "service_update": null,
+        "restricted_browser": true,
+        "authenticated_access": null
+      },
+      {
+        "rls": null,
+        "name": "supplier_price_ingestion_internal.production_publication_reversals",
+        "phase": "runtime",
+        "present": false,
+        "anon_access": null,
+        "exposed_schema": false,
+        "service_delete": null,
+        "service_insert": null,
+        "service_select": null,
+        "service_update": null,
+        "restricted_browser": true,
+        "authenticated_access": null
+      },
+      {
+        "rls": true,
+        "name": "supplier_price_ingestion_internal.verification_requests",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": false,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": false,
+        "service_update": false,
+        "restricted_browser": true,
+        "authenticated_access": false
+      },
+      {
+        "rls": true,
+        "name": "supplier_price_publications",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": false,
+        "service_update": false,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "supplier_price_release_batches",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": false,
+        "service_update": false,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "supplier_price_release_events",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": false,
+        "service_update": false,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "supplier_price_release_rows",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": false,
+        "service_update": false,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "supplier_price_release_validation_code_counts",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": true,
+        "service_insert": true,
+        "service_select": true,
+        "service_update": true,
+        "restricted_browser": false,
+        "authenticated_access": false
+      },
+      {
+        "rls": true,
+        "name": "supplier_price_release_validation_runs",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": true,
+        "service_insert": true,
+        "service_select": true,
+        "service_update": true,
+        "restricted_browser": false,
+        "authenticated_access": false
+      },
+      {
+        "rls": true,
+        "name": "supplier_price_releases",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": false,
+        "service_update": false,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "supplier_price_upload_sessions",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": true,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": false,
+        "service_update": false,
+        "restricted_browser": false,
+        "authenticated_access": true
+      },
+      {
+        "rls": true,
+        "name": "supplier_price_validation_internal.review_decisions",
+        "phase": "runtime",
+        "present": true,
+        "anon_access": false,
+        "exposed_schema": false,
+        "service_delete": false,
+        "service_insert": false,
+        "service_select": false,
+        "service_update": false,
+        "restricted_browser": true,
+        "authenticated_access": false
+      }
+    ],
+    "buckets": [
+      {
+        "name": "app-exports",
+        "public": false,
+        "present": true,
+        "private": true,
+        "needs_binary": true,
+        "minimum_limit": 41943040,
+        "file_size_limit": null,
+        "size_compatible": true,
+        "binary_compatible": true,
+        "allowed_mime_types": null
+      },
+      {
+        "name": "catalog-imports",
+        "public": false,
+        "present": true,
+        "private": true,
+        "needs_binary": true,
+        "minimum_limit": 1073741824,
+        "file_size_limit": 1073741824,
+        "size_compatible": true,
+        "binary_compatible": true,
+        "allowed_mime_types": [
+          "text/csv",
+          "text/plain",
+          "text/tab-separated-values",
+          "application/csv",
+          "application/vnd.ms-excel",
+          "application/octet-stream"
+        ]
+      },
+      {
+        "name": "supplier-price-imports",
+        "public": false,
+        "present": true,
+        "private": true,
+        "needs_binary": true,
+        "minimum_limit": 1073741824,
+        "file_size_limit": 1073741824,
+        "size_compatible": true,
+        "binary_compatible": true,
+        "allowed_mime_types": [
+          "text/csv",
+          "text/plain",
+          "application/csv",
+          "application/vnd.ms-excel",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "application/octet-stream"
+        ]
+      },
+      {
+        "name": "supplier-price-prepared",
+        "public": false,
+        "present": true,
+        "private": true,
+        "needs_binary": true,
+        "minimum_limit": 33554432,
+        "file_size_limit": null,
+        "size_compatible": true,
+        "binary_compatible": true,
+        "allowed_mime_types": null
+      }
+    ],
+    "columns": [
+      {
+        "phase": "baseline",
+        "present": true,
+        "type_name": "jsonb",
+        "compatible": true,
+        "table_name": "catalog_import_runs",
+        "actual_type": "jsonb",
+        "column_name": "input_scope"
+      },
+      {
+        "phase": "baseline",
+        "present": true,
+        "type_name": "uuid",
+        "compatible": true,
+        "table_name": "catalog_import_runs",
+        "actual_type": "uuid",
+        "column_name": "organization_id"
+      },
+      {
+        "phase": "baseline",
+        "present": true,
+        "type_name": "uuid",
+        "compatible": true,
+        "table_name": "catalog_import_stage",
+        "actual_type": "uuid",
+        "column_name": "run_id"
+      },
+      {
+        "phase": "baseline",
+        "present": true,
+        "type_name": "boolean",
+        "compatible": true,
+        "table_name": "profiles",
+        "actual_type": "boolean",
+        "column_name": "is_active"
+      },
+      {
+        "phase": "baseline",
+        "present": true,
+        "type_name": "timestamp with time zone",
+        "compatible": true,
+        "table_name": "profiles",
+        "actual_type": "timestamp with time zone",
+        "column_name": "session_revoked_at"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "integer",
+        "compatible": true,
+        "table_name": "app_export_jobs",
+        "actual_type": "integer",
+        "column_name": "byte_size"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "text",
+        "compatible": true,
+        "table_name": "app_export_jobs",
+        "actual_type": "text",
+        "column_name": "data_version"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "uuid",
+        "compatible": true,
+        "table_name": "app_export_jobs",
+        "actual_type": "uuid",
+        "column_name": "organization_id"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "uuid",
+        "compatible": true,
+        "table_name": "app_export_jobs",
+        "actual_type": "uuid",
+        "column_name": "requested_by"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "integer",
+        "compatible": true,
+        "table_name": "app_export_jobs",
+        "actual_type": "integer",
+        "column_name": "row_count"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "jsonb",
+        "compatible": true,
+        "table_name": "app_export_jobs",
+        "actual_type": "jsonb",
+        "column_name": "scope"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "timestamp with time zone",
+        "compatible": true,
+        "table_name": "app_export_jobs",
+        "actual_type": "timestamp with time zone",
+        "column_name": "started_at"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "text",
+        "compatible": true,
+        "table_name": "app_export_jobs",
+        "actual_type": "text",
+        "column_name": "storage_path"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "timestamp with time zone",
+        "compatible": true,
+        "table_name": "app_export_jobs",
+        "actual_type": "timestamp with time zone",
+        "column_name": "updated_at"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "timestamp with time zone",
+        "compatible": true,
+        "table_name": "app_export_jobs",
+        "actual_type": "timestamp with time zone",
+        "column_name": "worker_lease_expires_at"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "text",
+        "compatible": true,
+        "table_name": "app_export_jobs",
+        "actual_type": "text",
+        "column_name": "worker_lease_owner"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "jsonb",
+        "compatible": true,
+        "table_name": "catalog_import_sources",
+        "actual_type": "jsonb",
+        "column_name": "input_scope"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "bigint",
+        "compatible": true,
+        "table_name": "catalog_import_sources",
+        "actual_type": "bigint",
+        "column_name": "lease_generation"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "uuid",
+        "compatible": true,
+        "table_name": "catalog_import_sources",
+        "actual_type": "uuid",
+        "column_name": "lease_token"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "bigint",
+        "compatible": true,
+        "table_name": "catalog_import_sources",
+        "actual_type": "bigint",
+        "column_name": "verified_lease_generation"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "uuid",
+        "compatible": true,
+        "table_name": "supplier_current_price_pointers",
+        "actual_type": "uuid",
+        "column_name": "publication_id"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "uuid",
+        "compatible": true,
+        "table_name": "supplier_current_price_pointers",
+        "actual_type": "uuid",
+        "column_name": "release_id"
+      },
+      {
+        "phase": "runtime",
+        "present": false,
+        "type_name": "uuid",
+        "compatible": false,
+        "table_name": "supplier_price_ingestion_internal.production_publication_control",
+        "actual_type": null,
+        "column_name": "activation_decision_id"
+      },
+      {
+        "phase": "runtime",
+        "present": false,
+        "type_name": "boolean",
+        "compatible": false,
+        "table_name": "supplier_price_ingestion_internal.production_publication_control",
+        "actual_type": null,
+        "column_name": "enabled"
+      },
+      {
+        "phase": "runtime",
+        "present": false,
+        "type_name": "text",
+        "compatible": false,
+        "table_name": "supplier_price_ingestion_internal.production_publication_control",
+        "actual_type": null,
+        "column_name": "expected_project_ref"
+      },
+      {
+        "phase": "runtime",
+        "present": false,
+        "type_name": "boolean",
+        "compatible": false,
+        "table_name": "supplier_price_ingestion_internal.production_publication_control",
+        "actual_type": null,
+        "column_name": "reversal_enabled"
+      },
+      {
+        "phase": "runtime",
+        "present": false,
+        "type_name": "uuid",
+        "compatible": false,
+        "table_name": "supplier_price_ingestion_internal.production_publication_decisions",
+        "actual_type": null,
+        "column_name": "decision_id"
+      },
+      {
+        "phase": "runtime",
+        "present": false,
+        "type_name": "bigint",
+        "compatible": false,
+        "table_name": "supplier_price_ingestion_internal.production_publication_decisions",
+        "actual_type": null,
+        "column_name": "review_revision"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "numeric",
+        "compatible": true,
+        "table_name": "supplier_price_release_rows",
+        "actual_type": "numeric",
+        "column_name": "buy_price"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "text",
+        "compatible": true,
+        "table_name": "supplier_price_release_rows",
+        "actual_type": "text",
+        "column_name": "currency"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "text",
+        "compatible": true,
+        "table_name": "supplier_price_release_rows",
+        "actual_type": "text",
+        "column_name": "normalized_code"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "text",
+        "compatible": true,
+        "table_name": "supplier_price_release_rows",
+        "actual_type": "text",
+        "column_name": "product_code"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "text",
+        "compatible": true,
+        "table_name": "supplier_price_release_rows",
+        "actual_type": "text",
+        "column_name": "row_status"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "jsonb",
+        "compatible": true,
+        "table_name": "supplier_price_releases",
+        "actual_type": "jsonb",
+        "column_name": "brand_identity_audit"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "bigint",
+        "compatible": true,
+        "table_name": "supplier_price_releases",
+        "actual_type": "bigint",
+        "column_name": "review_revision"
+      },
+      {
+        "phase": "runtime",
+        "present": true,
+        "type_name": "boolean",
+        "compatible": true,
+        "table_name": "supplier_price_releases",
+        "actual_type": "boolean",
+        "column_name": "source_verification_required"
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_app_export_jobs_cache_lookup",
+        "ready": true,
+        "valid": true,
+        "present": true,
+        "definition": "CREATE INDEX idx_app_export_jobs_cache_lookup ON public.app_export_jobs USING btree (organization_id, export_type, cache_key, status, finalized_at DESC)"
+      },
+      {
+        "name": "idx_app_export_jobs_worker_lease",
+        "ready": true,
+        "valid": true,
+        "present": true,
+        "definition": "CREATE INDEX idx_app_export_jobs_worker_lease ON public.app_export_jobs USING btree (id, worker_lease_expires_at)"
+      },
+      {
+        "name": "idx_catalog_import_sources_dispatch",
+        "ready": true,
+        "valid": true,
+        "present": true,
+        "definition": "CREATE INDEX idx_catalog_import_sources_dispatch ON public.catalog_import_sources USING btree (status, lease_expires_at, updated_at) WHERE (status = ANY (ARRAY['uploaded'::text, 'processing'::text, 'staged'::text]))"
+      },
+      {
+        "name": "idx_catalog_import_stage_run_code_brand",
+        "ready": true,
+        "valid": true,
+        "present": true,
+        "definition": "CREATE INDEX idx_catalog_import_stage_run_code_brand ON public.catalog_import_stage USING btree (run_id, normalized_code, brand)"
+      },
+      {
+        "name": "idx_catalog_import_stage_run_validation",
+        "ready": true,
+        "valid": true,
+        "present": true,
+        "definition": "CREATE INDEX idx_catalog_import_stage_run_validation ON public.catalog_import_stage USING btree (run_id, row_index) WHERE (validation_status = 'pending'::text)"
+      },
+      {
+        "name": "idx_catalog_products_export_code_c_id",
+        "ready": true,
+        "valid": true,
+        "present": true,
+        "definition": "CREATE INDEX idx_catalog_products_export_code_c_id ON public.catalog_products USING btree (organization_id, brand_id, product_code COLLATE \"C\", id)"
+      },
+      {
+        "name": "idx_release_rows_export_exact_eligible_count",
+        "ready": true,
+        "valid": true,
+        "present": true,
+        "definition": "CREATE INDEX idx_release_rows_export_exact_eligible_count ON public.supplier_price_release_rows USING btree (release_id, normalized_code COLLATE \"C\") INCLUDE (valid_from) WHERE ((row_status = 'accepted'::text) AND (buy_price > (0)::numeric) AND (currency = 'EUR'::text) AND (normalized_code = normalize_catalog_product_code(product_code)) AND (normalized_code ~ '[A-Z0-9]'::text))"
+      },
+      {
+        "name": "idx_release_rows_master_export_code_c",
+        "ready": true,
+        "valid": true,
+        "present": true,
+        "definition": "CREATE INDEX idx_release_rows_master_export_code_c ON public.supplier_price_release_rows USING btree (release_id, normalized_code COLLATE \"C\", id) WHERE ((row_status = 'accepted'::text) AND (buy_price > (0)::numeric) AND (currency = 'EUR'::text))"
+      },
+      {
+        "name": "idx_release_rows_supplier_export_code_c",
+        "ready": true,
+        "valid": true,
+        "present": true,
+        "definition": "CREATE INDEX idx_release_rows_supplier_export_code_c ON public.supplier_price_release_rows USING btree (release_id, product_code COLLATE \"C\", ((md5((id)::text))::uuid)) WHERE ((row_status = 'accepted'::text) AND (buy_price > (0)::numeric) AND (currency = 'EUR'::text))"
+      }
+    ],
+    "schemas": [
+      {
+        "name": "supplier_price_ingestion_internal",
+        "present": true,
+        "anon_usage": false,
+        "service_usage": false,
+        "authenticated_usage": false
+      },
+      {
+        "name": "supplier_price_validation_internal",
+        "present": true,
+        "anon_usage": false,
+        "service_usage": true,
+        "authenticated_usage": false
+      }
+    ],
+    "database": "postgres",
+    "policies": [
+      {
+        "cmd": "SELECT",
+        "qual": "((organization_id = current_profile_org_id()) AND (current_profile_role() = ANY (ARRAY['admin'::text, 'superadmin'::text])))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "catalog_import_source_batches",
+        "permissive": "PERMISSIVE",
+        "policyname": "catalog_import_source_batches_select_ops",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "((organization_id = current_profile_org_id()) AND (current_profile_role() = ANY (ARRAY['admin'::text, 'superadmin'::text])))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "catalog_import_sources",
+        "permissive": "PERMISSIVE",
+        "policyname": "catalog_import_sources_select_ops",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "((current_profile_role() = ANY (ARRAY['admin'::text, 'superadmin'::text])) AND (organization_id = current_profile_org_id()))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "supplier_price_releases",
+        "permissive": "PERMISSIVE",
+        "policyname": "supplier_price_releases_admin_select",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "((current_profile_role() = ANY (ARRAY['admin'::text, 'superadmin'::text])) AND (organization_id = current_profile_org_id()))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "supplier_price_upload_sessions",
+        "permissive": "PERMISSIVE",
+        "policyname": "supplier_price_upload_sessions_admin_select",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "ALL",
+        "qual": "(bucket_id <> 'catalog-imports'::text)",
+        "roles": [
+          "anon"
+        ],
+        "tablename": "objects",
+        "permissive": "RESTRICTIVE",
+        "policyname": "catalog_import_objects_anon_fence",
+        "schemaname": "storage",
+        "with_check": "(bucket_id <> 'catalog-imports'::text)"
+      },
+      {
+        "cmd": "DELETE",
+        "qual": "((bucket_id = 'catalog-imports'::text) AND catalog_storage_object_allowed(name, true))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "objects",
+        "permissive": "PERMISSIVE",
+        "policyname": "catalog_import_objects_delete",
+        "schemaname": "storage",
+        "with_check": null
+      },
+      {
+        "cmd": "DELETE",
+        "qual": "((bucket_id <> 'catalog-imports'::text) OR catalog_storage_object_allowed(name, true))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "objects",
+        "permissive": "RESTRICTIVE",
+        "policyname": "catalog_import_objects_delete_fence",
+        "schemaname": "storage",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "objects",
+        "permissive": "PERMISSIVE",
+        "policyname": "catalog_import_objects_insert",
+        "schemaname": "storage",
+        "with_check": "((bucket_id = 'catalog-imports'::text) AND catalog_storage_object_allowed(name, true))"
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "objects",
+        "permissive": "RESTRICTIVE",
+        "policyname": "catalog_import_objects_insert_fence",
+        "schemaname": "storage",
+        "with_check": "((bucket_id <> 'catalog-imports'::text) OR catalog_storage_object_allowed(name, true))"
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "((bucket_id = 'catalog-imports'::text) AND catalog_storage_object_allowed(name, false))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "objects",
+        "permissive": "PERMISSIVE",
+        "policyname": "catalog_import_objects_select",
+        "schemaname": "storage",
+        "with_check": null
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "((bucket_id <> 'catalog-imports'::text) OR catalog_storage_object_allowed(name, false))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "objects",
+        "permissive": "RESTRICTIVE",
+        "policyname": "catalog_import_objects_select_fence",
+        "schemaname": "storage",
+        "with_check": null
+      },
+      {
+        "cmd": "UPDATE",
+        "qual": "((bucket_id = 'catalog-imports'::text) AND catalog_storage_object_allowed(name, true))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "objects",
+        "permissive": "PERMISSIVE",
+        "policyname": "catalog_import_objects_update",
+        "schemaname": "storage",
+        "with_check": "((bucket_id = 'catalog-imports'::text) AND catalog_storage_object_allowed(name, true))"
+      },
+      {
+        "cmd": "UPDATE",
+        "qual": "((bucket_id <> 'catalog-imports'::text) OR catalog_storage_object_allowed(name, true))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "objects",
+        "permissive": "RESTRICTIVE",
+        "policyname": "catalog_import_objects_update_fence",
+        "schemaname": "storage",
+        "with_check": "((bucket_id <> 'catalog-imports'::text) OR catalog_storage_object_allowed(name, true))"
+      },
+      {
+        "cmd": "DELETE",
+        "qual": "((bucket_id = 'supplier-price-imports'::text) AND (split_part(name, '/'::text, 1) = (current_profile_org_id())::text) AND profile_has_permission('supplier_prices.manage'::text))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "objects",
+        "permissive": "PERMISSIVE",
+        "policyname": "supplier_price_import_objects_delete",
+        "schemaname": "storage",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "qual": null,
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "objects",
+        "permissive": "PERMISSIVE",
+        "policyname": "supplier_price_import_objects_insert",
+        "schemaname": "storage",
+        "with_check": "((bucket_id = 'supplier-price-imports'::text) AND (split_part(name, '/'::text, 1) = (current_profile_org_id())::text) AND profile_has_permission('supplier_prices.manage'::text))"
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "((bucket_id = 'supplier-price-imports'::text) AND (split_part(name, '/'::text, 1) = (current_profile_org_id())::text) AND profile_has_permission('supplier_prices.manage'::text))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "objects",
+        "permissive": "PERMISSIVE",
+        "policyname": "supplier_price_import_objects_select",
+        "schemaname": "storage",
+        "with_check": null
+      },
+      {
+        "cmd": "UPDATE",
+        "qual": "((bucket_id = 'supplier-price-imports'::text) AND (split_part(name, '/'::text, 1) = (current_profile_org_id())::text) AND profile_has_permission('supplier_prices.manage'::text))",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "objects",
+        "permissive": "PERMISSIVE",
+        "policyname": "supplier_price_import_objects_update",
+        "schemaname": "storage",
+        "with_check": "((bucket_id = 'supplier-price-imports'::text) AND (split_part(name, '/'::text, 1) = (current_profile_org_id())::text) AND profile_has_permission('supplier_prices.manage'::text))"
+      }
+    ],
+    "functions": [
+      {
+        "name": "begin_catalog_import",
+        "phase": "baseline",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=public"
+            ],
+            "signature": "begin_catalog_import(jsonb,text)",
+            "definition_md5": "8c80af77991802e20cbe16321d23f682",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.begin_catalog_import(jsonb,text)",
+        "owner_only": false,
+        "anon_execute": true,
+        "service_only": false,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": true,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "current_profile_org_id",
+        "phase": "baseline",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=public"
+            ],
+            "signature": "current_profile_org_id()",
+            "definition_md5": "a25e504553d64d38e795258e2f453292",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.current_profile_org_id()",
+        "owner_only": false,
+        "anon_execute": true,
+        "service_only": false,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": true,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "current_profile_role",
+        "phase": "baseline",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=public"
+            ],
+            "signature": "current_profile_role()",
+            "definition_md5": "ae3a4585671153b8ff77ba6997d66737",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.current_profile_role()",
+        "owner_only": false,
+        "anon_execute": true,
+        "service_only": false,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": true,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "finalize_catalog_import",
+        "phase": "baseline",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=public"
+            ],
+            "signature": "finalize_catalog_import(uuid)",
+            "definition_md5": "70bd1e1ce7d1183b8b6ff7393dd702a6",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.finalize_catalog_import(uuid)",
+        "owner_only": false,
+        "anon_execute": true,
+        "service_only": false,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": true,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "stage_catalog_import_chunk",
+        "phase": "baseline",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=public"
+            ],
+            "signature": "stage_catalog_import_chunk(uuid,jsonb)",
+            "definition_md5": "d32753ab22e73d0639c01055d5f26bc4",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.stage_catalog_import_chunk(uuid,jsonb)",
+        "owner_only": false,
+        "anon_execute": true,
+        "service_only": false,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": true,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "ack_supplier_price_verified_handoff",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "ack_supplier_price_verified_handoff(uuid,text,uuid,text)",
+            "definition_md5": "1b43ce42f966864b9175174222126762",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "begin_catalog_import_storage",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=public, pg_temp"
+            ],
+            "signature": "begin_catalog_import_storage(jsonb,text,text,text,bigint,text,text)",
+            "definition_md5": "59516c400ed343da28f344d2767a49eb",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.begin_catalog_import_storage(jsonb,text,text,text,bigint,text,text)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": false,
+        "private_helper": false,
+        "service_execute": false,
+        "reference_required": true,
+        "authenticated_execute": true,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "begin_supplier_price_upload_verification",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "begin_supplier_price_upload_verification(uuid,uuid,uuid)",
+            "definition_md5": "6f8cb4f18c7623b660969a64d2d53c4c",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "claim_catalog_import_storage_source_system",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=public, pg_temp"
+            ],
+            "signature": "claim_catalog_import_storage_source_system(uuid,uuid,uuid,text,integer)",
+            "definition_md5": "47abb975be5397772c7af7429d132887",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "claim_supplier_price_release_batch",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "claim_supplier_price_release_batch(uuid,text,integer,integer)",
+            "definition_md5": "63c7aef8bccb07cc3a700e5aa629f021",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.claim_supplier_price_release_batch(uuid,text,integer,integer)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "claim_supplier_price_upload_verification",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "claim_supplier_price_upload_verification(text,integer)",
+            "definition_md5": "17ab4a3cc1926960a5d84f1b7bd73967",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "claim_supplier_price_verified_handoff",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "claim_supplier_price_verified_handoff(text,integer)",
+            "definition_md5": "6d77ef1d1f56db756880d4ca149c4e82",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "claim_supplier_price_verified_release_batch",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "claim_supplier_price_verified_release_batch(uuid,uuid,text,integer,integer)",
+            "definition_md5": "20ba51109c4ab4f6facbe7f3afe87a36",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "cloud_catalog_export_chunk_v3",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\"",
+              "statement_timeout=35s"
+            ],
+            "signature": "cloud_catalog_export_chunk_v3(uuid,uuid,text,uuid,integer)",
+            "definition_md5": "26f0d6ca752b5791e2f71be23aae0209",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.cloud_catalog_export_chunk_v3(uuid,uuid,text,uuid,integer)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "cloud_catalog_master_export_chunk_v3",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\"",
+              "statement_timeout=35s"
+            ],
+            "signature": "cloud_catalog_master_export_chunk_v3(uuid,uuid,text,text,text,uuid,integer,numeric,numeric)",
+            "definition_md5": "d185abd13056e0be939844ab3c1cf46a",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.cloud_catalog_master_export_chunk_v3(uuid,uuid,text,text,text,uuid,integer,numeric,numeric)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "cloud_current_supplier_price_options_core",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "cloud_current_supplier_price_options_core(uuid,text,text)",
+            "definition_md5": "d9ba262350aa8fb9d465738d8c6b933d",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.cloud_current_supplier_price_options_core(uuid,text,text)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "cloud_current_supplier_price_options_service",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "cloud_current_supplier_price_options_service(uuid,text,text)",
+            "definition_md5": "a2996586b7cdbdc678c8ff305955c463",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.cloud_current_supplier_price_options_service(uuid,text,text)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "cloud_supplier_price_export_chunk_v3",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\"",
+              "statement_timeout=35s"
+            ],
+            "signature": "cloud_supplier_price_export_chunk_v3(uuid,uuid,uuid,text,text,text,uuid,integer)",
+            "definition_md5": "d2e28668cc52cd289aaf2b05a6545388",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.cloud_supplier_price_export_chunk_v3(uuid,uuid,uuid,text,text,text,uuid,integer)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "complete_catalog_import_storage_upload_system",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=public, pg_temp"
+            ],
+            "signature": "complete_catalog_import_storage_upload_system(uuid,uuid,uuid,text,uuid,bigint,bigint,text)",
+            "definition_md5": "7ade9d00ba70d5a7815076387779957c",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "complete_supplier_price_release_duckdb_validation",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "complete_supplier_price_release_duckdb_validation(uuid,integer,integer,integer,integer,integer,integer,integer,integer)",
+            "definition_md5": "28428b514be100b2447743bb04f4a2cf",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.complete_supplier_price_release_duckdb_validation(uuid,integer,integer,integer,integer,integer,integer,integer,integer)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "complete_supplier_price_verified_upload",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "complete_supplier_price_verified_upload(uuid,uuid,uuid,uuid,text,timestamp with time zone,bigint,text,bigint)",
+            "definition_md5": "01d4b7f466f2c73e98b4c0adf2fa92f3",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "finalize_catalog_import_batch_system",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=public"
+            ],
+            "signature": "finalize_catalog_import_batch_system(uuid,uuid,uuid,integer)",
+            "definition_md5": "9130c22cb4eb8bb802597204edae666b",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.finalize_catalog_import_batch_system(uuid,uuid,uuid,integer)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "finalize_supplier_price_release_shadow_batch",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "finalize_supplier_price_release_shadow_batch(uuid,text,integer,bigint,integer,integer,integer)",
+            "definition_md5": "d047ede87467080c109981875888fc50",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "get_catalog_export_version",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "get_catalog_export_version(uuid,uuid,text)",
+            "definition_md5": "e98a62f318ef4184d617618ec69eb400",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.get_catalog_export_version(uuid,uuid,text)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "get_catalog_master_export_version",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "get_catalog_master_export_version(uuid,uuid,text)",
+            "definition_md5": "43c1539fdc2efde2628e0fb457ebfac8",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.get_catalog_master_export_version(uuid,uuid,text)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "get_supplier_price_release_manifest",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=public, pg_temp"
+            ],
+            "signature": "get_supplier_price_release_manifest(uuid)",
+            "definition_md5": "9ace9f93d0073967f645ccf0af070b8a",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.get_supplier_price_release_manifest(uuid)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "get_supplier_price_release_status",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "get_supplier_price_release_status(uuid[])",
+            "definition_md5": "06bff591d6cfd97c460ba1483d211f27",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.get_supplier_price_release_status(uuid[])",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "get_supplier_price_upload_status",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "get_supplier_price_upload_status(uuid,uuid,uuid,uuid,bigint,bigint)",
+            "definition_md5": "e94309e2dd775581fb178a5a143f92f4",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.get_supplier_price_upload_status(uuid,uuid,uuid,uuid,bigint,bigint)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "get_supplier_price_verified_manifest",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "get_supplier_price_verified_manifest(uuid,uuid)",
+            "definition_md5": "b3d88c87f2866b3b3bc1a5b32cd4d0e8",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "heartbeat_catalog_import_storage_source_system",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=public, pg_temp"
+            ],
+            "signature": "heartbeat_catalog_import_storage_source_system(uuid,uuid,uuid,text,uuid,bigint,integer)",
+            "definition_md5": "a41ca85fa16fc4d1d766e4972616dfe4",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "heartbeat_supplier_price_release_batch",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "heartbeat_supplier_price_release_batch(uuid,text,integer,bigint,integer)",
+            "definition_md5": "166d387d0aa7c9984631e9f5784ccfa6",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "publish_supplier_price_release_production",
+        "phase": "runtime",
+        "present": false,
+        "overloads": [],
+        "signature": "public.publish_supplier_price_release_production(text,uuid,uuid,uuid,uuid,uuid,uuid,bigint,uuid)",
+        "owner_only": false,
+        "anon_execute": null,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": null,
+        "reference_required": false,
+        "authenticated_execute": null,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "recover_expired_supplier_price_release_batches",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=public, pg_temp"
+            ],
+            "signature": "recover_expired_supplier_price_release_batches(integer)",
+            "definition_md5": "b1c4ccf4b07a35b3a127ee8221df362a",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.recover_expired_supplier_price_release_batches(integer)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "request_supplier_price_upload_verification",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "request_supplier_price_upload_verification(uuid,uuid,uuid,uuid,bigint,bigint)",
+            "definition_md5": "9d25def82ad8634a22526414f96eae8c",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.request_supplier_price_upload_verification(uuid,uuid,uuid,uuid,bigint,bigint)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "resume_supplier_price_shadow_finalization",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "resume_supplier_price_shadow_finalization(uuid,text,integer)",
+            "definition_md5": "cb866a6200474d70a1975b0d9a84bf29",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.resume_supplier_price_shadow_finalization(uuid,text,integer)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "reverse_supplier_price_publication_production",
+        "phase": "runtime",
+        "present": false,
+        "overloads": [],
+        "signature": "public.reverse_supplier_price_publication_production(text,uuid,uuid,uuid,uuid,uuid,uuid,uuid,bigint)",
+        "owner_only": false,
+        "anon_execute": null,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": null,
+        "reference_required": false,
+        "authenticated_execute": null,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "settle_supplier_price_upload_verification",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "settle_supplier_price_upload_verification(uuid,text,uuid,text,integer,text)",
+            "definition_md5": "a21dfae2cf7c837bcaad1e3a879b20da",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "stage_catalog_import_storage_batch_system",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=public, extensions, pg_temp"
+            ],
+            "signature": "stage_catalog_import_storage_batch_system(uuid,uuid,uuid,text,uuid,bigint,jsonb,bigint,boolean)",
+            "definition_md5": "f3d45228d66f09f59f7c06b33fbbcca8",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "stage_supplier_price_release_batch",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "stage_supplier_price_release_batch(uuid,text,jsonb)",
+            "definition_md5": "5dac6c7cd844153a293f311653fb34da",
+            "security_definer": true
+          }
+        ],
+        "signature": null,
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "start_supplier_price_release_batch_validation",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "start_supplier_price_release_batch_validation(uuid)",
+            "definition_md5": "11cb3b9dfe52f5e6715fbf52642065dc",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.start_supplier_price_release_batch_validation(uuid)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "start_supplier_price_upload_session",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "start_supplier_price_upload_session(uuid,uuid,uuid,uuid,text,text,bigint,text,text,text,date)",
+            "definition_md5": "8aac96a01421418f9a5b8ef052ff3e1d",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.start_supplier_price_upload_session(uuid,uuid,uuid,uuid,text,text,bigint,text,text,text,date)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "start_supplier_price_verified_upload_session",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "start_supplier_price_verified_upload_session(uuid,uuid,uuid,uuid,text,text,bigint,text,text,text,date)",
+            "definition_md5": "3c904c3493eef530b13df189e01ce30a",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.start_supplier_price_verified_upload_session(uuid,uuid,uuid,uuid,text,text,bigint,text,text,text,date)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "supplier_price_current_snapshot",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "supplier_price_current_snapshot(uuid,uuid,uuid,text[])",
+            "definition_md5": "1c4038bfcf92f1df8ea116b7d29f2e39",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.supplier_price_current_snapshot(uuid,uuid,uuid,text[])",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "supplier_price_upload_object_is_sealed",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "supplier_price_upload_object_is_sealed(text,text)",
+            "definition_md5": "2957e13e4db880be6dd2f0afbe9c25fe",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.supplier_price_upload_object_is_sealed(text,text)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": false,
+        "private_helper": false,
+        "service_execute": false,
+        "reference_required": true,
+        "authenticated_execute": true,
+        "authenticated_storage_predicate": true
+      },
+      {
+        "name": "supplier_price_validation_internal.check_publication_identity",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "supplier_price_validation_internal.check_publication_identity(uuid,uuid,uuid,uuid)",
+            "definition_md5": "d17f7e9327f65d55f4ca11343bb2f6df",
+            "security_definer": true
+          }
+        ],
+        "signature": "supplier_price_validation_internal.check_publication_identity(uuid,uuid,uuid,uuid)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": false,
+        "private_helper": true,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "supplier_price_validation_internal.cross_brand_audit",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "supplier_price_validation_internal.cross_brand_audit(uuid)",
+            "definition_md5": "4748945d77ee1240e8f877359cab662c",
+            "security_definer": false
+          }
+        ],
+        "signature": "supplier_price_validation_internal.cross_brand_audit(uuid)",
+        "owner_only": true,
+        "anon_execute": false,
+        "service_only": false,
+        "private_helper": true,
+        "service_execute": false,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "supplier_price_validation_internal.historical_rows_valid",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "supplier_price_validation_internal.historical_rows_valid(uuid)",
+            "definition_md5": "aa426b4d6a1a159b0a91a6319855ce14",
+            "security_definer": false
+          }
+        ],
+        "signature": "supplier_price_validation_internal.historical_rows_valid(uuid)",
+        "owner_only": true,
+        "anon_execute": false,
+        "service_only": false,
+        "private_helper": true,
+        "service_execute": false,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "supplier_price_validation_internal.review_release",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "supplier_price_validation_internal.review_release(uuid,uuid,uuid,uuid,text,text,bigint,text,text,jsonb)",
+            "definition_md5": "708573fea2256c32e8e9debc5a2b6fb0",
+            "security_definer": true
+          }
+        ],
+        "signature": "supplier_price_validation_internal.review_release(uuid,uuid,uuid,uuid,text,text,bigint,text,text,jsonb)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": false,
+        "private_helper": true,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "supplier_price_validation_internal.validate_supplier_price_release",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "supplier_price_validation_internal.validate_supplier_price_release(uuid)",
+            "definition_md5": "591b3271795869c1a7208b496d9529ce",
+            "security_definer": true
+          }
+        ],
+        "signature": "supplier_price_validation_internal.validate_supplier_price_release(uuid)",
+        "owner_only": true,
+        "anon_execute": false,
+        "service_only": false,
+        "private_helper": true,
+        "service_execute": false,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "validate_catalog_import_storage_batch_system",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=public, pg_temp"
+            ],
+            "signature": "validate_catalog_import_storage_batch_system(uuid,uuid,uuid,integer)",
+            "definition_md5": "5e696a7d68467e08bf2543cae64c2436",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.validate_catalog_import_storage_batch_system(uuid,uuid,uuid,integer)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "validate_supplier_price_release",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "validate_supplier_price_release(uuid)",
+            "definition_md5": "aa2271dabd68e1c988393800efa68b21",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.validate_supplier_price_release(uuid)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      },
+      {
+        "name": "validate_supplier_price_release_batch",
+        "phase": "runtime",
+        "present": true,
+        "overloads": [
+          {
+            "config": [
+              "search_path=\"\""
+            ],
+            "signature": "validate_supplier_price_release_batch(uuid,integer)",
+            "definition_md5": "e6d06fb2c0a3aac5d9758286d7557af2",
+            "security_definer": true
+          }
+        ],
+        "signature": "public.validate_supplier_price_release_batch(uuid,integer)",
+        "owner_only": false,
+        "anon_execute": false,
+        "service_only": true,
+        "private_helper": false,
+        "service_execute": true,
+        "reference_required": true,
+        "authenticated_execute": false,
+        "authenticated_storage_predicate": false
+      }
+    ],
+    "collected_at": "2026-10-14T11:36:19.211773+00:00",
+    "role_settings": [
+      {
+        "role": "service_role",
+        "config": null
+      },
+      {
+        "role": "authenticator",
+        "config": [
+          "session_preload_libraries=supautils, safeupdate",
+          "statement_timeout=8s",
+          "lock_timeout=8s"
+        ]
+      }
+    ],
+    "job_constraints": [
+      {
+        "conname": "app_export_jobs_audience_check",
+        "validated": true,
+        "definition": "CHECK ((audience = ANY (ARRAY['admin'::text, 'portal'::text, 'system'::text])))"
+      },
+      {
+        "conname": "app_export_jobs_byte_size_check",
+        "validated": true,
+        "definition": "CHECK ((byte_size >= 0))"
+      },
+      {
+        "conname": "app_export_jobs_export_type_check",
+        "validated": true,
+        "definition": "CHECK ((export_type = ANY (ARRAY['admin_price_list'::text, 'portal_price_list'::text, 'catalog_master'::text, 'catalog_export'::text, 'supplier_report'::text, 'supplier_price_list'::text])))"
+      },
+      {
+        "conname": "app_export_jobs_progress_done_check",
+        "validated": true,
+        "definition": "CHECK ((progress_done >= 0))"
+      },
+      {
+        "conname": "app_export_jobs_progress_total_check",
+        "validated": true,
+        "definition": "CHECK (((progress_total IS NULL) OR (progress_total >= 0)))"
+      },
+      {
+        "conname": "app_export_jobs_row_count_check",
+        "validated": true,
+        "definition": "CHECK ((row_count >= 0))"
+      },
+      {
+        "conname": "app_export_jobs_status_check",
+        "validated": true,
+        "definition": "CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'finalized'::text, 'failed'::text, 'expired'::text])))"
+      }
+    ],
+    "postgres_version": "17.11",
+    "snapshot_version": 1
+  }
+}

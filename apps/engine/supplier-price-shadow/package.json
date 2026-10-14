@@ -8,6 +8,9 @@
   "scripts": {
     "start": "node src/worker.mjs",
     "worker:service:staging": "node src/worker.mjs --service",
+    "worker:service:production": "node src/worker.mjs --service",
+    "publish:production:operator": "node src/production-publication-operator.mjs --publish-reviewed",
+    "reverse:production:operator": "node src/production-publication-operator.mjs --reverse-reviewed",
     "recover:staging:operator": "node src/worker.mjs --operator-recover",
     "worker:verify:staging": "node src/upload-verification-worker.mjs",
     "canary:staging": "node src/staging-canary.mjs",

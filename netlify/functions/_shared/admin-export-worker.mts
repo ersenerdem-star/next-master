@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { getJson, serviceRoleHeaders } from "./http.mts";
 import type { ExportJobRow } from "./export-jobs.mts";
+import { assertRemainingAdminExportsEnabled } from "./admin-export-target.mts";
 
 const TIMESTAMP_WINDOW_MS = 60_000;
 const LEASE_MS = 120_000;
@@ -21,6 +22,7 @@ function requiredServiceRoleKey() {
 }
 
 export async function dispatchAdminExportWorker(req: Request, jobId: string) {
+  assertRemainingAdminExportsEnabled();
   const key = requiredServiceRoleKey();
   const timestamp = String(Date.now());
   const endpoint = new URL("/api/admin-export-worker-background", req.url);

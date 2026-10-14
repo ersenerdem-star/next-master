@@ -12,6 +12,7 @@ import {createPartitionedVerifiedWorkflow} from "./partitioned-verified-workflow
 import {runDirectVerifiedRelease} from './direct-verified-release-runner.mjs';
 import {consumeUploadVerification} from './upload-verification-consumer.mjs';
 import {serviceConfig,servicePreflight,serviceLogger,serviceStartupFailure,createWorkerService,startServiceHealth,SERVICE_QUEUE_LIMITS,SERVICE_RPC_NAMES,reconcileFailedWorkflowHistory} from './worker-service.mjs';
+import {requireSupplierPriceServiceTarget,requireProductionServiceInvocation} from './worker-target.mjs';
 import { requireShadowStagingHost, requireCompleteShadowScan, requireShadowStageReceipt,
   requireShadowHeartbeatReceipt, requireShadowDrainProgress } from "./shadow-batch-contract.mjs";
 
@@ -28,7 +29,8 @@ function requireVerifiedMode() {
   if(process.env.SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED !== "1" || !PERSIST_SHADOW_ROWS
     || PREPARED_PARTITION_MANIFEST || process.env.SUPPLIER_PRICE_EXPIRY_TEST_ROLE
     || process.env.SUPPLIER_PRICE_RECOVERY_TEST_PAUSE_AFTER_STAGE === "1")throw Error("VERIFIED_HANDOFF_DISABLED_OR_UNSAFE_CONFIG");
-  requireShadowStagingHost(SUPABASE_URL);
+  if(process.argv[2]==='--service')requireSupplierPriceServiceTarget(process.env);
+  else requireShadowStagingHost(SUPABASE_URL);
 }
 
 function requireEnv(name, value) {
@@ -210,6 +212,7 @@ const verifiedPartitionedWorkflow=DBOS.registerWorkflow(async input=>{
 },{name:'supplier-price-verified-release-v4'});
 
 async function main() {
+  requireProductionServiceInvocation(process.env,process.argv[2]);
   const operatorRecovery = process.argv[2] === "--operator-recover";
   const releaseId = operatorRecovery
     ? String(process.env.SUPPLIER_PRICE_OPERATOR_RECOVERY_RELEASE_ID || "").trim()
@@ -225,7 +228,7 @@ async function main() {
     throw Error('OPERATOR_RECOVERY_RELEASE_AND_HANDOFF_REQUIRED');
   const verified = serviceMode || releaseId === "--verified-handoff" || operatorRecovery;
   if(verified)requireVerifiedMode();
-  if(serviceMode)await servicePreflight({origin:config.origin,key:SERVICE_ROLE_KEY});
+  if(serviceMode)await servicePreflight({origin:config.origin,key:SERVICE_ROLE_KEY,environment:config.environment});
   if (!releaseId) throw new Error("Usage: npm start -- <release-id> | --check-only");
   const expiryRole = process.env.SUPPLIER_PRICE_EXPIRY_TEST_ROLE || "";
   const queueName = verified ? VERIFIED_QUEUE : shadowWorkerQueueName({ expiryRole, releaseId });
@@ -246,7 +249,10 @@ async function main() {
       releaseId, supabaseUrl: SUPABASE_URL, canSend: typeof process.send === "function" });
     requireExpiryTestHook({ role: process.env.SUPPLIER_PRICE_EXPIRY_TEST_ROLE || "",
       releaseId, supabaseUrl: SUPABASE_URL, canSend: typeof process.send === "function" });
-    if (PERSIST_SHADOW_ROWS) requireShadowStagingHost(SUPABASE_URL);
+    if(PERSIST_SHADOW_ROWS) {
+      if(serviceMode)requireSupplierPriceServiceTarget(process.env);
+      else requireShadowStagingHost(SUPABASE_URL);
+    }
     if (operatorRecovery) {
       // DBOS ERROR workflows are terminal and cannot be resumed in place.
       // Use a new, explicit operator identity so the verified SQL lease RPC
@@ -375,7 +381,7 @@ async function main() {
 main().catch((error) => {
   if(process.argv[2]==='--service'){
     console.error(JSON.stringify(serviceStartupFailure(error)));
-    console.error('Supplier staging worker service stopped; check private operational status. No publication enabled.');
+    console.error('Supplier worker service stopped; check private operational status. No publication enabled.');
   }
   else console.error("supplier price shadow worker failed", error);
   process.exitCode = 1;

@@ -5,6 +5,7 @@ import { supabaseClient } from "./supabaseClient";
 import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 import { formatCanonicalProductCode } from "../../shared/productCodeDisplay";
 import * as tus from "tus-js-client";
+import { catalogStorageImportBrowserEnabled } from "./catalogImportTargetGate";
 
 export type SupplierImportProgress = {
   processedChunks: number;
@@ -85,9 +86,13 @@ export type CatalogStorageImportResult = {
   status: "uploaded" | "queued" | string;
 };
 
-export const catalogStorageImportEnabled =
-  import.meta.env.VITE_CATALOG_STORAGE_IMPORT_ENABLED === "1"
-  && (typeof window === "undefined" || window.location.hostname === "next-master-v3-staging-20261006.netlify.app");
+export const catalogStorageImportEnabled = catalogStorageImportBrowserEnabled({
+  enabled: import.meta.env.VITE_CATALOG_STORAGE_IMPORT_ENABLED,
+  productionEnabled: import.meta.env.VITE_CATALOG_STORAGE_IMPORT_PRODUCTION_ENABLED,
+  productionTarget: import.meta.env.VITE_NM_PRODUCTION_TARGET,
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+  browserOrigin: typeof window === "undefined" ? undefined : window.location.origin,
+});
 
 type SupplierImportChunkResult = {
   processed?: number;

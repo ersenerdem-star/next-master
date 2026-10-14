@@ -1,0 +1,3632 @@
+{
+  "source": {
+    "projectRef": "kaxsqafdevabkxofwdod",
+    "capturedOn": "2026-10-14",
+    "kind": "pg_catalog schema-only metadata; no business rows",
+    "publicFunctions": 24
+  },
+  "tables": [
+    {
+      "rls": true,
+      "name": "supplier_current_price_pointers",
+      "grants": [
+        {
+          "role": "anon",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "anon",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "anon",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "SELECT"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "service_role",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRUNCATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "organization_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "supplier_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "brand_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "publication_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "release_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_supplier_current_price_pointers_org_brand",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_current_price_pointers_org_brand ON public.supplier_current_price_pointers USING btree (organization_id, brand_id)"
+        },
+        {
+          "name": "idx_supplier_current_price_pointers_release",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_current_price_pointers_release ON public.supplier_current_price_pointers USING btree (release_id)"
+        },
+        {
+          "name": "supplier_current_price_pointers_pkey",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_current_price_pointers_pkey ON public.supplier_current_price_pointers USING btree (organization_id, supplier_id, brand_id)"
+        }
+      ],
+      "forceRls": false,
+      "policies": [
+        {
+          "name": "supplier_current_price_pointers_admin_select",
+          "check": null,
+          "roles": [
+            "authenticated"
+          ],
+          "using": "((current_profile_role() = ANY (ARRAY['admin'::text, 'superadmin'::text])) AND (organization_id = current_profile_org_id()))",
+          "command": "r",
+          "permissive": true
+        }
+      ],
+      "triggers": [],
+      "constraints": [
+        {
+          "name": "supplier_current_price_pointers_brand_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "supplier_current_price_pointers_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (organization_id, supplier_id, brand_id)"
+        },
+        {
+          "name": "supplier_current_price_pointers_publication_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (publication_id) REFERENCES supplier_price_publications(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "supplier_current_price_pointers_release_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (release_id) REFERENCES supplier_price_releases(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "supplier_current_price_pointers_supplier_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE RESTRICT"
+        }
+      ],
+      "schema": "public"
+    },
+    {
+      "rls": true,
+      "name": "supplier_price_publications",
+      "grants": [
+        {
+          "role": "anon",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "anon",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "anon",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "SELECT"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "service_role",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRUNCATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "release_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "organization_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "supplier_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "brand_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'pending'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "publication_version",
+          "type": "bigint",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "superseded_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_supplier_price_publications_scope_status",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_publications_scope_status ON public.supplier_price_publications USING btree (organization_id, supplier_id, brand_id, status, publication_version DESC)"
+        },
+        {
+          "name": "supplier_price_publications_pkey",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_price_publications_pkey ON public.supplier_price_publications USING btree (id)"
+        },
+        {
+          "name": "supplier_price_publications_release_unique",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_price_publications_release_unique ON public.supplier_price_publications USING btree (release_id)"
+        },
+        {
+          "name": "supplier_price_publications_scope_version_unique",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_price_publications_scope_version_unique ON public.supplier_price_publications USING btree (organization_id, supplier_id, brand_id, publication_version)"
+        }
+      ],
+      "forceRls": false,
+      "policies": [
+        {
+          "name": "supplier_price_publications_admin_select",
+          "check": null,
+          "roles": [
+            "authenticated"
+          ],
+          "using": "((current_profile_role() = ANY (ARRAY['admin'::text, 'superadmin'::text])) AND (organization_id = current_profile_org_id()))",
+          "command": "r",
+          "permissive": true
+        }
+      ],
+      "triggers": [],
+      "constraints": [
+        {
+          "name": "supplier_price_publications_brand_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "supplier_price_publications_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "supplier_price_publications_release_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (release_id) REFERENCES supplier_price_releases(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "supplier_price_publications_release_unique",
+          "type": "u",
+          "definition": "UNIQUE (release_id)"
+        },
+        {
+          "name": "supplier_price_publications_scope_version_unique",
+          "type": "u",
+          "definition": "UNIQUE (organization_id, supplier_id, brand_id, publication_version)"
+        },
+        {
+          "name": "supplier_price_publications_status_check",
+          "type": "c",
+          "definition": "CHECK (status = ANY (ARRAY['pending'::text, 'published'::text, 'superseded'::text, 'rolled_back'::text]))"
+        },
+        {
+          "name": "supplier_price_publications_supplier_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE RESTRICT"
+        }
+      ],
+      "schema": "public"
+    },
+    {
+      "rls": true,
+      "name": "supplier_price_release_batches",
+      "grants": [
+        {
+          "role": "anon",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "anon",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "anon",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "SELECT"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "service_role",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRUNCATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "release_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "batch_number",
+          "type": "integer",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "cursor_start",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "cursor_end",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "row_count",
+          "type": "integer",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "accepted_count",
+          "type": "integer",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "rejected_count",
+          "type": "integer",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "warning_count",
+          "type": "integer",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "checksum",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'queued'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "attempt",
+          "type": "integer",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "worker_version",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "error_code",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "error_message",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "last_heartbeat_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "lease_owner",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "lease_expires_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_supplier_price_release_batches_lease",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_release_batches_lease ON public.supplier_price_release_batches USING btree (status, lease_expires_at, release_id, batch_number)"
+        },
+        {
+          "name": "idx_supplier_price_release_batches_status",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_release_batches_status ON public.supplier_price_release_batches USING btree (release_id, status, batch_number)"
+        },
+        {
+          "name": "supplier_price_release_batches_pkey",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_price_release_batches_pkey ON public.supplier_price_release_batches USING btree (id)"
+        },
+        {
+          "name": "supplier_price_release_batches_unique",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_price_release_batches_unique ON public.supplier_price_release_batches USING btree (release_id, batch_number)"
+        }
+      ],
+      "forceRls": false,
+      "policies": [
+        {
+          "name": "supplier_price_release_batches_admin_select",
+          "check": null,
+          "roles": [
+            "authenticated"
+          ],
+          "using": "(EXISTS ( SELECT 1\n   FROM supplier_price_releases release\n  WHERE ((release.id = supplier_price_release_batches.release_id) AND (release.organization_id = current_profile_org_id()) AND (current_profile_role() = ANY (ARRAY['admin'::text, 'superadmin'::text])))))",
+          "command": "r",
+          "permissive": true
+        }
+      ],
+      "triggers": [],
+      "constraints": [
+        {
+          "name": "supplier_price_release_batches_counts_check",
+          "type": "c",
+          "definition": "CHECK (batch_number > 0 AND cursor_start >= 0 AND cursor_end >= cursor_start AND row_count >= 0)"
+        },
+        {
+          "name": "supplier_price_release_batches_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "supplier_price_release_batches_release_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (release_id) REFERENCES supplier_price_releases(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "supplier_price_release_batches_status_check",
+          "type": "c",
+          "definition": "CHECK (status = ANY (ARRAY['queued'::text, 'running'::text, 'retrying'::text, 'completed'::text, 'failed'::text, 'dead_letter'::text]))"
+        },
+        {
+          "name": "supplier_price_release_batches_unique",
+          "type": "u",
+          "definition": "UNIQUE (release_id, batch_number)"
+        }
+      ],
+      "schema": "public"
+    },
+    {
+      "rls": true,
+      "name": "supplier_price_release_events",
+      "grants": [
+        {
+          "role": "anon",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "anon",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "anon",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "SELECT"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "service_role",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRUNCATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "default": null,
+          "notNull": true,
+          "identity": "a",
+          "sequence": {
+            "start": "1",
+            "increment": "1",
+            "min": "1",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        {
+          "name": "release_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "event_type",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "stage",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "cursor",
+          "type": "bigint",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "processed_rows",
+          "type": "bigint",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "total_rows",
+          "type": "bigint",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "attempt",
+          "type": "integer",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "worker_version",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "error_code",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "error_message",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_supplier_price_release_events_release_time",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_release_events_release_time ON public.supplier_price_release_events USING btree (release_id, created_at DESC, id DESC)"
+        },
+        {
+          "name": "supplier_price_release_events_pkey",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_price_release_events_pkey ON public.supplier_price_release_events USING btree (id)"
+        }
+      ],
+      "forceRls": false,
+      "policies": [
+        {
+          "name": "supplier_price_release_events_admin_select",
+          "check": null,
+          "roles": [
+            "authenticated"
+          ],
+          "using": "(EXISTS ( SELECT 1\n   FROM supplier_price_releases release\n  WHERE ((release.id = supplier_price_release_events.release_id) AND (release.organization_id = current_profile_org_id()) AND (current_profile_role() = ANY (ARRAY['admin'::text, 'superadmin'::text])))))",
+          "command": "r",
+          "permissive": true
+        }
+      ],
+      "triggers": [],
+      "constraints": [
+        {
+          "name": "supplier_price_release_events_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "supplier_price_release_events_release_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (release_id) REFERENCES supplier_price_releases(id) ON DELETE CASCADE"
+        }
+      ],
+      "schema": "public"
+    },
+    {
+      "rls": true,
+      "name": "supplier_price_release_rows",
+      "grants": [
+        {
+          "role": "anon",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "anon",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "anon",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "SELECT"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "service_role",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRUNCATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "default": null,
+          "notNull": true,
+          "identity": "a",
+          "sequence": {
+            "start": "1",
+            "increment": "1",
+            "min": "1",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        {
+          "name": "release_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "source_row_number",
+          "type": "bigint",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "normalized_code",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "product_code",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "oem_no",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "ean",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "vehicle",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "vehicle_model",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "market_segment",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "dimensions",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "weight",
+          "type": "numeric",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "description_tr",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "origin",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "tariff",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "image_url",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "buy_price",
+          "type": "numeric",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "currency",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "moq",
+          "type": "integer",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "lead_time_days",
+          "type": "integer",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "valid_from",
+          "type": "date",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "row_hash",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "row_status",
+          "type": "text",
+          "default": "'staged'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "error_code",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "error_message",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_release_rows_compact_identity",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_release_rows_compact_identity ON public.supplier_price_release_rows USING btree (release_id, normalize_part_code(product_code))"
+        },
+        {
+          "name": "idx_release_rows_export_exact_eligible_count",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_release_rows_export_exact_eligible_count ON public.supplier_price_release_rows USING btree (release_id, normalized_code COLLATE \"C\") INCLUDE (valid_from) WHERE ((row_status = 'accepted'::text) AND (buy_price > (0)::numeric) AND (currency = 'EUR'::text) AND (normalized_code = normalize_catalog_product_code(product_code)) AND (normalized_code ~ '[A-Z0-9]'::text))"
+        },
+        {
+          "name": "idx_release_rows_export_future_eligibility",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_release_rows_export_future_eligibility ON public.supplier_price_release_rows USING btree (release_id, valid_from) WHERE ((row_status = 'accepted'::text) AND (buy_price > (0)::numeric) AND (currency = 'EUR'::text))"
+        },
+        {
+          "name": "idx_release_rows_master_export_code_c",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_release_rows_master_export_code_c ON public.supplier_price_release_rows USING btree (release_id, normalized_code COLLATE \"C\", id) WHERE ((row_status = 'accepted'::text) AND (buy_price > (0)::numeric) AND (currency = 'EUR'::text))"
+        },
+        {
+          "name": "idx_release_rows_supplier_export_code_c",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_release_rows_supplier_export_code_c ON public.supplier_price_release_rows USING btree (release_id, product_code COLLATE \"C\", ((md5((id)::text))::uuid)) WHERE ((row_status = 'accepted'::text) AND (buy_price > (0)::numeric) AND (currency = 'EUR'::text))"
+        },
+        {
+          "name": "idx_release_rows_supplier_export_keyset",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_release_rows_supplier_export_keyset ON public.supplier_price_release_rows USING btree (release_id, product_code, ((md5((id)::text))::uuid)) WHERE ((row_status = 'accepted'::text) AND (buy_price > (0)::numeric) AND (currency = 'EUR'::text))"
+        },
+        {
+          "name": "idx_supplier_price_release_rows_portal_prefix",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_release_rows_portal_prefix ON public.supplier_price_release_rows USING btree (release_id, normalized_code COLLATE \"C\", id)"
+        },
+        {
+          "name": "idx_supplier_price_release_rows_release_code",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_release_rows_release_code ON public.supplier_price_release_rows USING btree (release_id, normalized_code, id)"
+        },
+        {
+          "name": "idx_supplier_price_release_rows_release_status",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_release_rows_release_status ON public.supplier_price_release_rows USING btree (release_id, row_status, id)"
+        },
+        {
+          "name": "supplier_price_release_rows_pkey",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_price_release_rows_pkey ON public.supplier_price_release_rows USING btree (id)"
+        },
+        {
+          "name": "uq_supplier_price_release_rows_number",
+          "constraint": false,
+          "definition": "CREATE UNIQUE INDEX uq_supplier_price_release_rows_number ON public.supplier_price_release_rows USING btree (release_id, source_row_number)"
+        }
+      ],
+      "forceRls": false,
+      "policies": [
+        {
+          "name": "supplier_price_release_rows_admin_select",
+          "check": null,
+          "roles": [
+            "authenticated"
+          ],
+          "using": "(EXISTS ( SELECT 1\n   FROM supplier_price_releases release\n  WHERE ((release.id = supplier_price_release_rows.release_id) AND (release.organization_id = current_profile_org_id()) AND (current_profile_role() = ANY (ARRAY['admin'::text, 'superadmin'::text])))))",
+          "command": "r",
+          "permissive": true
+        }
+      ],
+      "triggers": [],
+      "constraints": [
+        {
+          "name": "supplier_price_release_rows_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "supplier_price_release_rows_release_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (release_id) REFERENCES supplier_price_releases(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "supplier_price_release_rows_row_check",
+          "type": "c",
+          "definition": "CHECK (source_row_number > 0 AND normalized_code <> ''::text AND product_code <> ''::text)"
+        },
+        {
+          "name": "supplier_price_release_rows_status_check",
+          "type": "c",
+          "definition": "CHECK (row_status = ANY (ARRAY['staged'::text, 'accepted'::text, 'rejected'::text, 'warning'::text, 'conflict'::text]))"
+        }
+      ],
+      "schema": "public"
+    },
+    {
+      "rls": true,
+      "name": "supplier_price_release_validation_code_counts",
+      "grants": [
+        {
+          "role": "service_role",
+          "privilege": "DELETE"
+        },
+        {
+          "role": "service_role",
+          "privilege": "INSERT"
+        },
+        {
+          "role": "service_role",
+          "privilege": "SELECT"
+        },
+        {
+          "role": "service_role",
+          "privilege": "UPDATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "release_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "normalized_code",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "row_count",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_supplier_price_validation_counts_release_count",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_validation_counts_release_count ON public.supplier_price_release_validation_code_counts USING btree (release_id, row_count DESC)"
+        },
+        {
+          "name": "supplier_price_release_validation_code_counts_pkey",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_price_release_validation_code_counts_pkey ON public.supplier_price_release_validation_code_counts USING btree (release_id, normalized_code)"
+        }
+      ],
+      "forceRls": false,
+      "policies": [],
+      "triggers": [],
+      "constraints": [
+        {
+          "name": "supplier_price_release_validation_code_counts_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (release_id, normalized_code)"
+        },
+        {
+          "name": "supplier_price_release_validation_code_counts_release_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (release_id) REFERENCES supplier_price_releases(id) ON DELETE CASCADE"
+        }
+      ],
+      "schema": "public"
+    },
+    {
+      "rls": true,
+      "name": "supplier_price_release_validation_runs",
+      "grants": [
+        {
+          "role": "service_role",
+          "privilege": "DELETE"
+        },
+        {
+          "role": "service_role",
+          "privilege": "INSERT"
+        },
+        {
+          "role": "service_role",
+          "privilege": "SELECT"
+        },
+        {
+          "role": "service_role",
+          "privilege": "UPDATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "release_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'queued'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "cursor",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "total_rows",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "accepted_rows",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "warning_rows",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "rejected_rows",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "conflict_rows",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "missing_price_rows",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "duplicate_rows",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "currency_count",
+          "type": "integer",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "last_error",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "supplier_price_release_validation_runs_pkey",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_price_release_validation_runs_pkey ON public.supplier_price_release_validation_runs USING btree (release_id)"
+        }
+      ],
+      "forceRls": false,
+      "policies": [],
+      "triggers": [],
+      "constraints": [
+        {
+          "name": "supplier_price_release_validation_runs_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (release_id)"
+        },
+        {
+          "name": "supplier_price_release_validation_runs_release_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (release_id) REFERENCES supplier_price_releases(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "supplier_price_release_validation_runs_status_check",
+          "type": "c",
+          "definition": "CHECK (status = ANY (ARRAY['queued'::text, 'running'::text, 'validated'::text, 'review_required'::text, 'failed'::text]))"
+        }
+      ],
+      "schema": "public"
+    },
+    {
+      "rls": true,
+      "name": "supplier_price_releases",
+      "grants": [
+        {
+          "role": "anon",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "anon",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "anon",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "SELECT"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "service_role",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRUNCATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "organization_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "supplier_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "brand_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "import_run_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "source_file_path",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "source_file_sha256",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "mode",
+          "type": "text",
+          "default": "'replace'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'received'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "source_date",
+          "type": "date",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "total_rows",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "accepted_rows",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "rejected_rows",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "warning_rows",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "conflict_rows",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "processed_rows",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "current_cursor",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "worker_version",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "error_code",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "error_message",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "created_by",
+          "type": "uuid",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "uploaded_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "validated_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "superseded_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "brand_identity_audit",
+          "type": "jsonb",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "review_revision",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "source_verification_required",
+          "type": "boolean",
+          "default": "false",
+          "notNull": true,
+          "identity": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_supplier_price_releases_scope_status",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_releases_scope_status ON public.supplier_price_releases USING btree (organization_id, supplier_id, brand_id, status, created_at DESC)"
+        },
+        {
+          "name": "supplier_price_releases_pkey",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_price_releases_pkey ON public.supplier_price_releases USING btree (id)"
+        },
+        {
+          "name": "uq_supplier_price_releases_idempotency",
+          "constraint": false,
+          "definition": "CREATE UNIQUE INDEX uq_supplier_price_releases_idempotency ON public.supplier_price_releases USING btree (organization_id, supplier_id, brand_id, source_file_sha256, mode)"
+        }
+      ],
+      "forceRls": false,
+      "policies": [
+        {
+          "name": "supplier_price_releases_admin_select",
+          "check": null,
+          "roles": [
+            "authenticated"
+          ],
+          "using": "((current_profile_role() = ANY (ARRAY['admin'::text, 'superadmin'::text])) AND (organization_id = current_profile_org_id()))",
+          "command": "r",
+          "permissive": true
+        }
+      ],
+      "triggers": [],
+      "constraints": [
+        {
+          "name": "supplier_price_releases_brand_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "supplier_price_releases_counts_check",
+          "type": "c",
+          "definition": "CHECK (total_rows >= 0 AND accepted_rows >= 0 AND rejected_rows >= 0 AND warning_rows >= 0 AND conflict_rows >= 0 AND processed_rows >= 0 AND current_cursor >= 0)"
+        },
+        {
+          "name": "supplier_price_releases_import_run_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (import_run_id) REFERENCES supplier_price_import_runs(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "supplier_price_releases_mode_check",
+          "type": "c",
+          "definition": "CHECK (mode = ANY (ARRAY['replace'::text, 'merge'::text]))"
+        },
+        {
+          "name": "supplier_price_releases_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "supplier_price_releases_review_revision_check",
+          "type": "c",
+          "definition": "CHECK (review_revision >= 0)"
+        },
+        {
+          "name": "supplier_price_releases_status_check",
+          "type": "c",
+          "definition": "CHECK (status = ANY (ARRAY['received'::text, 'uploaded'::text, 'parsing'::text, 'staged'::text, 'validating'::text, 'validated'::text, 'publishing'::text, 'catalog_enriching'::text, 'rollup_refreshing'::text, 'published'::text, 'failed'::text, 'cancelled'::text, 'superseded'::text, 'archived'::text]))"
+        },
+        {
+          "name": "supplier_price_releases_supplier_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE RESTRICT"
+        }
+      ],
+      "schema": "public"
+    },
+    {
+      "rls": true,
+      "name": "supplier_price_upload_sessions",
+      "grants": [
+        {
+          "role": "authenticated",
+          "privilege": "SELECT"
+        },
+        {
+          "role": "service_role",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRUNCATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "organization_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "release_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "idempotency_key",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "storage_bucket",
+          "type": "text",
+          "default": "'supplier-price-imports'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "storage_object_path",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "file_name",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "content_type",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "total_bytes",
+          "type": "bigint",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "uploaded_bytes",
+          "type": "bigint",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "checksum_sha256",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "tus_upload_url",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'created'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "attempt",
+          "type": "integer",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "last_heartbeat_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "uploaded_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "error_code",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "error_message",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "created_by",
+          "type": "uuid",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_supplier_price_upload_sessions_expiry",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_upload_sessions_expiry ON public.supplier_price_upload_sessions USING btree (status, expires_at) WHERE (status = ANY (ARRAY['created'::text, 'uploading'::text]))"
+        },
+        {
+          "name": "idx_supplier_price_upload_sessions_release_status",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_upload_sessions_release_status ON public.supplier_price_upload_sessions USING btree (release_id, status, updated_at DESC)"
+        },
+        {
+          "name": "supplier_price_upload_sessions_pkey",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_price_upload_sessions_pkey ON public.supplier_price_upload_sessions USING btree (id)"
+        },
+        {
+          "name": "uq_supplier_price_upload_sessions_idempotency",
+          "constraint": false,
+          "definition": "CREATE UNIQUE INDEX uq_supplier_price_upload_sessions_idempotency ON public.supplier_price_upload_sessions USING btree (organization_id, idempotency_key)"
+        },
+        {
+          "name": "uq_supplier_price_upload_sessions_storage_path",
+          "constraint": false,
+          "definition": "CREATE UNIQUE INDEX uq_supplier_price_upload_sessions_storage_path ON public.supplier_price_upload_sessions USING btree (storage_bucket, storage_object_path)"
+        }
+      ],
+      "forceRls": false,
+      "policies": [
+        {
+          "name": "supplier_price_upload_sessions_admin_select",
+          "check": null,
+          "roles": [
+            "authenticated"
+          ],
+          "using": "((current_profile_role() = ANY (ARRAY['admin'::text, 'superadmin'::text])) AND (organization_id = current_profile_org_id()))",
+          "command": "r",
+          "permissive": true
+        }
+      ],
+      "triggers": [],
+      "constraints": [
+        {
+          "name": "supplier_price_upload_sessions_attempt_check",
+          "type": "c",
+          "definition": "CHECK (attempt >= 0)"
+        },
+        {
+          "name": "supplier_price_upload_sessions_bytes_check",
+          "type": "c",
+          "definition": "CHECK (total_bytes > 0 AND uploaded_bytes >= 0 AND uploaded_bytes <= total_bytes)"
+        },
+        {
+          "name": "supplier_price_upload_sessions_idempotency_check",
+          "type": "c",
+          "definition": "CHECK (length(TRIM(BOTH FROM idempotency_key)) > 0)"
+        },
+        {
+          "name": "supplier_price_upload_sessions_path_check",
+          "type": "c",
+          "definition": "CHECK (length(TRIM(BOTH FROM storage_object_path)) > 0)"
+        },
+        {
+          "name": "supplier_price_upload_sessions_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "supplier_price_upload_sessions_release_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (release_id) REFERENCES supplier_price_releases(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "supplier_price_upload_sessions_status_check",
+          "type": "c",
+          "definition": "CHECK (status = ANY (ARRAY['created'::text, 'uploading'::text, 'uploaded'::text, 'aborted'::text, 'expired'::text, 'failed'::text]))"
+        }
+      ],
+      "schema": "public"
+    },
+    {
+      "rls": true,
+      "name": "handoffs",
+      "grants": [],
+      "schema": "supplier_price_ingestion_internal",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "session_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "release_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "organization_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "storage_bucket",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "source_path",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "source_sha256",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "source_bytes",
+          "type": "bigint",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "total_rows",
+          "type": "bigint",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "object_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "object_version",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "object_updated_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "workflow_id",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "queue_name",
+          "type": "text",
+          "default": "'supplier-price-verified-shadow'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'queued'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "attempt",
+          "type": "integer",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "lease_owner",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "lease_token",
+          "type": "uuid",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "lease_expires_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "enqueued_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "handoffs_pkey",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX handoffs_pkey ON supplier_price_ingestion_internal.handoffs USING btree (id)"
+        },
+        {
+          "name": "handoffs_session_id_key",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX handoffs_session_id_key ON supplier_price_ingestion_internal.handoffs USING btree (session_id)"
+        },
+        {
+          "name": "handoffs_release_id_key",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX handoffs_release_id_key ON supplier_price_ingestion_internal.handoffs USING btree (release_id)"
+        },
+        {
+          "name": "handoffs_workflow_id_key",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX handoffs_workflow_id_key ON supplier_price_ingestion_internal.handoffs USING btree (workflow_id)"
+        },
+        {
+          "name": "handoffs_dispatch_idx",
+          "constraint": false,
+          "definition": "CREATE INDEX handoffs_dispatch_idx ON supplier_price_ingestion_internal.handoffs USING btree (created_at, id) WHERE (status = ANY (ARRAY['queued'::text, 'dispatching'::text]))"
+        }
+      ],
+      "policies": [],
+      "triggers": [],
+      "constraints": [
+        {
+          "name": "handoffs_attempt_check",
+          "type": "c",
+          "definition": "CHECK (attempt >= 0)"
+        },
+        {
+          "name": "handoffs_object_version_check",
+          "type": "c",
+          "definition": "CHECK (length(object_version) > 0)"
+        },
+        {
+          "name": "handoffs_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "handoffs_queue_name_check",
+          "type": "c",
+          "definition": "CHECK (queue_name = 'supplier-price-verified-shadow'::text)"
+        },
+        {
+          "name": "handoffs_release_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (release_id) REFERENCES supplier_price_releases(id)"
+        },
+        {
+          "name": "handoffs_release_id_key",
+          "type": "u",
+          "definition": "UNIQUE (release_id)"
+        },
+        {
+          "name": "handoffs_session_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (session_id) REFERENCES supplier_price_upload_sessions(id)"
+        },
+        {
+          "name": "handoffs_session_id_key",
+          "type": "u",
+          "definition": "UNIQUE (session_id)"
+        },
+        {
+          "name": "handoffs_source_bytes_check",
+          "type": "c",
+          "definition": "CHECK (source_bytes >= 1 AND source_bytes <= 1073741824)"
+        },
+        {
+          "name": "handoffs_source_sha256_check",
+          "type": "c",
+          "definition": "CHECK (source_sha256 ~ '^[0-9a-f]{64}$'::text)"
+        },
+        {
+          "name": "handoffs_status_check",
+          "type": "c",
+          "definition": "CHECK (status = ANY (ARRAY['queued'::text, 'dispatching'::text, 'enqueued'::text]))"
+        },
+        {
+          "name": "handoffs_total_rows_check",
+          "type": "c",
+          "definition": "CHECK (total_rows > 0)"
+        },
+        {
+          "name": "handoffs_workflow_id_key",
+          "type": "u",
+          "definition": "UNIQUE (workflow_id)"
+        }
+      ]
+    },
+    {
+      "rls": true,
+      "name": "verification_requests",
+      "grants": [],
+      "schema": "supplier_price_ingestion_internal",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "session_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "release_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "organization_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "actor_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "accepted_auth_session_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "accepted_token_iat",
+          "type": "bigint",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'queued'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "attempt",
+          "type": "integer",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "worker_id",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "lease_token",
+          "type": "uuid",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "lease_expires_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "next_attempt_at",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "last_error",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "handoff_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "notNull": true,
+          "identity": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "verification_requests_pkey",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX verification_requests_pkey ON supplier_price_ingestion_internal.verification_requests USING btree (id)"
+        },
+        {
+          "name": "verification_requests_session_id_key",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX verification_requests_session_id_key ON supplier_price_ingestion_internal.verification_requests USING btree (session_id)"
+        },
+        {
+          "name": "verification_requests_release_id_key",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX verification_requests_release_id_key ON supplier_price_ingestion_internal.verification_requests USING btree (release_id)"
+        },
+        {
+          "name": "supplier_upload_verify_queue",
+          "constraint": false,
+          "definition": "CREATE INDEX supplier_upload_verify_queue ON supplier_price_ingestion_internal.verification_requests USING btree (next_attempt_at, created_at, id) WHERE (status = ANY (ARRAY['queued'::text, 'verifying'::text]))"
+        }
+      ],
+      "policies": [],
+      "triggers": [],
+      "constraints": [
+        {
+          "name": "verification_requests_handoff_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (handoff_id) REFERENCES supplier_price_ingestion_internal.handoffs(id)"
+        },
+        {
+          "name": "verification_requests_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "verification_requests_release_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (release_id) REFERENCES supplier_price_releases(id)"
+        },
+        {
+          "name": "verification_requests_release_id_key",
+          "type": "u",
+          "definition": "UNIQUE (release_id)"
+        },
+        {
+          "name": "verification_requests_session_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (session_id) REFERENCES supplier_price_upload_sessions(id)"
+        },
+        {
+          "name": "verification_requests_session_id_key",
+          "type": "u",
+          "definition": "UNIQUE (session_id)"
+        },
+        {
+          "name": "verification_requests_status_check",
+          "type": "c",
+          "definition": "CHECK (status = ANY (ARRAY['queued'::text, 'verifying'::text, 'verified'::text, 'failed'::text]))"
+        }
+      ]
+    },
+    {
+      "rls": true,
+      "name": "review_decisions",
+      "grants": [],
+      "schema": "supplier_price_validation_internal",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "organization_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "release_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "actor_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "request",
+          "type": "jsonb",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "receipt",
+          "type": "jsonb",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "review_decisions_pkey",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX review_decisions_pkey ON supplier_price_validation_internal.review_decisions USING btree (id)"
+        }
+      ],
+      "policies": [
+        {
+          "name": "review_decisions_no_direct_access",
+          "check": "false",
+          "roles": [
+            "public"
+          ],
+          "using": "false",
+          "command": "*",
+          "permissive": true
+        }
+      ],
+      "triggers": [],
+      "constraints": [
+        {
+          "name": "review_decisions_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "review_decisions_release_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (release_id) REFERENCES supplier_price_releases(id) ON DELETE RESTRICT"
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "args": "input_handoff_id uuid, input_worker_id text, input_lease_token uuid, input_workflow_id text",
+      "name": "ack_supplier_price_verified_handoff",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.ack_supplier_price_verified_handoff(input_handoff_id uuid, input_worker_id text, input_lease_token uuid, input_workflow_id text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare h supplier_price_ingestion_internal.handoffs%rowtype;\nbegin\n  if coalesce(auth.role(),'') <> 'service_role' then raise exception 'UPLOAD_VERIFY_ROLE';end if;\n  select x.* into h from supplier_price_ingestion_internal.handoffs x where x.id=input_handoff_id for update;\n  if not found or h.workflow_id is distinct from input_workflow_id or h.lease_owner is distinct from trim(input_worker_id)\n     or h.lease_token is distinct from input_lease_token then raise exception 'UPLOAD_HANDOFF_STALE';end if;\n  if h.status='enqueued' then return jsonb_build_object('status','enqueued','handoff_id',h.id,'workflow_id',h.workflow_id,'published',false);end if;\n  if h.status <> 'dispatching' or h.lease_expires_at <= clock_timestamp() then raise exception 'UPLOAD_HANDOFF_STALE';end if;\n  update supplier_price_ingestion_internal.handoffs x set status='enqueued',enqueued_at=clock_timestamp(),lease_expires_at=null where x.id=h.id;\n  return jsonb_build_object('status','enqueued','handoff_id',h.id,'workflow_id',h.workflow_id,'published',false);\nend $function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_session_id uuid, input_organization_id uuid, input_actor_id uuid",
+      "name": "begin_supplier_price_upload_verification",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.begin_supplier_price_upload_verification(input_session_id uuid, input_organization_id uuid, input_actor_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  u public.supplier_price_upload_sessions%rowtype;\n  r public.supplier_price_releases%rowtype;\n  o storage.objects%rowtype;\nbegin\n  if coalesce(auth.role(),'') <> 'service_role' then raise exception 'UPLOAD_VERIFY_ROLE';end if;\n  if current_setting('transaction_isolation') <> 'read committed' then raise exception 'UPLOAD_VERIFY_ISOLATION';end if;\n  select s.* into u from public.supplier_price_upload_sessions s where s.id=input_session_id for update;\n  if not found or u.organization_id is distinct from input_organization_id\n     or u.created_by is distinct from input_actor_id then raise exception 'UPLOAD_VERIFY_SCOPE';end if;\n  if not exists(select 1 from public.profiles p where p.id=input_actor_id and p.organization_id=input_organization_id\n    and p.is_active is true and p.role in ('admin','superadmin')) then raise exception 'UPLOAD_VERIFY_ACTOR';end if;\n  select x.* into r from public.supplier_price_releases x where x.id=u.release_id for update;\n  if not found or r.organization_id is distinct from u.organization_id or r.created_by is distinct from u.created_by\n     or r.source_file_path is distinct from u.storage_object_path or r.source_file_sha256 is distinct from u.checksum_sha256\n     or u.storage_bucket <> 'supplier-price-imports'\n     or u.storage_object_path is distinct from u.organization_id::text||'/supplier-price/'||u.id::text||'/'||u.file_name\n     or u.checksum_sha256 !~ '^[0-9a-f]{64}$' then raise exception 'UPLOAD_VERIFY_BINDING';end if;\n  if u.status not in ('created','uploading','uploaded') or (u.status <> 'uploaded' and u.expires_at <= clock_timestamp())\n     or r.status not in ('received','uploaded','parsing','staged','validated') then raise exception 'UPLOAD_VERIFY_STATE';end if;\n  if not r.source_verification_required then raise exception 'UPLOAD_VERIFY_NOT_ENROLLED';end if;\n  select x.* into o from storage.objects x where x.bucket_id=u.storage_bucket and x.name=u.storage_object_path for share;\n  if not found then raise exception 'UPLOAD_VERIFY_OBJECT_MISSING';end if;\n  if nullif(o.version,'') is null or o.updated_at is null\n     or coalesce(o.metadata->>'size','') !~ '^[0-9]{1,10}$' then raise exception 'UPLOAD_VERIFY_OBJECT_METADATA';end if;\n  if (o.metadata->>'size')::bigint <> u.total_bytes then raise exception 'UPLOAD_VERIFY_OBJECT_SIZE';end if;\n  return jsonb_build_object('session_id',u.id,'release_id',r.id,'organization_id',u.organization_id,'actor_id',u.created_by,\n    'storage_bucket',u.storage_bucket,'source_file_path',u.storage_object_path,'source_file_sha256',u.checksum_sha256,\n    'source_file_bytes',u.total_bytes,'source_date',r.source_date,'object_id',o.id,'object_version',o.version,'object_updated_at',o.updated_at);\nend $function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_release_id uuid, input_worker_id text, input_batch_size integer, input_lease_seconds integer",
+      "name": "claim_supplier_price_release_batch",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.claim_supplier_price_release_batch(input_release_id uuid, input_worker_id text, input_batch_size integer DEFAULT 1000, input_lease_seconds integer DEFAULT 120)\n RETURNS TABLE(status text, batch_id uuid, release_id uuid, batch_number integer, cursor_start bigint, cursor_end bigint, attempt integer, lease_expires_at timestamp with time zone, message text)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_release public.supplier_price_releases%rowtype;\n  v_batch public.supplier_price_release_batches%rowtype;\n  v_committed bigint; v_end bigint; v_batch_number integer;\nbegin\n  if coalesce(auth.role(),'') <> 'service_role' then\n    raise exception 'Supplier release worker requires service role';\n  end if;\n  if input_release_id is null or nullif(trim(input_worker_id),'') is null\n     or input_batch_size is null or input_batch_size not between 1 and 10000\n     or input_lease_seconds is null or input_lease_seconds not between 30 and 3600 then\n    raise exception 'Invalid supplier release claim input';\n  end if;\n  select r.* into v_release from public.supplier_price_releases r\n    where r.id=input_release_id for update skip locked;\n  if not found then\n    return query select 'lock_waiting'::text,null::uuid,input_release_id,null::integer,\n      null::bigint,null::bigint,null::integer,null::timestamptz,'Release absent or locked.'::text;\n    return;\n  end if;\n  if v_release.source_verification_required and (v_release.uploaded_at is null or not exists(\n      select 1 from supplier_price_ingestion_internal.handoffs h where h.release_id=v_release.id\n        and h.source_sha256=v_release.source_file_sha256 and h.source_path=v_release.source_file_path\n        and h.total_rows=v_release.total_rows)) then\n      return query select 'not_ready'::text,null::uuid,v_release.id,null::integer,\n        null::bigint,null::bigint,null::integer,null::timestamptz,'Verified upload completion required.'::text;\n      return;\n    end if;\n  if v_release.status not in ('received','uploaded','parsing','staged','validated') then\n    return query select 'not_claimable'::text,null::uuid,v_release.id,null::integer,\n      null::bigint,null::bigint,null::integer,null::timestamptz,'Release is not claimable.'::text;\n    return;\n  end if;\n  if v_release.total_rows < 1 then\n    return query select 'not_ready'::text,null::uuid,v_release.id,null::integer,\n      null::bigint,null::bigint,null::integer,null::timestamptz,'Release total unknown.'::text;\n    return;\n  end if;\n\n  -- Committed progress comes from finalized batches, never from heartbeat.\n  select coalesce(sum(b.row_count),0)::bigint into v_committed\n    from public.supplier_price_release_batches b\n    where b.release_id=v_release.id and b.status='completed';\n  if v_release.status in ('staged','validated') then\n    if v_committed <> v_release.total_rows then\n      raise exception 'Finished release has incomplete batch accounting';\n    end if;\n    return query select 'complete'::text,null::uuid,v_release.id,null::integer,\n      v_committed+1,v_committed,null::integer,null::timestamptz,'All batches finalized.'::text;\n    return;\n  end if;\n  select b.* into v_batch from public.supplier_price_release_batches b\n    where b.release_id=v_release.id and b.status in ('running','retrying','queued')\n    order by b.cursor_start,b.batch_number limit 1 for update;\n  if found then\n    if v_batch.lease_expires_at > clock_timestamp() then\n      return query select 'busy'::text,v_batch.id,v_release.id,v_batch.batch_number,\n        v_batch.cursor_start,v_batch.cursor_end,v_batch.attempt,v_batch.lease_expires_at,\n        'Another worker owns an active lease.'::text;\n      return;\n    end if;\n    if v_batch.cursor_start <> v_committed+1\n       or v_batch.row_count <> v_batch.cursor_end-v_batch.cursor_start+1 then\n      raise exception 'Unfinished batch does not follow finalized progress';\n    end if;\n    update public.supplier_price_release_batches b\n      set status='running',lease_owner=trim(input_worker_id),\n          lease_expires_at=clock_timestamp()+make_interval(secs=>input_lease_seconds),\n          attempt=b.attempt+1,last_heartbeat_at=clock_timestamp()\n      where b.id=v_batch.id returning b.* into v_batch;\n    insert into public.supplier_price_release_events\n      (release_id,event_type,stage,status,cursor,total_rows,attempt,worker_version)\n      values(v_release.id,'batch_reclaimed','parsing','running',v_batch.cursor_start,\n        v_release.total_rows,v_batch.attempt,'shadow-recovery-v3');\n    return query select 'claimed'::text,v_batch.id,v_release.id,v_batch.batch_number,\n      v_batch.cursor_start,v_batch.cursor_end,v_batch.attempt,v_batch.lease_expires_at,\n      'Unfinished batch reacquired without skipping rows.'::text;\n    return;\n  end if;\n  if v_committed <> v_release.current_cursor or v_committed > v_release.total_rows then\n    raise exception 'Finalized progress and release cursor disagree';\n  end if;\n  if v_committed=v_release.total_rows then\n    return query select 'complete'::text,null::uuid,v_release.id,null::integer,\n      v_committed+1,v_committed,null::integer,null::timestamptz,'All batches finalized.'::text;\n    return;\n  end if;\n  select coalesce(max(b.batch_number),0)+1 into v_batch_number\n    from public.supplier_price_release_batches b where b.release_id=v_release.id;\n  v_end:=least(v_release.total_rows,v_committed+input_batch_size);\n  insert into public.supplier_price_release_batches\n    (release_id,batch_number,cursor_start,cursor_end,row_count,status,attempt,\n     lease_owner,lease_expires_at,started_at,last_heartbeat_at,worker_version)\n    values(v_release.id,v_batch_number,v_committed+1,v_end,(v_end-v_committed)::integer,\n      'running',1,trim(input_worker_id),\n      clock_timestamp()+make_interval(secs=>input_lease_seconds),\n      clock_timestamp(),clock_timestamp(),'shadow-recovery-v3')\n    returning * into v_batch;\n  update public.supplier_price_releases r set status='parsing',updated_at=clock_timestamp()\n    where r.id=v_release.id;\n  insert into public.supplier_price_release_events\n    (release_id,event_type,stage,status,cursor,total_rows,attempt,worker_version)\n    values(v_release.id,'batch_claimed','parsing','running',v_batch.cursor_start,\n      v_release.total_rows,1,'shadow-recovery-v3');\n  return query select 'claimed'::text,v_batch.id,v_release.id,v_batch.batch_number,\n    v_batch.cursor_start,v_batch.cursor_end,v_batch.attempt,v_batch.lease_expires_at,\n    'Batch lease acquired.'::text;\nend;\n$function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_worker_id text, input_lease_seconds integer",
+      "name": "claim_supplier_price_upload_verification",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.claim_supplier_price_upload_verification(input_worker_id text, input_lease_seconds integer DEFAULT 120)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare r supplier_price_ingestion_internal.verification_requests%rowtype;\nbegin\n if coalesce(auth.role(),'') <> 'service_role' then raise exception 'UPLOAD_REQUEST_SERVICE_REQUIRED'; end if;\n if input_worker_id is null or length(input_worker_id) not between 1 and 200 or btrim(input_worker_id)<>input_worker_id\n  or input_lease_seconds is null or input_lease_seconds not between 30 and 3600 then raise exception 'UPLOAD_REQUEST_CONFIG'; end if;\n select a.* into r from supplier_price_ingestion_internal.verification_requests a\n where (a.status='queued' and a.next_attempt_at<=clock_timestamp())\n  or (a.status='verifying' and a.lease_expires_at<=clock_timestamp())\n order by a.next_attempt_at,a.created_at,a.id limit 1 for update skip locked;\n if not found then return jsonb_build_object('status','empty','published',false); end if;\n if r.attempt>=5 then\n  update supplier_price_ingestion_internal.verification_requests a set status='failed',last_error='ATTEMPTS_EXHAUSTED',\n   worker_id=null,lease_token=null,lease_expires_at=null,updated_at=clock_timestamp() where a.id=r.id;\n  return jsonb_build_object('status','exhausted','request_id',r.id,'published',false);\n end if;\n update supplier_price_ingestion_internal.verification_requests a set status='verifying',attempt=a.attempt+1,\n  worker_id=input_worker_id,lease_token=gen_random_uuid(),lease_expires_at=clock_timestamp()+make_interval(secs=>input_lease_seconds),\n  updated_at=clock_timestamp() where a.id=r.id returning a.* into r;\n return jsonb_build_object('status','claimed','request_id',r.id,'session_id',r.session_id,'release_id',r.release_id,\n  'organization_id',r.organization_id,'actor_id',r.actor_id,'attempt',r.attempt,'lease_token',r.lease_token,'published',false);\nend; $function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_worker_id text, input_lease_seconds integer",
+      "name": "claim_supplier_price_verified_handoff",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.claim_supplier_price_verified_handoff(input_worker_id text, input_lease_seconds integer DEFAULT 120)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare h supplier_price_ingestion_internal.handoffs%rowtype;\nbegin\n  if coalesce(auth.role(),'') <> 'service_role' then raise exception 'UPLOAD_VERIFY_ROLE';end if;\n  if nullif(trim(input_worker_id),'') is null or length(input_worker_id)>200\n     or input_lease_seconds is null or input_lease_seconds not between 30 and 3600 then raise exception 'UPLOAD_HANDOFF_INPUT';end if;\n  select x.* into h from supplier_price_ingestion_internal.handoffs x\n    where x.status='queued' or (x.status='dispatching' and x.lease_expires_at <= clock_timestamp())\n    order by x.created_at,x.id for update skip locked limit 1;\n  if not found then return jsonb_build_object('status','empty');end if;\n  update supplier_price_ingestion_internal.handoffs x set status='dispatching',attempt=x.attempt+1,\n    lease_owner=trim(input_worker_id),lease_token=pg_catalog.gen_random_uuid(),\n    lease_expires_at=clock_timestamp()+make_interval(secs=>input_lease_seconds)\n    where x.id=h.id returning * into h;\n  return jsonb_build_object('status','claimed','handoff_id',h.id,'release_id',h.release_id,'workflow_id',h.workflow_id,\n    'queue_name',h.queue_name,'lease_token',h.lease_token,'lease_expires_at',h.lease_expires_at,'attempt',h.attempt);\nend $function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_release_id uuid, input_handoff_id uuid, input_worker_id text, input_batch_size integer, input_lease_seconds integer",
+      "name": "claim_supplier_price_verified_release_batch",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.claim_supplier_price_verified_release_batch(input_release_id uuid, input_handoff_id uuid, input_worker_id text, input_batch_size integer DEFAULT 1000, input_lease_seconds integer DEFAULT 120)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nbegin\n  if coalesce(auth.role(),'') <> 'service_role' then raise exception 'UPLOAD_VERIFY_ROLE';end if;\n  if current_setting('transaction_isolation') <> 'read committed' then raise exception 'UPLOAD_VERIFY_ISOLATION';end if;\n  perform 1 from public.supplier_price_releases r where r.id=input_release_id for update skip locked;\n  if not found then return jsonb_build_object('status','lock_waiting');end if;\n  perform public.get_supplier_price_verified_manifest(input_release_id,input_handoff_id);\n  return (select to_jsonb(c) from public.claim_supplier_price_release_batch(input_release_id,input_worker_id,input_batch_size,input_lease_seconds)c);\nend $function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_session_id uuid, input_organization_id uuid, input_actor_id uuid, input_object_id uuid, input_object_version text, input_object_updated_at timestamp with time zone, input_source_bytes bigint, input_source_sha256 text, input_total_rows bigint",
+      "name": "complete_supplier_price_verified_upload",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.complete_supplier_price_verified_upload(input_session_id uuid, input_organization_id uuid, input_actor_id uuid, input_object_id uuid, input_object_version text, input_object_updated_at timestamp with time zone, input_source_bytes bigint, input_source_sha256 text, input_total_rows bigint)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  u public.supplier_price_upload_sessions%rowtype; r public.supplier_price_releases%rowtype;\n  o storage.objects%rowtype; h supplier_price_ingestion_internal.handoffs%rowtype;\nbegin\n  if coalesce(auth.role(),'') <> 'service_role' then raise exception 'UPLOAD_VERIFY_ROLE';end if;\n  if current_setting('transaction_isolation') <> 'read committed' then raise exception 'UPLOAD_VERIFY_ISOLATION';end if;\n  if input_source_bytes is null or input_source_bytes not between 1 and 1073741824\n     or input_source_sha256 is null or input_source_sha256 !~ '^[0-9a-f]{64}$'\n     or input_total_rows is null or input_total_rows < 1 or input_object_id is null\n     or nullif(input_object_version,'') is null or input_object_updated_at is null then raise exception 'UPLOAD_VERIFY_INPUT';end if;\n  select x.* into u from public.supplier_price_upload_sessions x where x.id=input_session_id for update;\n  if not found or u.organization_id is distinct from input_organization_id\n     or u.created_by is distinct from input_actor_id then raise exception 'UPLOAD_VERIFY_SCOPE';end if;\n  if not exists(select 1 from public.profiles p where p.id=input_actor_id and p.organization_id=input_organization_id\n    and p.is_active is true and p.role in ('admin','superadmin')) then raise exception 'UPLOAD_VERIFY_ACTOR';end if;\n  select x.* into r from public.supplier_price_releases x where x.id=u.release_id for update;\n  if not found or not r.source_verification_required\n     or r.organization_id is distinct from u.organization_id or r.created_by is distinct from u.created_by\n     or r.source_file_path is distinct from u.storage_object_path or r.source_file_sha256 is distinct from u.checksum_sha256\n     or u.storage_bucket <> 'supplier-price-imports' or input_source_bytes <> u.total_bytes\n     or input_source_sha256 is distinct from u.checksum_sha256 then raise exception 'UPLOAD_VERIFY_BINDING';end if;\n  if u.status not in ('created','uploading','uploaded') or (u.status <> 'uploaded' and u.expires_at <= clock_timestamp())\n     or r.status not in ('received','uploaded','parsing','staged','validated') then raise exception 'UPLOAD_VERIFY_STATE';end if;\n  select x.* into o from storage.objects x where x.bucket_id=u.storage_bucket and x.name=u.storage_object_path for share;\n  if not found or o.id is distinct from input_object_id or o.version is distinct from input_object_version\n     or o.updated_at is distinct from input_object_updated_at then raise exception 'UPLOAD_VERIFY_OBJECT_CHANGED';end if;\n  if coalesce(o.metadata->>'size','') !~ '^[0-9]{1,10}$'\n     or (o.metadata->>'size')::bigint <> input_source_bytes then raise exception 'UPLOAD_VERIFY_OBJECT_SIZE';end if;\n  select x.* into h from supplier_price_ingestion_internal.handoffs x where x.session_id=u.id for update;\n  if found then\n    if h.release_id <> r.id or h.organization_id <> u.organization_id or h.storage_bucket <> u.storage_bucket\n       or h.source_path <> u.storage_object_path or h.source_sha256 <> input_source_sha256\n       or h.source_bytes <> input_source_bytes or h.total_rows <> input_total_rows or h.object_id <> input_object_id\n       or h.object_version <> input_object_version or h.object_updated_at <> input_object_updated_at\n       or r.total_rows <> h.total_rows or u.status <> 'uploaded' then raise exception 'UPLOAD_VERIFY_REPLAY_CONFLICT';end if;\n  else\n    if r.status <> 'received' or r.current_cursor <> 0 or r.processed_rows <> 0\n       or exists(select 1 from public.supplier_price_release_batches b where b.release_id=r.id) then raise exception 'UPLOAD_VERIFY_ALREADY_STARTED';end if;\n    insert into supplier_price_ingestion_internal.handoffs(session_id,release_id,organization_id,storage_bucket,source_path,\n      source_sha256,source_bytes,total_rows,object_id,object_version,object_updated_at,workflow_id)\n      values(u.id,r.id,u.organization_id,u.storage_bucket,u.storage_object_path,input_source_sha256,input_source_bytes,\n        input_total_rows,input_object_id,input_object_version,input_object_updated_at,'supplier-price-verified:v1:'||r.id::text)\n      returning * into h;\n    update public.supplier_price_upload_sessions x set status='uploaded',uploaded_bytes=x.total_bytes,\n      uploaded_at=clock_timestamp(),completed_at=clock_timestamp(),updated_at=clock_timestamp() where x.id=u.id;\n    update public.supplier_price_releases x set status='uploaded',total_rows=input_total_rows,\n      uploaded_at=clock_timestamp(),updated_at=clock_timestamp(),worker_version='verified-handoff-v1' where x.id=r.id;\n    insert into public.supplier_price_release_events(release_id,event_type,stage,status,total_rows,worker_version)\n      values(r.id,'source_verified','upload','uploaded',input_total_rows,'verified-handoff-v1');\n  end if;\n  return jsonb_build_object('status','verified','session_id',u.id,'release_id',r.id,'handoff_id',h.id,\n    'workflow_id',h.workflow_id,'queue_name',h.queue_name,'source_bytes',h.source_bytes,'source_sha256',h.source_sha256,\n    'total_rows',h.total_rows,'published',false);\nend $function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_batch_id uuid, input_worker_id text, input_processed_rows integer, input_cursor bigint, input_accepted_rows integer, input_warning_rows integer, input_rejected_rows integer",
+      "name": "finalize_supplier_price_release_shadow_batch",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.finalize_supplier_price_release_shadow_batch(input_batch_id uuid, input_worker_id text, input_processed_rows integer, input_cursor bigint, input_accepted_rows integer DEFAULT 0, input_warning_rows integer DEFAULT 0, input_rejected_rows integer DEFAULT 0)\n RETURNS TABLE(status text, batch_id uuid, release_id uuid, release_status text, processed_rows bigint, current_cursor bigint, message text)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_batch public.supplier_price_release_batches%rowtype;\n  v_release public.supplier_price_releases%rowtype;\n  v_release_id uuid;\n  v_processed bigint;\n  v_accepted bigint;\n  v_warning bigint;\n  v_rejected bigint;\n  v_cursor bigint;\n  v_status text;\nbegin\n  if coalesce(auth.role(), '') <> 'service_role' then\n    raise exception 'Supplier release finalization requires service role';\n  end if;\n  if input_batch_id is null or nullif(trim(input_worker_id), '') is null\n     or input_processed_rows is null or input_cursor is null\n     or input_accepted_rows is null or input_warning_rows is null or input_rejected_rows is null\n     or input_processed_rows < 0 or input_accepted_rows < 0\n     or input_warning_rows < 0 or input_rejected_rows < 0 then\n    raise exception 'Invalid shadow finalization input';\n  end if;\n  select b.release_id into v_release_id from public.supplier_price_release_batches b\n    where b.id = input_batch_id;\n  if not found then raise exception 'Supplier release batch not found'; end if;\n  -- Every mutating lease path locks release before batch.\n  select r.* into v_release from public.supplier_price_releases r\n    where r.id = v_release_id for update;\n  select b.* into v_batch from public.supplier_price_release_batches b\n    where b.id = input_batch_id for update;\n\n  if input_processed_rows <> v_batch.row_count or input_cursor <> v_batch.cursor_end\n     or input_accepted_rows::bigint + input_warning_rows + input_rejected_rows <> input_processed_rows\n     or v_batch.row_count <> v_batch.cursor_end - v_batch.cursor_start + 1 then\n    raise exception 'Shadow scan counts or cursor do not cover the complete batch';\n  end if;\n  if v_batch.status = 'completed' then\n    if v_batch.accepted_count <> input_accepted_rows or v_batch.warning_count <> input_warning_rows\n       or v_batch.rejected_count <> input_rejected_rows then\n      raise exception 'Shadow replay counts differ from completed batch';\n    end if;\n    return query select 'finalized'::text, v_batch.id, v_batch.release_id,\n      v_release.status, v_release.processed_rows, v_release.current_cursor,\n      'Shadow batch already finalized; replay made no changes.'::text;\n    return;\n  end if;\n  if v_batch.status <> 'running' or v_batch.lease_owner is distinct from trim(input_worker_id)\n     or v_batch.lease_expires_at is null or v_batch.lease_expires_at <= now() then\n    return query select 'stale'::text, v_batch.id, v_batch.release_id,\n      v_release.status, v_release.processed_rows, v_release.current_cursor,\n      'Batch lease is expired or owned by another worker.'::text;\n    return;\n  end if;\n  if v_release.status <> 'parsing' then\n    raise exception 'Release is not in the shadow parsing phase';\n  end if;\n  if exists (\n    select 1 from public.supplier_price_release_batches b\n    where b.release_id = v_batch.release_id and b.status = 'completed'\n      and b.cursor_start <= v_batch.cursor_end and b.cursor_end >= v_batch.cursor_start\n  ) then raise exception 'Completed shadow batches overlap'; end if;\n  select coalesce(sum(b.row_count), 0)::bigint into v_processed\n    from public.supplier_price_release_batches b\n    where b.release_id = v_batch.release_id and b.status = 'completed';\n  if v_batch.cursor_start <> v_processed + 1 then\n    raise exception 'Shadow finalization would skip an unfinished batch';\n  end if;\n\n  update public.supplier_price_release_batches as b\n    set status = 'completed', accepted_count = input_accepted_rows,\n        warning_count = input_warning_rows, rejected_count = input_rejected_rows,\n        completed_at = now(), last_heartbeat_at = now(), lease_owner = null,\n        lease_expires_at = null, checksum = v_release.source_file_sha256\n    where b.id = v_batch.id;\n  select sum(b.row_count)::bigint, sum(b.accepted_count)::bigint,\n         sum(b.warning_count)::bigint, sum(b.rejected_count)::bigint, max(b.cursor_end)\n    into v_processed, v_accepted, v_warning, v_rejected, v_cursor\n    from public.supplier_price_release_batches b\n    where b.release_id = v_batch.release_id and b.status = 'completed';\n  v_status := case when v_processed = v_release.total_rows and v_cursor = v_release.total_rows\n                   then 'staged' else 'parsing' end;\n  update public.supplier_price_releases as r\n    set processed_rows = v_processed, current_cursor = v_cursor,\n        accepted_rows = v_accepted, warning_rows = v_warning, rejected_rows = v_rejected,\n        status = v_status, updated_at = now()\n    where r.id = v_batch.release_id;\n  insert into public.supplier_price_release_events\n    (release_id, event_type, stage, status, cursor, processed_rows, total_rows, attempt, worker_version)\n    values (v_batch.release_id, 'shadow_batch_finalized', 'shadow_scan', 'completed',\n            v_cursor, v_processed, v_release.total_rows, v_batch.attempt, 'shadow-finalize-v2');\n  return query select 'finalized'::text, v_batch.id, v_batch.release_id, v_status,\n    v_processed, v_cursor, 'Shadow scan finalized; row persistence and publication remain pending.'::text;\nend;\n$function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_release_id uuid",
+      "name": "get_supplier_price_release_manifest",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.get_supplier_price_release_manifest(input_release_id uuid)\n RETURNS TABLE(id uuid, source_file_path text, source_file_sha256 text, total_rows bigint, source_date date)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\n  select r.id, r.source_file_path, r.source_file_sha256, r.total_rows, r.source_date\n    from public.supplier_price_releases as r\n   where r.id = input_release_id;\n$function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_session_id uuid, input_actor_id uuid, input_organization_id uuid, input_auth_session_id uuid, input_token_iat bigint, input_token_exp bigint",
+      "name": "get_supplier_price_upload_status",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.get_supplier_price_upload_status(input_session_id uuid, input_actor_id uuid, input_organization_id uuid, input_auth_session_id uuid, input_token_iat bigint, input_token_exp bigint)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare u public.supplier_price_upload_sessions%rowtype; r public.supplier_price_releases%rowtype;\n v supplier_price_ingestion_internal.verification_requests%rowtype; p public.profiles%rowtype;\n s auth.sessions%rowtype; ready boolean;\nbegin\n if coalesce(auth.role(),'') <> 'service_role' then raise exception 'UPLOAD_STATUS_DENIED'; end if;\n if input_actor_id is null or input_organization_id is null or input_auth_session_id is null\n  or input_token_iat is null or input_token_exp is null or input_token_iat<=0\n  or input_token_iat>extract(epoch from clock_timestamp())+30\n  or input_token_exp<=extract(epoch from clock_timestamp()) or input_token_exp<=input_token_iat\n  then raise exception 'UPLOAD_STATUS_DENIED'; end if;\n select a.* into s from auth.sessions a where a.id=input_auth_session_id;\n if not found or s.user_id is distinct from input_actor_id\n  or (s.not_after is not null and s.not_after<=clock_timestamp()) then raise exception 'UPLOAD_STATUS_DENIED'; end if;\n select a.* into p from public.profiles a where a.id=input_actor_id;\n if not found or p.is_active is distinct from true or coalesce(p.role,'') not in ('admin','superadmin')\n  or p.organization_id is distinct from input_organization_id\n  or (p.session_revoked_at is not null and input_token_iat<=extract(epoch from p.session_revoked_at))\n  then raise exception 'UPLOAD_STATUS_DENIED'; end if;\n select a.* into u from public.supplier_price_upload_sessions a where a.id=input_session_id\n  and a.created_by=input_actor_id and a.organization_id=input_organization_id;\n if not found then raise exception 'UPLOAD_STATUS_DENIED'; end if;\n select a.* into r from public.supplier_price_releases a where a.id=u.release_id\n  and a.organization_id=u.organization_id and a.created_by=u.created_by;\n if not found or not r.source_verification_required then raise exception 'UPLOAD_STATUS_DENIED'; end if;\n select a.* into v from supplier_price_ingestion_internal.verification_requests a where a.session_id=u.id;\n -- Presence/size only permits verification submission; it is NOT hash proof.\n select exists(select 1 from storage.objects o where o.bucket_id=u.storage_bucket and o.name=u.storage_object_path\n  and nullif(o.version,'') is not null and o.updated_at is not null\n  and o.metadata->>'size'=u.total_bytes::text) into ready;\n return jsonb_build_object('session_id',u.id,'release_id',r.id,'upload_status',u.status,\n  'verification_status',coalesce(v.status,'not_requested'),'transfer_ready',ready,\n  'total_bytes',u.total_bytes,'total_rows',r.total_rows,'processed_rows',r.processed_rows,\n  'release_status',r.status,'expires_at',u.expires_at,'updated_at',coalesce(v.updated_at,u.updated_at),\n  'published',false);\nend $function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_release_id uuid, input_handoff_id uuid",
+      "name": "get_supplier_price_verified_manifest",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.get_supplier_price_verified_manifest(input_release_id uuid, input_handoff_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare r public.supplier_price_releases%rowtype; h supplier_price_ingestion_internal.handoffs%rowtype;\nbegin\n  if coalesce(auth.role(),'') <> 'service_role' then raise exception 'UPLOAD_VERIFY_ROLE';end if;\n  select x.* into r from public.supplier_price_releases x where x.id=input_release_id;\n  select x.* into h from supplier_price_ingestion_internal.handoffs x where x.id=input_handoff_id and x.release_id=input_release_id;\n  if r.id is null or h.id is null or not r.source_verification_required or r.uploaded_at is null\n     or r.source_file_path <> h.source_path or r.source_file_sha256 <> h.source_sha256 or r.total_rows <> h.total_rows\n     or r.organization_id <> h.organization_id or r.status not in ('uploaded','parsing','staged','validated')\n     or not exists(select 1 from public.supplier_price_upload_sessions u where u.id=h.session_id and u.status='uploaded')\n     or not exists(select 1 from storage.objects o where o.id=h.object_id and o.bucket_id=h.storage_bucket and o.name=h.source_path\n       and o.version=h.object_version and o.updated_at=h.object_updated_at\n       and o.metadata->>'size'=h.source_bytes::text) then raise exception 'UPLOAD_HANDOFF_NOT_READY';end if;\n  return jsonb_build_object('id',r.id,'source_file_path',r.source_file_path,'source_file_sha256',r.source_file_sha256,\n    'source_file_bytes',h.source_bytes,'total_rows',r.total_rows,'source_date',r.source_date,'handoff_id',h.id);\nend $function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_batch_id uuid, input_worker_id text, input_processed_rows integer, input_cursor bigint, input_lease_seconds integer",
+      "name": "heartbeat_supplier_price_release_batch",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.heartbeat_supplier_price_release_batch(input_batch_id uuid, input_worker_id text, input_processed_rows integer DEFAULT 0, input_cursor bigint DEFAULT NULL::bigint, input_lease_seconds integer DEFAULT 120)\n RETURNS TABLE(status text, batch_id uuid, release_id uuid, processed_rows bigint, current_cursor bigint, lease_expires_at timestamp with time zone, message text)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_batch public.supplier_price_release_batches%rowtype;\n  v_release_id uuid; v_cursor bigint; v_expires timestamptz;\nbegin\n  if coalesce(auth.role(),'') <> 'service_role' then\n    raise exception 'Supplier release worker requires service role';\n  end if;\n  if input_batch_id is null or nullif(trim(input_worker_id),'') is null\n     or input_processed_rows is null or input_processed_rows<0\n     or input_lease_seconds is null or input_lease_seconds not between 30 and 3600 then\n    raise exception 'Invalid supplier release heartbeat input';\n  end if;\n  select b.release_id into v_release_id from public.supplier_price_release_batches b\n    where b.id=input_batch_id;\n  if not found then raise exception 'Supplier release batch not found'; end if;\n  -- Consistent release-before-batch locking prevents lease-path deadlocks.\n  perform 1 from public.supplier_price_releases r where r.id=v_release_id for update;\n  select b.* into v_batch from public.supplier_price_release_batches b\n    where b.id=input_batch_id for update;\n  if v_batch.status<>'running' or v_batch.lease_owner is distinct from trim(input_worker_id)\n     or v_batch.lease_expires_at is null or v_batch.lease_expires_at<=clock_timestamp() then\n    return query select 'stale'::text,v_batch.id,v_batch.release_id,0::bigint,\n      null::bigint,v_batch.lease_expires_at,'Lease expired or belongs to another worker.'::text;\n    return;\n  end if;\n  v_cursor:=coalesce(input_cursor,v_batch.cursor_start-1);\n  if input_processed_rows>v_batch.row_count or v_cursor<v_batch.cursor_start-1\n     or v_cursor>v_batch.cursor_end\n     or input_processed_rows<>v_cursor-v_batch.cursor_start+1 then\n    raise exception 'Heartbeat counts and cursor disagree with claimed batch';\n  end if;\n  v_expires:=clock_timestamp()+make_interval(secs=>input_lease_seconds);\n  update public.supplier_price_release_batches b\n    set last_heartbeat_at=clock_timestamp(),lease_expires_at=v_expires\n    where b.id=v_batch.id;\n  -- Heartbeat reports liveness only. Finalizer owns release cursor/counters.\n  return query select 'heartbeat'::text,v_batch.id,v_batch.release_id,\n    input_processed_rows::bigint,v_cursor,v_expires,'Batch heartbeat recorded.'::text;\nend;\n$function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_limit integer",
+      "name": "recover_expired_supplier_price_release_batches",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.recover_expired_supplier_price_release_batches(input_limit integer DEFAULT 100)\n RETURNS integer\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare v_count integer := 0;\nbegin\n  if coalesce(auth.role(), '') <> 'service_role' then\n    raise exception 'Supplier release worker requires service role';\n  end if;\n  if input_limit < 1 or input_limit > 1000 then\n    raise exception 'input_limit must be between 1 and 1000';\n  end if;\n  with expired as (\n    select id from public.supplier_price_release_batches\n     where status = 'running' and lease_expires_at is not null and lease_expires_at <= now()\n     order by lease_expires_at asc limit input_limit for update skip locked\n  )\n  update public.supplier_price_release_batches batch\n     set status = 'retrying', attempt = batch.attempt + 1, lease_owner = null,\n         lease_expires_at = null, error_code = 'LEASE_EXPIRED',\n         error_message = 'Worker lease expired; batch is retryable.'\n    from expired where batch.id = expired.id;\n  get diagnostics v_count = row_count;\n  return v_count;\nend;\n$function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_session_id uuid, input_actor_id uuid, input_organization_id uuid, input_auth_session_id uuid, input_token_iat bigint, input_token_exp bigint",
+      "name": "request_supplier_price_upload_verification",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.request_supplier_price_upload_verification(input_session_id uuid, input_actor_id uuid, input_organization_id uuid, input_auth_session_id uuid, input_token_iat bigint, input_token_exp bigint)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare s auth.sessions%rowtype; p public.profiles%rowtype; c jsonb;\n r supplier_price_ingestion_internal.verification_requests%rowtype;\nbegin\n if coalesce(auth.role(),'') <> 'service_role' then raise exception 'UPLOAD_REQUEST_SERVICE_REQUIRED'; end if;\n if current_setting('transaction_isolation') <> 'read committed' then raise exception 'UPLOAD_REQUEST_REQUIRES_READ_COMMITTED'; end if;\n if input_actor_id is null or input_organization_id is null or input_auth_session_id is null\n  or input_token_iat is null or input_token_exp is null or input_token_iat <= 0\n  or input_token_iat > extract(epoch from clock_timestamp())+30\n  or input_token_exp <= extract(epoch from clock_timestamp()) or input_token_exp <= input_token_iat\n  then raise exception 'UPLOAD_REQUEST_SESSION_DENIED'; end if;\n select a.* into s from auth.sessions a where a.id=input_auth_session_id for share;\n if not found or s.user_id is distinct from input_actor_id\n  or (s.not_after is not null and s.not_after<=clock_timestamp()) then raise exception 'UPLOAD_REQUEST_SESSION_DENIED'; end if;\n select a.* into p from public.profiles a where a.id=input_actor_id for share;\n if not found or p.is_active is distinct from true or coalesce(p.role,'') not in ('admin','superadmin')\n  or p.organization_id is distinct from input_organization_id then raise exception 'UPLOAD_REQUEST_ACTOR_DENIED'; end if;\n if p.session_revoked_at is not null and input_token_iat<=extract(epoch from p.session_revoked_at)\n  then raise exception 'UPLOAD_REQUEST_SESSION_DENIED'; end if;\n -- Metadata-only check and same upload/release locks as trusted completion.\n -- This rejects legacy admission, nonexistent object, wrong scope and expiry.\n c:=public.begin_supplier_price_upload_verification(input_session_id,input_organization_id,input_actor_id);\n if input_token_exp<=extract(epoch from clock_timestamp())\n  or (s.not_after is not null and s.not_after<=clock_timestamp()) then raise exception 'UPLOAD_REQUEST_SESSION_DENIED'; end if;\n insert into supplier_price_ingestion_internal.verification_requests(session_id,release_id,organization_id,actor_id,accepted_auth_session_id,accepted_token_iat)\n values(input_session_id,(c->>'release_id')::uuid,input_organization_id,input_actor_id,input_auth_session_id,input_token_iat)\n on conflict(session_id) do nothing;\n select a.* into r from supplier_price_ingestion_internal.verification_requests a where a.session_id=input_session_id;\n if r.actor_id is distinct from input_actor_id or r.organization_id is distinct from input_organization_id\n  or r.release_id is distinct from (c->>'release_id')::uuid then raise exception 'UPLOAD_REQUEST_BINDING'; end if;\n return jsonb_build_object('request_id',r.id,'session_id',r.session_id,'release_id',r.release_id,'status',r.status,'published',false);\nend; $function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_release_id uuid, input_worker_id text, input_lease_seconds integer",
+      "name": "resume_supplier_price_shadow_finalization",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.resume_supplier_price_shadow_finalization(input_release_id uuid, input_worker_id text, input_lease_seconds integer DEFAULT 120)\n RETURNS TABLE(status text, batch_id uuid, release_id uuid, batch_number integer, cursor_start bigint, cursor_end bigint, attempt integer, lease_expires_at timestamp with time zone, message text)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_release public.supplier_price_releases%rowtype;\n  v_batch public.supplier_price_release_batches%rowtype;\nbegin\n  if coalesce(auth.role(), '') <> 'service_role' then\n    raise exception 'Supplier shadow recovery requires service role';\n  end if;\n  if input_release_id is null or nullif(trim(input_worker_id), '') is null\n     or input_lease_seconds is null or input_lease_seconds not between 30 and 3600 then\n    raise exception 'Invalid shadow recovery input';\n  end if;\n  select r.* into v_release from public.supplier_price_releases r\n    where r.id = input_release_id for update skip locked;\n  if not found then\n    return query select 'lock_waiting'::text, null::uuid, input_release_id,\n      null::integer, null::bigint, null::bigint, null::integer, null::timestamptz,\n      'Release not found or locked.'::text;\n    return;\n  end if;\n  if v_release.status <> 'parsing' or v_release.current_cursor <> v_release.total_rows\n     or v_release.total_rows < 1 then\n    return query select 'not_claimable'::text, null::uuid, v_release.id,\n      null::integer, null::bigint, null::bigint, null::integer, null::timestamptz,\n      'Release does not have a pending shadow finalization.'::text;\n    return;\n  end if;\n  select b.* into v_batch from public.supplier_price_release_batches b\n    where b.release_id = v_release.id and b.status in ('running', 'retrying')\n      and b.cursor_end = v_release.total_rows\n    order by b.batch_number desc limit 1 for update skip locked;\n  if not found then\n    return query select 'not_claimable'::text, null::uuid, v_release.id,\n      null::integer, null::bigint, null::bigint, null::integer, null::timestamptz,\n      'No unfinished final batch found.'::text;\n    return;\n  end if;\n  if v_batch.lease_expires_at > now() then\n    return query select 'busy'::text, v_batch.id, v_release.id, v_batch.batch_number,\n      v_batch.cursor_start, v_batch.cursor_end, v_batch.attempt,\n      v_batch.lease_expires_at, 'Final batch still has an active lease.'::text;\n    return;\n  end if;\n  update public.supplier_price_release_batches as b\n    set status = 'running', lease_owner = trim(input_worker_id),\n        lease_expires_at = now() + make_interval(secs => input_lease_seconds),\n        attempt = b.attempt + 1, last_heartbeat_at = now()\n    where b.id = v_batch.id returning b.* into v_batch;\n  return query select 'claimed'::text, v_batch.id, v_release.id, v_batch.batch_number,\n    v_batch.cursor_start, v_batch.cursor_end, v_batch.attempt,\n    v_batch.lease_expires_at, 'Expired shadow batch reacquired for rescan and finalization.'::text;\nend;\n$function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_request_id uuid, input_worker_id text, input_lease_token uuid, input_action text, input_lease_seconds integer, input_error_code text",
+      "name": "settle_supplier_price_upload_verification",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.settle_supplier_price_upload_verification(input_request_id uuid, input_worker_id text, input_lease_token uuid, input_action text, input_lease_seconds integer DEFAULT 120, input_error_code text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare r supplier_price_ingestion_internal.verification_requests%rowtype; h uuid;\nbegin\n if coalesce(auth.role(),'') <> 'service_role' then raise exception 'UPLOAD_REQUEST_SERVICE_REQUIRED'; end if;\n if input_action is null or input_action not in ('heartbeat','verified','retry','failed')\n  or input_lease_seconds is null or input_lease_seconds not between 30 and 3600\n  or (input_action in ('retry','failed') and (input_error_code is null or input_error_code !~ '^[A-Z0-9_]{1,80}$'))\n  then raise exception 'UPLOAD_REQUEST_CONFIG'; end if;\n select a.* into r from supplier_price_ingestion_internal.verification_requests a where a.id=input_request_id for update;\n if not found or r.status<>'verifying' or r.worker_id is distinct from input_worker_id\n  or r.lease_token is distinct from input_lease_token or r.lease_expires_at<=clock_timestamp()\n  then raise exception 'UPLOAD_REQUEST_LEASE_LOST'; end if;\n if input_action='verified' then\n  select a.id into h from supplier_price_ingestion_internal.handoffs a where a.session_id=r.session_id\n   and a.release_id=r.release_id and a.organization_id=r.organization_id;\n  if not found then raise exception 'UPLOAD_REQUEST_PROOF_MISSING'; end if;\n end if;\n update supplier_price_ingestion_internal.verification_requests a set\n  status=case input_action when 'heartbeat' then 'verifying' when 'verified' then 'verified'\n   when 'failed' then 'failed' else case when a.attempt>=5 then 'failed' else 'queued' end end,\n  lease_expires_at=case when input_action='heartbeat' then clock_timestamp()+make_interval(secs=>input_lease_seconds) else null end,\n  worker_id=case when input_action='heartbeat' then a.worker_id else null end,\n  lease_token=case when input_action='heartbeat' then a.lease_token else null end,\n  next_attempt_at=case when input_action='retry' then clock_timestamp()+make_interval(secs=>least(300,5*a.attempt*a.attempt)) else a.next_attempt_at end,\n  last_error=case when input_action in ('failed','retry') then input_error_code else null end,\n  handoff_id=coalesce(h,a.handoff_id),updated_at=clock_timestamp() where a.id=r.id returning a.* into r;\n return jsonb_build_object('request_id',r.id,'session_id',r.session_id,'release_id',r.release_id,'status',r.status,'published',false);\nend; $function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_batch_id uuid, input_worker_id text, input_rows jsonb",
+      "name": "stage_supplier_price_release_batch",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.stage_supplier_price_release_batch(input_batch_id uuid, input_worker_id text, input_rows jsonb)\n RETURNS TABLE(status text, batch_id uuid, release_id_result uuid, staged_rows bigint, message text)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_batch public.supplier_price_release_batches%rowtype;\n  v_release_id uuid; v_count bigint; v_unique bigint; v_min bigint; v_max bigint;\nbegin\n  if coalesce(auth.role(),'')<>'service_role' then\n    raise exception 'Supplier shadow staging requires service role';\n  end if;\n  if input_batch_id is null or nullif(trim(input_worker_id),'') is null\n     or input_rows is null or jsonb_typeof(input_rows)<>'array' then\n    raise exception 'Invalid supplier shadow staging input';\n  end if;\n  select b.release_id into v_release_id from public.supplier_price_release_batches b\n    where b.id=input_batch_id;\n  if not found then raise exception 'Supplier release batch not found'; end if;\n  perform 1 from public.supplier_price_releases r where r.id=v_release_id for update;\n  select b.* into v_batch from public.supplier_price_release_batches b\n    where b.id=input_batch_id for update;\n  if v_batch.status<>'running' or v_batch.lease_owner is distinct from trim(input_worker_id)\n     or v_batch.lease_expires_at is null or v_batch.lease_expires_at<=clock_timestamp() then\n    return query select 'stale'::text,v_batch.id,v_batch.release_id,0::bigint,\n      'Lease expired or belongs to another worker.'::text;\n    return;\n  end if;\n  select count(*),count(distinct x.source_row_number),min(x.source_row_number),max(x.source_row_number)\n    into v_count,v_unique,v_min,v_max\n    from jsonb_to_recordset(input_rows) x(source_row_number bigint);\n  if v_count<>v_batch.row_count or v_unique<>v_count\n     or v_min<>v_batch.cursor_start or v_max<>v_batch.cursor_end then\n    raise exception 'Shadow rows must exactly cover the claimed batch';\n  end if;\n  if exists(select 1 from jsonb_array_elements(input_rows) j\n      where coalesce(length(j->>'row_hash'),0)<>64) then\n    raise exception 'Shadow row hash missing or malformed';\n  end if;\n  if exists(\n    select 1 from jsonb_array_elements(input_rows) j\n    join public.supplier_price_release_rows rr\n      on rr.release_id=v_batch.release_id and rr.source_row_number=(j->>'source_row_number')::bigint\n    where (to_jsonb(rr)-'id'-'release_id'-'created_at') is distinct from\n      (to_jsonb(jsonb_populate_record(null::public.supplier_price_release_rows,j))-'id'-'release_id'-'created_at')\n  ) then raise exception 'Shadow retry payload differs from persisted rows'; end if;\n  insert into public.supplier_price_release_rows\n    (release_id,source_row_number,normalized_code,product_code,description,oem_no,ean,\n     vehicle,vehicle_model,market_segment,dimensions,weight,description_tr,origin,tariff,\n     image_url,buy_price,currency,moq,lead_time_days,notes,valid_from,row_hash,\n     row_status,error_code,error_message)\n  select v_batch.release_id,x.source_row_number,x.normalized_code,x.product_code,\n    x.description,x.oem_no,x.ean,x.vehicle,x.vehicle_model,x.market_segment,x.dimensions,\n    x.weight,x.description_tr,x.origin,x.tariff,x.image_url,x.buy_price,x.currency,\n    x.moq,x.lead_time_days,x.notes,x.valid_from,x.row_hash,x.row_status,x.error_code,x.error_message\n  from jsonb_populate_recordset(null::public.supplier_price_release_rows,input_rows) x\n  on conflict (release_id,source_row_number) do nothing;\n  select count(*) into v_count from public.supplier_price_release_rows rr\n    where rr.release_id=v_batch.release_id\n      and rr.source_row_number between v_batch.cursor_start and v_batch.cursor_end;\n  if v_count<>v_batch.row_count then raise exception 'Shadow staged row count mismatch'; end if;\n  return query select 'staged'::text,v_batch.id,v_batch.release_id,v_count,\n    'Shadow rows persisted; exact replay is immutable; publication disabled.'::text;\nend;\n$function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_release_id uuid",
+      "name": "start_supplier_price_release_batch_validation",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.start_supplier_price_release_batch_validation(input_release_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare r public.supplier_price_releases%rowtype; v public.supplier_price_release_validation_runs%rowtype;\nbegin\n if coalesce(auth.role(),'')<>'service_role' then raise exception 'VALIDATION_ROLE'; end if;\n select * into r from public.supplier_price_releases where id=input_release_id for update;\n if not found then raise exception 'Supplier release not found'; end if;\n if r.status not in ('staged','validated') then raise exception 'Release must be staged before batch validation'; end if;\n insert into public.supplier_price_release_validation_runs(release_id,total_rows,status,started_at,updated_at)\n values(r.id,r.total_rows,'running',coalesce(now(),now()),now())\n on conflict (release_id) do update set updated_at=now()\n returning * into v;\n return jsonb_build_object('release_id',v.release_id,'status',v.status,'cursor',v.cursor,'total_rows',v.total_rows,'completed',v.completed_at is not null);\nend $function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_organization_id uuid, input_actor_id uuid, input_supplier_id uuid, input_brand_id uuid, input_file_name text, input_content_type text, input_total_bytes bigint, input_checksum_sha256 text, input_idempotency_key text, input_mode text, input_source_date date",
+      "name": "start_supplier_price_upload_session",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.start_supplier_price_upload_session(input_organization_id uuid, input_actor_id uuid, input_supplier_id uuid, input_brand_id uuid, input_file_name text, input_content_type text, input_total_bytes bigint, input_checksum_sha256 text, input_idempotency_key text, input_mode text DEFAULT 'replace'::text, input_source_date date DEFAULT NULL::date)\n RETURNS TABLE(session_id uuid, release_id uuid, status text, storage_bucket text, storage_object_path text, total_bytes bigint, uploaded_bytes bigint, expires_at timestamp with time zone)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_existing public.supplier_price_upload_sessions%rowtype;\n  v_release public.supplier_price_releases%rowtype;\n  v_session_id uuid;\n  v_release_id uuid;\n  v_file_name text;\n  v_content_type text;\n  v_path text;\n  v_checksum text;\n  v_mode text;\n  v_key text;\n  v_expires timestamptz;\n  v_constraint text;\nbegin\n  if coalesce(auth.role(), '') <> 'service_role' then\n    raise exception using errcode = '42501', message = 'Supplier upload session requires service role';\n  end if;\n  if input_organization_id is null or input_actor_id is null\n     or input_supplier_id is null or input_brand_id is null then\n    raise exception using errcode = '22023', message = 'Organization, actor, supplier and brand are required';\n  end if;\n  if input_total_bytes is null or input_total_bytes < 1 or input_total_bytes > 1073741824 then\n    raise exception using errcode = '22023', message = 'File size must be between 1 byte and 1 GiB';\n  end if;\n  v_key := trim(coalesce(input_idempotency_key, ''));\n  if length(v_key) < 8 or length(v_key) > 200 then\n    raise exception using errcode = '22023', message = 'A stable idempotency key of 8 to 200 characters is required';\n  end if;\n  v_checksum := lower(trim(coalesce(input_checksum_sha256, '')));\n  if v_checksum !~ '^[0-9a-f]{64}$' then\n    raise exception using errcode = '22023', message = 'checksum_sha256 must be a SHA-256 hex digest';\n  end if;\n  v_mode := lower(trim(coalesce(input_mode, 'replace')));\n  if v_mode not in ('replace', 'merge') then\n    raise exception using errcode = '22023', message = 'input_mode must be replace or merge';\n  end if;\n  v_file_name := regexp_replace(left(trim(coalesce(input_file_name, 'supplier-prices.csv')), 180), '[^A-Za-z0-9._-]+', '_', 'g');\n  if v_file_name = '' then v_file_name := 'supplier-prices.csv'; end if;\n  if v_file_name in ('.', '..') then\n    raise exception using errcode = '22023', message = 'Select a valid file name';\n  end if;\n  v_content_type := coalesce(nullif(trim(input_content_type), ''), 'application/octet-stream');\n  if length(v_content_type) > 160 then\n    raise exception using errcode = '22023', message = 'Content type must not exceed 160 characters';\n  end if;\n\n  -- Validate tenant ownership even when a replay key already exists.\n  if not exists (select 1 from public.suppliers s\n                 where s.id = input_supplier_id and s.organization_id = input_organization_id) then\n    raise exception using errcode = 'PT403', message = 'Supplier is not in this organization';\n  end if;\n  if not exists (select 1 from public.brands b\n                 where b.id = input_brand_id and b.organization_id = input_organization_id) then\n    raise exception using errcode = 'PT403', message = 'Brand is not in this organization';\n  end if;\n\n  -- A short transaction lock serializes identical keys, including the initial\n  -- absent-row case. Hash collisions can only delay an unrelated request.\n  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(\n    'supplier-upload:' || input_organization_id::text || ':' || v_key, 0));\n  select u.* into v_existing from public.supplier_price_upload_sessions u\n   where u.organization_id = input_organization_id and u.idempotency_key = v_key\n   for update;\n  if found then\n    select r.* into v_release from public.supplier_price_releases r\n     where r.id = v_existing.release_id for update;\n    if not found then\n      raise exception using errcode = 'PT409', message = 'UPLOAD_SESSION_INTEGRITY_CONFLICT';\n    end if;\n    if v_existing.created_by is distinct from input_actor_id\n       or v_existing.checksum_sha256 is distinct from v_checksum\n       or v_existing.total_bytes is distinct from input_total_bytes\n       or v_existing.file_name is distinct from v_file_name\n       or v_existing.content_type is distinct from v_content_type\n       or v_release.organization_id is distinct from input_organization_id\n       or v_release.created_by is distinct from input_actor_id\n       or v_release.supplier_id is distinct from input_supplier_id\n       or v_release.brand_id is distinct from input_brand_id\n       or v_release.source_file_sha256 is distinct from v_checksum\n       or v_release.source_file_path is distinct from v_existing.storage_object_path\n       or v_release.mode is distinct from v_mode\n       or v_release.source_date is distinct from input_source_date then\n      raise exception using errcode = 'PT409', message = 'UPLOAD_REQUEST_CONFLICT: This upload key belongs to a different request';\n    end if;\n    if v_existing.status not in ('created', 'uploading', 'uploaded')\n       or v_existing.expires_at <= clock_timestamp()\n       or v_release.status in ('failed', 'cancelled', 'superseded', 'archived') then\n      raise exception using errcode = 'PT409', message = 'UPLOAD_SESSION_NOT_RESUMABLE: Existing upload is closed or expired';\n    end if;\n    return query select v_existing.id, v_existing.release_id, v_existing.status,\n      v_existing.storage_bucket, v_existing.storage_object_path,\n      v_existing.total_bytes, v_existing.uploaded_bytes, v_existing.expires_at;\n    return;\n  end if;\n\n  v_session_id := pg_catalog.gen_random_uuid();\n  v_release_id := pg_catalog.gen_random_uuid();\n  v_path := format('%s/supplier-price/%s/%s', input_organization_id::text, v_session_id::text, v_file_name);\n  v_expires := clock_timestamp() + interval '24 hours';\n  begin\n    insert into public.supplier_price_releases (\n      id, organization_id, supplier_id, brand_id, source_file_path,\n      source_file_sha256, mode, status, source_date, worker_version, created_by\n    ) values (\n      v_release_id, input_organization_id, input_supplier_id, input_brand_id, v_path,\n      v_checksum, v_mode, 'received', input_source_date, 'upload-session-v2', input_actor_id\n    );\n    insert into public.supplier_price_upload_sessions (\n      id, organization_id, release_id, idempotency_key, storage_bucket,\n      storage_object_path, file_name, content_type, total_bytes, checksum_sha256,\n      status, expires_at, created_by\n    ) values (\n      v_session_id, input_organization_id, v_release_id, v_key,\n      'supplier-price-imports', v_path, v_file_name, v_content_type,\n      input_total_bytes, v_checksum, 'created', v_expires, input_actor_id\n    );\n  exception when unique_violation then\n    get stacked diagnostics v_constraint = constraint_name;\n    if v_constraint = 'uq_supplier_price_releases_idempotency' then\n      raise exception using errcode = 'PT409', message = 'UPLOAD_SOURCE_ALREADY_REGISTERED: Review the existing upload before starting another';\n    end if;\n    raise;\n  end;\n  return query select v_session_id, v_release_id, 'created'::text,\n    'supplier-price-imports'::text, v_path, input_total_bytes, 0::bigint, v_expires;\nend;\n$function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_organization_id uuid, input_actor_id uuid, input_supplier_id uuid, input_brand_id uuid, input_file_name text, input_content_type text, input_total_bytes bigint, input_checksum_sha256 text, input_idempotency_key text, input_mode text, input_source_date date",
+      "name": "start_supplier_price_verified_upload_session",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.start_supplier_price_verified_upload_session(input_organization_id uuid, input_actor_id uuid, input_supplier_id uuid, input_brand_id uuid, input_file_name text, input_content_type text, input_total_bytes bigint, input_checksum_sha256 text, input_idempotency_key text, input_mode text DEFAULT 'replace'::text, input_source_date date DEFAULT NULL::date)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare receipt jsonb; r public.supplier_price_releases%rowtype;\nbegin\n  if coalesce(auth.role(),'') <> 'service_role' then raise exception 'UPLOAD_VERIFY_ROLE';end if;\n  if current_setting('transaction_isolation') <> 'read committed' then raise exception 'UPLOAD_VERIFY_ISOLATION';end if;\n  if not exists(select 1 from public.profiles p where p.id=input_actor_id and p.organization_id=input_organization_id\n    and p.is_active is true and p.role in ('admin','superadmin')) then raise exception 'UPLOAD_VERIFY_ACTOR';end if;\n  select to_jsonb(s) into receipt from public.start_supplier_price_upload_session(input_organization_id,input_actor_id,\n    input_supplier_id,input_brand_id,input_file_name,input_content_type,input_total_bytes,input_checksum_sha256,\n    input_idempotency_key,input_mode,input_source_date) s;\n  select x.* into r from public.supplier_price_releases x where x.id=(receipt->>'release_id')::uuid for update;\n  if not found then raise exception 'UPLOAD_VERIFY_BINDING';end if;\n  if not r.source_verification_required and (r.status <> 'received' or r.processed_rows <> 0 or r.current_cursor <> 0\n    or exists(select 1 from public.supplier_price_release_batches b where b.release_id=r.id)) then raise exception 'UPLOAD_VERIFY_ALREADY_STARTED';end if;\n  update public.supplier_price_releases x set source_verification_required=true where x.id=r.id;\n  return receipt;\nend $function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_organization_id uuid, input_supplier_id uuid, input_brand_id uuid, input_codes text[]",
+      "name": "supplier_price_current_snapshot",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.supplier_price_current_snapshot(input_organization_id uuid, input_supplier_id uuid, input_brand_id uuid, input_codes text[])\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_pointer public.supplier_current_price_pointers%rowtype;\n  v_publication public.supplier_price_publications%rowtype;\n  v_release public.supplier_price_releases%rowtype;\n  v_prices jsonb;\n  v_code_count integer;\nbegin\n  if coalesce(auth.role(), '') <> 'service_role' then\n    raise exception 'SUPPLIER_PRICE_SNAPSHOT_SERVICE_REQUIRED';\n  end if;\n\n  if input_organization_id is null or input_supplier_id is null or input_brand_id is null then\n    raise exception 'SUPPLIER_PRICE_SNAPSHOT_SCOPE_REQUIRED';\n  end if;\n\n  if input_codes is null or coalesce(array_length(input_codes, 1), 0) < 1\n     or array_length(input_codes, 1) > 20 then\n    raise exception 'SUPPLIER_PRICE_SNAPSHOT_CODES_INVALID';\n  end if;\n\n  select count(distinct code)::integer\n    into v_code_count\n    from unnest(input_codes) as codes(code)\n   where code is not null and btrim(code) <> '' and btrim(code) = code and length(code) <= 128;\n  if v_code_count <> array_length(input_codes, 1) then\n    raise exception 'SUPPLIER_PRICE_SNAPSHOT_CODES_INVALID';\n  end if;\n\n  select ptr.*\n    into v_pointer\n    from public.supplier_current_price_pointers ptr\n   where ptr.organization_id = input_organization_id\n     and ptr.supplier_id = input_supplier_id\n     and ptr.brand_id = input_brand_id;\n\n  if not found then\n    return jsonb_build_object(\n      'status', 'unpublished',\n      'organization_id', input_organization_id,\n      'supplier_id', input_supplier_id,\n      'brand_id', input_brand_id,\n      'release_id', null,\n      'publication_id', null,\n      'version', null,\n      'prices', '[]'::jsonb\n    );\n  end if;\n\n  select pub.*\n    into v_publication\n    from public.supplier_price_publications pub\n   where pub.id = v_pointer.publication_id\n     and pub.release_id = v_pointer.release_id\n     and pub.organization_id = input_organization_id\n     and pub.supplier_id = input_supplier_id\n     and pub.brand_id = input_brand_id\n     and pub.status = 'published';\n  if not found then\n    raise exception 'SUPPLIER_PRICE_SNAPSHOT_PUBLICATION_INVALID';\n  end if;\n\n  select rel.*\n    into v_release\n    from public.supplier_price_releases rel\n   where rel.id = v_pointer.release_id\n     and rel.organization_id = input_organization_id\n     and rel.supplier_id = input_supplier_id\n     and rel.brand_id = input_brand_id\n     and rel.status = 'published';\n  if not found then\n    raise exception 'SUPPLIER_PRICE_SNAPSHOT_RELEASE_INVALID';\n  end if;\n\n  if exists (\n    select 1\n      from public.supplier_price_release_rows rr\n     where rr.release_id = v_release.id\n       and rr.row_status = 'accepted'\n       and public.normalize_part_code(rr.normalized_code) = any(input_codes)\n       and (rr.currency is null or btrim(rr.currency) = ''\n            or coalesce(rr.valid_from, v_release.source_date) is null)\n  ) then\n    raise exception 'SUPPLIER_PRICE_SNAPSHOT_ROW_INVALID';\n  end if;\n\n  select coalesce(\n    jsonb_agg(\n      jsonb_build_object(\n        'normalized_code', public.normalize_part_code(rr.normalized_code),\n        'product_code', rr.product_code,\n        'buy_price', rr.buy_price::text,\n        'currency', upper(btrim(rr.currency)),\n        'valid_from', to_char(coalesce(rr.valid_from, v_release.source_date), 'YYYY-MM-DD')\n      ) order by public.normalize_part_code(rr.normalized_code)\n    ),\n    '[]'::jsonb\n  )\n    into v_prices\n    from public.supplier_price_release_rows rr\n   where rr.release_id = v_release.id\n     and rr.row_status = 'accepted'\n     and rr.buy_price is not null\n     and public.normalize_part_code(rr.normalized_code) = any(input_codes);\n\n  return jsonb_build_object(\n    'status', 'current',\n    'organization_id', input_organization_id,\n    'supplier_id', input_supplier_id,\n    'brand_id', input_brand_id,\n    'release_id', v_release.id,\n    'publication_id', v_publication.id,\n    'version', v_publication.publication_version::text,\n    'prices', v_prices\n  );\nend;\n$function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_bucket text, input_path text",
+      "name": "supplier_price_upload_object_is_sealed",
+      "grants": "{postgres=X/postgres,authenticated=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.supplier_price_upload_object_is_sealed(input_bucket text, input_path text)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n  select input_bucket='supplier-price-imports' and\n    (split_part(input_path,'/',1) is distinct from public.current_profile_org_id()::text or exists(\n      select 1 from public.supplier_price_upload_sessions u join public.supplier_price_releases r on r.id=u.release_id\n      where u.storage_bucket=input_bucket and u.storage_object_path=input_path and r.source_verification_required and u.status='uploaded'));\n$function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_release_id uuid",
+      "name": "validate_supplier_price_release",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.validate_supplier_price_release(input_release_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_result jsonb;\n  v_audit jsonb;\n  v_release public.supplier_price_releases%rowtype;\n  v_event_floor bigint;\n  v_blocked boolean;\n  v_error text;\n  v_message text;\nbegin\n  if coalesce(auth.role(),'')<>'service_role' then raise exception 'Supplier release validation requires service role'; end if;\n  if input_release_id is null then raise exception 'input_release_id is required'; end if;\n  select r.* into v_release from public.supplier_price_releases r where r.id=input_release_id for update;\n  if not found then raise exception 'Supplier release not found'; end if;\n  begin\n    v_audit:=supplier_price_validation_internal.cross_brand_audit(input_release_id);\n  exception when undefined_table or undefined_column or insufficient_privilege then\n    -- Dependency/schema drift must not accidentally return a green preview.\n    -- Do not expose SQL diagnostics/table names to the caller.\n    v_audit:=jsonb_build_object('policy','cross-brand-v1','checked',false,'review_required',true,\n      'reason','BRAND_IDENTITY_COMPARISON_UNAVAILABLE');\n  end;\n  select coalesce(max(e.id),0) into v_event_floor from public.supplier_price_release_events e where e.release_id=input_release_id;\n  v_result:=supplier_price_validation_internal.validate_supplier_price_release(input_release_id);\n  v_blocked:=coalesce((v_audit->>'review_required')::boolean,true);\n  if v_blocked then\n    v_error:=case when v_audit->>'checked'<>'true' then 'BRAND_IDENTITY_COMPARISON_UNAVAILABLE'\n      when v_audit->>'distinct_incoming_codes'='0' then 'BRAND_IDENTITY_EMPTY_CODES'\n      else 'CROSS_BRAND_BULK_OVERLAP' end;\n    v_message:=case when v_error='BRAND_IDENTITY_EMPTY_CODES'\n      then 'No usable product codes were found. Publication is blocked.'\n      when v_audit->>'checked'='true'\n      then 'Bulk product-code overlap with another brand. Review the selected brand and source file; existing prices remain unchanged.'\n      else 'Brand identity comparison unavailable. Publication is blocked until comparison succeeds.' end;\n    update public.supplier_price_releases set error_code=v_error,error_message=v_message where id=input_release_id;\n    update public.supplier_price_release_events set status='review_required',error_code=v_error,error_message=v_message,\n      worker_version='shadow-validation-cross-brand-v1' where release_id=input_release_id and id>v_event_floor;\n    v_result:=v_result||jsonb_build_object('publishable',false,'message',v_message,'error_code',v_error);\n  end if;\n  update public.supplier_price_releases set brand_identity_audit=v_audit where id=input_release_id;\n  return v_result||jsonb_build_object('brand_identity_audit',v_audit);\nend;\n$function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_release_id uuid, input_batch_size integer",
+      "name": "validate_supplier_price_release_batch",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.validate_supplier_price_release_batch(input_release_id uuid, input_batch_size integer DEFAULT 10000)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare v public.supplier_price_release_validation_runs%rowtype; r public.supplier_price_releases%rowtype; b record; n bigint; next_cursor bigint; dup bigint; currencies integer; final_status text; publishable boolean;\nbegin\n if coalesce(auth.role(),'')<>'service_role' then raise exception 'VALIDATION_ROLE'; end if;\n if input_batch_size is null or input_batch_size<1 or input_batch_size>50000 then raise exception 'VALIDATION_BATCH_SIZE'; end if;\n select * into r from public.supplier_price_releases where id=input_release_id for update;\n if not found then raise exception 'Supplier release not found'; end if;\n insert into public.supplier_price_release_validation_runs(release_id,total_rows,status,started_at) values(r.id,r.total_rows,'running',now()) on conflict do nothing;\n select * into v from public.supplier_price_release_validation_runs where release_id=r.id for update;\n if v.completed_at is not null then return jsonb_build_object('release_id',r.id,'status',v.status,'cursor',v.cursor,'total_rows',v.total_rows,'completed',true); end if;\n select max(source_row_number) into next_cursor from (select source_row_number from public.supplier_price_release_rows where release_id=r.id and source_row_number>v.cursor order by source_row_number limit input_batch_size) q;\n if next_cursor is null then next_cursor=v.cursor; end if;\n with batch as (select * from public.supplier_price_release_rows where release_id=r.id and source_row_number>v.cursor and source_row_number<=next_cursor)\n select count(*) filter(where row_status='accepted') as accepted_count,count(*) filter(where row_status='warning') as warning_count,count(*) filter(where row_status='rejected') as rejected_count,count(*) filter(where row_status='conflict') as conflict_count,count(*) filter(where buy_price is null or nullif(trim(currency),'') is null) as missing_count into b from batch;\n insert into public.supplier_price_release_validation_code_counts(release_id,normalized_code,row_count)\n select r.id,normalized_code,count(*) from public.supplier_price_release_rows where release_id=r.id and source_row_number>v.cursor and source_row_number<=next_cursor and normalized_code<>'' group by normalized_code\n on conflict (release_id,normalized_code) do update set row_count=public.supplier_price_release_validation_code_counts.row_count+excluded.row_count;\n update public.supplier_price_release_validation_runs set cursor=next_cursor,accepted_rows=accepted_rows+coalesce(b.accepted_count,0),warning_rows=warning_rows+coalesce(b.warning_count,0),rejected_rows=rejected_rows+coalesce(b.rejected_count,0),conflict_rows=conflict_rows+coalesce(b.conflict_count,0),missing_price_rows=missing_price_rows+coalesce(b.missing_count,0),updated_at=now() where release_id=r.id returning * into v;\n if v.cursor>=v.total_rows then\n   select coalesce(sum(greatest(row_count-1,0)),0) into dup from public.supplier_price_release_validation_code_counts where release_id=r.id;\n   select count(distinct nullif(trim(currency),''))::integer into currencies from public.supplier_price_release_rows where release_id=r.id;\n   publishable:=v.rejected_rows=0 and v.conflict_rows=0 and v.missing_price_rows=0 and dup=0 and currencies<=1;\n   final_status:=case when publishable then 'validated' else 'review_required' end;\n   update public.supplier_price_release_validation_runs set status=final_status,duplicate_rows=dup,currency_count=currencies,completed_at=now(),updated_at=now() where release_id=r.id returning * into v;\n   update public.supplier_price_releases set status='validated',validated_at=now(),accepted_rows=v.accepted_rows,warning_rows=v.warning_rows,rejected_rows=v.rejected_rows,conflict_rows=v.conflict_rows,error_code=case when publishable then null else 'VALIDATION_REVIEW_REQUIRED' end,error_message=case when publishable then null else 'Validation completed; review conflicts before publication.' end,updated_at=now() where id=r.id;\n end if;\n return jsonb_build_object('release_id',r.id,'status',v.status,'cursor',v.cursor,'total_rows',v.total_rows,'accepted_rows',v.accepted_rows,'duplicate_rows',v.duplicate_rows,'completed',v.completed_at is not null,'publishable',v.status='validated');\nend $function$\n",
+      "securityDefiner": true,
+      "schema": "public"
+    },
+    {
+      "args": "input_release_id uuid, input_organization_id uuid, input_supplier_id uuid, input_brand_id uuid",
+      "name": "check_publication_identity",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "schema": "supplier_price_validation_internal",
+      "definition": "CREATE OR REPLACE FUNCTION supplier_price_validation_internal.check_publication_identity(input_release_id uuid, input_organization_id uuid, input_supplier_id uuid, input_brand_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_release public.supplier_price_releases%rowtype;\n  v_audit jsonb;\n  v_error text;\n  v_allowed boolean;\nbegin\n  if coalesce(auth.role(),'')<>'service_role' then raise exception 'PUBLICATION_IDENTITY_SERVICE_REQUIRED'; end if;\n  if input_release_id is null or input_organization_id is null or input_supplier_id is null or input_brand_id is null then\n    raise exception 'PUBLICATION_IDENTITY_INPUT_REQUIRED'; end if;\n  if current_setting('transaction_isolation')<>'read committed' then\n    raise exception 'PUBLICATION_IDENTITY_REQUIRES_READ_COMMITTED'; end if;\n  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('supplier-price-identity:'||input_organization_id::text,0));\n  select r.* into v_release from public.supplier_price_releases r where r.id=input_release_id for update;\n  if not found then raise exception 'PUBLICATION_IDENTITY_RELEASE_MISSING'; end if;\n  if v_release.organization_id is distinct from input_organization_id or v_release.supplier_id is distinct from input_supplier_id\n    or v_release.brand_id is distinct from input_brand_id then raise exception 'PUBLICATION_IDENTITY_SCOPE_MISMATCH'; end if;\n  begin\n    v_audit:=supplier_price_validation_internal.cross_brand_audit(input_release_id);\n  exception when undefined_table or undefined_column or insufficient_privilege then\n    v_audit:=jsonb_build_object('policy','cross-brand-v1','checked',false,'review_required',true,\n      'reason','BRAND_IDENTITY_COMPARISON_UNAVAILABLE');\n  end;\n  if coalesce((v_audit->>'review_required')::boolean,true) then\n    v_error:=case when v_audit->>'checked'<>'true' then 'BRAND_IDENTITY_COMPARISON_UNAVAILABLE'\n      when v_audit->>'distinct_incoming_codes'='0' then 'BRAND_IDENTITY_EMPTY_CODES' else 'CROSS_BRAND_BULK_OVERLAP' end;\n  else v_error:=v_release.error_code; end if;\n  v_allowed:=v_error is null and v_audit->>'checked'='true' and v_audit->>'review_required'='false';\n  update public.supplier_price_releases set brand_identity_audit=v_audit,\n    error_code=v_error,error_message=case when v_error is null then error_message\n      when v_error=v_release.error_code then error_message\n      else 'Publication held: review current brand identity evidence. Existing prices remain unchanged.' end\n    where id=input_release_id;\n  if not v_allowed then\n    insert into public.supplier_price_release_events(release_id,event_type,stage,status,error_code,worker_version)\n      values(input_release_id,'publication_identity_held','publication','review_required',v_error,'publication-identity-v1');\n  end if;\n  return jsonb_build_object('status',case when v_allowed then 'identity_checked' else 'review_required' end,\n    'publication_allowed',v_allowed,'release_id',input_release_id,'error_code',v_error,'brand_identity_audit',v_audit);\nend;\n$function$\n"
+    },
+    {
+      "args": "input_decision_id uuid, input_actor_id uuid, input_organization_id uuid, input_release_id uuid, input_action text, input_reason text, input_expected_revision bigint, input_expected_status text, input_expected_error text, input_expected_audit jsonb",
+      "name": "review_release",
+      "grants": "{postgres=X/postgres,service_role=X/postgres}",
+      "schema": "supplier_price_validation_internal",
+      "definition": "CREATE OR REPLACE FUNCTION supplier_price_validation_internal.review_release(input_decision_id uuid, input_actor_id uuid, input_organization_id uuid, input_release_id uuid, input_action text, input_reason text, input_expected_revision bigint, input_expected_status text, input_expected_error text, input_expected_audit jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_actor public.profiles%rowtype;\n  v_release public.supplier_price_releases%rowtype;\n  v_saved record; v_request jsonb; v_receipt jsonb; v_validation jsonb; v_identity jsonb;\n  v_clear boolean:=false; v_outcome text;\nbegin\n  if coalesce(auth.role(),'')<>'service_role' then raise exception 'REVIEW_SERVICE_REQUIRED'; end if;\n  if input_decision_id is null or input_actor_id is null or input_organization_id is null or input_release_id is null\n    or input_expected_revision is null or input_expected_revision<0 or input_expected_status is null\n    or input_action is null or input_action not in ('reject','recheck')\n    or input_reason is null\n    or (input_action='reject' and input_reason not in ('wrong_brand_file','wrong_source_file'))\n    or (input_action='recheck' and input_reason<>'comparison_repaired')\n    or length(input_expected_status)>40 or length(input_expected_error)>100\n    or pg_catalog.pg_column_size(input_expected_audit)>16384 then raise exception 'REVIEW_INPUT_INVALID'; end if;\n  if current_setting('transaction_isolation')<>'read committed' then raise exception 'REVIEW_REQUIRES_READ_COMMITTED'; end if;\n  -- Same organization fence before decision, actor and release row locks.\n  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('supplier-price-identity:'||input_organization_id::text,0));\n  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('supplier-price-review:'||input_decision_id::text,0));\n  select p.* into v_actor from public.profiles p where p.id=input_actor_id for share;\n  if not found or v_actor.is_active is distinct from true or coalesce(v_actor.role,'') not in ('admin','superadmin')\n    or v_actor.organization_id is distinct from input_organization_id then raise exception 'REVIEW_ACTOR_DENIED'; end if;\n  select r.* into v_release from public.supplier_price_releases r where r.id=input_release_id for update;\n  if not found or v_release.organization_id is distinct from input_organization_id then raise exception 'REVIEW_SCOPE_DENIED'; end if;\n  if not exists(select 1 from public.brands b where b.id=v_release.brand_id and b.organization_id=input_organization_id)\n    or not exists(select 1 from public.suppliers s where s.id=v_release.supplier_id and s.organization_id=input_organization_id)\n    then raise exception 'REVIEW_SCOPE_DENIED'; end if;\n  v_request:=jsonb_build_object('actor',input_actor_id,'organization',input_organization_id,'release',input_release_id,\n    'action',input_action,'reason',input_reason,'revision',input_expected_revision,'status',input_expected_status,\n    'error',input_expected_error,'audit',input_expected_audit);\n  select d.request,d.receipt into v_saved from supplier_price_validation_internal.review_decisions d where d.id=input_decision_id;\n  if found then\n    if v_saved.request is distinct from v_request then raise exception 'REVIEW_DECISION_REUSE_MISMATCH'; end if;\n    return v_saved.receipt||jsonb_build_object('replayed',true);\n  end if;\n  if v_release.review_revision<>input_expected_revision or v_release.status is distinct from input_expected_status\n    or v_release.error_code is distinct from input_expected_error or v_release.brand_identity_audit is distinct from input_expected_audit\n    then raise exception 'REVIEW_STALE_EVIDENCE'; end if;\n  if exists(select 1 from public.supplier_current_price_pointers p where p.release_id=input_release_id)\n    then raise exception 'REVIEW_CURRENT_RELEASE_PROTECTED'; end if;\n  if v_release.error_code is null and coalesce(v_release.brand_identity_audit->>'review_required','false')<>'true'\n    then raise exception 'REVIEW_HOLD_REQUIRED'; end if;\n  if input_action='reject' then\n    if v_release.status not in ('staged','validated')\n      or exists(select 1 from public.supplier_price_publications p where p.release_id=input_release_id)\n      then raise exception 'REVIEW_PUBLISHED_HISTORY_PROTECTED'; end if;\n    update public.supplier_price_releases set status='cancelled',error_code='REVIEW_REJECTED',\n      error_message='Source rejected by authorized reviewer. Submit a corrected file through normal admission.',updated_at=now()\n      where id=input_release_id;\n    v_outcome:='rejected';\n  elsif v_release.status in ('staged','validated') then\n    -- Calls existing complete row validator + fresh brand gate. No waive path.\n    v_validation:=public.validate_supplier_price_release(input_release_id);\n    v_clear:=v_validation->>'publishable'='true';\n    v_outcome:=case when v_clear then 'rechecked_clear' else 'review_required' end;\n  elsif v_release.status='superseded' and v_release.error_code='BRAND_IDENTITY_COMPARISON_UNAVAILABLE' then\n    -- Only transient comparison repair on a historical publication, never an\n    -- override of bulk overlap/price conflicts. Keep commercial state immutable.\n    if not exists(select 1 from public.supplier_price_publications p where p.release_id=input_release_id\n      and p.organization_id=input_organization_id and p.supplier_id=v_release.supplier_id and p.brand_id=v_release.brand_id\n      and p.status='superseded') then raise exception 'REVIEW_HISTORY_INVALID'; end if;\n    if not coalesce(supplier_price_validation_internal.historical_rows_valid(input_release_id),false)\n      then raise exception 'REVIEW_HISTORY_ROWS_INVALID'; end if;\n    v_identity:=supplier_price_validation_internal.check_publication_identity(input_release_id,input_organization_id,v_release.supplier_id,v_release.brand_id);\n    v_clear:=v_identity->'brand_identity_audit'->>'checked'='true'\n      and v_identity->'brand_identity_audit'->>'review_required'='false';\n    if v_clear then\n      update public.supplier_price_releases set error_code=null,error_message=null,updated_at=now() where id=input_release_id;\n    end if;\n    v_outcome:=case when v_clear then 'rechecked_clear' else 'review_required' end;\n  else raise exception 'REVIEW_STATE_NOT_ELIGIBLE'; end if;\n  update public.supplier_price_releases set review_revision=review_revision+1,updated_at=now() where id=input_release_id\n    returning * into v_release;\n  insert into public.supplier_price_release_events(release_id,event_type,stage,status,error_code,worker_version)\n    values(input_release_id,'release_review_'||input_action,'review',v_outcome,v_release.error_code,'review-v1');\n  v_receipt:=jsonb_build_object('status',v_outcome,'decision_id',input_decision_id,'release_id',input_release_id,\n    'action',input_action,'review_revision',v_release.review_revision,'error_code',v_release.error_code,\n    'published',false,'replayed',false);\n  insert into supplier_price_validation_internal.review_decisions(id,organization_id,release_id,actor_id,request,receipt)\n    values(input_decision_id,input_organization_id,input_release_id,input_actor_id,v_request,v_receipt);\n  return v_receipt;\nend;\n$function$\n"
+    },
+    {
+      "args": "input_release_id uuid",
+      "name": "validate_supplier_price_release",
+      "grants": "{postgres=X/postgres}",
+      "schema": "supplier_price_validation_internal",
+      "definition": "CREATE OR REPLACE FUNCTION supplier_price_validation_internal.validate_supplier_price_release(input_release_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_release public.supplier_price_releases%rowtype;\n  v_persisted bigint;\n  v_total bigint;\n  v_accepted bigint;\n  v_warning bigint;\n  v_rejected bigint;\n  v_conflict bigint;\n  v_missing_price bigint;\n  v_currency_count bigint;\n  v_duplicate_codes bigint;\n  v_publishable boolean;\n  v_message text;\nbegin\n  if coalesce(auth.role(), '') <> 'service_role' then\n    raise exception 'Supplier release validation requires service role';\n  end if;\n  if input_release_id is null then\n    raise exception 'input_release_id is required';\n  end if;\n  select r.* into v_release\n    from public.supplier_price_releases as r\n    where r.id = input_release_id\n    for update;\n  if not found then raise exception 'Supplier release not found'; end if;\n  if v_release.status not in ('staged', 'validated') then\n    raise exception 'Release must be staged before validation';\n  end if;\n\n  select count(*) into v_persisted\n    from public.supplier_price_release_rows as rr\n    where rr.release_id = v_release.id;\n  if v_persisted <> v_release.total_rows then\n    raise exception 'Persisted row count does not match release total';\n  end if;\n\n  -- Conflicts are explicit and idempotent: repeated previews do not stack a\n  -- new error on an already-classified row.\n  with duplicate_codes as (\n    select rr.normalized_code\n    from public.supplier_price_release_rows as rr\n    where rr.release_id = v_release.id\n    group by rr.normalized_code\n    having count(*) > 1\n  )\n  update public.supplier_price_release_rows as rr\n     set row_status = 'conflict',\n         error_code = 'DUPLICATE_NORMALIZED_CODE',\n         error_message = 'Normalized product code occurs more than once in this release.'\n   where rr.release_id = v_release.id\n     and rr.normalized_code in (select d.normalized_code from duplicate_codes as d)\n     and rr.row_status <> 'rejected';\n\n  update public.supplier_price_release_rows as rr\n     set row_status = 'conflict',\n         error_code = 'MISSING_PRICE_OR_CURRENCY',\n         error_message = 'Buy price and currency are required before publication.'\n   where rr.release_id = v_release.id\n     and rr.row_status not in ('rejected', 'conflict')\n     and (rr.buy_price is null or nullif(trim(rr.currency), '') is null);\n\n  select count(*) into v_total\n    from public.supplier_price_release_rows as rr where rr.release_id = v_release.id;\n  select count(*) into v_accepted\n    from public.supplier_price_release_rows as rr where rr.release_id = v_release.id and rr.row_status = 'accepted';\n  select count(*) into v_warning\n    from public.supplier_price_release_rows as rr where rr.release_id = v_release.id and rr.row_status = 'warning';\n  select count(*) into v_rejected\n    from public.supplier_price_release_rows as rr where rr.release_id = v_release.id and rr.row_status = 'rejected';\n  select count(*) into v_conflict\n    from public.supplier_price_release_rows as rr where rr.release_id = v_release.id and rr.row_status = 'conflict';\n  select count(*) into v_missing_price\n    from public.supplier_price_release_rows as rr\n    where rr.release_id = v_release.id and (rr.buy_price is null or nullif(trim(rr.currency), '') is null);\n  select count(distinct nullif(trim(rr.currency), '')) into v_currency_count\n    from public.supplier_price_release_rows as rr where rr.release_id = v_release.id;\n  select count(*) into v_duplicate_codes\n    from (\n      select rr.normalized_code\n      from public.supplier_price_release_rows as rr\n      where rr.release_id = v_release.id\n      group by rr.normalized_code\n      having count(*) > 1\n    ) as duplicates;\n\n  v_publishable := v_total = v_release.total_rows\n    and v_rejected = 0 and v_conflict = 0 and v_missing_price = 0\n    and v_currency_count <= 1;\n  v_message := case when v_publishable\n    then 'Validation passed; release is eligible for a separate publication decision.'\n    else 'Validation completed; review conflicts before publication.' end;\n\n  update public.supplier_price_releases as r\n     set status = 'validated', validated_at = now(),\n         accepted_rows = v_accepted, warning_rows = v_warning,\n         rejected_rows = v_rejected, conflict_rows = v_conflict,\n         error_code = case when v_publishable then null else 'VALIDATION_REVIEW_REQUIRED' end,\n         error_message = case when v_publishable then null else v_message end,\n         updated_at = now()\n   where r.id = v_release.id;\n  insert into public.supplier_price_release_events\n    (release_id, event_type, stage, status, processed_rows, total_rows, worker_version)\n  values (v_release.id, 'release_validated', 'validation',\n          case when v_publishable then 'passed' else 'review_required' end,\n          v_total, v_release.total_rows, 'shadow-validation-v1');\n\n  return jsonb_build_object(\n    'status', 'validated', 'release_id', v_release.id,\n    'total_rows', v_total, 'accepted_rows', v_accepted,\n    'warning_rows', v_warning, 'rejected_rows', v_rejected,\n    'conflict_rows', v_conflict, 'missing_price_or_currency', v_missing_price,\n    'duplicate_codes', v_duplicate_codes, 'currency_count', v_currency_count,\n    'publishable', v_publishable, 'message', v_message\n  );\nend;\n$function$\n"
+    },
+    {
+      "args": "input_release_id uuid",
+      "name": "cross_brand_audit",
+      "grants": "{postgres=X/postgres}",
+      "schema": "supplier_price_validation_internal",
+      "definition": "CREATE OR REPLACE FUNCTION supplier_price_validation_internal.cross_brand_audit(input_release_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare\n  v_release public.supplier_price_releases%rowtype;\n  v_result jsonb;\nbegin\n  select r.* into strict v_release from public.supplier_price_releases r where r.id=input_release_id;\n  if not exists(select 1 from public.brands b where b.id=v_release.brand_id and b.organization_id=v_release.organization_id)\n     or not exists(select 1 from public.suppliers s where s.id=v_release.supplier_id and s.organization_id=v_release.organization_id) then\n    raise exception 'BRAND_IDENTITY_SCOPE_INVALID';\n  end if;\n  if pg_catalog.to_regclass('public.catalog_products') is null\n     or pg_catalog.to_regclass('public.supplier_prices') is null then\n    return jsonb_build_object('policy','cross-brand-v1','checked',false,'review_required',true,\n      'reason','BRAND_IDENTITY_COMPARISON_UNAVAILABLE');\n  end if;\n  with incoming as materialized (\n    select distinct public.normalize_part_code(rr.product_code) code\n    from public.supplier_price_release_rows rr where rr.release_id=input_release_id\n      and public.normalize_part_code(rr.product_code) <> ''\n  ), matches as (\n    select c.brand_id, i.code\n    from incoming i join public.catalog_products c on c.normalized_code=i.code\n      and c.organization_id=v_release.organization_id and c.brand_id<>v_release.brand_id\n    union\n    select p.brand_id, i.code\n    from incoming i join public.supplier_prices p on p.normalized_code=i.code\n      and p.organization_id=v_release.organization_id and p.brand_id<>v_release.brand_id and p.is_active=true\n    union\n    select r.brand_id, i.code\n    from public.supplier_current_price_pointers ptr\n    join public.supplier_price_publications pub on pub.id=ptr.publication_id\n      and pub.release_id=ptr.release_id and pub.organization_id=ptr.organization_id\n      and pub.supplier_id=ptr.supplier_id and pub.brand_id=ptr.brand_id and pub.status='published'\n    join public.supplier_price_releases r on r.id=ptr.release_id\n      and r.organization_id=ptr.organization_id and r.supplier_id=ptr.supplier_id\n      and r.brand_id=ptr.brand_id and r.status='published'\n    join public.supplier_price_release_rows rr on rr.release_id=r.id and rr.row_status='accepted'\n    join incoming i on i.code=public.normalize_part_code(rr.product_code)\n    where ptr.organization_id=v_release.organization_id and ptr.brand_id<>v_release.brand_id\n  ), ranked as (\n    select m.brand_id, m.code, row_number() over(partition by m.brand_id order by m.code collate \"C\") sample_rank\n    from matches m\n    join public.brands b on b.id=m.brand_id and b.organization_id=v_release.organization_id\n  ), grouped as (\n    select x.brand_id, count(*) matching_codes,\n      jsonb_agg(x.code order by x.code collate \"C\") filter(where x.sample_rank<=10) sample_codes\n    from ranked x group by x.brand_id\n  ), counts as (select count(*) n from incoming), evidence as (\n    select g.*, b.name brand_name, round(100.0*g.matching_codes/nullif(c.n,0),2) incoming_percent\n    from grouped g join public.brands b on b.id=g.brand_id cross join counts c\n    order by g.matching_codes desc, g.brand_id\n  )\n  select jsonb_build_object('policy','cross-brand-v1','checked',true,'checked_at',clock_timestamp(),\n    'selected_brand_id',v_release.brand_id,'selected_brand_name',(select b.name from public.brands b where b.id=v_release.brand_id),\n    'threshold_codes',5000,'ratio_min_codes',100,'ratio_threshold_percent',80,\n    'distinct_incoming_codes',(select n from counts),\n    'review_required',(select n=0 from counts) or coalesce((select bool_or(matching_codes>=5000\n      or (matching_codes>=100 and matching_codes::numeric*100 >= (select n from counts)*80)) from evidence),false),\n    'matching_brand_count',(select count(*) from evidence),\n    'brands',coalesce((select jsonb_agg(to_jsonb(e)) from (select * from evidence limit 10) e),'[]'::jsonb))\n  into v_result;\n  return v_result;\nend;\n$function$\n"
+    },
+    {
+      "args": "input_release_id uuid",
+      "name": "historical_rows_valid",
+      "grants": "{postgres=X/postgres}",
+      "schema": "supplier_price_validation_internal",
+      "definition": "CREATE OR REPLACE FUNCTION supplier_price_validation_internal.historical_rows_valid(input_release_id uuid)\n RETURNS boolean\n LANGUAGE sql\n SET search_path TO ''\nAS $function$\n  with rows as (\n    select count(*) n,count(distinct rr.normalized_code) codes,\n      min(rr.source_row_number) first_row,max(rr.source_row_number) last_row,\n      count(distinct rr.currency) currencies,\n      count(*) filter(where rr.row_status is distinct from 'accepted'\n        or rr.buy_price is null or rr.buy_price<0 or nullif(trim(rr.currency),'') is null\n        or rr.valid_from is null or rr.error_code is not null or rr.error_message is not null\n        or rr.row_hash is null or rr.row_hash !~ '^[a-f0-9]{64}$') bad\n    from public.supplier_price_release_rows rr where rr.release_id=input_release_id\n  ), batches as (\n    select coalesce(sum(b.row_count),0) n,count(*) filter(where b.status is distinct from 'completed'\n      or b.cursor_start is distinct from b.expected_start or b.cursor_end<>b.cursor_start+b.row_count-1) bad\n    from (select bb.*,coalesce(lag(bb.cursor_end) over(order by bb.cursor_start)+1,1) expected_start\n      from public.supplier_price_release_batches bb where bb.release_id=input_release_id) b\n  )\n  select coalesce(r.total_rows>0 and r.processed_rows=r.total_rows and r.current_cursor=r.total_rows\n    and r.accepted_rows=r.total_rows and r.warning_rows=0 and r.rejected_rows=0 and r.conflict_rows=0\n    and r.validated_at is not null and r.source_date is not null\n    and x.n=r.total_rows and x.codes=x.n and x.first_row=1 and x.last_row=x.n\n    and x.bad=0 and x.currencies=1 and b.n=x.n and b.bad=0,false)\n  from public.supplier_price_releases r cross join rows x cross join batches b where r.id=input_release_id;\n$function$\n"
+    }
+  ],
+  "schemaGrants": [
+    {
+      "schema": "supplier_price_ingestion_internal",
+      "grants": "{postgres=UC/postgres}"
+    },
+    {
+      "schema": "supplier_price_validation_internal",
+      "grants": "{postgres=UC/postgres,service_role=U/postgres}"
+    }
+  ],
+  "storagePolicies": [
+    {
+      "name": "supplier_price_import_objects_delete",
+      "check": null,
+      "roles": [
+        "authenticated"
+      ],
+      "using": "((bucket_id = 'supplier-price-imports'::text) AND (split_part(name, '/'::text, 1) = (current_profile_org_id())::text) AND profile_has_permission('supplier_prices.manage'::text))",
+      "command": "d",
+      "permissive": true
+    },
+    {
+      "name": "supplier_price_import_objects_insert",
+      "check": "((bucket_id = 'supplier-price-imports'::text) AND (split_part(name, '/'::text, 1) = (current_profile_org_id())::text) AND profile_has_permission('supplier_prices.manage'::text))",
+      "roles": [
+        "authenticated"
+      ],
+      "using": null,
+      "command": "a",
+      "permissive": true
+    },
+    {
+      "name": "supplier_price_import_objects_select",
+      "check": null,
+      "roles": [
+        "authenticated"
+      ],
+      "using": "((bucket_id = 'supplier-price-imports'::text) AND (split_part(name, '/'::text, 1) = (current_profile_org_id())::text) AND profile_has_permission('supplier_prices.manage'::text))",
+      "command": "r",
+      "permissive": true
+    },
+    {
+      "name": "supplier_price_import_objects_update",
+      "check": "((bucket_id = 'supplier-price-imports'::text) AND (split_part(name, '/'::text, 1) = (current_profile_org_id())::text) AND profile_has_permission('supplier_prices.manage'::text))",
+      "roles": [
+        "authenticated"
+      ],
+      "using": "((bucket_id = 'supplier-price-imports'::text) AND (split_part(name, '/'::text, 1) = (current_profile_org_id())::text) AND profile_has_permission('supplier_prices.manage'::text))",
+      "command": "w",
+      "permissive": true
+    },
+    {
+      "name": "supplier_price_verified_no_delete",
+      "check": null,
+      "roles": [
+        "authenticated"
+      ],
+      "using": "(NOT supplier_price_upload_object_is_sealed(bucket_id, name))",
+      "command": "d",
+      "permissive": false
+    },
+    {
+      "name": "supplier_price_verified_no_overwrite",
+      "check": "(NOT supplier_price_upload_object_is_sealed(bucket_id, name))",
+      "roles": [
+        "authenticated"
+      ],
+      "using": "(NOT supplier_price_upload_object_is_sealed(bucket_id, name))",
+      "command": "w",
+      "permissive": false
+    }
+  ],
+  "buckets": [
+    {
+      "id": "supplier-price-imports",
+      "name": "supplier-price-imports",
+      "public": false,
+      "fileSizeLimit": 1073741824,
+      "allowedMimeTypes": [
+        "text/csv",
+        "text/plain",
+        "application/csv",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/octet-stream"
+      ]
+    },
+    {
+      "id": "supplier-price-prepared",
+      "name": "supplier-price-prepared",
+      "public": false,
+      "fileSizeLimit": null,
+      "allowedMimeTypes": null
+    }
+  ],
+  "baselineFunctions": [
+    "auth.role()",
+    "auth.uid()",
+    "public.current_profile_org_id()",
+    "public.current_profile_role()",
+    "public.profile_has_permission(text)",
+    "public.normalize_part_code(text)",
+    "public.normalize_catalog_product_code(text)",
+    "public.current_profile_department()",
+    "public.raw_profile_role(uuid)"
+  ],
+  "baselineRelations": [
+    "public.organizations",
+    "public.brands",
+    "public.suppliers",
+    "public.profiles",
+    "public.catalog_products",
+    "public.supplier_prices",
+    "public.supplier_price_import_runs",
+    "storage.objects",
+    "storage.buckets",
+    "auth.users",
+    "auth.sessions",
+    "public.profile_permissions"
+  ],
+  "baselineColumns": [
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "user_id",
+      "type": "uuid",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamptz",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "factor_id",
+      "type": "uuid",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "aal",
+      "type": "aal_level",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "not_after",
+      "type": "timestamptz",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "refreshed_at",
+      "type": "timestamp",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "user_agent",
+      "type": "text",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "ip",
+      "type": "inet",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "tag",
+      "type": "text",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "oauth_client_id",
+      "type": "uuid",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "refresh_token_hmac_key",
+      "type": "text",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "refresh_token_counter",
+      "type": "int8",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "scopes",
+      "type": "text",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "instance_id",
+      "type": "uuid",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "aud",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "role",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "email",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "encrypted_password",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "email_confirmed_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "invited_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "confirmation_token",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "confirmation_sent_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "recovery_token",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "recovery_sent_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "email_change_token_new",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "email_change",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "email_change_sent_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "last_sign_in_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "raw_app_meta_data",
+      "type": "jsonb",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "raw_user_meta_data",
+      "type": "jsonb",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "is_super_admin",
+      "type": "bool",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "phone",
+      "type": "text",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "phone_confirmed_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "phone_change",
+      "type": "text",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "phone_change_token",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "phone_change_sent_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "confirmed_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "email_change_token_current",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "email_change_confirm_status",
+      "type": "int2",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "banned_until",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "reauthentication_token",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "reauthentication_sent_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "is_sso_user",
+      "type": "bool",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "deleted_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "is_anonymous",
+      "type": "bool",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "brands",
+      "schema": "public"
+    },
+    {
+      "name": "organization_id",
+      "type": "uuid",
+      "table": "brands",
+      "schema": "public"
+    },
+    {
+      "name": "name",
+      "type": "text",
+      "table": "brands",
+      "schema": "public"
+    },
+    {
+      "name": "normalized_name",
+      "type": "text",
+      "table": "brands",
+      "schema": "public"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "brands",
+      "schema": "public"
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamptz",
+      "table": "brands",
+      "schema": "public"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "organization_id",
+      "type": "uuid",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "brand_id",
+      "type": "uuid",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "product_code",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "normalized_code",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "description",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "oem_no",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "normalized_oem",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "hs_code",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "origin",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "weight_kg",
+      "type": "numeric",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "notes",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamptz",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "lifecycle_status",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "lifecycle_note",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "image_url",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "vehicle",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "ean",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "normalized_ean",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "market_segment",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "vehicle_model",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "search_text",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "product_group_id",
+      "type": "uuid",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "description_tr",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "dimensions",
+      "type": "jsonb",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "organizations",
+      "schema": "public"
+    },
+    {
+      "name": "name",
+      "type": "text",
+      "table": "organizations",
+      "schema": "public"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "organizations",
+      "schema": "public"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "organization_id",
+      "type": "uuid",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "email",
+      "type": "text",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "full_name",
+      "type": "text",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "role",
+      "type": "text",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "is_active",
+      "type": "bool",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "department",
+      "type": "text",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "permissions",
+      "type": "jsonb",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "customer_scope_mode",
+      "type": "text",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "session_revoked_at",
+      "type": "timestamptz",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "organization_id",
+      "type": "uuid",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "name",
+      "type": "text",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "normalized_name",
+      "type": "text",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "contact_info",
+      "type": "text",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "is_active",
+      "type": "bool",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamptz",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "bucket_id",
+      "type": "text",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "name",
+      "type": "text",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "owner",
+      "type": "uuid",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamptz",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "last_accessed_at",
+      "type": "timestamptz",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "metadata",
+      "type": "jsonb",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "path_tokens",
+      "type": "_text",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "version",
+      "type": "text",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "owner_id",
+      "type": "text",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "user_metadata",
+      "type": "jsonb",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "archived_at",
+      "type": "timestamptz",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "is_delete_marker",
+      "type": "bool",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "is_versioned",
+      "type": "bool",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "schema": "public",
+      "table": "profile_permissions",
+      "name": "organization_id",
+      "type": "uuid"
+    },
+    {
+      "schema": "public",
+      "table": "profile_permissions",
+      "name": "profile_id",
+      "type": "uuid"
+    },
+    {
+      "schema": "public",
+      "table": "profile_permissions",
+      "name": "permission_key",
+      "type": "text"
+    },
+    {
+      "schema": "public",
+      "table": "profile_permissions",
+      "name": "allowed",
+      "type": "boolean"
+    },
+    {
+      "schema": "public",
+      "table": "profile_permissions",
+      "name": "created_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "schema": "public",
+      "table": "profile_permissions",
+      "name": "updated_at",
+      "type": "timestamp with time zone"
+    }
+  ],
+  "baselineFunctionHashes": [
+    {
+      "signature": "public.current_profile_org_id()",
+      "md5": "a25e504553d64d38e795258e2f453292"
+    },
+    {
+      "signature": "public.current_profile_role()",
+      "md5": "ae3a4585671153b8ff77ba6997d66737"
+    },
+    {
+      "signature": "public.normalize_catalog_product_code(text)",
+      "md5": "be15cebd4bce2b1a79a3bf544984069a"
+    },
+    {
+      "signature": "public.normalize_part_code(text)",
+      "md5": "edd1f94d3b82843d747cca74856c64e9"
+    },
+    {
+      "signature": "public.profile_has_permission(text)",
+      "md5": "aa3d95a792407467f85d257318040039"
+    },
+    {
+      "signature": "public.current_profile_department()",
+      "md5": "3aa181f9dda6cd940d20910e33d6b04e"
+    },
+    {
+      "signature": "public.raw_profile_role(uuid)",
+      "md5": "3aebfe1bf4f51ae0d098c8972533c49a"
+    }
+  ]
+}

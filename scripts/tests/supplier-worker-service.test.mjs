@@ -50,7 +50,7 @@ test('Full V3 preflight checks the verified manifest RPC without mutating data',
  await servicePreflight({origin:'https://kaxsqafdevabkxofwdod.supabase.co',key:'sb_secret_synthetic_only',fetchImpl:async(url,opts)=>{
   called++;assert.ok(url.endsWith('/get_supplier_price_verified_manifest'));assert.equal(opts.redirect,'error');
   assert.deepEqual(JSON.parse(opts.body),{input_release_id:'00000000-0000-0000-0000-000000000000',input_handoff_id:'00000000-0000-0000-0000-000000000000'});
-  return {status:400,json:async()=>({code:'PGRST116',message:'not found'})};
+  return {status:400,json:async()=>({code:'P0001',message:'UPLOAD_HANDOFF_NOT_READY'})};
  }});
  assert.equal(called,1);
  await assert.rejects(servicePreflight({origin:'https://kaxsqafdevabkxofwdod.supabase.co',key:'synthetic',fetchImpl:async()=>({status:404,json:async()=>({code:'PGRST202'})})}),/CAPABILITY/);

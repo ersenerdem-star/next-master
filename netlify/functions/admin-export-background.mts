@@ -2,6 +2,7 @@ import type { Config } from "@netlify/functions";
 import { json } from "./_shared/http.mts";
 import { assertAdminExportWorkerRequest, fetchAdminExportWorkerJob } from "./_shared/admin-export-worker.mts";
 import { runCatalogExportJob, runCatalogMasterExportJob, runSupplierPriceListExportJob } from "./_shared/export-jobs.mts";
+import { remainingAdminExportsEnabled, remainingAdminExportPauseMessage } from "./_shared/admin-export-target.mts";
 
 export default async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -10,6 +11,7 @@ export default async (req: Request) => {
     const jobId = String(body.jobId || "").trim();
     if (!jobId) return json({ error: "jobId is required." }, 400);
     assertAdminExportWorkerRequest(req, jobId);
+    if (!remainingAdminExportsEnabled()) return json({ error: remainingAdminExportPauseMessage }, 503);
     const supabaseUrl = Netlify.env.get("SUPABASE_URL") || "";
     const serviceRoleKey = Netlify.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const job = await fetchAdminExportWorkerJob(supabaseUrl, serviceRoleKey, jobId);

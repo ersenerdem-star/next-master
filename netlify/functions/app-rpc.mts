@@ -6,6 +6,7 @@ import { normalizeCatalogMarketSegment } from "./_shared/catalog/catalog-segment
 import { canAccessCustomerOps, canAccessOperationsModules, isSuperadminRole } from "./_shared/roles.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 import { cleanupCatalogStorageSource } from "./_shared/catalog-storage.mts";
+import { catalogStorageImportTargetEnabled } from "./_shared/catalog-import-target.mts";
 
 const ALLOWED_RPCS = new Set([
   "admin_list_org_users",
@@ -1136,9 +1137,16 @@ export default async (req: Request, context: Context) => {
     }
 
     if (name === "begin_catalog_import_storage" || name === "complete_catalog_import_storage_upload" || name === "fail_catalog_import_storage_upload") {
-      const storageGateEnabled = Netlify.env.get("CATALOG_STORAGE_IMPORT_ENABLED") === "1";
-      const stagingTarget = Netlify.env.get("NM_FULL_STAGING_TARGET") === "kaxsqafdevabkxofwdod";
-      if (!storageGateEnabled || !stagingTarget) {
+      const storageGateEnabled = catalogStorageImportTargetEnabled({
+        supabaseUrl,
+        storageImportEnabled: Netlify.env.get("CATALOG_STORAGE_IMPORT_ENABLED"),
+        stagingTarget: Netlify.env.get("NM_FULL_STAGING_TARGET"),
+        productionTarget: Netlify.env.get("NM_PRODUCTION_TARGET"),
+        productionPortalOrigin: Netlify.env.get("NM_PRODUCTION_PORTAL_ORIGIN"),
+        productionImportEnabled: Netlify.env.get("CATALOG_STORAGE_IMPORT_PRODUCTION_ENABLED"),
+        requestUrl: req.url,
+      });
+      if (!storageGateEnabled) {
         return json({ error: "Catalog Storage import is not enabled for this environment." }, 409);
       }
     }

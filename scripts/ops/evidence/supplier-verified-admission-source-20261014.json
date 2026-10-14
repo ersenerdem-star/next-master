@@ -1,0 +1,49 @@
+{
+  "source_head": "f191e12e",
+  "source_branch": "agent/mira-knowledge-snapshot-source",
+  "source_state": "dirty-selected-files-read-only; no whole checkout/page copy",
+  "target_head": "adafb63d",
+  "files": [
+    {
+      "source": "/Users/ersen/Developer/next-master/netlify/functions/supplier-price-upload-session.mts",
+      "target": "netlify/functions/supplier-price-upload-session.mts",
+      "source_sha256": "1a7865d660860c23f0876ee9482bfc2b85b57ee164a0a1861e66cd80bb26f6bf"
+    },
+    {
+      "source": "/Users/ersen/Developer/next-master/netlify/functions/supplier-price-upload-options.mts",
+      "target": "netlify/functions/supplier-price-upload-options.mts",
+      "source_sha256": "ede819d01218d5595fa78944dbe26a3678312c7e05a54623d746ffc92dc51b1c"
+    },
+    {
+      "source": "/Users/ersen/Developer/next-master/netlify/functions/supplier-price-upload-status.mts",
+      "target": "netlify/functions/supplier-price-upload-status.mts",
+      "source_sha256": "3a8f7b07c955fbe7bf589ab6956fd52e82e4125e09cca6590360d84cea97ea37"
+    },
+    {
+      "source": "/Users/ersen/Developer/next-master/netlify/functions/supplier-price-upload-finish.mts",
+      "target": "netlify/functions/supplier-price-upload-finish.mts",
+      "source_sha256": "850afd2d610170893f339a403b0d57ce89feee5fb352387495758b6995eeb63d"
+    },
+    {
+      "source": "/Users/ersen/Developer/next-master/netlify/functions/_shared/supplier-upgrade-auth.mts",
+      "target": "netlify/functions/_shared/supplier-upgrade-auth.mts",
+      "source_sha256": "6a07bed005862a688d97e5c3a960dde79540bbd35ebb1040463fc36af3aec898"
+    },
+    {
+      "source": "/Users/ersen/Developer/next-master/apps/web/src/infrastructure/api/supplierVerifiedUploadApi.ts",
+      "target": "apps/web/src/infrastructure/api/supplierVerifiedUploadApi.ts",
+      "source_sha256": "a5b6c746859174484bbaca83e7cf1f3c9005882fab25b845ba2aeefec4acd812"
+    },
+    {
+      "source": "/Users/ersen/Developer/next-master/apps/web/src/shared/supplierUploadProtocol.ts",
+      "target": "apps/web/src/shared/supplierUploadProtocol.ts",
+      "source_sha256": "def39d488c41c9e46ba1ea67a371aeba2ff8a0d4514ce1907814055e71fdbb28"
+    },
+    {
+      "source": "/Users/ersen/Developer/next-master/apps/web/src/shared/supplierTusTransfer.ts",
+      "target": "apps/web/src/shared/supplierTusTransfer.ts",
+      "source_sha256": "c3bfb68e7da94b9de31c9860e86a08d8571346808a9e6b9fa0d4de084414fdef"
+    }
+  ],
+  "production_mutation_performed": false
+}

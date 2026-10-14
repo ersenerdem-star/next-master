@@ -1,0 +1,1722 @@
+{
+  "source": {
+    "projectRef": "zjgueqijumzlfioihnkt",
+    "capturedOn": "2026-10-14",
+    "kind": "column/type snapshot; checked identical to staging; no business rows"
+  },
+  "columns": [
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "user_id",
+      "type": "uuid",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamptz",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "factor_id",
+      "type": "uuid",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "aal",
+      "type": "aal_level",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "not_after",
+      "type": "timestamptz",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "refreshed_at",
+      "type": "timestamp",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "user_agent",
+      "type": "text",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "ip",
+      "type": "inet",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "tag",
+      "type": "text",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "oauth_client_id",
+      "type": "uuid",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "refresh_token_hmac_key",
+      "type": "text",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "refresh_token_counter",
+      "type": "int8",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "scopes",
+      "type": "text",
+      "table": "sessions",
+      "schema": "auth"
+    },
+    {
+      "name": "instance_id",
+      "type": "uuid",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "aud",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "role",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "email",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "encrypted_password",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "email_confirmed_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "invited_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "confirmation_token",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "confirmation_sent_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "recovery_token",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "recovery_sent_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "email_change_token_new",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "email_change",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "email_change_sent_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "last_sign_in_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "raw_app_meta_data",
+      "type": "jsonb",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "raw_user_meta_data",
+      "type": "jsonb",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "is_super_admin",
+      "type": "bool",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "phone",
+      "type": "text",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "phone_confirmed_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "phone_change",
+      "type": "text",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "phone_change_token",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "phone_change_sent_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "confirmed_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "email_change_token_current",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "email_change_confirm_status",
+      "type": "int2",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "banned_until",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "reauthentication_token",
+      "type": "varchar",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "reauthentication_sent_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "is_sso_user",
+      "type": "bool",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "deleted_at",
+      "type": "timestamptz",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "is_anonymous",
+      "type": "bool",
+      "table": "users",
+      "schema": "auth"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "brands",
+      "schema": "public"
+    },
+    {
+      "name": "organization_id",
+      "type": "uuid",
+      "table": "brands",
+      "schema": "public"
+    },
+    {
+      "name": "name",
+      "type": "text",
+      "table": "brands",
+      "schema": "public"
+    },
+    {
+      "name": "normalized_name",
+      "type": "text",
+      "table": "brands",
+      "schema": "public"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "brands",
+      "schema": "public"
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamptz",
+      "table": "brands",
+      "schema": "public"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "organization_id",
+      "type": "uuid",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "brand_id",
+      "type": "uuid",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "product_code",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "normalized_code",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "description",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "oem_no",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "normalized_oem",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "hs_code",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "origin",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "weight_kg",
+      "type": "numeric",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "notes",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamptz",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "lifecycle_status",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "lifecycle_note",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "image_url",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "vehicle",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "ean",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "normalized_ean",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "market_segment",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "vehicle_model",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "search_text",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "product_group_id",
+      "type": "uuid",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "description_tr",
+      "type": "text",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "dimensions",
+      "type": "jsonb",
+      "table": "catalog_products",
+      "schema": "public"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "organizations",
+      "schema": "public"
+    },
+    {
+      "name": "name",
+      "type": "text",
+      "table": "organizations",
+      "schema": "public"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "organizations",
+      "schema": "public"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "organization_id",
+      "type": "uuid",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "email",
+      "type": "text",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "full_name",
+      "type": "text",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "role",
+      "type": "text",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "is_active",
+      "type": "bool",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "department",
+      "type": "text",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "permissions",
+      "type": "jsonb",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "customer_scope_mode",
+      "type": "text",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "session_revoked_at",
+      "type": "timestamptz",
+      "table": "profiles",
+      "schema": "public"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "organization_id",
+      "type": "uuid",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "name",
+      "type": "text",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "normalized_name",
+      "type": "text",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "contact_info",
+      "type": "text",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "is_active",
+      "type": "bool",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamptz",
+      "table": "suppliers",
+      "schema": "public"
+    },
+    {
+      "name": "id",
+      "type": "uuid",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "bucket_id",
+      "type": "text",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "name",
+      "type": "text",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "owner",
+      "type": "uuid",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamptz",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamptz",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "last_accessed_at",
+      "type": "timestamptz",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "metadata",
+      "type": "jsonb",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "path_tokens",
+      "type": "_text",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "version",
+      "type": "text",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "owner_id",
+      "type": "text",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "user_metadata",
+      "type": "jsonb",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "archived_at",
+      "type": "timestamptz",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "is_delete_marker",
+      "type": "bool",
+      "table": "objects",
+      "schema": "storage"
+    },
+    {
+      "name": "is_versioned",
+      "type": "bool",
+      "table": "objects",
+      "schema": "storage"
+    }
+  ],
+  "functions": [
+    {
+      "args": "",
+      "name": "current_profile_org_id",
+      "grants": null,
+      "schema": "public",
+      "definition": "CREATE OR REPLACE FUNCTION public.current_profile_org_id()\n RETURNS uuid\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  select organization_id\n  from profiles\n  where id = auth.uid()\n    and is_active\n  limit 1;\n$function$\n"
+    },
+    {
+      "args": "",
+      "name": "current_profile_role",
+      "grants": null,
+      "schema": "public",
+      "definition": "CREATE OR REPLACE FUNCTION public.current_profile_role()\n RETURNS text\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  select\n    case\n      when public.raw_profile_role(auth.uid()) = 'superadmin' then 'admin'\n      else public.raw_profile_role(auth.uid())\n    end;\n$function$\n"
+    },
+    {
+      "args": "input_value text",
+      "name": "normalize_catalog_product_code",
+      "grants": null,
+      "schema": "public",
+      "definition": "CREATE OR REPLACE FUNCTION public.normalize_catalog_product_code(input_value text)\n RETURNS text\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'pg_catalog'\nAS $function$\n  select regexp_replace(upper(coalesce(input_value, '')), '[[:space:]]+', '', 'g');\n$function$\n"
+    },
+    {
+      "args": "input text",
+      "name": "normalize_part_code",
+      "grants": null,
+      "schema": "public",
+      "definition": "CREATE OR REPLACE FUNCTION public.normalize_part_code(input text)\n RETURNS text\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'public'\nAS $function$\n  select regexp_replace(upper(coalesce(input, '')), '[^A-Z0-9]', '', 'g');\n$function$\n"
+    },
+    {
+      "args": "input_permission text",
+      "name": "profile_has_permission",
+      "grants": null,
+      "schema": "public",
+      "definition": "CREATE OR REPLACE FUNCTION public.profile_has_permission(input_permission text)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  select case\n    when public.raw_profile_role(auth.uid()) in ('superadmin', 'admin') then true\n    when exists (\n      select 1\n      from public.profile_permissions pp\n      join public.profiles p on p.id = pp.profile_id and p.organization_id = pp.organization_id\n      where pp.profile_id = auth.uid()\n        and pp.permission_key = input_permission\n        and p.is_active\n    ) then coalesce((\n      select pp.allowed\n      from public.profile_permissions pp\n      where pp.profile_id = auth.uid()\n        and pp.permission_key = input_permission\n      limit 1\n    ), false)\n    else case public.current_profile_department()\n      when 'sales' then input_permission in ('customers.view', 'catalog.view', 'sales.orders', 'sales.invoices', 'reports.view')\n      when 'purchasing' then input_permission in ('catalog.view', 'purchasing.orders', 'purchasing.receive', 'supplier_prices.view', 'reports.view')\n      when 'accounting' then input_permission in ('customers.view', 'sales.invoices', 'finance.view', 'reports.view')\n      when 'warehouse' then input_permission in ('catalog.view', 'inventory.view', 'purchasing.receive')\n      else input_permission = 'catalog.view'\n    end\n  end;\n$function$\n"
+    }
+  ],
+  "additionalTables": [
+    {
+      "rls": true,
+      "name": "supplier_price_import_runs",
+      "grants": [
+        {
+          "role": "anon",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "anon",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "anon",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "SELECT"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "service_role",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "service_role",
+          "privilege": "SELECT"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "service_role",
+          "privilege": "UPDATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "organization_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "supplier_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "brand_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "mode",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'running'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "error_message",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "staged_rows",
+          "type": "integer",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "processed_rows",
+          "type": "integer",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "catalog_synced",
+          "type": "integer",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "created_by",
+          "type": "uuid",
+          "default": "auth.uid()",
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "catalog_sync_status",
+          "type": "text",
+          "default": "'pending'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "catalog_sync_started_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "catalog_sync_finished_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "catalog_sync_error_message",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "finalize_phase",
+          "type": "text",
+          "default": "'merge'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "finalize_cursor",
+          "type": "integer",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "finalize_started_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "finalized_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "finalize_error_message",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "processing_queued_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "processing_queued_by",
+          "type": "uuid",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "catalog_sync_cursor",
+          "type": "text",
+          "default": "''::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "catalog_sync_processed",
+          "type": "integer",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "catalog_sync_last_progress_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "catalog_sync_last_batch_processed",
+          "type": "integer",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "catalog_sync_batches",
+          "type": "integer",
+          "default": "0",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "catalog_sync_worker_state",
+          "type": "text",
+          "default": "'queued'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "superseded_by",
+          "type": "uuid",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "superseded_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_supplier_price_import_runs_catalog_sync_priority",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_import_runs_catalog_sync_priority ON public.supplier_price_import_runs USING btree (catalog_sync_status, catalog_sync_started_at, started_at DESC) WHERE ((catalog_sync_status = ANY (ARRAY['pending'::text, 'running'::text])) AND (status = ANY (ARRAY['finalized'::text, 'succeeded'::text])))"
+        },
+        {
+          "name": "idx_supplier_price_import_runs_catalog_sync_queue",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_import_runs_catalog_sync_queue ON public.supplier_price_import_runs USING btree (catalog_sync_status, status, started_at) WHERE ((catalog_sync_status = ANY (ARRAY['pending'::text, 'running'::text])) AND (status = ANY (ARRAY['finalized'::text, 'succeeded'::text])))"
+        },
+        {
+          "name": "idx_supplier_price_import_runs_org_started",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_import_runs_org_started ON public.supplier_price_import_runs USING btree (organization_id, started_at DESC)"
+        },
+        {
+          "name": "idx_supplier_price_import_runs_processing_queue",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_import_runs_processing_queue ON public.supplier_price_import_runs USING btree (processing_queued_at, started_at) WHERE (processing_queued_at IS NOT NULL)"
+        },
+        {
+          "name": "idx_supplier_price_import_runs_scope_status",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_price_import_runs_scope_status ON public.supplier_price_import_runs USING btree (organization_id, supplier_id, brand_id, status, started_at DESC)"
+        },
+        {
+          "name": "supplier_price_import_runs_pkey",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_price_import_runs_pkey ON public.supplier_price_import_runs USING btree (id)"
+        }
+      ],
+      "forceRls": false,
+      "policies": [
+        {
+          "name": "supplier_price_import_runs_select_ops",
+          "check": null,
+          "roles": [
+            "public"
+          ],
+          "using": "((organization_id = current_profile_org_id()) AND (current_profile_role() = ANY (ARRAY['admin'::text, 'superadmin'::text])))",
+          "command": "r",
+          "permissive": true
+        }
+      ],
+      "triggers": [
+        {
+          "name": "portal_price_list_catalog_sync_notification",
+          "definition": "CREATE TRIGGER portal_price_list_catalog_sync_notification AFTER UPDATE OF catalog_sync_status ON supplier_price_import_runs FOR EACH ROW EXECUTE FUNCTION notify_portal_price_list_finalized()",
+          "functionName": "notify_portal_price_list_finalized"
+        },
+        {
+          "name": "portal_price_list_finalized_notification",
+          "definition": "CREATE TRIGGER portal_price_list_finalized_notification AFTER UPDATE OF status ON supplier_price_import_runs FOR EACH ROW EXECUTE FUNCTION notify_portal_price_list_finalized()",
+          "functionName": "notify_portal_price_list_finalized"
+        },
+        {
+          "name": "supplier_price_import_runs_refresh_supplier_stats",
+          "definition": "CREATE TRIGGER supplier_price_import_runs_refresh_supplier_stats AFTER UPDATE OF status, finalize_phase, finalized_at ON supplier_price_import_runs FOR EACH ROW EXECUTE FUNCTION refresh_supplier_price_supplier_stats_after_finalize()",
+          "functionName": "refresh_supplier_price_supplier_stats_after_finalize"
+        },
+        {
+          "name": "supplier_price_import_runs_supersede_duplicates",
+          "definition": "CREATE TRIGGER supplier_price_import_runs_supersede_duplicates AFTER INSERT OR UPDATE OF status ON supplier_price_import_runs FOR EACH ROW EXECUTE FUNCTION supersede_duplicate_supplier_price_import_runs()",
+          "functionName": "supersede_duplicate_supplier_price_import_runs"
+        }
+      ],
+      "constraints": [
+        {
+          "name": "supplier_price_import_runs_brand_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "supplier_price_import_runs_catalog_sync_status_check",
+          "type": "c",
+          "definition": "CHECK (catalog_sync_status = ANY (ARRAY['pending'::text, 'running'::text, 'succeeded'::text, 'failed'::text]))"
+        },
+        {
+          "name": "supplier_price_import_runs_catalog_sync_worker_state_check",
+          "type": "c",
+          "definition": "CHECK (catalog_sync_worker_state = ANY (ARRAY['queued'::text, 'running'::text, 'lock_waiting'::text, 'stalled'::text, 'completed'::text, 'failed'::text, 'superseded'::text]))"
+        },
+        {
+          "name": "supplier_price_import_runs_finalize_phase_check",
+          "type": "c",
+          "definition": "CHECK (finalize_phase = ANY (ARRAY['merge'::text, 'cleanup'::text, 'done'::text]))"
+        },
+        {
+          "name": "supplier_price_import_runs_mode_check",
+          "type": "c",
+          "definition": "CHECK (mode = ANY (ARRAY['replace'::text, 'merge'::text]))"
+        },
+        {
+          "name": "supplier_price_import_runs_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "supplier_price_import_runs_status_check",
+          "type": "c",
+          "definition": "CHECK (status = ANY (ARRAY['running'::text, 'finalizing'::text, 'finalized'::text, 'succeeded'::text, 'failed'::text, 'superseded'::text]))"
+        },
+        {
+          "name": "supplier_price_import_runs_superseded_by_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (superseded_by) REFERENCES supplier_price_import_runs(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "supplier_price_import_runs_supplier_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE RESTRICT"
+        }
+      ]
+    },
+    {
+      "rls": true,
+      "name": "supplier_prices",
+      "grants": [
+        {
+          "role": "authenticated",
+          "privilege": "DELETE"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "INSERT"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "SELECT"
+        },
+        {
+          "role": "authenticated",
+          "privilege": "UPDATE"
+        },
+        {
+          "role": "service_role",
+          "privilege": "DELETE"
+        },
+        {
+          "role": "service_role",
+          "privilege": "INSERT"
+        },
+        {
+          "role": "service_role",
+          "privilege": "REFERENCES"
+        },
+        {
+          "role": "service_role",
+          "privilege": "SELECT"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRIGGER"
+        },
+        {
+          "role": "service_role",
+          "privilege": "TRUNCATE"
+        },
+        {
+          "role": "service_role",
+          "privilege": "UPDATE"
+        }
+      ],
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "organization_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "supplier_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "brand_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "catalog_product_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "import_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "product_code",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "normalized_code",
+          "type": "text",
+          "default": "normalize_part_code(product_code)",
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "oem_no",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "normalized_oem",
+          "type": "text",
+          "default": "normalize_part_code(oem_no)",
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "buy_price",
+          "type": "numeric(14,2)",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "currency",
+          "type": "text",
+          "default": "'EUR'::text",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "moq",
+          "type": "integer",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "lead_time_days",
+          "type": "integer",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "stock_qty",
+          "type": "integer",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "valid_from",
+          "type": "date",
+          "default": "CURRENT_DATE",
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "valid_to",
+          "type": "date",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "is_active",
+          "type": "boolean",
+          "default": "true",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "order_multiple",
+          "type": "integer",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        },
+        {
+          "name": "deactivated_at",
+          "type": "timestamp with time zone",
+          "default": null,
+          "notNull": false,
+          "identity": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_supplier_prices_brand_code",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_brand_code ON public.supplier_prices USING btree (organization_id, brand_id, normalized_code) WHERE is_active"
+        },
+        {
+          "name": "idx_supplier_prices_brand_fk",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_brand_fk ON public.supplier_prices USING btree (brand_id)"
+        },
+        {
+          "name": "idx_supplier_prices_canonical_backfill_dirty",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_canonical_backfill_dirty ON public.supplier_prices USING btree (organization_id, brand_id, id) WHERE ((normalize_catalog_compact_alnum(product_code) <> ''::text) AND (product_code IS DISTINCT FROM normalize_catalog_compact_alnum(product_code)))"
+        },
+        {
+          "name": "idx_supplier_prices_catalog_product_fk",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_catalog_product_fk ON public.supplier_prices USING btree (catalog_product_id)"
+        },
+        {
+          "name": "idx_supplier_prices_cleanup_scope_id",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_cleanup_scope_id ON public.supplier_prices USING btree (organization_id, supplier_id, brand_id, id) WHERE is_active"
+        },
+        {
+          "name": "idx_supplier_prices_code",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_code ON public.supplier_prices USING btree (organization_id, normalized_code) WHERE is_active"
+        },
+        {
+          "name": "idx_supplier_prices_cross_brand_active",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_cross_brand_active ON public.supplier_prices USING btree (organization_id, normalized_code, brand_id) WHERE (is_active = true)"
+        },
+        {
+          "name": "idx_supplier_prices_description_trgm",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_description_trgm ON public.supplier_prices USING gin (description gin_trgm_ops)"
+        },
+        {
+          "name": "idx_supplier_prices_export_code_c",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_export_code_c ON public.supplier_prices USING btree (organization_id, supplier_id, brand_id, COALESCE(product_code, ''::text) COLLATE \"C\", id) WHERE is_active"
+        },
+        {
+          "name": "idx_supplier_prices_export_keyset",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_export_keyset ON public.supplier_prices USING btree (organization_id, supplier_id, brand_id, product_code, id) WHERE is_active"
+        },
+        {
+          "name": "idx_supplier_prices_export_keyset_coalesced",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_export_keyset_coalesced ON public.supplier_prices USING btree (organization_id, supplier_id, brand_id, COALESCE(product_code, ''::text), id) WHERE is_active"
+        },
+        {
+          "name": "idx_supplier_prices_export_search",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_export_search ON public.supplier_prices USING btree (organization_id, supplier_id, brand_id, normalized_code, normalized_oem, product_code, id) WHERE is_active"
+        },
+        {
+          "name": "idx_supplier_prices_import_fk",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_import_fk ON public.supplier_prices USING btree (import_id)"
+        },
+        {
+          "name": "idx_supplier_prices_master_rollup_active",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_master_rollup_active ON public.supplier_prices USING btree (organization_id, brand_id, normalized_code, buy_price, valid_from DESC, updated_at DESC, id DESC) WHERE (is_active AND (buy_price IS NOT NULL) AND (normalized_code IS NOT NULL))"
+        },
+        {
+          "name": "idx_supplier_prices_master_rollup_supplier_active",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_master_rollup_supplier_active ON public.supplier_prices USING btree (organization_id, brand_id, normalized_code, supplier_id, buy_price, valid_from DESC, updated_at DESC, id DESC) WHERE (is_active AND (buy_price IS NOT NULL) AND (normalized_code IS NOT NULL))"
+        },
+        {
+          "name": "idx_supplier_prices_normalized_oem_hash",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_normalized_oem_hash ON public.supplier_prices USING hash (normalized_oem)"
+        },
+        {
+          "name": "idx_supplier_prices_normalized_oem_trgm",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_normalized_oem_trgm ON public.supplier_prices USING gin (normalized_oem gin_trgm_ops)"
+        },
+        {
+          "name": "idx_supplier_prices_oem_trgm",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_oem_trgm ON public.supplier_prices USING gin (oem_no gin_trgm_ops)"
+        },
+        {
+          "name": "idx_supplier_prices_order_rules",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_order_rules ON public.supplier_prices USING btree (organization_id, brand_id, normalized_code, supplier_id, valid_from DESC, id DESC) WHERE is_active"
+        },
+        {
+          "name": "idx_supplier_prices_org_brand_normcode_buy_active",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_org_brand_normcode_buy_active ON public.supplier_prices USING btree (organization_id, brand_id, normalized_code, buy_price, valid_from DESC, updated_at DESC) WHERE (is_active AND (buy_price IS NOT NULL))"
+        },
+        {
+          "name": "idx_supplier_prices_org_supplier_active",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_org_supplier_active ON public.supplier_prices USING btree (organization_id, supplier_id, valid_from DESC, id) WHERE is_active"
+        },
+        {
+          "name": "idx_supplier_prices_org_supplier_brand_active",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_org_supplier_brand_active ON public.supplier_prices USING btree (organization_id, supplier_id, brand_id, valid_from DESC, id) WHERE is_active"
+        },
+        {
+          "name": "idx_supplier_prices_org_supplier_brand_normcode_active",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_org_supplier_brand_normcode_active ON public.supplier_prices USING btree (organization_id, supplier_id, brand_id, normalized_code, valid_from DESC) WHERE is_active"
+        },
+        {
+          "name": "idx_supplier_prices_org_supplier_normcode_active",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_org_supplier_normcode_active ON public.supplier_prices USING btree (organization_id, supplier_id, normalized_code, valid_from DESC, updated_at DESC) WHERE is_active"
+        },
+        {
+          "name": "idx_supplier_prices_organization_fk",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_organization_fk ON public.supplier_prices USING btree (organization_id)"
+        },
+        {
+          "name": "idx_supplier_prices_product_code_trgm",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_product_code_trgm ON public.supplier_prices USING gin (product_code gin_trgm_ops)"
+        },
+        {
+          "name": "idx_supplier_prices_supplier_fk",
+          "constraint": false,
+          "definition": "CREATE INDEX idx_supplier_prices_supplier_fk ON public.supplier_prices USING btree (supplier_id)"
+        },
+        {
+          "name": "supplier_prices_organization_id_supplier_id_brand_id_normal_key",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_prices_organization_id_supplier_id_brand_id_normal_key ON public.supplier_prices USING btree (organization_id, supplier_id, brand_id, normalized_code, valid_from)"
+        },
+        {
+          "name": "supplier_prices_pkey",
+          "constraint": true,
+          "definition": "CREATE UNIQUE INDEX supplier_prices_pkey ON public.supplier_prices USING btree (id)"
+        }
+      ],
+      "forceRls": false,
+      "policies": [
+        {
+          "name": "supplier_prices_admin_manage_own_org",
+          "check": "(is_admin() AND (organization_id = current_profile_org_id()))",
+          "roles": [
+            "public"
+          ],
+          "using": "(is_admin() AND (organization_id = current_profile_org_id()))",
+          "command": "*",
+          "permissive": true
+        },
+        {
+          "name": "supplier_prices_select_own_org",
+          "check": null,
+          "roles": [
+            "public"
+          ],
+          "using": "((organization_id = current_profile_org_id()) AND (NOT is_admin()))",
+          "command": "r",
+          "permissive": true
+        }
+      ],
+      "triggers": [
+        {
+          "name": "supplier_prices_deactivated_at",
+          "definition": "CREATE TRIGGER supplier_prices_deactivated_at BEFORE INSERT OR UPDATE OF is_active ON supplier_prices FOR EACH ROW EXECUTE FUNCTION set_supplier_price_deactivated_at()",
+          "functionName": "set_supplier_price_deactivated_at"
+        },
+        {
+          "name": "supplier_prices_fill_order_multiple",
+          "definition": "CREATE TRIGGER supplier_prices_fill_order_multiple BEFORE INSERT OR UPDATE OF order_multiple, normalized_code, valid_from ON supplier_prices FOR EACH ROW EXECUTE FUNCTION fill_supplier_price_order_multiple_from_stage()",
+          "functionName": "fill_supplier_price_order_multiple_from_stage"
+        },
+        {
+          "name": "supplier_prices_reject_published_legacy_write",
+          "definition": "CREATE TRIGGER supplier_prices_reject_published_legacy_write BEFORE INSERT OR DELETE OR UPDATE OF organization_id, supplier_id, brand_id, product_code, normalized_code, buy_price, currency, valid_from, valid_to, is_active, moq, order_multiple, lead_time_days ON supplier_prices FOR EACH ROW EXECUTE FUNCTION reject_legacy_supplier_price_published_write()",
+          "functionName": "reject_legacy_supplier_price_published_write"
+        },
+        {
+          "name": "supplier_prices_sync_catalog_trigger",
+          "definition": "CREATE TRIGGER supplier_prices_sync_catalog_trigger AFTER INSERT OR UPDATE OF brand_id, product_code, description, oem_no, notes ON supplier_prices FOR EACH ROW EXECUTE FUNCTION trg_sync_catalog_from_supplier_prices()",
+          "functionName": "trg_sync_catalog_from_supplier_prices"
+        },
+        {
+          "name": "trg_supplier_prices_canonical_code",
+          "definition": "CREATE TRIGGER trg_supplier_prices_canonical_code BEFORE INSERT OR UPDATE OF product_code, brand_id ON supplier_prices FOR EACH ROW EXECUTE FUNCTION set_supplier_price_canonical_code()",
+          "functionName": "set_supplier_price_canonical_code"
+        }
+      ],
+      "constraints": [
+        {
+          "name": "supplier_prices_brand_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "supplier_prices_catalog_product_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (catalog_product_id) REFERENCES catalog_products(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "supplier_prices_import_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (import_id) REFERENCES imports(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "supplier_prices_order_multiple_check",
+          "type": "c",
+          "definition": "CHECK (order_multiple IS NULL OR order_multiple > 0)"
+        },
+        {
+          "name": "supplier_prices_organization_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "supplier_prices_organization_id_supplier_id_brand_id_normal_key",
+          "type": "u",
+          "definition": "UNIQUE (organization_id, supplier_id, brand_id, normalized_code, valid_from)"
+        },
+        {
+          "name": "supplier_prices_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "supplier_prices_supplier_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE"
+        }
+      ]
+    },
+    {
+      "rls": true,
+      "name": "profile_permissions",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "organization_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "profile_id",
+          "type": "uuid",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "permission_key",
+          "type": "text",
+          "default": null,
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "allowed",
+          "type": "boolean",
+          "default": "true",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notNull": true,
+          "identity": ""
+        }
+      ],
+      "constraints": [
+        {
+          "name": "profile_permissions_key_check",
+          "type": "c",
+          "definition": "CHECK (permission_key = ANY (ARRAY['customers.view'::text, 'customers.manage'::text, 'catalog.view'::text, 'catalog.manage'::text, 'sales.orders'::text, 'sales.invoices'::text, 'purchasing.orders'::text, 'purchasing.receive'::text, 'supplier_prices.view'::text, 'supplier_prices.manage'::text, 'inventory.view'::text, 'finance.view'::text, 'finance.manage'::text, 'reports.view'::text]))"
+        },
+        {
+          "name": "profile_permissions_organization_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE"
+        },
+        {
+          "name": "profile_permissions_pkey",
+          "type": "p",
+          "definition": "PRIMARY KEY (profile_id, permission_key)"
+        },
+        {
+          "name": "profile_permissions_profile_id_fkey",
+          "type": "f",
+          "definition": "FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE"
+        }
+      ]
+    }
+  ],
+  "buckets": [
+    {
+      "name": "id",
+      "type": "text"
+    },
+    {
+      "name": "name",
+      "type": "text"
+    },
+    {
+      "name": "public",
+      "type": "boolean"
+    },
+    {
+      "name": "file_size_limit",
+      "type": "bigint"
+    },
+    {
+      "name": "allowed_mime_types",
+      "type": "text[]"
+    }
+  ],
+  "dependencyFunctions": [
+    {
+      "args": "",
+      "name": "current_profile_department",
+      "schema": "public",
+      "definition": "CREATE OR REPLACE FUNCTION public.current_profile_department()\n RETURNS text\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$ select coalesce((select p.department from public.profiles p where p.id=auth.uid() and p.is_active limit 1),'viewer'); $function$\n"
+    },
+    {
+      "args": "input_user_id uuid",
+      "name": "raw_profile_role",
+      "schema": "public",
+      "definition": "CREATE OR REPLACE FUNCTION public.raw_profile_role(input_user_id uuid DEFAULT auth.uid())\n RETURNS text\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  select coalesce(\n    (\n      select lower(trim(coalesce(p.role, '')))\n      from public.profiles p\n      where p.id = coalesce(input_user_id, auth.uid())\n        and p.is_active\n      limit 1\n    ),\n    ''\n  );\n$function$\n"
+    }
+  ]
+}

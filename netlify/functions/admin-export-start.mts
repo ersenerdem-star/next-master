@@ -13,6 +13,7 @@ import {
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 import { dispatchV3PriceExportWorker, isProductionExportPaused, isV3ExportBridgeEnabled } from "./_shared/v3-export-dispatch.mts";
 import { dispatchAdminExportWorker } from "./_shared/admin-export-worker.mts";
+import { isRemainingAdminExportType, remainingAdminExportsEnabled, remainingAdminExportPauseMessage } from "./_shared/admin-export-target.mts";
 
 export default async (req: Request, context: Context) => {
   if (req.method !== "POST") return exportJson({ error: "Method not allowed" }, 405);
@@ -35,6 +36,9 @@ export default async (req: Request, context: Context) => {
     }
     if (exportType === "admin_price_list" && isV3ExportBridgeEnabled() && isProductionExportPaused()) {
       return exportJson({ error: "V3 export bridge is temporarily paused while the production safety gate is closed." }, 503, { "Retry-After": "300" });
+    }
+    if (isRemainingAdminExportType(exportType) && !remainingAdminExportsEnabled()) {
+      return exportJson({ error: remainingAdminExportPauseMessage }, 503, { "Retry-After": "300" });
     }
     const { job, cached } = exportType === "supplier_price_list"
       ? await startSupplierPriceListExport(supabaseUrl, serviceRoleKey, caller, {
