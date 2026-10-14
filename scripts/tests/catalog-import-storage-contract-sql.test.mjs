@@ -18,7 +18,11 @@ const apiCleanupSql = fs.readFileSync(
   new URL("../../supabase/migrations/20261014120000_catalog_import_storage_api_cleanup.sql", import.meta.url),
   "utf8",
 );
-const sql = `${baseSql}\n${hardeningSql}\n${runtimeFenceSql}\n${apiCleanupSql}`;
+const validationSql = fs.readFileSync(
+  new URL("../../supabase/migrations/20261014132000_catalog_import_storage_validation_batches.sql", import.meta.url),
+  "utf8",
+);
+const sql = `${baseSql}\n${hardeningSql}\n${runtimeFenceSql}\n${apiCleanupSql}\n${validationSql}`;
 
 const functionBlock = (name) => {
   const start = sql.indexOf(`create or replace function public.${name}`);
@@ -175,4 +179,17 @@ test("queued catalog runs retain the system finalization bridge", () => {
   assert.match(body, /storage_cleanup_required/i);
   assert.match(sql, /grant execute on function public\.finalize_catalog_import_batch_system\([^)]*\) to service_role/i);
   assert.match(body, /status = 'completed'/i);
+});
+
+test("large storage runs validate in durable bounded batches", () => {
+  assert.match(validationSql, /add column if not exists validation_cursor/i);
+  assert.match(validationSql, /idx_catalog_import_stage_run_validation/i);
+  assert.match(validationSql, /idx_catalog_import_stage_run_code_brand/i);
+  const body = latestFunctionBlock("validate_catalog_import_storage_batch_system");
+  assert.match(body, /auth\.role\(\).*service_role/i);
+  assert.match(body, /validation_cursor/i);
+  assert.match(body, /limit v_batch_size/i);
+  assert.match(body, /status = 'validating'/i);
+  assert.match(body, /has_more/i);
+  assert.match(validationSql, /grant execute on function public\.validate_catalog_import_storage_batch_system\([^)]*\) to service_role/i);
 });

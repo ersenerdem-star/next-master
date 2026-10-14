@@ -63,7 +63,7 @@ async function listQueuedFinalizationRuns() {
   const query = new URLSearchParams({
     select: "id,organization_id,created_by,status,processing_queued_at",
     processing_queued_at: "not.is.null",
-    status: "in.(running,validated,finalizing)",
+    status: "in.(running,validating,validated,finalizing)",
     order: "processing_queued_at.asc",
     limit: "1",
   });
@@ -184,13 +184,23 @@ export async function pollCatalogImportSources() {
 
 async function finalizeQueuedCatalogRun(run) {
   let status = String(run?.status || "");
-  if (status === "running") {
-    const validation = await callRpc("validate_catalog_import_system", {
-      input_run_id: run.id,
-      input_organization_id: run.organization_id,
-      input_actor_id: run.created_by,
-    });
-    status = String((Array.isArray(validation) ? validation[0] : validation)?.status || "");
+  if (status === "running" || status === "validating") {
+    let validation = null;
+    for (let index = 0; index < MAX_FINALIZATION_BATCHES; index += 1) {
+      validation = await callRpc("validate_catalog_import_storage_batch_system", {
+        input_run_id: run.id,
+        input_organization_id: run.organization_id,
+        input_actor_id: run.created_by,
+        input_batch_size: FINALIZE_BATCH_SIZE,
+      });
+      const value = Array.isArray(validation) ? validation[0] : validation;
+      status = String(value?.status || status);
+      if (status !== "validating") break;
+    }
+    if (status === "validation_failed") {
+      await clearRunQueueMarker(run.id);
+      return { runId: run.id, status, hasMore: false };
+    }
   }
 
   if (status !== "validated" && status !== "finalizing") {
