@@ -1,0 +1,89 @@
+{
+  "file": "/private/tmp/next-master-catalog-canary-20261014.csv",
+  "bytes": 6291712,
+  "sha256": "2bdc151a548c0b3bcacb72119a14e661ace3223b9d9565d713a2bab0a6da150b",
+  "logicalRows": 1,
+  "blankPadding": true,
+  "expectedTusChunks": [
+    6291456,
+    256
+  ],
+  "uiScopeRequired": true,
+  "brandField": "blank - explicit selected existing UI brand",
+  "marketSegmentField": "blank - explicit selected UI segment",
+  "localParserScope": {
+    "brand": "Corteco",
+    "marketSegment": "pc"
+  },
+  "localNormalizedPayload": {
+    "row_index": 0,
+    "brand": "Corteco",
+    "product_code": "NMCANARY202610146A71",
+    "description": "Runtime integration canary",
+    "description_tr": null,
+    "ean": null,
+    "oem_no": null,
+    "vehicle": null,
+    "vehicle_model": null,
+    "hs_code": null,
+    "origin": null,
+    "market_segment": "pc",
+    "weight_kg": null,
+    "image_url": null,
+    "lifecycle_status": "discontinued",
+    "lifecycle_note": "Temporary isolated integration canary 20261014-6A71",
+    "product_type": null,
+    "source_url": null,
+    "source_as_of": null,
+    "source_retrieved_at": null,
+    "source_fingerprint": null
+  },
+  "localRpcNames": [
+    "complete_catalog_import_storage_upload_system",
+    "heartbeat_catalog_import_storage_source_system",
+    "stage_catalog_import_storage_batch_system",
+    "heartbeat_catalog_import_storage_source_system",
+    "mark_catalog_import_storage_processing_queued_system"
+  ],
+  "localWorkerResult": {
+    "processedRows": 1,
+    "cursorEnd": 0,
+    "batches": 1,
+    "preflight": {
+      "engine": "duckdb",
+      "totalRows": 1
+    }
+  },
+  "proof": "Authenticated V3 UI to private Storage to Render to catalog row; scoped test row cleaned. Byte transport canary with one logical row and blank padding; not throughput or production proof.",
+  "environment": "V3 staging",
+  "project_ref": "kaxsqafdevabkxofwdod",
+  "runtime": {
+    "run_id": "ff25ab24-7ba5-4f06-bd39-0031d57e58af",
+    "source_id": "cdad3a88-0cf2-44a6-9c5b-160465d61f0f",
+    "started_at": "2026-10-14T16:31:32.790233Z",
+    "finished_at": "2026-10-14T16:31:49.636238Z",
+    "elapsed_seconds": 16.846005,
+    "status": "finalized",
+    "rows": 1,
+    "inserted": 1,
+    "updated": 0,
+    "errors": 0,
+    "source_status": "completed",
+    "attempt_count": 1,
+    "source_checksum_verified": true
+  },
+  "browser": {
+    "actual_ui_upload": true,
+    "brand": "Corteco",
+    "market_segment": "PC",
+    "search_visible": true,
+    "visible_code": "NMCANARY202610146A71",
+    "screenshot": "/private/tmp/next-master-stage-catalog-canary-20261014.png"
+  },
+  "cleanup": {
+    "product_id": "8e5ed11a-2f87-494b-a843-724cf1f91239",
+    "guard": "exact id, org, brand, code, description, discontinued; all FK references zero; row lock and count=1",
+    "remaining_products": 0,
+    "run_and_source_history_retained": true
+  }
+}
