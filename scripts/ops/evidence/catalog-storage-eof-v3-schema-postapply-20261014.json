@@ -1,0 +1,355 @@
+{
+  "schemaVersion": 1,
+  "scope": "V3 staging SQL postapply only; not worker deployment or new crash acceptance",
+  "projectId": "kaxsqafdevabkxofwdod",
+  "observedAt": "2026-10-14T20:45:57.479796+00:00",
+  "source": {
+    "commit": "3d2a816",
+    "migration": "supabase/migrations/20261014202040_catalog_storage_complete_read_fence.sql",
+    "sha256": "53152f780a85f249e83d0685ab321f645b14dc48278e4bc7db169bc2dd3f27b7"
+  },
+  "provenance": {
+    "migrationApplied": "Root reports corrected forward applied successfully; this agent independently inspected the resulting live schema.",
+    "metadata": "Personally observed using Supabase execute_sql; transaction READ ONLY with ROLLBACK.",
+    "nullProbes": "Personally observed as service_role in READ ONLY transaction with ROLLBACK; all input arguments null, exits before application locks/writes.",
+    "workerDeployment": "Not observed in this evidence."
+  },
+  "baselineReview": {
+    "v3DefinitionMd5": "9130c22cb4eb8bb802597204edae666b",
+    "productionDefinitionMd5": "3cedf9ed8542942ce507347803aac051",
+    "function": "public.finalize_catalog_import_batch_system(uuid,uuid,uuid,integer)",
+    "comparison": "316 SQL tokens and all string literals identical; only whitespace and comments differ.",
+    "normalizedTokensSha256": "20e743b7264ee7b2b1c26bb441ba0d7135ca91b206d94c815d1b1a147d099430",
+    "allowlist": "Only these two exact incoming hashes accepted; unknown variants still fail closed.",
+    "failedApplyRollback": "Schema agent's actual V3 read-only capture reported EOF schema false, columns 0 and RPCs 0 after the initial rejected apply."
+  },
+  "checks": {
+    "functionDefinitions": 16,
+    "functionDefinitionsExact": true,
+    "triggerDefinitions": 4,
+    "triggerDefinitionsExact": true,
+    "sourceColumnsExact": true,
+    "privateReceiptRls": true,
+    "privateReceiptPolicyCount": 0,
+    "privateReceiptDirectAccessDeniedFor": [
+      "anon",
+      "authenticated",
+      "service_role"
+    ],
+    "privateSchemaUsageDeniedFor": [
+      "anon",
+      "authenticated",
+      "service_role"
+    ],
+    "newRpcExecuteOnlyServiceRole": true,
+    "nullProbesExact": true
+  },
+  "probes": {
+    "get_probe": "P0001:CATALOG_STORAGE_READ_INPUT_INVALID",
+    "read_only": "on",
+    "observed_at": "2026-10-14T20:45:57.479796+00:00",
+    "complete_probe": "P0001:CATALOG_STORAGE_READ_INPUT_INVALID",
+    "null_probes_exact": true
+  },
+  "aclDifference": {
+    "strictProductionBaselineMetadataGate": "Initially failed closed because three pre-existing browser RPC ACLs differ between V3 and captured production fixture; definitions/security configuration/new objects all matched.",
+    "functions": [
+      {
+        "signature": "public.finalize_catalog_import(uuid)",
+        "v3PublicExecute": true,
+        "v3AnonExecute": true,
+        "productionFixturePublicExecute": false,
+        "productionFixtureAnonExecute": false
+      },
+      {
+        "signature": "public.finalize_catalog_import_batch(uuid,integer)",
+        "v3PublicExecute": true,
+        "v3AnonExecute": true,
+        "productionFixturePublicExecute": false,
+        "productionFixtureAnonExecute": false
+      },
+      {
+        "signature": "public.stage_catalog_import_chunk(uuid,jsonb)",
+        "v3PublicExecute": true,
+        "v3AnonExecute": true,
+        "productionFixturePublicExecute": false,
+        "productionFixtureAnonExecute": false
+      }
+    ],
+    "preservationEvidence": "The forward uses CREATE OR REPLACE for these existing functions and contains no GRANT/REVOKE for their signatures, so their prior grants are preserved. No separate preapply live ACL snapshot was captured by this agent.",
+    "authBehavior": "Active actor/organization gates remain in the function path; this is source inspection, not a new authenticated browser authorization test.",
+    "expandedOrChangedByThisAgent": false
+  },
+  "metadata": {
+    "triggers": [
+      {
+        "name": "catalog_read_receipt_immutable",
+        "type": 27,
+        "table": "catalog_storage_internal.read_completion_receipts",
+        "enabled": "O",
+        "definition_md5": "002972d7ee71150529d9b273a5f64120"
+      },
+      {
+        "name": "catalog_storage_run_readiness",
+        "type": 19,
+        "table": "public.catalog_import_runs",
+        "enabled": "O",
+        "definition_md5": "d1096ad1eaafce6fb27d41a13a2d8aed"
+      },
+      {
+        "name": "catalog_storage_source_read_receipt",
+        "type": 19,
+        "table": "public.catalog_import_sources",
+        "enabled": "O",
+        "definition_md5": "45d006e1446d619511826ea0f0fe4b83"
+      },
+      {
+        "name": "catalog_storage_stage_sealed",
+        "type": 31,
+        "table": "public.catalog_import_stage",
+        "enabled": "O",
+        "definition_md5": "ea1d3f840e19df866ff4a2ea238cf054"
+      }
+    ],
+    "functions": [
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "catalog_storage_internal.assert_finalization_ready(uuid,uuid,uuid)",
+        "volatility": "v",
+        "anon_execute": false,
+        "definition_md5": "004e1704781bd7f0ae4bf7909064de5a",
+        "public_execute": false,
+        "service_execute": false,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "catalog_storage_internal.assert_read_complete(uuid,uuid,uuid)",
+        "volatility": "v",
+        "anon_execute": false,
+        "definition_md5": "63582610096aa2df882a11af28008b6d",
+        "public_execute": false,
+        "service_execute": false,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "catalog_storage_internal.assert_stage_open(uuid,uuid,uuid)",
+        "volatility": "v",
+        "anon_execute": false,
+        "definition_md5": "1f74b69fa6fdf4c7c2c914a7b90fc917",
+        "public_execute": false,
+        "service_execute": false,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "catalog_storage_internal.guard_run_readiness()",
+        "volatility": "v",
+        "anon_execute": false,
+        "definition_md5": "37e87661fdf50e99dd1d46de947f4d50",
+        "public_execute": false,
+        "service_execute": false,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "catalog_storage_internal.guard_sealed_stage_row()",
+        "volatility": "v",
+        "anon_execute": false,
+        "definition_md5": "8084d3aa28990c8f899f18fe4b42cf0a",
+        "public_execute": false,
+        "service_execute": false,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "catalog_storage_internal.guard_source_read_receipt()",
+        "volatility": "v",
+        "anon_execute": false,
+        "definition_md5": "4b37b9dcfff4951d24f0cc374b489f68",
+        "public_execute": false,
+        "service_execute": false,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "catalog_storage_internal.immutable_read_receipt()",
+        "volatility": "v",
+        "anon_execute": false,
+        "definition_md5": "bd68e4b0882937bb65e233000f088474",
+        "public_execute": false,
+        "service_execute": false,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=public, pg_temp"
+        ],
+        "signature": "public.claim_catalog_import_storage_source_system(uuid,uuid,uuid,text,integer)",
+        "volatility": "v",
+        "anon_execute": false,
+        "definition_md5": "796a5588c1a83203cbc9dfa2985a69c0",
+        "public_execute": false,
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "public.complete_catalog_import_storage_read_system(uuid,uuid,uuid,text,uuid,bigint,bigint)",
+        "volatility": "v",
+        "anon_execute": false,
+        "definition_md5": "3b682fe5926333107f1839b2cc23da77",
+        "public_execute": false,
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=public"
+        ],
+        "signature": "public.finalize_catalog_import(uuid)",
+        "volatility": "v",
+        "anon_execute": true,
+        "definition_md5": "e55d324aa8596ad09b1432937d98928b",
+        "public_execute": true,
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": true
+      },
+      {
+        "config": [
+          "search_path=public"
+        ],
+        "signature": "public.finalize_catalog_import_batch(uuid,integer)",
+        "volatility": "v",
+        "anon_execute": true,
+        "definition_md5": "0d7932b0be1dda98bf66c9216dc42ace",
+        "public_execute": true,
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": true
+      },
+      {
+        "config": [
+          "search_path=public"
+        ],
+        "signature": "public.finalize_catalog_import_batch_system(uuid,uuid,uuid,integer)",
+        "volatility": "v",
+        "anon_execute": false,
+        "definition_md5": "e0d83a838c009e5980be58042add4663",
+        "public_execute": false,
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "public.get_catalog_import_storage_read_completion_system(uuid,uuid,uuid,uuid,text,bigint)",
+        "volatility": "s",
+        "anon_execute": false,
+        "definition_md5": "2a8a02f64be0f5b1b21feb7840988c88",
+        "public_execute": false,
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=public, pg_temp"
+        ],
+        "signature": "public.mark_catalog_import_storage_processing_queued_system(uuid,uuid,uuid,text,uuid,bigint)",
+        "volatility": "v",
+        "anon_execute": false,
+        "definition_md5": "86b248be86a495757a5ba9e3408168f3",
+        "public_execute": false,
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": false
+      },
+      {
+        "config": [
+          "search_path=public"
+        ],
+        "signature": "public.stage_catalog_import_chunk(uuid,jsonb)",
+        "volatility": "v",
+        "anon_execute": true,
+        "definition_md5": "3bd0bb5128657b385d143ae869ddb927",
+        "public_execute": true,
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": true
+      },
+      {
+        "config": [
+          "search_path=public, pg_temp"
+        ],
+        "signature": "public.validate_catalog_import_storage_batch_system(uuid,uuid,uuid,integer)",
+        "volatility": "v",
+        "anon_execute": false,
+        "definition_md5": "8a58640a86b924b9d9064b0889952ffc",
+        "public_execute": false,
+        "service_execute": true,
+        "security_definer": true,
+        "authenticated_execute": false
+      }
+    ],
+    "receipt_table": {
+      "rls": true,
+      "anon_any": false,
+      "policies": 0,
+      "force_rls": false,
+      "service_any": false,
+      "authenticated_any": false
+    },
+    "source_columns": [
+      {
+        "name": "read_complete_rows",
+        "type": "bigint",
+        "not_null": false
+      },
+      {
+        "name": "read_completed_at",
+        "type": "timestamp with time zone",
+        "not_null": false
+      }
+    ],
+    "private_schema_usage": {
+      "anon": false,
+      "service_role": false,
+      "authenticated": false
+    }
+  },
+  "limitations": [
+    "Does not establish new remote SIGKILL/restart acceptance; root owns that test.",
+    "Actual DBOS local tests use modeled business RPC boundaries; separate actual PostgreSQL SQL tests are recorded by their owning agent.",
+    "No application row, receipt, lease, storage object, history or provider configuration was modified by these READ ONLY checks."
+  ]
+}
