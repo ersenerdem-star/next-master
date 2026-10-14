@@ -1,0 +1,674 @@
+{
+  "schemaVersion": 1,
+  "scope": "Independent final production metadata and queue receipt; bounded read-only checks, not a new broad regression run.",
+  "projectRef": "zjgueqijumzlfioihnkt",
+  "stagingReferenceProjectRef": "kaxsqafdevabkxofwdod",
+  "canonicalAcceptanceDocument": "docs/runtime/platform/OPERATIONS_ENGINE_ASSESSMENT.md",
+  "observer": "production_schema_gate",
+  "provenance": {
+    "directlyObserved": [
+      "SELECT-only production and V3 Supabase metadata snapshots",
+      "Production scoped queue/control/current-pointer/source state",
+      "Public production version.json HTTP GET",
+      "Committed migration files and prior reviewed fingerprint artifacts"
+    ],
+    "coordinatorReported": [
+      "Provider deploy/instance identifiers and process-live timestamps",
+      "Authenticated production UI publication and screenshot observations"
+    ],
+    "remoteMutationPerformed": false,
+    "credentialAccess": false,
+    "providerUiAccess": false
+  },
+  "manifest": {
+    "file": "scripts/ops/price-engine-production-manifest.json",
+    "sha256": "724820e254f5e4c0d16e1584324f70e78c5bbea4334018cc6fe86fce2602c549",
+    "originalOrderedMigrationCount": 62,
+    "all62SourcePinsUnchanged": true,
+    "forwardMigrations": [
+      {
+        "file": "supabase/migrations/20261014162139_supplier_admin_release_action_queue.sql",
+        "sha256": "9a14f1e1aea51c103ac15250d8987fbf0ccc4ead25242a181988ccfa116a88de",
+        "exactLocalBytesVerified": true
+      },
+      {
+        "file": "supabase/migrations/20261014165817_price_list_legacy_scope_compatibility.sql",
+        "sha256": "572788a71f2e548575760ac44542d29fbf04994bd8762ed2fcd6b42ba78c2cc9",
+        "exactLocalBytesVerified": true
+      },
+      {
+        "file": "supabase/migrations/20261014171235_master_price_mixed_supplier_scopes.sql",
+        "sha256": "1467fd587ce9f3bd0580e67dd9eb381e9a5b71021d2165e1267d48c82ef958a0",
+        "exactLocalBytesVerified": true
+      },
+      {
+        "file": "supabase/migrations/20261014175649_supplier_source_commercial_compatibility_guard.sql",
+        "sha256": "5e4da92699a01f8a71375efd3f97a401a0731546a98141be1578f4ff1ddbe7f5",
+        "exactLocalBytesVerified": true
+      },
+      {
+        "file": "supabase/migrations/20261014183349_supplier_upload_safe_commercial_error_status.sql",
+        "sha256": "5071891230d3af3ba840162b1349e37b1509f832ff872616cd49442c9c9febfb",
+        "exactLocalBytesVerified": true
+      }
+    ],
+    "statusInterpretation": "The immutable preparation manifest keeps historical pending labels. Later execution and acceptance receipts are separate; no original migration pin was rewritten."
+  },
+  "metadata": {
+    "productionCapturedAt": "2026-10-14T19:12:05.122954+00:00",
+    "v3CapturedAt": "2026-10-14T19:12:09.043078+00:00",
+    "requirements": {
+      "tables": 32,
+      "columns": 36,
+      "functions": 55,
+      "triggers": 1,
+      "runtimeIndexes": 9,
+      "buckets": 4,
+      "privateSchemas": 2
+    },
+    "rawPreflight": {
+      "ready": false,
+      "errors": [
+        "FUNCTION_DRIFT:begin_catalog_import_storage",
+        "FUNCTION_DRIFT:finalize_catalog_import_batch_system"
+      ]
+    },
+    "reviewedMetadataReady": true,
+    "reviewedProductionVariants": [
+      {
+        "name": "begin_catalog_import_storage",
+        "expectedProductionMd5": "d0c6cd023a49aa1d4fec6959ee26c094",
+        "reason": "Reviewed production migration retains explicit CSV/TSV/TXT extension guard absent in V3.",
+        "actualProductionMd5": "d0c6cd023a49aa1d4fec6959ee26c094",
+        "actualV3Md5": "59516c400ed343da28f344d2767a49eb"
+      },
+      {
+        "name": "finalize_catalog_import_batch_system",
+        "expectedProductionMd5": "3cedf9ed8542942ce507347803aac051",
+        "reason": "Reviewed production and V3 definitions differ in whitespace/comments; exact production manifest definition is retained.",
+        "actualProductionMd5": "3cedf9ed8542942ce507347803aac051",
+        "actualV3Md5": "9130c22cb4eb8bb802597204edae666b"
+      }
+    ],
+    "allOtherRequiredRuntimeFingerprintsMatchV3": true,
+    "all32TablesRlsEnabled": true,
+    "requiredColumnsTypesAndRoleChecksPassed": true,
+    "requiredTriggerCompatible": true,
+    "runtimeIndexesReady": true,
+    "concurrent12": {
+      "count": 12,
+      "exactPlanDefinition": true,
+      "allValidReadyLive": true,
+      "normalizerFingerprintUnchanged": true,
+      "verificationContext": "SELECT-only metadata with pg_catalog search_path. No CREATE/REINDEX or long-running index operation."
+    },
+    "buckets": [
+      {
+        "name": "app-exports",
+        "private": true,
+        "fileSizeLimit": 104857600,
+        "minimumRequired": 41943040,
+        "sizeCompatible": true,
+        "binaryCompatible": true
+      },
+      {
+        "name": "catalog-imports",
+        "private": true,
+        "fileSizeLimit": 1073741824,
+        "minimumRequired": 1073741824,
+        "sizeCompatible": true,
+        "binaryCompatible": true
+      },
+      {
+        "name": "supplier-price-imports",
+        "private": true,
+        "fileSizeLimit": 1073741824,
+        "minimumRequired": 1073741824,
+        "sizeCompatible": true,
+        "binaryCompatible": true
+      },
+      {
+        "name": "supplier-price-prepared",
+        "private": true,
+        "fileSizeLimit": null,
+        "minimumRequired": 33554432,
+        "sizeCompatible": true,
+        "binaryCompatible": true
+      }
+    ],
+    "privateSchemas": [
+      {
+        "name": "supplier_price_ingestion_internal",
+        "present": true,
+        "anon_usage": false,
+        "service_usage": false,
+        "authenticated_usage": false
+      },
+      {
+        "name": "supplier_price_validation_internal",
+        "present": true,
+        "anon_usage": false,
+        "service_usage": false,
+        "authenticated_usage": false
+      }
+    ]
+  },
+  "sourceAndPublicationGuards": {
+    "exactReviewedSnapshotMatch": true,
+    "functionCount": 13,
+    "triggerCount": 3,
+    "functionFingerprints": [
+      {
+        "schema": "public",
+        "name": "claim_supplier_release_action",
+        "args": "input_project_ref text, input_lease_owner uuid",
+        "md5": "a64656cb7a02825ae7c8aaa951b305a8",
+        "securityDefiner": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "serviceExecute": true
+      },
+      {
+        "schema": "public",
+        "name": "execute_supplier_release_action",
+        "args": "input_project_ref text, input_decision_id uuid, input_lease_owner uuid",
+        "md5": "d1af8f8699bdc7bf1de5a18f77ec8e04",
+        "securityDefiner": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "serviceExecute": true
+      },
+      {
+        "schema": "public",
+        "name": "fail_supplier_release_action",
+        "args": "input_project_ref text, input_decision_id uuid, input_lease_owner uuid, input_error_code text",
+        "md5": "3ba1c8548d13df215c2596f11dc4d77d",
+        "securityDefiner": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "serviceExecute": true
+      },
+      {
+        "schema": "public",
+        "name": "get_supplier_price_verified_manifest",
+        "args": "input_release_id uuid, input_handoff_id uuid",
+        "md5": "b3d88c87f2866b3b3bc1a5b32cd4d0e8",
+        "securityDefiner": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "serviceExecute": true
+      },
+      {
+        "schema": "public",
+        "name": "get_supplier_release_action_evidence",
+        "args": "input_project_ref text, input_actor_id uuid, input_organization_id uuid, input_auth_session_id uuid, input_token_iat bigint, input_token_exp bigint, input_release_id uuid",
+        "md5": "3981012b5150f3d9bdd78793a8aade59",
+        "securityDefiner": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "serviceExecute": true
+      },
+      {
+        "schema": "public",
+        "name": "publish_supplier_price_release_production",
+        "args": "input_project_ref text, input_release_id uuid, input_organization_id uuid, input_supplier_id uuid, input_brand_id uuid, input_actor_id uuid, input_decision_id uuid, input_expected_review_revision bigint, input_expected_previous_publication_id uuid",
+        "md5": "38beea36b2cde986ec5f8b83ce242322",
+        "securityDefiner": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "serviceExecute": true
+      },
+      {
+        "schema": "public",
+        "name": "record_supplier_price_source_compatibility",
+        "args": "input_release_id uuid, input_handoff_id uuid, input_source_sha256 text, input_total_rows bigint, input_policy text",
+        "md5": "4acf9fef2b19fc01b135f4bea8285d83",
+        "securityDefiner": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "serviceExecute": true
+      },
+      {
+        "schema": "public",
+        "name": "reject_legacy_supplier_price_published_write",
+        "args": "",
+        "md5": "45d03c40fb76317b27eed30d4202462f",
+        "securityDefiner": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "serviceExecute": true
+      },
+      {
+        "schema": "public",
+        "name": "request_supplier_release_action",
+        "args": "input_project_ref text, input_actor_id uuid, input_organization_id uuid, input_auth_session_id uuid, input_token_iat bigint, input_token_exp bigint, input_action text, input_request jsonb",
+        "md5": "e40acb47ebcc24df9273c666ecec2523",
+        "securityDefiner": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "serviceExecute": true
+      },
+      {
+        "schema": "supplier_price_ingestion_internal",
+        "name": "admin_publish_staging",
+        "args": "input_project_ref text, input_release_id uuid, input_organization_id uuid, input_supplier_id uuid, input_brand_id uuid, input_actor_id uuid, input_decision_id uuid, input_expected_review_revision bigint, input_expected_previous_publication_id uuid",
+        "md5": "f6843f5e58603ff25b763fa73f31030e",
+        "securityDefiner": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "serviceExecute": false
+      },
+      {
+        "schema": "supplier_price_ingestion_internal",
+        "name": "guard_source_publication",
+        "args": "",
+        "md5": "23e29027db6019950bd6fc9cc5f37817",
+        "securityDefiner": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "serviceExecute": false
+      },
+      {
+        "schema": "supplier_price_ingestion_internal",
+        "name": "reject_source_compatibility_change",
+        "args": "",
+        "md5": "b41063728be82573f159e4a7bd56a6a8",
+        "securityDefiner": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "serviceExecute": false
+      },
+      {
+        "schema": "supplier_price_ingestion_internal",
+        "name": "source_publication_blocker",
+        "args": "input_release_id uuid",
+        "md5": "6d1af318ac47869305f780343fc0693d",
+        "securityDefiner": true,
+        "anonExecute": false,
+        "authenticatedExecute": false,
+        "serviceExecute": false
+      }
+    ],
+    "triggerFingerprints": [
+      {
+        "name": "supplier_publications_require_source_compatibility",
+        "schema": "public",
+        "enabled": "O",
+        "relation": "supplier_price_publications",
+        "definition": "CREATE TRIGGER supplier_publications_require_source_compatibility BEFORE INSERT ON public.supplier_price_publications FOR EACH ROW WHEN (new.status = 'published'::text) EXECUTE FUNCTION supplier_price_ingestion_internal.guard_source_publication()",
+        "definition_md5": "726845347e7d7031d76650ad98153e5f"
+      },
+      {
+        "name": "supplier_prices_reject_published_legacy_write",
+        "schema": "public",
+        "enabled": "O",
+        "relation": "supplier_prices",
+        "definition": "CREATE TRIGGER supplier_prices_reject_published_legacy_write BEFORE INSERT OR DELETE OR UPDATE OF organization_id, supplier_id, brand_id, product_code, normalized_code, buy_price, currency, valid_from, valid_to, is_active, moq, order_multiple, stock_qty, lead_time_days ON public.supplier_prices FOR EACH ROW EXECUTE FUNCTION public.reject_legacy_supplier_price_published_write()",
+        "definition_md5": "2b4f5cd5063ce258502d3eb4d3905e53"
+      },
+      {
+        "name": "source_compatibility_receipts_immutable",
+        "schema": "supplier_price_ingestion_internal",
+        "enabled": "O",
+        "relation": "source_compatibility_receipts",
+        "definition": "CREATE TRIGGER source_compatibility_receipts_immutable BEFORE DELETE OR UPDATE ON supplier_price_ingestion_internal.source_compatibility_receipts FOR EACH ROW EXECUTE FUNCTION supplier_price_ingestion_internal.reject_source_compatibility_change()",
+        "definition_md5": "3e008bd14a7f53ea4978e753013f6b08"
+      }
+    ],
+    "triggerDeparseContext": "SET LOCAL search_path=pg_catalog; pg_get_triggerdef(oid,true). A raw/pretty/search_path change can change the text hash without changing the trigger.",
+    "receiptTableRls": true,
+    "receiptTableNoApiRolePrivileges": true,
+    "receiptTablePublicPrivileges": 0,
+    "policy": "supplier-price-commercial-fields-v1",
+    "contract": "Verified source binding and immutable compatibility receipt are required by the common publication trigger. Nonblank stock_qty/order_multiple/valid_to is rejected rather than silently lost. The active legacy first-pointer guard and publication/legacy-writer advisory lock remain enforced."
+  },
+  "actionAndStorageAccess": {
+    "capturedAt": "2026-10-14T19:15:34.789875+00:00",
+    "privateNewTables": [
+      {
+        "schema": "supplier_price_ingestion_internal",
+        "name": "admin_release_action_control",
+        "rls": true,
+        "policies": 0,
+        "noApiRolePrivileges": true
+      },
+      {
+        "schema": "supplier_price_ingestion_internal",
+        "name": "admin_release_actions",
+        "rls": true,
+        "policies": 0,
+        "noApiRolePrivileges": true
+      },
+      {
+        "schema": "supplier_price_ingestion_internal",
+        "name": "admin_staging_publication_decisions",
+        "rls": true,
+        "policies": 0,
+        "noApiRolePrivileges": true
+      },
+      {
+        "schema": "supplier_price_ingestion_internal",
+        "name": "source_compatibility_receipts",
+        "rls": true,
+        "policies": 0,
+        "noApiRolePrivileges": true
+      }
+    ],
+    "checks": {
+      "allRls": true,
+      "fourPresent": true,
+      "noApiRolePrivileges": true
+    },
+    "storageObjectsRls": true,
+    "storagePolicyCount": 18,
+    "storagePolicyDigest": "f8f4528bf2468740efc93f0ba2f96780",
+    "genericPolicies": [
+      {
+        "name": "supplier_price_verified_no_delete",
+        "mode": "RESTRICTIVE",
+        "command": "DELETE",
+        "roles": [
+          "authenticated"
+        ]
+      },
+      {
+        "name": "supplier_price_verified_no_overwrite",
+        "mode": "RESTRICTIVE",
+        "command": "UPDATE",
+        "roles": [
+          "authenticated"
+        ]
+      }
+    ],
+    "genericPermissivePolicies": 0,
+    "anonymousPermissivePolicies": 0
+  },
+  "salesMasterForwardMetadata": {
+    "exactLastReviewedDefinitionsAndAcl": true,
+    "functionCount": 9,
+    "functions": [
+      {
+        "md5": "b8b2a4b03c055323ae27bd93dc2f5841",
+        "anon": false,
+        "name": "cloud_admin_price_list_brands",
+        "config": [
+          "search_path=\"\""
+        ],
+        "public": false,
+        "signature": "cloud_admin_price_list_brands(uuid)",
+        "volatility": "s",
+        "service_role": true,
+        "authenticated": false,
+        "security_definer": true
+      },
+      {
+        "md5": "91e8efbc5059ef0df3f4599723e40b1b",
+        "anon": false,
+        "name": "cloud_admin_price_list_page_fast",
+        "config": [
+          "search_path=\"\""
+        ],
+        "public": false,
+        "signature": "cloud_admin_price_list_page_fast(uuid,uuid,text,numeric,text,text,integer)",
+        "volatility": "s",
+        "service_role": true,
+        "authenticated": false,
+        "security_definer": true
+      },
+      {
+        "md5": "c79c89523348a31818098a0b908ec0e7",
+        "anon": false,
+        "name": "cloud_catalog_master_export_page_v3",
+        "config": [
+          "search_path=\"\""
+        ],
+        "public": false,
+        "signature": "cloud_catalog_master_export_page_v3(uuid,uuid,text,text,text,uuid,integer,numeric,numeric)",
+        "volatility": "s",
+        "service_role": true,
+        "authenticated": false,
+        "security_definer": true
+      },
+      {
+        "md5": "7866904a58e1f88753e28522c195614c",
+        "anon": false,
+        "name": "cloud_master_page_fast",
+        "config": [
+          "search_path=\"\""
+        ],
+        "public": false,
+        "signature": "cloud_master_page_fast(text,uuid,integer,integer,numeric,numeric)",
+        "volatility": "s",
+        "service_role": true,
+        "authenticated": true,
+        "security_definer": true
+      },
+      {
+        "md5": "0ff885d2aecdff1553ee98f6ab03ab5a",
+        "anon": false,
+        "name": "cloud_master_published_price_page_v3",
+        "config": [
+          "search_path=\"\""
+        ],
+        "public": false,
+        "signature": "cloud_master_published_price_page_v3(text,uuid,integer,integer,numeric,numeric)",
+        "volatility": "s",
+        "service_role": true,
+        "authenticated": true,
+        "security_definer": true
+      },
+      {
+        "md5": "f651598902f88c8041c00e291b9eaaa4",
+        "anon": false,
+        "name": "cloud_portal_customer_price_list_page_fast",
+        "config": [
+          "search_path=\"\""
+        ],
+        "public": false,
+        "signature": "cloud_portal_customer_price_list_page_fast(uuid,uuid,text,numeric,text,text,integer)",
+        "volatility": "s",
+        "service_role": true,
+        "authenticated": false,
+        "security_definer": true
+      },
+      {
+        "md5": "107025403b3d2301ca8c478c490fe537",
+        "anon": false,
+        "name": "cloud_price_list_source_page",
+        "config": [
+          "search_path=\"\""
+        ],
+        "public": false,
+        "signature": "cloud_price_list_source_page(uuid,uuid,text,integer)",
+        "volatility": "s",
+        "service_role": true,
+        "authenticated": false,
+        "security_definer": true
+      },
+      {
+        "md5": "fba77b48656072997d4899d2d1c0db0b",
+        "anon": false,
+        "name": "get_admin_price_list_export_version",
+        "config": [
+          "search_path=\"\""
+        ],
+        "public": false,
+        "signature": "get_admin_price_list_export_version(uuid,uuid)",
+        "volatility": "s",
+        "service_role": true,
+        "authenticated": false,
+        "security_definer": true
+      },
+      {
+        "md5": "24cc2622d274ee460af0bd84770d0ad8",
+        "anon": false,
+        "name": "get_catalog_master_export_version",
+        "config": [
+          "search_path=\"\""
+        ],
+        "public": false,
+        "signature": "get_catalog_master_export_version(uuid,uuid,text)",
+        "volatility": "s",
+        "service_role": true,
+        "authenticated": false,
+        "security_definer": true
+      }
+    ]
+  },
+  "finalState": {
+    "capturedAt": "2026-10-14T19:17:04.049908+00:00",
+    "actionControl": {
+      "enabled": true,
+      "expectedProjectRef": "zjgueqijumzlfioihnkt"
+    },
+    "activeActions": 0,
+    "catalogCanary": {
+      "rows": 1,
+      "status": "completed",
+      "complete": true,
+      "pollable": false,
+      "errorCode": null,
+      "liveLease": false
+    },
+    "newGebaReceipt": {
+      "policy": "supplier-price-commercial-fields-v1",
+      "handoffId": "6e225a56-4a01-4df6-b904-c60f918395bc",
+      "releaseId": "06ffd737-36a6-4b0c-8b5a-f61657bd1552",
+      "totalRows": 108,
+      "sourceBytes": 5761,
+      "sourceSha256": "7ed51a80a89d7d6548df91d33b4ffd521d0c3980b2f50f2dcfd4cddf75673c68"
+    },
+    "newGebaRelease": {
+      "id": "06ffd737-36a6-4b0c-8b5a-f61657bd1552",
+      "status": "published",
+      "errorCode": null,
+      "totalRows": 108,
+      "acceptedRows": 108,
+      "conflictRows": 0,
+      "rejectedRows": 0,
+      "processedRows": 108,
+      "reviewRevision": 1
+    },
+    "pendingHandoffs": 0,
+    "catalogRunsToday": {
+      "finalized": 1
+    },
+    "activeBatchLeases": 0,
+    "activeActionLeases": 0,
+    "activeExportLeases": 0,
+    "canaryProductCount": 0,
+    "currentGebaPointer": {
+      "releaseId": "06ffd737-36a6-4b0c-8b5a-f61657bd1552",
+      "publicationId": "a7578e86-2f62-482f-9ff2-d671406aec68"
+    },
+    "publicationControl": {
+      "enabled": true,
+      "attributed": true,
+      "activatedAt": "2026-10-14T17:57:08.028953+00:00",
+      "reversalEnabled": false,
+      "expectedProjectRef": "zjgueqijumzlfioihnkt",
+      "activationDecisionId": "2f15ffff-1932-442a-9e93-ab89e374d693"
+    },
+    "pendingVerifications": 0,
+    "activeUnexpiredExports": 0,
+    "catalogPollableSources": 0,
+    "gebaPublicationHistory": [
+      {
+        "id": "1345a117-51e5-4913-90b7-130c211da303",
+        "status": "superseded",
+        "version": 1,
+        "releaseId": "c6db3eac-ee98-404b-b07a-35de65abb463"
+      },
+      {
+        "id": "a7578e86-2f62-482f-9ff2-d671406aec68",
+        "status": "published",
+        "version": 2,
+        "releaseId": "06ffd737-36a6-4b0c-8b5a-f61657bd1552"
+      }
+    ],
+    "canaryNotificationCount": 9,
+    "activeVerificationLeases": 0,
+    "catalogActiveSourceLeases": 0,
+    "catalogSourceStatusCounts": {
+      "completed": 1
+    },
+    "catalogQueuedFinalizations": 0,
+    "historicalProviderCollectingRuns": 2
+  },
+  "publicProductionBuild": {
+    "observedAtMinute": "2026-10-14T19:15Z",
+    "method": "HTTPS GET /version.json",
+    "origin": "https://portal.next-master.com",
+    "httpStatus": 200,
+    "gitSha": "fa8e8be412c47f88ca70b2c6e5de12fa73212dd5",
+    "buildVersion": "fa8e8be412c47f88ca70b2c6e5de12fa73212dd5-guard-and-download-production",
+    "builtAt": "2026-10-14T18:43:35.650Z",
+    "environment": "production",
+    "publicDeployIdEmpty": true
+  },
+  "coordinatorReportedProviders": {
+    "productionUi": {
+      "deployId": "6acfd10f81989ec02d9b7c95",
+      "sourceCommit": "fa8e8be412c47f88ca70b2c6e5de12fa73212dd5",
+      "actualBrowserNewBadge": true
+    },
+    "supplier": {
+      "serviceId": "srv-db7ps1dg1s2s73be1ofg",
+      "deployId": "dep-db7t2b67bikc73cg8ii0",
+      "instance": "ws47n",
+      "sourceCommit": "fa8e8be412c47f88ca70b2c6e5de12fa73212dd5",
+      "liveAt": "2026-10-14T19:01:21Z",
+      "actualV2PublicationCompletedAt": "2026-10-14T19:11:41.829842Z",
+      "expectedTarget": "zjgueqijumzlfioihnkt",
+      "historyDatabase": "nm_supplier_production_history"
+    },
+    "catalog": {
+      "serviceId": "srv-db7ptlnavr4c73953c2g",
+      "deployId": "dep-db7qqku7bikc73brgf10",
+      "instance": "9x8bx",
+      "sourceCommit": "601784d0fc681cc007fbb653b123bc0ef56f3875",
+      "expectedTarget": "zjgueqijumzlfioihnkt",
+      "historyDatabase": "nm_catalog_production_history",
+      "actualSourceAndRunCompletedOneAttempt": true,
+      "newHttpHealthCheckClaimed": false
+    },
+    "staging": {
+      "uiDeployId": "6acfcdd0aeec91eb9a26f7de",
+      "workerDeployId": "dep-db7st47f3r2c73998f7g",
+      "workerInstance": "rxljv",
+      "workerLiveAt": "2026-10-14T18:49:31Z",
+      "sourceCommit": "fa8e8be412c47f88ca70b2c6e5de12fa73212dd5"
+    }
+  },
+  "acceptanceEvidence": {
+    "catalog": "scripts/ops/evidence/catalog-production-large-file-canary-20261014.json",
+    "gebaV2Commit": "8680e1e",
+    "gebaV2": "scripts/ops/evidence/price-engine-production-geba-v2-commercial-receipt-20261014.json",
+    "gebaV2ReportedChecksPassed": 23,
+    "masterProduction": "scripts/ops/evidence/master-price-mixed-scope-production-postapply-20261014.json",
+    "legacySalesProduction": "scripts/ops/evidence/price-list-legacy-scope-production-postapply-20261014.json",
+    "commercialGuardStaging": "scripts/ops/evidence/supplier-source-commercial-guard-v3-runtime-20261014.json",
+    "downloadHandoffStaging": "scripts/ops/evidence/export-download-handoff-v3-runtime-20261014.json"
+  },
+  "conclusion": {
+    "blockingSchemaAclSourceGuardOrNewQueueConditionFound": false,
+    "publicationEnabled": true,
+    "reversalEnabled": false,
+    "activationAttributionPreserved": true,
+    "currentGebaReleaseHasExactSourceCompatibilityReceipt": true,
+    "oldPublicationHistoryRetained": true,
+    "newMotorIdleAtSnapshot": true,
+    "catalogCanaryCompletedAndNotPollable": true
+  },
+  "limits": [
+    "Provider IDs, instance-live facts and exact worker configuration are coordinator-reported; this observer did not open provider UI or connect to external DBOS histories in this final check.",
+    "The SQL snapshots are instantaneous read-only receipts, not continuous monitoring or a new load/recovery test.",
+    "Production catalog proof used one logical row in a 6 MiB padded file. Many-row throughput and an actual production catalog worker restart/resume were not exercised in this turn.",
+    "The production shared quote core and complete A/B/custom price parity are covered by the separate GEBA acceptance evidence. No new production sales-order/invoice financial writes or authenticated order lifecycle were created in this turn.",
+    "Two historical provider_collecting catalog runs remain preserved. They are outside the new Storage source/finalization queue and are not reported as new pending motor work.",
+    "Verified supplier intake supports complete replace snapshots. Meaningful stock_qty/order_multiple/valid_to fields must be rejected; supporting those values or verified merge requires separate implementation.",
+    "Supplier metadata retained in release evidence does not by itself update the central catalog. Catalog remains a separate explicit import operation.",
+    "Customer upload-for-price-query remains limited to 200 lines with a warning; this separate bounded query flow is not expanded by the large-file engine.",
+    "No claim of a measured four-way 1M preparation speedup, infinite capacity, email delivery/read receipts, or automatic DBOS history deletion is made."
+  ]
+}
