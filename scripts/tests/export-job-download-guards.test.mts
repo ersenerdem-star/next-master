@@ -186,3 +186,35 @@ test("complete export signs a short-lived URL and fallback streams the stored fi
     globalThis.fetch = previousFetch;
   }
 });
+
+test("signed download preserves escaped path octets and safely attaches the download name", async () => {
+  const previousFetch = globalThis.fetch;
+  const requests: Array<{ url: URL; authorization: string | null }> = [];
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    requests.push({ url, authorization: new Headers(init?.headers).get("authorization") });
+    return Response.json({
+      signedURL: "/object/sign/app-exports/org-1/supplier-price/2026-10-14T05-20-00.000%2B00%3A00/Supplier%20file.csv?token=signed-only-token",
+    });
+  };
+  try {
+    const signed = await createExportArtifactSignedDownload("https://example.invalid", "service-role-secret", job({
+      audience: "admin",
+      export_type: "supplier_price_list",
+      file_name: "Supplier file.csv",
+      storage_path: "org-1/supplier-price/2026-10-14T05-20-00.000+00:00/Supplier file.csv",
+    }));
+    const parsed = new URL(signed.signedUrl);
+    assert.equal(parsed.pathname, "/storage/v1/object/sign/app-exports/org-1/supplier-price/2026-10-14T05-20-00.000%2B00%3A00/Supplier%20file.csv");
+    assert.equal(parsed.searchParams.get("token"), "signed-only-token");
+    assert.equal(parsed.searchParams.get("download"), "Supplier-file.csv");
+    assert.doesNotMatch(parsed.pathname, /%25(?:2B|3A|20)/i);
+    assert.doesNotMatch(signed.signedUrl, /service-role-secret|Bearer/i);
+    assert.equal(requests.length, 1);
+    assert.match(requests[0].url.pathname, /2026-10-14T05-20-00\.000%2B00%3A00\/Supplier%20file\.csv$/);
+    assert.equal(requests[0].authorization, "Bearer service-role-secret");
+    assert.equal(signed.fileName, "Supplier-file.csv");
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});

@@ -1052,10 +1052,10 @@ export async function createExportArtifactSignedDownload(
 
   const signedPath = String(data.signedURL || data.signedUrl || "").trim();
   if (!signedPath) throw new Error("Export signed URL response is missing.");
-  const query = new URLSearchParams({ download: sanitizeDownloadFileName(job.file_name) });
-  const separator = signedPath.includes("?") ? "&" : "?";
+  const signedUrl = new URL(signedPath.startsWith("https://") ? signedPath : `${storageBaseUrl}${signedPath}`);
+  signedUrl.searchParams.set("download", sanitizeDownloadFileName(job.file_name));
   return {
-    signedUrl: encodeURI(`${storageBaseUrl}${signedPath}${separator}${query.toString()}`),
+    signedUrl: signedUrl.toString(),
     fileName: sanitizeDownloadFileName(job.file_name),
     contentType: job.content_type,
     rowCount: Number(job.row_count || 0),
@@ -1914,7 +1914,8 @@ async function runPagedRemainingAdminExportJob(
       : exportType === "catalog_export" ? `catalog-${brandName}-${stamp}` : `master-${brandName}-${exportScope}-${stamp}`;
     const fileName = `${sanitizeDownloadFileName(stem)}.${format}`;
     const folder = exportType === "supplier_price_list" ? "supplier-price" : exportType === "catalog_export" ? "catalog-export" : "catalog-master";
-    const storagePath = `${job.organization_id}/${folder}/${job.cache_key}/${leaseStartedAt.replaceAll(":", "-")}/${fileName}`;
+    const attemptFolder = createHash("sha256").update(leaseStartedAt).digest("hex").slice(0, 24);
+    const storagePath = `${job.organization_id}/${folder}/${job.cache_key}/${attemptFolder}/${fileName}`;
     const contentType = format === "csv" ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     await assertAndTouchExportJobLease(supabaseUrl, serviceRoleKey, job.id, leaseStartedAt);
     await uploadExportArtifact(supabaseUrl, serviceRoleKey, { bucket: EXPORT_STORAGE_BUCKET, path: storagePath, contentType, body });

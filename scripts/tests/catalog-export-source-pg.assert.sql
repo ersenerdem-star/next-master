@@ -66,6 +66,8 @@ insert into public.brands values('00000000-0000-0000-0000-000000000202','0000000
 insert into public.catalog_products(id,organization_id,brand_id,product_code,normalized_code,description,market_segment)
 select md5('catalog-'||n)::uuid,'00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000202',
   'SKU-'||n,'SKU'||n,'Fixture','PC' from generate_series(1,150001) n;
+-- Embedded test databases have no autovacuum; provide representative statistics.
+analyze public.catalog_products;
 do $large$
 declare
   v_after uuid := null;
