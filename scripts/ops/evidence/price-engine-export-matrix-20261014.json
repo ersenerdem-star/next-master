@@ -1020,9 +1020,138 @@
         "This is an all-legacy scope with zero pointers, not a mixed published/legacy-supplier cutover fixture.",
         "Browser interaction is root-reported; local bytes, full contents, finalized job, immutable snapshot and every source price/date were independently checked."
       ]
+    },
+    {
+      "environment": "production",
+      "projectRef": "zjgueqijumzlfioihnkt",
+      "exportType": "portal_price_list",
+      "scope": {
+        "organizationId": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+        "format": "xlsx",
+        "brandId": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+        "currency": "EUR",
+        "inviteId": "ac04b833-8e22-4d76-90aa-9d21e5911247",
+        "brandName": "Corteco",
+        "customerId": "fd9f8834-7935-4050-8895-fde8a2eb4914",
+        "marginPercent": 10,
+        "priceListType": "A",
+        "schemaVersion": 4
+      },
+      "browserObservation": {
+        "source": "Root observed authenticated Ersen A customer portal export, completed job and native Save; browser added (1) because the prior admin file already existed.",
+        "personallyObservedByThisAgent": false,
+        "filePath": "/Users/ersen/Downloads/portal-price-list-Corteco-A-20261014 (1).xlsx",
+        "fileModifiedAt": "2026-10-14T17:24:28.947412+00:00"
+      },
+      "exportJob": {
+        "id": "38a5d53a-a882-46a4-95b7-4a380e765766",
+        "organization_id": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+        "audience": "portal",
+        "export_type": "portal_price_list",
+        "status": "finalized",
+        "scope": {
+          "format": "xlsx",
+          "brandId": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+          "currency": "EUR",
+          "inviteId": "ac04b833-8e22-4d76-90aa-9d21e5911247",
+          "brandName": "Corteco",
+          "customerId": "fd9f8834-7935-4050-8895-fde8a2eb4914",
+          "marginPercent": 10,
+          "priceListType": "A",
+          "schemaVersion": 4
+        },
+        "row_count": 30328,
+        "progress_done": 30328,
+        "progress_total": 30328,
+        "byte_size": 808862,
+        "file_name": "portal-price-list-Corteco-A-20261014.xlsx",
+        "created_at": "2026-10-14 17:23:31.610876+00",
+        "started_at": "2026-10-14 17:23:33.059+00",
+        "finalized_at": "2026-10-14 17:24:16.658+00",
+        "error_message": null,
+        "data_version": "a7b3441b1b2c7177cf197a7c2772e98cb9e64551faeac6767500a3bf8a17d123",
+        "snapshot_id": "907b5a92-a17b-4fa0-aa8d-d86ccc5eb3c0",
+        "snapshot_status": "sealed"
+      },
+      "download": {
+        "fileName": "portal-price-list-Corteco-A-20261014 (1).xlsx",
+        "bytes": 808862,
+        "sha256": "b1d9638269efab8dfcae6fdebc60c9446b5b6d6c9e3fa313e66c708d6ae114ee",
+        "headers": [
+          "Part_No",
+          "Description",
+          "Price_EUR",
+          "Price_Date",
+          "Lifecycle"
+        ],
+        "dataRows": 30328,
+        "distinctProductCodes": 30328,
+        "duplicateCodes": 0,
+        "blankCodes": 0,
+        "formulaCells": 0,
+        "sheetNames": [
+          "Price List 1"
+        ],
+        "sheetDataRows": [
+          30328
+        ],
+        "numericPriceCells": 30328,
+        "chunks": [
+          {
+            "start": 1,
+            "end": 30328,
+            "rows": 30328,
+            "md5": "243fc21ede09f7aa902e383e8060a092"
+          }
+        ],
+        "reader": "Bundled Python standard-library streaming ZIP/XML; no workbook edits or floating-point pricing comparisons"
+      },
+      "source": {
+        "method": "Independent SELECT-only audit of the distinct sealed customer snapshot and effective customer account. Current eligible legacy rows exclude supplier scopes with pointers; latest date/id per supplier and exact SKU, then cheapest supplier with deterministic ties. No price records printed.",
+        "aggregateQuery": "with job as materialized(select * from public.app_export_jobs where id='38a5d53a-a882-46a4-95b7-4a380e765766'),\n  legacy as materialized(select public.normalize_catalog_product_code(sp.product_code) collate \"C\" code,sp.supplier_id,sp.id::text source_id,sp.buy_price,sp.valid_from from public.supplier_prices sp cross join job j where sp.organization_id=j.organization_id and sp.brand_id=(j.scope->>'brandId')::uuid and sp.is_active and sp.buy_price>0 and sp.currency='EUR' and sp.valid_from<=current_date and (sp.valid_to is null or sp.valid_to>=current_date) and public.normalize_catalog_product_code(sp.product_code) ~ '[A-Z0-9]' and not exists(select 1 from public.supplier_current_price_pointers ptr where ptr.organization_id=sp.organization_id and ptr.brand_id=sp.brand_id and ptr.supplier_id=sp.supplier_id)),\n  latest as materialized(select distinct on(code,supplier_id) * from legacy order by code,supplier_id,valid_from desc,source_id desc),\n  winners as materialized(select distinct on(code) * from latest order by code,buy_price,valid_from desc,supplier_id),\n  snapshot_rows as materialized(select r.* from export_snapshot_private.rows r where r.snapshot_id='907b5a92-a17b-4fa0-aa8d-d86ccc5eb3c0'),\n  checked as(select p.*,w.buy_price,w.valid_from,j.scope,md5((select string_agg(octet_length(v)::text||':'||v,'' order by ord) from unnest(array[coalesce(payload->>'code',''),coalesce(payload->>'description',''),trim_scale((payload->>'price')::numeric)::text,coalesce(payload->>'priceDate',''),case when payload->>'discontinued'='true' then 'Discontinued'||case when coalesce(payload->>'replacementCode','')<>'' then '; replacement: '||(payload->>'replacementCode') else '' end else 'Active' end]) with ordinality f(v,ord))) row_hash from snapshot_rows p cross join job j left join winners w on w.code=p.source_key)\n  select clock_timestamp() observed_at,count(*) row_count,md5(string_agg(row_hash,'' order by ordinal)) ordered_fields_md5,count(*) filter(where payload->>'brand' is distinct from scope->>'brandName' or payload->>'currency' is distinct from 'EUR') scope_mismatches,count(*) filter(where buy_price is null) missing_prices,count(*) filter(where (payload->>'price')::numeric is distinct from round(buy_price*(1+(scope->>'marginPercent')::numeric/100),2)) price_mismatches,count(*) filter(where payload->>'priceDate' is distinct from valid_from::text) date_mismatches,(select count(*) from winners) eligible_source_keys,(select count(*) from public.supplier_current_price_pointers ptr cross join job j where ptr.organization_id=j.organization_id and ptr.brand_id=(j.scope->>'brandId')::uuid) pointer_count,(select public.get_admin_price_list_export_version(j.organization_id,(j.scope->>'brandId')::uuid) from job j) current_data_version,(select c.price_list_type from public.customers c cross join job j where c.id=(j.scope->>'customerId')::uuid and c.organization_id=j.organization_id) customer_list_type,(select c.price_list_margin_percent::text from public.customers c cross join job j where c.id=(j.scope->>'customerId')::uuid and c.organization_id=j.organization_id) customer_custom_margin,(select l.margin_percent::text from public.customer_price_lists l cross join job j where l.organization_id=j.organization_id and l.list_type='A' and l.is_active order by l.updated_at desc,l.created_at desc limit 1) active_a_margin from checked;",
+        "verification": {
+          "observed_at": "2026-10-14 17:25:32.919295+00",
+          "row_count": 30328,
+          "ordered_fields_md5": "243fc21ede09f7aa902e383e8060a092",
+          "scope_mismatches": 0,
+          "missing_prices": 0,
+          "price_mismatches": 0,
+          "date_mismatches": 0,
+          "eligible_source_keys": 30328,
+          "pointer_count": 0,
+          "current_data_version": "01b7ea06a7f08058b480e260304f8038",
+          "customer_list_type": "A",
+          "customer_custom_margin": null,
+          "active_a_margin": "10.00"
+        }
+      },
+      "equality": {
+        "allFiveExportColumnsMatchSealedSnapshot": true,
+        "everyPriceAndDateMatchesIndependentEligibleLegacyWinner": true,
+        "sourceFileAndJobRowsEqual": true,
+        "jobAndFileBytesEqual": true,
+        "noMissingOrDuplicateCodes": true,
+        "notTruncatedAt50Or1000": true,
+        "marginUnit": "customer portal percentage",
+        "marginPercent": 10,
+        "effectiveCustomerProfileMatchesJob": true,
+        "customMarginIsNull": true,
+        "activeAMarginPercent": 10,
+        "legacyFallbackProven": true,
+        "pointerCount": 0,
+        "distinctCustomerJobAndSnapshotFromAdmin": true,
+        "sameFileBytesAsAdminA": true,
+        "adminJobId": "99c6e378-4d8b-45b1-b2ad-c9b30db88c4d",
+        "adminSnapshotId": "65c24bf5-5ee6-494d-9303-0d7f378dcb5d",
+        "method": "Complete ordered UTF-8 length-framed five-field digest equality against the customer job sealed snapshot. Every price equals exact-numeric eligible legacy buy*(1+10/100), every date equals its winning supplier record, and current customer A/no override plus active A=10% independently agree with the customer job. Identical admin A bytes are expected at the same effective margin; separate job, audience, customer and snapshot establish customer portal provenance."
+      },
+      "limitations": [
+        "Browser interaction and login identity are root-reported; local bytes, full contents, finalized portal job, distinct immutable snapshot and every source price/date were independently checked.",
+        "This is an all-legacy scope with zero pointers; mixed published/legacy scopes require their separately owned SQL fixture evidence.",
+        "The customer job data version includes customer pricing scope and differs from the base admin source version; no direct equality between those two version values is claimed.",
+        "No workbook was modified or reserialized."
+      ]
     }
   ],
-  "pending": [
-    "Production customer portal price-list download and effective account pricing"
-  ]
+  "pending": []
 }
