@@ -22,8 +22,9 @@ export async function preflightCatalogCsv({ inputPath, memoryLimit = "512MB", th
     threads: String(threads),
     ...(tempDirectory ? { temp_directory: tempDirectory } : {}),
   });
-  const connection = await instance.connect();
+  let connection;
   try {
+    connection = await instance.connect();
     const source = `read_csv_auto(${quote(path)}, header=true, all_varchar=true, ignore_errors=false, strict_mode=true)`;
     const reader = await connection.runAndReadAll(`select count(*)::UBIGINT as total_rows from ${source}`);
     const raw = reader.getRowObjectsJson()?.[0]?.total_rows;
@@ -31,6 +32,7 @@ export async function preflightCatalogCsv({ inputPath, memoryLimit = "512MB", th
     if (!Number.isSafeInteger(totalRows) || totalRows < 1) throw new Error("CATALOG_SOURCE_NO_ROWS");
     return { engine: "duckdb", totalRows };
   } finally {
-    connection.disconnectSync();
+    connection?.disconnectSync();
+    instance.closeSync();
   }
 }
