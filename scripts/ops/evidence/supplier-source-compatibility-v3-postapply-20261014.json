@@ -1,0 +1,327 @@
+{
+  "evidenceVersion": 1,
+  "scope": "V3 staging independent read-only postapply; before new canary activity",
+  "projectId": "kaxsqafdevabkxofwdod",
+  "migration": {
+    "commit": "e5864a2",
+    "file": "supabase/migrations/20261014175649_supplier_source_commercial_compatibility_guard.sql",
+    "sha256": "5e4da92699a01f8a71375efd3f97a401a0731546a98141be1578f4ff1ddbe7f5",
+    "applyOwner": "root",
+    "applyResult": "success reported by root; independently checked below"
+  },
+  "capturedAt": "2026-10-14 18:18:35.707463+00",
+  "gatePassed": true,
+  "failures": [],
+  "checks": {
+    "no_active_actions": true,
+    "pointers_unchanged": true,
+    "no_pending_handoffs": true,
+    "no_production_control": true,
+    "no_active_batch_leases": true,
+    "publications_unchanged": true,
+    "releaseEvents_unchanged": true,
+    "action_control_unchanged": true,
+    "no_pending_verifications": true,
+    "stagingDecisions_unchanged": true,
+    "exact_schema_acl_rls_config": true,
+    "no_retroactive_source_receipts": true
+  },
+  "preservedBaseline": {
+    "capturedAt": "2026-10-14T18:13:17.612009+00:00",
+    "pointers": {
+      "count": 1,
+      "digest": "53c47d4a4269045cd4421c6aff07ba8f"
+    },
+    "publications": {
+      "count": 2,
+      "digest": "819ef8857cdf2b16649d2b4be04aa505"
+    },
+    "releaseEvents": {
+      "count": 4158,
+      "digest": "cc6fe25e82e3f23096492bf9e089db22"
+    },
+    "stagingDecisions": {
+      "count": 1,
+      "digest": "3bb5ac0495db1a195b3ccfe4565c86da"
+    },
+    "actionControlEnabled": true,
+    "expectedProjectRef": "kaxsqafdevabkxofwdod",
+    "productionControlAbsent": true
+  },
+  "verifiedFunctions": [
+    {
+      "function": "public.claim_supplier_release_action",
+      "md5": "a64656cb7a02825ae7c8aaa951b305a8",
+      "securityDefiner": true,
+      "config": [
+        "search_path=\"\"",
+        "lock_timeout=2s"
+      ],
+      "publicExecute": false,
+      "anonExecute": false,
+      "authenticatedExecute": false,
+      "serviceExecute": true
+    },
+    {
+      "function": "public.execute_supplier_release_action",
+      "md5": "d1af8f8699bdc7bf1de5a18f77ec8e04",
+      "securityDefiner": true,
+      "config": [
+        "search_path=\"\"",
+        "lock_timeout=2s",
+        "statement_timeout=55s"
+      ],
+      "publicExecute": false,
+      "anonExecute": false,
+      "authenticatedExecute": false,
+      "serviceExecute": true
+    },
+    {
+      "function": "public.fail_supplier_release_action",
+      "md5": "3ba1c8548d13df215c2596f11dc4d77d",
+      "securityDefiner": true,
+      "config": [
+        "search_path=\"\"",
+        "lock_timeout=2s"
+      ],
+      "publicExecute": false,
+      "anonExecute": false,
+      "authenticatedExecute": false,
+      "serviceExecute": true
+    },
+    {
+      "function": "public.get_supplier_price_verified_manifest",
+      "md5": "b3d88c87f2866b3b3bc1a5b32cd4d0e8",
+      "securityDefiner": true,
+      "config": [
+        "search_path=\"\""
+      ],
+      "publicExecute": false,
+      "anonExecute": false,
+      "authenticatedExecute": false,
+      "serviceExecute": true
+    },
+    {
+      "function": "public.get_supplier_release_action_evidence",
+      "md5": "3981012b5150f3d9bdd78793a8aade59",
+      "securityDefiner": true,
+      "config": [
+        "search_path=\"\"",
+        "lock_timeout=2s"
+      ],
+      "publicExecute": false,
+      "anonExecute": false,
+      "authenticatedExecute": false,
+      "serviceExecute": true
+    },
+    {
+      "function": "public.publish_supplier_price_release_staging",
+      "md5": "18bc9e1822e806b2f639a1cc509af6cf",
+      "securityDefiner": true,
+      "config": [
+        "search_path=\"\""
+      ],
+      "publicExecute": false,
+      "anonExecute": false,
+      "authenticatedExecute": false,
+      "serviceExecute": true
+    },
+    {
+      "function": "public.record_supplier_price_source_compatibility",
+      "md5": "4acf9fef2b19fc01b135f4bea8285d83",
+      "securityDefiner": true,
+      "config": [
+        "search_path=\"\"",
+        "lock_timeout=2s"
+      ],
+      "publicExecute": false,
+      "anonExecute": false,
+      "authenticatedExecute": false,
+      "serviceExecute": true
+    },
+    {
+      "function": "public.reject_legacy_supplier_price_published_write",
+      "md5": "45d03c40fb76317b27eed30d4202462f",
+      "securityDefiner": true,
+      "config": [
+        "search_path=\"\""
+      ],
+      "publicExecute": false,
+      "anonExecute": false,
+      "authenticatedExecute": false,
+      "serviceExecute": false
+    },
+    {
+      "function": "public.request_supplier_release_action",
+      "md5": "e40acb47ebcc24df9273c666ecec2523",
+      "securityDefiner": true,
+      "config": [
+        "search_path=\"\"",
+        "lock_timeout=2s"
+      ],
+      "publicExecute": false,
+      "anonExecute": false,
+      "authenticatedExecute": false,
+      "serviceExecute": true
+    },
+    {
+      "function": "supplier_price_ingestion_internal.admin_publish_staging",
+      "md5": "f6843f5e58603ff25b763fa73f31030e",
+      "securityDefiner": true,
+      "config": [
+        "search_path=\"\""
+      ],
+      "publicExecute": false,
+      "anonExecute": false,
+      "authenticatedExecute": false,
+      "serviceExecute": false
+    },
+    {
+      "function": "supplier_price_ingestion_internal.guard_source_publication",
+      "md5": "23e29027db6019950bd6fc9cc5f37817",
+      "securityDefiner": true,
+      "config": [
+        "search_path=\"\""
+      ],
+      "publicExecute": false,
+      "anonExecute": false,
+      "authenticatedExecute": false,
+      "serviceExecute": false
+    },
+    {
+      "function": "supplier_price_ingestion_internal.reject_source_compatibility_change",
+      "md5": "b41063728be82573f159e4a7bd56a6a8",
+      "securityDefiner": true,
+      "config": [
+        "search_path=\"\""
+      ],
+      "publicExecute": false,
+      "anonExecute": false,
+      "authenticatedExecute": false,
+      "serviceExecute": false
+    },
+    {
+      "function": "supplier_price_ingestion_internal.source_publication_blocker",
+      "md5": "6d1af318ac47869305f780343fc0693d",
+      "securityDefiner": true,
+      "config": [
+        "search_path=\"\""
+      ],
+      "publicExecute": false,
+      "anonExecute": false,
+      "authenticatedExecute": false,
+      "serviceExecute": false
+    }
+  ],
+  "verifiedTriggers": [
+    {
+      "name": "supplier_publications_require_source_compatibility",
+      "schema": "public",
+      "enabled": "O",
+      "relation": "supplier_price_publications",
+      "definition_md5": "726845347e7d7031d76650ad98153e5f"
+    },
+    {
+      "name": "supplier_prices_reject_published_legacy_write",
+      "schema": "public",
+      "enabled": "O",
+      "relation": "supplier_prices",
+      "definition_md5": "2b4f5cd5063ce258502d3eb4d3905e53"
+    },
+    {
+      "name": "source_compatibility_receipts_immutable",
+      "schema": "supplier_price_ingestion_internal",
+      "enabled": "O",
+      "relation": "source_compatibility_receipts",
+      "definition_md5": "3e008bd14a7f53ea4978e753013f6b08"
+    }
+  ],
+  "receiptTable": {
+    "rls": true,
+    "forceRls": false,
+    "policies": 0,
+    "apiRolePrivileges": {
+      "roles": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "checked": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE",
+        "REFERENCES",
+        "TRIGGER"
+      ],
+      "allDenied": true
+    },
+    "publicPrivileges": 0,
+    "constraints": [
+      {
+        "name": "source_compatibility_receipts_handoff_id_fkey",
+        "type": "f",
+        "definition": "FOREIGN KEY (handoff_id) REFERENCES supplier_price_ingestion_internal.handoffs(id)"
+      },
+      {
+        "name": "source_compatibility_receipts_pkey",
+        "type": "p",
+        "definition": "PRIMARY KEY (release_id)"
+      },
+      {
+        "name": "source_compatibility_receipts_policy_check",
+        "type": "c",
+        "definition": "CHECK (policy = 'supplier-price-commercial-fields-v1'::text)"
+      },
+      {
+        "name": "source_compatibility_receipts_release_id_fkey",
+        "type": "f",
+        "definition": "FOREIGN KEY (release_id) REFERENCES public.supplier_price_releases(id)"
+      },
+      {
+        "name": "source_compatibility_receipts_source_bytes_check",
+        "type": "c",
+        "definition": "CHECK (source_bytes > 0)"
+      },
+      {
+        "name": "source_compatibility_receipts_source_sha256_check",
+        "type": "c",
+        "definition": "CHECK (source_sha256 ~ '^[0-9a-f]{64}$'::text)"
+      },
+      {
+        "name": "source_compatibility_receipts_total_rows_check",
+        "type": "c",
+        "definition": "CHECK (total_rows > 0)"
+      }
+    ],
+    "indexes": [
+      {
+        "name": "source_compatibility_receipts_pkey",
+        "ready": true,
+        "valid": true,
+        "definition": "CREATE UNIQUE INDEX source_compatibility_receipts_pkey ON supplier_price_ingestion_internal.source_compatibility_receipts USING btree (release_id)"
+      }
+    ],
+    "noRetroactiveRows": true
+  },
+  "policy": "supplier-price-commercial-fields-v1",
+  "runtimeSourceReview": {
+    "commit": "c38be3f963a313b6bb2096ec6a3c94d115d915b6",
+    "independentFocusedTests": {
+      "command": "node --test scripts/tests/supplier-source-commercial-fields.test.mjs scripts/tests/shared-prepared-source-concurrency.test.mjs",
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0
+    },
+    "finding": "No blocking source defect identified. Full original-byte checksum and imported-row validation precede the immutable receipt, including cached prepared manifests. Unknown or mismatched receipt responses stop preparation."
+  },
+  "limits": [
+    "This is schema/ACL/state preservation evidence; it does not claim deployed worker/UI behavior or a postdeployment source-receipt canary.",
+    "No production change or production postapply claim in this evidence.",
+    "Queue and lock observations are point-in-time; read-only verification reserves no future quiet window.",
+    "Known nonempty stock/order-multiple/valid-to aliases are rejected, including numeric zero; this does not implement storage/support for those fields.",
+    "XLSX validation covers the imported worksheet, not unused worksheets. Supported metadata remains release-row metadata; central catalog mutation remains separate.",
+    "Old DBOS preparation checkpoints cannot manufacture this proof. Existing publication/decision history is preserved without retroactive receipt creation."
+  ]
+}
