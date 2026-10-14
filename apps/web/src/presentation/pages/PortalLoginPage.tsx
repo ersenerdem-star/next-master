@@ -4,6 +4,7 @@ import { Button } from "../components/common/Button";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { useI18n, type LocaleCode } from "../../i18n/I18nProvider";
+import { NextMasterLogo } from "../components/common/NextMasterBrand";
 
 type PortalLoginPageProps = {
   onSuccess: (session: PortalSnapshot) => void;
@@ -83,6 +84,7 @@ export function PortalLoginPage({ onSuccess }: PortalLoginPageProps) {
         </section>
         <div className="portal-login-card">
           <div className="portal-login-brand">
+            <NextMasterLogo theme="dark" />
             <div className="portal-login-brand__logo" aria-hidden="true">
               NM
             </div>

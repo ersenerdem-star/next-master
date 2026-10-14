@@ -20,6 +20,7 @@ import { SectionCard } from "../../../presentation/components/common/SectionCard
 import { BrandPill } from "../../../presentation/components/common/BrandPill";
 import { ProductVisual } from "../../../presentation/components/common/ProductVisual";
 import { VehicleBadges } from "../../../presentation/components/common/VehicleBadges";
+import { NextMasterLogo, NavGlyph } from "../../../presentation/components/common/NextMasterBrand";
 import { buildBusinessDocumentHtml } from "../../../shared/documentPrint";
 import { openAccountStatementPrintWindow } from "../../../shared/accountStatementPrint";
 import { buildXlsxBlob, buildXlsxBlobAsync, downloadBlob, downloadUrl } from "../../../shared/xlsx";
@@ -1567,6 +1568,7 @@ export function PortalPage() {
 
           <div className="portal-login-card">
             <div className="portal-login-brand">
+              <NextMasterLogo theme="dark" />
               <div className={`portal-login-brand__logo${loginBrandLogo ? " portal-login-brand__logo--image" : ""}`} aria-hidden="true">
                 {loginBrandLogo ? <img src={loginBrandLogo} alt="" className="portal-login-brand__logo-image" /> : loginBrandInitials}
               </div>
@@ -1810,6 +1812,7 @@ export function PortalPage() {
   const portalNavGroups: Array<{
     key: PortalNavGroupKey;
     code: string;
+    icon: "home" | "search" | "pricing" | "documents" | "finance" | "account";
     title: string;
     caption: string;
     items: Array<{ key: PortalSection; label: string; badge?: string }>;
@@ -1817,6 +1820,7 @@ export function PortalPage() {
     {
       key: "home" as const,
       code: "00",
+      icon: "home" as const,
       title: "Home",
       caption: "Customer Desk",
       items: portalSections.filter((section) => section.key === "home"),
@@ -1824,6 +1828,7 @@ export function PortalPage() {
     {
       key: "search" as const,
       code: "01",
+      icon: "search" as const,
       title: "Search",
       caption: "Parts",
       items: portalSections.filter((section) => section.key === "desk"),
@@ -1831,6 +1836,7 @@ export function PortalPage() {
     {
       key: "pricing" as const,
       code: "02",
+      icon: "pricing" as const,
       title: "Price Lists",
       caption: "Downloads",
       items: portalSections.filter((section) => section.key === "pricelist"),
@@ -1838,6 +1844,7 @@ export function PortalPage() {
     {
       key: "documents" as const,
       code: "03",
+      icon: "documents" as const,
       title: "Documents",
       caption: activeSnapshot.invite.party_type === "customer" ? "Orders & Invoices" : "PO & Bills",
       items: portalSections
@@ -1853,6 +1860,7 @@ export function PortalPage() {
     {
       key: "finance" as const,
       code: "04",
+      icon: "finance" as const,
       title: "Finance",
       caption: "Statement & Payments",
       items: portalSections.filter((section) => section.key === "statement"),
@@ -1860,6 +1868,7 @@ export function PortalPage() {
     {
       key: "account" as const,
       code: "05",
+      icon: "account" as const,
       title: "Account",
       caption: "Profile",
       items: portalSections.filter((section) => section.key === "account"),
@@ -3337,6 +3346,7 @@ export function PortalPage() {
       {feedbackOverlay}
       <div className="portal-header">
         <div className="portal-brand">
+          <NextMasterLogo theme="light" />
           {activeSnapshot.companyProfile?.logo_data_url ? <img src={activeSnapshot.companyProfile.logo_data_url} alt="Portal logo" className="portal-brand__logo" /> : null}
           <div>
             <h1>{activeSnapshot.companyProfile?.company_name || "Next Master Portal"}</h1>
@@ -3367,6 +3377,19 @@ export function PortalPage() {
               Logout
             </Button>
           </div>
+          <nav className="portal-header-nav" aria-label="Portal navigation">
+            {portalNavGroups.map((group) => (
+              <button
+                key={group.key}
+                type="button"
+                className={`portal-header-nav__item${activePortalGroup === group.key ? " active" : ""}`}
+                onClick={() => handlePortalGroupNavigate(group.key)}
+              >
+                <NavGlyph name={group.icon} />
+                <span>{group.title}</span>
+              </button>
+            ))}
+          </nav>
         </div>
       </div>
 
@@ -3381,6 +3404,7 @@ export function PortalPage() {
             {portalNavGroups.map((group) => (
               <div key={group.key} className={`nav-group${activePortalGroup === group.key ? " active" : ""}`}>
                 <button className={`nav-item${activePortalGroup === group.key ? " active" : ""}`} onClick={() => handlePortalGroupNavigate(group.key)}>
+                  <NavGlyph name={group.icon} />
                   <span className="nav-item__code">{group.code}</span>
                   <span className="nav-item__body">
                     <span className="nav-item__title">{group.title}</span>
@@ -4094,6 +4118,7 @@ export function PortalPage() {
             className={`portal-mobile-bottom-nav__item${activePortalGroup === group.key ? " active" : ""}`}
             onClick={() => handlePortalGroupNavigate(group.key)}
           >
+            <NavGlyph name={group.icon} />
             <span className="portal-mobile-bottom-nav__title">{group.title}</span>
             <span className="portal-mobile-bottom-nav__caption">{group.caption}</span>
           </button>

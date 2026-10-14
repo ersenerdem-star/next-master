@@ -4,6 +4,7 @@ import { Button } from "../components/common/Button";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { useI18n, type LocaleCode } from "../../i18n/I18nProvider";
+import { NextMasterLogo } from "../components/common/NextMasterBrand";
 
 type LoginPageProps = {
   onSuccess: () => void;
@@ -204,6 +205,7 @@ export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
         <div className="login-card login-card--admin">
           {!recoveryMode ? (
             <div className="login-brand">
+              <NextMasterLogo theme="dark" />
               <div className={`login-brand__logo${branding.logoDataUrl ? " login-brand__logo--image" : ""}`} aria-hidden="true">
                 {branding.logoDataUrl ? <img src={branding.logoDataUrl} alt="" className="login-brand__logo-image" /> : loginInitials}
               </div>

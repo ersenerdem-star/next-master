@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useI18n } from "../../i18n/I18nProvider";
 import { MiraCompanion } from "../components/common/MiraCompanion";
+import { NextMasterLogo, NavGlyph, navGlyphForKey } from "../components/common/NextMasterBrand";
 
 const APP_DESKTOP_BASE_WIDTH_PX = 1440;
 const APP_DESKTOP_SCALE_SIDE_PADDING_PX = 24;
@@ -163,8 +164,8 @@ export function AppShell({
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-panel">
+          <NextMasterLogo theme="light" />
           <div className="brand-panel__eyebrow">{t("nav.driveConsole")}</div>
-          <div className="brand">Next Master</div>
           <div className="brand-panel__sub">{t("nav.operationalCockpit")}</div>
         </div>
         <nav className="sidebar-nav">
@@ -176,6 +177,7 @@ export function AppShell({
             <div key={item.key} className={`nav-group${item.key === activePage ? " active" : ""}`}>
               {showSectionLabel ? <div className="sidebar-nav__section-label">{t(navSectionLabels[navSection as keyof typeof navSectionLabels])}</div> : null}
               <button className={`nav-item${item.key === activePage ? " active" : ""}`} onClick={() => onNavigate?.(item.key)}>
+                <NavGlyph name={navGlyphForKey(item.key)} />
                 <span className="nav-item__code">{item.code}</span>
                 <span className="nav-item__body">
                   <span className="nav-item__title">{item.label}</span>
@@ -267,6 +269,7 @@ export function AppShell({
             className={`mobile-bottom-nav__item${item.key === activePage ? " active" : ""}`}
             onClick={() => onNavigate?.(item.key)}
           >
+            <NavGlyph name={navGlyphForKey(item.key)} />
             <span className="mobile-bottom-nav__title">{item.label}</span>
             <span className="mobile-bottom-nav__caption">{item.caption}</span>
           </button>

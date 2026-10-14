@@ -69,10 +69,15 @@ export function ActionFeedbackProvider({ children }: { children: ReactNode }) {
       {kind !== "idle" ? (
         <div className={`action-feedback action-feedback--${kind}`}>
           <div className="action-feedback__backdrop" />
-          <div className="action-feedback__card" role="status" aria-live="polite">
-            {kind === "progress" ? <span className="action-feedback__spinner" aria-hidden="true" /> : null}
-            <strong>{kind === "progress" ? "Working..." : kind === "success" ? "Done" : "Action failed"}</strong>
-            <span>{message}</span>
+          <div className="action-feedback__card" role={kind === "error" ? "alert" : "status"} aria-live="polite">
+            <div className="action-feedback__icon" aria-hidden="true">
+              {kind === "progress" ? <span className="action-feedback__spinner" /> : kind === "success" ? "✓" : "×"}
+            </div>
+            <div className="action-feedback__body">
+              <span className="action-feedback__eyebrow">{kind === "progress" ? "Processing" : kind === "success" ? "Completed" : "Attention required"}</span>
+              <strong>{kind === "progress" ? "Working on it" : kind === "success" ? "Done" : "Action needs attention"}</strong>
+              <span>{message}</span>
+            </div>
           </div>
         </div>
       ) : null}
