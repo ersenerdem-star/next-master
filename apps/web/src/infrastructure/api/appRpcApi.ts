@@ -39,7 +39,11 @@ export async function callAppRpc<T>(name: string, args: Record<string, unknown> 
     });
     const data = (await response.json()) as RpcResponse<T>;
     if (!response.ok) {
-      throw Object.assign(new Error(sanitizeUserFacingMessage(data.error || `App RPC failed: ${response.status}`, "The request could not be completed right now.")), { status: response.status });
+      // Preserve the known gateway denial before its display text is sanitized.
+      // Consumers must not branch on translated or user-facing error messages.
+      const code = response.status === 403 && data.error === "Superadmin access required"
+        ? "SUPERADMIN_ACCESS_REQUIRED" : undefined;
+      throw Object.assign(new Error(sanitizeUserFacingMessage(data.error || `App RPC failed: ${response.status}`, "The request could not be completed right now.")), { status: response.status, code });
     }
     return data.data as T;
   } catch (error) {

@@ -13,8 +13,9 @@ export async function loadLegacySupplierOperations<ImportRun, RollupRun>(
   const [importRuns, rollup] = await Promise.all([
     loadImports(),
     loadRollup().then((run) => ({ run, unavailable: false })).catch((error: unknown) => {
-      if (error instanceof Error && (error as Error & { status?: number }).status === 403
-        && error.message === "Superadmin access required") {
+      const denial = error as Error & { status?: number; code?: string };
+      if (error instanceof Error && denial.status === 403
+        && denial.code === "SUPERADMIN_ACCESS_REQUIRED") {
         return { run: null, unavailable: true };
       }
       throw error;

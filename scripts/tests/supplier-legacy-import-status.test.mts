@@ -2,10 +2,32 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
+import {build} from 'esbuild';
 import {SUPPLIER_LEGACY_IMPORT_COLUMNS,legacySupplierImportTelemetry,loadLegacySupplierOperations,legacyCustomerPriceReadiness} from '../../apps/web/src/shared/supplierLegacyImportStatus.ts';
 
 const baseline=JSON.parse(await readFile(new URL('./fixtures/price-engine-full-replay-production-source.json',import.meta.url),'utf8'));
 const run={status:'running',error_message:null,finalize_error_message:null,finalized_at:null,finished_at:null,superseded_by:null};
+
+// Exercise the real gateway client and its real user-message sanitizer; only
+// Auth and HTTP are fixtures. Hand-built Errors missed this boundary before.
+const bundled=await build({entryPoints:[new URL('../../apps/web/src/infrastructure/api/appRpcApi.ts',import.meta.url).pathname],
+ bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'fixture-auth',setup(b){
+  b.onResolve({filter:/^\.\/supabaseClient$/},()=>({path:'auth',namespace:'fixture'}));
+  b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'export const supabaseClient={auth:{getSession:async()=>({data:{session:{access_token:"fixture-token"}},error:null})}};',loader:'js'}));
+ }}]});
+const actualRpc=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'));
+async function withRpcResponse<T>(status:number,body:unknown,fn:(load:()=>Promise<unknown>)=>Promise<T>){
+ const previousFetch=globalThis.fetch,previousWindow=(globalThis as any).window;
+ const pending:Promise<unknown>[]=[];
+ globalThis.fetch=async(url,options)=>{
+  assert.equal(url,'/api/app-rpc');
+  assert.deepEqual(JSON.parse(String(options?.body)),{name:'get_latest_supplier_price_rollup_refresh_run',args:{}});
+  return new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}});
+ };
+ (globalThis as any).window={setTimeout,clearTimeout};
+ try{return await fn(()=>{const request=actualRpc.callAppRpc('get_latest_supplier_price_rollup_refresh_run');pending.push(request);return request;});}
+ finally{await Promise.allSettled(pending);globalThis.fetch=previousFetch;(globalThis as any).window=previousWindow;}
+}
 
 test('legacy history projection executes against independently captured production/staging schema',async()=>{
  const columns=baseline.tables.find((t:{schema:string;name:string})=>t.schema==='public'&&t.name==='supplier_price_import_runs').columns;
@@ -55,7 +77,14 @@ test('terminal success uses only committed completion timestamp and never invent
 
 test('optional superadmin rollup denial preserves actual import history and errors',async()=>{
  const imports=[{...run,id:'failed-import',status:'failed',error_message:'real import error'}];
- const result=await loadLegacySupplierOperations(async()=>imports,async()=>{throw Object.assign(new Error('Superadmin access required'),{status:403});});
+ const result=await withRpcResponse(403,{error:'Superadmin access required'},async load=>{
+  await assert.rejects(load(),(error:any)=>{
+   assert.equal(error.status,403);assert.equal(error.code,'SUPERADMIN_ACCESS_REQUIRED');
+   assert.notEqual(error.message,'Superadmin access required');
+   assert.match(error.message,/superadmin|permission/i);return true;
+  });
+  return loadLegacySupplierOperations(async()=>imports,load);
+ });
  assert.equal(result.importRuns,imports);
  assert.equal(result.importRuns[0].error_message,'real import error');
  assert.equal(result.rollupRun,null);
@@ -66,7 +95,21 @@ test('optional superadmin rollup denial preserves actual import history and erro
 
 test('required import failure still rejects when optional rollup read is forbidden',async()=>{
  const failure=new Error('Import history could not be read');
- await assert.rejects(loadLegacySupplierOperations(async()=>{throw failure;},async()=>{throw Object.assign(new Error('Superadmin access required'),{status:403});}),error=>error===failure);
+ await withRpcResponse(403,{error:'Superadmin access required'},load=>
+  assert.rejects(loadLegacySupplierOperations(async()=>{throw failure;},load),error=>error===failure));
+});
+
+test('actual RPC sanitizer cannot turn other denials into the optional rollup code',async()=>{
+ for(const [status,body] of [
+  [401,{error:'Superadmin access required'}],
+  [500,{error:'Superadmin access required'}],
+  [403,{error:'Permission denied',code:'SUPERADMIN_ACCESS_REQUIRED'}],
+  [403,{error:'Superadmin access required for a different scope'}],
+ ] as const){
+  await withRpcResponse(status,body,load=>assert.rejects(loadLegacySupplierOperations(async()=>[],load),(error:any)=>{
+   assert.equal(error.status,status);assert.equal(error.code,undefined);return true;
+  }));
+ }
 });
 
 test('unrelated rollup auth, server and transport failures are not swallowed',async()=>{
@@ -74,6 +117,8 @@ test('unrelated rollup auth, server and transport failures are not swallowed',as
   Object.assign(new Error('Session expired'),{status:401}),
   Object.assign(new Error('Different denied scope'),{status:403}),
   Object.assign(new Error('Superadmin access required'),{status:500}),
+  Object.assign(new Error('Superadmin access required'),{status:403}),
+  Object.assign(new Error('Changed display text'),{status:401,code:'SUPERADMIN_ACCESS_REQUIRED'}),
   new Error('Superadmin access required'),
   new TypeError('Failed to fetch'),
  ])await assert.rejects(loadLegacySupplierOperations(async()=>[],async()=>{throw error;}),caught=>caught===error);
