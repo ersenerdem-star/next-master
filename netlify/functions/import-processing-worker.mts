@@ -38,6 +38,15 @@ const TERMINAL_CATALOG_STATUSES = new Set([
   "succeeded",
 ]);
 
+function processingPaused(flagName: string) {
+  const value = Netlify.env.get(flagName);
+  // Unset/0 preserves legacy behavior. An invalid explicit value must not
+  // accidentally resume old price writes during a controlled worker handoff.
+  if (value == null || value === "" || value === "0") return false;
+  if (value !== "1") console.error("import processing pause flag invalid; branch paused", { flagName });
+  return true;
+}
+
 async function clearQueueMarker(supabaseUrl: string, serviceRoleKey: string, table: string, runId: string) {
   const url = new URL(`/rest/v1/${table}`, supabaseUrl);
   url.searchParams.set("id", `eq.${runId}`);
@@ -202,6 +211,8 @@ export default async (_request: Request, context: Context) => {
   const serviceRoleKey = Netlify.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) return json({ error: "System configuration is incomplete." }, 500);
 
+  const catalogProcessingPaused = processingPaused("LEGACY_CATALOG_IMPORT_PROCESSING_PAUSED");
+  const supplierProcessingPaused = processingPaused("LEGACY_SUPPLIER_IMPORT_PROCESSING_PAUSED");
   const headers = serviceRoleHeaders(serviceRoleKey);
   const catalogUrl = new URL("/rest/v1/catalog_import_runs", supabaseUrl);
   catalogUrl.searchParams.set("select", "id,organization_id,created_by,status");
@@ -241,11 +252,18 @@ export default async (_request: Request, context: Context) => {
     await clearTerminalCatalogQueueMarkers(supabaseUrl, serviceRoleKey).catch((error) => {
       console.error("catalog import terminal queue marker scan deferred", error);
     });
-    const catalogRuns = await getJson<QueuedCatalogRun[]>(catalogUrl.toString(), { headers, timeoutMs: 12_000 });
-    const supplierRuns = await getJson<QueuedSupplierRun[]>(supplierUrl.toString(), { headers, timeoutMs: 12_000 });
+    // Maintenance above remains active after Render takes over processing.
+    // Paused branches do not even select their work: their durable queue,
+    // source rows, and history stay intact until an explicit recovery review.
+    const catalogRuns = catalogProcessingPaused ? []
+      : await getJson<QueuedCatalogRun[]>(catalogUrl.toString(), { headers, timeoutMs: 12_000 });
+    const supplierRuns = supplierProcessingPaused ? []
+      : await getJson<QueuedSupplierRun[]>(supplierUrl.toString(), { headers, timeoutMs: 12_000 });
     const [catalogSyncRunningRuns, catalogSyncPendingRuns] = await Promise.all([
-      getJson<QueuedSupplierRun[]>(catalogSyncRunningUrl.toString(), { headers, timeoutMs: 12_000 }),
-      getJson<QueuedSupplierRun[]>(catalogSyncPendingUrl.toString(), { headers, timeoutMs: 12_000 }),
+      supplierProcessingPaused ? []
+        : getJson<QueuedSupplierRun[]>(catalogSyncRunningUrl.toString(), { headers, timeoutMs: 12_000 }),
+      supplierProcessingPaused ? []
+        : getJson<QueuedSupplierRun[]>(catalogSyncPendingUrl.toString(), { headers, timeoutMs: 12_000 }),
     ]);
     const seenSupplierRuns = new Set<string>();
     const pendingSupplierRuns = [...(supplierRuns || []), ...(catalogSyncRunningRuns || []), ...(catalogSyncPendingRuns || [])].filter((run) => {
@@ -281,7 +299,7 @@ export default async (_request: Request, context: Context) => {
         break;
       }
     }
-    console.info("import processing worker completed", { results });
+    console.info("import processing worker completed", { results, catalogProcessingPaused, supplierProcessingPaused });
     return results;
   })().catch((error) => console.error("import processing worker failed", error));
 
