@@ -576,12 +576,453 @@
         "This verifies the complete production Corteco comparison export; it does not prove corrected mixed published/legacy Master-source behavior.",
         "The UI total50 display issue is distinct from this complete30328-row file and has separate source review."
       ]
+    },
+    {
+      "environment": "v3-staging",
+      "projectRef": "kaxsqafdevabkxofwdod",
+      "exportType": "admin_price_list",
+      "scope": {
+        "organizationId": "b0000000-0000-4000-8000-000000000001",
+        "format": "xlsx",
+        "brandId": "ddbeb595-853a-407d-91d7-25f1fd410ccd",
+        "brandName": "Euroricambi",
+        "marginPercent": 0.15,
+        "priceListType": "B",
+        "schemaVersion": 4
+      },
+      "browserObservation": {
+        "source": "Root observed authenticated admin selector, completed download and native Save",
+        "personallyObservedByThisAgent": false,
+        "filePath": "/Users/ersen/Downloads/portal-price-list-Euroricambi-B-20261014.xlsx"
+      },
+      "exportJob": {
+        "id": "726c11a8-fbba-4f90-b041-138eeb767d16",
+        "organization_id": "b0000000-0000-4000-8000-000000000001",
+        "audience": "admin",
+        "export_type": "admin_price_list",
+        "status": "finalized",
+        "scope": {
+          "format": "xlsx",
+          "brandId": "ddbeb595-853a-407d-91d7-25f1fd410ccd",
+          "brandName": "Euroricambi",
+          "marginPercent": 0.15,
+          "priceListType": "B",
+          "schemaVersion": 4
+        },
+        "row_count": 542,
+        "byte_size": 20389,
+        "file_name": "portal-price-list-Euroricambi-B-20261014.xlsx",
+        "created_at": "2026-10-14 17:17:39.506129+00",
+        "started_at": "2026-10-14 17:17:40.919+00",
+        "finalized_at": "2026-10-14 17:17:52.621+00",
+        "error_message": null,
+        "data_version": "c95fa066a34cf2d7155720b0db610976",
+        "snapshot_id": "5593b1c9-26b4-4db0-859b-9b0c5f4b1e23",
+        "snapshot_status": "sealed"
+      },
+      "download": {
+        "fileName": "portal-price-list-Euroricambi-B-20261014.xlsx",
+        "bytes": 20389,
+        "sha256": "3575a4857fecb299fbbf8ea2b96d421b3fca9f71fd3fbc9088b75c49da7d85c6",
+        "headers": [
+          "Part_No",
+          "Description",
+          "Price_EUR",
+          "Price_Date",
+          "Lifecycle"
+        ],
+        "dataRows": 542,
+        "distinctProductCodes": 542,
+        "duplicateCodes": 0,
+        "blankCodes": 0,
+        "formulaCells": 0,
+        "sheetNames": [
+          "Price List 1"
+        ],
+        "sheetDataRows": [
+          542
+        ],
+        "numericPriceCells": 542,
+        "chunks": [
+          {
+            "start": 1,
+            "end": 542,
+            "rows": 542,
+            "md5": "cdc5b23072e037846b4eaff1790cb1ba"
+          }
+        ],
+        "reader": "Bundled Python standard-library streaming ZIP/XML; no workbook edits or floating-point pricing comparisons"
+      },
+      "source": {
+        "method": "Current active eligible legacy rows, excluding any supplier scope that has a pointer. Latest date/id per supplier and exact SKU, then cheapest supplier with deterministic ties; source values not printed.",
+        "aggregateQuery": "with job as materialized(select * from public.app_export_jobs where id='726c11a8-fbba-4f90-b041-138eeb767d16'),\n  legacy as materialized(select public.normalize_catalog_product_code(sp.product_code) collate \"C\" code,sp.supplier_id,sp.id::text source_id,sp.buy_price,sp.valid_from from public.supplier_prices sp cross join job j where sp.organization_id=j.organization_id and sp.brand_id=(j.scope->>'brandId')::uuid and sp.is_active and sp.buy_price>0 and sp.currency='EUR' and sp.valid_from<=current_date and (sp.valid_to is null or sp.valid_to>=current_date) and public.normalize_catalog_product_code(sp.product_code) ~ '[A-Z0-9]' and not exists(select 1 from public.supplier_current_price_pointers ptr where ptr.organization_id=sp.organization_id and ptr.brand_id=sp.brand_id and ptr.supplier_id=sp.supplier_id)),\n  latest as materialized(select distinct on(code,supplier_id) * from legacy order by code,supplier_id,valid_from desc,source_id desc),\n  winners as materialized(select distinct on(code) * from latest order by code,buy_price,valid_from desc,supplier_id),\n  snapshot_rows as materialized(select r.* from export_snapshot_private.rows r where r.snapshot_id='5593b1c9-26b4-4db0-859b-9b0c5f4b1e23'),\n  checked as(select p.*,w.buy_price,w.valid_from,j.scope,md5((select string_agg(octet_length(v)::text||':'||v,'' order by ord) from unnest(array[coalesce(payload->>'code',''),coalesce(payload->>'description',''),trim_scale((payload->>'price')::numeric)::text,coalesce(payload->>'priceDate',''),case when payload->>'discontinued'='true' then 'Discontinued'||case when coalesce(payload->>'replacementCode','')<>'' then '; replacement: '||(payload->>'replacementCode') else '' end else 'Active' end]) with ordinality f(v,ord))) row_hash from snapshot_rows p cross join job j left join winners w on w.code=p.source_key)\n  select clock_timestamp() observed_at,count(*) row_count,md5(string_agg(row_hash,'' order by ordinal)) ordered_fields_md5,count(*) filter(where payload->>'brand' is distinct from scope->>'brandName' or payload->>'currency' is distinct from 'EUR') scope_mismatches,count(*) filter(where buy_price is null) missing_prices,count(*) filter(where (payload->>'price')::numeric is distinct from round(buy_price*(1+(scope->>'marginPercent')::numeric),2)) price_mismatches,count(*) filter(where payload->>'priceDate' is distinct from valid_from::text) date_mismatches,(select count(*) from winners) eligible_source_keys,(select count(*) from public.supplier_current_price_pointers ptr cross join job j where ptr.organization_id=j.organization_id and ptr.brand_id=(j.scope->>'brandId')::uuid) pointer_count,(select public.get_admin_price_list_export_version(j.organization_id,(j.scope->>'brandId')::uuid) from job j) current_data_version from checked;",
+        "verification": {
+          "observed_at": "2026-10-14 17:23:30.53268+00",
+          "row_count": 542,
+          "ordered_fields_md5": "cdc5b23072e037846b4eaff1790cb1ba",
+          "scope_mismatches": 0,
+          "missing_prices": 0,
+          "price_mismatches": 0,
+          "date_mismatches": 0,
+          "eligible_source_keys": 542,
+          "pointer_count": 0,
+          "current_data_version": "c95fa066a34cf2d7155720b0db610976"
+        }
+      },
+      "equality": {
+        "allFiveExportColumnsMatchSealedSnapshot": true,
+        "everyPriceAndDateMatchesIndependentEligibleLegacyWinner": true,
+        "marginUnit": "admin decimal",
+        "marginPercent": 15.0,
+        "sourceFileAndJobRowsEqual": true,
+        "jobAndFileBytesEqual": true,
+        "sourceVersionStillEqualsJob": true,
+        "noMissingOrDuplicateCodes": true,
+        "pointerCount": 0,
+        "legacyFallbackProven": true,
+        "method": "Complete ordered UTF-8 length-framed five-field digest equality. Every frozen price compared with exact-numeric source buy*(1+admin margin), and every date compared with the winning legacy supplier record."
+      },
+      "limitations": [
+        "The portal-price-list filename prefix is shared by the writer; this job audience is admin and does not prove a production customer login.",
+        "This is an all-legacy scope with zero pointers, not a mixed published/legacy-supplier cutover fixture.",
+        "Browser interaction is root-reported; local bytes, full contents, finalized job, immutable snapshot and every source price/date were independently checked."
+      ]
+    },
+    {
+      "environment": "v3-staging",
+      "projectRef": "kaxsqafdevabkxofwdod",
+      "exportType": "admin_price_list",
+      "scope": {
+        "organizationId": "b0000000-0000-4000-8000-000000000001",
+        "format": "xlsx",
+        "brandId": "ddbeb595-853a-407d-91d7-25f1fd410ccd",
+        "brandName": "Euroricambi",
+        "marginPercent": 0.1,
+        "priceListType": "A",
+        "schemaVersion": 4
+      },
+      "browserObservation": {
+        "source": "Root observed authenticated admin selector, completed download and native Save",
+        "personallyObservedByThisAgent": false,
+        "filePath": "/Users/ersen/Downloads/portal-price-list-Euroricambi-A-20261014.xlsx"
+      },
+      "exportJob": {
+        "id": "2517e05e-b2f9-4ed9-85d4-08e24ac9134b",
+        "organization_id": "b0000000-0000-4000-8000-000000000001",
+        "audience": "admin",
+        "export_type": "admin_price_list",
+        "status": "finalized",
+        "scope": {
+          "format": "xlsx",
+          "brandId": "ddbeb595-853a-407d-91d7-25f1fd410ccd",
+          "brandName": "Euroricambi",
+          "marginPercent": 0.1,
+          "priceListType": "A",
+          "schemaVersion": 4
+        },
+        "row_count": 542,
+        "byte_size": 20391,
+        "file_name": "portal-price-list-Euroricambi-A-20261014.xlsx",
+        "created_at": "2026-10-14 17:16:24.346318+00",
+        "started_at": "2026-10-14 17:16:25.815+00",
+        "finalized_at": "2026-10-14 17:16:37.148+00",
+        "error_message": null,
+        "data_version": "c95fa066a34cf2d7155720b0db610976",
+        "snapshot_id": "6070c1cc-f7da-4c6d-bf73-75ad66f4ad2e",
+        "snapshot_status": "sealed"
+      },
+      "download": {
+        "fileName": "portal-price-list-Euroricambi-A-20261014.xlsx",
+        "bytes": 20391,
+        "sha256": "da81d903b9f13413ea4f1d7520bd4fa66097aff4058e49d04d5c82fd677d75b2",
+        "headers": [
+          "Part_No",
+          "Description",
+          "Price_EUR",
+          "Price_Date",
+          "Lifecycle"
+        ],
+        "dataRows": 542,
+        "distinctProductCodes": 542,
+        "duplicateCodes": 0,
+        "blankCodes": 0,
+        "formulaCells": 0,
+        "sheetNames": [
+          "Price List 1"
+        ],
+        "sheetDataRows": [
+          542
+        ],
+        "numericPriceCells": 542,
+        "chunks": [
+          {
+            "start": 1,
+            "end": 542,
+            "rows": 542,
+            "md5": "4e025f60374269e6f185b332336c87ec"
+          }
+        ],
+        "reader": "Bundled Python standard-library streaming ZIP/XML; no workbook edits or floating-point pricing comparisons"
+      },
+      "source": {
+        "method": "Current active eligible legacy rows, excluding any supplier scope that has a pointer. Latest date/id per supplier and exact SKU, then cheapest supplier with deterministic ties; source values not printed.",
+        "aggregateQuery": "with job as materialized(select * from public.app_export_jobs where id='2517e05e-b2f9-4ed9-85d4-08e24ac9134b'),\n  legacy as materialized(select public.normalize_catalog_product_code(sp.product_code) collate \"C\" code,sp.supplier_id,sp.id::text source_id,sp.buy_price,sp.valid_from from public.supplier_prices sp cross join job j where sp.organization_id=j.organization_id and sp.brand_id=(j.scope->>'brandId')::uuid and sp.is_active and sp.buy_price>0 and sp.currency='EUR' and sp.valid_from<=current_date and (sp.valid_to is null or sp.valid_to>=current_date) and public.normalize_catalog_product_code(sp.product_code) ~ '[A-Z0-9]' and not exists(select 1 from public.supplier_current_price_pointers ptr where ptr.organization_id=sp.organization_id and ptr.brand_id=sp.brand_id and ptr.supplier_id=sp.supplier_id)),\n  latest as materialized(select distinct on(code,supplier_id) * from legacy order by code,supplier_id,valid_from desc,source_id desc),\n  winners as materialized(select distinct on(code) * from latest order by code,buy_price,valid_from desc,supplier_id),\n  snapshot_rows as materialized(select r.* from export_snapshot_private.rows r where r.snapshot_id='6070c1cc-f7da-4c6d-bf73-75ad66f4ad2e'),\n  checked as(select p.*,w.buy_price,w.valid_from,j.scope,md5((select string_agg(octet_length(v)::text||':'||v,'' order by ord) from unnest(array[coalesce(payload->>'code',''),coalesce(payload->>'description',''),trim_scale((payload->>'price')::numeric)::text,coalesce(payload->>'priceDate',''),case when payload->>'discontinued'='true' then 'Discontinued'||case when coalesce(payload->>'replacementCode','')<>'' then '; replacement: '||(payload->>'replacementCode') else '' end else 'Active' end]) with ordinality f(v,ord))) row_hash from snapshot_rows p cross join job j left join winners w on w.code=p.source_key)\n  select clock_timestamp() observed_at,count(*) row_count,md5(string_agg(row_hash,'' order by ordinal)) ordered_fields_md5,count(*) filter(where payload->>'brand' is distinct from scope->>'brandName' or payload->>'currency' is distinct from 'EUR') scope_mismatches,count(*) filter(where buy_price is null) missing_prices,count(*) filter(where (payload->>'price')::numeric is distinct from round(buy_price*(1+(scope->>'marginPercent')::numeric),2)) price_mismatches,count(*) filter(where payload->>'priceDate' is distinct from valid_from::text) date_mismatches,(select count(*) from winners) eligible_source_keys,(select count(*) from public.supplier_current_price_pointers ptr cross join job j where ptr.organization_id=j.organization_id and ptr.brand_id=(j.scope->>'brandId')::uuid) pointer_count,(select public.get_admin_price_list_export_version(j.organization_id,(j.scope->>'brandId')::uuid) from job j) current_data_version from checked;",
+        "verification": {
+          "observed_at": "2026-10-14 17:23:32.420479+00",
+          "row_count": 542,
+          "ordered_fields_md5": "4e025f60374269e6f185b332336c87ec",
+          "scope_mismatches": 0,
+          "missing_prices": 0,
+          "price_mismatches": 0,
+          "date_mismatches": 0,
+          "eligible_source_keys": 542,
+          "pointer_count": 0,
+          "current_data_version": "c95fa066a34cf2d7155720b0db610976"
+        }
+      },
+      "equality": {
+        "allFiveExportColumnsMatchSealedSnapshot": true,
+        "everyPriceAndDateMatchesIndependentEligibleLegacyWinner": true,
+        "marginUnit": "admin decimal",
+        "marginPercent": 10.0,
+        "sourceFileAndJobRowsEqual": true,
+        "jobAndFileBytesEqual": true,
+        "sourceVersionStillEqualsJob": true,
+        "noMissingOrDuplicateCodes": true,
+        "pointerCount": 0,
+        "legacyFallbackProven": true,
+        "method": "Complete ordered UTF-8 length-framed five-field digest equality. Every frozen price compared with exact-numeric source buy*(1+admin margin), and every date compared with the winning legacy supplier record."
+      },
+      "limitations": [
+        "The portal-price-list filename prefix is shared by the writer; this job audience is admin and does not prove a production customer login.",
+        "This is an all-legacy scope with zero pointers, not a mixed published/legacy-supplier cutover fixture.",
+        "Browser interaction is root-reported; local bytes, full contents, finalized job, immutable snapshot and every source price/date were independently checked."
+      ]
+    },
+    {
+      "environment": "production",
+      "projectRef": "zjgueqijumzlfioihnkt",
+      "exportType": "admin_price_list",
+      "scope": {
+        "organizationId": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+        "format": "xlsx",
+        "brandId": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+        "brandName": "Corteco",
+        "marginPercent": 0.15,
+        "priceListType": "B",
+        "schemaVersion": 4
+      },
+      "browserObservation": {
+        "source": "Root observed authenticated admin selector, completed download and native Save",
+        "personallyObservedByThisAgent": false,
+        "filePath": "/Users/ersen/Downloads/portal-price-list-Corteco-B-20261014.xlsx"
+      },
+      "exportJob": {
+        "id": "ce904de3-2f21-4c9b-a0fd-ed6dea6ad4fa",
+        "organization_id": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+        "audience": "admin",
+        "export_type": "admin_price_list",
+        "status": "finalized",
+        "scope": {
+          "format": "xlsx",
+          "brandId": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+          "brandName": "Corteco",
+          "marginPercent": 0.15,
+          "priceListType": "B",
+          "schemaVersion": 4
+        },
+        "row_count": 30328,
+        "byte_size": 809083,
+        "file_name": "portal-price-list-Corteco-B-20261014.xlsx",
+        "created_at": "2026-10-14 17:21:14.920174+00",
+        "started_at": "2026-10-14 17:21:16.55+00",
+        "finalized_at": "2026-10-14 17:21:59.637+00",
+        "error_message": null,
+        "data_version": "01b7ea06a7f08058b480e260304f8038",
+        "snapshot_id": "5be7a20f-5db1-42ba-9251-6b23867a046e",
+        "snapshot_status": "sealed"
+      },
+      "download": {
+        "fileName": "portal-price-list-Corteco-B-20261014.xlsx",
+        "bytes": 809083,
+        "sha256": "d5fa6eb7b9869f5ad7523d14719a13342b3c889d833765e66536135da02502c9",
+        "headers": [
+          "Part_No",
+          "Description",
+          "Price_EUR",
+          "Price_Date",
+          "Lifecycle"
+        ],
+        "dataRows": 30328,
+        "distinctProductCodes": 30328,
+        "duplicateCodes": 0,
+        "blankCodes": 0,
+        "formulaCells": 0,
+        "sheetNames": [
+          "Price List 1"
+        ],
+        "sheetDataRows": [
+          30328
+        ],
+        "numericPriceCells": 30328,
+        "chunks": [
+          {
+            "start": 1,
+            "end": 30328,
+            "rows": 30328,
+            "md5": "0259b2c6a2d460cf58b1e8f401c3e28a"
+          }
+        ],
+        "reader": "Bundled Python standard-library streaming ZIP/XML; no workbook edits or floating-point pricing comparisons"
+      },
+      "source": {
+        "method": "Current active eligible legacy rows, excluding any supplier scope that has a pointer. Latest date/id per supplier and exact SKU, then cheapest supplier with deterministic ties; source values not printed.",
+        "aggregateQuery": "with job as materialized(select * from public.app_export_jobs where id='ce904de3-2f21-4c9b-a0fd-ed6dea6ad4fa'),\n  legacy as materialized(select public.normalize_catalog_product_code(sp.product_code) collate \"C\" code,sp.supplier_id,sp.id::text source_id,sp.buy_price,sp.valid_from from public.supplier_prices sp cross join job j where sp.organization_id=j.organization_id and sp.brand_id=(j.scope->>'brandId')::uuid and sp.is_active and sp.buy_price>0 and sp.currency='EUR' and sp.valid_from<=current_date and (sp.valid_to is null or sp.valid_to>=current_date) and public.normalize_catalog_product_code(sp.product_code) ~ '[A-Z0-9]' and not exists(select 1 from public.supplier_current_price_pointers ptr where ptr.organization_id=sp.organization_id and ptr.brand_id=sp.brand_id and ptr.supplier_id=sp.supplier_id)),\n  latest as materialized(select distinct on(code,supplier_id) * from legacy order by code,supplier_id,valid_from desc,source_id desc),\n  winners as materialized(select distinct on(code) * from latest order by code,buy_price,valid_from desc,supplier_id),\n  snapshot_rows as materialized(select r.* from export_snapshot_private.rows r where r.snapshot_id='5be7a20f-5db1-42ba-9251-6b23867a046e'),\n  checked as(select p.*,w.buy_price,w.valid_from,j.scope,md5((select string_agg(octet_length(v)::text||':'||v,'' order by ord) from unnest(array[coalesce(payload->>'code',''),coalesce(payload->>'description',''),trim_scale((payload->>'price')::numeric)::text,coalesce(payload->>'priceDate',''),case when payload->>'discontinued'='true' then 'Discontinued'||case when coalesce(payload->>'replacementCode','')<>'' then '; replacement: '||(payload->>'replacementCode') else '' end else 'Active' end]) with ordinality f(v,ord))) row_hash from snapshot_rows p cross join job j left join winners w on w.code=p.source_key)\n  select clock_timestamp() observed_at,count(*) row_count,md5(string_agg(row_hash,'' order by ordinal)) ordered_fields_md5,count(*) filter(where payload->>'brand' is distinct from scope->>'brandName' or payload->>'currency' is distinct from 'EUR') scope_mismatches,count(*) filter(where buy_price is null) missing_prices,count(*) filter(where (payload->>'price')::numeric is distinct from round(buy_price*(1+(scope->>'marginPercent')::numeric),2)) price_mismatches,count(*) filter(where payload->>'priceDate' is distinct from valid_from::text) date_mismatches,(select count(*) from winners) eligible_source_keys,(select count(*) from public.supplier_current_price_pointers ptr cross join job j where ptr.organization_id=j.organization_id and ptr.brand_id=(j.scope->>'brandId')::uuid) pointer_count,(select public.get_admin_price_list_export_version(j.organization_id,(j.scope->>'brandId')::uuid) from job j) current_data_version from checked;",
+        "verification": {
+          "observed_at": "2026-10-14 17:23:35.510569+00",
+          "row_count": 30328,
+          "ordered_fields_md5": "0259b2c6a2d460cf58b1e8f401c3e28a",
+          "scope_mismatches": 0,
+          "missing_prices": 0,
+          "price_mismatches": 0,
+          "date_mismatches": 0,
+          "eligible_source_keys": 30328,
+          "pointer_count": 0,
+          "current_data_version": "01b7ea06a7f08058b480e260304f8038"
+        }
+      },
+      "equality": {
+        "allFiveExportColumnsMatchSealedSnapshot": true,
+        "everyPriceAndDateMatchesIndependentEligibleLegacyWinner": true,
+        "marginUnit": "admin decimal",
+        "marginPercent": 15.0,
+        "sourceFileAndJobRowsEqual": true,
+        "jobAndFileBytesEqual": true,
+        "sourceVersionStillEqualsJob": true,
+        "noMissingOrDuplicateCodes": true,
+        "pointerCount": 0,
+        "legacyFallbackProven": true,
+        "method": "Complete ordered UTF-8 length-framed five-field digest equality. Every frozen price compared with exact-numeric source buy*(1+admin margin), and every date compared with the winning legacy supplier record."
+      },
+      "limitations": [
+        "The portal-price-list filename prefix is shared by the writer; this job audience is admin and does not prove a production customer login.",
+        "This is an all-legacy scope with zero pointers, not a mixed published/legacy-supplier cutover fixture.",
+        "Browser interaction is root-reported; local bytes, full contents, finalized job, immutable snapshot and every source price/date were independently checked."
+      ]
+    },
+    {
+      "environment": "production",
+      "projectRef": "zjgueqijumzlfioihnkt",
+      "exportType": "admin_price_list",
+      "scope": {
+        "organizationId": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+        "format": "xlsx",
+        "brandId": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+        "brandName": "Corteco",
+        "marginPercent": 0.1,
+        "priceListType": "A",
+        "schemaVersion": 4
+      },
+      "browserObservation": {
+        "source": "Root observed authenticated admin selector, completed download and native Save",
+        "personallyObservedByThisAgent": false,
+        "filePath": "/Users/ersen/Downloads/portal-price-list-Corteco-A-20261014.xlsx"
+      },
+      "exportJob": {
+        "id": "99c6e378-4d8b-45b1-b2ad-c9b30db88c4d",
+        "organization_id": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+        "audience": "admin",
+        "export_type": "admin_price_list",
+        "status": "finalized",
+        "scope": {
+          "format": "xlsx",
+          "brandId": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+          "brandName": "Corteco",
+          "marginPercent": 0.1,
+          "priceListType": "A",
+          "schemaVersion": 4
+        },
+        "row_count": 30328,
+        "byte_size": 808862,
+        "file_name": "portal-price-list-Corteco-A-20261014.xlsx",
+        "created_at": "2026-10-14 17:19:27.153391+00",
+        "started_at": "2026-10-14 17:19:30.834+00",
+        "finalized_at": "2026-10-14 17:20:14.334+00",
+        "error_message": null,
+        "data_version": "01b7ea06a7f08058b480e260304f8038",
+        "snapshot_id": "65c24bf5-5ee6-494d-9303-0d7f378dcb5d",
+        "snapshot_status": "sealed"
+      },
+      "download": {
+        "fileName": "portal-price-list-Corteco-A-20261014.xlsx",
+        "bytes": 808862,
+        "sha256": "b1d9638269efab8dfcae6fdebc60c9446b5b6d6c9e3fa313e66c708d6ae114ee",
+        "headers": [
+          "Part_No",
+          "Description",
+          "Price_EUR",
+          "Price_Date",
+          "Lifecycle"
+        ],
+        "dataRows": 30328,
+        "distinctProductCodes": 30328,
+        "duplicateCodes": 0,
+        "blankCodes": 0,
+        "formulaCells": 0,
+        "sheetNames": [
+          "Price List 1"
+        ],
+        "sheetDataRows": [
+          30328
+        ],
+        "numericPriceCells": 30328,
+        "chunks": [
+          {
+            "start": 1,
+            "end": 30328,
+            "rows": 30328,
+            "md5": "243fc21ede09f7aa902e383e8060a092"
+          }
+        ],
+        "reader": "Bundled Python standard-library streaming ZIP/XML; no workbook edits or floating-point pricing comparisons"
+      },
+      "source": {
+        "method": "Current active eligible legacy rows, excluding any supplier scope that has a pointer. Latest date/id per supplier and exact SKU, then cheapest supplier with deterministic ties; source values not printed.",
+        "aggregateQuery": "with job as materialized(select * from public.app_export_jobs where id='99c6e378-4d8b-45b1-b2ad-c9b30db88c4d'),\n  legacy as materialized(select public.normalize_catalog_product_code(sp.product_code) collate \"C\" code,sp.supplier_id,sp.id::text source_id,sp.buy_price,sp.valid_from from public.supplier_prices sp cross join job j where sp.organization_id=j.organization_id and sp.brand_id=(j.scope->>'brandId')::uuid and sp.is_active and sp.buy_price>0 and sp.currency='EUR' and sp.valid_from<=current_date and (sp.valid_to is null or sp.valid_to>=current_date) and public.normalize_catalog_product_code(sp.product_code) ~ '[A-Z0-9]' and not exists(select 1 from public.supplier_current_price_pointers ptr where ptr.organization_id=sp.organization_id and ptr.brand_id=sp.brand_id and ptr.supplier_id=sp.supplier_id)),\n  latest as materialized(select distinct on(code,supplier_id) * from legacy order by code,supplier_id,valid_from desc,source_id desc),\n  winners as materialized(select distinct on(code) * from latest order by code,buy_price,valid_from desc,supplier_id),\n  snapshot_rows as materialized(select r.* from export_snapshot_private.rows r where r.snapshot_id='65c24bf5-5ee6-494d-9303-0d7f378dcb5d'),\n  checked as(select p.*,w.buy_price,w.valid_from,j.scope,md5((select string_agg(octet_length(v)::text||':'||v,'' order by ord) from unnest(array[coalesce(payload->>'code',''),coalesce(payload->>'description',''),trim_scale((payload->>'price')::numeric)::text,coalesce(payload->>'priceDate',''),case when payload->>'discontinued'='true' then 'Discontinued'||case when coalesce(payload->>'replacementCode','')<>'' then '; replacement: '||(payload->>'replacementCode') else '' end else 'Active' end]) with ordinality f(v,ord))) row_hash from snapshot_rows p cross join job j left join winners w on w.code=p.source_key)\n  select clock_timestamp() observed_at,count(*) row_count,md5(string_agg(row_hash,'' order by ordinal)) ordered_fields_md5,count(*) filter(where payload->>'brand' is distinct from scope->>'brandName' or payload->>'currency' is distinct from 'EUR') scope_mismatches,count(*) filter(where buy_price is null) missing_prices,count(*) filter(where (payload->>'price')::numeric is distinct from round(buy_price*(1+(scope->>'marginPercent')::numeric),2)) price_mismatches,count(*) filter(where payload->>'priceDate' is distinct from valid_from::text) date_mismatches,(select count(*) from winners) eligible_source_keys,(select count(*) from public.supplier_current_price_pointers ptr cross join job j where ptr.organization_id=j.organization_id and ptr.brand_id=(j.scope->>'brandId')::uuid) pointer_count,(select public.get_admin_price_list_export_version(j.organization_id,(j.scope->>'brandId')::uuid) from job j) current_data_version from checked;",
+        "verification": {
+          "observed_at": "2026-10-14 17:23:39.003298+00",
+          "row_count": 30328,
+          "ordered_fields_md5": "243fc21ede09f7aa902e383e8060a092",
+          "scope_mismatches": 0,
+          "missing_prices": 0,
+          "price_mismatches": 0,
+          "date_mismatches": 0,
+          "eligible_source_keys": 30328,
+          "pointer_count": 0,
+          "current_data_version": "01b7ea06a7f08058b480e260304f8038"
+        }
+      },
+      "equality": {
+        "allFiveExportColumnsMatchSealedSnapshot": true,
+        "everyPriceAndDateMatchesIndependentEligibleLegacyWinner": true,
+        "marginUnit": "admin decimal",
+        "marginPercent": 10.0,
+        "sourceFileAndJobRowsEqual": true,
+        "jobAndFileBytesEqual": true,
+        "sourceVersionStillEqualsJob": true,
+        "noMissingOrDuplicateCodes": true,
+        "pointerCount": 0,
+        "legacyFallbackProven": true,
+        "method": "Complete ordered UTF-8 length-framed five-field digest equality. Every frozen price compared with exact-numeric source buy*(1+admin margin), and every date compared with the winning legacy supplier record."
+      },
+      "limitations": [
+        "The portal-price-list filename prefix is shared by the writer; this job audience is admin and does not prove a production customer login.",
+        "This is an all-legacy scope with zero pointers, not a mixed published/legacy-supplier cutover fixture.",
+        "Browser interaction is root-reported; local bytes, full contents, finalized job, immutable snapshot and every source price/date were independently checked."
+      ]
     }
   ],
   "pending": [
-    "Staging Euroricambi A legacy-fallback UI download",
-    "Production admin A price-list download after legacy compatibility fix",
-    "Production admin B price-list download after legacy compatibility fix",
     "Production customer portal price-list download and effective account pricing"
   ]
 }
