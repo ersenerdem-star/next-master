@@ -1,0 +1,322 @@
+{
+  "schema_version": 1,
+  "scope": "Production cutover runtime checkpoint, with direct read-only observations separated from coordinator-reported provider facts. No business readiness claim.",
+  "project_ref": "zjgueqijumzlfioihnkt",
+  "portal_origin": "https://portal.next-master.com",
+  "captured_at": "2026-10-14T16:39:40.060484Z",
+  "local_checkout_head_at_start": "83b86fe4272a9ecc342ce9b73e1d3ad70c579ed6",
+  "observer": "production_runtime_inventory",
+  "provenance": {
+    "personally_observed": [
+      "Supabase connector SELECT-only metadata, scoped queue counts, selected historical run fields and active-operation counts.",
+      "Unauthenticated HTTPS GET of the public production version.json.",
+      "Local committed source and root-owned operations/readiness artifacts; those artifacts are not a new provider verification."
+    ],
+    "coordinator_reported": [
+      "Current Netlify deploy ID and export activation.",
+      "Supplier and catalog Render deploy IDs, process/health observations and dedicated history verification."
+    ],
+    "credential_access": false,
+    "provider_mutations": false,
+    "browser_control": false,
+    "remote_business_mutations": false
+  },
+  "reported_provider_runtime": {
+    "netlify": {
+      "source": "Coordinator message for this checkpoint",
+      "deploy_id": "6acfae3f011b52ad629b03ae",
+      "exports_active": true,
+      "independently_verified_deploy_id": false,
+      "independently_verified_export_gates": false
+    },
+    "supplier": {
+      "source": "Coordinator message and root-owned production schema evidence",
+      "checked_at": "2026-10-14T16:23:40.933Z",
+      "service_id": "srv-db7ps1dg1s2s73be1ofg",
+      "deploy_id": "dep-db7qnb2d0e5s73er5spg",
+      "source_commit": "601784d0fc681cc007fbb653b123bc0ef56f3875",
+      "health_http_status": 200,
+      "phase": "idle",
+      "history_verified": true,
+      "history_database": "nm_supplier_production_history",
+      "history_host": "dpg-db7pr95g1s2s73bdv7rg-a",
+      "history_workflows": [],
+      "independently_rechecked": false
+    },
+    "catalog": {
+      "source": "Coordinator message for this checkpoint",
+      "checked_at": "2026-10-14T16:30:02.121Z",
+      "service_id": "srv-db7ptlnavr4c73953c2g",
+      "deploy_id": "dep-db7qqku7bikc73brgf10",
+      "phase": "polling",
+      "history_verified": true,
+      "history_database": "nm_catalog_production_history",
+      "history_host": "dpg-db7ptdvavr4c73952ga0-a",
+      "independently_rechecked": false
+    }
+  },
+  "direct_observations": {
+    "public_version": {
+      "observed_at": "2026-10-14T16:39:13.843338Z",
+      "method": "GET",
+      "url": "https://portal.next-master.com/version.json?runtime-evidence=20261014T163900Z",
+      "http_status": 200,
+      "build_version": "49c4fd33-production-closed-20261014",
+      "git_sha": "49c4fd334237f3c06cad40b1258572e1bd710581",
+      "built_at": "2026-10-14T16:21:32.868Z",
+      "branch": "codex/price-engine-integration",
+      "environment": "production",
+      "context": "production",
+      "deploy_id_in_public_version": "",
+      "limitation": "Public version confirms the application build, not the provider deploy ID, feature-flag values, Auth behavior or a download."
+    },
+    "relation_presence": {
+      "observed_at": "2026-10-14 16:38:00.747862+00",
+      "database_name": "postgres",
+      "server_version": "17.6",
+      "relations": {
+        "catalog_sources": true,
+        "supplier_releases": true,
+        "admin_action_queue": false,
+        "admin_action_control": false,
+        "supplier_publications": true,
+        "supplier_upload_sessions": true,
+        "production_publication_control": true
+      }
+    },
+    "database_snapshot": {
+      "observed_at": "2026-10-14 16:38:38.049031+00",
+      "evidence": {
+        "activity": {
+          "observed_backend_role": "authenticator",
+          "rollup_refresh_active": 0,
+          "active_transactions_over_60s": 0,
+          "legacy_supplier_finalize_active": 0,
+          "legacy_supplier_catalog_sync_active": 0
+        },
+        "legacy_runs": [
+          {
+            "id": "a489b42c-0448-4164-85f4-3817790dfa3f",
+            "mode": "replace",
+            "status": "finalized",
+            "brand_id": "bb0eb4cc-6c0e-4985-8327-9c4ea61510b1",
+            "staged_rows": 15064,
+            "supplier_id": "61879f2b-b0a2-493e-b7c4-0aabba63752c",
+            "superseded_at": null,
+            "finalize_phase": "done",
+            "processed_rows": 15064,
+            "finalize_cursor": 15064,
+            "organization_id": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+            "catalog_sync_status": "succeeded",
+            "processing_queued_at": "2026-09-02T13:04:06.691013+00:00",
+            "catalog_sync_finished_at": "2026-09-02T14:35:20.705738+00:00"
+          },
+          {
+            "id": "43726b8b-84de-4eab-be5a-3086cced9ba3",
+            "mode": "replace",
+            "status": "finalized",
+            "brand_id": "b77229c6-ca2d-478b-95db-96aa2f02e318",
+            "staged_rows": 156,
+            "supplier_id": "61879f2b-b0a2-493e-b7c4-0aabba63752c",
+            "superseded_at": null,
+            "finalize_phase": "done",
+            "processed_rows": 156,
+            "finalize_cursor": 156,
+            "organization_id": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+            "catalog_sync_status": "succeeded",
+            "processing_queued_at": "2026-09-02T13:14:04.73941+00:00",
+            "catalog_sync_finished_at": "2026-09-02T14:30:07.224014+00:00"
+          },
+          {
+            "id": "036319e0-cf24-4943-a941-26e89dcc25e4",
+            "mode": "replace",
+            "status": "running",
+            "brand_id": "bb0eb4cc-6c0e-4985-8327-9c4ea61510b1",
+            "staged_rows": 2898,
+            "supplier_id": "bb8aa954-5c9c-4edb-8c25-37e170253a1b",
+            "superseded_at": null,
+            "finalize_phase": "merge",
+            "processed_rows": null,
+            "finalize_cursor": 0,
+            "organization_id": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+            "catalog_sync_status": "pending",
+            "processing_queued_at": "2026-09-29T16:26:58.539451+00:00",
+            "catalog_sync_finished_at": null
+          }
+        ],
+        "new_engine_counts": {
+          "supplier_handoffs": 0,
+          "supplier_releases": 0,
+          "supplier_publications": 0,
+          "supplier_release_rows": 0,
+          "current_price_pointers": 0,
+          "catalog_storage_sources": 0,
+          "supplier_upload_sessions": 0
+        },
+        "legacy_queue_counts": {
+          "catalog_active_queued": 0,
+          "supplier_queued_active": 1,
+          "catalog_terminal_markers": 0,
+          "supplier_queued_finalized": 2,
+          "supplier_catalog_sync_work": 0
+        },
+        "production_publication_control": {
+          "enabled": false,
+          "activation_empty": true,
+          "reversal_enabled": false,
+          "expected_project_ref": "zjgueqijumzlfioihnkt"
+        },
+        "catalog_runs_created_since_schema_commit": 0
+      }
+    },
+    "export_snapshot": {
+      "observed_at": "2026-10-14 16:39:40.060484+00",
+      "evidence": {
+        "schema_commit_window_start": "2026-10-14T16:03:11.758Z",
+        "export_jobs_created_in_window": 0,
+        "export_status_counts_in_window": {},
+        "rollup_refresh_active_authenticator": 0
+      }
+    },
+    "legacy_run_comparison": {
+      "baseline_source": "This observer's earlier SELECT result, retained in the same task",
+      "comparison_scope": "Selected identity, status, queue, counters and catalog-sync fields only; no complete row/source/history hash claim.",
+      "results": [
+        {
+          "run_id": "a489b42c-0448-4164-85f4-3817790dfa3f",
+          "baseline_observed_at": "2026-10-14 16:00:55.084212+00",
+          "supplier": "Romany",
+          "brand": "Sachs",
+          "compared_fields": [
+            "id",
+            "organization_id",
+            "supplier_id",
+            "brand_id",
+            "status",
+            "mode",
+            "staged_rows",
+            "processed_rows",
+            "processing_queued_at",
+            "finalize_phase",
+            "finalize_cursor",
+            "catalog_sync_status",
+            "catalog_sync_finished_at",
+            "superseded_at"
+          ],
+          "changed_fields": [],
+          "unchanged": true
+        },
+        {
+          "run_id": "43726b8b-84de-4eab-be5a-3086cced9ba3",
+          "baseline_observed_at": "2026-10-14 16:00:55.084236+00",
+          "supplier": "Romany",
+          "brand": "ZF",
+          "compared_fields": [
+            "id",
+            "organization_id",
+            "supplier_id",
+            "brand_id",
+            "status",
+            "mode",
+            "staged_rows",
+            "processed_rows",
+            "processing_queued_at",
+            "finalize_phase",
+            "finalize_cursor",
+            "catalog_sync_status",
+            "catalog_sync_finished_at",
+            "superseded_at"
+          ],
+          "changed_fields": [],
+          "unchanged": true
+        },
+        {
+          "run_id": "036319e0-cf24-4943-a941-26e89dcc25e4",
+          "baseline_observed_at": "2026-10-14 16:00:55.084293+00",
+          "supplier": "GroupAuto",
+          "brand": "Sachs",
+          "compared_fields": [
+            "id",
+            "organization_id",
+            "supplier_id",
+            "brand_id",
+            "status",
+            "mode",
+            "staged_rows",
+            "processed_rows",
+            "processing_queued_at",
+            "finalize_phase",
+            "finalize_cursor",
+            "catalog_sync_status",
+            "catalog_sync_finished_at",
+            "superseded_at"
+          ],
+          "changed_fields": [],
+          "unchanged": true
+        }
+      ]
+    },
+    "admin_action_queue": {
+      "observed_at": "2026-10-14 16:38:00.747862+00",
+      "relation_present": false,
+      "control_relation_present": false,
+      "operation_count": null,
+      "interpretation": "The new admin review/publication queue is not installed at this snapshot. It is not reported as a verified empty existing queue."
+    }
+  },
+  "root_owned_artifacts_reviewed": [
+    {
+      "path": "scripts/ops/evidence/price-engine-production-schema-20261014.json",
+      "sha256_at_read": "6ad5c8f4da67b4a83c31f77abf35bf9bb5dba7a2e65d06e211d9421b8fb27cc2",
+      "reported_migrations_committed": 62,
+      "reported_indexes_verified": 12,
+      "limitation": "Historical execution receipts plus coordinator runtime notes; no rerun by this observer."
+    },
+    {
+      "path": "scripts/ops/evidence/price-engine-production-readiness-20261014.json",
+      "sha256_at_read": "2c6c7f5bc1e1c480a2d0ae8f0d740a6a4e8ed4f650b630fcf3af6faa3bfd04da",
+      "checked_at": "2026-10-14T16:14:05.921Z",
+      "raw_preflight_ready": false,
+      "reviewed_metadata_ready": true,
+      "raw_preflight_errors": [
+        "FUNCTION_DRIFT:begin_catalog_import_storage",
+        "FUNCTION_DRIFT:finalize_catalog_import_batch_system"
+      ],
+      "interpretation": "Both recorded differences match reviewed manifest definitions. Preserve the raw fail result and explicit review; do not rewrite this as an unconditional raw preflight pass."
+    },
+    {
+      "path": "docs/runtime/platform/OPERATIONS_ENGINE_ASSESSMENT.md",
+      "section": "Price Engine Production Promotion Preparation and dated follow-ups",
+      "latest_checkpoint_at_read": "The final paragraph still records closed flags, no new portal deploy and zero worker activation at its earlier checkpoint.",
+      "required_followup": "Append the newer reported provider state and this direct DB snapshot without rewriting historical observations."
+    }
+  ],
+  "conclusions": {
+    "legacy_supplier_runs_selected_fields_unchanged": true,
+    "legacy_supplier_replace_cursor_remains_zero": true,
+    "legacy_rollup_absent_in_two_scoped_activity_snapshots": true,
+    "new_engine_tables_observed_empty": true,
+    "new_admin_action_schema_installed": false,
+    "publication_control_enabled": false,
+    "reversal_control_enabled": false,
+    "authenticated_business_canaries_proven": false,
+    "production_ready": false
+  },
+  "limits": [
+    "Activity observations are instantaneous and restricted to the authenticator backend role; they do not prove continuous absence or inspect every possible caller.",
+    "No Render history or health endpoint was independently connected to during this checkpoint; those facts remain explicitly coordinator-reported.",
+    "Zero export jobs since the recorded schema commit does not prove that existing finalized artifacts could not be downloaded. No browser download was observed by this agent.",
+    "No new catalog run since the schema-commit window, and empty release/upload/source/publication tables, establish a pre-canary checkpoint only.",
+    "Do not clear the two finalized legacy supplier markers: doing so with legacy processing enabled could release the retained GroupAuto/Sachs replace job.",
+    "The local guarded action UI/API commits are newer than the publicly observed 49c4fd33 build; this file does not claim those actions are deployed.",
+    "No production source rows, historical price data, customer credentials, session tokens or signed URLs are included."
+  ],
+  "remaining_acceptance": [
+    "Apply and verify the guarded admin action queue/schema through the reviewed execution path; currently absent in production.",
+    "Deploy and activate the guarded admin action API/UI/worker gates in the controlled sequence and verify real Auth/session handling.",
+    "Run complete-scope supplier import, review, explicit publication, idempotent receipt and A/B/customer-margin canaries with unchanged-price evidence.",
+    "Run both small browser-stream and >=5MiB Storage catalog canaries, then perform exact owned-product cleanup.",
+    "Verify actual authenticated admin/customer export files, complete counts and purchase/sales price agreement.",
+    "Retain the legacy supplier backlog without silent replay and record any rollback against the selected deploys."
+  ]
+}
