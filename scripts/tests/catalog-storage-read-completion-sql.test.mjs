@@ -8,7 +8,9 @@ import {setTimeout as delay} from 'node:timers/promises';
 import pg from 'pg';
 import {createFullReplayDb} from './fixtures/price-engine-full-replay-db.mjs';
 const exec=promisify(execFile),file='supabase/migrations/20261014202040_catalog_storage_complete_read_fence.sql';
-let db,container,connection,historical,beforeHistory;
+let db,container,connection,historical,beforeHistory,baselineProof;
+// Preserve quoted values and operators: this removes formatting/comments only.
+const sqlTokens=s=>(s.match(/'(?:''|[^'])*'|"(?:""|[^"])*"|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z_0-9$]*|\d+|::|<>|:=|->>|\|\||[^\s]/g)||[]).filter(t=>!t.startsWith('--')&&!t.startsWith('/*'));
 const org=randomUUID(),actor=randomUUID(),brand=randomUUID(),owner='read-fence-worker',hash='a'.repeat(64);
 async function admin(q,args=[]){await db.exec('reset role');return db.query(q,args);}
 async function rpc(name,args){await db.exec("reset role;set role service_role");await db.query("select set_config('request.jwt.claim.role','service_role',false),set_config('request.jwt.claim.sub',$1,false)",[actor]);return(await db.query(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) result`,args)).rows[0].result;}
@@ -48,9 +50,30 @@ before(async()=>{
  // Reproduce the actual staging failure before applying the new forward.
  historical=await seed();await stage(historical,0,86,false);assert.equal((await validate(historical)).status,'validated');assert.equal((await finalize(historical)).status,'finalized');
  beforeHistory=await snap(historical);assert.equal(beforeHistory.stage_rows,87);assert.equal(beforeHistory.products,87);
- await db.exec('reset role');await db.exec(await readFile(file,'utf8'));
+ await db.exec('reset role');
+ const original=(await db.query("select pg_get_functiondef('public.finalize_catalog_import_batch_system(uuid,uuid,uuid,integer)'::regprocedure) definition,md5(pg_get_functiondef('public.finalize_catalog_import_batch_system(uuid,uuid,uuid,integer)'::regprocedure)) md5")).rows[0];
+ assert.equal(original.md5,'3cedf9ed8542942ce507347803aac051');
+ const v3=await readFile('scripts/tests/fixtures/catalog-finalizer-v3-20261014.sql','utf8');
+ // CREATE statement terminator is outside pg_get_functiondef's stored body.
+ assert.deepEqual(sqlTokens(original.definition),sqlTokens(v3.replace(/;\s*$/,'')));
+ const migration=await readFile(file,'utf8');
+ await db.exec('begin');
+ try{
+  await db.exec(original.definition.replace('AS $function$','AS $function$\n-- Unknown deployment fingerprint must still fail.'));
+  await assert.rejects(db.exec(migration),/CATALOG_STORAGE_READ_BASELINE_DRIFT:finalize_catalog_import_batch_system/);
+ }finally{await db.exec('rollback');}
+ assert.equal((await db.query("select to_regnamespace('catalog_storage_internal') is null absent")).rows[0].absent,true);
+ await db.exec(v3);
+ const v3Hash=(await db.query("select md5(pg_get_functiondef('public.finalize_catalog_import_batch_system(uuid,uuid,uuid,integer)'::regprocedure)) md5")).rows[0].md5;
+ assert.equal(v3Hash,'9130c22cb4eb8bb802597204edae666b');
+ baselineProof={production:original.md5,v3:v3Hash,exactTokensEqual:true,unknownFingerprintRejected:true};
+ await db.exec(migration);
 });
 after(async()=>{try{await db?.close();}finally{if(container)await exec('docker',['rm','--force',container]).catch(()=>{});}});
+
+test('accepts only the two exact token-equivalent production/V3 wrappers; unknown drift rolls back',()=>{
+ assert.deepEqual(baselineProof,{production:'3cedf9ed8542942ce507347803aac051',v3:'9130c22cb4eb8bb802597204edae666b',exactTokensEqual:true,unknownFingerprintRejected:true});
+});
 
 test('reproduces87/2501 premature completion before fix; preserves its historical receipt/state',async()=>{
  const after=await snap(historical);
