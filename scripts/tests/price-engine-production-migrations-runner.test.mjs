@@ -7,8 +7,10 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setImmediate} from 'node:timers/promises';
 import {buildMigrationPlan,migrationBody,runProductionMigrations,parseMigrationArgs,safeMigrationFailure,readMigrationPassword,
- IDENTITY_SQL,EXCLUSIVE_RUN_SQL,TRANSACTION_SETUP_SQL} from '../ops/run-price-engine-production-migrations.mjs';
+ IDENTITY_SQL,EXCLUSIVE_RUN_SQL,TRANSACTION_SETUP_SQL,RESUME22_LOCKS_SQL,RESUME22_QUIET_WAIT_MS}
+ from '../ops/run-price-engine-production-migrations.mjs';
 import {createFullReplayDb} from './fixtures/price-engine-full-replay-db.mjs';
+import {RESUME22_JOURNAL_SHA256,validateResume22Evidence} from '../ops/price-engine-migration-resume22.mjs';
 
 const repo=new URL('../../',import.meta.url),hash=value=>createHash('sha256').update(value).digest('hex');
 const manifestBytes=await readFile(new URL('../ops/price-engine-production-manifest.json',import.meta.url));
@@ -23,7 +25,7 @@ finally { await baselineDb.close(); }
 const secret='synthetic-password-must-never-be-output';
 const connection={host:'db.zjgueqijumzlfioihnkt.supabase.co',user:'postgres',database:'postgres',port:5432,
  password:secret,ssl:{ca:'synthetic-private-ca',rejectUnauthorized:true},transaction:false};
-function harness({onQuery,onRecord,tls=true,indexMissing=false,exclusive=true}={}){
+function harness({onQuery,onRecord,tls=true,indexMissing=false,exclusive=true,reconciliation,reconciliationSnapshot,now,wait}={}){
  const events=[],queries=[];let active=0,maxActive=0,constructors=0,ends=0,pending=null,customer='C';
  const client=new EventEmitter();client.connection={stream:{encrypted:true,authorized:tls}};
  client.connect=async()=>{};client.end=async()=>{ends++;};
@@ -34,7 +36,10 @@ function harness({onQuery,onRecord,tls=true,indexMissing=false,exclusive=true}={
    const overridden=await onQuery?.({sql,entry,queries,client});if(overridden)return overridden;
    if(sql===IDENTITY_SQL)return {rows:[{database_ok:true,role_ok:true,unassumed_role:true,backend_pid:1234,server_version_num:'170006'}]};
    if(sql===EXCLUSIVE_RUN_SQL)return {rows:[{acquired:exclusive}]};
+   if(sql===RESUME22_LOCKS_SQL)return {rows:[{table_present:true,other_locks:0}]};
    if(sql===plan.preflight_sql)return {rows:[{price_engine_preflight:structuredClone(baseline)}]};
+   if(reconciliation&&sql===reconciliation.sql)return {rows:[{resume22_snapshot:
+    structuredClone(reconciliationSnapshot??reconciliation.expected)}]};
    if(sql===plan.indexPlan.verification_sql){
     const missing=typeof indexMissing==='function'?indexMissing(queries.filter(q=>q===sql).length):indexMissing;
     return {rows:[{index_prebuild_snapshot:{snapshot_version:1,
@@ -54,7 +59,8 @@ function harness({onQuery,onRecord,tls=true,indexMissing=false,exclusive=true}={
  };
  const run=overrides=>runProductionMigrations({plan,connection,record:async event=>{
   await onRecord?.(event);events.push(structuredClone(event));},...overrides},
- {regeneratePlan:async()=>plan,createClient:async config=>{
+ {regeneratePlan:async()=>plan,...(reconciliation?{buildResumeReconciliation:async()=>reconciliation}:{}),
+ ...(now?{now}:{}),...(wait?{wait}:{}),createClient:async config=>{
   constructors++;assert.equal(config.options,'');assert.equal(config.ssl.rejectUnauthorized,true);
   assert.equal(config.password,secret);assert.equal(Object.hasOwn(config,'connectionString'),false);return client;
  }});
@@ -62,6 +68,95 @@ function harness({onQuery,onRecord,tls=true,indexMissing=false,exclusive=true}={
   get maxActive(){return maxActive;},get ends(){return ends;}};
 }
 const apply={apply:true,alignErsen:true};
+const resumeEvidence={bytes:await readFile(new URL('./fixtures/price-engine-migration-attempt-20261014a.jsonl',import.meta.url)),
+ expectedSha256:RESUME22_JOURNAL_SHA256};
+const resumeConnection={...connection,host:'aws-0-eu-west-1.pooler.supabase.com',user:'postgres.zjgueqijumzlfioihnkt'};
+const mockReconciliation={sql:'SELECT synthetic_resume22_state',parameters:[],expected:{snapshot_version:1,prefix:'exact21'}};
+
+test('explicit inspected resume runs only22..62 and retains21 prior receipts plus atomic CAS29',async()=>{
+ const h=harness({reconciliation:mockReconciliation});
+ const result=await h.run({...apply,connection:resumeConnection,resumeEvidence});
+ assert.equal(result.status,'completed');assert.equal(result.outcome,'remaining-41-committed');
+ assert.deepEqual(result.completed.map(row=>row.position),Array.from({length:41},(_,i)=>i+22));
+ assert.deepEqual(result.resume.previously_committed.map(row=>row.position),Array.from({length:21},(_,i)=>i+1));
+ assert.equal(result.resume.journal_sha256,RESUME22_JOURNAL_SHA256);
+ assert.equal(h.queries.filter(sql=>sql==='BEGIN').length,41);assert.equal(h.queries.filter(sql=>sql==='COMMIT').length,41);
+ assert.equal(h.queries.some(sql=>plan.entries.slice(0,21).some(entry=>entry.sql===sql)),false);
+ assert.equal(h.queries.filter(sql=>sql===plan.alignment_sql).length,1);assert.equal(h.customer,'A');
+ assert.ok(h.queries.indexOf(EXCLUSIVE_RUN_SQL)<h.queries.indexOf(mockReconciliation.sql));
+ assert.ok(h.queries.indexOf(mockReconciliation.sql)<h.queries.indexOf('BEGIN'));
+ assert.equal(h.queries.filter(sql=>sql===RESUME22_LOCKS_SQL).length,1);
+ assert.ok(h.queries.indexOf(RESUME22_LOCKS_SQL)<h.queries.indexOf('BEGIN'));
+ const inspect=harness({reconciliation:mockReconciliation});
+ assert.equal((await inspect.run({connection:resumeConnection,resumeEvidence})).status,'inspected');
+ assert.equal(inspect.queries.includes('BEGIN'),false);assert.equal(inspect.queries.includes('SET default_transaction_read_only = on'),true);
+ assert.equal(inspect.queries.includes(RESUME22_LOCKS_SQL),false);
+});
+
+test('resumed22 waits without a transaction for natural lock release and fails closed at130s',async()=>{
+ for(const staysBusy of [false,true]){
+  let clock=0,polls=0;const sleeps=[];
+  const h=harness({reconciliation:mockReconciliation,now:()=>clock,wait:async ms=>{sleeps.push(ms);clock+=ms;},
+   onQuery({sql,queries}){
+    if(sql!==RESUME22_LOCKS_SQL)return;
+    assert.equal(queries.includes('BEGIN'),false,'No DDL transaction during read-only lock polling');
+    return {rows:[{table_present:true,other_locks:staysBusy||++polls<=2?1:0}]};
+   }});
+  const result=await h.run({...apply,connection:resumeConnection,resumeEvidence});
+  assert.equal(h.queries.filter(sql=>sql==='SET statement_timeout = \'2s\'').length,1);
+  assert.ok(sleeps.every(ms=>ms===2000));
+  assert.equal(h.queries.some(sql=>/pg_cancel_backend|pg_terminate_backend/i.test(sql)),false);
+  if(staysBusy){
+   assert.equal(clock,RESUME22_QUIET_WAIT_MS);assert.equal(result.failure.code,'RESUME22_QUIET_WINDOW_TIMEOUT');
+   assert.equal(result.failure.position,22);assert.equal(result.outcome,'no-migration-started');
+   assert.equal(h.queries.includes('BEGIN'),false);assert.equal(h.queries.includes('ROLLBACK'),false);
+   assert.equal(result.migration_ddl_attempted,0);assert.equal(result.resume.previously_committed.length,21);
+  }else{
+   assert.equal(result.status,'completed');assert.equal(clock,4000);
+   assert.equal(h.queries.filter(sql=>sql===plan.entries[21].sql).length,1);
+   assert.equal(h.queries.filter(sql=>sql==="SET LOCAL lock_timeout = '1s'").length,41);
+  }
+ }
+ const h=harness({reconciliation:mockReconciliation,onQuery({sql}){
+  if(sql===RESUME22_LOCKS_SQL)throw Object.assign(Error(secret),{code:'57014'});
+ }});
+ const result=await h.run({...apply,connection:resumeConnection,resumeEvidence});
+ assert.equal(result.failure.code,'57014');assert.equal(h.queries.includes('BEGIN'),false);
+ assert.equal(h.queries.filter(sql=>sql===RESUME22_LOCKS_SQL).length,1);
+ assert.equal(JSON.stringify(result).includes(secret),false);
+});
+
+test('resume rejects altered journal, schema drift or target change before any transaction',async()=>{
+ assert.equal(validateResume22Evidence(resumeEvidence.bytes,RESUME22_JOURNAL_SHA256,plan).from_position,22);
+ for(const bytes of [Buffer.concat([resumeEvidence.bytes,Buffer.from('\n')]),
+  Buffer.from(resumeEvidence.bytes.toString().replace('failed-transaction-rolled-back','unknown-requires-read-only-reconciliation')),
+  Buffer.from(resumeEvidence.bytes.toString().replace('migration-rolled-back','commit-requested'))]){
+  assert.throws(()=>validateResume22Evidence(bytes,hash(bytes),plan),/RESUME22_EVIDENCE_UNCONFIRMED/);
+  const h=harness({reconciliation:mockReconciliation});
+  assert.equal((await h.run({...apply,connection:resumeConnection,resumeEvidence:{bytes,expectedSha256:RESUME22_JOURNAL_SHA256}})).failure.code,'RESUME22_EVIDENCE_UNCONFIRMED');
+  assert.equal(h.constructors,0);
+ }
+ const changedPlan=structuredClone(plan);changedPlan.entries[20].sha256='a'.repeat(64);
+ assert.throws(()=>validateResume22Evidence(resumeEvidence.bytes,RESUME22_JOURNAL_SHA256,changedPlan),/RESUME22_EVIDENCE_UNCONFIRMED/);
+ const drift=harness({reconciliation:mockReconciliation,reconciliationSnapshot:{snapshot_version:1,prefix:'already22'}});
+ assert.equal((await drift.run({...apply,connection:resumeConnection,resumeEvidence})).failure.code,'RESUME22_DATABASE_STATE_CHANGED');
+ assert.equal(drift.queries.includes('BEGIN'),false);
+ const wrong=harness({reconciliation:mockReconciliation});
+ assert.equal((await wrong.run({...apply,resumeEvidence})).failure.code,'RESUME22_TARGET_CHANGED');assert.equal(wrong.constructors,0);
+ const args=['--project-ref','zjgueqijumzlfioihnkt','--manifest-sha256',expectedManifestSha256];
+ for(const extra of [['--resume-evidence','a'],['--resume-evidence-sha256',RESUME22_JOURNAL_SHA256],['--resume-from','22']])
+  assert.throws(()=>parseMigrationArgs([...args,...extra]),/RUNNER_ARGUMENT_INVALID/);
+});
+
+test('resumed COMMIT uncertainty preserves prior receipt chain and never retries22 or replays foundation',async()=>{
+ const h=harness({reconciliation:mockReconciliation,onQuery({sql}){if(sql==='COMMIT')throw Object.assign(Error(secret),{code:'ECONNRESET'});}});
+ const result=await h.run({...apply,connection:resumeConnection,resumeEvidence});
+ assert.equal(result.outcome,'unknown-requires-read-only-reconciliation');assert.equal(result.completed.length,0);
+ assert.equal(result.resume.previously_committed.length,21);assert.equal(result.failure.position,22);
+ assert.equal(h.queries.filter(sql=>sql===plan.entries[21].sql).length,1);assert.equal(h.queries.includes(plan.entries[22].sql),false);
+ assert.equal(h.queries.includes(plan.entries[0].sql),false);assert.equal(h.queries.includes('ROLLBACK'),false);
+ assert.equal(JSON.stringify(result).includes(secret),false);
+});
 
 test('exact62 plan preserves order and all source hashes; only wrappers1/49 are excluded',async()=>{
  assert.equal(plan.entries.length,62);assert.deepEqual(plan.entries.filter(e=>e.wrapped).map(e=>e.position),[1,49]);

@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 // Deliberately narrow production runner. Import/default plan never connects.
-// No environment fallback, subprocess arguments, automatic retries or resume.
+// No environment fallback, subprocess arguments, automatic retries or arbitrary resume.
 import {createHash,X509Certificate} from 'node:crypto';
 import {constants} from 'node:fs';
 import {open,readFile} from 'node:fs/promises';
 import {dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
+import {setTimeout as sleep} from 'node:timers/promises';
 import {assertConnectionTarget,buildPlan as buildIndexPlan,inspectIndexSnapshot,PRODUCTION_PROJECT}
  from './price-engine-production-index-prebuild.mjs';
 import {inspectSnapshot} from './price-engine-production-preflight.mjs';
+import {validateResume22Evidence,buildResume22Reconciliation,inspectResume22Snapshot}
+ from './price-engine-migration-resume22.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 const MANIFEST='scripts/ops/price-engine-production-manifest.json';
@@ -21,6 +24,16 @@ const ALIGNMENT_SHA256='806b1cb386ec925e0915fa2dc59c973fd7e5b788096ba16feb71baf0
 const hash=value=>createHash('sha256').update(value).digest('hex');
 export const IDENTITY_SQL="SELECT current_database()='postgres' AS database_ok, session_user='postgres' AS role_ok, current_user=session_user AS unassumed_role, pg_backend_pid() AS backend_pid, current_setting('server_version_num') AS server_version_num";
 export const EXCLUSIVE_RUN_SQL='SELECT pg_try_advisory_lock(20261014,600029) AS acquired';
+export const RESUME22_QUIET_WAIT_MS=130000;
+export const RESUME22_QUIET_POLL_MS=2000;
+// SELECT only: include granted and queued locks, including prepared transactions
+// with no PID. Never cancel another backend or hold a DDL transaction while waiting.
+export const RESUME22_LOCKS_SQL=`SELECT
+ to_regclass('public.supplier_prices') IS NOT NULL AS table_present,
+ (SELECT count(*)::integer FROM pg_locks
+  WHERE locktype='relation' AND relation=to_regclass('public.supplier_prices')
+   AND database=(SELECT oid FROM pg_database WHERE datname=current_database())
+   AND pid IS DISTINCT FROM pg_backend_pid()) AS other_locks`;
 export const TRANSACTION_SETUP_SQL=[
  "SET LOCAL search_path = public, extensions, pg_catalog", "SET LOCAL lock_timeout = '1s'",
  "SET LOCAL statement_timeout = '30s'", "SET LOCAL transaction_timeout = '45s'",
@@ -114,11 +127,12 @@ export async function buildMigrationPlan({manifestBytes,expectedManifestSha256,
 }
 
 const defaultClient=async config=>new (await import('pg')).default.Client(config);
-export async function runProductionMigrations({plan,connection,apply=false,alignErsen=false,record},
- {regeneratePlan=()=>buildMigrationPlan({expectedManifestSha256:plan?.manifest_sha256}),createClient=defaultClient}={}){
+export async function runProductionMigrations({plan,connection,apply=false,alignErsen=false,record,resumeEvidence},
+ {regeneratePlan=()=>buildMigrationPlan({expectedManifestSha256:plan?.manifest_sha256}),createClient=defaultClient,
+  buildResumeReconciliation=buildResume22Reconciliation,now=()=>performance.now(),wait=sleep}={}){
  const evidence={schema_version:1,project_ref:PRODUCTION_PROJECT,mode:apply?'apply':'inspect',status:'failed',
   outcome:'not-started',completed:[],migration_ddl_attempted:0,customer_alignment_attempted:false};
- let client,asyncError,backendPid,transactionOpen=false,commitSent=false,position=null,stage='plan-validation';
+ let client,asyncError,backendPid,resume,reconciliation,transactionOpen=false,commitSent=false,position=null,stage='plan-validation';
  const emit=event=>record({at:new Date().toISOString(),...event});
  const query=async(sql,parameters)=>{
   if(asyncError)throw asyncError;
@@ -130,11 +144,19 @@ export async function runProductionMigrations({plan,connection,apply=false,align
   if(typeof apply!=='boolean'||typeof alignErsen!=='boolean'||typeof record!=='function'||apply&&!alignErsen)
    fail('RUNNER_ARGUMENT_INVALID');
   if(!isDeepStrictEqual(plan,await regeneratePlan()))fail('REVIEWED_PLAN_DRIFT');
+  if(resumeEvidence!==undefined){
+   try{resume=validateResume22Evidence(resumeEvidence.bytes,resumeEvidence.expectedSha256,plan);}
+   catch{fail('RESUME22_EVIDENCE_UNCONFIRMED');}
+   try{reconciliation=await buildResumeReconciliation(plan);}catch{fail('RESUME22_LOCAL_RECONCILIATION_FAILED');}
+   evidence.resume={from_position:22,journal_sha256:resume.journal_sha256,previously_committed:resume.previously_committed};
+  }
   evidence.manifest_sha256=plan.manifest_sha256;
   stage='connection-validation';let target;
   try{target=assertConnectionTarget(connection);}catch{fail('CONNECTION_TARGET_UNCONFIRMED');}
+  if(resume&&!isDeepStrictEqual(resume.target,target))fail('RESUME22_TARGET_CHANGED');
   if(typeof connection.password!=='string'||!connection.password||/[\r\n\0]/.test(connection.password))fail('PASSWORD_FILE_INVALID');
-  await emit({event:'started',mode:evidence.mode,target,manifest_sha256:plan.manifest_sha256,order_sha256:plan.order_sha256});
+  await emit({event:'started',mode:evidence.mode,target,manifest_sha256:plan.manifest_sha256,order_sha256:plan.order_sha256,
+   ...(resume?{resume_from_position:22,resume_evidence_sha256:resume.journal_sha256}: {})});
   client=await createClient({host:target.host,user:target.user,database:'postgres',port:5432,password:connection.password,
    ssl:{ca:connection.ssl.ca,rejectUnauthorized:true},options:'',application_name:'nm-price-migrations-20261014',
    connectionTimeoutMillis:10000,query_timeout:46000,keepAlive:true});
@@ -171,15 +193,41 @@ export async function runProductionMigrations({plan,connection,apply=false,align
    if(!check.ready)fail('PREBUILT_INDEXES_UNCONFIRMED');
   };
   stage='index-verification';await indexes();
+  const reconcile=async()=>{
+   stage='resume22-reconciliation';
+   const snapshot=(await query(reconciliation.sql,reconciliation.parameters)).rows?.[0]?.resume22_snapshot;
+   const check=inspectResume22Snapshot(reconciliation,snapshot);
+   await emit({event:'resume-state-verified',from_position:22,...check});
+   if(!check.ready)fail('RESUME22_DATABASE_STATE_CHANGED');
+  };
+  const waitForResume22Quiet=async()=>{
+   stage='resume22-quiet-window';const started=now();
+   await query("SET statement_timeout = '2s'");
+   try{
+    while(true){
+     if(now()-started>=RESUME22_QUIET_WAIT_MS)fail('RESUME22_QUIET_WINDOW_TIMEOUT');
+     const row=(await query(RESUME22_LOCKS_SQL)).rows?.[0],elapsed=Math.ceil(now()-started);
+     if(!row||row.table_present!==true||!Number.isSafeInteger(row.other_locks)||row.other_locks<0)
+      fail('RESUME22_LOCK_STATE_UNCONFIRMED');
+     await emit({event:'resume22-lock-observation',other_locks:row.other_locks,wait_ms:elapsed});
+     if(elapsed>=RESUME22_QUIET_WAIT_MS)fail('RESUME22_QUIET_WINDOW_TIMEOUT');
+     if(row.other_locks===0)return;
+     await wait(Math.min(RESUME22_QUIET_POLL_MS,RESUME22_QUIET_WAIT_MS-(now()-started)));
+    }
+   }finally{await query("SET statement_timeout = '30s'");}
+  };
+  if(resume&&!apply)await reconcile();
   if(!apply){evidence.status='inspected';evidence.outcome='read-only';}
   else{
    stage='exclusive-run';
    if((await query(EXCLUSIVE_RUN_SQL)).rows?.[0]?.acquired!==true)fail('ANOTHER_MIGRATION_RUN_ACTIVE');
-   for(const entry of plan.entries){
+   if(resume)await reconcile();
+   for(const entry of plan.entries.filter(entry=>!resume||entry.position>=22)){
     position=entry.position;stage='before-migration';await identity();
     // Recheck immediately before migrations containing an ordinary existing-
     // table index, so missing/invalid indexes never silently build in this path.
     if(plan.indexPlan.operations.some(item=>item.source.file===entry.file||item.repeated_in.some(repeat=>repeat.file===entry.file)||item.superseded_in?.some(repeat=>repeat.file===entry.file)))await indexes();
+    if(resume&&position===22)await waitForResume22Quiet();
     await emit({event:'migration-start',position,id:entry.id,file:entry.file,sha256:entry.sha256,
      body_sha256:entry.body_sha256,outer_wrapper_removed:entry.wrapped});
     stage='begin';await query('BEGIN');transactionOpen=true;
@@ -197,7 +245,7 @@ export async function runProductionMigrations({plan,connection,apply=false,align
     await emit({event:'migration-committed',position,sha256:entry.sha256});
     evidence.completed.push({position,id:entry.id,sha256:entry.sha256});commitSent=false;
    }
-   evidence.status='completed';evidence.outcome='all-62-committed';
+   evidence.status='completed';evidence.outcome=resume?'remaining-41-committed':'all-62-committed';
   }
  }catch(error){
   evidence.failure={stage,position,...safeMigrationFailure(error)};
@@ -229,7 +277,7 @@ export function parseMigrationArgs(args){
   const key=args[i];if(seen.has(key))fail('RUNNER_ARGUMENT_INVALID');seen.add(key);
   if(['--plan','--inspect','--apply'].includes(key)){options.mode=key.slice(2);continue;}
   if(key==='--align-ersen-before-29'){options.alignErsen=true;continue;}
-  if(!['--project-ref','--manifest-sha256','--host','--password-file','--ca-file','--evidence'].includes(key)
+  if(!['--project-ref','--manifest-sha256','--host','--password-file','--ca-file','--evidence','--resume-evidence','--resume-evidence-sha256'].includes(key)
    ||!args[i+1]||args[i+1].startsWith('--'))fail('RUNNER_ARGUMENT_INVALID');
   options[key.slice(2)]=args[++i];
  }
@@ -238,6 +286,8 @@ export function parseMigrationArgs(args){
  if(options.mode!=='plan'&&['host','password-file','ca-file','evidence'].some(key=>!options[key]))fail('RUNNER_ARGUMENT_INVALID');
  if(options.mode==='apply'&&!options.alignErsen||options.mode!=='apply'&&options.alignErsen)fail('RUNNER_ARGUMENT_INVALID');
  if(options.mode==='plan'&&['host','password-file','ca-file','evidence'].some(key=>options[key]))fail('RUNNER_ARGUMENT_INVALID');
+ if(Boolean(options['resume-evidence'])!==Boolean(options['resume-evidence-sha256'])
+  ||options['resume-evidence-sha256']&&!/^[a-f0-9]{64}$/.test(options['resume-evidence-sha256']))fail('RUNNER_ARGUMENT_INVALID');
  return options;
 }
 export async function readMigrationPassword(path){
@@ -258,12 +308,27 @@ async function main(args){
    '  --host <production direct/session host> --password-file <owned0600 file> --ca-file <verified PEM> --evidence <new JSONL>\n'+
    'Requires all12 prebuilt indexes. Apply performs62 transactions, exact order; Ersen CAS is inside transaction29.\n'+
    'lock_timeout1s; statement_timeout30s; transaction_timeout45s; idle-in-transaction10s.\n'+
+   'Only the reviewed rollback22 may continue: --resume-evidence <original JSONL> --resume-evidence-sha256 <reviewed hash>.\n'+
+   'This validates21 prior receipts and fresh partial schema, then runs22..62. No other resume or automatic retry.\n'+
+   'Before resumed22: SELECT-only supplier_prices lock polling every2s for at most130s; no held DDL transaction.\n'+
    'Any uncertain COMMIT stops for read-only reconciliation. Keep the controlled quiet window until all62 finish.');return;
  }
  const options=parseMigrationArgs(args),plan=await buildMigrationPlan({expectedManifestSha256:options['manifest-sha256']});
+ let resumeEvidence,resume;
+ if(options['resume-evidence']){
+  const file=await open(resolve(options['resume-evidence']),constants.O_RDONLY|constants.O_NOFOLLOW);
+  try{
+   const info=await file.stat();
+   if(!info.isFile()||info.size<1||info.size>1048576)fail('RESUME22_EVIDENCE_UNCONFIRMED');
+   resumeEvidence={bytes:await file.readFile(),expectedSha256:options['resume-evidence-sha256']};
+   try{resume=validateResume22Evidence(resumeEvidence.bytes,resumeEvidence.expectedSha256,plan);}
+   catch{fail('RESUME22_EVIDENCE_UNCONFIRMED');}
+  }finally{await file.close();}
+ }
  if(options.mode==='plan'){
   console.log(JSON.stringify({mode:'offline-plan',project_ref:PRODUCTION_PROJECT,manifest_sha256:plan.manifest_sha256,
-   order_sha256:plan.order_sha256,migrations:plan.entries.map(({position,id,file,sha256,body_sha256,wrapped})=>
+   order_sha256:plan.order_sha256,resume_from_position:resume?.from_position||null,
+   migrations:plan.entries.filter(entry=>!resume||entry.position>=22).map(({position,id,file,sha256,body_sha256,wrapped})=>
     ({position,id,file,sha256,body_sha256,outer_wrapper_removed:wrapped})),alignment_before_position:29,remote_connection:false}));return;
  }
  const ca=await readFile(resolve(options['ca-file']),'utf8');
@@ -276,7 +341,7 @@ async function main(args){
  const journal=await open(resolve(options.evidence),'wx',0o600);
  try{
   connection.password=await readMigrationPassword(options['password-file']);
-  const result=await runProductionMigrations({plan,connection,apply:options.mode==='apply',alignErsen:options.alignErsen===true,
+  const result=await runProductionMigrations({plan,connection,resumeEvidence,apply:options.mode==='apply',alignErsen:options.alignErsen===true,
    record:async event=>{await journal.appendFile(JSON.stringify(event)+'\n');await journal.sync();
     if(['started','migration-start','migration-committed'].includes(event.event))console.log(JSON.stringify(event));}});
   console.log(JSON.stringify(result));if(result.status==='failed')process.exitCode=1;
