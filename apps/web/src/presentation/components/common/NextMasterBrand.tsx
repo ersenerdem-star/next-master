@@ -41,7 +41,16 @@ type NavGlyphName =
   | "pricing"
   | "documents"
   | "finance"
-  | "account";
+  | "account"
+  | "vehicle"
+  | "oe"
+  | "brand"
+  | "categories"
+  | "credit"
+  | "delivery"
+  | "warning"
+  | "upload"
+  | "download";
 
 const glyphPaths: Record<NavGlyphName, ReactNode> = {
   home: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>,
@@ -58,6 +67,15 @@ const glyphPaths: Record<NavGlyphName, ReactNode> = {
   documents: <><path d="M6 3h9l4 4v14H6z" /><path d="M15 3v5h5M9 12h6M9 16h6" /></>,
   finance: <><path d="M5 5h14v14H5z" /><path d="M8 9h8M8 13h2M13 13h3M8 17h8" /></>,
   account: <><circle cx="12" cy="8" r="3" /><path d="M5 20c.9-3.2 3.2-5 7-5s6.1 1.8 7 5" /></>,
+  vehicle: <><path d="M5 16v-4l2-5h10l2 5v4" /><path d="M4 16h16M7 16v2M17 16v2" /><circle cx="8" cy="13" r="1" /><circle cx="16" cy="13" r="1" /></>,
+  oe: <><path d="M6 3h9l4 4v14H6z" /><path d="M15 3v5h5M9 12h6M9 16h4" /></>,
+  brand: <><path d="M4 7h16M4 12h16M4 17h16" /><circle cx="8" cy="7" r="1" /><circle cx="15" cy="12" r="1" /><circle cx="11" cy="17" r="1" /></>,
+  categories: <><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9Z" /><path d="m4 7.5 8 4.5 8-4.5M12 12v9" /></>,
+  credit: <><path d="M4 6h16v12H4z" /><path d="M4 10h16M8 15h4" /></>,
+  delivery: <><path d="M3 6h11v10H3zM14 10h4l3 3v3h-7z" /><circle cx="7" cy="18" r="2" /><circle cx="17" cy="18" r="2" /></>,
+  warning: <><path d="m12 4 9 16H3Z" /><path d="M12 9v5M12 17h.01" /></>,
+  upload: <><path d="M5 20h14M12 16V4M7 9l5-5 5 5" /><path d="M5 20V4h4" /></>,
+  download: <><path d="M12 4v11M7 11l5 5 5-5M5 20h14" /></>,
 };
 
 export function NavGlyph({ name }: { name: NavGlyphName }) {
