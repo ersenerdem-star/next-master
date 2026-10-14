@@ -1,0 +1,587 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Authenticated export file validation matrix",
+  "observedDate": "2026-10-14",
+  "scopeBoundary": "Read-only local artifact inspection and scoped Supabase SELECT queries. No provider changes, upload, publication, or deployment by this validation task.",
+  "existingEvidence": [
+    {
+      "type": "supplier_price_list",
+      "environment": "production",
+      "scope": "GEBA / Geba",
+      "evidenceFile": "scripts/ops/evidence/price-engine-production-geba-export-20261014.json",
+      "status": "prior_independent_file_source_and_parser_validation",
+      "rows": 108
+    },
+    {
+      "type": "supplier_price_list",
+      "environment": "production",
+      "scope": "GroupAuto / Corteco",
+      "evidenceFile": "scripts/ops/evidence/price-engine-production-corteco-export-20261014.json",
+      "status": "root_owned_count_and_integrity_validation",
+      "rows": 30328,
+      "limitation": "Referenced without editing or upgrading that evidence's stated semantic coverage."
+    }
+  ],
+  "files": [
+    {
+      "environment": "production",
+      "projectRef": "zjgueqijumzlfioihnkt",
+      "exportType": "catalog_export",
+      "scope": {
+        "organizationId": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+        "brandId": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+        "brand": "Corteco",
+        "marketSegment": "",
+        "format": "csv"
+      },
+      "browserObservation": {
+        "source": "root agent authenticated production admin UI export",
+        "personallyObservedByThisAgent": false,
+        "build": "49c4fd33",
+        "filePath": "/Users/ersen/Downloads/catalog-Corteco-20261014.csv"
+      },
+      "exportJob": {
+        "id": "6a5c737e-4034-4274-bf59-07ff91200161",
+        "audience": "admin",
+        "status": "finalized",
+        "schemaVersion": 4,
+        "rowCount": 37526,
+        "progressDone": 37526,
+        "progressTotal": 37526,
+        "byteSize": 6221169,
+        "contentType": "text/csv",
+        "createdAt": "2026-10-14T16:58:35.946315Z",
+        "startedAt": "2026-10-14T16:58:38.993Z",
+        "finalizedAt": "2026-10-14T16:58:53.677Z",
+        "failedAt": null,
+        "errorMessage": null,
+        "dataVersion": "98a417ccbf82f01211bb69031d9bd92d"
+      },
+      "download": {
+        "fileName": "catalog-Corteco-20261014.csv",
+        "bytes": 6221169,
+        "sha256": "de893279ae2c2e482ff32c9695376117bffd2bff75d6748773d7cc7911537b44",
+        "encoding": "UTF-8 with BOM",
+        "delimiter": ",",
+        "headers": [
+          "Product_Code",
+          "Brand",
+          "EAN",
+          "Product_Name",
+          "Product_Name_TR",
+          "OEM_No",
+          "Vehicle",
+          "Vehicle_Model",
+          "HS_Code",
+          "Origin",
+          "Market_Segment",
+          "Weight_kg",
+          "Image_URL",
+          "Lifecycle_Status",
+          "Lifecycle_Note"
+        ],
+        "dataRows": 37526,
+        "distinctProductCodes": 37526,
+        "brandValues": [
+          "Corteco"
+        ],
+        "blankProductCodes": 0,
+        "malformedWidthRows": 0,
+        "nonemptyMarketSegments": 0,
+        "formulaEscapeCells": 0,
+        "artifactToolReadRows": 37526
+      },
+      "source": {
+        "method": "Supabase connector SELECT-only aggregate over exact organization and brand; no source records printed or stored",
+        "aggregateQuery": "with scope as materialized (\n select cp.*,b.name brand from public.catalog_products cp join public.brands b on b.id=cp.brand_id and b.organization_id=cp.organization_id\n where cp.organization_id='1e4c5e99-e387-41aa-a6d3-cbe74558f766' and cp.brand_id='821a7c95-dd21-4ae8-b55b-fe463fa0b7ca'\n), values_for_export as (\n select array[btrim(coalesce(product_code,'')),btrim(brand),coalesce(ean,''),coalesce(description,''),coalesce(description_tr,''),coalesce(oem_no,''),coalesce(vehicle,''),coalesce(vehicle_model,''),coalesce(hs_code,''),coalesce(origin,''),coalesce(market_segment,''),coalesce(trim_scale(weight_kg)::text,''),coalesce(image_url,''),coalesce(nullif(lifecycle_status,''),'active'),coalesce(lifecycle_note,'')] as fields from scope\n), hashes as (\n select md5((select string_agg(octet_length(escaped)::text||':'||escaped,'' order by ord) from (select ord,case when ord<>12 and val ~ '^[[:space:]]*[=+@-]' then chr(39)||val else val end escaped from unnest(fields) with ordinality as f(val,ord)) e)) row_hash,md5(fields[1]) key_hash from values_for_export\n)\nselect clock_timestamp() observed_at,(select count(*) from scope) catalog_rows,(select count(distinct btrim(product_code)) from scope) distinct_product_codes,(select count(*) from scope where market_segment is not null) nonnull_market_segments,md5(string_agg(row_hash,'' order by row_hash collate \"C\")) semantic_multiset_md5,md5(string_agg(key_hash,'' order by key_hash collate \"C\")) product_code_multiset_md5,public.get_catalog_export_version('1e4c5e99-e387-41aa-a6d3-cbe74558f766','821a7c95-dd21-4ae8-b55b-fe463fa0b7ca','') current_data_version from hashes;",
+        "observedAt": "2026-10-14T17:02:29.356817Z",
+        "catalogRows": 37526,
+        "distinctProductCodes": 37526,
+        "nonnullMarketSegments": 0,
+        "currentDataVersion": "98a417ccbf82f01211bb69031d9bd92d",
+        "semanticMultisetMd5": "d120b0d10f3664a3a9d59e1ce00e294b",
+        "productCodeMultisetMd5": "1b79009b1f830a410973b96d043b633f"
+      },
+      "equality": {
+        "all15ColumnsMatch": true,
+        "completeProductCodeMultisetMatches": true,
+        "rowCountMatchesSourceAndJob": true,
+        "byteSizeMatchesJob": true,
+        "dataVersionStillMatchesJob": true,
+        "notTruncatedAt50Or1000": true,
+        "semanticMultisetMd5": "d120b0d10f3664a3a9d59e1ce00e294b",
+        "productCodeMultisetMd5": "1b79009b1f830a410973b96d043b633f",
+        "method": "For all 15 export fields, preserve exact strings and documented empty/default handling; normalize Weight_kg as a decimal without floating point; mirror CSV formula escaping. Frame each field as UTF-8 byte length + colon + value, MD5 each row, sort row hashes, then MD5 their concatenation. Compare independently computed full source and file multisets. Product code multiset compared separately."
+      },
+      "limitations": [
+        "This proves the complete selected Corteco catalog CSV and its finalized production job; it is not A/B or customer pricing evidence.",
+        "No spreadsheet file was modified, reserialized, or re-uploaded.",
+        "Browser click provenance is root-reported; file bytes, Artifact Tool parsing, job metadata and source hashes were independently inspected."
+      ]
+    },
+    {
+      "environment": "production",
+      "projectRef": "zjgueqijumzlfioihnkt",
+      "exportType": "catalog_export",
+      "scope": {
+        "organizationId": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+        "brandId": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+        "brand": "Corteco",
+        "marketSegment": "",
+        "format": "xlsx"
+      },
+      "browserObservation": {
+        "source": "root agent authenticated production admin UI export",
+        "personallyObservedByThisAgent": false,
+        "build": "49c4fd33",
+        "filePath": "/Users/ersen/Downloads/catalog-Corteco-20261014.xlsx"
+      },
+      "exportJob": {
+        "id": "f7c69c75-9c61-41f8-8b0d-0d78b38d9d2c",
+        "audience": "admin",
+        "status": "finalized",
+        "schemaVersion": 4,
+        "rowCount": 37526,
+        "progressDone": 37526,
+        "progressTotal": 37526,
+        "byteSize": 4181907,
+        "contentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "createdAt": "2026-10-14T17:00:57.322372Z",
+        "startedAt": "2026-10-14T17:01:03.231Z",
+        "finalizedAt": "2026-10-14T17:01:24.767Z",
+        "failedAt": null,
+        "errorMessage": null,
+        "dataVersion": "98a417ccbf82f01211bb69031d9bd92d"
+      },
+      "download": {
+        "fileName": "catalog-Corteco-20261014.xlsx",
+        "bytes": 4181907,
+        "sha256": "98a50b2a7ea9850b51b95f825653d584ff6c6fd7d61e638765ed34bd8444745b",
+        "encoding": "Office Open XML",
+        "headers": [
+          "Product_Code",
+          "Brand",
+          "EAN",
+          "Product_Name",
+          "Product_Name_TR",
+          "OEM_No",
+          "Vehicle",
+          "Vehicle_Model",
+          "HS_Code",
+          "Origin",
+          "Market_Segment",
+          "Weight_kg",
+          "Image_URL",
+          "Lifecycle_Status",
+          "Lifecycle_Note"
+        ],
+        "dataRows": 37526,
+        "distinctProductCodes": 37526,
+        "brands": [
+          "Corteco"
+        ],
+        "blankCodes": 0,
+        "badWidths": 0,
+        "nonemptyMarketSegments": 0,
+        "formulaEscapeCells": 0,
+        "semanticMultisetMd5": "d120b0d10f3664a3a9d59e1ce00e294b",
+        "productCodeMultisetMd5": "1b79009b1f830a410973b96d043b633f",
+        "artifactToolReadRows": 37526,
+        "sheetName": "Corteco Catalog",
+        "exactCsvSemanticParity": true
+      },
+      "source": {
+        "method": "Supabase connector SELECT-only aggregate over exact organization and brand; no source records printed or stored",
+        "aggregateQuery": "with scope as materialized (\n select cp.*,b.name brand from public.catalog_products cp join public.brands b on b.id=cp.brand_id and b.organization_id=cp.organization_id\n where cp.organization_id='1e4c5e99-e387-41aa-a6d3-cbe74558f766' and cp.brand_id='821a7c95-dd21-4ae8-b55b-fe463fa0b7ca'\n), values_for_export as (\n select array[btrim(coalesce(product_code,'')),btrim(brand),coalesce(ean,''),coalesce(description,''),coalesce(description_tr,''),coalesce(oem_no,''),coalesce(vehicle,''),coalesce(vehicle_model,''),coalesce(hs_code,''),coalesce(origin,''),coalesce(market_segment,''),coalesce(trim_scale(weight_kg)::text,''),coalesce(image_url,''),coalesce(nullif(lifecycle_status,''),'active'),coalesce(lifecycle_note,'')] as fields from scope\n), hashes as (\n select md5((select string_agg(octet_length(escaped)::text||':'||escaped,'' order by ord) from (select ord,case when ord<>12 and val ~ '^[[:space:]]*[=+@-]' then chr(39)||val else val end escaped from unnest(fields) with ordinality as f(val,ord)) e)) row_hash,md5(fields[1]) key_hash from values_for_export\n)\nselect clock_timestamp() observed_at,(select count(*) from scope) catalog_rows,(select count(distinct btrim(product_code)) from scope) distinct_product_codes,(select count(*) from scope where market_segment is not null) nonnull_market_segments,md5(string_agg(row_hash,'' order by row_hash collate \"C\")) semantic_multiset_md5,md5(string_agg(key_hash,'' order by key_hash collate \"C\")) product_code_multiset_md5,public.get_catalog_export_version('1e4c5e99-e387-41aa-a6d3-cbe74558f766','821a7c95-dd21-4ae8-b55b-fe463fa0b7ca','') current_data_version from hashes;",
+        "observedAt": "2026-10-14T17:02:29.356817Z",
+        "catalogRows": 37526,
+        "distinctProductCodes": 37526,
+        "nonnullMarketSegments": 0,
+        "currentDataVersion": "98a417ccbf82f01211bb69031d9bd92d",
+        "semanticMultisetMd5": "d120b0d10f3664a3a9d59e1ce00e294b",
+        "productCodeMultisetMd5": "1b79009b1f830a410973b96d043b633f"
+      },
+      "equality": {
+        "all15ColumnsMatch": true,
+        "completeProductCodeMultisetMatches": true,
+        "rowCountMatchesSourceAndJob": true,
+        "byteSizeMatchesJob": true,
+        "dataVersionStillMatchesJob": true,
+        "notTruncatedAt50Or1000": true,
+        "semanticMultisetMd5": "d120b0d10f3664a3a9d59e1ce00e294b",
+        "productCodeMultisetMd5": "1b79009b1f830a410973b96d043b633f",
+        "method": "For all 15 export fields, preserve exact strings and documented empty/default handling; normalize Weight_kg as a decimal without floating point; mirror CSV formula escaping. Frame each field as UTF-8 byte length + colon + value, MD5 each row, sort row hashes, then MD5 their concatenation. Compare independently computed full source and file multisets. Product code multiset compared separately. XLSX imported independently with Artifact Tool and compared to the complete CSV multiset.",
+        "exactCsvSemanticParity": true
+      },
+      "limitations": [
+        "This proves all 37526 rows and 15 fields in the selected Corteco catalog XLSX, matching its CSV and unchanged source data version; it is not A/B/customer pricing evidence.",
+        "No spreadsheet file was modified, reserialized, or re-uploaded.",
+        "Browser click provenance is root-reported; file bytes, Artifact Tool parsing, job metadata and source hashes were independently inspected."
+      ]
+    },
+    {
+      "environment": "v3-staging",
+      "projectRef": "kaxsqafdevabkxofwdod",
+      "exportType": "portal_price_list",
+      "scope": {
+        "organizationId": "b0000000-0000-4000-8000-000000000001",
+        "brandId": "0e9fa984-fbbf-45d2-9a60-e7aa633dc928",
+        "brand": "Clevite",
+        "customerId": "b0000000-0000-4000-8000-000000000003",
+        "priceListType": "A",
+        "marginPercent": 10,
+        "currency": "EUR",
+        "format": "xlsx"
+      },
+      "browserObservation": {
+        "source": "Root observed authenticated V3 portal click, Done state and native Save dialog completion",
+        "personallyObservedByThisAgent": false,
+        "build": "6c9f104c20f2dbb83bc4ee1e44d608cad65954ab",
+        "filePath": "/Users/ersen/Downloads/portal-price-list-Clevite-A-20261014.xlsx"
+      },
+      "exportJob": {
+        "id": "203f8f96-0f8f-44a7-94a8-afac2ba4c43b",
+        "status": "finalized",
+        "rowCount": 999997,
+        "progressDone": 999997,
+        "progressTotal": 999997,
+        "byteSize": 25034673,
+        "createdAt": "2026-10-14T17:01:06.809036Z",
+        "startedAt": "2026-10-14T17:01:10.925Z",
+        "finalizedAt": "2026-10-14T17:09:50.521Z",
+        "errorMessage": null,
+        "dataVersion": "d5eed6192e9b01230ce49886cc9f21710b2eecf2f9120d1fc5c7c0327d62c3d2"
+      },
+      "download": {
+        "fileName": "portal-price-list-Clevite-A-20261014.xlsx",
+        "bytes": 25034673,
+        "sha256": "7279b1cc4e5e1effe68f6bcea4c5e90f60cf514aab955b6eeffaeaf7857a7b1e",
+        "headers": [
+          "Part_No",
+          "Description",
+          "Price_EUR",
+          "Price_Date",
+          "Lifecycle"
+        ],
+        "dataRows": 999997,
+        "distinctProductCodes": 999997,
+        "duplicateCodes": 0,
+        "blankCodes": 0,
+        "formulaCells": 0,
+        "sheetNames": [
+          "Price List 1"
+        ],
+        "sheetDataRows": [
+          999997
+        ],
+        "numericPriceCells": 999997,
+        "chunks": [
+          {
+            "start": 1,
+            "end": 100000,
+            "rows": 100000,
+            "md5": "70fb8b0bcf67f45559712205b3095b81"
+          },
+          {
+            "start": 100001,
+            "end": 200000,
+            "rows": 100000,
+            "md5": "86310259af537f2e0fb6570b4652c06b"
+          },
+          {
+            "start": 200001,
+            "end": 300000,
+            "rows": 100000,
+            "md5": "dab2bbab2891af3ea937ecef1c19a0d5"
+          },
+          {
+            "start": 300001,
+            "end": 400000,
+            "rows": 100000,
+            "md5": "3e3c13aee3a4203c0ebd0c38a526f067"
+          },
+          {
+            "start": 400001,
+            "end": 500000,
+            "rows": 100000,
+            "md5": "3bc95d1f7a33385e982c64000b8e4a45"
+          },
+          {
+            "start": 500001,
+            "end": 600000,
+            "rows": 100000,
+            "md5": "35223b37302684298867364a10784150"
+          },
+          {
+            "start": 600001,
+            "end": 700000,
+            "rows": 100000,
+            "md5": "48351ce891089d729ee845214b4fb9a6"
+          },
+          {
+            "start": 700001,
+            "end": 800000,
+            "rows": 100000,
+            "md5": "689064a48cc28f179ed0b4566a3543fb"
+          },
+          {
+            "start": 800001,
+            "end": 900000,
+            "rows": 100000,
+            "md5": "65b0eedca5c8b5eef67cee562a717404"
+          },
+          {
+            "start": 900001,
+            "end": 999997,
+            "rows": 99997,
+            "md5": "65b6ca64322523bdadeba6022736d660"
+          }
+        ],
+        "reader": "Bundled Python standard-library streaming ZIP/XML; no workbook edits or floating-point pricing comparisons"
+      },
+      "source": {
+        "snapshotId": "60fc0af5-82c2-46a4-971e-0e84f3a0e55b",
+        "snapshotStatus": "sealed",
+        "snapshotRows": 999997,
+        "expectedRows": 999997,
+        "releaseId": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+        "publicationId": "99afb6f6-93ca-4256-9f10-86803f476b88",
+        "publicationStatus": "published",
+        "brandPointerCount": 1,
+        "customerPriceListType": "A",
+        "customerCustomMargin": null,
+        "activeAMargin": "10.00",
+        "chunkQueryTemplate": "with page as materialized(select ordinal,source_key,payload from export_snapshot_private.rows where snapshot_id='60fc0af5-82c2-46a4-971e-0e84f3a0e55b' and ordinal between 1 and 100000), checked as (\nselect p.*,md5((select string_agg(octet_length(v)::text||':'||v,'' order by ord) from unnest(array[coalesce(payload->>'code',''),coalesce(payload->>'description',''),trim_scale((payload->>'price')::numeric)::text,coalesce(payload->>'priceDate',''),case when payload->>'discontinued'='true' then 'Discontinued'||case when coalesce(payload->>'replacementCode','')<>'' then '; replacement: '||(payload->>'replacementCode') else '' end else 'Active' end]) with ordinality f(v,ord))) row_hash,\n(select min(r.buy_price) from public.supplier_price_release_rows r where r.release_id='e9517ad0-3e11-4f52-a73f-71875a5b2d4a' and r.normalized_code=p.source_key and r.row_status='accepted' and r.buy_price>0 and r.currency='EUR' and r.valid_from<=current_date) buy_price\nfrom page p)\nselect count(*) row_count,md5(string_agg(row_hash,'' order by ordinal)) chunk_md5,count(*) filter(where payload->>'brand' is distinct from 'Clevite' or payload->>'currency' is distinct from 'EUR') scope_mismatches,count(*) filter(where buy_price is null) missing_prices,count(*) filter(where (payload->>'price')::numeric is distinct from round(buy_price*1.10,2)) price_mismatches from checked;",
+        "chunkReceipts": [
+          {
+            "start": 1,
+            "end": 100000,
+            "row_count": 100000,
+            "chunk_md5": "70fb8b0bcf67f45559712205b3095b81",
+            "scope_mismatches": 0,
+            "missing_prices": 0,
+            "price_mismatches": 0
+          },
+          {
+            "start": 100001,
+            "end": 200000,
+            "row_count": 100000,
+            "chunk_md5": "86310259af537f2e0fb6570b4652c06b",
+            "scope_mismatches": 0,
+            "missing_prices": 0,
+            "price_mismatches": 0
+          },
+          {
+            "start": 200001,
+            "end": 300000,
+            "row_count": 100000,
+            "chunk_md5": "dab2bbab2891af3ea937ecef1c19a0d5",
+            "scope_mismatches": 0,
+            "missing_prices": 0,
+            "price_mismatches": 0
+          },
+          {
+            "start": 300001,
+            "end": 400000,
+            "row_count": 100000,
+            "chunk_md5": "3e3c13aee3a4203c0ebd0c38a526f067",
+            "scope_mismatches": 0,
+            "missing_prices": 0,
+            "price_mismatches": 0
+          },
+          {
+            "start": 400001,
+            "end": 500000,
+            "row_count": 100000,
+            "chunk_md5": "3bc95d1f7a33385e982c64000b8e4a45",
+            "scope_mismatches": 0,
+            "missing_prices": 0,
+            "price_mismatches": 0
+          },
+          {
+            "start": 500001,
+            "end": 600000,
+            "row_count": 100000,
+            "chunk_md5": "35223b37302684298867364a10784150",
+            "scope_mismatches": 0,
+            "missing_prices": 0,
+            "price_mismatches": 0
+          },
+          {
+            "start": 600001,
+            "end": 700000,
+            "row_count": 100000,
+            "chunk_md5": "48351ce891089d729ee845214b4fb9a6",
+            "scope_mismatches": 0,
+            "missing_prices": 0,
+            "price_mismatches": 0
+          },
+          {
+            "start": 700001,
+            "end": 800000,
+            "row_count": 100000,
+            "chunk_md5": "689064a48cc28f179ed0b4566a3543fb",
+            "scope_mismatches": 0,
+            "missing_prices": 0,
+            "price_mismatches": 0
+          },
+          {
+            "start": 800001,
+            "end": 900000,
+            "row_count": 100000,
+            "chunk_md5": "65b0eedca5c8b5eef67cee562a717404",
+            "scope_mismatches": 0,
+            "missing_prices": 0,
+            "price_mismatches": 0
+          },
+          {
+            "start": 900001,
+            "end": 999997,
+            "row_count": 99997,
+            "chunk_md5": "65b6ca64322523bdadeba6022736d660",
+            "scope_mismatches": 0,
+            "missing_prices": 0,
+            "price_mismatches": 0
+          }
+        ]
+      },
+      "equality": {
+        "all999997RowsAndFiveExportColumnsMatchSnapshot": true,
+        "allRowsMatchCurrentPublishedMinimumBuyPricePlus10Percent": true,
+        "arithmetic": "PostgreSQL exact numeric round(buy_price*1.10,2), compared for every snapshot source key; independently normalized XLSX decimals without floating point",
+        "allPayloadBrandAndCurrencyMatch": true,
+        "noDuplicateOrBlankCodes": true,
+        "rowCountAndBytesMatchFinalizedJob": true,
+        "notTruncatedAt50Or1000": true,
+        "method": "Read XLSX ZIP/XML one row at a time with bundled Python. Frame each of five fields by UTF-8 byte length and value; compare ordered row MD5 digests in ten bounded chunks against the sealed immutable snapshot. No full workbook loaded or modified."
+      },
+      "limitations": [
+        "This proves the V3 published Clevite A customer export and effective10% account pricing, not production customer export or a custom-margin account.",
+        "Browser Save provenance is root-reported; file, complete snapshot fields, every source price, customer pricing context and job metadata were independently verified."
+      ]
+    },
+    {
+      "environment": "production",
+      "projectRef": "zjgueqijumzlfioihnkt",
+      "exportType": "catalog_master",
+      "scope": {
+        "organizationId": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+        "brandId": "821a7c95-dd21-4ae8-b55b-fe463fa0b7ca",
+        "brand": "Corteco",
+        "scope": "priced",
+        "search": "",
+        "marginA": 0.1,
+        "marginB": 0.15,
+        "format": "xlsx"
+      },
+      "browserObservation": {
+        "source": "Root authenticated production comparison export and native Save dialog completion",
+        "personallyObservedByThisAgent": false,
+        "filePath": "/Users/ersen/Downloads/master-Corteco-priced-20261014.xlsx"
+      },
+      "exportJob": {
+        "id": "123d7cf1-7d0a-4fbb-943a-aaf55fbad972",
+        "status": "finalized",
+        "rowCount": 30328,
+        "progressDone": 30328,
+        "progressTotal": 30328,
+        "byteSize": 3074659,
+        "createdAt": "2026-10-14T17:07:58.402358Z",
+        "startedAt": "2026-10-14T17:08:01.444Z",
+        "finalizedAt": "2026-10-14T17:08:16.303Z",
+        "failedAt": null,
+        "errorMessage": null,
+        "dataVersion": "8ce45a6459c4b74608e5192214ebe010"
+      },
+      "download": {
+        "fileName": "master-Corteco-priced-20261014.xlsx",
+        "bytes": 3074659,
+        "sha256": "ff40b257a3395f55de43ccb10179657639f7527657f2c403eaaf75f292e3e8ca",
+        "headers": [
+          "Product_Code",
+          "Brand",
+          "Product_Name",
+          "OEM_No",
+          "HS_Code",
+          "Origin",
+          "Weight_kg",
+          "Cheapest_Supplier",
+          "Cheapest_EUR",
+          "Second_Supplier",
+          "Second_EUR",
+          "Price_Gap_EUR",
+          "Price_Gap_Percent",
+          "Price_Date",
+          "A_Sales_EUR",
+          "B_Sales_EUR",
+          "Supplier_Count",
+          "Catalog_Status",
+          "Notes"
+        ],
+        "dataRows": 30328,
+        "distinctProductCodes": 30328,
+        "duplicateCodes": 0,
+        "blankCodes": 0,
+        "formulaCells": 0,
+        "sheetNames": [
+          "Corteco Master"
+        ],
+        "sheetDataRows": [
+          30328
+        ],
+        "numericPriceCells": 60656,
+        "chunks": [
+          {
+            "start": 1,
+            "end": 30328,
+            "rows": 30328,
+            "md5": "f247db8ffae5ef1cbdab80f41ccbb40d"
+          }
+        ],
+        "reader": "Bundled Python standard-library streaming ZIP/XML; no workbook edits or floating-point pricing comparisons",
+        "brands": [
+          "Corteco"
+        ],
+        "suppliers": [
+          "GO",
+          "GroupAuto"
+        ],
+        "supplierCountNotTwo": 0,
+        "a10B15ArithmeticMismatchRows": 0,
+        "semanticMultisetMd5": "8f020254c0016610ba48cc2578e40033",
+        "productCodeMultisetMd5": "942b700f921ab7a724db19e8c29146c3"
+      },
+      "source": {
+        "observedAt": "2026-10-14T17:16:26.268495Z",
+        "sourceRows": 30328,
+        "semanticMultisetMd5": "8f020254c0016610ba48cc2578e40033",
+        "productCodeMultisetMd5": "942b700f921ab7a724db19e8c29146c3",
+        "sourceSupplierPriceMismatches": 0,
+        "supplierCountMismatches": 0,
+        "currentDataVersion": "8ce45a6459c4b74608e5192214ebe010",
+        "aggregateQuery": "with scope as materialized (\n select spr.*,cp.id product_id,coalesce(nullif(spr.product_code,''),cp.product_code,spr.normalized_code) code,\n coalesce(nullif(cp.description,''),spr.description,'') product_description,coalesce(nullif(cp.oem_no,''),spr.oem_no,'') oem,\n cp.hs_code,cp.origin,cp.weight_kg,s.name cheapest_name,coalesce(nullif(spr.second_supplier_name,''),s2.name) second_name\n from public.supplier_price_rollups spr\n left join lateral (select c.* from public.catalog_products c where c.organization_id=spr.organization_id and c.brand_id=spr.brand_id and c.normalized_code=spr.normalized_code order by c.product_code,c.id limit 1) cp on true\n left join public.suppliers s on s.id=spr.cheapest_supplier_id and s.organization_id=spr.organization_id\n left join public.suppliers s2 on s2.id=spr.second_supplier_id and s2.organization_id=spr.organization_id\n where spr.organization_id='1e4c5e99-e387-41aa-a6d3-cbe74558f766' and spr.brand_id='821a7c95-dd21-4ae8-b55b-fe463fa0b7ca' and spr.cheapest_price is not null\n), fields as (\n select *,array[btrim(code),'Corteco',product_description,oem,coalesce(hs_code,''),coalesce(origin,''),coalesce(trim_scale(weight_kg)::text,''),coalesce(cheapest_name,''),trim_scale(cheapest_price)::text,coalesce(second_name,''),coalesce(trim_scale(second_price)::text,''),coalesce(trim_scale(second_price-cheapest_price)::text,''),coalesce(trim_scale(round((second_price-cheapest_price)*100/nullif(cheapest_price,0),2))::text,''),coalesce(price_date::text,''),trim_scale(round(cheapest_price*1.10,2))::text,trim_scale(round(cheapest_price*1.15,2))::text,supplier_count::text,case when product_id is null then 'Supplier Only' else 'In Catalog' end,coalesce(notes,'')] vals from scope\n), checked as (\n select *,md5((select string_agg(octet_length(v)::text||':'||v,'' order by ord) from unnest(vals) with ordinality f(v,ord))) row_hash,\n (select count(distinct sp.supplier_id) from public.supplier_prices sp where sp.organization_id=f.organization_id and sp.brand_id=f.brand_id and sp.normalized_code=f.normalized_code and sp.is_active and sp.currency='EUR' and sp.valid_from<=current_date and (sp.valid_to is null or sp.valid_to>=current_date) and ((sp.supplier_id=f.cheapest_supplier_id and sp.buy_price=f.cheapest_price) or (sp.supplier_id=f.second_supplier_id and sp.buy_price=f.second_price))) matched_suppliers\n from fields f)\n select clock_timestamp() observed_at,count(*) source_rows,md5(string_agg(row_hash,'' order by row_hash collate \"C\")) semantic_multiset_md5,md5(string_agg(md5(btrim(code)),'' order by md5(btrim(code)) collate \"C\")) product_code_multiset_md5,count(*) filter(where matched_suppliers<>2) source_supplier_price_mismatches,count(*) filter(where supplier_count<>2) supplier_count_mismatches,public.get_catalog_master_export_version('1e4c5e99-e387-41aa-a6d3-cbe74558f766','821a7c95-dd21-4ae8-b55b-fe463fa0b7ca','priced') current_data_version from checked;"
+      },
+      "equality": {
+        "all19FieldsMatchLiveSource": true,
+        "all30328ProductCodesMatch": true,
+        "everyRowHasTwoSuppliers": true,
+        "eachOfTwoSelectedSupplierPricesMatchesActiveEligibleOriginal": true,
+        "a10PercentB15PercentArithmeticMismatchRows": 0,
+        "rowCountAndBytesMatchJob": true,
+        "dataVersionStillMatchesJob": true,
+        "notTruncatedAt50Or1000": true,
+        "method": "Complete UTF-8 length-framed field multiset digest comparison, with exact numeric decimal normalization. Independently compare every exported A/B value against cheapest price at10%/15%, and every selected source supplier price against an active eligible supplier-price row."
+      },
+      "limitations": [
+        "This verifies the complete production Corteco comparison export; it does not prove corrected mixed published/legacy Master-source behavior.",
+        "The UI total50 display issue is distinct from this complete30328-row file and has separate source review."
+      ]
+    }
+  ],
+  "pending": [
+    "Staging Euroricambi A legacy-fallback UI download",
+    "Production admin A price-list download after legacy compatibility fix",
+    "Production admin B price-list download after legacy compatibility fix",
+    "Production customer portal price-list download and effective account pricing"
+  ]
+}
