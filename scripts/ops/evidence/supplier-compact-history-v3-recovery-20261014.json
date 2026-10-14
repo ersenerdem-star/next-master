@@ -1,0 +1,295 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "actual-v3-staging-supplier-1m-compact-workflow-fork-recovery",
+  "capturedAt": "2026-10-14T15:22:59.164Z",
+  "target": {
+    "environment": "v3-staging",
+    "supabaseProjectRef": "kaxsqafdevabkxofwdod",
+    "site": "https://next-master-v3-staging-20261006.netlify.app/",
+    "productionEvidence": false
+  },
+  "worker": {
+    "commit": "d976687e392528468c8ae19af417bf0ad839bfc2",
+    "deploymentId": "dep-db7pknuk1f9s738jfp5g",
+    "applicationVersion": "0.9.0-compact-history",
+    "sdkVersion": "5.2.11",
+    "queue": "supplier-price-verified-shadow",
+    "batchSize": 1000,
+    "provenance": "Root-confirmed deployed staging worker; deployment was not changed by this evidence task."
+  },
+  "source": {
+    "basename": "supplier-Sood-Clevite-20261014.csv",
+    "brand": "Clevite",
+    "supplier": "Sood",
+    "rows": 999997,
+    "bytes": 48752699,
+    "sha256": "f63f5e17d84ebff66f2c0d1465e5684e8c4bce7e4694379c1f304d0ac33b440d"
+  },
+  "recovery": {
+    "mode": "supported-DBOSClient-forkWorkflow",
+    "failedFunctionId": 4716,
+    "failedFunctionName": "compact-heartbeat-v5",
+    "errorName": "TimeoutError",
+    "lastSuccessfulFunctionId": 4715,
+    "lastSuccessfulFunctionName": "compact-scan-stage-v5",
+    "preRecoverySql": {
+      "currentCursor": 785000,
+      "persistedRows": 786000,
+      "batchLeaseExpired": true,
+      "provenance": "Root-confirmed pre-fork scoped SQL snapshot; final snapshot is independently refreshed below."
+    },
+    "forkStartStepExclusiveCopyBoundary": 4716,
+    "originalRetained": true,
+    "noResumeRewindOrDelete": true,
+    "operatorEvidence": {
+      "inspect": {
+        "basename": "next-master-v5-fork-inspect-20261014.json",
+        "sha256": "e62b3d2554a166b17f85f151f9fdaeb6791104206be47449cf9c1c8bf016e7b5",
+        "value": {
+          "mode": "inspect",
+          "originalWorkflowID": "supplier-price-verified:v1:e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+          "forkWorkflowID": "supplier-price-verified:v1:e9517ad0-3e11-4f52-a73f-71875a5b2d4a:recovery:20261014-heartbeat-4716",
+          "failedFunctionId": 4716,
+          "successfulCheckpointCount": 4716,
+          "successfulPrefixSha256": "4334cfd6c87c61cd887693042df158c1ecece61f32ae03a5e4a5e3c6a6d11381",
+          "originalPayloadSha256": "d1e6f810c11603d2c736dd04cd78d42f4a653cdecb6c1d5ea6d674e02e099b8d",
+          "sourceSha256": "f63f5e17d84ebff66f2c0d1465e5684e8c4bce7e4694379c1f304d0ac33b440d",
+          "stagedCursor": 786000,
+          "originalStatus": "ERROR",
+          "published": false,
+          "result": "ready_for_review",
+          "forkCalled": false,
+          "sqlPrecondition": "Fresh independent Supabase cursor785000/persisted786000/expired lease/no other recovery confirmation required"
+        }
+      },
+      "result": {
+        "basename": "next-master-v5-fork-result-20261014.json",
+        "sha256": "a3ec8f9cb760faaa2a6adace07b5e755969d90b921d9a6eefc7585ac1f6a47c8",
+        "value": {
+          "mode": "fork",
+          "originalWorkflowID": "supplier-price-verified:v1:e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+          "forkWorkflowID": "supplier-price-verified:v1:e9517ad0-3e11-4f52-a73f-71875a5b2d4a:recovery:20261014-heartbeat-4716",
+          "failedFunctionId": 4716,
+          "successfulCheckpointCount": 4716,
+          "successfulPrefixSha256": "4334cfd6c87c61cd887693042df158c1ecece61f32ae03a5e4a5e3c6a6d11381",
+          "originalPayloadSha256": "d1e6f810c11603d2c736dd04cd78d42f4a653cdecb6c1d5ea6d674e02e099b8d",
+          "sourceSha256": "f63f5e17d84ebff66f2c0d1465e5684e8c4bce7e4694379c1f304d0ac33b440d",
+          "stagedCursor": 786000,
+          "originalStatus": "ERROR",
+          "published": false,
+          "result": "fork_created_verified",
+          "forkStatus": "ENQUEUED",
+          "forkCalled": true,
+          "originalHistoryPreserved": true
+        }
+      },
+      "final": {
+        "basename": "next-master-v5-fork-final-20261014.json",
+        "sha256": "1c2d5ceb3c2453c26b1af0b0879583addf01d409b49a3cae1cd58bf4d37ff768",
+        "value": {
+          "mode": "inspect",
+          "originalWorkflowID": "supplier-price-verified:v1:e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+          "forkWorkflowID": "supplier-price-verified:v1:e9517ad0-3e11-4f52-a73f-71875a5b2d4a:recovery:20261014-heartbeat-4716",
+          "failedFunctionId": 4716,
+          "successfulCheckpointCount": 4716,
+          "successfulPrefixSha256": "4334cfd6c87c61cd887693042df158c1ecece61f32ae03a5e4a5e3c6a6d11381",
+          "originalPayloadSha256": "d1e6f810c11603d2c736dd04cd78d42f4a653cdecb6c1d5ea6d674e02e099b8d",
+          "sourceSha256": "f63f5e17d84ebff66f2c0d1465e5684e8c4bce7e4694379c1f304d0ac33b440d",
+          "stagedCursor": 786000,
+          "originalStatus": "ERROR",
+          "published": false,
+          "result": "existing_fork_verified",
+          "forkStatus": "SUCCESS",
+          "forkCalled": false
+        }
+      }
+    }
+  },
+  "sqlSnapshot": {
+    "rows": {
+      "warning_rows": 0,
+      "accepted_rows": 999997,
+      "conflict_rows": 0,
+      "rejected_rows": 0,
+      "persisted_rows": 999997,
+      "last_source_row": 999997,
+      "first_source_row": 1,
+      "distinct_source_rows": 999997
+    },
+    "upload": {
+      "id": "0481b291-ed2f-45da-a830-b92f46fb0567",
+      "status": "uploaded",
+      "total_bytes": 48752699,
+      "completed_at": "2026-10-14T13:55:25.003402+00:00",
+      "uploaded_bytes": 48752699,
+      "checksum_sha256": "f63f5e17d84ebff66f2c0d1465e5684e8c4bce7e4694379c1f304d0ac33b440d"
+    },
+    "batches": {
+      "batch_rows": 999997,
+      "last_cursor": 999997,
+      "first_cursor": 1,
+      "active_leases": 0,
+      "total_batches": 1000,
+      "retried_batches": 1,
+      "completed_batches": 1000,
+      "incomplete_batches": 0,
+      "retried_batch_details": [
+        {
+          "status": "completed",
+          "attempt": 2,
+          "row_count": 1000,
+          "cursor_end": 786000,
+          "batch_number": 786,
+          "completed_at": "2026-10-14T15:12:26.310603+00:00",
+          "cursor_start": 785001
+        }
+      ]
+    },
+    "handoff": {
+      "id": "4537355e-d007-4298-889b-5687d066ba60",
+      "status": "enqueued",
+      "total_rows": 999997,
+      "enqueued_at": "2026-10-14T13:55:25.351969+00:00",
+      "workflow_id": "supplier-price-verified:v1:e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+      "source_bytes": 48752699,
+      "source_sha256": "f63f5e17d84ebff66f2c0d1465e5684e8c4bce7e4694379c1f304d0ac33b440d"
+    },
+    "release": {
+      "id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+      "status": "validated",
+      "brand_id": "0e9fa984-fbbf-45d2-9a60-e7aa633dc928",
+      "created_at": "2026-10-14T13:53:17.667446+00:00",
+      "error_code": "BRAND_IDENTITY_COMPARISON_PENDING",
+      "total_rows": 999997,
+      "updated_at": "2026-10-14T15:16:21.571657+00:00",
+      "supplier_id": "786cbe53-6086-4782-a81f-7da95c6a1236",
+      "uploaded_at": "2026-10-14T13:55:25.003647+00:00",
+      "published_at": null,
+      "validated_at": "2026-10-14T15:16:21.571657+00:00",
+      "warning_rows": 0,
+      "accepted_rows": 999997,
+      "conflict_rows": 0,
+      "rejected_rows": 0,
+      "source_sha256": "f63f5e17d84ebff66f2c0d1465e5684e8c4bce7e4694379c1f304d0ac33b440d",
+      "current_cursor": 999997,
+      "processed_rows": 999997,
+      "organization_id": "b0000000-0000-4000-8000-000000000001",
+      "brand_review_required": null,
+      "source_verification_required": true
+    },
+    "captured_at": "2026-10-14T15:22:21.08236+00:00",
+    "current_pointer": {
+      "brand_id": "0e9fa984-fbbf-45d2-9a60-e7aa633dc928",
+      "release_id": "fed8b4fe-402e-40c5-967c-df587c91acdd",
+      "updated_at": "2026-10-12T22:13:30.27536+00:00",
+      "supplier_id": "786cbe53-6086-4782-a81f-7da95c6a1236",
+      "publication_id": "5f255b1f-63b0-49d8-8b2b-314bfab1a77b",
+      "organization_id": "b0000000-0000-4000-8000-000000000001"
+    },
+    "release_publication_count": 0
+  },
+  "checks": {
+    "allSourceRowsPersistedExactlyOnce": true,
+    "allBatchesCompleted": true,
+    "onlyExpiredBatch786Retried": true,
+    "operationalInterruptionCleared": true,
+    "originalErrorAndHistoryRetained": true,
+    "recoveryWorkflowSuccessful": true,
+    "newReleaseNotPublished": true
+  },
+  "publication": {
+    "status": "not-published",
+    "blocker": "BRAND_IDENTITY_COMPARISON_PENDING",
+    "currentPointerUnchanged": true,
+    "pointerBaselineEvidence": "scripts/ops/evidence/supplier-verified-upload-staging-20261014.json#pointer_before",
+    "expectedPointer": {
+      "organization_id": "b0000000-0000-4000-8000-000000000001",
+      "supplier_id": "786cbe53-6086-4782-a81f-7da95c6a1236",
+      "brand_id": "0e9fa984-fbbf-45d2-9a60-e7aa633dc928",
+      "publication_id": "5f255b1f-63b0-49d8-8b2b-314bfab1a77b",
+      "release_id": "fed8b4fe-402e-40c5-967c-df587c91acdd",
+      "updated_at": "2026-10-12T22:13:30.27536+00:00"
+    }
+  },
+  "preparedSourcePerformance": {
+    "originalRunUsedSerialPreparation": true,
+    "originalSerialPreparationApproxMinutes": 18,
+    "actualFourConcurrentUploadBenchmarkPerformed": false,
+    "reason": "The real run prepared 1000 immutable parts serially before the bounded-four-upload change. Recovery reused existing prepared objects. Local latency simulation is not a real Storage throughput result.",
+    "reference": "docs/runtime/platform/OPERATIONS_ENGINE_ASSESSMENT.md"
+  },
+  "dbosHistoryBytes": {
+    "measurementStatus": "actual-serialized-step-outputs-captured",
+    "actualSuccessfulOutputBytesOriginal": 1310926,
+    "actualSuccessfulOutputBytesFork": 1669837,
+    "retainedOriginalAndForkSuccessfulOutputBytes": 2980763,
+    "actualSerializedErrorBytesOriginal": 182,
+    "maxSuccessfulOutputBytes": 464,
+    "successfulOutputsOver4096": 0,
+    "actualPhysicalBytes": null,
+    "scope": "Raw serialized DBOS operation_outputs payload bytes only. The successful fork contains copies of pre-failure outputs; both original and fork histories remain retained. PostgreSQL table/index/TOAST storage, WAL and memory were not measured.",
+    "operatorEvidence": {
+      "basename": "next-master-v5-history-measurement-20261014.json",
+      "sha256": "b9757381f80829897ee9a42a61443c5d589d94dee0d08c0f707cee4080640a83",
+      "observedAt": "2026-10-14T15:22:59.164Z",
+      "rows": [
+        {
+          "workflow_uuid": "supplier-price-verified:v1:e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+          "checkpoints": 4717,
+          "error_checkpoints": 1,
+          "successful_output_bytes": "1310926",
+          "max_successful_output_bytes": 464,
+          "successful_outputs_over_4096": 0,
+          "serialized_error_bytes": "182"
+        },
+        {
+          "workflow_uuid": "supplier-price-verified:v1:e9517ad0-3e11-4f52-a73f-71875a5b2d4a:recovery:20261014-heartbeat-4716",
+          "checkpoints": 6008,
+          "error_checkpoints": 0,
+          "successful_output_bytes": "1669837",
+          "max_successful_output_bytes": 464,
+          "successful_outputs_over_4096": 0,
+          "serialized_error_bytes": null
+        }
+      ]
+    },
+    "localSerializationEvidence": "scripts/ops/evidence/supplier-compact-history-local-20261014.json",
+    "localMeasurementIsNotActualDatabaseBytes": true
+  },
+  "localRuntimeProof": {
+    "test": "scripts/tests/supplier-compact-dbos-fork-runtime.test.mjs",
+    "command": "RUN_SUPPLIER_COMPACT_DBOS_FORK_RUNTIME=1 node --test scripts/tests/supplier-compact-dbos-fork-runtime.test.mjs",
+    "executedDate": "2026-10-14",
+    "result": "passed",
+    "sdkVersion": "5.2.11",
+    "postgresMajor": 17,
+    "cpuLimit": 0.5,
+    "memoryMiB": 1024,
+    "fixtureRows": 6,
+    "rowInsertions": [
+      2,
+      2,
+      0,
+      2
+    ],
+    "originalStatus": "ERROR",
+    "forkStatus": "SUCCESS",
+    "expiredLeaseReclaimed": true,
+    "duplicatedRows": 0,
+    "published": false,
+    "warning": "pg8 emitted a deprecation warning about query invocation while a client query was executing; test completed successfully.",
+    "scope": "Real SDK/PG fork with modeled SQL lease and stage receipts; separate from actual V3 SQL acceptance above."
+  },
+  "reproduce": {
+    "sqlProjectRef": "kaxsqafdevabkxofwdod",
+    "readOnlySql": "WITH target AS (\n  SELECT * FROM public.supplier_price_releases\n  WHERE id='e9517ad0-3e11-4f52-a73f-71875a5b2d4a'::uuid\n), batch_summary AS (\n  SELECT count(*) AS total_batches,\n    count(*) FILTER (WHERE b.status='completed') AS completed_batches,\n    count(*) FILTER (WHERE b.status<>'completed') AS incomplete_batches,\n    count(*) FILTER (WHERE b.status IN ('queued','running','retrying') AND b.lease_expires_at>clock_timestamp()) AS active_leases,\n    count(*) FILTER (WHERE b.attempt>1) AS retried_batches,\n    coalesce(jsonb_agg(jsonb_build_object('batch_number',b.batch_number,'attempt',b.attempt,'status',b.status,\n      'cursor_start',b.cursor_start,'cursor_end',b.cursor_end,'row_count',b.row_count,\n      'completed_at',b.completed_at)) FILTER (WHERE b.attempt>1),'[]'::jsonb) AS retried_batch_details,\n    min(b.cursor_start) AS first_cursor,max(b.cursor_end) AS last_cursor,\n    sum(b.row_count) AS batch_rows\n  FROM public.supplier_price_release_batches b JOIN target r ON r.id=b.release_id\n), row_summary AS (\n  SELECT count(*) AS persisted_rows,count(DISTINCT x.source_row_number) AS distinct_source_rows,\n    min(x.source_row_number) AS first_source_row,max(x.source_row_number) AS last_source_row,\n    count(*) FILTER (WHERE x.row_status='accepted') AS accepted_rows,\n    count(*) FILTER (WHERE x.row_status='rejected') AS rejected_rows,\n    count(*) FILTER (WHERE x.row_status='conflict') AS conflict_rows,\n    count(*) FILTER (WHERE x.row_status='warning') AS warning_rows\n  FROM public.supplier_price_release_rows x JOIN target r ON r.id=x.release_id\n)\nSELECT jsonb_build_object(\n  'captured_at',clock_timestamp(),\n  'release',(SELECT jsonb_build_object('id',r.id,'organization_id',r.organization_id,'supplier_id',r.supplier_id,\n    'brand_id',r.brand_id,'status',r.status,'total_rows',r.total_rows,'processed_rows',r.processed_rows,\n    'current_cursor',r.current_cursor,'accepted_rows',r.accepted_rows,'rejected_rows',r.rejected_rows,\n    'warning_rows',r.warning_rows,'conflict_rows',r.conflict_rows,'error_code',r.error_code,\n    'source_sha256',r.source_file_sha256,'source_verification_required',r.source_verification_required,\n    'created_at',r.created_at,'uploaded_at',r.uploaded_at,'validated_at',r.validated_at,'published_at',r.published_at,\n    'updated_at',r.updated_at,'brand_review_required',r.brand_identity_audit->'review_required') FROM target r),\n  'upload',(SELECT jsonb_build_object('id',u.id,'status',u.status,'total_bytes',u.total_bytes,\n    'uploaded_bytes',u.uploaded_bytes,'checksum_sha256',u.checksum_sha256,'completed_at',u.completed_at)\n    FROM public.supplier_price_upload_sessions u JOIN target r ON r.id=u.release_id\n    WHERE u.id='0481b291-ed2f-45da-a830-b92f46fb0567'::uuid),\n  'handoff',(SELECT jsonb_build_object('id',h.id,'status',h.status,'workflow_id',h.workflow_id,\n    'source_sha256',h.source_sha256,'source_bytes',h.source_bytes,'total_rows',h.total_rows,'enqueued_at',h.enqueued_at)\n    FROM supplier_price_ingestion_internal.handoffs h JOIN target r ON r.id=h.release_id\n    WHERE h.id='4537355e-d007-4298-889b-5687d066ba60'::uuid),\n  'batches',(SELECT to_jsonb(b) FROM batch_summary b),\n  'rows',(SELECT to_jsonb(x) FROM row_summary x),\n  'current_pointer',(SELECT to_jsonb(p) FROM public.supplier_current_price_pointers p JOIN target r\n    ON p.organization_id=r.organization_id AND p.supplier_id=r.supplier_id AND p.brand_id=r.brand_id),\n  'release_publication_count',(SELECT count(*) FROM public.supplier_price_publications p JOIN target r ON p.release_id=r.id)\n) AS evidence;",
+    "dbosInspection": "Guarded operator inspection of the exact original and deterministic fork; operator outputs and hashes are embedded above."
+  },
+  "limits": [
+    "Staging evidence only; no production behavior or production migration acceptance is inferred.",
+    "The completed recovery does not authorize publication; brand identity comparison remains pending.",
+    "No new actual 1M test of four concurrent prepared-part uploads was performed.",
+    "Actual DBOS serialized outputs were measured; PostgreSQL table/index/TOAST storage, WAL and memory were not measured.",
+    "This evidence task performed one scoped read-only Supabase query and local tests; it did not mutate remote databases, deploy, or publish."
+  ]
+}
