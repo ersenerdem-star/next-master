@@ -202,14 +202,14 @@ begin
 
   if not v_has_more then
     select count(*)::integer,
-           count(*) filter (where proposed_action = 'insert')::integer,
-           count(*) filter (where proposed_action = 'update')::integer,
-           count(*) filter (where proposed_action = 'skip')::integer,
-           count(*) filter (where validation_status = 'error')::integer,
-           count(*) filter (where coalesce((conflict_summary->>'duplicate_in_run')::boolean, false))::integer
+           count(*) filter (where s.proposed_action = 'insert')::integer,
+           count(*) filter (where s.proposed_action = 'update')::integer,
+           count(*) filter (where s.proposed_action = 'skip')::integer,
+           count(*) filter (where s.validation_status = 'error')::integer,
+           count(*) filter (where coalesce((s.conflict_summary->>'duplicate_in_run')::boolean, false))::integer
     into v_total, v_insert, v_update, v_skip, v_error, v_duplicate
-    from public.catalog_import_stage
-    where run_id = v_run.id and organization_id = input_organization_id;
+    from public.catalog_import_stage s
+    where s.run_id = v_run.id and s.organization_id = input_organization_id;
 
     update public.catalog_import_runs
     set status = case when v_total = 0 or v_error > 0 then 'validation_failed' else 'validated' end,
