@@ -1,0 +1,531 @@
+{
+  "schema_version": 1,
+  "project_ref": "kaxsqafdevabkxofwdod",
+  "environment": "V3 staging",
+  "observer_scope": "Read-only SQL observation; user-visible review/publication actions performed by root in staging UI. No production access.",
+  "before_state": {
+    "clevite": [
+      {
+        "id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+        "status": "validated",
+        "brand_id": "0e9fa984-fbbf-45d2-9a60-e7aa633dc928",
+        "error_code": null,
+        "total_rows": 999997,
+        "updated_at": "2026-10-14T16:10:14.808844+00:00",
+        "supplier_id": "786cbe53-6086-4782-a81f-7da95c6a1236",
+        "accepted_rows": 999997,
+        "source_sha256": "f63f5e17d84ebff66f2c0d1465e5684e8c4bce7e4694379c1f304d0ac33b440d",
+        "current_cursor": 999997,
+        "processed_rows": 999997,
+        "review_revision": 1,
+        "source_verified": true,
+        "current_release_id": "fed8b4fe-402e-40c5-967c-df587c91acdd",
+        "current_publication_id": "5f255b1f-63b0-49d8-8b2b-314bfab1a77b"
+      },
+      {
+        "id": "fed8b4fe-402e-40c5-967c-df587c91acdd",
+        "status": "published",
+        "brand_id": "0e9fa984-fbbf-45d2-9a60-e7aa633dc928",
+        "error_code": null,
+        "total_rows": 999998,
+        "updated_at": "2026-10-12T22:13:30.27536+00:00",
+        "supplier_id": "786cbe53-6086-4782-a81f-7da95c6a1236",
+        "accepted_rows": 999998,
+        "source_sha256": "9b6fcb454653e8f30a562c4532bb61f6493510650c59549086826431131f5353",
+        "current_cursor": 999998,
+        "processed_rows": 999998,
+        "review_revision": 0,
+        "source_verified": true,
+        "current_release_id": "fed8b4fe-402e-40c5-967c-df587c91acdd",
+        "current_publication_id": "5f255b1f-63b0-49d8-8b2b-314bfab1a77b"
+      }
+    ],
+    "captured_at": "2026-10-14T16:48:12.50219+00:00",
+    "row_columns": [
+      {
+        "name": "id",
+        "type": "bigint"
+      },
+      {
+        "name": "release_id",
+        "type": "uuid"
+      },
+      {
+        "name": "source_row_number",
+        "type": "bigint"
+      },
+      {
+        "name": "normalized_code",
+        "type": "text"
+      },
+      {
+        "name": "product_code",
+        "type": "text"
+      },
+      {
+        "name": "description",
+        "type": "text"
+      },
+      {
+        "name": "oem_no",
+        "type": "text"
+      },
+      {
+        "name": "ean",
+        "type": "text"
+      },
+      {
+        "name": "vehicle",
+        "type": "text"
+      },
+      {
+        "name": "vehicle_model",
+        "type": "text"
+      },
+      {
+        "name": "market_segment",
+        "type": "text"
+      },
+      {
+        "name": "dimensions",
+        "type": "text"
+      },
+      {
+        "name": "weight",
+        "type": "numeric"
+      },
+      {
+        "name": "description_tr",
+        "type": "text"
+      },
+      {
+        "name": "origin",
+        "type": "text"
+      },
+      {
+        "name": "tariff",
+        "type": "text"
+      },
+      {
+        "name": "image_url",
+        "type": "text"
+      },
+      {
+        "name": "buy_price",
+        "type": "numeric"
+      },
+      {
+        "name": "currency",
+        "type": "text"
+      },
+      {
+        "name": "moq",
+        "type": "integer"
+      },
+      {
+        "name": "lead_time_days",
+        "type": "integer"
+      },
+      {
+        "name": "notes",
+        "type": "text"
+      },
+      {
+        "name": "valid_from",
+        "type": "date"
+      },
+      {
+        "name": "row_hash",
+        "type": "text"
+      },
+      {
+        "name": "row_status",
+        "type": "text"
+      },
+      {
+        "name": "error_code",
+        "type": "text"
+      },
+      {
+        "name": "error_message",
+        "type": "text"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone"
+      }
+    ],
+    "clevite_actions": [],
+    "recheck_candidates": [
+      {
+        "brand": "Corteco",
+        "status": "validated",
+        "checked": true,
+        "supplier": "Sood",
+        "uploaded": true,
+        "error_code": "VALIDATION_REVIEW_REQUIRED",
+        "is_current": false,
+        "release_id": "701466da-b4b1-489b-9e9b-68e1c680beee",
+        "total_rows": 30516,
+        "accepted_rows": 30141,
+        "conflict_rows": 375,
+        "rejected_rows": 0,
+        "review_required": false,
+        "review_revision": 0,
+        "source_verified": true,
+        "source_verification_required": true
+      },
+      {
+        "brand": "Corteco",
+        "status": "validated",
+        "checked": true,
+        "supplier": "Sood",
+        "uploaded": true,
+        "error_code": null,
+        "is_current": false,
+        "release_id": "a6603d5d-027e-46bd-abba-94f6375eea1f",
+        "total_rows": 30328,
+        "accepted_rows": 30328,
+        "conflict_rows": 0,
+        "rejected_rows": 0,
+        "review_required": false,
+        "review_revision": 0,
+        "source_verified": true,
+        "source_verification_required": true
+      },
+      {
+        "brand": "Euroricambi",
+        "status": "validated",
+        "checked": true,
+        "supplier": "Sood",
+        "uploaded": true,
+        "error_code": null,
+        "is_current": false,
+        "release_id": "9d6368c4-cefd-4835-81a4-2724426fd344",
+        "total_rows": 542,
+        "accepted_rows": 542,
+        "conflict_rows": 0,
+        "rejected_rows": 0,
+        "review_required": false,
+        "review_revision": 0,
+        "source_verified": true,
+        "source_verification_required": true
+      }
+    ]
+  },
+  "semantic_comparison": {
+    "method": "Full two-way EXCEPT ALL; bounded counts and samples only",
+    "fields": [
+      "normalized_code",
+      "product_code",
+      "description",
+      "oem_no",
+      "ean",
+      "vehicle",
+      "vehicle_model",
+      "market_segment",
+      "dimensions",
+      "weight",
+      "description_tr",
+      "origin",
+      "tariff",
+      "image_url",
+      "buy_price",
+      "currency",
+      "moq",
+      "lead_time_days",
+      "notes",
+      "valid_from",
+      "row_status"
+    ],
+    "excluded_mechanical_fields": [
+      "id",
+      "release_id",
+      "source_row_number",
+      "row_hash",
+      "created_at",
+      "error_code",
+      "error_message"
+    ],
+    "query": "with new_rows as materialized(select normalized_code,product_code,description,oem_no,ean,vehicle,vehicle_model,market_segment,dimensions,weight,description_tr,origin,tariff,image_url,buy_price,currency,moq,lead_time_days,notes,valid_from,row_status from public.supplier_price_release_rows where release_id='e9517ad0-3e11-4f52-a73f-71875a5b2d4a'),\ncurrent_rows as materialized(select normalized_code,product_code,description,oem_no,ean,vehicle,vehicle_model,market_segment,dimensions,weight,description_tr,origin,tariff,image_url,buy_price,currency,moq,lead_time_days,notes,valid_from,row_status from public.supplier_price_release_rows where release_id='fed8b4fe-402e-40c5-967c-df587c91acdd'),\nnew_minus_current as materialized(select * from new_rows except all select * from current_rows),\ncurrent_minus_new as materialized(select * from current_rows except all select * from new_rows)\nselect jsonb_build_object('captured_at',clock_timestamp(),'new_rows',(select count(*) from new_rows),'current_rows',(select count(*) from current_rows),\n'new_minus_current',(select count(*) from new_minus_current),'current_minus_new',(select count(*) from current_minus_new),\n'new_only_samples',(select coalesce(jsonb_agg(to_jsonb(s)),'[]') from (select normalized_code,product_code,valid_from,row_status from new_minus_current order by normalized_code limit 10)s),\n'current_only_samples',(select coalesce(jsonb_agg(to_jsonb(s)),'[]') from (select normalized_code,product_code,valid_from,row_status from current_minus_new order by normalized_code limit 10)s)) parity;",
+    "result": {
+      "new_rows": 999997,
+      "captured_at": "2026-10-14T16:49:01.96479+00:00",
+      "current_rows": 999998,
+      "new_only_samples": [],
+      "current_minus_new": 1,
+      "new_minus_current": 0,
+      "current_only_samples": [
+        {
+          "row_status": "accepted",
+          "valid_from": "2026-10-10",
+          "product_code": "-",
+          "normalized_code": "-"
+        }
+      ]
+    },
+    "explanation": "Only the historical placeholder product_code/normalized_code '-' is absent from the new release. All 999997 new rows match the previous release exactly across the compared commercial fields."
+  },
+  "export_eligibility": {
+    "live_sql": {
+      "counts": [
+        {
+          "release_id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+          "total_rows": 999997,
+          "placeholder_only_rows": 0,
+          "supplier_export_eligible_rows": 999997
+        },
+        {
+          "release_id": "fed8b4fe-402e-40c5-967c-df587c91acdd",
+          "total_rows": 999998,
+          "placeholder_only_rows": 1,
+          "supplier_export_eligible_rows": 999997
+        }
+      ],
+      "captured_at": "2026-10-14T16:50:22.061058+00:00",
+      "live_supplier_export_md5": "737aa8429b49f6e31685f1115b8b84e1",
+      "placeholder_normalization": "",
+      "live_export_has_valid_sku_predicate": true,
+      "placeholder_has_valid_sku_character": false
+    },
+    "source": "supabase/migrations/20261014092740_supplier_export_generic_plan_seek.sql",
+    "source_lines": [
+      75,
+      90
+    ],
+    "rule": "normalized_code ~ '[A-Z0-9]'",
+    "conclusion": "No supplier-export-eligible row was lost. The previous and new releases both contain 999997 eligible rows. The old-only '-' normalizes to empty and fails the existing export predicate."
+  },
+  "ui_review_operations": {
+    "actions": [
+      {
+        "action": "review",
+        "status": "completed",
+        "attempt": 1,
+        "receipt": {
+          "action": "recheck",
+          "status": "rechecked_clear",
+          "replayed": false,
+          "errorCode": null,
+          "published": false,
+          "releaseId": "c76682ae-673d-4066-a18d-00670eed6fe0",
+          "decisionId": "049f3b5c-5fb3-46c6-9ba4-56898e1fa71d",
+          "reviewRevision": 1
+        },
+        "created_at": "2026-10-14T16:49:04.670827+00:00",
+        "error_code": null,
+        "release_id": "c76682ae-673d-4066-a18d-00670eed6fe0",
+        "total_rows": 3,
+        "updated_at": "2026-10-14T16:49:07.759595+00:00",
+        "decision_id": "049f3b5c-5fb3-46c6-9ba4-56898e1fa71d",
+        "accepted_rows": 3,
+        "conflict_rows": 0,
+        "release_status": "validated",
+        "review_revision": 1,
+        "lease_expires_at": null,
+        "requested_action": "recheck",
+        "release_error_code": null
+      },
+      {
+        "action": "review",
+        "status": "completed",
+        "attempt": 1,
+        "receipt": {
+          "action": "recheck",
+          "status": "review_required",
+          "replayed": false,
+          "errorCode": "VALIDATION_REVIEW_REQUIRED",
+          "published": false,
+          "releaseId": "701466da-b4b1-489b-9e9b-68e1c680beee",
+          "decisionId": "26d4825f-4703-4bd7-bb87-f368400afb21",
+          "reviewRevision": 1
+        },
+        "created_at": "2026-10-14T16:50:16.532531+00:00",
+        "error_code": null,
+        "release_id": "701466da-b4b1-489b-9e9b-68e1c680beee",
+        "total_rows": 30516,
+        "updated_at": "2026-10-14T16:50:22.720679+00:00",
+        "decision_id": "26d4825f-4703-4bd7-bb87-f368400afb21",
+        "accepted_rows": 30141,
+        "conflict_rows": 375,
+        "release_status": "validated",
+        "review_revision": 1,
+        "lease_expires_at": null,
+        "requested_action": "recheck",
+        "release_error_code": "VALIDATION_REVIEW_REQUIRED"
+      }
+    ],
+    "captured_at": "2026-10-14T16:50:55.01799+00:00",
+    "clevite_pointer": {
+      "publication_id": "5f255b1f-63b0-49d8-8b2b-314bfab1a77b",
+      "current_release_id": "fed8b4fe-402e-40c5-967c-df587c91acdd"
+    },
+    "staging_publication_decisions": 0
+  },
+  "publication_observation": {
+    "action": {
+      "action": "publish",
+      "status": "completed",
+      "attempt": 1,
+      "receipt": {
+        "status": "published",
+        "version": 2,
+        "replayed": false,
+        "isCurrent": true,
+        "published": true,
+        "releaseId": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+        "decisionId": "bfd43007-b109-449a-8b25-2feaf0cce137",
+        "publicationId": "99afb6f6-93ca-4256-9f10-86803f476b88",
+        "reviewRevision": 1,
+        "expectedPreviousPublicationId": "5f255b1f-63b0-49d8-8b2b-314bfab1a77b"
+      },
+      "created_at": "2026-10-14T16:51:16.876048+00:00",
+      "error_code": null,
+      "release_id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+      "updated_at": "2026-10-14T16:51:25.870633+00:00",
+      "decision_id": "bfd43007-b109-449a-8b25-2feaf0cce137",
+      "lease_expires_at": null,
+      "expected_review_revision": 1,
+      "expected_previous_publication_id": "5f255b1f-63b0-49d8-8b2b-314bfab1a77b"
+    },
+    "pointer": {
+      "release_id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+      "publication_id": "99afb6f6-93ca-4256-9f10-86803f476b88"
+    },
+    "captured_at": "2026-10-14T16:52:08.336489+00:00",
+    "publications": [
+      {
+        "id": "5f255b1f-63b0-49d8-8b2b-314bfab1a77b",
+        "status": "superseded",
+        "release_id": "fed8b4fe-402e-40c5-967c-df587c91acdd",
+        "published_at": "2026-10-12T22:13:30.27536+00:00",
+        "superseded_at": "2026-10-14T16:51:25.870633+00:00",
+        "publication_version": 1
+      },
+      {
+        "id": "99afb6f6-93ca-4256-9f10-86803f476b88",
+        "status": "published",
+        "release_id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+        "published_at": "2026-10-14T16:51:25.870633+00:00",
+        "superseded_at": null,
+        "publication_version": 2
+      }
+    ],
+    "active_execution": []
+  },
+  "preservation": {
+    "releases": [
+      {
+        "id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+        "status": "published",
+        "total_rows": 999997,
+        "accepted_rows": 999997,
+        "source_sha256": "f63f5e17d84ebff66f2c0d1465e5684e8c4bce7e4694379c1f304d0ac33b440d",
+        "review_revision": 1,
+        "source_verified": true
+      },
+      {
+        "id": "fed8b4fe-402e-40c5-967c-df587c91acdd",
+        "status": "published",
+        "total_rows": 999998,
+        "accepted_rows": 999998,
+        "source_sha256": "9b6fcb454653e8f30a562c4532bb61f6493510650c59549086826431131f5353",
+        "review_revision": 0,
+        "source_verified": true
+      }
+    ],
+    "captured_at": "2026-10-14T16:52:52.125892+00:00",
+    "new_decision_rows": 1,
+    "retained_row_counts": [
+      {
+        "release_id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+        "total_rows": 999997
+      },
+      {
+        "release_id": "fed8b4fe-402e-40c5-967c-df587c91acdd",
+        "total_rows": 999998
+      }
+    ],
+    "new_publication_events": 1,
+    "new_publication_decision": {
+      "decided_at": "2026-10-14T16:51:25.870633+00:00",
+      "release_id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+      "decision_id": "bfd43007-b109-449a-8b25-2feaf0cce137",
+      "audit_checked": true,
+      "source_sha256": "f63f5e17d84ebff66f2c0d1465e5684e8c4bce7e4694379c1f304d0ac33b440d",
+      "publication_id": "99afb6f6-93ca-4256-9f10-86803f476b88",
+      "review_revision": 1,
+      "publication_version": 2,
+      "audit_distinct_codes": 999982,
+      "audit_review_required": false,
+      "expected_previous_publication_id": "5f255b1f-63b0-49d8-8b2b-314bfab1a77b"
+    },
+    "publication_rows_for_new_release": 1
+  },
+  "timing": {
+    "action_accepted_at": "2026-10-14T16:51:16.876048+00:00",
+    "execution_transaction_started_at": "2026-10-14T16:51:25.870633+00:00",
+    "first_completed_observation_at": "2026-10-14T16:52:08.336489+00:00",
+    "execution_to_first_completed_observation_upper_bound_seconds": 42.466,
+    "exact_execution_wall_seconds": null,
+    "limitation": "SQL now() columns record transaction start, not completion. Root observed the matching actual Render completion event at second precision; approximately 16 seconds execution and 25 seconds acceptance-to-completion are reported, not exact milliseconds.",
+    "worker_completion_log": {
+      "observed_by": "root via actual Render Logs UI",
+      "instance": "n5njw",
+      "displayed_local_time": "2026-10-14 19:51:42 Europe/Istanbul",
+      "utc_time": "2026-10-14T16:51:42Z",
+      "timestamp_resolution": "1 second",
+      "event": {
+        "stage": "admin-release-action",
+        "status": "completed",
+        "decisionId": "bfd43007-b109-449a-8b25-2feaf0cce137",
+        "releaseId": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+        "published": true
+      }
+    },
+    "execution_to_completion_log_approx_seconds": 16,
+    "acceptance_to_completion_log_approx_seconds": 25
+  },
+  "limits": {
+    "browser_reload_receipt_not_observed_by_this_agent": false,
+    "dbos_history_not_queried_by_this_agent": true,
+    "production_not_tested_here": true,
+    "browser_observation_provenance": "Root observed the authenticated staging browser and reported the re-opened receipt; this agent independently verified SQL singleton counts after reload."
+  },
+  "browser_observation": {
+    "observed_by": "root",
+    "active_publication_version": 2,
+    "publish_completed_visible": true,
+    "authenticated_session_retained_after_reload": true,
+    "receipt_reopened_after_reload": true,
+    "visible_labels": [
+      "Bu s\u00fcr\u00fcm \u015fu anda aktif",
+      "Yay\u0131n tamamland\u0131: v2"
+    ],
+    "second_publication_requested": false
+  },
+  "after_browser_reload": {
+    "pointer": {
+      "version": 2,
+      "release_id": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+      "publication_id": "99afb6f6-93ca-4256-9f10-86803f476b88"
+    },
+    "receipt": {
+      "status": "published",
+      "version": 2,
+      "replayed": false,
+      "isCurrent": true,
+      "published": true,
+      "releaseId": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+      "decisionId": "bfd43007-b109-449a-8b25-2feaf0cce137",
+      "publicationId": "99afb6f6-93ca-4256-9f10-86803f476b88",
+      "reviewRevision": 1,
+      "expectedPreviousPublicationId": "5f255b1f-63b0-49d8-8b2b-314bfab1a77b"
+    },
+    "captured_at": "2026-10-14T16:54:53.316965+00:00",
+    "action_count": 1,
+    "publication_count": 1,
+    "decision_ledger_count": 1,
+    "published_event_count": 1
+  }
+}
