@@ -1,6 +1,7 @@
 import { supabaseClient } from "./supabaseClient";
 import { downloadUrl, type ExportDownloadPart } from "../../shared/xlsx";
 import { sanitizeUserFacingMessage } from "../../shared/userMessage";
+import { preparedDownloadGeneration, assertPreparedDownloadGeneration } from "../../shared/preparedDownload";
 
 export type ExportJobStatus = {
   id: string;
@@ -81,6 +82,7 @@ async function getAccessToken() {
 }
 
 async function postExportJson(path: string, body: Record<string, unknown>) {
+  const generation = preparedDownloadGeneration();
   const accessToken = await getAccessToken();
   const response = await fetch(path, {
     method: "POST",
@@ -91,6 +93,7 @@ async function postExportJson(path: string, body: Record<string, unknown>) {
     body: JSON.stringify(body),
   });
   const data = (await response.json().catch(() => ({}))) as ExportJobResponse;
+  assertPreparedDownloadGeneration(generation);
   if (!response.ok) {
     throw new Error(sanitizeUserFacingMessage(data.error || `Export request failed: ${response.status}`, "The export request could not be completed right now."));
   }
@@ -186,7 +189,9 @@ export async function getExportJobStatus(jobId: string) {
 }
 
 export async function downloadExportJob(jobId: string) {
+  const generation = preparedDownloadGeneration();
   const result = await postExportDownloadJson("/api/admin-export-download", { jobId });
+  assertPreparedDownloadGeneration(generation);
   await downloadUrl(result.fileName, result.signedUrl, undefined, result.byteSize, result.parts);
   return result;
 }
@@ -195,6 +200,7 @@ export async function waitForExportJob(
   initialJob: ExportJobStatus,
   onProgress?: (job: ExportJobStatus) => void,
 ) {
+  const generation = preparedDownloadGeneration();
   let job = initialJob;
   const startedAt = Date.now();
   onProgress?.(job);
@@ -203,11 +209,14 @@ export async function waitForExportJob(
       throw new Error("Export is still preparing in the background. Try download again in a moment.");
     }
     await delay(EXPORT_STATUS_POLL_MS);
+    assertPreparedDownloadGeneration(generation);
     job = await getExportJobStatus(job.id);
+    assertPreparedDownloadGeneration(generation);
     onProgress?.(job);
   }
   if (job.status !== "finalized") {
     throw new Error(job.errorMessage || "Export failed.");
   }
+  assertPreparedDownloadGeneration(generation);
   return job;
 }

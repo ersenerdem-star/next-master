@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { downloadUrl } from "../../apps/web/src/shared/xlsx.ts";
-import { dismissPreparedDownload } from "../../apps/web/src/shared/preparedDownload.ts";
+import { clearPreparedDownloads, dismissPreparedDownload } from "../../apps/web/src/shared/preparedDownload.ts";
 
 const site = "https://next-master-v3-staging-20261006.netlify.app";
 const fallbackUrl = "/api/portal-export-file?jobId=job-1";
@@ -146,6 +146,38 @@ test("admin signed Storage URL rejects incomplete transfers before saving", asyn
     }));
     await assert.rejects(downloadUrl("admin.xlsx", signedUrl, undefined, workbook.byteLength), /incomplete/);
     assert.equal(clicks.length, 0);
+  });
+});
+
+test("logout during a signed workbook transfer creates no Blob URL or save link", async () => {
+  await withBrowserMocks(async ({ clicks, blobs, setFetch }) => {
+    let finish!: () => void;
+    setFetch(async () => new Response(new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(workbook.slice(0, 4));
+      finish = () => { controller.enqueue(workbook.slice(4)); controller.close(); };
+    } }), { headers: { "Content-Length": "8" } }));
+    const downloading = downloadUrl("B.xlsx", signedUrl, undefined, 8);
+    await new Promise(resolve => setImmediate(resolve));
+    clearPreparedDownloads(); finish();
+    await assert.rejects(downloading, /session changed/);
+    assert.equal(blobs.length, 0); assert.equal(clicks.length, 0);
+  });
+});
+
+test("logout during ordinary URL transfer also stops fallback requests and handoff", async () => {
+  await withBrowserMocks(async ({ clicks, blobs, setFetch }) => {
+    let finish!: () => void, requests = 0;
+    setFetch(async () => {
+      requests += 1;
+      return new Response(new ReadableStream<Uint8Array>({ start(controller) {
+        finish = () => { controller.enqueue(workbook); controller.close(); };
+      } }));
+    });
+    const downloading = downloadUrl("B.xlsx", "/api/file", "/api/fallback");
+    await new Promise(resolve => setImmediate(resolve));
+    clearPreparedDownloads(); finish();
+    await assert.rejects(downloading, /session changed/);
+    assert.equal(requests, 1); assert.equal(blobs.length, 0); assert.equal(clicks.length, 0);
   });
 });
 

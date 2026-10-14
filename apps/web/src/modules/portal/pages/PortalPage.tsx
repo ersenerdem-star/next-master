@@ -23,6 +23,7 @@ import { VehicleBadges } from "../../../presentation/components/common/VehicleBa
 import { buildBusinessDocumentHtml } from "../../../shared/documentPrint";
 import { openAccountStatementPrintWindow } from "../../../shared/accountStatementPrint";
 import { buildXlsxBlob, buildXlsxBlobAsync, downloadBlob, downloadUrl } from "../../../shared/xlsx";
+import { preparedDownloadGeneration, assertPreparedDownloadGeneration } from "../../../shared/preparedDownload";
 import { buildDocumentWorksheet } from "../../../shared/documentExport";
 import { formatBrandAwareProductCode } from "../../../shared/productCodeDisplay";
 import { matchesOriginalNumberSearch, normalizePartCode } from "../../../domain/shared/normalize";
@@ -2442,6 +2443,7 @@ export function PortalPage() {
   }
 
   async function handleDownloadPortalPriceList() {
+    const downloadGeneration = preparedDownloadGeneration();
     if (!portalPriceListBrand) {
       setError("Select a brand before downloading the price list.");
       return;
@@ -2467,6 +2469,7 @@ export function PortalPage() {
         });
       });
       const result = await downloadPortalExportJob(credentials, readyJob.id);
+      assertPreparedDownloadGeneration(downloadGeneration);
       await downloadUrl(
         result.fileName || `${sanitizeFileName(`portal-price-list-${portalPriceListBrand}`)}.xlsx`,
         result.signedUrl,

@@ -11,8 +11,14 @@ type PreparedDownload = {
 };
 
 let current: PreparedDownload | null = null;
+let generation = 0;
 const retained = new Map<string, number>();
 let lifecycleWindow: Window | null = null;
+
+export function preparedDownloadGeneration() { return generation; }
+export function assertPreparedDownloadGeneration(expected: number) {
+  if (expected !== generation) throw new Error("Your session changed. Start a new download.");
+}
 
 function release(url: string) {
   if (!retained.has(url)) return;
@@ -27,6 +33,7 @@ function release(url: string) {
 
 // Session end/navigation invalidates every retained link immediately.
 export function clearPreparedDownloads() {
+  generation += 1;
   if (current) {
     window.clearTimeout(current.expiry);
     current.panel.remove();

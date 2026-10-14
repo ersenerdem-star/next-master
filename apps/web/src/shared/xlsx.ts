@@ -1,5 +1,5 @@
 import { buildWorkbookBytes, type ExportRows, type WorkbookOptions } from "./xlsxCore";
-import { offerPreparedDownload } from "./preparedDownload";
+import { offerPreparedDownload, preparedDownloadGeneration, assertPreparedDownloadGeneration } from "./preparedDownload";
 
 const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const CSV_TYPE = "text/csv;charset=utf-8";
@@ -93,7 +93,7 @@ async function fetchSignedStorageChunks(target: URL, expectedByteSize?: number) 
   return { chunks, receivedBytes };
 }
 
-async function downloadSignedStorageUrl(name: string, signedUrl: string, expectedByteSize?: number, parts?: ExportDownloadPart[]) {
+async function downloadSignedStorageUrl(name: string, signedUrl: string, expectedByteSize: number | undefined, parts: ExportDownloadPart[] | undefined, generation: number) {
   const target = signedStorageTarget(signedUrl);
   const chunks: BlobPart[] = [];
   let receivedBytes = 0;
@@ -136,17 +136,19 @@ async function downloadSignedStorageUrl(name: string, signedUrl: string, expecte
       throw new Error("Export download returned an invalid workbook.");
     }
   }
+  assertPreparedDownloadGeneration(generation);
   downloadBlob(name, blob);
 }
 
 export async function downloadUrl(name: string, url: string, fallbackUrl?: string, expectedByteSize?: number, parts?: ExportDownloadPart[]) {
+  const generation = preparedDownloadGeneration();
   const signed = new URL(url, window.location.href);
   if (parts !== undefined || (signed.protocol === "https:" && signed.pathname.includes("/storage/v1/object/sign/")
     && !signed.username && !signed.password)) {
     // Portal and admin exports both carry a short-lived signed Storage URL.
     // Verify the complete workbook before reporting that download began so a
     // browser extension or partial transfer cannot be mistaken for success.
-    await downloadSignedStorageUrl(name, url, expectedByteSize, parts);
+    await downloadSignedStorageUrl(name, url, expectedByteSize, parts, generation);
     return;
   }
   let lastError: unknown = null;
@@ -154,9 +156,12 @@ export async function downloadUrl(name: string, url: string, fallbackUrl?: strin
     try {
       const response = await fetch(target, { credentials: "same-origin", cache: "no-store" });
       if (!response.ok) throw new Error(`Download failed: ${response.status}`);
-      downloadBlob(name, await response.blob());
+      const blob = await response.blob();
+      assertPreparedDownloadGeneration(generation);
+      downloadBlob(name, blob);
       return;
     } catch (error) {
+      assertPreparedDownloadGeneration(generation);
       lastError = error;
     }
   }
