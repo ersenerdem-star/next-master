@@ -20,7 +20,7 @@ function fixture(bytes,extension='csv'){
   if(name==='begin_supplier_price_upload_verification')return {session_id:session,release_id:release,
    organization_id:org,actor_id:actor,object_id:object,storage_bucket:'supplier-price-imports',
    source_file_bytes:source.length,source_file_sha256:state.wrongSha?'a'.repeat(64):sha,
-   object_version:'sealed-version',object_updated_at:'2026-10-14T18:00:00Z',
+   source_date:'2026-10-06',object_version:'sealed-version',object_updated_at:'2026-10-14T18:00:00Z',
    source_file_path:`${org}/supplier-price/${session}/fixture.${extension}`};
   if(name==='complete_supplier_price_verified_upload'){
    state.completed++;
@@ -65,6 +65,26 @@ test('actual original XLSX numeric zero rejects on the first verification attemp
  const f=fixture(await book.xlsx.writeBuffer(),'xlsx');
  const result=await f.consume();assert.equal(result.status,'rejected');assert.equal(f.state.attempt,1);assert.equal(f.state.completed,0);
  assert.equal(f.state.settlements[0].input_action,'failed');assert.equal(f.state.settlements[0].input_error_code,'SOURCE_UNSUPPORTED_ORDER_MULTIPLE');
+});
+
+test('v2 invalid commercial values fail on attempt1 with safe field codes and do not create a handoff',async t=>{
+ for(const [header,value,code]of [['Stock_Qty','-1','SOURCE_INVALID_STOCK_QTY'],
+  ['Order_Multiple','0','SOURCE_INVALID_ORDER_MULTIPLE'],['Valid_To','2026-10-05','SOURCE_INVALID_VALID_TO']])await t.test(header,async()=>{
+  const f=fixture(csv(header,value));const result=await f.consume({commercialFields:true});
+  assert.equal(result.status,'rejected');assert.equal(result.errorCode,code);assert.equal(f.state.attempt,1);
+  assert.equal(f.state.completed,0);assert.equal(f.state.settlements[0].input_error_code,code);
+  assert.equal(f.state.settlements[0].input_action,'failed');assert.equal((await f.consume({commercialFields:true})).status,'empty');
+ });
+});
+
+test('v2 rejection remains healthy and the next nonempty supported source verifies normally',async()=>{
+ const bad=fixture(csv('Order_Multiple','0')),good=fixture(
+  'Product_Code,Buy_Price_EUR,Price_Date,Stock_Qty,Order_Multiple,Valid_To\nA,7.50,,0,3,2026-10-06\nB,8.50,2026-10-06,12,6,2026-10-07\n');
+ let cycle=0;const logs=[];
+ const service=createWorkerService({verify:()=>++cycle===1?bad.consume({commercialFields:true}):good.consume({commercialFields:true}),
+  dispatch:async()=>({status:cycle===1?'empty':'enqueued',published:false}),probe:async()=>({busy:false,failed:false}),log:l=>logs.push(JSON.parse(l))});
+ await service.cycle();assert.equal(service.snapshot().ready,true);assert.equal(logs[0].errorCode,'SOURCE_INVALID_ORDER_MULTIPLE');
+ await service.cycle();assert.equal(service.snapshot().ready,true);assert.equal(good.state.completed,1);assert.equal(good.state.status,'verified');
 });
 
 test('only the exact structured field contract becomes a permanent public code; arbitrary diagnostics stay private and retryable',async t=>{

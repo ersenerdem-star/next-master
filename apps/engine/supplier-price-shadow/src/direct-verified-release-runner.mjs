@@ -5,7 +5,7 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Direct staging runner. Supabase leases are the recovery boundary; DBOS is not
 // required to admit or advance a supplier release.
-export async function runDirectVerifiedRelease({rpc,source,releaseId,handoffId,workerId,batchSize=1000,leaseSeconds=120}){
+export async function runDirectVerifiedRelease({rpc,source,releaseId,handoffId,workerId,batchSize=1000,leaseSeconds=120,commercialFields=false}){
  if(typeof rpc!=='function'||typeof source?.prepare!=='function'||typeof source?.scan!=='function'||!UUID.test(releaseId||'')||!UUID.test(handoffId||''))throw Error('DIRECT_RUNNER_INPUT');
  const manifest=await rpc('get_supplier_price_verified_manifest',{input_release_id:releaseId,input_handoff_id:handoffId});
  if(manifest?.id!==releaseId||manifest.handoff_id!==handoffId)throw Error('DIRECT_RUNNER_MANIFEST');
@@ -19,7 +19,7 @@ export async function runDirectVerifiedRelease({rpc,source,releaseId,handoffId,w
   if(claim?.status!=='claimed'||claim.release_id!==releaseId)throw Error('DIRECT_RUNNER_CLAIM');
   const scan=await source.scan({release:manifest,claim,batchSize,receipt:prepared});
   requireCompleteShadowScan(claim,scan,true);
-  const staged=await rpc('stage_supplier_price_release_batch',{input_batch_id:claim.batch_id,input_worker_id:workerId,input_rows:scan.rows});
+  const staged=await rpc(commercialFields?'stage_supplier_price_release_batch_v2':'stage_supplier_price_release_batch',{input_batch_id:claim.batch_id,input_worker_id:workerId,input_rows:scan.rows});
   if(first(staged)?.status==='stale'){
    if(++staleCount>8)throw Error('DIRECT_REPEATED_STALE_LEASE');
    continue;

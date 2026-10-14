@@ -111,6 +111,30 @@ test('Production read-only privilege probe requires the real manifest exception;
  }
 });
 
+test('v6 cannot admit work without both new SQL contracts; startup probes cannot lock or change a release',async()=>{
+ const expected=[['get_supplier_price_verified_manifest','UPLOAD_HANDOFF_NOT_READY'],
+  ['record_supplier_price_source_compatibility_v2','SOURCE_COMPATIBILITY_INPUT_INVALID'],
+  ['stage_supplier_price_release_batch_v2','Invalid supplier shadow staging input']];
+ for(const failedAt of [-1,1,2]){
+  const calls=[];
+  const run=()=>servicePreflight({origin,key:env.SUPABASE_SERVICE_ROLE_KEY,environment:'production',commercialFields:true,
+   fetchImpl:async(url,opts)=>{
+    const index=calls.length;calls.push(url);assert.equal(url,origin+'/rest/v1/rpc/'+expected[index][0]);
+    assert.equal(opts.redirect,'error');if(index>0)assert.ok(Object.values(JSON.parse(opts.body)).every(v=>v===null));
+    return {status:index===failedAt?404:400,json:async()=>index===failedAt?{code:'PGRST202'}:{code:'P0001',message:expected[index][1]}};
+   }});
+  if(failedAt<0)await run();else await assert.rejects(run(),/CAPABILITY_NOT_CONFIRMED/);
+  assert.equal(calls.length,failedAt<0?3:failedAt+1);
+ }
+ for(const response of [{status:200,code:'P0001',message:'SOURCE_COMPATIBILITY_INPUT_INVALID'},
+  {status:400,code:'42501',message:'SOURCE_COMPATIBILITY_INPUT_INVALID'},
+  {status:400,code:'P0001',message:'SOURCE_COMPATIBILITY_SERVICE_REQUIRED'}]){
+  let calls=0;await assert.rejects(servicePreflight({origin,key:'synthetic',environment:'production',commercialFields:true,
+   fetchImpl:async()=>++calls===1?{status:400,json:async()=>({code:'P0001',message:'UPLOAD_HANDOFF_NOT_READY'})}:
+    {status:response.status,json:async()=>response}}),/CAPABILITY_NOT_CONFIRMED/);
+ }
+});
+
 test('Missing migration, public-role denial, wrong key and generic HTTP400 cannot satisfy production capability',async()=>{
  for(const [status,data] of [[404,{code:'PGRST202'}],[400,{code:'P0001',message:'UPLOAD_VERIFY_ROLE'}],
   [400,{code:'P0001',message:'unrelated validation'}],[400,{code:'PGRST116',message:'not found'}],
@@ -153,6 +177,10 @@ test('Unapplied production Blueprint has dedicated private history and gates; st
  assert.equal(worker.numInstances,1);assert.equal(worker.autoDeployTrigger,'off');
  assert.equal(vars.SUPABASE_URL.value,origin);assert.equal(vars.SUPPLIER_PRICE_TARGET_ENVIRONMENT.value,'production');
  assert.equal(vars.SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED.value,'1');
+ for(const blueprint of [production,staging]){
+  const commercial=blueprint.services[0].envVars.find(entry=>entry.key==='SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED');
+  assert.equal(commercial.sync,false);assert.equal(commercial.value,undefined);
+ }
  assert.equal(staging.services[0].envVars.some(entry=>entry.key==='SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED'),false);
  for(const name of ['SUPABASE_SERVICE_ROLE_KEY','SUPPLIER_PRICE_PRODUCTION_ENABLED','SUPPLIER_PRICE_SERVICE_ENABLED','SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED']) {
   assert.equal(vars[name].sync,false);assert.equal(vars[name].value,undefined);

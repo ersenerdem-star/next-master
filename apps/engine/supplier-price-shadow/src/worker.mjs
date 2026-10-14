@@ -30,6 +30,7 @@ const PERSIST_SHADOW_ROWS = String(process.env.SUPPLIER_PRICE_SHADOW_PERSIST || 
 const PREPARED_PARTITION_MANIFEST = String(process.env.SUPPLIER_PRICE_SHADOW_PARTITION_MANIFEST || "").trim();
 const SHARED_PREPARED = process.env.SUPPLIER_PRICE_SHARED_PREPARED_ENABLED === "1";
 const COMPACT_HISTORY = process.env.SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED === '1';
+const COMMERCIAL_FIELDS = process.env.SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED === '1';
 
 function requireVerifiedMode() {
   if(process.env.SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED !== "1" || !PERSIST_SHADOW_ROWS
@@ -210,7 +211,7 @@ const verifiedWorkflow = DBOS.registerWorkflow(async input => {
 
 // New durable step order requires a separate application/workflow version.
 // Do not resume an old 0.5.0 execution under v2 or rewrite its recorded steps.
-const VERIFIED_VERSION=verifiedWorkflowVersion({compact:COMPACT_HISTORY,sharedPrepared:SHARED_PREPARED});
+const VERIFIED_VERSION=verifiedWorkflowVersion({compact:COMPACT_HISTORY,sharedPrepared:SHARED_PREPARED,commercialFields:COMMERCIAL_FIELDS});
 const {applicationVersion:VERIFIED_APP_VERSION,workflowName:VERIFIED_WORKFLOW_NAME}=VERIFIED_VERSION;
 const verifiedRecoveryWorkflow=DBOS.registerWorkflow(createVerifiedReleaseWorkflow({DBOS,rpc:callRpc,
   requireMode:requireVerifiedMode,batchSize:BATCH_SIZE,
@@ -235,7 +236,14 @@ const verifiedCompactWorkflow=DBOS.registerWorkflow(async input=>{
   const source=createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY});
   return createCompactVerifiedWorkflow({DBOS,rpc:callRpc,source,requireMode:requireVerifiedMode,batchSize:BATCH_SIZE})(input);
 },{name:'supplier-price-verified-release-v5'});
-const selectedVerifiedWorkflow=COMPACT_HISTORY?verifiedCompactWorkflow:SHARED_PREPARED?verifiedPartitionedWorkflow:verifiedRecoveryWorkflow;
+// v6 opts into the complete commercial row contract. v5 callback and history stay unchanged.
+const verifiedCommercialWorkflow=DBOS.registerWorkflow(async input=>{
+  requireVerifiedMode();
+  if(!COMMERCIAL_FIELDS||!COMPACT_HISTORY||!SHARED_PREPARED)throw Error('COMMERCIAL_FIELDS_DISABLED');
+  const source=createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,commercialFields:true});
+  return createCompactVerifiedWorkflow({DBOS,rpc:callRpc,source,requireMode:requireVerifiedMode,batchSize:BATCH_SIZE,commercialFields:true})(input);
+},{name:'supplier-price-verified-release-v6'});
+const selectedVerifiedWorkflow=COMMERCIAL_FIELDS?verifiedCommercialWorkflow:COMPACT_HISTORY?verifiedCompactWorkflow:SHARED_PREPARED?verifiedPartitionedWorkflow:verifiedRecoveryWorkflow;
 
 async function main() {
   requireProductionServiceInvocation(process.env,process.argv[2]);
@@ -255,7 +263,7 @@ async function main() {
   const verified = serviceMode || releaseId === "--verified-handoff" || operatorRecovery;
   if(verified)requireVerifiedMode();
   requireCompactHistoryConfig(process.env);
-  if(serviceMode)await servicePreflight({origin:config.origin,key:SERVICE_ROLE_KEY,environment:config.environment});
+  if(serviceMode)await servicePreflight({origin:config.origin,key:SERVICE_ROLE_KEY,environment:config.environment,commercialFields:COMMERCIAL_FIELDS});
   if (!releaseId) throw new Error("Usage: npm start -- <release-id> | --check-only");
   const expiryRole = process.env.SUPPLIER_PRICE_EXPIRY_TEST_ROLE || "";
   const queueName = verified ? VERIFIED_QUEUE : shadowWorkerQueueName({ expiryRole, releaseId });
@@ -286,8 +294,8 @@ async function main() {
       // can reclaim only the expired batch for this exact handoff. This path
       // never publishes commercial data.
       const result = await runDirectVerifiedRelease({
-        rpc:callRpc, source:createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY}),
-        releaseId, handoffId, workerId:`operator-recovery:${process.pid}`, batchSize:BATCH_SIZE,
+        rpc:callRpc, source:createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,commercialFields:COMMERCIAL_FIELDS}),
+        commercialFields:COMMERCIAL_FIELDS,releaseId, handoffId, workerId:`operator-recovery:${process.pid}`, batchSize:BATCH_SIZE,
       });
       console.log(JSON.stringify({mode:'direct-operator-recovery',releaseId,handoffId,result,published:false}));
       return;
@@ -296,7 +304,7 @@ async function main() {
       const history=await DBOSClient.create({systemDatabaseUrl:process.env.DBOS_SYSTEM_DATABASE_URL,
         systemDatabasePoolSize:1,systemDatabasePollingConcurrency:1,observabilityQueryTimeoutMs:15000,
         logger:serviceLogger()});
-      try{await requireCompactHistoryDrained(history);}finally{await history.destroy();}
+      try{await requireCompactHistoryDrained(history,{commercialFields:COMMERCIAL_FIELDS});}finally{await history.destroy();}
     }
     await DBOS.launch();
     launched = true;
@@ -305,7 +313,7 @@ async function main() {
       service=createWorkerService({pollMs:config.pollMs,
         consumeAdminAction:createAdminReleaseActionConsumer({env:process.env}),
         verify:()=>consumeUploadVerification({rpc:callRpc,workerId:config.executorId+':verify',
-          supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY}),
+          supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,commercialFields:COMMERCIAL_FIELDS}),
         dispatch:()=>dispatchVerifiedSupplierPriceHandoff({rpc:callRpc,workerId:config.executorId+':dispatch',
           startWorkflow:({workflowID,queueName,input})=>startVersionedVerifiedWorkflow({DBOS,
             workflow:selectedVerifiedWorkflow,version:VERIFIED_VERSION,workflowID,queueName,input})}),

@@ -12,14 +12,14 @@ export const SERVICE_QUEUE_LIMITS = Object.freeze({globalConcurrency:1,workerCon
 const SERVICE_OPT_INS = ['SUPPLIER_PRICE_SERVICE_ENABLED','SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED',
   'SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED','SUPPLIER_PRICE_SHARED_PREPARED_ENABLED',
   'SUPPLIER_PRICE_SHADOW_PERSIST','SUPPLIER_PRICE_UPLOAD_VERIFICATION_ENABLED'];
-const LOGGABLE_OPT_INS=[...SERVICE_OPT_INS,'SUPPLIER_PRICE_PRODUCTION_ENABLED','SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED'];
+const LOGGABLE_OPT_INS=[...SERVICE_OPT_INS,'SUPPLIER_PRICE_PRODUCTION_ENABLED','SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED','SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED'];
 const STARTUP_CODES = new Set(['SHADOW_PERSIST_STAGING_HOST_REQUIRED','SERVICE_STAGING_ORIGIN',
   'SERVICE_OPT_IN_REQUIRED','SERVICE_STAGING_SECRET_REQUIRED','SERVICE_STABLE_EXECUTOR_REQUIRED',
   'SERVICE_CANARY_CONFIG_DENIED','SERVICE_PRIVATE_HISTORY_REQUIRED','SERVICE_BATCH_LIMIT',
   'SERVICE_PORT','SERVICE_ARGUMENTS','SERVICE_CAPABILITY_NOT_CONFIRMED',
   'SERVICE_TARGET_ENVIRONMENT_REQUIRED','SERVICE_PRODUCTION_TARGET_REQUIRED',
   'SERVICE_PRODUCTION_SERVICE_REQUIRED','SERVICE_PRODUCTION_SECRET_REQUIRED',
-  'SERVICE_PRODUCTION_HISTORY_REQUIRED','SERVICE_PRODUCTION_EXECUTOR_REQUIRED','SERVICE_COMPACT_HISTORY_CONFIG',
+  'SERVICE_PRODUCTION_HISTORY_REQUIRED','SERVICE_PRODUCTION_EXECUTOR_REQUIRED','SERVICE_COMPACT_HISTORY_CONFIG','SERVICE_COMMERCIAL_FIELDS_CONFIG',
   'VERIFIED_VERSION_DRAIN_REQUIRED','VERIFIED_HISTORY_DRAIN_UNCONFIRMED']);
 // Fixed codes and known nonsecret flag names only. Never serialize an Error,
 // provider message, stack, connection URL or environment value into host logs.
@@ -40,7 +40,7 @@ export const SERVICE_RPC_NAMES = new Set([
   'get_supplier_price_verified_manifest','claim_supplier_price_verified_release_batch',
   'get_supplier_price_release_status',
   'get_supplier_price_workflow_failure_context','mark_supplier_price_processing_interrupted',
-  'stage_supplier_price_release_batch','heartbeat_supplier_price_release_batch',
+  'stage_supplier_price_release_batch','stage_supplier_price_release_batch_v2','heartbeat_supplier_price_release_batch',
   'finalize_supplier_price_release_shadow_batch',
   'complete_supplier_price_release_duckdb_validation',
 ]);
@@ -107,7 +107,8 @@ export function serviceConfig(env) {
 
 // Same exact non-mutating service privilege probe as the real staging canary.
 // An HTTP 200 at the API root is insufficient and does not validate a secret.
-export async function servicePreflight({origin,key,environment='staging',fetchImpl=fetch}) {
+export async function servicePreflight({origin,key,environment='staging',fetchImpl=fetch,commercialFields=false}) {
+  if(typeof commercialFields!=='boolean')throw Error('SERVICE_COMMERCIAL_FIELDS_CONFIG');
   const parsed = new URL(origin);
   if(!['staging','production'].includes(environment))throw Error('SERVICE_TARGET_ENVIRONMENT_REQUIRED');
   requireSupplierPriceServiceTarget({SUPABASE_URL:origin,SUPPLIER_PRICE_TARGET_ENVIRONMENT:environment,
@@ -133,6 +134,23 @@ export async function servicePreflight({origin,key,environment='staging',fetchIm
       throw Error('SERVICE_CAPABILITY_NOT_CONFIRMED');
   } else if(response.status!==400||data?.message!=='STAGING_FIXTURE_NOT_FOUND') {
     throw Error('SERVICE_CAPABILITY_NOT_CONFIRMED');
+  }
+  if(commercialFields){
+    // NULL input stops both functions at their validation gates, before any
+    // advisory/row lock or mutation. Feature enablement requires the new SQL.
+    if(!verified)throw Error('SERVICE_CAPABILITY_NOT_CONFIRMED');
+    for(const [name,payload,message] of [
+      ['record_supplier_price_source_compatibility_v2',{input_release_id:null,input_handoff_id:null,
+        input_source_sha256:null,input_total_rows:null,input_policy:null},'SOURCE_COMPATIBILITY_INPUT_INVALID'],
+      ['stage_supplier_price_release_batch_v2',{input_batch_id:null,input_worker_id:null,input_rows:null},'Invalid supplier shadow staging input'],
+    ]){
+      const response=await fetchImpl(origin+'/rest/v1/rpc/'+name,{method:'POST',
+        headers:supabaseApiHeaders(key,'application/json'),redirect:'error',body:JSON.stringify(payload),
+        signal:AbortSignal.timeout(15000)});
+      const data=await response.json().catch(()=>null);
+      if(response.status!==400||data?.code!=='P0001'||data?.message!==message)
+        throw Error('SERVICE_CAPABILITY_NOT_CONFIRMED');
+    }
   }
 }
 

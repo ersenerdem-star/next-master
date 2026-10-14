@@ -81,10 +81,10 @@ export function compactVerifiedStageCheckpoint({scan,claim,release,receipt,stage
   release_id_result:staged.release_id_result,staged_rows:Number(staged.staged_rows)}});
 }
 
-export function createCompactVerifiedWorkflow({DBOS,rpc,source,requireMode,batchSize,leaseSeconds=120}){
+export function createCompactVerifiedWorkflow({DBOS,rpc,source,requireMode,batchSize,leaseSeconds=120,commercialFields=false}){
  if(!positive(batchSize,10000)||!Number.isInteger(leaseSeconds)||leaseSeconds<30||leaseSeconds>3600
   ||typeof source?.prepare!=='function'||typeof source?.scan!=='function')throw Error('VERIFIED_WORKFLOW_CONFIG');
- const step=(name,fn)=>DBOS.runStep(async()=>bounded(await retryCompactRpcStep(fn)),{name});
+ const step=(name,fn)=>DBOS.runStep(async()=>bounded(await retryCompactRpcStep(fn)),{name:commercialFields?name.replace(/-v5$/,'-v6'):name});
  return async input=>{
   requireMode();
   if(!UUID.test(input?.releaseId||'')||!UUID.test(input?.handoffId||''))throw Error('VERIFIED_WORKFLOW_INPUT');
@@ -111,7 +111,7 @@ export function createCompactVerifiedWorkflow({DBOS,rpc,source,requireMode,batch
     // SQL checks the active lease and exact existing row contents before its
     // idempotent INSERT. A commit before DBOS checkpoint safely rescans the same
     // immutable partition; an expired owner receives stale and must reclaim.
-    const staged=await rpc('stage_supplier_price_release_batch',{
+    const staged=await rpc(commercialFields?'stage_supplier_price_release_batch_v2':'stage_supplier_price_release_batch',{
      input_batch_id:claim.batch_id,input_worker_id:owner,input_rows:rows.rows});
     return compactVerifiedStageCheckpoint({scan:rows,claim,release,receipt,stageReceipt:staged});
    });

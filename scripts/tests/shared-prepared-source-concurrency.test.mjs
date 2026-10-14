@@ -10,6 +10,7 @@ import {performance} from 'node:perf_hooks';
 import ExcelJS from 'exceljs';
 import {createSharedPreparedSource,PREPARED_BUCKET,validateSharedPreparedManifest}
  from '../../apps/engine/supplier-price-shadow/src/shared-prepared-source.mjs';
+import {createCompactVerifiedWorkflow} from '../../apps/engine/supplier-price-shadow/src/compact-verified-workflow.mjs';
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};};
@@ -24,7 +25,7 @@ function streamed(bytes,onRead=()=>{}){
   onRead();
  })())));
 }
-function fixture({count=12,latency=0,sourceBytes,sourceExtension='csv'}={}){
+function fixture({count=12,latency=0,sourceBytes,sourceExtension='csv',commercialFields=false}={}){
  const csv=sourceBytes||Buffer.from('Product_Code,Buy_Price_EUR,Price_Date\n'+
   Array.from({length:count},(_,i)=>`CODE${i+1},10.50,2026-10-14\n`).join(''));
  const release={id:randomUUID(),handoff_id:randomUUID(),source_file_path:randomUUID()+'/source.'+sourceExtension,
@@ -35,12 +36,12 @@ function fixture({count=12,latency=0,sourceBytes,sourceExtension='csv'}={}){
   const path=decodeURIComponent(new URL(url).pathname),method=options.method||'GET';
   if(path===`/storage/v1/bucket/${PREPARED_BUCKET}`)return Response.json({id:PREPARED_BUCKET,public:false});
   if(path===`/storage/v1/object/supplier-price-imports/${release.source_file_path}`)return streamed(csv,()=>{state.sourceReads++;});
-  if(path==='/rest/v1/rpc/record_supplier_price_source_compatibility'){
+  if(path===`/rest/v1/rpc/${commercialFields?'record_supplier_price_source_compatibility_v2':'record_supplier_price_source_compatibility'}`){
    assert.equal(method,'POST');assert.ok(state.sourceReads>0,'receipt requires a complete source read');
    const payload=JSON.parse(options.body);state.compatibilityCalls.push(payload);
    assert.deepEqual(payload,{input_release_id:release.id,input_handoff_id:release.handoff_id,
     input_source_sha256:release.source_file_sha256,input_total_rows:release.total_rows,
-    input_policy:'supplier-price-commercial-fields-v1'});
+    input_policy:commercialFields?'supplier-price-commercial-fields-v2':'supplier-price-commercial-fields-v1'});
    const overridden=await state.compatibilityHook?.(payload);if(overridden)return overridden;
    return Response.json({status:state.compatibilityCalls.length===1?'recorded':'replayed',
     release_id:payload.input_release_id,source_sha256:payload.input_source_sha256,
@@ -74,7 +75,7 @@ function fixture({count=12,latency=0,sourceBytes,sourceExtension='csv'}={}){
   });
  };
  const source=createSharedPreparedSource({supabaseUrl:'https://staging.example.invalid',
-  serviceRoleKey:'sb_secret_synthetic_only',fetchImpl});
+  serviceRoleKey:'sb_secret_synthetic_only',fetchImpl,commercialFields});
  return {release,csv,storage,events,state,source,readBacks,
   prepare:()=>source.prepare({release,batchSize:1})};
 }
@@ -207,6 +208,94 @@ test('unsupported last-row commercial value cannot produce a compatibility recei
  assert.equal(f.state.sourceReads,1);
  assert.equal(f.state.compatibilityCalls.length,0);
  assert.equal(f.storage.size,0);
+});
+
+test('v2 prepares all commercial values, recovers an ambiguous upload, and rescans source on cache replay',async()=>{
+ const f=fixture({count:2,commercialFields:true,sourceBytes:Buffer.from(
+  'Product_Code,Buy_Price_EUR,Price_Date,Stock_Qty,Order_Multiple,Valid_To\nA,10.50,,0,3,2026-10-14\nB,11.50,2026-10-14,,,\n')});
+ let lost=false;f.state.hook=({part,method,key,storage,options})=>{
+  if(part===1&&method==='POST'&&!lost){lost=true;storage.set(key,Buffer.from(options.body));throw Object.assign(Error('lost'),{code:'ECONNRESET'});}
+ };
+ const receipt=await f.prepare(),manifest=JSON.parse(f.storage.get(receipt.key));
+ assert.equal(manifest.contract,'supplier-price-normalized-parts-v3');
+ assert.equal(manifest.commercial_policy,'supplier-price-commercial-fields-v2');
+ validateSharedPreparedManifest(manifest,f.release,1,{commercialFields:true});
+ assert.throws(()=>validateSharedPreparedManifest(manifest,f.release,1),/MANIFEST_INVALID/);
+ const first=await f.source.scan({release:f.release,batchSize:1,receipt,claim:{cursor_start:1,cursor_end:1}});
+ const second=await f.source.scan({release:f.release,batchSize:1,receipt,claim:{cursor_start:2,cursor_end:2}});
+ assert.deepEqual([first.rows[0].stock_qty,first.rows[0].order_multiple,first.rows[0].valid_to,first.rows[0].valid_from],[0,3,'2026-10-14','2026-10-14']);
+ assert.deepEqual([second.rows[0].stock_qty,second.rows[0].order_multiple,second.rows[0].valid_to],[null,null,null]);
+ const before=new Map(f.storage),split=f.events.length;
+ assert.deepEqual(await f.prepare(),receipt);assert.deepEqual(f.storage,before);
+ assert.equal(f.events.slice(split).some(e=>e.method==='POST'),false);
+ assert.equal(f.state.sourceReads,2);assert.equal(f.state.compatibilityCalls.length,2);
+ assert.deepEqual(f.state.compatibilityCalls[0],f.state.compatibilityCalls[1]);
+});
+
+test('v2 cannot reuse an old correctly source-bound v1 cache which omitted the three fields',async()=>{
+ const f=fixture({count:1,commercialFields:true,sourceBytes:Buffer.from(
+  'Product_Code,Buy_Price_EUR,Price_Date,Stock_Qty,Order_Multiple,Valid_To\nA,10.50,2026-10-14,0,3,2026-10-15\n')});
+ const context={contract:'supplier-price-normalized-parts-v2',release_id:f.release.id,handoff_id:f.release.handoff_id,
+  source_path:f.release.source_file_path,source_sha256:f.release.source_file_sha256,source_bytes:f.csv.length,
+  total_rows:1,source_date:'2026-10-14',batch_size:1};
+ const prefix=`${f.release.source_file_path.split('/')[0]}/${f.release.id}/${sha(JSON.stringify(context))}`;
+ const row={source_row_number:1,normalized_code:'A',buy_price:10.5,currency:'EUR',valid_from:'2026-10-14',row_status:'accepted'};
+ const bytes=Buffer.from(JSON.stringify({...row,row_hash:sha(JSON.stringify(row))})+'\n'),path='part-000001-1-1.jsonl';
+ const manifest={version:1,...context,partitions:[{batch_number:1,cursor_start:1,cursor_end:1,row_count:1,path,sha256:sha(bytes)}]};
+ const oldBytes=Buffer.from(JSON.stringify(manifest)),oldReceipt={bucket:PREPARED_BUCKET,key:prefix+'/manifest.json',sha256:sha(oldBytes)};
+ f.storage.set(prefix+'/'+path,bytes);f.storage.set(oldReceipt.key,oldBytes);
+ validateSharedPreparedManifest(manifest,f.release,1);
+ const receipt=await f.prepare();assert.notEqual(receipt.key,oldReceipt.key);
+ assert.deepEqual(f.storage.get(oldReceipt.key),oldBytes);assert.deepEqual(f.storage.get(prefix+'/'+path),bytes);
+ await assert.rejects(f.source.scan({release:f.release,batchSize:1,receipt:oldReceipt,claim:{cursor_start:1,cursor_end:1}}),/RECEIPT_INVALID/);
+ const result=await f.source.scan({release:f.release,batchSize:1,receipt,claim:{cursor_start:1,cursor_end:1}});
+ assert.deepEqual([result.rows[0].stock_qty,result.rows[0].order_multiple,result.rows[0].valid_to],[0,3,'2026-10-15']);
+ assert.equal(f.state.sourceReads,1);assert.equal(f.state.compatibilityCalls.length,1);
+});
+
+test('v2 refuses missing commercial keys even if the cached part and manifest hashes are recomputed',async()=>{
+ const f=fixture({count:1,commercialFields:true});const receipt=await f.prepare();
+ const manifest=JSON.parse(f.storage.get(receipt.key)),part=manifest.partitions[0],key=receipt.key.replace('manifest.json',part.path);
+ const row=JSON.parse(f.storage.get(key).toString());delete row.stock_qty;delete row.row_hash;row.row_hash=sha(JSON.stringify(row));
+ const bytes=Buffer.from(JSON.stringify(row)+'\n');f.storage.set(key,bytes);part.sha256=sha(bytes);
+ const changed=Buffer.from(JSON.stringify(manifest));f.storage.set(receipt.key,changed);
+ await assert.rejects(f.source.scan({release:f.release,batchSize:1,receipt:{...receipt,sha256:sha(changed)},
+  claim:{cursor_start:1,cursor_end:1}}),/PREPARED_COMMERCIAL_ROW_INVALID/);
+});
+
+test('v2 invalid final row cannot record a receipt or prepare any part',async()=>{
+ const f=fixture({count:2,commercialFields:true,sourceBytes:Buffer.from(
+  'Product_Code,Buy_Price_EUR,Price_Date,Order_Multiple\nA,10.50,2026-10-14,3\nB,11.50,2026-10-14,0\n')});
+ await assert.rejects(f.prepare(),error=>error.code==='SUPPLIER_INVALID_COMMERCIAL_FIELD'&&error.sourceRowNumber===2);
+ assert.equal(f.state.sourceReads,1);assert.equal(f.state.compatibilityCalls.length,0);assert.equal(f.storage.size,0);
+});
+
+test('actual v2 source through DuckDB, immutable parts and compact workflow reaches v2 stage with exact terms',async()=>{
+ const f=fixture({count:2,commercialFields:true,sourceBytes:Buffer.from(
+  'Product_Code,Buy_Price_EUR,Price_Date,Stock_Qty,Order_Multiple,Valid_To\nA,10.50,,0,3,2026-10-14\nB,11.50,2026-10-14,,,\n')});
+ let cursor=0;const staged=[],outputs=[],batchId=randomUUID();
+ const rpc=async(name,args)=>{
+  if(name==='get_supplier_price_verified_manifest')return f.release;
+  if(name==='claim_supplier_price_verified_release_batch')return cursor===2?{status:'complete',release_id:f.release.id}:
+   {status:'claimed',release_id:f.release.id,batch_id:batchId,cursor_start:cursor+1,cursor_end:cursor+1};
+  if(name==='stage_supplier_price_release_batch_v2'){
+   assert.equal(f.state.compatibilityCalls.length,1,'v2 source receipt precedes staging');staged.push(...structuredClone(args.input_rows));
+   return {status:'staged',release_id_result:f.release.id,batch_id:batchId,staged_rows:1};
+  }
+  if(name==='heartbeat_supplier_price_release_batch')return {status:'heartbeat',release_id:f.release.id,batch_id:batchId,
+   current_cursor:args.input_cursor,processed_rows:args.input_processed_rows};
+  if(name==='finalize_supplier_price_release_shadow_batch'){cursor=args.input_cursor;return {status:'finalized',release_id:f.release.id,
+   batch_id:batchId,current_cursor:cursor,release_status:cursor===2?'staged':'parsing'};}
+  if(name==='complete_supplier_price_release_duckdb_validation')return {status:'validated',release_id:f.release.id,publishable:true};
+  assert.fail('unexpected RPC '+name);
+ };
+ const DBOS={runStep:async(fn,{name})=>{const result=await fn();outputs.push({name,result});return result;},sleep:async()=>{}};
+ const workflow=createCompactVerifiedWorkflow({DBOS,rpc,source:f.source,batchSize:1,commercialFields:true,requireMode(){}});
+ assert.equal((await workflow({releaseId:f.release.id,handoffId:f.release.handoff_id})).status,'validated');
+ assert.deepEqual(staged.map(r=>[r.normalized_code,r.stock_qty,r.order_multiple,r.valid_to]),[['A',0,3,'2026-10-14'],['B',null,null,null]]);
+ for(const row of staged){const {row_hash,...payload}=row;assert.equal(row_hash,sha(JSON.stringify(payload)));}
+ assert.ok(outputs.every(o=>o.name.endsWith('-v6')));
+ assert.doesNotMatch(JSON.stringify(outputs),/"stock_qty"|"order_multiple"|"valid_to"|"product_code"/);
 });
 
 test('a valid old prepared cache cannot attest away unsupported values in the original source',async()=>{

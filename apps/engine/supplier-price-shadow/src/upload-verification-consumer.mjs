@@ -4,18 +4,20 @@ import {verifySupplierPriceUpload} from './verified-upload-handoff.mjs';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const COMMERCIAL_FIELD_ERRORS=Object.freeze({stock_qty:'SOURCE_UNSUPPORTED_STOCK_QTY',
   order_multiple:'SOURCE_UNSUPPORTED_ORDER_MULTIPLE',valid_to:'SOURCE_UNSUPPORTED_VALID_TO'});
-export const SOURCE_COMMERCIAL_FAILURE_CODES=Object.freeze(Object.values(COMMERCIAL_FIELD_ERRORS));
+const INVALID_COMMERCIAL_FIELD_ERRORS=Object.freeze({stock_qty:'SOURCE_INVALID_STOCK_QTY',
+  order_multiple:'SOURCE_INVALID_ORDER_MULTIPLE',valid_to:'SOURCE_INVALID_VALID_TO'});
+export const SOURCE_COMMERCIAL_FAILURE_CODES=Object.freeze([...Object.values(COMMERCIAL_FIELD_ERRORS),...Object.values(INVALID_COMMERCIAL_FIELD_ERRORS)]);
 function commercialFieldError(error){
   // Trust only the structured contract emitted by our source parser. Never
   // derive durable user-facing diagnostics from arbitrary exception messages.
-  if(error?.code!=='SUPPLIER_UNSUPPORTED_COMMERCIAL_FIELD'||!Array.isArray(error.fields)
+  if(!['SUPPLIER_UNSUPPORTED_COMMERCIAL_FIELD','SUPPLIER_INVALID_COMMERCIAL_FIELD'].includes(error?.code)||!Array.isArray(error.fields)
     ||error.fields.length<1||error.fields.length>3||new Set(error.fields).size!==error.fields.length
     ||!error.fields.every(field=>typeof field==='string'&&Object.hasOwn(COMMERCIAL_FIELD_ERRORS,field))
     ||!Number.isSafeInteger(error.sourceRowNumber)||error.sourceRowNumber<1||error.sourceRowNumber>10000000)return null;
-  return COMMERCIAL_FIELD_ERRORS[[...error.fields].sort()[0]];
+  return (error.code==='SUPPLIER_INVALID_COMMERCIAL_FIELD'?INVALID_COMMERCIAL_FIELD_ERRORS:COMMERCIAL_FIELD_ERRORS)[[...error.fields].sort()[0]];
 }
 export async function consumeUploadVerification({rpc,workerId,supabaseUrl,serviceRoleKey,fetchImpl=fetch,
-  leaseSeconds=120,timeoutMs=3600000,verify=verifySupplierPriceUpload}) {
+  leaseSeconds=120,timeoutMs=3600000,verify=verifySupplierPriceUpload,commercialFields=false}) {
   if(typeof rpc!=='function'||typeof verify!=='function'||!workerId||workerId.trim()!==workerId||workerId.length>200
     ||!Number.isInteger(leaseSeconds)||leaseSeconds<30||leaseSeconds>3600)throw Error('UPLOAD_VERIFY_CONFIG');
   const job=await rpc('claim_supplier_price_upload_verification',{input_worker_id:workerId,input_lease_seconds:leaseSeconds});
@@ -34,7 +36,7 @@ export async function consumeUploadVerification({rpc,workerId,supabaseUrl,servic
   });},Math.floor(leaseSeconds*1000/3));
   let receipt,failure;
   try{receipt=await verify({sessionId:job.session_id,organizationId:job.organization_id,actorId:job.actor_id,
-    rpc,supabaseUrl,serviceRoleKey,fetchImpl,timeoutMs});}catch(error){failure=error;}
+    rpc,supabaseUrl,serviceRoleKey,fetchImpl,timeoutMs,...(commercialFields?{commercialFields:true}:{})});}catch(error){failure=error;}
   finally{clearInterval(timer);await pending;}
   if(renewalError)throw new Error(`UPLOAD_VERIFY_OWNERSHIP_UNCONFIRMED:${job.request_id}`,{cause:renewalError});
   if(!failure&&(receipt?.status!=='verified'||receipt.session_id!==job.session_id||receipt.release_id!==job.release_id||receipt.published!==false))

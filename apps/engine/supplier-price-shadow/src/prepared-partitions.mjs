@@ -4,13 +4,13 @@ import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { once } from "node:events";
 import { parseNormalizedSupplierPriceRowsFromXlsx } from "./streaming-xlsx.mjs";
-import { parseNormalizedSupplierPriceRows } from "./streaming-csv.mjs";
+import { parseNormalizedSupplierPriceRows, SUPPLIER_SOURCE_COMMERCIAL_POLICY, requireNormalizedCommercialFields } from "./streaming-csv.mjs";
 import { applyReleaseSourceDate } from "./storage-scan.mjs";
 
-function sourceParser(inputPath) {
+function sourceParser(inputPath, options) {
   return /\.xlsx$/i.test(inputPath)
-    ? parseNormalizedSupplierPriceRowsFromXlsx(inputPath)
-    : parseNormalizedSupplierPriceRows(createReadStream(inputPath));
+    ? parseNormalizedSupplierPriceRowsFromXlsx(inputPath, options)
+    : parseNormalizedSupplierPriceRows(createReadStream(inputPath), options);
 }
 
 async function writeLine(stream, line) {
@@ -48,6 +48,7 @@ export async function prepareSupplierPricePartitions({
   releaseId = null,
   sourcePath = null,
   expectedBrand = null,
+  commercialFields = false,
 }) {
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 10000) {
     throw new Error("INVALID_PREPARE_BATCH_SIZE");
@@ -58,6 +59,7 @@ export async function prepareSupplierPricePartitions({
   if (expectedChecksum && source.sha256 !== expectedChecksum) throw new Error("PREPARE_SOURCE_CHECKSUM_MISMATCH");
   const manifest = {
     version: 1,
+    ...(commercialFields ? { commercial_policy: SUPPLIER_SOURCE_COMMERCIAL_POLICY } : {}),
     input_path: inputPath,
     source_sha256: source.sha256,
     source_bytes: source.bytes,
@@ -98,7 +100,7 @@ export async function prepareSupplierPricePartitions({
     manifest.total_rows += batch.length;
     batch = [];
   };
-  for await (const parsed of sourceParser(inputPath)) {
+  for await (const parsed of sourceParser(inputPath, {commercialFields, sourceDate})) {
     if (expectedBrand && String(parsed.brand || "").toUpperCase() !== expectedBrand.toUpperCase()) {
       throw new Error(`PREPARE_BRAND_MISMATCH:row-${parsed.source_row_number}`);
     }
@@ -116,7 +118,7 @@ export async function prepareSupplierPricePartitions({
   return { manifestPath, manifest };
 }
 
-async function readPartitionRows(filePath, partition, cursorStart, cursorEnd) {
+async function readPartitionRows(filePath, partition, cursorStart, cursorEnd, commercialFields) {
   const rows = [];
   const source = await readFile(filePath, "utf8");
   if (createHash("sha256").update(source).digest("hex") !== partition.sha256) {
@@ -126,6 +128,7 @@ async function readPartitionRows(filePath, partition, cursorStart, cursorEnd) {
   for (const line of source.split("\n")) {
     if (!line.trim()) continue;
     const row = JSON.parse(line);
+    if (commercialFields) requireNormalizedCommercialFields(row);
     if (row.source_row_number !== partition.cursor_start + scanned) throw new Error("PREPARED_PARTITION_SEQUENCE_INVALID");
     const { row_hash: rowHash, ...hashable } = row;
     if (rowHash !== createHash("sha256").update(JSON.stringify(hashable)).digest("hex")) {
@@ -141,8 +144,9 @@ async function readPartitionRows(filePath, partition, cursorStart, cursorEnd) {
   return { rows, scanned };
 }
 
-export async function scanPreparedSupplierPriceBatch({ release, claim, manifestPath, includeRows = true }) {
+export async function scanPreparedSupplierPriceBatch({ release, claim, manifestPath, includeRows = true, commercialFields = false }) {
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  if (commercialFields ? manifest.commercial_policy !== SUPPLIER_SOURCE_COMMERCIAL_POLICY : manifest.commercial_policy != null) throw Error('PREPARED_COMMERCIAL_POLICY_MISMATCH');
   if (manifest.version !== 1) throw new Error("PREPARED_MANIFEST_VERSION_INVALID");
   if (release.id && manifest.release_id !== release.id) throw new Error("PREPARED_RELEASE_MISMATCH");
   if (release.source_file_path && manifest.source_path !== release.source_file_path) throw new Error("PREPARED_PATH_MISMATCH");
@@ -162,7 +166,7 @@ export async function scanPreparedSupplierPriceBatch({ release, claim, manifestP
   for (const partition of manifest.partitions) {
     if (partition.cursor_end < cursorStart || partition.cursor_start > cursorEnd) continue;
     if (basename(partition.path) !== partition.path) throw new Error("PREPARED_PARTITION_PATH_INVALID");
-    const part = await readPartitionRows(join(dirname(manifestPath), partition.path), partition, cursorStart, cursorEnd);
+    const part = await readPartitionRows(join(dirname(manifestPath), partition.path), partition, cursorStart, cursorEnd, commercialFields);
     rows.push(...part.rows);
     scannedRows += part.scanned;
   }

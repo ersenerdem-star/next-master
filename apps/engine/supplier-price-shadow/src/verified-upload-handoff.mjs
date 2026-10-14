@@ -17,7 +17,7 @@ const safeInt=(x,max=Number.MAX_SAFE_INTEGER)=>Number.isSafeInteger(x)&&x>0&&x<=
 const identity=id=>'supplier-price-verified:v1:'+requireUuid(id);
 
 export async function verifySupplierPriceUpload({sessionId,organizationId,actorId,rpc,supabaseUrl,serviceRoleKey,
-  fetchImpl=fetch,timeoutMs=60000}) {
+  fetchImpl=fetch,timeoutMs=60000,commercialFields=false}) {
   [sessionId,organizationId,actorId].forEach(requireUuid);
   if(typeof rpc!=='function'||!serviceRoleKey||!safeInt(timeoutMs,3600000))throw Error('VERIFIED_CONFIG_INVALID');
   const origin=new URL(supabaseUrl);
@@ -51,8 +51,8 @@ export async function verifySupplierPriceUpload({sessionId,organizationId,actorI
     if(bytes!==Number(c.source_file_bytes))throw Error('VERIFIED_SIZE_MISMATCH');
     if(hash.digest('hex')!==c.source_file_sha256)throw Error('VERIFIED_CHECKSUM_MISMATCH');
     // Single streaming parse; never materialize a workbook/all rows in RAM.
-    parser=/\.xlsx$/i.test(path)?parseNormalizedSupplierPriceRowsFromXlsx(file)
-      :parseNormalizedSupplierPriceRows(createReadStream(file));
+    parser=/\.xlsx$/i.test(path)?parseNormalizedSupplierPriceRowsFromXlsx(file,{commercialFields,sourceDate:c.source_date})
+      :parseNormalizedSupplierPriceRows(createReadStream(file),{commercialFields,sourceDate:c.source_date});
     for await(const row of parser){
       controller.signal.throwIfAborted();rows++;
       if(!safeInt(rows)||row.source_row_number!==rows)throw Error('VERIFIED_ROW_SEQUENCE_INVALID');

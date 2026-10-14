@@ -27,7 +27,7 @@ function journal(){
   },async sleep(){}}
  };
 }
-function fixture({totalRows=3,batchSize=2,staleAt,alwaysStale=false}={}){
+function fixture({totalRows=3,batchSize=2,staleAt,alwaysStale=false,commercialFields=false}={}){
  const history=journal(),calls=[],persisted=new Map(),owners=[];
  const state={cursor:0,owner:null,stageCalls:0,scanCalls:0,prepareCalls:0,staleSent:false,validationCalls:0};
  const release={id:releaseId,handoff_id:handoffId,total_rows:totalRows,source_date:'2026-10-10',
@@ -36,7 +36,7 @@ function fixture({totalRows=3,batchSize=2,staleAt,alwaysStale=false}={}){
   validation:{engine:'duckdb',totalRows,currencyCount:1,publishable:true,...noise},...noise};
  const batchId=start=>`11111111-1111-4111-8111-${String(start).padStart(12,'0')}`;
  const rows=(start,end)=>Array.from({length:end-start+1},(_,i)=>({source_row_number:start+i,
-  normalized_code:'CODE'+(start+i),raw_payload:{note:sentinel},row_status:'accepted'}));
+  normalized_code:'CODE'+(start+i),...(commercialFields?{stock_qty:i,order_multiple:3,valid_to:'2027-10-14'}:{}),raw_payload:{note:sentinel},row_status:'accepted'}));
  const source={async prepare(){state.prepareCalls++;return structuredClone(receipt);},async scan({claim}){
   state.scanCalls++;const batchRows=claim.cursor_end-claim.cursor_start+1;
   return {rows:rows(claim.cursor_start,claim.cursor_end),cursorEnd:claim.cursor_end,batchRows,
@@ -51,7 +51,7 @@ function fixture({totalRows=3,batchSize=2,staleAt,alwaysStale=false}={}){
    return {status:'claimed',release_id:releaseId,batch_id:batchId(state.cursor+1),
     cursor_start:state.cursor+1,cursor_end:Math.min(totalRows,state.cursor+batchSize),...noise};
   }
-  const stage=name==='stage_supplier_price_release_batch';
+  const stage=name===(commercialFields?'stage_supplier_price_release_batch_v2':'stage_supplier_price_release_batch');
   if(stage)state.stageCalls++;
   if((name===staleAt&&(!state.staleSent||alwaysStale))||args.input_worker_id&&args.input_worker_id!==state.owner){
    state.staleSent=true;
@@ -81,7 +81,7 @@ function fixture({totalRows=3,batchSize=2,staleAt,alwaysStale=false}={}){
   throw Error('UNEXPECTED_RPC:'+name);
  };
  const run=(overrides={})=>{history.reset();return createCompactVerifiedWorkflow({DBOS:history.DBOS,rpc,source,
-  requireMode(){},batchSize,...overrides})(input);};
+  requireMode(){},batchSize,commercialFields,...overrides})(input);};
  return {history,calls,persisted,owners,state,release,receipt,source,rpc,run};
 }
 function assertBoundedHistory(history){
@@ -115,6 +115,22 @@ test('commit before checkpoint rescans the same partition and reuses exact SQL r
  assert.equal(f.state.stageCalls,3);assert.equal(f.persisted.size,3);assert.equal(f.state.prepareCalls,1);
  const stages=f.calls.filter(c=>c.name==='stage_supplier_price_release_batch');
  assert.deepEqual(stages[0].args,stages[1].args);assertBoundedHistory(f.history);
+});
+
+test('v6 crash replay retains all three fields with exact v2 SQL identity and bounded scalar history',async()=>{
+ const f=fixture({commercialFields:true});f.history.crashAfter('compact-scan-stage-v6');
+ await assert.rejects(f.run(),/SIMULATED_PROCESS_EXIT/);assert.equal(f.persisted.size,2);assert.equal(f.state.cursor,0);
+ await f.run();assert.equal(f.persisted.size,3);assert.equal(f.state.stageCalls,3);
+ const stages=f.calls.filter(c=>c.name==='stage_supplier_price_release_batch_v2');
+ assert.deepEqual(stages[0].args,stages[1].args);
+ assert.equal(f.calls.some(c=>c.name==='stage_supplier_price_release_batch'),false);
+ const first=JSON.parse(f.persisted.get(1));assert.deepEqual([first.stock_qty,first.order_multiple,first.valid_to],[0,3,'2027-10-14']);
+ assert.ok(f.history.entries.every(e=>e.name.endsWith('-v6')));assertBoundedHistory(f.history);
+ const before=f.calls.length;await f.run();assert.equal(f.calls.length,before,'completed v6 replay must not restage');
+ const changed=fixture({commercialFields:true});changed.history.crashAfter('compact-scan-stage-v6');
+ await assert.rejects(changed.run(),/SIMULATED_PROCESS_EXIT/);const original=changed.source.scan;
+ changed.source.scan=async args=>{const r=await original(args);r.rows[0].stock_qty=1;return r;};
+ await assert.rejects(changed.run(),/ROW_REPLAY_MISMATCH/);assert.equal(changed.state.validationCalls,0);
 });
 
 test('commit before checkpoint plus expired owner records stale and reclaims the same batch with a new owner',async()=>{
@@ -205,6 +221,38 @@ test('compact gate is off by default, requires prepared source, and production c
   assert.throws(()=>requireCompactHistoryConfig(env));
  assert.doesNotThrow(()=>requireCompactHistoryConfig({SUPPLIER_PRICE_TARGET_ENVIRONMENT:'production',
   SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED:'1',SUPPLIER_PRICE_SHARED_PREPARED_ENABLED:'1'}));
+});
+
+test('commercial v6 is separately default-off and cannot start without compact prepared history',()=>{
+ const base={SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED:'1',SUPPLIER_PRICE_SHARED_PREPARED_ENABLED:'1'};
+ assert.doesNotThrow(()=>requireCompactHistoryConfig({...base,SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED:'0'}));
+ assert.equal(verifiedWorkflowVersion({compact:true,sharedPrepared:true}).workflowName,'supplier-price-verified-release-v5');
+ assert.deepEqual(verifiedWorkflowVersion({compact:true,sharedPrepared:true,commercialFields:true}),
+  {workflowName:'supplier-price-verified-release-v6',applicationVersion:'0.10.0-commercial-fields'});
+ for(const env of [{SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED:'1'},
+  {...base,SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED:'true'},
+  {...base,SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED:'1',SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED:'0'},
+  {...base,SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED:'1',SUPPLIER_PRICE_SHARED_PREPARED_ENABLED:'0'}])
+  assert.throws(()=>requireCompactHistoryConfig(env),/SERVICE_COMMERCIAL_FIELDS_CONFIG/);
+ assert.doesNotThrow(()=>requireCompactHistoryConfig({...base,SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED:'1'}));
+ assert.throws(()=>verifiedWorkflowVersion({commercialFields:true}),/SERVICE_COMMERCIAL_FIELDS_CONFIG/);
+});
+
+test('v6 dispatch never repurposes any v5 workflow identity, even a completed prior workflow',async()=>{
+ const v5=verifiedWorkflowVersion({compact:true,sharedPrepared:true});
+ const v6=verifiedWorkflowVersion({compact:true,sharedPrepared:true,commercialFields:true});let started=0;
+ const DBOS={getWorkflowStatus:async()=>({...v5,status:'SUCCESS'}),startWorkflow:()=>()=>{started++;}};
+ await assert.rejects(startVersionedVerifiedWorkflow({DBOS,workflow(){},version:v6,workflowID:'same-release',queueName:'queue',input}),/VERIFIED_VERSION_DRAIN_REQUIRED/);
+ assert.equal(started,0);
+});
+
+test('v6 startup additionally drains every active v5 status without changing default v5 startup queries',async()=>{
+ for(const status of ['PENDING','ENQUEUED','DELAYED']){
+  const calls=[],history={listWorkflows:async q=>{calls.push(q);return q.workflowName==='supplier-price-verified-release-v5'?[{status}]:[];}};
+  await requireCompactHistoryDrained(history);assert.equal(calls.length,4);calls.length=0;
+  await assert.rejects(requireCompactHistoryDrained(history,{commercialFields:true}),/VERIFIED_VERSION_DRAIN_REQUIRED/);
+  assert.equal(calls.length,5);assert.equal(calls.at(-1).loadInput,false);assert.equal(calls.at(-1).loadOutput,false);
+ }
 });
 
 test('versioned dispatch starts new v5 only; every prior workflow name or version stays untouched',async()=>{

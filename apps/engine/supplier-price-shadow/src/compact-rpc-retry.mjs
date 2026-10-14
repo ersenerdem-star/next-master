@@ -7,7 +7,7 @@ export const COMPACT_RPC_BACKOFF_MS=250;
 const replaySafeRpcs=new Set([
  'get_supplier_price_verified_manifest',
  'claim_supplier_price_verified_release_batch',
- 'stage_supplier_price_release_batch',
+ 'stage_supplier_price_release_batch','stage_supplier_price_release_batch_v2',
  'heartbeat_supplier_price_release_batch',
  'finalize_supplier_price_release_shadow_batch',
  'complete_supplier_price_release_duckdb_validation',

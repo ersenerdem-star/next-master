@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 
 export const SUPPLIER_SOURCE_COMPATIBILITY_POLICY = "supplier-price-commercial-fields-v1";
-// These fields affect commercial behavior but are not stored by release rows.
-// Never accept a nonempty value and silently replace it with an absent value.
+export const SUPPLIER_SOURCE_COMMERCIAL_POLICY = "supplier-price-commercial-fields-v2";
+// V1 release rows cannot store these fields. V2 opts into their complete contract;
+// historical callers still reject nonempty values instead of discarding them.
 const UNSUPPORTED_COMMERCIAL_HEADERS = {
   stock_qty: ["stock_qty", "stock_quantity", "stock", "qty_in_stock", "quantity_in_stock", "available_stock", "available_quantity"],
   order_multiple: ["order_multiple", "order_qty_multiple", "pack_multiple", "case_qty", "case_quantity"],
@@ -180,12 +181,12 @@ export async function* parseCsvRows(readable, options = {}) {
   if (header === null) throw new Error("CSV_MISSING_HEADER");
 }
 
-export function normalizeSupplierPriceRow({ sourceRowNumber, row, buyPriceIsNumeric = false }) {
+export function normalizeSupplierPriceRow({ sourceRowNumber, row, buyPriceIsNumeric = false }, { commercialFields = false, sourceDate = null } = {}) {
   const unsupportedFields = [...new Set(Object.entries(row)
     .filter(([header, value]) => UNSUPPORTED_HEADER_TO_FIELD.has(normalizeHeader(header))
       && String(value ?? "").trim() !== "")
     .map(([header]) => UNSUPPORTED_HEADER_TO_FIELD.get(normalizeHeader(header))))].sort();
-  if (unsupportedFields.length) {
+  if (!commercialFields && unsupportedFields.length) {
     throw Object.assign(new Error(`SUPPLIER_UNSUPPORTED_COMMERCIAL_FIELD:${unsupportedFields.join(",")}:row=${sourceRowNumber}`), {
       code: "SUPPLIER_UNSUPPORTED_COMMERCIAL_FIELD", fields: unsupportedFields, sourceRowNumber,
     });
@@ -208,8 +209,10 @@ export function normalizeSupplierPriceRow({ sourceRowNumber, row, buyPriceIsNume
   if (value("moq") && moq === null) warnings.push("INVALID_MOQ");
   const leadTimeDays = parseInteger(value("lead_time_days"));
   if (value("lead_time_days") && leadTimeDays === null) warnings.push("INVALID_LEAD_TIME");
-  const validFrom = normalizeDate(value("valid_from"));
+  let validFrom = normalizeDate(value("valid_from"));
   if (value("valid_from") && validFrom === null) errors.push("INVALID_VALID_FROM");
+  if (commercialFields && !value("valid_from")) validFrom = normalizeDate(sourceDate);
+  const commercial = commercialFields ? normalizeCommercialFields(row, sourceRowNumber, validFrom) : null;
   const currency = value("currency").toUpperCase();
   if (!currency) errors.push("MISSING_CURRENCY");
   else if (!/^[A-Z]{3}$/.test(currency)) errors.push("INVALID_CURRENCY");
@@ -242,12 +245,47 @@ export function normalizeSupplierPriceRow({ sourceRowNumber, row, buyPriceIsNume
       ? `${errors.join(",")}${errors.includes("AMBIGUOUS_BUY_PRICE_FORMAT") ? ": write 1234 for a whole amount or 1.2340 for a fractional amount" : ""}`
       : warnings.length ? warnings.join(",") : null,
   };
+  // v1 callers keep the exact historical key order, values and row hashes.
+  // v2 includes every commercial key, including NULL, in the immutable hash.
+  if (commercialFields) Object.assign(normalized, commercial);
   normalized.row_hash = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
   return normalized;
 }
 
 export async function* parseNormalizedSupplierPriceRows(readable, options = {}) {
-  for await (const record of parseCsvRows(readable, options)) yield normalizeSupplierPriceRow(record);
+  for await (const record of parseCsvRows(readable, options)) yield normalizeSupplierPriceRow(record, options);
+}
+
+function invalidCommercial(field, sourceRowNumber) {
+  throw Object.assign(new Error(`SUPPLIER_INVALID_COMMERCIAL_FIELD:${field}:row=${sourceRowNumber}`), {
+    code: "SUPPLIER_INVALID_COMMERCIAL_FIELD", fields: [field], sourceRowNumber,
+  });
+}
+
+function normalizeCommercialFields(row, sourceRowNumber, validFrom) {
+  const text = field => String(row[field] ?? "").trim();
+  const quantity = (field, minimum) => {
+    const value = text(field);
+    if (!value) return null;
+    if (!/^\d+$/.test(value)) invalidCommercial(field, sourceRowNumber);
+    const number = Number(value);
+    if (!Number.isSafeInteger(number) || number < minimum || number > 2147483647) invalidCommercial(field, sourceRowNumber);
+    return number;
+  };
+  const stock_qty = quantity("stock_qty", 0);
+  const order_multiple = quantity("order_multiple", 1);
+  const valid_to = normalizeDate(text("valid_to"));
+  if (text("valid_to") && (!valid_to || validFrom && valid_to < validFrom)) invalidCommercial("valid_to", sourceRowNumber);
+  return { stock_qty, order_multiple, valid_to };
+}
+
+export function requireNormalizedCommercialFields(row) {
+  if (!row || !["stock_qty", "order_multiple", "valid_to"].every(key => Object.hasOwn(row, key))
+    || row.stock_qty !== null && (!Number.isInteger(row.stock_qty) || row.stock_qty < 0 || row.stock_qty > 2147483647)
+    || row.order_multiple !== null && (!Number.isInteger(row.order_multiple) || row.order_multiple < 1 || row.order_multiple > 2147483647)
+    || row.valid_to !== null && (typeof row.valid_to !== "string" || normalizeDate(row.valid_to) !== row.valid_to
+      || row.valid_from && row.valid_to < row.valid_from)) throw Error("PREPARED_COMMERCIAL_ROW_INVALID");
+  return row;
 }
 
 export async function* chunkRows(rows, batchSize = 1000) {

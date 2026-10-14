@@ -48,6 +48,10 @@ services:
         value: "1"
       - key: SUPPLIER_PRICE_SHARED_PREPARED_ENABLED
         value: "1"
+      # Default OFF in code. Enable only after v2 SQL and v5 history drain are proved.
+      # Preserve the manually reviewed activation on subsequent Blueprint syncs.
+      - key: SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED
+        sync: false
       - key: SUPPLIER_PRICE_SHADOW_PERSIST
         value: "1"
       - key: SUPPLIER_PRICE_SHADOW_BATCH_SIZE

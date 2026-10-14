@@ -13,13 +13,13 @@ import { requireCompactHistoryDrained } from '../../apps/engine/supplier-price-s
 const exec = promisify(execFile);
 const childPath = fileURLToPath(new URL('../../apps/engine/supplier-price-shadow/scripts/compact-dbos-runtime-child.mjs', import.meta.url));
 
-async function checkHistoryDrain(connectionString) {
+async function checkHistoryDrain(connectionString, options) {
   // Resolve the same pinned SDK as the worker, without launching DBOS.
   const { DBOSClient } = createRequire(childPath)('@dbos-inc/dbos-sdk');
   const history = await DBOSClient.create({ systemDatabaseUrl: connectionString,
     systemDatabasePoolSize: 1, systemDatabasePollingConcurrency: 1, observabilityQueryTimeoutMs: 15000,
     logger: { debug() {}, info() {}, warn() {}, error() {} } });
-  try { await requireCompactHistoryDrained(history); }
+  try { await requireCompactHistoryDrained(history, options); }
   finally { await history.destroy(); }
 }
 
@@ -37,9 +37,10 @@ async function historySnapshot(client) {
   return result;
 }
 
-function launch(connectionString, pause) {
+function launch(connectionString, pause, commercialFields) {
   const child = fork(childPath, [], { silent: true, env: { ...process.env,
     NM_COMPACT_TEST_DATABASE_URL: connectionString,
+    NM_COMPACT_TEST_COMMERCIAL_FIELDS: commercialFields ? '1' : '0',
     NM_COMPACT_TEST_PAUSE_AFTER_STAGE: pause ? '1' : '0', NM_COMPACT_TEST_RESUME: pause ? '0' : '1' } });
   // Consume output privately; credentials/provider messages never enter reports.
   child.stdout.on('data', () => {});
@@ -56,8 +57,10 @@ function launch(connectionString, pause) {
   return { child, completion, event };
 }
 
-test('real DBOS5.2.11 restarts after stage commit with compact history and one idempotent business effect',
+for (const commercialFields of [false,true]) test(`real DBOS5.2.11 v${commercialFields ? 6 : 5} restarts after stage commit with compact history and one idempotent business effect`,
   { skip: process.env.RUN_SUPPLIER_COMPACT_DBOS_RUNTIME !== '1', timeout: 180_000 }, async (t) => {
+  const version = commercialFields ? 6 : 5;
+  const workflowId = `supplier-compact-runtime-proof-v${version}`;
   const sdkPackage = JSON.parse(await readFile(new URL('../../apps/engine/supplier-price-shadow/node_modules/@dbos-inc/dbos-sdk/package.json', import.meta.url), 'utf8'));
   assert.equal(sdkPackage.version, '5.2.11');
   const container = `nm-compact-dbos-${process.pid}-${randomBytes(4).toString('hex')}`;
@@ -79,7 +82,7 @@ test('real DBOS5.2.11 restarts after stage commit with compact history and one i
     }
     assert.ok(client, 'local PostgreSQL did not become ready');
     assert.equal((await client.query("select to_regnamespace('dbos') as schema")).rows[0].schema, null);
-    await checkHistoryDrain(connectionString);
+    await checkHistoryDrain(connectionString,{commercialFields});
     assert.equal((await client.query("select to_regnamespace('dbos') as schema")).rows[0].schema, null,
       'public DBOSClient create/list/destroy must not initialize a fresh history database');
     assert.deepEqual(await historySnapshot(client), []);
@@ -89,19 +92,23 @@ test('real DBOS5.2.11 restarts after stage commit with compact history and one i
       create table runtime_fixture.rows(row_number int primary key,payload jsonb not null);
       create table runtime_fixture.receipts(batch_id uuid primary key,owner text not null,payload_hash text not null);
       create table runtime_fixture.stage_calls(id bigint generated always as identity,owner text not null,payload_hash text not null,inserted_rows int not null);`);
-    const first = launch(connectionString, true); children.push(first.child);
+    const first = launch(connectionString, true, commercialFields); children.push(first.child);
     await first.event;
-    const before = await client.query(`select function_name,output from dbos.operation_outputs where workflow_uuid=$1`, ['supplier-compact-runtime-proof-v5']);
-    assert.equal(before.rows.some((row) => row.function_name === 'compact-scan-stage-v5'), false, 'kill window must precede the compact durable checkpoint');
+    const before = await client.query(`select function_name,output from dbos.operation_outputs where workflow_uuid=$1`, [workflowId]);
+    assert.equal(before.rows.some((row) => row.function_name === `compact-scan-stage-v${version}`), false, 'kill window must precede the compact durable checkpoint');
     assert.equal(Number((await client.query('select count(*) from runtime_fixture.rows')).rows[0].count), 1000);
     first.child.kill('SIGKILL');
     assert.equal((await first.completion).signal, 'SIGKILL');
 
-    const second = launch(connectionString, false); children.push(second.child);
+    const second = launch(connectionString, false, commercialFields); children.push(second.child);
     const completed = await second.event;
     assert.equal(completed.result.status, 'validated');
     assert.equal(completed.result.published, false);
     assert.equal((await second.completion).code, 0);
+    if(commercialFields) {
+      const values=(await client.query("select payload->'stock_qty' stock,payload->'order_multiple' multiple,payload->>'valid_to' expiry from runtime_fixture.rows order by row_number limit 2")).rows;
+      assert.deepEqual(values,[{stock:0,multiple:3,expiry:'2027-10-14'},{stock:null,multiple:3,expiry:'2027-10-14'}]);
+    }
     const calls = (await client.query('select owner,payload_hash,inserted_rows from runtime_fixture.stage_calls order by id')).rows;
     assert.equal(calls.length, 2);
     assert.deepEqual(calls.map((row) => row.inserted_rows), [1000, 0]);
@@ -109,36 +116,37 @@ test('real DBOS5.2.11 restarts after stage commit with compact history and one i
     assert.equal(calls[0].payload_hash, calls[1].payload_hash);
     assert.equal(Number((await client.query('select count(*) from runtime_fixture.receipts')).rows[0].count), 1);
     assert.deepEqual((await client.query('select finalized,validated from runtime_fixture.state')).rows, [{ finalized: true, validated: true }]);
-    const checkpoints = (await client.query('select function_name,output from dbos.operation_outputs where workflow_uuid=$1 order by function_id', ['supplier-compact-runtime-proof-v5'])).rows;
+    const checkpoints = (await client.query('select function_name,output from dbos.operation_outputs where workflow_uuid=$1 order by function_id', [workflowId])).rows;
     const outputs = JSON.stringify(checkpoints);
     assert.equal(outputs.includes('COMPACT_ROW_SENTINEL_'), false);
     assert.equal(outputs.includes('PRIVATE_ROW_PAYLOAD_SENTINEL_'), false);
-    const compact = checkpoints.filter((row) => row.function_name === 'compact-scan-stage-v5');
+    const compact = checkpoints.filter((row) => row.function_name === `compact-scan-stage-v${version}`);
     assert.equal(compact.length, 1);
     assert.ok(Buffer.byteLength(String(compact[0].output)) < 4096, 'stage checkpoint must remain bounded without row payloads');
     assert.ok(Buffer.byteLength(outputs) < 32768, 'all durable step outputs must remain compact');
 
     // All worker processes have exited. Fixture setup is the only history mutation;
     // each actual pre-launch gate call must leave every DBOS table unchanged.
-    const legacyId = 'supplier-legacy-v4-drain-fixture';
+    const legacyVersion = commercialFields ? 5 : 4;
+    const legacyId = `supplier-legacy-v${legacyVersion}-drain-fixture`;
     await client.query(`insert into dbos.workflow_status
       select (jsonb_populate_record(null::dbos.workflow_status,to_jsonb(s)||$1::jsonb)).*
       from dbos.workflow_status s where workflow_uuid=$2`, [JSON.stringify({ workflow_uuid: legacyId,
-      name: 'supplier-price-verified-release-v4', application_version: '0.8.0-verified-integrity', status: 'PENDING' }),
-      'supplier-compact-runtime-proof-v5']);
+      name: `supplier-price-verified-release-v${legacyVersion}`, application_version: commercialFields ? '0.9.0-compact-history' : '0.8.0-verified-integrity', status: 'PENDING' }),
+      workflowId]);
     const legacyStatuses = ['PENDING', 'ENQUEUED', 'DELAYED'];
     for (const status of legacyStatuses) {
       await client.query('update dbos.workflow_status set status=$1 where workflow_uuid=$2', [status, legacyId]);
       const snapshot = await historySnapshot(client);
-      await assert.rejects(checkHistoryDrain(connectionString), /VERIFIED_VERSION_DRAIN_REQUIRED/);
+      await assert.rejects(checkHistoryDrain(connectionString,{commercialFields}), /VERIFIED_VERSION_DRAIN_REQUIRED/);
       assert.deepEqual(await historySnapshot(client), snapshot, `history gate must not alter ${status} history`);
     }
     await client.query('update dbos.workflow_status set status=$1 where workflow_uuid=$2', ['SUCCESS', legacyId]);
     const drainedSnapshot = await historySnapshot(client);
-    await checkHistoryDrain(connectionString);
+    await checkHistoryDrain(connectionString,{commercialFields});
     assert.deepEqual(await historySnapshot(client), drainedSnapshot, 'successful drain gate must preserve all history');
     t.diagnostic(JSON.stringify({ sdk: sdkPackage.version, postgres: 17, cpu: 0.5, memoryMiB: 1024,
-      sourceRows: 1000, stageInvocations: 2, rowInsertions: 1000, stageReceipts: 1,
+      workflowVersion: version, drainedLegacyVersion: legacyVersion, sourceRows: 1000, stageInvocations: 2, rowInsertions: 1000, stageReceipts: 1,
       durableStepCount: checkpoints.length, durableOutputBytes: Buffer.byteLength(outputs),
       compactStageOutputBytes: Buffer.byteLength(String(compact[0].output)), rowPayloadPersistedInDbos: false,
       killedBeforeCheckpoint: true, recoveredWithSameLeaseIdentity: true,

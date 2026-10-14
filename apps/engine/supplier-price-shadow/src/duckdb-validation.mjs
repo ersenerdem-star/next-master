@@ -22,10 +22,10 @@ const csvCell=value=>{
 
 // Parse with the same delimiter, header aliases, number/date and code rules
 // that stage rows. DuckDB never reinterprets the supplier's original file.
-async function writeNormalizedCsv(inputPath,outputPath,sourceDate){
+async function writeNormalizedCsv(inputPath,outputPath,sourceDate,commercialFields){
  const rows=/\.xlsx$/i.test(inputPath)
-  ?parseNormalizedSupplierPriceRowsFromXlsx(inputPath)
-  :parseNormalizedSupplierPriceRows(createReadStream(inputPath));
+  ?parseNormalizedSupplierPriceRowsFromXlsx(inputPath,{commercialFields,sourceDate})
+  :parseNormalizedSupplierPriceRows(createReadStream(inputPath),{commercialFields,sourceDate});
  // Resolve the supplier header before opening the output stream. A malformed
  // header must fail without destroying a stream with an in-flight write.
  const first=await rows.next();
@@ -53,13 +53,13 @@ async function writeNormalizedCsv(inputPath,outputPath,sourceDate){
 
 // Current commercial prices and exports are EUR-only. Other currencies need
 // an explicit FX design before they can be marked publishable.
-export async function validateCsvWithDuckDB({inputPath,memoryLimit='512MB',threads=4,tempDirectory,sourceDate=null}){
+export async function validateCsvWithDuckDB({inputPath,memoryLimit='512MB',threads=4,tempDirectory,sourceDate=null,commercialFields=false}){
  const input=safePath(inputPath);
  const workDir=await mkdtemp(join(tempDirectory||tmpdir(),'supplier-price-validate-'));
  const path=join(workDir,'normalized.csv');
  let connection;
  try{
-  await writeNormalizedCsv(input,path,sourceDate);
+  await writeNormalizedCsv(input,path,sourceDate,commercialFields);
   const instance=await DuckDBInstance.create(':memory:',{memory_limit:memoryLimit,threads:String(threads),...(tempDirectory?{temp_directory:tempDirectory}:{})});
   connection=await instance.connect();
   const source=`read_csv(${q(path)},auto_detect=false,header=true,delim=',',quote='"',escape='"',

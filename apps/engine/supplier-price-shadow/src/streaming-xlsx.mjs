@@ -95,6 +95,7 @@ export async function* parseNormalizedSupplierPriceRowsFromXlsx(input, options =
     entries: "emit",
     sharedStrings: "cache",
     worksheets: "emit",
+    ...(options.commercialFields ? { styles: "cache" } : {}),
   });
   // Some valid XLSX producers (including ExcelJS itself) place worksheet XML
   // entries before xl/workbook.xml in the ZIP stream. ExcelJS 4.4 then tries
@@ -128,7 +129,7 @@ export async function* parseNormalizedSupplierPriceRowsFromXlsx(input, options =
         const rawBuyPrice = values[headers.indexOf("buy_price")];
         const buyPriceIsNumeric = typeof rawBuyPrice === "number"
           || (rawBuyPrice && typeof rawBuyPrice === "object" && typeof rawBuyPrice.result === "number");
-        yield normalizeSupplierPriceRow({ sourceRowNumber, row: record, buyPriceIsNumeric });
+        yield normalizeSupplierPriceRow({ sourceRowNumber, row: record, buyPriceIsNumeric }, options);
         if (options.maxRows && sourceRowNumber >= options.maxRows) return;
       }
       if (!headers) throw new Error("XLSX_MISSING_HEADER");

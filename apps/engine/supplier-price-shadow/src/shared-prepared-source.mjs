@@ -11,7 +11,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {prepareSupplierPricePartitions,scanPreparedSupplierPriceBatch} from './prepared-partitions.mjs';
 import {supabaseApiHeaders} from './supabase-headers.mjs';
 import {validateCsvWithDuckDB,requirePublishableSupplierPriceValidation} from './duckdb-validation.mjs';
-import {SUPPLIER_SOURCE_COMPATIBILITY_POLICY} from './streaming-csv.mjs';
+import {SUPPLIER_SOURCE_COMPATIBILITY_POLICY,SUPPLIER_SOURCE_COMMERCIAL_POLICY} from './streaming-csv.mjs';
 
 export const PREPARED_BUCKET='supplier-price-prepared';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -21,7 +21,7 @@ const PART_UPLOAD_CONCURRENCY=4;
 const MAX_READ_ATTEMPTS=5,READ_BACKOFF_MS=250;
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const positive=(n,max)=>Number.isSafeInteger(n)&&n>0&&n<=max;
-function binding(release,batchSize){
+function binding(release,batchSize,commercialFields=false){
  const path=release?.source_file_path;
  if(!UUID.test(release?.id||'')||!UUID.test(release?.handoff_id||'')||!SHA.test(release?.source_file_sha256||'')
   ||!positive(Number(release?.source_file_bytes),1073741824)||!positive(Number(release?.total_rows),10000000)
@@ -30,14 +30,15 @@ function binding(release,batchSize){
   ||! /\.(csv|tsv|txt|xlsx)$/i.test(path))throw Error('SHARED_PREPARED_BINDING_INVALID');
  const date=release.source_date?String(release.source_date).slice(0,10):null;
  if(date&&!/^\d{4}-\d{2}-\d{2}$/.test(date))throw Error('SHARED_PREPARED_DATE_INVALID');
- const context={contract:'supplier-price-normalized-parts-v2',release_id:release.id,handoff_id:release.handoff_id,
+ const context={contract:commercialFields?'supplier-price-normalized-parts-v3':'supplier-price-normalized-parts-v2',
+  ...(commercialFields?{commercial_policy:SUPPLIER_SOURCE_COMMERCIAL_POLICY}:{}),release_id:release.id,handoff_id:release.handoff_id,
   source_path:path,source_sha256:release.source_file_sha256,source_bytes:Number(release.source_file_bytes),
   total_rows:Number(release.total_rows),source_date:date,batch_size:batchSize};
  const prefix=`${path.split('/')[0]}/${release.id}/${digest(JSON.stringify(context))}`;
  return {context,prefix,key:prefix+'/manifest.json'};
 }
-export function validateSharedPreparedManifest(manifest,release,batchSize){
- const {context,prefix,key}=binding(release,batchSize);
+export function validateSharedPreparedManifest(manifest,release,batchSize,{commercialFields=false}={}){
+ const {context,prefix,key}=binding(release,batchSize,commercialFields);
  if(!manifest||manifest.version!==1||Object.entries(context).some(([k,v])=>manifest[k]!==v)
   ||manifest.input_path!=null||!Array.isArray(manifest.partitions)
   ||manifest.partitions.length!==Math.ceil(context.total_rows/batchSize))throw Error('SHARED_PREPARED_MANIFEST_INVALID');
@@ -53,10 +54,10 @@ export function validateSharedPreparedManifest(manifest,release,batchSize){
  return {prefix,key};
 }
 
-export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl=fetch,timeoutMs=60000}){
+export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl=fetch,timeoutMs=60000,commercialFields=false}){
  const origin=new URL(supabaseUrl);
  if(origin.protocol!=='https:'||origin.username||origin.password||origin.pathname!=='/'||origin.search||origin.hash
-  ||!serviceRoleKey||typeof fetchImpl!=='function'||!positive(timeoutMs,3600000))throw Error('SHARED_PREPARED_CONFIG_INVALID');
+  ||typeof commercialFields!=='boolean'||!serviceRoleKey||typeof fetchImpl!=='function'||!positive(timeoutMs,3600000))throw Error('SHARED_PREPARED_CONFIG_INVALID');
  const objectUrl=(bucket,path)=>`${origin.origin}/storage/v1/object/${bucket}/${path.split('/').map(encodeURIComponent).join('/')}`;
  async function request(url,options={}){
   return fetchImpl(url,{...options,headers:{...supabaseApiHeaders(serviceRoleKey),...options.headers},
@@ -123,16 +124,16 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
  async function recordCompatibility(context){
   const payload={input_release_id:context.release_id,input_handoff_id:context.handoff_id,
    input_source_sha256:context.source_sha256,input_total_rows:context.total_rows,
-   input_policy:SUPPLIER_SOURCE_COMPATIBILITY_POLICY};
+   input_policy:commercialFields?SUPPLIER_SOURCE_COMMERCIAL_POLICY:SUPPLIER_SOURCE_COMPATIBILITY_POLICY};
   let r,receipt;
   try{
-   r=await request(`${origin.origin}/rest/v1/rpc/record_supplier_price_source_compatibility`,{
+   r=await request(`${origin.origin}/rest/v1/rpc/${commercialFields?'record_supplier_price_source_compatibility_v2':'record_supplier_price_source_compatibility'}`,{
     method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
    receipt=JSON.parse((await boundedBody(r,4096)).toString());
   }catch{throw Error('SHARED_PREPARED_SOURCE_COMPATIBILITY_UNCONFIRMED');}
   if(!r.ok||!['recorded','replayed'].includes(receipt?.status)
    ||receipt.release_id!==context.release_id||receipt.source_sha256!==context.source_sha256
-   ||receipt.total_rows!==context.total_rows||receipt.policy!==SUPPLIER_SOURCE_COMPATIBILITY_POLICY)
+   ||receipt.total_rows!==context.total_rows||receipt.policy!==payload.input_policy)
    throw Error('SHARED_PREPARED_SOURCE_COMPATIBILITY_UNCONFIRMED');
  }
  async function putExact(path,bytes,type,max){
@@ -153,17 +154,17 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
   if(actual!==true)throw Error(r.ok?'SHARED_PREPARED_READBACK_MISMATCH':`SHARED_PREPARED_UPLOAD_FAILED:${r.status}`);
  }
  async function load(release,batchSize,receipt){
-  const {key}=binding(release,batchSize);
+  const {key}=binding(release,batchSize,commercialFields);
   if(receipt&&(receipt.key!==key||receipt.bucket!==PREPARED_BUCKET||!SHA.test(receipt.sha256||'')))throw Error('SHARED_PREPARED_RECEIPT_INVALID');
   const bytes=await get(key,MAX_MANIFEST);
   if(!bytes)return null;
   if(receipt&&digest(bytes)!==receipt.sha256)throw Error('SHARED_PREPARED_MANIFEST_CHECKSUM_MISMATCH');
-  const manifest=JSON.parse(bytes.toString());validateSharedPreparedManifest(manifest,release,batchSize);
+  const manifest=JSON.parse(bytes.toString());validateSharedPreparedManifest(manifest,release,batchSize,{commercialFields});
   return {manifest,receipt:{bucket:PREPARED_BUCKET,key,sha256:digest(bytes)}};
  }
  return {
   async prepare({release,batchSize}){
-   const {context,prefix,key}=binding(release,batchSize);
+   const {context,prefix,key}=binding(release,batchSize,commercialFields);
    await privateBucket();
    const ready=await load(release,batchSize);
    const dir=await mkdtemp(join(tmpdir(),'supplier-price-shared-'));
@@ -179,7 +180,7 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
     }}),createWriteStream(file,{flags:'wx',mode:0o600}));
     if(bytes!==context.source_bytes||hash.digest('hex')!==context.source_sha256)throw Error('SHARED_PREPARED_SOURCE_MISMATCH');
     const validation=await validateCsvWithDuckDB({inputPath:file,sourceDate:context.source_date,
-      memoryLimit:'512MB',threads:4,tempDirectory:dir});
+      memoryLimit:'512MB',threads:4,tempDirectory:dir,commercialFields});
     requirePublishableSupplierPriceValidation(validation,context.total_rows);
     // This runs only after downloading/checksumming and parsing ALL original
     // CSV/XLSX rows. A cached manifest or replayed DBOS step is not scan proof.
@@ -188,9 +189,9 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
     if(ready)return {...ready.receipt,validation};
     const prepared=await prepareSupplierPricePartitions({inputPath:file,outputDir:join(dir,'parts'),batchSize,
      sourceDate:context.source_date,expectedRows:context.total_rows,expectedChecksum:context.source_sha256,
-     releaseId:context.release_id,sourcePath:context.source_path});
+     releaseId:context.release_id,sourcePath:context.source_path,commercialFields});
     const {input_path:_local,...m}=prepared.manifest;
-    const manifest={...m,...context};validateSharedPreparedManifest(manifest,release,batchSize);
+    const manifest={...m,...context};validateSharedPreparedManifest(manifest,release,batchSize,{commercialFields});
     let nextPart=0,uploadError;
     const uploadParts=async()=>{
      while(!uploadError){
@@ -216,7 +217,7 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
   async scan({release,claim,batchSize,receipt}){
    const ready=await load(release,batchSize,receipt);
    if(!ready)throw Error('SHARED_PREPARED_NOT_READY');
-   const {prefix}=validateSharedPreparedManifest(ready.manifest,release,batchSize);
+   const {prefix}=validateSharedPreparedManifest(ready.manifest,release,batchSize,{commercialFields});
    if(!positive(claim?.cursor_start,ready.manifest.total_rows)||!positive(claim?.cursor_end,ready.manifest.total_rows)
     ||claim.cursor_end<claim.cursor_start||claim.cursor_end-claim.cursor_start+1>batchSize)throw Error('SHARED_PREPARED_CLAIM_INVALID');
    const dir=await mkdtemp(join(tmpdir(),'supplier-price-shared-scan-'));
@@ -229,7 +230,7 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
     }
     const manifestPath=join(dir,'manifest.json');
     await writeFile(manifestPath,JSON.stringify(ready.manifest),{flag:'wx',mode:0o600});
-    return await scanPreparedSupplierPriceBatch({release,claim,manifestPath,includeRows:true});
+    return await scanPreparedSupplierPriceBatch({release,claim,manifestPath,includeRows:true,commercialFields});
    }finally{await rm(dir,{recursive:true,force:true});}
   },
  };

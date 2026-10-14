@@ -11,14 +11,16 @@ const client = new pg.Client({ connectionString: connection.href });
 const releaseId = '11111111-1111-4111-8111-111111111111';
 const handoffId = '22222222-2222-4222-8222-222222222222';
 const batchId = '33333333-3333-4333-8333-333333333333';
-const workflowId = 'supplier-compact-runtime-proof-v5';
+const commercialFields = process.env.NM_COMPACT_TEST_COMMERCIAL_FIELDS === '1';
+const version = commercialFields ? 6 : 5;
+const workflowId = `supplier-compact-runtime-proof-v${version}`;
 const rowCount = 1000;
 const sourceHash = 'a'.repeat(64);
 const release = { id: releaseId, handoff_id: handoffId, total_rows: rowCount, source_file_sha256: sourceHash,
   source_file_bytes: 1_500_000, source_file_path: `44444444-4444-4444-8444-444444444444/${releaseId}/source.csv`, source_date: '2026-10-14' };
 const rows = Array.from({ length: rowCount }, (_, index) => ({ source_row_number: index + 1,
   product_code: `COMPACT_ROW_SENTINEL_${index + 1}`, normalized_code: `COMPACTROW${index + 1}`,
-  buy_price: '12.34', currency: 'EUR', notes: 'PRIVATE_ROW_PAYLOAD_SENTINEL_'.repeat(40) }));
+  buy_price: '12.34', currency: 'EUR', ...(commercialFields ? {stock_qty:index === 0 ? 0 : null,order_multiple:3,valid_to:'2027-10-14'} : {}), notes: 'PRIVATE_ROW_PAYLOAD_SENTINEL_'.repeat(40) }));
 
 async function rpc(name, args) {
   if (name === 'get_supplier_price_verified_manifest') return release;
@@ -27,7 +29,7 @@ async function rpc(name, args) {
     if (state.finalized) return { status: 'complete', release_id: releaseId };
     return { status: 'claimed', release_id: releaseId, batch_id: batchId, cursor_start: 1, cursor_end: rowCount };
   }
-  if (name === 'stage_supplier_price_release_batch') {
+  if (name === (commercialFields ? 'stage_supplier_price_release_batch_v2' : 'stage_supplier_price_release_batch')) {
     const payload = JSON.stringify(args.input_rows);
     const hash = createHash('sha256').update(payload).digest('hex');
     await client.query('begin');
@@ -67,12 +69,12 @@ const source = {
   scan: async () => ({ rows, batchRows: rowCount, cursorEnd: rowCount, acceptedRows: rowCount,
     warningRows: 0, rejectedRows: 0, checksum: sourceHash, prepared: true, sourceRows: rowCount }),
 };
-const workflow = DBOS.registerWorkflow(createCompactVerifiedWorkflow({ DBOS, rpc, source, requireMode() {}, batchSize: rowCount }),
-  { name: 'supplier-price-verified-release-v5' });
+const workflow = DBOS.registerWorkflow(createCompactVerifiedWorkflow({ DBOS, rpc, source, requireMode() {}, batchSize: rowCount, commercialFields }),
+  { name: `supplier-price-verified-release-v${version}` });
 
 async function main() {
   await client.connect();
-  DBOS.setConfig({ name: 'supplier-compact-local-runtime', applicationVersion: '0.9.0-compact-history',
+  DBOS.setConfig({ name: 'supplier-compact-local-runtime', applicationVersion: commercialFields ? '0.10.0-commercial-fields' : '0.9.0-compact-history',
     executorID: 'supplier-compact-local-runtime-01', systemDatabaseUrl: connection.href,
     logLevel: 'error', logger: { debug() {}, info() {}, warn() {}, error() {} } });
   await DBOS.launch();
