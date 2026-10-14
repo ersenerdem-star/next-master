@@ -35,5 +35,44 @@
     "visible_products": 3,
     "screenshot": "/private/tmp/next-master-catalog-count-canary-20261014.jpg"
   },
-  "production_changed": false
+  "production_changed": false,
+  "rollback_only_skip_canaries": {
+    "fixture_setup": "Privileged transaction-only fixtures; actual validator/finalizer RPCs executed as service_role with direct table writes still denied. No grants.",
+    "sql_sha256": "23135d23e9731c93f30b15385533a292a88b160976487a754f454e134b5c4d44",
+    "cases": [
+      {
+        "case": "all-skip / insert_only",
+        "planned": [
+          0,
+          0,
+          3
+        ],
+        "actual": [
+          0,
+          0,
+          3
+        ]
+      },
+      {
+        "case": "insert + update + trailing-skip / upsert",
+        "planned": [
+          1,
+          1,
+          1
+        ],
+        "actual": [
+          1,
+          1,
+          1
+        ]
+      }
+    ],
+    "all_finalized": true,
+    "processed_each": 3,
+    "finalize_cursor_each": 2,
+    "skipped_products_unchanged": true,
+    "finalized_replay_unchanged": true,
+    "rolled_back": true,
+    "remaining_fixture_products": 0
+  }
 }

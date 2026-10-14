@@ -16,6 +16,7 @@ export const PREPARED_BUCKET='supplier-price-prepared';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA=/^[0-9a-f]{64}$/;
 const MAX_MANIFEST=8*1024*1024,MAX_PART=32*1024*1024;
+const PART_UPLOAD_CONCURRENCY=4;
 const MAX_READ_ATTEMPTS=5,READ_BACKOFF_MS=250;
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const positive=(n,max)=>Number.isSafeInteger(n)&&n>0&&n<=max;
@@ -68,9 +69,21 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
   finally{stream.destroy?.();}
   return Buffer.concat(chunks,size);
  }
+ async function matchesBody(response,expected,max){
+  if(!response.body)throw Error('SHARED_PREPARED_BODY_MISSING');
+  const stream=typeof response.body.getReader==='function'?Readable.fromWeb(response.body):response.body;
+  let offset=0,matches=true;
+  try{for await(const bytes of stream){
+   const end=offset+bytes.length;
+   if(end>max)throw Error('SHARED_PREPARED_SIZE_EXCEEDED');
+   if(end>expected.length||!expected.subarray(offset,end).equals(bytes))matches=false;
+   offset=end;
+  }}finally{stream.destroy?.();}
+  return matches&&offset===expected.length;
+ }
  const transientStatus=status=>status===408||status===425||status===429||status>=500&&status<=599;
  const transientError=error=>/AbortError|TimeoutError|ETIMEDOUT|ECONNRESET|ECONNREFUSED|UND_ERR/i.test(String(error?.name||'')+' '+String(error?.code||''));
- async function get(path,max){
+ async function get(path,max,expected){
   let lastStatus=null;
   for(let attempt=1;attempt<=MAX_READ_ATTEMPTS;attempt++){
    let r;
@@ -92,7 +105,7 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
     if(r.status===404||r.status===400&&String(b?.statusCode)==='404'&&/Object not found|not_found|NoSuchKey/i.test(String(b?.error)+' '+String(b?.message)))return null;
     throw Error(`SHARED_PREPARED_READ_FAILED:${r.status}`);
    }
-   try{return await boundedBody(r,max);}
+   try{return expected?await matchesBody(r,expected,max):await boundedBody(r,max);}
    catch(error){
     if(!transientError(error)||attempt===MAX_READ_ATTEMPTS)throw Error('SHARED_PREPARED_READ_FAILED:NETWORK');
     await delay(READ_BACKOFF_MS*2**(attempt-1));
@@ -108,19 +121,20 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
  }
  async function putExact(path,bytes,type,max){
   if(!bytes.length||bytes.length>max)throw Error('SHARED_PREPARED_SIZE_EXCEEDED');
-  const existing=await get(path,max);
-  if(existing){if(!existing.equals(bytes))throw Error('SHARED_PREPARED_IMMUTABLE_CONFLICT');return;}
+  // Exact streamed readback avoids a second whole-part buffer per uploader.
+  const existing=await get(path,max,bytes);
+  if(existing!==null){if(!existing)throw Error('SHARED_PREPARED_IMMUTABLE_CONFLICT');return;}
   let r;
   try{r=await request(objectUrl(PREPARED_BUCKET,path),{method:'POST',headers:{'content-type':type,'x-upsert':'false'},body:bytes});}
   catch(error){
    // Acceptance can be unknown. Same identity is recovered by exact readback.
-   const recovered=await get(path,max);
-   if(recovered?.equals(bytes))return;
+   const recovered=await get(path,max,bytes);
+   if(recovered===true)return;
    throw Error('SHARED_PREPARED_UPLOAD_UNCONFIRMED',{cause:error});
   }
   await r.body?.cancel?.();
-  const actual=await get(path,max);
-  if(!actual?.equals(bytes))throw Error(r.ok?'SHARED_PREPARED_READBACK_MISMATCH':`SHARED_PREPARED_UPLOAD_FAILED:${r.status}`);
+  const actual=await get(path,max,bytes);
+  if(actual!==true)throw Error(r.ok?'SHARED_PREPARED_READBACK_MISMATCH':`SHARED_PREPARED_UPLOAD_FAILED:${r.status}`);
  }
  async function load(release,batchSize,receipt){
   const {key}=binding(release,batchSize);
@@ -157,13 +171,23 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
      releaseId:context.release_id,sourcePath:context.source_path});
     const {input_path:_local,...m}=prepared.manifest;
     const manifest={...m,...context};validateSharedPreparedManifest(manifest,release,batchSize);
-    for(const part of manifest.partitions){
-     const filePath=join(dir,'parts',part.path);
-     if((await stat(filePath)).size>MAX_PART)throw Error('SHARED_PREPARED_PART_TOO_LARGE');
-     const bytes=await readFile(filePath);
-     if(digest(bytes)!==part.sha256)throw Error('SHARED_PREPARED_LOCAL_PART_CHANGED');
-     await putExact(prefix+'/'+part.path,bytes,'application/x-ndjson',MAX_PART);
-    }
+    let nextPart=0,uploadError;
+    const uploadParts=async()=>{
+     while(!uploadError){
+      const part=manifest.partitions[nextPart++];if(!part)return;
+      try{
+       const filePath=join(dir,'parts',part.path);
+       if((await stat(filePath)).size>MAX_PART)throw Error('SHARED_PREPARED_PART_TOO_LARGE');
+       const bytes=await readFile(filePath);
+       if(digest(bytes)!==part.sha256)throw Error('SHARED_PREPARED_LOCAL_PART_CHANGED');
+       await putExact(prefix+'/'+part.path,bytes,'application/x-ndjson',MAX_PART);
+      }catch(error){uploadError??=error;return;}
+     }
+    };
+    // Four workers hold at most four MAX_PART buffers. Stop assigning parts
+    // on failure, but settle every in-flight read/upload before temp cleanup.
+    await Promise.all(Array.from({length:Math.min(PART_UPLOAD_CONCURRENCY,manifest.partitions.length)},uploadParts));
+    if(uploadError)throw uploadError;
     // Ready marker LAST. A partial upload cannot be used by the row worker.
     await putExact(key,Buffer.from(JSON.stringify(manifest)+'\n'),'application/json',MAX_MANIFEST);
     return {...(await load(release,batchSize)).receipt,validation};
