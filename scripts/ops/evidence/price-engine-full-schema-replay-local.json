@@ -1,7 +1,7 @@
 {
   "evidence_scope": "Local isolated PG17 schema replay; actual production schema metadata; no remote writes or commercial browser proof",
   "source_project_ref": "zjgueqijumzlfioihnkt",
-  "manifest_sha256": "30405c8e12233c37b5488d5a814f4a7292fee41dd7b515669e061ef6e65a6758",
+  "manifest_sha256": "d5c965bb7f975d91343d0fae6b844a908b31c8318514397ac24e8e5b590195ea",
   "baseline_tables": 38,
   "baseline_functions": 88,
   "passes": [
@@ -243,9 +243,13 @@
         {
           "file": "supabase/migrations/20261014123941_sales_order_historical_operational_edit.sql",
           "sha256": "b40ff52813200556c54925d33ac165a12ff0b17456d0c98e0f73ee12ba0bc4d2"
+        },
+        {
+          "file": "supabase/migrations/20261014132434_catalog_finalize_preserve_validation_counts.sql",
+          "sha256": "5288f8f67c9914a2706ba5de3b5ad0ca42d52b17e3a6696f47c7a1b49b1a00a2"
         }
       ],
-      "logical_schema_sha256": "e3743a74d9ba243d73bdeb353a22ba9310d0c8724bc4966269849056f2814155",
+      "logical_schema_sha256": "3d0ec16fa76c5fa34867697042880c0be1464f02e10d1ef9160d2c47a1ed7f69",
       "preexisting_job_business_fields_preserved": true,
       "production_activation_off": true,
       "role_boundaries_preserved": true
@@ -488,9 +492,13 @@
         {
           "file": "supabase/migrations/20261014123941_sales_order_historical_operational_edit.sql",
           "sha256": "b40ff52813200556c54925d33ac165a12ff0b17456d0c98e0f73ee12ba0bc4d2"
+        },
+        {
+          "file": "supabase/migrations/20261014132434_catalog_finalize_preserve_validation_counts.sql",
+          "sha256": "5288f8f67c9914a2706ba5de3b5ad0ca42d52b17e3a6696f47c7a1b49b1a00a2"
         }
       ],
-      "logical_schema_sha256": "e3743a74d9ba243d73bdeb353a22ba9310d0c8724bc4966269849056f2814155",
+      "logical_schema_sha256": "3d0ec16fa76c5fa34867697042880c0be1464f02e10d1ef9160d2c47a1ed7f69",
       "preexisting_job_business_fields_preserved": true,
       "production_activation_off": true,
       "role_boundaries_preserved": true

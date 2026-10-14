@@ -17,7 +17,7 @@ const env={SUPABASE_URL:origin,SUPPLIER_PRICE_EXPECTED_HOST:PRODUCTION_SUPABASE_
  SUPABASE_SERVICE_ROLE_KEY:'sb_secret_synthetic_only',SUPPLIER_PRICE_EXECUTOR_ID:'supplier-price-production-01', // synthetic placeholder
  DBOS_SYSTEM_DATABASE_URL:'postgresql://nm_supplier_production_worker:example@dpg-private-production/nm_supplier_production_history',
  ...Object.fromEntries(['SUPPLIER_PRICE_SERVICE_ENABLED','SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED',
-  'SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED','SUPPLIER_PRICE_SHARED_PREPARED_ENABLED',
+  'SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED','SUPPLIER_PRICE_SHARED_PREPARED_ENABLED','SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED',
   'SUPPLIER_PRICE_SHADOW_PERSIST','SUPPLIER_PRICE_UPLOAD_VERIFICATION_ENABLED'].map(key=>[key,'1']))};
 const jwt=(patch={},header={alg:'HS256',typ:'JWT'})=>[
  Buffer.from(JSON.stringify(header)).toString('base64url'),
@@ -38,6 +38,9 @@ for(const [name,patch] of Object.entries({
  missingEnvironment:{SUPPLIER_PRICE_TARGET_ENVIRONMENT:undefined},
  missingProductionOptIn:{SUPPLIER_PRICE_PRODUCTION_ENABLED:undefined},
  disabledProductionOptIn:{SUPPLIER_PRICE_PRODUCTION_ENABLED:'0'},
+ missingCompactHistory:{SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED:undefined},
+ disabledCompactHistory:{SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED:'0'},
+ malformedCompactHistory:{SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED:'yes'},
  missingExpectedHost:{SUPPLIER_PRICE_EXPECTED_HOST:undefined},
  stagingExpectedHost:{SUPPLIER_PRICE_EXPECTED_HOST:'kaxsqafdevabkxofwdod.supabase.co'},
  arbitraryExpectedHost:{SUPPLIER_PRICE_EXPECTED_HOST:'arbitrary.supabase.co'},
@@ -149,6 +152,8 @@ test('Unapplied production Blueprint has dedicated private history and gates; st
  assert.equal(production.previews.generation,'off');assert.equal(worker.type,'worker');
  assert.equal(worker.numInstances,1);assert.equal(worker.autoDeployTrigger,'off');
  assert.equal(vars.SUPABASE_URL.value,origin);assert.equal(vars.SUPPLIER_PRICE_TARGET_ENVIRONMENT.value,'production');
+ assert.equal(vars.SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED.value,'1');
+ assert.equal(staging.services[0].envVars.some(entry=>entry.key==='SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED'),false);
  for(const name of ['SUPABASE_SERVICE_ROLE_KEY','SUPPLIER_PRICE_PRODUCTION_ENABLED','SUPPLIER_PRICE_SERVICE_ENABLED','SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED']) {
   assert.equal(vars[name].sync,false);assert.equal(vars[name].value,undefined);
  }

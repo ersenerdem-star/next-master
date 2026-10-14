@@ -50,6 +50,8 @@ services:
         value: "1"
       - key: SUPPLIER_PRICE_SHARED_PREPARED_ENABLED
         value: "1"
+      - key: SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED
+        value: "1"
       - key: SUPPLIER_PRICE_SHADOW_PERSIST
         value: "1"
       - key: SUPPLIER_PRICE_SHADOW_BATCH_SIZE

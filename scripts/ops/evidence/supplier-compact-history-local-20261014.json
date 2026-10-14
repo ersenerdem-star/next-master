@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "local-serialization-measurement",
+  "sdkVersion": "5.2.11",
+  "source": {
+    "basename": "supplier-Sood-Clevite-20261014.csv",
+    "sha256": "f63f5e17d84ebff66f2c0d1465e5684e8c4bce7e4694379c1f304d0ac33b440d",
+    "bytes": 48752699,
+    "rows": 999997,
+    "sourceDate": "2026-10-10"
+  },
+  "batchSize": 1000,
+  "batches": 1000,
+  "v4": {
+    "scanStepCount": 1000,
+    "scanSerializedBytes": 558326225,
+    "maxScanSerializedBytes": 564668
+  },
+  "v5": {
+    "scanStageStepCount": 1000,
+    "scanStageSerializedBytes": 463889,
+    "maxScanStageSerializedBytes": 464,
+    "allStepOutputCount": 6003,
+    "allStepOutputSerializedBytes": 1592358,
+    "maxStepOutputSerializedBytes": 464
+  },
+  "scanStageReductionPercent": 99.91691434519309,
+  "elapsedSeconds": 27.830126583,
+  "published": false,
+  "scope": "Actual supplier export CSV, production row parser, v5 workflow and SDK DBOSJSON serializer; in-process mocked RPC and preparation receipt.",
+  "limits": [
+    "Not the original uploaded workbook.",
+    "No DuckDB validation, Storage partition I/O or remote SQL ran.",
+    "Not PostgreSQL physical storage, indexes, TOAST, WAL, memory or end-to-end throughput.",
+    "v4 metric includes scan outputs only; v5 total includes all successful workflow step outputs, not DBOS row metadata or workflow input/output.",
+    "Fixture UUIDs and prepared manifest hash preserve identity field widths; row content and source hash are from the local file."
+  ],
+  "reproduce": {
+    "script": "apps/engine/supplier-price-shadow/scripts/measure-compact-history.mjs",
+    "command": "node apps/engine/supplier-price-shadow/scripts/measure-compact-history.mjs <local-export.csv> 999997 2026-10-10"
+  }
+}

@@ -1,22 +1,24 @@
-// Operational lifecycle only. Reuses the verified v4 workflow and SQL outbox;
+// Operational lifecycle only. Reuses the versioned verified workflow and SQL outbox;
 // never publishes, creates fixtures, alters profiles or resets DBOS history.
 import {createServer} from 'node:http';
 import {setTimeout as delay} from 'node:timers/promises';
 import {PRODUCTION_SUPABASE_HOST,requireSupplierPriceServiceTarget,requireProductionServiceCredential} from './worker-target.mjs';
 import {supabaseApiHeaders} from './supabase-headers.mjs';
+import {requireCompactHistoryConfig} from './verified-workflow-version.mjs';
 
 export const SERVICE_QUEUE_LIMITS = Object.freeze({globalConcurrency:1,workerConcurrency:1});
 const SERVICE_OPT_INS = ['SUPPLIER_PRICE_SERVICE_ENABLED','SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED',
   'SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED','SUPPLIER_PRICE_SHARED_PREPARED_ENABLED',
   'SUPPLIER_PRICE_SHADOW_PERSIST','SUPPLIER_PRICE_UPLOAD_VERIFICATION_ENABLED'];
-const LOGGABLE_OPT_INS=[...SERVICE_OPT_INS,'SUPPLIER_PRICE_PRODUCTION_ENABLED'];
+const LOGGABLE_OPT_INS=[...SERVICE_OPT_INS,'SUPPLIER_PRICE_PRODUCTION_ENABLED','SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED'];
 const STARTUP_CODES = new Set(['SHADOW_PERSIST_STAGING_HOST_REQUIRED','SERVICE_STAGING_ORIGIN',
   'SERVICE_OPT_IN_REQUIRED','SERVICE_STAGING_SECRET_REQUIRED','SERVICE_STABLE_EXECUTOR_REQUIRED',
   'SERVICE_CANARY_CONFIG_DENIED','SERVICE_PRIVATE_HISTORY_REQUIRED','SERVICE_BATCH_LIMIT',
   'SERVICE_PORT','SERVICE_ARGUMENTS','SERVICE_CAPABILITY_NOT_CONFIRMED',
   'SERVICE_TARGET_ENVIRONMENT_REQUIRED','SERVICE_PRODUCTION_TARGET_REQUIRED',
   'SERVICE_PRODUCTION_SERVICE_REQUIRED','SERVICE_PRODUCTION_SECRET_REQUIRED',
-  'SERVICE_PRODUCTION_HISTORY_REQUIRED','SERVICE_PRODUCTION_EXECUTOR_REQUIRED']);
+  'SERVICE_PRODUCTION_HISTORY_REQUIRED','SERVICE_PRODUCTION_EXECUTOR_REQUIRED','SERVICE_COMPACT_HISTORY_CONFIG',
+  'VERIFIED_VERSION_DRAIN_REQUIRED','VERIFIED_HISTORY_DRAIN_UNCONFIRMED']);
 // Fixed codes and known nonsecret flag names only. Never serialize an Error,
 // provider message, stack, connection URL or environment value into host logs.
 export function serviceStartupFailure(error) {
@@ -68,6 +70,7 @@ export function serviceConfig(env) {
   for(const name of SERVICE_OPT_INS) {
     if(env[name]!=='1')throw Object.assign(Error('SERVICE_OPT_IN_REQUIRED'),{configKey:name});
   }
+  requireCompactHistoryConfig(env);
   if(target.environment==='production')requireProductionServiceCredential(env.SUPABASE_SERVICE_ROLE_KEY,target.expectedHost);
   else if(!/^sb_secret_[A-Za-z0-9_-]+$/.test(env.SUPABASE_SERVICE_ROLE_KEY||''))throw Error('SERVICE_STAGING_SECRET_REQUIRED');
   const executorId=env.SUPPLIER_PRICE_EXECUTOR_ID||'';
@@ -88,7 +91,7 @@ export function serviceConfig(env) {
   const batchSize=Number(env.SUPPLIER_PRICE_SHADOW_BATCH_SIZE||1000);
   const port=Number(env.PORT||3000);
   // This service is hard-bound to its explicitly selected Supabase target.
-  // The v4 workflow validates its own persisted rows. Do not silently run the
+  // The verified workflow validates its own persisted rows. Do not silently run the
   // legacy SQL-only validator on an old staged release after an upgrade.
   const autoValidate=false;
   if(!Number.isInteger(batchSize)||batchSize<1||batchSize>1000)throw Error('SERVICE_BATCH_LIMIT');

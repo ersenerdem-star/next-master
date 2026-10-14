@@ -3,7 +3,7 @@
   "project_ref": "zjgueqijumzlfioihnkt",
   "action": "offline-concurrent-index-prebuild-plan",
   "manifest_file": "scripts/ops/price-engine-production-manifest.json",
-  "manifest_sha256": "30405c8e12233c37b5488d5a814f4a7292fee41dd7b515669e061ef6e65a6758",
+  "manifest_sha256": "d5c965bb7f975d91343d0fae6b844a908b31c8318514397ac24e8e5b590195ea",
   "captured_schema_file": "scripts/tests/fixtures/price-engine-full-replay-production-source.json",
   "captured_schema_sha256": "09e2d2ccff7f2ee6bb0e55a3aa0deff7df4a7c7f2c89b139f084dfd9a2fa02db",
   "normalizer": {

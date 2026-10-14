@@ -1,4 +1,4 @@
-import { DBOS } from "@dbos-inc/dbos-sdk";
+import { DBOS, DBOSClient } from "@dbos-inc/dbos-sdk";
 import { fetchReleaseMetadata, scanSupplierPriceStorageBatch } from "./storage-scan.mjs";
 import { scanPreparedSupplierPriceBatch } from "./prepared-partitions.mjs";
 import { supabaseApiHeaders } from "./supabase-headers.mjs";
@@ -9,6 +9,8 @@ import {dispatchVerifiedSupplierPriceHandoff,VERIFIED_QUEUE} from "./verified-up
 import {createVerifiedReleaseWorkflow} from "./verified-release-workflow.mjs";
 import {createSharedPreparedSource} from "./shared-prepared-source.mjs";
 import {createPartitionedVerifiedWorkflow} from "./partitioned-verified-workflow.mjs";
+import {createCompactVerifiedWorkflow} from './compact-verified-workflow.mjs';
+import {verifiedWorkflowVersion,requireCompactHistoryConfig,startVersionedVerifiedWorkflow,requireCompactHistoryDrained} from './verified-workflow-version.mjs';
 import {runDirectVerifiedRelease} from './direct-verified-release-runner.mjs';
 import {consumeUploadVerification} from './upload-verification-consumer.mjs';
 import {serviceConfig,servicePreflight,serviceLogger,serviceStartupFailure,createWorkerService,startServiceHealth,SERVICE_QUEUE_LIMITS,SERVICE_RPC_NAMES,reconcileFailedWorkflowHistory} from './worker-service.mjs';
@@ -24,6 +26,7 @@ const STORAGE_BUCKET = String(process.env.SUPPLIER_PRICE_STORAGE_BUCKET || "supp
 const PERSIST_SHADOW_ROWS = String(process.env.SUPPLIER_PRICE_SHADOW_PERSIST || "") === "1";
 const PREPARED_PARTITION_MANIFEST = String(process.env.SUPPLIER_PRICE_SHADOW_PARTITION_MANIFEST || "").trim();
 const SHARED_PREPARED = process.env.SUPPLIER_PRICE_SHARED_PREPARED_ENABLED === "1";
+const COMPACT_HISTORY = process.env.SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED === '1';
 
 function requireVerifiedMode() {
   if(process.env.SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED !== "1" || !PERSIST_SHADOW_ROWS
@@ -194,8 +197,8 @@ const verifiedWorkflow = DBOS.registerWorkflow(async input => {
 
 // New durable step order requires a separate application/workflow version.
 // Do not resume an old 0.5.0 execution under v2 or rewrite its recorded steps.
-const VERIFIED_APP_VERSION=SHARED_PREPARED?'0.8.0-verified-integrity':'0.6.0-verified-recovery';
-const VERIFIED_WORKFLOW_NAME=SHARED_PREPARED?'supplier-price-verified-release-v4':'supplier-price-verified-release-v2';
+const VERIFIED_VERSION=verifiedWorkflowVersion({compact:COMPACT_HISTORY,sharedPrepared:SHARED_PREPARED});
+const {applicationVersion:VERIFIED_APP_VERSION,workflowName:VERIFIED_WORKFLOW_NAME}=VERIFIED_VERSION;
 const verifiedRecoveryWorkflow=DBOS.registerWorkflow(createVerifiedReleaseWorkflow({DBOS,rpc:callRpc,
   requireMode:requireVerifiedMode,batchSize:BATCH_SIZE,
   scanSource:({release,claim})=>scanSupplierPriceStorageBatch({release,claim,supabaseUrl:SUPABASE_URL,
@@ -210,6 +213,16 @@ const verifiedPartitionedWorkflow=DBOS.registerWorkflow(async input=>{
   const source=createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY});
   return createPartitionedVerifiedWorkflow({DBOS,rpc:callRpc,source,requireMode:requireVerifiedMode,batchSize:BATCH_SIZE})(input);
 },{name:'supplier-price-verified-release-v4'});
+
+// v5 never stores normalized row arrays in DBOS. Keep v2/v4 registrations and
+// callbacks unchanged; activation requires draining their existing identities.
+const verifiedCompactWorkflow=DBOS.registerWorkflow(async input=>{
+  requireVerifiedMode();
+  if(!COMPACT_HISTORY||!SHARED_PREPARED)throw Error('COMPACT_HISTORY_DISABLED');
+  const source=createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY});
+  return createCompactVerifiedWorkflow({DBOS,rpc:callRpc,source,requireMode:requireVerifiedMode,batchSize:BATCH_SIZE})(input);
+},{name:'supplier-price-verified-release-v5'});
+const selectedVerifiedWorkflow=COMPACT_HISTORY?verifiedCompactWorkflow:SHARED_PREPARED?verifiedPartitionedWorkflow:verifiedRecoveryWorkflow;
 
 async function main() {
   requireProductionServiceInvocation(process.env,process.argv[2]);
@@ -228,6 +241,7 @@ async function main() {
     throw Error('OPERATOR_RECOVERY_RELEASE_AND_HANDOFF_REQUIRED');
   const verified = serviceMode || releaseId === "--verified-handoff" || operatorRecovery;
   if(verified)requireVerifiedMode();
+  requireCompactHistoryConfig(process.env);
   if(serviceMode)await servicePreflight({origin:config.origin,key:SERVICE_ROLE_KEY,environment:config.environment});
   if (!releaseId) throw new Error("Usage: npm start -- <release-id> | --check-only");
   const expiryRole = process.env.SUPPLIER_PRICE_EXPIRY_TEST_ROLE || "";
@@ -265,6 +279,12 @@ async function main() {
       console.log(JSON.stringify({mode:'direct-operator-recovery',releaseId,handoffId,result,published:false}));
       return;
     }
+    if(verified&&COMPACT_HISTORY){
+      const history=await DBOSClient.create({systemDatabaseUrl:process.env.DBOS_SYSTEM_DATABASE_URL,
+        systemDatabasePoolSize:1,systemDatabasePollingConcurrency:1,observabilityQueryTimeoutMs:15000,
+        logger:serviceLogger()});
+      try{await requireCompactHistoryDrained(history);}finally{await history.destroy();}
+    }
     await DBOS.launch();
     launched = true;
     await DBOS.registerQueue(queueName,serviceMode?SERVICE_QUEUE_LIMITS:undefined);
@@ -273,12 +293,8 @@ async function main() {
         verify:()=>consumeUploadVerification({rpc:callRpc,workerId:config.executorId+':verify',
           supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY}),
         dispatch:()=>dispatchVerifiedSupplierPriceHandoff({rpc:callRpc,workerId:config.executorId+':dispatch',
-          startWorkflow:async({workflowID,queueName,input})=>{
-            const existing=await DBOS.getWorkflowStatus(workflowID);
-            if(existing&&(existing.workflowName!==VERIFIED_WORKFLOW_NAME||existing.applicationVersion!==VERIFIED_APP_VERSION))
-              throw Error('VERIFIED_VERSION_DRAIN_REQUIRED');
-            return DBOS.startWorkflow(verifiedPartitionedWorkflow,{workflowID,queueName})(input);
-          }}),
+          startWorkflow:({workflowID,queueName,input})=>startVersionedVerifiedWorkflow({DBOS,
+            workflow:selectedVerifiedWorkflow,version:VERIFIED_VERSION,workflowID,queueName,input})}),
       probe:async()=>{
           const scope={workflowName:VERIFIED_WORKFLOW_NAME,applicationVersion:VERIFIED_APP_VERSION,limit:100,loadInput:true};
           const busy=await DBOS.listWorkflows({...scope,status:['PENDING','ENQUEUED','DELAYED']});
@@ -315,11 +331,9 @@ async function main() {
       const receipt=await dispatchVerifiedSupplierPriceHandoff({rpc:callRpc,workerId:WORKER_ID,
         expectedReleaseId:process.env.SUPPLIER_PRICE_EXPECTED_RELEASE_ID||undefined,
         startWorkflow:async ({workflowID,queueName,input})=>{
-          const existing=await DBOS.getWorkflowStatus(workflowID);
           // Never attach a new step order to an old pending/history identity.
-          if(existing&&(existing.workflowName!==VERIFIED_WORKFLOW_NAME||existing.applicationVersion!==VERIFIED_APP_VERSION))
-            throw Error('VERIFIED_VERSION_DRAIN_REQUIRED');
-          queuedHandle=await DBOS.startWorkflow(SHARED_PREPARED?verifiedPartitionedWorkflow:verifiedRecoveryWorkflow,{workflowID,queueName})(input);
+          queuedHandle=await startVersionedVerifiedWorkflow({DBOS,workflow:selectedVerifiedWorkflow,
+            version:VERIFIED_VERSION,workflowID,queueName,input});
           return queuedHandle;
         }});
       console.log(JSON.stringify(receipt));
