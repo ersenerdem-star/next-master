@@ -6,6 +6,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {PRODUCTION_SUPABASE_HOST,requireSupplierPriceServiceTarget,requireProductionServiceCredential} from './worker-target.mjs';
 import {supabaseApiHeaders} from './supabase-headers.mjs';
 import {requireCompactHistoryConfig} from './verified-workflow-version.mjs';
+import {SOURCE_COMMERCIAL_FAILURE_CODES} from './upload-verification-consumer.mjs';
 
 export const SERVICE_QUEUE_LIMITS = Object.freeze({globalConcurrency:1,workerConcurrency:1});
 const SERVICE_OPT_INS = ['SUPPLIER_PRICE_SERVICE_ENABLED','SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED',
@@ -154,8 +155,12 @@ export function createWorkerService({verify,dispatch,probe,validate,consumeAdmin
       // failure must never prevent a newly completed upload from being claimed.
       state.phase='verifying-source';
       const verified=await verify();
-      if(!['empty','exhausted','verified'].includes(verified?.status)||verified.published!==false)
+      if(!['empty','exhausted','verified','rejected'].includes(verified?.status)||verified.published!==false
+        ||verified.status==='rejected'&&(![verified.requestId,verified.sessionId,verified.releaseId].every(id=>RELEASE_ID.test(id||''))
+          ||!SOURCE_COMMERCIAL_FAILURE_CODES.includes(verified.errorCode)))
         throw Error('SERVICE_VERIFICATION_RESPONSE');
+      if(verified.status==='rejected')log(JSON.stringify({stage:'source-verification',status:'rejected',
+        releaseId:verified.releaseId,errorCode:verified.errorCode,published:false}));
       if(state.stopping)return;
       state.phase='dispatching';
       const receipt=await dispatch();

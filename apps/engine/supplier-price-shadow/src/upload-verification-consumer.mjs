@@ -2,6 +2,18 @@
 // verified completion creates the SAME immutable DBOS handoff, never prices.
 import {verifySupplierPriceUpload} from './verified-upload-handoff.mjs';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const COMMERCIAL_FIELD_ERRORS=Object.freeze({stock_qty:'SOURCE_UNSUPPORTED_STOCK_QTY',
+  order_multiple:'SOURCE_UNSUPPORTED_ORDER_MULTIPLE',valid_to:'SOURCE_UNSUPPORTED_VALID_TO'});
+export const SOURCE_COMMERCIAL_FAILURE_CODES=Object.freeze(Object.values(COMMERCIAL_FIELD_ERRORS));
+function commercialFieldError(error){
+  // Trust only the structured contract emitted by our source parser. Never
+  // derive durable user-facing diagnostics from arbitrary exception messages.
+  if(error?.code!=='SUPPLIER_UNSUPPORTED_COMMERCIAL_FIELD'||!Array.isArray(error.fields)
+    ||error.fields.length<1||error.fields.length>3||new Set(error.fields).size!==error.fields.length
+    ||!error.fields.every(field=>typeof field==='string'&&Object.hasOwn(COMMERCIAL_FIELD_ERRORS,field))
+    ||!Number.isSafeInteger(error.sourceRowNumber)||error.sourceRowNumber<1||error.sourceRowNumber>10000000)return null;
+  return COMMERCIAL_FIELD_ERRORS[[...error.fields].sort()[0]];
+}
 export async function consumeUploadVerification({rpc,workerId,supabaseUrl,serviceRoleKey,fetchImpl=fetch,
   leaseSeconds=120,timeoutMs=3600000,verify=verifySupplierPriceUpload}) {
   if(typeof rpc!=='function'||typeof verify!=='function'||!workerId||workerId.trim()!==workerId||workerId.length>200
@@ -29,10 +41,19 @@ export async function consumeUploadVerification({rpc,workerId,supabaseUrl,servic
     failure=Error('VERIFIED_RECEIPT_UNCONFIRMED');
   if(failure){
     const message=String(failure.message||'');
-    const permanent=/VERIFIED_(?:CHECKSUM_MISMATCH|SIZE_MISMATCH|SIZE_EXCEEDED|EMPTY_SOURCE|PATH_INVALID|SCOPE_DENIED|ACTOR_DENIED|UPLOAD_EXPIRED|REQUIRED|CONTEXT_INVALID)/.test(message);
+    const commercialError=commercialFieldError(failure);
+    const permanent=Boolean(commercialError)||/VERIFIED_(?:CHECKSUM_MISMATCH|SIZE_MISMATCH|SIZE_EXCEEDED|EMPTY_SOURCE|PATH_INVALID|SCOPE_DENIED|ACTOR_DENIED|UPLOAD_EXPIRED|REQUIRED|CONTEXT_INVALID)/.test(message);
     // Never persist raw network errors, URLs, keys or stack traces in the ledger.
-    await rpc('settle_supplier_price_upload_verification',{...fence,input_action:permanent?'failed':'retry',
-      input_error_code:permanent?'SOURCE_VERIFICATION_REJECTED':'SOURCE_VERIFICATION_UNCONFIRMED'});
+    const settled=await rpc('settle_supplier_price_upload_verification',{...fence,input_action:permanent?'failed':'retry',
+      input_error_code:commercialError||(permanent?'SOURCE_VERIFICATION_REJECTED':'SOURCE_VERIFICATION_UNCONFIRMED')});
+    if(commercialError){
+      if(settled?.request_id!==job.request_id||settled.session_id!==job.session_id||settled.release_id!==job.release_id
+        ||settled.status!=='failed'||settled.published!==false)throw Error(`UPLOAD_VERIFY_SETTLE_UNCONFIRMED:${job.request_id}`);
+      // This is a confirmed business rejection. It must not degrade the worker
+      // or stop later files from being verified and dispatched.
+      return {status:'rejected',requestId:job.request_id,sessionId:job.session_id,releaseId:job.release_id,
+        errorCode:commercialError,published:false};
+    }
     throw new Error(`UPLOAD_VERIFY_UNCONFIRMED:${job.request_id}`,{cause:failure});
   }
   const settled=await rpc('settle_supplier_price_upload_verification',{...fence,input_action:'verified'});
