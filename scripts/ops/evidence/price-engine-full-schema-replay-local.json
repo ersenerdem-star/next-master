@@ -1,0 +1,495 @@
+{
+  "evidence_scope": "Local isolated PG17 schema replay; actual production schema metadata; no remote writes or commercial browser proof",
+  "source_project_ref": "zjgueqijumzlfioihnkt",
+  "manifest_sha256": "6a15a528ef8c8ab7c401d07aa9fad8ffbe557d18cdfd829de6093623bb32fffe",
+  "baseline_tables": 38,
+  "baseline_functions": 88,
+  "passes": [
+    {
+      "pass": 1,
+      "migrations": [
+        {
+          "file": "supabase/migrations/20261014110452_price_engine_production_foundation_bootstrap.sql",
+          "sha256": "93da9f4f6029dc234a5dfb8367ec7ffb47833b851d5828986ff769472b0e719a"
+        },
+        {
+          "file": "supabase/migrations/20261009120000_supplier_price_release_status_rpc.sql",
+          "sha256": "64c6778b292eb095ac2204ac92b230b54c6e50f43b6f8433c577ad668e6a3b7b"
+        },
+        {
+          "file": "supabase/migrations/20261011174858_supplier_price_auto_validation_candidate.sql",
+          "sha256": "0616cb9e87d2cd9e1a82dbedf4c17ef0b39998225274781c981033a40cfa1e74"
+        },
+        {
+          "file": "supabase/migrations/20261013100000_supplier_price_duckdb_validation_completion.sql",
+          "sha256": "74468de086f5de15fbc53b5da62d66cadbe7c7b2b796cf3299bce9d5be428993"
+        },
+        {
+          "file": "supabase/migrations/20261013140001_supplier_price_import_integrity_gate.sql",
+          "sha256": "3e1407f68b868fe45335c4158bcb1e50069906ee88054e806aa4edc3256a9421"
+        },
+        {
+          "file": "supabase/migrations/20261014110614_supplier_price_production_publication_decision.sql",
+          "sha256": "5af9287532740fb04c77808887d43a15ec5863098a898c82d222af77ac64b575"
+        },
+        {
+          "file": "supabase/migrations/20261013130000_export_published_release_source.sql",
+          "sha256": "ff0a717596ad0b6eb42d277d4508a6780a1fd52bed4b7bac34e117a04659ac10"
+        },
+        {
+          "file": "supabase/migrations/20261013130001_export_published_release_keyset.sql",
+          "sha256": "e84ce553e884c1f5f144aa11344a4dc39fa7531c424485d09cae9bcd59174103"
+        },
+        {
+          "file": "supabase/migrations/20261013130002_export_rpc_least_privilege.sql",
+          "sha256": "51bcabe7df3572bc8c46628f4945551b6ce587140f4e42dc1784aeaf7058250d"
+        },
+        {
+          "file": "supabase/migrations/20261013130003_optimize_portal_export_keyset_page.sql",
+          "sha256": "ca20434037f1485401e0ac1358c447f685e572fe684438a4f203c494d85ac19e"
+        },
+        {
+          "file": "supabase/migrations/20261013140002_supplier_price_published_quote_bridge.sql",
+          "sha256": "26fe94c29333bf8ea4911f5b99e1ed4246125527af4fbe4028fde7b3a26f216b"
+        },
+        {
+          "file": "supabase/migrations/20261013140003_supplier_price_service_scope_bridge.sql",
+          "sha256": "20a8eb26c881311772e2b51871e2b7403065948f2409afaafc53f27c3d36997e"
+        },
+        {
+          "file": "supabase/migrations/20261013140004_supplier_price_reject_placeholder_code.sql",
+          "sha256": "ee277b7c3246145b77b8fc971de29b2fa858055d3e1a4bd5a472403133fb2789"
+        },
+        {
+          "file": "supabase/migrations/20261013140005_supplier_price_quote_import_batch.sql",
+          "sha256": "cef100d34cce4de4f56fe91daa25e2a84af792dbc82d6afd9586ca79863d7acd"
+        },
+        {
+          "file": "supabase/migrations/20261013140006_supplier_price_compact_lookup_index.sql",
+          "sha256": "106d54440f1ed1222d91bc4c01fd163c49bb67bf09d760805065bc664eee0067"
+        },
+        {
+          "file": "supabase/migrations/20261013140007_master_published_price_page.sql",
+          "sha256": "dbc6c3b7f40287d75dceebffcb33eb8a73c4c700e8c1fd1e579e900326e0b8e7"
+        },
+        {
+          "file": "supabase/migrations/20261013140008_supplier_price_export_pointer_fingerprint.sql",
+          "sha256": "8b6d80af80c22cc6708880753d4c38aa79e4b96467c5380099207b5f5330fd0f"
+        },
+        {
+          "file": "supabase/migrations/20261013140009_supplier_price_batch_legacy_options.sql",
+          "sha256": "c8c48d0cd01497dd110d72dbe12cbb8e2d7c63fd801c3e4775317a8f06e91ebf"
+        },
+        {
+          "file": "supabase/migrations/20261013140010_supplier_price_export_valid_sku.sql",
+          "sha256": "30e0d18996e600655f97c864a49403cdeed98faa32a5191cd17af93855b4f049"
+        },
+        {
+          "file": "supabase/migrations/20261013140011_master_pointer_scope_fail_closed.sql",
+          "sha256": "45980257efd8a968c7387dce2e40217173fedde4a92e34bcbd71d85b9779a3c7"
+        },
+        {
+          "file": "supabase/migrations/20261013140012_supplier_price_export_exact_catalog_identity.sql",
+          "sha256": "01f42051b82270a9cb69203d69c21da5950a47ce498ee8e4395119e4f3f96968"
+        },
+        {
+          "file": "supabase/migrations/20261013140013_supplier_price_block_legacy_published_writes.sql",
+          "sha256": "7a79b31c70d5faf6bcf4a6d03b85b76bbc84c491ece43dd486f439f70aebc464"
+        },
+        {
+          "file": "supabase/migrations/20261013140014_supplier_price_export_complete_source_fingerprint.sql",
+          "sha256": "170d06af324800c8ca440ab1de27d3adad207c4b154e42fb41d5121dba3e2479"
+        },
+        {
+          "file": "supabase/migrations/20261013140015_supplier_price_guard_active_legacy_delete.sql",
+          "sha256": "c96052a1d1d1bd2038f761867d6f07f67f5b343d4aa91b33ef5b8cb9adbcb8e1"
+        },
+        {
+          "file": "supabase/migrations/20261013140016_supplier_price_exact_sku_lookup.sql",
+          "sha256": "5407ffd2e8b80c385bd3655dd8633c0e31cf94e96d62c1dd8db1cbcd005ac67a"
+        },
+        {
+          "file": "supabase/migrations/20261013140017_customer_price_lists_admin_permissions.sql",
+          "sha256": "a7dc26bee30317fccbb466bcb14325fce6faf69361c212acd27be0a88d2f65f9"
+        },
+        {
+          "file": "supabase/migrations/20261013140018_portal_published_release_search.sql",
+          "sha256": "630f001bb62c0eb7dcf8924fcb3dc14717214684924333d4805d0bf55b68d9db"
+        },
+        {
+          "file": "supabase/migrations/20261013140019_portal_published_release_search_permissions.sql",
+          "sha256": "5500ed4517300a5716c706ea8c2dfcc52ba8effd9a60463dc664ae1a8dcdd029"
+        },
+        {
+          "file": "supabase/migrations/20261013140020_sales_order_active_customer_pricing_guard.sql",
+          "sha256": "8e9f35c476872b2baaa46ca1acfdd9c4f0990d3bb58cd0e3c11c0be26ab565a6"
+        },
+        {
+          "file": "supabase/migrations/20261013140021_invoice_price_customer_exact_lookup.sql",
+          "sha256": "176429af80fb93a69bfa4220c8ff79c4e50ab6860b2a4ccacfc44dff0ec043e9"
+        },
+        {
+          "file": "supabase/migrations/20261013140022_sales_order_confirmed_current_margin_guard.sql",
+          "sha256": "87d906e9c2746e149cb4dba5ec2416d5c034155867320b1d4517901b40ac566c"
+        },
+        {
+          "file": "supabase/migrations/20261013140023_invoice_linked_customer_identity.sql",
+          "sha256": "efc1f48af7ca2ee96b48a7ffa55aa6c5c360cda1eeb4654dbc34dffbfc1b1be6"
+        },
+        {
+          "file": "supabase/migrations/20261013140024_supplier_price_export_quote_eligibility.sql",
+          "sha256": "0be057c71c1d8ac5af8389421023755e921d732c76ee42f69309e222d7f803c9"
+        },
+        {
+          "file": "supabase/migrations/20261013140025_portal_order_item_reference_service_read.sql",
+          "sha256": "21bcc1384b1ded1a5b44338de7dba88bb8107f2df53c39add2a4269f86e531c3"
+        },
+        {
+          "file": "supabase/migrations/20261014000000_admin_price_list_brand_scope.sql",
+          "sha256": "76595695abf1972c8052c102ee4b97247697bb2392c801100b3c207038dbafe7"
+        },
+        {
+          "file": "supabase/migrations/20261014072055_supplier_price_export_keyset_page.sql",
+          "sha256": "61601e15328df84ed97b0c7d94312ee3537b20355139fe9d117433da90d4a726"
+        },
+        {
+          "file": "supabase/migrations/20261014085226_catalog_export_source_contracts.sql",
+          "sha256": "be8f561b279aba5d31485d330155d915e8e035128bc880c8caa68845e42f47ca"
+        },
+        {
+          "file": "supabase/migrations/20261014085547_supplier_price_export_published_source.sql",
+          "sha256": "b24393e32e6c386245e265a07bc4f8e5fc2f0d6cbc0eeab1c28ce54269263807"
+        },
+        {
+          "file": "supabase/migrations/20261014090241_export_source_keyset_collation.sql",
+          "sha256": "a36788a5e5910c2c584d0cb3b227972f56b93ebd7eb9a98cc940ded42e6d7ae5"
+        },
+        {
+          "file": "supabase/migrations/20261014090712_export_source_single_count_keyset.sql",
+          "sha256": "c620c6369e3bdcd6e110b60db318eed06c9ce00f7da5b380f0e7f3535ac1afcd"
+        },
+        {
+          "file": "supabase/migrations/20261014090955_catalog_export_version_source_state.sql",
+          "sha256": "4351623c771e407e0e02f93685ddac0563d3a2262761a7073a27fdbf8ddf3129"
+        },
+        {
+          "file": "supabase/migrations/20261014091607_app_export_jobs_supplier_type.sql",
+          "sha256": "7e9e151ffacdc08ba7f9d1be0a23bba49d49e92d8502ed5e75071b1110fa52b9"
+        },
+        {
+          "file": "supabase/migrations/20261014091652_app_export_jobs_schema_contract.sql",
+          "sha256": "da69f4e6e227c9ee3f438c164c5e05e85a4c13f1b10d35253b65cea242a13e2f"
+        },
+        {
+          "file": "supabase/migrations/20261014091816_export_source_json_chunks.sql",
+          "sha256": "3413c4f30912521fe562654f3d22e3ce8a68b85233b61741f8131c637ec590a0"
+        },
+        {
+          "file": "supabase/migrations/20261014092740_supplier_export_generic_plan_seek.sql",
+          "sha256": "86fc0b0d6680a4b391aac3726c1c09ac6dbe6c06fa19c42d716789f1f436d3bc"
+        },
+        {
+          "file": "supabase/migrations/20261014093220_export_chunk_budget_and_count_index.sql",
+          "sha256": "141bafdb98d6fecc8e1d093b4eb15f8cafbb44e03d2fbbfe7f0506eaf1d5ea3d"
+        },
+        {
+          "file": "supabase/migrations/20261014094441_master_export_linear_page_join.sql",
+          "sha256": "7eb296c04f4353f823d8bdb6427045a92ee76e740aad74e94f5f4b55d89e4bbd"
+        },
+        {
+          "file": "supabase/migrations/20261014120514_app_exports_multipart_mime_capability.sql",
+          "sha256": "ff44ece276bfb4c3b1d657fbd3db06d959d18edbccec8fabb9dbd9bcf1104311"
+        },
+        {
+          "file": "supabase/migrations/20261014090000_catalog_import_storage_pipeline.sql",
+          "sha256": "dd36105602edf2e185544cee18bd5dc600fa3fd16e269a26f87dc76801241b2c"
+        },
+        {
+          "file": "supabase/migrations/20261014100000_catalog_import_storage_hardening.sql",
+          "sha256": "d2828138cfae0b9ecda0eee4e1c2a09d145224aae94474489591abcaa7830cdb"
+        },
+        {
+          "file": "supabase/migrations/20261014110000_catalog_import_storage_runtime_fence.sql",
+          "sha256": "d2828138cfae0b9ecda0eee4e1c2a09d145224aae94474489591abcaa7830cdb"
+        },
+        {
+          "file": "supabase/migrations/20261014120000_catalog_import_storage_api_cleanup.sql",
+          "sha256": "7eaf3001b5a615d3b1b7fc092fe963639b2e2298a55732aad060a5425f66aa8f"
+        },
+        {
+          "file": "supabase/migrations/20261014123000_catalog_import_storage_worker_grants.sql",
+          "sha256": "682d4e32b44fdf6a0fa11d45926763187e5e0128e9121a431fe400ce01e87190"
+        },
+        {
+          "file": "supabase/migrations/20261014124000_catalog_import_worker_supplier_grants.sql",
+          "sha256": "598f9f34148a6245a38d931e1bd0eff873db33449755cd750df20f4f28791631"
+        },
+        {
+          "file": "supabase/migrations/20261014132000_catalog_import_storage_validation_batches.sql",
+          "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43"
+        },
+        {
+          "file": "supabase/migrations/20261014133000_catalog_import_storage_validation_ambiguity_fix.sql",
+          "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43"
+        },
+        {
+          "file": "supabase/migrations/20261014134000_catalog_import_storage_validation_aggregate_fix.sql",
+          "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43"
+        },
+        {
+          "file": "supabase/migrations/20261014135000_catalog_import_storage_validation_projection_fix.sql",
+          "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43"
+        }
+      ],
+      "logical_schema_sha256": "17b8d0032a68e3aa143d27163f7c7cb3c0ea2b3d50980bc1001bdb62d3d1ea13",
+      "preexisting_job_business_fields_preserved": true,
+      "production_activation_off": true,
+      "role_boundaries_preserved": true
+    },
+    {
+      "pass": 2,
+      "migrations": [
+        {
+          "file": "supabase/migrations/20261014110452_price_engine_production_foundation_bootstrap.sql",
+          "sha256": "93da9f4f6029dc234a5dfb8367ec7ffb47833b851d5828986ff769472b0e719a"
+        },
+        {
+          "file": "supabase/migrations/20261009120000_supplier_price_release_status_rpc.sql",
+          "sha256": "64c6778b292eb095ac2204ac92b230b54c6e50f43b6f8433c577ad668e6a3b7b"
+        },
+        {
+          "file": "supabase/migrations/20261011174858_supplier_price_auto_validation_candidate.sql",
+          "sha256": "0616cb9e87d2cd9e1a82dbedf4c17ef0b39998225274781c981033a40cfa1e74"
+        },
+        {
+          "file": "supabase/migrations/20261013100000_supplier_price_duckdb_validation_completion.sql",
+          "sha256": "74468de086f5de15fbc53b5da62d66cadbe7c7b2b796cf3299bce9d5be428993"
+        },
+        {
+          "file": "supabase/migrations/20261013140001_supplier_price_import_integrity_gate.sql",
+          "sha256": "3e1407f68b868fe45335c4158bcb1e50069906ee88054e806aa4edc3256a9421"
+        },
+        {
+          "file": "supabase/migrations/20261014110614_supplier_price_production_publication_decision.sql",
+          "sha256": "5af9287532740fb04c77808887d43a15ec5863098a898c82d222af77ac64b575"
+        },
+        {
+          "file": "supabase/migrations/20261013130000_export_published_release_source.sql",
+          "sha256": "ff0a717596ad0b6eb42d277d4508a6780a1fd52bed4b7bac34e117a04659ac10"
+        },
+        {
+          "file": "supabase/migrations/20261013130001_export_published_release_keyset.sql",
+          "sha256": "e84ce553e884c1f5f144aa11344a4dc39fa7531c424485d09cae9bcd59174103"
+        },
+        {
+          "file": "supabase/migrations/20261013130002_export_rpc_least_privilege.sql",
+          "sha256": "51bcabe7df3572bc8c46628f4945551b6ce587140f4e42dc1784aeaf7058250d"
+        },
+        {
+          "file": "supabase/migrations/20261013130003_optimize_portal_export_keyset_page.sql",
+          "sha256": "ca20434037f1485401e0ac1358c447f685e572fe684438a4f203c494d85ac19e"
+        },
+        {
+          "file": "supabase/migrations/20261013140002_supplier_price_published_quote_bridge.sql",
+          "sha256": "26fe94c29333bf8ea4911f5b99e1ed4246125527af4fbe4028fde7b3a26f216b"
+        },
+        {
+          "file": "supabase/migrations/20261013140003_supplier_price_service_scope_bridge.sql",
+          "sha256": "20a8eb26c881311772e2b51871e2b7403065948f2409afaafc53f27c3d36997e"
+        },
+        {
+          "file": "supabase/migrations/20261013140004_supplier_price_reject_placeholder_code.sql",
+          "sha256": "ee277b7c3246145b77b8fc971de29b2fa858055d3e1a4bd5a472403133fb2789"
+        },
+        {
+          "file": "supabase/migrations/20261013140005_supplier_price_quote_import_batch.sql",
+          "sha256": "cef100d34cce4de4f56fe91daa25e2a84af792dbc82d6afd9586ca79863d7acd"
+        },
+        {
+          "file": "supabase/migrations/20261013140006_supplier_price_compact_lookup_index.sql",
+          "sha256": "106d54440f1ed1222d91bc4c01fd163c49bb67bf09d760805065bc664eee0067"
+        },
+        {
+          "file": "supabase/migrations/20261013140007_master_published_price_page.sql",
+          "sha256": "dbc6c3b7f40287d75dceebffcb33eb8a73c4c700e8c1fd1e579e900326e0b8e7"
+        },
+        {
+          "file": "supabase/migrations/20261013140008_supplier_price_export_pointer_fingerprint.sql",
+          "sha256": "8b6d80af80c22cc6708880753d4c38aa79e4b96467c5380099207b5f5330fd0f"
+        },
+        {
+          "file": "supabase/migrations/20261013140009_supplier_price_batch_legacy_options.sql",
+          "sha256": "c8c48d0cd01497dd110d72dbe12cbb8e2d7c63fd801c3e4775317a8f06e91ebf"
+        },
+        {
+          "file": "supabase/migrations/20261013140010_supplier_price_export_valid_sku.sql",
+          "sha256": "30e0d18996e600655f97c864a49403cdeed98faa32a5191cd17af93855b4f049"
+        },
+        {
+          "file": "supabase/migrations/20261013140011_master_pointer_scope_fail_closed.sql",
+          "sha256": "45980257efd8a968c7387dce2e40217173fedde4a92e34bcbd71d85b9779a3c7"
+        },
+        {
+          "file": "supabase/migrations/20261013140012_supplier_price_export_exact_catalog_identity.sql",
+          "sha256": "01f42051b82270a9cb69203d69c21da5950a47ce498ee8e4395119e4f3f96968"
+        },
+        {
+          "file": "supabase/migrations/20261013140013_supplier_price_block_legacy_published_writes.sql",
+          "sha256": "7a79b31c70d5faf6bcf4a6d03b85b76bbc84c491ece43dd486f439f70aebc464"
+        },
+        {
+          "file": "supabase/migrations/20261013140014_supplier_price_export_complete_source_fingerprint.sql",
+          "sha256": "170d06af324800c8ca440ab1de27d3adad207c4b154e42fb41d5121dba3e2479"
+        },
+        {
+          "file": "supabase/migrations/20261013140015_supplier_price_guard_active_legacy_delete.sql",
+          "sha256": "c96052a1d1d1bd2038f761867d6f07f67f5b343d4aa91b33ef5b8cb9adbcb8e1"
+        },
+        {
+          "file": "supabase/migrations/20261013140016_supplier_price_exact_sku_lookup.sql",
+          "sha256": "5407ffd2e8b80c385bd3655dd8633c0e31cf94e96d62c1dd8db1cbcd005ac67a"
+        },
+        {
+          "file": "supabase/migrations/20261013140017_customer_price_lists_admin_permissions.sql",
+          "sha256": "a7dc26bee30317fccbb466bcb14325fce6faf69361c212acd27be0a88d2f65f9"
+        },
+        {
+          "file": "supabase/migrations/20261013140018_portal_published_release_search.sql",
+          "sha256": "630f001bb62c0eb7dcf8924fcb3dc14717214684924333d4805d0bf55b68d9db"
+        },
+        {
+          "file": "supabase/migrations/20261013140019_portal_published_release_search_permissions.sql",
+          "sha256": "5500ed4517300a5716c706ea8c2dfcc52ba8effd9a60463dc664ae1a8dcdd029"
+        },
+        {
+          "file": "supabase/migrations/20261013140020_sales_order_active_customer_pricing_guard.sql",
+          "sha256": "8e9f35c476872b2baaa46ca1acfdd9c4f0990d3bb58cd0e3c11c0be26ab565a6"
+        },
+        {
+          "file": "supabase/migrations/20261013140021_invoice_price_customer_exact_lookup.sql",
+          "sha256": "176429af80fb93a69bfa4220c8ff79c4e50ab6860b2a4ccacfc44dff0ec043e9"
+        },
+        {
+          "file": "supabase/migrations/20261013140022_sales_order_confirmed_current_margin_guard.sql",
+          "sha256": "87d906e9c2746e149cb4dba5ec2416d5c034155867320b1d4517901b40ac566c"
+        },
+        {
+          "file": "supabase/migrations/20261013140023_invoice_linked_customer_identity.sql",
+          "sha256": "efc1f48af7ca2ee96b48a7ffa55aa6c5c360cda1eeb4654dbc34dffbfc1b1be6"
+        },
+        {
+          "file": "supabase/migrations/20261013140024_supplier_price_export_quote_eligibility.sql",
+          "sha256": "0be057c71c1d8ac5af8389421023755e921d732c76ee42f69309e222d7f803c9"
+        },
+        {
+          "file": "supabase/migrations/20261013140025_portal_order_item_reference_service_read.sql",
+          "sha256": "21bcc1384b1ded1a5b44338de7dba88bb8107f2df53c39add2a4269f86e531c3"
+        },
+        {
+          "file": "supabase/migrations/20261014000000_admin_price_list_brand_scope.sql",
+          "sha256": "76595695abf1972c8052c102ee4b97247697bb2392c801100b3c207038dbafe7"
+        },
+        {
+          "file": "supabase/migrations/20261014072055_supplier_price_export_keyset_page.sql",
+          "sha256": "61601e15328df84ed97b0c7d94312ee3537b20355139fe9d117433da90d4a726"
+        },
+        {
+          "file": "supabase/migrations/20261014085226_catalog_export_source_contracts.sql",
+          "sha256": "be8f561b279aba5d31485d330155d915e8e035128bc880c8caa68845e42f47ca"
+        },
+        {
+          "file": "supabase/migrations/20261014085547_supplier_price_export_published_source.sql",
+          "sha256": "b24393e32e6c386245e265a07bc4f8e5fc2f0d6cbc0eeab1c28ce54269263807"
+        },
+        {
+          "file": "supabase/migrations/20261014090241_export_source_keyset_collation.sql",
+          "sha256": "a36788a5e5910c2c584d0cb3b227972f56b93ebd7eb9a98cc940ded42e6d7ae5"
+        },
+        {
+          "file": "supabase/migrations/20261014090712_export_source_single_count_keyset.sql",
+          "sha256": "c620c6369e3bdcd6e110b60db318eed06c9ce00f7da5b380f0e7f3535ac1afcd"
+        },
+        {
+          "file": "supabase/migrations/20261014090955_catalog_export_version_source_state.sql",
+          "sha256": "4351623c771e407e0e02f93685ddac0563d3a2262761a7073a27fdbf8ddf3129"
+        },
+        {
+          "file": "supabase/migrations/20261014091607_app_export_jobs_supplier_type.sql",
+          "sha256": "7e9e151ffacdc08ba7f9d1be0a23bba49d49e92d8502ed5e75071b1110fa52b9"
+        },
+        {
+          "file": "supabase/migrations/20261014091652_app_export_jobs_schema_contract.sql",
+          "sha256": "da69f4e6e227c9ee3f438c164c5e05e85a4c13f1b10d35253b65cea242a13e2f"
+        },
+        {
+          "file": "supabase/migrations/20261014091816_export_source_json_chunks.sql",
+          "sha256": "3413c4f30912521fe562654f3d22e3ce8a68b85233b61741f8131c637ec590a0"
+        },
+        {
+          "file": "supabase/migrations/20261014092740_supplier_export_generic_plan_seek.sql",
+          "sha256": "86fc0b0d6680a4b391aac3726c1c09ac6dbe6c06fa19c42d716789f1f436d3bc"
+        },
+        {
+          "file": "supabase/migrations/20261014093220_export_chunk_budget_and_count_index.sql",
+          "sha256": "141bafdb98d6fecc8e1d093b4eb15f8cafbb44e03d2fbbfe7f0506eaf1d5ea3d"
+        },
+        {
+          "file": "supabase/migrations/20261014094441_master_export_linear_page_join.sql",
+          "sha256": "7eb296c04f4353f823d8bdb6427045a92ee76e740aad74e94f5f4b55d89e4bbd"
+        },
+        {
+          "file": "supabase/migrations/20261014120514_app_exports_multipart_mime_capability.sql",
+          "sha256": "ff44ece276bfb4c3b1d657fbd3db06d959d18edbccec8fabb9dbd9bcf1104311"
+        },
+        {
+          "file": "supabase/migrations/20261014090000_catalog_import_storage_pipeline.sql",
+          "sha256": "dd36105602edf2e185544cee18bd5dc600fa3fd16e269a26f87dc76801241b2c"
+        },
+        {
+          "file": "supabase/migrations/20261014100000_catalog_import_storage_hardening.sql",
+          "sha256": "d2828138cfae0b9ecda0eee4e1c2a09d145224aae94474489591abcaa7830cdb"
+        },
+        {
+          "file": "supabase/migrations/20261014110000_catalog_import_storage_runtime_fence.sql",
+          "sha256": "d2828138cfae0b9ecda0eee4e1c2a09d145224aae94474489591abcaa7830cdb"
+        },
+        {
+          "file": "supabase/migrations/20261014120000_catalog_import_storage_api_cleanup.sql",
+          "sha256": "7eaf3001b5a615d3b1b7fc092fe963639b2e2298a55732aad060a5425f66aa8f"
+        },
+        {
+          "file": "supabase/migrations/20261014123000_catalog_import_storage_worker_grants.sql",
+          "sha256": "682d4e32b44fdf6a0fa11d45926763187e5e0128e9121a431fe400ce01e87190"
+        },
+        {
+          "file": "supabase/migrations/20261014124000_catalog_import_worker_supplier_grants.sql",
+          "sha256": "598f9f34148a6245a38d931e1bd0eff873db33449755cd750df20f4f28791631"
+        },
+        {
+          "file": "supabase/migrations/20261014132000_catalog_import_storage_validation_batches.sql",
+          "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43"
+        },
+        {
+          "file": "supabase/migrations/20261014133000_catalog_import_storage_validation_ambiguity_fix.sql",
+          "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43"
+        },
+        {
+          "file": "supabase/migrations/20261014134000_catalog_import_storage_validation_aggregate_fix.sql",
+          "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43"
+        },
+        {
+          "file": "supabase/migrations/20261014135000_catalog_import_storage_validation_projection_fix.sql",
+          "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43"
+        }
+      ],
+      "logical_schema_sha256": "17b8d0032a68e3aa143d27163f7c7cb3c0ea2b3d50980bc1001bdb62d3d1ea13",
+      "preexisting_job_business_fields_preserved": true,
+      "production_activation_off": true,
+      "role_boundaries_preserved": true
+    }
+  ],
+  "remote_mutations": 0,
+  "prepared_artifact_read_write_denied_for_browser_roles": true,
+  "prepared_fence_adversarial_permissive_policy_positive_control": "passed after both migration fingerprints; synthetic test-only grants/policy/object",
+  "status": "passed"
+}

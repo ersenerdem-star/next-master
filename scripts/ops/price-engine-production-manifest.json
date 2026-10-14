@@ -350,6 +350,13 @@
       "status": "source-reviewed-pending-target-apply"
     },
     {
+      "id": "20261014120514_app_exports_multipart_mime_capability",
+      "phase": "bounded-export",
+      "file": "supabase/migrations/20261014120514_app_exports_multipart_mime_capability.sql",
+      "sha256": "ff44ece276bfb4c3b1d657fbd3db06d959d18edbccec8fabb9dbd9bcf1104311",
+      "status": "local-storage-compatibility-3-of-3-passed-pending-target-apply"
+    },
+    {
       "id": "20261014090000_catalog_import_storage_pipeline",
       "phase": "catalog-storage",
       "file": "supabase/migrations/20261014090000_catalog_import_storage_pipeline.sql",
@@ -434,27 +441,27 @@
     {
       "id": "foundation-capture",
       "status": "prepared-not-applied",
-      "evidence": "Captured real staging closure:12tables/29functions plus base119columns/6helperhashes, privateRLS+ACL/Storagefences; bootstraplocal5tests and actualpublication-realvalidator3tests passed. Full57entry upgrade replay remains pending."
+      "evidence": "Captured real staging closure: 12 tables/29 functions plus 125 prerequisite columns/seven helper fingerprints, private RLS/ACL/Storage fences; five bootstrap tests and three publication tests using the actual captured validator passed. All 58 ordered migrations and a second complete replay passed against captured production baseline metadata. Production application remains pending."
     },
     {
       "id": "app-export-jobs-compatibility",
-      "status": "pending",
-      "evidence": "Production table exists. CREATE TABLE IF NOT EXISTS does not repair wrong types, omitted columns, old constraints or grants. Compare all required columns before runtime enablement."
+      "status": "captured-production-baseline-replayed-pending-target-apply",
+      "evidence": "Actual production table columns, constraints, indexes, triggers, RLS and ACL included in full schema fixture. Existing synthetic finalized job business fields survived both complete upgrade passes; required runtime metadata still must be checked after production application."
     },
     {
       "id": "export-bucket-mime",
-      "status": "confirmed-gap",
-      "evidence": "Production app-exports permits XLSX, CSV, JSON with 100 MiB limit; multipart upload uses application/octet-stream, currently absent."
+      "status": "prepared-local-tests-passed-pending-target-apply",
+      "evidence": "Production app-exports currently omits application/octet-stream. Prepared additive MIME migration preserves private access, existing types and 100 MiB capacity; replay performs no write. Three embedded PostgreSQL tests passed; production bucket unchanged."
     },
     {
       "id": "catalog-legacy-baseline",
-      "status": "pending",
-      "evidence": "Verify existing catalog run/stage/provider-resume contract and finalize batch RPC. Promote only missing prerequisites with verified definitions, never the unrelated governance migrations."
+      "status": "captured-production-baseline-replayed-pending-business-canary",
+      "evidence": "Actual production catalog baseline tables/functions included in isolated full-chain replay; catalog storage/validation/finalization migrations applied twice successfully. Authenticated production import/resume/finalization canary remains separate."
     },
     {
       "id": "supplier-verified-admission-source-port",
       "status": "prepared-local-tests-passed",
-      "evidence": "Selected8 source modules ported, canonicalSuppliersPage verified branch added without changing exporthandler. Exacttarget/auth/object-boundary37tests +pureJS1MiB checksum12tests passed; no productionbrowserclaim."
+      "evidence": "Eight selected source modules ported and canonical SuppliersPage verified branch added without changing export handler. All 54 local admission/TUS/checksum/mode/hint tests passed; fresh authenticated V3 staging upload accepted 3/3 rows. No production browser claim."
     }
   ],
   "runtime_configuration": [
@@ -600,13 +607,14 @@
   "required_acceptance": [
     {
       "id": "isolated-full-schema-replay",
-      "status": "pending",
-      "expected": "Exact ordered foundation and upgrade chain succeeds against a disposable production-shaped clone, preserving existing job rows and role boundaries."
+      "status": "passed",
+      "expected": "Exact ordered foundation and upgrade chain succeeds against a disposable production-shaped clone, preserving existing job rows and role boundaries.",
+      "evidence": "scripts/ops/evidence/price-engine-full-schema-replay-local.json; actual captured production schema fixture, two complete 58-entry passes, logical schema stable, synthetic existing job business fields preserved, publication controls disabled and browser role boundaries enforced. Local PG17 proof only."
     },
     {
       "id": "production-provider-readiness",
       "status": "pending",
-      "expected": "Separate Render supplier/catalog services and DBOS history; exact host+origin configuration, capabilities and heartbeat observed without accepting business work."
+      "expected": "Separate Render supplier/catalog services and DBOS history; exact host+origin configuration, capabilities and heartbeat observed without accepting business work. Verify the actual Storage global file limit supports admitted supplier/catalog file sizes and the 40 MiB export parts; bucket metadata alone does not prove this."
     },
     {
       "id": "production-read-only-runtime-metadata",
@@ -642,7 +650,7 @@
       "id": "supplier-verified-ui-admission-bridge",
       "status": "passed",
       "expected": "Scoped verified CSV/XLSX admission/options/status/finish routes and TUS browser client packaged in canonical release checkout; strict current Auth session/revocation + supplier/brand/organization binding, exact target/origin opt-in; no fallback to legacy writer for published brands. Verified imports admit only complete replace snapshots; merge is rejected before hashing/admission and at publication, with no pointer or ledger changes.",
-      "evidence": "Scoped sourceport and49local tests; authenticatedproductioncanary is separate pending acceptance."
+      "evidence": "Scoped source port and 54 local admission/TUS/checksum/mode tests; fresh authenticated V3 staging upload accepted 3/3 rows with current published pointer unchanged. scripts/ops/evidence/supplier-verified-upload-staging-20261014.json. Authenticated production canary is separate pending acceptance."
     }
   ],
   "production_baseline": {
@@ -703,15 +711,18 @@
   ],
   "preparation_validation": {
     "preflight_tests": 5,
-    "supplier_admission_tus_checksum_tests": 53,
+    "supplier_admission_tus_checksum_tests": 54,
     "complete_export_regression_tests": 40,
     "foundation_tests": 5,
     "actual_publication_with_captured_validator_tests": 3,
     "customer_alignment_cas_tests": 2,
+    "export_bucket_mime_tests": 3,
     "typescript": "passed",
-    "full_ordered_schema_replay": "pending",
+    "full_ordered_schema_replay": "passed-two-complete-58-entry-passes",
+    "full_ordered_schema_replay_evidence": "scripts/ops/evidence/price-engine-full-schema-replay-local.json",
     "production_browser_canary": "pending",
-    "remote_mutations": 0,
+    "production_mutations": 0,
+    "staging_verified_upload_evidence": "scripts/ops/evidence/supplier-verified-upload-staging-20261014.json",
     "verified_replace_only_mode_guard": "server/client/UI local regression passed; source-level actualclient tested before hash/Auth/network"
   }
 }

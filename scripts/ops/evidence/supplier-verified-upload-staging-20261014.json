@@ -8,6 +8,13 @@
     "commit": "2f5327b952de5f601c2fc40a70366ebda74e74e3",
     "deploy_id": "6acf6cbaba9f77e87bd2ddc6"
   },
+  "final_staging_deployment": {
+    "commit": "df39596f3c0de348b1c2bcbd05d209d13096eed1",
+    "deploy_id": "6acf6e5151a47a749b1ae15f",
+    "change_after_upload_proof": "Verified-only TR/EN hint clarifies complete supplier/brand snapshot and separate publication; transfer logic unchanged.",
+    "authenticated_browser_hint_verified": true,
+    "authenticated_session_survived_reload": true
+  },
   "method": "Authenticated native Chrome UI admission, SHA-256, TUS private Storage transfer, finish and same-session status; read-only Supabase verification.",
   "source": {
     "file": "supplier-preparation-staging-canary-20261014.csv",
