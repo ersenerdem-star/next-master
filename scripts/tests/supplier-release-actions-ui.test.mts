@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {actionScope,parseReleaseActionEvidence,prepareDurableAction,publicationConfirmationKey,publishCommand,readDurableAction,
-  reconcileDurableAction,releaseActionsTargetEnabled,releasePublicationReady,reviewCommand,updateDurableAction,
+  reconcileDurableAction,recordActionFailure,releaseActionsTargetEnabled,releasePublicationReady,reviewCommand,updateDurableAction,
   type ActionReceipt,type DurableAction,type ReleaseActionEvidence} from '../../apps/web/src/shared/supplierReleaseActions.ts';
 import {createSupplierReleaseActionsClient,SupplierReleaseActionError} from '../../apps/web/src/infrastructure/api/supplierReleaseActionsApi.ts';
 import {SupplierReleaseActionView} from '../../apps/web/src/modules/admin/SupplierReleaseActionPanel.tsx';
@@ -107,6 +107,25 @@ test('actor/origin/release storage scopes isolate receipts and actor changes pre
   await assert.rejects(client(async()=>{calls++;return Response.json({});},id(40)).submit(saved),/ACTION_ACTOR_CHANGED/);
   assert.equal(calls,0);
   assert.throws(()=>reconcileDurableAction(s,saved,{...evidence,actorId:id(40)}),/ACTION_ACTOR_CHANGED/);
+});
+
+test('auth or disabled-gate denial of a retry cannot erase the original unknown outcome',async()=>{
+  const s=storage(),scope=actionScope(evidence,origin);
+  let saved=prepareDurableAction(s,scope,'publish',publishCommand(evidence,id(43)));
+  saved=recordActionFailure(s,saved,{code:'ACTION_OUTCOME_UNKNOWN',outcome:'unknown'},false);
+  for(const code of ['ACTION_AUTH_DENIED','ACTION_NOT_ENABLED','ACTION_ACTOR_CHANGED','ACTION_SESSION_DENIED','ACTION_UNAVAILABLE','ACTION_DECISION_CONFLICT']) {
+    const api=client(async()=>Response.json({code,outcome:'not_submitted'},{status:code==='ACTION_NOT_ENABLED'?503:403}));
+    await assert.rejects(api.submit(saved),(error:SupplierReleaseActionError)=>{
+      saved=recordActionFailure(s,saved,error,true);return true;
+    });
+    assert.equal(saved.phase,'unknown');assert.equal(saved.command.decisionId,id(43));
+  }
+  // Only an exact operation receipt or a denial after the decision lookup
+  // resolves the previous uncertainty; no updated CAS is silently substituted.
+  saved=recordActionFailure(s,saved,{code:'ACTION_STALE_POINTER',outcome:'not_submitted'},true);
+  assert.equal(saved.phase,'failed');assert.equal((saved.command as any).expectedPreviousPublicationId,id(6));
+  const first=prepareDurableAction(s,scope,'publish',publishCommand(evidence,id(44)));
+  assert.equal(recordActionFailure(s,first,{code:'ACTION_AUTH_DENIED',outcome:'not_submitted'},false).phase,'failed');
 });
 
 test('unavailable or corrupt storage prevents a new command and never silently replaces a pending receipt',()=>{

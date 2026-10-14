@@ -1,7 +1,7 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {Button} from '../../presentation/components/common/Button';
 import {supplierReleaseActionsClient,SupplierReleaseActionError} from '../../infrastructure/api/supplierReleaseActionsApi';
-import {actionScope,prepareDurableAction,publicationConfirmationKey,publishCommand,readDurableAction,reconcileDurableAction,
+import {actionScope,prepareDurableAction,publicationConfirmationKey,publishCommand,readDurableAction,reconcileDurableAction,recordActionFailure,
   releasePublicationReady,reviewCommand,updateDurableAction,type ActionKind,type DurableAction,type ReceiptStorage,
   type ReleaseActionEvidence,type ReviewReason} from '../../shared/supplierReleaseActions';
 
@@ -119,14 +119,14 @@ export function SupplierReleaseActionPanel({releaseId,tr,onChanged}:{releaseId:s
     return()=>window.clearInterval(timer);
   },[needsPolling,load]);
 
-  async function send(r:DurableAction) {
+  async function send(r:DurableAction,retry:boolean) {
     try {
       const receipt=await supplierReleaseActionsClient.submit(r);
       updateDurableAction(storage(),r,{receipt});
       if(!['queued','running'].includes(receipt.status))onChangedRef.current?.();
     }catch(err) {
       const requestError=err instanceof SupplierReleaseActionError?err:null;
-      updateDurableAction(storage(),r,{errorCode:requestError?.code||'ACTION_OUTCOME_UNKNOWN',unknown:requestError?.outcome!=='not_submitted'});
+      recordActionFailure(storage(),r,{code:requestError?.code||'ACTION_OUTCOME_UNKNOWN',outcome:requestError?.outcome||'unknown'},retry);
     }
   }
   async function act(kind:ActionKind,retry=false) {
@@ -138,7 +138,7 @@ export function SupplierReleaseActionPanel({releaseId,tr,onChanged}:{releaseId:s
       const saved=readDurableAction(storage(),scope,kind);
       if(retry) {
         if(!saved||!unresolved(saved))throw new Error('ACTION_RECEIPT_STORAGE_INVALID');
-        await send(saved); // Exact persisted command: never replace CAS fields from refreshed evidence.
+        await send(saved,true); // Exact persisted command: never replace CAS fields from refreshed evidence.
       } else {
         if(unresolved(readDurableAction(storage(),scope,kind==='review'?'publish':'review')))throw new Error('ACTION_PENDING');
         const fresh=await load();if(!fresh)return;
@@ -148,7 +148,7 @@ export function SupplierReleaseActionPanel({releaseId,tr,onChanged}:{releaseId:s
         if(kind==='review'&&!fresh.canReview)throw new Error('ACTION_NOT_READY');
         const command=kind==='review'?reviewCommand(fresh,reason,crypto.randomUUID()):publishCommand(fresh,crypto.randomUUID());
         const durable=prepareDurableAction(storage(),scope,kind,command);
-        await send(durable);
+        await send(durable,durable.command.decisionId!==command.decisionId);
       }
       setConfirmed(false);
       await load();

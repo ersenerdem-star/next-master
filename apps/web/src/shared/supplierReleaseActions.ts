@@ -135,6 +135,16 @@ export function updateDurableAction(storage:ReceiptStorage,r:DurableAction,resul
   return saveDurableAction(storage,{...r,receipt,errorCode:result.errorCode||receipt?.errorCode||null,
     phase:receipt?(receipt.status==='failed'?'failed':['queued','running'].includes(receipt.status)?'pending':'completed'):result.unknown?'unknown':'failed'});
 }
+// These acceptance denials occur only after the server looked up the exact
+// immutable decision, or describe a terminal queue receipt. Auth/gate rejection
+// of a retry cannot establish the outcome of an earlier uncertain submission.
+const DECISION_SETTLED_FAILURES=new Set(['ACTION_STALE_EVIDENCE','ACTION_STALE_POINTER','ACTION_STATE_DENIED',
+  'ACTION_SOURCE_REQUIRED','ACTION_SCOPE_DENIED','ACTION_ALREADY_PENDING',
+  'ACTION_EXECUTION_FAILED','ACTION_EXECUTION_TIMEOUT','ACTION_RETRY_EXHAUSTED']);
+export function recordActionFailure(storage:ReceiptStorage,r:DurableAction,error:{code:string;outcome:'unknown'|'not_submitted'},retry:boolean) {
+  return updateDurableAction(storage,r,{errorCode:error.code,
+    unknown:error.outcome==='unknown'||retry&&!DECISION_SETTLED_FAILURES.has(error.code)});
+}
 export function reconcileDurableAction(storage:ReceiptStorage,r:DurableAction,e:ReleaseActionEvidence):DurableAction {
   if(e.actorId!==r.scope.actorId||e.organizationId!==r.scope.organizationId||e.releaseId!==r.scope.releaseId)throw new Error('ACTION_ACTOR_CHANGED');
   if(!['pending','unknown'].includes(r.phase))return r;
