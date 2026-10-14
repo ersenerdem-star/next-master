@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Production GEBA same-data publication acceptance",
+  "projectRef": "zjgueqijumzlfioihnkt",
+  "releaseId": "c6db3eac-ee98-404b-b07a-35de65abb463",
+  "publicationId": "1345a117-51e5-4913-90b7-130c211da303",
+  "decisionId": "47c90ada-4c7b-40da-817b-1499bade975a",
+  "database": {
+    "checks": {
+      "legacy_complete": true,
+      "quote_core_exact": true,
+      "release_complete": true,
+      "all_rows_accepted": true,
+      "admin_portal_equal": true,
+      "legacy_worker_quiet": true,
+      "publication_matches": true,
+      "quote_core_complete": true,
+      "identity_audit_clear": true,
+      "sole_active_supplier": true,
+      "exact_current_pointer": true,
+      "release_published_clear": true,
+      "verified_source_binding": true,
+      "actor_still_active_admin": true,
+      "legacy_baseline_unchanged": true,
+      "all_commercial_fields_equal": true,
+      "production_decision_matches": true,
+      "queued_ui_decision_completed": true,
+      "all_price_profiles_complete_and_exact": true
+    },
+    "release_id": "c6db3eac-ee98-404b-b07a-35de65abb463",
+    "decision_id": "47c90ada-4c7b-40da-817b-1499bade975a",
+    "legacy_rows": 108,
+    "observed_at": "2026-10-14T17:58:18.923056+00:00",
+    "project_ref": "zjgueqijumzlfioihnkt",
+    "release_rows": 108,
+    "price_profiles": [
+      {
+        "rows": 108,
+        "profile": "admin_A_10",
+        "mismatches": 0,
+        "semantic_md5": "d908b4765919ecd49bda2933b7e80f1c",
+        "missing_codes": 0,
+        "distinct_codes": 108
+      },
+      {
+        "rows": 108,
+        "profile": "admin_B_15",
+        "mismatches": 0,
+        "semantic_md5": "aed7ea00bfca09eb817437682ebdf78d",
+        "missing_codes": 0,
+        "distinct_codes": 108
+      },
+      {
+        "rows": 108,
+        "profile": "portal_A_10",
+        "mismatches": 0,
+        "semantic_md5": "d908b4765919ecd49bda2933b7e80f1c",
+        "missing_codes": 0,
+        "distinct_codes": 108
+      },
+      {
+        "rows": 108,
+        "profile": "portal_B_15",
+        "mismatches": 0,
+        "semantic_md5": "aed7ea00bfca09eb817437682ebdf78d",
+        "missing_codes": 0,
+        "distinct_codes": 108
+      },
+      {
+        "rows": 108,
+        "profile": "portal_custom_20",
+        "mismatches": 0,
+        "semantic_md5": "b4abd76184d8eec8cb833f92d8ee2e87",
+        "missing_codes": 0,
+        "distinct_codes": 108
+      }
+    ],
+    "proof_boundary": "Shared live quote core checked without impersonating an authenticated user; actual authenticated quote API and export job/file checks remain separate.",
+    "publication_id": "1345a117-51e5-4913-90b7-130c211da303",
+    "quote_core_rows": 108,
+    "admin_source_version": "34906ed1f52a90c78422bf799de4e55c",
+    "commercial_difference_rows": 0,
+    "database_acceptance_passed": true
+  },
+  "databaseQuery": "-- READ ONLY, production project zjgueqijumzlfioihnkt only.\n-- Substitute the three UUID placeholders with the actual authenticated UI receipts.\n-- No authentication impersonation, configuration changes, publication, or writes.\n-- Supplier export and authenticated quote wrappers require their real API session;\n-- verify those separately using actual jobs/files and UI receipts.\nwith params as (\n select 'c6db3eac-ee98-404b-b07a-35de65abb463'::uuid release_id,\n '1345a117-51e5-4913-90b7-130c211da303'::uuid publication_id,\n '47c90ada-4c7b-40da-817b-1499bade975a'::uuid decision_id,\n '1e4c5e99-e387-41aa-a6d3-cbe74558f766'::uuid org_id,\n 'bbd25101-b14a-4967-ac5d-fa78054d4f2e'::uuid supplier_id,\n '72cb646e-658d-4775-b3bb-b0799eaa9913'::uuid brand_id,\n '5c1d0a043b7f97b84e3eec7bf5ae1229274dc9e8c97089a2e64ff37468a99927'::text source_sha256,\n 5759::bigint source_bytes\n), legacy as materialized (\n select public.normalize_catalog_product_code(sp.product_code) normalized_code,\n sp.product_code,sp.description,sp.oem_no,sp.buy_price,sp.currency,sp.moq,\n sp.lead_time_days,sp.notes,sp.valid_from,sp.order_multiple,sp.stock_qty,sp.valid_to\n from public.supplier_prices sp cross join params p\n where sp.organization_id=p.org_id and sp.supplier_id=p.supplier_id and sp.brand_id=p.brand_id and sp.is_active\n), candidate as materialized (\n select rr.normalized_code,rr.product_code,rr.description,rr.oem_no,rr.buy_price,rr.currency,\n rr.moq,rr.lead_time_days,rr.notes,rr.valid_from,null::integer order_multiple,null::integer stock_qty,null::date valid_to\n from public.supplier_price_release_rows rr cross join params p where rr.release_id=p.release_id\n), differences as (\n (select * from legacy except all select * from candidate)\n union all (select * from candidate except all select * from legacy)\n), quote_options as materialized (\n select l.normalized_code requested_code,q.* from legacy l cross join params p\n cross join lateral public.cloud_current_supplier_price_options_core(p.org_id,l.product_code,'Geba') q\n), profiles(profile,audience,list_type,margin) as (\n values ('admin_A_10','admin','A',10::numeric),('admin_B_15','admin','B',15::numeric),\n ('portal_A_10','portal','A',10::numeric),('portal_B_15','portal','B',15::numeric),('portal_custom_20','portal','A',20::numeric)\n), price_pages as materialized (\n select f.profile,f.list_type expected_type,f.margin,a.normalized_code,a.product_code,a.brand,a.description,\n a.price_list_type,a.sales_price,a.price_date,a.lifecycle_status,a.lifecycle_note,a.total_count\n from params p cross join profiles f cross join lateral\n public.cloud_admin_price_list_page_fast(p.org_id,p.brand_id,f.list_type,f.margin/100,null,null,1000) a where f.audience='admin'\n union all\n select f.profile,f.list_type,f.margin,a.normalized_code,a.product_code,a.brand,a.description,\n a.price_list_type,a.sales_price,a.price_date,a.lifecycle_status,a.lifecycle_note,a.total_count\n from params p cross join profiles f cross join lateral\n public.cloud_portal_customer_price_list_page_fast(p.org_id,p.brand_id,f.list_type,f.margin,null,null,1000) a where f.audience='portal'\n), price_stats as (\n select f.profile,count(a.normalized_code) rows,count(distinct a.normalized_code) distinct_codes,\n count(*) filter(where a.normalized_code is not null and (l.normalized_code is null\n or a.brand is distinct from 'Geba' or a.price_list_type is distinct from f.list_type\n or a.sales_price is distinct from round(l.buy_price*(1+f.margin/100),2)\n or a.price_date is distinct from l.valid_from or a.total_count is distinct from 108::bigint)) mismatches,\n (select count(*) from legacy ll where not exists(select 1 from price_pages aa where aa.profile=f.profile and aa.normalized_code=ll.normalized_code)) missing_codes,\n md5(string_agg(md5(jsonb_build_array(a.normalized_code,a.product_code,a.brand,a.description,\n a.sales_price,a.price_date,a.lifecycle_status,a.lifecycle_note)::text),'|' order by a.normalized_code collate \"C\")) semantic_md5\n from profiles f left join price_pages a on a.profile=f.profile left join legacy l on l.normalized_code=a.normalized_code group by f.profile\n), checks as (\n select\n (select count(*)=108 and count(distinct normalized_code)=108 from legacy) legacy_complete,\n (select count(*)=108 and count(distinct normalized_code)=108 from candidate) release_complete,\n (select count(*)=0 from differences) all_commercial_fields_equal,\n (select count(*)=0 from public.supplier_price_release_rows rr where rr.release_id=p.release_id and rr.row_status is distinct from 'accepted') all_rows_accepted,\n (select md5(string_agg(md5(jsonb_build_array(l.normalized_code,l.product_code,l.description,l.oem_no,\n l.buy_price,l.currency,l.moq,l.lead_time_days,l.notes,l.valid_from,l.order_multiple,l.stock_qty,l.valid_to)::text),'|' order by l.normalized_code))='4237935b4fc06832cd0960fbb0116a23' from legacy l) legacy_baseline_unchanged,\n (select count(*)=1 and bool_and(ptr.release_id=p.release_id and ptr.publication_id=p.publication_id)\n from public.supplier_current_price_pointers ptr where ptr.organization_id=p.org_id and ptr.brand_id=p.brand_id) exact_current_pointer,\n (pub.id=p.publication_id and pub.release_id=p.release_id and pub.organization_id=p.org_id and pub.supplier_id=p.supplier_id\n and pub.brand_id=p.brand_id and pub.status='published' and pub.publication_version=1 and pub.published_at is not null) publication_matches,\n (r.organization_id=p.org_id and r.supplier_id=p.supplier_id and r.brand_id=p.brand_id and r.mode='replace'\n and r.status='published' and r.published_at is not null and r.source_date='2026-07-20'::date\n and r.total_rows=108 and r.processed_rows=108 and r.current_cursor=108 and r.accepted_rows=108\n and r.rejected_rows=0 and r.warning_rows=0 and r.conflict_rows=0 and r.error_code is null\n and r.source_verification_required and r.source_file_sha256=p.source_sha256) release_published_clear,\n (r.brand_identity_audit->>'policy'='cross-brand-v1' and r.brand_identity_audit->'checked'='true'::jsonb\n and r.brand_identity_audit->'review_required'='false'::jsonb) identity_audit_clear,\n (select count(*)=1 and bool_and(u.organization_id=p.org_id and u.created_by=r.created_by\n and u.storage_object_path=r.source_file_path and u.checksum_sha256=p.source_sha256 and u.total_bytes=p.source_bytes\n and u.uploaded_bytes=u.total_bytes and u.status='uploaded') from public.supplier_price_upload_sessions u where u.release_id=p.release_id) verified_source_binding,\n (d.decision_id=p.decision_id and d.release_id=p.release_id and d.publication_id=p.publication_id\n and d.organization_id=p.org_id and d.supplier_id=p.supplier_id and d.brand_id=p.brand_id\n and d.expected_previous_publication_id is null and d.review_revision=r.review_revision\n and d.source_sha256=p.source_sha256 and d.identity_audit=r.brand_identity_audit) production_decision_matches,\n (a.project_ref='zjgueqijumzlfioihnkt' and a.action='publish' and a.status='completed'\n and a.organization_id=p.org_id and a.supplier_id=p.supplier_id and a.brand_id=p.brand_id\n and a.release_id=p.release_id and a.actor_id=d.actor_id and a.source_sha256=p.source_sha256\n and a.error_code is null and a.receipt->>'status'='published' and a.receipt->'published'='true'::jsonb\n and a.receipt->>'releaseId'=p.release_id::text and a.receipt->>'publicationId'=p.publication_id::text\n and a.receipt->>'decisionId'=p.decision_id::text) queued_ui_decision_completed,\n exists(select 1 from public.profiles actor where actor.id=d.actor_id and actor.organization_id=p.org_id\n and actor.is_active and lower(actor.role::text) in ('admin','superadmin')) actor_still_active_admin,\n (select count(*)=108 and count(distinct requested_code)=108 from quote_options) quote_core_complete,\n not exists(select 1 from quote_options q left join legacy l on l.normalized_code=q.requested_code\n where q.supplier_id is distinct from p.supplier_id or q.brand_id is distinct from p.brand_id\n or q.product_code is distinct from l.product_code or q.description is distinct from l.description\n or q.buy_price is distinct from l.buy_price or q.price_date is distinct from l.valid_from or q.notes is distinct from l.notes) quote_core_exact,\n (select bool_and(rows=108 and distinct_codes=108 and mismatches=0 and missing_codes=0) from price_stats) all_price_profiles_complete_and_exact,\n not exists(select 1 from price_pages admin full join price_pages portal on admin.normalized_code=portal.normalized_code\n and portal.profile='portal_'||substring(admin.profile from 7) where admin.profile in ('admin_A_10','admin_B_15')\n and (portal.profile is null or jsonb_build_array(admin.product_code,admin.description,admin.sales_price,admin.price_date,admin.lifecycle_status,admin.lifecycle_note)\n is distinct from jsonb_build_array(portal.product_code,portal.description,portal.sales_price,portal.price_date,portal.lifecycle_status,portal.lifecycle_note))) admin_portal_equal,\n (select count(distinct sp.supplier_id)=1 and bool_and(sp.supplier_id=p.supplier_id) from public.supplier_prices sp where sp.organization_id=p.org_id and sp.brand_id=p.brand_id and sp.is_active) sole_active_supplier,\n not exists(select 1 from public.supplier_price_import_runs ir where ir.organization_id=p.org_id and ir.brand_id=p.brand_id\n and ((ir.finished_at is null and ir.status not in ('failed','cancelled','superseded'))\n or ir.status in ('running','finalizing') or (ir.processing_queued_at is not null and ir.status in ('finalized','succeeded'))\n or (ir.status in ('finalized','succeeded') and ir.catalog_sync_status in ('running','pending')))) legacy_worker_quiet\n from params p left join public.supplier_price_releases r on r.id=p.release_id\n left join public.supplier_price_publications pub on pub.id=p.publication_id\n left join supplier_price_ingestion_internal.production_publication_decisions d on d.decision_id=p.decision_id\n left join supplier_price_ingestion_internal.admin_release_actions a on a.decision_id=p.decision_id\n), body as (\n select clock_timestamp() observed_at,'zjgueqijumzlfioihnkt'::text project_ref,p.release_id,p.publication_id,p.decision_id,\n to_jsonb(c) checks,(select jsonb_agg(to_jsonb(s) order by profile) from price_stats s) price_profiles,\n (select count(*) from differences) commercial_difference_rows,\n (select count(*) from legacy) legacy_rows,(select count(*) from candidate) release_rows,\n (select count(*) from quote_options) quote_core_rows,\n public.get_admin_price_list_export_version(p.org_id,p.brand_id) admin_source_version,\n 'Shared live quote core checked without impersonating an authenticated user; actual authenticated quote API and export job/file checks remain separate.'::text proof_boundary\n from checks c cross join params p\n)\nselect to_jsonb(body)||jsonb_build_object('database_acceptance_passed',\n not exists(select 1 from jsonb_each(body.checks) v where v.value is distinct from 'true'::jsonb)) as evidence from body;\n",
+  "rootReportedBrowserObservation": {
+    "personallyObservedByThisAgent": false,
+    "method": "Parent agent actual authenticated production admin UI upload, review and publish; exact receipts supplied directly",
+    "reviewDecisionId": "10348b68-b0f6-4c37-a8dd-2477762d9cc6",
+    "reviewRevision": 1,
+    "uploadSessionId": "51363b07-b31d-410f-bea4-38499c7edd32",
+    "publicationVersion": 1
+  },
+  "prepublicationPageParity": "All five full semantic hashes equal exact prepublication capture",
+  "customerPricing": {
+    "method": "Actual shared customer resolver executed locally against projected production pricing fields",
+    "customers": [
+      {
+        "customerId": "be450451-78d4-43cf-b35c-66239eccfc38",
+        "customerType": "Other",
+        "currency": "EUR",
+        "effectiveMarginA": 20,
+        "effectiveMarginB": 15,
+        "cPriceListIds": []
+      },
+      {
+        "customerId": "fd9f8834-7935-4050-8895-fde8a2eb4914",
+        "customerType": "A",
+        "currency": "EUR",
+        "effectiveMarginA": 10,
+        "effectiveMarginB": 15,
+        "cPriceListIds": []
+      }
+    ]
+  },
+  "exports": [],
+  "supplierExport": null,
+  "authenticatedQuote": null,
+  "pending": [
+    "Postpublication supplier export actual job/file",
+    "admin_A actual job/file",
+    "admin_B actual job/file",
+    "customer_A actual job/file",
+    "Actual authenticated quote API/UI receipt (DB core already verified)"
+  ],
+  "acceptanceComplete": false,
+  "productionWritesByThisAgent": false,
+  "limitations": [
+    "Database core checks do not assert authenticated API/UI execution.",
+    "Browser observations are reported by the operator; files and database receipts are independently verified.",
+    "108-row same-data scope proves commercial parity, not large-file throughput."
+  ]
+}
