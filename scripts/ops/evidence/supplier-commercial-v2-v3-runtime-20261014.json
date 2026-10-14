@@ -1,0 +1,1077 @@
+{
+  "schemaVersion": 1,
+  "purpose": "V3 commercial v2 supplier source, publication and reader acceptance",
+  "environment": "V3 staging",
+  "projectRef": "kaxsqafdevabkxofwdod",
+  "scope": {
+    "organizationId": "b0000000-0000-4000-8000-000000000001",
+    "supplierId": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+    "supplier": "V3 Test Vendor",
+    "brandId": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+    "brand": "Mahle",
+    "testOnly": true
+  },
+  "observer": {
+    "method": "Supabase connector SELECT-only",
+    "remoteMutations": false,
+    "browserActionsOwner": "root",
+    "browserActionsPersonallyObserved": false
+  },
+  "source": {
+    "path": "/private/tmp/next-master-commercial-v2-mahle-20261014.csv",
+    "bytes": 365,
+    "sha256": "9abb47e111010b81d0920cde37c9400ed006bc946ca43bb2fb90c4db38d68dab"
+  },
+  "policy": "supplier-price-commercial-fields-v2",
+  "before": {
+    "pointers": [
+      {
+        "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+        "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+        "updated_at": "2026-10-14T18:25:25.372955+00:00",
+        "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+        "publication_id": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+        "organization_id": "b0000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "capturedAt": "2026-10-14T19:57:42.534425+00:00",
+    "legacyScope": {
+      "rows": 1,
+      "shaMd5": "b0cdf9c27d583a5573872bab4243c1da",
+      "activeRows": 1
+    },
+    "catalogScope": {
+      "rows": 1,
+      "shaMd5": "053873101a98b5b3632947a7c8f2e5b2"
+    },
+    "databaseDate": "2026-10-14",
+    "currentReleases": [
+      {
+        "id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+        "rows": {
+          "count": 1,
+          "shaMd5": "569e52c72b728938145417cbb47f8ba6"
+        },
+        "status": "published",
+        "receipt": {
+          "policy": "supplier-price-commercial-fields-v1",
+          "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+          "created_at": "2026-10-14T18:22:29.865623+00:00",
+          "handoff_id": "11f5a553-5e02-421a-9316-b1b64a796135",
+          "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+          "total_rows": 1,
+          "source_path": "b0000000-0000-4000-8000-000000000001/supplier-price/6e190723-7caa-40d4-997c-f5e14422531e/v3-mahle-accepted.csv",
+          "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+          "source_bytes": 295,
+          "source_sha256": "dea1778c5ac680a503c90895c30dfa306592760428539493a35dbfd9e39f6d93",
+          "organization_id": "b0000000-0000-4000-8000-000000000001"
+        },
+        "totalRows": 1,
+        "updatedAt": "2026-10-14T18:25:25.372955+00:00",
+        "sourceDate": "2026-10-06",
+        "acceptedRows": 1,
+        "sourceSha256": "dea1778c5ac680a503c90895c30dfa306592760428539493a35dbfd9e39f6d93",
+        "processedRows": 1
+      }
+    ],
+    "currentPublications": [
+      {
+        "id": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+        "status": "published",
+        "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+        "created_at": "2026-10-14T18:25:25.372955+00:00",
+        "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+        "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+        "published_at": "2026-10-14T18:25:25.372955+00:00",
+        "superseded_at": null,
+        "organization_id": "b0000000-0000-4000-8000-000000000001",
+        "publication_version": 1
+      }
+    ],
+    "priorMatchingSourceCount": 0
+  },
+  "sourceLocalProof": {
+    "parser": "actual committed v2 parseNormalizedSupplierPriceRows",
+    "rows": [
+      {
+        "source_row_number": 1,
+        "brand": null,
+        "normalized_code": "V3-PO-UUID-20261006-001",
+        "product_code": "V3-PO-UUID-20261006-001",
+        "description": null,
+        "description_tr": null,
+        "oem_no": null,
+        "ean": null,
+        "vehicle": null,
+        "vehicle_model": null,
+        "market_segment": null,
+        "dimensions": null,
+        "weight": null,
+        "origin": null,
+        "tariff": null,
+        "image_url": null,
+        "buy_price": 7.5,
+        "currency": "EUR",
+        "moq": 5,
+        "lead_time_days": null,
+        "notes": null,
+        "valid_from": "2026-10-06",
+        "row_status": "accepted",
+        "error_code": null,
+        "error_message": null,
+        "stock_qty": 0,
+        "order_multiple": 3,
+        "valid_to": "2027-10-14",
+        "row_hash": "0441722e6c842b9c3b2fa3377608e414ec82f686bc52dedaa473a9cfc33932cf"
+      },
+      {
+        "source_row_number": 2,
+        "brand": null,
+        "normalized_code": "NMCV2NULL20261014",
+        "product_code": "NMCV2NULL20261014",
+        "description": null,
+        "description_tr": null,
+        "oem_no": null,
+        "ean": null,
+        "vehicle": null,
+        "vehicle_model": null,
+        "market_segment": null,
+        "dimensions": null,
+        "weight": null,
+        "origin": null,
+        "tariff": null,
+        "image_url": null,
+        "buy_price": 8,
+        "currency": "EUR",
+        "moq": null,
+        "lead_time_days": null,
+        "notes": null,
+        "valid_from": "2026-10-06",
+        "row_status": "accepted",
+        "error_code": null,
+        "error_message": null,
+        "stock_qty": null,
+        "order_multiple": null,
+        "valid_to": null,
+        "row_hash": "e50c17e8ac9a7eb644e26ca0b83e95ce5ccec445262994da799b447aac9f7187"
+      },
+      {
+        "source_row_number": 3,
+        "brand": null,
+        "normalized_code": "NMCV2TODAY20261014",
+        "product_code": "NMCV2TODAY20261014",
+        "description": null,
+        "description_tr": null,
+        "oem_no": null,
+        "ean": null,
+        "vehicle": null,
+        "vehicle_model": null,
+        "market_segment": null,
+        "dimensions": null,
+        "weight": null,
+        "origin": null,
+        "tariff": null,
+        "image_url": null,
+        "buy_price": 9,
+        "currency": "EUR",
+        "moq": 1,
+        "lead_time_days": null,
+        "notes": null,
+        "valid_from": "2026-10-06",
+        "row_status": "accepted",
+        "error_code": null,
+        "error_message": null,
+        "stock_qty": 17,
+        "order_multiple": 1,
+        "valid_to": "2026-10-14",
+        "row_hash": "c19a723f9c6b02598542883bef5728a876d3eb6273e129fe701bc4baec0778e1"
+      },
+      {
+        "source_row_number": 4,
+        "brand": null,
+        "normalized_code": "NMCV2EXPIRED20261014",
+        "product_code": "NMCV2EXPIRED20261014",
+        "description": null,
+        "description_tr": null,
+        "oem_no": null,
+        "ean": null,
+        "vehicle": null,
+        "vehicle_model": null,
+        "market_segment": null,
+        "dimensions": null,
+        "weight": null,
+        "origin": null,
+        "tariff": null,
+        "image_url": null,
+        "buy_price": 10,
+        "currency": "EUR",
+        "moq": 1,
+        "lead_time_days": null,
+        "notes": null,
+        "valid_from": "2026-10-06",
+        "row_status": "accepted",
+        "error_code": null,
+        "error_message": null,
+        "stock_qty": 20,
+        "order_multiple": 5,
+        "valid_to": "2026-10-13",
+        "row_hash": "3d38d98216697e43a3294ded8ade1e3a6c011869fbaeaeeeb3864e965f60e24f"
+      },
+      {
+        "source_row_number": 5,
+        "brand": null,
+        "normalized_code": "NMCV2FUTURE20261014",
+        "product_code": "NMCV2FUTURE20261014",
+        "description": null,
+        "description_tr": null,
+        "oem_no": null,
+        "ean": null,
+        "vehicle": null,
+        "vehicle_model": null,
+        "market_segment": null,
+        "dimensions": null,
+        "weight": null,
+        "origin": null,
+        "tariff": null,
+        "image_url": null,
+        "buy_price": 11,
+        "currency": "EUR",
+        "moq": 1,
+        "lead_time_days": null,
+        "notes": null,
+        "valid_from": "2026-10-15",
+        "row_status": "accepted",
+        "error_code": null,
+        "error_message": null,
+        "stock_qty": 4,
+        "order_multiple": 2,
+        "valid_to": "2027-10-14",
+        "row_hash": "d7d7a9ebcddf1a60b33d7d6c8c4670c759d1514d080fd5905b62b88004f5d82b"
+      }
+    ],
+    "expectedCurrentCodesAsOf20261014": [
+      "V3-PO-UUID-20261006-001",
+      "NMCV2NULL20261014",
+      "NMCV2TODAY20261014"
+    ],
+    "quantityRule": "minimum threshold then round up to order_multiple; not least common multiple",
+    "quantityExpectations": [
+      {
+        "requested": 1,
+        "corrected": 6,
+        "moq": 5,
+        "orderMultiple": 3,
+        "adjusted": true,
+        "kind": "moq_and_multiple"
+      },
+      {
+        "requested": 5,
+        "corrected": 6,
+        "moq": 5,
+        "orderMultiple": 3,
+        "adjusted": true,
+        "kind": "moq_and_multiple"
+      },
+      {
+        "requested": 6,
+        "corrected": 6,
+        "moq": 5,
+        "orderMultiple": 3,
+        "adjusted": false,
+        "kind": "none"
+      },
+      {
+        "requested": 7,
+        "corrected": 9,
+        "moq": 5,
+        "orderMultiple": 3,
+        "adjusted": true,
+        "kind": "moq_and_multiple"
+      }
+    ]
+  },
+  "phases": [
+    {
+      "name": "uploaded_validated_before_identity_review",
+      "personallyObserved": true,
+      "state": {
+        "canaries": [
+          {
+            "audit": null,
+            "sha256": "9abb47e111010b81d0920cde37c9400ed006bc946ca43bb2fb90c4db38d68dab",
+            "status": "validated",
+            "actions": [],
+            "handoff": {
+              "id": "87183962-f470-4829-9e12-73e9257dc89c",
+              "status": "enqueued",
+              "workflowId": "supplier-price-verified:v1:e748a708-24fb-44fe-886c-90c315a723fb"
+            },
+            "receipt": {
+              "policy": "supplier-price-commercial-fields-v2",
+              "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+              "created_at": "2026-10-14T20:12:55.237733+00:00",
+              "handoff_id": "87183962-f470-4829-9e12-73e9257dc89c",
+              "release_id": "e748a708-24fb-44fe-886c-90c315a723fb",
+              "total_rows": 5,
+              "source_path": "b0000000-0000-4000-8000-000000000001/supplier-price/66a52979-d74a-40a9-a6ef-f04c3bee8f83/next-master-commercial-v2-mahle-20261014.csv",
+              "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+              "source_bytes": 365,
+              "source_sha256": "9abb47e111010b81d0920cde37c9400ed006bc946ca43bb2fb90c4db38d68dab",
+              "organization_id": "b0000000-0000-4000-8000-000000000001"
+            },
+            "createdAt": "2026-10-14T20:12:40.291655+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": "BRAND_IDENTITY_COMPARISON_PENDING",
+            "releaseId": "e748a708-24fb-44fe-886c-90c315a723fb",
+            "totalRows": 5,
+            "acceptedRows": 5,
+            "publications": [],
+            "verification": {
+              "id": "a9324e4f-8d3e-4ba1-a368-6395f7d04c56",
+              "status": "verified",
+              "lastError": null,
+              "sessionId": "66a52979-d74a-40a9-a6ef-f04c3bee8f83",
+              "updatedAt": "2026-10-14T20:12:52.373523+00:00",
+              "attemptCount": 1
+            },
+            "persistedRows": 5,
+            "processedRows": 5
+          }
+        ],
+        "pointers": [
+          {
+            "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+            "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+            "updated_at": "2026-10-14T18:25:25.372955+00:00",
+            "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+            "publication_id": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+            "organization_id": "b0000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "capturedAt": "2026-10-14T20:13:04.278756+00:00",
+        "legacyScope": {
+          "rows": 1,
+          "shaMd5": "b0cdf9c27d583a5573872bab4243c1da"
+        },
+        "catalogScope": {
+          "rows": 1,
+          "shaMd5": "053873101a98b5b3632947a7c8f2e5b2"
+        }
+      },
+      "exactNormalizedRowParity": {
+        "actual": [
+          {
+            "moq": 1,
+            "currency": "EUR",
+            "row_hash": "3d38d98216697e43a3294ded8ade1e3a6c011869fbaeaeeeb3864e965f60e24f",
+            "valid_to": "2026-10-13",
+            "buy_price": 10,
+            "stock_qty": 20,
+            "valid_from": "2026-10-06",
+            "product_code": "NMCV2EXPIRED20261014",
+            "order_multiple": 5
+          },
+          {
+            "moq": 1,
+            "currency": "EUR",
+            "row_hash": "d7d7a9ebcddf1a60b33d7d6c8c4670c759d1514d080fd5905b62b88004f5d82b",
+            "valid_to": "2027-10-14",
+            "buy_price": 11,
+            "stock_qty": 4,
+            "valid_from": "2026-10-15",
+            "product_code": "NMCV2FUTURE20261014",
+            "order_multiple": 2
+          },
+          {
+            "moq": null,
+            "currency": "EUR",
+            "row_hash": "e50c17e8ac9a7eb644e26ca0b83e95ce5ccec445262994da799b447aac9f7187",
+            "valid_to": null,
+            "buy_price": 8,
+            "stock_qty": null,
+            "valid_from": "2026-10-06",
+            "product_code": "NMCV2NULL20261014",
+            "order_multiple": null
+          },
+          {
+            "moq": 1,
+            "currency": "EUR",
+            "row_hash": "c19a723f9c6b02598542883bef5728a876d3eb6273e129fe701bc4baec0778e1",
+            "valid_to": "2026-10-14",
+            "buy_price": 9,
+            "stock_qty": 17,
+            "valid_from": "2026-10-06",
+            "product_code": "NMCV2TODAY20261014",
+            "order_multiple": 1
+          },
+          {
+            "moq": 5,
+            "currency": "EUR",
+            "row_hash": "0441722e6c842b9c3b2fa3377608e414ec82f686bc52dedaa473a9cfc33932cf",
+            "valid_to": "2027-10-14",
+            "buy_price": 7.5,
+            "stock_qty": 0,
+            "valid_from": "2026-10-06",
+            "product_code": "V3-PO-UUID-20261006-001",
+            "order_multiple": 3
+          }
+        ],
+        "allRowsV2": true,
+        "actualRows": 5,
+        "capturedAt": "2026-10-14T20:13:05.112244+00:00",
+        "databaseDate": "2026-10-14",
+        "expectedRows": 5,
+        "mismatchRows": 0,
+        "releaseCount": 1
+      }
+    },
+    {
+      "name": "explicit_review_complete_before_publication",
+      "personallyObserved": true,
+      "state": {
+        "canaries": [
+          {
+            "audit": {
+              "brands": [],
+              "policy": "cross-brand-v1",
+              "checked": true,
+              "checked_at": "2026-10-14T20:14:05.669272+00:00",
+              "ratio_min_codes": 100,
+              "review_required": false,
+              "threshold_codes": 5000,
+              "selected_brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+              "selected_brand_name": "Mahle",
+              "matching_brand_count": 0,
+              "distinct_incoming_codes": 5,
+              "ratio_threshold_percent": 80
+            },
+            "sha256": "9abb47e111010b81d0920cde37c9400ed006bc946ca43bb2fb90c4db38d68dab",
+            "status": "validated",
+            "actions": [
+              {
+                "action": "review",
+                "status": "completed",
+                "receipt": {
+                  "action": "recheck",
+                  "status": "rechecked_clear",
+                  "replayed": false,
+                  "errorCode": null,
+                  "published": false,
+                  "releaseId": "e748a708-24fb-44fe-886c-90c315a723fb",
+                  "decisionId": "9391b9d1-5204-4ae3-a2ab-e6e5a1229e3a",
+                  "reviewRevision": 1
+                },
+                "errorCode": null,
+                "decisionId": "9391b9d1-5204-4ae3-a2ab-e6e5a1229e3a"
+              }
+            ],
+            "handoff": {
+              "id": "87183962-f470-4829-9e12-73e9257dc89c",
+              "status": "enqueued",
+              "workflowId": "supplier-price-verified:v1:e748a708-24fb-44fe-886c-90c315a723fb"
+            },
+            "receipt": {
+              "policy": "supplier-price-commercial-fields-v2",
+              "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+              "created_at": "2026-10-14T20:12:55.237733+00:00",
+              "handoff_id": "87183962-f470-4829-9e12-73e9257dc89c",
+              "release_id": "e748a708-24fb-44fe-886c-90c315a723fb",
+              "total_rows": 5,
+              "source_path": "b0000000-0000-4000-8000-000000000001/supplier-price/66a52979-d74a-40a9-a6ef-f04c3bee8f83/next-master-commercial-v2-mahle-20261014.csv",
+              "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+              "source_bytes": 365,
+              "source_sha256": "9abb47e111010b81d0920cde37c9400ed006bc946ca43bb2fb90c4db38d68dab",
+              "organization_id": "b0000000-0000-4000-8000-000000000001"
+            },
+            "createdAt": "2026-10-14T20:12:40.291655+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "e748a708-24fb-44fe-886c-90c315a723fb",
+            "totalRows": 5,
+            "acceptedRows": 5,
+            "publications": [],
+            "verification": {
+              "id": "a9324e4f-8d3e-4ba1-a368-6395f7d04c56",
+              "status": "verified",
+              "lastError": null,
+              "sessionId": "66a52979-d74a-40a9-a6ef-f04c3bee8f83",
+              "updatedAt": "2026-10-14T20:12:52.373523+00:00",
+              "attemptCount": 1
+            },
+            "persistedRows": 5,
+            "processedRows": 5
+          }
+        ],
+        "pointers": [
+          {
+            "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+            "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+            "updated_at": "2026-10-14T18:25:25.372955+00:00",
+            "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+            "publication_id": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+            "organization_id": "b0000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "capturedAt": "2026-10-14T20:14:19.540902+00:00",
+        "legacyScope": {
+          "rows": 1,
+          "shaMd5": "b0cdf9c27d583a5573872bab4243c1da"
+        },
+        "catalogScope": {
+          "rows": 1,
+          "shaMd5": "053873101a98b5b3632947a7c8f2e5b2"
+        }
+      }
+    },
+    {
+      "name": "published_after_explicit_ui_confirmation_reported_by_root",
+      "personallyObserved": true,
+      "state": {
+        "canaries": [
+          {
+            "audit": {
+              "brands": [],
+              "policy": "cross-brand-v1",
+              "checked": true,
+              "checked_at": "2026-10-14T20:15:08.076011+00:00",
+              "ratio_min_codes": 100,
+              "review_required": false,
+              "threshold_codes": 5000,
+              "selected_brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+              "selected_brand_name": "Mahle",
+              "matching_brand_count": 0,
+              "distinct_incoming_codes": 5,
+              "ratio_threshold_percent": 80
+            },
+            "sha256": "9abb47e111010b81d0920cde37c9400ed006bc946ca43bb2fb90c4db38d68dab",
+            "status": "published",
+            "actions": [
+              {
+                "action": "review",
+                "status": "completed",
+                "receipt": {
+                  "action": "recheck",
+                  "status": "rechecked_clear",
+                  "replayed": false,
+                  "errorCode": null,
+                  "published": false,
+                  "releaseId": "e748a708-24fb-44fe-886c-90c315a723fb",
+                  "decisionId": "9391b9d1-5204-4ae3-a2ab-e6e5a1229e3a",
+                  "reviewRevision": 1
+                },
+                "errorCode": null,
+                "decisionId": "9391b9d1-5204-4ae3-a2ab-e6e5a1229e3a"
+              },
+              {
+                "action": "publish",
+                "status": "completed",
+                "receipt": {
+                  "status": "published",
+                  "version": 2,
+                  "replayed": false,
+                  "isCurrent": true,
+                  "published": true,
+                  "releaseId": "e748a708-24fb-44fe-886c-90c315a723fb",
+                  "decisionId": "0c9e00d4-0197-464d-80c0-b3bce923cc73",
+                  "publicationId": "4946aae2-746a-48df-8b9a-4cdfbea32767",
+                  "reviewRevision": 1,
+                  "expectedPreviousPublicationId": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2"
+                },
+                "errorCode": null,
+                "decisionId": "0c9e00d4-0197-464d-80c0-b3bce923cc73"
+              }
+            ],
+            "handoff": {
+              "id": "87183962-f470-4829-9e12-73e9257dc89c",
+              "status": "enqueued",
+              "workflowId": "supplier-price-verified:v1:e748a708-24fb-44fe-886c-90c315a723fb"
+            },
+            "receipt": {
+              "policy": "supplier-price-commercial-fields-v2",
+              "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+              "created_at": "2026-10-14T20:12:55.237733+00:00",
+              "handoff_id": "87183962-f470-4829-9e12-73e9257dc89c",
+              "release_id": "e748a708-24fb-44fe-886c-90c315a723fb",
+              "total_rows": 5,
+              "source_path": "b0000000-0000-4000-8000-000000000001/supplier-price/66a52979-d74a-40a9-a6ef-f04c3bee8f83/next-master-commercial-v2-mahle-20261014.csv",
+              "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+              "source_bytes": 365,
+              "source_sha256": "9abb47e111010b81d0920cde37c9400ed006bc946ca43bb2fb90c4db38d68dab",
+              "organization_id": "b0000000-0000-4000-8000-000000000001"
+            },
+            "createdAt": "2026-10-14T20:12:40.291655+00:00",
+            "createdBy": "c945231b-af64-486d-8ac4-f733ec906bd2",
+            "errorCode": null,
+            "releaseId": "e748a708-24fb-44fe-886c-90c315a723fb",
+            "totalRows": 5,
+            "acceptedRows": 5,
+            "publications": [
+              {
+                "id": "4946aae2-746a-48df-8b9a-4cdfbea32767",
+                "status": "published",
+                "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+                "created_at": "2026-10-14T20:15:08.040602+00:00",
+                "release_id": "e748a708-24fb-44fe-886c-90c315a723fb",
+                "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+                "published_at": "2026-10-14T20:15:08.040602+00:00",
+                "superseded_at": null,
+                "organization_id": "b0000000-0000-4000-8000-000000000001",
+                "publication_version": 2
+              }
+            ],
+            "verification": {
+              "id": "a9324e4f-8d3e-4ba1-a368-6395f7d04c56",
+              "status": "verified",
+              "lastError": null,
+              "sessionId": "66a52979-d74a-40a9-a6ef-f04c3bee8f83",
+              "updatedAt": "2026-10-14T20:12:52.373523+00:00",
+              "attemptCount": 1
+            },
+            "persistedRows": 5,
+            "processedRows": 5
+          }
+        ],
+        "pointers": [
+          {
+            "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+            "release_id": "e748a708-24fb-44fe-886c-90c315a723fb",
+            "updated_at": "2026-10-14T20:15:08.040602+00:00",
+            "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+            "publication_id": "4946aae2-746a-48df-8b9a-4cdfbea32767",
+            "organization_id": "b0000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "capturedAt": "2026-10-14T20:15:11.259896+00:00",
+        "legacyScope": {
+          "rows": 1,
+          "shaMd5": "b0cdf9c27d583a5573872bab4243c1da"
+        },
+        "catalogScope": {
+          "rows": 1,
+          "shaMd5": "053873101a98b5b3632947a7c8f2e5b2"
+        }
+      },
+      "exactNormalizedRowParity": {
+        "actual": [
+          {
+            "moq": 1,
+            "currency": "EUR",
+            "row_hash": "3d38d98216697e43a3294ded8ade1e3a6c011869fbaeaeeeb3864e965f60e24f",
+            "valid_to": "2026-10-13",
+            "buy_price": 10,
+            "stock_qty": 20,
+            "valid_from": "2026-10-06",
+            "product_code": "NMCV2EXPIRED20261014",
+            "order_multiple": 5
+          },
+          {
+            "moq": 1,
+            "currency": "EUR",
+            "row_hash": "d7d7a9ebcddf1a60b33d7d6c8c4670c759d1514d080fd5905b62b88004f5d82b",
+            "valid_to": "2027-10-14",
+            "buy_price": 11,
+            "stock_qty": 4,
+            "valid_from": "2026-10-15",
+            "product_code": "NMCV2FUTURE20261014",
+            "order_multiple": 2
+          },
+          {
+            "moq": null,
+            "currency": "EUR",
+            "row_hash": "e50c17e8ac9a7eb644e26ca0b83e95ce5ccec445262994da799b447aac9f7187",
+            "valid_to": null,
+            "buy_price": 8,
+            "stock_qty": null,
+            "valid_from": "2026-10-06",
+            "product_code": "NMCV2NULL20261014",
+            "order_multiple": null
+          },
+          {
+            "moq": 1,
+            "currency": "EUR",
+            "row_hash": "c19a723f9c6b02598542883bef5728a876d3eb6273e129fe701bc4baec0778e1",
+            "valid_to": "2026-10-14",
+            "buy_price": 9,
+            "stock_qty": 17,
+            "valid_from": "2026-10-06",
+            "product_code": "NMCV2TODAY20261014",
+            "order_multiple": 1
+          },
+          {
+            "moq": 5,
+            "currency": "EUR",
+            "row_hash": "0441722e6c842b9c3b2fa3377608e414ec82f686bc52dedaa473a9cfc33932cf",
+            "valid_to": "2027-10-14",
+            "buy_price": 7.5,
+            "stock_qty": 0,
+            "valid_from": "2026-10-06",
+            "product_code": "V3-PO-UUID-20261006-001",
+            "order_multiple": 3
+          }
+        ],
+        "allRowsV2": true,
+        "actualRows": 5,
+        "capturedAt": "2026-10-14T20:15:12.313345+00:00",
+        "databaseDate": "2026-10-14",
+        "expectedRows": 5,
+        "mismatchRows": 0,
+        "releaseCount": 1
+      },
+      "rawAndCurrentReaders": {
+        "raw": [
+          {
+            "moq": 1,
+            "brand": "Mahle",
+            "notes": null,
+            "oem_no": null,
+            "currency": "EUR",
+            "price_id": "02abe1d8-9890-5695-5aa9-da5aca4aba9f",
+            "valid_to": "2026-10-13",
+            "buy_price": 10,
+            "freshness": "fresh",
+            "stock_qty": 20,
+            "price_date": "2026-10-06",
+            "description": null,
+            "total_count": 5,
+            "product_code": "NMCV2EXPIRED20261014",
+            "lead_time_days": null,
+            "order_multiple": 5
+          },
+          {
+            "moq": 1,
+            "brand": "Mahle",
+            "notes": null,
+            "oem_no": null,
+            "currency": "EUR",
+            "price_id": "9f180a32-5034-dd1f-7fe9-90624c8f9ecd",
+            "valid_to": "2027-10-14",
+            "buy_price": 11,
+            "freshness": "fresh",
+            "stock_qty": 4,
+            "price_date": "2026-10-15",
+            "description": null,
+            "total_count": 5,
+            "product_code": "NMCV2FUTURE20261014",
+            "lead_time_days": null,
+            "order_multiple": 2
+          },
+          {
+            "moq": null,
+            "brand": "Mahle",
+            "notes": null,
+            "oem_no": null,
+            "currency": "EUR",
+            "price_id": "63ab157b-96e6-355e-579e-8980a34dc8f8",
+            "valid_to": null,
+            "buy_price": 8,
+            "freshness": "fresh",
+            "stock_qty": null,
+            "price_date": "2026-10-06",
+            "description": null,
+            "total_count": 5,
+            "product_code": "NMCV2NULL20261014",
+            "lead_time_days": null,
+            "order_multiple": null
+          },
+          {
+            "moq": 1,
+            "brand": "Mahle",
+            "notes": null,
+            "oem_no": null,
+            "currency": "EUR",
+            "price_id": "b3dbbccd-f8b3-4302-dc8b-1ea217d7a891",
+            "valid_to": "2026-10-14",
+            "buy_price": 9,
+            "freshness": "fresh",
+            "stock_qty": 17,
+            "price_date": "2026-10-06",
+            "description": null,
+            "total_count": 5,
+            "product_code": "NMCV2TODAY20261014",
+            "lead_time_days": null,
+            "order_multiple": 1
+          },
+          {
+            "moq": 5,
+            "brand": "Mahle",
+            "notes": null,
+            "oem_no": null,
+            "currency": "EUR",
+            "price_id": "24f87404-95b5-4ef8-6623-92e4d4603e2e",
+            "valid_to": "2027-10-14",
+            "buy_price": 7.5,
+            "freshness": "fresh",
+            "stock_qty": 0,
+            "price_date": "2026-10-06",
+            "description": null,
+            "total_count": 5,
+            "product_code": "V3-PO-UUID-20261006-001",
+            "lead_time_days": null,
+            "order_multiple": 3
+          }
+        ],
+        "current": [
+          {
+            "moq": null,
+            "brand": "Mahle",
+            "notes": null,
+            "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+            "valid_to": null,
+            "buy_price": 8,
+            "stock_qty": null,
+            "price_date": "2026-10-06",
+            "description": null,
+            "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+            "product_code": "NMCV2NULL20261014",
+            "supplier_name": "V3 Test Vendor",
+            "order_multiple": null
+          },
+          {
+            "moq": 1,
+            "brand": "Mahle",
+            "notes": null,
+            "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+            "valid_to": "2026-10-14",
+            "buy_price": 9,
+            "stock_qty": 17,
+            "price_date": "2026-10-06",
+            "description": null,
+            "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+            "product_code": "NMCV2TODAY20261014",
+            "supplier_name": "V3 Test Vendor",
+            "order_multiple": 1
+          },
+          {
+            "moq": 5,
+            "brand": "Mahle",
+            "notes": null,
+            "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+            "valid_to": "2027-10-14",
+            "buy_price": 7.5,
+            "stock_qty": 0,
+            "price_date": "2026-10-06",
+            "description": null,
+            "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+            "product_code": "V3-PO-UUID-20261006-001",
+            "supplier_name": "V3 Test Vendor",
+            "order_multiple": 3
+          }
+        ],
+        "rawCount": 5,
+        "rawTotal": 5,
+        "capturedAt": "2026-10-14T20:15:13.442962+00:00",
+        "currentCount": 3,
+        "databaseDate": "2026-10-14",
+        "rawMismatchRows": 0,
+        "currentMismatchRows": 0,
+        "expectedCurrentCount": 3
+      },
+      "knownActorSqlContract": {
+        "batch": [
+          {
+            "options": [
+              {
+                "moq": 5,
+                "brand": "Mahle",
+                "notes": null,
+                "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+                "valid_to": "2027-10-14",
+                "buy_price": 7.5,
+                "stock_qty": 0,
+                "price_date": "2026-10-06",
+                "description": null,
+                "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+                "product_code": "V3-PO-UUID-20261006-001",
+                "supplier_name": "V3 Test Vendor",
+                "order_multiple": 3
+              }
+            ],
+            "request_index": 0,
+            "has_published_scope": true
+          },
+          {
+            "options": [
+              {
+                "moq": null,
+                "brand": "Mahle",
+                "notes": null,
+                "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+                "valid_to": null,
+                "buy_price": 8,
+                "stock_qty": null,
+                "price_date": "2026-10-06",
+                "description": null,
+                "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+                "product_code": "NMCV2NULL20261014",
+                "supplier_name": "V3 Test Vendor",
+                "order_multiple": null
+              }
+            ],
+            "request_index": 1,
+            "has_published_scope": true
+          },
+          {
+            "options": [
+              {
+                "moq": 1,
+                "brand": "Mahle",
+                "notes": null,
+                "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+                "valid_to": "2026-10-14",
+                "buy_price": 9,
+                "stock_qty": 17,
+                "price_date": "2026-10-06",
+                "description": null,
+                "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+                "product_code": "NMCV2TODAY20261014",
+                "supplier_name": "V3 Test Vendor",
+                "order_multiple": 1
+              }
+            ],
+            "request_index": 2,
+            "has_published_scope": true
+          },
+          {
+            "options": [],
+            "request_index": 3,
+            "has_published_scope": true
+          },
+          {
+            "options": [],
+            "request_index": 4,
+            "has_published_scope": true
+          }
+        ],
+        "prices": [
+          {
+            "moq": 5,
+            "notes": null,
+            "profile": "A",
+            "valid_to": "2027-10-14",
+            "buy_price": 7.5,
+            "stock_qty": 0,
+            "price_date": "2026-10-06",
+            "sell_price": 8.25,
+            "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+            "supplier_name": "V3 Test Vendor",
+            "order_multiple": 3
+          },
+          {
+            "moq": 5,
+            "notes": null,
+            "profile": "B",
+            "valid_to": "2027-10-14",
+            "buy_price": 7.5,
+            "stock_qty": 0,
+            "price_date": "2026-10-06",
+            "sell_price": 8.63,
+            "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+            "supplier_name": "V3 Test Vendor",
+            "order_multiple": 3
+          },
+          {
+            "moq": 5,
+            "notes": null,
+            "profile": "custom20",
+            "valid_to": "2027-10-14",
+            "buy_price": 7.5,
+            "stock_qty": 0,
+            "price_date": "2026-10-06",
+            "sell_price": 9,
+            "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+            "supplier_name": "V3 Test Vendor",
+            "order_multiple": 3
+          }
+        ],
+        "actorId": "c945231b-af64-486d-8ac4-f733ec906bd2",
+        "probeKind": "known-actor read-only SQL context; not authenticated browser/API proof",
+        "capturedAt": "2026-10-14T20:15:42.523098+00:00",
+        "organizationId": "b0000000-0000-4000-8000-000000000001"
+      },
+      "historyPreservation": {
+        "capturedAt": "2026-10-14T20:15:54.320476+00:00",
+        "previousReceipt": {
+          "policy": "supplier-price-commercial-fields-v1",
+          "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+          "created_at": "2026-10-14T18:22:29.865623+00:00",
+          "handoff_id": "11f5a553-5e02-421a-9316-b1b64a796135",
+          "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+          "total_rows": 1,
+          "source_path": "b0000000-0000-4000-8000-000000000001/supplier-price/6e190723-7caa-40d4-997c-f5e14422531e/v3-mahle-accepted.csv",
+          "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+          "source_bytes": 295,
+          "source_sha256": "dea1778c5ac680a503c90895c30dfa306592760428539493a35dbfd9e39f6d93",
+          "organization_id": "b0000000-0000-4000-8000-000000000001"
+        },
+        "previousPublication": {
+          "id": "381116b6-6bfb-4b4e-ab5d-f70be499d6b2",
+          "status": "superseded",
+          "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+          "created_at": "2026-10-14T18:25:25.372955+00:00",
+          "release_id": "d65df77a-81ce-4261-bf8b-494e0f3165f8",
+          "supplier_id": "a3d48dd7-0424-4edd-96c1-54e80abccebf",
+          "published_at": "2026-10-14T18:25:25.372955+00:00",
+          "superseded_at": "2026-10-14T20:15:08.040602+00:00",
+          "organization_id": "b0000000-0000-4000-8000-000000000001",
+          "publication_version": 1
+        },
+        "previousReleaseRowHash": {
+          "count": 1,
+          "shaMd5": "569e52c72b728938145417cbb47f8ba6"
+        },
+        "currentOutstandingActions": 0
+      }
+    }
+  ],
+  "completion": "V3 source-to-publication-and-reader DB acceptance passed; actual browser API and saved download receipts remain root-owned separate proof",
+  "deploymentReportedByRoot": {
+    "uiSource": "403f567",
+    "workerDeployId": "dep-db7tve6i0phs73cped60",
+    "workerInstance": "pck8w",
+    "workerApplicationVersion": "0.10.0-commercial-fields",
+    "workerHealthy": true
+  },
+  "assertions": {
+    "sourceRowHashParity": true,
+    "sourceFieldsRetained": true,
+    "stockZeroDistinctFromNull": true,
+    "allFiveRawRowsRetainedIncludingExpiredAndFuture": true,
+    "threeCurrentRowsOnlyOnDatabaseDate20261014": true,
+    "expiryInclusive": true,
+    "stockZeroStillPriceEligible": true,
+    "knownActorBatchOptionsCounts": [
+      1,
+      1,
+      1,
+      0,
+      0
+    ],
+    "knownActorQuotePricesA10B15Custom20": [
+      "8.25",
+      "8.63",
+      "9.00"
+    ],
+    "legacyScopeUnchanged": true,
+    "catalogScopeUnchanged": true,
+    "previousReleaseRowsAndReceiptUnchanged": true,
+    "previousPublicationSupersededWithHistoryRetained": true,
+    "outstandingCanaryAdminActions": 0
+  },
+  "limits": [
+    "V3 staging only; no production commercial-v2 runtime claim.",
+    "Five-row functional canary, not throughput or million-row performance evidence.",
+    "UI upload/review/publication and worker deployment attributed to root; personally observed evidence is connector read-only SQL.",
+    "Known-actor role/claims transaction validates SQL contracts only, not browser/API authentication.",
+    "Download reader values verified in SQL; native saved CSV and actual app-rpc HTTP request proof remain separate.",
+    "Quantity normalizer evaluated locally against terms matching live DB; no sales, invoice or purchase-order writes were performed.",
+    "Date eligibility proof uses database current_date 2026-10-14; future replay must update date-specific expectations."
+  ],
+  "reproductionQueries": {
+    "baseline": "with scope as(select 'b0000000-0000-4000-8000-000000000001'::uuid org,'a3d48dd7-0424-4edd-96c1-54e80abccebf'::uuid supplier,'f116493d-87c3-4ba5-a0e9-5738cabf026a'::uuid brand),ptr as(select p.* from public.supplier_current_price_pointers p,scope s where p.organization_id=s.org and p.supplier_id=s.supplier and p.brand_id=s.brand)\nselect jsonb_build_object(\n'capturedAt',clock_timestamp(),'databaseDate',current_date,\n'pointers',(select coalesce(jsonb_agg(to_jsonb(p)),'[]') from ptr p),\n'currentPublications',(select coalesce(jsonb_agg(to_jsonb(p)),'[]') from public.supplier_price_publications p join ptr on ptr.publication_id=p.id),\n'currentReleases',(select coalesce(jsonb_agg(jsonb_build_object('id',r.id,'status',r.status,'totalRows',r.total_rows,'acceptedRows',r.accepted_rows,'processedRows',r.processed_rows,'sourceSha256',r.source_file_sha256,'sourceDate',r.source_date,'updatedAt',r.updated_at,'receipt',(select to_jsonb(c) from supplier_price_ingestion_internal.source_compatibility_receipts c where c.release_id=r.id),'rows',(select jsonb_build_object('count',count(*),'shaMd5',md5(coalesce(string_agg(md5(to_jsonb(rr)::text),'' order by rr.id),''))) from public.supplier_price_release_rows rr where rr.release_id=r.id))),'[]') from public.supplier_price_releases r join ptr on ptr.release_id=r.id),\n'legacyScope',(select jsonb_build_object('rows',count(*),'activeRows',count(*)filter(where sp.is_active),'shaMd5',md5(coalesce(string_agg(md5(to_jsonb(sp)::text),'' order by sp.id::text),''))) from public.supplier_prices sp,scope s where sp.organization_id=s.org and sp.supplier_id=s.supplier and sp.brand_id=s.brand),\n'catalogScope',(select jsonb_build_object('rows',count(*),'shaMd5',md5(coalesce(string_agg(md5(to_jsonb(cp)::text),'' order by cp.id::text),''))) from public.catalog_products cp,scope s where cp.organization_id=s.org and cp.brand_id=s.brand),\n'priorMatchingSourceCount',(select count(*) from public.supplier_price_releases r,scope s where r.organization_id=s.org and r.supplier_id=s.supplier and r.brand_id=s.brand and r.source_file_sha256='9abb47e111010b81d0920cde37c9400ed006bc946ca43bb2fb90c4db38d68dab')\n) evidence;\n",
+    "state": "-- READ ONLY. Execute with Supabase connector project kaxsqafdevabkxofwdod only.\nwith scope as(select 'b0000000-0000-4000-8000-000000000001'::uuid org,\n 'a3d48dd7-0424-4edd-96c1-54e80abccebf'::uuid supplier,'f116493d-87c3-4ba5-a0e9-5738cabf026a'::uuid brand),\ncanaries as(select r.* from public.supplier_price_releases r,scope s\n where r.organization_id=s.org and r.supplier_id=s.supplier and r.brand_id=s.brand\n and r.source_file_sha256='9abb47e111010b81d0920cde37c9400ed006bc946ca43bb2fb90c4db38d68dab')\nselect jsonb_build_object('capturedAt',clock_timestamp(),\n 'canaries',(select coalesce(jsonb_agg(jsonb_build_object('releaseId',r.id,'sha256',r.source_file_sha256,\n 'status',r.status,'totalRows',r.total_rows,'processedRows',r.processed_rows,'acceptedRows',r.accepted_rows,\n 'errorCode',r.error_code,'audit',r.brand_identity_audit,'createdBy',r.created_by,'createdAt',r.created_at,\n 'persistedRows',(select count(*) from public.supplier_price_release_rows rr where rr.release_id=r.id),\n 'verification',(select jsonb_build_object('id',v.id,'sessionId',v.session_id,'status',v.status,'attemptCount',v.attempt,'lastError',case when v.last_error in ('SOURCE_UNSUPPORTED_STOCK_QTY','SOURCE_UNSUPPORTED_ORDER_MULTIPLE','SOURCE_UNSUPPORTED_VALID_TO','SOURCE_INVALID_STOCK_QTY','SOURCE_INVALID_ORDER_MULTIPLE','SOURCE_INVALID_VALID_TO','SOURCE_VERIFICATION_UNCONFIRMED') then v.last_error when v.last_error is not null then 'OTHER_REDACTED' else null end,'updatedAt',v.updated_at) from supplier_price_ingestion_internal.verification_requests v where v.release_id=r.id),\n 'receipt',(select to_jsonb(c) from supplier_price_ingestion_internal.source_compatibility_receipts c where c.release_id=r.id),\n 'handoff',(select jsonb_build_object('id',h.id,'workflowId',h.workflow_id,'status',h.status) from supplier_price_ingestion_internal.handoffs h where h.release_id=r.id),\n 'actions',(select coalesce(jsonb_agg(jsonb_build_object('decisionId',a.decision_id,'action',a.action,'status',a.status,'errorCode',a.error_code,'receipt',a.receipt) order by a.created_at),'[]') from supplier_price_ingestion_internal.admin_release_actions a where a.release_id=r.id),\n 'publications',(select coalesce(jsonb_agg(to_jsonb(p)),'[]') from public.supplier_price_publications p where p.release_id=r.id)\n ) order by r.created_at),'[]') from canaries r),\n 'pointers',(select coalesce(jsonb_agg(to_jsonb(p)),'[]') from public.supplier_current_price_pointers p,scope s where p.organization_id=s.org and p.supplier_id=s.supplier and p.brand_id=s.brand),\n 'legacyScope',(select jsonb_build_object('rows',count(*),'shaMd5',md5(coalesce(string_agg(md5(to_jsonb(sp)::text),'' order by sp.id::text),''))) from public.supplier_prices sp,scope s where sp.organization_id=s.org and sp.supplier_id=s.supplier and sp.brand_id=s.brand and sp.is_active),\n 'catalogScope',(select jsonb_build_object('rows',count(*),'shaMd5',md5(coalesce(string_agg(md5(to_jsonb(cp)::text),'' order by cp.id::text),''))) from public.catalog_products cp,scope s where cp.organization_id=s.org and cp.brand_id=s.brand)\n) evidence;\n",
+    "row-parity": "-- READ ONLY, V3 only. Call after root confirms uploaded.\nwith expected as (select * from jsonb_to_recordset($expected$[{\"source_row_number\":1,\"brand\":null,\"normalized_code\":\"V3-PO-UUID-20261006-001\",\"product_code\":\"V3-PO-UUID-20261006-001\",\"description\":null,\"description_tr\":null,\"oem_no\":null,\"ean\":null,\"vehicle\":null,\"vehicle_model\":null,\"market_segment\":null,\"dimensions\":null,\"weight\":null,\"origin\":null,\"tariff\":null,\"image_url\":null,\"buy_price\":7.5,\"currency\":\"EUR\",\"moq\":5,\"lead_time_days\":null,\"notes\":null,\"valid_from\":\"2026-10-06\",\"row_status\":\"accepted\",\"error_code\":null,\"error_message\":null,\"stock_qty\":0,\"order_multiple\":3,\"valid_to\":\"2027-10-14\",\"row_hash\":\"0441722e6c842b9c3b2fa3377608e414ec82f686bc52dedaa473a9cfc33932cf\"},{\"source_row_number\":2,\"brand\":null,\"normalized_code\":\"NMCV2NULL20261014\",\"product_code\":\"NMCV2NULL20261014\",\"description\":null,\"description_tr\":null,\"oem_no\":null,\"ean\":null,\"vehicle\":null,\"vehicle_model\":null,\"market_segment\":null,\"dimensions\":null,\"weight\":null,\"origin\":null,\"tariff\":null,\"image_url\":null,\"buy_price\":8,\"currency\":\"EUR\",\"moq\":null,\"lead_time_days\":null,\"notes\":null,\"valid_from\":\"2026-10-06\",\"row_status\":\"accepted\",\"error_code\":null,\"error_message\":null,\"stock_qty\":null,\"order_multiple\":null,\"valid_to\":null,\"row_hash\":\"e50c17e8ac9a7eb644e26ca0b83e95ce5ccec445262994da799b447aac9f7187\"},{\"source_row_number\":3,\"brand\":null,\"normalized_code\":\"NMCV2TODAY20261014\",\"product_code\":\"NMCV2TODAY20261014\",\"description\":null,\"description_tr\":null,\"oem_no\":null,\"ean\":null,\"vehicle\":null,\"vehicle_model\":null,\"market_segment\":null,\"dimensions\":null,\"weight\":null,\"origin\":null,\"tariff\":null,\"image_url\":null,\"buy_price\":9,\"currency\":\"EUR\",\"moq\":1,\"lead_time_days\":null,\"notes\":null,\"valid_from\":\"2026-10-06\",\"row_status\":\"accepted\",\"error_code\":null,\"error_message\":null,\"stock_qty\":17,\"order_multiple\":1,\"valid_to\":\"2026-10-14\",\"row_hash\":\"c19a723f9c6b02598542883bef5728a876d3eb6273e129fe701bc4baec0778e1\"},{\"source_row_number\":4,\"brand\":null,\"normalized_code\":\"NMCV2EXPIRED20261014\",\"product_code\":\"NMCV2EXPIRED20261014\",\"description\":null,\"description_tr\":null,\"oem_no\":null,\"ean\":null,\"vehicle\":null,\"vehicle_model\":null,\"market_segment\":null,\"dimensions\":null,\"weight\":null,\"origin\":null,\"tariff\":null,\"image_url\":null,\"buy_price\":10,\"currency\":\"EUR\",\"moq\":1,\"lead_time_days\":null,\"notes\":null,\"valid_from\":\"2026-10-06\",\"row_status\":\"accepted\",\"error_code\":null,\"error_message\":null,\"stock_qty\":20,\"order_multiple\":5,\"valid_to\":\"2026-10-13\",\"row_hash\":\"3d38d98216697e43a3294ded8ade1e3a6c011869fbaeaeeeb3864e965f60e24f\"},{\"source_row_number\":5,\"brand\":null,\"normalized_code\":\"NMCV2FUTURE20261014\",\"product_code\":\"NMCV2FUTURE20261014\",\"description\":null,\"description_tr\":null,\"oem_no\":null,\"ean\":null,\"vehicle\":null,\"vehicle_model\":null,\"market_segment\":null,\"dimensions\":null,\"weight\":null,\"origin\":null,\"tariff\":null,\"image_url\":null,\"buy_price\":11,\"currency\":\"EUR\",\"moq\":1,\"lead_time_days\":null,\"notes\":null,\"valid_from\":\"2026-10-15\",\"row_status\":\"accepted\",\"error_code\":null,\"error_message\":null,\"stock_qty\":4,\"order_multiple\":2,\"valid_to\":\"2027-10-14\",\"row_hash\":\"d7d7a9ebcddf1a60b33d7d6c8c4670c759d1514d080fd5905b62b88004f5d82b\"}]$expected$::jsonb) as x(product_code text,buy_price numeric,currency text,valid_from date,moq integer,order_multiple integer,stock_qty integer,valid_to date,row_hash text)),\nreleases as(select r.* from public.supplier_price_releases r where r.organization_id='b0000000-0000-4000-8000-000000000001'::uuid and r.supplier_id='a3d48dd7-0424-4edd-96c1-54e80abccebf'::uuid and r.brand_id='f116493d-87c3-4ba5-a0e9-5738cabf026a'::uuid and r.source_file_sha256='9abb47e111010b81d0920cde37c9400ed006bc946ca43bb2fb90c4db38d68dab'),\nactual as(select rr.product_code,rr.buy_price,rr.currency,rr.valid_from,rr.moq,rr.order_multiple,rr.stock_qty,rr.valid_to,rr.row_hash from public.supplier_price_release_rows rr join releases r on r.id=rr.release_id),\ndelta as((select product_code,buy_price,currency,valid_from,moq,order_multiple,stock_qty,valid_to,row_hash from expected except all select product_code,buy_price,currency,valid_from,moq,order_multiple,stock_qty,valid_to,row_hash from actual)union all(select product_code,buy_price,currency,valid_from,moq,order_multiple,stock_qty,valid_to,row_hash from actual except all select product_code,buy_price,currency,valid_from,moq,order_multiple,stock_qty,valid_to,row_hash from expected))\nselect jsonb_build_object('capturedAt',clock_timestamp(),'databaseDate',current_date,'releaseCount',(select count(*)from releases),'expectedRows',5,'actualRows',(select count(*)from actual),'mismatchRows',(select count(*)from delta),'allRowsV2',(select bool_and(rr.commercial_policy='supplier-price-commercial-fields-v2') from public.supplier_price_release_rows rr join releases r on r.id=rr.release_id),'actual',(select jsonb_agg(to_jsonb(a)order by a.product_code)from actual a)) evidence;\n",
+    "readers": "-- READ ONLY transaction; service-role DB context is a SQL contract probe, not browser/session evidence.\nbegin read only;\nset local request.jwt.claims='{\"role\":\"service_role\"}';\nwith expected as (select * from jsonb_to_recordset($expected$[{\"source_row_number\":1,\"brand\":null,\"normalized_code\":\"V3-PO-UUID-20261006-001\",\"product_code\":\"V3-PO-UUID-20261006-001\",\"description\":null,\"description_tr\":null,\"oem_no\":null,\"ean\":null,\"vehicle\":null,\"vehicle_model\":null,\"market_segment\":null,\"dimensions\":null,\"weight\":null,\"origin\":null,\"tariff\":null,\"image_url\":null,\"buy_price\":7.5,\"currency\":\"EUR\",\"moq\":5,\"lead_time_days\":null,\"notes\":null,\"price_date\":\"2026-10-06\",\"row_status\":\"accepted\",\"error_code\":null,\"error_message\":null,\"stock_qty\":0,\"order_multiple\":3,\"valid_to\":\"2027-10-14\",\"row_hash\":\"0441722e6c842b9c3b2fa3377608e414ec82f686bc52dedaa473a9cfc33932cf\"},{\"source_row_number\":2,\"brand\":null,\"normalized_code\":\"NMCV2NULL20261014\",\"product_code\":\"NMCV2NULL20261014\",\"description\":null,\"description_tr\":null,\"oem_no\":null,\"ean\":null,\"vehicle\":null,\"vehicle_model\":null,\"market_segment\":null,\"dimensions\":null,\"weight\":null,\"origin\":null,\"tariff\":null,\"image_url\":null,\"buy_price\":8,\"currency\":\"EUR\",\"moq\":null,\"lead_time_days\":null,\"notes\":null,\"price_date\":\"2026-10-06\",\"row_status\":\"accepted\",\"error_code\":null,\"error_message\":null,\"stock_qty\":null,\"order_multiple\":null,\"valid_to\":null,\"row_hash\":\"e50c17e8ac9a7eb644e26ca0b83e95ce5ccec445262994da799b447aac9f7187\"},{\"source_row_number\":3,\"brand\":null,\"normalized_code\":\"NMCV2TODAY20261014\",\"product_code\":\"NMCV2TODAY20261014\",\"description\":null,\"description_tr\":null,\"oem_no\":null,\"ean\":null,\"vehicle\":null,\"vehicle_model\":null,\"market_segment\":null,\"dimensions\":null,\"weight\":null,\"origin\":null,\"tariff\":null,\"image_url\":null,\"buy_price\":9,\"currency\":\"EUR\",\"moq\":1,\"lead_time_days\":null,\"notes\":null,\"price_date\":\"2026-10-06\",\"row_status\":\"accepted\",\"error_code\":null,\"error_message\":null,\"stock_qty\":17,\"order_multiple\":1,\"valid_to\":\"2026-10-14\",\"row_hash\":\"c19a723f9c6b02598542883bef5728a876d3eb6273e129fe701bc4baec0778e1\"},{\"source_row_number\":4,\"brand\":null,\"normalized_code\":\"NMCV2EXPIRED20261014\",\"product_code\":\"NMCV2EXPIRED20261014\",\"description\":null,\"description_tr\":null,\"oem_no\":null,\"ean\":null,\"vehicle\":null,\"vehicle_model\":null,\"market_segment\":null,\"dimensions\":null,\"weight\":null,\"origin\":null,\"tariff\":null,\"image_url\":null,\"buy_price\":10,\"currency\":\"EUR\",\"moq\":1,\"lead_time_days\":null,\"notes\":null,\"price_date\":\"2026-10-06\",\"row_status\":\"accepted\",\"error_code\":null,\"error_message\":null,\"stock_qty\":20,\"order_multiple\":5,\"valid_to\":\"2026-10-13\",\"row_hash\":\"3d38d98216697e43a3294ded8ade1e3a6c011869fbaeaeeeb3864e965f60e24f\"},{\"source_row_number\":5,\"brand\":null,\"normalized_code\":\"NMCV2FUTURE20261014\",\"product_code\":\"NMCV2FUTURE20261014\",\"description\":null,\"description_tr\":null,\"oem_no\":null,\"ean\":null,\"vehicle\":null,\"vehicle_model\":null,\"market_segment\":null,\"dimensions\":null,\"weight\":null,\"origin\":null,\"tariff\":null,\"image_url\":null,\"buy_price\":11,\"currency\":\"EUR\",\"moq\":1,\"lead_time_days\":null,\"notes\":null,\"price_date\":\"2026-10-15\",\"row_status\":\"accepted\",\"error_code\":null,\"error_message\":null,\"stock_qty\":4,\"order_multiple\":2,\"valid_to\":\"2027-10-14\",\"row_hash\":\"d7d7a9ebcddf1a60b33d7d6c8c4670c759d1514d080fd5905b62b88004f5d82b\"}]$expected$::jsonb) as x(product_code text,buy_price numeric,currency text,price_date date,moq integer,order_multiple integer,stock_qty integer,valid_to date,row_hash text)),\nraw as(select * from public.cloud_supplier_price_export_commercial_page_v3('b0000000-0000-4000-8000-000000000001'::uuid,'a3d48dd7-0424-4edd-96c1-54e80abccebf'::uuid,'f116493d-87c3-4ba5-a0e9-5738cabf026a'::uuid,'','all',null,null,1000)),\nraw_delta as((select product_code,buy_price,price_date,moq,order_multiple,stock_qty,valid_to from expected except all select product_code,buy_price,price_date,moq,order_multiple,stock_qty,valid_to from raw)union all(select product_code,buy_price,price_date,moq,order_multiple,stock_qty,valid_to from raw except all select product_code,buy_price,price_date,moq,order_multiple,stock_qty,valid_to from expected)),\ncurrent_rows as(select o.* from expected e cross join lateral public.cloud_current_supplier_commercial_options_core('b0000000-0000-4000-8000-000000000001'::uuid,e.product_code,'Mahle')o where o.supplier_id='a3d48dd7-0424-4edd-96c1-54e80abccebf'::uuid),\ncurrent_expected as(select * from expected where price_date<=current_date and(valid_to is null or valid_to>=current_date)),\ncurrent_delta as((select product_code,buy_price,price_date,moq,order_multiple,stock_qty,valid_to from current_expected except all select product_code,buy_price,price_date,moq,order_multiple,stock_qty,valid_to from current_rows)union all(select product_code,buy_price,price_date,moq,order_multiple,stock_qty,valid_to from current_rows except all select product_code,buy_price,price_date,moq,order_multiple,stock_qty,valid_to from current_expected))\nselect jsonb_build_object('capturedAt',clock_timestamp(),'databaseDate',current_date,'rawCount',(select count(*)from raw),'rawTotal',(select min(total_count)from raw),'rawMismatchRows',(select count(*)from raw_delta),'expectedCurrentCount',(select count(*)from current_expected),'currentCount',(select count(*)from current_rows),'currentMismatchRows',(select count(*)from current_delta),'raw',(select jsonb_agg(to_jsonb(r) order by product_code)from raw r),'current',(select jsonb_agg(to_jsonb(c)order by product_code)from current_rows c)) evidence;\nrollback;\n",
+    "known-actor": "begin read only;\nset local role authenticated;\nset local request.jwt.claims='{\"sub\":\"c945231b-af64-486d-8ac4-f733ec906bd2\",\"role\":\"authenticated\"}';\nwith batch as(select * from public.cloud_current_supplier_price_options_batch('[{\"code\":\"V3-PO-UUID-20261006-001\",\"brand\":\"Mahle\"},{\"code\":\"NMCV2NULL20261014\",\"brand\":\"Mahle\"},{\"code\":\"NMCV2TODAY20261014\",\"brand\":\"Mahle\"},{\"code\":\"NMCV2EXPIRED20261014\",\"brand\":\"Mahle\"},{\"code\":\"NMCV2FUTURE20261014\",\"brand\":\"Mahle\"}]'::jsonb)),\nprices as(select 'A' profile,o.* from public.cloud_quote_supplier_commercial_options_v3('V3-PO-UUID-20261006-001','Mahle','A',0.10,0.15)o\n union all select 'B',o.* from public.cloud_quote_supplier_commercial_options_v3('V3-PO-UUID-20261006-001','Mahle','B',0.10,0.15)o\n union all select 'custom20',o.* from public.cloud_quote_supplier_commercial_options_v3('V3-PO-UUID-20261006-001','Mahle','A',0.20,0.15)o)\nselect jsonb_build_object('capturedAt',clock_timestamp(),'actorId',auth.uid(),'organizationId',public.current_profile_org_id(),'probeKind','known-actor read-only SQL context; not authenticated browser/API proof','batch',(select jsonb_agg(to_jsonb(b)order by request_index)from batch b),'prices',(select jsonb_agg(to_jsonb(p)order by profile)from prices p)) evidence;\nrollback;\n",
+    "history": "select jsonb_build_object('capturedAt',clock_timestamp(),'previousPublication',(select to_jsonb(p)from public.supplier_price_publications p where p.id='381116b6-6bfb-4b4e-ab5d-f70be499d6b2'::uuid),'previousReleaseRowHash',(select jsonb_build_object('count',count(*),'shaMd5',md5(coalesce(string_agg(md5(to_jsonb(rr)::text),'' order by rr.id),''))) from public.supplier_price_release_rows rr where rr.release_id='d65df77a-81ce-4261-bf8b-494e0f3165f8'::uuid),'previousReceipt',(select to_jsonb(c)from supplier_price_ingestion_internal.source_compatibility_receipts c where c.release_id='d65df77a-81ce-4261-bf8b-494e0f3165f8'::uuid),'currentOutstandingActions',(select count(*)from supplier_price_ingestion_internal.admin_release_actions a where a.release_id='e748a708-24fb-44fe-886c-90c315a723fb'::uuid and a.status in('queued','running')))evidence;\n"
+  }
+}
