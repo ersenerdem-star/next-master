@@ -425,6 +425,13 @@
       "file": "supabase/migrations/20261014135000_catalog_import_storage_validation_projection_fix.sql",
       "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
       "status": "source-reviewed-pending-target-apply"
+    },
+    {
+      "id": "sales-order-historical-operational-edit",
+      "phase": "pricing-compatibility",
+      "file": "supabase/migrations/20261014123941_sales_order_historical_operational_edit.sql",
+      "sha256": "b40ff52813200556c54925d33ac165a12ff0b17456d0c98e0f73ee12ba0bc4d2",
+      "status": "local-pg-regression-passed-not-applied-production"
     }
   ],
   "excluded_migrations": [
@@ -609,7 +616,7 @@
       "id": "isolated-full-schema-replay",
       "status": "passed",
       "expected": "Exact ordered foundation and upgrade chain succeeds against a disposable production-shaped clone, preserving existing job rows and role boundaries.",
-      "evidence": "scripts/ops/evidence/price-engine-full-schema-replay-local.json; actual captured production schema fixture, two complete 58-entry passes, logical schema stable, synthetic existing job business fields preserved, publication controls disabled and browser role boundaries enforced. Local PG17 proof only."
+      "evidence": "scripts/ops/evidence/price-engine-full-schema-replay-local.json; actual captured production schema fixture, two complete 59-entry passes, logical schema stable, synthetic existing job business fields preserved, publication controls disabled and browser role boundaries enforced. Local PG17 proof only."
     },
     {
       "id": "production-provider-readiness",
@@ -718,11 +725,13 @@
     "customer_alignment_cas_tests": 2,
     "export_bucket_mime_tests": 3,
     "typescript": "passed",
-    "full_ordered_schema_replay": "passed-two-complete-58-entry-passes",
+    "full_ordered_schema_replay": "passed-two-complete-59-entry-passes",
     "full_ordered_schema_replay_evidence": "scripts/ops/evidence/price-engine-full-schema-replay-local.json",
     "production_browser_canary": "pending",
     "production_mutations": 0,
     "staging_verified_upload_evidence": "scripts/ops/evidence/supplier-verified-upload-staging-20261014.json",
-    "verified_replace_only_mode_guard": "server/client/UI local regression passed; source-level actualclient tested before hash/Auth/network"
+    "verified_replace_only_mode_guard": "server/client/UI local regression passed; source-level actualclient tested before hash/Auth/network",
+    "historical_sales_order_operational_edit_tests": 7,
+    "production_provider_cost_approval": "conditional-user-approval-after-equivalent-capacity-alternatives-review"
   }
 }

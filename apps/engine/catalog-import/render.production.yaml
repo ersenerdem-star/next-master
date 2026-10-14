@@ -16,6 +16,12 @@ services:
     dockerContext: .
     autoDeployTrigger: off
     numInstances: 1
+    # Stop the prior instance before replacement so the stable DBOS executor
+    # never overlaps itself. This unused mount holds no history or source data.
+    disk:
+      name: production-single-instance-guard
+      mountPath: /var/lib/next-master-deployment-guard
+      sizeGB: 1
     envVars:
       - key: NM_PRODUCTION_TARGET
         value: zjgueqijumzlfioihnkt
@@ -31,10 +37,12 @@ services:
           property: connectionString
       - key: CATALOG_IMPORT_WORKER_ID
         value: catalog-import-production-01
+      # Supply "0" during provisioning and "1" only at reviewed activation.
+      # Keep operator-owned values across later Blueprint synchronizations.
       - key: CATALOG_IMPORT_SERVICE_ENABLED
-        value: "0"
+        sync: false
       - key: CATALOG_STORAGE_IMPORT_PRODUCTION_ENABLED
-        value: "0"
+        sync: false
       - key: CATALOG_IMPORT_SERVICE_HISTORY_CONFIRMED
         sync: false
 

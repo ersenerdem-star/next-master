@@ -167,7 +167,7 @@ test("authenticated gateway refuses begin/seal/fail writes for mixed or unenable
   }
 });
 
-test("production Blueprint defines isolated private history and both activation flags remain off", async () => {
+test("production Blueprint keeps activation operator-owned and history isolated across synchronization", async () => {
   const blueprint = parse(await readFile(new URL("../../apps/engine/catalog-import/render.production.yaml", import.meta.url), "utf8"));
   assert.equal(blueprint.previews.generation, "off");
   assert.equal(blueprint.services.length, 1);
@@ -175,16 +175,25 @@ test("production Blueprint defines isolated private history and both activation 
   assert.equal(worker.type, "worker");
   assert.equal(worker.autoDeployTrigger, "off");
   assert.equal(worker.numInstances, 1);
+  assert.equal(worker.repo, "https://github.com/ersenerdem-star/next-master");
+  assert.deepEqual(worker.disk, {
+    name: "production-single-instance-guard",
+    mountPath: "/var/lib/next-master-deployment-guard",
+    sizeGB: 1,
+  });
   const env = Object.fromEntries(worker.envVars.map((item: any) => [item.key, item]));
   assert.equal(env.SUPABASE_URL.value, productionUrl);
   assert.equal(env.NM_PRODUCTION_TARGET.value, productionTarget);
   assert.equal(env.NM_PRODUCTION_PORTAL_ORIGIN.value, productionOrigin);
-  assert.equal(env.CATALOG_IMPORT_SERVICE_ENABLED.value, "0");
-  assert.equal(env.CATALOG_STORAGE_IMPORT_PRODUCTION_ENABLED.value, "0");
+  for (const name of ["CATALOG_IMPORT_SERVICE_ENABLED", "CATALOG_STORAGE_IMPORT_PRODUCTION_ENABLED"]) {
+    assert.deepEqual(env[name], { key: name, sync: false });
+  }
   assert.equal(env.SUPABASE_SERVICE_ROLE_KEY.sync, false);
   assert.equal(env.CATALOG_IMPORT_SERVICE_HISTORY_CONFIRMED.sync, false);
   assert.equal(env.DBOS_SYSTEM_DATABASE_URL.fromDatabase.name, blueprint.databases[0].name);
+  assert.equal(env.DBOS_SYSTEM_DATABASE_URL.fromDatabase.property, "connectionString");
   assert.equal(blueprint.databases[0].databaseName, "nm_catalog_production_history");
+  assert.equal(blueprint.databases[0].user, "nm_catalog_production_worker");
   assert.deepEqual(blueprint.databases[0].ipAllowList, []);
   assert.equal(env.NM_FULL_STAGING_TARGET, undefined);
   assert.equal(env.CATALOG_IMPORT_ALLOW_PRODUCTION, undefined);

@@ -1,7 +1,7 @@
 {
   "evidence_scope": "Local isolated PG17 schema replay; actual production schema metadata; no remote writes or commercial browser proof",
   "source_project_ref": "zjgueqijumzlfioihnkt",
-  "manifest_sha256": "6a15a528ef8c8ab7c401d07aa9fad8ffbe557d18cdfd829de6093623bb32fffe",
+  "manifest_sha256": "30405c8e12233c37b5488d5a814f4a7292fee41dd7b515669e061ef6e65a6758",
   "baseline_tables": 38,
   "baseline_functions": 88,
   "passes": [
@@ -239,9 +239,13 @@
         {
           "file": "supabase/migrations/20261014135000_catalog_import_storage_validation_projection_fix.sql",
           "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43"
+        },
+        {
+          "file": "supabase/migrations/20261014123941_sales_order_historical_operational_edit.sql",
+          "sha256": "b40ff52813200556c54925d33ac165a12ff0b17456d0c98e0f73ee12ba0bc4d2"
         }
       ],
-      "logical_schema_sha256": "17b8d0032a68e3aa143d27163f7c7cb3c0ea2b3d50980bc1001bdb62d3d1ea13",
+      "logical_schema_sha256": "e3743a74d9ba243d73bdeb353a22ba9310d0c8724bc4966269849056f2814155",
       "preexisting_job_business_fields_preserved": true,
       "production_activation_off": true,
       "role_boundaries_preserved": true
@@ -480,9 +484,13 @@
         {
           "file": "supabase/migrations/20261014135000_catalog_import_storage_validation_projection_fix.sql",
           "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43"
+        },
+        {
+          "file": "supabase/migrations/20261014123941_sales_order_historical_operational_edit.sql",
+          "sha256": "b40ff52813200556c54925d33ac165a12ff0b17456d0c98e0f73ee12ba0bc4d2"
         }
       ],
-      "logical_schema_sha256": "17b8d0032a68e3aa143d27163f7c7cb3c0ea2b3d50980bc1001bdb62d3d1ea13",
+      "logical_schema_sha256": "e3743a74d9ba243d73bdeb353a22ba9310d0c8724bc4966269849056f2814155",
       "preexisting_job_business_fields_preserved": true,
       "production_activation_off": true,
       "role_boundaries_preserved": true
