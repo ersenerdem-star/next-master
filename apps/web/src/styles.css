@@ -7189,6 +7189,62 @@ textarea {
   gap: 14px;
 }
 
+.dashboard-command-hero {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  min-height: 190px;
+  overflow: hidden;
+  border: 1px solid rgba(18, 35, 59, 0.1);
+  border-radius: 24px;
+  background-color: #f6f8fb;
+  background-image: url("/portal-assets/admin-operations-hero.png");
+  background-position: right center;
+  background-repeat: no-repeat;
+  background-size: auto 100%;
+  padding: 28px clamp(24px, 4vw, 46px);
+  box-shadow: 0 18px 38px rgba(16, 24, 40, 0.08);
+}
+
+.dashboard-command-hero::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(90deg, rgba(246, 248, 251, 0.99) 0%, rgba(246, 248, 251, 0.94) 42%, rgba(246, 248, 251, 0.18) 78%, rgba(246, 248, 251, 0) 100%);
+  content: "";
+}
+
+.dashboard-command-hero__copy {
+  max-width: 620px;
+}
+
+.dashboard-command-hero__copy span {
+  display: block;
+  margin-bottom: 10px;
+  color: #1d78b7;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.dashboard-command-hero__copy h2 {
+  margin: 0;
+  color: #0b1830;
+  font-size: clamp(28px, 3.2vw, 48px);
+  font-weight: 850;
+  letter-spacing: -0.05em;
+  line-height: 1.03;
+  text-transform: uppercase;
+}
+
+.dashboard-command-hero__copy p {
+  margin: 10px 0 0;
+  color: #29476b;
+  font-size: 16px;
+}
+
 .mira-companion {
   position: fixed;
   left: clamp(208px, calc(18vw - 18px), 272px);
@@ -7311,6 +7367,22 @@ textarea {
 }
 
 @media (max-width: 760px) {
+  .dashboard-command-hero {
+    min-height: 220px;
+    align-items: flex-end;
+    background-position: 72% center;
+    background-size: auto 100%;
+    padding: 24px 18px;
+  }
+
+  .dashboard-command-hero::before {
+    background: linear-gradient(180deg, rgba(246, 248, 251, 0.28) 0%, rgba(246, 248, 251, 0.98) 70%);
+  }
+
+  .dashboard-command-hero__copy h2 {
+    font-size: 32px;
+  }
+
   .mira-companion {
     left: auto;
     right: 12px;
@@ -9974,7 +10046,7 @@ select.field__input {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 24px;
   background-color: #061427;
-  background-image: url("/portal-assets/customer-desk-brake-hero.webp");
+  background-image: url("/portal-assets/customer-desk-network-hero.png");
   background-position: center right;
   background-repeat: no-repeat;
   background-size: cover;
@@ -10370,7 +10442,7 @@ select.field__input {
   justify-content: center;
   min-height: 100vh;
   background-color: #061427;
-  background-image: url("/portal-assets/customer-desk-brake-hero.webp");
+  background-image: url("/portal-assets/customer-desk-network-hero.png");
   background-position: center right;
   background-repeat: no-repeat;
   background-size: cover;
@@ -10585,7 +10657,7 @@ select.field__input {
   place-items: stretch;
   padding: clamp(24px, 5vw, 72px);
   background-color: #061427;
-  background-image: url("/portal-assets/customer-desk-brake-hero.webp");
+  background-image: url("/portal-assets/admin-operations-hero.png");
   background-position: center right;
   background-repeat: no-repeat;
   background-size: cover;
@@ -10844,7 +10916,7 @@ select.field__input {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 28px;
   background-color: #061427;
-  background-image: url("/portal-assets/customer-desk-brake-hero.webp");
+  background-image: url("/portal-assets/admin-operations-hero.png");
   background-position: right 38%;
   background-repeat: no-repeat;
   background-size: cover;
