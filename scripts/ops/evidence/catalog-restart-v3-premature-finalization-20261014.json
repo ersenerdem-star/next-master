@@ -1,0 +1,742 @@
+{
+  "evidenceScope": "Actual V3 upload/restart failure and guarded owned-product cleanup; not successful restart acceptance",
+  "projectRef": "kaxsqafdevabkxofwdod",
+  "sourceCommit": "403f567b5935ce7cd344cf4d4f95625643e53f6a",
+  "rootOwnedProvider": {
+    "workerService": "srv-db7bt5dg1s2s739u744g",
+    "deployId": "dep-db7u03t9fdbs73dgns20",
+    "instance": "9pdzj",
+    "nodeVersion": "24.15.0",
+    "provenance": "Root observed provider/runtime, independent database observations below"
+  },
+  "failedAcceptance": {
+    "run": [
+      {
+        "id": "e0a5ee35-bbf0-4c4c-b0a7-59e4b9344c57",
+        "mode": "upsert",
+        "status": "finalized",
+        "skipRows": 0,
+        "errorRows": 0,
+        "startedAt": "2026-10-14T20:15:24.110024+00:00",
+        "validRows": 87,
+        "insertRows": 87,
+        "stagedRows": 87,
+        "updateRows": 0,
+        "finalizedAt": "2026-10-14T20:15:51.066077+00:00",
+        "skippedCount": 0,
+        "updatedCount": 0,
+        "duplicateRows": 0,
+        "insertedCount": 87,
+        "processedRows": 87,
+        "finalizeCursor": 86,
+        "validationCursor": 86
+      }
+    ],
+    "checks": {
+      "exact_run_scope": true,
+      "exactly_one_run": true,
+      "exactly_one_source": true,
+      "run_source_binding": true,
+      "exact_stage_content": false,
+      "exact_product_content": false,
+      "no_cross_brand_canary": true,
+      "receipt_scope_binding": true,
+      "exact_completed_source": false,
+      "exact_finalized_counts": false,
+      "exact_contiguous_receipt_coverage": false,
+      "exact_stage_count_without_duplicates": false,
+      "exact_product_count_without_duplicates": false
+    },
+    "source": [
+      {
+        "id": "af1a962f-95fa-4960-a471-b917f1bed76c",
+        "bytes": 6545191,
+        "runId": "e0a5ee35-bbf0-4c4c-b0a7-59e4b9344c57",
+        "cursor": 86,
+        "sha256": "1f2826bf049ff9a5b485301f04c70b548f9df19ab38e8a3272fbdcaf0aec244e",
+        "status": "completed",
+        "errorCode": null,
+        "leaseOwner": null,
+        "rowsParsed": 87,
+        "rowsStaged": 87,
+        "completedAt": "2026-10-14T20:15:51.066077+00:00",
+        "attemptCount": 1,
+        "leaseGeneration": 1
+      }
+    ],
+    "batches": [
+      {
+        "id": "0944bc07-be34-4cf6-b3da-6024764e69fa",
+        "rows": 87,
+        "isFinal": false,
+        "sourceId": "af1a962f-95fa-4960-a471-b917f1bed76c",
+        "createdAt": "2026-10-14T20:15:47.966239+00:00",
+        "cursorEnd": 86,
+        "completedAt": "2026-10-14T20:15:47.966239+00:00",
+        "cursorStart": 0,
+        "payloadSha256": "476ade76e1e9c7e346107c2fcd3a65a96821ce8274ac19712b2abf2f5793703c",
+        "leaseGeneration": 1
+      }
+    ],
+    "history": {
+      "runMd5": "1ff251733944bf12e79601977b9a936a",
+      "batchMd5": "0897fb64c09657b3f0c653190094726e",
+      "stageMd5": "addfdc01b4e366e0fac53d4aea298fc0",
+      "sourceMd5": "5b657e6a4f40b9ecc35f86692b7a54c4",
+      "batchCount": 1,
+      "stageCount": 87,
+      "notificationMd5": "e74ea8133571a534313900b79427f191",
+      "notificationCount": 1
+    },
+    "capturedAt": "2026-10-14T20:17:35.362582+00:00",
+    "projectRef": "kaxsqafdevabkxofwdod",
+    "productCount": 87,
+    "businessScope": {
+      "pointerMd5": "d41d8cd98f00b204e9800998ecf8427e",
+      "publicationMd5": "d41d8cd98f00b204e9800998ecf8427e",
+      "supplierPriceMd5": "d41d8cd98f00b204e9800998ecf8427e",
+      "supplierPriceCount": 0
+    },
+    "productIdsMd5": "f1ff4e4fcc5f4a743cabfcff86fc66ef",
+    "productRowsMd5": "ebfcb5db231f07f1d9c76ac8fb88838a",
+    "allChecksPassed": false
+  },
+  "cleanupPreflight": {
+    "identity": {
+      "run": [
+        {
+          "id": "e0a5ee35-bbf0-4c4c-b0a7-59e4b9344c57",
+          "mode": "upsert",
+          "status": "finalized",
+          "skipRows": 0,
+          "errorRows": 0,
+          "startedAt": "2026-10-14T20:15:24.110024+00:00",
+          "validRows": 87,
+          "insertRows": 87,
+          "stagedRows": 87,
+          "updateRows": 0,
+          "finalizedAt": "2026-10-14T20:15:51.066077+00:00",
+          "skippedCount": 0,
+          "updatedCount": 0,
+          "duplicateRows": 0,
+          "insertedCount": 87,
+          "processedRows": 87,
+          "finalizeCursor": 86,
+          "validationCursor": 86
+        }
+      ],
+      "checks": {
+        "exact_run_scope": true,
+        "exactly_one_run": true,
+        "exactly_one_source": true,
+        "run_source_binding": true,
+        "exact_stage_content": true,
+        "exact_product_content": true,
+        "no_cross_brand_canary": true,
+        "receipt_scope_binding": true,
+        "exact_completed_source": true,
+        "exact_finalized_counts": true,
+        "exact_nonfinal_partial_receipt": true,
+        "exact_contiguous_receipt_coverage": true,
+        "exact_stage_count_without_duplicates": true,
+        "exact_product_count_without_duplicates": true
+      },
+      "source": [
+        {
+          "id": "af1a962f-95fa-4960-a471-b917f1bed76c",
+          "bytes": 6545191,
+          "runId": "e0a5ee35-bbf0-4c4c-b0a7-59e4b9344c57",
+          "cursor": 86,
+          "sha256": "1f2826bf049ff9a5b485301f04c70b548f9df19ab38e8a3272fbdcaf0aec244e",
+          "status": "completed",
+          "errorCode": null,
+          "leaseOwner": null,
+          "rowsParsed": 87,
+          "rowsStaged": 87,
+          "completedAt": "2026-10-14T20:15:51.066077+00:00",
+          "attemptCount": 1,
+          "leaseGeneration": 1
+        }
+      ],
+      "batches": [
+        {
+          "id": "0944bc07-be34-4cf6-b3da-6024764e69fa",
+          "rows": 87,
+          "isFinal": false,
+          "sourceId": "af1a962f-95fa-4960-a471-b917f1bed76c",
+          "createdAt": "2026-10-14T20:15:47.966239+00:00",
+          "cursorEnd": 86,
+          "completedAt": "2026-10-14T20:15:47.966239+00:00",
+          "cursorStart": 0,
+          "payloadSha256": "476ade76e1e9c7e346107c2fcd3a65a96821ce8274ac19712b2abf2f5793703c",
+          "leaseGeneration": 1
+        }
+      ],
+      "history": {
+        "runMd5": "1ff251733944bf12e79601977b9a936a",
+        "batchMd5": "0897fb64c09657b3f0c653190094726e",
+        "stageMd5": "addfdc01b4e366e0fac53d4aea298fc0",
+        "sourceMd5": "5b657e6a4f40b9ecc35f86692b7a54c4",
+        "batchCount": 1,
+        "stageCount": 87,
+        "notificationMd5": "e74ea8133571a534313900b79427f191",
+        "notificationCount": 1
+      },
+      "purpose": "known_partial_87_cleanup_only_not_restart_acceptance",
+      "capturedAt": "2026-10-14T20:19:05.704183+00:00",
+      "projectRef": "kaxsqafdevabkxofwdod",
+      "productCount": 87,
+      "businessScope": {
+        "pointerMd5": "d41d8cd98f00b204e9800998ecf8427e",
+        "publicationMd5": "d41d8cd98f00b204e9800998ecf8427e",
+        "supplierPriceMd5": "d41d8cd98f00b204e9800998ecf8427e",
+        "supplierPriceCount": 0
+      },
+      "productIdsMd5": "f1ff4e4fcc5f4a743cabfcff86fc66ef",
+      "productRowsMd5": "ebfcb5db231f07f1d9c76ac8fb88838a",
+      "allIdentityChecksPassed": true
+    },
+    "foreignKeys": {
+      "allZero": true,
+      "references": [
+        {
+          "rows": 0,
+          "reference": "public.account_transactions:account_transactions_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.bill_lines:bill_lines_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_apply_events:catalog_apply_events_catalog_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_external_observations:catalog_external_observations_catalog_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_integrity_queue:catalog_integrity_queue_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_observation_candidates:catalog_observation_candidates_catalog_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_observation_item_outcomes:catalog_observation_item_outcomes_catalog_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_observation_review_apply_events:catalog_observation_review_apply_events_catalog_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_observation_review_decision_events:catalog_observation_review_decision_eve_catalog_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_observation_review_decisions:catalog_observation_review_decisions_catalog_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_product_attributes:catalog_product_attributes_product_org_fk"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_product_fitments:catalog_product_fitments_product_org_fk"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_product_identifiers:catalog_product_identifiers_product_org_fk"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_product_integrity:catalog_product_integrity_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_product_relations:catalog_product_relations_product_org_fk"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_product_source_aliases:catalog_product_source_aliases_catalog_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.catalog_product_source_records:catalog_product_source_records_product_org_fk"
+        },
+        {
+          "rows": 0,
+          "reference": "public.commercial_line_facts:commercial_line_facts_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.customer_price_list_items:customer_price_list_items_catalog_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.invoice_lines:invoice_lines_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.price_variance_checks:price_variance_checks_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.product_attribute_conflicts:product_attribute_conflicts_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.quote_lines:quote_lines_catalog_product_id_fkey"
+        },
+        {
+          "rows": 0,
+          "reference": "public.supplier_prices:supplier_prices_catalog_product_id_fkey"
+        }
+      ],
+      "referencesChecked": 24
+    },
+    "commercialReferences": {
+      "all_13_commercial_reference_checks_clear": true
+    }
+  },
+  "cleanupExecution": {
+    "provenance": "Root executed reviewed exact staging-only cleanup via Supabase MCP; observer performed no mutation",
+    "at": "2026-10-14T20:21:36.910891Z",
+    "deletedOwnedProducts": 87,
+    "lockTimeout": "1s",
+    "statementTimeout": "30s",
+    "file": "/private/tmp/next-master-catalog-restart-v3-partial87-cleanup-20261014.sql",
+    "fileSha256": "b5b5368369d63decc913018162fc05e24daa4f00a021e49134edcf4e9814539b"
+  },
+  "independentAfterCleanup": {
+    "run": [
+      {
+        "id": "e0a5ee35-bbf0-4c4c-b0a7-59e4b9344c57",
+        "mode": "upsert",
+        "status": "finalized",
+        "skipRows": 0,
+        "errorRows": 0,
+        "startedAt": "2026-10-14T20:15:24.110024+00:00",
+        "validRows": 87,
+        "insertRows": 87,
+        "stagedRows": 87,
+        "updateRows": 0,
+        "finalizedAt": "2026-10-14T20:15:51.066077+00:00",
+        "skippedCount": 0,
+        "updatedCount": 0,
+        "duplicateRows": 0,
+        "insertedCount": 87,
+        "processedRows": 87,
+        "finalizeCursor": 86,
+        "validationCursor": 86
+      }
+    ],
+    "checks": {
+      "exact_run_scope": true,
+      "exactly_one_run": true,
+      "exactly_one_source": true,
+      "run_source_binding": true,
+      "exact_stage_content": true,
+      "exact_product_content": false,
+      "no_cross_brand_canary": true,
+      "receipt_scope_binding": true,
+      "exact_completed_source": true,
+      "exact_finalized_counts": true,
+      "exact_nonfinal_partial_receipt": true,
+      "exact_contiguous_receipt_coverage": true,
+      "exact_stage_count_without_duplicates": true,
+      "exact_product_count_without_duplicates": false
+    },
+    "source": [
+      {
+        "id": "af1a962f-95fa-4960-a471-b917f1bed76c",
+        "bytes": 6545191,
+        "runId": "e0a5ee35-bbf0-4c4c-b0a7-59e4b9344c57",
+        "cursor": 86,
+        "sha256": "1f2826bf049ff9a5b485301f04c70b548f9df19ab38e8a3272fbdcaf0aec244e",
+        "status": "completed",
+        "errorCode": null,
+        "leaseOwner": null,
+        "rowsParsed": 87,
+        "rowsStaged": 87,
+        "completedAt": "2026-10-14T20:15:51.066077+00:00",
+        "attemptCount": 1,
+        "leaseGeneration": 1
+      }
+    ],
+    "batches": [
+      {
+        "id": "0944bc07-be34-4cf6-b3da-6024764e69fa",
+        "rows": 87,
+        "isFinal": false,
+        "sourceId": "af1a962f-95fa-4960-a471-b917f1bed76c",
+        "createdAt": "2026-10-14T20:15:47.966239+00:00",
+        "cursorEnd": 86,
+        "completedAt": "2026-10-14T20:15:47.966239+00:00",
+        "cursorStart": 0,
+        "payloadSha256": "476ade76e1e9c7e346107c2fcd3a65a96821ce8274ac19712b2abf2f5793703c",
+        "leaseGeneration": 1
+      }
+    ],
+    "history": {
+      "runMd5": "1ff251733944bf12e79601977b9a936a",
+      "batchMd5": "0897fb64c09657b3f0c653190094726e",
+      "stageMd5": "addfdc01b4e366e0fac53d4aea298fc0",
+      "sourceMd5": "5b657e6a4f40b9ecc35f86692b7a54c4",
+      "batchCount": 1,
+      "stageCount": 87,
+      "notificationMd5": "e74ea8133571a534313900b79427f191",
+      "notificationCount": 1
+    },
+    "purpose": "known_partial_87_cleanup_only_not_restart_acceptance",
+    "capturedAt": "2026-10-14T20:22:09.102753+00:00",
+    "projectRef": "kaxsqafdevabkxofwdod",
+    "productCount": 0,
+    "businessScope": {
+      "pointerMd5": "d41d8cd98f00b204e9800998ecf8427e",
+      "publicationMd5": "d41d8cd98f00b204e9800998ecf8427e",
+      "supplierPriceMd5": "d41d8cd98f00b204e9800998ecf8427e",
+      "supplierPriceCount": 0
+    },
+    "productIdsMd5": "d41d8cd98f00b204e9800998ecf8427e",
+    "productRowsMd5": "d41d8cd98f00b204e9800998ecf8427e",
+    "allIdentityChecksPassed": false
+  },
+  "rootCause": {
+    "queueMarkerAlreadyPresentDuringIngestion": true,
+    "workerFinalizationIgnoredStorageReadiness": true,
+    "sqlValidationAcceptedPartialStage": true,
+    "sqlFinalizerMarkedProcessingSourceCompleted": true
+  },
+  "limitations": {
+    "successfulRestartAcceptance": false,
+    "exactPostkillZeroCheckpointWitness": false,
+    "watcherTerminalLostOnShellReset": true,
+    "productionCatalogDeploymentForThisChange": false
+  },
+  "initialUploadFailure": {
+    "evidenceScope": "Read-only V3 Supabase observation; no upload completion or restart claimed",
+    "projectRef": "kaxsqafdevabkxofwdod",
+    "observation": {
+      "runId": "f272d8ad-060a-41e7-9ddc-0c216c02a8a8",
+      "status": "failed",
+      "sourceId": "87c49c40-136a-4922-9582-1240fbfd6ea7",
+      "batchCount": 0,
+      "capturedAt": "2026-10-14T20:06:10.632878+00:00",
+      "stageCount": 0,
+      "sourceBytes": 6291712,
+      "attemptCount": 0,
+      "sourceStatus": "failed",
+      "canaryProducts": 0,
+      "leaseGeneration": 0,
+      "sourceErrorCode": "CATALOG_STORAGE_UPLOAD_FAILED",
+      "admittedChecksum": null,
+      "verifiedChecksum": null,
+      "sourceContentType": "text/csv",
+      "storageObjectCount": 0,
+      "runErrorMessageBytes": 86,
+      "sourceErrorMessageBytes": 86
+    },
+    "interpretation": {
+      "workerClaimed": false,
+      "restartPerformed": false,
+      "sourceStorageObjectPresent": false,
+      "historyPreserved": true
+    },
+    "mutations": 0,
+    "observedCause": "UI build-version fence required reload before Storage upload",
+    "storedErrorMessage": "Bu işlem devam etmeden önce daha yeni sürüm gerekli. Uygulama yeniden yükleniyor."
+  },
+  "paddedSourceFailure": {
+    "projectRef": "kaxsqafdevabkxofwdod",
+    "capturedAt": "2026-10-14T20:10:37.569185Z",
+    "runId": "8334e2ee-e1ec-4bb2-8c11-e7c97c2d72cb",
+    "sourceId": "11fa12a4-fe5a-4e64-9051-a61c82679d26",
+    "status": "failed",
+    "sourceSha256": "e774989a827f055c44b4b7d7645e80ad042f473dd93d709de491ea4528c8e94a",
+    "attemptCount": 1,
+    "leaseGeneration": 1,
+    "rowsParsed": 0,
+    "rowsStaged": 0,
+    "stageRows": 0,
+    "batchReceipts": 0,
+    "productRows": 0,
+    "observedCause": "DuckDB strict CSV dialect sniff failed on source containing millions of trailing blank lines",
+    "restartPerformed": false,
+    "historyPreserved": true
+  },
+  "legitimateSourcePreflight": {
+    "evidenceScope": "Local exact deployed-source DuckDB preflight plus actual streaming normalizer and batcher; no remote mutation",
+    "file": "/private/tmp/next-master-catalog-restart-v3-retry2-20261014.csv",
+    "bytes": 6545191,
+    "sha256": "1f2826bf049ff9a5b485301f04c70b548f9df19ab38e8a3272fbdcaf0aec244e",
+    "logicalRows": 2501,
+    "distinctCodes": 2501,
+    "sourceCommit": "403f567b5935ce7cd344cf4d4f95625643e53f6a",
+    "descriptionBytes": 2560,
+    "descriptionMd5": "2b29dd4caa1597e61b4b53342f85cd4c",
+    "descriptionSha256": "16fc802db3c0f7753cd7e09d2a569f5b4cbd19fe8b66b3247072d298c98d8b60",
+    "schemaDescriptionType": "text; no length check in captured schema",
+    "parserFieldLimitBytes": 262144,
+    "parserRowLimitBytes": 1048576,
+    "duckdb": {
+      "engine": "duckdb",
+      "totalRows": 2501
+    },
+    "batchCount": 29,
+    "batches": [
+      {
+        "cursorStart": 0,
+        "cursorEnd": 86,
+        "rows": 87,
+        "bytes": 259686
+      },
+      {
+        "cursorStart": 87,
+        "cursorEnd": 173,
+        "rows": 87,
+        "bytes": 259770
+      },
+      {
+        "cursorStart": 174,
+        "cursorEnd": 260,
+        "rows": 87,
+        "bytes": 259783
+      },
+      {
+        "cursorStart": 261,
+        "cursorEnd": 347,
+        "rows": 87,
+        "bytes": 259783
+      },
+      {
+        "cursorStart": 348,
+        "cursorEnd": 434,
+        "rows": 87,
+        "bytes": 259783
+      },
+      {
+        "cursorStart": 435,
+        "cursorEnd": 521,
+        "rows": 87,
+        "bytes": 259783
+      },
+      {
+        "cursorStart": 522,
+        "cursorEnd": 608,
+        "rows": 87,
+        "bytes": 259783
+      },
+      {
+        "cursorStart": 609,
+        "cursorEnd": 695,
+        "rows": 87,
+        "bytes": 259783
+      },
+      {
+        "cursorStart": 696,
+        "cursorEnd": 782,
+        "rows": 87,
+        "bytes": 259783
+      },
+      {
+        "cursorStart": 783,
+        "cursorEnd": 869,
+        "rows": 87,
+        "bytes": 259783
+      },
+      {
+        "cursorStart": 870,
+        "cursorEnd": 956,
+        "rows": 87,
+        "bytes": 259783
+      },
+      {
+        "cursorStart": 957,
+        "cursorEnd": 1043,
+        "rows": 87,
+        "bytes": 259827
+      },
+      {
+        "cursorStart": 1044,
+        "cursorEnd": 1130,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 1131,
+        "cursorEnd": 1217,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 1218,
+        "cursorEnd": 1304,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 1305,
+        "cursorEnd": 1391,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 1392,
+        "cursorEnd": 1478,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 1479,
+        "cursorEnd": 1565,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 1566,
+        "cursorEnd": 1652,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 1653,
+        "cursorEnd": 1739,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 1740,
+        "cursorEnd": 1826,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 1827,
+        "cursorEnd": 1913,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 1914,
+        "cursorEnd": 2000,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 2001,
+        "cursorEnd": 2087,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 2088,
+        "cursorEnd": 2174,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 2175,
+        "cursorEnd": 2261,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 2262,
+        "cursorEnd": 2348,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 2349,
+        "cursorEnd": 2435,
+        "rows": 87,
+        "bytes": 259870
+      },
+      {
+        "cursorStart": 2436,
+        "cursorEnd": 2500,
+        "rows": 65,
+        "bytes": 194156
+      }
+    ],
+    "trailingBlankPadding": false,
+    "v3DescriptionMetadata": {
+      "observedReadOnly": true,
+      "stageType": "text",
+      "productType": "text",
+      "characterMaximumLength": null,
+      "descriptionChecks": []
+    }
+  },
+  "rootCapturedDbosReadOnlyReceipt": {
+    "provider": "Render Shell",
+    "file": "/private/tmp/next-master-catalog-restart-v3-dbos-failure-20261014.txt",
+    "fileSha256": "8314dbfafbfd69718dd7487fb41056461f4937b8057e7918502c5141379dfec3",
+    "receipt": {
+      "workflow": [
+        {
+          "receipt": {
+            "name": "catalog-import-storage-v1",
+            "error": null,
+            "status": "ERROR",
+            "created_at": 1792008946356,
+            "queue_name": "catalog-import-storage",
+            "updated_at": 1792008953431,
+            "executor_id": "next-master-catalog-import-staging",
+            "workflow_uuid": "catalog-storage:e0a5ee35-bbf0-4c4c-b0a7-59e4b9344c57:lease-1",
+            "application_id": "",
+            "recovery_attempts": 2,
+            "application_version": "0.1.0-catalog-storage"
+          }
+        }
+      ],
+      "operations": [
+        {
+          "function_id": 0,
+          "function_name": "catalog-source:e0a5ee35-bbf0-4c4c-b0a7-59e4b9344c57",
+          "output_bytes": 0,
+          "errorCode": "CATALOG_SUPABASE_HTTP_400"
+        }
+      ]
+    },
+    "independentFileReview": true
+  },
+  "followUpLocalRegression": {
+    "scope": "Local actual DBOS 5.2.11 and PostgreSQL17 with modeled business RPCs; not V3 runtime acceptance",
+    "queue": "catalog-import-storage",
+    "queueRegistration": "after DBOS.launch",
+    "sameExecutorAndApplicationVersion": true,
+    "partial": {
+      "passed": true,
+      "rows": 2501,
+      "killedAfterCursor": 86,
+      "checkpointOutputsAtKill": 0,
+      "firstBatchReplayInserted": 0,
+      "finalizationBeforeEof": 0,
+      "receipts": 29,
+      "finalizedRows": 2501,
+      "durableOutputBytes": 553
+    },
+    "finalizedEof": {
+      "passed": true,
+      "rows": 2501,
+      "killedAfterCursor": 2500,
+      "checkpointOutputsAtKill": 0,
+      "recoveredFromImmutableProof": true,
+      "storageDownloadsOnRecovery": 0,
+      "additionalMutationsOnRecovery": 0,
+      "receipts": 29,
+      "finalizedRows": 2501,
+      "durableOutputBytes": 546
+    },
+    "executionNote": "Each final named-queue scenario passed. An initial combined run failed its partial scenario during bounded isolated PostgreSQL startup before launching the worker; that scenario passed on the separate rerun.",
+    "files": [
+      "scripts/tests/catalog-restart-dbos-runtime.test.mjs",
+      "apps/engine/catalog-import/scripts/catalog-restart-runtime-child.mjs"
+    ]
+  }
+}
