@@ -1,0 +1,301 @@
+{
+  "schemaVersion": 1,
+  "projectRef": "kaxsqafdevabkxofwdod",
+  "scope": "read-only actual V3 post-apply SQL verification",
+  "migration": {
+    "file": "supabase/migrations/20261014165817_price_list_legacy_scope_compatibility.sql",
+    "sha256": "572788a71f2e548575760ac44542d29fbf04994bd8762ed2fcd6b42ba78c2cc9"
+  },
+  "remoteMutationsPerformed": false,
+  "metadata": {
+    "collected_at": "2026-10-14 17:13:44.479892+00",
+    "functions": [
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "cloud_admin_price_list_brands(uuid)",
+        "volatility": "s",
+        "anonExecute": false,
+        "definitionMd5": "b8b2a4b03c055323ae27bd93dc2f5841",
+        "serviceExecute": true,
+        "securityDefiner": true,
+        "authenticatedExecute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "cloud_admin_price_list_page_fast(uuid,uuid,text,numeric,text,text,integer)",
+        "volatility": "s",
+        "anonExecute": false,
+        "definitionMd5": "91e8efbc5059ef0df3f4599723e40b1b",
+        "serviceExecute": true,
+        "securityDefiner": true,
+        "authenticatedExecute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "cloud_portal_customer_price_list_page_fast(uuid,uuid,text,numeric,text,text,integer)",
+        "volatility": "s",
+        "anonExecute": false,
+        "definitionMd5": "f651598902f88c8041c00e291b9eaaa4",
+        "serviceExecute": true,
+        "securityDefiner": true,
+        "authenticatedExecute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "cloud_price_list_source_page(uuid,uuid,text,integer)",
+        "volatility": "s",
+        "anonExecute": false,
+        "definitionMd5": "107025403b3d2301ca8c478c490fe537",
+        "serviceExecute": true,
+        "securityDefiner": true,
+        "authenticatedExecute": false
+      },
+      {
+        "config": [
+          "search_path=\"\""
+        ],
+        "signature": "get_admin_price_list_export_version(uuid,uuid)",
+        "volatility": "s",
+        "anonExecute": false,
+        "definitionMd5": "34c153786735d84dd79076cb4ee6e836",
+        "serviceExecute": true,
+        "securityDefiner": true,
+        "authenticatedExecute": false
+      }
+    ],
+    "localExactSourceFingerprintMatch": true,
+    "localReplayIncludesOriginal62": true
+  },
+  "publishedClevite": {
+    "releaseId": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+    "publicationId": "99afb6f6-93ca-4256-9f10-86803f476b88",
+    "count": {
+      "collectedAt": "2026-10-14 17:14:41.409305+00",
+      "firstPageRows": 1000,
+      "totalCount": 999997,
+      "middleCursorObtainedAtOffset": 500000
+    },
+    "goldenSource": "supabase/migrations/20261013140024_supplier_price_export_quote_eligibility.sql",
+    "comparisonMethod": "Previous admin SQL body replayed inline read-only against current data. Raw buy price retained for exact margin calculation; zero-margin output rounded to the former function result before two-way EXCEPT ALL. All output fields except continuation total_count compared. Former continuation count 0 and new NULL both mean not reported.",
+    "firstPage": {
+      "collected_at": "2026-10-14 17:17:02.447623+00",
+      "page": "first",
+      "golden_rows": 1000,
+      "actual_rows": 1000,
+      "golden_total": 999997,
+      "actual_total": 999997,
+      "old_minus_new": 0,
+      "new_minus_old": 0,
+      "margins": [
+        {
+          "label": "A",
+          "audience": "admin",
+          "mismatch": 0,
+          "sample_rows": 64
+        },
+        {
+          "label": "A",
+          "audience": "portal",
+          "mismatch": 0,
+          "sample_rows": 64
+        },
+        {
+          "label": "B",
+          "audience": "admin",
+          "mismatch": 0,
+          "sample_rows": 64
+        },
+        {
+          "label": "B",
+          "audience": "portal",
+          "mismatch": 0,
+          "sample_rows": 64
+        },
+        {
+          "label": "custom20",
+          "audience": "admin",
+          "mismatch": 0,
+          "sample_rows": 64
+        },
+        {
+          "label": "custom20",
+          "audience": "portal",
+          "mismatch": 0,
+          "sample_rows": 64
+        }
+      ]
+    },
+    "middlePage": {
+      "collected_at": "2026-10-14 17:17:38.258033+00",
+      "page": "middle",
+      "golden_rows": 1000,
+      "actual_rows": 1000,
+      "golden_total": 0,
+      "actual_total": null,
+      "old_minus_new": 0,
+      "new_minus_old": 0,
+      "margins": [
+        {
+          "label": "A",
+          "audience": "admin",
+          "mismatch": 0,
+          "sample_rows": 64
+        },
+        {
+          "label": "A",
+          "audience": "portal",
+          "mismatch": 0,
+          "sample_rows": 64
+        },
+        {
+          "label": "B",
+          "audience": "admin",
+          "mismatch": 0,
+          "sample_rows": 64
+        },
+        {
+          "label": "B",
+          "audience": "portal",
+          "mismatch": 0,
+          "sample_rows": 64
+        },
+        {
+          "label": "custom20",
+          "audience": "admin",
+          "mismatch": 0,
+          "sample_rows": 64
+        },
+        {
+          "label": "custom20",
+          "audience": "portal",
+          "mismatch": 0,
+          "sample_rows": 64
+        }
+      ]
+    }
+  },
+  "legacy": {
+    "targetScopeSnapshot": [
+      {
+        "collected_at": "2026-10-14 17:14:20.156173+00",
+        "id": "0e9fa984-fbbf-45d2-9a60-e7aa633dc928",
+        "name": "Clevite",
+        "raw_active_rows": 0,
+        "raw_exact_codes": 0,
+        "raw_suppliers": 0,
+        "expired": 0,
+        "pointer_count": 1,
+        "pointers": [
+          {
+            "status": "published",
+            "releaseId": "e9517ad0-3e11-4f52-a73f-71875a5b2d4a",
+            "supplierId": "786cbe53-6086-4782-a81f-7da95c6a1236",
+            "publicationId": "99afb6f6-93ca-4256-9f10-86803f476b88"
+          }
+        ]
+      },
+      {
+        "collected_at": "2026-10-14 17:14:20.156189+00",
+        "id": "0481b20d-81b5-4044-898e-fa88f597024e",
+        "name": "Corteco",
+        "raw_active_rows": 0,
+        "raw_exact_codes": 0,
+        "raw_suppliers": 0,
+        "expired": 0,
+        "pointer_count": 0,
+        "pointers": null
+      }
+    ],
+    "allOrganizationCortecoGebaRawPriceRows": [],
+    "availableUnownedLegacyBrands": [
+      {
+        "collected_at": "2026-10-14 17:15:49.351968+00",
+        "name": "Euroricambi",
+        "organization_id": "b0000000-0000-4000-8000-000000000001",
+        "brand_id": "ddbeb595-853a-407d-91d7-25f1fd410ccd",
+        "eligible_rows": 542,
+        "exact_codes": 542,
+        "suppliers": 1
+      },
+      {
+        "collected_at": "2026-10-14 17:15:49.351984+00",
+        "name": "Mahle",
+        "organization_id": "b0000000-0000-4000-8000-000000000001",
+        "brand_id": "f116493d-87c3-4ba5-a0e9-5738cabf026a",
+        "eligible_rows": 1,
+        "exact_codes": 1,
+        "suppliers": 1
+      }
+    ],
+    "existingEuroricambiFullParity": {
+      "collected_at": "2026-10-14 17:17:44.088089+00",
+      "brand": "Euroricambi",
+      "raw_latest_rows": 542,
+      "golden_rows": 542,
+      "actual_rows": 542,
+      "golden_minus_actual": 0,
+      "actual_minus_golden": 0,
+      "margins": [
+        {
+          "rows": 542,
+          "label": "A",
+          "audience": "admin",
+          "mismatch": 0,
+          "total_count": 542
+        },
+        {
+          "rows": 542,
+          "label": "A",
+          "audience": "portal",
+          "mismatch": 0,
+          "total_count": 542
+        },
+        {
+          "rows": 542,
+          "label": "B",
+          "audience": "admin",
+          "mismatch": 0,
+          "total_count": 542
+        },
+        {
+          "rows": 542,
+          "label": "B",
+          "audience": "portal",
+          "mismatch": 0,
+          "total_count": 542
+        },
+        {
+          "rows": 542,
+          "label": "custom20",
+          "audience": "admin",
+          "mismatch": 0,
+          "total_count": 542
+        },
+        {
+          "rows": 542,
+          "label": "custom20",
+          "audience": "portal",
+          "mismatch": 0,
+          "total_count": 542
+        }
+      ],
+      "listed": true,
+      "version": "c95fa066a34cf2d7155720b0db610976"
+    }
+  },
+  "limits": [
+    "Database SQL and ACL verification; not a browser download proof.",
+    "Corteco has no legacy source rows or current pointer in V3, so its empty-source response is expected. Unpublished uploads were not published or modified.",
+    "Actual fallback was verified with all 542 existing Euroricambi rows; no temporary or persistent fixture was inserted.",
+    "Clevite source count is complete; full row equality compares the first 1,000 and middle 1,000 rows. Margin checks cover 64 rows per A/B/custom case, page and audience.",
+    "Customer-specific authorization/account profile resolution belongs to existing API and browser tests; these service-only SQL checks exercise numeric10/15/20 percent inputs."
+  ]
+}
