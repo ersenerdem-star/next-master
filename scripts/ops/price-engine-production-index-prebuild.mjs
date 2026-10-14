@@ -33,6 +33,18 @@ export const REVIEWED_INDEXES = [
   ['idx_catalog_import_stage_run_code_brand', 'catalog_import_stage', '20261014132000_catalog_import_storage_validation_batches'],
 ].map(([name, table, source]) => ({ name, schema: 'public', table, source: `supabase/migrations/${source}.sql` }));
 
+// A single reviewed supersession, enabled only by the new forward migration
+// in the supplied manifest. Older 60-entry plans remain exactly reproducible.
+export const COMPACT_SEARCH_OVERRIDE = Object.freeze({
+  name: 'idx_supplier_prices_export_search',
+  source: 'supabase/migrations/20261014145352_supplier_price_export_compact_search_index.sql',
+  source_sha256: '0bf89e6b27238cec08cddfcadb918fdeacfc9c5f1d600aff6d143490d488a488',
+  source_sql_sha256: '9b44a174ddd584f237d5a5a8f437db8eab6ad4cf4e4f55b4beb77414ecb3626f',
+  superseded_source: 'supabase/migrations/20261014072055_supplier_price_export_keyset_page.sql',
+  superseded_source_sha256: '61601e15328df84ed97b0c7d94312ee3537b20355139fe9d117433da90d4a726',
+  superseded_sql_sha256: '1bee78a279b7d809b35aa2f162eac2f39b3f731e3666a800013ef8e6cce45fcc',
+});
+
 // A small SQL lexer, not a regexp across function bodies. Dollar bodies, quoted
 // strings/identifiers and nested comments cannot introduce top-level statements.
 function statements(sql) {
@@ -85,7 +97,13 @@ export async function extractReviewedIndexes(manifestBytes, { loadFile = (file) 
   if (manifest.schema_version !== 1 || manifest.environment !== 'production-preparation' ||
       manifest.targets?.production_project_ref !== PRODUCTION_PROJECT || !Array.isArray(manifest.migration_order) || !manifest.migration_order.length)
     throw Error('INDEX_MANIFEST_TARGET_OR_SHAPE_INVALID');
-  const wanted = new Map(REVIEWED_INDEXES.map((item) => [item.name, item]));
+  const override = manifest.migration_order.find((entry) => entry.file === COMPACT_SEARCH_OVERRIDE.source);
+  if (override && (override.sha256 !== COMPACT_SEARCH_OVERRIDE.source_sha256 ||
+      manifest.migration_order.findIndex(entry => entry.file === COMPACT_SEARCH_OVERRIDE.source) >=
+      manifest.migration_order.findIndex(entry => entry.file === COMPACT_SEARCH_OVERRIDE.superseded_source)))
+    throw Error('INDEX_SUPERSESSION_SOURCE_OR_ORDER_INVALID');
+  const wanted = new Map(REVIEWED_INDEXES.map((item) => [item.name,
+    override && item.name === COMPACT_SEARCH_OVERRIDE.name ? {...item, source: COMPACT_SEARCH_OVERRIDE.source} : item]));
   const found = new Map(), seen = new Set();
   for (const [migrationIndex, entry] of manifest.migration_order.entries()) {
     if (!/^supabase\/migrations\/[a-z0-9_]+\.sql$/.test(entry.file || '') || seen.has(entry.file))
@@ -103,25 +121,44 @@ export async function extractReviewedIndexes(manifestBytes, { loadFile = (file) 
         throw Error(`INDEX_STATEMENT_SHAPE_CHANGED:${candidate.name}`);
       const originalSql = sql.slice(tokens[0].start, tokens.at(-1).end);
       const previous = found.get(candidate.name);
+      if (override && candidate.name === COMPACT_SEARCH_OVERRIDE.name && entry.file === COMPACT_SEARCH_OVERRIDE.superseded_source) {
+        if (!previous || entry.sha256 !== COMPACT_SEARCH_OVERRIDE.superseded_source_sha256 ||
+            digest(originalSql) !== COMPACT_SEARCH_OVERRIDE.superseded_sql_sha256)
+          throw Error('INDEX_SUPERSEDED_DEFINITION_CHANGED');
+        previous.superseded_in.push({file: entry.file, sha256: entry.sha256, migration_position: migrationIndex + 1,
+          source_sql_sha256: digest(originalSql), action: 'skip-only-after-compact-index-verification'});
+        continue;
+      }
       if (previous) {
         if (previous.tokens !== JSON.stringify(words)) throw Error(`INDEX_REPEATED_DEFINITION_CHANGED:${candidate.name}`);
         previous.repeated_in.push({ file: entry.file, sha256: entry.sha256, migration_position: migrationIndex + 1 });
         continue;
       }
       if (entry.file !== candidate.source) throw Error(`INDEX_SOURCE_ORDER_CHANGED:${candidate.name}`);
+      if (override && candidate.name === COMPACT_SEARCH_OVERRIDE.name && digest(originalSql) !== COMPACT_SEARCH_OVERRIDE.source_sql_sha256)
+        throw Error('INDEX_COMPACT_DEFINITION_CHANGED');
       const concurrentSql = originalSql.slice(0, tokens[1].end - tokens[0].start) + ' concurrently' + originalSql.slice(tokens[1].end - tokens[0].start);
       found.set(candidate.name, {
         name: candidate.name, schema: candidate.schema, table: candidate.table,
         source: { file: entry.file, sha256: entry.sha256, migration_position: migrationIndex + 1 },
         source_sql: originalSql, source_sql_sha256: digest(originalSql),
         sql: concurrentSql, sql_sha256: digest(concurrentSql), repeated_in: [], tokens: JSON.stringify(words),
+        ...(override && candidate.name === COMPACT_SEARCH_OVERRIDE.name ? {superseded_in: []} : {}),
       });
     }
   }
   if (found.size !== REVIEWED_INDEXES.length) throw Error(`INDEX_REVIEWED_DEFINITIONS_MISSING:${REVIEWED_INDEXES.filter((item) => !found.has(item.name)).map((item) => item.name).join(',')}`);
   const actualOrder = [...found.keys()];
-  if (actualOrder.join(',') !== REVIEWED_INDEXES.map((item) => item.name).join(',')) throw Error('INDEX_EXECUTION_ORDER_CHANGED');
-  return [...found.values()].map(({ tokens: _tokens, ...item }, index) => ({ sequence: index + 1, ...item }));
+  const expectedDiscovery = REVIEWED_INDEXES.map((item) => item.name);
+  if (override) {
+    // The forward source must precede the legacy migration. Keep the reviewed
+    // prebuild operation order stable, while explicitly pinning this one move.
+    [expectedDiscovery[1], expectedDiscovery[2]] = [expectedDiscovery[2], expectedDiscovery[1]];
+    if (found.get(COMPACT_SEARCH_OVERRIDE.name).superseded_in.length !== 1)
+      throw Error('INDEX_SUPERSEDED_DEFINITION_MISSING');
+  }
+  if (actualOrder.join(',') !== expectedDiscovery.join(',')) throw Error('INDEX_EXECUTION_ORDER_CHANGED');
+  return REVIEWED_INDEXES.map(({name}) => found.get(name)).map(({ tokens: _tokens, ...item }, index) => ({ sequence: index + 1, ...item }));
 }
 
 // Run with search_path=pg_catalog on the same dedicated session. This stabilizes
@@ -249,6 +286,9 @@ export async function buildPlan({ bytes = readFile(manifestPath), loadFile } = {
       'Concurrent creation reduces write blocking but still uses I/O, disk, CPU and short locks; verify provider capacity and long transactions immediately before execution.',
       'A concurrent DDL name race cannot be made atomic with this precheck; postcheck must pass even when IF NOT EXISTS reports a skip.',
       'Keep all reviewed migration bytes unchanged. After all 12 exact indexes verify, their later CREATE INDEX IF NOT EXISTS statements will skip them.',
+      ...(operations.some(item => item.superseded_in?.length) ? [
+        'The compact supplier search definition explicitly supersedes the exact recorded historical wide statement. Prebuild the compact definition first; verify it again before both forward and superseded migrations. Never build the wide statement or accept it as equivalent.',
+      ] : []),
       'This plan does not execute SQL, authorize a production change, prove production readiness or activate any import/export/catalog workflow.',
     ],
   };

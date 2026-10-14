@@ -6,6 +6,15 @@ import { createFullReplayDb,fullReplaySource } from "./fixtures/price-engine-ful
 
 const manifestPath=new URL("../ops/price-engine-production-manifest.json",import.meta.url);
 const manifest=JSON.parse(await readFile(manifestPath,"utf8"));
+const forwardReplayFiles=[
+  "supabase/migrations/20261014145352_supplier_price_export_compact_search_index.sql",
+  "supabase/migrations/20261014144957_supplier_price_workflow_failure_visibility.sql",
+];
+const forwardReplay=forwardReplayFiles.map(file=>{
+  const matches=manifest.migration_order.filter(entry=>entry.file===file);
+  assert.equal(matches.length,1,`Missing/duplicate reviewed forward:${file}`);
+  return matches[0];
+});
 const repoRoot=new URL("../../",import.meta.url);
 const fixtureOrg="90000000-0000-4000-8000-000000000001";
 const fixtureJob="90000000-0000-4000-8000-000000000002";
@@ -41,22 +50,25 @@ async function assertRoleBoundaries(db) {
   assert.deepEqual(bucket.allowed_mime_types,[...fullReplaySource.bucketConfiguration[0].allowed_mime_types,"application/octet-stream"]);
 }
 
-test("all reviewed manifest migrations apply in order to the captured production schema and replay",async()=>{
+test("fresh62 chain applies to the captured production schema, then its two new forwards replay without schema drift",async()=>{
+  assert.equal(manifest.migration_order.length,62);
   const db=await createFullReplayDb();
-  const evidence={evidence_scope:"Local isolated PG17 schema replay; actual production schema metadata; no remote writes or commercial browser proof",source_project_ref:fullReplaySource.source.projectRef,manifest_sha256:createHash("sha256").update(await readFile(manifestPath)).digest("hex"),baseline_tables:fullReplaySource.tables.length,baseline_functions:fullReplaySource.functions.length,passes:[],remote_mutations:0};
+  const evidence={evidence_scope:"Local isolated PG17 schema replay; actual production schema metadata; no remote writes or commercial browser proof",source_project_ref:fullReplaySource.source.projectRef,manifest_sha256:createHash("sha256").update(await readFile(manifestPath)).digest("hex"),baseline_tables:fullReplaySource.tables.length,baseline_functions:fullReplaySource.functions.length,
+    replay_policy:"Fresh complete 62-entry chain, then only the two new forward migrations. Historical foundation bytes and MD5 guards are preserved; replaying foundation over the forward-replaced upload-status function is intentionally excluded. Prior 60+60 evidence remains in Git history, not claimed by this run.",passes:[],remote_mutations:0};
   try {
     const originalJob=await seedPreexistingJob(db);
     const fingerprints=[];
     for(let pass=1;pass<=2;pass++) {
+      const entries=pass===1?manifest.migration_order:forwardReplay;
       const completed=[];
-      for(const entry of manifest.migration_order) {
+      for(const entry of entries) {
         const bytes=await readFile(new URL(entry.file,repoRoot));
         assert.equal(createHash("sha256").update(bytes).digest("hex"),entry.sha256,`Manifest drift:${entry.file}`);
         try { await db.exec(bytes.toString("utf8")); }
         catch(error) {
           evidence.failed={pass,completed:completed.length,file:entry.file,code:error.code,message:error.message,where:error.where||null,internal_query:error.internalQuery||null,position:error.position||null};
           await writeFile(new URL("../ops/evidence/price-engine-full-schema-replay-local.json",import.meta.url),JSON.stringify(evidence,null,2)+"\n");
-          throw new Error(`FULL_SCHEMA_REPLAY_PASS_${pass}_${completed.length}/${manifest.migration_order.length}:${entry.file}:${error.code}:${error.message}`);
+          throw new Error(`FULL_SCHEMA_REPLAY_PASS_${pass}_${completed.length}/${entries.length}:${entry.file}:${error.code}:${error.message}`);
         }
         completed.push({file:entry.file,sha256:entry.sha256});
       }
@@ -66,12 +78,12 @@ test("all reviewed manifest migrations apply in order to the captured production
       const schema=(await db.query(logicalSchemaSql)).rows[0].schema_metadata;
       const fingerprint=createHash("sha256").update(JSON.stringify(schema)).digest("hex");
       fingerprints.push(fingerprint);
-      evidence.passes.push({pass,migrations:completed,logical_schema_sha256:fingerprint,preexisting_job_business_fields_preserved:true,production_activation_off:true,role_boundaries_preserved:true});
+      evidence.passes.push({pass,scope:pass===1?"fresh-complete-manifest":"new-forward-migrations-only",migrations:completed,logical_schema_sha256:fingerprint,preexisting_job_business_fields_preserved:true,production_activation_off:true,role_boundaries_preserved:true});
     }
     assert.equal(evidence.passes.length,2);
     assert.equal(evidence.passes[0].migrations.length,manifest.migration_order.length);
-    assert.equal(evidence.passes[1].migrations.length,manifest.migration_order.length);
-    assert.equal(fingerprints[0],fingerprints[1],"Replaying the manifest changed the logical schema");
+    assert.equal(evidence.passes[1].migrations.length,forwardReplay.length);
+    assert.equal(fingerprints[0],fingerprints[1],"Replaying the two forwards changed the logical schema");
     // Test-only adversarial challenge, AFTER both migration fingerprints and
     // actual role-boundary assertions. A broad permissive policy must not
     // reopen prepared artifacts; a nonprepared object is the positive control.

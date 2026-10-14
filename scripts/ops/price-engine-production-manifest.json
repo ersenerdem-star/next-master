@@ -266,6 +266,13 @@
       "status": "source-reviewed-pending-target-apply"
     },
     {
+      "id": "20261014145352_supplier_price_export_compact_search_index",
+      "phase": "supplier-export",
+      "file": "supabase/migrations/20261014145352_supplier_price_export_compact_search_index.sql",
+      "sha256": "0bf89e6b27238cec08cddfcadb918fdeacfc9c5f1d600aff6d143490d488a488",
+      "status": "local-pg-regression-passed-not-applied-production"
+    },
+    {
       "id": "20261014072055_supplier_price_export_keyset_page",
       "phase": "bounded-export",
       "file": "supabase/migrations/20261014072055_supplier_price_export_keyset_page.sql",
@@ -439,6 +446,13 @@
       "file": "supabase/migrations/20261014132434_catalog_finalize_preserve_validation_counts.sql",
       "sha256": "5288f8f67c9914a2706ba5de3b5ad0ca42d52b17e3a6696f47c7a1b49b1a00a2",
       "status": "local-pg-regression-passed-not-applied-production"
+    },
+    {
+      "id": "20261014144957_supplier_price_workflow_failure_visibility",
+      "phase": "supplier-upgrade",
+      "file": "supabase/migrations/20261014144957_supplier_price_workflow_failure_visibility.sql",
+      "sha256": "e332d089070643c008949c8f1b4314e67b551cc664906f9657ee8ece9c2d7ede",
+      "status": "local-pg-regression-passed-not-applied-production"
     }
   ],
   "excluded_migrations": [
@@ -455,12 +469,12 @@
     {
       "id": "foundation-capture",
       "status": "prepared-not-applied",
-      "evidence": "Captured real staging closure: 12 tables/29 functions plus 125 prerequisite columns/seven helper fingerprints, private RLS/ACL/Storage fences; five bootstrap tests and three publication tests using the actual captured validator passed. All 58 ordered migrations and a second complete replay passed against captured production baseline metadata. Production application remains pending."
+      "evidence": "Captured real staging closure: 12 tables/29 functions plus 125 prerequisite columns/seven helper fingerprints, private RLS/ACL/Storage fences. Historical 60-entry chain passed twice. Current 62-entry chain passes from the captured production baseline, followed by separate replay of the two new forward migrations. Foundation bytes and original function fingerprint guards remain unchanged; do not replay foundation over the new upload-status function. Production application remains pending."
     },
     {
       "id": "app-export-jobs-compatibility",
       "status": "captured-production-baseline-replayed-pending-target-apply",
-      "evidence": "Actual production table columns, constraints, indexes, triggers, RLS and ACL included in full schema fixture. Existing synthetic finalized job business fields survived both complete upgrade passes; required runtime metadata still must be checked after production application."
+      "evidence": "Actual production table columns, constraints, indexes, triggers, RLS and ACL included in full schema fixture. Existing synthetic finalized job business fields survive the fresh 62-entry upgrade and separate replay of its two new forward migrations; required runtime metadata still must be checked after production application."
     },
     {
       "id": "export-bucket-mime",
@@ -623,7 +637,7 @@
       "id": "isolated-full-schema-replay",
       "status": "passed",
       "expected": "Exact ordered foundation and upgrade chain succeeds against a disposable production-shaped clone, preserving existing job rows and role boundaries.",
-      "evidence": "scripts/ops/evidence/price-engine-full-schema-replay-local.json; actual captured production schema fixture, two complete 60-entry passes, logical schema stable, synthetic existing job business fields preserved, publication controls disabled and browser role boundaries enforced. Local PG17 proof only."
+      "evidence": "scripts/ops/evidence/price-engine-full-schema-replay-local.json; actual captured production schema fixture, one complete 62-entry pass followed by replay of the compact-index and workflow-failure-visibility forwards, logical schema stable, synthetic existing job business fields preserved, publication controls disabled and browser role boundaries enforced. Historical foundation replay is intentionally excluded after forward function changes. Local PG17 proof only."
     },
     {
       "id": "production-provider-readiness",
@@ -732,7 +746,7 @@
     "customer_alignment_cas_tests": 2,
     "export_bucket_mime_tests": 3,
     "typescript": "passed",
-    "full_ordered_schema_replay": "passed-two-complete-60-entry-passes",
+    "full_ordered_schema_replay": "passed-fresh-62-entry-chain-plus-two-forward-replays",
     "full_ordered_schema_replay_evidence": "scripts/ops/evidence/price-engine-full-schema-replay-local.json",
     "production_browser_canary": "pending",
     "production_mutations": 0,

@@ -30,12 +30,15 @@ function harness({onQuery,onRecord,tls=true,indexMissing=false,exclusive=true}={
    if(sql===IDENTITY_SQL)return {rows:[{database_ok:true,role_ok:true,unassumed_role:true,backend_pid:1234,server_version_num:'170006'}]};
    if(sql===EXCLUSIVE_RUN_SQL)return {rows:[{acquired:exclusive}]};
    if(sql===plan.preflight_sql)return {rows:[{price_engine_preflight:structuredClone(baseline)}]};
-   if(sql===plan.indexPlan.verification_sql)return {rows:[{index_prebuild_snapshot:{snapshot_version:1,
+   if(sql===plan.indexPlan.verification_sql){
+    const missing=typeof indexMissing==='function'?indexMissing(queries.filter(q=>q===sql).length):indexMissing;
+    return {rows:[{index_prebuild_snapshot:{snapshot_version:1,
     server_version_num:'170006',search_path:'pg_catalog',lock_timeout:'5s',statement_timeout:'30min',
     idle_in_transaction_session_timeout:'30s',normalizer:plan.indexPlan.normalizer,
     indexes:plan.indexPlan.operations.map((item,index)=>({name:item.name,schema:'public',table:item.table,
-     table_present:true,table_kind:'r',present:!(indexMissing&&index===0),kind:'i',actual_table_schema:'public',
+     table_present:true,table_kind:'r',present:!(typeof missing==='string'?item.name===missing:missing&&index===0),kind:'i',actual_table_schema:'public',
      actual_table:item.table,unique:false,valid:true,ready:true,live:true,definition:item.expected_definition}))}}]};
+   }
    if(sql==='BEGIN'){assert.equal(pending,null);pending={customer};return {command:'BEGIN',rows:[]};}
    if(sql==='COMMIT'){assert.ok(pending);customer=pending.customer;pending=null;return {command:'COMMIT',rows:[]};}
    if(sql==='ROLLBACK'){pending=null;return {command:'ROLLBACK',rows:[]};}
@@ -55,8 +58,8 @@ function harness({onQuery,onRecord,tls=true,indexMissing=false,exclusive=true}={
 }
 const apply={apply:true,alignErsen:true};
 
-test('exact60 plan preserves order and all source hashes; only wrappers1/48 are excluded',async()=>{
- assert.equal(plan.entries.length,60);assert.deepEqual(plan.entries.filter(e=>e.wrapped).map(e=>e.position),[1,48]);
+test('exact62 plan preserves order and all source hashes; only wrappers1/49 are excluded',async()=>{
+ assert.equal(plan.entries.length,62);assert.deepEqual(plan.entries.filter(e=>e.wrapped).map(e=>e.position),[1,49]);
  for(const entry of plan.entries)assert.equal(hash(await readFile(new URL(entry.file,repo))),entry.sha256);
  assert.match(plan.entries[28].id,/sales_order_active_customer_pricing_guard$/);
  const reordered=JSON.parse(manifestBytes);[reordered.migration_order[1],reordered.migration_order[2]]=
@@ -87,11 +90,11 @@ test('inspect uses fresh baseline and all12 indexes without a transaction or bus
  assert.equal(missing.queries.includes('BEGIN'),false);
 });
 
-test('apply serializes all60 transactions and couples the only customer CAS to transaction29',async()=>{
+test('apply serializes all62 transactions and couples the only customer CAS to transaction29',async()=>{
  const h=harness(),result=await h.run(apply);
- assert.equal(result.status,'completed');assert.equal(result.completed.length,60);assert.equal(h.maxActive,1);assert.equal(h.ends,1);
- assert.equal(h.customer,'A');assert.equal(h.queries.filter(q=>q==='BEGIN').length,60);
- assert.equal(h.queries.filter(q=>q==='COMMIT').length,60);assert.equal(h.queries.includes('ROLLBACK'),false);
+ assert.equal(result.status,'completed');assert.equal(result.completed.length,62);assert.equal(h.maxActive,1);assert.equal(h.ends,1);
+ assert.equal(h.customer,'A');assert.equal(h.queries.filter(q=>q==='BEGIN').length,62);
+ assert.equal(h.queries.filter(q=>q==='COMMIT').length,62);assert.equal(h.queries.includes('ROLLBACK'),false);
  assert.deepEqual(h.queries.filter(sql=>plan.entries.some(e=>e.sql===sql)),plan.entries.map(e=>e.sql));
  assert.equal(h.queries.filter(sql=>sql===plan.alignment_sql).length,1);
  const cas=h.queries.indexOf(plan.alignment_sql);assert.equal(h.queries[cas+1],plan.entries[28].sql);
@@ -101,8 +104,38 @@ test('apply serializes all60 transactions and couples the only customer CAS to t
   const committed=h.events.findIndex(event=>event.event==='migration-committed'&&event.position===entry.position);
   assert.ok(start<requested&&requested<committed);
  }
- for(const sql of TRANSACTION_SETUP_SQL)assert.equal(h.queries.filter(q=>q===sql).length,60);
+ for(const sql of TRANSACTION_SETUP_SQL)assert.equal(h.queries.filter(q=>q===sql).length,62);
  assert.equal(JSON.stringify([result,h.events]).includes(secret),false);
+});
+
+test('index disappearing after initial preflight stops before the first source migration can build it',async()=>{
+ const entry=plan.entries.find(item=>item.file===plan.indexPlan.operations[0].source.file);
+ assert.equal(entry.position,21);
+ const h=harness({indexMissing:verification=>verification>1}),result=await h.run(apply);
+ assert.equal(result.failure.code,'PREBUILT_INDEXES_UNCONFIRMED');assert.equal(result.failure.position,entry.position);
+ assert.equal(result.outcome,'stopped-after-confirmed-commits');assert.equal(result.completed.length,entry.position-1);
+ assert.equal(h.queries.filter(q=>q===plan.indexPlan.verification_sql).length,2);
+ assert.equal(h.queries.filter(q=>q==='BEGIN').length,entry.position-1);
+ assert.equal(h.queries.filter(q=>q==='COMMIT').length,entry.position-1);
+ assert.equal(h.queries.includes(entry.sql),false);
+ assert.equal(h.events.some(event=>event.event==='migration-start'&&event.position===entry.position),false);
+});
+
+test('compact index disappearing after its forward blocks the historical wide CREATE before BEGIN',async()=>{
+ const compact=plan.indexPlan.operations.find(item=>item.name==='idx_supplier_prices_export_search');
+ const source=plan.entries.find(item=>item.file===compact.source.file);
+ const superseded=plan.entries.find(item=>item.file===compact.superseded_in[0].file);
+ assert.equal(source.position,36);assert.equal(superseded.position,37);
+ let sourceApplied=false;
+ const h=harness({onQuery({entry}){if(entry?.file===source.file)sourceApplied=true;},
+  indexMissing:()=>sourceApplied?compact.name:false});
+ const result=await h.run(apply);
+ assert.equal(result.failure.code,'PREBUILT_INDEXES_UNCONFIRMED');assert.equal(result.failure.position,37);
+ assert.equal(result.completed.length,36);assert.equal(result.outcome,'stopped-after-confirmed-commits');
+ assert.equal(h.queries.filter(sql=>sql==='BEGIN').length,36);
+ assert.equal(h.queries.filter(sql=>sql==='COMMIT').length,36);
+ assert.equal(h.queries.includes(superseded.sql),false);
+ assert.equal(h.events.some(event=>event.event==='migration-start'&&event.position===37),false);
 });
 
 test('a timeout in migration29 rolls back the customer CAS and stops without implicit retry',async()=>{
@@ -159,7 +192,7 @@ test('credential reader accepts only owned private regular files and never follo
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 
-test('real captured PG17 fixture proves foundation rollback, all60 per-file transactions and atomic CAS29',async()=>{
+test('real captured PG17 fixture proves foundation rollback, all62 per-file transactions and atomic CAS29',async()=>{
  const db=await createFullReplayDb();
  const customer='fd9f8834-7935-4050-8895-fde8a2eb4914',org='1e4c5e99-e387-41aa-a6d3-cbe74558f766';
  const other='11111111-1111-4111-8111-111111111111';

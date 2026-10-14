@@ -13,7 +13,7 @@ const hash = (value) => createHash('sha256').update(value).digest('hex');
 const wrap = (data) => ({ project_ref: PRODUCTION_PROJECT, data });
 async function snapshot(db) { return wrap((await db.query(metadataSql())).rows[0].index_prebuild_snapshot); }
 
-test('plan is exactly 12 reviewed standalone concurrent statements in manifest order', async () => {
+test('plan is exactly 12 reviewed standalone concurrent statements in pinned operation order', async () => {
   assert.equal(plan.operations.length, 12);
   assert.deepEqual(plan.operations.map((item) => item.name), REVIEWED_INDEXES.map((item) => item.name));
   assert.equal(plan.manifest_sha256, hash(manifestBytes));

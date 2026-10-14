@@ -15,7 +15,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 const MANIFEST='scripts/ops/price-engine-production-manifest.json';
 const PREFLIGHT='scripts/ops/price-engine-production-preflight.sql';
 const ALIGNMENT='scripts/ops/price-engine-production-customer-alignment.sql';
-export const REVIEWED_ORDER_SHA256='0b3e54284eeea43a807b60d19e03e0b310b5cebd0155471fb0468f400550712a';
+export const REVIEWED_ORDER_SHA256='866b2fd0af3fe7f287da75c8b55c1dddcecb7cbc76f8aa001f2fb0e3e5c873a0';
 const PREFLIGHT_SHA256='347731de0978db56e067f3451898620c6025908fdb57625f77328195a089cda4';
 const ALIGNMENT_SHA256='806b1cb386ec925e0915fa2dc59c973fd7e5b788096ba16feb71baf00520ee98';
 const hash=value=>createHash('sha256').update(value).digest('hex');
@@ -90,7 +90,7 @@ export async function buildMigrationPlan({manifestBytes,expectedManifestSha256,
  if(!/^[a-f0-9]{64}$/.test(expectedManifestSha256||'')||hash(bytes)!==expectedManifestSha256)fail('MANIFEST_HASH_UNCONFIRMED');
  let manifest;try{manifest=JSON.parse(bytes);}catch{fail('MANIFEST_INVALID');}
  if(manifest?.schema_version!==1||manifest.environment!=='production-preparation'
-  ||manifest.targets?.production_project_ref!==PRODUCTION_PROJECT||manifest.migration_order?.length!==60)
+  ||manifest.targets?.production_project_ref!==PRODUCTION_PROJECT||manifest.migration_order?.length!==62)
   fail('MANIFEST_TARGET_OR_COUNT_INVALID');
  const order=manifest.migration_order.map(({id,file,sha256})=>({id,file,sha256}));
  if(hash(JSON.stringify(order))!==REVIEWED_ORDER_SHA256)fail('REVIEWED_MIGRATION_ORDER_CHANGED');
@@ -98,7 +98,7 @@ export async function buildMigrationPlan({manifestBytes,expectedManifestSha256,
  for(const [index,entry] of order.entries()){
   const source=await loadFile(entry.file);if(hash(source)!==entry.sha256)fail('MIGRATION_HASH_CHANGED');
   const body=migrationBody(source.toString('utf8'));
-  if(body.wrapped!==[0,47].includes(index))fail('MIGRATION_WRAPPER_CHANGED');
+  if(body.wrapped!==[0,48].includes(index))fail('MIGRATION_WRAPPER_CHANGED');
   entries.push({...entry,position:index+1,...body});
  }
  const alignment=manifest.controlled_data_operations?.find(item=>item.id==='ersen-profile-c-to-a');
@@ -179,7 +179,7 @@ export async function runProductionMigrations({plan,connection,apply=false,align
     position=entry.position;stage='before-migration';await identity();
     // Recheck immediately before migrations containing an ordinary existing-
     // table index, so missing/invalid indexes never silently build in this path.
-    if(plan.indexPlan.operations.some(item=>item.source===entry.file||item.repeated_in.some(repeat=>repeat.file===entry.file)))await indexes();
+    if(plan.indexPlan.operations.some(item=>item.source.file===entry.file||item.repeated_in.some(repeat=>repeat.file===entry.file)||item.superseded_in?.some(repeat=>repeat.file===entry.file)))await indexes();
     await emit({event:'migration-start',position,id:entry.id,file:entry.file,sha256:entry.sha256,
      body_sha256:entry.body_sha256,outer_wrapper_removed:entry.wrapped});
     stage='begin';await query('BEGIN');transactionOpen=true;
@@ -197,7 +197,7 @@ export async function runProductionMigrations({plan,connection,apply=false,align
     await emit({event:'migration-committed',position,sha256:entry.sha256});
     evidence.completed.push({position,id:entry.id,sha256:entry.sha256});commitSent=false;
    }
-   evidence.status='completed';evidence.outcome='all-60-committed';
+   evidence.status='completed';evidence.outcome='all-62-committed';
   }
  }catch(error){
   evidence.failure={stage,position,...safeMigrationFailure(error)};
@@ -256,9 +256,9 @@ async function main(args){
    'node scripts/ops/run-price-engine-production-migrations.mjs --project-ref zjgueqijumzlfioihnkt --manifest-sha256 <reviewed exact manifest SHA256> [--plan]\n'+
    '  --inspect | --apply --align-ersen-before-29\n'+
    '  --host <production direct/session host> --password-file <owned0600 file> --ca-file <verified PEM> --evidence <new JSONL>\n'+
-   'Requires all12 prebuilt indexes. Apply performs60 transactions, exact order; Ersen CAS is inside transaction29.\n'+
+   'Requires all12 prebuilt indexes. Apply performs62 transactions, exact order; Ersen CAS is inside transaction29.\n'+
    'lock_timeout1s; statement_timeout30s; transaction_timeout45s; idle-in-transaction10s.\n'+
-   'Any uncertain COMMIT stops for read-only reconciliation. Keep the controlled quiet window until all60 finish.');return;
+   'Any uncertain COMMIT stops for read-only reconciliation. Keep the controlled quiet window until all62 finish.');return;
  }
  const options=parseMigrationArgs(args),plan=await buildMigrationPlan({expectedManifestSha256:options['manifest-sha256']});
  if(options.mode==='plan'){

@@ -3,7 +3,7 @@
   "project_ref": "zjgueqijumzlfioihnkt",
   "action": "offline-concurrent-index-prebuild-plan",
   "manifest_file": "scripts/ops/price-engine-production-manifest.json",
-  "manifest_sha256": "d5c965bb7f975d91343d0fae6b844a908b31c8318514397ac24e8e5b590195ea",
+  "manifest_sha256": "98a0ef8617db560e8aacb7f6bc50e731ef71a09f2766b703170728bdf6ef5a12",
   "captured_schema_file": "scripts/tests/fixtures/price-engine-full-replay-production-source.json",
   "captured_schema_sha256": "09e2d2ccff7f2ee6bb0e55a3aa0deff7df4a7c7f2c89b139f084dfd9a2fa02db",
   "normalizer": {
@@ -58,7 +58,7 @@
       "source": {
         "file": "supabase/migrations/20261014072055_supplier_price_export_keyset_page.sql",
         "sha256": "61601e15328df84ed97b0c7d94312ee3537b20355139fe9d117433da90d4a726",
-        "migration_position": 36
+        "migration_position": 37
       },
       "source_sql": "create index if not exists idx_supplier_prices_export_keyset\n  on public.supplier_prices (\n    organization_id,\n    supplier_id,\n    brand_id,\n    product_code,\n    id\n  )\n  where is_active;",
       "source_sql_sha256": "d5000e57bf0ef7cc814ff979c623603e6fea2c342c3f79782ba59bb043f46ca6",
@@ -73,16 +73,25 @@
       "schema": "public",
       "table": "supplier_prices",
       "source": {
-        "file": "supabase/migrations/20261014072055_supplier_price_export_keyset_page.sql",
-        "sha256": "61601e15328df84ed97b0c7d94312ee3537b20355139fe9d117433da90d4a726",
+        "file": "supabase/migrations/20261014145352_supplier_price_export_compact_search_index.sql",
+        "sha256": "0bf89e6b27238cec08cddfcadb918fdeacfc9c5f1d600aff6d143490d488a488",
         "migration_position": 36
       },
-      "source_sql": "create index if not exists idx_supplier_prices_export_search\n  on public.supplier_prices (\n    organization_id,\n    supplier_id,\n    brand_id,\n    normalized_code,\n    normalized_oem,\n    product_code,\n    id\n  )\n  where is_active;",
-      "source_sql_sha256": "1bee78a279b7d809b35aa2f162eac2f39b3f731e3666a800013ef8e6cce45fcc",
-      "sql": "create index concurrently if not exists idx_supplier_prices_export_search\n  on public.supplier_prices (\n    organization_id,\n    supplier_id,\n    brand_id,\n    normalized_code,\n    normalized_oem,\n    product_code,\n    id\n  )\n  where is_active;",
-      "sql_sha256": "08116627f529a6d8623731b2c2f6e1dff5fabc3de0a3ed07210504dea03a40dc",
+      "source_sql": "create index if not exists idx_supplier_prices_export_search\n  on public.supplier_prices (\n    organization_id,\n    supplier_id,\n    brand_id,\n    normalized_code text_pattern_ops\n  )\n  where is_active;",
+      "source_sql_sha256": "9b44a174ddd584f237d5a5a8f437db8eab6ad4cf4e4f55b4beb77414ecb3626f",
+      "sql": "create index concurrently if not exists idx_supplier_prices_export_search\n  on public.supplier_prices (\n    organization_id,\n    supplier_id,\n    brand_id,\n    normalized_code text_pattern_ops\n  )\n  where is_active;",
+      "sql_sha256": "8c6cfef4ccba36a2517faa9235b36d14e95af8bd94ae3b9b744522797e1dd503",
       "repeated_in": [],
-      "expected_definition": "CREATE INDEX idx_supplier_prices_export_search ON public.supplier_prices USING btree (organization_id, supplier_id, brand_id, normalized_code, normalized_oem, product_code, id) WHERE is_active"
+      "superseded_in": [
+        {
+          "file": "supabase/migrations/20261014072055_supplier_price_export_keyset_page.sql",
+          "sha256": "61601e15328df84ed97b0c7d94312ee3537b20355139fe9d117433da90d4a726",
+          "migration_position": 37,
+          "source_sql_sha256": "1bee78a279b7d809b35aa2f162eac2f39b3f731e3666a800013ef8e6cce45fcc",
+          "action": "skip-only-after-compact-index-verification"
+        }
+      ],
+      "expected_definition": "CREATE INDEX idx_supplier_prices_export_search ON public.supplier_prices USING btree (organization_id, supplier_id, brand_id, normalized_code text_pattern_ops) WHERE is_active"
     },
     {
       "sequence": 4,
@@ -92,7 +101,7 @@
       "source": {
         "file": "supabase/migrations/20261014085226_catalog_export_source_contracts.sql",
         "sha256": "be8f561b279aba5d31485d330155d915e8e035128bc880c8caa68845e42f47ca",
-        "migration_position": 37
+        "migration_position": 38
       },
       "source_sql": "create index if not exists idx_catalog_products_export_id\n  on public.catalog_products(organization_id,brand_id,id);",
       "source_sql_sha256": "151ae3abb60ce0d589730b914925c9eb32cb00a6eac6d5ce340a16af2b9a7ba6",
@@ -109,7 +118,7 @@
       "source": {
         "file": "supabase/migrations/20261014085226_catalog_export_source_contracts.sql",
         "sha256": "be8f561b279aba5d31485d330155d915e8e035128bc880c8caa68845e42f47ca",
-        "migration_position": 37
+        "migration_position": 38
       },
       "source_sql": "create index if not exists idx_catalog_products_export_code_id\n  on public.catalog_products(organization_id,brand_id,product_code,id);",
       "source_sql_sha256": "21e8084b4128c437af5c313ef7eee463040fc4cba4e816ce84e96840d6241bbc",
@@ -126,7 +135,7 @@
       "source": {
         "file": "supabase/migrations/20261014085547_supplier_price_export_published_source.sql",
         "sha256": "b24393e32e6c386245e265a07bc4f8e5fc2f0d6cbc0eeab1c28ce54269263807",
-        "migration_position": 38
+        "migration_position": 39
       },
       "source_sql": "create index if not exists idx_supplier_prices_export_keyset_coalesced\n  on public.supplier_prices(organization_id,supplier_id,brand_id,(coalesce(product_code,'')),id)\n  where is_active;",
       "source_sql_sha256": "e1af6c742eee1fc598b3ec55c9f22a9d7fc1647d089e65763247a81a646a331f",
@@ -143,7 +152,7 @@
       "source": {
         "file": "supabase/migrations/20261014090241_export_source_keyset_collation.sql",
         "sha256": "a36788a5e5910c2c584d0cb3b227972f56b93ebd7eb9a98cc940ded42e6d7ae5",
-        "migration_position": 39
+        "migration_position": 40
       },
       "source_sql": "create index if not exists idx_catalog_products_export_exact_identity\n  on public.catalog_products(organization_id,brand_id,public.normalize_catalog_product_code(product_code),product_code,id);",
       "source_sql_sha256": "f340caaabd7350f2b26716c71e65a468cabd1758ed710e19fe4dbf8a03aac700",
@@ -160,7 +169,7 @@
       "source": {
         "file": "supabase/migrations/20261014090241_export_source_keyset_collation.sql",
         "sha256": "a36788a5e5910c2c584d0cb3b227972f56b93ebd7eb9a98cc940ded42e6d7ae5",
-        "migration_position": 39
+        "migration_position": 40
       },
       "source_sql": "create index if not exists idx_catalog_products_export_code_c_id\n  on public.catalog_products(organization_id,brand_id,product_code collate \"C\",id);",
       "source_sql_sha256": "86f7f7afa7619ef229dd68cf47ba57dee45c8238f9ccb1c1ef90f6c37b531c75",
@@ -177,7 +186,7 @@
       "source": {
         "file": "supabase/migrations/20261014090241_export_source_keyset_collation.sql",
         "sha256": "a36788a5e5910c2c584d0cb3b227972f56b93ebd7eb9a98cc940ded42e6d7ae5",
-        "migration_position": 39
+        "migration_position": 40
       },
       "source_sql": "create index if not exists idx_supplier_price_rollups_export_code_c\n  on public.supplier_price_rollups(organization_id,brand_id,normalized_code collate \"C\") where cheapest_price is not null;",
       "source_sql_sha256": "bae938d5eb6a4bace6589c79f5cf0ec393929e63b8c94ddbe803977085a5a02b",
@@ -194,7 +203,7 @@
       "source": {
         "file": "supabase/migrations/20261014090241_export_source_keyset_collation.sql",
         "sha256": "a36788a5e5910c2c584d0cb3b227972f56b93ebd7eb9a98cc940ded42e6d7ae5",
-        "migration_position": 39
+        "migration_position": 40
       },
       "source_sql": "create index if not exists idx_supplier_prices_export_code_c\n  on public.supplier_prices(organization_id,supplier_id,brand_id,(coalesce(product_code,'') collate \"C\"),id) where is_active;",
       "source_sql_sha256": "9757397928d25ae3a2abe1b75716f3a9e107ca4945920efb50614af567483b4d",
@@ -211,7 +220,7 @@
       "source": {
         "file": "supabase/migrations/20261014132000_catalog_import_storage_validation_batches.sql",
         "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
-        "migration_position": 55
+        "migration_position": 56
       },
       "source_sql": "create index if not exists idx_catalog_import_stage_run_validation\n  on public.catalog_import_stage (run_id, row_index)\n  where validation_status = 'pending';",
       "source_sql_sha256": "e6a305016efdce5cf39d2c22411f8f5513f53fb56a4cfe3dea75befde885757a",
@@ -221,17 +230,17 @@
         {
           "file": "supabase/migrations/20261014133000_catalog_import_storage_validation_ambiguity_fix.sql",
           "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
-          "migration_position": 56
+          "migration_position": 57
         },
         {
           "file": "supabase/migrations/20261014134000_catalog_import_storage_validation_aggregate_fix.sql",
           "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
-          "migration_position": 57
+          "migration_position": 58
         },
         {
           "file": "supabase/migrations/20261014135000_catalog_import_storage_validation_projection_fix.sql",
           "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
-          "migration_position": 58
+          "migration_position": 59
         }
       ],
       "expected_definition": "CREATE INDEX idx_catalog_import_stage_run_validation ON public.catalog_import_stage USING btree (run_id, row_index) WHERE (validation_status = 'pending'::text)"
@@ -244,7 +253,7 @@
       "source": {
         "file": "supabase/migrations/20261014132000_catalog_import_storage_validation_batches.sql",
         "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
-        "migration_position": 55
+        "migration_position": 56
       },
       "source_sql": "create index if not exists idx_catalog_import_stage_run_code_brand\n  on public.catalog_import_stage (run_id, normalized_code, brand);",
       "source_sql_sha256": "0101110bb712f813beb9d67280d843c49c0bb355ab671c3348a0f76a0567a59d",
@@ -254,17 +263,17 @@
         {
           "file": "supabase/migrations/20261014133000_catalog_import_storage_validation_ambiguity_fix.sql",
           "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
-          "migration_position": 56
+          "migration_position": 57
         },
         {
           "file": "supabase/migrations/20261014134000_catalog_import_storage_validation_aggregate_fix.sql",
           "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
-          "migration_position": 57
+          "migration_position": 58
         },
         {
           "file": "supabase/migrations/20261014135000_catalog_import_storage_validation_projection_fix.sql",
           "sha256": "dae095ff054c59598f780d93fc83fafbe4158764a682e16cfc72adcf308a6c43",
-          "migration_position": 58
+          "migration_position": 59
         }
       ],
       "expected_definition": "CREATE INDEX idx_catalog_import_stage_run_code_brand ON public.catalog_import_stage USING btree (run_id, normalized_code, brand)"
@@ -280,6 +289,7 @@
     "Concurrent creation reduces write blocking but still uses I/O, disk, CPU and short locks; verify provider capacity and long transactions immediately before execution.",
     "A concurrent DDL name race cannot be made atomic with this precheck; postcheck must pass even when IF NOT EXISTS reports a skip.",
     "Keep all reviewed migration bytes unchanged. After all 12 exact indexes verify, their later CREATE INDEX IF NOT EXISTS statements will skip them.",
+    "The compact supplier search definition explicitly supersedes the exact recorded historical wide statement. Prebuild the compact definition first; verify it again before both forward and superseded migrations. Never build the wide statement or accept it as equivalent.",
     "This plan does not execute SQL, authorize a production change, prove production readiness or activate any import/export/catalog workflow."
   ]
 }
