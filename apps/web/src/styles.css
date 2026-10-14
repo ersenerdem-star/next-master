@@ -11191,6 +11191,7 @@ select.field__input {
 
 .portal-shell--workspace .portal-sidebar-nav {
   display: flex;
+  flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
