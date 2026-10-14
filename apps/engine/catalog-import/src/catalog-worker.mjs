@@ -11,6 +11,7 @@ import {
   validateCatalogImportSource,
 } from "./catalog-import-adapter.mjs";
 import { preflightCatalogCsv } from "./catalog-duckdb.mjs";
+import { withCatalogHeavyImportGate } from "./catalog-import-gate.mjs";
 
 const DEFAULT_BUCKET = "catalog-imports";
 
@@ -114,7 +115,7 @@ function rpcValue(result, ...keys) {
  * Execute one catalog import against injectable RPC calls. The worker owns the
  * source transfer and cursor; the RPC implementation owns DB transactions.
  */
-export async function runCatalogStorageImport({
+async function runCatalogStorageImportUnlocked({
   supabaseUrl,
   serviceRoleKey,
   bucket = DEFAULT_BUCKET,
@@ -275,4 +276,14 @@ export async function runCatalogStorageImport({
   } finally {
     if (downloaded) await rm(downloaded.workDir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Serialize heavy storage imports within this worker process. DBOS's internal
+ * recovery queue and the named application queue have separate limits, so a
+ * process-global gate is required to keep their download/DuckDB work from
+ * overlapping after restart.
+ */
+export async function runCatalogStorageImport(options) {
+  return withCatalogHeavyImportGate(() => runCatalogStorageImportUnlocked(options));
 }

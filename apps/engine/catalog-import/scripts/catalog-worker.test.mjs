@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { runCatalogStorageImport } from "../src/catalog-worker.mjs";
 
 const csv = "Brand,Product_Code,Description\nClevite,A-1,One\nClevite,A-2,Two\nClevite,A-3,Three\n";
@@ -156,4 +157,47 @@ test('historical terminal partial source without EOF proof cannot become success
       throw Error('CATALOG_STORAGE_RUN_TERMINAL:finalized'); },
   }), /CATALOG_STORAGE_RUN_TERMINAL/);
   assert.deepEqual(calls, ['get_catalog_import_storage_read_completion_system', 'complete_catalog_import_storage_upload_system']);
+});
+
+test('recovery and named-queue imports share one process-global heavy-work gate', async () => {
+  let activeDownloads = 0;
+  let maxActiveDownloads = 0;
+  const gatedFetch = async () => ({
+    ok: true,
+    status: 200,
+    body: (async function* () {
+      activeDownloads += 1;
+      maxActiveDownloads = Math.max(maxActiveDownloads, activeDownloads);
+      await delay(20);
+      yield Buffer.from(csv);
+      await delay(20);
+      activeDownloads -= 1;
+    })(),
+  });
+  const gatedRpc = async (name, args) => {
+    if (name === 'get_catalog_import_storage_read_completion_system') return { read_complete: false };
+    if (name === 'stage_catalog_import_storage_batch_system') return { staged_count: args.input_payload.length };
+    if (name === 'heartbeat_catalog_import_storage_source_system') return { status: 'processing' };
+    if (name === 'complete_catalog_import_storage_upload_system') return { status: 'uploaded' };
+    if (name === 'complete_catalog_import_storage_read_system') return {
+      queued: true, status: 'queued', run_id: args.input_run_id, source_id: 'source-1',
+      read_complete_rows: args.input_total_rows, read_completed_at: '2026-10-15T00:00:00Z',
+    };
+    throw new Error(`unexpected rpc ${name}`);
+  };
+  const input = (runId) => ({
+    supabaseUrl: 'https://staging.supabase.co', serviceRoleKey: 'test-key', runId,
+    organizationId: 'org-1', actorId: 'actor-1',
+    source: { sourcePath: 'org/run/catalog.csv', sourceBytes: Buffer.byteLength(csv), sourceSha256: sha256 },
+    lease: { sourceId: 'source-1', workerId: 'worker-1', leaseToken: `token-${runId}`, leaseGeneration: 1 },
+    fetchImpl: gatedFetch, rpc: gatedRpc,
+  });
+
+  const [first, second] = await Promise.all([
+    runCatalogStorageImport(input('recovery-run')),
+    runCatalogStorageImport(input('named-run')),
+  ]);
+  assert.equal(first.processedRows, 3);
+  assert.equal(second.processedRows, 3);
+  assert.equal(maxActiveDownloads, 1, 'DBOS recovery and named queues must not overlap heavy source work');
 });
