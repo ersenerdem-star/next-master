@@ -8,6 +8,8 @@ const WORKER_ID = String(process.env.CATALOG_IMPORT_WORKER_ID || `catalog-storag
 const QUEUE_NAME = "catalog-import-storage";
 const APP_VERSION = "0.1.0-catalog-storage";
 const POLL_MS = Math.max(2_000, Math.min(60_000, Number(process.env.CATALOG_IMPORT_POLL_MS || 10_000)));
+const FINALIZE_BATCH_SIZE = Math.max(100, Math.min(1000, Number(process.env.CATALOG_IMPORT_FINALIZE_BATCH_SIZE || 1000)));
+const MAX_FINALIZATION_BATCHES = Math.max(1, Math.min(50, Number(process.env.CATALOG_IMPORT_MAX_FINALIZATION_BATCHES || 12)));
 
 function requireConfig() {
   if (!/^https:\/\//.test(SUPABASE_URL)) throw new Error("CATALOG_SUPABASE_URL_REQUIRED");
@@ -55,6 +57,26 @@ async function getRun(runId) {
   const query = new URLSearchParams({ select: "id,organization_id,input_scope,created_by,status,processing_queued_at", id: `eq.${runId}`, limit: "1" });
   const rows = await supabaseJson(`/rest/v1/catalog_import_runs?${query}`);
   return Array.isArray(rows) ? rows[0] : null;
+}
+
+async function listQueuedFinalizationRuns() {
+  const query = new URLSearchParams({
+    select: "id,organization_id,created_by,status,processing_queued_at",
+    processing_queued_at: "not.is.null",
+    status: "in.(running,validated,finalizing)",
+    order: "processing_queued_at.asc",
+    limit: "1",
+  });
+  return supabaseJson(`/rest/v1/catalog_import_runs?${query}`);
+}
+
+async function clearRunQueueMarker(runId) {
+  const query = new URLSearchParams({ id: `eq.${runId}` });
+  await supabaseJson(`/rest/v1/catalog_import_runs?${query}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ processing_queued_at: null, processing_queued_by: null }),
+  });
 }
 
 async function callRpc(name, args) {
@@ -160,6 +182,56 @@ export async function pollCatalogImportSources() {
   return results;
 }
 
+async function finalizeQueuedCatalogRun(run) {
+  let status = String(run?.status || "");
+  if (status === "running") {
+    const validation = await callRpc("validate_catalog_import_system", {
+      input_run_id: run.id,
+      input_organization_id: run.organization_id,
+      input_actor_id: run.created_by,
+    });
+    status = String((Array.isArray(validation) ? validation[0] : validation)?.status || "");
+  }
+
+  if (status !== "validated" && status !== "finalizing") {
+    if (["failed", "cancelled", "finalized", "succeeded", "validation_failed", "finalize_failed"].includes(status)) {
+      await clearRunQueueMarker(run.id);
+    }
+    return { runId: run.id, status };
+  }
+
+  let latest = null;
+  for (let index = 0; index < MAX_FINALIZATION_BATCHES; index += 1) {
+    latest = await callRpc("finalize_catalog_import_batch_system", {
+      input_run_id: run.id,
+      input_organization_id: run.organization_id,
+      input_actor_id: run.created_by,
+      input_batch_size: FINALIZE_BATCH_SIZE,
+    });
+    const value = Array.isArray(latest) ? latest[0] : latest;
+    status = String(value?.status || status);
+    if (value?.has_more === false || ["failed", "cancelled", "finalized", "succeeded", "validation_failed", "finalize_failed"].includes(status)) {
+      await clearRunQueueMarker(run.id);
+      break;
+    }
+  }
+  const value = Array.isArray(latest) ? latest[0] : latest;
+  return { runId: run.id, status: String(value?.status || status), hasMore: value?.has_more !== false };
+}
+
+async function pollCatalogFinalization() {
+  const runs = await listQueuedFinalizationRuns();
+  const run = Array.isArray(runs) ? runs[0] : null;
+  if (!run) return { status: "idle" };
+  try {
+    return await finalizeQueuedCatalogRun(run);
+  } catch (error) {
+    // Leave the durable queue marker intact. The next poll retries the same
+    // run; deterministic RPC failures already transition the run terminally.
+    return { runId: run.id, status: "deferred", errorCode: String(error?.message || "CATALOG_FINALIZATION_DEFERRED").slice(0, 160) };
+  }
+}
+
 async function main() {
   requireConfig();
   DBOS.setConfig({
@@ -174,12 +246,15 @@ async function main() {
   await DBOS.registerQueue(QUEUE_NAME, { globalConcurrency: 1, workerConcurrency: 1 });
   try {
     if (process.argv.includes("--once")) {
-      console.log(JSON.stringify(await pollCatalogImportSources()));
+      const ingestion = await pollCatalogImportSources();
+      const finalization = await pollCatalogFinalization();
+      console.log(JSON.stringify({ ingestion, finalization }));
       return;
     }
     while (true) {
       console.log(JSON.stringify({ worker: "catalog-import", status: "polling", workerId: WORKER_ID }));
       await pollCatalogImportSources();
+      await pollCatalogFinalization();
       await new Promise((resolve) => setTimeout(resolve, POLL_MS));
     }
   } finally {
