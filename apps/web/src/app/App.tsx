@@ -7,6 +7,7 @@ import { AppShell } from "../presentation/layout/AppShell";
 import { useI18n } from "../i18n/I18nProvider";
 import { APP_NAVIGATION_EVENT, type AppNavigationDetail } from "../shared/catalogTransfer";
 import { reconcileAppStorage } from "../shared/storageHygiene";
+import { clearPreparedDownloads } from "../shared/preparedDownload";
 import {
   canAccessCatalogReviewModules,
   canAccessInventoryModules,
@@ -310,6 +311,7 @@ export function App() {
         return;
       }
       if (event === "SIGNED_OUT") {
+        clearPreparedDownloads();
         clearCachedAppSession();
         setAppRole("");
         setAppDepartment("viewer");
@@ -486,6 +488,7 @@ export function App() {
   }, []);
 
   async function handleLogout() {
+    clearPreparedDownloads();
     await supabaseClient.auth.signOut();
   }
 

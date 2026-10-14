@@ -1,4 +1,5 @@
 import { buildWorkbookBytes, type ExportRows, type WorkbookOptions } from "./xlsxCore";
+import { offerPreparedDownload } from "./preparedDownload";
 
 const XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const CSV_TYPE = "text/csv;charset=utf-8";
@@ -28,16 +29,7 @@ export async function buildXlsxBlobAsync(sheetName: string, rows: ExportRows, nu
 }
 
 export function downloadBlob(name: string, blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  // Keep the object URL alive while the browser hands a large workbook to its
-  // download manager. Revoking it immediately can race that handoff.
-  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  offerPreparedDownload(name, blob);
 }
 
 function signedStorageTarget(signedUrl: string) {

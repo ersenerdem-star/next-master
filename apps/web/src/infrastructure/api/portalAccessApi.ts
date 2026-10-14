@@ -1,4 +1,5 @@
 import type { PortalBranding, PortalCredentials, PortalSnapshot } from "../../types/portalSession";
+import { clearPreparedDownloads } from "../../shared/preparedDownload";
 
 type PortalResponse = {
   ok?: boolean;
@@ -131,6 +132,7 @@ export async function confirmPortalPasswordReset(email: string, resetToken: stri
 }
 
 export async function logoutPortalSession() {
+  clearPreparedDownloads();
   await fetch("/api/portal-logout", {
     method: "POST",
     credentials: "same-origin",

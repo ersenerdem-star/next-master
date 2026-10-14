@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { downloadUrl } from "../../apps/web/src/shared/xlsx.ts";
+import { dismissPreparedDownload } from "../../apps/web/src/shared/preparedDownload.ts";
 
 const site = "https://next-master-v3-staging-20261006.netlify.app";
 const fallbackUrl = "/api/portal-export-file?jobId=job-1";
@@ -22,14 +23,17 @@ async function withBrowserMocks(run: (state: {
   globalThis.window = {
     location: new URL(`${site}/portal`),
     setTimeout: () => 0,
+    clearTimeout: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
   } as unknown as Window & typeof globalThis;
   globalThis.document = {
+    documentElement: { lang: "en" },
     createElement: (tag: string) => {
-      assert.equal(tag, "a");
       return {
-        href: "", download: "", rel: "",
-        click() { clicks.push({ href: this.href, name: this.download }); },
-        remove() {},
+        href: "", download: "", rel: "", style: {},
+        click() { if (tag === "a") clicks.push({ href: this.href, name: this.download }); },
+        remove() {}, append() {}, setAttribute() {}, addEventListener() {},
       };
     },
     body: { appendChild() {} },
@@ -42,6 +46,7 @@ async function withBrowserMocks(run: (state: {
   try {
     await run({ clicks, blobs, setFetch: (fetcher) => { globalThis.fetch = fetcher; } });
   } finally {
+    dismissPreparedDownload();
     globalThis.window = originalWindow;
     globalThis.document = originalDocument;
     globalThis.fetch = originalFetch;
