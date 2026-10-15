@@ -287,7 +287,7 @@ async function main() {
     requireExpiryTestHook({ role: process.env.SUPPLIER_PRICE_EXPIRY_TEST_ROLE || "",
       releaseId, supabaseUrl: SUPABASE_URL, canSend: typeof process.send === "function" });
     if(PERSIST_SHADOW_ROWS) {
-      if(serviceMode)requireSupplierPriceServiceTarget(process.env);
+      if(serviceMode || process.argv[2] === "--operator-recover-production") requireSupplierPriceServiceTarget(process.env);
       else requireShadowStagingHost(SUPABASE_URL);
     }
     if (operatorRecovery) {
