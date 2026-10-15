@@ -139,8 +139,12 @@ export function AppShell({
         </div>
         <nav className="sidebar-nav">
           {navigation.filter(group => group.key !== "settings").map((group) => (
-            <div key={group.key} className="reference-nav-group">
-              <div className="sidebar-nav__section-label">{t(group.labelKey)}</div>
+            <details key={group.key} className="reference-nav-group" name="workspace-sidebar-sections">
+              <summary className="sidebar-nav__section-label sidebar-nav__toggle">
+                <span>{t(group.labelKey)}</span>
+                <svg className="sidebar-nav__chevron" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m7 4 6 6-6 6" /></svg>
+              </summary>
+              <div className="reference-nav-group__items">
               {group.items.map((item) => {
                 const isActive = item.page === activePage && (!item.section || item.section === activeSubPage);
                 return (
@@ -155,7 +159,8 @@ export function AppShell({
                   </div>
                 );
               })}
-            </div>
+              </div>
+            </details>
           ))}
         </nav>
       </aside>

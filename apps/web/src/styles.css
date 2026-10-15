@@ -13139,6 +13139,21 @@ body {
 .supplier-new-brand--form { grid-column: 1 / -1; }
 .supplier-new-brand--form p { margin: 0; color: #51657b; font-size: 13px; }
 
+.sidebar .sidebar-nav__toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 0 !important; padding: 12px 10px; border: 1px solid rgba(170,202,232,.14);
+  border-radius: 8px; color: rgba(222,237,251,.88) !important; cursor: pointer; list-style: none;
+}
+.sidebar-nav__toggle::-webkit-details-marker { display: none; }
+.sidebar-nav__toggle::marker { content: ""; }
+.sidebar .sidebar-nav__toggle:hover { background: rgba(34,134,218,.16); }
+.sidebar-nav__toggle:focus-visible { outline: 2px solid #53b8ff; outline-offset: 3px; }
+.sidebar-nav__chevron { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; transition: transform 160ms ease; }
+.reference-nav-group[open] > .sidebar-nav__toggle .sidebar-nav__chevron { transform: rotate(90deg); }
+.reference-nav-group__items { padding-top: 6px; }
+.reference-nav-group:not([open]) > .reference-nav-group__items { display: none; }
+@media (prefers-reduced-motion: reduce) { .sidebar-nav__chevron { transition: none; } }
+
 .topbar-icon-button--messages::after { display: none; }
 
 /* Portal brand access is an alphabetical list; seller-scope layouts stay intact. */
