@@ -1,0 +1,27 @@
+{
+  "releaseId": "91b9ca04-b38d-4ba0-8078-f399196163f4",
+  "brand": "Febi",
+  "supplier": "Romany",
+  "environment": "production",
+  "workerService": "srv-db7ps1dg1s2s73be1ofg",
+  "workflowStatus": "ERROR",
+  "workflowName": "supplier-price-verified-release-v6",
+  "error": "SUPPLIER_PRICE_FILE_VALIDATION_BLOCKED",
+  "observedErrorTimeUtc": "2026-10-15T17:00:17Z",
+  "sourceChecksumAndBytesVerified": true,
+  "totalRows": 71280,
+  "distinctCodes": 70646,
+  "duplicateRows": 634,
+  "originalInvalidPriceRows": 71280,
+  "priceCellFormatExample": "€ 14,19",
+  "diagnosticInMemoryEuroPrefixRemoval": {
+    "rejectedRows": 0,
+    "duplicateRows": 634,
+    "conflictingDuplicateRowsAcrossAllCsvFields": 0
+  },
+  "method": "Authenticated Chrome Render production logs and Web Shell; DBOSClient read-only workflow/step queries; checksum-verified source download to temporary worker storage and validation with deployed parser. Temporary files removed in finally blocks.",
+  "recoveryPerformed": false,
+  "publicationPerformed": false,
+  "productionDataModified": false,
+  "conclusion": "Source validation blocked ingestion: euro-prefixed price cells are rejected by the deployed amount parser, and identical duplicate rows violate the unique-code gate. No user cancellation is indicated by the workflow ERROR. A corrected source must remove currency symbols and identical duplicates before a new upload, unless a separately validated parser/import-policy repair is implemented."
+}

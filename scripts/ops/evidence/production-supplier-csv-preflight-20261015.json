@@ -1,0 +1,25 @@
+{
+  "sourceCommit": "8069b8f4ccdb449d93eb90510ded3078948ba0b6",
+  "integrationCommit": "853c1fdc",
+  "deployId": "6ad10f8bfdf1b8a8ce420a16",
+  "site": "portal.next-master.com",
+  "checks": [
+    "5 focused tests passed",
+    "TypeScript and Vite build passed",
+    "Production environment target and public key verified",
+    "Authenticated Chrome: 3 sample row issues shown before upload",
+    "Downloaded CSV verified: 3 diagnostic rows"
+  ],
+  "coverage": "CSV client preflight: missing/invalid product code, duplicate normalized product code, missing/invalid/ambiguous/nonpositive price, currency symbol, missing required headers, empty file. Backend validation unchanged; XLSX remains server validated.",
+  "detailsCap": 100000,
+  "rowNumbers": "CSV record index including header; entirely blank records ignored by existing scanner; physical Excel lines may differ",
+  "latestFebiObserved": {
+    "releaseId": "d2d34111-21bd-46ab-8ec7-4da4d31b463a",
+    "status": "validated",
+    "acceptedRows": 70646,
+    "rejectedRows": 0,
+    "warningRows": 0,
+    "errorCode": "BRAND_IDENTITY_COMPARISON_PENDING"
+  },
+  "screenshot": "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/supplier-upload-validation/live-csv-errors.png"
+}
