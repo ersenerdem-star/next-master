@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-15",
+  "production_url": "https://portal.next-master.com",
+  "production_commit": "a229a210645cc1ed5b40ceb319f5ada43247e349",
+  "deploy_id": "6ad0dee37a0b1614ce4c4696",
+  "integration_commits": [
+    "ca2148e",
+    "78a50d6f"
+  ],
+  "scope": [
+    "dashboard upload-center compact summary",
+    "same summary in Supplier Prices",
+    "row-selected native detail modal",
+    "reference-aligned card header"
+  ],
+  "data_checks": {
+    "Romany/Bosch": {
+      "rows": 45170,
+      "date": "2026-10-15",
+      "status": "Published"
+    },
+    "GEBA/Geba": {
+      "rows": 108,
+      "date": "2026-10-14",
+      "status": "Published"
+    }
+  },
+  "live_checks": [
+    "summary current rows",
+    "Bosch supplier button opens matching details",
+    "Bosch row count cell opens matching details",
+    "GEBA details shows 108",
+    "Close dismisses",
+    "Escape dismisses",
+    "Upload price file opens Supplier Prices",
+    "production version matches deployed source",
+    "browser errors none returned"
+  ],
+  "tests": {
+    "command": "TSX_TSCONFIG_PATH=apps/web/tsconfig.json node --import tsx --test scripts/tests/supplier-upload-summary.test.mts scripts/tests/supplier-release-actions-ui.test.mts",
+    "passed": 19,
+    "failed": 0,
+    "production_build": "passed",
+    "integration_build": "passed"
+  },
+  "integration_preserved": [
+    "issue-row review component",
+    "controlled/archive toggle",
+    "staged-state labeling",
+    "broader commercial implementations not promoted"
+  ],
+  "screenshots": [
+    "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/full-link-audit/upload-summary/final-dashboard.png",
+    "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/full-link-audit/upload-summary/final-bosch-details.png"
+  ],
+  "design_qa": "design-qa.md, current scoped review passed",
+  "no_business_mutations": true,
+  "no_database_migration": true
+}
