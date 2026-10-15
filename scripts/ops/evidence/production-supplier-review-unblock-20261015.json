@@ -1,0 +1,53 @@
+{
+  "environment": "production",
+  "project": "zjgueqijumzlfioihnkt",
+  "service": "srv-db7ps1dg1s2s73be1ofg",
+  "previousCommit": "3cfc09e7dcd8436727b1fe007dba6616505b611a",
+  "deployedCommit": "544095b0b20df7de34d27925f571afefa1ae33fd",
+  "deployId": "dep-db8h4v8u01pc73873mkg",
+  "deployStatus": "Live",
+  "fix": "Explicit fenced admin actions now execute on idle ingestion even when historical workflows have failed. The historical-failure readiness error is evaluated after the action consumer. Busy/unconfirmed history, stopping, source/identity checks and publication confirmations remain enforced.",
+  "tests": {
+    "passed": 67,
+    "failed": 0,
+    "skipped": 1,
+    "skippedScope": "Optional isolated PostgreSQL17 runtime concurrency test (RUN_SUPPLIER_ACTION_PG_RUNTIME not enabled). SQL contract harness and worker tests passed."
+  },
+  "liveProof": {
+    "Febi": {
+      "releaseId": "d2d34111-21bd-46ab-8ec7-4da4d31b463a",
+      "acceptedRows": 70646,
+      "rejectedRows": 0,
+      "warningRows": 0,
+      "conflictRows": 0,
+      "status": "validated",
+      "errorCode": null,
+      "reviewRevision": 1,
+      "identityChecked": true,
+      "reviewRequired": false,
+      "queueStatus": "completed",
+      "queueResult": "rechecked_clear",
+      "attempt": 1
+    },
+    "Blue Print": {
+      "releaseId": "15834ead-41f8-4768-808c-b839a415072e",
+      "acceptedRows": 26312,
+      "rejectedRows": 0,
+      "warningRows": 0,
+      "conflictRows": 0,
+      "status": "validated",
+      "errorCode": null,
+      "reviewRevision": 1,
+      "identityChecked": true,
+      "reviewRequired": false,
+      "queueStatus": "completed",
+      "queueResult": "rechecked_clear",
+      "attempt": 1,
+      "ui": "The current server check confirms that this release is ready to publish."
+    }
+  },
+  "publicationPerformed": false,
+  "historicalFailuresDeleted": false,
+  "healthBoundary": "Old unresolved ERROR workflows still intentionally degrade readiness; they no longer starve valid explicit review decisions. This receipt does not assert readyz is healthy.",
+  "screenshotsRoot": "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/supplier-review-unblock"
+}
