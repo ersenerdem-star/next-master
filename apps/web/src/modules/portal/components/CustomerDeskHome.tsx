@@ -44,7 +44,7 @@ function statusLabel(value?: string | null, submitted = false) {
 
 function statusTone(value?: string | null) {
   const status = normaliseStatus(value);
-  if (status.includes("deliver") || status.includes("paid") || status.includes("complete")) return "success";
+  if (["delivered", "paid", "fully paid", "complete", "completed"].includes(status)) return "success";
   if (status.includes("dispatch") || status.includes("ship") || status.includes("process")) return "info";
   if (status.includes("cancel") || status.includes("reject")) return "danger";
   return "warning";
@@ -90,7 +90,7 @@ export function CustomerDeskHome({
       if (line.sell_price == null || line.lifecycle_status === "discontinued") actionRows.add(`${order.id}:${index}`);
     });
   });
-  const accountCredit = snapshot.accountSummary.creditAmount > 0 ? snapshot.accountSummary.creditAmount : snapshot.accountSummary.openAmount;
+  const accountCredit = snapshot.accountSummary.creditAmount;
   const priceListLabel = snapshot.pricingProfile?.price_list_type
     ? `${snapshot.pricingProfile.price_list_type} customer price list`
     : "Customer price list";
@@ -194,7 +194,7 @@ export function CustomerDeskHome({
             <div className="customer-desk-price-card__body">
               <span className="customer-desk-price-card__icon"><NavGlyph name="download" /></span>
               <div><strong>{priceListLabel}</strong><small>{snapshot.invite.party_name} · Customer pricing</small></div>
-              <button type="button" onClick={onOpenPriceLists}><NavGlyph name="download" /> <span>Download (PDF)</span></button>
+              <button type="button" onClick={onOpenPriceLists}><NavGlyph name="download" /> <span>View price lists</span></button>
             </div>
           </section>
 

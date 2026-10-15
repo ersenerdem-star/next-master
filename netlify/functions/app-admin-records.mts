@@ -1,6 +1,6 @@
 import type { Config, Context } from "@netlify/functions";
 import { buildRestUrl, getJson, json, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
-import { resolveCaller } from "./_shared/app-auth.mts";
+import { resolveCaller, getAppAuthStatus } from "./_shared/app-auth.mts";
 import { canAccessCustomerOps, canAccessOperationsModules, isAdminLikeRole, isSuperadminRole } from "./_shared/roles.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 import { listTecAllianceBrandEntries } from "./_shared/catalog/tecalliance-brand-registry.mts";
@@ -1321,7 +1321,7 @@ export default async (req: Request, _context: Context) => {
 
     return json({ error: "Unsupported admin records request" }, 400);
   } catch (error) {
-    return json({ error: getErrorMessage(error, "App admin records request failed") }, 400);
+    return json({ error: getErrorMessage(error, "App admin records request failed") }, getAppAuthStatus(error) || 400);
   }
 };
 
