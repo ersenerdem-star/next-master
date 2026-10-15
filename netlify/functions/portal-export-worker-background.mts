@@ -41,6 +41,10 @@ export default async (req: Request) => {
 };
 
 export const config: Config = {
+  // Keep this explicit in source as well as netlify.toml. The filename
+  // convention is the normal Netlify switch, but an explicit flag protects
+  // deploys generated from a function manifest or a different context.
+  background: true,
   path: "/api/portal-export-worker-background",
   method: "POST",
 };

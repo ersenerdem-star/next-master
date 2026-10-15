@@ -72,7 +72,7 @@ export default async (req: Request, context: Context) => {
     });
   } catch (error) {
     const message = sanitizeUserFacingError(error, "Portal export status could not be loaded.");
-    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+    void writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       email: auditEmail,
       eventType: "portal_export_status",
       status: "failed",

@@ -19,7 +19,11 @@ test("portal export polling and download guards stay off the full source fingerp
 });
 
 test("large portal worker is explicitly configured as a background function", async () => {
-  const netlify = await readFile(new URL("netlify.toml", root), "utf8");
+  const [netlify, source] = await Promise.all([
+    readFile(new URL("netlify.toml", root), "utf8"),
+    readFile(new URL("netlify/functions/portal-export-worker-background.mts", root), "utf8"),
+  ]);
   const block = netlify.match(/\[functions\.\"portal-export-worker-background\"\]([\s\S]*?)(?=\n\[|$)/)?.[1] || "";
   assert.match(block, /background\s*=\s*true/);
+  assert.match(source, /config\s*:[\s\S]*background\s*:\s*true/);
 });

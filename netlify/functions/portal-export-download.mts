@@ -45,7 +45,7 @@ export default async (req: Request) => {
     if (job.status !== "finalized") return json({ error: "Export file is not ready yet." }, 409, { "Set-Cookie": buildPortalSessionCookie(nextSessionToken) });
 
     const download = await createExportArtifactSignedDownload(supabaseUrl, serviceRoleKey, job);
-    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+    void writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       organizationId: invite.organization_id,
       inviteId: invite.id,
       partyType: invite.party_type,
@@ -60,7 +60,7 @@ export default async (req: Request) => {
     });
   } catch (error) {
     const message = sanitizeUserFacingError(error, "Portal export file could not be downloaded.");
-    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+    void writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       email: auditEmail,
       eventType: "portal_export_download",
       status: "failed",

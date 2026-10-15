@@ -67,7 +67,7 @@ export default async (req: Request, context: Context) => {
       }
     }
 
-    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+    void writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       organizationId: invite.organization_id,
       inviteId: invite.id,
       partyType: invite.party_type,
@@ -81,7 +81,7 @@ export default async (req: Request, context: Context) => {
     });
   } catch (error) {
     const message = sanitizeUserFacingError(error, "Portal export could not be started.");
-    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+    void writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       email: auditEmail,
       eventType: "portal_export_start",
       status: "failed",

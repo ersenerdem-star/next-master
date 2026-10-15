@@ -10,7 +10,12 @@ const TARGETS = {
   v3: { ref: V3_REF, url: V3_URL, flag: "NM_V3_EXPORT_BRIDGE", targetError: "EXACT_V3_REQUIRED" },
   production: { ref: PROD_REF, url: PROD_URL, flag: "NM_PRODUCTION_EXPORT_BRIDGE", targetError: "EXACT_PRODUCTION_REQUIRED" },
 } as const;
-const WORKER_TIMESTAMP_WINDOW_MS = 60_000;
+// Netlify Background Functions can be accepted with HTTP 202 and start after
+// a queue delay.  A one-minute signature window rejected valid continuations
+// after the first invocation had already checkpointed the job.  The window is
+// bounded by the background execution horizon; the job lease and advisory
+// lock still prevent duplicate work when an old handoff eventually arrives.
+const WORKER_TIMESTAMP_WINDOW_MS = 15 * 60_000;
 
 export function targetConfig() {
   const url = Netlify.env.get("SUPABASE_URL");

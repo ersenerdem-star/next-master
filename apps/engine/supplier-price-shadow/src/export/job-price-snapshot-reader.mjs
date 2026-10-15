@@ -145,10 +145,14 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
       const pageResult=await withShortTransaction(async client=>{
         const timing={pricingRpcMs:0,replacementLookupMs:0,snapshotInsertMs:0};
         // Resolve account pricing and permissions in the same repeatable-read
-        // transaction as the rows being captured for this page.
+        // transaction as the rows being captured for this page.  The source
+        // version is fenced at invocation start and again before sealing (and
+        // at the start of every continuation).  Recomputing the full legacy
+        // fingerprint on every 5,000-row page made a large export pay the
+        // same O(N) scan ten or more times without improving publication
+        // safety: a changed source is rejected by the final fence.
         const live=await authority(client,jobId);if(live.authorityDigest!==a.authorityDigest)fail('AUTHORITY_CHANGED');
         await assertWriteLease(client,jobId);
-        await assertSourceVersion(client,live);
         const pricingStarted=performance.now();
         const page=(await client.query(`select normalized_code,product_code,brand,description,sales_price::text,price_date::text,lifecycle_status,total_count::text
           from public.${fn}($1,$2,$3,$4,null,$5,$6)`,[a.job.organization_id,a.brand.id,a.context.priceListType==='Other'?'A':a.context.priceListType,a.context.margin,after,pageSize])).rows;

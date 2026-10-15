@@ -36,7 +36,7 @@ export default async (req: Request) => {
     if (job.status !== "finalized") return new Response("Export file is not ready yet.", { status: 409 });
 
     const response = await downloadExportArtifact(supabaseUrl, serviceRoleKey, job);
-    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+    void writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       organizationId: invite.organization_id,
       inviteId: invite.id,
       partyType: invite.party_type,
