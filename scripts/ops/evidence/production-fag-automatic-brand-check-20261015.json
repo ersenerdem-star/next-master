@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-15",
+  "project_ref": "zjgueqijumzlfioihnkt",
+  "task": "FAG pending brand comparison / verified completion automatic audit",
+  "release": {
+    "id": "1e847714-85e2-4679-a5c4-156c39581da4",
+    "supplier": "Romany",
+    "brand": "FAG",
+    "status": "validated",
+    "total_rows": 7037,
+    "accepted_rows": 7037,
+    "rejected_rows": 0,
+    "warning_rows": 0,
+    "conflict_rows": 0,
+    "error_code": null,
+    "checked": true,
+    "review_required": false,
+    "review_revision": 1,
+    "current_pointer_count": 0
+  },
+  "review_queue": {
+    "decision_id": "e04b66c2-e8fe-4472-be9d-424496fff644",
+    "status": "completed",
+    "receipt_status": "rechecked_clear",
+    "published": false,
+    "completed_at": "2026-10-15T18:09:29.543382Z"
+  },
+  "change": {
+    "migration": "supabase/migrations/20261015181100_supplier_verified_completion_brand_audit.sql",
+    "sha256": "6fa3f04680d6c608f71540a7f781a4a8d88fdeb29e9fc6172c37f6ef0c2a0066",
+    "applied": true,
+    "new_staged_imports": "Cross-brand audit runs after exact persisted-row integrity; clean imports no longer require a separate brand-check request.",
+    "serialization": "Existing organization identity advisory lock before release row lock; read committed required.",
+    "review_replays": "Previously validated audits/errors/review revisions preserved; no duplicate validation event.",
+    "publication": "Explicit decision and fresh publication identity gate unchanged; no publication performed."
+  },
+  "validation": {
+    "targeted_tests": 47,
+    "failures": 0,
+    "sql_engine": "PGlite with real existing cross-brand audit function and isolated fixture data",
+    "production_worker_completion_rpc": {
+      "http": 200,
+      "publishable": true,
+      "mode": "Existing validated FAG receipt replay; not a new upload E2E"
+    },
+    "production_audit_read_only_execution_ms": 358.279,
+    "security_advisors_before": 3,
+    "security_advisors_after": 3,
+    "new_security_findings": 0
+  },
+  "operational_notes": [
+    "One direct full-validator REST request timed out (57014); normal queued admin review independently completed successfully. No timeout bypass or role/security change applied.",
+    "New staged-to-validated automatic branch tested in isolated PostgreSQL; production confirms deployment, ACL, existing-release replay and current FAG readiness. No synthetic production release created."
+  ],
+  "screenshot": "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/fag-upload-ready/production.png",
+  "deployment": {
+    "frontend": "No change; remains f73a4ef8",
+    "worker": "No change; remains 544095b0",
+    "legacy_auto_validation_flag": "Unchanged; remains disabled"
+  }
+}
