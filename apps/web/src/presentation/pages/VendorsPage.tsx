@@ -17,7 +17,7 @@ import { useI18n } from "../../i18n/I18nProvider";
 
 type VendorTab = "Other Details" | "Address" | "Contact Persons" | "Custom Fields" | "Reporting Tags" | "Remarks";
 
-export function VendorsPage() {
+export function VendorsPage({ onOpenSupplierPrices }: { onOpenSupplierPrices?: () => void } = {}) {
   const { t } = useI18n();
   const p = (key: string, params?: Record<string, string | number>) => t(`purchases.${key}`, params);
   const actionFeedback = useActionFeedback();
@@ -252,7 +252,7 @@ export function VendorsPage() {
       <div className="page-stack">
         <div className="module-tabs">
           {(["Vendor Directory", "Supplier Prices"] as const).map((item) => (
-            <button key={item} className={`module-tab${activeMode === item ? " active" : ""}`} onClick={() => setActiveMode(item)}>
+            <button key={item} className={`module-tab${activeMode === item ? " active" : ""}`} onClick={() => item === "Supplier Prices" && onOpenSupplierPrices ? onOpenSupplierPrices() : setActiveMode(item)}>
               {item === "Vendor Directory" ? p("vendors.tabs.directory") : p("vendors.tabs.supplierPrices")}
             </button>
           ))}
@@ -266,7 +266,7 @@ export function VendorsPage() {
     <div className="page-stack">
         <div className="module-tabs">
           {(["Vendor Directory", "Supplier Prices"] as const).map((item) => (
-            <button key={item} className={`module-tab${activeMode === item ? " active" : ""}`} onClick={() => setActiveMode(item)}>
+            <button key={item} className={`module-tab${activeMode === item ? " active" : ""}`} onClick={() => item === "Supplier Prices" && onOpenSupplierPrices ? onOpenSupplierPrices() : setActiveMode(item)}>
               {item === "Vendor Directory" ? p("vendors.tabs.directory") : p("vendors.tabs.supplierPrices")}
             </button>
           ))}

@@ -1,3 +1,4 @@
+import { commercialUpgradeEnabled } from "../../shared/commercialUpgrade";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { markupMoney } from "../../../../../shared/order-money.mjs";
 import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastructure/api/companyProfilesApi";
@@ -12,7 +13,7 @@ import {
   fetchSalesOrderById,
   fetchSalesOrderSummaries,
   markSalesOrderPortalSeen,
-  replacePurchaseOrdersForSalesOrder,
+  confirmSalesOrderWithPurchases,
   upsertInvoice,
   upsertSalesOrder,
 } from "../../infrastructure/api/ordersApi";
@@ -29,9 +30,12 @@ import { buildBrandResolutionLookup, resolveCanonicalBrandName } from "../../sha
 import { parseCsv } from "../../shared/csv";
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import { consumeCatalogTransfer, PENDING_CATALOG_SALES_ITEM_KEY } from "../../shared/catalogTransfer";
-import { buildInvoiceFromSalesOrder, buildLocalSalesOrder, buildPurchaseOrdersFromSalesOrder } from "../../shared/localOrders";
+import { buildInvoiceFromSalesOrder, buildLocalSalesOrder } from "../../shared/localOrders";
+import { hydrateSalesOrderLines } from "../../shared/hydrateSalesOrderLines";
+import { salesOrderTotals, multiplyMoney } from "../../../../../shared/order-money.mjs";
 import { resyncSalesOrderLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
-import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
+import { buildXlsxBlobAsync, downloadBlob } from "../../shared/xlsx";
+import { buildDocumentWorksheet } from "../../shared/documentExport";
 import { buildBusinessDocumentHtml, openBusinessDocumentPreview } from "../../shared/documentPrint";
 import { buildEntityAlias } from "../../shared/entityAlias";
 import { Select } from "../components/common/Select";
@@ -772,7 +776,7 @@ function buildDraftQuoteHtml(input: {
     ],
     lines: input.lines.map((line) => {
       const sellUnit = toNumber(line.sell_price);
-      const total = roundMoney(sellUnit * line.qty);
+      const total = multiplyMoney(sellUnit, line.qty);
       return {
         code: line.resolvedCode,
         oldCode: line.codeChanged ? line.requestedCode : "",
@@ -862,6 +866,7 @@ export function QuotesPage({
   const [printingDraft, setPrintingDraft] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [confirmingOrder, setConfirmingOrder] = useState(false);
+  const confirmationAttemptRef = useRef<{ fingerprint: string; order: LocalSalesOrder; decisionId: string } | null>(null);
   const [showProductConflictReview, setShowProductConflictReview] = useState(false);
   const [resyncingCatalog, setResyncingCatalog] = useState(false);
   const [resyncOnlyFillBlanks, setResyncOnlyFillBlanks] = useState(true);
@@ -893,7 +898,8 @@ export function QuotesPage({
 
   const selectedCustomerProfile = useMemo(() => {
     const customerLabel = customerSelection === "__manual__" ? manualCustomerName : customerSelection;
-    return customerLabel ? findCustomerByNameInList(customers, customerLabel) : null;
+    return customers.find((customer) => customer.id === customerLabel) ||
+      (customerLabel ? findCustomerByNameInList(customers, customerLabel) : null);
   }, [customers, customerSelection, manualCustomerName]);
   const resolvedCustomerName = useMemo(() => {
     if (customerSelection === "__manual__") return manualCustomerName.trim();
@@ -1573,10 +1579,6 @@ export function QuotesPage({
 
   const customerOptions = useMemo(() => {
     const names = new Set<string>();
-    customers.forEach((customer) => {
-      if (customer.display_name) names.add(customer.display_name);
-      else if (customer.company_name) names.add(customer.company_name);
-    });
     quotes.forEach((quote) => {
       if (quote.customer_name) names.add(String(quote.customer_name));
     });
@@ -1586,7 +1588,16 @@ export function QuotesPage({
     if (customerName.trim()) names.add(customerName.trim());
     return [
       { value: "", label: t("common.select") },
+      ...customers.map((customer) => {
+        const name = customer.display_name || customer.company_name;
+        const duplicate = customers.filter((item) =>
+          (item.display_name || item.company_name).trim().toLowerCase() === name.trim().toLowerCase()).length > 1;
+        return { value: customer.id, label: duplicate ? `${name} · ${customer.id.slice(-8)}` : name };
+      }).sort((a, b) => a.label.localeCompare(b.label)),
       ...Array.from(names)
+        .filter((name) => !customers.some((item) =>
+          item.display_name.trim().toLowerCase() === name.trim().toLowerCase() ||
+          item.company_name.trim().toLowerCase() === name.trim().toLowerCase()))
         .sort((a, b) => a.localeCompare(b))
         .map((name) => ({ value: name, label: name })),
       { value: "__manual__", label: t("common.manualEntry") },
@@ -1753,6 +1764,9 @@ export function QuotesPage({
     const editorOrder = {
       ...detailOrder,
       buyer_info: detailOrder.buyer_info || detailOrder.purchase_company || "",
+      supplier_mode: detailOrder.supplier_mode || "Best price",
+      currency: detailOrder.currency || "EUR",
+      lines: hydrateSalesOrderLines(detailOrder.lines || [], detailOrder.id),
     };
     setWorkbenchMode("existing");
     setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(editorOrder));
@@ -1761,17 +1775,17 @@ export function QuotesPage({
     onSelectedQuoteChange?.("");
     setQuoteNo(detailOrder.sales_order_no);
     setCustomerName(detailOrder.customer_name);
-    setCustomerSelection(detailOrder.customer_name || "");
+    setCustomerSelection(detailOrder.customer_id || detailOrder.customer_name || "");
     setManualCustomerName("");
     setSellerCompany(detailOrder.seller_company || "");
     setQuoteDate(detailOrder.quote_date);
-    setCurrency(detailOrder.currency || "EUR");
+    setCurrency(editorOrder.currency);
     setQuoteBrand("");
     setQuoteBrandSelection("");
     setCustomerType(detailOrder.customer_type);
     setShippingCost(String(detailOrder.shipping_cost ?? 0));
     setDiscountAmount(String(detailOrder.discount_amount ?? 0));
-    setSupplierMode(detailOrder.supplier_mode || "Best price");
+    setSupplierMode(editorOrder.supplier_mode);
     setSellerInfo(detailOrder.seller_info || "");
     setBuyerInfo(editorOrder.buyer_info);
     setDeliveryTermSelection(toTermSelection(detailOrder.delivery_term || "", DELIVERY_TERM_OPTIONS));
@@ -1781,7 +1795,7 @@ export function QuotesPage({
     setPackingDetails(detailOrder.packing_details || "");
     setQuoteNotes(detailOrder.notes || "");
     actionFeedback.begin(t("sales.orders.loadingOrder", { salesOrderNo: detailOrder.sales_order_no }));
-    const clonedLines = (detailOrder.lines || []).map((line) => ({ ...line }));
+    const clonedLines = editorOrder.lines.map((line) => ({ ...line }));
     if (detailOrder.source_channel === "portal" && detailOrder.portal_submitted_at && !detailOrder.portal_seen_at) {
       try {
         const seenOrder = await markSalesOrderPortalSeen(detailOrder.id);
@@ -1881,11 +1895,12 @@ export function QuotesPage({
     }
   }
 
-  function buildSalesOrderPayload(status: "draft" | "confirmed") {
-    return buildLocalSalesOrder({
+  function buildSalesOrderInput(status: "draft" | "confirmed") {
+    return {
       id: selectedLocalSalesOrderId || undefined,
       sales_order_no: quoteNo.trim() || `SO-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Date.now().toString().slice(-4)}`,
       customer_name: resolvedCustomerName,
+      customer_id: selectedCustomerProfile?.id ?? null,
       seller_company: sellerCompany.trim(),
       purchase_company: buyerInfo.trim(),
       quote_date: quoteDate,
@@ -1903,14 +1918,19 @@ export function QuotesPage({
       notes: quoteNotes.trim(),
       status,
       lines: quoteBuilderLines,
-    });
+    };
   }
 
-  function serializeSalesOrderForDirtyCheck(order: LocalSalesOrder | null) {
+  function buildSalesOrderPayload(status: "draft" | "confirmed") {
+    return buildLocalSalesOrder(buildSalesOrderInput(status));
+  }
+
+  function serializeSalesOrderForDirtyCheck(order: Partial<LocalSalesOrder> | null) {
     if (!order) return "";
     return JSON.stringify({
       sales_order_no: order.sales_order_no || "",
       customer_name: order.customer_name || "",
+      customer_id: order.customer_id ?? null,
       seller_company: order.seller_company || "",
       purchase_company: order.purchase_company || "",
       quote_date: order.quote_date || "",
@@ -1948,7 +1968,7 @@ export function QuotesPage({
   }
 
   const salesOrderDraftSnapshot = useMemo(
-    () => serializeSalesOrderForDirtyCheck(buildSalesOrderPayload(currentLocalSalesOrder?.status === "confirmed" ? "confirmed" : "draft")),
+    () => serializeSalesOrderForDirtyCheck(buildSalesOrderInput(currentLocalSalesOrder?.status === "confirmed" ? "confirmed" : "draft")),
     [
       currentLocalSalesOrder?.status,
       selectedLocalSalesOrderId,
@@ -2542,78 +2562,27 @@ export function QuotesPage({
     }
   }
 
-  function handleExportQuoteXlsx() {
-    if (!quoteBuilderLines.length) {
-      actionFeedback.fail("Add quote lines first.");
-      return;
-    }
+  async function handleExportQuoteXlsx() {
     setExportingXlsx(true);
     try {
-      actionFeedback.begin(`Preparing Sales Order Excel for ${quoteBuilderLines.length.toLocaleString("en-US")} line(s)...`);
-      const rows: Array<Array<string | number>> = [
-        ["Sales Order No", quoteNo],
-        ["Customer", resolvedCustomerName],
-        ["Date", quoteDate],
-        ["Currency", currency],
-        ["Customer Type", customerType],
-        ["Seller Company", sellerCompany],
-        ["Purchase Company", buyerInfo],
-        ["Purchase Company", buyerInfo],
-        ["Supplier Mode", supplierMode],
-        ["Delivery Term", deliveryTerm],
-        ["Payment Terms", paymentTerms],
-        [],
-        ["Line", "Part No", "Old Code", "Changed No Warning", "Lifecycle Status", "Lifecycle Warning", "Brand", "Description", "OEM", "HS", "Origin", "Weight kg", "Qty", "Supplier", "Price Date", "Buy Unit", "Buy Total", "Sell Unit", "Sell Total", "Profit", "Margin %", "Notes"],
-      ];
-
-      quoteBuilderLines.forEach((line, index) => {
-        const buyUnit = roundMoney(toNumber(line.buy_price));
-        const buyTotal = roundMoney(buyUnit * line.qty);
-        const sellUnit = roundMoney(toNumber(line.sell_price));
-        const sellTotal = roundMoney(sellUnit * line.qty);
-        const profit = roundMoney(sellTotal - buyTotal);
-        const margin = sellTotal > 0 ? roundMoney((profit / sellTotal) * 100) : 0;
-        rows.push([
-          index + 1,
-          line.resolvedCode,
-          line.codeChanged ? line.requestedCode : "",
-          line.codeChangeWarning,
-          line.lifecycle_status === "discontinued" ? "Discontinued" : "Active",
-          line.lifecycle_warning || "",
-          line.brand,
-          line.description,
-          line.oem_no,
-          line.hs_code,
-          line.origin,
-          line.weight_kg ?? "",
-          line.qty,
-          line.supplier_name,
-          line.price_date,
-          buyUnit,
-          buyTotal,
-          sellUnit,
-          sellTotal,
-          profit,
-          margin,
-          line.notes,
-        ]);
+      actionFeedback.begin("Checking Sales Order totals and preparing Excel...");
+      const model = buildDocumentWorksheet({
+        kind: "sales-order", audience: "admin", number: quoteNo || "sales-order-draft",
+        party: resolvedCustomerName, currency, date: quoteDate,
+        status: currentLocalSalesOrder?.status || String(detail.quote?.status || "draft"),
+        lines: quoteBuilderLines.map((line) => ({
+          code: line.resolvedCode, brand: line.brand, description: line.description,
+          qty: line.qty, unitPrice: Number(line.sell_price || 0),
+          origin: line.origin, weight: line.weight_kg, tariff: line.hs_code,
+        })),
+        shipping: draftTotals.shipping, discount: draftTotals.discount, total: draftTotals.totalAmount,
       });
-      rows.push([]);
-      rows.push(["Purchase Total", draftTotals.purchase]);
-      rows.push(["Subtotal", draftTotals.subtotal]);
-      rows.push(["Discount", draftTotals.discount]);
-      rows.push(["Shipping", draftTotals.shipping]);
-      rows.push(["Total Amount", draftTotals.totalAmount]);
-      rows.push(["Profit", draftTotals.profit]);
-      rows.push(["Margin %", draftTotals.margin]);
-      const blob = buildXlsxBlob("Sales Order Draft", rows, [11, 12, 15, 16, 17, 18, 19, 20]);
+      const blob = await buildXlsxBlobAsync("Sales Order", model.rows, model.numericColumns, model.options);
       downloadBlob(`${(quoteNo || "sales-order-draft").replace(/[^a-z0-9_-]+/gi, "-")}.xlsx`, blob);
-      actionFeedback.succeed("Sales order Excel downloaded.");
+      actionFeedback.succeed("Sales order Excel download started.");
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Sales order Excel export failed");
-    } finally {
-      setExportingXlsx(false);
-    }
+    } finally { setExportingXlsx(false); }
   }
 
   function handlePrintDraftPdf() {
@@ -3066,9 +3035,18 @@ export function QuotesPage({
       actionFeedback.begin(t("sales.orders.confirmingAndCreatingPurchaseOrders", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
       await assertCurrentPricesBeforeConfirmation(quoteBuilderLines, customerType, effectiveMarginA, effectiveMarginB, currency);
       const order = buildSalesOrderPayload("confirmed");
-      const saved = await upsertSalesOrder(order);
-      const purchaseOrders = buildPurchaseOrdersFromSalesOrder(saved);
-      await replacePurchaseOrdersForSalesOrder(saved.id, purchaseOrders);
+      // Reject locally invalid inputs before recording an ambiguous network
+      // attempt; users must be able to correct missing prices immediately.
+      salesOrderTotals(order.lines, order.shipping_cost, order.discount_amount, true);
+      const fingerprint = JSON.stringify({ ...order, id: selectedLocalSalesOrderId || "", sales_order_no: quoteNo.trim(), created_at: "", updated_at: "", confirmed_at: "" });
+      const pending = confirmationAttemptRef.current;
+      if (pending && pending.fingerprint !== fingerprint) {
+        throw new Error("The previous confirmation result must be checked before changing the order. Reload its status first.");
+      }
+      const attempt = pending || { fingerprint, order, decisionId: crypto.randomUUID() };
+      confirmationAttemptRef.current = attempt;
+      const { salesOrder: saved, purchaseOrders } = await confirmSalesOrderWithPurchases(attempt.order, attempt.decisionId);
+      confirmationAttemptRef.current = null;
       const seenOrder =
         saved.source_channel === "portal" && saved.portal_submitted_at ? await markSalesOrderPortalSeen(saved.id) : null;
       const effectiveOrder = seenOrder || saved;
@@ -3352,7 +3330,7 @@ export function QuotesPage({
             <Button variant="secondary" onClick={() => void handleSaveDraft()} busy={savingDraft} busyLabel={t("sales.orders.savingDraft")}>
               {t("sales.orders.saveDraft")}
             </Button>
-            <Button onClick={() => void handleMarkConfirmed()} busy={confirmingOrder} busyLabel={t("sales.orders.confirming")}>
+            <Button disabled={!commercialUpgradeEnabled()} title={!commercialUpgradeEnabled() ? t("sales.orders.commercialUpgradePending") : undefined} onClick={() => void handleMarkConfirmed()} busy={confirmingOrder} busyLabel={t("sales.orders.confirming")}>
               {t("sales.orders.markConfirmed")}
             </Button>
             <Button variant="secondary" className="danger-button" onClick={clearDraft}>
@@ -3385,14 +3363,15 @@ export function QuotesPage({
                     <div className="invoice-customer-field">
                       <Select
                         label={t("sales.orders.customer")}
-                        value={customerSelection}
+                        value={customerSelection === "__manual__" ? customerSelection : selectedCustomerProfile?.id || customerSelection}
                         options={customerOptions}
                         onChange={(value) => {
                           setCustomerSelection(value);
                           if (value !== "__manual__") {
-                            setCustomerName(value);
-                            const customer = findCustomerByNameInList(customers, value);
-                            setSellerInfo(customer?.contract_nr || customerContractMap.get(String(value).trim().toLowerCase()) || "");
+                            const customer = customers.find((item) => item.id === value) || findCustomerByNameInList(customers, value);
+                            const name = customer?.display_name || customer?.company_name || value;
+                            setCustomerName(name);
+                            setSellerInfo(customer?.contract_nr || customerContractMap.get(name.trim().toLowerCase()) || "");
                             if (customer?.currency) setCurrency(customer.currency);
                             if (customer?.payment_terms) {
                               setPaymentTermsSelection(toTermSelection(customer.payment_terms, PAYMENT_TERM_OPTIONS));

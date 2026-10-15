@@ -4,6 +4,7 @@ import { supabaseClient } from "../infrastructure/api/supabaseClient";
 import { touchCurrentUserPresence } from "../infrastructure/api/usersApi";
 import { ActionFeedbackProvider } from "../presentation/components/common/ActionFeedback";
 import { AppShell } from "../presentation/layout/AppShell";
+import { resolveWorkspaceDestination, type WorkspaceSections } from "../modules/admin/workspaceNavigation";
 import { useI18n } from "../i18n/I18nProvider";
 import { APP_NAVIGATION_EVENT, type AppNavigationDetail } from "../shared/catalogTransfer";
 import { reconcileAppStorage } from "../shared/storageHygiene";
@@ -69,6 +70,7 @@ const salesSubNav = [
 
 const purchasesSubNav = [
   { key: "Vendors", labelKey: "nav.vendors" },
+  { key: "Supplier Prices", labelKey: "purchases.vendors.tabs.supplierPrices" },
   { key: "Purchase Orders", labelKey: "nav.purchaseOrders" },
   { key: "Bills", labelKey: "nav.bills" },
   { key: "Payments Made", labelKey: "nav.paymentsMade" },
@@ -104,7 +106,7 @@ type PersistedAppUiState = {
   inventorySelectedWarehouseId?: string;
   inventoryStockSearch?: string;
   salesTab?: "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists";
-  purchasesTab?: "Vendors" | "Purchase Orders" | "Bills" | "Payments Made";
+  purchasesTab?: "Vendors" | "Supplier Prices" | "Purchase Orders" | "Bills" | "Payments Made";
   reportsTab?: ReportsTab;
   settingsTab?: "session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics";
 };
@@ -226,6 +228,7 @@ export function App() {
   const initialAppDepartment = String(initialAppSession?.department || "viewer");
   const [sessionReady, setSessionReady] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [appEmail, setAppEmail] = useState(initialAppSession?.email || "");
   const [appRole, setAppRole] = useState<AppRole>(initialAppRole);
   const [appDepartment, setAppDepartment] = useState<AppDepartment>(initialAppDepartment);
   const [appPermissions, setAppPermissions] = useState<AppPermissionMap>(initialAppSession?.permissions || {});
@@ -248,7 +251,7 @@ export function App() {
   const [inventorySelectedWarehouseId, setInventorySelectedWarehouseId] = useState(initialUiState?.inventorySelectedWarehouseId || "");
   const [inventoryStockSearch, setInventoryStockSearch] = useState(initialUiState?.inventoryStockSearch || "");
   const [salesTab, setSalesTab] = useState<"Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists">(initialUiState?.salesTab || "Sales Orders");
-  const [purchasesTab, setPurchasesTab] = useState<"Vendors" | "Purchase Orders" | "Bills" | "Payments Made">(initialUiState?.purchasesTab || "Vendors");
+  const [purchasesTab, setPurchasesTab] = useState<"Vendors" | "Supplier Prices" | "Purchase Orders" | "Bills" | "Payments Made">(initialUiState?.purchasesTab || "Vendors");
   const [reportsTab, setReportsTab] = useState<ReportsTab>(initialUiState?.reportsTab || "Procurement Dashboard");
   const [settingsTab, setSettingsTab] = useState<"session" | "users" | "companies" | "portals" | "templates" | "emails" | "diagnostics">(initialUiState?.settingsTab || "session");
 
@@ -295,10 +298,12 @@ export function App() {
       if (!mounted) return;
       setRecoveryMode(isRecoveryLink);
       setLoggedIn(Boolean(data.session) && !isRecoveryLink);
+      setAppEmail(data.session?.user.email || "");
       setSessionReady(true);
     });
 
     const { data } = supabaseClient.auth.onAuthStateChange((event, session) => {
+      setAppEmail(session?.user.email || "");
       if (event === "PASSWORD_RECOVERY") {
         clearCachedAppSession();
         setAppRole("");
@@ -382,6 +387,7 @@ export function App() {
       try {
         const session = await fetchAppSession(true);
         if (cancelled) return;
+        setAppEmail(session.email);
         setAppRole(normalizeAppRole(session.role));
         setAppDepartment(String(session.department || "viewer"));
         setAppPermissions(session.permissions || {});
@@ -680,7 +686,7 @@ export function App() {
         showAccessNotice(t("errors.purchaseDetailAccessDenied"));
         return;
       }
-      setPurchasesTab(nextSubPage as "Vendors" | "Purchase Orders" | "Bills" | "Payments Made");
+      setPurchasesTab(nextSubPage as "Vendors" | "Supplier Prices" | "Purchase Orders" | "Bills" | "Payments Made");
       return;
     }
     if (activePage === "Reports" && reportsSubNav.some((item) => item.key === nextSubPage)) {
@@ -748,7 +754,7 @@ export function App() {
     if (purchasesSubNavItems.length && !purchasesSubNavItems.some((item) => item.key === purchasesTab)) {
       const firstItem = purchasesSubNavItems[0];
       if (firstItem) {
-        setPurchasesTab(firstItem.key as "Vendors" | "Purchase Orders" | "Bills" | "Payments Made");
+        setPurchasesTab(firstItem.key as "Vendors" | "Supplier Prices" | "Purchase Orders" | "Bills" | "Payments Made");
       }
     }
   }, [purchasesSubNavItems, purchasesTab]);
@@ -814,19 +820,29 @@ export function App() {
                 ? settingsTab
                 : "";
 
+  const localizeSections = (items: readonly { key: string; labelKey: string }[]) =>
+    items.map((item) => ({ key: item.key, label: t(item.labelKey) }));
+  const pageSections: WorkspaceSections = {
+    Items: localizeSections(itemSubNav), CatalogReview: localizeSections(catalogReviewSubNav),
+    Inventory: localizeSections(inventorySubNavItems), Sales: localizeSections(salesSubNavItems),
+    Purchases: localizeSections(purchasesSubNavItems), Reports: localizeSections(reportsSubNavItems),
+    Settings: localizeSections(settingsSubNavItems),
+  };
+
   function handleDashboardNavigate(page: string, subPage?: string) {
-    // Set the destination tab before switching the page. This keeps dashboard
-    // reference cards useful without relying on a second render's activePage.
-    if (page === "Items" && (subPage === "Catalog" || subPage === "Code References")) {
-      setItemsTab(subPage);
-    } else if (page === "Sales" && ["Customers", "Sales Orders", "Invoices", "Payments Received", "Price Lists"].includes(subPage || "")) {
-      setSalesTab(subPage as "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists");
-    } else if (page === "Purchases" && ["Vendors", "Purchase Orders", "Bills", "Payments Made"].includes(subPage || "")) {
-      setPurchasesTab(subPage as "Vendors" | "Purchase Orders" | "Bills" | "Payments Made");
-    } else if (page === "Reports" && ["Core Reports", "Procurement Dashboard", "Inventory Analytics", "Master"].includes(subPage || "")) {
-      setReportsTab(subPage as ReportsTab);
+    const destination = resolveWorkspaceDestination(page, subPage, allowedNavItems, pageSections);
+    if (!destination) {
+      showAccessNotice(t("errors.areaAccessDenied"));
+      return;
     }
-    handleMainNavigate(page);
+    handleMainNavigate(destination.page);
+    const section = destination.section;
+    if (page === "Items" && section) setItemsTab(section as typeof itemsTab);
+    else if (page === "Inventory" && section) setInventoryInitialTab(section as typeof inventoryInitialTab);
+    else if (page === "Sales" && section) setSalesTab(section as typeof salesTab);
+    else if (page === "Purchases" && section) setPurchasesTab(section as typeof purchasesTab);
+    else if (page === "Reports" && section) setReportsTab(section as ReportsTab);
+    else if (page === "Settings" && section) setSettingsTab(section as typeof settingsTab);
   }
 
   if (isPortalRoute) {
@@ -878,6 +894,7 @@ export function App() {
       <InventoryPage initialTab={inventoryInitialTab} selectedWarehouseId={inventorySelectedWarehouseId} stockSearch={inventoryStockSearch} />
     ) : activePage === "Sales" && canAccessSalesModules(appRole, appDepartment) ? (
       <SalesPage
+        onNavigateTab={setSalesTab}
         activeTab={salesTab}
         salesOrdersNavTick={salesOrdersNavTick}
         invoicesNavTick={salesInvoicesNavTick}
@@ -889,9 +906,10 @@ export function App() {
         onSelectedInvoiceChange={setSelectedInvoiceId}
       />
     ) : activePage === "Purchases" && canAccessPurchasingModules(appRole, appDepartment) ? (
-      <PurchasesPage activeTab={purchasesTab} selectedPurchaseOrderId={selectedPurchaseOrderId} selectedBillId={selectedBillId} />
+      <PurchasesPage onNavigateTab={setPurchasesTab} activeTab={purchasesTab} selectedPurchaseOrderId={selectedPurchaseOrderId} selectedBillId={selectedBillId} />
     ) : activePage === "Reports" && canAccessReportModules(appRole, appDepartment) ? (
       <ReportsPage
+        onOpenSupplierPrices={() => handleDashboardNavigate("Purchases", "Supplier Prices")}
         activeTab={reportsTab}
         onOpenSalesOrder={openSalesOrder}
         onOpenPurchaseOrder={openPurchaseOrder}
@@ -912,6 +930,10 @@ export function App() {
   return (
     <ActionFeedbackProvider>
       <AppShell
+        pageSections={pageSections}
+        onNavigateTarget={handleDashboardNavigate}
+        userEmail={appEmail}
+        userRole={appRole}
         activePage={shellActivePage}
         activeSubPage={activeSubPage}
         notice={accessNotice}

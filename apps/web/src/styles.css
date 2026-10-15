@@ -12961,10 +12961,11 @@ body {
 .topbar-icon-button { position: relative; display: grid; width: 34px; height: 34px; place-items: center; border: 0; background: transparent; color: #152844; cursor: pointer; }
 .topbar-icon-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
 .topbar-icon-button::after { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border: 2px solid #fff; border-radius: 50%; background: #f39a1d; content: ""; }
-.topbar-profile { display: flex; align-items: center; gap: 10px; min-width: 150px; color: var(--admin-ink); }
+.topbar-profile { display: flex; align-items: center; gap: 10px; min-width: 150px; max-width: 360px; padding: 0; border: 0; background: transparent; color: var(--admin-ink); text-align: left; cursor: pointer; }
+.topbar-profile:focus-visible { outline: 2px solid var(--admin-blue, #2877b8); outline-offset: 5px; border-radius: 8px; }
 .topbar-profile__avatar { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 50%; background: #61738c; color: #fff; font-size: 13px; font-weight: 800; }
 .topbar-profile__copy { display: grid; gap: 1px; min-width: 0; }
-.topbar-profile__copy strong { font-size: 13px; font-weight: 700; white-space: nowrap; }
+.topbar-profile__copy strong { overflow: hidden; text-overflow: ellipsis; font-size: 13px; font-weight: 700; white-space: nowrap; }
 .topbar-profile__copy span,
 .topbar-profile__copy small { color: #70839a; font-size: 11px; white-space: nowrap; }
 .topbar-profile__chevron { color: #546b85; font-size: 16px; }

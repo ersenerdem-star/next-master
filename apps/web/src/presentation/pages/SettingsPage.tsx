@@ -539,6 +539,22 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   );
   const selectedPortalBrands = brandOptions.filter((brand) => portalDraft.allowed_brand_ids.includes(brand.id));
 
+  function editPortalInvite(row: PortalInvite) {
+    setActiveTab("portals");
+    setPortalDraft({
+      ...row,
+      allowed_brand_ids: [...row.allowed_brand_ids],
+      access: { ...row.access },
+    });
+    setPortalBrandSearch("");
+    setPortalStatus(s("portal.feedback.editingFor", { party: row.party_name }));
+    // The editor is above the table; make the selected record immediately
+    // visible instead of forcing the admin to scroll and re-select it.
+    window.requestAnimationFrame(() => {
+      document.getElementById("portal-access-editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   const outboundColumns = [
     { key: "template", header: s("columns.template"), render: (row: OutboundEmail) => row.template_key },
     { key: "recipient", header: s("columns.recipient"), render: (row: OutboundEmail) => row.recipient_name || "-" },
@@ -732,6 +748,13 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
       header: s("columns.actions"),
       render: (row: PortalInvite) => (
         <div className="inline-actions">
+          <Button
+            variant="secondary"
+            className="button--compact"
+            onClick={() => editPortalInvite(row)}
+          >
+            {s("actions.edit")}
+          </Button>
           <Button
             variant="secondary"
             className="button--compact"
@@ -1287,6 +1310,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
         </div>
       </SectionCard> : null}
       {activeTab === "portals" ? <SectionCard title={s("portal.title")}>
+        <div id="portal-access-editor">
         <div className="settings-grid">
           <Select
             label={s("portal.fields.portalType")}
@@ -1498,7 +1522,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               }
             }}
           >
-            {s("portal.actions.saveAccess")}
+            {isUuid(portalDraft.id) ? s("portal.actions.updateAccess") : s("portal.actions.saveAccess")}
           </Button>
           <Button variant="secondary" onClick={() => {
             setPortalDraft(createEmptyCloudPortalInvite());
@@ -1509,6 +1533,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
           </Button>
         </div>
         {portalStatus ? <div className="success-text">{portalStatus}</div> : null}
+        </div>
         <div className="meta-row">
           <span>{s("portal.meta.records", { count: portalInvites.length.toLocaleString("en-US") })}</span>
           <span>{s("portal.meta.accessHelp")}</span>

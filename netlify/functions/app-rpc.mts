@@ -1,6 +1,6 @@
 import type { Config, Context } from "@netlify/functions";
-import { buildRestUrl, getJson, HttpRequestError, json, readJson, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
-import { resolveCaller } from "./_shared/app-auth.mts";
+import { buildRestUrl, getJson, HttpRequestError, HttpTimeoutError, json, readJson, sendJson, serviceRoleHeaders } from "./_shared/http.mts";
+import { getAppAuthStatus, resolveCaller } from "./_shared/app-auth.mts";
 import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./_shared/catalog-standardization.mts";
 import { normalizeCatalogMarketSegment } from "./_shared/catalog/catalog-segments.mts";
 import { canAccessCustomerOps, canAccessOperationsModules, isSuperadminRole } from "./_shared/roles.mts";
@@ -9,6 +9,10 @@ import { cleanupCatalogStorageSource } from "./_shared/catalog-storage.mts";
 import { catalogStorageImportTargetEnabled } from "./_shared/catalog-import-target.mts";
 
 const ALLOWED_RPCS = new Set([
+  "reporting_customer_balance_by_brand_product",
+  "reporting_supplier_balance_by_brand_product",
+  "reporting_sales_margin_report",
+  "confirm_sales_order_with_purchases_atomic",
   "admin_list_org_users",
   "admin_list_org_users_with_access",
   "assert_legacy_supplier_price_write_allowed",
@@ -155,6 +159,7 @@ const OPERATIONS_RPCS = new Set([
 ]);
 
 const CUSTOMER_STAFF_RPCS = new Set([
+  "confirm_sales_order_with_purchases_atomic",
   "cloud_quote_supplier_options",
   "cloud_quote_supplier_options_v3",
   "cloud_quote_supplier_commercial_options_v3",
@@ -1129,10 +1134,18 @@ export default async (req: Request, context: Context) => {
     return json({ error: "System configuration is incomplete." }, 500);
   }
 
+  const startedAt = performance.now();
+  let phase = "auth";
+  let operation = "unknown";
+  let boundedPurchaseSave = false;
+  let rpcDispatched = false;
   try {
-    const caller = await resolveCaller(req, supabaseUrl, supabaseAnonKey, serviceRoleKey);
     const body = await req.json().catch(() => ({}));
     const name = String(body?.name || "").trim();
+    operation = ALLOWED_RPCS.has(name) ? name : "denied";
+    boundedPurchaseSave = name === "save_purchase_order_atomic";
+    const caller = await resolveCaller(req, supabaseUrl, supabaseAnonKey, serviceRoleKey);
+    phase = "authorization";
     const args = body?.args && typeof body.args === "object" ? body.args : {};
     const authorizationHeader = String(req.headers.get("authorization") || "");
 
@@ -1153,6 +1166,19 @@ export default async (req: Request, context: Context) => {
       if (!storageGateEnabled) {
         return json({ error: "Catalog Storage import is not enabled for this environment." }, 409);
       }
+    }
+
+    if (name === "confirm_sales_order_with_purchases_atomic" && Netlify.env.get("NM_COMMERCIAL_DOCUMENT_UPGRADE_ENABLED") !== "true") {
+      return json({ error: "Atomic order confirmation is not enabled for this environment.", code: "COMMERCIAL_UPGRADE_NOT_ENABLED" }, 409);
+    }
+
+    if (["reporting_customer_balance_by_brand_product", "reporting_supplier_balance_by_brand_product", "reporting_sales_margin_report"].includes(name)) {
+      if (args.p_organization_id && String(args.p_organization_id) !== caller.organizationId) {
+        return json({ error: "Report organization is not authorized." }, 403);
+      }
+      // Forward the real caller JWT, NEVER service-role authority. DB rechecks
+      // live profile, session, department/permissions and assigned customers.
+      args.p_organization_id = caller.organizationId;
     }
 
     if (SUPERADMIN_RPCS.has(name) && !isSuperadminRole(caller.role)) {
@@ -1436,6 +1462,12 @@ export default async (req: Request, context: Context) => {
       }
     }
 
+    // Complete server handling before the browser's 25s deadline. Never
+    // automatically retry a mutation: loss of response is not rollback proof.
+    const remainingMs = 22_000 - (performance.now() - startedAt);
+    if (boundedPurchaseSave && remainingMs <= 0) throw new HttpTimeoutError();
+    phase = "rpc";
+    rpcDispatched = true;
     const data = await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/${name}`, {
       method: "POST",
       headers: {
@@ -1444,11 +1476,21 @@ export default async (req: Request, context: Context) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(args),
+      ...(boundedPurchaseSave ? { timeoutMs: Math.max(1, remainingMs) } : {}),
     });
 
     return json({ ok: true, data });
   } catch (error) {
-    return json({ error: sanitizeUserFacingError(error, "The request could not be completed right now.") }, 400);
+    if (boundedPurchaseSave && error instanceof HttpTimeoutError) {
+      return json({ ok: false, code: rpcDispatched ? "RPC_OUTCOME_UNKNOWN" : "RPC_NOT_DISPATCHED",
+        error: rpcDispatched
+          ? "Save result could not be confirmed. Check the order status before saving again."
+          : "Save was not sent. The session check is unavailable; please try again shortly." }, 504);
+    }
+    return json({ error: sanitizeUserFacingError(error, "The request could not be completed right now.") }, getAppAuthStatus(error) || 400);
+  } finally {
+    if (boundedPurchaseSave) console.info(JSON.stringify({ event: "purchase-save-gateway", operation,
+      phase, rpcDispatched, durationMs: Math.round(performance.now() - startedAt) }));
   }
 };
 

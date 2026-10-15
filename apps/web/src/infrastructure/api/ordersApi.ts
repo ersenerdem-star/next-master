@@ -12,9 +12,13 @@ import { supabaseClient } from "./supabaseClient";
 import { getCurrentOrgId } from "./organizationApi";
 import { fetchWarehouses } from "./warehousesApi";
 import { callAppRpc } from "./appRpcApi";
+import { commercialUpgradeEnabled } from "../../shared/commercialUpgrade";
+import { salesOrderTotals } from "../../../../../shared/order-money.mjs";
+import { recomputeInvoiceTotals, recomputeBillTotals } from "../../shared/invoiceMoney";
 
 const SALES_ORDER_COLUMNS = [
   "id",
+  "customer_id",
   "sales_order_no",
   "customer_name",
   "seller_company",
@@ -49,6 +53,7 @@ const SALES_ORDER_COLUMNS = [
 
 const SALES_ORDER_SUMMARY_COLUMNS = [
   "id",
+  "customer_id",
   "sales_order_no",
   "customer_name",
   "seller_company",
@@ -66,6 +71,7 @@ const SALES_ORDER_SUMMARY_COLUMNS = [
 
 const PURCHASE_ORDER_COLUMNS = [
   "id",
+  "vendor_id",
   "supplier_name",
   "supplier_key",
   "purchase_company",
@@ -83,6 +89,7 @@ const PURCHASE_ORDER_COLUMNS = [
 
 const PURCHASE_ORDER_SUMMARY_COLUMNS = [
   "id",
+  "vendor_id",
   "supplier_name",
   "supplier_key",
   "purchase_company",
@@ -100,9 +107,9 @@ const PURCHASE_ORDER_SUMMARY_COLUMNS = [
 
 const INVOICE_COLUMNS = [
   "id",
+  "customer_id",
   "sales_order_id",
   "sales_order_ids",
-  "customer_id",
   "warehouse_id",
   "warehouse_code",
   "warehouse_name",
@@ -133,9 +140,9 @@ const INVOICE_COLUMNS = [
 
 const INVOICE_SUMMARY_COLUMNS = [
   "id",
+  "customer_id",
   "sales_order_id",
   "sales_order_ids",
-  "customer_id",
   "warehouse_id",
   "warehouse_code",
   "warehouse_name",
@@ -166,6 +173,7 @@ const INVOICE_SUMMARY_COLUMNS = [
 
 const BILL_COLUMNS = [
   "id",
+  "vendor_id",
   "purchase_order_id",
   "purchase_order_no",
   "supplier_name",
@@ -187,6 +195,7 @@ const BILL_COLUMNS = [
 
 const BILL_SUMMARY_COLUMNS = [
   "id",
+  "vendor_id",
   "purchase_order_id",
   "purchase_order_no",
   "supplier_name",
@@ -208,6 +217,7 @@ const BILL_SUMMARY_COLUMNS = [
 
 const PAYMENT_RECEIVED_COLUMNS = [
   "id",
+  "customer_id",
   "invoice_id",
   "invoice_no",
   "customer_name",
@@ -224,6 +234,7 @@ const PAYMENT_RECEIVED_COLUMNS = [
 
 const PAYMENT_MADE_COLUMNS = [
   "id",
+  "vendor_id",
   "bill_id",
   "bill_no",
   "supplier_name",
@@ -252,6 +263,7 @@ function toNumber(value: unknown) {
 function mapSalesOrderRow(row: Record<string, unknown>): LocalSalesOrder {
   return {
     id: String(row.id || ""),
+    customer_id: row.customer_id ? String(row.customer_id) : null,
     sales_order_no: String(row.sales_order_no || ""),
     customer_name: String(row.customer_name || ""),
     seller_company: String(row.seller_company || ""),
@@ -288,6 +300,7 @@ function mapSalesOrderRow(row: Record<string, unknown>): LocalSalesOrder {
 function mapPurchaseOrderRow(row: Record<string, unknown>): LocalPurchaseOrder {
   return {
     id: String(row.id || ""),
+    vendor_id: row.vendor_id ? String(row.vendor_id) : null,
     supplier_name: String(row.supplier_name || ""),
     supplier_key: String(row.supplier_key || ""),
     purchase_company: String(row.purchase_company || ""),
@@ -307,9 +320,9 @@ function mapPurchaseOrderRow(row: Record<string, unknown>): LocalPurchaseOrder {
 function mapInvoiceRow(row: Record<string, unknown>): LocalInvoice {
   return {
     id: String(row.id || ""),
+    customer_id: row.customer_id ? String(row.customer_id) : null,
     sales_order_id: String(row.sales_order_id || ""),
     sales_order_ids: Array.isArray(row.sales_order_ids) ? (row.sales_order_ids as string[]) : [],
-    customer_id: row.customer_id ? String(row.customer_id) : null,
     warehouse_id: row.warehouse_id ? String(row.warehouse_id) : null,
     warehouse_code: String(row.warehouse_code || ""),
     warehouse_name: String(row.warehouse_name || ""),
@@ -342,6 +355,7 @@ function mapInvoiceRow(row: Record<string, unknown>): LocalInvoice {
 function mapBillRow(row: Record<string, unknown>): LocalBill {
   return {
     id: String(row.id || ""),
+    vendor_id: row.vendor_id ? String(row.vendor_id) : null,
     purchase_order_id: String(row.purchase_order_id || ""),
     purchase_order_no: String(row.purchase_order_no || ""),
     supplier_name: String(row.supplier_name || ""),
@@ -365,6 +379,7 @@ function mapBillRow(row: Record<string, unknown>): LocalBill {
 function mapPaymentReceivedRow(row: Record<string, unknown>): LocalPaymentReceived {
   return {
     id: String(row.id || ""),
+    customer_id: row.customer_id ? String(row.customer_id) : null,
     invoice_id: String(row.invoice_id || ""),
     invoice_no: String(row.invoice_no || ""),
     customer_name: String(row.customer_name || ""),
@@ -383,6 +398,7 @@ function mapPaymentReceivedRow(row: Record<string, unknown>): LocalPaymentReceiv
 function mapPaymentMadeRow(row: Record<string, unknown>): LocalPaymentMade {
   return {
     id: String(row.id || ""),
+    vendor_id: row.vendor_id ? String(row.vendor_id) : null,
     bill_id: String(row.bill_id || ""),
     bill_no: String(row.bill_no || ""),
     supplier_name: String(row.supplier_name || ""),
@@ -402,6 +418,7 @@ function mapPaymentMadeRow(row: Record<string, unknown>): LocalPaymentMade {
 function mapSalesOrderPayload(order: LocalSalesOrder, organizationId: string) {
   return {
     id: order.id,
+    customer_id: order.customer_id ?? null,
     organization_id: organizationId,
     sales_order_no: order.sales_order_no,
     customer_name: order.customer_name,
@@ -439,6 +456,7 @@ function mapSalesOrderPayload(order: LocalSalesOrder, organizationId: string) {
 function mapPurchaseOrderPayload(order: LocalPurchaseOrder, organizationId: string) {
   return {
     id: order.id,
+    vendor_id: order.vendor_id ?? null,
     organization_id: organizationId,
     supplier_name: order.supplier_name,
     supplier_key: order.supplier_key,
@@ -459,6 +477,7 @@ function mapPurchaseOrderPayload(order: LocalPurchaseOrder, organizationId: stri
 function mapInvoicePayload(invoice: LocalInvoice, organizationId: string) {
   return {
     id: invoice.id,
+    customer_id: invoice.customer_id ?? null,
     organization_id: organizationId,
     sales_order_id: invoice.sales_order_id,
     sales_order_ids: invoice.sales_order_ids ?? [],
@@ -527,6 +546,7 @@ async function resolveInvoiceWarehouseDefaults(invoice: LocalInvoice) {
 function mapBillPayload(bill: LocalBill, organizationId: string) {
   return {
     id: bill.id,
+    vendor_id: bill.vendor_id ?? null,
     organization_id: organizationId,
     purchase_order_id: bill.purchase_order_id,
     purchase_order_no: bill.purchase_order_no,
@@ -551,6 +571,7 @@ function mapBillPayload(bill: LocalBill, organizationId: string) {
 function mapPaymentReceivedPayload(payment: LocalPaymentReceived, organizationId: string) {
   return {
     id: payment.id,
+    customer_id: payment.customer_id ?? null,
     organization_id: organizationId,
     invoice_id: payment.invoice_id,
     invoice_no: payment.invoice_no,
@@ -570,6 +591,7 @@ function mapPaymentReceivedPayload(payment: LocalPaymentReceived, organizationId
 function mapPaymentMadePayload(payment: LocalPaymentMade, organizationId: string) {
   return {
     id: payment.id,
+    vendor_id: payment.vendor_id ?? null,
     organization_id: organizationId,
     bill_id: payment.bill_id,
     bill_no: payment.bill_no,
@@ -849,6 +871,16 @@ export async function upsertSalesOrder(order: LocalSalesOrder): Promise<LocalSal
   return mapSalesOrderRow(result.sales_order);
 }
 
+export async function confirmSalesOrderWithPurchases(order: LocalSalesOrder, decisionId: string) {
+  if (!commercialUpgradeEnabled()) throw new Error("Atomic order confirmation is not enabled for this environment. The commercial upgrade must be validated before confirmation.");
+  salesOrderTotals(order.lines, order.shipping_cost, order.discount_amount, true);
+  const result = await callAppRpc<{ sales_order?: Record<string, unknown>; purchase_orders?: Record<string, unknown>[]; replayed?: boolean }>(
+    "confirm_sales_order_with_purchases_atomic", { payload: mapSalesOrderPayload({ ...order, status: "confirmed" }, ""), decision_id: decisionId },
+  );
+  if (!result?.sales_order || !Array.isArray(result.purchase_orders)) throw new Error("Order confirmation response is incomplete. Check order status before retrying.");
+  return { salesOrder: mapSalesOrderRow(result.sales_order), purchaseOrders: result.purchase_orders.map(mapPurchaseOrderRow), replayed: result.replayed === true };
+}
+
 export async function deleteSalesOrder(salesOrderId: string): Promise<void> {
   await callAppRpc("delete_sales_order_guarded", { id: salesOrderId });
 }
@@ -884,24 +916,6 @@ export async function fetchPurchaseOrderById(purchaseOrderId: string): Promise<L
   return fetchOrderRecord("purchase_orders", PURCHASE_ORDER_COLUMNS, mapPurchaseOrderRow, purchaseOrderId);
 }
 
-export async function replacePurchaseOrdersForSalesOrder(salesOrderId: string, purchaseOrders: LocalPurchaseOrder[]) {
-  const organizationId = await getCurrentOrgId();
-  const { data: existingRows, error: existingError } = await supabaseClient
-    .from("purchase_orders")
-    .select("id")
-    .eq("organization_id", organizationId)
-    .eq("sales_order_id", salesOrderId);
-  if (existingError) throw new Error(existingError.message || "Purchase order replace failed");
-
-  await Promise.all(
-    ((existingRows || []) as Array<Record<string, unknown>>).map((row) => callAppRpc("delete_purchase_order_guarded", { id: String(row.id || "") })),
-  );
-
-  if (!purchaseOrders.length) return [];
-
-  return Promise.all(purchaseOrders.map((row) => upsertPurchaseOrder(row)));
-}
-
 export async function fetchInvoices(): Promise<LocalInvoice[]> {
   return fetchOrderCollection("invoices", INVOICE_COLUMNS, mapInvoiceRow);
 }
@@ -932,7 +946,7 @@ export async function fetchInvoicesByCustomerNames(names: string[]): Promise<Loc
 }
 
 export async function upsertInvoice(invoice: LocalInvoice, previousId?: string): Promise<LocalInvoice> {
-  const resolvedInvoice = await resolveInvoiceWarehouseDefaults(invoice);
+  const resolvedInvoice = await resolveInvoiceWarehouseDefaults(recomputeInvoiceTotals(invoice));
   const result = await callAppRpc<{ invoice?: Record<string, unknown> }>("save_invoice_atomic", {
     payload: mapInvoicePayload(resolvedInvoice, ""),
     previous_id: previousId || null,
@@ -995,7 +1009,7 @@ export async function fetchBillsBySupplierNames(names: string[]): Promise<LocalB
 
 export async function upsertBill(bill: LocalBill, previousId?: string): Promise<LocalBill> {
   const result = await callAppRpc<{ bill?: Record<string, unknown> }>("save_bill_atomic", {
-    payload: mapBillPayload(bill, ""),
+    payload: mapBillPayload(recomputeBillTotals(bill), ""),
     previous_id: previousId || null,
   });
   if (!result?.bill) throw new Error("Bill save failed");

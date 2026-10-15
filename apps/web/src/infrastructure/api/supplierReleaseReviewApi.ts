@@ -1,8 +1,10 @@
 import {supabaseClient} from './supabaseClient';
 import {getCurrentOrgId} from './organizationApi';
-import {parseReleaseAudit, type ReleaseReviewRow} from '../../shared/supplierReleaseReview';
+import {parseReleaseAudit, type ReleaseReviewRow, type ReleaseIssueRow} from '../../shared/supplierReleaseReview';
 
 export type ReleaseReviewCursor={createdAt:string;id:string};
+export type ReleaseIssueCursor={sourceRowNumber:number;id:number};
+const uuid=(value:string)=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 export async function fetchSupplierReleaseReviewPage(cursor:ReleaseReviewCursor|null, signal:AbortSignal):Promise<{rows:ReleaseReviewRow[];next:ReleaseReviewCursor|null}> {
   const org=await getCurrentOrgId();
   if(signal.aborted) throw new DOMException('Cancelled','AbortError');
@@ -41,4 +43,35 @@ export async function fetchSupplierReleaseReviewPage(cursor:ReleaseReviewCursor|
   });
   const last=rows.at(-1);
   return {rows,next:data.length>25 && last ? {id:last.id,createdAt:last.createdAt} : null};
+}
+
+export async function fetchSupplierReleaseIssuePage(releaseId:string,cursor:ReleaseIssueCursor|null,signal:AbortSignal):Promise<{rows:ReleaseIssueRow[];next:ReleaseIssueCursor|null}> {
+  const org=await getCurrentOrgId();
+  if(signal.aborted) throw new DOMException('Cancelled','AbortError');
+  if(!uuid(releaseId)) throw new Error('Invalid release id');
+  if(cursor && (!Number.isSafeInteger(cursor.sourceRowNumber)||cursor.sourceRowNumber<0||!Number.isSafeInteger(cursor.id)||cursor.id<0)) throw new Error('Invalid issue cursor');
+  let query=supabaseClient.from('supplier_price_release_rows')
+    .select('id,source_row_number,product_code,buy_price,row_status,error_code,error_message,supplier_price_releases!inner(organization_id)')
+    .eq('supplier_price_releases.organization_id',org).eq('release_id',releaseId)
+    .or('row_status.neq.accepted,row_status.is.null')
+    .order('source_row_number',{ascending:true}).order('id',{ascending:true}).limit(51);
+  if(cursor) query=query.or(`source_row_number.gt.${cursor.sourceRowNumber},and(source_row_number.eq.${cursor.sourceRowNumber},id.gt.${cursor.id})`);
+  const result=await query.abortSignal(signal);
+  if(result.error) throw new Error('Release issue details could not be verified.');
+  const data=result.data||[];
+  const toSafeInt=(v:unknown)=>{
+    const n=typeof v==='number'?v:typeof v==='string'&&/^\d+$/.test(v)?Number(v):NaN;
+    return Number.isSafeInteger(n)&&n>=0?n:null;
+  };
+  const text=(v:unknown,max:number)=>typeof v==='string'&&v.length<=max?v:null;
+  const rows:ReleaseIssueRow[]=data.slice(0,50).map(r=>{
+    const id=toSafeInt(r.id), sourceRowNumber=toSafeInt(r.source_row_number);
+    if(id===null||sourceRowNumber===null) throw new Error('Invalid issue row');
+    const price=typeof r.buy_price==='number'&&Number.isFinite(r.buy_price) ? String(r.buy_price)
+      : typeof r.buy_price==='string'&&r.buy_price.length<=100 ? r.buy_price : null;
+    return {id,sourceRowNumber,productCode:text(r.product_code,200),buyPrice:price,
+      rowStatus:text(r.row_status,40)||'unknown',errorCode:text(r.error_code,120),errorMessage:text(r.error_message,1000)};
+  });
+  const last=rows.at(-1);
+  return {rows,next:data.length>50&&last?{sourceRowNumber:last.sourceRowNumber,id:last.id}:null};
 }

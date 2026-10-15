@@ -4,6 +4,7 @@ import {releaseReviewState, splitReleaseReviewHistory, type ReleaseReviewRow} fr
 import {SectionCard} from '../../presentation/components/common/SectionCard';
 import {Button} from '../../presentation/components/common/Button';
 import {useActionFeedback} from '../../presentation/components/common/ActionFeedback';
+import {SupplierReleaseIssuePanel} from './SupplierReleaseIssuePanel';
 import {SupplierReleaseReviewCard} from './SupplierReleaseReviewCard';
 import {supplierReleaseActionsEnabled} from '../../infrastructure/api/supplierReleaseActionsApi';
 
@@ -13,6 +14,7 @@ export function SupplierReleaseReviewPanel({locale}:{locale:string}){
   const [rows,setRows]=useState<ReleaseReviewRow[]>([]),[next,setNext]=useState<ReleaseReviewCursor|null>(null);
   const [cursor,setCursor]=useState<ReleaseReviewCursor|null>(null),[refresh,setRefresh]=useState(0);
   const [loading,setLoading]=useState(false),[error,setError]=useState(false),[loaded,setLoaded]=useState(false);
+  const [issueRelease,setIssueRelease]=useState<ReleaseReviewRow|null>(null);
   const serial=useRef(0);
   useEffect(()=>{
     const controller=new AbortController(), version=++serial.current;
@@ -32,7 +34,7 @@ export function SupplierReleaseReviewPanel({locale}:{locale:string}){
   },[]);
   const grouped=splitReleaseReviewHistory(rows);
   const stateLabel=(state:string)=>tr
-    ? ({processing_interrupted:'işlem durdu',active:'aktif',review_required:'inceleme gerekli',awaiting_publication:'yayın bekliyor',unverified:'kontrol bekliyor',processing:'işleniyor',inactive:'pasif',rejected:'reddedildi'} as Record<string,string>)[state] || state
+    ? ({staged:'dosya işlendi — kontrol bekliyor',processing_interrupted:'işlem durdu',active:'aktif',review_required:'inceleme gerekli',awaiting_publication:'yayın bekliyor',unverified:'kontrol bekliyor',processing:'işleniyor',inactive:'pasif',rejected:'reddedildi'} as Record<string,string>)[state] || state
     : state.replaceAll('_',' ');
   const latestSummary=grouped.latest.reduce((counts,row)=>{
     const state=releaseReviewState(row);
@@ -50,11 +52,12 @@ export function SupplierReleaseReviewPanel({locale}:{locale:string}){
     {grouped.latest.length ? <div className="supplier-release-review-summary" aria-label={tr?'En yeni kapsam özeti':'Latest scope summary'}>
       {Object.entries(latestSummary).map(([state,count])=><span key={state}><strong>{count}</strong> {stateLabel(state)}</span>)}
     </div> : null}
-    <SupplierReleaseReviewCard rows={grouped.latest} tr={tr} onDetails={feedback.fail} actionsEnabled={actionsEnabled} onChanged={()=>setRefresh(v=>v+1)}/>
+    <SupplierReleaseReviewCard onIssues={setIssueRelease} rows={grouped.latest} tr={tr} onDetails={feedback.fail} actionsEnabled={actionsEnabled} onChanged={()=>setRefresh(v=>v+1)}/>
     {grouped.history.length ? <details className="supplier-release-history">
       <summary>{tr?`Geçmiş yüklemeler (${grouped.history.length})`:`Older uploads (${grouped.history.length})`}</summary>
-      <SupplierReleaseReviewCard rows={grouped.history} tr={tr} onDetails={feedback.fail} actionsEnabled={actionsEnabled} onChanged={()=>setRefresh(v=>v+1)}/>
+      <SupplierReleaseReviewCard onIssues={setIssueRelease} rows={grouped.history} tr={tr} onDetails={feedback.fail} actionsEnabled={actionsEnabled} onChanged={()=>setRefresh(v=>v+1)}/>
     </details> : null}
+    {issueRelease ? <SupplierReleaseIssuePanel key={issueRelease.id} release={issueRelease} tr={tr} onClose={()=>setIssueRelease(null)} /> : null}
     <div className="toolbar toolbar--wrap">
       {cursor ? <Button variant="secondary" disabled={loading} onClick={()=>setCursor(null)}>{tr?'En yeni kayıtlar':'Latest releases'}</Button> : null}
       {next ? <Button variant="secondary" disabled={loading||error} onClick={()=>setCursor(next)}>{tr?'Daha eski kayıtlar':'Older releases'}</Button> : null}

@@ -1,0 +1,46 @@
+{
+  "local_tests": {
+    "tests": 135,
+    "pass": 135,
+    "fail": 0
+  },
+  "web_build": "passed",
+  "diff_check": "passed",
+  "module_audit": {
+    "green": false,
+    "new_findings": 0,
+    "baseline_critical": 2,
+    "candidate_critical": 2,
+    "warnings": 2,
+    "legacy_frontend_baseline": 26,
+    "unchanged_critical_findings": [
+      {
+        "severity": "critical",
+        "module": "admin",
+        "file": "netlify/functions/admin-export-background.mts",
+        "message": "Admin service-role path has no visible caller/role verification."
+      },
+      {
+        "severity": "critical",
+        "module": "frontend",
+        "file": "apps/web/src/presentation/pages/MiraMissionDeskPage.tsx",
+        "message": "Presentation pages must remain compatibility wrappers only; move implementation to a module page."
+      }
+    ]
+  },
+  "browser": {
+    "scope": "Local synthetic browser fixture only; actual App, routes and pages; no remote business writes.",
+    "checks": [
+      "Reports/Core Reports routes correctly; synthetic EUR 10.34 and USD 25.00 total separately",
+      "Purchasing/Supplier Prices opens directly",
+      "Release issue sample source row 4 is shown under its release; publication actions preserve target gate",
+      "Settings/Portals opens canonical access editor",
+      "Reports/Status Center links back to Supplier Prices"
+    ],
+    "expected_blocked_operations": [
+      "Existing Settings initialization attempts default email-template seeding when the synthetic list is empty; the local stub rejects writes. No real template or email was created."
+    ]
+  },
+  "database": "Read-only presence/hash checks; no migration or data writes",
+  "production_deploy": "not executed"
+}

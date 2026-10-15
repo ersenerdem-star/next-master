@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "source_branch": "agent/mira-knowledge-snapshot-source",
+  "source_head": "f191e12e5461d0f751b8468edfc6b1120dc1d670",
+  "source_includes_uncommitted_changes": true,
+  "target_branch": "codex/price-engine-integration",
+  "target_baseline": "3d752fc",
+  "scope": "Integrate legacy commercial UI/report improvements into existing admin workspace navigation",
+  "remote_mutation_allowed": false,
+  "deployment_ready": false,
+  "release_gates": [
+    "Verify commercial database contract on intended staging target before rollout",
+    "Reconcile exact RPC fingerprint guards with current price-engine schema; do not run SQL blindly",
+    "Authenticated staging report/document/order acceptance",
+    "Explicit production rollout authorization"
+  ],
+  "sql_review_package": [
+    {
+      "source": "supabase/migrations/20261002174650_order_money_and_atomic_confirmation.sql",
+      "review_file": "scripts/ops/legacy-ui-integration/sql/20261002174650_order_money_and_atomic_confirmation.sql",
+      "sha256": "5f3e2147ee7575d7d5e7ac16031ac7d478d417f77c84bfa73bca83a31a6829dd",
+      "target_application": "NOT_EXECUTED",
+      "compatibility": "requires exact target-schema and RPC baseline verification; preserve existing price-engine forwards"
+    },
+    {
+      "source": "supabase/migrations/20261006104009_invoice_money_server_boundary.sql",
+      "review_file": "scripts/ops/legacy-ui-integration/sql/20261006104009_invoice_money_server_boundary.sql",
+      "sha256": "e35cf6db7f254d3af9cd0f932acd18bccda7c038a592cde15ad7404749ee61c9",
+      "target_application": "NOT_EXECUTED",
+      "compatibility": "requires exact target-schema and RPC baseline verification; preserve existing price-engine forwards"
+    },
+    {
+      "source": "supabase/migrations/20261006104456_invoice_money_rpc_execute_fence.sql",
+      "review_file": "scripts/ops/legacy-ui-integration/sql/20261006104456_invoice_money_rpc_execute_fence.sql",
+      "sha256": "72bd8e874838c162d45f815ddef86d661afdb9f47ec30bf47072d1c1c68a6da1",
+      "target_application": "NOT_EXECUTED",
+      "compatibility": "requires exact target-schema and RPC baseline verification; preserve existing price-engine forwards"
+    },
+    {
+      "source": "supabase/migrations/20261006105211_invoice_reporting_document_projection.sql",
+      "review_file": "scripts/ops/legacy-ui-integration/sql/20261006105211_invoice_reporting_document_projection.sql",
+      "sha256": "10780b18ae9954144ca6d7146474d9e3760194222c93169627e18e60277fb83f",
+      "target_application": "NOT_EXECUTED",
+      "compatibility": "requires exact target-schema and RPC baseline verification; preserve existing price-engine forwards"
+    },
+    {
+      "source": "supabase/migrations/20261006110431_invoice_commercial_document_sync.sql",
+      "review_file": "scripts/ops/legacy-ui-integration/sql/20261006110431_invoice_commercial_document_sync.sql",
+      "sha256": "0194c32eded0d8586613f9f88b17efcff385b32ae7236acab410bd181f9b856f",
+      "target_application": "NOT_EXECUTED",
+      "compatibility": "requires exact target-schema and RPC baseline verification; preserve existing price-engine forwards"
+    },
+    {
+      "source": "supabase/migrations/20261006112513_governed_financial_report_readers.sql",
+      "review_file": "scripts/ops/legacy-ui-integration/sql/20261006112513_governed_financial_report_readers.sql",
+      "sha256": "10861388ab2ae4c4c36c082b6b749fb921d89bb9ed3d29f4221d872ced6e31d8",
+      "target_application": "NOT_EXECUTED",
+      "compatibility": "requires exact target-schema and RPC baseline verification; preserve existing price-engine forwards"
+    },
+    {
+      "source": "supabase/migrations/20261006123808_commercial_party_identity_chain.sql",
+      "review_file": "scripts/ops/legacy-ui-integration/sql/20261006123808_commercial_party_identity_chain.sql",
+      "sha256": "49328a98fcb36fea1b36f4f8b9e041bdeef68a0182c33a391eb7aa7040a47d5c",
+      "target_application": "NOT_EXECUTED",
+      "compatibility": "requires exact target-schema and RPC baseline verification; preserve existing price-engine forwards"
+    },
+    {
+      "source": "supabase/migrations/20261006124320_commercial_source_order_party_identity.sql",
+      "review_file": "scripts/ops/legacy-ui-integration/sql/20261006124320_commercial_source_order_party_identity.sql",
+      "sha256": "4ded597d7c592cd0bd7419ae09a4e4f9a1da4bef2d3dc40a1236013faa29e6d2",
+      "target_application": "NOT_EXECUTED",
+      "compatibility": "requires exact target-schema and RPC baseline verification; preserve existing price-engine forwards"
+    }
+  ],
+  "preserved_target_boundaries": [
+    "Published and legacy supplier price bridge, exact SKU identity and commercial quantity rules",
+    "Durable exports, download handoff, source revision and worker dispatch",
+    "Supplier publication actions and feature gates",
+    "Catalog storage worker admission and current reader contracts"
+  ],
+  "excluded_from_this_ui_integration": [
+    "Mira crawling, adapters, schedules and catalog-source enrollment",
+    "Legacy source export handlers and old upload workers",
+    "Historical SQL not listed in this review package",
+    "Secrets, environment files and runtime artifacts"
+  ],
+  "schema_readonly_preflight": {
+    "date": "2026-10-15",
+    "production": {
+      "project": "zjgueqijumzlfioihnkt",
+      "atomic_confirmation": false,
+      "invoice_money_contract": false,
+      "party_chain_contract": false,
+      "financial_report_contract": false,
+      "all_commercial_party_id_columns_exist": true,
+      "invoice_rpc_md5": "a11651a154a25f334a75be4a9ccc0316",
+      "bill_rpc_md5": "e47304f9620a46ec8561d98d5c994ecf"
+    },
+    "staging": {
+      "project": "kaxsqafdevabkxofwdod",
+      "atomic_confirmation": true,
+      "invoice_money_contract": true,
+      "party_chain_contract": true,
+      "financial_report_contract": true,
+      "invoice_rpc_md5": "30e70790c00711ae39078bb7c4b6e379",
+      "bill_rpc_md5": "9e9fb1221cd96df3f10beb0e8003cae7"
+    },
+    "meaning": "Function presence and selected source hashes only; not business E2E or authorization proof"
+  },
+  "capability_gates": {
+    "VITE_COMMERCIAL_DOCUMENT_UPGRADE_ENABLED": "default false; financial semantics and atomic confirmation UI use only after target acceptance",
+    "NM_COMMERCIAL_DOCUMENT_UPGRADE_ENABLED": "default false; server refuses atomic dispatch until explicitly enabled after acceptance"
+  }
+}

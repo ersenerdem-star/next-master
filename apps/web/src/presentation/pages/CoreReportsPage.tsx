@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fetchAppSession } from "../../infrastructure/api/appSessionApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import {
@@ -27,6 +27,8 @@ import { DataTable } from "../components/common/DataTable";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { useI18n } from "../../i18n/I18nProvider";
+import { commercialUpgradeEnabled } from "../../shared/commercialUpgrade";
+import { sumMoney } from "../../../../../shared/order-money.mjs";
 
 type CoreReportKey =
   | "supplierBalance"
@@ -293,6 +295,7 @@ export function CoreReportsPage() {
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
+  const requestVersion = useRef(0);
 
   const activeDefinition = useMemo(() => reports.find((report) => report.key === activeReport) || reports[0], [activeReport]);
   const activeReportLabel = r(activeDefinition.labelKey);
@@ -313,7 +316,18 @@ export function CoreReportsPage() {
     () => activeDefinition.columns.map((column) => ({ ...column, header: r(column.headerKey) })),
     [activeDefinition, t],
   );
-  const totalValue = useMemo(() => rows.reduce((sum, row) => sum + asNumber(row, activeDefinition.totalField), 0), [activeDefinition.totalField, rows]);
+  const totalByCurrency = useMemo(() => {
+    const sums = new Map<string, number[]>();
+    for (const row of rows) {
+      const currency = String((row as unknown as Record<string, unknown>).currency || "");
+      const values = sums.get(currency) || [];
+      values.push(asNumber(row, activeDefinition.totalField));
+      sums.set(currency, values);
+    }
+    return [...sums].map(([currency, values]) => `${formatNumber(activeReport === "inventory" ? values.reduce((a, b) => a + b, 0) : sumMoney(values))} ${currency}`.trim()).join(" · ") || formatNumber(0);
+  }, [activeDefinition.totalField, activeReport, rows]);
+  const governedReports = commercialUpgradeEnabled();
+  const balanceReport = governedReports && (activeReport === "supplierBalance" || activeReport === "customerBalance");
   const brandOptions = useMemo(() => [{ value: "", label: r("core.filters.allBrands") }, ...brands.map((brand) => ({ value: brand.id, label: brand.name }))], [brands, t]);
 
   useEffect(() => {
@@ -337,9 +351,13 @@ export function CoreReportsPage() {
   }, []);
 
   useEffect(() => {
+    ++requestVersion.current;
+    actionFeedback.clear();
+    setLoading(false);
     setRows([]);
     setLoaded(false);
     setError("");
+    return () => { ++requestVersion.current; };
   }, [activeReport]);
 
   async function loadReport() {
@@ -349,6 +367,7 @@ export function CoreReportsPage() {
       return;
     }
 
+    const version = ++requestVersion.current;
     setLoading(true);
     setError("");
     actionFeedback.begin(r("core.feedback.loading", { report: activeReportLabel }));
@@ -357,22 +376,24 @@ export function CoreReportsPage() {
         organizationId: nextOrganizationId,
         startDate,
         endDate,
-        brandId,
-        productQuery,
+        brandId: balanceReport ? "" : brandId,
+        productQuery: balanceReport ? "" : productQuery,
         partyQuery,
         limit: Number(limit) || 500,
       });
+      if (version !== requestVersion.current) return;
       setRows(result);
       setLoaded(true);
       actionFeedback.succeed(r("core.feedback.rowsLoaded", { count: result.length.toLocaleString("en-US"), report: activeReportLabel }));
     } catch (caught) {
+      if (version !== requestVersion.current) return;
       const message = caught instanceof Error ? caught.message : r("core.errors.requestFailed");
       setRows([]);
       setLoaded(false);
       setError(message);
       actionFeedback.fail(message);
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
   }
 
@@ -386,11 +407,11 @@ export function CoreReportsPage() {
           </div>
           <div className="toolbar toolbar--wrap">
             <Select label={r("core.fields.report")} value={activeReport} options={reportOptions} onChange={(value) => setActiveReport(value as CoreReportKey)} />
-            <Input label={r("core.fields.organizationId")} value={organizationId} onChange={setOrganizationId} />
+            <Input label={r("core.fields.organizationId")} value={organizationId} onChange={setOrganizationId} disabled />
             <Input label={r("core.fields.startDate")} type="date" value={startDate} onChange={setStartDate} />
             <Input label={r("core.fields.endDate")} type="date" value={endDate} onChange={setEndDate} />
-            <Select label={r("columns.brand")} value={brandId} options={brandOptions} onChange={setBrandId} />
-            <Input label={r("columns.product")} value={productQuery} onChange={setProductQuery} placeholder={r("core.placeholders.product")} />
+            {!balanceReport ? <Select label={r("columns.brand")} value={brandId} options={brandOptions} onChange={setBrandId} /> : null}
+            {!balanceReport ? <Input label={r("columns.product")} value={productQuery} onChange={setProductQuery} placeholder={r("core.placeholders.product")} /> : null}
             <Input label={activePartyLabel} value={partyQuery} onChange={setPartyQuery} placeholder={activePartyLabel} />
             <Select label={r("core.fields.limit")} value={limit} options={limitOptions} onChange={setLimit} />
             <Button onClick={() => void loadReport()} busy={loading} busyLabel={t("common.loadingPage")}>
@@ -401,9 +422,10 @@ export function CoreReportsPage() {
         <div className="section-card__body">
           <div className="meta-row">
             <span>{loaded ? r("core.meta.rows", { count: rows.length.toLocaleString("en-US") }) : r("core.meta.noReportLoaded")}</span>
-            <span>{loaded ? r("core.meta.total", { label: activeTotalLabel, value: formatNumber(totalValue) }) : activeDefinition.source}</span>
+            <span>{loaded ? r("core.meta.total", { label: activeTotalLabel, value: totalByCurrency }) : activeDefinition.source}</span>
             {error ? <span className="error-text">{error}</span> : null}
           </div>
+          {balanceReport ? <p>{r("core.meta.balanceSemantics")}</p> : governedReports && activeReport === "salesMargin" ? <p>{r("core.meta.marginSemantics")}</p> : null}
           <DataTable rows={rows} columns={translatedColumns} emptyText={loading ? t("common.loadingPage") : r("core.empty.noRows")} />
         </div>
       </section>

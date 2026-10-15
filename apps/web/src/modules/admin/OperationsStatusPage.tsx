@@ -21,10 +21,9 @@ import { SectionCard } from "../../presentation/components/common/SectionCard";
 import { Select } from "../../presentation/components/common/Select";
 import { PageHeader, PageShell } from "../../presentation/components/common/VisualPrimitives";
 import { useActionFeedback } from "../../presentation/components/common/ActionFeedback";
-import { SupplierReleaseReviewPanel } from "./SupplierReleaseReviewPanel";
 import { SupplierLegacyHistory } from "./SupplierLegacyHistory";
 
-export function OperationsStatusPage() {
+export function OperationsStatusPage({ onOpenSupplierPrices }: { onOpenSupplierPrices?: () => void } = {}) {
   const actionFeedback = useActionFeedback();
   const { locale, t } = useI18n();
   // The review tables are introduced with the verified-upload cutover. Keep the
@@ -321,8 +320,11 @@ export function OperationsStatusPage() {
 
   return (
       <PageShell className="operations-status-page">
-      <PageHeader title={t("dashboard.operationsStatus.title")} subtitle={t("reports.statusCenterSubtitle")} />
-      {releaseReviewEnabled ? <SupplierReleaseReviewPanel locale={locale} /> : null}
+      <PageHeader title={t("nav.statusCenter")} subtitle={t("reports.statusCenterSubtitle")} />
+      {releaseReviewEnabled ? <SectionCard title={locale === "tr" ? "Tedarikçi yükleme incelemesi" : "Supplier upload review"}>
+        <p>{locale === "tr" ? "Satır sorunları, doğrulama ve yayın kararları Tedarikçi Fiyatları alanındadır. Bu ekran operasyon sağlığını izler." : "Row issues, validation and publication decisions live in Supplier Prices. This screen monitors operational health."}</p>
+        <Button variant="secondary" disabled={!onOpenSupplierPrices} onClick={onOpenSupplierPrices}>{locale === "tr" ? "Tedarikçi Fiyatları'nı aç" : "Open Supplier Prices"}</Button>
+      </SectionCard> : null}
       <SupplierLegacyHistory enabled={releaseReviewEnabled}
         title={t("dashboard.operationsStatus.legacyPipelineTitle")}
         summary={t("dashboard.operationsStatus.legacyHistorySummary", { count: formatCount(operationsRows.length) })}>

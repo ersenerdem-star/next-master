@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePaymentDraftEditor } from "../hooks/usePaymentDraftEditor";
+import { multiplyMoney, sumMoney, requireUnitPrice, requireQuantity } from "../../../../../shared/order-money.mjs";
 import { deliverQueuedEmails, queueVendorPurchaseOrderEmail } from "../../infrastructure/api/emailTemplatesApi";
 import {
   buildInventoryAvailabilityLookup,
@@ -25,11 +27,12 @@ import {
   upsertPurchaseOrder,
 } from "../../infrastructure/api/ordersApi";
 import { VendorsPage } from "./VendorsPage";
+import { SuppliersPage } from "./SuppliersPage";
 import { SectionCard } from "../components/common/SectionCard";
 import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastructure/api/companyProfilesApi";
 import { fetchVendors } from "../../infrastructure/api/vendorsApi";
 import { fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
-import { buildBusinessDocumentHtml } from "../../shared/documentPrint";
+import { buildBusinessDocumentHtml, openBusinessDocumentPreview } from "../../shared/documentPrint";
 import { consumeCatalogTransfer, PENDING_CATALOG_PURCHASE_ITEM_KEY } from "../../shared/catalogTransfer";
 import { normalizePartCode } from "../../domain/shared/normalize";
 import { resyncPurchaseOrderLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
@@ -45,11 +48,14 @@ import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
 import { BrandPill } from "../components/common/BrandPill";
 import { useActionFeedback } from "../components/common/ActionFeedback";
-import { buildXlsxBlob, downloadBlob } from "../../shared/xlsx";
+import { buildXlsxBlobAsync, downloadBlob } from "../../shared/xlsx";
+import { buildDocumentWorksheet } from "../../shared/documentExport";
 import { buildEntityAlias } from "../../shared/entityAlias";
 import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
 import type { Warehouse } from "../../types/warehouses";
 import { useI18n } from "../../i18n/I18nProvider";
+import { recomputeBillTotals, previewInvoiceMoney } from "../../shared/invoiceMoney";
+import { refreshAfterCommit } from "../../shared/refreshAfterCommit";
 
 function formatMoney(value: number, currency = "EUR") {
   return `${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
@@ -109,14 +115,22 @@ export function mergeCatalogLineIntoPurchaseDraft(draft: LocalPurchaseOrder, nex
                 origin: line.origin || nextLine.origin,
               },
         );
-  const totalAmount = Math.round(nextLines.reduce((sum, line) => sum + Number(line.line_total || 0), 0) * 100) / 100;
+  const pricedLines = nextLines.map((line) => ({ ...line, line_total: multiplyMoney(requireUnitPrice(line.buy_price), requireQuantity(line.qty)) }));
+  const totalAmount = sumMoney(pricedLines.map((line) => line.line_total));
   return {
     ...draft,
-    lines: nextLines,
-    line_count: nextLines.length,
+    lines: pricedLines,
+    line_count: pricedLines.length,
     total_amount: totalAmount,
     updated_at: new Date().toISOString(),
   };
+}
+
+// Editing can temporarily produce an invalid number. Validate on Save, not
+// during React render (which would otherwise crash the entire workspace).
+function previewPurchaseLineTotal(line: LocalPurchaseOrderLine) {
+  try { return multiplyMoney(line.buy_price || 0, line.qty || 0); }
+  catch { return 0; }
 }
 
 function createCatalogPurchaseOrderDraft(
@@ -231,20 +245,26 @@ function renderInventoryAvailabilityBadge(
 }
 
 type PurchasesPageProps = {
-  activeTab?: "Vendors" | "Purchase Orders" | "Bills" | "Payments Made";
+  onNavigateTab?: (tab: "Vendors" | "Supplier Prices" | "Purchase Orders" | "Bills" | "Payments Made") => void;
+  activeTab?: "Vendors" | "Supplier Prices" | "Purchase Orders" | "Bills" | "Payments Made";
   selectedPurchaseOrderId?: string;
   selectedBillId?: string;
 };
 
 export function PurchasesPage({
   activeTab: activeTabProp = "Vendors",
+  onNavigateTab,
   selectedPurchaseOrderId: externalSelectedPurchaseOrderId = "",
   selectedBillId: externalSelectedBillId = "",
 }: PurchasesPageProps) {
   const { t } = useI18n();
   const p = (key: string, params?: Record<string, string | number>) => t(`purchases.${key}`, params);
   const actionFeedback = useActionFeedback();
-  const [activeTab, setActiveTab] = useState<"Vendors" | "Purchase Orders" | "Bills" | "Payments Made">(activeTabProp);
+  const [activeTab, setLocalActiveTab] = useState<"Vendors" | "Supplier Prices" | "Purchase Orders" | "Bills" | "Payments Made">(activeTabProp);
+  function setActiveTab(tab: "Vendors" | "Supplier Prices" | "Purchase Orders" | "Bills" | "Payments Made") {
+    setLocalActiveTab(tab);
+    onNavigateTab?.(tab);
+  }
   const [purchaseOrders, setPurchaseOrders] = useState<LocalPurchaseOrder[]>([]);
   const [bills, setBills] = useState<LocalBill[]>([]);
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState("");
@@ -254,15 +274,23 @@ export function PurchasesPage({
   const [purchaseOrderSourceSnapshot, setPurchaseOrderSourceSnapshot] = useState("");
   const [selectedBillId, setSelectedBillId] = useState("");
   const [billDraft, setBillDraft] = useState<LocalBill | null>(null);
+  const billMoneyPreview = useMemo(() => previewInvoiceMoney(recomputeBillTotals, billDraft), [billDraft]);
   const [billSourceSnapshot, setBillSourceSnapshot] = useState("");
   const [paymentsMade, setPaymentsMade] = useState<LocalPaymentMade[]>([]);
-  const [selectedPaymentMadeId, setSelectedPaymentMadeId] = useState("");
-  const [paymentMadeDraft, setPaymentMadeDraft] = useState<LocalPaymentMade | null>(null);
+  const {
+    persistedId: selectedPaymentMadeId,
+    draft: paymentMadeDraft,
+    setDraft: setPaymentMadeDraft,
+    startNew: startNewPaymentMade,
+    selectExisting: selectPaymentMade,
+  } = usePaymentDraftEditor(paymentsMade);
   const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
   const [vendors, setVendors] = useState<LocalVendor[]>([]);
   const [customers, setCustomers] = useState<LocalCustomer[]>([]);
   const [printingPurchaseOrder, setPrintingPurchaseOrder] = useState(false);
   const [printingBill, setPrintingBill] = useState(false);
+  const [exportingDocument, setExportingDocument] = useState(false);
+  const documentExportInFlight = useRef(false);
   const [purchaseOrdersView, setPurchaseOrdersView] = useState<"list" | "detail">("list");
   const [billsView, setBillsView] = useState<"list" | "detail">("list");
   const [purchaseLinePreview, setPurchaseLinePreview] = useState<LocalPurchaseOrderLine | null>(null);
@@ -289,7 +317,7 @@ export function PurchasesPage({
   );
 
   useEffect(() => {
-    setActiveTab(activeTabProp);
+    setLocalActiveTab(activeTabProp);
   }, [activeTabProp]);
 
   useEffect(() => {
@@ -541,18 +569,6 @@ export function PurchasesPage({
     };
   }, [billDraft?.id, billDraft?.lines.length, billsView, selectedBillId]);
 
-  useEffect(() => {
-    if (!paymentsMade.length) {
-      const next = createEmptyPaymentMade();
-      setSelectedPaymentMadeId(next.id);
-      setPaymentMadeDraft(next);
-      return;
-    }
-    const current = paymentsMade.find((item) => item.id === selectedPaymentMadeId) || paymentsMade[0];
-    setSelectedPaymentMadeId(current.id);
-    setPaymentMadeDraft({ ...current });
-  }, [paymentsMade, selectedPaymentMadeId]);
-
   const billCountByPurchaseOrderId = useMemo(() => {
     const map = new Map<string, number>();
     bills.forEach((bill) => {
@@ -793,9 +809,11 @@ export function PurchasesPage({
     [purchaseOrderColumns, billCountByPurchaseOrderId, selectedPurchaseOrderIds, t],
   );
 
-  function findVendorByName(name: string) {
+  function findVendorByName(name: string, vendorId?: string | null) {
+    if (vendorId) return vendors.find((item) => item.id === vendorId) || null;
     const key = name.trim().toLowerCase();
-    return vendors.find((item) => item.display_name.trim().toLowerCase() === key || item.company_name.trim().toLowerCase() === key) || null;
+    const matches = vendors.filter((item) => item.display_name.trim().toLowerCase() === key || item.company_name.trim().toLowerCase() === key);
+    return matches.length === 1 ? matches[0] : null;
   }
 
   function getAdminVendorLabel(name: string) {
@@ -836,11 +854,11 @@ export function PurchasesPage({
     }
   }
 
-  function buildVendorAddressBlock(vendorName: string) {
-    const vendor = findVendorByName(vendorName);
+  function buildVendorAddressBlock(vendorName: string, vendorId?: string | null) {
+    const vendor = findVendorByName(vendorName, vendorId);
     if (!vendor) return vendorName || "-";
     const displayName = vendor.company_name || vendor.display_name || vendorName || "-";
-    return [displayName, vendor.billing_address || "", vendor.company_id ? p("document.companyId", { id: vendor.company_id }) : "", vendor.work_phone ? p("document.phone", { phone: vendor.work_phone }) : "", vendor.email || ""]
+    return [displayName, vendor.billing_address || "", vendor.company_id ? p("document.companyId", { id: vendor.company_id }) : "", vendor.work_phone ? p("document.phone", { phone: vendor.work_phone }) : ""]
       .filter(Boolean)
       .join("\n");
   }
@@ -872,7 +890,7 @@ export function PurchasesPage({
       },
       party: {
         title: p("document.vendor"),
-        details: buildVendorAddressBlock(row.supplier_name),
+        details: buildVendorAddressBlock(row.supplier_name, row.vendor_id),
       },
       meta: [
         { label: p("columns.poDate"), value: row.created_at?.slice(0, 10) || "-" },
@@ -919,6 +937,7 @@ export function PurchasesPage({
       };
     return buildBusinessDocumentHtml({
       docType: p("document.bill"),
+      sourceOrderColumn: true,
       docNo: row.id,
       company: {
         companyName: company.companyName || "",
@@ -929,7 +948,7 @@ export function PurchasesPage({
       },
       party: {
         title: p("document.vendor"),
-        details: buildVendorAddressBlock(row.supplier_name),
+        details: buildVendorAddressBlock(row.supplier_name, row.vendor_id),
       },
       meta: [
         { label: p("columns.billDate"), value: row.bill_date || "-" },
@@ -963,17 +982,10 @@ export function PurchasesPage({
   }
 
   function handlePrintPurchaseOrder(row: LocalPurchaseOrder) {
-    const win = window.open("about:blank", "_blank");
-    if (!win) {
-      actionFeedback.fail(p("errors.popupBlocked"));
-      return;
-    }
     setPrintingPurchaseOrder(true);
     try {
       actionFeedback.begin(p("feedback.preparingPurchaseOrder", { id: row.id }));
-      win.document.write(buildPurchaseOrderHtml(row));
-      win.document.close();
-      win.focus();
+      openBusinessDocumentPreview(buildPurchaseOrderHtml(row));
       actionFeedback.succeed(p("feedback.purchaseOrderPdfOpened"));
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.purchaseOrderPrintFailed"));
@@ -982,53 +994,46 @@ export function PurchasesPage({
     }
   }
 
-  function handleExportPurchaseOrderExcel(row: LocalPurchaseOrder) {
+  async function handleExportPurchaseOrderExcel(row: LocalPurchaseOrder) {
+    await exportPurchaseDocumentExcel(row, "purchase-order");
+  }
+
+  async function exportPurchaseDocumentExcel(row: LocalPurchaseOrder | LocalBill, kind: "purchase-order" | "bill") {
+    if (documentExportInFlight.current) return;
+    documentExportInFlight.current = true;
+    setExportingDocument(true);
     try {
-      const rows: Array<Array<string | number | null | undefined>> = [
-        [p("columns.purchaseOrder"), row.id],
-        [p("columns.vendor"), row.supplier_name],
-        [p("columns.purchaseCompany"), row.purchase_company || ""],
-        [p("columns.status"), statusLabel(row.status)],
-        [p("columns.currency"), row.currency || "EUR"],
-        [p("columns.created"), row.created_at?.slice(0, 10) || ""],
-        [],
-        [p("columns.code"), p("columns.brand"), p("columns.description"), p("columns.qty"), "OEM", p("columns.tariff"), p("columns.weight"), p("columns.origin"), p("columns.buyPriceWithCurrency", { currency: row.currency || "EUR" }), p("columns.lineTotalWithCurrency", { currency: row.currency || "EUR" }), p("columns.notes")],
-        ...row.lines.map((line) => [
-          line.product_code || line.old_code || "",
-          line.brand || "",
-          line.description || "",
-          Number(line.qty || 0),
-          line.oem_no || "",
-          line.hs_code || "",
-          line.weight_kg == null ? "" : formatWeight(line.weight_kg),
-          line.origin || "",
-          Number(line.buy_price || 0),
-          Number(line.line_total || 0),
-          line.notes || "",
-        ]),
-        [],
-        [p("columns.totalAmount"), "", "", "", "", "", "", "", "", Number(row.total_amount || 0)],
-      ];
-      const blob = buildXlsxBlob((row.id || "purchase-order").slice(0, 31), rows, [3, 8, 9]);
-      downloadBlob(`${sanitizeFileName(row.id || "purchase-order")}.xlsx`, blob);
+      actionFeedback.begin("Checking document totals and preparing Excel...");
+      if (kind === "bill") row = recomputeBillTotals(row as LocalBill);
+      const model = buildDocumentWorksheet({
+        kind, audience: "admin", number: row.id, party: row.supplier_name, currency: row.currency || "EUR",
+        date: "bill_date" in row ? row.bill_date : row.created_at?.slice(0, 10), status: row.status,
+        lines: row.lines.map((line) => ({
+          code: line.product_code || line.old_code || "", brand: line.brand, description: line.description,
+          qty: line.qty, unitPrice: line.buy_price, amount: line.line_total,
+          origin: line.origin, weight: line.weight_kg, tariff: line.hs_code,
+          orderNo: "purchase_order_no" in line ? line.purchase_order_no : line.sales_order_no,
+        })),
+        shipping: "shipping_cost" in row ? row.shipping_cost : 0,
+        discount: "discount_amount" in row ? row.discount_amount : 0, total: row.total_amount,
+      });
+      const blob = await buildXlsxBlobAsync(row.id, model.rows, model.numericColumns, model.options);
+      downloadBlob(`${sanitizeFileName(row.id)}.xlsx`, blob);
       actionFeedback.succeed(p("feedback.excelExported", { id: row.id }));
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.purchaseOrderExcelExportFailed"));
+    } finally {
+      documentExportInFlight.current = false;
+      setExportingDocument(false);
     }
   }
 
   function handlePrintBill(row: LocalBill) {
-    const win = window.open("about:blank", "_blank");
-    if (!win) {
-      actionFeedback.fail(p("errors.popupBlocked"));
-      return;
-    }
     setPrintingBill(true);
     try {
       actionFeedback.begin(p("feedback.preparingBill", { id: row.id }));
-      win.document.write(buildBillHtml(row));
-      win.document.close();
-      win.focus();
+      row = recomputeBillTotals(row);
+      openBusinessDocumentPreview(buildBillHtml(row));
       actionFeedback.succeed(p("feedback.billPdfOpened"));
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.billPrintFailed"));
@@ -1040,11 +1045,11 @@ export function PurchasesPage({
   function recomputePurchaseOrderTotals(draft: LocalPurchaseOrder): LocalPurchaseOrder {
     const lines = draft.lines.map((line) => ({
       ...line,
-      buy_price: Number(line.buy_price || 0),
-      qty: Math.max(1, Number(line.qty || 1) || 1),
-      line_total: Math.round((Math.max(1, Number(line.qty || 1) || 1) * Number(line.buy_price || 0)) * 100) / 100,
+      buy_price: requireUnitPrice(line.buy_price),
+      qty: requireQuantity(line.qty),
+      line_total: multiplyMoney(requireUnitPrice(line.buy_price), requireQuantity(line.qty)),
     }));
-    const total_amount = Math.round(lines.reduce((sum, line) => sum + line.line_total, 0) * 100) / 100;
+    const total_amount = sumMoney(lines.map((line) => line.line_total));
     return {
       ...draft,
       line_count: lines.length,
@@ -1054,30 +1059,18 @@ export function PurchasesPage({
     };
   }
 
-  function recomputeBillTotals(draft: LocalBill): LocalBill {
-    const lines = draft.lines.map((line) => ({
-      ...line,
-      buy_price: Number(line.buy_price || 0),
-      qty: Math.max(1, Number(line.qty || 1) || 1),
-      line_total: Math.round((Math.max(1, Number(line.qty || 1) || 1) * Number(line.buy_price || 0)) * 100) / 100,
-    }));
-    const subtotal = Math.round(lines.reduce((sum, line) => sum + line.line_total, 0) * 100) / 100;
-    const total_amount = Math.round((subtotal - Number(draft.discount_amount || 0) + Number(draft.shipping_cost || 0)) * 100) / 100;
-    return {
-      ...draft,
-      subtotal,
-      total_amount,
-      updated_at: new Date().toISOString(),
-      lines,
-    };
-  }
-
   function serializePurchaseOrderForDirtyCheck(input: LocalPurchaseOrder) {
-    return JSON.stringify(recomputePurchaseOrderTotals(input));
+    // Compare editable inputs only. Invalid intermediate values remain dirty
+    // without throwing during render; derived totals/time do not create dirt.
+    const { updated_at, total_amount, line_count, lines, ...fields } = input;
+    return JSON.stringify({ ...fields, lines: lines.map(({ line_total, ...line }) => line) });
   }
 
   function serializeBillForDirtyCheck(input: LocalBill) {
-    return JSON.stringify(recomputeBillTotals(input));
+    // Dirty checking must not generate updated_at or recalculate money.
+    // Compare editable source fields, including invalid intermediate inputs.
+    const { updated_at, subtotal, total_amount, lines, ...fields } = input;
+    return JSON.stringify({ ...fields, lines: lines.map(({ line_total, ...line }) => line) });
   }
 
   function getSelectedReceiveWarehouse() {
@@ -1146,6 +1139,7 @@ export function PurchasesPage({
     return {
       id: `PM-${Date.now()}`,
       bill_id: bill?.id || "",
+      vendor_id: bill?.vendor_id ?? null,
       bill_no: bill?.id || "",
       supplier_name: bill?.supplier_name || "",
       purchase_company: bill?.purchase_company || "",
@@ -1206,11 +1200,13 @@ export function PurchasesPage({
           message = `${message} ${caught instanceof Error ? caught.message : p("errors.vendorEmailQueueFailed")}`;
         }
       }
-      const refreshed = await fetchPurchaseOrderSummaries();
-      setPurchaseOrders(refreshed);
       setSelectedPurchaseOrderId(saved.id);
       setPurchaseOrderDraft({ ...saved, lines: saved.lines.map((line) => ({ ...line })) });
       setPurchaseOrderSourceSnapshot(serializePurchaseOrderForDirtyCheck(saved));
+      setPurchaseOrders((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+      const refreshed = await refreshAfterCommit(fetchPurchaseOrderSummaries);
+      if (refreshed) setPurchaseOrders(refreshed);
+      else message = `${message} ${p("feedback.purchaseOrderRefreshDelayed")}`;
       actionFeedback.succeed(message);
       return saved;
     } catch (caught) {
@@ -1476,8 +1472,7 @@ export function PurchasesPage({
       const [refreshedPayments, refreshedBills] = await Promise.all([fetchPaymentsMade(), fetchBillSummaries()]);
       setPaymentsMade(refreshedPayments);
       setBills(refreshedBills);
-      setSelectedPaymentMadeId(saved.id);
-      setPaymentMadeDraft({ ...saved });
+      selectPaymentMade(saved);
       actionFeedback.succeed(p("feedback.paymentSaved", { id: saved.id }));
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.paymentSaveFailed"));
@@ -1496,8 +1491,8 @@ export function PurchasesPage({
       setBills(refreshedBills);
       if (selectedPaymentMadeId === row.id) {
         const next = refreshedPayments[0] || null;
-        setSelectedPaymentMadeId(next?.id || "");
-        setPaymentMadeDraft(next ? { ...next } : createEmptyPaymentMade(null));
+        if (next) selectPaymentMade(next);
+        else startNewPaymentMade(createEmptyPaymentMade(null));
       }
       actionFeedback.succeed(p("feedback.paymentDeleted", { id: row.id }));
     } catch (caught) {
@@ -1507,15 +1502,15 @@ export function PurchasesPage({
 
   function handleAddPaymentMade(bill?: LocalBill | null) {
     const next = createEmptyPaymentMade(bill || billDraft || null);
-    setSelectedPaymentMadeId(next.id);
-    setPaymentMadeDraft(next);
+    startNewPaymentMade(next);
     setActiveTab("Payments Made");
     actionFeedback.succeed(p("feedback.newPaymentDraftReady"));
   }
 
   return (
     <div className="page-stack">
-      {activeTab === "Vendors" ? <VendorsPage /> : null}
+      {activeTab === "Vendors" ? <VendorsPage onOpenSupplierPrices={() => onNavigateTab ? onNavigateTab("Supplier Prices") : setActiveTab("Supplier Prices")} /> : null}
+      {activeTab === "Supplier Prices" ? <SuppliersPage /> : null}
 
       {activeTab === "Purchase Orders" ? (
         <SectionCard title={p("sections.purchaseOrders")}>
@@ -1615,10 +1610,25 @@ export function PurchasesPage({
                 </div>
                 <div className="invoice-meta-grid">
                   <Input label={p("fields.poNo")} value={purchaseOrderDraft.id} onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, id: value } : current))} />
-                  <Input
+                  <Select
                     label={p("fields.vendor")}
-                    value={purchaseOrderDraft.supplier_name}
-                    onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, supplier_name: value } : current))}
+                    value={purchaseOrderDraft.vendor_id || findVendorByName(purchaseOrderDraft.supplier_name)?.id || purchaseOrderDraft.supplier_name}
+                    options={[
+                      ...vendors.map((vendor) => {
+                        const name = vendor.display_name || vendor.company_name;
+                        const duplicate = vendors.filter((item) =>
+                          (item.display_name || item.company_name).trim().toLowerCase() === name.trim().toLowerCase()).length > 1;
+                        return { value: vendor.id, label: duplicate ? `${name} · ${vendor.id.slice(-8)}` : name };
+                      }),
+                      ...(!purchaseOrderDraft.vendor_id && !findVendorByName(purchaseOrderDraft.supplier_name)
+                        ? [{ value: purchaseOrderDraft.supplier_name, label: purchaseOrderDraft.supplier_name || "Unassigned Supplier" }] : []),
+                    ]}
+                    onChange={(value) => {
+                      const vendor = vendors.find((item) => item.id === value);
+                      if (vendor) setPurchaseOrderDraft((current) => current ? {
+                        ...current, vendor_id: vendor.id, supplier_name: vendor.display_name || vendor.company_name,
+                      } : current);
+                    }}
                   />
                   <Input
                     label={p("fields.purchaseCompany")}
@@ -1715,7 +1725,7 @@ export function PurchasesPage({
                                 }
                               />
                             </td>
-                            <td>{formatMoney((Number(line.buy_price || 0) || 0) * (Number(line.qty || 0) || 0), purchaseOrderDraft.currency)}</td>
+                            <td>{formatMoney(previewPurchaseLineTotal(line), purchaseOrderDraft.currency)}</td>
                             <td>
                               <input
                                 className="inline-edit-input"
@@ -1753,7 +1763,7 @@ export function PurchasesPage({
                   <Button variant="secondary" onClick={() => handlePrintPurchaseOrder(purchaseOrderDraft)} busy={printingPurchaseOrder} busyLabel={p("busy.openingPdf")}>
                     {p("actions.pdfPrint")}
                   </Button>
-                  <Button variant="secondary" onClick={() => handleExportPurchaseOrderExcel(purchaseOrderDraft)}>
+                  <Button variant="secondary" onClick={() => handleExportPurchaseOrderExcel(purchaseOrderDraft)} busy={exportingDocument} busyLabel="Preparing Excel...">
                     {p("actions.exportExcel")}
                   </Button>
                   <Button onClick={savePurchaseOrderDraft}>{p("actions.savePurchaseOrder")}</Button>
@@ -1852,8 +1862,8 @@ export function PurchasesPage({
                               <input
                                 className="inline-edit-input inline-edit-input--qty"
                                 type="number"
-                                min={1}
-                                step={1}
+                                min="0.000001"
+                                step="any"
                                 value={line.qty}
                                 onChange={(event) =>
                                   setBillDraft((current) =>
@@ -1861,7 +1871,7 @@ export function PurchasesPage({
                                       ? {
                                           ...current,
                                           lines: current.lines.map((item, itemIndex) =>
-                                            itemIndex === index ? { ...item, qty: Math.max(1, Number(event.target.value || 1) || 1) } : item,
+                                            itemIndex === index ? { ...item, qty: Number(event.target.value) } : item,
                                           ),
                                         }
                                       : current,
@@ -1898,7 +1908,7 @@ export function PurchasesPage({
                                 }
                               />
                             </td>
-                            <td>{formatMoney((Number(line.buy_price || 0) || 0) * (Number(line.qty || 0) || 0), billDraft.currency)}</td>
+                            <td>{billMoneyPreview.value ? formatMoney(billMoneyPreview.value.lines[index].line_total, billDraft.currency) : "—"}</td>
                             <td>
                               <input
                                 className="inline-edit-input"
@@ -1922,12 +1932,14 @@ export function PurchasesPage({
 
                 <div className="toolbar toolbar--wrap">
                   <div className="meta-row">
-                    <span>{p("summary.subtotal", { amount: formatMoney(recomputeBillTotals(billDraft).subtotal, billDraft.currency) })}</span>
-                    <span>{p("summary.total", { amount: formatMoney(recomputeBillTotals(billDraft).total_amount, billDraft.currency) })}</span>
+                    <span>{p("summary.subtotal", { amount: billMoneyPreview.value ? formatMoney(billMoneyPreview.value.subtotal, billDraft.currency) : "—" })}</span>
+                    <span>{p("summary.total", { amount: billMoneyPreview.value ? formatMoney(billMoneyPreview.value.total_amount, billDraft.currency) : "—" })}</span>
                   </div>
+                  {billMoneyPreview.error ? <p className="warning-text" role="alert">{billMoneyPreview.error}</p> : null}
                   <Button variant="secondary" onClick={() => handlePrintBill(billDraft)} busy={printingBill} busyLabel={p("busy.openingPdf")}>
                     {p("actions.pdfPrint")}
                   </Button>
+                  <Button variant="secondary" onClick={() => exportPurchaseDocumentExcel(billDraft, "bill")} busy={exportingDocument} busyLabel="Preparing Excel...">Download Excel</Button>
                   <Button onClick={saveBillDraft}>{p("actions.saveBill")}</Button>
                   <Button variant="secondary" onClick={() => handleAddPaymentMade(billDraft)}>
                     {p("actions.addPayment")}
@@ -1953,8 +1965,7 @@ export function PurchasesPage({
             columns={paymentMadeColumns}
             emptyText={p("empty.noVendorPayments")}
             onRowClick={(row) => {
-              setSelectedPaymentMadeId(row.id);
-              setPaymentMadeDraft({ ...row });
+              selectPaymentMade(row);
             }}
             rowClassName={(row) => (row.id === selectedPaymentMadeId ? "data-table__row--active" : "")}
           />
@@ -1975,6 +1986,7 @@ export function PurchasesPage({
                             ? {
                                 ...current,
                                 bill_id: bill?.id || "",
+                                vendor_id: bill?.vendor_id ?? null,
                                 bill_no: bill?.id || "",
                                 supplier_name: bill?.supplier_name || current.supplier_name,
                                 purchase_company: bill?.purchase_company || current.purchase_company,

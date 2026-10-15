@@ -11,6 +11,25 @@ export type ReleaseReviewRow = {
   errorCode: string | null; errorMessage: string | null;
   audit: ReleaseAudit | null; current: boolean;
 };
+export type ReleaseIssueRow = {
+  id: number; sourceRowNumber: number; productCode: string | null; buyPrice: string | null;
+  rowStatus: string; errorCode: string | null; errorMessage: string | null;
+};
+export function releaseIssueExplanation(issue: ReleaseIssueRow, tr: boolean) {
+  const code=issue.errorCode;
+  if (code==='INVALID_BUY_PRICE') return tr
+    ? 'Alış fiyatı geçerli bir sayı olmalı; fiyatı ve para birimini doldurup dosyayı düzeltin.'
+    : 'Buy price must be a valid number; fill in the price and currency, then correct the file.';
+  if (code==='DUPLICATE_NORMALIZED_CODE') return tr
+    ? 'Normalize ürün kodu bu sürümde birden fazla kez bulundu; aynı kodu tek satıra indirin.'
+    : 'The normalized product code appears more than once in this release; keep one row per code.';
+  if (code) return tr
+    ? `Doğrulama kodu: ${code}. Dosyadaki bu satırı düzeltip yeniden doğrulayın.`
+    : `Validation code: ${code}. Correct this row and validate the file again.`;
+  return tr ? 'Bu satır doğrulamadan geçmedi; ürün kodu ve zorunlu alanları kontrol edin.'
+    : 'This row did not pass validation; check the product code and required fields.';
+}
+
 // The page is ordered newest first by the API. Scope identity uses UUIDs so
 // equal display names never combine releases from different suppliers.
 export function splitReleaseReviewHistory(rows: ReleaseReviewRow[]) {
@@ -48,6 +67,8 @@ export function releaseReviewState(row:ReleaseReviewRow) {
   if (row.errorCode || row.audit?.reviewRequired) return 'review_required';
   if (['failed','cancelled','superseded','archived'].includes(row.status)) return 'inactive';
   if (row.status==='published') return row.current ? 'active' : 'previous_publication';
+  if (row.status==='staged') return 'staged';
+  if (['received','uploaded','parsing','validating'].includes(row.status)) return 'processing';
   if (!row.audit?.checked) return 'unverified';
   if (row.status==='validated') return 'awaiting_publication';
   return 'processing';

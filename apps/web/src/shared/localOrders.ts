@@ -1,4 +1,5 @@
 import type { QuoteBuilderLine } from "../types/quoteBuilder";
+import { roundMoney, multiplyMoney, sumMoney, marginPercent as decimalMarginPercent, salesOrderTotals, requireUnitPrice, requireQuantity } from "../../../../shared/order-money.mjs";
 import type { LocalBill, LocalBillLine, LocalInvoice, LocalInvoiceLine, LocalPurchaseOrder, LocalPurchaseOrderLine, LocalSalesOrder } from "../types/orders";
 
 const SALES_ORDERS_KEY = "master-next-sales-orders";
@@ -29,15 +30,26 @@ function makeId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function roundMoney(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
 function supplierKey(name: string) {
   return String(name || "Unassigned Supplier")
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-");
+}
+
+// Names are snapshots, not identities. Do not merge partially identified or
+// different accounts merely because their display names happen to match.
+function mergedPartyIdentity(rows: Array<{ customer_id?: string | null; vendor_id?: string | null; customer_name?: string; supplier_name?: string }>, idKey: "customer_id" | "vendor_id", nameKey: "customer_name" | "supplier_name") {
+  const ids = rows.map((row) => row[idKey]?.trim() || null);
+  if (ids.some(Boolean)) {
+    if (ids.some((id) => id !== ids[0])) throw new Error("COMMERCIAL_MERGE_PARTY_MISMATCH");
+    return ids[0];
+  }
+  // Legacy ID-less drafts still undergo authoritative tenant/source validation
+  // in the save RPC; client matching is never a substitute for that check.
+  const names = new Set(rows.map((row) => (row[nameKey] || "").trim().toLowerCase()));
+  if (names.size > 1) throw new Error("COMMERCIAL_MERGE_PARTY_MISMATCH");
+  return null;
 }
 
 export function loadLocalSalesOrders() {
@@ -92,6 +104,7 @@ export function upsertLocalSalesOrder(order: LocalSalesOrder) {
 
 export function buildLocalSalesOrder(input: {
   id?: string;
+  customer_id?: string | null;
   sales_order_no: string;
   customer_name: string;
   seller_company: string;
@@ -117,14 +130,14 @@ export function buildLocalSalesOrder(input: {
   lines: QuoteBuilderLine[];
 }) {
   const previous = input.id ? loadLocalSalesOrders().find((item) => item.id === input.id) : null;
-  const purchaseTotal = roundMoney(input.lines.reduce((sum, line) => sum + (Number(line.buy_price ?? 0) || 0) * line.qty, 0));
-  const subtotalAmount = roundMoney(input.lines.reduce((sum, line) => sum + (Number(line.sell_price ?? 0) || 0) * line.qty, 0));
-  const salesTotal = roundMoney(subtotalAmount - input.discount_amount + input.shipping_cost);
-  const profitTotal = roundMoney(salesTotal - purchaseTotal);
-  const marginPercent = salesTotal > 0 ? roundMoney((profitTotal / salesTotal) * 100) : 0;
+  // Builders also serve editable previews. Enforce complete prices at the
+  // confirmation boundary (API + database), not during a React render.
+  const totals = salesOrderTotals(input.lines, input.shipping_cost, input.discount_amount);
   return {
     id: input.id || makeId("so"),
     sales_order_no: input.sales_order_no,
+    customer_id: input.customer_id !== undefined ? input.customer_id :
+      (previous?.customer_name === input.customer_name ? previous.customer_id ?? null : null),
     customer_name: input.customer_name,
     seller_company: input.seller_company,
     purchase_company: input.purchase_company,
@@ -142,10 +155,10 @@ export function buildLocalSalesOrder(input: {
     packing_details: input.packing_details,
     notes: input.notes,
     status: input.status,
-    purchase_total: purchaseTotal,
-    sales_total: salesTotal,
-    profit_total: profitTotal,
-    margin_percent: marginPercent,
+    purchase_total: totals.purchase_total,
+    sales_total: totals.sales_total,
+    profit_total: totals.profit_total,
+    margin_percent: totals.margin_percent,
     source_channel: input.source_channel || previous?.source_channel || "internal",
     portal_invite_id: input.portal_invite_id ?? previous?.portal_invite_id ?? null,
     portal_submitted_at: input.portal_submitted_at ?? previous?.portal_submitted_at ?? null,
@@ -165,6 +178,7 @@ export function createPurchaseOrdersFromSalesOrder(order: LocalSalesOrder) {
 }
 
 export function buildPurchaseOrdersFromSalesOrder(order: LocalSalesOrder) {
+  salesOrderTotals(order.lines, order.shipping_cost, order.discount_amount, true);
   const grouped = new Map<string, LocalPurchaseOrderLine[]>();
   order.lines.forEach((line) => {
     const name = line.supplier_name || "Unassigned Supplier";
@@ -182,8 +196,8 @@ export function buildPurchaseOrdersFromSalesOrder(order: LocalSalesOrder) {
       hs_code: line.hs_code || "",
       weight_kg: line.weight_kg ?? null,
       supplier_name: name,
-      buy_price: roundMoney(Number(line.buy_price ?? 0) || 0),
-      line_total: roundMoney((Number(line.buy_price ?? 0) || 0) * line.qty),
+      buy_price: requireUnitPrice(line.buy_price, true),
+      line_total: multiplyMoney(requireUnitPrice(line.buy_price, true), requireQuantity(line.qty)),
       origin: line.origin,
       notes: line.notes,
     });
@@ -204,7 +218,7 @@ export function buildPurchaseOrdersFromSalesOrder(order: LocalSalesOrder) {
       currency: order.currency,
       created_at: nowIso(),
       updated_at: nowIso(),
-      total_amount: roundMoney(lines.reduce((sum, line) => sum + line.line_total, 0)),
+      total_amount: sumMoney(lines.map((line) => line.line_total)),
       line_count: lines.length,
       lines,
     } satisfies LocalPurchaseOrder;
@@ -222,10 +236,10 @@ export function createInvoiceFromSalesOrder(order: LocalSalesOrder) {
 
 export function buildInvoiceFromSalesOrder(order: LocalSalesOrder) {
   const lines: LocalInvoiceLine[] = order.lines.map((line) => {
-    const purchaseTotal = roundMoney((Number(line.buy_price ?? 0) || 0) * line.qty);
-    const salesTotal = roundMoney((Number(line.sell_price ?? 0) || 0) * line.qty);
-    const profitTotal = roundMoney(salesTotal - purchaseTotal);
-    const marginPercent = salesTotal > 0 ? roundMoney((profitTotal / salesTotal) * 100) : 0;
+    const purchaseTotal = multiplyMoney(line.buy_price ?? 0, line.qty);
+    const salesTotal = multiplyMoney(line.sell_price ?? 0, line.qty);
+    const profitTotal = sumMoney([salesTotal, -purchaseTotal]);
+    const marginPercent = decimalMarginPercent(profitTotal, salesTotal);
     return {
       sales_order_id: order.id,
       sales_order_no: order.sales_order_no,
@@ -238,8 +252,8 @@ export function buildInvoiceFromSalesOrder(order: LocalSalesOrder) {
       hs_code: line.hs_code,
       weight_kg: line.weight_kg ?? null,
       supplier_name: line.supplier_name,
-      buy_price: roundMoney(Number(line.buy_price ?? 0) || 0),
-      sell_price: roundMoney(Number(line.sell_price ?? 0) || 0),
+      buy_price: requireUnitPrice(line.buy_price ?? 0),
+      sell_price: requireUnitPrice(line.sell_price ?? 0),
       purchase_total: purchaseTotal,
       sales_total: salesTotal,
       profit_total: profitTotal,
@@ -263,6 +277,7 @@ export function buildInvoiceFromSalesOrder(order: LocalSalesOrder) {
     warehouse_name: previous?.warehouse_name || "",
     sales_order_no: order.sales_order_no,
     customer_name: order.customer_name,
+    customer_id: order.customer_id ?? null,
     seller_company: order.seller_company,
     purchase_company: order.purchase_company,
     currency: order.currency,
@@ -274,7 +289,7 @@ export function buildInvoiceFromSalesOrder(order: LocalSalesOrder) {
     contract_nr: order.seller_info,
     packing_details: order.packing_details,
     notes: order.notes,
-    subtotal: roundMoney(order.sales_total - order.shipping_cost + order.discount_amount),
+    subtotal: sumMoney([order.sales_total, -order.shipping_cost, order.discount_amount]),
     discount_amount: roundMoney(order.discount_amount),
     shipping_cost: roundMoney(order.shipping_cost),
     total_amount: roundMoney(order.sales_total),
@@ -294,12 +309,13 @@ export function buildMergedInvoiceFromSalesOrders(orders: LocalSalesOrder[]) {
   }
 
   const first = orders[0];
+  const customerId = mergedPartyIdentity(orders, "customer_id", "customer_name");
   const lines: LocalInvoiceLine[] = orders.flatMap((order) =>
     order.lines.map((line) => {
-      const purchaseTotal = roundMoney((Number(line.buy_price ?? 0) || 0) * line.qty);
-      const salesTotal = roundMoney((Number(line.sell_price ?? 0) || 0) * line.qty);
-      const profitTotal = roundMoney(salesTotal - purchaseTotal);
-      const marginPercent = salesTotal > 0 ? roundMoney((profitTotal / salesTotal) * 100) : 0;
+      const purchaseTotal = multiplyMoney(line.buy_price ?? 0, line.qty);
+      const salesTotal = multiplyMoney(line.sell_price ?? 0, line.qty);
+      const profitTotal = sumMoney([salesTotal, -purchaseTotal]);
+      const marginPercent = decimalMarginPercent(profitTotal, salesTotal);
       return {
         sales_order_id: order.id,
         sales_order_no: order.sales_order_no,
@@ -312,8 +328,8 @@ export function buildMergedInvoiceFromSalesOrders(orders: LocalSalesOrder[]) {
         hs_code: line.hs_code,
         weight_kg: line.weight_kg ?? null,
         supplier_name: line.supplier_name,
-        buy_price: roundMoney(Number(line.buy_price ?? 0) || 0),
-        sell_price: roundMoney(Number(line.sell_price ?? 0) || 0),
+        buy_price: requireUnitPrice(line.buy_price ?? 0),
+        sell_price: requireUnitPrice(line.sell_price ?? 0),
         purchase_total: purchaseTotal,
         sales_total: salesTotal,
         profit_total: profitTotal,
@@ -327,13 +343,13 @@ export function buildMergedInvoiceFromSalesOrders(orders: LocalSalesOrder[]) {
     }),
   );
 
-  const discountAmount = roundMoney(orders.reduce((sum, order) => sum + Number(order.discount_amount || 0), 0));
-  const shippingCost = roundMoney(orders.reduce((sum, order) => sum + Number(order.shipping_cost || 0), 0));
-  const subtotal = roundMoney(lines.reduce((sum, line) => sum + Number(line.sales_total || 0), 0));
-  const purchaseTotal = roundMoney(lines.reduce((sum, line) => sum + Number(line.purchase_total || 0), 0));
-  const totalAmount = roundMoney(subtotal - discountAmount + shippingCost);
-  const profitTotal = roundMoney(totalAmount - purchaseTotal);
-  const marginPercent = totalAmount > 0 ? roundMoney((profitTotal / totalAmount) * 100) : 0;
+  const discountAmount = sumMoney(orders.map((order) => order.discount_amount || 0));
+  const shippingCost = sumMoney(orders.map((order) => order.shipping_cost || 0));
+  const subtotal = sumMoney(lines.map((line) => line.sales_total || 0));
+  const purchaseTotal = sumMoney(lines.map((line) => line.purchase_total || 0));
+  const totalAmount = sumMoney([subtotal, -discountAmount, shippingCost]);
+  const profitTotal = sumMoney([totalAmount, -purchaseTotal]);
+  const marginPercent = decimalMarginPercent(profitTotal, totalAmount);
 
   return {
     id: makeId("inv"),
@@ -344,6 +360,7 @@ export function buildMergedInvoiceFromSalesOrders(orders: LocalSalesOrder[]) {
     warehouse_name: "",
     sales_order_no: orders.map((order) => order.sales_order_no).join(", "),
     customer_name: first.customer_name,
+    customer_id: customerId,
     seller_company: first.seller_company,
     purchase_company: first.purchase_company,
     currency: first.currency,
@@ -381,7 +398,7 @@ export function buildBillFromPurchaseOrder(order: LocalPurchaseOrder) {
     hs_code: line.hs_code || "",
     weight_kg: line.weight_kg ?? null,
     supplier_name: line.supplier_name,
-    buy_price: roundMoney(line.buy_price),
+    buy_price: requireUnitPrice(line.buy_price),
     line_total: roundMoney(line.line_total),
     origin: line.origin,
     notes: line.notes,
@@ -395,6 +412,7 @@ export function buildBillFromPurchaseOrder(order: LocalPurchaseOrder) {
     purchase_order_no: order.id,
     supplier_name: order.supplier_name,
     purchase_company: order.purchase_company,
+    vendor_id: order.vendor_id ?? null,
     currency: order.currency,
     status: "draft",
     bill_date: nowIso().slice(0, 10),
@@ -418,6 +436,7 @@ export function buildMergedBillFromPurchaseOrders(orders: LocalPurchaseOrder[]) 
   }
 
   const first = orders[0];
+  const vendorId = mergedPartyIdentity(orders, "vendor_id", "supplier_name");
   const lines: LocalBillLine[] = orders.flatMap((order) =>
     order.lines.map((line) => ({
       purchase_order_id: order.id,
@@ -431,20 +450,21 @@ export function buildMergedBillFromPurchaseOrders(orders: LocalPurchaseOrder[]) 
       hs_code: line.hs_code || "",
       weight_kg: line.weight_kg ?? null,
       supplier_name: line.supplier_name,
-      buy_price: roundMoney(line.buy_price),
+      buy_price: requireUnitPrice(line.buy_price),
       line_total: roundMoney(line.line_total),
       origin: line.origin,
       notes: line.notes,
     })),
   );
 
-  const subtotal = roundMoney(lines.reduce((sum, line) => sum + Number(line.line_total || 0), 0));
+  const subtotal = sumMoney(lines.map((line) => line.line_total || 0));
 
   return {
     id: makeId("bill"),
     purchase_order_id: first.id,
     purchase_order_no: orders.map((order) => order.id).join(", "),
     supplier_name: first.supplier_name,
+    vendor_id: vendorId,
     purchase_company: first.purchase_company,
     currency: first.currency,
     status: "draft",

@@ -8,6 +8,7 @@ export type LocalPaymentMadeStatus = "draft" | "confirmed" | "void";
 
 export type LocalSalesOrder = {
   id: string;
+  customer_id?: string | null;
   sales_order_no: string;
   customer_name: string;
   seller_company: string;
@@ -60,6 +61,7 @@ export type LocalPurchaseOrderLine = {
 
 export type LocalPurchaseOrder = {
   id: string;
+  vendor_id?: string | null;
   supplier_name: string;
   supplier_key: string;
   purchase_company: string;
@@ -95,6 +97,7 @@ export type LocalBillLine = {
 
 export type LocalBill = {
   id: string;
+  vendor_id?: string | null;
   purchase_order_id: string;
   purchase_order_no: string;
   supplier_name: string;
@@ -141,9 +144,9 @@ export type LocalInvoiceLine = {
 
 export type LocalInvoice = {
   id: string;
+  customer_id?: string | null;
   sales_order_id: string;
   sales_order_ids?: string[];
-  customer_id?: string | null;
   warehouse_id?: string | null;
   warehouse_code: string;
   warehouse_name: string;
@@ -174,6 +177,7 @@ export type LocalInvoice = {
 
 export type LocalPaymentReceived = {
   id: string;
+  customer_id?: string | null;
   invoice_id: string;
   invoice_no: string;
   customer_name: string;
@@ -190,6 +194,7 @@ export type LocalPaymentReceived = {
 
 export type LocalPaymentMade = {
   id: string;
+  vendor_id?: string | null;
   bill_id: string;
   bill_no: string;
   supplier_name: string;

@@ -1,3 +1,4 @@
+import { SupplierReleaseReviewPanel } from "../../modules/admin/SupplierReleaseReviewPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { normalizeBrandName, normalizePartCode } from "../../domain/shared/normalize";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
@@ -879,6 +880,8 @@ export function SuppliersPage() {
           <DataTable rows={rows} columns={columns} emptyText={loadingRows ? t("common.loadingPage") : p("suppliers.empty.noPreviewRows")} />
         </div>
       </section>
+
+      {import.meta.env.VITE_SUPPLIER_RELEASE_REVIEW_ENABLED === "true" ? <SupplierReleaseReviewPanel locale={locale} /> : null}
 
       {showImportDialog ? (
         <div className="modal-backdrop">

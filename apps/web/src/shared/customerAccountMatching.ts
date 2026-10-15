@@ -7,8 +7,10 @@ function matchingCustomersByName<T extends Pick<LocalCustomer, "display_name" | 
     item.display_name.trim().toLowerCase() === key || item.company_name.trim().toLowerCase() === key);
 }
 
-export function findCustomerByNameInList<T extends Pick<LocalCustomer, "display_name" | "company_name">>(customers: T[], name: string) {
-  return matchingCustomersByName(customers, name)[0] || null;
+export function findCustomerByNameInList<T extends Pick<LocalCustomer, "display_name" | "company_name"> & { id?: string }>(customers: T[], name: string, customerId?: string | null) {
+  if (customerId) return customers.find((item) => item.id === customerId) || null;
+  const matches = matchingCustomersByName(customers, name);
+  return matches.length === 1 ? matches[0] : null;
 }
 
 export function findUniqueCustomerByNameInList<T extends Pick<LocalCustomer, "display_name" | "company_name">>(customers: T[], name: string) {

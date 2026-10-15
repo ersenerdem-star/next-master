@@ -1,4 +1,5 @@
 import { supabaseClient } from "./supabaseClient";
+import { callAppRpc } from "./appRpcApi";
 import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 import { getCurrentOrgId } from "./organizationApi";
 import type {
@@ -58,6 +59,11 @@ function normalizeReportFilters(options: ReportingReportFilters) {
 }
 
 async function fetchReportRows<T>(functionName: string, options: ReportingReportFilters) {
+  if (["reporting_customer_balance_by_brand_product", "reporting_supplier_balance_by_brand_product", "reporting_sales_margin_report"].includes(functionName)) {
+    const data = await callAppRpc<unknown>(functionName, normalizeReportFilters(options));
+    if (!Array.isArray(data)) throw new Error("Report response is missing or incomplete.");
+    return data as T[];
+  }
   const { data, error } = await supabaseClient.rpc(functionName, normalizeReportFilters(options));
   if (error) throw new Error(sanitizeUserFacingMessage(error.message, "The request could not be completed right now."));
   return (data ?? []) as T[];

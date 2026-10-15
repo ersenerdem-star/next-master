@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastructure/api/companyProfilesApi";
 import { fetchCustomerForInvoicePriceRefresh, fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
 import {
@@ -31,10 +31,15 @@ import { Select } from "../components/common/Select";
 import { useActionFeedback } from "../components/common/ActionFeedback";
 import { useI18n } from "../../i18n/I18nProvider";
 import { buildBusinessDocumentHtml, openBusinessDocumentPreview } from "../../shared/documentPrint";
+import { buildDocumentWorksheet } from "../../shared/documentExport";
+import { buildXlsxBlobAsync, downloadBlob } from "../../shared/xlsx";
 import { BrandPill } from "../components/common/BrandPill";
 import { buildEntityAlias } from "../../shared/entityAlias";
+import { recomputeInvoiceTotals as calculateInvoiceTotals, previewInvoiceMoney } from "../../shared/invoiceMoney";
+import { usePaymentDraftEditor } from "../hooks/usePaymentDraftEditor";
 
 type SalesPageProps = {
+  onNavigateTab?: (tab: "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists") => void;
   activeTab?: "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists";
   salesOrdersNavTick?: number;
   invoicesNavTick?: number;
@@ -48,6 +53,7 @@ type SalesPageProps = {
 
 export function SalesPage({
   activeTab: activeTabProp = "Sales Orders",
+  onNavigateTab,
   salesOrdersNavTick = 0,
   invoicesNavTick = 0,
   selectedSalesOrderId = "",
@@ -59,15 +65,24 @@ export function SalesPage({
 }: SalesPageProps) {
   const { t } = useI18n();
   const actionFeedback = useActionFeedback();
-  const [activeTab, setActiveTab] = useState<"Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists">(activeTabProp);
+  const [activeTab, setLocalActiveTab] = useState<"Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists">(activeTabProp);
+  function setActiveTab(tab: "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists") {
+    setLocalActiveTab(tab);
+    onNavigateTab?.(tab);
+  }
   const [invoicesView, setInvoicesView] = useState<"list" | "detail">(externalSelectedInvoiceId ? "detail" : "list");
   const [invoices, setInvoices] = useState<LocalInvoice[]>([]);
   const [salesOrders, setSalesOrders] = useState<LocalSalesOrder[]>([]);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
   const [invoiceDraft, setInvoiceDraft] = useState<LocalInvoice | null>(null);
   const [paymentsReceived, setPaymentsReceived] = useState<LocalPaymentReceived[]>([]);
-  const [selectedPaymentReceivedId, setSelectedPaymentReceivedId] = useState("");
-  const [paymentReceivedDraft, setPaymentReceivedDraft] = useState<LocalPaymentReceived | null>(null);
+  const {
+    persistedId: selectedPaymentReceivedId,
+    draft: paymentReceivedDraft,
+    setDraft: setPaymentReceivedDraft,
+    startNew: startNewPaymentReceived,
+    selectExisting: selectPaymentReceived,
+  } = usePaymentDraftEditor(paymentsReceived);
   const [selectedSalesOrderIds, setSelectedSalesOrderIds] = useState<string[]>([]);
   const [customers, setCustomers] = useState<LocalCustomer[]>([]);
   const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
@@ -77,6 +92,9 @@ export function SalesPage({
   const [invoiceResyncOnlyFillBlanks, setInvoiceResyncOnlyFillBlanks] = useState(true);
   const [invoiceResyncKeepPrices, setInvoiceResyncKeepPrices] = useState(true);
   const [resyncingInvoice, setResyncingInvoice] = useState(false);
+  const [exportingInvoice, setExportingInvoice] = useState(false);
+  const invoiceExportInFlight = useRef(false);
+  const invoiceMoneyPreview = useMemo(() => previewInvoiceMoney(calculateInvoiceTotals, invoiceDraft), [invoiceDraft]);
 
   function renderInvoiceLifecycleBadge(row: { lifecycle_status?: string | null; lifecycle_warning?: string | null }) {
     if (String(row.lifecycle_status || "").trim().toLowerCase() !== "discontinued") return null;
@@ -119,41 +137,7 @@ export function SalesPage({
   }
 
   function recomputeInvoiceTotals(input: LocalInvoice): LocalInvoice {
-    const lines = input.lines.map((line) => {
-      const qty = Math.max(1, Number(line.qty || 1) || 1);
-      const buyPrice = Number(line.buy_price || 0) || 0;
-      const sellPrice = Number(line.sell_price || 0) || 0;
-      const purchaseTotal = qty * buyPrice;
-      const salesTotal = qty * sellPrice;
-      const profitTotal = salesTotal - purchaseTotal;
-      const marginPercent = salesTotal > 0 ? (profitTotal / salesTotal) * 100 : 0;
-      return {
-        ...line,
-        qty,
-        buy_price: buyPrice,
-        sell_price: sellPrice,
-        purchase_total: Math.round(purchaseTotal * 100) / 100,
-        sales_total: Math.round(salesTotal * 100) / 100,
-        profit_total: Math.round(profitTotal * 100) / 100,
-        margin_percent: Math.round(marginPercent * 100) / 100,
-      };
-    });
-
-    const subtotal = Math.round(lines.reduce((sum, line) => sum + Number(line.sales_total || 0), 0) * 100) / 100;
-    const purchaseTotal = Math.round(lines.reduce((sum, line) => sum + Number(line.purchase_total || 0), 0) * 100) / 100;
-    const totalAmount = Math.round((subtotal - Number(input.discount_amount || 0) + Number(input.shipping_cost || 0)) * 100) / 100;
-    const profitTotal = Math.round((totalAmount - purchaseTotal) * 100) / 100;
-    const marginPercent = totalAmount > 0 ? Math.round(((profitTotal / totalAmount) * 100) * 100) / 100 : 0;
-
-    return {
-      ...input,
-      lines,
-      subtotal,
-      total_amount: totalAmount,
-      purchase_total: purchaseTotal,
-      profit_total: profitTotal,
-      margin_percent: marginPercent,
-    };
+    return previewInvoiceMoney(calculateInvoiceTotals, input).value || input;
   }
 
   function buildInvoiceBrandSummary(lines: LocalInvoice["lines"]) {
@@ -176,7 +160,7 @@ export function SalesPage({
   }
 
   useEffect(() => {
-    setActiveTab(activeTabProp);
+    setLocalActiveTab(activeTabProp);
   }, [activeTabProp]);
 
   useEffect(() => {
@@ -350,18 +334,6 @@ export function SalesPage({
     };
   }, [invoiceDraft?.id, invoiceDraft?.lines.length, invoicesView, selectedInvoiceId]);
 
-  useEffect(() => {
-    if (!paymentsReceived.length) {
-      const next = createEmptyPaymentReceived();
-      setSelectedPaymentReceivedId(next.id);
-      setPaymentReceivedDraft(next);
-      return;
-    }
-    const current = paymentsReceived.find((item) => item.id === selectedPaymentReceivedId) || paymentsReceived[0];
-    setSelectedPaymentReceivedId(current.id);
-    setPaymentReceivedDraft({ ...current });
-  }, [paymentsReceived, selectedPaymentReceivedId]);
-
   function formatMoney(value: number, currency = "EUR") {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -389,6 +361,7 @@ export function SalesPage({
     return {
       id: `PR-${Date.now()}`,
       invoice_id: invoice?.id || "",
+      customer_id: invoice?.customer_id ?? null,
       invoice_no: invoice?.id || "",
       customer_name: invoice?.customer_name || "",
       currency: invoice?.currency || "EUR",
@@ -404,7 +377,7 @@ export function SalesPage({
   }
 
   function buildCustomerAddressBlock(row: LocalInvoice) {
-    const customer = findCustomerByNameInList(customers, row.customer_name);
+    const customer = findCustomerByNameInList(customers, row.customer_name, row.customer_id);
     if (!customer) return row.customer_name || "-";
     const displayName = customer.company_name || customer.display_name || row.customer_name || "-";
     return [displayName, customer.billing_address || "", customer.company_id ? `Company ID ${customer.company_id}` : "", customer.work_phone ? `Phone: ${customer.work_phone}` : ""]
@@ -413,7 +386,7 @@ export function SalesPage({
   }
 
   function buildCustomerShippingBlock(row: LocalInvoice) {
-    const customer = findCustomerByNameInList(customers, row.customer_name);
+    const customer = findCustomerByNameInList(customers, row.customer_name, row.customer_id);
     if (!customer) return row.customer_name || "-";
     const displayName = customer.company_name || customer.display_name || row.customer_name || "-";
     return [displayName, customer.shipping_address || customer.billing_address || "", customer.company_id ? `Company ID ${customer.company_id}` : "", customer.mobile_phone ? `Phone: ${customer.mobile_phone}` : customer.work_phone ? `Phone: ${customer.work_phone}` : ""]
@@ -475,7 +448,7 @@ export function SalesPage({
         description: line.description || "",
         origin: line.origin || "",
         brand: line.brand || "",
-        orderNo: row.sales_order_no || "",
+        orderNo: line.sales_order_no || row.sales_order_no || "",
         weight: line.weight_kg == null ? "" : String(line.weight_kg),
         gtip: line.hs_code || "",
         alerts: buildInvoicePrintAlerts(line),
@@ -498,11 +471,35 @@ export function SalesPage({
 
   function handlePrintInvoice(row: LocalInvoice) {
     try {
+      row = calculateInvoiceTotals(row);
       openBusinessDocumentPreview(buildInvoiceHtml(row));
       actionFeedback.succeed(t("sales.invoices.pdfViewOpened"));
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.invoices.pdfViewFailed"));
     }
+  }
+
+  async function handleExportInvoiceExcel(row: LocalInvoice) {
+    if (invoiceExportInFlight.current) return;
+    invoiceExportInFlight.current = true;
+    setExportingInvoice(true);
+    try {
+      actionFeedback.begin("Checking invoice totals and preparing Excel...");
+      row = calculateInvoiceTotals(row);
+      const model = buildDocumentWorksheet({
+        kind: "invoice", audience: "admin", number: row.id, party: row.customer_name,
+        currency: row.currency || "EUR", date: row.quote_date, status: row.status,
+        lines: row.lines.map((line) => ({
+          code: line.product_code, brand: line.brand, description: line.description, qty: line.qty,
+          unitPrice: line.sell_price, amount: line.sales_total, weight: line.weight_kg,
+          origin: line.origin, tariff: line.hs_code, orderNo: line.sales_order_no || row.sales_order_no,
+        })), shipping: row.shipping_cost, discount: row.discount_amount, total: row.total_amount,
+      });
+      const blob = await buildXlsxBlobAsync(row.id, model.rows, model.numericColumns, model.options);
+      downloadBlob(`${row.id.replace(/[^a-z0-9_-]+/gi, "-")}.xlsx`, blob);
+      actionFeedback.succeed("Invoice Excel download started.");
+    } catch (caught) { actionFeedback.fail(caught instanceof Error ? caught.message : "Invoice export failed."); }
+    finally { invoiceExportInFlight.current = false; setExportingInvoice(false); }
   }
 
   async function handleDeleteInvoice(row: LocalInvoice) {
@@ -538,8 +535,8 @@ export function SalesPage({
       setInvoices(refreshedInvoices);
       if (selectedPaymentReceivedId === row.id) {
         const next = refreshedPayments[0] || null;
-        setSelectedPaymentReceivedId(next?.id || "");
-        setPaymentReceivedDraft(next ? { ...next } : createEmptyPaymentReceived(null));
+        if (next) selectPaymentReceived(next);
+        else startNewPaymentReceived(createEmptyPaymentReceived(null));
       }
       actionFeedback.succeed(t("sales.payments.deleted", { paymentNo: row.id }));
     } catch (caught) {
@@ -597,7 +594,7 @@ export function SalesPage({
         onlyFillBlanks: invoiceResyncOnlyFillBlanks,
         keepPrices: invoiceResyncKeepPrices,
       });
-      const nextDraft = recomputeInvoiceTotals({
+      const nextDraft = calculateInvoiceTotals({
         ...invoiceDraft,
         lines: nextLines,
       });
@@ -617,13 +614,11 @@ export function SalesPage({
   async function saveInvoiceDraft() {
     if (!invoiceDraft) return;
     const previousId = selectedInvoiceId;
-    const payload: LocalInvoice = {
-      ...recomputeInvoiceTotals(invoiceDraft),
-      discount_amount: Number(invoiceDraft.discount_amount || 0),
-      shipping_cost: Number(invoiceDraft.shipping_cost || 0),
-      updated_at: new Date().toISOString(),
-    };
     try {
+      const payload: LocalInvoice = {
+        ...calculateInvoiceTotals(invoiceDraft),
+        updated_at: new Date().toISOString(),
+      };
       actionFeedback.begin(t("sales.invoices.savingInvoice", { invoiceNo: payload.id }));
       const saved = await upsertInvoice(payload, previousId);
       const next = [saved, ...invoices.filter((item) => item.id !== previousId && item.id !== saved.id)].sort((a, b) =>
@@ -652,8 +647,7 @@ export function SalesPage({
       const [refreshedPayments, refreshedInvoices] = await Promise.all([fetchPaymentsReceived(), fetchInvoiceSummaries()]);
       setPaymentsReceived(refreshedPayments);
       setInvoices(refreshedInvoices);
-      setSelectedPaymentReceivedId(saved.id);
-      setPaymentReceivedDraft({ ...saved });
+      selectPaymentReceived(saved);
       actionFeedback.succeed(t("sales.payments.saved", { paymentNo: saved.id }));
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.payments.saveFailed"));
@@ -662,8 +656,7 @@ export function SalesPage({
 
   function handleAddPaymentReceived(invoice?: LocalInvoice | null) {
     const next = createEmptyPaymentReceived(invoice || selectedInvoice || null);
-    setSelectedPaymentReceivedId(next.id);
-    setPaymentReceivedDraft(next);
+    startNewPaymentReceived(next);
     setActiveTab("Payments Received");
     actionFeedback.succeed(t("sales.payments.newDraftReady"));
   }
@@ -960,7 +953,8 @@ export function SalesPage({
                   <Input label={t("sales.invoices.packingDetails")} value={invoiceDraft.packing_details} onChange={(value) => updateInvoiceDraft("packing_details", value)} />
                   <Input label={t("sales.invoices.discount")} type="number" value={String(invoiceDraft.discount_amount)} onChange={(value) => setInvoiceDraft((current) => (current ? recomputeInvoiceTotals({ ...current, discount_amount: Number(value || 0) }) : current))} />
                   <Input label={t("sales.invoices.shippingHandling")} type="number" value={String(invoiceDraft.shipping_cost)} onChange={(value) => setInvoiceDraft((current) => (current ? recomputeInvoiceTotals({ ...current, shipping_cost: Number(value || 0) }) : current))} />
-                  <Input label={t("sales.invoices.subTotal")} type="number" value={String(invoiceDraft.subtotal)} onChange={() => undefined} disabled />
+                  <Input label={t("sales.invoices.subTotal")} type="number" value={invoiceMoneyPreview.value ? String(invoiceMoneyPreview.value.subtotal) : ""} onChange={() => undefined} disabled />
+                  {invoiceMoneyPreview.error ? <p className="warning-text" role="alert">{invoiceMoneyPreview.error}</p> : null}
                   <Input label={t("sales.invoices.currency")} value={invoiceDraft.currency} onChange={(value) => updateInvoiceDraft("currency", value)} />
                 </div>
                 <table className="simple-edit-table">
@@ -987,8 +981,8 @@ export function SalesPage({
                           <input
                             className="inline-edit-input inline-edit-input--qty"
                             type="number"
-                            min={1}
-                            step={1}
+                            min="0.000001"
+                            step="any"
                             value={line.qty}
                             onChange={(event) =>
                               setInvoiceDraft((current) =>
@@ -996,7 +990,7 @@ export function SalesPage({
                                   ? recomputeInvoiceTotals({
                                       ...current,
                                       lines: current.lines.map((item, itemIndex) =>
-                                        itemIndex === index ? { ...item, qty: Math.max(1, Number(event.target.value || 1) || 1) } : item,
+                                        itemIndex === index ? { ...item, qty: Number(event.target.value) } : item,
                                       ),
                                     })
                                   : current,
@@ -1046,7 +1040,7 @@ export function SalesPage({
                             }
                           />
                         </td>
-                        <td>{formatMoney(Number(line.sales_total || 0), invoiceDraft.currency)}</td>
+                        <td>{invoiceMoneyPreview.value ? formatMoney(invoiceMoneyPreview.value.lines[index].sales_total, invoiceDraft.currency) : "—"}</td>
                         <td>
                           <input
                             className="inline-edit-input"
@@ -1077,7 +1071,7 @@ export function SalesPage({
                 <div className="quote-summary-card">
                   <div className="quote-summary-row">
                     <span>{t("sales.invoices.summary.subTotal")}</span>
-                    <strong>{formatMoney(invoiceDraft.subtotal, invoiceDraft.currency)}</strong>
+                    <strong>{invoiceMoneyPreview.value ? formatMoney(invoiceMoneyPreview.value.subtotal, invoiceDraft.currency) : "—"}</strong>
                   </div>
                   <div className="quote-summary-row">
                     <span>{t("sales.invoices.summary.discount")}</span>
@@ -1089,20 +1083,20 @@ export function SalesPage({
                   </div>
                   <div className="quote-summary-row quote-summary-row--total">
                     <span>{t("sales.invoices.summary.totalAmount")}</span>
-                    <strong>{formatMoney(invoiceDraft.total_amount, invoiceDraft.currency)}</strong>
+                    <strong>{invoiceMoneyPreview.value ? formatMoney(invoiceMoneyPreview.value.total_amount, invoiceDraft.currency) : "—"}</strong>
                   </div>
                   <div className="quote-summary-internal">
                     <div className="quote-summary-mini">
                       <span>{t("sales.invoices.summary.purchaseTotal")}</span>
-                      <strong>{formatMoney(invoiceDraft.purchase_total, invoiceDraft.currency)}</strong>
+                      <strong>{invoiceMoneyPreview.value ? formatMoney(invoiceMoneyPreview.value.purchase_total, invoiceDraft.currency) : "—"}</strong>
                     </div>
                     <div className="quote-summary-mini">
                       <span>{t("sales.invoices.summary.profit")}</span>
-                      <strong>{formatMoney(invoiceDraft.profit_total, invoiceDraft.currency)}</strong>
+                      <strong>{invoiceMoneyPreview.value ? formatMoney(invoiceMoneyPreview.value.profit_total, invoiceDraft.currency) : "—"}</strong>
                     </div>
                     <div className="quote-summary-mini">
                       <span>{t("sales.invoices.summary.marginPercent")}</span>
-                      <strong>{invoiceDraft.margin_percent.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</strong>
+                      <strong>{invoiceMoneyPreview.value ? `${invoiceMoneyPreview.value.margin_percent.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%` : "—"}</strong>
                     </div>
                   </div>
                 </div>
@@ -1134,6 +1128,7 @@ export function SalesPage({
                   <Button variant="secondary" onClick={() => handlePrintInvoice(invoiceDraft)}>
                     PDF / Print
                   </Button>
+                  <Button variant="secondary" onClick={() => handleExportInvoiceExcel(invoiceDraft)} busy={exportingInvoice} busyLabel="Preparing Excel...">Download Excel</Button>
                   <Button variant="secondary" onClick={() => handleAddPaymentReceived(invoiceDraft)}>
                     {t("sales.invoices.addPayment")}
                   </Button>
@@ -1157,8 +1152,7 @@ export function SalesPage({
             columns={paymentReceivedColumns}
             emptyText={t("sales.payments.noReceivedPaymentsYet")}
             onRowClick={(row) => {
-              setSelectedPaymentReceivedId(row.id);
-              setPaymentReceivedDraft({ ...row });
+              selectPaymentReceived(row);
             }}
             rowClassName={(row) => (row.id === selectedPaymentReceivedId ? "data-table__row--active" : "")}
           />
@@ -1179,6 +1173,7 @@ export function SalesPage({
                             ? {
                                 ...current,
                                 invoice_id: invoice?.id || "",
+                                customer_id: invoice?.customer_id ?? null,
                                 invoice_no: invoice?.id || "",
                                 customer_name: invoice?.customer_name || current.customer_name,
                                 currency: invoice?.currency || current.currency,

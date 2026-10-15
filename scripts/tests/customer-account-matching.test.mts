@@ -14,7 +14,8 @@ test("invoice repricing cannot choose an arbitrary account when names overlap", 
     { id: "a", display_name: "Acme", company_name: "Acme Trading" },
     { id: "b", display_name: "Other", company_name: "Acme" },
   ];
-  assert.equal(findCustomerByNameInList(accounts, "acme")?.id, "a");
+  assert.equal(findCustomerByNameInList(accounts, "acme"), null);
+  assert.equal(findCustomerByNameInList(accounts, "acme", "b")?.id, "b");
   assert.throws(() => findUniqueCustomerByNameInList(accounts, " ACME "), /ambiguous/);
   assert.equal(findUniqueCustomerByNameInList(accounts, "Acme Trading")?.id, "a");
   assert.equal(findUniqueCustomerByNameInList(accounts, "Unknown"), null);

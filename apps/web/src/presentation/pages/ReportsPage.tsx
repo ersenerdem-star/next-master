@@ -7,6 +7,7 @@ import { OperationsStatusPage } from "./OperationsStatusPage";
 import { useI18n } from "../../i18n/I18nProvider";
 
 type ReportsPageProps = {
+  onOpenSupplierPrices?: () => void;
   activeTab?: "Procurement Dashboard" | "Master" | "Core Reports" | "Item Transactions" | "Inventory Analytics" | "Status Center";
   onOpenSalesOrder?: (salesOrderId: string) => void;
   onOpenPurchaseOrder?: (purchaseOrderId: string) => void;
@@ -19,6 +20,7 @@ type ReportsPageProps = {
 
 export function ReportsPage({
   activeTab = "Procurement Dashboard",
+  onOpenSupplierPrices,
   onOpenSalesOrder,
   onOpenPurchaseOrder,
   onOpenInvoice,
@@ -27,7 +29,8 @@ export function ReportsPage({
   onOpenInventoryItem,
   onOpenSupplierComparison,
 }: ReportsPageProps) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
+  const activeLabel = { "Procurement Dashboard": "nav.procurementDashboard", Master: "nav.supplierComparison", "Core Reports": "nav.coreReports", "Item Transactions": "nav.itemTransactions", "Inventory Analytics": "nav.inventoryAnalytics", "Status Center": "nav.statusCenter" }[activeTab];
   return (
     <div className="page-stack reports-workspace">
       <section className="reports-command-banner">
@@ -38,7 +41,7 @@ export function ReportsPage({
         </div>
         <div className="reports-command-banner__active">
           <span>{locale === "tr" ? "Açık görünüm" : "Active view"}</span>
-          <strong>{activeTab}</strong>
+          <strong>{t(activeLabel)}</strong>
         </div>
       </section>
       {activeTab === "Procurement Dashboard" ? <ProcurementDashboardPage onOpenSupplierComparison={onOpenSupplierComparison} /> : null}
@@ -55,7 +58,7 @@ export function ReportsPage({
       {activeTab === "Inventory Analytics" ? (
         <InventoryAnalyticsPage onOpenSalesOrder={onOpenSalesOrder} onOpenInventoryWarehouse={onOpenInventoryWarehouse} onOpenInventoryItem={onOpenInventoryItem} />
       ) : null}
-      {activeTab === "Status Center" ? <OperationsStatusPage /> : null}
+      {activeTab === "Status Center" ? <OperationsStatusPage onOpenSupplierPrices={onOpenSupplierPrices} /> : null}
     </div>
   );
 }

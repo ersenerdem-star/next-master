@@ -1,0 +1,165 @@
+[
+  {
+    "path": "apps/web/src/i18n/locales/en.ts",
+    "method": "three-way",
+    "target_before_sha256": "6065ef51fce8571df1a2c6cb35ecdcf1248f5b136161a84bdd0114247293b9ef",
+    "source_sha256": "da4131b8bdf0cabc39de0ecccdec90b0036293d6c2ee10b6a7c92b90f5c5b0a0"
+  },
+  {
+    "path": "apps/web/src/i18n/locales/tr.ts",
+    "method": "three-way",
+    "target_before_sha256": "e12135acd947c35a8abaf8b0cee73e1bb96cb1c72cfb2be490623c1c77d9d77f",
+    "source_sha256": "eb71690a00e322d8c3144066f2eb2537aa841ad41f23d0061a366bb0dd23fd47"
+  },
+  {
+    "path": "apps/web/src/infrastructure/api/ordersApi.ts",
+    "method": "three-way",
+    "target_before_sha256": "8ae05226ab84a1cf111687f65d1fc4b26fb3cdacb75f1da6e1864d5a996b81fa",
+    "source_sha256": "c6d631fd3b7bd537e7db01f28386cd5a690204f0c38c507d29f2980fa2b38a29"
+  },
+  {
+    "path": "apps/web/src/infrastructure/api/reportingApi.ts",
+    "method": "three-way",
+    "target_before_sha256": "94493605303279178c859b7a9929e869878ef44ba6cf98cb805f59818310e469",
+    "source_sha256": "3b7e853d87582a528030c8f9cde5dc5cde68b38f9e74c1505d4ab6f360ba4067"
+  },
+  {
+    "path": "apps/web/src/infrastructure/api/supplierReleaseReviewApi.ts",
+    "method": "three-way",
+    "target_before_sha256": "fdeb85337b2a3595bab7f4cdda4cbce950f9f5c8be91450d57c8ed73e4f9780c",
+    "source_sha256": "62e3d40a4ff0e98fd54a886d1210385e6b7ce3da24bbb71640abe1cf7f010713"
+  },
+  {
+    "path": "apps/web/src/presentation/pages/CoreReportsPage.tsx",
+    "method": "three-way",
+    "target_before_sha256": "68e4e0edcee45abcbcd597c2c662fff6ac5d05ae4de6b48a2f2e8259d11c1164",
+    "source_sha256": "af291969018265abb7c01c23307c2df3eed687faa6f5c7aeaa8f03c4de241a2b"
+  },
+  {
+    "path": "apps/web/src/presentation/pages/PurchasesPage.tsx",
+    "method": "three-way",
+    "target_before_sha256": "d59d262bafcb09bf336f27edb06134fb771e451d0b420d271c4b9298c74c919a",
+    "source_sha256": "354527969666497e99936e530f40d2338f82279d77b1e069bc071ffce7555cb2"
+  },
+  {
+    "path": "apps/web/src/presentation/pages/QuotesPage.tsx",
+    "method": "three-way",
+    "target_before_sha256": "10ed0a3b10f39bc65db31cad0c2706218a3bea3630319ee561db08e4fb233309",
+    "source_sha256": "25ad552b907ca6743779ec830408514097121ded0a4fc38131eafd1c17ae4732"
+  },
+  {
+    "path": "apps/web/src/presentation/pages/SalesPage.tsx",
+    "method": "three-way",
+    "target_before_sha256": "ad4d5f4ab3fce5e3ed402e2ea20259f56f853f37932b8d318bb381dc0800fac2",
+    "source_sha256": "c991101052a143e4a0afee0249b241595ec0880f8e80387e0fca0052aae770dc"
+  },
+  {
+    "path": "apps/web/src/presentation/pages/SettingsPage.tsx",
+    "method": "three-way",
+    "target_before_sha256": "0b364120d4d7a0b33420623c808b014d101a96e989a227496588e3e7ff0b5a2a",
+    "source_sha256": "6bce3601a706797c42add5c8b4b2cb5e1056d84d81d2de422c3262e791302385"
+  },
+  {
+    "path": "apps/web/src/shared/localOrders.ts",
+    "method": "three-way",
+    "target_before_sha256": "336ba34e35e4c5e4d5ac56ffec97f529c98c11b4aedd2192179d2cd05b895d8c",
+    "source_sha256": "35060131edb4a6f00de28765c1a199c53323419f7e36a45daf47f473ce5e7d34"
+  },
+  {
+    "path": "apps/web/src/types/orders.ts",
+    "method": "three-way",
+    "target_before_sha256": "ed4adac66318310f6dd65643323fc0d89bca4239c009b0d49f59f8dffb132c6f",
+    "source_sha256": "a8563c15796e3983a5639dd3557e1522bd29a366abca86ef310fc9ecdbac5cc3"
+  },
+  {
+    "path": "apps/web/src/presentation/hooks/usePaymentDraftEditor.ts",
+    "method": "source-copy",
+    "source_sha256": "110845ab7f5318afffb3c19a418ef47a5066530fd1f296a476a8c890cb886b34"
+  },
+  {
+    "path": "apps/web/src/shared/hydrateSalesOrderLines.ts",
+    "method": "source-copy",
+    "source_sha256": "ff6039b31afbd35211d70a24a584b8637da85017665233b05ba8a275790f4d3a"
+  },
+  {
+    "path": "apps/web/src/shared/invoiceMoney.ts",
+    "method": "source-copy",
+    "source_sha256": "de1184ce670850a8cee2f775410e1816965ee7e23beeff752a7b6cd74eba50f0"
+  },
+  {
+    "path": "apps/web/src/shared/paymentDraftEditor.ts",
+    "method": "source-copy",
+    "source_sha256": "f8de554c79114c7af83c93abe1b31c0d5bb786cc05872f87a401c8e8e42e17e3"
+  },
+  {
+    "path": "apps/web/src/shared/refreshAfterCommit.ts",
+    "method": "source-copy",
+    "source_sha256": "72ccf059840ffbfe5008645a507b66df5de9f2145bde7f5e3be41e5c157af535"
+  },
+  {
+    "path": "scripts/tests/invoice-conversion-money.test.mjs",
+    "method": "source-copy",
+    "source_sha256": "4f6254cdada01591f52f3bd08dfc43af9075c77bc2c49554ed06d71bc1829003"
+  },
+  {
+    "path": "scripts/tests/invoice-editor-money.test.mjs",
+    "method": "source-copy",
+    "source_sha256": "e7717e319248aa6ef577be9acdd086e05b1611861ceab5ed1173ead42294c9ff"
+  },
+  {
+    "path": "scripts/tests/payment-draft-editor.test.mjs",
+    "method": "source-copy",
+    "source_sha256": "f5649e5650f2b47f10a901b4088d21ce7b2c2aade754d43c23c2aaac7b01a725"
+  },
+  {
+    "path": "scripts/tests/sales-order-line-hydration.test.mjs",
+    "method": "source-copy",
+    "source_sha256": "272a3adc2df558a39ea7c0cd30ec5ffd2743edca72e6033b39d0836c58fce97a"
+  },
+  {
+    "path": "scripts/tests/financial-report-gateway.test.mjs",
+    "method": "source-copy",
+    "source_sha256": "5fbadee9274425c5c7a1103effdbb6eebad1e0807ca1490944f315e7a1d1b0df"
+  },
+  {
+    "path": "scripts/tests/commercial-party-chain.test.mjs",
+    "method": "source-copy",
+    "source_sha256": "8fd6a39bd7c8d11289902adb2839e80c823c54a2e2e5ab64252117a69f7f2eb1"
+  },
+  {
+    "path": "apps/web/src/presentation/components/common/Button.tsx",
+    "method": "source-compatible React import",
+    "source_reference": "apps/web/src/presentation/components/common/Button.tsx",
+    "source_sha256": "d54c343902b0b08b7584f00ba0101e086cfdb6c8d9e3c35195d58fe65218eeee"
+  },
+  {
+    "path": "apps/web/src/shared/customerAccountMatching.ts",
+    "method": "manual integration preserving target module and source explicit-ID/ambiguous-name behavior",
+    "source_reference": "apps/web/src/infrastructure/api/customersApi.ts",
+    "source_sha256": "7381ce94cb4364a101922f5c548a69e3b37e9eacf1ed0ac0d5903a63d1476a02"
+  },
+  {
+    "path": "apps/web/src/shared/supplierReleaseReview.ts",
+    "method": "manual integration preserving current-publication and interrupted states",
+    "source_reference": "apps/web/src/shared/supplierReleaseReview.ts",
+    "source_sha256": "422924e335d7cb94ab13e2a953a75272a9e99d83a921c9c6d30fcf7c64271772"
+  },
+  {
+    "path": "apps/web/src/modules/admin/SupplierReleaseReviewCard.tsx",
+    "method": "manual integration preserving target durable publication actions",
+    "source_reference": "apps/web/src/modules/admin/SupplierReleaseReviewCard.tsx",
+    "source_sha256": "175bc56439215178b54973cb44b4bea68f5b9efaea544e459365fb2da4e60d8c"
+  },
+  {
+    "path": "apps/web/src/modules/admin/SupplierReleaseReviewPanel.tsx",
+    "method": "manual integration; source issue details isolated into cancellable child panel",
+    "source_reference": "apps/web/src/modules/admin/SupplierReleaseReviewPanel.tsx",
+    "source_sha256": "37e9b0d6041ca467bed92efa38383db0d24f0670cb161ff765f9ca66b95bb0b5"
+  },
+  {
+    "path": "scripts/tests/supplier-release-review.test.mjs",
+    "method": "source-copy",
+    "source_reference": "scripts/tests/supplier-release-review.test.mjs",
+    "source_sha256": "1fdab2ca8f2bed6bbdcdf6ce801f79f51912c9f800de04482b614aaa7309cee2"
+  }
+]
