@@ -1,3 +1,5 @@
+import {inspectSupplierCsv,supplierCsvIssueCsv,type SupplierCsvReport} from "../../shared/supplierCsvPreflight";
+import {downloadCsv} from "../../shared/csv";
 import { SupplierReleaseReviewPanel } from "../../modules/admin/SupplierReleaseReviewPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { normalizeBrandName, normalizePartCode } from "../../domain/shared/normalize";
@@ -94,6 +96,7 @@ export function SuppliersPage() {
   const uploadController = useRef<AbortController | null>(null);
   const [verifiedProgress, setVerifiedProgress] = useState<UploadProgress | null>(null);
   const [uploadSourceDate, setUploadSourceDate] = useState("");
+  const [csvReport,setCsvReport]=useState<SupplierCsvReport|null>(null);
   const verifiedUploadComplete = verifiedUploadEnabled && verifiedProgress?.phase === "verified";
   useEffect(() => () => uploadController.current?.abort(), []);
   const [savingManualPrice, setSavingManualPrice] = useState(false);
@@ -394,6 +397,15 @@ export function SuppliersPage() {
       const controller=new AbortController();uploadController.current=controller;
       setImportingSupplier(true);setError('');setStatus('');setWarning('');
       try {
+        setCsvReport(null);setVerifiedProgress(null);
+        if(/\.csv$/i.test(file.name)){
+          setStatus('Dosya kontrol ediliyor: ürün kodları, fiyatlar ve tekrarlar…');
+          const report=await inspectSupplierCsv(file,controller.signal);setCsvReport(report);
+          if(report.issueCount){
+            const message=`Dosyada ${report.issueCount.toLocaleString('tr-TR')} sorun bulundu. Aşağıdaki satır ayrıntılarını kontrol edin veya hata listesini indirin.`;
+            setError(message);setStatus('Dosya gönderilmedi. Hataları düzelttikten sonra tekrar seçin.');actionFeedback.fail(message);return;
+          }
+        }
         const result=await uploadVerifiedSupplierFile(file,{supplierId:importSupplierId,brandId:brand.id,
           mode:importMode,sourceDate:uploadSourceDate},controller.signal,
           progress=>{setVerifiedProgress(progress);setStatus(progress.message);});
@@ -937,12 +949,21 @@ export function SuppliersPage() {
                   accept={verifiedUploadEnabled ? ".csv,.xlsx" : ".csv,text/csv"}
                   disabled={importingSupplier}
                   onChange={(event) => {
-                    setImportFile(event.target.files?.[0] ?? null);
+                    setImportFile(event.target.files?.[0] ?? null);setCsvReport(null);setVerifiedProgress(null);
                   }}
                 />
               </label>
               <Input label={p("fields.selectedFile")} value={importFile?.name ?? ""} onChange={() => undefined} disabled />
             </div>
+            {verifiedUploadEnabled&&csvReport&&csvReport.issueCount>0?<section className="section-card" role="alert">
+              <h4>Dosya kontrolü — {csvReport.issueCount.toLocaleString('tr-TR')} sorun</h4>
+              <p>{csvReport.totalRows.toLocaleString('tr-TR')} ürün satırı tarandı. Dosya gönderilmedi.</p>
+              <ul>{Object.entries(csvReport.counts).map(([code,count])=><li key={code}>{csvReport.issues.find(x=>x.code===code)?.message} — {count.toLocaleString('tr-TR')} kayıt</li>)}</ul>
+              <p>Satır numaraları, başlık 1 kabul edilerek CSV kayıt sırasını gösterir. Çok satırlı hücreler veya tamamen boş satırlar varsa Excel satır numarası farklı olabilir.</p>
+              <ul>{csvReport.issues.slice(0,8).map((issue,i)=><li key={i}>Kayıt {issue.row.toLocaleString('tr-TR')} · {issue.column}: {issue.message}</li>)}</ul>
+              {csvReport.issueCount>csvReport.issues.length?<p>Ayrıntı dosyası ilk 100.000 sorunu içerir; yukarıdaki sayılar dosyanın tamamını kapsar.</p>:null}
+              <Button variant="secondary" onClick={()=>downloadCsv('supplier-upload-errors.csv',supplierCsvIssueCsv(csvReport))}>Hata listesini indir</Button>
+            </section>:null}
             {verifiedUploadEnabled&&verifiedProgress ? <section className="section-card" aria-live="polite">
               <h4>Verified supplier upload — {verifiedProgress.phase}</h4>
               <progress style={{width:'100%'}} max={verifiedProgress.totalBytes||1} value={verifiedProgress.bytes}/>
