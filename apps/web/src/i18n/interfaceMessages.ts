@@ -345,6 +345,21 @@ export const trInterfaceMessages: Record<string,string> = {
   "Status unavailable.":"Durum bilgisi alınamıyor.",
   "received":"Alındı", "uploaded":"Yüklendi", "parsing":"Satırlar işleniyor", "staged":"Satırlar hazırlandı",
   "validated":"Doğrulandı", "published":"Yayında", "superseded":"Önceki sürüm", "archived":"Arşivlendi",
+  "Active":"Etkin", "Inactive":"Etkin değil", "Updated":"Güncellendi", "Created":"Oluşturuldu", "Enabled":"Etkin", "Disabled":"Devre dışı",
+  "Select a brand first.":"Önce marka seçin.", "Enter the new brand name.":"Yeni marka adını girin.",
+  "Enter the old code.":"Eski kodu girin.", "Enter the new code.":"Yeni kodu girin.",
+  "Old Code and New Code cannot be the same.":"Eski kod ve yeni kod aynı olamaz.",
+  "Code references load failed":"Kod referansları yüklenemedi", "Automatic replacement":"Otomatik kod değişimi",
+  "Upload CSV, TSV, TXT, XLSX or XLS files.":"CSV, TSV, TXT, XLSX veya XLS dosyası yükleyin.",
+  "Required columns not found. Use Old Code / New Code or Old Part Nr / New Part Nr headers.":"Zorunlu sütunlar bulunamadı. Old Code / New Code veya Old Part Nr / New Part Nr başlıklarını kullanın.",
+  "Select a default brand for files that do not include a Brand column.":"Brand sütunu olmayan dosyalar için varsayılan marka seçin.",
+  "Code reference create failed":"Kod referansı oluşturulamadı", "Code reference update failed":"Kod referansı güncellenemedi",
+  "Code reference delete failed":"Kod referansı silinemedi", "Loading code references...":"Kod referansları yükleniyor…",
+  "No code references found":"Kod referansı bulunamadı", "Code reference sample template downloaded.":"Kod referansı örnek şablonu indirildi.",
+  "Importing code references...":"Kod referansları içe aktarılıyor…", "Code references imported successfully.":"Kod referansları içe aktarıldı.",
+  "Code reference import failed":"Kod referansları içe aktarılamadı",
+  "Code reference saved. Quotes will warn for old code {old} and use {next}.":"Kod referansı kaydedildi. Tekliflerde {old} eski kodu için uyarı gösterilecek ve {next} kullanılacak.",
+  "Code reference updated for {code}.":"{code} için kod referansı güncellendi.", "Code reference deleted for {code}.":"{code} için kod referansı silindi.",
 };
 
 const patterns=Object.entries(trInterfaceMessages).filter(([key])=>/\{\w+\}/.test(key)).map(([key,value])=>{

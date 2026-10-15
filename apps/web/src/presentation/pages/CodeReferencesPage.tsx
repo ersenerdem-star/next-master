@@ -489,8 +489,8 @@ export function CodeReferencesPage() {
         <div className="section-card__body">
           <div className="meta-row">
             <span>{loading ? "Loading code references..." : `${rows.length.toLocaleString("en-US")} code references loaded`}</span>
-            {error ? <span className="error-text">{error}</span> : null}
-            {!error && status ? <span className="success-text">{status}</span> : null}
+            {error ? <span className="error-text">{ui(error)}</span> : null}
+            {!error && status ? <span className="success-text">{ui(status)}</span> : null}
           </div>
           <DataTable rows={rows} columns={columns} emptyText={loading ? "Loading..." : "No code references found"} />
         </div>
@@ -561,8 +561,8 @@ export function CodeReferencesPage() {
             </div>
             {renderUsageHint("old", oldCodeUsage)}
             {renderUsageHint("new", newCodeUsage)}
-            {createValidationMessage ? <div className="warning-text">{createValidationMessage}</div> : null}
-            {createError ? <div className="error-text">{createError}</div> : null}
+            {createValidationMessage ? <div className="warning-text">{ui(createValidationMessage)}</div> : null}
+            {createError ? <div className="error-text">{ui(createError)}</div> : null}
             <div className="modal-hint"><InterfaceText text={"Quotes will only warn about old-to-new code changes when a reference exists here. Original Number helps same-brand matching discipline."}/></div>
             <div className="modal-actions">
               <Button
