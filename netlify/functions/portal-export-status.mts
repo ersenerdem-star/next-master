@@ -44,6 +44,7 @@ export default async (req: Request, context: Context) => {
       password,
       sessionToken,
       hostname: getPortalRequestHostname(req),
+      touchSession: false,
     });
     const job = await fetchExportJobById(supabaseUrl, serviceRoleKey, invite.organization_id, jobId);
     if (!job) return json({ error: "Export job not found." }, 404, { "Set-Cookie": buildPortalSessionCookie(nextSessionToken) });

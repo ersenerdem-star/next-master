@@ -359,11 +359,13 @@ export async function waitForPortalExportJob(
       transientStatusFailures = 0;
     } catch (error) {
       // A gateway timeout must not turn a durable background export into a
-      // false failed operation. Keep the same job id and retry a few times;
-      // the server-side worker continues independently of this browser poll.
-      if (!isRetryablePortalExportRequestError(error) || transientStatusFailures >= 3) throw error;
+      // false failed operation. Keep the same job id and continue polling for
+      // the lifetime of the durable wait; the server-side worker continues
+      // independently of this browser request. A persistent outage reaches
+      // the resumable 30-minute path below instead of showing a false error.
+      if (!isRetryablePortalExportRequestError(error)) throw error;
       transientStatusFailures += 1;
-      await delay(Math.min(8_000, 1_000 * (2 ** transientStatusFailures)));
+      await delay(Math.min(15_000, 1_000 * (2 ** Math.min(transientStatusFailures, 4))));
       continue;
     }
     onProgress?.(job);

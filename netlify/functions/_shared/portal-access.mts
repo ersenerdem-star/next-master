@@ -187,6 +187,35 @@ async function fetchPortalInviteByIdEmail(supabaseUrl: string, serviceRoleKey: s
   return rows.find((row) => String(row.id || "").trim() === normalizedInviteId) || null;
 }
 
+async function fetchPortalInviteById(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  inviteId: string,
+  organizationId = "",
+  sellerCompanyProfileId = "",
+) {
+  const baseParams = {
+    id: `eq.${String(inviteId || "").trim()}`,
+    ...(String(organizationId || "").trim() ? { organization_id: `eq.${String(organizationId).trim()}` } : {}),
+    ...(String(sellerCompanyProfileId || "").trim() ? { seller_company_profile_id: `eq.${String(sellerCompanyProfileId).trim()}` } : {}),
+    limit: "1",
+  };
+  const selectors = [PORTAL_INVITE_SELECT, PORTAL_INVITE_SELECT_ACCESS, PORTAL_INVITE_SELECT_LEGACY];
+  let lastError: unknown = null;
+  for (const select of selectors) {
+    try {
+      const rows = await fetchAll<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
+        select,
+        ...baseParams,
+      });
+      return normalizePortalInviteRow(rows[0] || null);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Portal invite lookup failed");
+}
+
 function isPortalSoftFailure(error: unknown) {
   const details = error as { message?: unknown; rawMessage?: unknown; status?: unknown };
   const message = String(details?.rawMessage || details?.message || error || "").toLowerCase();
@@ -745,6 +774,10 @@ export async function resolvePortalInvite(
     token?: string | null;
     sessionToken?: string | null;
     hostname?: string | null;
+    // Status polling already has a valid signed session and should not write
+    // last_used_at on every three-second request. Other portal actions keep
+    // the default touch so an active session remains warm.
+    touchSession?: boolean;
   },
 ) {
   const providedPassword = String(auth.password || "").trim();
@@ -768,11 +801,10 @@ export async function resolvePortalInvite(
     if (hostname && session.hostname && hostname !== String(session.hostname).trim().toLowerCase()) {
       throw new Error("Portal session belongs to another seller domain. Sign in again.");
     }
-    const invite = await fetchPortalInviteByIdEmail(
+    const invite = await fetchPortalInviteById(
       supabaseUrl,
       serviceRoleKey,
       session.invite_id,
-      session.email,
       String(session.organization_id || tenant?.organization_id || ""),
       String(tenant?.seller_company_profile_id || ""),
     );
@@ -785,7 +817,7 @@ export async function resolvePortalInvite(
     }
 
     assertPortalTenantInvite(invite.organization_id, invite.seller_company_profile_id, tenant);
-    await touchPortalInvite(supabaseUrl, serviceRoleKey, invite);
+    if (auth.touchSession !== false) await touchPortalInvite(supabaseUrl, serviceRoleKey, invite);
     const nextSessionToken = await createPortalSessionToken(sessionSecret, invite.id, invite.email, invite.organization_id, hostname, String(invite.updated_at || ""));
     return { invite, sessionToken: nextSessionToken };
   }
