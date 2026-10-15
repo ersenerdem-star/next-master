@@ -2669,6 +2669,12 @@ export const enMessages = {
     title: "Warnings",
   },
   statuses: {
+    draft: "Draft",
+    confirmed: "Confirmed",
+    purchased: "Purchased",
+    invoiced: "Invoiced",
+    paid: "Paid",
+    void: "Void",
     production: "Production",
     preview: "Preview",
     branch: "Branch",

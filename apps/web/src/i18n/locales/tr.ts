@@ -2649,6 +2649,12 @@ export const trMessages = {
     title: "Uyarılar",
   },
   statuses: {
+    draft: "Taslak",
+    confirmed: "Onaylandı",
+    purchased: "Satın alındı",
+    invoiced: "Faturalandı",
+    paid: "Ödendi",
+    void: "İptal",
     production: "Canlı",
     preview: "Önizleme",
     branch: "Dal",

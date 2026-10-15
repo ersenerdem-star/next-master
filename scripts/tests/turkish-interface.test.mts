@@ -4,7 +4,7 @@ import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {translateInterfaceText,trInterfaceMessages} from '../../apps/web/src/i18n/interfaceMessages.ts';
 import {InterfaceText} from '../../apps/web/src/i18n/InterfaceText.tsx';
-import {I18nProvider} from '../../apps/web/src/i18n/I18nProvider.tsx';
+import {I18nProvider,useI18n} from '../../apps/web/src/i18n/I18nProvider.tsx';
 import {Input} from '../../apps/web/src/presentation/components/common/Input.tsx';
 import {Select} from '../../apps/web/src/presentation/components/common/Select.tsx';
 import {Button} from '../../apps/web/src/presentation/components/common/Button.tsx';
@@ -52,6 +52,11 @@ test('shared form and table captions follow locale without translating control v
  assert.match(tr,/Tedarikçi Fiyat Yükleme Merkezi/);assert.match(tr,/Kaynak tarihi/);assert.match(tr,/Marka/);assert.match(tr,/Excel indir/);assert.match(tr,/Açıklama/);
  assert.match(en,/Supplier Price Upload Center/);assert.match(en,/Source date/);assert.match(en,/Download Excel/);
  for(const html of [tr,en]){assert.match(html,/value="2026-10-15"/);assert.match(html,/value="Brand" selected="">Brand/);assert.match(html,/English product description/);assert.match(html,/Vitesco/);}
+});
+test('dashboard order status keys resolve in both languages without missing-key fallback',()=>{
+ function StatusProbe(){const {t}=useI18n();return React.createElement('span',null,t('statuses.draft'),' / ',t('statuses.confirmed'));}
+ assert.match(render('tr',React.createElement(StatusProbe)),/Taslak \/ Onaylandı/);
+ assert.match(render('en',React.createElement(StatusProbe)),/Draft \/ Confirmed/);
 });
 test('all existing English translation keys have a Turkish entry and registered display copy is nonempty',()=>{
  for(const [namespace,group] of Object.entries(enMessages))for(const key of Object.keys(group)){
