@@ -13135,6 +13135,9 @@ body {
 .topbar-account-menu__settings { display: grid; gap: 6px; padding-block: 12px; border-block: 1px solid #e6edf5; }
 .topbar-account-menu__section-label { color: #51657b; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 4px; }
 .topbar-account-menu__settings button[aria-current="page"] { color: #155b9c; background: #e8f2fc; border-color: #a8c9eb; }
+.supplier-new-brand { display: grid; align-content: end; gap: 10px; }
+.supplier-new-brand--form { grid-column: 1 / -1; }
+.supplier-new-brand--form p { margin: 0; color: #51657b; font-size: 13px; }
 
 .topbar-icon-button--messages::after { display: none; }
 

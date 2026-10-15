@@ -3,7 +3,7 @@ import {downloadCsv} from "../../shared/csv";
 import { SupplierReleaseReviewPanel } from "../../modules/admin/SupplierReleaseReviewPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { normalizeBrandName, normalizePartCode } from "../../domain/shared/normalize";
-import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
+import { createCloudBrand, fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCloudCatalog } from "../../infrastructure/api/catalogApi";
 import { assertLegacySupplierPriceWriteAllowed, bulkImportSupplierPrices } from "../../infrastructure/api/importApi";
 import {
@@ -73,6 +73,11 @@ export function SuppliersPage() {
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [importBrand, setImportBrand] = useState("");
   const [importBrandName, setImportBrandName] = useState("");
+  const [showNewBrand,setShowNewBrand]=useState(false);
+  const [newBrandName,setNewBrandName]=useState('');
+  const [creatingBrand,setCreatingBrand]=useState(false);
+  const [newBrandError,setNewBrandError]=useState('');
+  const [newBrandStatus,setNewBrandStatus]=useState('');
   const [exportBrand, setExportBrand] = useState("");
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showManualPriceDialog, setShowManualPriceDialog] = useState(false);
@@ -774,7 +779,27 @@ export function SuppliersPage() {
     }
   }
 
+  async function handleCreateBrand() {
+    if(creatingBrand || importingSupplier || !newBrandName.trim()) return;
+    setCreatingBrand(true);setNewBrandError('');setNewBrandStatus('');
+    try {
+      const {brand,created}=await createCloudBrand(newBrandName);
+      setBrands(current=>[...current.filter(item=>item.id!==brand.id),brand].sort((a,b)=>a.name.localeCompare(b.name,locale)));
+      setImportBrand(brand.name);setImportBrandName(brand.name);
+      setShowNewBrand(false);setNewBrandName('');
+      setNewBrandStatus(created
+        ? (locale==='tr'?`${brand.name} eklendi ve seçildi. Dosya yüklemeye devam edebilirsiniz.`:`${brand.name} added and selected. Continue with your file.`)
+        : (locale==='tr'?`${brand.name} zaten kayıtlı; mevcut marka seçildi.`:`${brand.name} already exists; the existing brand is selected.`));
+    } catch(caught) {
+      const invalid=caught instanceof Error && caught.message==='BRAND_NAME_INVALID';
+      setNewBrandError(locale==='tr'
+        ? (invalid?'Geçerli bir marka adı girin (en fazla 120 karakter).':'Marka kaydedilemedi. Yönetici oturumunu ve bağlantıyı kontrol edip tekrar deneyin; dosyanız korunuyor.')
+        : (invalid?'Enter a valid brand name (up to 120 characters).':'Brand could not be saved. Check your admin session and connection, then retry; your file is retained.'));
+    } finally {setCreatingBrand(false);}
+  }
+
   function closeImportDialog() {
+    if(creatingBrand) return;
     uploadController.current?.abort();
     setShowImportDialog(false);
     setImportFile(null);
@@ -786,6 +811,7 @@ export function SuppliersPage() {
     );
     setImportBrand("");
     setImportBrandName("");
+    setShowNewBrand(false);setNewBrandName('');setNewBrandError('');setNewBrandStatus('');
   }
 
   const visibleSupplierRows = total ?? rows.length;
@@ -923,6 +949,7 @@ export function SuppliersPage() {
                 label={p("fields.brand")}
                 value={importBrand}
                 options={brandOptions}
+                disabled={importingSupplier || creatingBrand}
                 onChange={(value) => {
                   setImportBrand(value);
                   if (value !== "__new__") {
@@ -932,12 +959,26 @@ export function SuppliersPage() {
                   }
                 }}
               />
-              <Input
+              {verifiedUploadEnabled ? <div className="supplier-new-brand">
+                <Button variant="secondary" disabled={importingSupplier || creatingBrand}
+                  onClick={()=>{setShowNewBrand(current=>!current);setNewBrandError('');setNewBrandStatus('');}}>
+                  {showNewBrand?(locale==='tr'?'Vazgeç':'Cancel'):(locale==='tr'?'+ Yeni marka ekle':'+ Add new brand')}
+                </Button>
+              </div> : <Input
                 label={p("fields.brandName")}
                 value={importBrandName}
                 onChange={setImportBrandName}
                 disabled={importBrand !== "__new__"}
-              />
+              />}
+              {verifiedUploadEnabled && showNewBrand ? <div className="supplier-new-brand supplier-new-brand--form">
+                <Input label={locale==='tr'?'Yeni marka adı':'New brand name'} value={newBrandName} onChange={setNewBrandName}
+                  disabled={creatingBrand} onEnter={()=>void handleCreateBrand()}/>
+                <Button onClick={()=>void handleCreateBrand()} disabled={!newBrandName.trim() || importingSupplier} busy={creatingBrand}
+                  busyLabel={locale==='tr'?'Marka kaydediliyor…':'Saving brand…'}>{locale==='tr'?'Kaydet ve seç':'Save and select'}</Button>
+                <p>{locale==='tr'?'Aynı marka zaten varsa mevcut kayıt seçilir. Dosyanız ve tarih seçiminiz korunur.':'An existing matching brand is reused. Your file and date selection are retained.'}</p>
+                {newBrandError?<div role="alert" className="error-text">{newBrandError}</div>:null}
+              </div>:null}
+              {newBrandStatus?<div className="supplier-new-brand--form success-text" role="status">{newBrandStatus}</div>:null}
               <Select label={p("fields.importMode")} value={importMode} options={importModeOptions} onChange={setImportMode} />
               {verifiedUploadEnabled ? <Input label="Source date" type="date" value={uploadSourceDate} onChange={setUploadSourceDate} disabled={importingSupplier}/> : null}
               <Input label={p("fields.target")} value={p("suppliers.import.cloudTarget")} onChange={() => undefined} disabled />
@@ -1019,6 +1060,7 @@ export function SuppliersPage() {
                     !importMode ||
                     !importFile ||
                     (verifiedUploadEnabled&&!uploadSourceDate) ||
+                    creatingBrand || showNewBrand ||
                     loadingRows
                   }
                   busy={importingSupplier}
