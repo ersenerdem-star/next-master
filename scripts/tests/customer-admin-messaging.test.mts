@@ -6,7 +6,7 @@ import {createMessagesHandler} from '../../netlify/functions/_shared/customer-me
 import {createPortalSessionToken,buildPortalSessionCookie} from '../../netlify/functions/_shared/portal-security.mts';
 const org='10000000-0000-4000-8000-000000000001',customer='20000000-0000-4000-8000-000000000001',other='20000000-0000-4000-8000-000000000002',actor='30000000-0000-4000-8000-000000000001',id='40000000-0000-4000-8000-000000000001';
 const config={url:'https://fixture.supabase.co',anonKey:'fixture-anon',serviceKey:'fixture-service',sessionSecret:'fixture-secret'};
-const migration=await readFile(new URL('../../supabase/migrations/20261015124542_customer_admin_messaging.sql',import.meta.url),'utf8');
+const migration=await readFile(new URL('../../supabase/migrations/20261015125102_customer_admin_messaging.sql',import.meta.url),'utf8');
 
 test('actual SQL enforces service-only storage, idempotency, customer/tenant binding and unread state',async()=>{
  const db=new PGlite();
