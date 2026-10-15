@@ -73,6 +73,7 @@ export function AppShell({
   const accountInitials = (accountName || accountEmail || userEmail).trim().split(/[\s@._-]+/).filter(Boolean).slice(0,2).map(part => part[0]).join("").toLocaleUpperCase(locale) || "?";
   const appDesktopFrameRef = useRef<HTMLDivElement | null>(null);
   const navigation = workspaceNavigationItems(navItems, pageSections);
+  const settingsNavigation = navigation.find(group => group.key === "settings")?.items || [];
   const meta = pageMeta[activePage as keyof typeof pageMeta] || pageMeta.Home;
   const [appViewportWidth, setAppViewportWidth] = useState(() =>
     typeof window === "undefined" ? APP_DESKTOP_BASE_WIDTH_PX : window.innerWidth,
@@ -137,7 +138,7 @@ export function AppShell({
           <div className="brand-panel__sub">{t("nav.operationalCockpit")}</div>
         </div>
         <nav className="sidebar-nav">
-          {navigation.map((group) => (
+          {navigation.filter(group => group.key !== "settings").map((group) => (
             <div key={group.key} className="reference-nav-group">
               <div className="sidebar-nav__section-label">{t(group.labelKey)}</div>
               {group.items.map((item) => {
@@ -183,8 +184,14 @@ export function AppShell({
               </summary>
               <div className="topbar-account-menu__items">
                 <strong>{accountName || accountEmail}</strong><span>{accountEmail}</span>
-                <button type="button" className="button button--secondary" onClick={event => {event.currentTarget.closest("details")?.removeAttribute("open");onOpenAccount?.();}}>{locale === "tr" ? "Hesap ve oturum" : "Account and session"}</button>
-                {pageSections.Settings?.filter(item => item.key === "users" || item.key === "portals").map(item => <button key={item.key} type="button" className="button button--secondary" onClick={event => {event.currentTarget.closest("details")?.removeAttribute("open");onNavigateTarget?.("Settings",item.key);}}>{item.label}</button>)}
+                {settingsNavigation.length ? <nav className="topbar-account-menu__settings" aria-label={t("nav.settings")}>
+                  <span className="topbar-account-menu__section-label">{t("nav.settings")}</span>
+                  {settingsNavigation.map(item => <button key={item.section || "root"} type="button" className="button button--secondary"
+                    aria-current={activePage === "Settings" && (!item.section || activeSubPage === item.section) ? "page" : undefined}
+                    onClick={event => {event.currentTarget.closest("details")?.removeAttribute("open");onNavigateTarget ? onNavigateTarget("Settings",item.section) : onNavigate?.("Settings");}}>
+                    {item.section === "session" ? (locale === "tr" ? "Hesap ve oturum" : "Account and session") : item.label}
+                  </button>)}
+                </nav> : onOpenAccount ? <button type="button" className="button button--secondary" onClick={event => {event.currentTarget.closest("details")?.removeAttribute("open");onOpenAccount();}}>{locale === "tr" ? "Hesap ve oturum" : "Account and session"}</button> : null}
                 <button type="button" className="button button--secondary" onClick={() => void onLogout?.()}>{locale === "tr" ? "Çıkış yap" : "Sign out"}</button>
               </div>
             </details>
@@ -214,7 +221,7 @@ export function AppShell({
         {children}
       </main>
       <nav className="mobile-bottom-nav" aria-label={t("common.primaryNavigation")}>
-        {navItems.map((item) => (
+        {navItems.filter(item => item.key !== "Settings").map((item) => (
           <button
             key={item.key}
             className={`mobile-bottom-nav__item${item.key === activePage ? " active" : ""}`}
