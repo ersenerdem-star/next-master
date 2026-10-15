@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-15",
+  "source_commit": "156ee15",
+  "integration_mirror": "322fc2f2",
+  "production_url": "https://portal.next-master.com",
+  "netlify_deploy_id": "6ad11f3856a9835544f1fd63",
+  "feature": "Inline new brand creation in the verified supplier price upload form.",
+  "ui_path": [
+    "Tedarikçi Fiyatları",
+    "CSV İçe Aktar",
+    "+ Yeni marka ekle",
+    "Yeni marka adı",
+    "Kaydet ve seç"
+  ],
+  "safety": {
+    "organization": "Resolved through a fresh authenticated app session; explicit tenant predicate on lookup/insert.",
+    "authorization": "Existing authenticated brands admin RLS and table grants unchanged. No service key or new endpoint.",
+    "duplicates": "Matches existing normalized_name database identity and unique constraint; existing brand is reused; concurrent/lost-response inserts reconcile by identity.",
+    "source_file": "Handler leaves selected file and source date state unchanged; upload disabled while new-brand form is pending or saving.",
+    "publication": "No upload session, price publication or product creation performed by brand save."
+  },
+  "validation": {
+    "isolated_tests_passed": 5,
+    "failures": 0,
+    "build": "Production TypeScript/Vite build passed.",
+    "live_browser": "Add-brand form rendered; entered bosch and Save and select returned Bosch already registered and selected existing Bosch.",
+    "new_brand_insertion": "Covered by isolated store tests; no synthetic brand inserted in production.",
+    "database_read_only": "Confirmed generated normalized_name expression, tenant-scoped unique constraint, existing admin RLS, authenticated SELECT/INSERT grants and brand-scope triggers."
+  },
+  "screenshot": "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/upload-new-brand/production.png"
+}
