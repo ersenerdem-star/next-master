@@ -136,6 +136,7 @@ const PORTAL_INVITE_COLUMNS = [
   "access_can_view_payments",
   "access_can_view_orders",
   "allowed_brand_ids",
+  "excluded_brand_ids",
   "created_at",
   "updated_at",
 ].join(",");
@@ -406,25 +407,24 @@ async function sanitizePortalInvitePayload(input: {
     }
   }
 
-  const rawBrandIds = Array.isArray(next.allowed_brand_ids)
-    ? next.allowed_brand_ids.map((value) => String(value || "").trim()).filter((value) => isUuid(value))
-    : [];
-  if (!rawBrandIds.length) {
-    next.allowed_brand_ids = [];
-    return next;
+  // The DB derives the compatibility allow-list from explicit exclusions.
+  // Never fall back to saving an incomplete scope when validation fails.
+  delete next.allowed_brand_ids;
+  if (!Array.isArray(next.excluded_brand_ids) || next.excluded_brand_ids.some(value => !isUuid(String(value)))) {
+    throw new Error("Select valid brands to exclude from portal access.");
   }
-  const rows = await getJson<Array<Record<string, unknown>>>(
-    buildRestUrl(input.supabaseUrl, "brands", {
-      select: "id",
-      organization_id: `eq.${input.organizationId}`,
-      id: `in.(${[...new Set(rawBrandIds)].join(",")})`,
-    }),
-    {
-      headers: serviceRoleHeaders(input.serviceRoleKey),
-    },
-  ).catch(() => []);
-  const allowedSet = new Set(rows.map((row) => String(row.id || "").trim()).filter(Boolean));
-  next.allowed_brand_ids = [...new Set(rawBrandIds.filter((value) => allowedSet.has(value)))];
+  const rawBrandIds = [...new Set(next.excluded_brand_ids.map(String))];
+  if (rawBrandIds.length) {
+    const rows = await getJson<Array<Record<string, unknown>>>(
+      buildRestUrl(input.supabaseUrl, "brands", {
+        select: "id", organization_id: `eq.${input.organizationId}`,
+        id: `in.(${rawBrandIds.join(",")})`,
+      }), { headers: serviceRoleHeaders(input.serviceRoleKey) },
+    );
+    const allowedSet = new Set(rows.map(row => String(row.id)));
+    if (rawBrandIds.some(id => !allowedSet.has(id))) throw new Error("Excluded brand was not found in this organization.");
+  }
+  next.excluded_brand_ids = rawBrandIds;
   return next;
 }
 
@@ -635,6 +635,7 @@ async function listPortalInvites(supabaseUrl: string, serviceRoleKey: string, or
       }),
     );
   } catch (primaryError) {
+    if (getErrorMessage(primaryError, "").includes("excluded_brand_ids")) throw primaryError;
     try {
       return decoratePortalInviteRows(
         await listRows<Record<string, unknown>>({
@@ -1011,6 +1012,7 @@ async function upsertPortalInvite(input: {
       });
       return decoratePortalInviteRow(rows[0] || null);
     } catch (primaryError) {
+      if ("excluded_brand_ids" in nextPayload) throw primaryError;
       const legacyPayload = { ...nextPayload };
       delete legacyPayload.expires_at;
       delete legacyPayload.allowed_brand_ids;
@@ -1039,6 +1041,7 @@ async function upsertPortalInvite(input: {
     });
     return decoratePortalInviteRow(rows[0] || null);
   } catch (primaryError) {
+    if ("excluded_brand_ids" in nextPayload) throw primaryError;
     const legacyPayload = { ...nextPayload };
     delete legacyPayload.expires_at;
     delete legacyPayload.allowed_brand_ids;

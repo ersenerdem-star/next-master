@@ -25,5 +25,6 @@ export type PortalInvite = {
   updated_at: string;
   has_password?: boolean;
   allowed_brand_ids: string[];
+  excluded_brand_ids?: string[];
   access: PortalAccess;
 };

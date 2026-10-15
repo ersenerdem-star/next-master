@@ -13131,3 +13131,17 @@ body {
 .topbar-account-menu__items button { text-align: left; }
 
 .topbar-icon-button--messages::after { display: none; }
+
+/* Portal brand access is an alphabetical list; seller-scope layouts stay intact. */
+.portal-brand-scope--brands .portal-brand-scope__list {
+  display: flex; flex-direction: column; gap: 0; max-height: 340px; padding: 0;
+}
+.portal-brand-scope--brands .portal-brand-scope__option {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) 90px;
+  min-height: 42px; padding: 9px 14px; border: 0; border-bottom: 1px solid #e8edf3;
+  border-radius: 0; font-weight: 500;
+}
+.portal-brand-scope--brands .portal-brand-scope__option:last-child { border-bottom: 0; }
+.portal-brand-scope--brands .portal-brand-scope__option:has(input:not(:checked)) { background: #fff6ed; }
+.portal-brand-scope--brands .portal-brand-scope__availability { text-align: right; font-size: 12px; color: #526579; }
+.portal-brand-scope--brands .portal-brand-scope__option:has(input:not(:checked)) .portal-brand-scope__availability { color: #974800; }

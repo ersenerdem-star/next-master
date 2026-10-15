@@ -492,12 +492,12 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   function togglePortalAllowedBrand(brandId: string, checked: boolean) {
     setPortalStatus("");
     setPortalDraft((current) => {
-      const nextSet = new Set((current.allowed_brand_ids || []).map((value) => String(value || "").trim()).filter(Boolean));
-      if (checked) nextSet.add(brandId);
-      else nextSet.delete(brandId);
+      const nextSet = new Set((current.excluded_brand_ids || []).map((value) => String(value || "").trim()).filter(Boolean));
+      if (checked) nextSet.delete(brandId);
+      else nextSet.add(brandId);
       return {
         ...current,
-        allowed_brand_ids: [...nextSet],
+        excluded_brand_ids: [...nextSet],
       };
     });
   }
@@ -509,7 +509,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     setPortalStatus("");
     setPortalDraft((current) => ({
       ...current,
-      allowed_brand_ids: Array.from(new Set([...(current.allowed_brand_ids || []), ...visibleIds])),
+      excluded_brand_ids: (current.excluded_brand_ids || []).filter(id => !visibleIds.includes(id)),
     }));
   }
 
@@ -536,8 +536,8 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const normalizedPortalBrandSearch = portalBrandSearch.trim();
   const visiblePortalBrands = brandOptions.filter((brand) =>
     !normalizedPortalBrandSearch || includesLooseText(brand.name, normalizedPortalBrandSearch),
-  );
-  const selectedPortalBrands = brandOptions.filter((brand) => portalDraft.allowed_brand_ids.includes(brand.id));
+  ).sort((a, b) => a.name.localeCompare(b.name));
+  const excludedPortalBrandIds = portalDraft.excluded_brand_ids || [];
 
   function editPortalInvite(row: PortalInvite) {
     setActiveTab("portals");
@@ -659,8 +659,8 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
       key: "brandScope",
       header: s("portal.fields.brandScope"),
       render: (row: PortalInvite) =>
-        row.allowed_brand_ids.length
-          ? s("portal.brandScope.selected", { count: row.allowed_brand_ids.length })
+        row.excluded_brand_ids?.length
+          ? s("portal.brandScope.excluded", { count: row.excluded_brand_ids.length })
           : s("portal.brandScope.allBrands"),
     },
     { key: "email", header: s("columns.email"), render: (row: PortalInvite) => row.email || "-" },
@@ -1402,15 +1402,15 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
             <span className="field__label">{s("portal.access.viewOrders")}</span>
           </label>
         </div>
-        <div className="portal-brand-scope">
+        <div className="portal-brand-scope portal-brand-scope--brands">
           <div className="portal-brand-scope__header">
             <div>
               <span className="field__label">{s("portal.fields.brandScope")}</span>
               <span className="field__help">{s("portal.help.brandScope")}</span>
             </div>
-            <span className={`portal-brand-scope__status${portalDraft.allowed_brand_ids.length ? " portal-brand-scope__status--limited" : ""}`}>
-              {portalDraft.allowed_brand_ids.length
-                ? s("portal.brandScope.brandSelected", { count: portalDraft.allowed_brand_ids.length })
+            <span className={`portal-brand-scope__status${excludedPortalBrandIds.length ? " portal-brand-scope__status--limited" : ""}`}>
+              {excludedPortalBrandIds.length
+                ? s("portal.brandScope.excluded", { count: excludedPortalBrandIds.length })
                 : s("portal.brandScope.allBrands")}
             </span>
           </div>
@@ -1427,36 +1427,21 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               <Button variant="secondary" className="button--compact" onClick={selectVisiblePortalBrands} disabled={!visiblePortalBrands.length}>
                 {s("portal.actions.selectVisible")}
               </Button>
-              <Button variant="secondary" className="button--compact" onClick={() => updatePortalField("allowed_brand_ids", [])} disabled={!portalDraft.allowed_brand_ids.length}>
-                {s("portal.actions.clearScope")}
+              <Button variant="secondary" className="button--compact" onClick={() => updatePortalField("excluded_brand_ids", [])} disabled={!excludedPortalBrandIds.length}>
+                {s("portal.actions.enableAllBrands")}
               </Button>
             </div>
           </div>
-          {selectedPortalBrands.length ? (
-            <div className="portal-brand-scope__selected" aria-label={s("portal.brandScope.selectedBrands")}>
-              {selectedPortalBrands.map((brand) => (
-                <button
-                  key={brand.id}
-                  type="button"
-                  className="portal-brand-scope__chip"
-                  onClick={() => togglePortalAllowedBrand(brand.id, false)}
-                  title={s("portal.actions.removeBrand")}
-                >
-                  <span>{brand.name}</span>
-                  <span aria-hidden="true">×</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
           <div className="portal-brand-scope__list" role="group" aria-label={s("portal.fields.brandScope")}>
             {visiblePortalBrands.length ? visiblePortalBrands.map((brand) => (
               <label key={brand.id} className="portal-brand-scope__option">
                 <input
                   type="checkbox"
-                  checked={portalDraft.allowed_brand_ids.includes(brand.id)}
+                  checked={!excludedPortalBrandIds.includes(brand.id)}
                   onChange={(event) => togglePortalAllowedBrand(brand.id, event.target.checked)}
                 />
                 <span>{brand.name}</span>
+                <span className="portal-brand-scope__availability">{excludedPortalBrandIds.includes(brand.id) ? s("portal.brandScope.hidden") : s("portal.brandScope.enabled")}</span>
               </label>
             )) : <span className="portal-brand-scope__empty">{s("portal.brandScope.noMatches")}</span>}
           </div>
