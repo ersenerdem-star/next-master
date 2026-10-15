@@ -10089,10 +10089,13 @@ body,
 }
 
 /* Clip horizontal overflow without creating a non-scrolling ancestor that
-   captures the admin sidebar's sticky positioning. */
+   captures the admin sidebar or customer portal header's sticky positioning. */
 html:has(.app-shell),
 body:has(.app-shell),
-#root:has(.app-shell) {
+#root:has(.app-shell),
+html:has(.portal-shell--workspace),
+body:has(.portal-shell--workspace),
+#root:has(.portal-shell--workspace) {
   overflow-x: clip;
 }
 
