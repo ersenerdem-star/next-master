@@ -7826,7 +7826,7 @@ textarea {
   border: 1px solid rgba(18, 35, 59, 0.1);
   border-radius: 24px;
   background-color: #f6f8fb;
-  background-image: url("/portal-assets/admin-operations-hero.png");
+  background-image: var(--admin-operations-artwork, url("/portal-assets/admin-operations-hero.png"));
   background-position: right center;
   background-repeat: no-repeat;
   background-size: auto 100%;
@@ -10684,7 +10684,7 @@ select.field__input {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 24px;
   background-color: #061427;
-  background-image: url("/portal-assets/customer-desk-network-hero.png");
+  background-image: var(--customer-desk-artwork, url("/portal-assets/customer-desk-network-hero.png"));
   background-position: center right;
   background-repeat: no-repeat;
   background-size: cover;
@@ -11080,7 +11080,7 @@ select.field__input {
   justify-content: center;
   min-height: 100vh;
   background-color: #061427;
-  background-image: url("/portal-assets/customer-desk-network-hero.png");
+  background-image: var(--customer-desk-artwork, url("/portal-assets/customer-desk-network-hero.png"));
   background-position: center right;
   background-repeat: no-repeat;
   background-size: cover;
@@ -11295,7 +11295,7 @@ select.field__input {
   place-items: stretch;
   padding: clamp(24px, 5vw, 72px);
   background-color: #061427;
-  background-image: url("/portal-assets/admin-operations-hero.png");
+  background-image: var(--admin-operations-artwork, url("/portal-assets/admin-operations-hero.png"));
   background-position: center right;
   background-repeat: no-repeat;
   background-size: cover;
@@ -11554,7 +11554,7 @@ select.field__input {
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 28px;
   background-color: #061427;
-  background-image: url("/portal-assets/admin-operations-hero.png");
+  background-image: var(--admin-operations-artwork, url("/portal-assets/admin-operations-hero.png"));
   background-position: right 38%;
   background-repeat: no-repeat;
   background-size: cover;
@@ -12716,7 +12716,7 @@ body {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: url("/portal-assets/customer-desk-network-hero.png") right center / auto 100% no-repeat;
+  background: var(--customer-desk-artwork, url("/portal-assets/customer-desk-network-hero.png")) right center / auto 100% no-repeat;
   content: "";
   pointer-events: none;
   /* The artwork is narrower than the hero. Start its reveal before the
@@ -12992,7 +12992,7 @@ body {
   overflow: hidden;
   border: 0 !important;
   border-radius: 0 !important;
-  background: #f1f6fb url("/portal-assets/admin-operations-hero.png") right center / auto 100% no-repeat !important;
+  background: #f1f6fb var(--admin-operations-artwork, url("/portal-assets/admin-operations-hero.png")) right center / auto 100% no-repeat !important;
   box-shadow: none !important;
   padding: 32px 42px !important;
 }
@@ -13230,3 +13230,9 @@ body {
 @media(prefers-reduced-motion:reduce) { .supplier-live-stats__card { transition:none; }.supplier-live-stats__card::after { animation:none;display:none; }.supplier-live-stats__card:hover { transform:none; } }
 
 .supplier-live-stats .sr-only { position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0; }
+
+/* Localized artwork follows the same language selection as interface copy. */
+:root[lang="tr"] {
+  --admin-operations-artwork: url("/portal-assets/admin-operations-hero-tr.jpg");
+  --customer-desk-artwork: url("/portal-assets/customer-desk-network-hero-tr.jpg");
+}
