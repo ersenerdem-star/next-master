@@ -1,7 +1,7 @@
 {
   "local_tests": {
-    "tests": 138,
-    "pass": 138,
+    "tests": 144,
+    "pass": 144,
     "fail": 0
   },
   "web_build": "passed",
@@ -41,7 +41,7 @@
       "Existing Settings initialization attempts default email-template seeding when the synthetic list is empty; the local stub rejects writes. No real template or email was created."
     ]
   },
-  "database": "Read-only presence/hash checks; no migration or data writes",
+  "database": "Schema checked read-only; no migrations or commercial writes. One staging export job/artifact created by the existing export flow.",
   "production_deploy": "not executed",
   "confirmation_compatibility": {
     "existing_confirmation": "Preserved when atomic capability is false; original target sequence restored",
@@ -54,5 +54,6 @@
     },
     "build": "passed after compatibility correction",
     "scope": "Local tests; not authenticated database acceptance"
-  }
+  },
+  "hosted_staging_acceptance": "staging-acceptance.json"
 }

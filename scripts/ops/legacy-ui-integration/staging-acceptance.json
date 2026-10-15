@@ -1,0 +1,493 @@
+{
+  "date": "2026-10-15",
+  "scope": "Hosted staging UI and selected read/export acceptance; production unchanged",
+  "site_id": "6778214b-94e6-4e4a-8a01-99afc80200bd",
+  "origin": "https://next-master-v3-staging-20261006.netlify.app",
+  "supabase_project": "kaxsqafdevabkxofwdod",
+  "rollback_deploy_id": "6ad03ae391fec19ef834d72d",
+  "initial_candidate": {
+    "commit": "5ebbb6fb4e2516af7fbc5e4b0ae9cf08b5d28246",
+    "deploy_id": "6ad0ae1a99f62f7bf7683b3e"
+  },
+  "candidate": {
+    "commit": "61e4139744a08ba467f46d5afb043dc2573e48fc",
+    "deploy_id": "6ad0af54afff9f5d4156885a",
+    "version_json_verified": true,
+    "build_context": "staging",
+    "provider_published_state": "ready"
+  },
+  "capabilities": {
+    "frontend_commercial": true,
+    "server_commercial": "true (per-deploy override only)",
+    "schema_migrations_applied": false
+  },
+  "local_regression": {
+    "tests": 144,
+    "pass": 144,
+    "fail": 0,
+    "web_build": "passed"
+  },
+  "initial_smoke": {
+    "status": "incomplete",
+    "mode": "hosted-v3-unauthenticated-smoke",
+    "origin": "https://next-master-v3-staging-20261006.netlify.app",
+    "checks": [
+      {
+        "path": "/api/admin-login-branding",
+        "method": "GET",
+        "expected": 200,
+        "actual": 200,
+        "durationMs": 851,
+        "passed": true
+      },
+      {
+        "path": "/api/app-locale",
+        "method": "GET",
+        "expected": 200,
+        "actual": 200,
+        "durationMs": 872,
+        "passed": true
+      },
+      {
+        "path": "/api/app-session",
+        "method": "GET",
+        "expected": 401,
+        "actual": 401,
+        "durationMs": 794,
+        "passed": true
+      },
+      {
+        "path": "/api/app-rpc",
+        "method": "POST",
+        "expected": 401,
+        "actual": 401,
+        "durationMs": 1091,
+        "passed": true
+      },
+      {
+        "path": "/api/app-admin-records",
+        "method": "POST",
+        "expected": 401,
+        "actual": 400,
+        "durationMs": 826,
+        "passed": false
+      },
+      {
+        "path": "/api/portal-branding",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 879,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-login",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 777,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-logout",
+        "method": "POST",
+        "expected": 200,
+        "actual": 200,
+        "durationMs": 808,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-data",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 974,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-order-search",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 798,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-order-detail",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 839,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-order-prepare",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 767,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-order-submit",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 677,
+        "passed": true
+      },
+      {
+        "path": "/api/admin-export-start",
+        "method": "POST",
+        "expected": 401,
+        "actual": 401,
+        "durationMs": 2123,
+        "passed": true
+      },
+      {
+        "path": "/api/admin-export-status",
+        "method": "POST",
+        "expected": 401,
+        "actual": 401,
+        "durationMs": 2135,
+        "passed": true
+      },
+      {
+        "path": "/api/admin-export-download",
+        "method": "POST",
+        "expected": 401,
+        "actual": 401,
+        "durationMs": 2116,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-export-start",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 2088,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-export-status",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 2216,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-export-download",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 2098,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-export-file?jobId=synthetic-unowned",
+        "method": "GET",
+        "expected": 401,
+        "actual": 401,
+        "durationMs": 2140,
+        "passed": true
+      },
+      {
+        "path": "/api/mira-catalog-pilot-schedule",
+        "method": "GET",
+        "expected": 404,
+        "actual": 404,
+        "durationMs": 289,
+        "passed": true
+      }
+    ],
+    "authenticatedUiAcceptance": false,
+    "fullApplicationE2E": false,
+    "productionWrites": 0
+  },
+  "final_smoke": {
+    "status": "passed",
+    "mode": "hosted-v3-unauthenticated-smoke",
+    "origin": "https://next-master-v3-staging-20261006.netlify.app",
+    "checks": [
+      {
+        "path": "/api/admin-login-branding",
+        "method": "GET",
+        "expected": 200,
+        "actual": 200,
+        "durationMs": 1001,
+        "passed": true
+      },
+      {
+        "path": "/api/app-locale",
+        "method": "GET",
+        "expected": 200,
+        "actual": 200,
+        "durationMs": 512,
+        "passed": true
+      },
+      {
+        "path": "/api/app-session",
+        "method": "GET",
+        "expected": 401,
+        "actual": 401,
+        "durationMs": 269,
+        "passed": true
+      },
+      {
+        "path": "/api/app-rpc",
+        "method": "POST",
+        "expected": 401,
+        "actual": 401,
+        "durationMs": 563,
+        "passed": true
+      },
+      {
+        "path": "/api/app-admin-records",
+        "method": "POST",
+        "expected": 401,
+        "actual": 401,
+        "durationMs": 756,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-branding",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 269,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-login",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 267,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-logout",
+        "method": "POST",
+        "expected": 200,
+        "actual": 200,
+        "durationMs": 243,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-data",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 237,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-order-search",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 259,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-order-detail",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 248,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-order-prepare",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 243,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-order-submit",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 275,
+        "passed": true
+      },
+      {
+        "path": "/api/admin-export-start",
+        "method": "POST",
+        "expected": 401,
+        "actual": 401,
+        "durationMs": 478,
+        "passed": true
+      },
+      {
+        "path": "/api/admin-export-status",
+        "method": "POST",
+        "expected": 401,
+        "actual": 401,
+        "durationMs": 249,
+        "passed": true
+      },
+      {
+        "path": "/api/admin-export-download",
+        "method": "POST",
+        "expected": 401,
+        "actual": 401,
+        "durationMs": 278,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-export-start",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 269,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-export-status",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 342,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-export-download",
+        "method": "POST",
+        "expected": 400,
+        "actual": 400,
+        "durationMs": 277,
+        "passed": true
+      },
+      {
+        "path": "/api/portal-export-file?jobId=synthetic-unowned",
+        "method": "GET",
+        "expected": 401,
+        "actual": 401,
+        "durationMs": 268,
+        "passed": true
+      },
+      {
+        "path": "/api/mira-catalog-pilot-schedule",
+        "method": "GET",
+        "expected": 404,
+        "actual": 404,
+        "durationMs": 190,
+        "passed": true
+      }
+    ],
+    "authenticatedUiAcceptance": false,
+    "fullApplicationE2E": false,
+    "productionWrites": 0
+  },
+  "authenticated_browser_checks": [
+    {
+      "step": 1,
+      "name": "Admin report destinations",
+      "health": "passed",
+      "evidence": [
+        "04-staging-reports.jpg",
+        "06-staging-customer-balance.jpg",
+        "07-staging-sales-margin.jpg",
+        "12-staging-final-report.jpg"
+      ],
+      "observed": {
+        "supplier_balance": {
+          "rows": 62,
+          "EUR": 42
+        },
+        "customer_balance": {
+          "rows": 6,
+          "EUR": 69.26
+        },
+        "invoice_margin": {
+          "rows": 5,
+          "EUR": 55.5
+        }
+      },
+      "limit": "Observed staging fixtures, not independent accounting certification",
+      "final_candidate_recheck": "Supplier balance reloaded after final candidate: 62 rows / EUR 42.00"
+    },
+    {
+      "step": 2,
+      "name": "Supplier Prices release issues and Status Center ownership",
+      "health": "passed",
+      "evidence": [
+        "05-staging-supplier-issues-full.jpg"
+      ],
+      "observed": "Behr/Sood seven rejected/conflicting source rows; Status Center returns to Supplier Prices; no publication"
+    },
+    {
+      "step": 3,
+      "name": "Settings / Portals",
+      "health": "placement passed",
+      "evidence": [
+        "08-staging-portal-settings.jpg"
+      ],
+      "observed": "Canonical portal editor and list load; no invite, credential update or save"
+    },
+    {
+      "step": 4,
+      "name": "Customer home and price-list navigation",
+      "health": "passed",
+      "evidence": [
+        "09-staging-customer-home.jpg"
+      ],
+      "observed": "Account credit is 0.00 EUR rather than outstanding 4035.77; View price lists opens account A pricing; exact status semantics covered locally"
+    },
+    {
+      "step": 5,
+      "name": "Customer order detail",
+      "health": "read passed",
+      "evidence": [
+        "11-staging-customer-order.jpg"
+      ],
+      "observed": "V3-FINAL-001 line qty 2 x EUR 16.50, subtotal 33.00, discount 1.00, shipping 2.50, total 34.50; no submission or confirmation"
+    },
+    {
+      "step": 6,
+      "name": "Bounded Mahle price-list export",
+      "health": "generation finalized; file bytes not inspected",
+      "evidence": [
+        "10-staging-export-completed.jpg"
+      ],
+      "observed": {
+        "job_id": "73bd91cf-3190-4780-a76d-0954e1dd7d05",
+        "audience": "portal",
+        "export_type": "portal_price_list",
+        "status": "finalized",
+        "row_count": 3,
+        "file_name": "portal-price-list-Mahle-A-20261015.xlsx"
+      },
+      "limit": "Browser completion and read-only DB evidence. Browser tooling lost its download-event handle; blob downloadMedia unsupported; host file bytes were not captured."
+    }
+  ],
+  "screenshot_directory": "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/staging-acceptance",
+  "production": {
+    "origin": "https://portal.next-master.com",
+    "git_sha": "38dfa7d590b19bf9915d1c5eda919f604275faf4",
+    "deploy_id": "6ad03a4126764166c7257dff",
+    "changed": false
+  },
+  "remote_effects": [
+    "Two staging UI/function deployments",
+    "One staging portal export job and generated export artifact"
+  ],
+  "not_executed": [
+    "Production deployment or flags",
+    "Database DDL/migration",
+    "Order save/confirmation",
+    "Invoice/payment writes",
+    "Supplier upload/publication",
+    "Invite/email/credential changes"
+  ],
+  "remaining_gates": [
+    "Transactional order/invoice staging acceptance",
+    "Production commercial schema reconciliation",
+    "Production rollout authorization"
+  ],
+  "baseline_module_audit": "Two unchanged critical findings; full audit not green"
+}
