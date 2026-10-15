@@ -1,0 +1,193 @@
+{
+  "date": "2026-10-15",
+  "source_commit": "75878b6",
+  "source_commits": [
+    "76827927",
+    "b4b3a283",
+    "349a8518",
+    "ae273a7a",
+    "f485f9c4",
+    "75878b6"
+  ],
+  "integration_mirror": "2e31171d",
+  "integration_commits": [
+    "54d5d5f",
+    "3dbdd86",
+    "96f19fee",
+    "e5cb4853",
+    "e2af52b7",
+    "2e31171d"
+  ],
+  "production_url": "https://portal.next-master.com",
+  "netlify_deploy_id": "6ad1279d65fc689a21e75ad5",
+  "change": "Presentation-only Turkish interface registry and locale keys, typed placeholder formats, locale-aware dates/numbers, brand casing context, and separate localized hero artwork. English copy and original assets retained.",
+  "phrase_count": 769,
+  "browser_checks": {
+    "admin": {
+      "brandLanguage": [
+        {
+          "lang": "en",
+          "text": "VAG"
+        },
+        {
+          "lang": "en",
+          "text": "Vitesco"
+        },
+        {
+          "lang": "en",
+          "text": "LUK"
+        },
+        {
+          "lang": "en",
+          "text": "INA"
+        },
+        {
+          "lang": "en",
+          "text": "FAG"
+        },
+        {
+          "lang": "en",
+          "text": "Blue Print"
+        },
+        {
+          "lang": "en",
+          "text": "Febi"
+        },
+        {
+          "lang": "en",
+          "text": "Bosch"
+        },
+        {
+          "lang": "en",
+          "text": "Geba"
+        },
+        {
+          "lang": "en",
+          "text": "Bosch"
+        }
+      ],
+      "headings": [
+        "Ticaretin ritmini koruyun",
+        "Tedarikçi Fiyat Yükleme Merkezi",
+        "Raporlar",
+        "Para ve aksiyon sinyalleri",
+        "Sistem envanteri (referans)",
+        "Stok Nabzı",
+        "Yeni Sipariş Bildirimi",
+        "Son Satış Siparişleri",
+        "Gelir Analizi",
+        "Satıcıya Göre",
+        "Satın Alma Şirketine Göre",
+        "Markaya Göre Satışlar",
+        ""
+      ],
+      "lang": "tr",
+      "orderStatusCaptions": [
+        "Taslak",
+        "Taslak",
+        "Taslak",
+        "Taslak",
+        "Taslak"
+      ]
+    },
+    "artwork_admin": {
+      "background": "url(\"https://portal.next-master.com/portal-assets/admin-operations-hero-tr.jpg\")",
+      "lang": "tr"
+    },
+    "artwork_customer": {
+      "background": "url(\"https://portal.next-master.com/portal-assets/customer-desk-network-hero-tr.jpg\")",
+      "lang": "tr"
+    },
+    "customer_navigation": [
+      "Ana Sayfa",
+      "Parça Arama",
+      "Siparişler",
+      "Fiyat Listeleri",
+      "Faturalar",
+      "Hesap Ekstresi",
+      "Mesajlar",
+      "Hesap",
+      "Destek"
+    ],
+    "customer_notifications": [
+      "VAG markası eklendi",
+      "Bosch için yeni fiyat listesi müşteri portalınızda hazır."
+    ],
+    "price_list": [
+      "A Fiyat Listesi",
+      "Bu müşteri hesabına atanmış A fiyat listesi kullanılır."
+    ],
+    "upload_form": [
+      "Tedarikçi Fiyatlarını İçe Aktar",
+      "Kaynak tarihi",
+      "+ Yeni marka ekle",
+      "Yükle / aynı dosyaya devam et"
+    ],
+    "verified_read_only": true
+  },
+  "validation": {
+    "focused_tests_passed": 21,
+    "production_typescript_vite_build": "passed",
+    "integration_typescript_vite_build": "passed",
+    "source_contract_audit": {
+      "files": 32,
+      "changedPayloadOrRouteLiteralKeys": [],
+      "removedOrAlteredExistingEqualityLiterals": [],
+      "addedDisplayEqualityLiterals": [
+        {
+          "f": "apps/web/src/modules/portal/components/CustomerDeskHome.tsx",
+          "k": "tr",
+          "count": 6
+        },
+        {
+          "f": "apps/web/src/modules/portal/components/PortalSearchResults.tsx",
+          "k": "tr",
+          "count": 14
+        },
+        {
+          "f": "apps/web/src/modules/portal/pages/PortalPage.tsx",
+          "k": "tr",
+          "count": 26
+        },
+        {
+          "f": "apps/web/src/presentation/components/common/Button.tsx",
+          "k": "string",
+          "count": 1
+        },
+        {
+          "f": "apps/web/src/presentation/components/common/DataTable.tsx",
+          "k": "tr",
+          "count": 1
+        },
+        {
+          "f": "apps/web/src/presentation/components/common/DataTable.tsx",
+          "k": "No",
+          "count": 1
+        },
+        {
+          "f": "apps/web/src/presentation/components/common/SectionCard.tsx",
+          "k": "string",
+          "count": 1
+        },
+        {
+          "f": "apps/web/src/presentation/components/common/VisualPrimitives.tsx",
+          "k": "string",
+          "count": 2
+        }
+      ]
+    },
+    "english_mode": "Rendering tests passed; original artwork remains the CSS fallback. No authenticated production English browser session was opened.",
+    "stored_data": "unchanged",
+    "payload_route_status_identifiers": "unchanged",
+    "financial_calculations": "unchanged",
+    "database_migrations": "none",
+    "render_deployment": "none",
+    "business_writes": "none; no forms submitted or notifications marked read"
+  },
+  "screenshots": [
+    "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/turkish-interface/admin.png",
+    "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/turkish-interface/customer-home.png",
+    "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/turkish-interface/upload-form.png"
+  ],
+  "scope_note": "Known interface text and system notification formats are localized at display boundaries. Customer-authored content, product descriptions, company/brand names and import column contracts are retained literally."
+}
