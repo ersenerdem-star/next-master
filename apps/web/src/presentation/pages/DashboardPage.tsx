@@ -20,7 +20,6 @@ import { canAccessCustomerOps, canAccessSystemModules } from "../../shared/roles
 import { useI18n } from "../../i18n/I18nProvider";
 import { PageHeader, PageShell } from "../components/common/VisualPrimitives";
 import { MiraCompanion } from "../components/common/MiraCompanion";
-import { NavGlyph } from "../components/common/NextMasterBrand";
 
 type DashboardPageProps = {
   role?: string;
@@ -220,19 +219,10 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab,
       </section>
 
       <section className="dashboard-reference-grid" aria-label={locale === "tr" ? "Operasyon girişleri" : "Operations shortcuts"}>
-        {showSystemPanels ? <article className="dashboard-upload-center">
-          <header className="dashboard-reference-card__header">
-            <span className="dashboard-reference-card__icon dashboard-reference-card__icon--upload"><NavGlyph name="upload" /></span>
-            <div><h2>{locale === "tr" ? "Tedarikçi fiyatları" : "Supplier prices"}</h2><p>{locale === "tr" ? "Dosya yükleme, doğrulama ve yayın kararları." : "File upload, validation and publication decisions."}</p></div>
-          </header>
-          <button type="button" className="dashboard-upload-dropzone" onClick={() => onNavigatePage?.("Purchases", "Supplier Prices")}>
-            <span className="dashboard-upload-dropzone__cloud"><NavGlyph name="upload" /></span>
-            <strong>{locale === "tr" ? "Fiyat yükleme alanını aç" : "Open supplier price workspace"}</strong>
-            <span>{locale === "tr" ? "Yükleme dosyası ve kapsamını bu ekranda seçin." : "Choose the source file and scope in the upload workspace."}</span>
-          </button>
-          <p>{locale === "tr" ? "Dosya kabulü, doğrulama ve yayın ayrı aşamalardır. İnceleme sonuçları Tedarikçi Fiyatları alanında, işlem sağlığı Durum Merkezi'ndedir." : "File acceptance, validation and publication are separate stages. Review releases in Supplier Prices and monitor worker health in Status Center."}</p>
-          <Button variant="secondary" onClick={() => onNavigatePage?.("Reports", "Status Center")}>{t("nav.statusCenter")}</Button>
-        </article> : null}
+        {showSystemPanels ? import.meta.env.VITE_SUPPLIER_RELEASE_REVIEW_ENABLED === "true"
+          ? <SupplierReleaseReviewPanel locale={locale} dashboard onOpenWorkspace={()=>onNavigatePage?.("Purchases", "Supplier Prices")} />
+          : <SectionCard title="Supplier Price Upload Center"><Button onClick={()=>onNavigatePage?.("Purchases", "Supplier Prices")}>{locale==='tr'?'Yükleme alanını aç':'Open upload workspace'}</Button></SectionCard>
+          : null}
         <aside className="dashboard-customer-preview">
           <header className="dashboard-reference-card__header"><div><h2>{t("nav.reports")}</h2><p>{locale === "tr" ? "Mevcut raporlar ve belge hareketleri." : "Existing reports and document activity."}</p></div></header>
           <div className="toolbar toolbar--wrap">
@@ -246,7 +236,6 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab,
         </aside>
       </section>
 
-      {showSystemPanels && import.meta.env.VITE_SUPPLIER_RELEASE_REVIEW_ENABLED === "true" ? <SupplierReleaseReviewPanel locale={locale} /> : null}
       <MiraCompanion />
 
       <SectionCard title={t("dashboard.moneySignals.title")} className="dashboard-money-signals">

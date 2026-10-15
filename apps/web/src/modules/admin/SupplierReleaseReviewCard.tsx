@@ -22,8 +22,8 @@ export function SupplierReleaseIssues({rows,tr,loading,error,next,onLoadMore}:{r
     {next?<Button variant="secondary" disabled={loading} onClick={onLoadMore}>{tr?'Daha fazla sorunlu satır':'More problematic rows'}</Button>:null}
   </div>;
 }
-export function SupplierReleaseReviewCard({rows,tr,onDetails,onIssues,actionsEnabled=false,onChanged}:{rows:ReleaseReviewRow[];tr:boolean;onDetails:(message:string)=>void;onIssues?:(row:ReleaseReviewRow)=>void;actionsEnabled?:boolean;onChanged?:()=>void}) {
-  const [expanded,setExpanded]=useState<string|null>(null);
+export function SupplierReleaseReviewCard({rows,tr,onDetails,onIssues,actionsEnabled=false,onChanged,initialExpanded=false}:{rows:ReleaseReviewRow[];tr:boolean;onDetails:(message:string)=>void;onIssues?:(row:ReleaseReviewRow)=>void;actionsEnabled?:boolean;onChanged?:()=>void;initialExpanded?:boolean}) {
+  const [expanded,setExpanded]=useState<string|null>(initialExpanded?rows[0]?.id||null:null);
   const labels=tr ? {staged:'Dosya işlendi — yayın öncesi kontrol bekliyor',processing_interrupted:'İşlem durdu — operasyon kontrolü gerekiyor',rejected:'Dosya reddedildi — yayınlanmadı',review_required:'İnceleme gerekli — yayın durduruldu',inactive:'Aktif değil',active:'Güncel aktif sürüm',previous_publication:'Önceki yayın — güncel değil',unverified:'Kontrol doğrulanmadı',awaiting_publication:'Doğrulandı — henüz yayınlanmadı',processing:'İşleniyor'}
     : {staged:'File processed — pre-publication review pending',processing_interrupted:'Processing stopped — operational review needed',rejected:'Source rejected — not published',review_required:'Review required — publication held',inactive:'Not active',active:'Current active release',previous_publication:'Previous publication — not current',unverified:'Check not verified',awaiting_publication:'Validated — not yet published',processing:'Processing'};
   return <div className="list-stack">{rows.map(row=>{

@@ -1,6 +1,9 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useId,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
+import {SupplierReleaseSummaryTable} from './SupplierReleaseSummaryTable';
+import {NavGlyph} from '../../presentation/components/common/NextMasterBrand';
 import {fetchSupplierReleaseReviewPage,type ReleaseReviewCursor} from '../../infrastructure/api/supplierReleaseReviewApi';
-import {releaseReviewState, splitReleaseReviewHistory, type ReleaseReviewRow} from '../../shared/supplierReleaseReview';
+import {splitReleaseReviewHistory, type ReleaseReviewRow} from '../../shared/supplierReleaseReview';
 import {SectionCard} from '../../presentation/components/common/SectionCard';
 import {Button} from '../../presentation/components/common/Button';
 import {useActionFeedback} from '../../presentation/components/common/ActionFeedback';
@@ -8,16 +11,26 @@ import {SupplierReleaseIssuePanel} from './SupplierReleaseIssuePanel';
 import {SupplierReleaseReviewCard} from './SupplierReleaseReviewCard';
 import {supplierReleaseActionsEnabled} from '../../infrastructure/api/supplierReleaseActionsApi';
 
-export function SupplierReleaseReviewPanel({locale,showArchive:controlledArchive}:{locale:string;showArchive?:boolean}){
+export function SupplierReleaseReviewPanel({locale,showArchive:controlledArchive,dashboard=false,onOpenWorkspace}:{locale:string;showArchive?:boolean;dashboard?:boolean;onOpenWorkspace?:()=>void}){
   const [archive,setShowArchive]=useState(false);
   const showArchive=controlledArchive ?? archive;
   const [issueRelease,setIssueRelease]=useState<ReleaseReviewRow|null>(null);
-  const tr=locale==='tr',feedback=useActionFeedback();
+  const tr=locale==='tr',feedback=useActionFeedback(),titleId=useId();
   const actionsEnabled=supplierReleaseActionsEnabled();
   const [rows,setRows]=useState<ReleaseReviewRow[]>([]),[next,setNext]=useState<ReleaseReviewCursor|null>(null);
   const [cursor,setCursor]=useState<ReleaseReviewCursor|null>(null),[refresh,setRefresh]=useState(0);
   const [loading,setLoading]=useState(false),[error,setError]=useState(false),[loaded,setLoaded]=useState(false);
-  const serial=useRef(0);
+  const serial=useRef(0),dialog=useRef<HTMLDialogElement>(null);
+  const [selectedId,setSelectedId]=useState<string|null>(null);
+  const selected=rows.find(row=>row.id===selectedId);
+  useEffect(()=>{
+    const el=dialog.current;
+    if(!selected || !el)return;
+    const previousOverflow=document.body.style.overflow;
+    document.body.style.overflow='hidden';
+    el.showModal();
+    return ()=>{el.close();document.body.style.overflow=previousOverflow;};
+  },[selected?.id]);
   useEffect(()=>{
     const controller=new AbortController(), version=++serial.current;
     setLoading(true);
@@ -35,34 +48,33 @@ export function SupplierReleaseReviewPanel({locale,showArchive:controlledArchive
     return ()=>window.clearInterval(interval);
   },[]);
   const grouped=splitReleaseReviewHistory(rows);
-  const stateLabel=(state:string)=>tr
-    ? ({staged:'dosya işlendi — kontrol bekliyor',processing_interrupted:'işlem durdu',active:'aktif',review_required:'inceleme gerekli',awaiting_publication:'yayın bekliyor',unverified:'kontrol bekliyor',processing:'işleniyor',inactive:'pasif',rejected:'reddedildi'} as Record<string,string>)[state] || state
-    : state.replaceAll('_',' ');
-  const latestSummary=grouped.latest.reduce((counts,row)=>{
-    const state=releaseReviewState(row);
-    counts[state]=(counts[state]||0)+1;
-    return counts;
-  },{} as Record<string,number>);
   const displayedRows=showArchive ? (cursor ? rows : grouped.history) : grouped.latest;
-  return <SectionCard title={showArchive ? (tr?'Yükleme arşivi':'Upload archive') : (tr?'Güncel tedarikçi yüklemeleri':'Current supplier uploads')} actions={
-    <Button variant="secondary" disabled={loading} onClick={()=>setRefresh(v=>v+1)}>{tr?'Yenile':'Refresh'}</Button>}>
-    {controlledArchive === undefined ? <Button variant="secondary" aria-pressed={showArchive} onClick={()=>{setShowArchive(v=>!v);setIssueRelease(null);if(cursor){setRows([]);setLoaded(false);setCursor(null);}}}>
+  return <><SectionCard className={`supplier-upload-summary${dashboard?' supplier-upload-summary--dashboard dashboard-upload-center':''}`} title={dashboard ? 'Supplier Price Upload Center' : showArchive ? (tr?'Yükleme arşivi':'Upload archive') : (tr?'Güncel tedarikçi yüklemeleri':'Current supplier uploads')} actions={<>
+    {onOpenWorkspace?<Button onClick={onOpenWorkspace}>{tr?'Fiyat dosyası yükle':'Upload price file'}</Button>:null}
+    <Button variant="secondary" disabled={loading} onClick={()=>setRefresh(v=>v+1)}>{tr?'Yenile':'Refresh'}</Button></>}>
+    {controlledArchive === undefined ? <Button variant="secondary" aria-pressed={showArchive} onClick={()=>{setShowArchive(v=>!v);setIssueRelease(null);setSelectedId(null);if(cursor){setRows([]);setLoaded(false);setCursor(null);}}}>
       {showArchive?(tr?'Güncel yüklemelere dön':'Back to current uploads'):(tr?'Yükleme arşivini aç':'Open upload archive')}
     </Button> : null}
-    <p>{showArchive
+    <p className="supplier-upload-summary__intro">{showArchive
       ? (tr?'Önceki yüklemeler burada saklanır. Güncel göstergeler için güncel yüklemelere dönün.':'Previous uploads are kept here. Return to current uploads for current indicators.')
-      : (tr?'Her tedarikçi ve marka için yalnızca son yükleme gösterilir. Yeni yükleme geldiğinde önceki kayıt otomatik olarak arşiv görünümüne taşınır.':'Only the latest upload for each supplier and brand is shown. A new upload automatically moves the previous record to the archive view.')}</p>
+      : (tr?'Güncel yüklemeler. Ayrıntıları görmek için bir satıra tıklayın.':'Latest uploads. Select a row to view details.')}</p>
     {error ? <div role="alert" className="error-text">{tr?'Upgrade kontrol durumu alınamadı. Gösterilen eski veriler güncel olmayabilir; kontrol tamamlandı kabul etmeyin.':'Upgrade review status is unavailable. Previously displayed data may be stale; do not treat the check as completed.'}</div> : null}
     {loading ? <p role="status">{tr?'Kontroller yükleniyor…':'Loading checks…'}</p> : null}
     {loaded && !loading && !error && !displayedRows.length ? <p>{showArchive ? (tr?'Bu sayfada arşivlenmiş yükleme yok.':'No archived uploads on this page.') : (tr?'Güncel yükleme yok.':'No current uploads.')}</p> : null}
-    {!showArchive && grouped.latest.length ? <div className="supplier-release-review-summary" aria-label={tr?'En yeni kapsam özeti':'Latest scope summary'}>
-      {Object.entries(latestSummary).map(([state,count])=><span key={state}><strong>{count}</strong> {stateLabel(state)}</span>)}
-    </div> : null}
-    <SupplierReleaseReviewCard onIssues={setIssueRelease} rows={displayedRows} tr={tr} onDetails={feedback.fail} actionsEnabled={actionsEnabled} onChanged={()=>setRefresh(v=>v+1)}/>
-    {issueRelease ? <SupplierReleaseIssuePanel key={issueRelease.id} release={issueRelease} tr={tr} onClose={()=>setIssueRelease(null)} /> : null}
+    {displayedRows.length?<SupplierReleaseSummaryTable rows={displayedRows} tr={tr} onOpen={setSelectedId}/>:null}
+    {dashboard&&onOpenWorkspace?<button type="button" className="supplier-upload-summary__workspace" onClick={onOpenWorkspace}><NavGlyph name="upload"/>{tr?'Yükleme alanını aç':'Open upload workspace'}</button>:null}
     {showArchive ? <div className="toolbar toolbar--wrap">
       {cursor ? <Button variant="secondary" disabled={loading} onClick={()=>setCursor(null)}>{tr?'Arşiv başlangıcı':'Archive start'}</Button> : null}
       {next ? <Button variant="secondary" disabled={loading||error} onClick={()=>setCursor(next)}>{tr?'Daha eski kayıtlar':'Older releases'}</Button> : null}
     </div> : null}
-  </SectionCard>;
+  </SectionCard>
+  {createPortal(<dialog ref={dialog} className="supplier-upload-details" aria-labelledby={titleId} onCancel={()=>setSelectedId(null)} onClick={event=>{if(event.target===event.currentTarget)setSelectedId(null);}}>
+    <div className="supplier-upload-details__surface">
+      <header><div><span>{tr?'Tedarikçi fiyat yüklemesi':'Supplier price upload'}</span><h2 id={titleId}>{selected?`${selected.supplier} / ${selected.brand}`:''}</h2></div>
+        <Button variant="secondary" onClick={()=>setSelectedId(null)}>{tr?'Kapat':'Close'}</Button></header>
+      {selected?<SupplierReleaseReviewCard onIssues={setIssueRelease} key={selected.id} rows={[selected]} tr={tr} onDetails={feedback.fail} actionsEnabled={actionsEnabled} initialExpanded onChanged={()=>setRefresh(v=>v+1)}/>:null}
+      {issueRelease&&selected?.id===issueRelease.id?<SupplierReleaseIssuePanel key={issueRelease.id} release={issueRelease} tr={tr} onClose={()=>setIssueRelease(null)}/>:null}
+    </div>
+  </dialog>,document.body)}
+  </>;
 }

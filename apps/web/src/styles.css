@@ -13145,3 +13145,40 @@ body {
 .portal-brand-scope--brands .portal-brand-scope__option:has(input:not(:checked)) { background: #fff6ed; }
 .portal-brand-scope--brands .portal-brand-scope__availability { text-align: right; font-size: 12px; color: #526579; }
 .portal-brand-scope--brands .portal-brand-scope__option:has(input:not(:checked)) .portal-brand-scope__availability { color: #974800; }
+
+/* Keep live upload status inside the dashboard card rhythm. Details are on demand. */
+.supplier-upload-summary { min-width: 0; }
+.supplier-upload-summary .section-card__header { gap: 16px; flex-wrap: wrap; }
+.supplier-upload-summary .section-card__header h2 { font-size: 18px; margin: 0; }
+.supplier-upload-summary .section-card__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.supplier-upload-summary .section-card__actions .button { min-height: 32px; padding: 7px 11px; font-size: 12px; }
+.supplier-upload-summary__intro { margin: 0 0 16px; font-size: 12px; color: #6e8199; }
+.supplier-upload-summary--dashboard { margin: 0; border: 1px solid var(--admin-line); border-radius: 11px; box-shadow: 0 5px 16px rgba(17,49,82,.05); }
+.supplier-upload-summary--dashboard .section-card__header { padding: 20px 20px 10px; border: 0; }
+.supplier-upload-summary--dashboard .section-card__body { padding: 0 20px 16px; }
+.supplier-upload-summary__table-wrap { overflow-x: auto; border: 1px solid #e4ebf3; border-radius: 8px; }
+.supplier-upload-summary__table { width: 100%; min-width: 560px; border-collapse: collapse; text-align: left; font-size: 12px; }
+.supplier-upload-summary__table th { background: #f4f8fc; padding: 10px 12px; color: #71839a; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.supplier-upload-summary__table td { padding: 13px 12px; border-top: 1px solid #e9eff5; color: #344c68; white-space: nowrap; }
+.supplier-upload-summary__table tbody tr { cursor: pointer; }
+.supplier-upload-summary__table tbody tr:hover,.supplier-upload-summary__table tbody tr:focus-within { background: #f5faff; }
+.supplier-upload-summary__open { border: 0; background: transparent; padding: 0; color: #183c65; font: inherit; font-weight: 700; cursor: pointer; }
+.supplier-upload-summary__open:focus-visible { outline: 2px solid #287ac1; outline-offset: 5px; border-radius: 2px; }
+.supplier-upload-summary__table time { display: grid; gap: 3px; font-size: 12px; }
+.supplier-upload-summary__table time small { color: #8797aa; font-size: 10px; }
+.supplier-upload-summary__number { text-align: right; font-variant-numeric: tabular-nums; }
+.supplier-upload-summary__detail { color: #2877b8 !important; font-size: 11px; }
+.supplier-upload-summary__status { display: inline-flex; padding: 5px 8px; border-radius: 5px; font-size: 10px; font-weight: 700; background: #edf3f9; color: #56718f; }
+.supplier-upload-summary__status--success { background: #e5f6ee; color: #16774e; }
+.supplier-upload-summary__status--warning { background: #fff0d8; color: #9a6010; }
+.supplier-upload-summary__workspace { display: flex; justify-content: center; align-items: center; width: 100%; gap: 8px; padding: 12px; margin-top: 14px; border: 1px dashed #b8cee3; border-radius: 7px; background: #fbfdff; color: #2877b8; font-weight: 600; cursor: pointer; }
+.supplier-upload-summary__workspace .nav-glyph { width: 19px; height: 19px; }
+.dashboard-customer-preview > .toolbar { padding: 0 20px 20px; }
+.supplier-upload-details { width: min(760px, calc(100vw - 40px)); max-height: calc(100dvh - 64px); margin: auto; padding: 0; border: 1px solid #dce6f0; border-radius: 16px; background: #fff; color: #1b344f; box-shadow: 0 24px 80px rgba(7,27,55,.25); overflow: auto; }
+.supplier-upload-details::backdrop { background: rgba(7,27,55,.46); }
+.supplier-upload-details__surface { padding: 24px; }
+.supplier-upload-details__surface > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.supplier-upload-details__surface > header span { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #6e8199; }
+.supplier-upload-details__surface h2 { margin: 6px 0 0; font-size: 24px; letter-spacing: -.03em; }
+@media(max-width:1100px) { .dashboard-reference-grid { grid-template-columns: minmax(0,1fr); } }
+@media(max-width:600px) { .supplier-upload-details__surface { padding: 16px; } .supplier-upload-summary--dashboard .section-card__header { padding: 16px 14px 10px; } .supplier-upload-summary--dashboard .section-card__body { padding-inline: 14px; } }
