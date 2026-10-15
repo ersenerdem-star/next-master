@@ -460,6 +460,13 @@
       "file": "supabase/migrations/20261015000000_supplier_price_source_revision.sql",
       "sha256": "897c0d5336b927d12d9422f75d2f3ec594160c9d7d7f46f9c36dc774cf071469",
       "status": "local-pg-regression-passed-applied-staging-and-production-verified"
+    },
+    {
+      "id": "20261015001000_supplier_price_source_revision_rls",
+      "phase": "pricing-bridge",
+      "file": "supabase/migrations/20261015001000_supplier_price_source_revision_rls.sql",
+      "sha256": "8e4fde66f6930fe258e974926b808d8004e8ae93acd605f23d16a40d47d00385",
+      "status": "applied-staging-and-production-verified"
     }
   ],
   "excluded_migrations": [
