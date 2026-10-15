@@ -1,0 +1,80 @@
+{
+  "date": "2026-10-15",
+  "production_url": "https://portal.next-master.com",
+  "source_branch": "codex/portal-reports-navigation-hotfix",
+  "source_commit": "1683cad7812349d475ef2ef0d391eb9ca007cc23",
+  "deploy_id": "6ad0db88aee2682b3e472fc8",
+  "supabase_project": "zjgueqijumzlfioihnkt",
+  "migration": "20261015135403_portal_brand_default_all_exclusions.sql",
+  "before": {
+    "portal_records": 9,
+    "active_records": 9,
+    "nonempty_allow_lists": 0,
+    "ui_empty_meant_all_but_all_checkboxes_unchecked": true
+  },
+  "after": {
+    "portal_records": 9,
+    "active_records": 9,
+    "all_brands_records": 9,
+    "admin_checked_brands": 88,
+    "admin_total_brands": 88,
+    "existing_account_checked_brands": 88,
+    "authenticated_customer_search_brands": 88,
+    "customer_has_corteco": true,
+    "customer_has_geba": true,
+    "public_version_verified": true
+  },
+  "behavior": {
+    "default": "all current and future tenant brands",
+    "exceptions": "excluded_brand_ids; checkbox unchecked means hidden",
+    "compatibility": "allowed_brand_ids derived by triggers; no exceptions=[]; deny-all=reserved zero UUID",
+    "future_brand_insert": "refresh exception scopes before brand notifications",
+    "session_versions_preserved": true,
+    "scope_lookup_and_save_errors": "fail closed without legacy fallback"
+  },
+  "validation": {
+    "isolated_postgres": [
+      "existing whitelist reset",
+      "new account default",
+      "exclusion persists",
+      "new brand automatically included",
+      "exclude-all does not reopen scope",
+      "brand deletion removes obsolete exclusion",
+      "tenant rejection",
+      "malformed exclusion rejection",
+      "trigger function ACL denial"
+    ],
+    "gateway": [
+      "organization pinned to caller",
+      "client allow-list ignored",
+      "foreign exclusion rejected",
+      "malformed exclusion rejected",
+      "lookup failure has no write",
+      "failed write has no legacy retry",
+      "viewer denied"
+    ],
+    "test_count": 6,
+    "production_build": "passed",
+    "integration_build": "passed",
+    "integration_commits": [
+      "e00d52fc",
+      "96d146d7"
+    ],
+    "security_advisor": "Existing unrelated notices remain; neither new trigger helper is callable by anon/authenticated/service_role."
+  },
+  "live_ui": {
+    "admin": "Alphabetical searchable single-column list; 88/88 checked. Opened existing account and confirmed 88/88. Bosch unchecked in unsaved draft showed Hidden; Enable all brands restored selection.",
+    "customer": "Existing cookie survived deployment. Parts Search offers all 88 organization brands.",
+    "business_writes": "No portal form save, password change, invite send, order write or synthetic brand insertion performed through live UI."
+  },
+  "screenshots": [
+    "full-link-audit/brand-scope/before.png",
+    "full-link-audit/brand-scope/exclusion-draft.png",
+    "full-link-audit/brand-scope/final-admin-all-brands.png",
+    "full-link-audit/brand-scope/final-customer-brands.png"
+  ],
+  "limits": [
+    "Future-brand and deny-all scenarios executed in isolated PostgreSQL, not by adding live business records.",
+    "Only the narrow production repair branch was deployed; broader integration commercial changes were not promoted."
+  ]
+}
