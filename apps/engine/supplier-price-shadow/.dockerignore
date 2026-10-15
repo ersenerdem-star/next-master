@@ -6,6 +6,7 @@ src/**
 !src/admin-release-review-worker.mjs
 !src/compact-rpc-retry.mjs
 !src/compact-verified-workflow.mjs
+!src/local-stream-source.mjs
 !src/direct-verified-release-runner.mjs
 !src/worker.mjs
 !src/worker-service.mjs
