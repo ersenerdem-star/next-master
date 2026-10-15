@@ -645,6 +645,8 @@ export function App() {
       return;
     }
     setAccessNotice("");
+    if(nextPage !== "Sales"){setSelectedSalesOrderId("");setSelectedQuoteId("");setSelectedInvoiceId("");}
+    if(nextPage !== "Purchases"){setSelectedPurchaseOrderId("");setSelectedBillId("");}
     if (nextPage === "CatalogReview") {
       pushWorkspacePath(CATALOG_OBSERVATION_REVIEW_PATH);
       return;
@@ -841,7 +843,7 @@ export function App() {
     }
     handleMainNavigate(destination.page);
     const section = destination.section;
-    if(page === "Sales" && section){setSelectedSalesOrderId("");setSelectedInvoiceId("");}
+    if(page === "Sales" && section){setSelectedSalesOrderId("");setSelectedQuoteId("");setSelectedInvoiceId("");}
     if(page === "Purchases" && section){setSelectedPurchaseOrderId("");setSelectedBillId("");}
     if (page === "Items" && section) setItemsTab(section as typeof itemsTab);
     else if (page === "Inventory" && section) setInventoryInitialTab(section as typeof inventoryInitialTab);

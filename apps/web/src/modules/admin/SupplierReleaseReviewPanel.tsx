@@ -8,8 +8,9 @@ import {SupplierReleaseIssuePanel} from './SupplierReleaseIssuePanel';
 import {SupplierReleaseReviewCard} from './SupplierReleaseReviewCard';
 import {supplierReleaseActionsEnabled} from '../../infrastructure/api/supplierReleaseActionsApi';
 
-export function SupplierReleaseReviewPanel({locale}:{locale:string}){
-  const [showArchive,setShowArchive]=useState(false);
+export function SupplierReleaseReviewPanel({locale,showArchive:controlledArchive}:{locale:string;showArchive?:boolean}){
+  const [archive,setShowArchive]=useState(false);
+  const showArchive=controlledArchive ?? archive;
   const [issueRelease,setIssueRelease]=useState<ReleaseReviewRow|null>(null);
   const tr=locale==='tr',feedback=useActionFeedback();
   const actionsEnabled=supplierReleaseActionsEnabled();
@@ -45,9 +46,9 @@ export function SupplierReleaseReviewPanel({locale}:{locale:string}){
   const displayedRows=showArchive ? (cursor ? rows : grouped.history) : grouped.latest;
   return <SectionCard title={showArchive ? (tr?'Yükleme arşivi':'Upload archive') : (tr?'Güncel tedarikçi yüklemeleri':'Current supplier uploads')} actions={
     <Button variant="secondary" disabled={loading} onClick={()=>setRefresh(v=>v+1)}>{tr?'Yenile':'Refresh'}</Button>}>
-    <Button variant="secondary" aria-pressed={showArchive} onClick={()=>{setShowArchive(v=>!v);setIssueRelease(null);if(cursor){setRows([]);setLoaded(false);setCursor(null);}}}>
+    {controlledArchive === undefined ? <Button variant="secondary" aria-pressed={showArchive} onClick={()=>{setShowArchive(v=>!v);setIssueRelease(null);if(cursor){setRows([]);setLoaded(false);setCursor(null);}}}>
       {showArchive?(tr?'Güncel yüklemelere dön':'Back to current uploads'):(tr?'Yükleme arşivini aç':'Open upload archive')}
-    </Button>
+    </Button> : null}
     <p>{showArchive
       ? (tr?'Önceki yüklemeler burada saklanır. Güncel göstergeler için güncel yüklemelere dönün.':'Previous uploads are kept here. Return to current uploads for current indicators.')
       : (tr?'Her tedarikçi ve marka için yalnızca son yükleme gösterilir. Yeni yükleme geldiğinde önceki kayıt otomatik olarak arşiv görünümüne taşınır.':'Only the latest upload for each supplier and brand is shown. A new upload automatically moves the previous record to the archive view.')}</p>
