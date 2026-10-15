@@ -50,6 +50,8 @@ services:
         value: "1"
       - key: SUPPLIER_PRICE_SHARED_PREPARED_ENABLED
         value: "1"
+      - key: SUPPLIER_PRICE_LOCAL_STREAM_ENABLED
+        value: "1"
       - key: SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED
         value: "1"
       # Default OFF in code. Enable only after v2 SQL and v5 history drain are proved.

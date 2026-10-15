@@ -8,6 +8,7 @@ import { shadowWorkerQueueName } from "./shadow-worker-queue.mjs";
 import {dispatchVerifiedSupplierPriceHandoff,VERIFIED_QUEUE} from "./verified-upload-handoff.mjs";
 import {createVerifiedReleaseWorkflow} from "./verified-release-workflow.mjs";
 import {createSharedPreparedSource} from "./shared-prepared-source.mjs";
+import {createLocalStreamSource} from "./local-stream-source.mjs";
 import {createPartitionedVerifiedWorkflow} from "./partitioned-verified-workflow.mjs";
 import {createCompactVerifiedWorkflow} from './compact-verified-workflow.mjs';
 import {compactRpcTransportError,compactRpcHttpError} from './compact-rpc-retry.mjs';
@@ -32,6 +33,12 @@ const SHARED_PREPARED = process.env.SUPPLIER_PRICE_SHARED_PREPARED_ENABLED === "
 const COMPACT_HISTORY = process.env.SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED === '1';
 const COMMERCIAL_FIELDS = process.env.SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED === '1';
 const PREPARED_PART_UPLOAD_CONCURRENCY = Math.min(4, Math.max(1, Number(process.env.SUPPLIER_PRICE_SHARED_PREPARED_PART_CONCURRENCY || 4)));
+const LOCAL_STREAM = process.env.SUPPLIER_PRICE_LOCAL_STREAM_ENABLED === "1";
+function verifiedSource(){
+  return LOCAL_STREAM
+    ? createLocalStreamSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,commercialFields:COMMERCIAL_FIELDS})
+    : createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,commercialFields:COMMERCIAL_FIELDS,partUploadConcurrency:PREPARED_PART_UPLOAD_CONCURRENCY});
+}
 
 function requireVerifiedMode() {
   const productionOperatorRecovery = process.argv[2] === "--operator-recover-production";
@@ -226,7 +233,7 @@ const verifiedRecoveryWorkflow=DBOS.registerWorkflow(createVerifiedReleaseWorkfl
 const verifiedPartitionedWorkflow=DBOS.registerWorkflow(async input=>{
   requireVerifiedMode();
   if(!SHARED_PREPARED)throw Error('SHARED_PREPARED_DISABLED');
-  const source=createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,partUploadConcurrency:PREPARED_PART_UPLOAD_CONCURRENCY});
+  const source=verifiedSource();
   return createPartitionedVerifiedWorkflow({DBOS,rpc:callRpc,source,requireMode:requireVerifiedMode,batchSize:BATCH_SIZE})(input);
 },{name:'supplier-price-verified-release-v4'});
 
@@ -235,14 +242,14 @@ const verifiedPartitionedWorkflow=DBOS.registerWorkflow(async input=>{
 const verifiedCompactWorkflow=DBOS.registerWorkflow(async input=>{
   requireVerifiedMode();
   if(!COMPACT_HISTORY||!SHARED_PREPARED)throw Error('COMPACT_HISTORY_DISABLED');
-  const source=createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,partUploadConcurrency:PREPARED_PART_UPLOAD_CONCURRENCY});
+  const source=verifiedSource();
   return createCompactVerifiedWorkflow({DBOS,rpc:callRpc,source,requireMode:requireVerifiedMode,batchSize:BATCH_SIZE})(input);
 },{name:'supplier-price-verified-release-v5'});
 // v6 opts into the complete commercial row contract. v5 callback and history stay unchanged.
 const verifiedCommercialWorkflow=DBOS.registerWorkflow(async input=>{
   requireVerifiedMode();
   if(!COMMERCIAL_FIELDS||!COMPACT_HISTORY||!SHARED_PREPARED)throw Error('COMMERCIAL_FIELDS_DISABLED');
-  const source=createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,commercialFields:true,partUploadConcurrency:PREPARED_PART_UPLOAD_CONCURRENCY});
+  const source=verifiedSource();
   return createCompactVerifiedWorkflow({DBOS,rpc:callRpc,source,requireMode:requireVerifiedMode,batchSize:BATCH_SIZE,commercialFields:true})(input);
 },{name:'supplier-price-verified-release-v6'});
 const selectedVerifiedWorkflow=COMMERCIAL_FIELDS?verifiedCommercialWorkflow:COMPACT_HISTORY?verifiedCompactWorkflow:SHARED_PREPARED?verifiedPartitionedWorkflow:verifiedRecoveryWorkflow;
@@ -296,7 +303,7 @@ async function main() {
       // can reclaim only the expired batch for this exact handoff. This path
       // never publishes commercial data.
       const result = await runDirectVerifiedRelease({
-        rpc:callRpc, source:createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,commercialFields:COMMERCIAL_FIELDS,partUploadConcurrency:PREPARED_PART_UPLOAD_CONCURRENCY}),
+        rpc:callRpc, source:verifiedSource(),
         commercialFields:COMMERCIAL_FIELDS,releaseId, handoffId, workerId:`operator-recovery:${process.pid}`, batchSize:BATCH_SIZE,
       });
       console.log(JSON.stringify({mode:'direct-operator-recovery',releaseId,handoffId,result,published:false}));

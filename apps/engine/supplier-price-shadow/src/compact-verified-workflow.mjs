@@ -34,6 +34,12 @@ function manifest(response,input){
 }
 function preparedReceipt(response,release){
  const validation=requirePublishableSupplierPriceValidation(response?.validation,release.total_rows);
+ if(response?.bucket==='supplier-price-local'){
+  if(typeof response.key!=='string'||response.key!==`${release.id}/manifest.json`||!SHA.test(response.sha256||'')||validation.currencyCount!==1)
+   throw Error('VERIFIED_LOCAL_RECEIPT_INVALID');
+  return {bucket:response.bucket,key:response.key,sha256:response.sha256,
+   validation:{engine:'duckdb',totalRows:validation.totalRows,currencyCount:1,publishable:true}};
+ }
  const prefix=release.source_file_path.split('/')[0]+'/'+release.id+'/';
  const suffix='/manifest.json';
  if(response.bucket!=='supplier-price-prepared'||typeof response.key!=='string'
