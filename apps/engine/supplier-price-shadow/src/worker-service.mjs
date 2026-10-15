@@ -213,7 +213,9 @@ export function createWorkerService({verify,dispatch,probe,validate,consumeAdmin
     }finally{historyTimer.abort();}
     if(!history||typeof history.busy!=='boolean'||typeof history.failed!=='boolean')
       throw Error('SERVICE_HISTORY_RESPONSE');
-    if(history.failed)throw Error('SERVICE_WORKFLOW_REQUIRES_REVIEW');
+    // A failed historical upload must not starve explicit admin review for a
+    // different release. Keep the idle/busy gate and all per-action SQL checks;
+    // readiness remains degraded below until those historical errors resolve.
     // The optional action consumer runs only while verified ingestion is idle.
     // Its SQL queue persists the admin's exact decision and survives shutdown.
     if(intakeIdle&&!history.busy&&!state.stopping&&typeof consumeAdminAction==='function'){
@@ -226,6 +228,7 @@ export function createWorkerService({verify,dispatch,probe,validate,consumeAdmin
         decisionId:action.decisionId,releaseId:action.releaseId,published:action.published}));
       state.phase=action.status==='empty'?'idle':`admin-action-${action.status}`;
     }
+    if(history.failed)throw Error('SERVICE_WORKFLOW_REQUIRES_REVIEW');
     if(state.stopping)return;
     state.completedCycles++;
     if(validationDegraded){state.phase='validation-degraded';return;}

@@ -168,3 +168,27 @@ test('Actual worker service invocation without opt-ins exits before DBOS/network
    assert.doesNotMatch(String(error.stderr)+String(error.stdout),/sb_secret_not_to_log|Initializing DBOS/);return true;
  });
 });
+
+
+test('Failed historical upload cannot starve explicit queued review; readiness stays degraded',async()=>{
+ const calls=[];const s=setup({probe:async()=>({busy:false,failed:true}),
+  consumeAdminAction:async()=>{calls.push('review');return {status:'completed',published:false};}});
+ await assert.rejects(s.cycle(),/SERVICE_WORKFLOW_REQUIRES_REVIEW/);
+ assert.deepEqual(calls,['review']);assert.equal(s.snapshot().ready,false);assert.equal(s.snapshot().published,false);
+});
+test('Historical failures do not remove ingestion idle and history busy protections',async()=>{
+ for(const patch of [
+  {probe:async()=>({busy:true,failed:true})},
+  {probe:async()=>({busy:false,failed:true}),dispatch:async()=>({status:'enqueued',published:false})},
+  {probe:async()=>({busy:false,failed:true}),verify:async()=>({status:'verified',published:false})},
+ ]){
+  let actions=0;const s=setup({...patch,consumeAdminAction:async()=>{actions++;return empty;}});
+  await assert.rejects(s.cycle(),/SERVICE_WORKFLOW_REQUIRES_REVIEW/);assert.equal(actions,0);
+ }
+});
+test('Unconfirmed history cannot authorize an admin action',async()=>{
+ for(const probe of [async()=>({busy:'unknown',failed:true}),async()=>{throw Error('HISTORY_UNAVAILABLE');}]){
+  let actions=0;const s=setup({probe,consumeAdminAction:async()=>{actions++;return empty;}});
+  await assert.rejects(s.cycle());assert.equal(actions,0);
+ }
+});

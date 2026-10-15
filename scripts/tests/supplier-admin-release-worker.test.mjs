@@ -88,12 +88,12 @@ test('gateway errors, malformed payloads, foreign claims and action-mismatched r
  const lostSettlement=await consume({steps:[null,response({code:'57014',message:'cancelled'},400),Error(secret)]});
  assert.equal(lostSettlement.result.status,'pending');assert.equal(lostSettlement.calls.length,3);
 });
-test('service consumes explicit actions only after idle intake/history and never after stop or failed/busy work',async()=>{
+test('service consumes explicit actions only after idle intake/history and never after stop or busy work',async()=>{
  const setup=changes=>createWorkerService({verify:async()=>empty,dispatch:async()=>empty,probe:async()=>({busy:false,failed:false}),log:()=>{},...changes});
  for(const changes of [{verify:async()=>({status:'verified',published:false})},{dispatch:async()=>({status:'enqueued',published:false})},
-  {probe:async()=>({busy:true,failed:false})},{probe:async()=>({busy:false,failed:true})}]){
+  {probe:async()=>({busy:true,failed:false})}]){
   let consumed=0;const s=setup({...changes,consumeAdminAction:async()=>{consumed++;return empty;}});
-  if(changes.probe&&(await changes.probe()).failed)await assert.rejects(s.cycle(),/REQUIRES_REVIEW/);else await s.cycle();
+  await s.cycle();
   assert.equal(consumed,0);
  }
  let consumed=0,s;s=setup({probe:async()=>{s.stop();return {busy:false,failed:false};},consumeAdminAction:async()=>{consumed++;return empty;}});
@@ -102,4 +102,15 @@ test('service consumes explicit actions only after idle intake/history and never
   probe:async()=>{order.push('history');return {busy:false,failed:false};},consumeAdminAction:async()=>{order.push('action');return {status:'completed',decisionId:decision,releaseId:release,published:true};},log:x=>logs.push(JSON.parse(x))});
  await live.cycle();assert.deepEqual(order,['verify','dispatch','history','action']);assert.equal(logs[0].published,true);
  assert.equal(live.snapshot().published,false,'infrastructure state is not an action receipt');assert.equal(live.snapshot().phase,'admin-action-completed');
+});
+
+test('historical failures retain degraded readiness while exact leased admin decisions still settle',async()=>{
+ const {worker,calls}=(()=>{const calls=[];return {calls,worker:createAdminReleaseActionConsumer({env,uuid:()=>owner,fetchImpl:async(url)=>{
+ const name=new URL(url).pathname.split('/').at(-1);calls.push(name);
+ return response(name==='claim_supplier_release_action'?claim:receipt);
+ }})};})();
+ const s=createWorkerService({verify:async()=>empty,dispatch:async()=>empty,probe:async()=>({busy:false,failed:true}),consumeAdminAction:worker,log:()=>{}});
+ await assert.rejects(s.cycle(),/REQUIRES_REVIEW/);
+ assert.deepEqual(calls,['claim_supplier_release_action','execute_supplier_release_action']);
+ assert.equal(s.snapshot().ready,false);assert.equal(s.snapshot().published,false);
 });
