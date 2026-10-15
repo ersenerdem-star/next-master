@@ -12708,13 +12708,13 @@ body {
   background: url("/portal-assets/customer-desk-network-hero.png") right center / auto 100% no-repeat;
   content: "";
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, transparent 46%, rgba(0, 0, 0, 0.04) 54%, rgba(0, 0, 0, 0.55) 64%, #000 76%, #000 100%);
-  mask-image: linear-gradient(90deg, transparent 0%, transparent 46%, rgba(0, 0, 0, 0.04) 54%, rgba(0, 0, 0, 0.55) 64%, #000 76%, #000 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, transparent 46%, rgba(0, 0, 0, 0.10) 54%, rgba(0, 0, 0, 0.72) 62%, #000 72%, #000 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, transparent 46%, rgba(0, 0, 0, 0.10) 54%, rgba(0, 0, 0, 0.72) 62%, #000 72%, #000 100%);
 }
 
 .customer-desk-hero--reference::before {
   z-index: 1;
-  background: linear-gradient(90deg, rgba(3, 15, 31, 0.99) 0%, rgba(3, 15, 31, 0.98) 31%, rgba(3, 15, 31, 0.89) 45%, rgba(3, 15, 31, 0.56) 59%, rgba(3, 15, 31, 0.14) 76%, rgba(3, 15, 31, 0) 88%);
+  background: linear-gradient(90deg, rgba(3, 15, 31, 0.99) 0%, rgba(3, 15, 31, 0.98) 31%, rgba(3, 15, 31, 0.89) 45%, rgba(3, 15, 31, 0.44) 59%, rgba(3, 15, 31, 0.12) 72%, rgba(3, 15, 31, 0) 88%);
 }
 
 .customer-desk-hero--reference .customer-desk-hero__copy,
