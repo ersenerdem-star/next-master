@@ -6160,6 +6160,10 @@ body {
   box-shadow: 0 14px 30px rgba(6, 20, 39, 0.18);
 }
 
+.portal-shell--workspace {
+  gap: 0;
+}
+
 .portal-shell--workspace .portal-brand {
   display: flex;
   align-items: center;
