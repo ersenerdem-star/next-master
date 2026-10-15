@@ -10088,6 +10088,14 @@ body,
   overflow-x: hidden;
 }
 
+/* Clip horizontal overflow without creating a non-scrolling ancestor that
+   captures the admin sidebar's sticky positioning. */
+html:has(.app-shell),
+body:has(.app-shell),
+#root:has(.app-shell) {
+  overflow-x: clip;
+}
+
 .main-content,
 .content,
 .page-stack,
