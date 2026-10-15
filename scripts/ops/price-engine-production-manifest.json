@@ -459,7 +459,7 @@
       "phase": "pricing-bridge",
       "file": "supabase/migrations/20261015000000_supplier_price_source_revision.sql",
       "sha256": "897c0d5336b927d12d9422f75d2f3ec594160c9d7d7f46f9c36dc774cf071469",
-      "status": "local-pg-regression-passed-pending-staging-and-production-apply"
+      "status": "local-pg-regression-passed-applied-staging-and-production-verified"
     }
   ],
   "excluded_migrations": [
