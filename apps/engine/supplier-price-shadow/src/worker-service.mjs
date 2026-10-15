@@ -59,12 +59,13 @@ const TERMINAL_RELEASE_STATUSES = new Set(['validated', 'published']);
 export function reconcileFailedWorkflowHistory(failed, releaseStatusRows) {
   const statusByRelease = new Map((Array.isArray(releaseStatusRows) ? releaseStatusRows : [])
     .filter(row => RELEASE_ID.test(row?.id || ''))
-    .map(row => [row.id.toLowerCase(), row.status]));
+    .map(row => [row.id.toLowerCase(), row.error_code === 'SUPPLIER_PROCESSING_INTERRUPTED'
+      ? 'operator_interrupted' : row.status]));
   return (Array.isArray(failed) ? failed : []).filter(workflow => {
     const releaseId = workflow?.input?.[0]?.releaseId;
     if (!RELEASE_ID.test(releaseId || '')) return true;
     const status = statusByRelease.get(releaseId.toLowerCase());
-    return status !== undefined && !TERMINAL_RELEASE_STATUSES.has(status);
+    return status !== undefined && !TERMINAL_RELEASE_STATUSES.has(status) && status !== 'operator_interrupted';
   });
 }
 

@@ -72,6 +72,12 @@ test('Only validated current-target history clears failed workflow backpressure'
   {id:active.input[0].releaseId,status:'received'},
  ]),[staged,active,malformed]);
 });
+test('An explicitly interrupted unpublished release is quarantined without blocking new intake',()=>{
+ const interrupted=workflow('0f6f5f6e-7f2f-4f8f-9f0f-6f5e4d3c2b1a');
+ assert.deepEqual(reconcileFailedWorkflowHistory([interrupted],[
+  {id:interrupted.input[0].releaseId,status:'parsing',error_code:'SUPPLIER_PROCESSING_INTERRUPTED'},
+ ]),[]);
+});
 test('Startup diagnosis identifies only known guard codes and nonsecret opt-in names',()=>{
  try{serviceConfig({...env,SUPPLIER_PRICE_SERVICE_HISTORY_CONFIRMED:'0'});}catch(error){
   assert.deepEqual(serviceStartupFailure(error),{stage:'worker-service',status:'startup-failed',
