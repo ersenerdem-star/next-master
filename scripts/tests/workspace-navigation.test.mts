@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { workspaceNavigationItems, resolveWorkspaceDestination } from "../../apps/web/src/modules/admin/workspaceNavigation.ts";
 
-const pages = ["Home", "Items", "CatalogReview", "Inventory", "Purchases", "Sales", "Reports", "Settings", "Mira"].map((key) => ({ key, label: key }));
+const pages = ["Home", "Items", "CatalogReview", "Inventory", "Purchases", "Sales", "Reports", "Settings", "Messages", "Mira"].map((key) => ({ key, label: key }));
 const sections = {
   Items: ["Catalog", "Code References"], CatalogReview: ["Observation Review"],
   Inventory: ["Warehouses", "Purchase Receives", "Stock Movements", "On Hand", "Transfers"],
@@ -22,6 +22,8 @@ test("every existing authorized screen has one unambiguous desktop destination",
     }
   }
   assert.equal(items.filter((item) => item.page === "Home").length, 1);
+  assert.equal(items.filter((item) => item.page === "Messages").length,1);
+  assert.deepEqual(resolveWorkspaceDestination("Messages",undefined,pages,labelled),{page:"Messages"});
 });
 
 test("supplier upload compatibility selects the real price workspace; report tabs stay distinct", () => {

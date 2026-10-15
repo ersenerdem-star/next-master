@@ -841,6 +841,8 @@ export function App() {
     }
     handleMainNavigate(destination.page);
     const section = destination.section;
+    if(page === "Sales" && section){setSelectedSalesOrderId("");setSelectedInvoiceId("");}
+    if(page === "Purchases" && section){setSelectedPurchaseOrderId("");setSelectedBillId("");}
     if (page === "Items" && section) setItemsTab(section as typeof itemsTab);
     else if (page === "Inventory" && section) setInventoryInitialTab(section as typeof inventoryInitialTab);
     else if (page === "Sales" && section) setSalesTab(section as typeof salesTab);

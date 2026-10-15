@@ -307,7 +307,21 @@ export async function fetchCloudSupplierOperationsStatusAll(inputSuppliers?: Sup
     };
   });
 
-  return mappedRows.sort((left, right) => {
+  // Published replacement releases own current indicators. Their old legacy
+  // worker records are historical storage, never another current upload card.
+  const replacedScopes = new Set<string>();
+  if (import.meta.env.VITE_SUPPLIER_RELEASE_REVIEW_ENABLED === "true") {
+    for (let offset = 0; ; offset += 1000) {
+      const {data,error} = await supabaseClient.from("supplier_current_price_pointers")
+        .select("supplier_id,brand_id,supplier_price_publications!inner(status)")
+        .eq("organization_id",organizationId).eq("supplier_price_publications.status","published")
+        .order("supplier_id").order("brand_id").range(offset,offset+999);
+      if(error)throw new Error("Current supplier publications could not be verified.");
+      for(const pointer of data || [])replacedScopes.add(`${pointer.supplier_id}:${pointer.brand_id}`);
+      if(!data || data.length<1000)break;
+    }
+  }
+  return mappedRows.filter(row => !replacedScopes.has(`${row.supplier_id}:${row.brand_id}`)).sort((left, right) => {
     const severity = (row: SupplierOperationsStatusRow) => {
       if (row.supplier_import_status === "failed" || row.catalog_sync_status === "failed" || row.rollup_refresh_status === "failed") return 0;
       if (row.supplier_import_status === "running" || row.catalog_sync_status === "running" || row.rollup_refresh_status === "running") return 1;

@@ -21,9 +21,10 @@ import { SectionCard } from "../../presentation/components/common/SectionCard";
 import { Select } from "../../presentation/components/common/Select";
 import { PageHeader, PageShell } from "../../presentation/components/common/VisualPrimitives";
 import { useActionFeedback } from "../../presentation/components/common/ActionFeedback";
+import { SupplierReleaseReviewPanel } from "./SupplierReleaseReviewPanel";
 import { SupplierLegacyHistory } from "./SupplierLegacyHistory";
 
-export function OperationsStatusPage({ onOpenSupplierPrices }: { onOpenSupplierPrices?: () => void } = {}) {
+export function OperationsStatusPage({onOpenSupplierPrices}:{onOpenSupplierPrices?:()=>void}={}) {
   const actionFeedback = useActionFeedback();
   const { locale, t } = useI18n();
   // The review tables are introduced with the verified-upload cutover. Keep the
@@ -322,14 +323,16 @@ export function OperationsStatusPage({ onOpenSupplierPrices }: { onOpenSupplierP
 
   return (
       <PageShell className="operations-status-page">
-      <PageHeader title={t("nav.statusCenter")} subtitle={t("reports.statusCenterSubtitle")} />
-      {releaseReviewEnabled ? <SectionCard title={locale === "tr" ? "Tedarikçi yükleme incelemesi" : "Supplier upload review"}>
-        <p>{locale === "tr" ? "Satır sorunları, doğrulama ve yayın kararları Tedarikçi Fiyatları alanındadır. Bu ekran operasyon sağlığını izler." : "Row issues, validation and publication decisions live in Supplier Prices. This screen monitors operational health."}</p>
-        <Button variant="secondary" disabled={!onOpenSupplierPrices} onClick={onOpenSupplierPrices}>{locale === "tr" ? "Tedarikçi Fiyatları'nı aç" : "Open Supplier Prices"}</Button>
-      </SectionCard> : null}
-      {releaseReviewEnabled ? <Button variant="secondary" aria-pressed={showUploadArchive} onClick={() => setShowUploadArchive(value => !value)}>
-        {showUploadArchive ? (locale === "tr" ? "Arşivi kapat" : "Close archive") : (locale === "tr" ? "Eski yükleme arşivini aç" : "Open legacy upload archive")}
-      </Button> : null}
+      <PageHeader title={t("dashboard.operationsStatus.title")} subtitle={t("reports.statusCenterSubtitle")} />
+      {releaseReviewEnabled ? <>
+        {onOpenSupplierPrices ? <Button variant="secondary" onClick={onOpenSupplierPrices}>{locale === "tr" ? "Tedarikçi Fiyatları" : "Supplier Prices"}</Button> : null}
+        <div className="toolbar toolbar--wrap">
+          <Button variant="secondary" aria-pressed={showUploadArchive} onClick={() => setShowUploadArchive(value => !value)}>
+            {showUploadArchive ? (locale === "tr" ? "Güncel yüklemelere dön" : "Back to current uploads") : (locale === "tr" ? "Yükleme arşivini aç" : "Open upload archive")}
+          </Button>
+        </div>
+        <SupplierReleaseReviewPanel key={showUploadArchive ? "archive" : "current"} locale={locale} showArchive={showUploadArchive} />
+      </> : null}
       {!releaseReviewEnabled || showUploadArchive ? <SupplierLegacyHistory enabled={releaseReviewEnabled}
         title={t("dashboard.operationsStatus.legacyPipelineTitle")}
         summary={t("dashboard.operationsStatus.legacyHistorySummary", { count: formatCount(operationsRows.length) })}>

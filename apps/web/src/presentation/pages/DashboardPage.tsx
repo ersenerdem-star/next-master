@@ -1,3 +1,4 @@
+import {SupplierReleaseReviewPanel} from "../../modules/admin/SupplierReleaseReviewPanel";
 import { useEffect, useRef, useState } from "react";
 import {
   fetchCustomerOpsDashboardSnapshot,
@@ -245,6 +246,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab,
         </aside>
       </section>
 
+      {showSystemPanels && import.meta.env.VITE_SUPPLIER_RELEASE_REVIEW_ENABLED === "true" ? <SupplierReleaseReviewPanel locale={locale} /> : null}
       <MiraCompanion />
 
       <SectionCard title={t("dashboard.moneySignals.title")} className="dashboard-money-signals">

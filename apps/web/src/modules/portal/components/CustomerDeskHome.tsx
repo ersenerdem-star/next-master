@@ -1,3 +1,4 @@
+import type {PortalSearchField} from "../../../infrastructure/api/portalOrderApi";
 import type { PortalSnapshot } from "../../../types/portalSession";
 import { useState } from "react";
 import { Button } from "../../../presentation/components/common/Button";
@@ -8,7 +9,9 @@ type CustomerDeskHomeProps = {
   searchValue: string;
   onSearchValueChange: (value: string) => void;
   onSearch: () => void;
-  onOpenSearch: () => void;
+  onOpenSearch: (field?:PortalSearchField) => void;
+  onOpenStatement: () => void;
+  onOpenOrder: (id:string) => void;
   onOpenOrders: () => void;
   onOpenBilling: () => void;
   onOpenPriceLists: () => void;
@@ -56,6 +59,8 @@ export function CustomerDeskHome({
   onSearchValueChange,
   onSearch,
   onOpenSearch,
+  onOpenStatement,
+  onOpenOrder,
   onOpenOrders,
   onOpenBilling,
   onOpenPriceLists,
@@ -127,10 +132,10 @@ export function CustomerDeskHome({
             </div>
           </form>
           <nav className="customer-desk-quick-links" aria-label="Part search shortcuts">
-            <button type="button" onClick={onOpenSearch}><NavGlyph name="vehicle" /><span>Search by vehicle</span><b>›</b></button>
-            <button type="button" onClick={onOpenSearch}><NavGlyph name="oe" /><span>Search by OE number</span><b>›</b></button>
-            <button type="button" onClick={onOpenSearch}><NavGlyph name="brand" /><span>Search by brand</span><b>›</b></button>
-            <button type="button" onClick={onOpenSearch}><NavGlyph name="categories" /><span>Browse categories</span><b>›</b></button>
+            <button type="button" onClick={() => onOpenSearch("vehicle")}><NavGlyph name="vehicle" /><span>Search by vehicle</span><b>›</b></button>
+            <button type="button" onClick={() => onOpenSearch("oem")}><NavGlyph name="oe" /><span>Search by OE number</span><b>›</b></button>
+            <button type="button" onClick={() => onOpenSearch("part_number")}><NavGlyph name="brand" /><span>Search by brand</span><b>›</b></button>
+            <button type="button" onClick={() => onOpenSearch("description")}><NavGlyph name="categories" /><span>Search by description</span><b>›</b></button>
           </nav>
         </div>
         <div className="customer-desk-hero__part-label customer-desk-hero__part-label--braking" aria-hidden="true">
@@ -140,7 +145,7 @@ export function CustomerDeskHome({
       </section>
 
       <section className="customer-desk-metrics" aria-label="Account summary">
-        <button type="button" className="customer-desk-metric customer-desk-metric--blue" onClick={onOpenBilling}>
+        <button type="button" className="customer-desk-metric customer-desk-metric--blue" onClick={onOpenStatement}>
           <span className="customer-desk-metric__icon"><NavGlyph name="credit" /></span>
           <span className="customer-desk-metric__body"><small>Account credit</small><strong>{formatMoney(accountCredit, currency)}</strong><em>View statement</em></span>
           <b className="customer-desk-metric__arrow">›</b>
@@ -175,7 +180,7 @@ export function CustomerDeskHome({
             {recentOrders.length ? recentOrders.map((order) => {
               const status = statusLabel(order.status, Boolean(order.portal_submitted_at));
               return (
-                <button key={order.id} type="button" className="customer-desk-order-table__row" onClick={onOpenOrders} role="row">
+                <button key={order.id} type="button" className="customer-desk-order-table__row" onClick={() => onOpenOrder(order.id)} role="row">
                   <strong>{order.sales_order_no || order.id}</strong>
                   <span>{formatDate(order.updated_at || order.quote_date)}</span>
                   <span>{Number(order.line_count || order.lines?.length || 0).toLocaleString("en-US")}</span>
@@ -194,7 +199,7 @@ export function CustomerDeskHome({
             <div className="customer-desk-price-card__body">
               <span className="customer-desk-price-card__icon"><NavGlyph name="download" /></span>
               <div><strong>{priceListLabel}</strong><small>{snapshot.invite.party_name} · Customer pricing</small></div>
-              <button type="button" onClick={onOpenPriceLists}><NavGlyph name="download" /> <span>View price lists</span></button>
+              <button type="button" onClick={onOpenPriceLists}><NavGlyph name="download" /> <span>Open price list downloads</span></button>
             </div>
           </section>
 
@@ -205,13 +210,7 @@ export function CustomerDeskHome({
               <span><strong>Upload from Orders</strong><small>Customer order file · available in Orders</small></span>
               <b>⋮</b>
             </button>
-            <div className="customer-desk-upload-card__stepper" aria-label="Upload status">
-              <span className="customer-desk-step customer-desk-step--current"><i>1</i><b>Received</b><small>Ready</small></span>
-              <span className="customer-desk-step__line" />
-              <span className="customer-desk-step"><i>2</i><b>Validated</b><small>After upload</small></span>
-              <span className="customer-desk-step__line" />
-              <span className="customer-desk-step"><i>3</i><b>Published</b><small>After validation</small></span>
-            </div>
+            <p>Choose an order file in Orders to start an import.</p>
           </section>
         </div>
       </div>

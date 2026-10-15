@@ -100,6 +100,10 @@ export function AppShell({
       } as CSSProperties
     : undefined;
   useEffect(() => {
+    if (typeof window !== "undefined") window.scrollTo(0,0);
+  }, [activePage,activeSubPage]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const syncViewportWidth = () => setAppViewportWidth(window.innerWidth);
     syncViewportWidth();
@@ -180,6 +184,7 @@ export function AppShell({
               <div className="topbar-account-menu__items">
                 <strong>{accountName || accountEmail}</strong><span>{accountEmail}</span>
                 <button type="button" className="button button--secondary" onClick={event => {event.currentTarget.closest("details")?.removeAttribute("open");onOpenAccount?.();}}>{locale === "tr" ? "Hesap ve oturum" : "Account and session"}</button>
+                {pageSections.Settings?.filter(item => item.key === "users" || item.key === "portals").map(item => <button key={item.key} type="button" className="button button--secondary" onClick={event => {event.currentTarget.closest("details")?.removeAttribute("open");onNavigateTarget?.("Settings",item.key);}}>{item.label}</button>)}
                 <button type="button" className="button button--secondary" onClick={() => void onLogout?.()}>{locale === "tr" ? "Çıkış yap" : "Sign out"}</button>
               </div>
             </details>

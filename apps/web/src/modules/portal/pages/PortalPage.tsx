@@ -337,7 +337,7 @@ type PortalSelection =
   | { kind: "purchase-order"; id: string }
   | { kind: "bill"; id: string };
 type PortalSection = "home" | "desk" | "pricelist" | "orders" | "billing" | "statement" | "account" | "support" | "messages";
-type PortalNavGroupKey = "home" | "search" | "orders" | "pricing" | "documents" | "support" | "messages";
+type PortalNavGroupKey = "home" | "search" | "orders" | "pricing" | "documents" | "support" | "messages" | "account";
 type PortalSearchView = "cards" | "list";
 
 type PortalLine = NonNullable<PortalSnapshot["invoices"][number]["lines"]>[number];
@@ -620,6 +620,7 @@ export function PortalPage() {
   const [loginBranding, setLoginBranding] = useState<PortalBranding | null>(null);
   const [selection, setSelection] = useState<PortalSelection | null>(null);
   const [portalDetailLoadingId, setPortalDetailLoadingId] = useState("");
+  const [homeSearchField,setHomeSearchField]=useState<PortalSearchField>("part_number");
   const [activeSection, setActiveSection] = useState<PortalSection>("home");
   const [documentSearch, setDocumentSearch] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
@@ -1877,8 +1878,16 @@ export function PortalPage() {
       items: portalSections.filter((section) => section.key === "messages"),
     },
     {
-      key: "support" as const,
+      key: "account" as const,
       code: "06",
+      icon: "account" as const,
+      title: "Account",
+      caption: "Account identity and contact details",
+      items: portalSections.filter((section) => section.key === "account"),
+    },
+    {
+      key: "support" as const,
+      code: "07",
       icon: "documents" as const,
       title: "Support",
       caption: "Help and account contact",
@@ -3371,20 +3380,13 @@ export function PortalPage() {
           <NextMasterLogo theme="light" />
         </div>
         <nav className="portal-header-nav" aria-label="Portal navigation">
-          {portalNavGroups.map((group) => (
-            <button
-              key={group.key}
-              type="button"
-              className={`portal-header-nav__item${activePortalGroup === group.key ? " active" : ""}`}
-              onClick={() => handlePortalGroupNavigate(group.key)}
-            >
-              <NavGlyph name={group.icon} />
-              <span>{group.title}</span>
-            </button>
+          {portalNavGroups.flatMap(group => group.items).map(item => (
+            <button key={item.key} type="button" className={`portal-header-nav__item${activeSection === item.key ? " active" : ""}`}
+              aria-current={activeSection === item.key ? "page" : undefined} onClick={() => setActiveSection(item.key)}><span>{item.label}</span></button>
           ))}
         </nav>
         <div className="portal-header__account">
-          <button type="button" className="portal-header__customer-switcher" onClick={() => handlePortalGroupNavigate("support")}>
+          <button type="button" className="portal-header__customer-switcher" onClick={() => setActiveSection("account")}>
             <span>Customer</span>
             <strong>{activeSnapshot.invite.party_name}</strong>
             <b>⌄</b>
@@ -3478,7 +3480,9 @@ export function PortalPage() {
                 setActiveSection("desk");
                 void handlePortalCatalogSearch();
               }}
-              onOpenSearch={() => setActiveSection("desk")}
+              onOpenSearch={(field="part_number") => {setHomeSearchField(field);setActiveSection("desk");}}
+              onOpenStatement={() => setActiveSection("statement")}
+              onOpenOrder={id => void openPortalDocument({kind:"sales-order",id})}
               onOpenOrders={() => setActiveSection("orders")}
               onOpenBilling={() => setActiveSection("billing")}
               onOpenPriceLists={() => setActiveSection("pricelist")}
@@ -3880,6 +3884,7 @@ export function PortalPage() {
               ) : null}
 
               <PortalSearchResults
+                  initialSearchField={homeSearchField}
                   results={catalogResults}
                   query={orderSearch}
                   brand={orderSearchBrand}

@@ -7,6 +7,7 @@ import { VehicleBadges } from "../../../presentation/components/common/VehicleBa
 import type { PortalCatalogSearchItem, PortalPreparedLine, PortalSearchField } from "../../../infrastructure/api/portalOrderApi";
 
 type PortalSearchResultsProps = {
+  initialSearchField?: PortalSearchField;
   results: PortalCatalogSearchItem[];
   query: string;
   brand: string;
@@ -69,6 +70,7 @@ function hasProductCode(line: { code?: string; requested_code?: string; old_code
 }
 
 export function PortalSearchResults({
+  initialSearchField="part_number",
   results,
   query,
   brand,
@@ -107,7 +109,7 @@ export function PortalSearchResults({
   onAdd,
   onPreview,
 }: PortalSearchResultsProps) {
-  const [searchField, setSearchField] = useState<PortalSearchField>("part_number");
+  const [searchField, setSearchField] = useState<PortalSearchField>(initialSearchField);
   const [addQuantity, setAddQuantity] = useState(1);
   const [showAllResults, setShowAllResults] = useState(false);
   const selected = results.find((item) => item.code === selectedCode) || results[0] || null;
