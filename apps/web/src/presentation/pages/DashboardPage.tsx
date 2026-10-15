@@ -238,7 +238,7 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab,
       <section className="dashboard-command-hero" aria-label="Operations workspace">
         <div className="dashboard-command-hero__copy">
           <span>Operations Console</span>
-          <h2>Keep markets moving.</h2>
+          <h2>Keep markets moving</h2>
           <p>Parts. Data. People. In sync.</p>
         </div>
       </section>

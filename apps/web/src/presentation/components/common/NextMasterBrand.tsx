@@ -50,7 +50,8 @@ type NavGlyphName =
   | "delivery"
   | "warning"
   | "upload"
-  | "download";
+  | "download"
+  | "bell";
 
 const glyphPaths: Record<NavGlyphName, ReactNode> = {
   home: <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>,
@@ -76,6 +77,7 @@ const glyphPaths: Record<NavGlyphName, ReactNode> = {
   warning: <><path d="m12 4 9 16H3Z" /><path d="M12 9v5M12 17h.01" /></>,
   upload: <><path d="M5 20h14M12 16V4M7 9l5-5 5 5" /><path d="M5 20V4h4" /></>,
   download: <><path d="M12 4v11M7 11l5 5 5-5M5 20h14" /></>,
+  bell: <><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,
 };
 
 export function NavGlyph({ name }: { name: NavGlyphName }) {

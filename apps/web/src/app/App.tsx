@@ -814,6 +814,21 @@ export function App() {
                 ? settingsTab
                 : "";
 
+  function handleDashboardNavigate(page: string, subPage?: string) {
+    // Set the destination tab before switching the page. This keeps dashboard
+    // reference cards useful without relying on a second render's activePage.
+    if (page === "Items" && (subPage === "Catalog" || subPage === "Code References")) {
+      setItemsTab(subPage);
+    } else if (page === "Sales" && ["Customers", "Sales Orders", "Invoices", "Payments Received", "Price Lists"].includes(subPage || "")) {
+      setSalesTab(subPage as "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists");
+    } else if (page === "Purchases" && ["Vendors", "Purchase Orders", "Bills", "Payments Made"].includes(subPage || "")) {
+      setPurchasesTab(subPage as "Vendors" | "Purchase Orders" | "Bills" | "Payments Made");
+    } else if (page === "Reports" && ["Core Reports", "Procurement Dashboard", "Inventory Analytics", "Master"].includes(subPage || "")) {
+      setReportsTab(subPage as ReportsTab);
+    }
+    handleMainNavigate(page);
+  }
+
   if (isPortalRoute) {
     return (
       <ActionFeedbackProvider>
@@ -891,7 +906,7 @@ export function App() {
     ) : activePage === "Mira" && isSuperadminRole(appRole) ? (
       <MiraMissionDeskPage />
     ) : (
-      <DashboardPage role={appRole} onOpenSalesOrder={openSalesOrder} onOpenInventoryTab={openInventoryTab} />
+      <DashboardPage role={appRole} onOpenSalesOrder={openSalesOrder} onOpenInventoryTab={openInventoryTab} onNavigatePage={handleDashboardNavigate} />
     );
 
   return (

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useI18n } from "../../i18n/I18nProvider";
-import { MiraCompanion } from "../components/common/MiraCompanion";
 import { NextMasterLogo, NavGlyph, navGlyphForKey } from "../components/common/NextMasterBrand";
 
 const APP_DESKTOP_BASE_WIDTH_PX = 1440;
@@ -43,28 +42,60 @@ const pageMeta = {
   Mira: { code: "08", eyebrowKey: "nav.mira", titleKey: "nav.mira", descriptionKey: "nav.miraCaption" },
 } as const;
 
-const buildMeta = __APP_BUILD_META__;
-
-const contextMeta = {
-  production: { labelKey: "statuses.production", className: "is-production" },
-  "deploy-preview": { labelKey: "statuses.preview", className: "is-preview" },
-  "branch-deploy": { labelKey: "statuses.branch", className: "is-branch" },
-  local: { labelKey: "statuses.local", className: "is-local" },
-} as const;
-
-function navSectionFor(key: string) {
-  if (key === "Home" || key === "Items" || key === "CatalogReview" || key === "Inventory") return "workspace";
-  if (key === "Sales" || key === "Purchases") return "commercial";
-  if (key === "Reports") return "insight";
-  return "system";
-}
-
-const navSectionLabels = {
-  workspace: "nav.groupWorkspace",
-  commercial: "nav.groupCommercial",
-  insight: "nav.groupInsight",
-  system: "nav.groupSystem",
-} as const;
+/**
+ * The admin shell uses a compact, product-facing navigation vocabulary while
+ * the application continues to route through its existing page keys. Keeping
+ * this mapping in the shell lets the visual hierarchy stay stable as page
+ * permissions and internal route names evolve.
+ */
+const referenceNavGroups = [
+  {
+    key: "workspace",
+    label: "Workspace",
+    items: [
+      { key: "dashboard", label: "Dashboard", page: "Home", glyphKey: "Home", primary: true },
+      { key: "tasks", label: "Tasks", page: "Mira", glyphKey: "Mira" },
+      { key: "messages", label: "Messages", page: "Reports", glyphKey: "Reports" },
+    ],
+  },
+  {
+    key: "catalog",
+    label: "Catalog",
+    items: [
+      { key: "parts-search", label: "Parts Search", page: "Items", glyphKey: "Items", primary: true },
+      { key: "vehicles", label: "Vehicles", page: "Inventory", glyphKey: "Inventory", primary: true },
+      { key: "oe-cross-reference", label: "OE Cross Reference", page: "CatalogReview", glyphKey: "CatalogReview", primary: true },
+      { key: "suppliers", label: "Suppliers", page: "Purchases", glyphKey: "Purchases" },
+    ],
+  },
+  {
+    key: "purchasing",
+    label: "Purchasing",
+    items: [
+      { key: "purchase-orders", label: "Purchase Orders", page: "Purchases", glyphKey: "Purchases", primary: true },
+      { key: "supplier-price-upload", label: "Supplier Price Upload", page: "Purchases", glyphKey: "Purchases" },
+      { key: "quotes", label: "Quotes", page: "Sales", glyphKey: "Sales" },
+    ],
+  },
+  {
+    key: "sales",
+    label: "Sales",
+    items: [
+      { key: "customer-price-lists", label: "Customer Price Lists", page: "Sales", glyphKey: "Sales", primary: true },
+      { key: "orders", label: "Orders", page: "Sales", glyphKey: "Sales" },
+      { key: "customers", label: "Customers", page: "Sales", glyphKey: "Sales" },
+    ],
+  },
+  {
+    key: "reports",
+    label: "Reports",
+    items: [
+      { key: "sales-reports", label: "Sales Reports", page: "Reports", glyphKey: "Reports", primary: true },
+      { key: "purchase-reports", label: "Purchase Reports", page: "Reports", glyphKey: "Reports" },
+      { key: "inventory-reports", label: "Inventory Reports", page: "Reports", glyphKey: "Reports" },
+    ],
+  },
+] as const;
 
 export function AppShell({
   children,
@@ -77,27 +108,16 @@ export function AppShell({
   onNavigate,
   onNavigateSub,
 }: AppShellProps) {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const appDesktopFrameRef = useRef<HTMLDivElement | null>(null);
   const activeSubmenuRef = useRef<HTMLDivElement | null>(null);
   const meta = pageMeta[activePage as keyof typeof pageMeta] || pageMeta.Home;
-  const context = contextMeta[buildMeta.context as keyof typeof contextMeta] || {
-    labelKey: "common.build",
-    className: "is-local",
-  };
   const [appViewportWidth, setAppViewportWidth] = useState(() =>
     typeof window === "undefined" ? APP_DESKTOP_BASE_WIDTH_PX : window.innerWidth,
   );
   const [appDesktopFrameHeight, setAppDesktopFrameHeight] = useState(() =>
     typeof window === "undefined" ? 0 : window.innerHeight,
   );
-  const commitShort = buildMeta.commit.slice(0, 8);
-  const builtAtLabel = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-GB", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(buildMeta.builtAt));
   const shouldScaleAppDesktop =
     appViewportWidth > APP_MOBILE_LAYOUT_BREAKPOINT_PX &&
     appViewportWidth < APP_DESKTOP_BASE_WIDTH_PX;
@@ -117,8 +137,6 @@ export function AppShell({
         "--app-desktop-base-width": `${APP_DESKTOP_BASE_WIDTH_PX}px`,
       } as CSSProperties
     : undefined;
-  let lastNavSection = "";
-
   useEffect(() => {
     if (typeof window === "undefined") return;
     const syncViewportWidth = () => setAppViewportWidth(window.innerWidth);
@@ -169,74 +187,78 @@ export function AppShell({
           <div className="brand-panel__sub">{t("nav.operationalCockpit")}</div>
         </div>
         <nav className="sidebar-nav">
-          {navItems.map((item) => {
-            const navSection = navSectionFor(item.key);
-            const showSectionLabel = navSection !== lastNavSection;
-            lastNavSection = navSection;
-            return (
-            <div key={item.key} className={`nav-group${item.key === activePage ? " active" : ""}`}>
-              {showSectionLabel ? <div className="sidebar-nav__section-label">{t(navSectionLabels[navSection as keyof typeof navSectionLabels])}</div> : null}
-              <button className={`nav-item${item.key === activePage ? " active" : ""}`} onClick={() => onNavigate?.(item.key)}>
-                <NavGlyph name={navGlyphForKey(item.key)} />
-                <span className="nav-item__code">{item.code}</span>
-                <span className="nav-item__body">
-                  <span className="nav-item__title">{item.label}</span>
-                  <span className="nav-item__caption">{item.caption}</span>
-                </span>
-                <span className="nav-item__indicator" />
-              </button>
-              {item.key === activePage && subNavItems.length ? (
-                <div
-                  ref={activeSubmenuRef}
-                  className="nav-submenu"
-                  role="menu"
-                  aria-label={`${item.label} ${t("common.sections")}`}
-                >
-                  {subNavItems.map((subItem) => (
+          {referenceNavGroups.map((group) => (
+            <div key={group.key} className="reference-nav-group">
+              <div className="sidebar-nav__section-label">{group.label}</div>
+              {group.items.map((item) => {
+                const isAllowed = navItems.some((navItem) => navItem.key === item.page);
+                if (!isAllowed) return null;
+                const isActive = ("primary" in item && item.primary === true) && item.page === activePage;
+                const showSubmenu = isActive && subNavItems.length > 0;
+                const routeLabel = navItems.find((navItem) => navItem.key === item.page)?.label || item.label;
+                return (
+                  <div key={item.key} className={`nav-group reference-nav-item-group${isActive ? " active" : ""}`}>
                     <button
-                      key={subItem.key}
-                      className={`nav-submenu__item${subItem.key === activeSubPage ? " active" : ""}`}
-                      onClick={() => onNavigateSub?.(subItem.key)}
+                      type="button"
+                      className={`nav-item reference-nav-item${isActive ? " active" : ""}`}
+                      aria-current={isActive ? "page" : undefined}
+                      onClick={() => onNavigate?.(item.page)}
                     >
-                      <span className="nav-submenu__dot" />
-                      <span>{subItem.label}</span>
+                      <NavGlyph name={navGlyphForKey(item.glyphKey)} />
+                      <span className="nav-item__body">
+                        <span className="nav-item__title">{item.label}</span>
+                      </span>
+                      <span className="nav-item__indicator" />
                     </button>
-                  ))}
-                </div>
-              ) : null}
+                    {showSubmenu ? (
+                      <div
+                        ref={activeSubmenuRef}
+                        className="nav-submenu reference-nav-submenu"
+                        role="menu"
+                        aria-label={`${routeLabel} ${t("common.sections")}`}
+                      >
+                        {subNavItems.map((subItem) => (
+                          <button
+                            type="button"
+                            key={subItem.key}
+                            className={`nav-submenu__item${subItem.key === activeSubPage ? " active" : ""}`}
+                            onClick={() => onNavigateSub?.(subItem.key)}
+                          >
+                            <span className="nav-submenu__dot" />
+                            <span>{subItem.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
-            );
-          })}
+          ))}
         </nav>
       </aside>
       <main className="main">
-        <header className="topbar">
-          <div className="topbar-panel">
-            <span className="topbar-panel__code">{meta.code}</span>
-            <div className="topbar-panel__content">
-              <div className="topbar-panel__eyebrow">{t(meta.eyebrowKey)}</div>
-              <h1>{t(meta.titleKey)}</h1>
-              <p>{t(meta.descriptionKey)}</p>
-            </div>
+        <header className="topbar topbar--reference">
+          <div className="topbar-search" role="search">
+            <NavGlyph name="search" />
+            <input aria-label="Search parts, OE numbers, or suppliers" placeholder="Search parts, OE numbers, or suppliers..." />
+            <kbd aria-label="Keyboard shortcut Command K">⌘ K</kbd>
           </div>
-          <div className="topbar-build">
-            <div className="topbar-build__eyebrow">{t("common.buildContext")}</div>
-            <div className="topbar-build__chips">
-              <span className={`topbar-chip ${context.className}`}>{t(context.labelKey)}</span>
-              <span className="topbar-chip">{buildMeta.branch}</span>
-              <span className="topbar-chip">{commitShort}</span>
-            </div>
-            <div className="topbar-build__meta">
-              <span>
-                {t("common.built")} {builtAtLabel}
+          <div className="topbar-user-actions">
+            <button type="button" className="topbar-icon-button" aria-label="Notifications">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M6 17h12l-1.2-1.7V10a4.8 4.8 0 0 0-9.6 0v5.3Z" />
+                <path d="M10 20h4" />
+              </svg>
+            </button>
+            <div className="topbar-profile">
+              <span className="topbar-profile__avatar">JD</span>
+              <span className="topbar-profile__copy">
+                <strong>John Davis</strong>
+                <span>Procurement</span>
               </span>
-              {buildMeta.deployUrl ? <span>{t("common.deployReady")}</span> : null}
+              <span className="topbar-profile__chevron" aria-hidden="true">⌄</span>
             </div>
-            {activePage === "Home" ? (
-              <div className="topbar-build__mira-slot">
-                <MiraCompanion embedded onOpenMissionDesk={() => onNavigate?.("Mira")} />
-              </div>
-            ) : null}
           </div>
         </header>
         {subNavItems.length ? (
