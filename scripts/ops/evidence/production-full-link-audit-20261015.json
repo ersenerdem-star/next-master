@@ -1,0 +1,738 @@
+{
+  "date": "2026-10-15",
+  "origin": "https://portal.next-master.com",
+  "first_navigation_deploy_id": "6ad0cff4d61e01a600515bb0",
+  "final_deploy_id": "6ad0d39d9c835aa287404cfc",
+  "final_ui_commit": "f170db6e2ab678d0da7094e45d2b8a7986844a5f",
+  "integration_commit": "7232282",
+  "before": [
+    {
+      "label": "Dashboard",
+      "headings": [
+        "    - heading \"Keep markets moving\" [level=2]",
+        "      - heading \"Supplier Price Upload Center\" [level=2]",
+        "      - heading \"Recent Upload Activity\" [level=3]",
+        "      - heading \"Customer Portal Preview\" [level=2]",
+        "  - heading \"Money & action signals\" [level=2]",
+        "  - heading \"System inventory (reference)\" [level=2]",
+        "  - heading \"Inventory Pulse\" [level=2]",
+        "  - heading \"Latest Sales Orders\" [level=2]",
+        "  - heading \"Revenue Analysis\" [level=2]",
+        "  - heading \"Sales by Brand\" [level=2]"
+      ],
+      "notices": []
+    },
+    {
+      "label": "Messages",
+      "headings": [
+        "  - heading \"Messages\" [level=2]"
+      ],
+      "notices": []
+    },
+    {
+      "label": "Vehicles",
+      "headings": [
+        "  - heading \"Warehouses\" [level=2]",
+        "  - heading \"Partner API Clients\" [level=2]"
+      ],
+      "notices": []
+    },
+    {
+      "label": "OE Cross Reference",
+      "headings": [
+        "  - heading \"Catalog Observation Review\" [level=1]"
+      ],
+      "notices": []
+    },
+    {
+      "label": "Tasks",
+      "headings": [
+        "  - heading \"MIRA Mission Desk\" [level=1]",
+        "    - heading \"MIRA online görev masası\" [level=2]",
+        "    - heading \"Yeni online görev\" [level=2]",
+        "      - heading \"Online görev kuyruğu\" [level=2]"
+      ],
+      "notices": []
+    },
+    {
+      "label": "Parts Search",
+      "headings": [
+        "  - heading \"Catalog Search\" [level=1]"
+      ],
+      "notices": [
+        "    - option \"Failed\""
+      ]
+    },
+    {
+      "label": "Suppliers",
+      "headings": [
+        "    - heading \"Vendors\" [level=3]",
+        "  - heading \"Edit Vendor\" [level=2]",
+        "  - heading \"Account Statement\" [level=2]"
+      ],
+      "notices": []
+    },
+    {
+      "label": "Purchase Orders",
+      "headings": [
+        "    - heading \"Vendors\" [level=3]",
+        "  - heading \"Edit Vendor\" [level=2]",
+        "  - heading \"Account Statement\" [level=2]"
+      ],
+      "notices": []
+    },
+    {
+      "label": "Supplier Price Upload",
+      "headings": [
+        "    - heading \"Vendors\" [level=3]",
+        "  - heading \"Edit Vendor\" [level=2]",
+        "  - heading \"Account Statement\" [level=2]"
+      ],
+      "notices": []
+    },
+    {
+      "label": "Quotes",
+      "headings": [
+        "  - heading \"Price Lists\" [level=2]"
+      ],
+      "notices": []
+    },
+    {
+      "label": "Customer Price Lists",
+      "headings": [
+        "  - heading \"Price Lists\" [level=2]"
+      ],
+      "notices": []
+    },
+    {
+      "label": "Orders",
+      "headings": [
+        "  - heading \"Price Lists\" [level=2]"
+      ],
+      "notices": []
+    },
+    {
+      "label": "Customers",
+      "headings": [
+        "  - heading \"Price Lists\" [level=2]"
+      ],
+      "notices": []
+    },
+    {
+      "label": "Reports",
+      "headings": [
+        "  - heading \"One reporting view for faster decisions\" [level=2]",
+        "  - heading \"Supplier Price Upload Center\" [level=1]",
+        "  - heading \"Current supplier uploads\" [level=2]"
+      ],
+      "notices": []
+    }
+  ],
+  "admin_navigation": [
+    {
+      "label": "Overview",
+      "headings": [
+        "    - heading \"Keep markets moving\" [level=2]",
+        "      - heading \"Supplier prices\" [level=2]",
+        "      - heading \"Reports\" [level=2]",
+        "  - heading \"Current supplier uploads\" [level=2]",
+        "  - heading \"Money & action signals\" [level=2]",
+        "  - heading \"System inventory (reference)\" [level=2]",
+        "  - heading \"Inventory Pulse\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Messages",
+      "headings": [
+        "  - heading \"Messages\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "MIRA",
+      "headings": [
+        "  - heading \"MIRA Mission Desk\" [level=1]",
+        "    - heading \"MIRA online görev masası\" [level=2]",
+        "    - heading \"Yeni online görev\" [level=2]",
+        "      - heading \"Online görev kuyruğu\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Catalog",
+      "headings": [
+        "  - heading \"Catalog Search\" [level=1]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Code References",
+      "headings": [
+        "  - heading \"Code References\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Observation Review",
+      "headings": [
+        "  - heading \"Catalog Observation Review\" [level=1]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Vendors",
+      "headings": [
+        "    - heading \"Vendors\" [level=3]",
+        "  - heading \"Edit Vendor\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Supplier Prices",
+      "headings": [
+        "  - heading \"Import, review, and maintain supplier buying prices.\" [level=2]",
+        "  - heading \"Supplier Prices\" [level=2]",
+        "  - heading \"Current supplier uploads\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Purchase Orders",
+      "headings": [
+        "  - heading \"Purchase Orders\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Bills",
+      "headings": [
+        "  - heading \"Bills\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Payments Made",
+      "headings": [
+        "  - heading \"Payments Made\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Customers",
+      "headings": [
+        "    - heading \"Customers\" [level=3]",
+        "  - heading \"Edit Customer\" [level=2]",
+        "  - heading \"Account Statement\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Sales Orders",
+      "headings": [
+        "    - heading \"Sales Orders\" [level=1]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Invoices",
+      "headings": [
+        "  - heading \"Invoices\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Payments Received",
+      "headings": [
+        "  - heading \"Payments Received\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Price Lists",
+      "headings": [
+        "  - heading \"Price Lists\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Warehouses",
+      "headings": [
+        "  - heading \"Warehouses\" [level=2]",
+        "  - heading \"Partner API Clients\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Purchase Receives",
+      "headings": [
+        "    - heading \"Purchase Receives\" [level=3]",
+        "  - heading \"Receive Into Warehouse\" [level=2]",
+        "  - heading \"Purchase Receives\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Stock Movements",
+      "headings": [
+        "  - heading \"Stock Movements\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "On Hand",
+      "headings": [
+        "  - heading \"On Hand\" [level=2]",
+        "  - heading \"Warehouse Stock Detail\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Transfers",
+      "headings": [
+        "  - heading \"Transfers\" [level=2]",
+        "  - heading \"Source Stock\" [level=2]",
+        "  - heading \"Transfer Draft\" [level=2]",
+        "  - heading \"Transfer Posting\" [level=2]",
+        "  - heading \"Transfer History\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Procurement Dashboard",
+      "headings": [
+        "  - heading \"One reporting view for faster decisions\" [level=2]",
+        "  - heading \"Procurement Intelligence\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Supplier Comparison",
+      "headings": [
+        "  - heading \"One reporting view for faster decisions\" [level=2]",
+        "  - heading \"Supplier Comparison\" [level=1]",
+        "  - heading \"Decision Table\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Core Reports",
+      "headings": [
+        "  - heading \"One reporting view for faster decisions\" [level=2]",
+        "  - heading \"Core Reports\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Item Transactions",
+      "headings": [
+        "  - heading \"One reporting view for faster decisions\" [level=2]",
+        "  - heading \"Item Transactions\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Inventory Analytics",
+      "headings": [
+        "  - heading \"One reporting view for faster decisions\" [level=2]",
+        "  - heading \"Inventory Analytics\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Status Center",
+      "headings": [
+        "  - heading \"One reporting view for faster decisions\" [level=2]",
+        "  - heading \"Supplier Price Upload Center\" [level=1]",
+        "  - heading \"Current supplier uploads\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Session",
+      "headings": [
+        "  - heading \"Session Settings\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Users",
+      "headings": [
+        "  - heading \"Users\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Companies",
+      "headings": [
+        "  - heading \"Company Profile\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Portals",
+      "headings": [
+        "  - heading \"Customer & Vendor Portal Access\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Templates",
+      "headings": [
+        "  - heading \"Email Templates\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Outgoing Emails",
+      "headings": [
+        "  - heading \"Outgoing Emails\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Diagnostics",
+      "headings": [
+        "  - heading \"Diagnostics\" [level=2]"
+      ],
+      "alerts": []
+    }
+  ],
+  "portal_navigation": [
+    {
+      "label": "Home",
+      "headings": [
+        "- heading \"Find a part for your business\" [level=2]:",
+        "- heading \"Recent orders\" [level=3]",
+        "- heading \"Price lists\" [level=3]",
+        "- heading \"Product data upload\" [level=3]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Parts Search",
+      "headings": [
+        "- heading \"Part Search\" [level=2]",
+        "  - heading \"Last ordered\" [level=3]",
+        "  - heading \"Price movement (customer price)\" [level=3]",
+        "  - heading \"Open invoice reminder\" [level=3]",
+        "  - heading \"New sales order\" [level=3]",
+        "    - heading \"Order lines\" [level=4]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Orders",
+      "headings": [
+        "- heading \"Order Filters\" [level=2]",
+        "- heading \"Order History\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Price Lists",
+      "headings": [
+        "- heading \"Download Price List\" [level=2]",
+        "- heading \"How This Download Works\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Invoices",
+      "headings": [
+        "- heading \"Invoice Filters\" [level=2]",
+        "- heading \"Invoices\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Statement",
+      "headings": [
+        "- heading \"Statement\" [level=2]",
+        "- heading \"Account Statement\" [level=2]",
+        "- heading \"Payment History\" [level=2]",
+        "- heading \"Credit Notes\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Messages",
+      "headings": [
+        "- heading \"Messages\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Account",
+      "headings": [
+        "- heading \"Account Profile\" [level=2]",
+        "- heading \"Primary Seller\" [level=2]",
+        "- heading \"Financial Summary\" [level=2]"
+      ],
+      "alerts": []
+    },
+    {
+      "label": "Support",
+      "headings": [
+        "- heading \"Support\" [level=2]"
+      ],
+      "alerts": []
+    }
+  ],
+  "dashboard_shortcuts": [
+    {
+      "label": "Open supplier price workspace Choose the source file and scope in the upload workspace.",
+      "headings": [
+        "  - heading \"Import, review, and maintain supplier buying prices.\" [level=2]",
+        "  - heading \"Supplier Prices\" [level=2]",
+        "  - heading \"Current supplier uploads\" [level=2]"
+      ]
+    },
+    {
+      "label": "Status Center",
+      "headings": [
+        "  - heading \"One reporting view for faster decisions\" [level=2]",
+        "  - heading \"Supplier Price Upload Center\" [level=1]",
+        "  - heading \"Current supplier uploads\" [level=2]"
+      ]
+    },
+    {
+      "label": "Core Reports",
+      "headings": [
+        "  - heading \"One reporting view for faster decisions\" [level=2]",
+        "  - heading \"Core Reports\" [level=2]"
+      ]
+    },
+    {
+      "label": "Supplier Comparison",
+      "headings": [
+        "  - heading \"One reporting view for faster decisions\" [level=2]",
+        "  - heading \"Supplier Comparison\" [level=1]",
+        "  - heading \"Decision Table\" [level=2]"
+      ]
+    },
+    {
+      "label": "Portals",
+      "headings": [
+        "  - heading \"Customer & Vendor Portal Access\" [level=2]"
+      ]
+    },
+    {
+      "label": "Sales Orders",
+      "headings": [
+        "    - heading \"Sales Orders\" [level=1]"
+      ]
+    }
+  ],
+  "portal_home_shortcuts": [
+    {
+      "label": "Search by vehicle ›",
+      "headings": [
+        "- heading \"Part Search\" [level=2]",
+        "  - heading \"Last ordered\" [level=3]"
+      ],
+      "searchFields": [
+        "  - option \"All Brands\" [selected]",
+        "- textbox \"Vehicle search\":",
+        "    - textbox \"Delivery term\":",
+        "    - textbox \"Payment terms\":",
+        "    - textbox \"Packing details\":",
+        "    - textbox \"Message to seller Leave a note for the seller or admin team.\":"
+      ]
+    },
+    {
+      "label": "Search by OE number ›",
+      "headings": [
+        "- heading \"Part Search\" [level=2]",
+        "  - heading \"Last ordered\" [level=3]"
+      ],
+      "searchFields": [
+        "  - option \"All Brands\" [selected]",
+        "- textbox \"OEM search\":",
+        "    - textbox \"Delivery term\":",
+        "    - textbox \"Payment terms\":",
+        "    - textbox \"Packing details\":",
+        "    - textbox \"Message to seller Leave a note for the seller or admin team.\":"
+      ]
+    },
+    {
+      "label": "Search by brand ›",
+      "headings": [
+        "- heading \"Part Search\" [level=2]",
+        "  - heading \"Last ordered\" [level=3]"
+      ],
+      "searchFields": [
+        "  - option \"All Brands\" [selected]",
+        "- textbox \"Part number search\":",
+        "    - textbox \"Delivery term\":",
+        "    - textbox \"Payment terms\":",
+        "    - textbox \"Packing details\":",
+        "    - textbox \"Message to seller Leave a note for the seller or admin team.\":"
+      ]
+    },
+    {
+      "label": "Search by description ›",
+      "headings": [
+        "- heading \"Part Search\" [level=2]",
+        "  - heading \"Last ordered\" [level=3]"
+      ],
+      "searchFields": [
+        "  - option \"All Brands\" [selected]",
+        "- textbox \"Description search\":",
+        "    - textbox \"Delivery term\":",
+        "    - textbox \"Payment terms\":",
+        "    - textbox \"Packing details\":",
+        "    - textbox \"Message to seller Leave a note for the seller or admin team.\":"
+      ]
+    },
+    {
+      "label": "Account credit 0.00 EUR View statement ›",
+      "headings": [
+        "- heading \"Statement\" [level=2]",
+        "- heading \"Account Statement\" [level=2]",
+        "- heading \"Payment History\" [level=2]",
+        "- heading \"Credit Notes\" [level=2]"
+      ]
+    },
+    {
+      "label": "Open orders 0 View all orders ›",
+      "headings": [
+        "- heading \"Order Filters\" [level=2]",
+        "- heading \"Order History\" [level=2]"
+      ]
+    },
+    {
+      "label": "Pending delivery 0 Track orders ›",
+      "headings": [
+        "- heading \"Order Filters\" [level=2]",
+        "- heading \"Order History\" [level=2]"
+      ]
+    },
+    {
+      "label": "Items requiring action 0 View details ›",
+      "headings": [
+        "- heading \"Order Filters\" [level=2]",
+        "- heading \"Order History\" [level=2]"
+      ]
+    },
+    {
+      "label": "View all orders ›",
+      "headings": [
+        "- heading \"Order Filters\" [level=2]",
+        "- heading \"Order History\" [level=2]"
+      ]
+    },
+    {
+      "label": "Open price list downloads",
+      "headings": [
+        "- heading \"Download Price List\" [level=2]",
+        "- heading \"How This Download Works\" [level=2]"
+      ]
+    },
+    {
+      "label": "Upload from Orders Customer order file · available in Orders ⋮",
+      "headings": [
+        "- heading \"Order Filters\" [level=2]",
+        "- heading \"Order History\" [level=2]"
+      ]
+    }
+  ],
+  "dashboard_order_records": [
+    {
+      "label": "Latest sales order Open",
+      "expected": "FU26-F70602561",
+      "actual": "FU26-F70602561"
+    },
+    {
+      "label": "Latest sales order Open",
+      "expected": "F26-F70635224",
+      "actual": "F26-F70635224"
+    },
+    {
+      "label": "Latest sales order Open",
+      "expected": "F26-FRT1409K",
+      "actual": "F26-FRT1409K"
+    },
+    {
+      "label": "Latest sales order Open",
+      "expected": "FU26-F70635224",
+      "actual": "FU26-F70635224"
+    },
+    {
+      "label": "Latest sales order Open",
+      "expected": "FU26-F69902862",
+      "actual": "FU26-F69902862"
+    }
+  ],
+  "final_route_regression": [
+    {
+      "label": "Messages",
+      "actual": "Messages"
+    },
+    {
+      "label": "Core Reports",
+      "actual": "Core Reports"
+    },
+    {
+      "label": "Messages",
+      "actual": "Messages"
+    },
+    {
+      "label": "Users",
+      "actual": "Users"
+    },
+    {
+      "label": "Portals",
+      "actual": "Customer & Vendor Portal Access"
+    }
+  ],
+  "counts": {
+    "admin_menu_destinations": 34,
+    "portal_menu_destinations": 9,
+    "dashboard_shortcuts": 6,
+    "portal_home_shortcuts": 11,
+    "dashboard_order_record_links": 5
+  },
+  "fixes": [
+    "One allowed page/section destination for every admin menu item",
+    "Settings exposes Session, Users, Companies, Portals, Templates, Outgoing Emails and Diagnostics",
+    "Messages stays separate from Reports",
+    "Supplier Prices has its own purchasing tab and current release result above legacy price preview",
+    "Removed static Recent Upload Activity and Customer Portal Preview from admin dashboard",
+    "Dashboard uses current supplier publication evidence",
+    "Current published scope is excluded from legacy worker cards, including the archive view",
+    "Portal Statement/Account/Invoices accessible directly",
+    "Portal vehicle/OEM/description shortcuts select matching search fields",
+    "Home statement card opens Statement; order links carry record ID; price download entry label matches its destination",
+    "Document selections clear on workspace change and viewport resets to page top"
+  ],
+  "current_upload": {
+    "supplier": "Romany",
+    "brand": "Bosch",
+    "created_at_visible": "Oct 15, 2026, 10:09 AM",
+    "total_rows": 45170,
+    "processed_rows": 45170,
+    "status": "published",
+    "current": true,
+    "legacy_september_failure_visible_in_current_or_opened_legacy_view": false,
+    "legacy_view_observation": "Legacy summary returned no rows in this authenticated audit; no old Bosch failure was presented."
+  },
+  "validation": {
+    "targeted_tests_passed": 21,
+    "production_build": "passed",
+    "integration_build": "passed",
+    "new_invite_form": "opened without saving/sending",
+    "user_create_form": "visible; required email validation keeps empty submission disabled",
+    "real_user_accounts_created": 0,
+    "real_portal_invites_sent": 0,
+    "commercial_writes": false
+  },
+  "limits": [
+    "This is an authenticated desktop navigation and entry-point audit, not acceptance of every commerce mutation.",
+    "Create/delete/revoke/resend/publish/save/payment/order-confirmation actions were not submitted.",
+    "Customer account had no order rows to click; portal detail routing was checked in source and admin dashboard record links were verified against five actual document identifiers.",
+    "Several fast chained automation calls needed re-observation; all five dashboard order links passed individual identity checks.",
+    "Screenshots do not certify full accessibility or mobile behavior."
+  ],
+  "evidence_directory": "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/full-link-audit"
+}
