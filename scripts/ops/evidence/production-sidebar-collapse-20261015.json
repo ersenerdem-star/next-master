@@ -1,0 +1,87 @@
+{
+  "date": "2026-10-15",
+  "source_commit": "4d022126",
+  "integration_mirror": "01bb4ce9",
+  "production_url": "https://portal.next-master.com",
+  "netlify_deploy_id": "6ad12029d1fd035d5e373a19",
+  "change": "Six permission-filtered sidebar sections use native exclusive details/summary, closed initially. Clicking a section toggles only its children; opening another closes the previous section.",
+  "browser_checks": {
+    "initial": [
+      {
+        "label": "Genel Bakış",
+        "open": false
+      },
+      {
+        "label": "Katalog",
+        "open": false
+      },
+      {
+        "label": "Satın Alma",
+        "open": false
+      },
+      {
+        "label": "Satış",
+        "open": false
+      },
+      {
+        "label": "Depolar",
+        "open": false
+      },
+      {
+        "label": "Raporlar",
+        "open": false
+      }
+    ],
+    "catalogOpen": [
+      "Katalog"
+    ],
+    "repeatClick": 0,
+    "purchasingOpen": [
+      "Satın Alma"
+    ],
+    "switchedToSales": [
+      "Satış"
+    ],
+    "salesPageHeadings": [
+      "Satış Siparişleri"
+    ],
+    "keyboardOpen": [
+      "Raporlar"
+    ],
+    "keyboardClose": 0,
+    "afterReload": [
+      {
+        "label": "Genel Bakış",
+        "open": false
+      },
+      {
+        "label": "Katalog",
+        "open": false
+      },
+      {
+        "label": "Satın Alma",
+        "open": false
+      },
+      {
+        "label": "Satış",
+        "open": false
+      },
+      {
+        "label": "Depolar",
+        "open": false
+      },
+      {
+        "label": "Raporlar",
+        "open": false
+      }
+    ]
+  },
+  "validation": {
+    "existing_navigation_tests_passed": 3,
+    "production_typescript_vite_build": "passed",
+    "routes_and_permissions": "unchanged",
+    "settings_account_menu": "unchanged",
+    "business_writes": "none"
+  },
+  "screenshot": "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/sidebar-collapse/production.png"
+}
