@@ -111,5 +111,32 @@
   "capability_gates": {
     "VITE_COMMERCIAL_DOCUMENT_UPGRADE_ENABLED": "default false; preserve existing confirmation sequence; enable atomic confirmation and financial semantics only after target acceptance",
     "NM_COMMERCIAL_DOCUMENT_UPGRADE_ENABLED": "default false; server refuses atomic dispatch until explicitly enabled after acceptance"
+  },
+  "production_report_repair": {
+    "ui_commit": "7fb7a024b55923932cd38b9d70b7578d7a60b76a",
+    "source_branch": "codex/portal-reports-navigation-hotfix",
+    "deploy_id": "6ad0b269e64e946b01f69625",
+    "project": "zjgueqijumzlfioihnkt",
+    "sql_applied": [
+      {
+        "version": "20261015110450",
+        "name": "restore_missing_report_readers",
+        "archive": "scripts/ops/legacy-ui-integration/sql/production-repair/20261015110450_restore_missing_report_readers.sql",
+        "applied_sha256": "f63a130adbd972b941fe09c70cbacc2a6772474a56da953753eb44c364e431ef"
+      },
+      {
+        "version": "20261015110828",
+        "name": "optimize_restored_inventory_report_lookup",
+        "archive": "scripts/ops/legacy-ui-integration/sql/production-repair/20261015110828_optimize_restored_inventory_report_lookup.sql",
+        "applied_sha256": "71f0025070d1595c946f49a5b77c1fc73da4dfb474d8ce952644b89f222a3c76"
+      },
+      {
+        "version": "20261015111020",
+        "name": "materialize_inventory_report_lookup_keys",
+        "archive": "scripts/ops/legacy-ui-integration/sql/production-repair/20261015111020_materialize_inventory_report_lookup_keys.sql",
+        "applied_sha256": "fc62f726e861e6f4bda513b27ae70986375b60042bd1ecf6d14dba9bc3b269af"
+      }
+    ],
+    "meaning": "Applied production report-only repair. Original eight SQL packages remain unapplied; reconcile new production RPCs before future commercial promotion. Archives are outside automatic migrations."
   }
 }

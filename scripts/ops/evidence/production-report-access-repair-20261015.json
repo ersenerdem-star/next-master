@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-15",
+  "origin": "https://portal.next-master.com",
+  "baseline": "38dfa7d590b19bf9915d1c5eda919f604275faf4",
+  "ui_commit": "7fb7a024b55923932cd38b9d70b7578d7a60b76a",
+  "deploy_id": "6ad0b269e64e946b01f69625",
+  "deploy_state": "ready",
+  "rollback_ui_deploy_id": "6ad03a4126764166c7257dff",
+  "database_project": "zjgueqijumzlfioihnkt",
+  "migration_versions": [
+    "20261015110450",
+    "20261015110828",
+    "20261015111020"
+  ],
+  "schema_scope": "Seven invoker SELECT report functions; optimize inventory lookup; no table grants or RLS changes",
+  "business_writes": false,
+  "historical_data_refresh": false,
+  "live_authenticated_rows": {
+    "Supplier Balance": 46,
+    "Customer Balance": 48,
+    "Open Purchases": 500,
+    "Open Sales": 500,
+    "Price Variance": 46,
+    "Sales Margin": 500,
+    "Inventory": 500
+  },
+  "selected_limit": 500,
+  "limits": [
+    "500-row results are bounded, not complete ledger totals",
+    "Existing financial report semantics restored; staging-only governed semantics not promoted",
+    "Only report access and selected read flows accepted; not full-system production acceptance"
+  ],
+  "inventory_plan": {
+    "authenticated_role": true,
+    "estimated_total_cost_before": 1653907.47,
+    "estimated_total_cost_after": 195.82,
+    "catalog_sequential_scan_after": false,
+    "new_indexes": false
+  },
+  "screenshot_directory": "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/production-reports-hotfix",
+  "screenshots": [
+    "01-live-supplier-report.jpg",
+    "02-live-inventory-report.jpg",
+    "03-live-customer-report.jpg"
+  ],
+  "not_changed": [
+    "Order/invoice/payment data",
+    "Price-engine source",
+    "Supplier publication",
+    "Export worker source",
+    "Production environment flags"
+  ],
+  "remaining": "Reconcile these new production RPC definitions before a later governed-financial rollout; keep production/staging schemas distinct."
+}
