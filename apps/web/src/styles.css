@@ -12762,3 +12762,14 @@ body {
   .customer-desk-order-table__row { min-width: 680px; }
   .portal-notification-panel--after-home { margin: 0 16px; }
 }
+
+@media (max-width: 768px) {
+  /* The artwork is a pseudo layer on mobile too; use a vertical fade so the
+     search copy stays legible while the lower diagram remains recognisable. */
+  .customer-desk-hero--reference::after {
+    background-size: auto 46%;
+    background-position: right bottom;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, transparent 47%, rgba(0, 0, 0, 0.2) 70%, #000 100%);
+    mask-image: linear-gradient(180deg, transparent 0%, transparent 47%, rgba(0, 0, 0, 0.2) 70%, #000 100%);
+  }
+}
