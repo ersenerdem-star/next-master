@@ -1,5 +1,6 @@
 import React,{useState} from 'react';
 import {releaseReviewState, type ReleaseReviewRow, type ReleaseIssueRow, releaseIssueExplanation} from '../../shared/supplierReleaseReview';
+import {translateInterfaceText} from '../../i18n/interfaceMessages';
 import {Button} from '../../presentation/components/common/Button';
 import {supplierProcessingInterruptedMessage} from '../../shared/supplierUploadProtocol';
 import {SupplierReleaseActionPanel} from './SupplierReleaseActionPanel';
@@ -31,7 +32,7 @@ export function SupplierReleaseReviewCard({rows,tr,onDetails,onIssues,actionsEna
     return <article key={row.id} className="list-stack" style={{border:'1px solid var(--border-color, #d8e1ee)',borderRadius:12,padding:16}}>
       <strong>{row.brand} · {row.supplier}</strong>
       <span className={`mark-badge mark-badge--${state==='review_required'||state==='rejected'||state==='processing_interrupted'?'failed':state==='active'||state==='previous_publication'?'completed':'pending'}`}>{labels[state]}</span>
-      <span>{row.processedRows.toLocaleString()} / {row.totalRows.toLocaleString()} · {row.status}</span>
+      <span>{row.processedRows.toLocaleString()} / {row.totalRows.toLocaleString()} · {translateInterfaceText(row.status,tr?'tr':'en')}</span>
       <span className="operations-subtle">{new Date(row.createdAt).toLocaleString(tr?'tr-TR':'en-US',{dateStyle:'medium',timeStyle:'short'})}</span>
       {state==='processing_interrupted'?<p role="status">{supplierProcessingInterruptedMessage(tr)} {tr?'Son durum':'Last status'}: {new Date(row.updatedAt).toLocaleString(tr?'tr-TR':'en-US')}</p>:null}
       {typeof row.acceptedRows==='number' ? <div className="operations-subtle">

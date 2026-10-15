@@ -343,6 +343,8 @@ export const trInterfaceMessages: Record<string,string> = {
   "pending_dispatch":"Sevk bekliyor", "pending_delivery":"Teslimat bekliyor", "partially_delivered":"Kısmen teslim edildi",
   "approved":"Onaylandı", "rejected":"Reddedildi", "invoiced":"Faturalandı", "purchased":"Satın alındı",
   "Status unavailable.":"Durum bilgisi alınamıyor.",
+  "received":"Alındı", "uploaded":"Yüklendi", "parsing":"Satırlar işleniyor", "staged":"Satırlar hazırlandı",
+  "validated":"Doğrulandı", "published":"Yayında", "superseded":"Önceki sürüm", "archived":"Arşivlendi",
 };
 
 const patterns=Object.entries(trInterfaceMessages).filter(([key])=>/\{\w+\}/.test(key)).map(([key,value])=>{

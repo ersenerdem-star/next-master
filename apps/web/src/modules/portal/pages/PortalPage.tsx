@@ -963,7 +963,7 @@ export function PortalPage() {
       {
         key: "status",
         header: "Status",
-        render: (row: PortalSnapshot["salesOrders"][number]) => (row.portal_submitted_at ? "Submitted" : row.status || "-"),
+        render: (row: PortalSnapshot["salesOrders"][number]) => ui(row.portal_submitted_at ? "Submitted" : row.status || "-"),
       },
       {
         key: "brands",
@@ -1554,7 +1554,7 @@ export function PortalPage() {
 
   if (!snapshot) {
     const loginBrandLogo = loginBranding?.companyProfile?.logo_data_url || "";
-    const loginBrandName = loginBranding?.companyProfile?.company_name || loginBranding?.partyName || "Portal Workspace";
+    const loginBrandName = loginBranding?.companyProfile?.company_name || loginBranding?.partyName || ui("Portal Workspace");
     const loginBrandLabel = loginBranding?.portalLabel || "Self-Service Access";
     const loginBrandInitials = buildPortalLoginInitials(loginBrandName);
     return (
