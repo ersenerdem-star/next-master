@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-15",
+  "project_ref": "zjgueqijumzlfioihnkt",
+  "release_id": "f7193de0-de0f-4790-b930-2f2503f3fbde",
+  "handoff_id": "8a8a3ec8-951a-419d-8b98-ade269cb08a4",
+  "upload_session_id": "c10625c6-e93e-479f-8dfd-9417096c14e2",
+  "file_name": "VAG-1_Ro_15102026.csv",
+  "source_sha256": "833ac488c74cb10d8a343ec71780c092608ff8a9a95161da10b9b6ad7b17ae7b",
+  "total_rows": 999998,
+  "source_bytes": 25957749,
+  "before": {
+    "supplier": "GEBA",
+    "supplier_id": "bbd25101-b14a-4967-ac5d-fa78054d4f2e",
+    "status": "uploaded",
+    "processed_rows": 0,
+    "cursor": 0,
+    "staged_rows": 0,
+    "batches": 0,
+    "publications": 0,
+    "current_pointers": 0
+  },
+  "after": {
+    "supplier": "Romany",
+    "supplier_id": "61879f2b-b0a2-493e-b7c4-0aabba63752c",
+    "status": "uploaded",
+    "processed_rows": 0,
+    "error_code": "SUPPLIER_PROCESSING_INTERRUPTED",
+    "published": false
+  },
+  "audit_event": "supplier_corrected",
+  "guards": [
+    "Exact release, organization, brand, original supplier and source SHA-256",
+    "Verified complete upload and unchanged total rows",
+    "No accepted/staged rows, batches, publication, current pointer or queued admin action",
+    "Active same-organization Romany supplier and active original admin",
+    "Release and handoff row locks; source/error/history retained"
+  ],
+  "worker": {
+    "live_commit": "544095b0b20df7de34d27925f571afefa1ae33fd",
+    "workflow_status": "ERROR",
+    "workflow_name": "supplier-price-verified-release-v6",
+    "error": "SHARED_PREPARED_UPLOAD_FAILED:429",
+    "failed_step": "compact-source-prepare-v6",
+    "active_workflows": 0
+  },
+  "recovery": "Not started. The existing production invocation guard allows service mode only; direct operator recovery is staging-only. No guard disabled, history cleared, workflow reset or source reupload performed.",
+  "verification": {
+    "database_supplier_and_source": "passed",
+    "audit_event_exactly_once": "passed",
+    "no_publication": "passed",
+    "authenticated_admin": "Romany / VAG; 0 / 999,998; işlem durdu"
+  },
+  "screenshot": "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/vag-supplier-correction/production.png"
+}
