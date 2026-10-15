@@ -12251,6 +12251,11 @@ body {
 }
 
 /* Accepted customer portal composition: single-line shell, split hero, and dashboard cards. */
+.portal-shell--workspace {
+  gap: 0;
+  padding: 0 0 30px;
+}
+
 .portal-shell--workspace .portal-header {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
