@@ -16,6 +16,7 @@ export function BrandPill({ brand, compact = false, className = "", withLogo = f
 
   return (
     <span
+      lang="en"
       className={`brand-pill${compact ? " brand-pill--compact" : ""}${logo ? " brand-pill--with-logo" : ""}${logoOnly && logo ? " brand-pill--logo-only" : ""}${className ? ` ${className}` : ""}`}
       title={value}
     >

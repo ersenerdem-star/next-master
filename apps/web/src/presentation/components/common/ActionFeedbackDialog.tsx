@@ -1,5 +1,7 @@
+import {InterfaceText} from "../../../i18n/InterfaceText";
 import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
+import {useInterfaceText} from '../../../i18n/InterfaceText';
 
 export type ActionFeedbackKind = "progress" | "success" | "error" | "warning";
 
@@ -27,6 +29,7 @@ export function ActionFeedbackDialog({ kind, message, title, onClose }: {
   title?: string;
   onClose?: () => void;
 }) {
+  const ui=useInterfaceText();
   const id = useId();
   const cardRef = useRef<HTMLElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -78,12 +81,12 @@ export function ActionFeedbackDialog({ kind, message, title, onClose }: {
           {kind === "progress" ? <span className="action-feedback__spinner" /> : kind === "success" ? "✓" : "!"}
         </div>
         <div className="action-feedback__body">
-          <span className="action-feedback__eyebrow">{copy.eyebrow}</span>
-          <strong id={`${id}-title`}>{title || copy.title}</strong>
-          <span id={`${id}-message`} role={kind === "progress" ? "status" : undefined} aria-live={kind === "progress" ? "polite" : undefined}>{message}</span>
-          {copy.helper ? <small>{copy.helper}</small> : null}
+          <span className="action-feedback__eyebrow">{ui(copy.eyebrow)}</span>
+          <strong id={`${id}-title`}>{ui(title || copy.title)}</strong>
+          <span id={`${id}-message`} role={kind === "progress" ? "status" : undefined} aria-live={kind === "progress" ? "polite" : undefined}>{ui(message)}</span>
+          {copy.helper ? <small>{ui(copy.helper)}</small> : null}
           {dismissible ? <div className="action-feedback__actions">
-            <button type="button" className="action-feedback__button" onClick={onClose}>Close</button>
+            <button type="button" className="action-feedback__button" onClick={onClose}><InterfaceText text={"Close"}/></button>
           </div> : null}
         </div>
       </section>

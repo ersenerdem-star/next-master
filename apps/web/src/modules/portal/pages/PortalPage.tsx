@@ -1,3 +1,5 @@
+import {useI18n} from "../../../i18n/I18nProvider";
+import {InterfaceText,useInterfaceText} from "../../../i18n/InterfaceText";
 import {CustomerMessagesPage} from "../../../presentation/pages/CustomerMessagesPage";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
 import { ActionFeedbackDialog } from "../../../presentation/components/common/ActionFeedbackDialog";
@@ -204,17 +206,20 @@ function buildEmptyPortalOfflineDraft(activeSection: PortalSection = "home"): Po
   };
 }
 
-function formatMoney(value: number, currency = "EUR") {
-  return `${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+function formatMoneyForLocale(value: number, currency = "EUR", locale = "en") {
+  return `${Number(value || 0).toLocaleString(locale === "tr" ? "tr-TR" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
 
-function formatWeight(value: number | null | undefined) {
+function formatWeightForLocale(value: number | null | undefined, locale = "en") {
   if (value == null || Number.isNaN(Number(value))) return "-";
-  return Number(value).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+  return Number(value).toLocaleString(locale === "tr" ? "tr-TR" : "en-US", { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 }
 
-function formatDate(value?: string) {
-  return value || "-";
+function formatDateForLocale(value?: string, locale = "en") {
+  if(!value)return "-";
+  if(locale!=="tr")return value;
+  const date=new Date(value);
+  return Number.isNaN(date.getTime())?value:new Intl.DateTimeFormat('tr-TR',{day:'2-digit',month:'short',year:'numeric'}).format(date);
 }
 
 function isWithinDateRange(value: string | undefined, dateFrom: string, dateTo: string) {
@@ -297,7 +302,7 @@ function renderStatusLamp(status: string | undefined) {
   return (
     <span className={`status-lamp status-lamp--${state.tone}`}>
       <span className="status-lamp__dot" />
-      {state.label}
+      <InterfaceText text={state.label}/>
     </span>
   );
 }
@@ -306,7 +311,7 @@ function renderDiscontinuedBadge(row: { lifecycle_status?: string | null; lifecy
   if (String(row.lifecycle_status || "").trim().toLowerCase() !== "discontinued") return null;
   return (
     <div>
-      <span className="mark-badge mark-badge--danger">Discontinued</span>
+      <span className="mark-badge mark-badge--danger"><InterfaceText text={"Discontinued"}/></span>
       {row.lifecycle_warning ? <div className="warning-text">{row.lifecycle_warning}</div> : null}
     </div>
   );
@@ -316,7 +321,7 @@ function renderReplacementBadge(row: { replacement_warning?: string | null }) {
   if (!String(row.replacement_warning || "").trim()) return null;
   return (
     <div>
-      <span className="mark-badge mark-badge--accent">Replacement</span>
+      <span className="mark-badge mark-badge--accent"><InterfaceText text={"Replacement"}/></span>
       <div className="warning-text">{row.replacement_warning}</div>
     </div>
   );
@@ -569,6 +574,11 @@ function getDefaultPortalSection(snapshot: PortalSnapshot) {
 }
 
 export function PortalPage() {
+  const ui=useInterfaceText();
+  const {locale}=useI18n();
+  const formatMoney=(value: number, currency = "EUR")=>ui(formatMoneyForLocale(value,currency,locale));
+  const formatDate=(value?:string)=>ui(formatDateForLocale(value,locale));
+  const formatWeight=(value:number|null|undefined)=>formatWeightForLocale(value,locale);
   const search = new URLSearchParams(window.location.search);
   const portalLinkEmail = search.get("email") || "";
   const portalResetToken = search.get("reset") || search.get("reset_token") || "";
@@ -691,7 +701,7 @@ export function PortalPage() {
     className: "is-local",
   };
   const portalCommitShort = buildMeta.commit.slice(0, 8);
-  const portalBuiltAtLabel = new Intl.DateTimeFormat("en-GB", {
+  const portalBuiltAtLabel = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-GB", {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
@@ -927,10 +937,10 @@ export function PortalPage() {
       { key: "no", header: "No", render: (row: PortalSnapshot["accountRows"][number]) => row.document_no },
       { key: "date", header: "Date", render: (row: PortalSnapshot["accountRows"][number]) => row.document_date || "-" },
       { key: "due", header: "Due Date", render: (row: PortalSnapshot["accountRows"][number]) => row.due_date || "-" },
-      { key: "status", header: "Status", render: (row: PortalSnapshot["accountRows"][number]) => row.status || "-" },
+      { key: "status", header: "Status", render: (row: PortalSnapshot["accountRows"][number]) => ui(row.status || "-") },
       { key: "amount", header: "Amount", render: (row: PortalSnapshot["accountRows"][number]) => formatMoney(row.amount, row.currency) },
     ],
-    [],
+    [locale],
   );
 
   const salesOrderColumns = useMemo(
@@ -944,8 +954,7 @@ export function PortalPage() {
             {row.source_channel === "portal" && row.portal_submitted_at ? (
               <div className="status-lamp status-lamp--info">
                 <span className="status-lamp__dot" />
-                Submitted
-              </div>
+                <InterfaceText text={"Submitted"}/></div>
             ) : null}
           </div>
         ),
@@ -979,12 +988,11 @@ export function PortalPage() {
               void handleDeletePortalDraft(row);
             }}
           >
-            Delete
-          </Button>
+            <InterfaceText text={"Delete"}/></Button>
         ) : row.source_channel === "portal" && row.portal_submitted_at ? "Confirmed" : "-",
       },
     ],
-    [credentials, isOnline, savingPortalOrder, selection],
+    [credentials, isOnline, savingPortalOrder, selection, locale],
   );
 
   const invoiceColumns = useMemo(
@@ -996,7 +1004,7 @@ export function PortalPage() {
       { key: "status", header: "Status", render: (row: PortalSnapshot["invoices"][number]) => renderStatusLamp(row.status) },
       { key: "amount", header: "Amount", render: (row: PortalSnapshot["invoices"][number]) => formatMoney(row.total_amount, row.currency) },
     ],
-    [],
+    [locale],
   );
 
   const purchaseOrderColumns = useMemo(
@@ -1004,10 +1012,10 @@ export function PortalPage() {
       { key: "no", header: "Purchase Order", render: (row: PortalSnapshot["purchaseOrders"][number]) => row.id },
       { key: "sales", header: "Sales Order", render: (row: PortalSnapshot["purchaseOrders"][number]) => row.sales_order_no || "-" },
       { key: "customer", header: "Customer", render: (row: PortalSnapshot["purchaseOrders"][number]) => row.customer_name || "-" },
-      { key: "status", header: "Status", render: (row: PortalSnapshot["purchaseOrders"][number]) => row.status || "-" },
+      { key: "status", header: "Status", render: (row: PortalSnapshot["purchaseOrders"][number]) => ui(row.status || "-") },
       { key: "amount", header: "Amount", render: (row: PortalSnapshot["purchaseOrders"][number]) => formatMoney(Number(row.total_amount || 0), row.currency) },
     ],
-    [],
+    [locale],
   );
 
   const billColumns = useMemo(
@@ -1019,7 +1027,7 @@ export function PortalPage() {
       { key: "status", header: "Status", render: (row: PortalSnapshot["bills"][number]) => renderStatusLamp(row.status) },
       { key: "amount", header: "Amount", render: (row: PortalSnapshot["bills"][number]) => formatMoney(row.total_amount, row.currency) },
     ],
-    [],
+    [locale],
   );
 
   const paymentColumns = useMemo(
@@ -1036,7 +1044,7 @@ export function PortalPage() {
       { key: "status", header: "Status", render: (row: PortalSnapshot["paymentsReceived"][number] | PortalSnapshot["paymentsMade"][number]) => renderStatusLamp(row.status) },
       { key: "amount", header: "Amount", render: (row: PortalSnapshot["paymentsReceived"][number] | PortalSnapshot["paymentsMade"][number]) => formatMoney(row.amount, row.currency) },
     ],
-    [],
+    [locale],
   );
 
   const portalCatalogColumns = useMemo(
@@ -1086,7 +1094,7 @@ export function PortalPage() {
           header: `Price ${portalPricingCurrency}`,
           render: (row: PortalCatalogSearchItem) => (
             <span className="portal-result-price" title={row.sell_price == null ? "Price on request" : formatMoney(Number(row.sell_price || 0), row.currency || portalPricingCurrency)}>
-              {row.sell_price == null ? "Price on request" : formatMoney(Number(row.sell_price || 0), row.currency || portalPricingCurrency)}
+              {row.sell_price == null ? ui("Price on request") : formatMoney(Number(row.sell_price || 0), row.currency || portalPricingCurrency)}
             </span>
           ),
         },
@@ -1099,13 +1107,12 @@ export function PortalPage() {
         header: "Actions",
         render: (row: PortalCatalogSearchItem) => (
           <Button variant="secondary" className="button--compact" onClick={() => requestPortalCatalogAdd(row)}>
-            Add to Sales Order
-          </Button>
+            <InterfaceText text={"Add to Sales Order"}/></Button>
         ),
       });
       return columns;
     },
-    [portalPricingCurrency],
+    [portalPricingCurrency, ui, locale],
   );
 
   const portalDraftColumns = useMemo(
@@ -1120,7 +1127,7 @@ export function PortalPage() {
           render: (row: PortalPreparedLine) => (
             <div>
               <div>{row.description || "-"}</div>
-              {row.sell_price == null ? <div className="warning-text">No live price found for this item.</div> : null}
+              {row.sell_price == null ? <div className="warning-text"><InterfaceText text={"No live price found for this item."}/></div> : null}
               {renderReplacementBadge(row)}
               {renderDiscontinuedBadge(row)}
             </div>
@@ -1167,14 +1174,13 @@ export function PortalPage() {
               className="button--compact danger-button"
               onClick={() => setPortalDraftLines((current) => current.filter((item) => item.lineId !== row.lineId))}
             >
-              Remove
-            </Button>
+              <InterfaceText text={"Remove"}/></Button>
           ),
         },
       );
       return columns;
     },
-    [portalPricingCurrency],
+    [portalPricingCurrency, locale],
   );
 
   const creditColumns = useMemo(
@@ -1182,10 +1188,10 @@ export function PortalPage() {
       { key: "no", header: "Credit Note", render: (row: PortalSnapshot["creditNotes"][number]) => row.credit_note_no || row.id },
       { key: "date", header: "Date", render: (row: PortalSnapshot["creditNotes"][number]) => row.credit_date || "-" },
       { key: "due", header: "Due Date", render: (row: PortalSnapshot["creditNotes"][number]) => row.due_date || "-" },
-      { key: "status", header: "Status", render: (row: PortalSnapshot["creditNotes"][number]) => row.status || "-" },
+      { key: "status", header: "Status", render: (row: PortalSnapshot["creditNotes"][number]) => ui(row.status || "-") },
       { key: "amount", header: "Amount", render: (row: PortalSnapshot["creditNotes"][number]) => formatMoney(row.total_amount, row.currency) },
     ],
-    [],
+    [locale],
   );
 
   const vendorCreditColumns = useMemo(
@@ -1193,10 +1199,10 @@ export function PortalPage() {
       { key: "no", header: "Vendor Credit", render: (row: PortalSnapshot["vendorCredits"][number]) => row.vendor_credit_no || row.id },
       { key: "date", header: "Date", render: (row: PortalSnapshot["vendorCredits"][number]) => row.credit_date || "-" },
       { key: "due", header: "Due Date", render: (row: PortalSnapshot["vendorCredits"][number]) => row.due_date || "-" },
-      { key: "status", header: "Status", render: (row: PortalSnapshot["vendorCredits"][number]) => row.status || "-" },
+      { key: "status", header: "Status", render: (row: PortalSnapshot["vendorCredits"][number]) => ui(row.status || "-") },
       { key: "amount", header: "Amount", render: (row: PortalSnapshot["vendorCredits"][number]) => formatMoney(row.total_amount, row.currency) },
     ],
-    [],
+    [locale],
   );
 
   async function handleLogin() {
@@ -1308,7 +1314,7 @@ export function PortalPage() {
       setLoading(true);
       setError("");
       setStatus("Refreshing portal data...");
-      setPortalOverlay({ title: "Refreshing portal", message: "Loading your latest account information." });
+      setPortalOverlay({ title: ui("Refreshing portal"), message: "Loading your latest account information." });
       const { snapshot: next } = await fetchPortalSnapshot(credentials);
       setSnapshot((current) => mergePortalSnapshotOrderDetails(current, next));
       const refreshFeedback = portalSnapshotFeedback(next, "Portal data refreshed.");
@@ -1516,7 +1522,7 @@ export function PortalPage() {
         return;
       }
       const code = portalPreview.kind === "catalog" ? portalPreview.item.code : portalPreview.item.resolvedCode || portalPreview.item.requestedCode;
-      const fallbackItems = portalPreview.item.image_url ? [{ src: portalPreview.item.image_url, label: "Product" }] : [];
+      const fallbackItems = portalPreview.item.image_url ? [{ src: portalPreview.item.image_url, label: ui("Product") }] : [];
       if (!cancelled) setPortalPreviewMedia(fallbackItems);
       try {
         const items = await fetchCatalogProductMedia({
@@ -1540,7 +1546,7 @@ export function PortalPage() {
     return (
       <div className="portal-shell portal-shell--login">
         <div className="portal-login-layout">
-          <div className="portal-login-card" role="status">Restoring your portal session...</div>
+          <div className="portal-login-card" role="status"><InterfaceText text={"Restoring your portal session..."}/></div>
         </div>
       </div>
     );
@@ -1555,15 +1561,15 @@ export function PortalPage() {
       <div className="portal-shell portal-shell--login">
         {feedbackOverlay}
         <div className="portal-login-layout">
-          <section className="portal-login-visual" aria-label="Customer Desk introduction">
+          <section className="portal-login-visual" aria-label={ui("Customer Desk introduction")}>
             <div className="portal-login-visual__copy">
-              <span className="portal-login-visual__eyebrow">Customer Desk</span>
-              <h1>Keep every part search and order moving.</h1>
-              <p>One calm workspace for the parts you buy, the prices assigned to your account, and the orders you need to track.</p>
-              <div className="portal-login-visual__proof" aria-label="Portal capabilities">
-                <span>Part and OEM search</span>
-                <span>Account-specific pricing</span>
-                <span>Orders and billing visibility</span>
+              <span className="portal-login-visual__eyebrow"><InterfaceText text={"Customer Desk"}/></span>
+              <h1><InterfaceText text={"Keep every part search and order moving."}/></h1>
+              <p><InterfaceText text={"One calm workspace for the parts you buy, the prices assigned to your account, and the orders you need to track."}/></p>
+              <div className="portal-login-visual__proof" aria-label={ui("Portal capabilities")}>
+                <span><InterfaceText text={"Part and OEM search"}/></span>
+                <span><InterfaceText text={"Account-specific pricing"}/></span>
+                <span><InterfaceText text={"Orders and billing visibility"}/></span>
               </div>
             </div>
           </section>
@@ -1575,19 +1581,19 @@ export function PortalPage() {
                 {loginBrandLogo ? <img src={loginBrandLogo} alt="" className="portal-login-brand__logo-image" /> : loginBrandInitials}
               </div>
               <div className="portal-login-brand__copy">
-                <span>{loginBrandLabel}</span>
+                <span>{ui(loginBrandLabel)}</span>
                 <strong>{loginBrandName}</strong>
               </div>
             </div>
             <div className="portal-login-card__intro">
-              <span>Secure account access</span>
-              <h2>{portalResetToken ? "Create New Password" : portalForgotMode ? "Reset your access" : "Welcome back"}</h2>
+              <span><InterfaceText text={"Secure account access"}/></span>
+              <h2>{portalResetToken ? ui("Create New Password") : portalForgotMode ? ui("Reset your access") : ui("Welcome back")}</h2>
               <p>
                 {portalResetToken
-                  ? "Create a new portal password to continue."
+                  ? ui("Create a new portal password to continue.")
                   : portalForgotMode
-                    ? "Enter the portal email address and a reset link will be sent if the account is active."
-                    : "Sign in to search parts, review account pricing, and keep your orders on track."}
+                    ? ui("Enter the portal email address and a reset link will be sent if the account is active.")
+                    : ui("Sign in to search parts, review account pricing, and keep your orders on track.")}
               </p>
             </div>
             <form
@@ -1605,21 +1611,21 @@ export function PortalPage() {
                 void handleLogin();
               }}
             >
-              <Input label="Email" value={credentials.email} placeholder="name@company.com" onChange={(value) => setCredentials((current) => ({ ...current, email: value }))} />
+              <Input label="Email" value={credentials.email} placeholder={ui("name@company.com")} onChange={(value) => setCredentials((current) => ({ ...current, email: value }))} />
               {portalResetToken ? (
                 <>
                   <Input
                     label="New Password"
                     type="password"
                     value={portalResetPassword}
-                    placeholder="New portal password"
+                    placeholder={ui("New portal password")}
                     onChange={setPortalResetPassword}
                   />
                   <Input
                     label="Confirm Password"
                     type="password"
                     value={portalResetConfirmPassword}
-                    placeholder="Repeat new password"
+                    placeholder={ui("Repeat new password")}
                     onChange={setPortalResetConfirmPassword}
                   />
                 </>
@@ -1628,7 +1634,7 @@ export function PortalPage() {
                   label="Password"
                   type="password"
                   value={credentials.password || ""}
-                  placeholder="Portal password"
+                  placeholder={ui("Portal password")}
                   onChange={(value) => setCredentials((current) => ({ ...current, password: value }))}
                 />
               )}
@@ -1649,10 +1655,10 @@ export function PortalPage() {
                     void handleLogin();
                   }}
                 >
-                  {portalResetToken ? "Save New Password" : portalForgotMode ? "Send Reset Link" : "Sign In"}
+                  {portalResetToken ? ui("Save New Password") : portalForgotMode ? ui("Send Reset Link") : ui("Sign In")}
                 </Button>
               </div>
-              {status ? <div className="portal-feedback-status" role="status">{status}</div> : null}
+              {status ? <div className="portal-feedback-status" role="status">{ui(status)}</div> : null}
               {!portalResetToken ? (
                 <button
                   type="button"
@@ -1663,11 +1669,11 @@ export function PortalPage() {
                     setStatus("");
                   }}
                 >
-                  {portalForgotMode ? "Back to sign in" : "Forgot password?"}
+                  {portalForgotMode ? ui("Back to sign in") : ui("Forgot password?")}
                 </button>
               ) : null}
             </form>
-            <p className="portal-login-card__privacy">Your account data, customer pricing, and order visibility stay within your authorized workspace.</p>
+            <p className="portal-login-card__privacy"><InterfaceText text={"Your account data, customer pricing, and order visibility stay within your authorized workspace."}/></p>
           </div>
         </div>
       </div>
@@ -1710,13 +1716,13 @@ export function PortalPage() {
         if (brand) brands.add(brand);
       });
     });
-    return [{ value: "", label: "All Brands" }, ...Array.from(brands).sort((a, b) => a.localeCompare(b)).map((brand) => ({ value: brand, label: brand }))];
+    return [{ value: "", label: ui("All Brands") }, ...Array.from(brands).sort((a, b) => a.localeCompare(b)).map((brand) => ({ value: brand, label: brand }))];
   })();
   const paymentStatusOptions = [
-    { value: "", label: "All Statuses" },
-    { value: "paid", label: "Paid" },
-    { value: "partial", label: "Partial Paid" },
-    { value: "unpaid", label: "Unpaid" },
+    { value: "", label: ui("All Statuses") },
+    { value: "paid", label: ui("Paid") },
+    { value: "partial", label: ui("Partial Paid") },
+    { value: "unpaid", label: ui("Unpaid") },
   ];
 
   const filteredSalesOrders = activeSnapshot.salesOrders.filter((row) => matchesSearch(documentSearch, row) && matchesBrand(brandFilter, row));
@@ -1746,15 +1752,15 @@ export function PortalPage() {
     activeSnapshot.invite.party_type === "customer"
       ? activeSnapshot.paymentsReceived.filter((row) => (!statementDateFrom && !statementDateTo ? true : isWithinDateRange(row.received_date, statementDateFrom, statementDateTo)))
       : activeSnapshot.paymentsMade.filter((row) => (!statementDateFrom && !statementDateTo ? true : isWithinDateRange(row.payment_date, statementDateFrom, statementDateTo)));
-  const statementPeriodLabel = buildDateRangeLabel(statementDateFrom, statementDateTo);
+  const statementPeriodLabel = ui(buildDateRangeLabel(statementDateFrom, statementDateTo));
   const portalCanOrder = activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_orders;
-  const portalBrandOptions = [{ value: "", label: "All Brands" }, ...activeSnapshot.availableBrands.map((brand) => ({ value: brand, label: brand }))];
+  const portalBrandOptions = [{ value: "", label: ui("All Brands") }, ...activeSnapshot.availableBrands.map((brand) => ({ value: brand, label: brand }))];
   const portalBrandValueOptions = activeSnapshot.availableBrands.map((brand) => ({ value: brand, label: brand }));
   const portalDraftSelectionOptions = [
-    { value: "", label: "New sales order" },
+    { value: "", label: ui("New sales order") },
     ...portalDraftOrders.map((row) => ({
       value: row.id,
-      label: `${row.sales_order_no || row.id} · ${(row.line_count || row.lines?.length || 0).toLocaleString("en-US")} lines`,
+      label: `${row.sales_order_no || row.id} · ${(row.line_count || row.lines?.length || 0).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} lines`,
     })),
   ];
   const portalOrderCurrency = activeSnapshot.pricingProfile?.currency || activeSnapshot.accountSummary.currency || "EUR";
@@ -1781,37 +1787,37 @@ export function PortalPage() {
   const portalQuickStats = [
     {
       label: portalCanOrder ? "Open sales orders" : "Orders",
-      value: portalCanOrder ? portalDraftOrders.length.toLocaleString("en-US") : portalOrderHistoryRows.length.toLocaleString("en-US"),
+      value: portalCanOrder ? portalDraftOrders.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US") : portalOrderHistoryRows.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US"),
       note: portalCanOrder ? "Saved work waiting for submission" : "Visible order records",
     },
     {
-      label: activeSnapshot.invite.party_type === "customer" ? "Invoices" : "Bills",
-      value: portalBillingRows.length.toLocaleString("en-US"),
+      label: ui(activeSnapshot.invite.party_type === "customer" ? "Invoices" : "Bills"),
+      value: portalBillingRows.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US"),
       note: "Document history available online",
     },
     {
-      label: "Balance",
+      label: ui("Balance"),
       value: formatMoney(activeSnapshot.accountSummary.openAmount, activeSnapshot.accountSummary.currency),
       note: "Current open account position",
     },
     {
-      label: "Payments",
+      label: ui("Payments"),
       value: formatMoney(activeSnapshot.accountSummary.paymentAmount, activeSnapshot.accountSummary.currency),
       note: "Total payment movement",
     },
   ];
   const portalSections: Array<{ key: PortalSection; label: string }> = [
-    ...(portalCanOrder ? [{ key: "home" as PortalSection, label: "Home" }] : []),
-    ...(portalCanOrder ? [{ key: "desk" as PortalSection, label: "Parts Search" }] : []),
-    ...(portalCanOrder ? [{ key: "pricelist" as PortalSection, label: "Price Lists" }] : []),
-    ...(activeSnapshot.invite.access.can_view_orders ? [{ key: "orders" as PortalSection, label: "Orders" }] : []),
+    ...(portalCanOrder ? [{ key: "home" as PortalSection, label: ui("Home") }] : []),
+    ...(portalCanOrder ? [{ key: "desk" as PortalSection, label: ui("Parts Search") }] : []),
+    ...(portalCanOrder ? [{ key: "pricelist" as PortalSection, label: ui("Price Lists") }] : []),
+    ...(activeSnapshot.invite.access.can_view_orders ? [{ key: "orders" as PortalSection, label: ui("Orders") }] : []),
     ...(activeSnapshot.invite.access.can_view_invoices
-      ? [{ key: "billing" as PortalSection, label: activeSnapshot.invite.party_type === "customer" ? "Invoices" : "Bills" }]
+      ? [{ key: "billing" as PortalSection, label: ui(activeSnapshot.invite.party_type === "customer" ? "Invoices" : "Bills") }]
       : []),
-    ...(activeSnapshot.invite.access.can_view_account || activeSnapshot.invite.access.can_view_payments ? [{ key: "statement" as PortalSection, label: "Statement" }] : []),
-    { key: "account", label: "Account" },
-    ...(activeSnapshot.invite.party_type === "customer" ? [{key:"messages" as PortalSection,label:"Messages"}] : []),
-    { key: "support", label: "Support" },
+    ...(activeSnapshot.invite.access.can_view_account || activeSnapshot.invite.access.can_view_payments ? [{ key: "statement" as PortalSection, label: ui("Statement") }] : []),
+    { key: "account", label: ui("Account") },
+    ...(activeSnapshot.invite.party_type === "customer" ? [{key:"messages" as PortalSection,label:ui("Messages")}] : []),
+    { key: "support", label: ui("Support") },
   ];
   const portalNavGroups: Array<{
     key: PortalNavGroupKey;
@@ -1825,7 +1831,7 @@ export function PortalPage() {
       key: "home" as const,
       code: "00",
       icon: "home" as const,
-      title: "Home",
+      title: ui("Home"),
       caption: "Customer Desk",
       items: portalSections.filter((section) => section.key === "home"),
     },
@@ -1833,7 +1839,7 @@ export function PortalPage() {
       key: "search" as const,
       code: "01",
       icon: "search" as const,
-      title: "Parts Search",
+      title: ui("Parts Search"),
       caption: "Part number, OE and vehicle",
       items: portalSections.filter((section) => section.key === "desk"),
     },
@@ -1841,7 +1847,7 @@ export function PortalPage() {
       key: "orders" as const,
       code: "02",
       icon: "documents" as const,
-      title: "Orders",
+      title: ui("Orders"),
       caption: "Order history and tracking",
       items: portalSections.filter((section) => section.key === "orders"),
     },
@@ -1849,7 +1855,7 @@ export function PortalPage() {
       key: "pricing" as const,
       code: "03",
       icon: "pricing" as const,
-      title: "Price Lists",
+      title: ui("Price Lists"),
       caption: "Downloads",
       items: portalSections.filter((section) => section.key === "pricelist"),
     },
@@ -1857,7 +1863,7 @@ export function PortalPage() {
       key: "documents" as const,
       code: "04",
       icon: "documents" as const,
-      title: "Documents",
+      title: ui("Documents"),
       caption: activeSnapshot.invite.party_type === "customer" ? "Invoices and statements" : "Bills and statements",
       items: portalSections
         .filter((section) => section.key === "billing" || section.key === "statement")
@@ -1865,7 +1871,7 @@ export function PortalPage() {
           ...section,
           badge:
             section.key === "billing"
-              ? portalBillingRows.length.toLocaleString("en-US")
+              ? portalBillingRows.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")
               : undefined,
         })),
     },
@@ -1873,7 +1879,7 @@ export function PortalPage() {
       key: "messages" as const,
       code: "05",
       icon: "documents" as const,
-      title: "Messages",
+      title: ui("Messages"),
       caption: "Conversation with your account team",
       items: portalSections.filter((section) => section.key === "messages"),
     },
@@ -1881,7 +1887,7 @@ export function PortalPage() {
       key: "account" as const,
       code: "06",
       icon: "account" as const,
-      title: "Account",
+      title: ui("Account"),
       caption: "Account identity and contact details",
       items: portalSections.filter((section) => section.key === "account"),
     },
@@ -1889,7 +1895,7 @@ export function PortalPage() {
       key: "support" as const,
       code: "07",
       icon: "documents" as const,
-      title: "Support",
+      title: ui("Support"),
       caption: "Help and account contact",
       items: portalSections.filter((section) => section.key === "support"),
     },
@@ -2008,7 +2014,7 @@ export function PortalPage() {
         setPortalPreview(null);
       }
       setPortalOrderStatus(
-        `${items.length.toLocaleString("en-US")} matching product and alternative result(s) found for the sales order flow.${result.recommendations.length ? ` ${result.recommendations.length.toLocaleString("en-US")} stock-backed recommendation(s) added below.` : ""}`,
+        `${items.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} matching product and alternative result(s) found for the sales order flow.${result.recommendations.length ? ` ${result.recommendations.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} stock-backed recommendation(s) added below.` : ""}`,
       );
     } catch (caught) {
       if (controller.signal.aborted || portalSearchRequestRef.current.id !== requestId) return;
@@ -2066,7 +2072,7 @@ export function PortalPage() {
       const pricedCount = preparedLines.length - missingPriceCount;
       const adjustedQuantityCount = preparedLines.filter((line) => line.quantity_adjusted).length;
       setPortalOrderStatus(
-        `${statusText.replace("{count}", preparedLines.length.toLocaleString("en-US"))} ${pricedCount > 0 ? `${pricedCount.toLocaleString("en-US")} priced.` : ""}${missingPriceCount > 0 ? ` ${missingPriceCount.toLocaleString("en-US")} need live pricing.` : ""}${discontinuedCount > 0 ? ` ${discontinuedCount.toLocaleString("en-US")} discontinued item(s) detected.` : ""}${adjustedQuantityCount > 0 ? ` ${adjustedQuantityCount} quantities adjusted to minimum/order multiples; review the shown quantities before submitting.` : ""}`.trim(),
+        `${ui(statusText.replace("{count}", preparedLines.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")))} ${pricedCount > 0 ? ui(`${pricedCount.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} priced.`) : ""}${missingPriceCount > 0 ? ui(` ${missingPriceCount.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} need live pricing.`) : ""}${discontinuedCount > 0 ? ui(` ${discontinuedCount.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} discontinued item(s) detected.`) : ""}${adjustedQuantityCount > 0 ? ui(` ${adjustedQuantityCount} quantities adjusted to minimum/order multiples; review the shown quantities before submitting.`) : ""}`.trim(),
       );
       return preparedLines;
     } catch (caught) {
@@ -2204,7 +2210,7 @@ export function PortalPage() {
     const blob = buildXlsxBlob("Sales order", rows, [2, 8, 9]);
     const fileName = sanitizeFileName(`${activeSnapshot.invite.party_name}-sales-order`);
     downloadBlob(`${fileName || "portal-sales-order"}.xlsx`, blob);
-    setPortalOrderStatus(`Exported ${portalDraftLines.length.toLocaleString("en-US")} sales order line${portalDraftLines.length === 1 ? "" : "s"}.`);
+    setPortalOrderStatus(`Exported ${portalDraftLines.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} sales order line${portalDraftLines.length === 1 ? "" : "s"}.`);
     setError("");
   }
 
@@ -2279,7 +2285,7 @@ export function PortalPage() {
       mode === "confirm" &&
       orderDiscontinuedCount > 0 &&
       !window.confirm(
-        `${orderDiscontinuedCount.toLocaleString("en-US")} discontinued item(s) are still in this sales order. Continue and submit anyway?`,
+        `${orderDiscontinuedCount.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} discontinued item(s) are still in this sales order. Continue and submit anyway?`,
       )
     ) {
       return;
@@ -2458,7 +2464,7 @@ export function PortalPage() {
       setSavingPortalOrder(true);
       setError("");
       setPortalOverlay({
-        title: "Deleting Sales Order",
+        title: ui("Deleting Sales Order"),
         message: `Removing sales order ${row.sales_order_no || row.id} from your portal workspace.`,
       });
       const result = await deletePortalDraftOrder(credentials, row.id);
@@ -2490,7 +2496,7 @@ export function PortalPage() {
       setDownloadingPortalPriceList(true);
       setError("");
       setPortalOverlay({
-        title: "Preparing Price List",
+        title: ui("Preparing Price List"),
         message: `Queuing ${portalPriceListBrand} price list for this customer account.`,
       });
       const initialJob = await startPortalPriceListExport(credentials, portalPriceListBrand);
@@ -2498,7 +2504,7 @@ export function PortalPage() {
         const message = describePortalExportJobStatus(job);
         setStatus(message);
         setPortalOverlay({
-          title: "Preparing Price List",
+          title: ui("Preparing Price List"),
           message,
         });
       });
@@ -2587,7 +2593,7 @@ export function PortalPage() {
     try {
       setSavingPortalOrder(true);
       setError("");
-      setPortalOverlay({ title: "Updating Sales Order", message: "Saving the revised quantities and recalculating prices." });
+      setPortalOverlay({ title: ui("Updating Sales Order"), message: "Saving the revised quantities and recalculating prices." });
       const result = await submitPortalOrder(credentials, {
         orderId: row.id,
         salesOrderNo: row.sales_order_no || row.id,
@@ -2654,7 +2660,7 @@ export function PortalPage() {
     try {
       setSavingPortalOrder(true);
       setError("");
-      setPortalOverlay({ title: "Adding Manual Part", message: "Checking the item and refreshing the sales order total." });
+      setPortalOverlay({ title: ui("Adding Manual Part"), message: "Checking the item and refreshing the sales order total." });
       const result = await submitPortalOrder(credentials, {
         orderId: row.id,
         salesOrderNo: row.sales_order_no || row.id,
@@ -2752,7 +2758,7 @@ export function PortalPage() {
     try {
       setSavingPortalOrder(true);
       setError("");
-      setPortalOverlay({ title: "Removing Order Line", message: "Updating the sales order total." });
+      setPortalOverlay({ title: ui("Removing Order Line"), message: "Updating the sales order total." });
       const result = await submitPortalOrder(credentials, {
         orderId: row.id,
         salesOrderNo: row.sales_order_no || row.id,
@@ -2817,7 +2823,7 @@ export function PortalPage() {
     try {
       setConfirmingPortalOrder(true);
       setError("");
-      setPortalOverlay({ title: "Confirming Sales Order", message: "Sending the order with the current quantities to the internal team." });
+      setPortalOverlay({ title: ui("Confirming Sales Order"), message: "Sending the order with the current quantities to the internal team." });
       const result = await submitPortalOrder(credentials, {
         orderId: row.id,
         salesOrderNo: row.sales_order_no || row.id,
@@ -2911,8 +2917,7 @@ export function PortalPage() {
                 disabled={lineIndex < 0 || (selectedDocument.row.lines?.length || 0) <= 1 || savingPortalOrder}
                 onClick={() => void handleRemovePortalDetailLine(lineIndex)}
               >
-                Remove
-              </Button>
+                <InterfaceText text={"Remove"}/></Button>
             ) : null;
           },
         }] : []),
@@ -3098,12 +3103,12 @@ export function PortalPage() {
                 ? documentToPrint.row.quote_date || "-"
                 : "-",
         },
-        ...(documentToPrint.row.payment_terms ? [{ label: "Terms", value: documentToPrint.row.payment_terms }] : []),
-        ...("due_date" in documentToPrint.row && documentToPrint.row.due_date ? [{ label: "Due Date", value: documentToPrint.row.due_date }] : []),
-        ...("delivery_term" in documentToPrint.row && documentToPrint.row.delivery_term ? [{ label: "Delivery Term", value: documentToPrint.row.delivery_term }] : []),
-        ...("contract_nr" in documentToPrint.row && documentToPrint.row.contract_nr ? [{ label: "Contract Nr", value: documentToPrint.row.contract_nr }] : []),
-        ...(documentToPrint.kind === "invoice" && documentToPrint.row.sales_order_no ? [{ label: "Sales Order", value: documentToPrint.row.sales_order_no }] : []),
-        ...(documentToPrint.kind === "bill" && documentToPrint.row.purchase_order_no ? [{ label: "Purchase Order", value: documentToPrint.row.purchase_order_no }] : []),
+        ...(documentToPrint.row.payment_terms ? [{ label: ui("Terms"), value: documentToPrint.row.payment_terms }] : []),
+        ...("due_date" in documentToPrint.row && documentToPrint.row.due_date ? [{ label: ui("Due Date"), value: documentToPrint.row.due_date }] : []),
+        ...("delivery_term" in documentToPrint.row && documentToPrint.row.delivery_term ? [{ label: ui("Delivery Term"), value: documentToPrint.row.delivery_term }] : []),
+        ...("contract_nr" in documentToPrint.row && documentToPrint.row.contract_nr ? [{ label: ui("Contract Nr"), value: documentToPrint.row.contract_nr }] : []),
+        ...(documentToPrint.kind === "invoice" && documentToPrint.row.sales_order_no ? [{ label: ui("Sales Order"), value: documentToPrint.row.sales_order_no }] : []),
+        ...(documentToPrint.kind === "bill" && documentToPrint.row.purchase_order_no ? [{ label: ui("Purchase Order"), value: documentToPrint.row.purchase_order_no }] : []),
       ],
       lines,
       totals: {
@@ -3133,7 +3138,7 @@ export function PortalPage() {
     const doc = kind && id ? getPortalDocumentSelection(kind, id) : selectedDocument;
     if (!doc) return;
     try {
-      setPortalOverlay({ title: "Preparing Excel", message: "Checking document totals and preparing the file." });
+      setPortalOverlay({ title: ui("Preparing Excel"), message: "Checking document totals and preparing the file." });
       const buying = doc.kind === "purchase-order" || doc.kind === "bill";
       const row = doc.row;
       const model = buildDocumentWorksheet({
@@ -3180,8 +3185,7 @@ export function PortalPage() {
               disabled={!detailHasQuantityEdits}
               onClick={() => void handleSavePortalDetailQuantities()}
             >
-              Update quantities
-            </Button>
+              <InterfaceText text={"Update quantities"}/></Button>
           ) : null}
           {detailCanEditQuantities ? (
             <Button
@@ -3190,33 +3194,29 @@ export function PortalPage() {
               disabled={confirmingPortalOrder}
               onClick={() => void handleConfirmPortalDocument()}
             >
-              Confirm order
-            </Button>
+              <InterfaceText text={"Confirm order"}/></Button>
           ) : null}
           <Button variant="secondary" onClick={handlePortalPrint}>
-            PDF / Print
-          </Button>
+            <InterfaceText text={"PDF / Print"}/></Button>
           <Button variant="secondary" onClick={handlePortalExportExcel}>
-            Export Excel
-          </Button>
+            <InterfaceText text={"Export Excel"}/></Button>
           <Button variant="secondary" onClick={() => setSelection(null)}>
-            Back to List
-          </Button>
+            <InterfaceText text={"Back to List"}/></Button>
         </div>
       }
     >
       <div className="portal-document-detail">
         <div className="portal-detail-grid">
           <div className="settings-item">
-            <span className="settings-label">Status</span>
-            <strong>{selectedDocument.row.status || "-"}</strong>
+            <span className="settings-label"><InterfaceText text={"Status"}/></span>
+            <strong>{ui(selectedDocument.row.status || "-")}</strong>
           </div>
           <div className="settings-item">
-            <span className="settings-label">Currency</span>
+            <span className="settings-label"><InterfaceText text={"Currency"}/></span>
             <strong>{selectedDocument.row.currency || "-"}</strong>
           </div>
           <div className="settings-item">
-            <span className="settings-label">Date</span>
+            <span className="settings-label"><InterfaceText text={"Date"}/></span>
             <strong>
               {formatDate(
                 selectedDocument.kind === "bill"
@@ -3228,7 +3228,7 @@ export function PortalPage() {
             </strong>
           </div>
           <div className="settings-item">
-            <span className="settings-label">Due Date</span>
+            <span className="settings-label"><InterfaceText text={"Due Date"}/></span>
             <strong>{formatDate("due_date" in selectedDocument.row ? selectedDocument.row.due_date : undefined)}</strong>
           </div>
         </div>
@@ -3240,25 +3240,25 @@ export function PortalPage() {
           <div className="portal-detail-grid">
             {"delivery_term" in selectedDocument.row && selectedDocument.row.delivery_term ? (
               <div className="settings-item">
-                <span className="settings-label">Delivery Term</span>
+                <span className="settings-label"><InterfaceText text={"Delivery Term"}/></span>
                 <strong>{selectedDocument.row.delivery_term || "-"}</strong>
               </div>
             ) : null}
             {"payment_terms" in selectedDocument.row && selectedDocument.row.payment_terms ? (
               <div className="settings-item">
-                <span className="settings-label">Payment Terms</span>
+                <span className="settings-label"><InterfaceText text={"Payment Terms"}/></span>
                 <strong>{selectedDocument.row.payment_terms || "-"}</strong>
               </div>
             ) : null}
             {"contract_nr" in selectedDocument.row && selectedDocument.row.contract_nr ? (
               <div className="settings-item">
-                <span className="settings-label">Contract Nr</span>
+                <span className="settings-label"><InterfaceText text={"Contract Nr"}/></span>
                 <strong>{selectedDocument.row.contract_nr || "-"}</strong>
               </div>
             ) : null}
             {"packing_details" in selectedDocument.row && selectedDocument.row.packing_details ? (
               <div className="settings-item">
-                <span className="settings-label">Packing</span>
+                <span className="settings-label"><InterfaceText text={"Packing"}/></span>
                 <strong>{selectedDocument.row.packing_details || "-"}</strong>
               </div>
             ) : null}
@@ -3267,7 +3267,7 @@ export function PortalPage() {
 
         {selectedDocument.row.notes ? (
           <div className="portal-detail-notes">
-            <span className="settings-label">Notes</span>
+            <span className="settings-label"><InterfaceText text={"Notes"}/></span>
             <strong>{selectedDocument.row.notes}</strong>
           </div>
         ) : null}
@@ -3275,29 +3275,28 @@ export function PortalPage() {
         {detailCanEditQuantities ? (
           <div className="portal-manual-line">
             <div>
-              <span className="settings-label">Add manual part</span>
-              <strong>Enter a known part number directly without returning to Search.</strong>
+              <span className="settings-label"><InterfaceText text={"Add manual part"}/></span>
+              <strong><InterfaceText text={"Enter a known part number directly without returning to Search."}/></strong>
             </div>
             <div className="portal-manual-line__fields">
-              <Input label="Part no" value={portalDetailManualCode} placeholder="e.g. W11025" onChange={setPortalDetailManualCode} onEnter={() => void handleAddPortalDetailManualLine()} />
-              <Select label="Brand" value={portalDetailManualBrand} options={[{ value: "", label: "Select brand" }, ...portalBrandValueOptions]} onChange={setPortalDetailManualBrand} />
+              <Input label="Part no" value={portalDetailManualCode} placeholder={ui("e.g. W11025")} onChange={setPortalDetailManualCode} onEnter={() => void handleAddPortalDetailManualLine()} />
+              <Select label="Brand" value={portalDetailManualBrand} options={[{ value: "", label: ui("Select brand") }, ...portalBrandValueOptions]} onChange={setPortalDetailManualBrand} />
               <Input label="Qty" type="number" value={portalDetailManualQty} onChange={setPortalDetailManualQty} onEnter={() => void handleAddPortalDetailManualLine()} />
               <Button busy={savingPortalOrder} busyLabel="Adding..." disabled={!portalDetailManualCode.trim() || !portalDetailManualBrand.trim()} onClick={() => void handleAddPortalDetailManualLine()}>
-                Add part
-              </Button>
+                <InterfaceText text={"Add part"}/></Button>
             </div>
           </div>
         ) : selectedDocument.kind === "sales-order" && selectedDocument.row.portal_submitted_at ? (
           <div className="portal-inline-note">
-            <span>Order locked</span>
-            <strong>This order has been confirmed and can no longer be edited.</strong>
+            <span><InterfaceText text={"Order locked"}/></span>
+            <strong><InterfaceText text={"This order has been confirmed and can no longer be edited."}/></strong>
           </div>
         ) : null}
 
         {selectedDocument.kind === "sales-order" && !selectedDocument.row.lines?.length ? (
           <div className="portal-inline-note">
-            <span>Order lines unavailable</span>
-            <strong>The order was found, but its line details have not arrived yet.</strong>
+            <span><InterfaceText text={"Order lines unavailable"}/></span>
+            <strong><InterfaceText text={"The order was found, but its line details have not arrived yet."}/></strong>
             <Button
               variant="secondary"
               busy={portalDetailLoadingId === selectedDocument.row.id}
@@ -3305,8 +3304,7 @@ export function PortalPage() {
               disabled={portalDetailLoadingId === selectedDocument.row.id}
               onClick={() => void openPortalDocument({ kind: "sales-order", id: selectedDocument.row.id })}
             >
-              Retry details
-            </Button>
+              <InterfaceText text={"Retry details"}/></Button>
           </div>
         ) : null}
 
@@ -3319,30 +3317,30 @@ export function PortalPage() {
         <div className="portal-detail-totals">
           {"subtotal" in selectedDocument.row ? (
             <div className="settings-item">
-              <span className="settings-label">Sub Total</span>
+              <span className="settings-label"><InterfaceText text={"Sub Total"}/></span>
               <strong>{formatMoney(Number(selectedDocument.row.subtotal || 0), selectedDocument.row.currency)}</strong>
             </div>
           ) : null}
           {"discount_amount" in selectedDocument.row && Number(selectedDocument.row.discount_amount || 0) > 0 ? (
             <div className="settings-item">
-              <span className="settings-label">Discount</span>
+              <span className="settings-label"><InterfaceText text={"Discount"}/></span>
               <strong>{formatMoney(Number(selectedDocument.row.discount_amount || 0), selectedDocument.row.currency)}</strong>
             </div>
           ) : null}
           {"shipping_cost" in selectedDocument.row && Number(selectedDocument.row.shipping_cost || 0) > 0 ? (
             <div className="settings-item">
-              <span className="settings-label">Shipping</span>
+              <span className="settings-label"><InterfaceText text={"Shipping"}/></span>
               <strong>{formatMoney(Number(selectedDocument.row.shipping_cost || 0), selectedDocument.row.currency)}</strong>
             </div>
           ) : null}
           {"purchase_total" in selectedDocument.row && selectedDocument.kind !== "sales-order" && selectedDocument.kind !== "invoice" ? (
             <div className="settings-item">
-              <span className="settings-label">Purchase Total</span>
+              <span className="settings-label"><InterfaceText text={"Purchase Total"}/></span>
               <strong>{formatMoney(Number(selectedDocument.row.purchase_total || 0), selectedDocument.row.currency)}</strong>
             </div>
           ) : null}
           <div className="settings-item">
-            <span className="settings-label">Total Amount</span>
+            <span className="settings-label"><InterfaceText text={"Total Amount"}/></span>
             <strong>{formatMoney(Number(("sales_total" in selectedDocument.row ? selectedDocument.row.sales_total : selectedDocument.row.total_amount) || 0), selectedDocument.row.currency)}</strong>
           </div>
         </div>
@@ -3379,31 +3377,29 @@ export function PortalPage() {
         <div className="portal-brand">
           <NextMasterLogo theme="light" />
         </div>
-        <nav className="portal-header-nav" aria-label="Portal navigation">
+        <nav className="portal-header-nav" aria-label={ui("Portal navigation")}>
           {portalNavGroups.flatMap(group => group.items).map(item => (
             <button key={item.key} type="button" className={`portal-header-nav__item${activeSection === item.key ? " active" : ""}`}
-              aria-current={activeSection === item.key ? "page" : undefined} onClick={() => setActiveSection(item.key)}><span>{item.label}</span></button>
+              aria-current={activeSection === item.key ? "page" : undefined} onClick={() => setActiveSection(item.key)}><span>{ui(item.label)}</span></button>
           ))}
         </nav>
         <div className="portal-header__account">
           <button type="button" className="portal-header__customer-switcher" onClick={() => setActiveSection("account")}>
-            <span>Customer</span>
+            <span><InterfaceText text={"Customer"}/></span>
             <strong>{activeSnapshot.invite.party_name}</strong>
             <b>⌄</b>
           </button>
           <details className="portal-header__profile-menu">
             <summary className="portal-header__profile">
               <span className="portal-header__avatar">{portalProfileInitials}</span>
-              <span><strong>{portalProfileName}</strong><small>{activeSnapshot.invite.party_type === "customer" ? "Customer" : "Supplier"}</small></span>
+              <span><strong>{portalProfileName}</strong><small>{ui(activeSnapshot.invite.party_type === "customer" ? "Customer" : "Supplier")}</small></span>
               <b>⌄</b>
             </summary>
             <div className="portal-header__profile-menu__panel">
               <Button type="button" variant="secondary" busy={loading} busyLabel="Refreshing..." onClick={() => void handleRefresh()}>
-                Refresh
-              </Button>
+                <InterfaceText text={"Refresh"}/></Button>
               <Button type="button" variant="secondary" onClick={() => void handleLogout()}>
-                Logout
-              </Button>
+                <InterfaceText text={"Logout"}/></Button>
             </div>
           </details>
         </div>
@@ -3412,8 +3408,8 @@ export function PortalPage() {
       <div className="portal-layout">
         <aside className="portal-sidebar">
           <div className="brand-panel portal-sidebar__panel">
-            <div className="brand-panel__eyebrow">Portal Navigation</div>
-            <div className="brand">{activeSnapshot.invite.party_type === "customer" ? "Customer" : "Vendor"}</div>
+            <div className="brand-panel__eyebrow"><InterfaceText text={"Portal Navigation"}/></div>
+            <div className="brand">{ui(activeSnapshot.invite.party_type === "customer" ? "Customer" : "Vendor")}</div>
             <div className="brand-panel__sub">{activeSnapshot.invite.party_name}</div>
           </div>
           <nav className="sidebar-nav portal-sidebar-nav">
@@ -3437,7 +3433,7 @@ export function PortalPage() {
                         onClick={() => setActiveSection(item.key)}
                       >
                         <span className="nav-submenu__dot" />
-                        <span className="nav-submenu__label">{item.label}</span>
+                        <span className="nav-submenu__label">{ui(item.label)}</span>
                         {item.badge ? <span className="nav-submenu__badge">{item.badge}</span> : null}
                       </button>
                     ))}
@@ -3449,27 +3445,27 @@ export function PortalPage() {
         </aside>
 
         <div className="portal-content">
-          <div className="portal-mobile-subnav" role="tablist" aria-label="Portal mobile sections">
+          <div className="portal-mobile-subnav" role="tablist" aria-label={ui("Portal mobile sections")}>
             {(portalNavGroups.find((group) => group.key === activePortalGroup)?.items || []).map((item) => (
               <button
                 key={item.key}
                 className={`portal-mobile-subnav__item${activeSection === item.key ? " active" : ""}`}
                 onClick={() => setActiveSection(item.key)}
               >
-                <span>{item.label}</span>
+                <span>{ui(item.label)}</span>
                 {item.badge ? <span className="portal-mobile-subnav__badge">{item.badge}</span> : null}
               </button>
             ))}
           </div>
-          {status ? <div className="portal-feedback-status" role="status">{status}</div> : null}
-          {backgroundMessage ? <div className="portal-feedback-status portal-feedback-status--warning" role="status">{backgroundMessage}</div> : null}
+          {status ? <div className="portal-feedback-status" role="status">{ui(status)}</div> : null}
+          {backgroundMessage ? <div className="portal-feedback-status portal-feedback-status--warning" role="status">{ui(backgroundMessage)}</div> : null}
           {activeSection !== "home" ? (
             <div className="portal-inline-note portal-inline-note--soft portal-inline-note--compact">
-              <span>Current View</span>
-              <strong>{portalDeskSummaryText}</strong>
+              <span><InterfaceText text={"Current View"}/></span>
+              <strong>{ui(portalDeskSummaryText)}</strong>
             </div>
           ) : null}
-          {!isOnline ? <div className="warning-text">Offline mode active. Sales order changes stay on this device until you reconnect and confirm the order.</div> : null}
+          {!isOnline ? <div className="warning-text"><InterfaceText text={"Offline mode active. Sales order changes stay on this device until you reconnect and confirm the order."}/></div> : null}
 
           {activeSection === "home" && portalCanOrder ? (
             <CustomerDeskHome
@@ -3490,21 +3486,20 @@ export function PortalPage() {
           ) : null}
 
           {portalNotifications.length ? (
-            <section className="portal-notification-panel portal-notification-panel--after-home" aria-label="Portal updates">
+            <section className="portal-notification-panel portal-notification-panel--after-home" aria-label={ui("Portal updates")}>
               <div className="portal-notification-panel__header">
                 <div>
-                  <span className="settings-label">New information</span>
-                  <strong>Updates from your seller</strong>
+                  <span className="settings-label"><InterfaceText text={"New information"}/></span>
+                  <strong><InterfaceText text={"Updates from your seller"}/></strong>
                 </div>
                 <Button variant="secondary" onClick={() => setPortalNotifications([])}>
-                  Mark as read
-                </Button>
+                  <InterfaceText text={"Mark as read"}/></Button>
               </div>
               <div className="portal-notification-panel__list">
                 {portalNotifications.map((notification) => (
                   <div className="portal-notification-panel__item" key={notification.id}>
-                    <strong>{notification.title}</strong>
-                    <span>{notification.detail}</span>
+                    <strong>{ui(notification.title)}</strong>
+                    <span>{ui(notification.detail)}</span>
                   </div>
                 ))}
               </div>
@@ -3515,7 +3510,7 @@ export function PortalPage() {
             <div className="portal-kpi-strip">
               {portalQuickStats.map((item) => (
                 <div key={item.label} className="portal-kpi-card">
-                  <span>{item.label}</span>
+                  <span>{ui(item.label)}</span>
                   <strong>{item.value}</strong>
                   <small>{item.note}</small>
                 </div>
@@ -3526,70 +3521,70 @@ export function PortalPage() {
           {activeSection === "account" ? (
         <div className="portal-section-stack">
           <div className="portal-summary-grid">
-            <SectionCard title="Account Profile">
+            <SectionCard title={ui("Account Profile")}>
               <div className="settings-grid settings-grid--compact">
                 <div className="settings-item">
-                  <span className="settings-label">Party</span>
+                  <span className="settings-label"><InterfaceText text={"Party"}/></span>
                   <strong>{activeSnapshot.invite.party_name}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Email</span>
+                  <span className="settings-label"><InterfaceText text={"Email"}/></span>
                   <strong>{activeSnapshot.invite.email}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Billing Address</span>
+                  <span className="settings-label"><InterfaceText text={"Billing Address"}/></span>
                   <strong>{partyProfile?.billing_address || "-"}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Shipping Address</span>
+                  <span className="settings-label"><InterfaceText text={"Shipping Address"}/></span>
                   <strong>{partyProfile?.shipping_address || "-"}</strong>
                 </div>
               </div>
             </SectionCard>
-            <SectionCard title="Primary Seller">
+            <SectionCard title={ui("Primary Seller")}>
               <div className="settings-grid settings-grid--compact">
                 <div className="settings-item">
-                  <span className="settings-label">Seller</span>
+                  <span className="settings-label"><InterfaceText text={"Seller"}/></span>
                   <strong>{activeSnapshot.companyProfile?.company_name || "-"}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Email</span>
+                  <span className="settings-label"><InterfaceText text={"Email"}/></span>
                   <strong>{activeSnapshot.companyProfile?.email || "-"}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Phone</span>
+                  <span className="settings-label"><InterfaceText text={"Phone"}/></span>
                   <strong>{activeSnapshot.companyProfile?.phone || "-"}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Website</span>
+                  <span className="settings-label"><InterfaceText text={"Website"}/></span>
                   <strong>{activeSnapshot.companyProfile?.website || "-"}</strong>
                 </div>
                 <div className="settings-item">
-                  <span className="settings-label">Address</span>
+                  <span className="settings-label"><InterfaceText text={"Address"}/></span>
                   <strong>{activeSnapshot.companyProfile?.address || "-"}</strong>
                 </div>
               </div>
             </SectionCard>
-            <SectionCard title="Financial Summary">
+            <SectionCard title={ui("Financial Summary")}>
               <div className="dashboard-grid">
                 <div className="dashboard-stat">
-                  <span>Total Documents</span>
+                  <span><InterfaceText text={"Total Documents"}/></span>
                   <strong>{activeSnapshot.accountSummary.totalDocuments}</strong>
                 </div>
                 <div className="dashboard-stat">
-                  <span>{activeSnapshot.invite.party_type === "customer" ? "Invoice Amount" : "Bill Amount"}</span>
+                  <span>{activeSnapshot.invite.party_type === "customer" ? ui("Invoice Amount") : ui("Bill Amount")}</span>
                   <strong>{formatMoney(activeSnapshot.accountSummary.documentAmount, activeSnapshot.accountSummary.currency)}</strong>
                 </div>
                 <div className="dashboard-stat">
-                  <span>{activeSnapshot.invite.party_type === "customer" ? "Credit Notes" : "Vendor Credits"}</span>
+                  <span>{activeSnapshot.invite.party_type === "customer" ? ui("Credit Notes") : ui("Vendor Credits")}</span>
                   <strong>{formatMoney(activeSnapshot.accountSummary.creditAmount, activeSnapshot.accountSummary.currency)}</strong>
                 </div>
                 <div className="dashboard-stat">
-                  <span>Payment Amount</span>
+                  <span><InterfaceText text={"Payment Amount"}/></span>
                   <strong>{formatMoney(activeSnapshot.accountSummary.paymentAmount, activeSnapshot.accountSummary.currency)}</strong>
                 </div>
                 <div className="dashboard-stat">
-                  <span>Balance</span>
+                  <span><InterfaceText text={"Balance"}/></span>
                   <strong>{formatMoney(activeSnapshot.accountSummary.openAmount, activeSnapshot.accountSummary.currency)}</strong>
                 </div>
               </div>
@@ -3601,22 +3596,22 @@ export function PortalPage() {
           {activeSection === "messages" && activeSnapshot.invite.party_type === "customer" ? <CustomerMessagesPage portal /> : null}
           {activeSection === "support" ? (
         <div className="portal-section-stack">
-          <SectionCard title="Support">
+          <SectionCard title={ui("Support")}>
             <div className="portal-summary-grid">
               <div className="settings-item">
-                <span className="settings-label">Seller</span>
+                <span className="settings-label"><InterfaceText text={"Seller"}/></span>
                 <strong>{activeSnapshot.companyProfile?.company_name || "Next Master"}</strong>
               </div>
               <div className="settings-item">
-                <span className="settings-label">Email</span>
-                <strong>{activeSnapshot.companyProfile?.email || "Support contact not available"}</strong>
+                <span className="settings-label"><InterfaceText text={"Email"}/></span>
+                <strong>{activeSnapshot.companyProfile?.email || ui("Support contact not available")}</strong>
               </div>
               <div className="settings-item">
-                <span className="settings-label">Phone</span>
-                <strong>{activeSnapshot.companyProfile?.phone || "Support phone not available"}</strong>
+                <span className="settings-label"><InterfaceText text={"Phone"}/></span>
+                <strong>{activeSnapshot.companyProfile?.phone || ui("Support phone not available")}</strong>
               </div>
               <div className="settings-item">
-                <span className="settings-label">Account</span>
+                <span className="settings-label"><InterfaceText text={"Account"}/></span>
                 <strong>{activeSnapshot.invite.party_name}</strong>
               </div>
             </div>
@@ -3628,31 +3623,29 @@ export function PortalPage() {
         <div className="portal-section-stack">
           {activeSnapshot.invite.access.can_view_account ? (
             <SectionCard
-              title="Statement"
+              title={ui("Statement")}
               actions={
                 <div className="portal-statement-actions">
                   <Input label="Date From" type="date" value={statementDateFrom} onChange={setStatementDateFrom} />
                   <Input label="Date To" type="date" value={statementDateTo} onChange={setStatementDateTo} />
                   <Button variant="secondary" onClick={handleStatementExportExcel}>
-                    Export Excel
-                  </Button>
+                    <InterfaceText text={"Export Excel"}/></Button>
                   <Button variant="secondary" onClick={handleStatementPrint}>
-                    PDF / Print
-                  </Button>
+                    <InterfaceText text={"PDF / Print"}/></Button>
                 </div>
               }
             >
               <div className="portal-summary-list">
                 <div className="dashboard-stat">
-                  <span>Period</span>
+                  <span><InterfaceText text={"Period"}/></span>
                   <strong>{statementPeriodLabel}</strong>
                 </div>
                 <div className="dashboard-stat">
-                  <span>Open Balance</span>
+                  <span><InterfaceText text={"Open Balance"}/></span>
                   <strong>{formatMoney(activeSnapshot.accountSummary.openAmount, activeSnapshot.accountSummary.currency)}</strong>
                 </div>
                 <div className="dashboard-stat">
-                  <span>Payment Amount</span>
+                  <span><InterfaceText text={"Payment Amount"}/></span>
                   <strong>{formatMoney(activeSnapshot.accountSummary.paymentAmount, activeSnapshot.accountSummary.currency)}</strong>
                 </div>
               </div>
@@ -3660,25 +3653,25 @@ export function PortalPage() {
           ) : null}
 
           {activeSnapshot.invite.access.can_view_account ? (
-            <SectionCard title="Account Statement">
+            <SectionCard title={ui("Account Statement")}>
               <DataTable rows={filteredAccountRows} columns={accountColumns} emptyText="No statement rows available." />
             </SectionCard>
           ) : null}
 
           {activeSnapshot.invite.access.can_view_payments ? (
-            <SectionCard title="Payment History">
+            <SectionCard title={ui("Payment History")}>
               <DataTable rows={visiblePayments} columns={paymentColumns} emptyText="No payments available." />
             </SectionCard>
           ) : null}
 
           {activeSnapshot.invite.party_type === "customer" && activeSnapshot.invite.access.can_view_invoices ? (
-            <SectionCard title="Credit Notes">
+            <SectionCard title={ui("Credit Notes")}>
               <DataTable rows={filteredCreditNotes} columns={creditColumns} emptyText="No credit notes available." />
             </SectionCard>
           ) : null}
 
           {activeSnapshot.invite.party_type === "vendor" && activeSnapshot.invite.access.can_view_invoices ? (
-            <SectionCard title="Vendor Credits">
+            <SectionCard title={ui("Vendor Credits")}>
               <DataTable rows={filteredVendorCredits} columns={vendorCreditColumns} emptyText="No vendor credits available." />
             </SectionCard>
           ) : null}
@@ -3687,7 +3680,7 @@ export function PortalPage() {
 
           {activeSection === "pricelist" && portalCanOrder ? (
         <div className="portal-section-stack">
-          <SectionCard title="Download Price List">
+          <SectionCard title={ui("Download Price List")}>
             <div className="portal-filter-grid">
               <Select
                 label="Brand"
@@ -3696,8 +3689,8 @@ export function PortalPage() {
                 onChange={setPortalPriceListBrand}
               />
               <div className="portal-filter-stat">
-                <span>Customer Pricing</span>
-                <strong>{portalPricingLabel}</strong>
+                <span><InterfaceText text={"Customer Pricing"}/></span>
+                <strong>{ui(portalPricingLabel)}</strong>
               </div>
               <div className="portal-builder-actions">
                 <Button
@@ -3706,19 +3699,18 @@ export function PortalPage() {
                   busyLabel="Preparing..."
                   onClick={() => void handleDownloadPortalPriceList()}
                 >
-                  Download Excel
-                </Button>
+                  <InterfaceText text={"Download Excel"}/></Button>
               </div>
             </div>
           </SectionCard>
-          <SectionCard title="How This Download Works">
+          <SectionCard title={ui("How This Download Works")}>
             <div className="portal-inline-note portal-inline-note--soft">
-              <span>Pricing Rule</span>
-              <strong>{portalPricingRuleDescription}</strong>
+              <span><InterfaceText text={"Pricing Rule"}/></span>
+              <strong>{ui(portalPricingRuleDescription)}</strong>
             </div>
             <div className="portal-inline-note portal-inline-note--soft">
-              <span>Fields</span>
-              <strong>Part no, description, customer price, price date, and lifecycle are included.</strong>
+              <span><InterfaceText text={"Fields"}/></span>
+              <strong><InterfaceText text={"Part no, description, customer price, price date, and lifecycle are included."}/></strong>
             </div>
           </SectionCard>
         </div>
@@ -3728,11 +3720,11 @@ export function PortalPage() {
         <div className="portal-section-stack">
           <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Order Filters" : "Purchase Order Filters"}>
             <div className="portal-filter-grid">
-              <Input label="Search" value={documentSearch} placeholder="Order no, code, description" onChange={setDocumentSearch} />
+              <Input label="Search" value={documentSearch} placeholder={ui("Order no, code, description")} onChange={setDocumentSearch} />
               <Select label="Brand" value={brandFilter} options={brandOptions} onChange={setBrandFilter} />
               <div className="portal-filter-stat">
-                <span>Records</span>
-                <strong>{portalOrderHistoryRows.length.toLocaleString("en-US")}</strong>
+                <span><InterfaceText text={"Records"}/></span>
+                <strong>{portalOrderHistoryRows.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")}</strong>
               </div>
             </div>
           </SectionCard>
@@ -3755,11 +3747,9 @@ export function PortalPage() {
                       }}
                     />
                     <Button type="button" variant="secondary" onClick={() => portalDocumentsImportRef.current?.click()}>
-                      Import Excel
-                    </Button>
+                      <InterfaceText text={"Import Excel"}/></Button>
                     <Button type="button" variant="secondary" onClick={downloadQuoteTemplate}>
-                      Template
-                    </Button>
+                      <InterfaceText text={"Template"}/></Button>
                   </div>
                 ) : null
               }
@@ -3787,7 +3777,7 @@ export function PortalPage() {
         <div className="portal-section-stack">
           <SectionCard title={activeSnapshot.invite.party_type === "customer" ? "Invoice Filters" : "Bill Filters"}>
             <div className="portal-filter-grid">
-              <Input label="Search" value={documentSearch} placeholder="Document no, code, description" onChange={setDocumentSearch} />
+              <Input label="Search" value={documentSearch} placeholder={ui("Document no, code, description")} onChange={setDocumentSearch} />
               <Select label="Brand" value={brandFilter} options={brandOptions} onChange={setBrandFilter} />
               <Select label={activeSnapshot.invite.party_type === "customer" ? "Invoice Status" : "Bill Status"} value={paymentStatusFilter} options={paymentStatusOptions} onChange={setPaymentStatusFilter} />
             </div>
@@ -3817,7 +3807,7 @@ export function PortalPage() {
 
           {activeSection === "desk" && portalCanOrder ? (
         <div className="portal-section-stack">
-          <SectionCard title="Part Search" className="search-focus-card search-focus-card--portal">
+          <SectionCard title={ui("Part Search")} className="search-focus-card search-focus-card--portal">
             <div className="portal-order-builder portal-order-builder--modern">
               <form
                 className={`portal-filter-grid portal-filter-grid--desk${catalogResults.length ? " portal-filter-grid--results-hidden" : ""}`}
@@ -3839,7 +3829,7 @@ export function PortalPage() {
                     if (target) handleResumePortalDraft(target);
                   }}
                 />
-                <Input label="Part No / OEM Search" value={orderSearch} placeholder="Write part number or OEM number here" onChange={setOrderSearch} />
+                <Input label="Part No / OEM Search" value={orderSearch} placeholder={ui("Write part number or OEM number here")} onChange={setOrderSearch} />
                 <Select label="Brand" value={orderSearchBrand} options={portalBrandOptions} onChange={setOrderSearchBrand} />
                 <div className="portal-builder-actions">
                   <input
@@ -3853,34 +3843,28 @@ export function PortalPage() {
                     }}
                   />
                   <Button type="button" variant="secondary" onClick={() => portalImportRef.current?.click()}>
-                    Import Excel
-                  </Button>
+                    <InterfaceText text={"Import Excel"}/></Button>
                   <Button type="button" variant="secondary" onClick={downloadQuoteTemplate}>
-                    Template
-                  </Button>
+                    <InterfaceText text={"Template"}/></Button>
                   <Button type="button" variant="secondary" disabled={!portalDraftLines.length} onClick={handleExportPortalBasket}>
-                    Export Sales Order
-                  </Button>
+                    <InterfaceText text={"Export Sales Order"}/></Button>
                   <Button type="button" variant="secondary" onClick={handleClearPortalSearch}>
-                    Clear Search
-                  </Button>
+                    <InterfaceText text={"Clear Search"}/></Button>
                 <Button type="submit" variant="secondary" busy={searchingCatalog} busyLabel="Searching...">
-                  Search
-                </Button>
+                  <InterfaceText text={"Search"}/></Button>
               </div>
             </form>
 
               <div className={`portal-inline-note portal-inline-note--soft portal-inline-note--compact${catalogResults.length ? " portal-search-helper--results-hidden" : ""}`}>
-                <span>Search Guide</span>
-                <strong>Use the middle field for part number or OEM code. Import Brand, Part Code, and Qty files with Excel or CSV; exact matches stay on top and alternatives appear below.</strong>
+                <span><InterfaceText text={"Search Guide"}/></span>
+                <strong><InterfaceText text={"Use the middle field for part number or OEM code. Import Brand, Part Code, and Qty files with Excel or CSV; exact matches stay on top and alternatives appear below."}/></strong>
               </div>
 
-              {portalOrderStatus && !catalogResults.length ? <div className="portal-feedback-status" role="status">{portalOrderStatus}</div> : null}
-              {portalDraftHasMissingPrices ? <div className="warning-text">Items without live price can be saved in the sales order but cannot be confirmed.</div> : null}
+              {portalOrderStatus && !catalogResults.length ? <div className="portal-feedback-status" role="status">{ui(portalOrderStatus)}</div> : null}
+              {portalDraftHasMissingPrices ? <div className="warning-text"><InterfaceText text={"Items without live price can be saved in the sales order but cannot be confirmed."}/></div> : null}
               {portalDraftDiscontinuedCount > 0 ? (
                 <div className="warning-text">
-                  {portalDraftDiscontinuedCount.toLocaleString("en-US")} discontinued item(s) detected in this sales order. Review before submission.
-                </div>
+                  {portalDraftDiscontinuedCount.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={"discontinued item(s) detected in this sales order. Review before submission."}/></div>
               ) : null}
 
               <PortalSearchResults
@@ -3930,24 +3914,22 @@ export function PortalPage() {
               {false ? <>
               <div className="portal-workbench">
                 <div className="portal-workbench__tables">
-                  <SectionCard title={`Search Items (${catalogResults.length.toLocaleString("en-US")})`} className={`search-results-focus-card${catalogResults.length ? " search-results-focus-card--legacy" : ""}`}>
+                  <SectionCard title={`Search Items (${catalogResults.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")})`} className={`search-results-focus-card${catalogResults.length ? " search-results-focus-card--legacy" : ""}`}>
                     {catalogResults.length && !isCompactPortalSearch ? (
                       <div className="workbench-controls workbench-controls--compact">
-                        <div className="segmented-control" aria-label="Search result view">
+                        <div className="segmented-control" aria-label={ui("Search result view")}>
                           <button
                             type="button"
                             className={`segmented-control__item ${effectivePortalSearchView === "cards" ? "active" : ""}`}
                             onClick={() => setPortalSearchView("cards")}
                           >
-                            Cards
-                          </button>
+                            <InterfaceText text={"Cards"}/></button>
                           <button
                             type="button"
                             className={`segmented-control__item ${effectivePortalSearchView === "list" ? "active" : ""}`}
                             onClick={() => setPortalSearchView("list")}
                           >
-                            List
-                          </button>
+                            <InterfaceText text={"List"}/></button>
                         </div>
                       </div>
                     ) : null}
@@ -3971,7 +3953,7 @@ export function PortalPage() {
                                 <div className="portal-search-card__code">{row.code || "-"}</div>
                                 <BrandPill brand={row.brand} compact />
                                 <div className="portal-search-card__price">
-                                  {row.sell_price == null ? "Price on request" : formatMoney(row.sell_price, row.currency || portalPricingCurrency)}
+                                  {row.sell_price == null ? ui("Price on request") : formatMoney(row.sell_price, row.currency || portalPricingCurrency)}
                                 </div>
                               </div>
                             </div>
@@ -3984,10 +3966,10 @@ export function PortalPage() {
                                 <span>{formatWeight(row.weight_kg)}</span>
                               </div>
                               {row.replacement_warning ? (
-                                <div className="portal-search-card__warning portal-search-card__warning--accent">Replacement</div>
+                                <div className="portal-search-card__warning portal-search-card__warning--accent"><InterfaceText text={"Replacement"}/></div>
                               ) : null}
                               {row.lifecycle_status === "discontinued" ? (
-                                <div className="portal-search-card__warning">Discontinued</div>
+                                <div className="portal-search-card__warning"><InterfaceText text={"Discontinued"}/></div>
                               ) : null}
                             </div>
                             <div className="portal-search-card__actions">
@@ -3999,8 +3981,7 @@ export function PortalPage() {
                                   requestPortalCatalogAdd(row);
                                 }}
                               >
-                                Add to Sales Order
-                              </Button>
+                                <InterfaceText text={"Add to Sales Order"}/></Button>
                             </div>
                           </button>
                         ))}
@@ -4021,16 +4002,16 @@ export function PortalPage() {
                       />
                     ) : (
                       <div className="empty-state">
-                        {searchingCatalog ? "Searching items..." : "Search by part number, original number, or description to load matching products and alternatives."}
+                        {searchingCatalog ? ui("Searching items...") : ui("Search by part number, original number, or description to load matching products and alternatives.")}
                       </div>
                     )}
                   </SectionCard>
 
                   {portalRecommendationCards.length ? (
-                    <SectionCard title={`Recommended With This Search (${portalRecommendationCards.length.toLocaleString("en-US")})`} className={catalogResults.length ? "search-results-focus-card--legacy" : ""}>
+                    <SectionCard title={`Recommended With This Search (${portalRecommendationCards.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")})`} className={catalogResults.length ? "search-results-focus-card--legacy" : ""}>
                       <div className="portal-inline-note portal-inline-note--soft">
-                        <span>Recommendation Logic</span>
-                        <strong>These items stay outside the exact match list. They are ranked from the same product family and current stock movement.</strong>
+                        <span><InterfaceText text={"Recommendation Logic"}/></span>
+                        <strong><InterfaceText text={"These items stay outside the exact match list. They are ranked from the same product family and current stock movement."}/></strong>
                       </div>
                       <div className="portal-search-card-grid">
                         {portalRecommendationCards.map((row) => (
@@ -4051,7 +4032,7 @@ export function PortalPage() {
                                 <div className="portal-search-card__code">{row.code || "-"}</div>
                                 <BrandPill brand={row.brand} compact />
                                 <div className="portal-search-card__price">
-                                  {row.sell_price == null ? "Price on request" : formatMoney(row.sell_price, row.currency || portalPricingCurrency)}
+                                  {row.sell_price == null ? ui("Price on request") : formatMoney(row.sell_price, row.currency || portalPricingCurrency)}
                                 </div>
                               </div>
                             </div>
@@ -4059,16 +4040,16 @@ export function PortalPage() {
                               <strong>{row.description || "-"}</strong>
                               {row.vehicle ? <VehicleBadges value={row.vehicle} compact limit={3} logoOnly className="portal-search-card__vehicles" /> : null}
                               <div className="portal-search-card__specs">
-                                <span>{row.available_qty == null ? "Stock check" : `${Number(row.available_qty).toLocaleString("en-US")} in stock`}</span>
+                                <span>{row.available_qty == null ? ui("Stock check") : ui(`${Number(row.available_qty).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} in stock`)}</span>
                                 <span>{row.origin || "No origin"}</span>
                                 <span>{formatWeight(row.weight_kg)}</span>
                               </div>
                               {row.recommendation_reason ? <div className="portal-search-card__warning portal-search-card__warning--accent">{row.recommendation_reason}</div> : null}
                               {row.replacement_warning ? (
-                                <div className="portal-search-card__warning portal-search-card__warning--accent">Replacement</div>
+                                <div className="portal-search-card__warning portal-search-card__warning--accent"><InterfaceText text={"Replacement"}/></div>
                               ) : null}
                               {row.lifecycle_status === "discontinued" ? (
-                                <div className="portal-search-card__warning">Discontinued</div>
+                                <div className="portal-search-card__warning"><InterfaceText text={"Discontinued"}/></div>
                               ) : null}
                             </div>
                             <div className="portal-search-card__actions">
@@ -4080,8 +4061,7 @@ export function PortalPage() {
                                   requestPortalCatalogAdd(row);
                                 }}
                               >
-                                Add to Sales Order
-                              </Button>
+                                <InterfaceText text={"Add to Sales Order"}/></Button>
                             </div>
                           </button>
                         ))}
@@ -4090,7 +4070,7 @@ export function PortalPage() {
                   ) : null}
 
                   <div ref={portalDraftLinesRef}>
-                    <SectionCard title={`Sales order (${portalDraftLines.length.toLocaleString("en-US")})`}>
+                    <SectionCard title={`Sales order (${portalDraftLines.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")})`}>
                       <DataTable
                         rows={portalDraftLines}
                         columns={portalDraftColumns}
@@ -4108,13 +4088,13 @@ export function PortalPage() {
 
               {portalOriginalNumberBrandMatches.length ? (
                 <div className="portal-inline-note">
-                  <span>Original No Match</span>
+                  <span><InterfaceText text={"Original No Match"}/></span>
                   <strong>{portalOriginalNumberBrandMatches.join(", ")}</strong>
                 </div>
               ) : null}
 
               {portalDraftWarningLines.length ? (
-                <SectionCard title="Warning Items">
+                <SectionCard title={ui("Warning Items")}>
                   <div className="portal-warning-list">
                     {portalDraftWarningLines.slice(0, 8).map((line) => (
                       <button
@@ -4129,10 +4109,10 @@ export function PortalPage() {
                         <strong>{line.resolvedCode || line.requestedCode || "-"}</strong>
                         <span>
                           {line.sell_price == null
-                            ? "Missing live price"
+                            ? ui("Missing live price")
                             : line.lifecycle_status === "discontinued"
-                              ? "Discontinued"
-                              : line.codeChangeWarning || "Review line"}
+                              ? ui("Discontinued")
+                              : line.codeChangeWarning || ui("Review line")}
                         </span>
                       </button>
                     ))}
@@ -4142,14 +4122,11 @@ export function PortalPage() {
 
               <div className="portal-action-bar">
                 <Button variant="secondary" busy={savingPortalOrder} busyLabel="Saving..." onClick={() => void handleSubmitPortalOrder("draft")}>
-                  Save draft → Documents / Orders
-                </Button>
+                  <InterfaceText text={"Save draft → Documents / Orders"}/></Button>
                 <Button variant="secondary" onClick={handleClearPortalBuilder}>
-                  Clear
-                </Button>
+                  <InterfaceText text={"Clear"}/></Button>
                 <Button busy={confirmingPortalOrder} busyLabel="Confirming..." disabled={portalDraftHasMissingPrices} onClick={() => void handleSubmitPortalOrder("confirm")}>
-                  Confirm Sales Order
-                </Button>
+                  <InterfaceText text={"Confirm Sales Order"}/></Button>
               </div>
               </> : null}
             </div>
@@ -4158,7 +4135,7 @@ export function PortalPage() {
           ) : null}
         </div>
       </div>
-      <nav className="portal-mobile-bottom-nav" aria-label="Portal mobile navigation">
+      <nav className="portal-mobile-bottom-nav" aria-label={ui("Portal mobile navigation")}>
         {portalNavGroups.map((group) => (
           <button
             key={group.key}
@@ -4176,18 +4153,17 @@ export function PortalPage() {
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="portal-add-target-title">
           <DraggableSurface className="modal-card modal-card--compact portal-add-target-modal" dragHandleSelector=".draggable-surface__handle">
             <div className="modal-card__header draggable-surface__handle">
-              <h3 id="portal-add-target-title">Add to which sales order?</h3>
-              <p>{portalAddTarget.item.code} · Qty {portalAddTarget.quantity.toLocaleString("en-US")}</p>
+              <h3 id="portal-add-target-title"><InterfaceText text={"Add to which sales order?"}/></h3>
+              <p>{portalAddTarget.item.code} <InterfaceText text={" · Qty "}/>{portalAddTarget.quantity.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")}</p>
               <div className="portal-inline-note portal-inline-note--soft portal-inline-note--compact">
-                <span>Automatic save</span>
-                <strong>Choose a target. The product will be saved immediately and the sales order will open in Documents &gt; Orders.</strong>
+                <span><InterfaceText text={"Automatic save"}/></span>
+                <strong><InterfaceText text={"Choose a target. The product will be saved immediately and the sales order will open in Documents > Orders."}/></strong>
               </div>
             </div>
             <div className="portal-add-target-modal__actions">
               <Button busy={portalAddTargetLoading} onClick={() => void choosePortalAddTarget("new")}>
-                Create new sales order
-              </Button>
-              <span className="portal-add-target-modal__label">Or add and save to an existing draft</span>
+                <InterfaceText text={"Create new sales order"}/></Button>
+              <span className="portal-add-target-modal__label"><InterfaceText text={"Or add and save to an existing draft"}/></span>
               {portalDraftOrders.length ? (
                 <div className="portal-add-target-modal__list">
                   {portalDraftOrders.map((row) => (
@@ -4198,16 +4174,14 @@ export function PortalPage() {
                       disabled={portalAddTargetLoading}
                       onClick={() => void choosePortalAddTarget(row)}
                     >
-                      {row.sales_order_no || row.id} · {(row.line_count || row.lines?.length || 0).toLocaleString("en-US")} lines
-                    </Button>
+                      {row.sales_order_no || row.id} · {(row.line_count || row.lines?.length || 0).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={"lines"}/></Button>
                   ))}
                 </div>
               ) : (
-                <div className="portal-inline-note portal-inline-note--soft">No saved draft sales orders are available.</div>
+                <div className="portal-inline-note portal-inline-note--soft"><InterfaceText text={"No saved draft sales orders are available."}/></div>
               )}
               <Button type="button" variant="secondary" disabled={portalAddTargetLoading} onClick={() => setPortalAddTarget(null)}>
-                Cancel
-              </Button>
+                <InterfaceText text={"Cancel"}/></Button>
             </div>
           </DraggableSurface>
         </div>
@@ -4255,38 +4229,38 @@ export function PortalPage() {
             <div className="workbench-detail-list">
               {portalPreview.kind === "basket" ? (
                 <>
-                  <div><span>Requested Code</span><strong>{portalPreview.item.requestedCode || "-"}</strong></div>
-                  <div><span>Resolved Code</span><strong>{portalPreview.item.resolvedCode || "-"}</strong></div>
-                  <div><span>Description</span><strong>{portalPreview.item.description || "-"}</strong></div>
+                  <div><span><InterfaceText text={"Requested Code"}/></span><strong>{portalPreview.item.requestedCode || "-"}</strong></div>
+                  <div><span><InterfaceText text={"Resolved Code"}/></span><strong>{portalPreview.item.resolvedCode || "-"}</strong></div>
+                  <div><span><InterfaceText text={"Description"}/></span><strong>{portalPreview.item.description || "-"}</strong></div>
                   <div><span>OEM</span><strong>{portalPreview.item.oem_no || "-"}</strong></div>
-                  <div><span>Tariff</span><strong>{portalPreview.item.hs_code || "-"}</strong></div>
-                  <div><span>Origin</span><strong>{portalPreview.item.origin || "-"}</strong></div>
-                  <div><span>Weight</span><strong>{formatWeight(portalPreview.item.weight_kg)}</strong></div>
-                  <div><span>Unit Price</span><strong>{portalPreview.item.sell_price == null ? "-" : formatMoney(portalPreview.item.sell_price, portalOrderCurrency)}</strong></div>
-                  {portalPreview.item.codeChangeWarning ? <div><span>Replacement</span><strong>{portalPreview.item.codeChangeWarning}</strong></div> : null}
-                  {portalPreview.item.lifecycle_warning ? <div><span>Lifecycle</span><strong>{portalPreview.item.lifecycle_warning}</strong></div> : null}
+                  <div><span><InterfaceText text={"Tariff"}/></span><strong>{portalPreview.item.hs_code || "-"}</strong></div>
+                  <div><span><InterfaceText text={"Origin"}/></span><strong>{portalPreview.item.origin || "-"}</strong></div>
+                  <div><span><InterfaceText text={"Weight"}/></span><strong>{formatWeight(portalPreview.item.weight_kg)}</strong></div>
+                  <div><span><InterfaceText text={"Unit Price"}/></span><strong>{portalPreview.item.sell_price == null ? "-" : formatMoney(portalPreview.item.sell_price, portalOrderCurrency)}</strong></div>
+                  {portalPreview.item.codeChangeWarning ? <div><span><InterfaceText text={"Replacement"}/></span><strong>{portalPreview.item.codeChangeWarning}</strong></div> : null}
+                  {portalPreview.item.lifecycle_warning ? <div><span><InterfaceText text={"Lifecycle"}/></span><strong>{portalPreview.item.lifecycle_warning}</strong></div> : null}
                 </>
               ) : (
                 <>
-                  <div><span>Code</span><strong>{portalPreview.item.code || "-"}</strong></div>
-                  <div><span>Description</span><strong>{portalPreview.item.description || "-"}</strong></div>
+                  <div><span><InterfaceText text={"Code"}/></span><strong>{portalPreview.item.code || "-"}</strong></div>
+                  <div><span><InterfaceText text={"Description"}/></span><strong>{portalPreview.item.description || "-"}</strong></div>
                   <div><span>OEM</span><strong>{portalPreview.item.oem_no || "-"}</strong></div>
                   <div>
-                    <span>Vehicle</span>
+                    <span><InterfaceText text={"Vehicle"}/></span>
                     <strong className="catalog-detail-list-text">
                       <VehicleBadges value={portalPreview.item.vehicle || ""} limit={5} expandable logoOnly />
                     </strong>
                   </div>
-                  <div><span>Tariff</span><strong>{portalPreview.item.tariff || "-"}</strong></div>
-                  <div><span>Origin</span><strong>{portalPreview.item.origin || "-"}</strong></div>
-                  <div><span>Weight</span><strong>{formatWeight(portalPreview.item.weight_kg)}</strong></div>
-                  <div><span>Unit Price</span><strong>{portalPreview.item.sell_price == null ? "-" : formatMoney(portalPreview.item.sell_price, portalPreview.item.currency || portalOrderCurrency)}</strong></div>
+                  <div><span><InterfaceText text={"Tariff"}/></span><strong>{portalPreview.item.tariff || "-"}</strong></div>
+                  <div><span><InterfaceText text={"Origin"}/></span><strong>{portalPreview.item.origin || "-"}</strong></div>
+                  <div><span><InterfaceText text={"Weight"}/></span><strong>{formatWeight(portalPreview.item.weight_kg)}</strong></div>
+                  <div><span><InterfaceText text={"Unit Price"}/></span><strong>{portalPreview.item.sell_price == null ? "-" : formatMoney(portalPreview.item.sell_price, portalPreview.item.currency || portalOrderCurrency)}</strong></div>
                   {portalPreview.item.available_qty != null ? (
-                    <div><span>Available Stock</span><strong>{Number(portalPreview.item.available_qty).toLocaleString("en-US")}</strong></div>
+                    <div><span><InterfaceText text={"Available Stock"}/></span><strong>{Number(portalPreview.item.available_qty).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")}</strong></div>
                   ) : null}
-                  {portalPreview.item.recommendation_reason ? <div><span>Why Suggested</span><strong>{portalPreview.item.recommendation_reason}</strong></div> : null}
-                  {portalPreview.item.replacement_warning ? <div><span>Replacement</span><strong>{portalPreview.item.replacement_warning}</strong></div> : null}
-                  {portalPreview.item.lifecycle_warning ? <div><span>Lifecycle</span><strong>{portalPreview.item.lifecycle_warning}</strong></div> : null}
+                  {portalPreview.item.recommendation_reason ? <div><span><InterfaceText text={"Why Suggested"}/></span><strong>{portalPreview.item.recommendation_reason}</strong></div> : null}
+                  {portalPreview.item.replacement_warning ? <div><span><InterfaceText text={"Replacement"}/></span><strong>{portalPreview.item.replacement_warning}</strong></div> : null}
+                  {portalPreview.item.lifecycle_warning ? <div><span><InterfaceText text={"Lifecycle"}/></span><strong>{portalPreview.item.lifecycle_warning}</strong></div> : null}
                 </>
               )}
             </div>
@@ -4297,12 +4271,10 @@ export function PortalPage() {
                     requestPortalCatalogAdd(portalPreview.item);
                   }}
                 >
-                  Add to Sales Order
-                </Button>
+                  <InterfaceText text={"Add to Sales Order"}/></Button>
               ) : null}
               <Button variant="secondary" onClick={() => setPortalPreview(null)}>
-                Close
-              </Button>
+                <InterfaceText text={"Close"}/></Button>
             </div>
           </DraggableSurface>
         </div>
@@ -4314,7 +4286,7 @@ export function PortalPage() {
             <div className="modal-card__header draggable-surface__handle">
               <div>
                 <h3>{previewImage.code}</h3>
-                <p>{previewImage.name || "Portal image preview"}</p>
+                <p>{previewImage.name || ui("Portal image preview")}</p>
               </div>
             </div>
             <div className="image-preview-wrap">
@@ -4322,8 +4294,7 @@ export function PortalPage() {
             </div>
             <div className="modal-actions">
               <Button variant="secondary" onClick={() => setPreviewImage(null)}>
-                Close
-              </Button>
+                <InterfaceText text={"Close"}/></Button>
             </div>
           </DraggableSurface>
         </div>

@@ -1,3 +1,4 @@
+import {InterfaceText,useInterfaceText} from "../../i18n/InterfaceText";
 import {inspectSupplierCsv,supplierCsvIssueCsv,type SupplierCsvReport} from "../../shared/supplierCsvPreflight";
 import {downloadCsv} from "../../shared/csv";
 import { SupplierReleaseReviewPanel } from "../../modules/admin/SupplierReleaseReviewPanel";
@@ -67,6 +68,7 @@ const SUPPLIER_IMPORT_HEADER_ALIASES: Record<(typeof SUPPLIER_IMPORT_COLUMNS)[nu
 const SUPPLIER_IMPORT_REQUIRED_COLUMNS = ["Product_Code", "Buy_Price_EUR"] as const;
 
 export function SuppliersPage() {
+  const ui=useInterfaceText();
   const { t, locale } = useI18n();
   const p = (key: string, params?: Record<string, string | number>) => t(`purchases.${key}`, params);
   const actionFeedback = useActionFeedback();
@@ -822,12 +824,12 @@ export function SuppliersPage() {
         <div>
           <span className="supplier-command-hero__eyebrow">{p("suppliers.title")}</span>
           <h2>{p("suppliers.subtitle")}</h2>
-          <p>Upload, validate and publish supplier prices from one controlled workspace.</p>
+          <p><InterfaceText text={"Upload, validate and publish supplier prices from one controlled workspace."}/></p>
         </div>
-        <div className="supplier-command-hero__metrics" aria-label="Supplier upload summary">
-          <div><strong>{visibleSupplierRows.toLocaleString("en-US")}</strong><span>visible rows</span></div>
-          <div><strong>{suppliers.length.toLocaleString("en-US")}</strong><span>suppliers</span></div>
-          <div><strong>{verifiedUploadEnabled ? "3" : "2"}</strong><span>release gates</span></div>
+        <div className="supplier-command-hero__metrics" aria-label={ui("Supplier upload summary")}>
+          <div><strong>{visibleSupplierRows.toLocaleString("en-US")}</strong><span><InterfaceText text={"visible rows"}/></span></div>
+          <div><strong>{suppliers.length.toLocaleString("en-US")}</strong><span><InterfaceText text={"suppliers"}/></span></div>
+          <div><strong>{verifiedUploadEnabled ? "3" : "2"}</strong><span><InterfaceText text={"release gates"}/></span></div>
         </div>
       </section>
       {import.meta.env.VITE_SUPPLIER_RELEASE_REVIEW_ENABLED === "true" ? <SupplierReleaseReviewPanel locale={locale} /> : null}
@@ -906,9 +908,9 @@ export function SuppliersPage() {
                     ? p("suppliers.meta.previewRows", { count: rows.length.toLocaleString("en-US") })
                     : p("suppliers.meta.rows", { count: total.toLocaleString("en-US") })}
             </span>
-            {status ? <span className="success-text">{status}</span> : null}
-            {warning ? <span className="warning-text">{warning}</span> : null}
-            {error ? <span className="error-text">{error}</span> : null}
+            {status ? <span className="success-text">{ui(status)}</span> : null}
+            {warning ? <span className="warning-text">{ui(warning)}</span> : null}
+            {error ? <span className="error-text">{ui(error)}</span> : null}
           </div>
           <DataTable rows={rows} columns={columns} emptyText={loadingRows ? t("common.loadingPage") : p("suppliers.empty.noPreviewRows")} />
         </div>
@@ -1006,13 +1008,13 @@ export function SuppliersPage() {
               <Button variant="secondary" onClick={()=>downloadCsv('supplier-upload-errors.csv',supplierCsvIssueCsv(csvReport))}>Hata listesini indir</Button>
             </section>:null}
             {verifiedUploadEnabled&&verifiedProgress ? <section className="section-card" aria-live="polite">
-              <h4>Verified supplier upload — {verifiedProgress.phase}</h4>
+              <h4><InterfaceText text={"Verified supplier upload — "}/>{ui(verifiedProgress.phase)}</h4>
               <progress style={{width:'100%'}} max={verifiedProgress.totalBytes||1} value={verifiedProgress.bytes}/>
-              <p>{verifiedProgress.message}</p>
-              <p>{verifiedProgress.bytes.toLocaleString()} / {verifiedProgress.totalBytes.toLocaleString()} bytes</p>
-              {verifiedProgress.sessionId?<p>Upload session: {verifiedProgress.sessionId}</p>:null}
+              <p>{ui(verifiedProgress.message)}</p>
+              <p>{verifiedProgress.bytes.toLocaleString()} / {verifiedProgress.totalBytes.toLocaleString()} <InterfaceText text={" bytes"}/></p>
+              {verifiedProgress.sessionId?<p><InterfaceText text={"Upload session: "}/>{verifiedProgress.sessionId}</p>:null}
               <div className="toolbar toolbar--wrap">
-                {importingSupplier?<Button variant="secondary" onClick={()=>uploadController.current?.abort()}>Pause upload</Button>:null}
+                {importingSupplier?<Button variant="secondary" onClick={()=>uploadController.current?.abort()}><InterfaceText text={"Pause upload"}/></Button>:null}
                 {verifiedProgress.sessionId&&!importingSupplier?<Button variant="secondary" onClick={async()=>{
                   const controller=new AbortController();uploadController.current=controller;setImportingSupplier(true);
                   try {const result=await fetchVerifiedUploadStatus(verifiedProgress.sessionId!,controller.signal);
@@ -1023,7 +1025,7 @@ export function SuppliersPage() {
                     setError('');
                   }catch(e){setError(e instanceof Error?e.message:'Status unavailable.');}
                   finally{uploadController.current=null;setImportingSupplier(false);}
-                }}>Check this upload</Button>:null}
+                }}><InterfaceText text={"Check this upload"}/></Button>:null}
               </div>
             </section>:null}
             <div className="modal-hint">{p(verifiedUploadEnabled ? "suppliers.import.verifiedRequiredHint" : "suppliers.import.requiredHint")}</div>
@@ -1066,7 +1068,7 @@ export function SuppliersPage() {
                   busy={importingSupplier}
                   busyLabel={p("busy.importing")}
                 >
-                  {verifiedUploadEnabled?'Upload / resume same file':p("suppliers.actions.import")}
+                  {verifiedUploadEnabled?ui("Upload / resume same file"):p("suppliers.actions.import")}
                 </Button>
               </>}
             </div>

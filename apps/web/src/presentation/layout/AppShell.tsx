@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {useInterfaceText} from '../../i18n/InterfaceText';
 import { useI18n } from "../../i18n/I18nProvider";
 import { NextMasterLogo, NavGlyph, navGlyphForKey } from "../components/common/NextMasterBrand";
 import { workspaceNavigationItems, type WorkspaceSections } from "../../modules/admin/workspaceNavigation";
@@ -70,6 +71,7 @@ export function AppShell({
   userRole = "",
 }: AppShellProps) {
   const { t, locale } = useI18n();
+  const ui=useInterfaceText();
   const accountInitials = (accountName || accountEmail || userEmail).trim().split(/[\s@._-]+/).filter(Boolean).slice(0,2).map(part => part[0]).join("").toLocaleUpperCase(locale) || "?";
   const appDesktopFrameRef = useRef<HTMLDivElement | null>(null);
   const navigation = workspaceNavigationItems(navItems, pageSections);
@@ -184,7 +186,7 @@ export function AppShell({
             <details className="topbar-account-menu" onKeyDown={event => {if(event.key === "Escape") event.currentTarget.removeAttribute("open");}}>
               <summary className="topbar-profile" aria-label={locale === "tr" ? "Hesap menüsü" : "Account menu"}>
                 <span className="topbar-profile__avatar">{accountInitials}</span>
-                <span className="topbar-profile__copy"><strong>{accountName || accountEmail || (locale === "tr" ? "Hesap" : "Account")}</strong><span>{accountRole || userRole}</span></span>
+                <span className="topbar-profile__copy"><strong>{accountName || accountEmail || (locale === "tr" ? "Hesap" : "Account")}</strong><span>{ui(accountRole || userRole)}</span></span>
                 <span className="topbar-profile__chevron" aria-hidden="true">⌄</span>
               </summary>
               <div className="topbar-account-menu__items">

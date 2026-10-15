@@ -33,6 +33,8 @@ export function supplierProcessingInterruptedMessage(tr=false) {
   :'File processing stopped and needs operational review. The upload and processed rows are preserved. Check this same upload.';
 }
 export function supplierUploadStatusView(status:UploadStatus,tr=false):{phase:UploadPhase;message:string} {
+ const displayStatuses:Record<string,string>={received:'Alındı',uploaded:'Yüklendi',staged:'Satırlar hazırlandı',validated:'Doğrulandı',published:'Yayında',failed:'Başarısız',cancelled:'İptal edildi',archived:'Arşivlendi'};
+ const displayStatus=tr?(displayStatuses[status.releaseStatus]||status.releaseStatus):status.releaseStatus;
  const invalid=sourceInvalidMessage(status.errorCode,tr);
  if(invalid)return {phase:'failed',message:invalid};
  const unsupported=sourceUnsupportedMessage(status.errorCode,tr);
@@ -46,7 +48,7 @@ export function supplierUploadStatusView(status:UploadStatus,tr=false):{phase:Up
   :`File review is required (${status.errorCode}). ${progress}. Open the review details for this same upload.`};
  if(status.verificationStatus==='failed')return {phase:'failed',message:tr?'Kaynak dosya doğrulanamadı. Aynı yüklemeyi kontrol edin.':'Source verification failed. Check this same upload.'};
  if(status.verificationStatus==='verified')return {phase:'verified',message:tr
-  ?`Kaynak doğrulandı. İşlenen satır: ${progress}. Durum: ${status.releaseStatus}. Son durum: ${activity}. Fiyat yayını ayrı aşamadır.`
+  ?`Kaynak doğrulandı. İşlenen satır: ${progress}. Durum: ${displayStatus}. Son durum: ${activity}. Fiyat yayını ayrı aşamadır.`
   :`Source verified. Processed rows: ${progress}. Status: ${status.releaseStatus}. Last status: ${activity}. Price publication is a separate step.`};
  return {phase:'queued',message:tr?'Dosya doğrulama kuyruğunda veya doğrulanıyor. Aynı yüklemeyi daha sonra kontrol edin.':'Source verification is queued or running. Check this same upload later.'};
 }

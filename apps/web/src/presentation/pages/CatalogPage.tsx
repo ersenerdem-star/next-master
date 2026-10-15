@@ -1,3 +1,4 @@
+import {InterfaceText} from "../../i18n/InterfaceText";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CATALOG_MARKET_SEGMENT_OPTIONS, normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
@@ -1800,7 +1801,7 @@ export function CatalogPage() {
             </div>
             <div className="workbench-detail-list">
               <div><span>{t("catalog.common.description")}</span><strong>{selectedCatalogDraft.description || "-"}</strong></div>
-              <div><span>Description (TR)</span><strong>{selectedCatalogDraft.description_tr || "-"}</strong></div>
+              <div><span><InterfaceText text={"Description (TR)"}/></span><strong>{selectedCatalogDraft.description_tr || "-"}</strong></div>
               <div><span>{t("catalog.common.ean")}</span><strong>{selectedCatalogDraft.ean || "-"}</strong></div>
               <div>
                 <span>{t("catalog.common.oem")}</span>
@@ -2108,12 +2109,12 @@ export function CatalogPage() {
               <div className="info-text">
                 <strong>{catalogImportSummary.validationStatus === "processing" ? "Background processing" : catalogImportSummary.finalized ? "Finalize summary" : "Validation summary"}</strong>
                 <ul>
-                  <li>Total rows: {formatCount(catalogImportSummary.totalRows)}</li>
-                  <li>Insert: {formatCount(catalogImportSummary.insertCount)}</li>
-                  <li>Update: {formatCount(catalogImportSummary.updateCount)}</li>
-                  <li>Skip: {formatCount(catalogImportSummary.skipCount)}</li>
-                  <li>Error: {formatCount(catalogImportSummary.errorCount)}</li>
-                  <li>Conflict: {formatCount(catalogImportSummary.conflictCount)}</li>
+                  <li><InterfaceText text={"Total rows: "}/>{formatCount(catalogImportSummary.totalRows)}</li>
+                  <li><InterfaceText text={"Insert: "}/>{formatCount(catalogImportSummary.insertCount)}</li>
+                  <li><InterfaceText text={"Update: "}/>{formatCount(catalogImportSummary.updateCount)}</li>
+                  <li><InterfaceText text={"Skip: "}/>{formatCount(catalogImportSummary.skipCount)}</li>
+                  <li><InterfaceText text={"Error: "}/>{formatCount(catalogImportSummary.errorCount)}</li>
+                  <li><InterfaceText text={"Conflict: "}/>{formatCount(catalogImportSummary.conflictCount)}</li>
                 </ul>
                 <div>
                   {catalogImportSummary.validationStatus === "processing"
@@ -2125,8 +2126,8 @@ export function CatalogPage() {
               </div>
             ) : null}
             <div className="info-text">
-              <strong>Bilstein Group provider pilot</strong>
-              <p>Stages product identities from the official PartsFinder API for review only. It does not validate, finalize, insert, or update catalog products.</p>
+              <strong><InterfaceText text={"Bilstein Group provider pilot"}/></strong>
+              <p><InterfaceText text={"Stages product identities from the official PartsFinder API for review only. It does not validate, finalize, insert, or update catalog products."}/></p>
               <div className="modal-form-grid">
                 <Select
                   label="Provider brand"
@@ -2154,13 +2155,11 @@ export function CatalogPage() {
                   busy={stagingBilsteinProducts}
                   busyLabel="Staging provider pilot"
                 >
-                  Stage Bilstein pilot (no finalize)
-                </Button>
+                  <InterfaceText text={"Stage Bilstein pilot (no finalize)"}/></Button>
               </div>
               {bilsteinStageSummary ? (
                 <p>
-                  Run {bilsteinStageSummary.runId}: {bilsteinStageSummary.stagedRows} staged; catalog products unchanged.
-                </p>
+                  <InterfaceText text={"Run"}/>{bilsteinStageSummary.runId}: {bilsteinStageSummary.stagedRows} <InterfaceText text={"staged; catalog products unchanged."}/></p>
               ) : null}
             </div>
           </DraggableSurface>

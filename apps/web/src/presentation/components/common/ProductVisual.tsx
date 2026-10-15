@@ -1,3 +1,4 @@
+import {useInterfaceText} from "../../../i18n/InterfaceText";
 import { useEffect, useState } from "react";
 
 import { resolveNamedLogo } from "./logoAssets";
@@ -50,6 +51,7 @@ function isKnownPlaceholderImageUrl(value: string) {
 }
 
 export function ProductVisual({ imageUrl, imageGallery = [], brand, alt, detail = false, onPreview = null }: ProductVisualProps) {
+  const ui=useInterfaceText();
   const displayBrand = String(brand || "").trim();
   const monogram = buildBrandMonogram(displayBrand || alt);
   const logoAsset = resolveNamedLogo(displayBrand);
@@ -106,7 +108,7 @@ export function ProductVisual({ imageUrl, imageGallery = [], brand, alt, detail 
               type="button"
               className="catalog-media-carousel__nav"
               onClick={() => setActiveImageIndex((current) => (current <= 0 ? galleryItems.length - 1 : current - 1))}
-              aria-label="Previous image"
+              aria-label={ui("Previous image")}
             >
               ‹
             </button>
@@ -115,7 +117,7 @@ export function ProductVisual({ imageUrl, imageGallery = [], brand, alt, detail 
               type="button"
               className="catalog-media-carousel__nav"
               onClick={() => setActiveImageIndex((current) => (current >= galleryItems.length - 1 ? 0 : current + 1))}
-              aria-label="Next image"
+              aria-label={ui("Next image")}
             >
               ›
             </button>

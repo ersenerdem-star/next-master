@@ -1,3 +1,4 @@
+import {InterfaceText,useInterfaceText} from "../../i18n/InterfaceText";
 import {SupplierReleaseReviewPanel} from "../../modules/admin/SupplierReleaseReviewPanel";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -30,6 +31,7 @@ type DashboardPageProps = {
 };
 
 export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab, onNavigatePage }: DashboardPageProps) {
+  const ui=useInterfaceText();
   const { locale, t } = useI18n();
   const numberLocale = locale === "tr" ? "tr-TR" : "en-US";
   const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
@@ -210,18 +212,18 @@ export function DashboardPage({ role = "", onOpenSalesOrder, onOpenInventoryTab,
     <PageShell className="dashboard dashboard-page">
       <PageHeader title={t("dashboard.overview.title")} subtitle={t("dashboard.overview.subtitle")} />
 
-      <section className="dashboard-command-hero" aria-label="Operations workspace">
+      <section className="dashboard-command-hero" aria-label={ui("Operations workspace")}>
         <div className="dashboard-command-hero__copy">
-          <span>Operations Console</span>
-          <h2>Keep markets moving</h2>
-          <p>Parts. Data. People. In sync.</p>
+          <span><InterfaceText text={"Operations Console"}/></span>
+          <h2><InterfaceText text={"Keep markets moving"}/></h2>
+          <p><InterfaceText text={"Parts. Data. People. In sync."}/></p>
         </div>
       </section>
 
       <section className="dashboard-reference-grid" aria-label={locale === "tr" ? "Operasyon girişleri" : "Operations shortcuts"}>
         {showSystemPanels ? import.meta.env.VITE_SUPPLIER_RELEASE_REVIEW_ENABLED === "true"
           ? <SupplierReleaseReviewPanel locale={locale} dashboard onOpenWorkspace={()=>onNavigatePage?.("Purchases", "Supplier Prices")} />
-          : <SectionCard title="Supplier Price Upload Center"><Button onClick={()=>onNavigatePage?.("Purchases", "Supplier Prices")}>{locale==='tr'?'Yükleme alanını aç':'Open upload workspace'}</Button></SectionCard>
+          : <SectionCard title={ui("Supplier Price Upload Center")}><Button onClick={()=>onNavigatePage?.("Purchases", "Supplier Prices")}>{locale==='tr'?'Yükleme alanını aç':'Open upload workspace'}</Button></SectionCard>
           : null}
         <aside className="dashboard-customer-preview">
           <header className="dashboard-reference-card__header"><div><h2>{t("nav.reports")}</h2><p>{locale === "tr" ? "Mevcut raporlar ve belge hareketleri." : "Existing reports and document activity."}</p></div></header>

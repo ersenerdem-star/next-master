@@ -1,3 +1,4 @@
+import {InterfaceText} from "../../i18n/InterfaceText";
 import { useEffect, useState } from "react";
 import {
   createOrgUser,
@@ -928,7 +929,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
               />
               <div className="field" style={{ gridColumn: "1 / -1" }}>
                 <span className="field__label">Customer scope / Cari kapsamı</span>
-                {loadingUserAccess ? <div className="meta-row">Loading access settings…</div> : editUserAccess ? (
+                {loadingUserAccess ? <div className="meta-row"><InterfaceText text={"Loading access settings…"}/></div> : editUserAccess ? (
                   <>
                     <Select
                       value={editUserAccess.scopeMode}
@@ -966,7 +967,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                       </div>
                     ) : null}
                   </>
-                ) : <div className="meta-row">Access settings could not be loaded.</div>}
+                ) : <div className="meta-row"><InterfaceText text={"Access settings could not be loaded."}/></div>}
               </div>
               <label className="field checkbox-field">
                 <input

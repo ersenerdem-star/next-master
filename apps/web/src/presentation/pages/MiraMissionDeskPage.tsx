@@ -1,3 +1,4 @@
+import {InterfaceText,useInterfaceText} from "../../i18n/InterfaceText";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { PageHeader, PageShell, StatusBadge } from "../components/common/VisualPrimitives";
 import { useI18n } from "../../i18n/I18nProvider";
@@ -284,11 +285,11 @@ function MissionReportCard({ mission, report, evidenceLabel, reasonLabel, artifa
       <div className="mira-mission-page__package-summary" aria-label="Paket sonucu">
         <span>Paket: <b>{report.package.requested ?? "—"}</b></span>
         <span>Gözlenen: <b>{report.package.observed ?? "—"}</b></span>
-        <span>Staging: <b>{report.package.staged ?? "—"}</b></span>
+        <span><InterfaceText text={"Staging: "}/><b>{report.package.staged ?? "—"}</b></span>
         <span>Kataloğa yazılan: <b>{report.package.loaded ?? 0}</b></span>
         <span>Yüklenmeyen: <b>{report.package.failed ?? "—"}</b></span>
         {report.package.alreadyPresent !== null ? <span>Mevcut: <b>{report.package.alreadyPresent}</b></span> : null}
-        {report.package.guarded !== null ? <span>Guarded: <b>{report.package.guarded}</b></span> : null}
+        {report.package.guarded !== null ? <span><InterfaceText text={"Guarded: "}/><b>{report.package.guarded}</b></span> : null}
         {report.package.deduped !== null ? <span>Tekrar: <b>{report.package.deduped}</b></span> : null}
       </div>
       <div className="mira-mission-page__catalog-review-gate">
@@ -320,6 +321,7 @@ function MissionReportCard({ mission, report, evidenceLabel, reasonLabel, artifa
 }
 
 export function MiraMissionDeskPage() {
+  const ui=useInterfaceText();
   const { t } = useI18n();
   const [missions, setMissions] = useState<MiraMission[]>([]);
   const [activeTab, setActiveTab] = useState<MiraDeskTab>("queue");
@@ -472,7 +474,7 @@ export function MiraMissionDeskPage() {
         title={t("mira.missionDesk.title")}
         subtitle={t("mira.missionDesk.subtitle")}
         status={<StatusBadge tone={deskStatus === "MIRA çalışıyor" ? "warning" : "success"}>{deskStatus}</StatusBadge>}
-        actions={<div className="mira-mission-page__header-actions"><button className="button button--primary" type="button" onClick={() => void runPlanner()} disabled={planning || loading}>{planning ? "Planlanıyor…" : "MIRA sıradaki işi seçsin"}</button><button className="button button--secondary" type="button" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button></div>}
+        actions={<div className="mira-mission-page__header-actions"><button className="button button--primary" type="button" onClick={() => void runPlanner()} disabled={planning || loading}>{planning ? "Planlanıyor…" : "MIRA sıradaki işi seçsin"}</button><button className="button button--secondary" type="button" onClick={() => void refresh()} disabled={loading}>{loading ? "Refreshing…" : ui("Refresh")}</button></div>}
       />
 
       <section className="mira-mission-page__hero" aria-labelledby="mira-mission-copy">
@@ -480,13 +482,13 @@ export function MiraMissionDeskPage() {
         <div className="mira-mission-page__copy">
           <h2 id="mira-mission-copy">MIRA online görev masası</h2>
           <p>Görevi yaz. MIRA hedef markayı, aranacak alanı ve uygun kaynağı kendi çıkarır; sonucu kanıt ve debrief olarak geri getirir.</p>
-          <div className="mira-mission-page__status-grid" aria-label="MIRA runtime status">
-            <div><span>Worker</span><strong>{deskStatus}</strong></div>
+          <div className="mira-mission-page__status-grid" aria-label={ui("MIRA runtime status")}>
+            <div><span><InterfaceText text={"Worker"}/></span><strong>{deskStatus}</strong></div>
             <div><span>Kuyruk</span><strong>{missions.length} görev</strong></div>
             <div><span>Kanıt</span><strong>{evidenceMissions.length} kayıt</strong></div>
-            <div><span>Guard</span><strong>Review-only</strong></div>
+            <div><span><InterfaceText text={"Guard"}/></span><strong><InterfaceText text={"Review-only"}/></strong></div>
           </div>
-          <div className="mira-mission-page__boundary"><strong>Catalog’a otomatik Apply yok.</strong><span> Kanıt staging’e gelir; final karar ayrı review akışındadır.</span></div>
+          <div className="mira-mission-page__boundary"><strong><InterfaceText text={"Catalog’a otomatik Apply yok."}/></strong><span> Kanıt staging’e gelir; final karar ayrı review akışındadır.</span></div>
           <div className="mira-mission-page__workflow" aria-label="MIRA çalışma aşamaları"><span className="is-active"><b>1</b> Görevi tanımla</span><span><b>2</b> Rakamlarla izle</span><span><b>3</b> Yazılacak veriyi gör</span></div>
         </div>
       </section>
@@ -511,13 +513,13 @@ export function MiraMissionDeskPage() {
             <button className="button button--primary" type="submit" disabled={submitting}>{submitting ? "Kuyruğa alınıyor…" : "MIRA’ya görev ver"}</button>
             {message ? <p className="mira-mission-page__message" role="status">{message}</p> : null}
           </form>
-          <section className="mira-mission-page__online-queue" aria-label="MIRA mission queue"><div className="mira-mission-page__queue-header"><div><h2>Online görev kuyruğu</h2><span>{missions.length} kayıt</span></div><div className="mira-mission-page__queue-actions"><label className="mira-mission-page__select-all"><input type="checkbox" checked={allQueuedSelected} onChange={(event) => setSelectedMissionIds(event.target.checked ? queuedMissions.map((mission) => mission.id) : [])} disabled={!queuedMissions.length} />Tüm bekleyenleri seç</label><button className="button button--secondary mira-mission-page__clear-queue" type="button" onClick={() => void clearQueue()} disabled={clearing || !selectedMissionIds.length}>{clearing ? "Siliniyor…" : "Seçilenleri sil"}</button><label className="mira-mission-page__select-all"><input type="checkbox" checked={allHistorySelected} onChange={(event) => setSelectedHistoryIds(event.target.checked ? historyMissions.map((mission) => mission.id) : [])} disabled={!historyMissions.length} />Tüm geçmişi seç</label><button className="button button--secondary mira-mission-page__clear-queue" type="button" onClick={() => void hideHistory()} disabled={clearing || !selectedHistoryIds.length}>{clearing ? "Gizleniyor…" : "Geçmişten gizle"}</button></div></div>{missions.length === 0 && !loading ? <p>Henüz online görev yok.</p> : missions.map((mission) => <article key={mission.id} className="mira-mission-page__queue-item"><label className="mira-mission-page__queue-check"><input type="checkbox" checked={mission.status === "queued" ? selectedMissionIds.includes(mission.id) : selectedHistoryIds.includes(mission.id)} onChange={(event) => { const setter = mission.status === "queued" ? setSelectedMissionIds : setSelectedHistoryIds; setter((current) => event.target.checked ? [...new Set([...current, mission.id])] : current.filter((id) => id !== mission.id)); }} disabled={mission.status === "processing"} aria-label={`${mission.objective} görevini seç`} /></label><div><div className="mira-mission-page__queue-title"><strong>{mission.objective}</strong>{mission.origin === "planner" ? <span className="mira-mission-page__planner-badge">Planner</span> : null}</div><small>{mission.target_brand || "Marka otomatik"} · {mission.planner_context?.sourceKey === "tecalliance" ? "TecAlliance" : mission.planner_context?.sourceKey === "spareto" ? "Spareto" : "MIRA kaynak seçimi"} · {mission.max_items ?? mission.max_pages} ürün</small><small>Alanlar: {(mission.requested_fields || []).join(", ") || "talimattan çıkarılacak"}</small>{mission.origin === "planner" && mission.planner_reason ? <small className="mira-mission-page__planner-reason">{mission.target_brand ?? "Marka"}: {mission.planner_reason}</small> : null}</div><StatusBadge tone={statusTone(mission.status)}>{mission.status}</StatusBadge></article>)}</section>
+          <section className="mira-mission-page__online-queue" aria-label={ui("MIRA mission queue")}><div className="mira-mission-page__queue-header"><div><h2>Online görev kuyruğu</h2><span>{missions.length} kayıt</span></div><div className="mira-mission-page__queue-actions"><label className="mira-mission-page__select-all"><input type="checkbox" checked={allQueuedSelected} onChange={(event) => setSelectedMissionIds(event.target.checked ? queuedMissions.map((mission) => mission.id) : [])} disabled={!queuedMissions.length} />Tüm bekleyenleri seç</label><button className="button button--secondary mira-mission-page__clear-queue" type="button" onClick={() => void clearQueue()} disabled={clearing || !selectedMissionIds.length}>{clearing ? "Siliniyor…" : "Seçilenleri sil"}</button><label className="mira-mission-page__select-all"><input type="checkbox" checked={allHistorySelected} onChange={(event) => setSelectedHistoryIds(event.target.checked ? historyMissions.map((mission) => mission.id) : [])} disabled={!historyMissions.length} />Tüm geçmişi seç</label><button className="button button--secondary mira-mission-page__clear-queue" type="button" onClick={() => void hideHistory()} disabled={clearing || !selectedHistoryIds.length}>{clearing ? "Gizleniyor…" : "Geçmişten gizle"}</button></div></div>{missions.length === 0 && !loading ? <p>Henüz online görev yok.</p> : missions.map((mission) => <article key={mission.id} className="mira-mission-page__queue-item"><label className="mira-mission-page__queue-check"><input type="checkbox" checked={mission.status === "queued" ? selectedMissionIds.includes(mission.id) : selectedHistoryIds.includes(mission.id)} onChange={(event) => { const setter = mission.status === "queued" ? setSelectedMissionIds : setSelectedHistoryIds; setter((current) => event.target.checked ? [...new Set([...current, mission.id])] : current.filter((id) => id !== mission.id)); }} disabled={mission.status === "processing"} aria-label={`${mission.objective} görevini seç`} /></label><div><div className="mira-mission-page__queue-title"><strong>{mission.objective}</strong>{mission.origin === "planner" ? <span className="mira-mission-page__planner-badge"><InterfaceText text={"Planner"}/></span> : null}</div><small>{mission.target_brand || "Marka otomatik"} · {mission.planner_context?.sourceKey === "tecalliance" ? "TecAlliance" : mission.planner_context?.sourceKey === "spareto" ? "Spareto" : "MIRA kaynak seçimi"} · {mission.max_items ?? mission.max_pages} ürün</small><small>Alanlar: {(mission.requested_fields || []).join(", ") || "talimattan çıkarılacak"}</small>{mission.origin === "planner" && mission.planner_reason ? <small className="mira-mission-page__planner-reason">{mission.target_brand ?? "Marka"}: {mission.planner_reason}</small> : null}</div><StatusBadge tone={statusTone(mission.status)}>{mission.status}</StatusBadge></article>)}</section>
         </section>
       ) : null}
 
       {activeTab === "evidence" ? (
         <section className="mira-mission-page__report-panel" role="tabpanel" aria-label={t("mira.missionDesk.tabs.evidence")}>
-          <div className="mira-mission-page__panel-heading"><div><h2>{t("mira.missionDesk.evidence.title")}</h2><p>{t("mira.missionDesk.evidence.subtitle")}</p></div><StatusBadge tone="info">Review-only</StatusBadge></div>
+          <div className="mira-mission-page__panel-heading"><div><h2>{t("mira.missionDesk.evidence.title")}</h2><p>{t("mira.missionDesk.evidence.subtitle")}</p></div><StatusBadge tone="info"><InterfaceText text={"Review-only"}/></StatusBadge></div>
           {message ? <p className="mira-mission-page__message" role="status">{message}</p> : null}
           {evidenceMissions.length === 0 ? <p className="mira-mission-page__empty">{t("mira.missionDesk.evidence.empty")}</p> : evidenceMissions.map((mission) => <MissionReportCard key={mission.id} mission={mission} report={reportForMission(mission)} evidenceLabel={t("mira.missionDesk.evidence.label")} reasonLabel={t("mira.missionDesk.evidence.negativeReason")} artifactLabel={t("mira.missionDesk.evidence.artifact")} debriefLabel={t("mira.missionDesk.evidence.debrief")} pendingLabel={t("mira.missionDesk.evidence.pending")} onReview={reviewMission} />)}
         </section>
@@ -525,7 +527,7 @@ export function MiraMissionDeskPage() {
 
       {activeTab === "results" ? (
         <section className="mira-mission-page__report-panel" role="tabpanel" aria-label={t("mira.missionDesk.tabs.results")}>
-          <div className="mira-mission-page__panel-heading"><div><h2>{t("mira.missionDesk.results.title")}</h2><p>{t("mira.missionDesk.results.subtitle")}</p></div><StatusBadge tone="info">Review-only</StatusBadge></div>
+          <div className="mira-mission-page__panel-heading"><div><h2>{t("mira.missionDesk.results.title")}</h2><p>{t("mira.missionDesk.results.subtitle")}</p></div><StatusBadge tone="info"><InterfaceText text={"Review-only"}/></StatusBadge></div>
           {message ? <p className="mira-mission-page__message" role="status">{message}</p> : null}
           {terminalMissions.length === 0 ? <p className="mira-mission-page__empty">{t("mira.missionDesk.results.empty")}</p> : terminalMissions.map((mission) => <MissionReportCard key={mission.id} mission={mission} report={reportForMission(mission)} evidenceLabel={t("mira.missionDesk.evidence.label")} reasonLabel={t("mira.missionDesk.evidence.negativeReason")} artifactLabel={t("mira.missionDesk.evidence.artifact")} debriefLabel={t("mira.missionDesk.evidence.debrief")} pendingLabel={t("mira.missionDesk.evidence.pending")} onReview={reviewMission} />)}
         </section>

@@ -1,3 +1,4 @@
+import {useInterfaceText} from "../../i18n/InterfaceText";
 import {useEffect,useRef,useState} from 'react';
 import {messagingRequest,type CustomerMessage,type MessageCustomer,type MessageConversation,type MessageCursor} from '../../infrastructure/api/customerMessagesApi';
 import {SectionCard} from '../components/common/SectionCard';
@@ -5,6 +6,7 @@ import {Button} from '../components/common/Button';
 import {useI18n} from '../../i18n/I18nProvider';
 
 export function CustomerMessagesPage({portal=false}:{portal?:boolean}){
+  const ui=useInterfaceText();
   const {locale}=useI18n(),tr=locale==='tr';
   const [customers,setCustomers]=useState<MessageCustomer[]>([]),[conversations,setConversations]=useState<MessageConversation[]>([]);
   const [customerId,setCustomerId]=useState(''),[messages,setMessages]=useState<CustomerMessage[]>([]),[next,setNext]=useState<MessageCursor|null>(null);
@@ -75,10 +77,10 @@ export function CustomerMessagesPage({portal=false}:{portal?:boolean}){
     return (cb?.last_message_at||'').localeCompare(ca?.last_message_at||'')||a.name.localeCompare(b.name);
   });
   return <div className="page-shell customer-messages-page">
-    <SectionCard title={tr?'Mesajlar':'Messages'} actions={<Button variant="secondary" onClick={()=>setTick(v=>v+1)}>{tr?'Yenile':'Refresh'}</Button>}>
+    <SectionCard title={tr?'Mesajlar':'Messages'} actions={<Button variant="secondary" onClick={()=>setTick(v=>v+1)}>{tr?'Yenile':ui("Refresh")}</Button>}>
       <p>{portal?(tr?'Firma yetkilisiyle buradan yazışabilirsiniz.':'Send a message to your account team.'):(tr?'Müşteriyi seçerek portal yazışmasını açın.':'Select a customer to open their portal conversation.')}</p>
       {inboxError?<p role="alert" className="error-text">{inboxError}</p>:null}
-      {!portal?<label className="field-label">{tr?'Müşteri':'Customer'}
+      {!portal?<label className="field-label">{tr?'Müşteri':ui("Customer")}
         <select aria-label={tr?'Mesajlaşılacak müşteri':'Message customer'} value={customerId} disabled={sending} onChange={e=>setCustomerId(e.target.value)}>
           <option value="">{tr?'Müşteri seçin':'Choose a customer'}</option>
           {sorted.map(c=>{const count=conversations.find(v=>v.customer_id===c.id)?.unread_count||0;return <option key={c.id} value={c.id}>{c.name}{count?` (${count} ${tr?'okunmamış':'unread'})`:''}</option>;})}

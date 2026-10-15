@@ -1,3 +1,4 @@
+import {useInterfaceText} from '../../../i18n/InterfaceText';
 import React, { type ButtonHTMLAttributes, type ReactNode } from "react";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -8,6 +9,8 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 export function Button({ children, variant = "primary", className = "", busy = false, busyLabel, disabled, ...props }: ButtonProps) {
+  const ui=useInterfaceText();
+  const content=typeof children==='string'?ui(children):children;
   return (
     <button
       {...props}
@@ -18,10 +21,10 @@ export function Button({ children, variant = "primary", className = "", busy = f
       {busy ? (
         <span className="button__content">
           <span className="button__spinner" aria-hidden="true" />
-          <span>{busyLabel || children}</span>
+          <span>{busyLabel ? ui(busyLabel) : content}</span>
         </span>
       ) : (
-        <span className="button__content">{children}</span>
+        <span className="button__content">{content}</span>
       )}
     </button>
   );

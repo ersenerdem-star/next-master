@@ -1,3 +1,5 @@
+import {useI18n} from "../../../i18n/I18nProvider";
+import {InterfaceText,useInterfaceText} from "../../../i18n/InterfaceText";
 import { useEffect, useState, type FormEvent } from "react";
 import type { PortalSnapshot } from "../../../types/portalSession";
 import { Button } from "../../../presentation/components/common/Button";
@@ -47,16 +49,16 @@ type PortalSearchResultsProps = {
   onPreview?: (item: PortalCatalogSearchItem) => void;
 };
 
-function formatMoney(value: number | null | undefined, currency: string) {
+function formatMoneyForLocale(value: number | null | undefined, currency: string, locale = "en") {
   if (value == null) return "Price on request";
-  return `${Number(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+  return `${Number(value).toLocaleString(locale === "tr" ? "tr-TR" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
 
-function formatDate(value?: string) {
+function formatDateForLocale(value?: string, locale = "en") {
   if (!value) return "No order history";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+  return new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
 function compactText(value: string, maxLength = 68) {
@@ -109,6 +111,10 @@ export function PortalSearchResults({
   onAdd,
   onPreview,
 }: PortalSearchResultsProps) {
+  const ui=useInterfaceText();
+  const {locale}=useI18n();
+  const formatMoney=(value: number | null | undefined, currency: string)=>ui(formatMoneyForLocale(value,currency,locale));
+  const formatDate=(value?:string)=>ui(formatDateForLocale(value,locale));
   const [searchField, setSearchField] = useState<PortalSearchField>(initialSearchField);
   const [addQuantity, setAddQuantity] = useState(1);
   const [showAllResults, setShowAllResults] = useState(false);
@@ -135,10 +141,10 @@ export function PortalSearchResults({
   }
 
   const searchTabs: Array<{ value: PortalSearchField; label: string }> = [
-    { value: "part_number", label: "Part number" },
+    { value: "part_number", label: ui("Part number") },
     { value: "oem", label: "OEM" },
-    { value: "vehicle", label: "Vehicle" },
-    { value: "description", label: "Description" },
+    { value: "vehicle", label: ui("Vehicle") },
+    { value: "description", label: ui("Description") },
   ];
 
   const searchPlaceholder: Record<PortalSearchField, string> = {
@@ -151,7 +157,7 @@ export function PortalSearchResults({
   return (
     <div className="portal-search-result-view">
       <div className="portal-search-result-view__toolbar">
-        <div className="portal-search-result-view__types" role="tablist" aria-label="Search type">
+        <div className="portal-search-result-view__types" role="tablist" aria-label={ui("Search type")}>
           {searchTabs.map((tab) => (
             <button
               key={tab.value}
@@ -165,46 +171,42 @@ export function PortalSearchResults({
           ))}
         </div>
         <form className="portal-search-result-view__form" onSubmit={submitSearch}>
-          <select aria-label="Search brand" value={brand} onChange={(event) => onBrandChange(event.target.value)}>
+          <select aria-label={ui("Search brand")} value={brand} onChange={(event) => onBrandChange(event.target.value)}>
             {brands.map((option) => <option key={option.value || "all"} value={option.value}>{option.label}</option>)}
           </select>
           <input aria-label={`${searchTabs.find((tab) => tab.value === searchField)?.label || "Part"} search`} placeholder={searchPlaceholder[searchField]} value={query} onChange={(event) => onQueryChange(event.target.value)} />
-          <button type="button" className="portal-search-result-view__clear" onClick={onClear} aria-label="Clear search">×</button>
-          <button type="submit" className="portal-search-result-view__submit" disabled={searching}>{searching ? "…" : "Search"}</button>
+          <button type="button" className="portal-search-result-view__clear" onClick={onClear} aria-label={ui("Clear search")}>×</button>
+          <button type="submit" className="portal-search-result-view__submit" disabled={searching}>{searching ? "…" : ui("Search")}</button>
         </form>
-        <div className="portal-search-result-view__actions" aria-label="Import and export tools">
+        <div className="portal-search-result-view__actions" aria-label={ui("Import and export tools")}>
           <div className="portal-search-result-view__action-group">
-            <span className="portal-search-result-view__action-label">Sales order tools</span>
+            <span className="portal-search-result-view__action-label"><InterfaceText text={"Sales order tools"}/></span>
             <Button type="button" variant="secondary" onClick={onImport}>
-              Import Excel
-            </Button>
+              <InterfaceText text={"Import Excel"}/></Button>
             <Button type="button" variant="secondary" onClick={onTemplate}>
-              Template
-            </Button>
+              <InterfaceText text={"Template"}/></Button>
             <Button type="button" variant="secondary" onClick={onExport} disabled={exportDisabled}>
-              Export sales order
-            </Button>
+              <InterfaceText text={"Export sales order"}/></Button>
           </div>
           <div className="portal-search-result-view__action-status" aria-live="polite">
-            <strong>{basketCount.toLocaleString("en-US")} sales order line{basketCount === 1 ? "" : "s"}</strong>
-            <span>{orderStatus || "Import a file or add a search result to build a sales order."}</span>
+            <strong>{basketCount.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={" sales order line"}/>{basketCount === 1 ? "" : "s"}</strong>
+            <span>{orderStatus || ui("Import a file or add a search result to build a sales order.")}</span>
           </div>
         </div>
         <div className="portal-inline-note portal-inline-note--soft portal-inline-note--compact portal-search-result-view__import-limit-note" role="note">
-          <span>Price lookup limit</span>
-          <strong>Price lookups run in batches of up to 200 rows. Larger files are split automatically; save or send each sales order with 200 lines or fewer.</strong>
+          <span><InterfaceText text={"Price lookup limit"}/></span>
+          <strong><InterfaceText text={"Price lookups run in batches of up to 200 rows. Larger files are split automatically; save or send each sales order with 200 lines or fewer."}/></strong>
         </div>
         {basketCount > 200 ? (
           <div className="portal-search-result-view__order-limit-warning" role="alert">
-            This sales order has {basketCount.toLocaleString("en-US")} lines. Split it into 200-line lists before saving or sending.
-          </div>
+            <InterfaceText text={"This sales order has"}/>{basketCount.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={"lines. Split it into 200-line lists before saving or sending."}/></div>
         ) : null}
       </div>
 
       <div className="portal-search-result-view__layout">
-        <aside className="portal-search-result-rail" aria-label="Search results">
+        <aside className="portal-search-result-rail" aria-label={ui("Search results")}>
           <div className="portal-search-result-rail__summary">
-            {results.length.toLocaleString("en-US")} result{results.length === 1 ? "" : "s"} for “{query || "all parts"}”
+            {results.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={" result"}/>{results.length === 1 ? "" : "s"} <InterfaceText text={" for “"}/>{query || ui("all parts")}”
           </div>
           <div className="portal-search-result-rail__items">
             {visibleResults.map((item) => (
@@ -219,7 +221,7 @@ export function PortalSearchResults({
                   <strong>{item.code || "-"}</strong>
                   <BrandPill brand={item.brand} compact withLogo className="portal-search-result-rail__brand" />
                   <span>{compactText(item.description || "Part description", 48)}</span>
-                  <small>{item.available_qty == null ? "Stock check" : `${Number(item.available_qty).toLocaleString("en-US")} in stock`}</small>
+                  <small>{item.available_qty == null ? ui("Stock check") : ui(`${Number(item.available_qty).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} in stock`)}</small>
                 </span>
                 <span className="portal-search-result-rail__chevron">›</span>
               </button>
@@ -227,7 +229,7 @@ export function PortalSearchResults({
           </div>
           {results.length > 12 ? (
             <button type="button" className="portal-search-result-rail__all" onClick={() => setShowAllResults((current) => !current)}>
-              {showAllResults ? "Show fewer results" : `View all ${results.length.toLocaleString("en-US")} results`}
+              {showAllResults ? ui("Show fewer results") : `View all ${results.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} results`}
             </button>
           ) : null}
         </aside>
@@ -237,9 +239,9 @@ export function PortalSearchResults({
             <>
               <div className="portal-search-result-main__header">
                 <div>
-                  <span className="portal-search-result-main__eyebrow">Selected part</span>
+                  <span className="portal-search-result-main__eyebrow"><InterfaceText text={"Selected part"}/></span>
                   <h2>{selected.code}</h2>
-                  <p>{selected.description || "Part description"}</p>
+                  <p>{selected.description || ui("Part description")}</p>
                   <span>{selected.market_segment || "Automotive"}</span>
                 </div>
                 <BrandPill brand={selected.brand} compact logoOnly />
@@ -255,14 +257,14 @@ export function PortalSearchResults({
                   />
                 </div>
                 <div className="portal-search-result-main__purchase">
-                  <div className="portal-search-result-main__stock"><span />{selected.available_qty == null ? "Stock check" : `${Number(selected.available_qty).toLocaleString("en-US")} pcs available`}</div>
+                  <div className="portal-search-result-main__stock"><span />{selected.available_qty == null ? ui("Stock check") : ui(`${Number(selected.available_qty).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} pcs available`)}</div>
                   <strong className="portal-search-result-main__price">{formatMoney(selected.sell_price, selected.currency || currency)}</strong>
-                  <span className="portal-search-result-main__price-note">Your customer price · Excl. VAT</span>
+                  <span className="portal-search-result-main__price-note"><InterfaceText text={"Your customer price · Excl. VAT"}/></span>
                   <div className="portal-search-result-main__actions">
                     <label className="portal-search-result-main__quantity">
-                      <span>Quantity</span>
+                      <span><InterfaceText text={"Quantity"}/></span>
                       <input
-                        aria-label="Quantity to add"
+                        aria-label={ui("Quantity to add")}
                         type="number"
                         min={1}
                         step={1}
@@ -271,87 +273,87 @@ export function PortalSearchResults({
                         onChange={(event) => setAddQuantity(Math.max(1, Math.floor(Number(event.target.value || 1) || 1)))}
                       />
                     </label>
-                    <Button onClick={() => onAdd(selected, addQuantity)}>Add to sales order</Button>
+                    <Button onClick={() => onAdd(selected, addQuantity)}><InterfaceText text={"Add to sales order"}/></Button>
                   </div>
-                  <button type="button" className="portal-search-result-main__secondary" onClick={() => onPreview?.(selected)}>View larger / details</button>
+                  <button type="button" className="portal-search-result-main__secondary" onClick={() => onPreview?.(selected)}><InterfaceText text={"View larger / details"}/></button>
                 </div>
               </div>
               {selected.replacement_warning ? (
-                <div className="portal-search-result-main__notice"><strong>Replacement note</strong><span>{selected.replacement_warning}</span></div>
+                <div className="portal-search-result-main__notice"><strong><InterfaceText text={"Replacement note"}/></strong><span>{selected.replacement_warning}</span></div>
               ) : null}
               <div className="portal-search-result-main__facts">
-                <section><h3>OEM references</h3><p>{selected.oem_no || "No OEM references recorded"}</p><button type="button" onClick={() => onPreview?.(selected)}>Show all references</button></section>
-                <section><h3>Vehicle compatibility</h3><div className="portal-search-result-main__vehicle"><VehicleBadges value={selected.vehicle || ""} limit={5} expandable logoOnly /></div><button type="button" onClick={() => onPreview?.(selected)}>View compatible vehicles</button></section>
+                <section><h3><InterfaceText text={"OEM references"}/></h3><p>{selected.oem_no || ui("No OEM references recorded")}</p><button type="button" onClick={() => onPreview?.(selected)}><InterfaceText text={"Show all references"}/></button></section>
+                <section><h3><InterfaceText text={"Vehicle compatibility"}/></h3><div className="portal-search-result-main__vehicle"><VehicleBadges value={selected.vehicle || ""} limit={5} expandable logoOnly /></div><button type="button" onClick={() => onPreview?.(selected)}><InterfaceText text={"View compatible vehicles"}/></button></section>
               </div>
               <div className="portal-search-result-main__metadata">
-                <span>Tariff {selected.tariff || "-"}</span>
-                <span>Origin {selected.origin || "-"}</span>
-                <span>Weight {selected.weight_kg == null ? "-" : `${selected.weight_kg} kg`}</span>
+                <span><InterfaceText text={"Tariff "}/>{selected.tariff || "-"}</span>
+                <span><InterfaceText text={"Origin "}/>{selected.origin || "-"}</span>
+                <span><InterfaceText text={"Weight "}/>{selected.weight_kg == null ? "-" : `${selected.weight_kg} kg`}</span>
               </div>
             </>
-          ) : <div className="empty-state">Search by part number, OEM, vehicle or description.</div>}
+          ) : <div className="empty-state"><InterfaceText text={"Search by part number, OEM, vehicle or description."}/></div>}
         </main>
 
-        <aside className="portal-search-result-insights" aria-label="Account insights">
+        <aside className="portal-search-result-insights" aria-label={ui("Account insights")}>
           <section className="portal-search-insight-card">
-            <h3>Last ordered</h3>
+            <h3><InterfaceText text={"Last ordered"}/></h3>
             <small>{formatDate(latestOrder?.updated_at || latestOrder?.quote_date)}</small>
             <strong>{selected?.code || "-"}</strong>
-            <span>{selectedOrderLine?.description || latestOrder?.status || "No previous order for this part"}</span>
-            {selectedOrderLine?.qty ? <small>Qty: {selectedOrderLine.qty}</small> : null}
-            <button type="button" onClick={() => onPreview?.(selected || results[0])}>View order history ›</button>
+            <span>{selectedOrderLine?.description || latestOrder?.status || ui("No previous order for this part")}</span>
+            {selectedOrderLine?.qty ? <small><InterfaceText text={"Qty: "}/>{selectedOrderLine.qty}</small> : null}
+            <button type="button" onClick={() => onPreview?.(selected || results[0])}><InterfaceText text={"View order history ›"}/></button>
           </section>
           <section className="portal-search-insight-card">
-            <h3>Price movement <small>(customer price)</small></h3>
+            <h3><InterfaceText text={"Price movement "}/><small><InterfaceText text={"(customer price)"}/></small></h3>
             <strong>{selected ? formatMoney(selected.sell_price, selected.currency || currency) : "-"}</strong>
-            <span>No prior movement data available yet.</span>
+            <span><InterfaceText text={"No prior movement data available yet."}/></span>
             <div className="portal-search-insight-card__line" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></div>
-            <button type="button" onClick={() => onPreview?.(selected || results[0])}>View price details ›</button>
+            <button type="button" onClick={() => onPreview?.(selected || results[0])}><InterfaceText text={"View price details ›"}/></button>
           </section>
           <section className="portal-search-insight-card portal-search-insight-card--invoice">
-            <h3>Open invoice reminder</h3>
-            <strong>{openInvoice ? formatMoney(openInvoice.total_amount, openInvoice.currency || currency) : "No open invoice"}</strong>
-            <span>{openInvoice ? `Due date: ${formatDate(openInvoice.due_date)}` : "Your account is up to date."}</span>
-            <button type="button" onClick={() => onPreview?.(selected || results[0])}>View invoices ›</button>
+            <h3><InterfaceText text={"Open invoice reminder"}/></h3>
+            <strong>{openInvoice ? formatMoney(openInvoice.total_amount, openInvoice.currency || currency) : ui("No open invoice")}</strong>
+            <span>{openInvoice ? `Due date: ${formatDate(openInvoice.due_date)}` : ui("Your account is up to date.")}</span>
+            <button type="button" onClick={() => onPreview?.(selected || results[0])}><InterfaceText text={"View invoices ›"}/></button>
           </section>
         </aside>
       </div>
 
-      <section className="portal-order-workspace" aria-label="Sales order workspace">
+      <section className="portal-order-workspace" aria-label={ui("Sales order workspace")}>
         <div className="portal-order-workspace__header">
           <div>
-            <span className="portal-search-result-view__eyebrow">Sales order workspace</span>
-            <h3>New sales order</h3>
-            <p>{draftLines.length ? "Review lines, quantities and customer terms before saving or confirming the order." : "Add a search result or import a file to start an order."}</p>
+            <span className="portal-search-result-view__eyebrow"><InterfaceText text={"Sales order workspace"}/></span>
+            <h3><InterfaceText text={"New sales order"}/></h3>
+            <p>{draftLines.length ? ui("Review lines, quantities and customer terms before saving or confirming the order.") : ui("Add a search result or import a file to start an order.")}</p>
           </div>
           <div className="portal-order-workspace__header-meta">
-            <span className="portal-order-workspace__status">{orderStatus || "Draft"}</span>
-            <strong>{draftLines.length.toLocaleString("en-US")} line{draftLines.length === 1 ? "" : "s"}</strong>
+            <span className="portal-order-workspace__status">{ui(orderStatus || "Draft")}</span>
+            <strong>{draftLines.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={" line"}/>{draftLines.length === 1 ? "" : "s"}</strong>
           </div>
         </div>
 
-        <div className="portal-order-workspace__toolbar" aria-label="Sales order actions">
+        <div className="portal-order-workspace__toolbar" aria-label={ui("Sales order actions")}>
           <div className="portal-order-workspace__toolbar-group">
-            <span className="portal-order-workspace__toolbar-label">Order actions</span>
-            <Button variant="secondary" busy={savingBasket} busyLabel="Saving..." onClick={onSaveBasket} disabled={!draftLines.length}>Save sales order → Documents / Orders</Button>
-            <Button variant="secondary" onClick={onClearBasket} disabled={!draftLines.length}>Clear lines</Button>
-            <Button busy={confirmingBasket} busyLabel="Confirming..." onClick={onConfirmBasket} disabled={!draftLines.length || confirmDisabled}>Confirm order</Button>
+            <span className="portal-order-workspace__toolbar-label"><InterfaceText text={"Order actions"}/></span>
+            <Button variant="secondary" busy={savingBasket} busyLabel="Saving..." onClick={onSaveBasket} disabled={!draftLines.length}><InterfaceText text={"Save sales order → Documents / Orders"}/></Button>
+            <Button variant="secondary" onClick={onClearBasket} disabled={!draftLines.length}><InterfaceText text={"Clear lines"}/></Button>
+            <Button busy={confirmingBasket} busyLabel="Confirming..." onClick={onConfirmBasket} disabled={!draftLines.length || confirmDisabled}><InterfaceText text={"Confirm order"}/></Button>
           </div>
           <div className="portal-order-workspace__toolbar-summary">
-            <span>{orderQuantity.toLocaleString("en-US")} pcs</span>
+            <span>{orderQuantity.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={" pcs"}/></span>
             <strong>{formatMoney(orderSubtotal, currency)}</strong>
           </div>
         </div>
 
-        {unpricedLines > 0 ? <div className="portal-order-workspace__warning">{unpricedLines.toLocaleString("en-US")} line{unpricedLines === 1 ? "" : "s"} have no customer price and cannot be confirmed yet.</div> : null}
+        {unpricedLines > 0 ? <div className="portal-order-workspace__warning">{unpricedLines.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={" line"}/>{unpricedLines === 1 ? "" : "s"} <InterfaceText text={" have no customer price and cannot be confirmed yet."}/></div> : null}
 
         <div className="portal-order-workspace__grid">
-          <section className="portal-order-workspace__lines" aria-label="Order lines">
-            <div className="portal-order-workspace__section-heading"><h4>Order lines</h4><span>{draftLines.length.toLocaleString("en-US")} items</span></div>
+          <section className="portal-order-workspace__lines" aria-label={ui("Order lines")}>
+            <div className="portal-order-workspace__section-heading"><h4><InterfaceText text={"Order lines"}/></h4><span>{draftLines.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={" items"}/></span></div>
             {draftLines.length ? (
-              <div className="portal-order-line-table" role="table" aria-label="Sales order lines">
+              <div className="portal-order-line-table" role="table" aria-label={ui("Sales order lines")}>
                 <div className="portal-order-line-table__head" role="row">
-                  <span>Part</span><span>Description</span><span>Qty</span><span>Price</span><span>Amount</span>
+                  <span><InterfaceText text={"Part"}/></span><span><InterfaceText text={"Description"}/></span><span><InterfaceText text={"Qty"}/></span><span><InterfaceText text={"Price"}/></span><span><InterfaceText text={"Amount"}/></span>
                 </div>
                 {draftLines.map((line) => {
                   const code = line.resolvedCode || line.requestedCode || "-";
@@ -359,7 +361,7 @@ export function PortalSearchResults({
                   return (
                     <div key={line.lineId} className="portal-order-line-table__row" role="row">
                       <div className="portal-order-line-table__part"><strong>{code}</strong><BrandPill brand={line.brand} compact withLogo /><small>{line.market_segment || "Automotive"}</small></div>
-                      <div className="portal-order-line-table__description"><span>{line.description || "Part description"}</span>{(line.moq ?? 0) > 1 || (line.order_multiple ?? 0) > 1 ? <small className="portal-order-line-table__notice">Minimum {line.moq || 1}; order multiple {line.order_multiple || 1}.</small> : null}{line.quantity_adjustment_note ? <small className="portal-order-line-table__notice" role="status">{line.quantity_adjustment_note}</small> : null}{line.codeChangeWarning ? <small className="portal-order-line-table__notice">{line.codeChangeWarning}</small> : null}{line.lifecycle_status === "discontinued" ? <small className="portal-order-line-table__notice">Discontinued</small> : null}</div>
+                      <div className="portal-order-line-table__description"><span>{line.description || ui("Part description")}</span>{(line.moq ?? 0) > 1 || (line.order_multiple ?? 0) > 1 ? <small className="portal-order-line-table__notice"><InterfaceText text={"Minimum "}/>{line.moq || 1}<InterfaceText text={"; order multiple "}/>{line.order_multiple || 1}.</small> : null}{line.quantity_adjustment_note ? <small className="portal-order-line-table__notice" role="status">{line.quantity_adjustment_note}</small> : null}{line.codeChangeWarning ? <small className="portal-order-line-table__notice">{line.codeChangeWarning}</small> : null}{line.lifecycle_status === "discontinued" ? <small className="portal-order-line-table__notice"><InterfaceText text={"Discontinued"}/></small> : null}</div>
                       <input className="portal-order-line-table__qty" aria-label={`Quantity for ${code}`} type="number" min={1} step={1} value={line.qty} onChange={(event) => onQuantityChange(line.lineId, Math.max(1, Number(event.target.value || 1) || 1))} />
                       <span className="portal-order-line-table__price">{formatMoney(line.sell_price, currency)}</span>
                       <strong className="portal-order-line-table__amount">{amount == null ? "—" : formatMoney(amount, currency)}</strong>
@@ -367,16 +369,16 @@ export function PortalSearchResults({
                   );
                 })}
               </div>
-            ) : <div className="portal-order-workspace__empty">No order lines yet. Search for a part or import a sales order file above.</div>}
+            ) : <div className="portal-order-workspace__empty"><InterfaceText text={"No order lines yet. Search for a part or import a sales order file above."}/></div>}
           </section>
 
-          <aside className="portal-order-workspace__summary" aria-label="Order summary">
-            <div className="portal-order-workspace__section-heading"><h4>Order summary</h4><span>{currency}</span></div>
-            <div className="portal-order-workspace__totals"><div><span>Lines</span><strong>{draftLines.length.toLocaleString("en-US")}</strong></div><div><span>Quantity</span><strong>{orderQuantity.toLocaleString("en-US")} pcs</strong></div><div className="is-total"><span>Subtotal excl. VAT</span><strong>{formatMoney(orderSubtotal, currency)}</strong></div></div>
-            <label className="portal-order-workspace__field"><span>Delivery term</span><input value={deliveryTerm} onChange={(event) => onDeliveryTermChange(event.target.value)} placeholder="e.g. Standard delivery" /></label>
-            <label className="portal-order-workspace__field"><span>Payment terms</span><input value={paymentTerms} onChange={(event) => onPaymentTermsChange(event.target.value)} placeholder="e.g. As agreed" /></label>
-            <label className="portal-order-workspace__field"><span>Packing details</span><input value={packingDetails} onChange={(event) => onPackingDetailsChange(event.target.value)} placeholder="Optional packing instruction" /></label>
-            <label className="portal-order-workspace__field portal-order-workspace__field--message"><span>Message to seller</span><small>Leave a note for the seller or admin team.</small><textarea value={orderNotes} onChange={(event) => onOrderNotesChange(event.target.value)} placeholder="Write a message for the seller or admin team" rows={3} /></label>
+          <aside className="portal-order-workspace__summary" aria-label={ui("Order summary")}>
+            <div className="portal-order-workspace__section-heading"><h4><InterfaceText text={"Order summary"}/></h4><span>{currency}</span></div>
+            <div className="portal-order-workspace__totals"><div><span><InterfaceText text={"Lines"}/></span><strong>{draftLines.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")}</strong></div><div><span><InterfaceText text={"Quantity"}/></span><strong>{orderQuantity.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={" pcs"}/></strong></div><div className="is-total"><span><InterfaceText text={"Subtotal excl. VAT"}/></span><strong>{formatMoney(orderSubtotal, currency)}</strong></div></div>
+            <label className="portal-order-workspace__field"><span><InterfaceText text={"Delivery term"}/></span><input value={deliveryTerm} onChange={(event) => onDeliveryTermChange(event.target.value)} placeholder={ui("e.g. Standard delivery")} /></label>
+            <label className="portal-order-workspace__field"><span><InterfaceText text={"Payment terms"}/></span><input value={paymentTerms} onChange={(event) => onPaymentTermsChange(event.target.value)} placeholder={ui("e.g. As agreed")} /></label>
+            <label className="portal-order-workspace__field"><span><InterfaceText text={"Packing details"}/></span><input value={packingDetails} onChange={(event) => onPackingDetailsChange(event.target.value)} placeholder={ui("Optional packing instruction")} /></label>
+            <label className="portal-order-workspace__field portal-order-workspace__field--message"><span><InterfaceText text={"Message to seller"}/></span><small><InterfaceText text={"Leave a note for the seller or admin team."}/></small><textarea value={orderNotes} onChange={(event) => onOrderNotesChange(event.target.value)} placeholder={ui("Write a message for the seller or admin team")} rows={3} /></label>
           </aside>
         </div>
       </section>

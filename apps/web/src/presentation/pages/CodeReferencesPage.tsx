@@ -1,3 +1,4 @@
+import {InterfaceText,useInterfaceText} from "../../i18n/InterfaceText";
 import { useEffect, useMemo, useState } from "react";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { createCodeReference, deleteCodeReference, fetchCodeReferences, importCodeReferences, inspectCodeReferenceUsage, updateCodeReference } from "../../infrastructure/api/codeReferencesApi";
@@ -14,6 +15,7 @@ import { downloadCodeReferenceTemplate } from "../../shared/importTemplates";
 import { assertSpreadsheetFile, isSpreadsheetTextExtension, readSpreadsheetMatrix } from "../../shared/spreadsheetImport";
 
 export function CodeReferencesPage() {
+  const ui=useInterfaceText();
   const actionFeedback = useActionFeedback();
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [search, setSearch] = useState("");
@@ -116,7 +118,7 @@ export function CodeReferencesPage() {
 
   const brandOptions = [
     ...brands.map((item) => ({ value: item.name, label: item.name })),
-    { value: "__new__", label: "New brand..." },
+    { value: "__new__", label: ui("New brand...") },
   ];
   const createValidationMessage = useMemo(() => {
     if (!createDraft.brand) return "Select a brand first.";
@@ -136,7 +138,7 @@ export function CodeReferencesPage() {
       const linked = usage.matchesNewCode[0];
       return (
         <div className="warning-text">
-          This code is already used as a current valid code. Old code for it is <strong>{linked.old_code}</strong>.
+          <InterfaceText text={"This code is already used as a current valid code. Old code for it is"}/><strong>{linked.old_code}</strong>.
         </div>
       );
     }
@@ -145,7 +147,7 @@ export function CodeReferencesPage() {
       const linked = usage.matchesOldCode[0];
       return (
         <div className="warning-text">
-          This old code already exists and currently maps to <strong>{linked.new_code}</strong>.
+          <InterfaceText text={"This old code already exists and currently maps to"}/><strong>{linked.new_code}</strong>.
         </div>
       );
     }
@@ -154,7 +156,7 @@ export function CodeReferencesPage() {
       const linked = usage.matchesOldCode[0];
       return (
         <div className="warning-text">
-          This code is already registered as an old code and maps to <strong>{linked.new_code}</strong>.
+          <InterfaceText text={"This code is already registered as an old code and maps to"}/><strong>{linked.new_code}</strong>.
         </div>
       );
     }
@@ -163,7 +165,7 @@ export function CodeReferencesPage() {
       const linked = usage.matchesNewCode[0];
       return (
         <div className="info-text">
-          This code is already used as a current valid code for old code <strong>{linked.old_code}</strong>.
+          <InterfaceText text={"This code is already used as a current valid code for old code"}/><strong>{linked.old_code}</strong>.
         </div>
       );
     }
@@ -380,8 +382,8 @@ export function CodeReferencesPage() {
               }))
             }
           >
-            <option value="true">Yes</option>
-            <option value="false">No</option>
+            <option value="true"><InterfaceText text={"Yes"}/></option>
+            <option value="false"><InterfaceText text={"No"}/></option>
           </select>
         ),
       },
@@ -422,8 +424,7 @@ export function CodeReferencesPage() {
               busy={rowActionKey === `save:${row.id}`}
               busyLabel="Saving..."
             >
-              Save
-            </Button>
+              <InterfaceText text={"Save"}/></Button>
             <Button
               variant="secondary"
               className="button--compact danger-button"
@@ -449,8 +450,7 @@ export function CodeReferencesPage() {
               busy={rowActionKey === `delete:${row.id}`}
               busyLabel="Deleting..."
             >
-              Delete
-            </Button>
+              <InterfaceText text={"Delete"}/></Button>
           </div>
         ),
       },
@@ -463,15 +463,14 @@ export function CodeReferencesPage() {
       <section className="section-card">
         <div className="section-card__header section-card__header--row">
           <div>
-            <h2>Code References</h2>
-            <p>Manage old code to new code supersessions by brand. Quotes will warn only from these approved references.</p>
+            <h2><InterfaceText text={"Code References"}/></h2>
+            <p><InterfaceText text={"Manage old code to new code supersessions by brand. Quotes will warn only from these approved references."}/></p>
           </div>
           <div className="toolbar">
-            <Input value={search} onChange={setSearch} placeholder="Search code references" onEnter={() => setSubmittedSearch(search)} />
-            <Button onClick={() => setSubmittedSearch(search)}>Search</Button>
+            <Input value={search} onChange={setSearch} placeholder={ui("Search code references")} onEnter={() => setSubmittedSearch(search)} />
+            <Button onClick={() => setSubmittedSearch(search)}><InterfaceText text={"Search"}/></Button>
             <Button variant="secondary" onClick={() => setShowImportDialog(true)}>
-              Import CSV
-            </Button>
+              <InterfaceText text={"Import CSV"}/></Button>
             <Button
               variant="secondary"
               onClick={() => {
@@ -484,8 +483,7 @@ export function CodeReferencesPage() {
                 setShowCreateDialog(true);
               }}
             >
-              Add Reference
-            </Button>
+              <InterfaceText text={"Add Reference"}/></Button>
           </div>
         </div>
         <div className="section-card__body">
@@ -503,8 +501,8 @@ export function CodeReferencesPage() {
           <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
             <div className="modal-card__header draggable-surface__handle">
               <div>
-                <h3>Add Code Reference</h3>
-                <p>Create an approved old-code to new-code mapping for quotes and pricing warnings.</p>
+                <h3><InterfaceText text={"Add Code Reference"}/></h3>
+                <p><InterfaceText text={"Create an approved old-code to new-code mapping for quotes and pricing warnings."}/></p>
               </div>
             </div>
             <div className="modal-form-grid">
@@ -565,7 +563,7 @@ export function CodeReferencesPage() {
             {renderUsageHint("new", newCodeUsage)}
             {createValidationMessage ? <div className="warning-text">{createValidationMessage}</div> : null}
             {createError ? <div className="error-text">{createError}</div> : null}
-            <div className="modal-hint">Quotes will only warn about old-to-new code changes when a reference exists here. Original Number helps same-brand matching discipline.</div>
+            <div className="modal-hint"><InterfaceText text={"Quotes will only warn about old-to-new code changes when a reference exists here. Original Number helps same-brand matching discipline."}/></div>
             <div className="modal-actions">
               <Button
                 variant="secondary"
@@ -575,16 +573,14 @@ export function CodeReferencesPage() {
                   setShowCreateDialog(false);
                 }}
               >
-                Cancel
-              </Button>
+                <InterfaceText text={"Cancel"}/></Button>
               <Button
                 onClick={() => void handleCreateReference()}
                 disabled={savingCreate}
                 busy={savingCreate}
                 busyLabel="Creating..."
               >
-                Create Reference
-              </Button>
+                <InterfaceText text={"Create Reference"}/></Button>
             </div>
           </DraggableSurface>
         </div>
@@ -595,24 +591,24 @@ export function CodeReferencesPage() {
           <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
             <div className="modal-card__header draggable-surface__handle">
               <div>
-                <h3>Import Code References CSV</h3>
-                <p>Accepted columns: Brand, Old_Code, New_Code, Original_Number, Reason, Active.</p>
+                <h3><InterfaceText text={"Import Code References CSV"}/></h3>
+                <p><InterfaceText text={"Accepted columns: Brand, Old_Code, New_Code, Original_Number, Reason, Active."}/></p>
               </div>
             </div>
             <div className="modal-form-grid">
               <label className="field field--full">
-                <span className="field__label">File</span>
+                <span className="field__label"><InterfaceText text={"File"}/></span>
                 <input className="field__input" type="file" accept=".csv,text/csv,.tsv,.txt,.xlsx,.xls,.xlsm" onChange={(event) => setImportFile(event.target.files?.[0] ?? null)} />
               </label>
               <Input label="Selected file" value={importFile?.name ?? ""} onChange={() => undefined} disabled />
               <Select
                 label="Default Brand"
                 value={importBrand}
-                options={[{ value: "", label: "Pick brand if file has no Brand column" }, ...brands.map((item) => ({ value: item.name, label: item.name }))]}
+                options={[{ value: "", label: ui("Pick brand if file has no Brand column") }, ...brands.map((item) => ({ value: item.name, label: item.name }))]}
                 onChange={setImportBrand}
               />
             </div>
-            <div className="modal-hint">Duplicate control is automatic. Same brand + old code will update the existing reference instead of creating a duplicate row. Flattened replacement files can contain only Old/New columns if you choose a default brand here.</div>
+            <div className="modal-hint"><InterfaceText text={"Duplicate control is automatic. Same brand + old code will update the existing reference instead of creating a duplicate row. Flattened replacement files can contain only Old/New columns if you choose a default brand here."}/></div>
             <div className="toolbar">
               <Button
                 variant="secondary"
@@ -622,13 +618,11 @@ export function CodeReferencesPage() {
                   actionFeedback.succeed("Code reference sample template downloaded.");
                 }}
               >
-                Download Sample Template
-              </Button>
+                <InterfaceText text={"Download Sample Template"}/></Button>
             </div>
             <div className="modal-actions">
               <Button variant="secondary" onClick={() => setShowImportDialog(false)}>
-                Cancel
-              </Button>
+                <InterfaceText text={"Cancel"}/></Button>
               <Button
                 onClick={async () => {
                   if (!importFile) return;
@@ -657,8 +651,7 @@ export function CodeReferencesPage() {
                 busy={importing}
                 busyLabel="Importing..."
               >
-                Import
-              </Button>
+                <InterfaceText text={"Import"}/></Button>
             </div>
           </DraggableSurface>
         </div>

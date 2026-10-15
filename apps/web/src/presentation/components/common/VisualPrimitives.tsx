@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import {useInterfaceText} from '../../../i18n/InterfaceText';
 
 type PageShellProps = {
   children: ReactNode;
@@ -19,15 +20,17 @@ type PageHeaderProps = {
 };
 
 export function PageHeader({ title, eyebrow, subtitle, status, actions, className = "" }: PageHeaderProps) {
+  const ui=useInterfaceText();
+  const display=(value:ReactNode)=>typeof value==='string'?ui(value):value;
   return (
     <header className={`page-header ${className}`.trim()}>
       <div className="page-header__copy">
-        {eyebrow ? <span className="page-header__eyebrow">{eyebrow}</span> : null}
+        {eyebrow ? <span className="page-header__eyebrow">{display(eyebrow)}</span> : null}
         <div className="page-header__title-row">
-          <h1>{title}</h1>
-          {status ? <div className="page-header__status">{status}</div> : null}
+          <h1>{display(title)}</h1>
+          {status ? <div className="page-header__status">{display(status)}</div> : null}
         </div>
-        {subtitle ? <p>{subtitle}</p> : null}
+        {subtitle ? <p>{display(subtitle)}</p> : null}
       </div>
       {actions ? <PageActions>{actions}</PageActions> : null}
     </header>
@@ -53,7 +56,8 @@ type StatusBadgeProps = {
 };
 
 export function StatusBadge({ children, tone = "neutral", className = "" }: StatusBadgeProps) {
-  return <span className={`status-badge status-badge--${tone} ${className}`.trim()}>{children}</span>;
+  const ui=useInterfaceText();
+  return <span className={`status-badge status-badge--${tone} ${className}`.trim()}>{typeof children==='string'?ui(children):children}</span>;
 }
 
 type StateProps = {

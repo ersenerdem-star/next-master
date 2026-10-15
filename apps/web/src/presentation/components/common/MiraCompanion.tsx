@@ -1,3 +1,4 @@
+import {InterfaceText,useInterfaceText} from "../../../i18n/InterfaceText";
 import { useState } from "react";
 
 type MiraCompanionProps = {
@@ -10,6 +11,7 @@ type MiraCompanionProps = {
  * tracked in the authenticated online Mission Desk, never in browser storage.
  */
 export function MiraCompanion({ embedded = false, onOpenMissionDesk }: MiraCompanionProps) {
+  const ui=useInterfaceText();
   const [isOpen, setIsOpen] = useState(false);
 
   function openMissionDesk() {
@@ -21,12 +23,12 @@ export function MiraCompanion({ embedded = false, onOpenMissionDesk }: MiraCompa
     <aside
       className={`mira-companion${embedded ? " mira-companion--embedded" : ""} mira-companion--home`}
       data-mira-entry={embedded ? "build-context" : "legacy-floating"}
-      aria-label="MIRA online assistant"
+      aria-label={ui("MIRA online assistant")}
     >
       <button
         type="button"
         className="mira-companion__launcher"
-        aria-label="Open MIRA online mission control"
+        aria-label={ui("Open MIRA online mission control")}
         aria-expanded={isOpen}
         onClick={() => setIsOpen((open) => !open)}
       >
@@ -37,27 +39,25 @@ export function MiraCompanion({ embedded = false, onOpenMissionDesk }: MiraCompa
         <span className="mira-companion__badge" aria-live="polite">
           <span className="mira-companion__state-dot" />
           <strong>MIRA</strong>
-          <span>Online</span>
+          <span><InterfaceText text={"Online"}/></span>
         </span>
       </button>
 
       {isOpen ? (
-        <section className="mira-companion__panel" aria-label="MIRA online mission control">
+        <section className="mira-companion__panel" aria-label={ui("MIRA online mission control")}>
           <header className="mira-companion__panel-header">
             <div>
-              <strong>MIRA online</strong>
-              <span>Authenticated mission control</span>
+              <strong><InterfaceText text={"MIRA online"}/></strong>
+              <span><InterfaceText text={"Authenticated mission control"}/></span>
             </div>
-            <button type="button" className="mira-companion__close" onClick={() => setIsOpen(false)} aria-label="Close MIRA panel">
+            <button type="button" className="mira-companion__close" onClick={() => setIsOpen(false)} aria-label={ui("Close MIRA panel")}>
               ×
             </button>
           </header>
           <div className="mira-companion__guard-note">
-            Create and track missions in the online queue. Catalog changes still require a separate human review and Apply step.
-          </div>
+            <InterfaceText text={"Create and track missions in the online queue. Catalog changes still require a separate human review and Apply step."}/></div>
           <button type="button" className="mira-companion__primary-action" onClick={openMissionDesk}>
-            Open MIRA mission control
-          </button>
+            <InterfaceText text={"Open MIRA mission control"}/></button>
         </section>
       ) : null}
     </aside>

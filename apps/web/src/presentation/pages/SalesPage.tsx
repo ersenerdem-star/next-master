@@ -1,3 +1,4 @@
+import {InterfaceText,useInterfaceText} from "../../i18n/InterfaceText";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastructure/api/companyProfilesApi";
 import { fetchCustomerForInvoicePriceRefresh, fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
@@ -63,6 +64,7 @@ export function SalesPage({
   selectedInvoiceId: externalSelectedInvoiceId = "",
   onSelectedInvoiceChange,
 }: SalesPageProps) {
+  const ui=useInterfaceText();
   const { t } = useI18n();
   const actionFeedback = useActionFeedback();
   const [activeTab, setLocalActiveTab] = useState<"Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists">(activeTabProp);
@@ -429,18 +431,18 @@ export function SalesPage({
         logoDataUrl: company.logoDataUrl || "",
       },
       party: {
-        title: "Bill To",
+        title: ui("Bill To"),
         details: billingBlock,
         shippingTitle: showShipping ? "Shipping Address" : undefined,
         shippingDetails: showShipping ? shippingBlock : undefined,
       },
       meta: [
-        { label: "Invoice Date", value: row.quote_date || "-" },
-        { label: "Terms", value: row.payment_terms || "-" },
-        { label: "Due Date", value: row.due_date || "-" },
-        { label: "Delivery Term", value: row.delivery_term || "-" },
-        { label: "Contract Nr", value: row.contract_nr || "-" },
-        { label: "Sales Order", value: row.sales_order_no || "-" },
+        { label: ui("Invoice Date"), value: row.quote_date || "-" },
+        { label: ui("Terms"), value: row.payment_terms || "-" },
+        { label: ui("Due Date"), value: row.due_date || "-" },
+        { label: ui("Delivery Term"), value: row.delivery_term || "-" },
+        { label: ui("Contract Nr"), value: row.contract_nr || "-" },
+        { label: ui("Sales Order"), value: row.sales_order_no || "-" },
       ],
       lines: row.lines.map((line) => ({
         code: line.product_code,
@@ -788,8 +790,7 @@ export function SalesPage({
               handlePrintInvoice(row);
             }}
           >
-            PDF / Print
-          </Button>
+            <InterfaceText text={"PDF / Print"}/></Button>
           <Button
             variant="secondary"
             className="button--compact danger-button"

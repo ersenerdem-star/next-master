@@ -197,3 +197,9 @@ export function useI18n() {
   }
   return context;
 }
+
+// Shared presentational controls also render in isolated previews and receipts.
+// Their previous English default remains available outside an application root.
+export function useInterfaceLocale():LocaleCode {
+  return useContext(I18nContext)?.locale ?? 'en';
+}

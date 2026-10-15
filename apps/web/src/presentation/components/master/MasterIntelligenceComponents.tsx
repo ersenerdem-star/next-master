@@ -1,3 +1,4 @@
+import {InterfaceText} from "../../../i18n/InterfaceText";
 import type { MasterRow } from "../../../types/master";
 import { BrandPill } from "../common/BrandPill";
 import { formatBrandAwareProductCode } from "../../../shared/productCodeDisplay";
@@ -68,7 +69,7 @@ export function MetricTile({ label, value, detail, tone = "neutral" }: MetricTil
 }
 
 export function RiskBadge({ label, tone = "neutral" }: RiskBadgeProps) {
-  return <span className={`risk-badge risk-badge--${tone}`}>{label}</span>;
+  return <span className={`risk-badge risk-badge--${tone}`}><InterfaceText text={label}/></span>;
 }
 
 export function MoneyCell({ value, currency = "EUR", precision = 2, muted = false }: MoneyCellProps) {
@@ -110,7 +111,7 @@ export function SupplierComparisonCell({ row }: { row: MasterRow }) {
         {row.cheapest_supplier ? <RiskBadge label="Best" tone="success" /> : null}
         <RiskBadge label={risk.label} tone={risk.tone} />
       </div>
-      <span className="supplier-decision-cell__count">{row.supplier_count ?? 0} supplier(s)</span>
+      <span className="supplier-decision-cell__count">{row.supplier_count ?? 0} <InterfaceText text={" supplier(s)"}/></span>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import {InterfaceText,useInterfaceText} from "../../i18n/InterfaceText";
 import {SupplierPriceStatistics} from './SupplierPriceStatistics';
 import {useEffect,useId,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
@@ -13,6 +14,7 @@ import {SupplierReleaseReviewCard} from './SupplierReleaseReviewCard';
 import {supplierReleaseActionsEnabled} from '../../infrastructure/api/supplierReleaseActionsApi';
 
 export function SupplierReleaseReviewPanel({locale,showArchive:controlledArchive,dashboard=false,onOpenWorkspace}:{locale:string;showArchive?:boolean;dashboard?:boolean;onOpenWorkspace?:()=>void}){
+  const ui=useInterfaceText();
   const [archive,setShowArchive]=useState(false);
   const showArchive=controlledArchive ?? archive;
   const [issueRelease,setIssueRelease]=useState<ReleaseReviewRow|null>(null);
@@ -50,9 +52,9 @@ export function SupplierReleaseReviewPanel({locale,showArchive:controlledArchive
   },[]);
   const grouped=splitReleaseReviewHistory(rows);
   const displayedRows=showArchive ? (cursor ? rows : grouped.history) : grouped.latest;
-  return <><SectionCard className={`supplier-upload-summary${dashboard?' supplier-upload-summary--dashboard dashboard-upload-center':''}`} title={dashboard ? <span className="supplier-upload-summary__title"><span className="dashboard-reference-card__icon"><NavGlyph name="upload"/></span>Supplier Price Upload Center</span> : showArchive ? (tr?'Yükleme arşivi':'Upload archive') : (tr?'Güncel tedarikçi yüklemeleri':'Current supplier uploads')} actions={<>
+  return <><SectionCard className={`supplier-upload-summary${dashboard?' supplier-upload-summary--dashboard dashboard-upload-center':''}`} title={dashboard ? <span className="supplier-upload-summary__title"><span className="dashboard-reference-card__icon"><NavGlyph name="upload"/></span><InterfaceText text={"Supplier Price Upload Center"}/></span> : showArchive ? (tr?'Yükleme arşivi':'Upload archive') : (tr?'Güncel tedarikçi yüklemeleri':'Current supplier uploads')} actions={<>
     {onOpenWorkspace?<Button onClick={onOpenWorkspace}>{tr?'Fiyat dosyası yükle':'Upload price file'}</Button>:null}
-    <Button variant="secondary" disabled={loading} onClick={()=>setRefresh(v=>v+1)}>{tr?'Yenile':'Refresh'}</Button></>}>
+    <Button variant="secondary" disabled={loading} onClick={()=>setRefresh(v=>v+1)}>{tr?'Yenile':ui("Refresh")}</Button></>}>
     {dashboard?<SupplierPriceStatistics tr={tr} refresh={refresh}/>:null}
     {controlledArchive === undefined ? <Button variant="secondary" aria-pressed={showArchive} onClick={()=>{setShowArchive(v=>!v);setIssueRelease(null);setSelectedId(null);if(cursor){setRows([]);setLoaded(false);setCursor(null);}}}>
       {showArchive?(tr?'Güncel yüklemelere dön':'Back to current uploads'):(tr?'Yükleme arşivini aç':'Open upload archive')}
@@ -60,7 +62,7 @@ export function SupplierReleaseReviewPanel({locale,showArchive:controlledArchive
     <p className="supplier-upload-summary__intro">{showArchive
       ? (tr?'Önceki yüklemeler burada saklanır. Güncel göstergeler için güncel yüklemelere dönün.':'Previous uploads are kept here. Return to current uploads for current indicators.')
       : (tr?'Güncel yüklemeler. Ayrıntıları görmek için bir satıra tıklayın.':'Latest uploads. Select a row to view details.')}</p>
-    {error ? <div role="alert" className="error-text">{tr?'Upgrade kontrol durumu alınamadı. Gösterilen eski veriler güncel olmayabilir; kontrol tamamlandı kabul etmeyin.':'Upgrade review status is unavailable. Previously displayed data may be stale; do not treat the check as completed.'}</div> : null}
+    {error ? <div role="alert" className="error-text">{tr?'Yükleme kontrol durumu alınamadı. Gösterilen eski veriler güncel olmayabilir; kontrol tamamlandı kabul etmeyin.':'Upgrade review status is unavailable. Previously displayed data may be stale; do not treat the check as completed.'}</div> : null}
     {loading ? <p role="status">{tr?'Kontroller yükleniyor…':'Loading checks…'}</p> : null}
     {loaded && !loading && !error && !displayedRows.length ? <p>{showArchive ? (tr?'Bu sayfada arşivlenmiş yükleme yok.':'No archived uploads on this page.') : (tr?'Güncel yükleme yok.':'No current uploads.')}</p> : null}
     {displayedRows.length?<SupplierReleaseSummaryTable rows={displayedRows} tr={tr} onOpen={setSelectedId}/>:null}

@@ -1,3 +1,4 @@
+import {InterfaceText} from "../../i18n/InterfaceText";
 import { commercialUpgradeEnabled } from "../../shared/commercialUpgrade";
 import { confirmOrderForCapability } from "../../shared/confirmOrderForCapability";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -3313,17 +3314,13 @@ export function QuotesPage({
               }}
             />
             <Button variant="secondary" onClick={() => importRef.current?.click()} busy={importingLines} busyLabel={t("sales.orders.importing")}>
-              Import CSV
-            </Button>
+              <InterfaceText text={"Import CSV"}/></Button>
             <Button variant="secondary" onClick={downloadQuoteTemplate}>
-              Sample Template
-            </Button>
+              <InterfaceText text={"Sample Template"}/></Button>
             <Button variant="secondary" onClick={handleExportQuoteXlsx} busy={exportingXlsx} busyLabel="Preparing Excel...">
-              Internal Excel
-            </Button>
+              <InterfaceText text={"Internal Excel"}/></Button>
             <Button variant="secondary" onClick={handlePrintDraftPdf} busy={printingDraft} busyLabel="Opening PDF...">
-              PDF / Print
-            </Button>
+              <InterfaceText text={"PDF / Print"}/></Button>
             {quoteBuilderLines.length ? (
               <>
                 <label className="checkbox-field quote-toolbar-checkbox">
@@ -3362,7 +3359,7 @@ export function QuotesPage({
             </div>
             <div className="workbench-controls">
               <label className="quote-pdf-toggle">
-                <span>Show PDF View</span>
+                <span><InterfaceText text={"Show PDF View"}/></span>
                 <input type="checkbox" checked={pdfView} onChange={(event) => setPdfView(event.target.checked)} />
               </label>
             </div>

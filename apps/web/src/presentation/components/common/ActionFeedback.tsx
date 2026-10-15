@@ -1,3 +1,4 @@
+import {useInterfaceText} from "../../../i18n/InterfaceText";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type ActionFeedbackKind = "idle" | "progress" | "success" | "error";
@@ -12,6 +13,7 @@ type ActionFeedbackContextValue = {
 const ActionFeedbackContext = createContext<ActionFeedbackContextValue | null>(null);
 
 export function ActionFeedbackProvider({ children }: { children: ReactNode }) {
+  const ui=useInterfaceText();
   const [kind, setKind] = useState<ActionFeedbackKind>("idle");
   const [message, setMessage] = useState("");
   const timeoutRef = useRef<number | null>(null);
@@ -74,9 +76,9 @@ export function ActionFeedbackProvider({ children }: { children: ReactNode }) {
               {kind === "progress" ? <span className="action-feedback__spinner" /> : kind === "success" ? "✓" : "×"}
             </div>
             <div className="action-feedback__body">
-              <span className="action-feedback__eyebrow">{kind === "progress" ? "Processing" : kind === "success" ? "Completed" : "Attention required"}</span>
-              <strong>{kind === "progress" ? "Working on it" : kind === "success" ? "Done" : "Action needs attention"}</strong>
-              <span>{message}</span>
+              <span className="action-feedback__eyebrow">{kind === "progress" ? ui("Processing") : kind === "success" ? ui("Completed") : ui("Attention required")}</span>
+              <strong>{kind === "progress" ? ui("Working on it") : kind === "success" ? ui("Done") : ui("Action needs attention")}</strong>
+              <span>{ui(message)}</span>
             </div>
           </div>
         </div>

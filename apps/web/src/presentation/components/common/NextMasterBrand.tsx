@@ -1,3 +1,4 @@
+import {InterfaceText} from "../../../i18n/InterfaceText";
 import type { ReactNode } from "react";
 
 type NextMasterLogoProps = {
@@ -20,7 +21,7 @@ export function NextMasterLogo({ className = "", theme = "dark", compact = false
       {!compact ? (
         <span className="next-master-logo__lockup">
           <strong>NEXT MASTER</strong>
-          <small>AUTOMOTIVE PARTS PLATFORM</small>
+          <small><InterfaceText text={"AUTOMOTIVE PARTS PLATFORM"}/></small>
         </span>
       ) : null}
     </div>

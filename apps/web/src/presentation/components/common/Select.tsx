@@ -1,3 +1,4 @@
+import {useInterfaceText} from '../../../i18n/InterfaceText';
 type SelectOption = {
   value: string;
   label: string;
@@ -16,9 +17,10 @@ type SelectProps = {
 };
 
 export function Select({ label, value, options, onChange, name, autoComplete, fieldClassName = "", inputClassName = "", disabled = false }: SelectProps) {
+  const ui=useInterfaceText();
   return (
     <label className={`field ${fieldClassName}`.trim()}>
-      {label ? <span className="field__label">{label}</span> : null}
+      {label ? <span className="field__label">{ui(label)}</span> : null}
       <select className={`field__input ${inputClassName}`.trim()} name={name} autoComplete={autoComplete} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
           <option key={option.value} value={option.value}>

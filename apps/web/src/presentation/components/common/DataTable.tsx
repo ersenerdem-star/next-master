@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useI18n } from "../../../i18n/I18nProvider";
+import {useInterfaceText} from '../../../i18n/InterfaceText';
 
 type Column<T> = {
   key: string;
@@ -35,7 +36,9 @@ export function DataTable<T>({
   wrapClassName = "",
   rowKey,
 }: DataTableProps<T>) {
-  const { t } = useI18n();
+  const { t,locale } = useI18n();
+  const ui=useInterfaceText();
+  const headerText=(header:string)=>locale==='tr'&&header==='No'?'Numara':ui(header);
   const [sortKey, setSortKey] = useState("");
   const [sortDirection, setSortDirection] = useState<"asc" | "">("");
   const resolvedEmptyText = emptyText ?? t("common.noRowsFound");
@@ -83,7 +86,7 @@ export function DataTable<T>({
   if (!rows.length) {
     return (
       <div className={`table-wrap data-table-shell${wrapClassName ? ` ${wrapClassName}` : ""}`}>
-        <div className="empty-state">{resolvedEmptyText}</div>
+        <div className="empty-state">{ui(resolvedEmptyText)}</div>
       </div>
     );
   }
@@ -101,13 +104,13 @@ export function DataTable<T>({
                     className={`data-table__sort-button${sortKey === column.key && sortDirection === "asc" ? " active" : ""}`}
                     onClick={() => handleHeaderClick(column)}
                   >
-                    <span>{column.header}</span>
+                    <span>{headerText(column.header)}</span>
                     <span className="data-table__sort-indicator" aria-hidden="true">
                       {sortKey === column.key && sortDirection === "asc" ? "↑" : "↕"}
                     </span>
                   </button>
                 ) : (
-                  column.header
+                  headerText(column.header)
                 )}
               </th>
             ))}

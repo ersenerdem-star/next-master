@@ -1,3 +1,4 @@
+import {InterfaceText} from "../../../i18n/InterfaceText";
 import { useMemo, useState } from "react";
 import { resolveNamedLogo } from "./logoAssets";
 
@@ -106,7 +107,7 @@ export function VehicleBadges({
           <span
             key={item.label}
             className={`vehicle-badge vehicle-badge--${item.tone}${compact ? " vehicle-badge--compact" : ""}${logoOnly ? " vehicle-badge--logo-only" : ""}${logoAsset ? " vehicle-badge--has-logo" : ""}`}
-            title={item.label}
+            title={item.label} lang="en"
           >
             <span className="vehicle-badge__mark">
               {logoAsset ? <img src={logoAsset.src} alt="" className="vehicle-badge__logo" /> : item.mark}
@@ -127,8 +128,7 @@ export function VehicleBadges({
       ) : null}
       {expandable && expanded && items.length > limit ? (
         <button type="button" className="vehicle-badge-more" onClick={() => setExpanded(false)}>
-          Less
-        </button>
+          <InterfaceText text={"Less"}/></button>
       ) : null}
     </div>
   );

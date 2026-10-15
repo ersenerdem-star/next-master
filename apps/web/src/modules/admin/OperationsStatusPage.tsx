@@ -1,3 +1,4 @@
+import {InterfaceText} from "../../i18n/InterfaceText";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n/I18nProvider";
 import {
@@ -422,7 +423,7 @@ export function OperationsStatusPage({onOpenSupplierPrices}:{onOpenSupplierPrice
                         <span className={`mark-badge mark-badge--${statusTone(row.catalog_sync_status)}`}>{t(`statuses.${row.catalog_sync_status}`)}</span>
                         <span className={`mark-badge mark-badge--${catalogWorkerStateTone(row)}`}>{catalogWorkerStateLabel(row)}</span>
                       </div>
-                      <small>{formatCount(row.catalog_sync_processed)} / {formatCount(row.supplier_import_staged_rows)} · {formatCount(row.catalog_sync_batches)} batches</small>
+                      <small>{formatCount(row.catalog_sync_processed)} / {formatCount(row.supplier_import_staged_rows)} · {formatCount(row.catalog_sync_batches)} <InterfaceText text={" batches"}/></small>
                     </div>
                     <div className="supplier-operation-stage">
                       <span className="supplier-operation-stage__label">{t("dashboard.operationsStatus.customerPrice")}</span>

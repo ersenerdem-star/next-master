@@ -1,3 +1,4 @@
+import {useInterfaceText} from "../../i18n/InterfaceText";
 import {releaseReviewState, type ReleaseReviewRow} from '../../shared/supplierReleaseReview';
 import {BrandPill} from '../../presentation/components/common/BrandPill';
 
@@ -11,9 +12,10 @@ export function uploadSummaryStatus(row:ReleaseReviewRow,tr:boolean) {
 }
 
 export function SupplierReleaseSummaryTable({rows,tr,onOpen}:{rows:ReleaseReviewRow[];tr:boolean;onOpen:(id:string)=>void}) {
+  const ui=useInterfaceText();
  const locale=tr?'tr-TR':'en-GB';
  return <div className="supplier-upload-summary__table-wrap"><table className="supplier-upload-summary__table">
-   <thead><tr><th>{tr?'Tedarikçi':'Supplier'}</th><th>{tr?'Marka':'Brand'}</th><th>{tr?'Yükleme':'Uploaded'}</th><th className="supplier-upload-summary__number">{tr?'Satır':'Rows'}</th><th>{tr?'Durum':'Status'}</th><th aria-label={tr?'Ayrıntı':'Details'}></th></tr></thead>
+   <thead><tr><th>{tr?'Tedarikçi':ui("Supplier")}</th><th>{tr?'Marka':ui("Brand")}</th><th>{tr?'Yükleme':'Uploaded'}</th><th className="supplier-upload-summary__number">{tr?'Satır':'Rows'}</th><th>{tr?'Durum':ui("Status")}</th><th aria-label={tr?'Ayrıntı':'Details'}></th></tr></thead>
    <tbody>{rows.map(row=>{
      const status=uploadSummaryStatus(row,tr),date=new Date(row.createdAt);
      return <tr key={row.id} onClick={()=>onOpen(row.id)}>
