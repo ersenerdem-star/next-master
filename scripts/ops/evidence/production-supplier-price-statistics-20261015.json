@@ -1,0 +1,23 @@
+{
+  "sourceCommit": "f73a4ef8",
+  "integrationCommit": "fb274b0",
+  "deployId": "6ad1157ea2bebb8d656c2943",
+  "site": "portal.next-master.com",
+  "migration": "20261015180022_supplier_current_price_dashboard_statistics.sql",
+  "observed": {
+    "totalBrands": 88,
+    "pricedBrands": 31,
+    "pricedParts": 400515
+  },
+  "definition": "Total brands is the tenant brand registry. Priced parts are distinct brand ID plus exact whitespace-normalized uppercase SKU, across suppliers. Published current-pointer rows and legacy rows only in scopes without a current pointer contribute; prices must be accepted (published release rows), positive EUR and effective today. Failed/unpublished/previous releases, expired/future prices, and repeated supplier entries do not inflate the count.",
+  "security": "No organization input accepted. auth.uid, current_profile_org_id and supplier_prices.manage are required. Execution revoked from PUBLIC/anon/service_role and granted to authenticated. search_path empty, stable read-only function, 8-second statement limit. Existing security advisor findings 3 before and 3 after; no new findings.",
+  "checks": [
+    "PGlite SQL fixture: tenant/admin access, anonymous denial, unique brand/SKU, suppressed legacy scopes, expired/future/zero/non-EUR/rejected prices and invalid current publication",
+    "TypeScript + Vite production build passed",
+    "Production public environment verified before build",
+    "Authenticated Chrome Overview displays all three live totals"
+  ],
+  "effects": "850ms easing count animation; one-shot light sweep; subtle hover elevation; reduced-motion disables animation.",
+  "refresh": "Reuses panel refresh and 45-second visible-page refresh. Unknown/error totals display a placeholder, not zero.",
+  "screenshot": "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/supplier-upload-statistics/desktop.png"
+}
