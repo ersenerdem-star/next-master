@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-15",
+  "production_url": "https://portal.next-master.com",
+  "netlify_deploy_id": "6ad13647f736a7572fee3d9d",
+  "ui_source_commits": [
+    "2099fb6f",
+    "725a5cc"
+  ],
+  "worker_source_commits": [
+    "dd9fc07e",
+    "1807e2f4"
+  ],
+  "worker_live_commit": "1807e2f4",
+  "portal_changes": {
+    "login_language_selector": true,
+    "profile_language_selector": true,
+    "notifications_only_in_messages": true,
+    "messages_nav_attention": "pulse animation and notification dot while unread notifications exist",
+    "customer_price_list_label": "Müşteri fiyat listesi; A/B tier hidden from customer UI and portal download filename",
+    "customer_hero": "single seamless Turkish background asset without embedded English captions"
+  },
+  "browser_checks": {
+    "customer_home_no_notification_panel": true,
+    "messages_button": "Mesajlar · Yeni bilgiler",
+    "messages_panel_contains_supplier_updates": true,
+    "language_options": [
+      "English",
+      "Türkçe"
+    ],
+    "customer_home_price_list": "Müşteri fiyat listesi",
+    "hero_screenshot": "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/portal-fix/customer-home.png"
+  },
+  "vag_release": {
+    "release_id": "f7193de0-de0f-4790-b930-2f2503f3fbde",
+    "handoff_id": "8a8a3ec8-951a-419d-8b98-ade269cb08a4",
+    "supplier": "Romany",
+    "brand": "VAG",
+    "file_name": "VAG-1_Ro_15102026.csv",
+    "source_sha256": "833ac488c74cb10d8a343ec71780c092608ff8a9a95161da10b9b6ad7b17ae7b",
+    "total_rows": 999998,
+    "observed_status": "parsing",
+    "observed_processed_rows": 25000,
+    "observed_accepted_rows": 25000,
+    "observed_rejected_rows": 0,
+    "observed_warning_rows": 0,
+    "observed_error_code": null,
+    "previous_error": "SUPPLIER_PROCESSING_INTERRUPTED",
+    "recovery_method": "guarded production operator recovery with exact release/handoff IDs; no reupload and no publication"
+  },
+  "validation": {
+    "focused_portal_tests": 21,
+    "production_frontend_build": "passed",
+    "integration_build": "passed",
+    "worker_target_tests": 51,
+    "shared_prepared_rate_limit_fix": "bounded retries plus optional concurrency=1 for the guarded recovery",
+    "no_customer_orders_or_messages_submitted": true,
+    "no_price_publication_at_observation": true
+  }
+}
