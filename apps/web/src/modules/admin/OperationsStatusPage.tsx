@@ -151,6 +151,7 @@ export function OperationsStatusPage({ onOpenSupplierPrices }: { onOpenSupplierP
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
     return date.toLocaleString(locale === "tr" ? "tr-TR" : "en-US", {
+      year: "numeric",
       month: "short",
       day: "2-digit",
       hour: "2-digit",
@@ -337,6 +338,11 @@ export function OperationsStatusPage({ onOpenSupplierPrices }: { onOpenSupplierP
           </Button>
         }
       >
+        {releaseReviewEnabled ? <p role="note" className="operations-data-state operations-data-state--warning">
+          {locale === "tr"
+            ? "Bu bölüm eski aktarım sisteminin geçmişidir. Aşağıdaki hata, bekleme ve fiyat kaynağı bilgileri yalnızca eski akışa aittir. Güncel yükleme ve aktif yayın durumu yukarıdaki Tedarikçi fiyat yayınları bölümündedir."
+            : "This is legacy import history. Failures, waiting states and price sources below describe the legacy pipeline only. See Supplier price releases above for current uploads and active publications."}
+        </p> : null}
         <div className="toolbar toolbar--wrap dashboard-toolbar">
           <Select value={operationsSupplier} options={operationsSupplierOptions} onChange={setOperationsSupplier} />
           <Input value={operationsSearch} placeholder={t("dashboard.operationsStatus.searchPlaceholder")} onChange={setOperationsSearch} />
@@ -380,6 +386,10 @@ export function OperationsStatusPage({ onOpenSupplierPrices }: { onOpenSupplierP
                       <BrandPill brand={row.brand} compact />
                       <strong>{row.supplier_name}</strong>
                       <span className="operations-subtle">
+                        {locale === "tr" ? "Aktarım başlangıcı" : "Import started"}: {formatDateTime(row.supplier_import_started_at)}
+                        {row.supplier_import_finished_at ? ` · ${locale === "tr" ? "Bitiş" : "Finished"}: ${formatDateTime(row.supplier_import_finished_at)}` : ""}
+                      </span>
+                      <span className="operations-subtle">
                         {t("dashboard.operationsStatus.partsAndLines", { parts: formatCount(row.part_count), lines: formatCount(row.line_count) })}
                         {row.latest_price_date ? ` · ${t("dashboard.operationsStatus.latestPrice")} ${row.latest_price_date}` : ""}
                       </span>
@@ -416,7 +426,7 @@ export function OperationsStatusPage({ onOpenSupplierPrices }: { onOpenSupplierP
                     </div>
                   </div>
                   <div className="supplier-operation-card__footer">
-                    <span className="operations-subtle">{t("dashboard.operationsStatus.activePriceSource")}: {formatDateTime(row.last_successful_import_at)}</span>
+                    <span className="operations-subtle">{releaseReviewEnabled ? (locale === "tr" ? "Eski akışın son başarılı aktarımı" : "Last successful legacy import") : t("dashboard.operationsStatus.activePriceSource")}: {formatDateTime(row.last_successful_import_at)}</span>
                     <div className="supplier-operation-card__actions">
                       {hasAttention ? (
                         <details className="supplier-operation-card__details">
@@ -429,7 +439,7 @@ export function OperationsStatusPage({ onOpenSupplierPrices }: { onOpenSupplierP
                           </div>
                         </details>
                       ) : null}
-                      {retryEnabled ? <Button variant="secondary" className="button--compact" onClick={() => void handleRetryRow(row)}>{t("common.retry")}</Button> : null}
+                      {retryEnabled ? <Button variant="secondary" className="button--compact" onClick={() => void handleRetryRow(row)}>{releaseReviewEnabled ? (locale === "tr" ? "Eski aktarımı yeniden dene" : "Retry legacy import") : t("common.retry")}</Button> : null}
                     </div>
                   </div>
                 </article>

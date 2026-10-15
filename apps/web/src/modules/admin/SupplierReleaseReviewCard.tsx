@@ -52,7 +52,7 @@ export function SupplierReleaseReviewCard({rows,tr,onDetails,onIssues,actionsEna
       {state==='review_required' || state==='unverified' ? <Button variant="secondary" onClick={()=>onDetails(releaseReviewMessage(row,tr))}>{tr?'Uyarıyı aç':'Show warning'}</Button> : null}
       {onIssues && ((row.rejectedRows||0)>0 || (row.conflictRows||0)>0 || (row.warningRows||0)>0) ? <Button variant="secondary" onClick={()=>onIssues(row)}>{tr?'Sorunlu satırları göster':'Show problematic rows'}</Button> : null}
       {actionsEnabled?<Button variant="secondary" aria-expanded={expanded===row.id} onClick={()=>setExpanded(expanded===row.id?null:row.id)}>
-        {expanded===row.id?(tr?'İncelemeyi kapat':'Close review'):(tr?'İncele ve yayınla':'Review and publish')}
+        {expanded===row.id?(tr?'İncelemeyi kapat':'Close review'):(state==='active'||state==='previous_publication'?(tr?'Yayın ayrıntıları':'Publication details'):(tr?'İncele ve yayınla':'Review and publish'))}
       </Button>:null}
       {actionsEnabled&&expanded===row.id?<SupplierReleaseActionPanel releaseId={row.id} tr={tr} onChanged={onChanged}/>:null}
     </article>;

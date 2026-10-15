@@ -41,7 +41,7 @@ export function SupplierReleaseReviewPanel({locale}:{locale:string}){
     counts[state]=(counts[state]||0)+1;
     return counts;
   },{} as Record<string,number>);
-  return <SectionCard title={tr?'Upgrade — marka güvenlik kontrolleri':'Upgrade — brand safety checks'} actions={
+  return <SectionCard title={tr?'Tedarikçi fiyat yayınları':'Supplier price releases'} actions={
     <Button variant="secondary" disabled={loading} onClick={()=>setRefresh(v=>v+1)}>{tr?'Yenile':'Refresh'}</Button>}>
     <p>{actionsEnabled?(tr?'Dosya kabulü, doğrulama ve fiyat yayını ayrı aşamalardır. Kaydı açarak güncel kontrol sonucunu inceleyin; yayın için ayrıca onay verin.'
       :'File acceptance, validation, and publication are separate stages. Open a release to review current evidence; publication requires a separate confirmation.')
