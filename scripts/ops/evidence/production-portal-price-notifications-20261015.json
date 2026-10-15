@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-15",
+  "url": "https://portal.next-master.com/portal",
+  "project": "zjgueqijumzlfioihnkt",
+  "migration": "20261015152030_portal_published_price_notifications.sql",
+  "previous_price_notice_count": 0,
+  "root_cause": "Only legacy import-run triggers emitted portal_price_list_updated; new publication/current-pointer path did not.",
+  "behavior": {
+    "signal": "published publication matching all current pointer scope keys",
+    "eligible": "active customer invites in same tenant and permitted brand scope",
+    "deduplication": "unique invite_id + publication_id index; ON CONFLICT DO NOTHING",
+    "backfill": "only current published releases from previous seven days",
+    "email_or_chat_sent": false,
+    "price_or_publication_mutations": false
+  },
+  "database_verification": {
+    "Bosch": {
+      "notice_count": 9,
+      "distinct_recipients": 9,
+      "actual_publication_at": "2026-10-15T07:42:41.495129Z"
+    },
+    "Geba": {
+      "notice_count": 9,
+      "distinct_recipients": 9,
+      "actual_publication_at": "2026-10-14T19:11:41.829842Z"
+    }
+  },
+  "tests": {
+    "command": "node --test scripts/tests/portal-published-price-notifications.test.mjs",
+    "passed": 1,
+    "failed": 0,
+    "scenarios": [
+      "recent current publication backfill",
+      "tenant scope",
+      "disabled invite exclusion",
+      "vendor exclusion",
+      "explicit brand exclusion",
+      "legacy allow-list scope",
+      "idempotent helper replay",
+      "publication before pointer",
+      "pointer before published status",
+      "unchanged pointer update deduplication",
+      "mismatched release rejection",
+      "anon/authenticated/service_role direct helper execution denied"
+    ]
+  },
+  "live_ui": {
+    "authenticated_existing_customer": true,
+    "visible": [
+      "New Bosch price list available",
+      "The new Bosch price list is now available in your customer portal.",
+      "New Geba price list available"
+    ],
+    "screenshot": "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/full-link-audit/price-notifications/bosch-live-notification.png"
+  },
+  "security_advisor": "No finding for either new helper; existing unrelated findings remain. No RLS policies or grants broadened.",
+  "frontend_deployment": "not required; existing feed/API/UI contract reused",
+  "limits": [
+    "Future publication scenarios tested in isolated PostgreSQL; no synthetic publication performed in production."
+  ]
+}
