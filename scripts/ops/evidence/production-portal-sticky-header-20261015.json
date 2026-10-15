@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-15",
+  "url": "https://portal.next-master.com/portal",
+  "source_commit": "672ba4d532b53bc5f7624a2ab116e5d74e97bbc4",
+  "deploy_id": "6ad0f054556ba8433c0e9b19",
+  "integration_commit": "207ee103",
+  "change": "Extend the existing scoped root overflow-x:clip rule to authenticated customer portal workspace roots. Existing sticky header retained.",
+  "build": "production build passed with production public environment",
+  "before": {
+    "scrollY": 605.5,
+    "headerTop": -605.5,
+    "rootOverflowY": "auto"
+  },
+  "after": {
+    "scrollY": 605.5,
+    "headerTop": 0,
+    "headerHeight": 73,
+    "rootOverflowY": "visible",
+    "navigation_from_scrolled_header": "Parts Search and Home succeeded"
+  },
+  "screenshots": [
+    "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/full-link-audit/portal-sticky-header/before-scroll.png",
+    "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/full-link-audit/portal-sticky-header/after-scroll.png"
+  ],
+  "limits": [
+    "Desktop authenticated scroll and navigation verified. No claim of a new exhaustive mobile audit."
+  ],
+  "business_mutations": false,
+  "database_changes": false
+}
