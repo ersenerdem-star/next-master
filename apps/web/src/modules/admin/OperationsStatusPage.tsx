@@ -30,6 +30,7 @@ export function OperationsStatusPage({ onOpenSupplierPrices }: { onOpenSupplierP
   // panel closed until the corresponding schema and worker route are live in
   // this environment; the legacy status centre must remain usable on its own.
   const releaseReviewEnabled = import.meta.env.VITE_SUPPLIER_RELEASE_REVIEW_ENABLED === "true";
+  const [showUploadArchive, setShowUploadArchive] = useState(false);
   const numberLocale = locale === "tr" ? "tr-TR" : "en-US";
   const [operationsRows, setOperationsRows] = useState<SupplierOperationsStatusRow[]>([]);
   const [catalogIntegrity, setCatalogIntegrity] = useState<CatalogIntegritySummary | null>(null);
@@ -58,7 +59,7 @@ export function OperationsStatusPage({ onOpenSupplierPrices }: { onOpenSupplierP
         try {
           const refreshedSuppliers = await fetchCloudSuppliers();
           const [result, integrity, brandOperations] = await Promise.all([
-            fetchCloudSupplierOperationsStatusAll(refreshedSuppliers),
+            !releaseReviewEnabled || showUploadArchive ? fetchCloudSupplierOperationsStatusAll(refreshedSuppliers) : Promise.resolve([]),
             fetchCatalogIntegritySummary().catch(() => null),
             fetchCatalogOperationsBrandStatus(100).catch(() => []),
           ]);
@@ -80,7 +81,7 @@ export function OperationsStatusPage({ onOpenSupplierPrices }: { onOpenSupplierP
       operationsLoadInFlight.current = false;
       setLoadingOperations(false);
     }
-  }, []);
+  }, [releaseReviewEnabled, showUploadArchive]);
 
   useEffect(() => {
     let cancelled = false;
@@ -326,7 +327,10 @@ export function OperationsStatusPage({ onOpenSupplierPrices }: { onOpenSupplierP
         <p>{locale === "tr" ? "Satır sorunları, doğrulama ve yayın kararları Tedarikçi Fiyatları alanındadır. Bu ekran operasyon sağlığını izler." : "Row issues, validation and publication decisions live in Supplier Prices. This screen monitors operational health."}</p>
         <Button variant="secondary" disabled={!onOpenSupplierPrices} onClick={onOpenSupplierPrices}>{locale === "tr" ? "Tedarikçi Fiyatları'nı aç" : "Open Supplier Prices"}</Button>
       </SectionCard> : null}
-      <SupplierLegacyHistory enabled={releaseReviewEnabled}
+      {releaseReviewEnabled ? <Button variant="secondary" aria-pressed={showUploadArchive} onClick={() => setShowUploadArchive(value => !value)}>
+        {showUploadArchive ? (locale === "tr" ? "Arşivi kapat" : "Close archive") : (locale === "tr" ? "Eski yükleme arşivini aç" : "Open legacy upload archive")}
+      </Button> : null}
+      {!releaseReviewEnabled || showUploadArchive ? <SupplierLegacyHistory enabled={releaseReviewEnabled}
         title={t("dashboard.operationsStatus.legacyPipelineTitle")}
         summary={t("dashboard.operationsStatus.legacyHistorySummary", { count: formatCount(operationsRows.length) })}>
       <SectionCard
@@ -452,7 +456,7 @@ export function OperationsStatusPage({ onOpenSupplierPrices }: { onOpenSupplierP
           </div>
         ) : null}
       </SectionCard>
-      </SupplierLegacyHistory>
+      </SupplierLegacyHistory> : null}
       <details className="operations-secondary-details">
         <summary>
           <span>{t("catalog.integrity.title")}</span>

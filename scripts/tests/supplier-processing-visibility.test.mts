@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {parseUploadStatus,supplierUploadStatusView,SUPPLIER_PROCESSING_INTERRUPTED,type UploadStatus} from '../../apps/web/src/shared/supplierUploadProtocol.ts';
-import {releaseReviewState,type ReleaseReviewRow} from '../../apps/web/src/shared/supplierReleaseReview.ts';
+import {releaseReviewState,splitReleaseReviewHistory,type ReleaseReviewRow} from '../../apps/web/src/shared/supplierReleaseReview.ts';
 import {SupplierReleaseReviewCard,releaseReviewMessage} from '../../apps/web/src/modules/admin/SupplierReleaseReviewCard.tsx';
 
 const sessionId='10000000-0000-0000-0000-000000000001',releaseId='20000000-0000-0000-0000-000000000002';
@@ -59,4 +59,22 @@ test('published history remains a previous publication when a later version owns
  }
  // An actual stored error still takes priority over a historical success label.
  assert.equal(releaseReviewState({...previous,errorCode:'VALIDATION_REVIEW_REQUIRED'}),'review_required');
+});
+
+
+test('new uploads automatically move all earlier same-scope results out of current indicators',()=>{
+ const previous={...row,id:'previous',status:'published',current:true,errorCode:null};
+ const latest={...row,id:'latest',status:'failed',errorCode:'WORKER_FAILED',createdAt:'2026-10-15T10:00:00Z'};
+ const otherScope={...previous,id:'other-supplier',supplierId:'another-supplier'};
+ const before=splitReleaseReviewHistory([previous,otherScope]);
+ assert.deepEqual(before.latest.map(r=>r.id),['previous','other-supplier']);
+ const after=splitReleaseReviewHistory([latest,previous,otherScope]);
+ assert.deepEqual(after.latest.map(r=>r.id),['latest','other-supplier']);
+ assert.deepEqual(after.history.map(r=>r.id),['previous']);
+ assert.equal(after.latest[0].status,'failed');
+ assert.equal(after.latest[0].processedRows,25000);
+ assert.equal(after.history[0].current,true);
+ const next=splitReleaseReviewHistory([{...latest,id:'next',status:'parsing'},latest,previous,otherScope]);
+ assert.deepEqual(next.latest.map(r=>r.id),['next','other-supplier']);
+ assert.deepEqual(next.history.map(r=>r.id),['latest','previous']);
 });

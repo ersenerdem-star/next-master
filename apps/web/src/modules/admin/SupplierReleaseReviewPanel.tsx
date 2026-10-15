@@ -9,12 +9,13 @@ import {SupplierReleaseReviewCard} from './SupplierReleaseReviewCard';
 import {supplierReleaseActionsEnabled} from '../../infrastructure/api/supplierReleaseActionsApi';
 
 export function SupplierReleaseReviewPanel({locale}:{locale:string}){
+  const [showArchive,setShowArchive]=useState(false);
+  const [issueRelease,setIssueRelease]=useState<ReleaseReviewRow|null>(null);
   const tr=locale==='tr',feedback=useActionFeedback();
   const actionsEnabled=supplierReleaseActionsEnabled();
   const [rows,setRows]=useState<ReleaseReviewRow[]>([]),[next,setNext]=useState<ReleaseReviewCursor|null>(null);
   const [cursor,setCursor]=useState<ReleaseReviewCursor|null>(null),[refresh,setRefresh]=useState(0);
   const [loading,setLoading]=useState(false),[error,setError]=useState(false),[loaded,setLoaded]=useState(false);
-  const [issueRelease,setIssueRelease]=useState<ReleaseReviewRow|null>(null);
   const serial=useRef(0);
   useEffect(()=>{
     const controller=new AbortController(), version=++serial.current;
@@ -41,26 +42,26 @@ export function SupplierReleaseReviewPanel({locale}:{locale:string}){
     counts[state]=(counts[state]||0)+1;
     return counts;
   },{} as Record<string,number>);
-  return <SectionCard title={tr?'Tedarikçi fiyat yayınları':'Supplier price releases'} actions={
+  const displayedRows=showArchive ? (cursor ? rows : grouped.history) : grouped.latest;
+  return <SectionCard title={showArchive ? (tr?'Yükleme arşivi':'Upload archive') : (tr?'Güncel tedarikçi yüklemeleri':'Current supplier uploads')} actions={
     <Button variant="secondary" disabled={loading} onClick={()=>setRefresh(v=>v+1)}>{tr?'Yenile':'Refresh'}</Button>}>
-    <p>{actionsEnabled?(tr?'Dosya kabulü, doğrulama ve fiyat yayını ayrı aşamalardır. Kaydı açarak güncel kontrol sonucunu inceleyin; yayın için ayrıca onay verin.'
-      :'File acceptance, validation, and publication are separate stages. Open a release to review current evidence; publication requires a separate confirmation.')
-      :(tr?'Salt okunur kontrol ekranı. Dosya kabulü, doğrulama ve fiyat yayını farklı aşamalardır. Bu bölüm eski upload akışının güvenlik kontrolünden geçtiğini göstermez.':'Read-only review. File acceptance, validation and price publication are separate stages. This section does not certify the legacy upload path.')}</p>
+    <Button variant="secondary" aria-pressed={showArchive} onClick={()=>{setShowArchive(v=>!v);setIssueRelease(null);if(cursor){setRows([]);setLoaded(false);setCursor(null);}}}>
+      {showArchive?(tr?'Güncel yüklemelere dön':'Back to current uploads'):(tr?'Yükleme arşivini aç':'Open upload archive')}
+    </Button>
+    <p>{showArchive
+      ? (tr?'Önceki yüklemeler burada saklanır. Güncel göstergeler için güncel yüklemelere dönün.':'Previous uploads are kept here. Return to current uploads for current indicators.')
+      : (tr?'Her tedarikçi ve marka için yalnızca son yükleme gösterilir. Yeni yükleme geldiğinde önceki kayıt otomatik olarak arşiv görünümüne taşınır.':'Only the latest upload for each supplier and brand is shown. A new upload automatically moves the previous record to the archive view.')}</p>
     {error ? <div role="alert" className="error-text">{tr?'Upgrade kontrol durumu alınamadı. Gösterilen eski veriler güncel olmayabilir; kontrol tamamlandı kabul etmeyin.':'Upgrade review status is unavailable. Previously displayed data may be stale; do not treat the check as completed.'}</div> : null}
     {loading ? <p role="status">{tr?'Kontroller yükleniyor…':'Loading checks…'}</p> : null}
-    {loaded && !error && !rows.length ? <p>{tr?'Bu sayfada upgrade kaydı yok. Eski yüklemeler kontrol edilmiş sayılmaz.':'No upgraded releases on this page. Legacy uploads are not considered checked.'}</p> : null}
-    {grouped.latest.length ? <div className="supplier-release-review-summary" aria-label={tr?'En yeni kapsam özeti':'Latest scope summary'}>
+    {loaded && !loading && !error && !displayedRows.length ? <p>{showArchive ? (tr?'Bu sayfada arşivlenmiş yükleme yok.':'No archived uploads on this page.') : (tr?'Güncel yükleme yok.':'No current uploads.')}</p> : null}
+    {!showArchive && grouped.latest.length ? <div className="supplier-release-review-summary" aria-label={tr?'En yeni kapsam özeti':'Latest scope summary'}>
       {Object.entries(latestSummary).map(([state,count])=><span key={state}><strong>{count}</strong> {stateLabel(state)}</span>)}
     </div> : null}
-    <SupplierReleaseReviewCard onIssues={setIssueRelease} rows={grouped.latest} tr={tr} onDetails={feedback.fail} actionsEnabled={actionsEnabled} onChanged={()=>setRefresh(v=>v+1)}/>
-    {grouped.history.length ? <details className="supplier-release-history">
-      <summary>{tr?`Geçmiş yüklemeler (${grouped.history.length})`:`Older uploads (${grouped.history.length})`}</summary>
-      <SupplierReleaseReviewCard onIssues={setIssueRelease} rows={grouped.history} tr={tr} onDetails={feedback.fail} actionsEnabled={actionsEnabled} onChanged={()=>setRefresh(v=>v+1)}/>
-    </details> : null}
+    <SupplierReleaseReviewCard onIssues={setIssueRelease} rows={displayedRows} tr={tr} onDetails={feedback.fail} actionsEnabled={actionsEnabled} onChanged={()=>setRefresh(v=>v+1)}/>
     {issueRelease ? <SupplierReleaseIssuePanel key={issueRelease.id} release={issueRelease} tr={tr} onClose={()=>setIssueRelease(null)} /> : null}
-    <div className="toolbar toolbar--wrap">
-      {cursor ? <Button variant="secondary" disabled={loading} onClick={()=>setCursor(null)}>{tr?'En yeni kayıtlar':'Latest releases'}</Button> : null}
+    {showArchive ? <div className="toolbar toolbar--wrap">
+      {cursor ? <Button variant="secondary" disabled={loading} onClick={()=>setCursor(null)}>{tr?'Arşiv başlangıcı':'Archive start'}</Button> : null}
       {next ? <Button variant="secondary" disabled={loading||error} onClick={()=>setCursor(next)}>{tr?'Daha eski kayıtlar':'Older releases'}</Button> : null}
-    </div>
+    </div> : null}
   </SectionCard>;
 }
