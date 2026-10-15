@@ -623,34 +623,12 @@ async function deleteSingleRow(input: {
 }
 
 async function listPortalInvites(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
-  try {
-    return decoratePortalInviteRows(
-      await listRows<Record<string, unknown>>({
-        supabaseUrl,
-        serviceRoleKey,
-        table: "portal_invites",
-        select: PORTAL_INVITE_COLUMNS,
-        organizationId,
-        order: "updated_at.desc",
-      }),
-    );
-  } catch (primaryError) {
-    if (getErrorMessage(primaryError, "").includes("excluded_brand_ids")) throw primaryError;
-    try {
-      return decoratePortalInviteRows(
-        await listRows<Record<string, unknown>>({
-          supabaseUrl,
-          serviceRoleKey,
-          table: "portal_invites",
-          select: LEGACY_PORTAL_INVITE_COLUMNS,
-          organizationId,
-          order: "updated_at.desc",
-        }),
-      );
-    } catch (legacyError) {
-      throw new Error(getErrorMessage(legacyError, getErrorMessage(primaryError, "Portal invites load failed")));
-    }
-  }
+  // Exclusions are mandatory scope data. A failed read must never retry with
+  // legacy columns that would make a restricted account appear unrestricted.
+  return decoratePortalInviteRows(await listRows<Record<string, unknown>>({
+    supabaseUrl, serviceRoleKey, table: "portal_invites", select: PORTAL_INVITE_COLUMNS,
+    organizationId, order: "updated_at.desc",
+  }));
 }
 
 function decoratePortalInviteRow(row: Record<string, unknown> | null) {
