@@ -1,7 +1,7 @@
 {
   "local_tests": {
-    "tests": 135,
-    "pass": 135,
+    "tests": 138,
+    "pass": 138,
     "fail": 0
   },
   "web_build": "passed",
@@ -42,5 +42,17 @@
     ]
   },
   "database": "Read-only presence/hash checks; no migration or data writes",
-  "production_deploy": "not executed"
+  "production_deploy": "not executed",
+  "confirmation_compatibility": {
+    "existing_confirmation": "Preserved when atomic capability is false; original target sequence restored",
+    "atomic_failure": "No legacy fallback after an ambiguous result",
+    "focused_suite": {
+      "tests": 27,
+      "pass": 25,
+      "skipped": 2,
+      "fail": 0
+    },
+    "build": "passed after compatibility correction",
+    "scope": "Local tests; not authenticated database acceptance"
+  }
 }

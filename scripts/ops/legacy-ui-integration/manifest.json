@@ -76,7 +76,8 @@
     "Published and legacy supplier price bridge, exact SKU identity and commercial quantity rules",
     "Durable exports, download handoff, source revision and worker dispatch",
     "Supplier publication actions and feature gates",
-    "Catalog storage worker admission and current reader contracts"
+    "Catalog storage worker admission and current reader contracts",
+    "Existing order confirmation remains available while atomic capability is disabled; atomic failures never trigger legacy fallback"
   ],
   "excluded_from_this_ui_integration": [
     "Mira crawling, adapters, schedules and catalog-source enrollment",
@@ -108,7 +109,7 @@
     "meaning": "Function presence and selected source hashes only; not business E2E or authorization proof"
   },
   "capability_gates": {
-    "VITE_COMMERCIAL_DOCUMENT_UPGRADE_ENABLED": "default false; financial semantics and atomic confirmation UI use only after target acceptance",
+    "VITE_COMMERCIAL_DOCUMENT_UPGRADE_ENABLED": "default false; preserve existing confirmation sequence; enable atomic confirmation and financial semantics only after target acceptance",
     "NM_COMMERCIAL_DOCUMENT_UPGRADE_ENABLED": "default false; server refuses atomic dispatch until explicitly enabled after acceptance"
   }
 }

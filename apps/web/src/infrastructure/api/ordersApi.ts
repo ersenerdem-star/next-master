@@ -916,6 +916,24 @@ export async function fetchPurchaseOrderById(purchaseOrderId: string): Promise<L
   return fetchOrderRecord("purchase_orders", PURCHASE_ORDER_COLUMNS, mapPurchaseOrderRow, purchaseOrderId);
 }
 
+export async function replacePurchaseOrdersForSalesOrder(salesOrderId: string, purchaseOrders: LocalPurchaseOrder[]) {
+  const organizationId = await getCurrentOrgId();
+  const { data: existingRows, error: existingError } = await supabaseClient
+    .from("purchase_orders")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("sales_order_id", salesOrderId);
+  if (existingError) throw new Error(existingError.message || "Purchase order replace failed");
+
+  await Promise.all(
+    ((existingRows || []) as Array<Record<string, unknown>>).map((row) => callAppRpc("delete_purchase_order_guarded", { id: String(row.id || "") })),
+  );
+
+  if (!purchaseOrders.length) return [];
+
+  return Promise.all(purchaseOrders.map((row) => upsertPurchaseOrder(row)));
+}
+
 export async function fetchInvoices(): Promise<LocalInvoice[]> {
   return fetchOrderCollection("invoices", INVOICE_COLUMNS, mapInvoiceRow);
 }
