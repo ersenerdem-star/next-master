@@ -18,6 +18,8 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHA=/^[0-9a-f]{64}$/;
 const MAX_MANIFEST=8*1024*1024,MAX_PART=32*1024*1024;
 const PART_UPLOAD_CONCURRENCY=4;
+const PUT_MAX_ATTEMPTS=5;
+const PUT_BACKOFF_MS=1000;
 const MAX_READ_ATTEMPTS=5,READ_BACKOFF_MS=250;
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const positive=(n,max)=>Number.isSafeInteger(n)&&n>0&&n<=max;
@@ -54,7 +56,7 @@ export function validateSharedPreparedManifest(manifest,release,batchSize,{comme
  return {prefix,key};
 }
 
-export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl=fetch,timeoutMs=60000,commercialFields=false}){
+export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl=fetch,timeoutMs=60000,commercialFields=false,partUploadConcurrency=PART_UPLOAD_CONCURRENCY}){
  const origin=new URL(supabaseUrl);
  if(origin.protocol!=='https:'||origin.username||origin.password||origin.pathname!=='/'||origin.search||origin.hash
   ||typeof commercialFields!=='boolean'||!serviceRoleKey||typeof fetchImpl!=='function'||!positive(timeoutMs,3600000))throw Error('SHARED_PREPARED_CONFIG_INVALID');
@@ -141,17 +143,26 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
   // Exact streamed readback avoids a second whole-part buffer per uploader.
   const existing=await get(path,max,bytes);
   if(existing!==null){if(!existing)throw Error('SHARED_PREPARED_IMMUTABLE_CONFLICT');return;}
-  let r;
-  try{r=await request(objectUrl(PREPARED_BUCKET,path),{method:'POST',headers:{'content-type':type,'x-upsert':'false'},body:bytes});}
-  catch(error){
-   // Acceptance can be unknown. Same identity is recovered by exact readback.
-   const recovered=await get(path,max,bytes);
-   if(recovered===true)return;
-   throw Error('SHARED_PREPARED_UPLOAD_UNCONFIRMED',{cause:error});
+  let lastStatus=null;
+  for(let attempt=1;attempt<=PUT_MAX_ATTEMPTS;attempt++){
+   let r;
+   try{r=await request(objectUrl(PREPARED_BUCKET,path),{method:'POST',headers:{'content-type':type,'x-upsert':'false'},body:bytes});}
+   catch(error){
+    const recovered=await get(path,max,bytes);
+    if(recovered===true)return;
+    if(attempt<PUT_MAX_ATTEMPTS){await delay(PUT_BACKOFF_MS*2**(attempt-1));continue;}
+    throw Error('SHARED_PREPARED_UPLOAD_UNCONFIRMED',{cause:error});
+   }
+   lastStatus=r.status;
+   await r.body?.cancel?.();
+   const transient=r.status===408||r.status===425||r.status===429||r.status>=500&&r.status<=599;
+   if(!r.ok&&transient&&attempt<PUT_MAX_ATTEMPTS){await delay(PUT_BACKOFF_MS*2**(attempt-1));continue;}
+   const actual=await get(path,max,bytes);
+   if(actual===true)return;
+   if(!r.ok)throw Error(`SHARED_PREPARED_UPLOAD_FAILED:${r.status}`);
+   throw Error('SHARED_PREPARED_READBACK_MISMATCH');
   }
-  await r.body?.cancel?.();
-  const actual=await get(path,max,bytes);
-  if(actual!==true)throw Error(r.ok?'SHARED_PREPARED_READBACK_MISMATCH':`SHARED_PREPARED_UPLOAD_FAILED:${r.status}`);
+  throw Error(`SHARED_PREPARED_UPLOAD_FAILED:${lastStatus||'UNKNOWN'}`);
  }
  async function load(release,batchSize,receipt){
   const {key}=binding(release,batchSize,commercialFields);
@@ -207,7 +218,7 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
     };
     // Four workers hold at most four MAX_PART buffers. Stop assigning parts
     // on failure, but settle every in-flight read/upload before temp cleanup.
-    await Promise.all(Array.from({length:Math.min(PART_UPLOAD_CONCURRENCY,manifest.partitions.length)},uploadParts));
+    await Promise.all(Array.from({length:Math.min(partUploadConcurrency,manifest.partitions.length)},uploadParts));
     if(uploadError)throw uploadError;
     // Ready marker LAST. A partial upload cannot be used by the row worker.
     await putExact(key,Buffer.from(JSON.stringify(manifest)+'\n'),'application/json',MAX_MANIFEST);

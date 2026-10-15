@@ -95,6 +95,9 @@ test('Production activation never expands staging fixtures or their recovery/exp
  for(const argument of [undefined,'--operator-recover','--verified-handoff','--check-only','00000000-0000-0000-0000-000000000000'])
   assert.throws(()=>requireProductionServiceInvocation(env,argument),/PRODUCTION_SERVICE_REQUIRED/);
  assert.doesNotThrow(()=>requireProductionServiceInvocation(env,'--service'));
+ const recoveryEnv={...env,SUPPLIER_PRICE_OPERATOR_RECOVERY_APPROVED:'1',SUPPLIER_PRICE_OPERATOR_RECOVERY_RELEASE_ID:'00000000-0000-0000-0000-000000000000',SUPPLIER_PRICE_OPERATOR_RECOVERY_HANDOFF_ID:'00000000-0000-0000-0000-000000000001'};
+ assert.doesNotThrow(()=>requireProductionServiceInvocation(recoveryEnv,'--operator-recover-production'));
+ assert.throws(()=>requireProductionServiceInvocation({...recoveryEnv,SUPPLIER_PRICE_OPERATOR_RECOVERY_APPROVED:'0'},'--operator-recover-production'),/PRODUCTION_SERVICE_REQUIRED/);
 });
 
 test('Production read-only privilege probe requires the real manifest exception; headers respect key format',async()=>{

@@ -31,12 +31,14 @@ const PREPARED_PARTITION_MANIFEST = String(process.env.SUPPLIER_PRICE_SHADOW_PAR
 const SHARED_PREPARED = process.env.SUPPLIER_PRICE_SHARED_PREPARED_ENABLED === "1";
 const COMPACT_HISTORY = process.env.SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED === '1';
 const COMMERCIAL_FIELDS = process.env.SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED === '1';
+const PREPARED_PART_UPLOAD_CONCURRENCY = Math.min(4, Math.max(1, Number(process.env.SUPPLIER_PRICE_SHARED_PREPARED_PART_CONCURRENCY || 4)));
 
 function requireVerifiedMode() {
+  const productionOperatorRecovery = process.argv[2] === "--operator-recover-production";
   if(process.env.SUPPLIER_PRICE_VERIFIED_HANDOFF_ENABLED !== "1" || !PERSIST_SHADOW_ROWS
     || PREPARED_PARTITION_MANIFEST || process.env.SUPPLIER_PRICE_EXPIRY_TEST_ROLE
     || process.env.SUPPLIER_PRICE_RECOVERY_TEST_PAUSE_AFTER_STAGE === "1")throw Error("VERIFIED_HANDOFF_DISABLED_OR_UNSAFE_CONFIG");
-  if(process.argv[2]==='--service')requireSupplierPriceServiceTarget(process.env);
+  if(process.argv[2]==='--service' || productionOperatorRecovery) requireSupplierPriceServiceTarget(process.env);
   else requireShadowStagingHost(SUPABASE_URL);
 }
 
@@ -224,7 +226,7 @@ const verifiedRecoveryWorkflow=DBOS.registerWorkflow(createVerifiedReleaseWorkfl
 const verifiedPartitionedWorkflow=DBOS.registerWorkflow(async input=>{
   requireVerifiedMode();
   if(!SHARED_PREPARED)throw Error('SHARED_PREPARED_DISABLED');
-  const source=createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY});
+  const source=createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,partUploadConcurrency:PREPARED_PART_UPLOAD_CONCURRENCY});
   return createPartitionedVerifiedWorkflow({DBOS,rpc:callRpc,source,requireMode:requireVerifiedMode,batchSize:BATCH_SIZE})(input);
 },{name:'supplier-price-verified-release-v4'});
 
@@ -233,21 +235,21 @@ const verifiedPartitionedWorkflow=DBOS.registerWorkflow(async input=>{
 const verifiedCompactWorkflow=DBOS.registerWorkflow(async input=>{
   requireVerifiedMode();
   if(!COMPACT_HISTORY||!SHARED_PREPARED)throw Error('COMPACT_HISTORY_DISABLED');
-  const source=createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY});
+  const source=createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,partUploadConcurrency:PREPARED_PART_UPLOAD_CONCURRENCY});
   return createCompactVerifiedWorkflow({DBOS,rpc:callRpc,source,requireMode:requireVerifiedMode,batchSize:BATCH_SIZE})(input);
 },{name:'supplier-price-verified-release-v5'});
 // v6 opts into the complete commercial row contract. v5 callback and history stay unchanged.
 const verifiedCommercialWorkflow=DBOS.registerWorkflow(async input=>{
   requireVerifiedMode();
   if(!COMMERCIAL_FIELDS||!COMPACT_HISTORY||!SHARED_PREPARED)throw Error('COMMERCIAL_FIELDS_DISABLED');
-  const source=createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,commercialFields:true});
+  const source=createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,commercialFields:true,partUploadConcurrency:PREPARED_PART_UPLOAD_CONCURRENCY});
   return createCompactVerifiedWorkflow({DBOS,rpc:callRpc,source,requireMode:requireVerifiedMode,batchSize:BATCH_SIZE,commercialFields:true})(input);
 },{name:'supplier-price-verified-release-v6'});
 const selectedVerifiedWorkflow=COMMERCIAL_FIELDS?verifiedCommercialWorkflow:COMPACT_HISTORY?verifiedCompactWorkflow:SHARED_PREPARED?verifiedPartitionedWorkflow:verifiedRecoveryWorkflow;
 
 async function main() {
   requireProductionServiceInvocation(process.env,process.argv[2]);
-  const operatorRecovery = process.argv[2] === "--operator-recover";
+  const operatorRecovery = process.argv[2] === "--operator-recover" || process.argv[2] === "--operator-recover-production";
   const releaseId = operatorRecovery
     ? String(process.env.SUPPLIER_PRICE_OPERATOR_RECOVERY_RELEASE_ID || "").trim()
     : String(process.argv[2] || "").trim();
@@ -294,7 +296,7 @@ async function main() {
       // can reclaim only the expired batch for this exact handoff. This path
       // never publishes commercial data.
       const result = await runDirectVerifiedRelease({
-        rpc:callRpc, source:createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,commercialFields:COMMERCIAL_FIELDS}),
+        rpc:callRpc, source:createSharedPreparedSource({supabaseUrl:SUPABASE_URL,serviceRoleKey:SERVICE_ROLE_KEY,commercialFields:COMMERCIAL_FIELDS,partUploadConcurrency:PREPARED_PART_UPLOAD_CONCURRENCY}),
         commercialFields:COMMERCIAL_FIELDS,releaseId, handoffId, workerId:`operator-recovery:${process.pid}`, batchSize:BATCH_SIZE,
       });
       console.log(JSON.stringify({mode:'direct-operator-recovery',releaseId,handoffId,result,published:false}));

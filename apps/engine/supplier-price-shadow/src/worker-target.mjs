@@ -34,6 +34,11 @@ export function requireProductionServiceInvocation(env,argument) {
   let productionHost=false;
   try{productionHost=new URL(env.SUPABASE_URL||'https://invalid.invalid').hostname===PRODUCTION_SUPABASE_HOST;}
   catch{} // Config gives the bounded diagnosis; no raw URL is logged.
+  const approvedProductionRecovery = argument === '--operator-recover-production'
+    && env.SUPPLIER_PRICE_OPERATOR_RECOVERY_APPROVED === '1'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(env.SUPPLIER_PRICE_OPERATOR_RECOVERY_RELEASE_ID || '')
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(env.SUPPLIER_PRICE_OPERATOR_RECOVERY_HANDOFF_ID || '');
+  if(approvedProductionRecovery) return;
   if(argument!=='--service'&&(productionHost||env.SUPPLIER_PRICE_TARGET_ENVIRONMENT==='production'
     ||env.SUPPLIER_PRICE_PRODUCTION_ENABLED==='1'))throw Error('SERVICE_PRODUCTION_SERVICE_REQUIRED');
 }
