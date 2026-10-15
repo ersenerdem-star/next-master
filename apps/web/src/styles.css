@@ -12708,8 +12708,11 @@ body {
   background: url("/portal-assets/customer-desk-network-hero.png") right center / auto 100% no-repeat;
   content: "";
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, transparent 46%, rgba(0, 0, 0, 0.10) 54%, rgba(0, 0, 0, 0.72) 62%, #000 72%, #000 100%);
-  mask-image: linear-gradient(90deg, transparent 0%, transparent 46%, rgba(0, 0, 0, 0.10) 54%, rgba(0, 0, 0, 0.72) 62%, #000 72%, #000 100%);
+  /* The artwork is narrower than the hero. Start its reveal before the
+     bitmap's dark left edge so the copy and the diagram share one surface
+     instead of producing a visible vertical seam at the image boundary. */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, transparent 48%, rgba(0, 0, 0, 0.04) 56%, rgba(0, 0, 0, 0.52) 67%, #000 79%, #000 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, transparent 48%, rgba(0, 0, 0, 0.04) 56%, rgba(0, 0, 0, 0.52) 67%, #000 79%, #000 100%);
 }
 
 .customer-desk-hero--reference::before {
@@ -12725,6 +12728,23 @@ body {
 
 .customer-desk-hero--reference .customer-desk-hero__part-label {
   position: absolute;
+}
+
+/* Match the approved desktop composition: the search field is a little
+   taller and the shortcut rail has enough breathing room below it. */
+.customer-desk-hero--reference .customer-desk-search__control {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.customer-desk-hero--reference .customer-desk-quick-links {
+  margin-top: 32px;
+}
+
+@media (max-width: 768px) {
+  .customer-desk-hero--reference .customer-desk-quick-links {
+    margin-top: 22px;
+  }
 }
 
 @media (max-width: 1100px) {

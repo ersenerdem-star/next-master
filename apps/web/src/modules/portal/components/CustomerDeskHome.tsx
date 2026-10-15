@@ -1,4 +1,5 @@
 import type { PortalSnapshot } from "../../../types/portalSession";
+import { useState } from "react";
 import { Button } from "../../../presentation/components/common/Button";
 import { NavGlyph } from "../../../presentation/components/common/NextMasterBrand";
 
@@ -59,6 +60,10 @@ export function CustomerDeskHome({
   onOpenBilling,
   onOpenPriceLists,
 }: CustomerDeskHomeProps) {
+  // The home search is a fresh entry point. Keep it local so returning from
+  // Part Search does not surface the previous query in the approved hero
+  // composition; the parent still receives every keystroke for submission.
+  const [homeSearchValue, setHomeSearchValue] = useState("");
   const currency = snapshot.accountSummary.currency || snapshot.pricingProfile?.currency || "EUR";
   const recentOrders = [...snapshot.salesOrders]
     .filter((row) => !(row.source_channel === "portal" && !row.portal_submitted_at && normaliseStatus(row.status) === "draft"))
@@ -110,10 +115,13 @@ export function CustomerDeskHome({
               <NavGlyph name="search" />
               <input
                 id="customer-desk-search"
-                value={searchValue}
+                value={homeSearchValue}
                 aria-label="Search by part number, OE number, brand or vehicle"
                 placeholder="Search by part number, OE number, brand or vehicle (e.g. 0986479, BOSCH, Audi A4 2019)"
-                onChange={(event) => onSearchValueChange(event.target.value)}
+                onChange={(event) => {
+                  setHomeSearchValue(event.target.value);
+                  onSearchValueChange(event.target.value);
+                }}
               />
               <Button type="submit">Search <span className="customer-desk-search__arrow">›</span></Button>
             </div>
