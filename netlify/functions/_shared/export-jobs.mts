@@ -1772,7 +1772,7 @@ export async function runPortalPriceListExportJob(
     }
 
     const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-    const fileName = `${sanitizeDownloadFileName(`portal-price-list-${brandName}-${priceListType}-${stamp}`)}.xlsx`;
+    const fileName = `${sanitizeDownloadFileName(`portal-price-list-${brandName}-${stamp}`)}.xlsx`;
     const storagePath = `${job.organization_id}/portal-price-list/${job.cache_key}/${fileName}`;
     const contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     await uploadExportArtifact(supabaseUrl, serviceRoleKey, {

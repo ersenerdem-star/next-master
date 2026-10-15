@@ -13234,5 +13234,63 @@ body {
 /* Localized artwork follows the same language selection as interface copy. */
 :root[lang="tr"] {
   --admin-operations-artwork: url("/portal-assets/admin-operations-hero-tr.jpg");
-  --customer-desk-artwork: url("/portal-assets/customer-desk-network-hero-tr.jpg");
+  --customer-desk-artwork: url("/portal-assets/customer-desk-network-hero-tr-seamless.jpg");
 }
+
+
+/* Portal language and notification affordances. */
+.portal-language-picker {
+  display: grid;
+  gap: 6px;
+  color: #6b7c91;
+  font-size: 11px;
+  font-weight: 800;
+}
+.portal-language-picker select {
+  min-height: 36px;
+  border: 1px solid #d2ddea;
+  border-radius: 9px;
+  background: #fff;
+  color: #1b3552;
+  padding: 0 10px;
+  font: inherit;
+}
+.portal-language-picker--login { margin: -8px 0 18px; }
+.portal-language-picker--profile { width: 100%; margin-bottom: 8px; }
+.portal-header-nav__item.has-notifications,
+.portal-shell--workspace .portal-sidebar-nav .nav-item.has-notifications,
+.portal-mobile-bottom-nav__item.has-notifications {
+  animation: portal-notification-pulse 1.8s ease-in-out infinite;
+}
+.portal-notification-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #ffbd45;
+  box-shadow: 0 0 0 3px rgba(255, 189, 69, .16);
+}
+@keyframes portal-notification-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 189, 69, 0); }
+  50% { box-shadow: 0 0 0 5px rgba(255, 189, 69, .18); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .portal-header-nav__item.has-notifications,
+  .portal-shell--workspace .portal-sidebar-nav .nav-item.has-notifications,
+  .portal-mobile-bottom-nav__item.has-notifications { animation: none; }
+}
+
+/* The customer hero uses one continuous localized composition; the dark copy
+   overlay keeps the left side readable without exposing an image seam. */
+.customer-desk-hero--reference::after {
+  -webkit-mask-image: none;
+  mask-image: none;
+  background-position: center right;
+  background-size: auto 100%;
+}
+.customer-desk-hero--reference::before {
+  background: linear-gradient(90deg, rgba(3, 15, 31, .99) 0%, rgba(3, 15, 31, .94) 30%, rgba(3, 15, 31, .66) 50%, rgba(3, 15, 31, .18) 72%, rgba(3, 15, 31, 0) 100%);
+}
+
+:root[lang="tr"] .customer-desk-hero--reference::after { background-size: cover; background-position: center; }

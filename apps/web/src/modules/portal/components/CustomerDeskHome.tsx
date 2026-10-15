@@ -102,9 +102,7 @@ export function CustomerDeskHome({
     });
   });
   const accountCredit = snapshot.accountSummary.creditAmount;
-  const priceListLabel = snapshot.pricingProfile?.price_list_type
-    ? `${snapshot.pricingProfile.price_list_type} customer price list`
-    : "Customer price list";
+  const priceListLabel = "Customer price list";
 
   return (
     <div className="customer-desk-home customer-desk-home--reference">

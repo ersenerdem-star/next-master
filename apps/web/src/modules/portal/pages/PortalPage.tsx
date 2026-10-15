@@ -575,7 +575,7 @@ function getDefaultPortalSection(snapshot: PortalSnapshot) {
 
 export function PortalPage() {
   const ui=useInterfaceText();
-  const {locale}=useI18n();
+  const {locale,localeOptions,setLocale}=useI18n();
   const formatMoney=(value: number, currency = "EUR")=>ui(formatMoneyForLocale(value,currency,locale));
   const formatDate=(value?:string)=>ui(formatDateForLocale(value,locale));
   const formatWeight=(value:number|null|undefined)=>formatWeightForLocale(value,locale);
@@ -1585,6 +1585,12 @@ export function PortalPage() {
                 <strong>{loginBrandName}</strong>
               </div>
             </div>
+            <label className="portal-language-picker portal-language-picker--login">
+              <span>{ui("Language")}</span>
+              <select aria-label={ui("Language")} value={locale} onChange={(event) => setLocale(event.target.value as typeof locale)}>
+                {localeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
             <div className="portal-login-card__intro">
               <span><InterfaceText text={"Secure account access"}/></span>
               <h2>{portalResetToken ? ui("Create New Password") : portalForgotMode ? ui("Reset your access") : ui("Welcome back")}</h2>
@@ -1683,18 +1689,8 @@ export function PortalPage() {
   const activeSnapshot = snapshot;
   const partyProfile = activeSnapshot.customer || activeSnapshot.vendor;
   const portalBasePriceListType = activeSnapshot.pricingProfile?.price_list_type || "";
-  const portalPricingLabel =
-    !activeSnapshot.pricingProfile
-      ? "Default Pricing"
-      : portalBasePriceListType
-        ? `${portalBasePriceListType} Price List`
-        : "Customer Account Pricing";
-  const portalPricingRuleDescription =
-    !activeSnapshot.pricingProfile
-      ? "The file is built using the default account pricing for this portal."
-      : portalBasePriceListType === "C"
-        ? "Uses the C price list assigned on this customer account."
-        : `Uses the ${portalBasePriceListType || "assigned"} price list assigned on this customer account.`;
+  const portalPricingLabel = "Customer Price List";
+  const portalPricingRuleDescription = "The file is built using the price list assigned to this customer account.";
   const portalSellerDetails = [
     activeSnapshot.companyProfile?.email,
     activeSnapshot.companyProfile?.phone,
@@ -1819,6 +1815,8 @@ export function PortalPage() {
     ...(activeSnapshot.invite.party_type === "customer" ? [{key:"messages" as PortalSection,label:ui("Messages")}] : []),
     { key: "support", label: ui("Support") },
   ];
+  const hasPortalNotifications = portalNotifications.length > 0;
+
   const portalNavGroups: Array<{
     key: PortalNavGroupKey;
     code: string;
@@ -3379,8 +3377,8 @@ export function PortalPage() {
         </div>
         <nav className="portal-header-nav" aria-label={ui("Portal navigation")}>
           {portalNavGroups.flatMap(group => group.items).map(item => (
-            <button key={item.key} type="button" className={`portal-header-nav__item${activeSection === item.key ? " active" : ""}`}
-              aria-current={activeSection === item.key ? "page" : undefined} onClick={() => setActiveSection(item.key)}><span>{ui(item.label)}</span></button>
+            <button key={item.key} type="button" className={`portal-header-nav__item${activeSection === item.key ? " active" : ""}${item.key === "messages" && hasPortalNotifications ? " has-notifications" : ""}`}
+              aria-current={activeSection === item.key ? "page" : undefined} aria-label={item.key === "messages" && hasPortalNotifications ? `${ui(item.label)} · ${ui("New information")}` : undefined} onClick={() => setActiveSection(item.key)}><span>{ui(item.label)}</span>{item.key === "messages" && hasPortalNotifications ? <i className="portal-notification-dot" aria-hidden="true" /> : null}</button>
           ))}
         </nav>
         <div className="portal-header__account">
@@ -3396,6 +3394,12 @@ export function PortalPage() {
               <b>⌄</b>
             </summary>
             <div className="portal-header__profile-menu__panel">
+              <label className="portal-language-picker portal-language-picker--profile">
+                <span>{ui("Language")}</span>
+                <select aria-label={ui("Language")} value={locale} onChange={(event) => setLocale(event.target.value as typeof locale)}>
+                  {localeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
               <Button type="button" variant="secondary" busy={loading} busyLabel="Refreshing..." onClick={() => void handleRefresh()}>
                 <InterfaceText text={"Refresh"}/></Button>
               <Button type="button" variant="secondary" onClick={() => void handleLogout()}>
@@ -3415,7 +3419,7 @@ export function PortalPage() {
           <nav className="sidebar-nav portal-sidebar-nav">
             {portalNavGroups.map((group) => (
               <div key={group.key} className={`nav-group${activePortalGroup === group.key ? " active" : ""}`}>
-                <button className={`nav-item${activePortalGroup === group.key ? " active" : ""}`} onClick={() => handlePortalGroupNavigate(group.key)}>
+                <button className={`nav-item${activePortalGroup === group.key ? " active" : ""}${group.key === "messages" && hasPortalNotifications ? " has-notifications" : ""}`} onClick={() => handlePortalGroupNavigate(group.key)}>
                   <NavGlyph name={group.icon} />
                   <span className="nav-item__code">{group.code}</span>
                   <span className="nav-item__body">
@@ -3423,6 +3427,7 @@ export function PortalPage() {
                     <span className="nav-item__caption">{group.caption}</span>
                   </span>
                   <span className="nav-item__indicator" />
+                  {group.key === "messages" && hasPortalNotifications ? <i className="portal-notification-dot" aria-hidden="true" /> : null}
                 </button>
                 {activePortalGroup === group.key ? (
                   <div className="nav-submenu" role="menu" aria-label={`${group.title} sections`}>
@@ -3485,7 +3490,7 @@ export function PortalPage() {
             />
           ) : null}
 
-          {portalNotifications.length ? (
+          {portalNotifications.length && activeSection === "messages" ? (
             <section className="portal-notification-panel portal-notification-panel--after-home" aria-label={ui("Portal updates")}>
               <div className="portal-notification-panel__header">
                 <div>
@@ -4139,12 +4144,13 @@ export function PortalPage() {
         {portalNavGroups.map((group) => (
           <button
             key={group.key}
-            className={`portal-mobile-bottom-nav__item${activePortalGroup === group.key ? " active" : ""}`}
+            className={`portal-mobile-bottom-nav__item${activePortalGroup === group.key ? " active" : ""}${group.key === "messages" && hasPortalNotifications ? " has-notifications" : ""}`}
             onClick={() => handlePortalGroupNavigate(group.key)}
           >
             <NavGlyph name={group.icon} />
             <span className="portal-mobile-bottom-nav__title">{group.title}</span>
             <span className="portal-mobile-bottom-nav__caption">{group.caption}</span>
+            {group.key === "messages" && hasPortalNotifications ? <i className="portal-notification-dot" aria-hidden="true" /> : null}
           </button>
         ))}
       </nav>
