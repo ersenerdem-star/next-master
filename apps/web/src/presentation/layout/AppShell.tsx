@@ -21,6 +21,11 @@ type NavItem = {
 
 type AppShellProps = {
   children: ReactNode;
+  accountName?: string;
+  accountEmail?: string;
+  accountRole?: string;
+  onOpenAccount?: () => void;
+  onLogout?: () => void | Promise<void>;
   activePage?: string;
   activeSubPage?: string;
   notice?: string;
@@ -43,12 +48,14 @@ const pageMeta = {
   Sales: { code: "04", eyebrowKey: "nav.sales", titleKey: "nav.sales", descriptionKey: "nav.salesCaption" },
   Purchases: { code: "05", eyebrowKey: "nav.purchases", titleKey: "nav.purchases", descriptionKey: "nav.purchasesCaption" },
   Reports: { code: "06", eyebrowKey: "nav.reports", titleKey: "nav.reports", descriptionKey: "nav.reportsCaption" },
+  Messages: { code: "09", eyebrowKey: "nav.messages", titleKey: "nav.messages", descriptionKey: "nav.messages" },
   Settings: { code: "07", eyebrowKey: "nav.settings", titleKey: "nav.settings", descriptionKey: "nav.settingsCaption" },
   Mira: { code: "08", eyebrowKey: "nav.mira", titleKey: "nav.mira", descriptionKey: "nav.miraCaption" },
 } as const;
 
 export function AppShell({
   children,
+  accountName = "", accountEmail = "", accountRole = "", onOpenAccount, onLogout,
   activePage = "Home",
   activeSubPage = "",
   notice = "",
@@ -62,7 +69,8 @@ export function AppShell({
   userEmail = "",
   userRole = "",
 }: AppShellProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const accountInitials = (accountName || accountEmail || userEmail).trim().split(/[\s@._-]+/).filter(Boolean).slice(0,2).map(part => part[0]).join("").toLocaleUpperCase(locale) || "?";
   const appDesktopFrameRef = useRef<HTMLDivElement | null>(null);
   const navigation = workspaceNavigationItems(navItems, pageSections);
   const meta = pageMeta[activePage as keyof typeof pageMeta] || pageMeta.Home;
@@ -157,11 +165,24 @@ export function AppShell({
             {pageSections.Reports?.some((item) => item.key === "Status Center") ? <button type="button" className="topbar-icon-button" aria-label={t("nav.statusCenter")} onClick={() => onNavigateTarget?.("Reports", "Status Center")}>
               <NavGlyph name="reports" />
             </button> : null}
-            <button type="button" className="topbar-profile" aria-label={t("nav.session")} onClick={() => onNavigateTarget?.("Settings", "session")}>
-              <span className="topbar-profile__avatar">{userEmail.slice(0, 2).toUpperCase() || "NM"}</span>
-              <span className="topbar-profile__copy"><strong>{userEmail || t("nav.session")}</strong><span>{userRole}</span></span>
-              <span className="topbar-profile__chevron" aria-hidden="true">⌄</span>
+            <button type="button" className="topbar-icon-button topbar-icon-button--messages" aria-label={locale === "tr" ? "Mesajları aç" : "Open messages"} disabled={!navItems.some(item => item.key === "Messages")} onClick={() => onNavigate?.("Messages")}>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M6 17h12l-1.2-1.7V10a4.8 4.8 0 0 0-9.6 0v5.3Z" />
+                <path d="M10 20h4" />
+              </svg>
             </button>
+            <details className="topbar-account-menu" onKeyDown={event => {if(event.key === "Escape") event.currentTarget.removeAttribute("open");}}>
+              <summary className="topbar-profile" aria-label={locale === "tr" ? "Hesap menüsü" : "Account menu"}>
+                <span className="topbar-profile__avatar">{accountInitials}</span>
+                <span className="topbar-profile__copy"><strong>{accountName || accountEmail || (locale === "tr" ? "Hesap" : "Account")}</strong><span>{accountRole || userRole}</span></span>
+                <span className="topbar-profile__chevron" aria-hidden="true">⌄</span>
+              </summary>
+              <div className="topbar-account-menu__items">
+                <strong>{accountName || accountEmail}</strong><span>{accountEmail}</span>
+                <button type="button" className="button button--secondary" onClick={event => {event.currentTarget.closest("details")?.removeAttribute("open");onOpenAccount?.();}}>{locale === "tr" ? "Hesap ve oturum" : "Account and session"}</button>
+                <button type="button" className="button button--secondary" onClick={() => void onLogout?.()}>{locale === "tr" ? "Çıkış yap" : "Sign out"}</button>
+              </div>
+            </details>
           </div>
         </header>
         {subNavItems.length ? (

@@ -91,6 +91,7 @@ export const trMessages = {
     purchasesCaption: "Gelen tedarik, kabul ve satıcı iş akışları",
     reports: "Raporlar",
     reportsCaption: "Rapor görünümleri ve analitik fiyat karşılaştırmaları",
+    messages: "Mesajlar",
     settings: "Ayarlar",
     settingsCaption: "Uygulama ve şirket düzeyi ayarlar",
     mira: "MIRA",

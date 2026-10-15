@@ -18,6 +18,7 @@ export function getAppAuthStatus(error: unknown): 401 | 403 | undefined {
 export type AppCaller = {
   id: string;
   email: string;
+  fullName?: string;
   organizationId: string;
   role: string;
   department: string;
@@ -72,6 +73,7 @@ export async function resolveCaller(
   }
 
   type ProfileRow = {
+    full_name?: string | null;
     organization_id?: string | null;
     role?: string | null;
     department?: string | null;
@@ -84,7 +86,7 @@ export async function resolveCaller(
   let profiles: ProfileRow[];
   try {
     profiles = await getJson<ProfileRow[]>(
-      `${supabaseUrl}/rest/v1/profiles?select=organization_id,role,department,permissions,customer_scope_mode,is_active,session_revoked_at&id=eq.${encodeURIComponent(userId)}&limit=1`,
+      `${supabaseUrl}/rest/v1/profiles?select=full_name,organization_id,role,department,permissions,customer_scope_mode,is_active,session_revoked_at&id=eq.${encodeURIComponent(userId)}&limit=1`,
       {
         headers: serviceRoleHeaders(serviceRoleKey),
         timeoutMs: 8_000,
@@ -100,7 +102,7 @@ export async function resolveCaller(
     // is being rolled out. The active flag remains enforced; only the
     // optional revocation timestamp is unavailable on older schemas.
     profiles = await getJson<ProfileRow[]>(
-      `${supabaseUrl}/rest/v1/profiles?select=organization_id,role,department,permissions,customer_scope_mode,is_active&id=eq.${encodeURIComponent(userId)}&limit=1`,
+      `${supabaseUrl}/rest/v1/profiles?select=full_name,organization_id,role,department,permissions,customer_scope_mode,is_active&id=eq.${encodeURIComponent(userId)}&limit=1`,
       {
         headers: serviceRoleHeaders(serviceRoleKey),
         timeoutMs: 8_000,
@@ -123,6 +125,7 @@ export async function resolveCaller(
   return {
     id: userId,
     email: String(user.email || ""),
+    fullName: String(profile.full_name || ""),
     organizationId,
     role: String(profile.role || ""),
     department: String(profile.department || "viewer"),

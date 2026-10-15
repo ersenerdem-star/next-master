@@ -5,7 +5,7 @@ export type WorkspaceSections = Record<string, readonly WorkspaceSection[]>;
 export type WorkspaceDestination = { page: string; section?: string };
 
 export const workspaceGroups = [
-  { key: "workspace", labelKey: "nav.home", pages: ["Home", "Mira"] },
+  { key: "workspace", labelKey: "nav.home", pages: ["Home", "Messages", "Mira"] },
   { key: "catalog", labelKey: "nav.catalog", pages: ["Items", "CatalogReview"] },
   { key: "purchasing", labelKey: "nav.purchases", pages: ["Purchases"] },
   { key: "sales", labelKey: "nav.sales", pages: ["Sales"] },

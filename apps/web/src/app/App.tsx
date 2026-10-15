@@ -41,6 +41,7 @@ const PortalPage = lazy(() => import("../modules/portal/pages/PortalPage").then(
 const PurchasesPage = lazy(() => import("../presentation/pages/PurchasesPage").then((module) => ({ default: module.PurchasesPage })));
 const ReportsPage = lazy(() => import("../presentation/pages/ReportsPage").then((module) => ({ default: module.ReportsPage })));
 const SalesPage = lazy(() => import("../presentation/pages/SalesPage").then((module) => ({ default: module.SalesPage })));
+const CustomerMessagesPage = lazy(() => import("../presentation/pages/CustomerMessagesPage").then(module => ({default:module.CustomerMessagesPage})));
 const SettingsPage = lazy(() => import("../presentation/pages/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 
 const itemSubNav = [
@@ -138,6 +139,7 @@ const allNavItems = [
   { key: "Sales", code: "04", labelKey: "nav.sales", captionKey: "nav.salesCaption" },
   { key: "Purchases", code: "05", labelKey: "nav.purchases", captionKey: "nav.purchasesCaption" },
   { key: "Reports", code: "06", labelKey: "nav.reports", captionKey: "nav.reportsCaption" },
+  { key: "Messages", code: "09", labelKey: "nav.messages", captionKey: "nav.messages" },
   { key: "Settings", code: "07", labelKey: "nav.settings", captionKey: "nav.settingsCaption" },
   { key: "Mira", code: "08", labelKey: "nav.mira", captionKey: "nav.miraCaption" },
 ] as const;
@@ -145,15 +147,15 @@ const allNavItems = [
 function getAllowedNavItems(role: AppRole, department: AppDepartment = "", permissions?: AppPermissionMap) {
   if (isSuperadminRole(role)) return allNavItems;
   if (canAccessOperationsModules(role, department, permissions)) {
-    return allNavItems.filter((item) => item.key === "Home" || item.key === "CatalogReview" || item.key === "Inventory" || item.key === "Sales" || item.key === "Purchases" || item.key === "Reports" || item.key === "Settings");
+    return allNavItems.filter((item) => (item.key === "Messages" && role === "admin") || item.key === "Home" || item.key === "CatalogReview" || item.key === "Inventory" || item.key === "Sales" || item.key === "Purchases" || item.key === "Reports" || item.key === "Settings");
   }
   if (canAccessSalesModules(role, department, permissions)) {
-    return allNavItems.filter((item) => item.key === "Home" || item.key === "Sales" || item.key === "Settings");
+    return allNavItems.filter((item) => (item.key === "Messages" && role === "admin") || item.key === "Home" || item.key === "Sales" || item.key === "Settings");
   }
   if (permissions?.["catalog.view"] === true) {
-    return allNavItems.filter((item) => item.key === "Home" || item.key === "Items" || item.key === "Settings");
+    return allNavItems.filter((item) => (item.key === "Messages" && role === "admin") || item.key === "Home" || item.key === "Items" || item.key === "Settings");
   }
-  return allNavItems.filter((item) => item.key === "Home" || item.key === "Settings");
+  return allNavItems.filter((item) => (item.key === "Messages" && role === "admin") || item.key === "Home" || item.key === "Settings");
 }
 
 function getSalesSubNav(role: AppRole, department: AppDepartment = "", permissions?: AppPermissionMap) {
@@ -229,6 +231,7 @@ export function App() {
   const [sessionReady, setSessionReady] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [appEmail, setAppEmail] = useState(initialAppSession?.email || "");
+  const [accountIdentity, setAccountIdentity] = useState({name:initialAppSession?.fullName || "",email:initialAppSession?.email || ""});
   const [appRole, setAppRole] = useState<AppRole>(initialAppRole);
   const [appDepartment, setAppDepartment] = useState<AppDepartment>(initialAppDepartment);
   const [appPermissions, setAppPermissions] = useState<AppPermissionMap>(initialAppSession?.permissions || {});
@@ -388,6 +391,7 @@ export function App() {
         const session = await fetchAppSession(true);
         if (cancelled) return;
         setAppEmail(session.email);
+        setAccountIdentity({name:session.fullName || "",email:session.email});
         setAppRole(normalizeAppRole(session.role));
         setAppDepartment(String(session.department || "viewer"));
         setAppPermissions(session.permissions || {});
@@ -919,6 +923,8 @@ export function App() {
         onOpenInventoryItem={openInventoryItem}
         onOpenSupplierComparison={() => setReportsTab("Master")}
       />
+    ) : activePage === "Messages" && ["admin","superadmin"].includes(appRole) ? (
+      <CustomerMessagesPage />
     ) : activePage === "Settings" ? (
       <SettingsPage initialTab={settingsTab} onLogout={handleLogout} onOpenRelatedRecord={openRelatedRecord} />
     ) : activePage === "Mira" && isSuperadminRole(appRole) ? (
@@ -934,6 +940,11 @@ export function App() {
         onNavigateTarget={handleDashboardNavigate}
         userEmail={appEmail}
         userRole={appRole}
+        accountName={accountIdentity.name || accountIdentity.email}
+        accountEmail={accountIdentity.email}
+        accountRole={appRole}
+        onOpenAccount={() => {setSettingsTab("session");handleMainNavigate("Settings");}}
+        onLogout={handleLogout}
         activePage={shellActivePage}
         activeSubPage={activeSubPage}
         notice={accessNotice}

@@ -1,3 +1,4 @@
+import {CustomerMessagesPage} from "../../../presentation/pages/CustomerMessagesPage";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
 import { ActionFeedbackDialog } from "../../../presentation/components/common/ActionFeedbackDialog";
 import { emptyPortalFeedback, portalFeedbackReducer } from "../portalFeedback";
@@ -335,8 +336,8 @@ type PortalSelection =
   | { kind: "invoice"; id: string }
   | { kind: "purchase-order"; id: string }
   | { kind: "bill"; id: string };
-type PortalSection = "home" | "desk" | "pricelist" | "orders" | "billing" | "statement" | "account" | "support";
-type PortalNavGroupKey = "home" | "search" | "orders" | "pricing" | "documents" | "support";
+type PortalSection = "home" | "desk" | "pricelist" | "orders" | "billing" | "statement" | "account" | "support" | "messages";
+type PortalNavGroupKey = "home" | "search" | "orders" | "pricing" | "documents" | "support" | "messages";
 type PortalSearchView = "cards" | "list";
 
 type PortalLine = NonNullable<PortalSnapshot["invoices"][number]["lines"]>[number];
@@ -1808,6 +1809,7 @@ export function PortalPage() {
       : []),
     ...(activeSnapshot.invite.access.can_view_account || activeSnapshot.invite.access.can_view_payments ? [{ key: "statement" as PortalSection, label: "Statement" }] : []),
     { key: "account", label: "Account" },
+    ...(activeSnapshot.invite.party_type === "customer" ? [{key:"messages" as PortalSection,label:"Messages"}] : []),
     { key: "support", label: "Support" },
   ];
   const portalNavGroups: Array<{
@@ -1867,8 +1869,16 @@ export function PortalPage() {
         })),
     },
     {
-      key: "support" as const,
+      key: "messages" as const,
       code: "05",
+      icon: "documents" as const,
+      title: "Messages",
+      caption: "Conversation with your account team",
+      items: portalSections.filter((section) => section.key === "messages"),
+    },
+    {
+      key: "support" as const,
+      code: "06",
       icon: "documents" as const,
       title: "Support",
       caption: "Help and account contact",
@@ -1890,6 +1900,8 @@ export function PortalPage() {
           ? "Review invoices or bills with payment status and line-level detail."
           : activeSection === "statement"
             ? "Use this area for statement, payments, and credits only."
+            : activeSection === "messages"
+              ? "Read replies and message your account team here."
             : activeSection === "support"
               ? "Contact your seller for account, pricing, delivery, or product support."
             : "Review your account identity, addresses, and financial profile.";
@@ -3582,6 +3594,7 @@ export function PortalPage() {
         </div>
           ) : null}
 
+          {activeSection === "messages" && activeSnapshot.invite.party_type === "customer" ? <CustomerMessagesPage portal /> : null}
           {activeSection === "support" ? (
         <div className="portal-section-stack">
           <SectionCard title="Support">

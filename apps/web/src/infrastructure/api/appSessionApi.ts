@@ -8,6 +8,7 @@ type AppSessionResponse = {
     email?: string;
   };
   profile?: {
+    full_name?: string;
     organization_id?: string;
     role?: string;
     department?: string;
@@ -18,6 +19,7 @@ type AppSessionResponse = {
 };
 
 type AppSessionSnapshot = {
+  fullName?: string;
   userId: string;
   email: string;
   organizationId: string;
@@ -76,6 +78,7 @@ export async function fetchAppSession(forceRefresh = false): Promise<AppSessionS
   const next = {
     userId: String(data.user?.id || ""),
     email: String(data.user?.email || ""),
+    fullName: String(data.profile?.full_name || ""),
     organizationId: String(data.profile?.organization_id || ""),
     role: String(data.profile?.role || ""),
     department: String(data.profile?.department || "viewer"),

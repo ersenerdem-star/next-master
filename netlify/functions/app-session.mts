@@ -22,6 +22,7 @@ export default async (req: Request, _context: Context) => {
         email: caller.email,
       },
       profile: {
+        full_name: caller.fullName || "",
         organization_id: caller.organizationId,
         role: caller.role,
         department: caller.department,

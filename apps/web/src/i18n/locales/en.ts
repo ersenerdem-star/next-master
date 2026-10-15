@@ -111,6 +111,7 @@ export const enMessages = {
     purchasesCaption: "Inbound procurement, receipts, and vendor-side workflows",
     reports: "Reports",
     reportsCaption: "Reporting views and analytical pricing comparisons",
+    messages: "Messages",
     settings: "Settings",
     settingsCaption: "Application and company-level settings",
     mira: "MIRA",
