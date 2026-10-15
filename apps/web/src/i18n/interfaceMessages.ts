@@ -202,6 +202,15 @@ export const trInterfaceMessages: Record<string,string> = {
   "admin":"Yönetici", "sales":"Satış", "purchasing":"Satın alma", "viewer":"Görüntüleyici", "accounting":"Muhasebe", "warehouse":"Depo",
   "New {brand} price list available":"{brand} için yeni fiyat listesi hazır",
   "New {brand} brand available":"{brand} markası eklendi",
+  "New {brand} catalog brand available":"{brand} markası eklendi",
+  "New {brand} catalog data available":"{brand} için yeni katalog verileri hazır",
+  "New catalog brand available":"Yeni marka eklendi",
+  "New catalog data available":"Yeni katalog verileri hazır",
+  "New price list available":"Yeni fiyat listesi hazır",
+  "The new {brand} price list is now available in your customer portal.":"{brand} için yeni fiyat listesi müşteri portalınızda hazır.",
+  "New catalog brand {brand} is now available in your customer portal.":"{brand} markası artık müşteri portalınızda kullanılabilir.",
+  "New catalog data is now available in your customer portal.":"Yeni katalog verileri müşteri portalınızda hazır.",
+  "A new customer price list is now available in your customer portal.":"Yeni müşteri fiyat listesi portalınızda hazır.",
   "{brand} customer price list":"{brand} müşteri fiyat listesi",
   "Portal session active.":"Portal oturumu etkin.",
   "Please review":"Lütfen inceleyin", "Review the details before continuing.":"Devam etmeden önce ayrıntıları inceleyin.",
@@ -323,6 +332,9 @@ export const trInterfaceMessages: Record<string,string> = {
   "Verified supplier upload requires a complete replacement price list. Merge is not supported.":"Yükleme için tam fiyat listesi gerekir. Birleştirme desteklenmez.",
   "File, staged rows and brand identity validated; publication is a separate decision.":"Dosya, satırlar ve marka kimliği doğrulandı. Yayınlama ayrı bir karardır.",
   "Invoices":"Faturalar", "Bills":"Alış faturaları", "Supplier":"Tedarikçi", "Vendor":"Tedarikçi",
+  "{type} Price List":"{type} Fiyat Listesi",
+  "Uses the {type} price list assigned on this customer account.":"Bu müşteri hesabına atanmış {type} fiyat listesi kullanılır.",
+  "Uses the assigned price list assigned on this customer account.":"Bu müşteri hesabına atanmış fiyat listesi kullanılır.",
   "Price {currency}":"Fiyat {currency}", "Amount {currency}":"Tutar {currency}",
   "From {date}":"Başlangıç: {date}", "Until {date}":"Bitiş: {date}",
   "hashing":"Dosya kontrol ediliyor", "admitting":"Yükleme açılıyor", "uploading":"Yükleniyor", "verifying":"Doğrulanıyor",
@@ -362,7 +374,10 @@ export const trInterfaceMessages: Record<string,string> = {
   "Code reference updated for {code}.":"{code} için kod referansı güncellendi.", "Code reference deleted for {code}.":"{code} için kod referansı silindi.",
 };
 
-const patterns=Object.entries(trInterfaceMessages).filter(([key])=>/\{\w+\}/.test(key)).map(([key,value])=>{
+const patterns=Object.entries(trInterfaceMessages).filter(([key])=>/\{\w+\}/.test(key))
+  // Prefer specific formats so catalog is never captured as part of a brand name.
+  .sort(([a],[b])=>b.replace(/\{\w+\}/g,'').length-a.replace(/\{\w+\}/g,'').length)
+  .map(([key,value])=>{
   const names:string[]=[];
   const source=key.split(/(\{\w+\})/).map(part=>/^\{\w+\}$/.test(part)?(names.push(part.slice(1,-1)),'(.+?)'):part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('');
   return {regex:new RegExp(`^${source}$`),value,names};

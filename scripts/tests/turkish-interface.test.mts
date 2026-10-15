@@ -30,6 +30,13 @@ test('Turkish copy replaces English slogans while English and unknown business t
 test('registered notification formats preserve dynamic names literally, including replacement characters',()=>{
  assert.equal(translateInterfaceText('New Bosch price list available','tr'),'Bosch için yeni fiyat listesi hazır');
  assert.equal(translateInterfaceText('New AC$&ME price list available','tr'),'AC$&ME için yeni fiyat listesi hazır');
+ assert.equal(translateInterfaceText('New VAG catalog brand available','tr'),'VAG markası eklendi');
+ assert.equal(translateInterfaceText('New VAG catalog data available','tr'),'VAG için yeni katalog verileri hazır');
+ assert.equal(translateInterfaceText('New catalog brand VAG is now available in your customer portal.','tr'),'VAG markası artık müşteri portalınızda kullanılabilir.');
+ assert.equal(translateInterfaceText('The new AC$&ME price list is now available in your customer portal.','tr'),'AC$&ME için yeni fiyat listesi müşteri portalınızda hazır.');
+ assert.equal(translateInterfaceText('The new Bosch price list is now available in your customer portal.','en'),'The new Bosch price list is now available in your customer portal.');
+ assert.equal(translateInterfaceText('A Price List','tr'),'A Fiyat Listesi');
+ assert.equal(translateInterfaceText('Uses the A price list assigned on this customer account.','tr'),'Bu müşteri hesabına atanmış A fiyat listesi kullanılır.');
  assert.equal(translateInterfaceText('View all 1.234 results','tr'),'1.234 sonucun tümünü gör');
  assert.equal(translateInterfaceText('New unknown message from customer','tr'),'New unknown message from customer');
 });
