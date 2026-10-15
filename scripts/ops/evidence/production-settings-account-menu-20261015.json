@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-15",
+  "source_commit": "adfe54d2",
+  "integration_mirror": "da519c04",
+  "production_url": "https://portal.next-master.com",
+  "netlify_deploy_id": "6ad1188d48918ee90ae4c004",
+  "change": "Settings removed from admin sidebar and mobile bottom navigation; all authorized destinations now live in account dropdown.",
+  "access": "Uses existing permission-filtered workspace navigation items; no role or route changes.",
+  "validation": {
+    "navigation_tests_passed": 3,
+    "production_typescript_vite_build": "passed",
+    "sidebar_has_settings": false,
+    "dropdown_bottom_px": 566.5859375,
+    "viewport_height_px": 888,
+    "clicked_destinations": {
+      "Hesap ve oturum": "Oturum Ayarları",
+      "Kullanıcılar": "Kullanıcılar",
+      "Şirketler": "Şirket Profili",
+      "Portallar": "Müşteri ve Tedarikçi Portal Erişimi",
+      "Şablonlar": "E-posta Şablonları",
+      "Giden E-postalar": "Giden E-postalar",
+      "Tanılama": "Tanılama"
+    },
+    "scope": "Navigation and screen openings only; no forms submitted, emails sent, or access data changed."
+  },
+  "screenshot": "/Users/ersen/.codex/visualizations/2026/10/15/01a13eb9-497f-78b3-9b71-e4bf87794f70/settings-account-menu/production.png"
+}
