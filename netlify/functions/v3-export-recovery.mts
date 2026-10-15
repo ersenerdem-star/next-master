@@ -1,10 +1,10 @@
 import type { Config } from "@netlify/functions";
 import { getJson, json, serviceRoleHeaders } from "./_shared/http.mts";
-import { dispatchV3PriceExportWorker, required } from "./_shared/v3-export-dispatch.mts";
+import { dispatchV3PriceExportWorker, isProductionExportPaused, required } from "./_shared/v3-export-dispatch.mts";
 import {
-  isExactV3RecoveryTarget,
-  recoverStagingV3ExportJobs,
-  V3_EXPORT_STAGING_SITE_URL,
+  isExactExportRecoveryTarget,
+  recoverV3ExportJobs,
+  recoveryTargetSiteUrl,
   type RecoveryJob,
 } from "./_shared/v3-export-recovery.mts";
 
@@ -13,14 +13,18 @@ export default async (_request: Request) => {
     siteId: process.env.SITE_ID,
     siteUrl: process.env.URL,
     supabaseUrl: Netlify.env.get("SUPABASE_URL"),
-    bridgeFlag: Netlify.env.get("NM_V3_EXPORT_BRIDGE"),
+    bridgeFlag: Netlify.env.get("NM_PRODUCTION_EXPORT_BRIDGE") === "1"
+      || Netlify.env.get("NM_V3_EXPORT_BRIDGE") === "1" ? "1" : "0",
   };
-  if (!isExactV3RecoveryTarget(target)) return json({ ok: true, status: "disabled" });
+  if (!isExactExportRecoveryTarget(target)) return json({ ok: true, status: "disabled" });
+  if (isProductionExportPaused()) return json({ ok: true, status: "paused" });
 
   try {
     const serviceRoleKey = required("SUPABASE_SERVICE_ROLE_KEY");
-    const dispatchRequest = new Request(V3_EXPORT_STAGING_SITE_URL);
-    const result = await recoverStagingV3ExportJobs({
+    const siteUrl = recoveryTargetSiteUrl(target);
+    if (!siteUrl) return json({ ok: true, status: "disabled" });
+    const dispatchRequest = new Request(siteUrl);
+    const result = await recoverV3ExportJobs({
       target,
       nowMs: Date.now(),
       listJobs: (url) => getJson<RecoveryJob[]>(url, {

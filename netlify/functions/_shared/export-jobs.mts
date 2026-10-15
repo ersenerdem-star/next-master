@@ -1295,18 +1295,27 @@ export function assertPortalExportJobForInvite(job: ExportJobRow, invite: Portal
   }
 }
 
+/**
+ * Cheap contract guard for portal status/download requests.  It preserves the
+ * retired-list rejection without re-running the expensive source-version and
+ * pricing-context fingerprint used by the worker fence.
+ */
+export function assertPortalExportJobCurrentContract(job: ExportJobRow, invite: PortalInviteRow) {
+  assertPortalExportJobForInvite(job, invite);
+  if (job.scope?.schemaVersion !== 4) {
+    throw new Error("Customer price export is outdated. Start a new export.");
+  }
+}
+
 export async function assertPortalExportJobCurrentContext(
   supabaseUrl: string,
   serviceRoleKey: string,
   job: ExportJobRow,
   invite: PortalInviteRow,
 ) {
-  assertPortalExportJobForInvite(job, invite);
+  assertPortalExportJobCurrentContract(job, invite);
   // Legacy files may contain a retired C price or an obsolete account margin.
   // Require regeneration under the current published-price contract.
-  if (job.scope?.schemaVersion !== 4) {
-    throw new Error("Customer price export is outdated. Start a new export.");
-  }
   const context = await resolvePortalPriceListExportContext(
     supabaseUrl, serviceRoleKey, invite, String(job.scope.brandName || ""),
   );

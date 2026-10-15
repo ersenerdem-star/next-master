@@ -1,7 +1,7 @@
 import type { Config } from "@netlify/functions";
 import { resolvePortalInvite } from "./_shared/portal-access.mts";
 import { writePortalAuditEvent } from "./_shared/portal-audit.mts";
-import { assertPortalExportJobCurrentContext, downloadExportArtifact, fetchExportJobById } from "./_shared/export-jobs.mts";
+import { assertPortalExportJobCurrentContract, downloadExportArtifact, fetchExportJobById } from "./_shared/export-jobs.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
 import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
@@ -30,7 +30,9 @@ export default async (req: Request) => {
     if (!rateLimit.allowed) return new Response("Too many portal refresh attempts. Try again later.", { status: 429 });
     const job = await fetchExportJobById(supabaseUrl, serviceRoleKey, invite.organization_id, jobId);
     if (!job) return new Response("Export job not found.", { status: 404 });
-    await assertPortalExportJobCurrentContext(supabaseUrl, serviceRoleKey, job, invite);
+    // See portal-export-download: the worker fences the immutable artifact;
+    // keep the same-origin fallback bounded to the cheap scope check.
+    assertPortalExportJobCurrentContract(job, invite);
     if (job.status !== "finalized") return new Response("Export file is not ready yet.", { status: 409 });
 
     const response = await downloadExportArtifact(supabaseUrl, serviceRoleKey, job);

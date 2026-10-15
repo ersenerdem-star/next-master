@@ -1,10 +1,17 @@
-// Small, staging-only recovery scan for price export jobs whose browser or
-// self-dispatch handoff stopped before the next background invocation.
+// Small recovery scan for price export jobs whose browser or self-dispatch
+// handoff stopped before the next background invocation.  The target is
+// allow-listed so this cannot turn an arbitrary Netlify deploy into a worker
+// for either database.
 import { V3_REF } from "./v3-export-dispatch.mts";
 
 export const V3_EXPORT_STAGING_SITE_ID = "6778214b-94e6-4e4a-8a01-99afc80200bd";
 export const V3_EXPORT_STAGING_SITE_URL = "https://next-master-v3-staging-20261006.netlify.app";
+export const V3_EXPORT_PRODUCTION_SITE_ID = "08d7af8d-484c-4dba-a069-234e52dcfd6c";
+export const V3_EXPORT_PRODUCTION_SITE_URL = "https://portal.next-master.com";
+export const V3_EXPORT_PRODUCTION_DEPLOY_URL = "https://ersen-quote-desk.netlify.app";
+export const V3_EXPORT_PRODUCTION_REF = "zjgueqijumzlfioihnkt";
 const V3_EXPORT_STAGING_DB_URL = `https://${V3_REF}.supabase.co`;
+const V3_EXPORT_PRODUCTION_DB_URL = `https://${V3_EXPORT_PRODUCTION_REF}.supabase.co`;
 const MAX_DISPATCHES_PER_TICK = 2;
 const STALE_QUEUED_MS = 30_000;
 const STALE_RUNNING_MS = 120_000;
@@ -38,10 +45,27 @@ export function isExactV3RecoveryTarget(target: RecoveryTarget) {
     && target.bridgeFlag === "1";
 }
 
-export function recoveryQueryUrls(nowMs: number) {
+export function isExactProductionRecoveryTarget(target: RecoveryTarget) {
+  return target.siteId === V3_EXPORT_PRODUCTION_SITE_ID
+    && (target.siteUrl === V3_EXPORT_PRODUCTION_SITE_URL || target.siteUrl === V3_EXPORT_PRODUCTION_DEPLOY_URL)
+    && target.supabaseUrl === V3_EXPORT_PRODUCTION_DB_URL
+    && target.bridgeFlag === "1";
+}
+
+export function isExactExportRecoveryTarget(target: RecoveryTarget) {
+  return isExactV3RecoveryTarget(target) || isExactProductionRecoveryTarget(target);
+}
+
+export function recoveryTargetSiteUrl(target: RecoveryTarget) {
+  if (isExactV3RecoveryTarget(target)) return V3_EXPORT_STAGING_SITE_URL;
+  if (isExactProductionRecoveryTarget(target)) return V3_EXPORT_PRODUCTION_SITE_URL;
+  return null;
+}
+
+export function recoveryQueryUrls(nowMs: number, databaseUrl = V3_EXPORT_STAGING_DB_URL) {
   const now = new Date(nowMs).toISOString();
   return PRICE_EXPORTS.flatMap(({ audience, exportType }) => ["queued", "running"].map((status) => {
-    const url = new URL("/rest/v1/app_export_jobs", V3_EXPORT_STAGING_DB_URL);
+    const url = new URL("/rest/v1/app_export_jobs", databaseUrl);
     url.searchParams.set("select", "id,audience,export_type,status,updated_at,expires_at,worker_lease_expires_at");
     url.searchParams.set("audience", `eq.${audience}`);
     url.searchParams.set("export_type", `eq.${exportType}`);
@@ -75,14 +99,18 @@ export function selectRecoverableJobs(rows: RecoveryJob[], nowMs: number) {
     .slice(0, MAX_DISPATCHES_PER_TICK);
 }
 
-export async function recoverStagingV3ExportJobs(options: {
+export async function recoverV3ExportJobs(options: {
   target: RecoveryTarget;
   nowMs: number;
   listJobs: (url: string) => Promise<RecoveryJob[]>;
   dispatchJob: (jobId: string) => Promise<unknown>;
 }) {
-  if (!isExactV3RecoveryTarget(options.target)) return { status: "disabled", scanned: 0, dispatched: 0, failed: 0 };
-  const batches = await Promise.all(recoveryQueryUrls(options.nowMs).map(options.listJobs));
+  const siteUrl = recoveryTargetSiteUrl(options.target);
+  if (!siteUrl) return { status: "disabled", scanned: 0, dispatched: 0, failed: 0 };
+  const databaseUrl = isExactProductionRecoveryTarget(options.target)
+    ? V3_EXPORT_PRODUCTION_DB_URL
+    : V3_EXPORT_STAGING_DB_URL;
+  const batches = await Promise.all(recoveryQueryUrls(options.nowMs, databaseUrl).map(options.listJobs));
   const jobs = selectRecoverableJobs(batches.flat(), options.nowMs);
   let dispatched = 0;
   let failed = 0;
@@ -97,3 +125,7 @@ export async function recoverStagingV3ExportJobs(options: {
   }
   return { status: "checked", scanned: batches.reduce((count, batch) => count + batch.length, 0), dispatched, failed };
 }
+
+// Kept as a named compatibility export for the existing staging tests and
+// callers while the same bounded scan is now also used in production.
+export const recoverStagingV3ExportJobs = recoverV3ExportJobs;

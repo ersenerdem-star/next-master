@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   assertExportArtifactReady,
+  assertPortalExportJobCurrentContract,
   assertPortalExportJobCurrentContext,
   assertPortalExportJobForInvite,
   assertPortalExportJobPricingContext,
@@ -54,6 +55,15 @@ test("portal export checks current invite order, customer, organization, brand a
   ]) {
     assert.throws(() => assertPortalExportJobForInvite(job(), invite(changed)), /Export job not found/);
   }
+});
+
+test("portal export polling contract rejects retired schemas without a source scan", () => {
+  assert.doesNotThrow(() => assertPortalExportJobCurrentContract(job({ scope: {
+    inviteId: "invite-1", customerId: "customer-1", brandId: "brand-1", schemaVersion: 4,
+  } }), invite()));
+  assert.throws(() => assertPortalExportJobCurrentContract(job({ scope: {
+    inviteId: "invite-1", customerId: "customer-1", brandId: "brand-1", schemaVersion: 3,
+  } }), invite()), /outdated.*new export/);
 });
 
 test("legacy portal exports cannot bypass the current price contract", async () => {

@@ -28,6 +28,11 @@
   node_bundler = "esbuild"
 
 [functions."portal-export-worker-background"]
+  # Large V3 exports must run as a Netlify Background Function.  Without this
+  # flag the first invocation is subject to the synchronous function timeout
+  # and can stop after a few snapshot pages, leaving the job waiting for a
+  # browser status poll to restart it.
+  background = true
   external_node_modules = ["@duckdb/node-api", "@duckdb/node-bindings", "@duckdb/node-bindings-linux-x64"]
   included_files = ["node_modules/@duckdb/node-bindings-linux-x64/**", "!node_modules/@duckdb/node-bindings-darwin-arm64/**"]
 

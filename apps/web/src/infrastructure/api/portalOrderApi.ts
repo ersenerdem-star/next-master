@@ -243,8 +243,17 @@ export async function deletePortalDraftOrder(credentials: PortalCredentials, ord
 }
 
 const PORTAL_EXPORT_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
-const PORTAL_EXPORT_STATUS_POLL_MS = 1_500;
+// The worker updates durable progress at page boundaries. Polling more often
+// than the worker can publish only adds load to the portal; two to three
+// seconds still keeps the progress message responsive for customers.
+const PORTAL_EXPORT_STATUS_POLL_MS = 3_000;
 const PORTAL_EXPORT_START_RETRY_MS = 800;
+
+function isRetryablePortalExportRequestError(error: unknown) {
+  const message = String(error instanceof Error ? error.message : error || "");
+  return /Portal request failed: (?:502|503|504)\b/.test(message)
+    || /Portal request timed out/i.test(message);
+}
 
 function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -264,7 +273,17 @@ export async function startPortalPriceListExport(credentials: PortalCredentials,
     exportType: "portal_price_list",
     brand,
   };
-  let data = await postPortalOrderJson("/api/portal-export-start", payload);
+  let data: PortalOrderResponse;
+  try {
+    data = await postPortalOrderJson("/api/portal-export-start", payload);
+  } catch (error) {
+    // Starting is idempotent by cache key. If the edge response is lost after
+    // the server created the durable job, one bounded retry recovers that same
+    // job instead of making the customer repeat the operation manually.
+    if (!isRetryablePortalExportRequestError(error)) throw error;
+    await delay(PORTAL_EXPORT_START_RETRY_MS);
+    data = await postPortalOrderJson("/api/portal-export-start", payload);
+  }
   // The export is idempotent by organization, customer, brand and pricing
   // snapshot. If the edge response is lost after the server creates the job,
   // retry once so the active or finalized job is returned instead of showing
@@ -319,6 +338,7 @@ export async function waitForPortalExportJob(
   onProgress?: (job: PortalExportJobStatus) => void,
 ) {
   let job = initialJob;
+  let transientStatusFailures = 0;
   const startedAt = Date.now();
   onProgress?.(job);
   while (job.status === "queued" || job.status === "running") {
@@ -334,7 +354,18 @@ export async function waitForPortalExportJob(
       break;
     }
     await delay(PORTAL_EXPORT_STATUS_POLL_MS);
-    job = await getPortalExportJobStatus(credentials, job.id);
+    try {
+      job = await getPortalExportJobStatus(credentials, job.id);
+      transientStatusFailures = 0;
+    } catch (error) {
+      // A gateway timeout must not turn a durable background export into a
+      // false failed operation. Keep the same job id and retry a few times;
+      // the server-side worker continues independently of this browser poll.
+      if (!isRetryablePortalExportRequestError(error) || transientStatusFailures >= 3) throw error;
+      transientStatusFailures += 1;
+      await delay(Math.min(8_000, 1_000 * (2 ** transientStatusFailures)));
+      continue;
+    }
     onProgress?.(job);
   }
   if (job.status !== "finalized") {

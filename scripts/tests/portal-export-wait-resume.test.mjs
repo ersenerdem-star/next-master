@@ -30,7 +30,7 @@ async function withStatusAtElapsed(elapsedMs, status, callback) {
   let statusReads = 0;
   globalThis.window = {
     setTimeout(callback, ms) {
-      if (ms === 1_500) queueMicrotask(callback);
+      if (ms === 3_000) queueMicrotask(callback);
       return 1;
     },
     clearTimeout() {},

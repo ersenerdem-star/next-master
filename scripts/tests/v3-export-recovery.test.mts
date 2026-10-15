@@ -1,9 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  isExactExportRecoveryTarget,
+  isExactProductionRecoveryTarget,
   isExactV3RecoveryTarget,
+  recoverV3ExportJobs,
   recoveryQueryUrls,
   recoverStagingV3ExportJobs,
+  recoveryTargetSiteUrl,
+  V3_EXPORT_PRODUCTION_SITE_ID,
+  V3_EXPORT_PRODUCTION_SITE_URL,
   selectRecoverableJobs,
   V3_EXPORT_STAGING_SITE_ID,
   V3_EXPORT_STAGING_SITE_URL,
@@ -48,6 +54,34 @@ test("recovery runs only on the exact staging site and database", async () => {
     assert.equal(dispatches, 0);
   }
   assert.equal(isExactV3RecoveryTarget(target), true);
+  assert.equal(isExactExportRecoveryTarget(target), true);
+});
+
+test("production recovery is allow-listed to the production site and database", async () => {
+  const production = {
+    siteId: V3_EXPORT_PRODUCTION_SITE_ID,
+    siteUrl: V3_EXPORT_PRODUCTION_SITE_URL,
+    supabaseUrl: "https://zjgueqijumzlfioihnkt.supabase.co",
+    bridgeFlag: "1",
+  };
+  assert.equal(isExactProductionRecoveryTarget(production), true);
+  assert.equal(recoveryTargetSiteUrl(production), V3_EXPORT_PRODUCTION_SITE_URL);
+  assert.equal(isExactExportRecoveryTarget(production), true);
+  let reads = 0;
+  let dispatched = 0;
+  const result = await recoverV3ExportJobs({
+    target: production,
+    nowMs,
+    listJobs: async (url) => {
+      reads += 1;
+      assert.equal(new URL(url).origin, "https://zjgueqijumzlfioihnkt.supabase.co");
+      return [job(1)];
+    },
+    dispatchJob: async () => { dispatched += 1; },
+  });
+  assert.equal(reads, 4);
+  assert.equal(dispatched, 1);
+  assert.equal(result.status, "checked");
 });
 
 test("recovery queries only stale, unexpired portal and admin price jobs with released leases", () => {

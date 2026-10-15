@@ -2,7 +2,7 @@ import type { Config } from "@netlify/functions";
 import { json } from "./_shared/http.mts";
 import { resolvePortalInvite } from "./_shared/portal-access.mts";
 import { writePortalAuditEvent } from "./_shared/portal-audit.mts";
-import { assertPortalExportJobCurrentContext, createExportArtifactSignedDownload, fetchExportJobById } from "./_shared/export-jobs.mts";
+import { assertPortalExportJobCurrentContract, createExportArtifactSignedDownload, fetchExportJobById } from "./_shared/export-jobs.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
 import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
@@ -37,7 +37,11 @@ export default async (req: Request) => {
     });
     const job = await fetchExportJobById(supabaseUrl, serviceRoleKey, invite.organization_id, jobId);
     if (!job) return json({ error: "Export job not found." }, 404, { "Set-Cookie": buildPortalSessionCookie(nextSessionToken) });
-    await assertPortalExportJobCurrentContext(supabaseUrl, serviceRoleKey, job, invite);
+    // The immutable artifact was fenced against the current pricing context by
+    // the worker before finalization.  Keep the download request bounded by
+    // checking only the invite/job scope; recomputing the full source version
+    // here would re-run the expensive legacy fingerprint after every export.
+    assertPortalExportJobCurrentContract(job, invite);
     if (job.status !== "finalized") return json({ error: "Export file is not ready yet." }, 409, { "Set-Cookie": buildPortalSessionCookie(nextSessionToken) });
 
     const download = await createExportArtifactSignedDownload(supabaseUrl, serviceRoleKey, job);

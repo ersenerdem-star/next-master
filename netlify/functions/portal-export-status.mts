@@ -2,7 +2,7 @@ import type { Config, Context } from "@netlify/functions";
 import { json } from "./_shared/http.mts";
 import { resolvePortalInvite } from "./_shared/portal-access.mts";
 import { writePortalAuditEvent } from "./_shared/portal-audit.mts";
-import { assertPortalExportJobCurrentContext, fetchExportJobById, isExportJobUnexpired, runPortalPriceListExportJob, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
+import { assertPortalExportJobCurrentContract, fetchExportJobById, isExportJobUnexpired, runPortalPriceListExportJob, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
 import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
@@ -47,7 +47,12 @@ export default async (req: Request, context: Context) => {
     });
     const job = await fetchExportJobById(supabaseUrl, serviceRoleKey, invite.organization_id, jobId);
     if (!job) return json({ error: "Export job not found." }, 404, { "Set-Cookie": buildPortalSessionCookie(nextSessionToken) });
-    await assertPortalExportJobCurrentContext(supabaseUrl, serviceRoleKey, job, invite);
+    // Status is polled while a large export is being built.  Recomputing the
+    // full pricing/data-version fingerprint here turns every status poll into a
+    // full-table operation and can exceed the Netlify gateway timeout.  The
+    // worker performs the full source/context fence before writing snapshot
+    // rows; this request only needs the cheap tenant/job ownership check.
+    assertPortalExportJobCurrentContract(job, invite);
     if (isExportJobUnexpired(job) && (job.status === "queued" || job.status === "running") && isStaleExportJob(job.status, job.updated_at)
       && !(isV3ExportBridgeEnabled() && isProductionExportPaused())) {
       context.waitUntil(
@@ -59,15 +64,9 @@ export default async (req: Request, context: Context) => {
         }),
       );
     }
-    await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
-      organizationId: invite.organization_id,
-      inviteId: invite.id,
-      partyType: invite.party_type,
-      email: invite.email,
-      eventType: "portal_export_status",
-      status: "ok",
-      details: { jobId, exportStatus: job.status },
-    });
+    // Polling is intentionally not written to the audit table.  A 3s poll
+    // interval would create thousands of audit writes for one download and
+    // add another remote round-trip to the hot status path.
     return json({ ok: true, job: toPublicExportJobStatus(job) }, 200, {
       "Set-Cookie": buildPortalSessionCookie(nextSessionToken),
     });
