@@ -13148,7 +13148,7 @@ body {
 
 /* Keep live upload status inside the dashboard card rhythm. Details are on demand. */
 .supplier-upload-summary { min-width: 0; }
-.supplier-upload-summary .section-card__header { gap: 16px; flex-wrap: wrap; }
+.supplier-upload-summary .section-card__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .supplier-upload-summary .section-card__header h2 { font-size: 18px; margin: 0; }
 .supplier-upload-summary .section-card__actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .supplier-upload-summary .section-card__actions .button { min-height: 32px; padding: 7px 11px; font-size: 12px; }
@@ -13182,3 +13182,6 @@ body {
 .supplier-upload-details__surface h2 { margin: 6px 0 0; font-size: 24px; letter-spacing: -.03em; }
 @media(max-width:1100px) { .dashboard-reference-grid { grid-template-columns: minmax(0,1fr); } }
 @media(max-width:600px) { .supplier-upload-details__surface { padding: 16px; } .supplier-upload-summary--dashboard .section-card__header { padding: 16px 14px 10px; } .supplier-upload-summary--dashboard .section-card__body { padding-inline: 14px; } }
+
+.supplier-upload-summary__title { display: flex; align-items: center; gap: 12px; }
+.supplier-upload-summary__title .dashboard-reference-card__icon { width: 44px; height: 44px; flex-basis: 44px; }

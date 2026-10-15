@@ -49,7 +49,7 @@ export function SupplierReleaseReviewPanel({locale,showArchive:controlledArchive
   },[]);
   const grouped=splitReleaseReviewHistory(rows);
   const displayedRows=showArchive ? (cursor ? rows : grouped.history) : grouped.latest;
-  return <><SectionCard className={`supplier-upload-summary${dashboard?' supplier-upload-summary--dashboard dashboard-upload-center':''}`} title={dashboard ? 'Supplier Price Upload Center' : showArchive ? (tr?'Yükleme arşivi':'Upload archive') : (tr?'Güncel tedarikçi yüklemeleri':'Current supplier uploads')} actions={<>
+  return <><SectionCard className={`supplier-upload-summary${dashboard?' supplier-upload-summary--dashboard dashboard-upload-center':''}`} title={dashboard ? <span className="supplier-upload-summary__title"><span className="dashboard-reference-card__icon"><NavGlyph name="upload"/></span>Supplier Price Upload Center</span> : showArchive ? (tr?'Yükleme arşivi':'Upload archive') : (tr?'Güncel tedarikçi yüklemeleri':'Current supplier uploads')} actions={<>
     {onOpenWorkspace?<Button onClick={onOpenWorkspace}>{tr?'Fiyat dosyası yükle':'Upload price file'}</Button>:null}
     <Button variant="secondary" disabled={loading} onClick={()=>setRefresh(v=>v+1)}>{tr?'Yenile':'Refresh'}</Button></>}>
     {controlledArchive === undefined ? <Button variant="secondary" aria-pressed={showArchive} onClick={()=>{setShowArchive(v=>!v);setIssueRelease(null);setSelectedId(null);if(cursor){setRows([]);setLoaded(false);setCursor(null);}}}>
