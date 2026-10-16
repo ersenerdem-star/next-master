@@ -16,7 +16,8 @@ test('statistics enforce tenant/admin scope, unique brand/SKU and current effect
  create table public.supplier_price_publications(id uuid,release_id uuid,organization_id uuid,supplier_id uuid,brand_id uuid,status text);
  create table public.supplier_price_release_rows(release_id uuid,product_code text,normalized_code text,buy_price numeric,currency text,row_status text,valid_from date,valid_to date);
  create table public.supplier_prices(organization_id uuid,supplier_id uuid,brand_id uuid,product_code text,buy_price numeric,currency text,is_active boolean,valid_from date,valid_to date);`);
- await db.exec(migration);
+ await db.exec(migration.replaceAll('get_supplier_current_price_statistics()', 'get_supplier_current_price_statistics_baseline()'));
+ await db.exec(await readFile(new URL('../../supabase/migrations/20261016114944_supplier_statistics_exact_code_sort.sql',import.meta.url),'utf8'));
  const id=n=>`00000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
  const org=id(1),other=id(2),brand=id(3),brand2=id(4),unpriced=id(5),supplier=id(6),supplier2=id(7),release=id(8),pub=id(9);
  await assert.rejects(db.query('select public.get_supplier_current_price_statistics()'),/Authentication required/);
@@ -34,6 +35,17 @@ test('statistics enforce tenant/admin scope, unique brand/SKU and current effect
  }
  const get=async()=> (await db.query('select public.get_supplier_current_price_statistics() as result')).rows[0].result;
  const r=await get();assert.equal(r.totalBrands,3);assert.equal(r.pricedBrands,2);assert.equal(r.pricedParts,4);
+ const old=(await db.query('select public.get_supplier_current_price_statistics_baseline() as result')).rows[0].result;
+ assert.deepEqual({...r,asOf:null},{...old,asOf:null});
+ // Exact source SKUs keep punctuation/case distinctions after the documented
+ // uppercase/whitespace normalization, while cross-supplier duplicates collapse.
+ for(const code of ['a-b','A/B','\u0130-1','\u0131-1','\u00e9-1','A B']){
+  await db.query("insert into supplier_prices values($1,$2,$3,$4,5,'EUR',true,current_date,null)",[org,supplier2,brand,code]);
+ }
+ const unicode=await get();
+ const unicodeOld=(await db.query('select public.get_supplier_current_price_statistics_baseline() as result')).rows[0].result;
+ assert.deepEqual({...unicode,asOf:null},{...unicodeOld,asOf:null});
+ await db.query("delete from supplier_prices where product_code in ('a-b','A/B','\u0130-1','\u0131-1','\u00e9-1','A B')");
  // An invalid current publication suppresses legacy rows in that same scope.
  await db.exec("update supplier_price_publications set status='superseded'");
  const unavailable=await get();assert.equal(unavailable.pricedParts,2);
