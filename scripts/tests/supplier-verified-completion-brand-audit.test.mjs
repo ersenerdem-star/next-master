@@ -11,7 +11,7 @@ const audit=foundation.slice(start,foundation.indexOf('$captured_function$;',sta
 await db.exec(`create role anon;create role authenticated;create role service_role;
  create schema auth;create schema supplier_price_validation_internal;
  create function auth.role() returns text language sql stable as $$select current_setting('request.jwt.claim.role',true)$$;
- create function public.normalize_part_code(text) returns text language sql immutable as $$select upper(regexp_replace($1,'[^a-zA-Z0-9]','','g'))$$;
+ create function public.normalize_part_code(text) returns text language sql immutable set search_path to public as $$select regexp_replace(upper(coalesce($1,'')), '[^A-Z0-9]', '', 'g')$$;
  create table brands(id uuid primary key,organization_id uuid,name text);
  create table suppliers(id uuid primary key,organization_id uuid);
  create table supplier_price_releases(id uuid primary key,organization_id uuid,supplier_id uuid,brand_id uuid,status text,
@@ -25,7 +25,10 @@ await db.exec(`create role anon;create role authenticated;create role service_ro
  create table supplier_prices(organization_id uuid,brand_id uuid,normalized_code text,is_active boolean);
  create table supplier_current_price_pointers(organization_id uuid,supplier_id uuid,brand_id uuid,release_id uuid,publication_id uuid);
  create table supplier_price_publications(id uuid,organization_id uuid,supplier_id uuid,brand_id uuid,release_id uuid,status text);`);
-await db.exec(audit);await db.exec(sql);
+await db.exec(audit);
+await db.exec(audit.replace('cross_brand_audit(', 'cross_brand_audit_baseline('));
+await db.exec(sql);
+await db.exec(await readFile(new URL('../../supabase/migrations/20261016102920_supplier_brand_audit_single_pass.sql',import.meta.url),'utf8'));
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const org=id(1),supplier=id(2),brand=id(3),otherBrand=id(4),release=id(5);
 beforeEach(async()=>{
@@ -42,6 +45,36 @@ async function seed(codes=['61/1','611']){
 }
 const finish=async(n=2)=>(await db.query('select * from complete_supplier_price_release_duckdb_validation($1,$2,$2,0,0,0,0,0,1)',[release,n])).rows[0];
 const saved=async()=>(await db.query('select * from supplier_price_releases where id=$1',[release])).rows[0];
+
+test('single-pass audit preserves evidence across all price sources, duplicate codes and tenant boundaries',async()=>{
+ const codes=Array.from({length:120},(_,i)=>`SKU-${i}`);
+ await seed([...codes,'SKU/0',' sku-1 ','!!!','ı-İ','é-ß']);
+ await db.query(`insert into catalog_products select $1,$2,'SKU'||n from generate_series(0,99) n`,[org,otherBrand]);
+ await db.query(`insert into supplier_prices select $1,$2,'SKU'||n,true from generate_series(0,99) n`,[org,otherBrand]);
+ await db.query(`insert into supplier_prices values($1,$2,'SKU119',false),($3,$2,'SKU118',true),($1,$4,'SKU117',true)`,[org,otherBrand,id(20),brand]);
+ await db.query(`insert into supplier_price_releases(id,organization_id,supplier_id,brand_id,status) values($1,$2,$3,$4,'published')`,[id(10),org,supplier,otherBrand]);
+ await db.query(`insert into supplier_price_publications values($1,$2,$3,$4,$5,'published')`,[id(11),org,supplier,otherBrand,id(10)]);
+ await db.query(`insert into supplier_current_price_pointers values($1,$2,$3,$4,$5)`,[org,supplier,otherBrand,id(10),id(11)]);
+ await db.query(`insert into supplier_price_release_rows select $1,n,'SKU/'||n,'SKU/'||n,'accepted',12.3,'EUR',current_date from generate_series(90,109) n`,[id(10)]);
+ const old=(await db.query(`select supplier_price_validation_internal.cross_brand_audit_baseline($1)-'checked_at' as result`,[release])).rows[0].result;
+ const next=(await db.query(`select supplier_price_validation_internal.cross_brand_audit($1)-'checked_at' as result`,[release])).rows[0].result;
+ assert.deepEqual(next,old);
+ assert.equal(next.brands[0].matching_codes,110);
+ assert.equal(next.review_required,true);
+ assert.equal(next.brands[0].sample_codes.length,10);
+});
+
+test('single-pass audit retains empty input and absolute bulk threshold decisions',async()=>{
+ await seed(['!!!']);
+ let next=(await db.query(`select supplier_price_validation_internal.cross_brand_audit($1) as result`,[release])).rows[0].result;
+ assert.equal(next.distinct_incoming_codes,0);assert.equal(next.review_required,true);
+ await db.query(`delete from supplier_price_release_rows where release_id=$1`,[release]);
+ await db.query(`insert into supplier_price_release_rows select $1,n,'V'||n,'V'||n,'accepted',12.3,'EUR',current_date from generate_series(1,6001) n`,[release]);
+ await db.query(`insert into catalog_products select $1,$2,'V'||n from generate_series(1,5000) n`,[org,otherBrand]);
+ const old=(await db.query(`select supplier_price_validation_internal.cross_brand_audit_baseline($1)-'checked_at' as result`,[release])).rows[0].result;
+ next=(await db.query(`select supplier_price_validation_internal.cross_brand_audit($1)-'checked_at' as result`,[release])).rows[0].result;
+ assert.deepEqual(next,old);assert.equal(next.review_required,true);assert.equal(next.brands[0].matching_codes,5000);
+});
 
 test('clean import automatically completes real brand audit, preserves exact SKUs and never publishes',async()=>{
  await seed();const result=await finish();assert.equal(result.publishable,true);
