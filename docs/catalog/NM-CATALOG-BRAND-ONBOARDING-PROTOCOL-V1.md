@@ -79,6 +79,14 @@ current exact-detail probe; do not copy browser tokens or bypass that boundary.
 Unbranded products remain file/manual managed. An engine being connected is
 not proof that all brand products have been enriched.
 
+The first production Denso review and publication completed through the signed
+scheduled worker for DCRI100360, DCRI100510 and DCRI100570. Canonical reread
+confirmed the official descriptions, EANs and gross weights (0.92, 0.84 and
+0.84 kg). Origin and tariff remained absent. Both current supplier publication
+pointers remained unchanged. The two current supplier enrichment jobs (7,349
+and 9,469 source rows, different suppliers) were requeued at their preserved
+official cursors; this is not proof of whole-list enrichment completion.
+
 The supplier-enrichment worker must checkpoint every completed official row
 before the next request, use bounded source pacing, and preserve file progress.
 A source failure on row N must not replay successful earlier observations in
