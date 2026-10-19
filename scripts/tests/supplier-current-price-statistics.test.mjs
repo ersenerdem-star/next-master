@@ -18,6 +18,9 @@ test('statistics enforce tenant/admin scope, unique brand/SKU and current effect
  create table public.supplier_prices(organization_id uuid,supplier_id uuid,brand_id uuid,product_code text,buy_price numeric,currency text,is_active boolean,valid_from date,valid_to date);`);
  await db.exec(migration.replaceAll('get_supplier_current_price_statistics()', 'get_supplier_current_price_statistics_baseline()'));
  await db.exec(await readFile(new URL('../../supabase/migrations/20261016114944_supplier_statistics_exact_code_sort.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../../supabase/migrations/20261019083038_supplier_statistics_large_catalog_timeout.sql',import.meta.url),'utf8'));
+ const config=(await db.query("select proconfig from pg_proc where proname='get_supplier_current_price_statistics'")).rows[0].proconfig;
+ assert.ok(config.includes('statement_timeout=30s'));
  const id=n=>`00000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
  const org=id(1),other=id(2),brand=id(3),brand2=id(4),unpriced=id(5),supplier=id(6),supplier2=id(7),release=id(8),pub=id(9);
  await assert.rejects(db.query('select public.get_supplier_current_price_statistics()'),/Authentication required/);

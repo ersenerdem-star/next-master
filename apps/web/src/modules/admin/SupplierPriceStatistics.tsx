@@ -21,7 +21,8 @@ export function SupplierPriceStatistics({tr,refresh}:{tr:boolean;refresh:number}
  const [loading,setLoading]=useState(true);
  useEffect(()=>{
   const controller=new AbortController();let live=true;
-  const timer=setTimeout(()=>controller.abort(),11000);setLoading(true);setError(false);
+  // Leave room for the database's bounded 30s exact-count query on large catalogs.
+  const timer=setTimeout(()=>controller.abort(),35000);setLoading(true);setError(false);
   void Promise.resolve(supabaseClient.rpc('get_supplier_current_price_statistics').abortSignal(controller.signal)).then(({data,error})=>{
    if(!live)return;
    if(error||!data||!['totalBrands','pricedBrands','pricedParts'].every(k=>Number.isSafeInteger(data[k])&&data[k]>=0)
