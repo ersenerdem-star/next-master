@@ -51,7 +51,9 @@ A six-digit Sachs article may use its known 3+3 official spelling directly,
 with the same exact returned-brand/article check and exact-search fallback.
 Whitespace is presentation; punctuation remains
 identity. No reader may substitute the first fuzzy search result. Use the source
-article spelling in the detail URL. All legacy ZF imports share this reader.
+article spelling in the detail URL. All legacy ZF reads share this reader. Legacy CLI --apply/--import writers
+are retired and refuse execution before credentials or network access; reviewed
+publication must use the durable engine.
 Weight is the explicitly labelled gross shipping weight in kg; convert grams
 only with an explicit unit and report conflicting product-type weights as
 unavailable. Never substitute a kit component, a net value or an unknown unit.
@@ -76,6 +78,14 @@ Raw source payloads remain in receipts; portal projections omit raw bodies, and
 collected receipts are capped at 5 MiB. Each mutation records its
 source and before/after values in a small transaction with a short lock timeout.
 No source policy is inferred from successful HTTP access.
+
+An explicit operator review may quarantine confirmed foreign SKU-title metadata
+on a completed Sachs manifest when the exact official article is unavailable.
+A source 404 alone never authorizes this action. The service-only operation
+checks tenant/admin, exact product, immutable before-values and title shape;
+concurrent edits are preserved. Original full records remain in an RLS-protected
+ledger before description/weight become unknown. EAN, code, origin, tariff,
+prices and lifecycle remain unchanged; missing source never means discontinued.
 
 Replacement signals are directional: `replacedBy` means old → successor;
 `replaces` means predecessor → current. Parse the official nested `values`

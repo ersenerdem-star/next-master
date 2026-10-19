@@ -91,3 +91,9 @@ test('ZF brands cannot enter a marketplace completion or import path',async()=>{
   for(const action of [syncBrandCatalogFromSpareto,completeMissingCatalogFieldsFromSpareto])await assert.rejects(action({brandName,supabaseUrl:'https://unused.invalid',serviceRoleKey:'test'}),/ZF_OFFICIAL_SOURCE_REQUIRED/);
  }
 });
+
+test('legacy ZF bulk writer refuses writes before credentials or network use',async()=>{
+ const {spawnSync}=await import('node:child_process');
+ const result=spawnSync(process.execPath,[new URL('../sync/fill-zf-aftermarket-details.mjs',import.meta.url).pathname,'--apply','--brands=Sachs'],{encoding:'utf8',env:{PATH:process.env.PATH}});
+ assert.notEqual(result.status,0);assert.match(result.stderr,/ZF_REVIEWED_ENGINE_REQUIRED/);assert.doesNotMatch(result.stderr,/SUPABASE_.*required/);
+});
