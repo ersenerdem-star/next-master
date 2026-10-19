@@ -116,6 +116,20 @@ Publication fills only empty canonical attributes and records OEM, vehicle
 and segment conflicts while preserving existing values. Images remain review
 evidence for `apply_catalog_observation_review_image`; this adapter does not
 automatically create an image-review decision or write canonical image URLs.
+An explicit Product Decision Owner instruction on 2026-10-20 authorizes a
+separate internal image-only source-fill job for the sealed Elring manifest.
+`fill_approved_elring_images` requires a time-limited approval row matching the
+organization, source, brand, run and manifest. It admits only official
+TecAlliance asset URLs present in the exact Elring/supplier-10 article evidence,
+fills empty image URLs on existing products, preserves populated images and
+records a durable per-row audit. It does not insert products, change lifecycle
+or prices, resume base publication, or reactivate the paused source. The source
+must remain inactive during this recovery job; general review policy is intact.
+The operator runner uses at most 25 rows per transaction, a 3-second database
+timeout, a 250ms lock timeout, no automatic retries, and auth/data health checks
+every five batches. A response over two seconds stops further publication.
+An image-only update now preserves derived search text when all search inputs
+are unchanged; edits to search inputs and inserts still rebuild search text.
 The report shows image candidates separately from canonical image coverage.
 Prices are excluded. Lifecycle and directional relations use the separate
 Elring lifecycle step described below. `reread_verified`
