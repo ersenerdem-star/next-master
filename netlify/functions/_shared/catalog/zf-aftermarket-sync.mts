@@ -1,3 +1,4 @@
+import {exactZfSearchItem,assertZfArticleIdentity,zfArticleWeight,zfReplacementCandidates} from './zf-product-identity.mjs';
 import {
   isCatalogPlaceholderDescription,
   normalizeCatalogEan,
@@ -489,13 +490,7 @@ export function boundZfCandidateItems<T>(
 // it never selects the first fuzzy result or writes products/images/relations.
 export async function fetchZfSupplierCatalogFields(brandName:string,productCode:string,requestTimeoutMs=12000) {
   const target=resolveStaticTarget(brandName);
-  const exact=(v:unknown)=>String(v??'').trim().replace(/\s+/g,'').toUpperCase();
-  const search=await fetchSearchPage(target,productCode,0,100,requestTimeoutMs);
-  const matches=search.items.filter((r:any)=>exact(r.source_article_number)===exact(productCode)
-    &&normalizeBrandKey(r.source_brand_name)===normalizeBrandKey(target.officialFilter));
-  if(matches.length!==1)throw Error('OFFICIAL_EXACT_MATCH_NOT_FOUND');
-  const payload=await fetchArticle(target,matches[0].source_article_number,requestTimeoutMs);
-  if(exact(payload?.details?.number)!==exact(productCode))throw Error('OFFICIAL_EXACT_MATCH_NOT_FOUND');
+  const {payload}=await fetchExactZfPayload(target,productCode,100,requestTimeoutMs);
   const detail=normalizeDetailPayload(target,payload);
   const specs=payload?.specifications?.content?.generalSpecifications?.specifications;
   const originSpec=Array.isArray(specs)?specs.find((s:any)=>/^(country of origin|country of manufacture|manufacturing country)$/i.test(cleanText(s.label))):null;
@@ -514,27 +509,8 @@ export async function fetchZfAftermarketOfficialObservation(input: {
   const target = resolveStaticTarget(input.brandName);
   const requestTimeoutMs = Math.max(5000, input.requestTimeoutMs ?? 30000);
   const searchPageSize = Math.max(20, input.searchPageSize ?? 100);
-  const search = await fetchSearchPage(target, normalizeCode(input.productCode), 0, searchPageSize, requestTimeoutMs);
-  if (!search.items.length) {
-    throw new Error(`search_returned_zero for ${input.productCode}`);
-  }
-
-  const sourceArticleId = String(search.items[0].source_article_number || search.items[0].product_code || input.productCode).trim();
-  if (!sourceArticleId) {
-    throw new Error(`search_schema_changed for ${input.productCode}`);
-  }
-
-  let detailPayload: any;
-  try {
-    detailPayload = await fetchArticle(target, sourceArticleId, requestTimeoutMs);
-  } catch (error) {
-    const message = String(error || "");
-    if (message.includes("404")) throw new Error(`article_detail_missing for ${input.productCode}`);
-    throw error;
-  }
-  if (!detailPayload?.details?.number) {
-    throw new Error(`article_detail_missing for ${input.productCode}`);
-  }
+  const {payload:detailPayload,item}=await fetchExactZfPayload(target,input.productCode,searchPageSize,requestTimeoutMs);
+  const sourceArticleId=item.source_article_number;
   const detail = normalizeDetailPayload(target, detailPayload);
   return {
     source_name: "ZF Aftermarket official catalog",
@@ -784,32 +760,26 @@ function normalizeSearchItem(target: any, item: any) {
   };
 }
 
-async function resolveOfficialDetail(target: any, productCode: string, searchPageSize: number, requestTimeoutMs: number) {
-  const candidates = dedupeStrings(buildArticleCandidates(target, productCode));
-  let lastError: unknown = null;
-  for (const candidate of candidates) {
-    try {
-      const detailPayload = await fetchArticle(target, candidate, requestTimeoutMs);
-      if (detailPayload?.details?.number) return normalizeDetailPayload(target, detailPayload);
-    } catch (error) {
-      lastError = error;
-    }
-  }
+async function fetchExactZfPayload(target:any,productCode:string,searchPageSize:number,requestTimeoutMs:number){
+  const search=await fetchSearchPage(target,productCode,0,searchPageSize,requestTimeoutMs);
+  const item=exactZfSearchItem(search.items,productCode,target.officialFilter);
+  const payload=await fetchArticle(target,item.source_article_number,requestTimeoutMs);
+  assertZfArticleIdentity(payload,productCode,target.officialFilter);
+  return {payload,item};
+}
 
-  const exactSearch = await fetchSearchPage(target, normalizeCode(productCode), 0, searchPageSize, requestTimeoutMs);
-  const exactItem = exactSearch.items.find((item: any) => item.normalized_code === normalizeCode(productCode)) || exactSearch.items[0] || null;
-  if (exactItem?.product_code) {
-    for (const candidate of buildArticleCandidates(target, exactItem.product_code)) {
-      try {
-        const detailPayload = await fetchArticle(target, candidate, requestTimeoutMs);
-        if (detailPayload?.details?.number) return normalizeDetailPayload(target, detailPayload);
-      } catch (error) {
-        lastError = error;
-      }
-    }
-  }
+async function resolveOfficialDetail(target:any,productCode:string,searchPageSize:number,requestTimeoutMs:number){
+  const {payload}=await fetchExactZfPayload(target,productCode,searchPageSize,requestTimeoutMs);
+  return normalizeDetailPayload(target,payload);
+}
 
-  throw lastError || new Error(`Official ZF article not found for ${productCode}`);
+export async function readZfOfficialProduct(brandName:string,productCode:string,requestTimeoutMs=15000){
+  const target=resolveStaticTarget(brandName);
+  const {payload,item}=await fetchExactZfPayload(target,productCode,100,requestTimeoutMs);
+  const detail=normalizeDetailPayload(target,payload);
+  return {brand:target.internalName,code:detail.product_code,fields:detail,raw:payload,
+    replacementCandidates:zfReplacementCandidates(payload.details),sourceArticle:item.source_article_number,
+    sourceUrl:detail.source_url,observedAt:new Date().toISOString()};
 }
 
 function buildArticleCandidates(target: any, productCode: string) {
@@ -928,15 +898,7 @@ function chooseBestImage(images: any[]) {
   return "";
 }
 
-function extractWeightKg(details: any) {
-  const productTypeWeight = details.productTypes?.find((item: any) => item?.grossWeight || item?.netWeight);
-  const first = cleanText(productTypeWeight?.grossWeight || productTypeWeight?.netWeight || "");
-  if (first) {
-    const parsed = parseWeight(first);
-    if (parsed != null) return parsed;
-  }
-  return parseWeight(details.mainStage?.weight?.value || "");
-}
+function extractWeightKg(details:any){return zfArticleWeight(details);}
 
 function extractEan(details: any, specEntries: Array<{ label: string; values: string[] }>) {
   const direct = normalizeCatalogEan(String(details?.mainStage?.ean?.value || details?.mainStage?.ean || ""));
@@ -998,7 +960,7 @@ async function resolveExtraCodes({
     if (!normalizedCode || existingByCode.has(normalizedCode)) continue;
     try {
       const page = await fetchSearchPage(target, normalizedCode, 0, searchPageSize, requestTimeoutMs);
-      const match = page.items.find((item: any) => item.normalized_code === normalizedCode) || page.items[0] || null;
+      const match = exactZfSearchItem(page.items,code,target.officialFilter);
       if (!match || processedCodes.has(match.normalized_code)) continue;
       processedCodes.add(match.normalized_code);
       items.push({ target, searchItem: match });

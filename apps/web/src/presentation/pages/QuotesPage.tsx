@@ -643,6 +643,7 @@ function getQuoteBuilderLineIssues(t: TranslateFn, line: QuoteBuilderLine) {
   if (!line.found) issues.push(t("sales.warnings.notMatched"));
   if (!line.description?.trim()) issues.push(t("sales.warnings.missingDescription"));
   if ((line.sell_price ?? 0) <= 0) issues.push(t("sales.warnings.missingSellPrice"));
+  if(line.price_sync_issue)issues.push(t(line.price_sync_issue==='PRICE_NOT_AVAILABLE'?'sales.warnings.currentPriceUnavailable':'sales.warnings.priceLookupFailed'));
   if (line.quantity_adjustment_note) issues.push(line.quantity_adjustment_note);
   return issues;
 }
@@ -1850,6 +1851,7 @@ export function QuotesPage({
         currency,
         onlyFillBlanks: resyncOnlyFillBlanks,
         keepPrices: resyncKeepPrices,
+        hydrateMissingPricesIfKeepingPrices: true,
       });
       setQuoteBuilderLines(syncedLines);
 
@@ -1890,7 +1892,8 @@ export function QuotesPage({
           ? t("sales.orders.resyncCompleteBlanksOnly")
           : t("sales.orders.resyncComplete"),
       );
-      actionFeedback.succeed(t("sales.orders.resyncedFromCatalog"));
+      const unpriced=syncedLines.filter(line=>line.price_sync_issue).length;
+      actionFeedback.succeed(unpriced?t("sales.orders.resyncedWithUnpricedRows",{count:unpriced}):t("sales.orders.resyncedFromCatalog"));
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.resyncFailed"));
     } finally {

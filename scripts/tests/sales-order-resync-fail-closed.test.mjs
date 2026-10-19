@@ -34,13 +34,13 @@ function savedLine(code = "61/1") {
   };
 }
 
-function makeResync(resolveQuoteLine) {
+function makeResync(resolveQuoteLine, references = new Map()) {
   return loadSalesResync({
     exactProductCode,
     normalizePartCode: (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, ""),
     normalizeBrandKey: (value) => String(value || "").trim().toLowerCase(),
     canonicalizeBrandName: (value) => String(value || "").trim(),
-    fetchCodeReferenceMatchesForRows: async () => new Map(),
+    fetchCodeReferenceMatchesForRows: async () => references,
     fetchCatalogMetadataForRows: async () => new Map(),
     mergeCatalogMetadata: (line) => line,
     fillText: (current, next) => next || current,
@@ -118,4 +118,46 @@ test("explicit repricing clears a removed supplier pack rule without mutating th
   assert.equal(updated.moq, null);
   assert.equal(updated.order_multiple, null);
   assert.deepEqual(original, before);
+});
+
+test('keeping saved prices fills an unpriced replacement from current options without changing other lines',async()=>{
+  const priced=savedLine(),blank={...savedLine('350038'),brand:'Sachs',supplier_name:'',buy_price:null,sell_price:null,supplierOptions:[],selectedSupplierKey:''};
+  const before=structuredClone([priced,blank]);const calls=[];
+  const resync=makeResync(async({code})=>{calls.push(code);return {resolved:{found:true,product_code:code,brand:'Sachs'},
+    supplierOptions:[{supplier_id:'current',supplier_name:'GroupAuto',buy_price:67.76,sell_price:74.54,price_date:'2026-10-19'}]};});
+  const result=await resync([priced,blank],{...repriceOptions,keepPrices:true,hydrateMissingPricesIfKeepingPrices:true});
+  assert.deepEqual(calls,['350038']);assert.deepEqual(result[0],priced);
+  assert.equal(result[1].buy_price,67.76);assert.equal(result[1].supplier_name,'GroupAuto');assert.equal(result[1].price_sync_issue,null);
+  assert.deepEqual([priced,blank],before);
+});
+
+test('unavailable prices and lookup failures remain explicit per-line outcomes while good missing lines are filled',async()=>{
+  const blank=code=>({...savedLine(code),supplier_name:'',buy_price:null,sell_price:null,supplierOptions:[],selectedSupplierKey:''});
+  const resync=makeResync(async({code})=>{
+    if(code==='NETWORK')throw Error('RPC unavailable');
+    return {resolved:{found:code!=='MISSING',product_code:code},supplierOptions:code==='MISSING'?[]:[{supplier_id:'s',supplier_name:'Sood',buy_price:1,sell_price:1.1}]};
+  });
+  const result=await resync(['GOOD','MISSING','NETWORK'].map(blank),{...repriceOptions,keepPrices:true,hydrateMissingPricesIfKeepingPrices:true});
+  assert.equal(result[0].buy_price,1);assert.equal(result[1].price_sync_issue,'PRICE_NOT_AVAILABLE');assert.equal(result[2].price_sync_issue,'PRICE_LOOKUP_FAILED');
+  assert.equal(result[1].buy_price,null);assert.equal(result[2].buy_price,null);
+  await assert.rejects(resync([blank('GOOD')],{...repriceOptions,currency:'USD',keepPrices:true,hydrateMissingPricesIfKeepingPrices:true}),/currency to EUR/);
+});
+
+test('changing SKU discards old product fields and prices before exact successor resolution',async()=>{
+  const old={...savedLine('318189'),brand:'Sachs',weight_kg:999,oem_no:'OLD-OEM',origin:'XX',hs_code:'OLD'};
+  const before=structuredClone(old);
+  const refs=new Map([['sachs::318189',{old_code:'318189',new_code:'350038',reason:'Official replacement'}]]);
+  const resync=makeResync(async({code})=>({resolved:{found:true,product_code:code,brand:'Sachs',description:'Correct successor',weight_kg:4.18,oem_no:'NEW-OEM'},
+    supplierOptions:[{supplier_id:'s',supplier_name:'Sood',buy_price:67.76,sell_price:74.54}]}),refs);
+  const [result]=await resync([old],{...repriceOptions,keepPrices:true,hydrateMissingPricesIfKeepingPrices:true});
+  assert.equal(result.requestedCode,'318189');assert.equal(result.resolvedCode,'350038');assert.equal(result.buy_price,67.76);
+  assert.equal(result.description,'Correct successor');assert.equal(result.weight_kg,4.18);assert.equal(result.oem_no,'NEW-OEM');assert.equal(result.origin,'');
+  assert.deepEqual(old,before);
+});
+
+test('explicit repricing may select a supplier only for a previously unpriced line with no saved supplier',async()=>{
+  const resync=makeResync(async({code})=>({resolved:{found:true,product_code:code},supplierOptions:[{supplier_id:'s',supplier_name:'Sood',buy_price:10,sell_price:11}]}));
+  const [result]=await resync([{...savedLine(),supplier_name:'',buy_price:null,sell_price:null,supplierOptions:[],selectedSupplierKey:''}],repriceOptions);
+  assert.equal(result.buy_price,10);assert.equal(result.supplier_name,'Sood');
+  await assert.rejects(resync([{...savedLine(),supplier_name:'',supplierOptions:[],selectedSupplierKey:''}],repriceOptions),/No exact current price/);
 });

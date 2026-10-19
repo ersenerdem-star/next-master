@@ -165,9 +165,13 @@ export async function resyncSalesOrderLinesFromCatalog(
       `${normalizeBrandKey(line.brand || "")}::${normalizePartCode(requestedCode)}`,
     );
     if (!referenceMatch || exactProductCode(referenceMatch.old_code) !== exactProductCode(requestedCode)) return line;
-
+    const changesSku=exactProductCode(referenceMatch.new_code)!==exactProductCode(line.resolvedCode||line.requestedCode);
     return {
       ...line,
+      ...(changesSku?{description:'',oem_no:'',hs_code:'',origin:'',weight_kg:null,found:false,
+        buy_price:null,sell_price:null,c_sell_price:null,manual_sell_price:false,price_date:'',
+        supplierOptions:[],selectedSupplierKey:'',moq:null,order_multiple:null,stock_qty:null,valid_to:null,
+        lifecycle_status:null,lifecycle_note:null,lifecycle_warning:null,price_sync_issue:null}:{}),
       resolvedCode: referenceMatch.new_code || line.resolvedCode || line.requestedCode,
       codeChanged: true,
       codeChangeWarning:
@@ -203,6 +207,7 @@ export async function resyncSalesOrderLinesFromCatalog(
   if (refreshesCurrentPrice && options.customerType === "C") {
     throw new Error("The retired C price list cannot be refreshed. Set A, B, or Other on the customer account.");
   }
+  if (refreshesCurrentPrice) requireRepricingCurrency(options.currency);
 
   if (keepPrices) {
     if (!options.hydrateMissingPricesIfKeepingPrices) {
@@ -255,14 +260,16 @@ async function refreshLinePricesFromCatalog(
     const matchingOptions = supplierOptions.filter((option) => selectedSupplierId
       ? String(option.supplier_id || "").trim() === selectedSupplierId
       : String(option.supplier_name || "").trim().toLowerCase() === selectedSupplierName);
+    const selectUnpricedSupplier=!selectedSupplierName&&!lineHasVisiblePrices(line);
     const selected = reprice
-      ? matchingOptions.length === 1 ? matchingOptions[0] : null
+      ? selectUnpricedSupplier ? supplierOptions[0]||null : matchingOptions.length === 1 ? matchingOptions[0] : null
       : matchingOptions[0] || supplierOptions[0] || null;
-    if (reprice && (!resolved.found
+    if ((!resolved.found
         || exactProductCode(resolved.product_code) !== exactProductCode(line.resolvedCode || line.requestedCode)
-        || !selectedSupplierName || !selected
+        || (!selectUnpricedSupplier&&!selectedSupplierName) || !selected
         || !Number.isFinite(Number(selected.buy_price)) || Number(selected.buy_price) <= 0
         || !Number.isFinite(Number(selected.sell_price)) || Number(selected.sell_price) <= 0)) {
+      if(!reprice)throw Error('NO_CURRENT_PRICE');
       throw new Error("No exact current price exists for the saved supplier and SKU.");
     }
     const quantityAdjustment = normalizeOrderQuantity(line.qty, selected || {});
@@ -289,6 +296,7 @@ async function refreshLinePricesFromCatalog(
 
     return {
       ...refreshed,
+      price_sync_issue:null,
       brand: canonicalizeBrandName(resolved.brand || refreshed.brand || line.brand || "") || refreshed.brand || line.brand,
       supplier_name: selected?.supplier_name || resolved.supplier_name || line.supplier_name,
       buy_price: reprice ? selected!.buy_price : selected?.buy_price ?? resolved.buy_price ?? line.buy_price,
@@ -311,7 +319,7 @@ async function refreshLinePricesFromCatalog(
       const reason = error instanceof Error ? error.message : "Current price lookup failed.";
       throw new Error(`Current supplier price refresh failed for ${itemName}: ${reason}`);
     }
-    return line;
+    return {...line,price_sync_issue:error instanceof Error&&error.message==='NO_CURRENT_PRICE'?'PRICE_NOT_AVAILABLE':'PRICE_LOOKUP_FAILED'} as QuoteBuilderLine;
   }
 }
 

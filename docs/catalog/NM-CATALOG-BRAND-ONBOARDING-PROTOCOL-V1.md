@@ -34,6 +34,54 @@ the canonical reread passed.
    not a zero, empty success, or guessed value. The package remains visible
    until its review, publication, enrichment and reread states are explicit.
 
+## ZF Group exact identity and correction — 2026-10-20
+
+The Product Decision Owner requested repair of order `FU26-R42026` and the
+Sachs/Boge/TRW/Lemforder/Wabco catalog engine, including official replacement
+and discontinued evidence. The existing ZF brand remains in the same connector;
+TRW Engine Components remains a distinct Motorservice domain. This instruction
+authorizes bounded internal official-source observations and reviewed corrections
+for these six existing brands, not unrestricted catalog collection or public
+republication. The source approval reference is
+`user-zf-group-catalog-order-repair-2026-10-20`.
+
+Every lookup must verify both the requested brand and exact article number in
+search and detail responses. Whitespace is presentation; punctuation remains
+identity. No reader may substitute the first fuzzy search result. Use the source
+article spelling in the detail URL. All legacy ZF imports share this reader.
+Weight is the explicitly labelled gross shipping weight in kg; convert grams
+only with an explicit unit and report conflicting product-type weights as
+unavailable. Never substitute a kit component, a net value or an unknown unit.
+The user-corrected Sachs `350038` has a valid 4.33 kg gross weight and matching
+EAN; it is not evidence that every existing Sachs attribute is wrong.
+
+The durable engine collects an immutable exact-code manifest of at most 100
+products, then shows source/current field differences before application.
+Requests are bounded and source snapshots, identities, errors and checkpoints
+are retained. Applying reviewed description/weight corrections requires the
+same field values seen during review; a subsequent manual edit is preserved.
+Existing EAN, menşe/tariff and identifiers are preserved or conflict-reported;
+blank source values never erase canonical values. Each mutation records its
+source and before/after values in a small transaction with a short lock timeout.
+No source policy is inferred from successful HTTP access.
+
+Replacement signals are directional: `replacedBy` means old → successor;
+`replaces` means predecessor → current. Parse the official nested `values`
+structure. Verify every target against the same brand and exact identity before
+recording evidence. Only a unique, non-cyclic, non-conflicting successor can enter
+operational Code References; existing manual mappings remain authoritative.
+Multiple/unverified successors require review. Availability, a numeric status,
+or a replacement alone is not proof that production ended. Only explicit
+production-stop wording changes canonical discontinued status; normal or missing
+status never reactivates a discontinued item automatically.
+
+Order resync is a separate pricing operation. It keeps valid saved prices for
+unchanged SKUs, fills unpriced lines from current supplier options, and clears
+old SKU attributes/prices before resolving a newly approved replacement. The
+original requested code is retained. Missing prices and lookup failures remain
+visible per row; a missing supplier cannot force use of a stale supplier price.
+Full explicit repricing retains its exact-SKU, saved-supplier and EUR guards.
+
 ## Elring official provider
 
 Operational entry point: `npm run catalog:elring -- --help`. This uses the

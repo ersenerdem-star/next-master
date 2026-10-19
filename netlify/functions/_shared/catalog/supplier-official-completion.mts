@@ -9,7 +9,7 @@ import {CATALOG_FIELDS,exactCatalogCode} from './supplier-enrichment-plan.mjs';
 
 export function supplierOfficialProvider(brand:string){
  const key=normalizeBrandKey(brand);
- if(['sachs','lemforder','zf','trw','boge','lemfoerder'].includes(key))return {key:'zf',fetch:(code:string)=>fetchZfSupplierCatalogFields(brand,code)};
+ if(['sachs','lemforder','zf','trw','boge','wabco','lemfoerder'].includes(key))return {key:'zf',fetch:(code:string)=>fetchZfSupplierCatalogFields(brand,code)};
  if(key==='bosch')return {key:'bosch',fetch:fetchBoschSupplierCatalogFields};
  if(['mann','mannfilter'].includes(key))return {key:'mann',fetch:fetchMannSupplierCatalogFields};
  const entry=resolveTecAllianceBrandEntry(brand);

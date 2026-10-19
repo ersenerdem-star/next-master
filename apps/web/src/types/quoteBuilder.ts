@@ -72,6 +72,7 @@ export type QuoteBuilderLine = {
   found: boolean;
   codeChanged: boolean;
   codeChangeWarning: string;
+  price_sync_issue?: 'PRICE_NOT_AVAILABLE' | 'PRICE_LOOKUP_FAILED' | null;
   lifecycle_status?: CatalogLifecycleStatus | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
