@@ -13294,3 +13294,29 @@ body {
 }
 
 :root[lang="tr"] .customer-desk-hero--reference::after { background-size: cover; background-position: center; }
+
+/* Publication readiness uses the actual disabled state so color and action agree. */
+.button.supplier-publish-button:not(:disabled) {
+  color: #fff;
+  background: linear-gradient(135deg, #15803d, #166534);
+  border-color: #166534;
+  box-shadow: 0 8px 20px rgba(21, 128, 61, 0.18);
+}
+
+.button.supplier-publish-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #166534, #14532d);
+  box-shadow: 0 10px 22px rgba(21, 128, 61, 0.24);
+}
+
+.button.supplier-publish-button:focus-visible {
+  outline: 3px solid #22c55e;
+  outline-offset: 3px;
+}
+
+.button.supplier-publish-button:disabled {
+  color: #64748b;
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  box-shadow: none;
+  opacity: 1;
+}

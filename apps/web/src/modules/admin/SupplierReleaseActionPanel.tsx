@@ -61,7 +61,7 @@ export function SupplierReleaseActionView(p:ViewProps) {
         <label style={{display:'flex',gap:8,alignItems:'flex-start'}}><input type="checkbox" checked={p.confirmed} disabled={!ready||p.busy||p.loading} onChange={event=>p.onConfirm(event.target.checked)}/>
           {tr?'Tedarikçiyi, markayı, satır sayısını ve yukarıdaki önceki sürümü kontrol ettim; kapsamın tamamının değiştirilmesini onaylıyorum.'
             :'I checked the supplier, brand, row count, and previous version above; I confirm replacement of this complete scope.'}</label>
-        <Button disabled={!ready||!p.confirmed||p.busy||p.loading} onClick={p.onPublish}>{tr?'Onayla ve yayınla':'Confirm and publish'}</Button>
+        <Button className="supplier-publish-button" disabled={!ready||!p.confirmed||p.busy||p.loading} onClick={p.onPublish}>{tr?'Onayla ve yayınla':'Confirm and publish'}</Button>
       </>:<p role="status">{tr?'Bu sürüm şu anda aktif.':'This release is currently active.'}</p>}
     </>:null}
     {(['review','publish'] as const).map(kind=>{
