@@ -13295,7 +13295,7 @@ body {
 
 :root[lang="tr"] .customer-desk-hero--reference::after { background-size: cover; background-position: center; }
 
-/* Publication readiness uses the actual disabled state so color and action agree. */
+/* Gray: unavailable. Yellow: ready, awaiting confirmation. Green: can publish. */
 .button.supplier-publish-button:not(:disabled) {
   color: #fff;
   background: linear-gradient(135deg, #15803d, #166534);
@@ -13319,4 +13319,11 @@ body {
   border-color: #cbd5e1;
   box-shadow: none;
   opacity: 1;
+}
+
+.button.supplier-publish-button.supplier-publish-button--awaiting-confirmation:disabled {
+  color: #713f12;
+  background: linear-gradient(135deg, #fef08a, #facc15);
+  border-color: #eab308;
+  box-shadow: 0 6px 18px rgba(202, 138, 4, 0.16);
 }

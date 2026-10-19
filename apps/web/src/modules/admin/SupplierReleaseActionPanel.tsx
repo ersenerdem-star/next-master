@@ -26,6 +26,7 @@ export function SupplierReleaseActionView(p:ViewProps) {
   const pending=unresolved(records.review)||unresolved(records.publish);
   const remotePending=Boolean(e&&[e.reviewOperation,e.publishOperation].some(op=>op&&['queued','running'].includes(op.status)));
   const ready=releasePublicationReady(e)&&!pending&&!remotePending&&!p.error;
+  const awaitingConfirmation=ready&&!p.confirmed&&!p.busy&&!p.loading;
   return <section className="list-stack" aria-label={tr?'İnceleme ve yayın':'Review and publication'} style={{borderTop:'1px solid var(--border-color, #d8e1ee)',paddingTop:16}}>
     <div className="toolbar toolbar--wrap"><strong>{tr?'İnceleme ve yayın':'Review and publication'}</strong>
       <Button variant="secondary" disabled={p.loading||p.busy} onClick={p.onRefresh}>{tr?'Güncel kontrolü al':'Refresh evidence'}</Button></div>
@@ -61,7 +62,9 @@ export function SupplierReleaseActionView(p:ViewProps) {
         <label style={{display:'flex',gap:8,alignItems:'flex-start'}}><input type="checkbox" checked={p.confirmed} disabled={!ready||p.busy||p.loading} onChange={event=>p.onConfirm(event.target.checked)}/>
           {tr?'Tedarikçiyi, markayı, satır sayısını ve yukarıdaki önceki sürümü kontrol ettim; kapsamın tamamının değiştirilmesini onaylıyorum.'
             :'I checked the supplier, brand, row count, and previous version above; I confirm replacement of this complete scope.'}</label>
-        <Button className="supplier-publish-button" disabled={!ready||!p.confirmed||p.busy||p.loading} onClick={p.onPublish}>{tr?'Onayla ve yayınla':'Confirm and publish'}</Button>
+        <Button className={`supplier-publish-button${awaitingConfirmation?' supplier-publish-button--awaiting-confirmation':''}`} disabled={!ready||!p.confirmed||p.busy||p.loading} onClick={p.onPublish}>
+          {awaitingConfirmation?(tr?'Devam etmek için onay kutusunu işaretleyin':'Tick the confirmation box to continue'):(tr?'Onayla ve yayınla':'Confirm and publish')}
+        </Button>
       </>:<p role="status">{tr?'Bu sürüm şu anda aktif.':'This release is currently active.'}</p>}
     </>:null}
     {(['review','publish'] as const).map(kind=>{
