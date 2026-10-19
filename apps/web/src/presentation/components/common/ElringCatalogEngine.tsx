@@ -40,8 +40,8 @@ export function ElringCatalogEngine({onClose,onPublished,defaultSegment=''}:{onC
   const a=document.createElement('a');a.href=url;a.download=`elring-${jobId}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
  }catch(e){setError(e instanceof Error?e.message:'ELRING_REQUEST_FAILED');}finally{setBusy(false);}};
  return <dialog ref={dialog} className="elring-engine-dialog" onCancel={event=>{event.preventDefault();onClose();}} aria-labelledby="elring-engine-title">
-  <div className="elring-engine-header"><div><h2 id="elring-engine-title">{tr?'Elring Katalog Motoru':'Elring Catalog Engine'}</h2>
-   <a href="https://web.tecalliance.net/elring/en/home" target="_blank" rel="noreferrer">{tr?'Resmi Elring kataloğu':'Official Elring catalog'}</a></div>
+  <div className="elring-engine-header"><div className="elring-engine-brand"><img className="elring-engine-logo" src="/brand-logos/elring.png" alt="Elring" /><div><h2 id="elring-engine-title">{tr?'Elring Katalog Motoru':'Elring Catalog Engine'}</h2>
+   <a href="https://web.tecalliance.net/elring/en/home" target="_blank" rel="noreferrer">{tr?'Resmi Elring kataloğu':'Official Elring catalog'}</a></div></div>
    <Button variant="secondary" onClick={onClose}>{tr?'Kapat':'Close'}</Button></div>
   <p>{tr?'Ürün kodlarıyla resmi kaynak inceleme paketi oluşturun. Paketleri kontrol ettikten sonra yetkili yayını başlatın.':'Collect official review packages by product code. Inspect the packages before starting authorized publication.'}</p>
   <p className="info-text">{tr?'Sayfayı kapatmak işi silmez. Ürün bilgileri, replacement ve discontinued kaynak kanıtıyla işlenir; görseller kontrollü onayda kalır.':'Closing this page preserves the job. Product facts, replacements and discontinued signals retain source evidence; images remain subject to controlled approval.'}</p>

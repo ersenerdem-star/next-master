@@ -15,6 +15,7 @@ type LogoPreset = {
 };
 
 const LOGO_PRESETS: LogoPreset[] = [
+  { match: /elring/i, label: "Elring", wordmark: "ELRING", assetSrc: "/brand-logos/elring.png", bgFrom: "#ffffff", bgTo: "#ffffff", fg: "#e30613" },
   { match: /bosch/i, label: "Bosch", wordmark: "BOSCH", assetSrc: "/brand-logos/bosch_logo.png", bgFrom: "#fff7ed", bgTo: "#ffffff", fg: "#c2410c", stroke: "#fdba74" },
   { match: /\bate\b/i, label: "ATE", wordmark: "ATE", assetSrc: "/brand-logos/ate_logo.png", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#93c5fd" },
   { match: /donaldson/i, label: "Donaldson", wordmark: "DONALDSON", assetSrc: "/brand-logos/donaldson_logo.png", bgFrom: "#fef2f2", bgTo: "#ffffff", fg: "#c81e1e", stroke: "#fca5a5" },

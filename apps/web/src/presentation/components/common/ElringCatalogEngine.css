@@ -7,3 +7,5 @@
 .elring-engine-results th,.elring-engine-results td{padding:10px;border-bottom:1px solid #d4dce6;vertical-align:top}.elring-engine-results td div{font-size:.85em;margin-top:6px}
 .elring-engine-results dl{min-width:220px}.elring-engine-results dl div{display:flex;justify-content:space-between;gap:10px}.elring-engine-results dd{margin:0}
 @media(max-width:600px){.elring-engine-dialog{padding:16px}.elring-engine-actions button{flex:1}}
+
+.elring-engine-brand{display:flex;align-items:center;gap:12px}.elring-engine-logo{width:88px;height:72px;object-fit:contain;background:#fff;border-radius:6px;flex-shrink:0}
