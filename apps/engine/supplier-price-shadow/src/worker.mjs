@@ -245,13 +245,14 @@ const verifiedCompactWorkflow=DBOS.registerWorkflow(async input=>{
   const source=verifiedSource();
   return createCompactVerifiedWorkflow({DBOS,rpc:callRpc,source,requireMode:requireVerifiedMode,batchSize:BATCH_SIZE})(input);
 },{name:'supplier-price-verified-release-v5'});
-// v6 opts into the complete commercial row contract. v5 callback and history stay unchanged.
+// Derive the commercial registration from the same version contract used by
+// dispatch, history drain and failure observation. v5 history stays unchanged.
 const verifiedCommercialWorkflow=DBOS.registerWorkflow(async input=>{
   requireVerifiedMode();
   if(!COMMERCIAL_FIELDS||!COMPACT_HISTORY||!SHARED_PREPARED)throw Error('COMMERCIAL_FIELDS_DISABLED');
   const source=verifiedSource();
   return createCompactVerifiedWorkflow({DBOS,rpc:callRpc,source,requireMode:requireVerifiedMode,batchSize:BATCH_SIZE,commercialFields:true})(input);
-},{name:'supplier-price-verified-release-v6'});
+},{name:verifiedWorkflowVersion({compact:true,sharedPrepared:true,commercialFields:true}).workflowName});
 const selectedVerifiedWorkflow=COMMERCIAL_FIELDS?verifiedCommercialWorkflow:COMPACT_HISTORY?verifiedCompactWorkflow:SHARED_PREPARED?verifiedPartitionedWorkflow:verifiedRecoveryWorkflow;
 
 async function main() {
