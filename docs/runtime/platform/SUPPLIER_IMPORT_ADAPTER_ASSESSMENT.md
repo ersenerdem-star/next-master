@@ -178,6 +178,66 @@ Foundation:
 - [Next-Master Implementation Standards](../NEXT_MASTER_IMPLEMENTATION_STANDARDS.md)
 - [Runtime Domain Ownership Index](../DOMAIN_OWNERSHIP_INDEX.md)
 
+### Boge decimal-weight incident and actionable source diagnostics — 2026-10-19
+
+The failed GroupAuto/Boge release `68989a27-d36f-4175-8739-c852db368d97`
+contains 509 unique price rows. The exact uploaded SHA-256
+`720ffd50c1bfdc1482139e3f7b47383b29a6429370c4f2c1ca3770bb4aba9f83`
+matches the local source. Legacy measurement parsing rejected 21 valid comma
+decimal weights, including record 6, part `89-183-0`, `Weight_kg=0,355`.
+No code, price, currency, date or duplicate error was found. The corrected
+measurement parser validates the same bytes with 509 rows and zero warnings;
+the separate buy-price ambiguity policy is unchanged.
+
+Normalization now uses durable commercial workflow v7; pending v1–v6 history
+blocks startup rather than replaying old hashes with new parsing. Local pinned
+DBOS/PostgreSQL crash-recovery tests passed for legacy v5 and commercial v7.
+The container allowlist includes both new parser/report modules. A staging
+deployment caught the initially missing image entries before production;
+the rebuilt image passed an actual container import and DuckDB validation.
+Runtime commit `05b6d7f` was deployed on the existing staging and production Render
+workers, with correct separate Supabase targets and `/readyz` reporting healthy.
+Both deployed runtimes validated `0,355` and `2,228` correctly.
+
+Source validation reports are private and bound to release, handoff and exact
+source hash. Reports retain total counts and at most 500 bounded diagnostic
+samples. Service-only writes and tenant/admin-only reads passed real PostgreSQL
+authorization tests. The latest failed Boge record now retains its 21 original
+diagnostics, labeled as a legacy result; no price or release state was changed
+by restoring those details. Admin review displays record, product, column,
+original cell and correction, with a formula-safe CSV download. Browser
+preflight shares the same weight parser. Original supplier files are unchanged.
+
+Evidence: `artifacts/catalog-enrichment-release/boge-*.log` and validation JSON.
+Successful upload preparation remains separate from explicit price publication.
+
+The authenticated production retry used identical bytes under
+`Boge_TR_19102026_verified.csv` to preserve the closed failed upload and its
+diagnostics. Release `5a28c5ba-7da9-4f48-aa9a-9fba2e7c77a2` completed source
+verification and handoff at attempt 1, then persisted and validated all 509 rows
+with zero rejected/warning rows and no error. Database samples retain weights
+`0.355` and `2.228`; the authenticated review confirms publication readiness.
+The agent left the approval checkbox unchecked and did not request publication.
+The new row report and ready review were verified in deployed web `05b6d7f`.
+
+Post-upload history inspection caught a hardcoded v6 registration despite the
+v7 application/version contract. The worker now derives registration from the
+same factory as dispatch and observation (`8f3fe51`); the validated Boge result
+is retained without replay or deletion. The initial Boge execution used the v6
+registration with application `0.11.0-measurement-diagnostics`, not a v7 name.
+This distinction prevents treating readiness as proof of a workflow identity.
+Registration fix `8f3fe51` subsequently deployed successfully in staging and
+production. The live worker reports healthy idle readiness, the v7 contract,
+and registration derived from that contract. The exact Boge history is SUCCESS.
+
+While final verification continued, an interactive publication approval was
+submitted at 21:32:31 Istanbul. Publication
+`9207fbdf-e218-4569-873e-fbe6bc99dea4` is published and has the active current
+pointer for all 509 accepted rows. The admin modal independently shows
+"Güncel aktif sürüm" and "Yayında". File enrichment has processed and changed
+509 catalog products. Official-source completion is separate: it remains
+queued at 0/509 with `OFFICIAL_SOURCE_TIMEOUT`; it is not claimed complete.
+
 ## Executive conclusion
 
 Supplier Import is the correct first adapter candidate for the future canonical Import Engine.
