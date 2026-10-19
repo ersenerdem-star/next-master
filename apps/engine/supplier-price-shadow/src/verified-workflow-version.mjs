@@ -2,7 +2,7 @@
 export function verifiedWorkflowVersion({compact=false,sharedPrepared=false,commercialFields=false}={}){
  if(commercialFields){
   if(!compact||!sharedPrepared)throw Error('SERVICE_COMMERCIAL_FIELDS_CONFIG');
-  return {applicationVersion:'0.10.0-commercial-fields',workflowName:'supplier-price-verified-release-v6'};
+  return {applicationVersion:'0.11.0-measurement-diagnostics',workflowName:'supplier-price-verified-release-v7'};
  }
  if(compact)return {applicationVersion:'0.9.0-compact-history',workflowName:'supplier-price-verified-release-v5'};
  return sharedPrepared
@@ -27,11 +27,11 @@ export async function startVersionedVerifiedWorkflow({DBOS,workflow,version,work
  return DBOS.startWorkflow(workflow,{workflowID,queueName})(input);
 }
 
-// Run through a read-only DBOSClient BEFORE launch can recover or dequeue v5/v6.
+// Run through a read-only DBOSClient BEFORE launch can recover or dequeue versioned work.
 // The SQL outbox may already be acknowledged, so per-dispatch checks alone
 // cannot discover an old pending workflow. No old history is changed here.
 export async function requireCompactHistoryDrained(history,{commercialFields=false}={}){
- for(const version of commercialFields?[1,2,3,4,5]:[1,2,3,4]){
+ for(const version of commercialFields?[1,2,3,4,5,6]:[1,2,3,4]){
   let active;
   try{
    active=await history.listWorkflows({workflowName:`supplier-price-verified-release-v${version}`,

@@ -223,12 +223,12 @@ test('compact gate is off by default, requires prepared source, and production c
   SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED:'1',SUPPLIER_PRICE_SHARED_PREPARED_ENABLED:'1'}));
 });
 
-test('commercial v6 is separately default-off and cannot start without compact prepared history',()=>{
+test('commercial v7 measurements are separately default-off and cannot start without compact prepared history',()=>{
  const base={SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED:'1',SUPPLIER_PRICE_SHARED_PREPARED_ENABLED:'1'};
  assert.doesNotThrow(()=>requireCompactHistoryConfig({...base,SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED:'0'}));
  assert.equal(verifiedWorkflowVersion({compact:true,sharedPrepared:true}).workflowName,'supplier-price-verified-release-v5');
  assert.deepEqual(verifiedWorkflowVersion({compact:true,sharedPrepared:true,commercialFields:true}),
-  {workflowName:'supplier-price-verified-release-v6',applicationVersion:'0.10.0-commercial-fields'});
+  {workflowName:'supplier-price-verified-release-v7',applicationVersion:'0.11.0-measurement-diagnostics'});
  for(const env of [{SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED:'1'},
   {...base,SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED:'true'},
   {...base,SUPPLIER_PRICE_COMMERCIAL_FIELDS_ENABLED:'1',SUPPLIER_PRICE_COMPACT_HISTORY_ENABLED:'0'},

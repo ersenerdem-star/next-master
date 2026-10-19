@@ -1,3 +1,4 @@
+import {parseSupplierWeight} from '../../../engine/supplier-price-shadow/src/supplier-weight.mjs';
 import {streamCsvRows,toCsv} from './csv';
 
 // Kept in parity with the deployed worker amount parser; see preflight tests.
@@ -40,7 +41,7 @@ export function parseSupplierPriceAmount(value: unknown, { typedNumeric = false 
   return { value: Number.isFinite(number) ? number : null, ambiguous: false };
 }
 
-export type SupplierCsvIssue={row:number;column:string;code:string;message:string};
+export type SupplierCsvIssue={row:number;column:string;code:string;message:string;productCode?:string;value?:string};
 export type SupplierCsvReport={totalRows:number;issueCount:number;counts:Record<string,number>;issues:SupplierCsvIssue[]};
 const CODE_HEADERS=['product_code','part_no','part_number','partno','code','sku','article_number','article_no'];
 const PRICE_HEADERS=['buy_price','buy_price_eur','buy_price_usd','buy_price_gbp','buy_price_try','supplier_price','price','net_price','purchase_price'];
@@ -51,20 +52,21 @@ export async function inspectSupplierCsv(file:Blob,signal:AbortSignal):Promise<S
   // Bounded report memory. Counts cover every row; downloaded details are capped.
   if(report.issues.length<100000)report.issues.push({row,column,code,message});
  };
- let codeIndex=-1,priceIndex=-1,headerSeen=false;
+ let codeIndex=-1,priceIndex=-1,weightIndex=-1,headerSeen=false;
  const codes=new Map<string,number>();
  for await(const cells of streamCsvRows(file)){
   signal.throwIfAborted();
   if(!headerSeen){
    headerSeen=true;
    const headers=cells.map(x=>x.trim().toLowerCase().replace(/[\s-]+/g,'_'));
-   codeIndex=headers.findIndex(x=>CODE_HEADERS.includes(x));priceIndex=headers.findIndex(x=>PRICE_HEADERS.includes(x));
+   codeIndex=headers.findIndex(x=>CODE_HEADERS.includes(x));priceIndex=headers.findIndex(x=>PRICE_HEADERS.includes(x));weightIndex=headers.findIndex(x=>['weight','weight_kg','weightkg'].includes(x));
    if(codeIndex<0)add(1,'Product_Code','missing_header','Ürün kodu sütunu bulunamadı.');
    if(priceIndex<0)add(1,'Buy_Price','missing_header','Alış fiyatı sütunu bulunamadı.');
    if(codeIndex<0||priceIndex<0)return report;
    continue;
   }
   report.totalRows++;const row=report.totalRows+1;
+  const beforeIssues=report.issues.length;
   const code=(cells[codeIndex]||'').replace(/\s+/g,'').toUpperCase();
   if(!/[A-Z0-9]/.test(code))add(row,'Product_Code','missing_code','Ürün kodu boş veya geçersiz.');
   else if(codes.has(code))add(row,'Product_Code','duplicate_code',`Ürün kodu tekrar ediyor; ilk kayıt: ${codes.get(code)}.`);
@@ -74,6 +76,8 @@ export async function inspectSupplierCsv(file:Blob,signal:AbortSignal):Promise<S
   else if(/[€$£₺]/.test(price))add(row,'Buy_Price','currency_symbol','Fiyat hücresindeki para birimi işaretini kaldırın; örnek: 14,19.');
   else if(parsed.ambiguous)add(row,'Buy_Price','ambiguous_price','Fiyatın ondalık/binlik ayrımı belirsiz; örnek: 1234 veya 1,2340.');
   else if(parsed.value===null||parsed.value<=0)add(row,'Buy_Price','invalid_price','Fiyat sıfırdan büyük, geçerli bir sayı olmalı.');
+  if(weightIndex>=0){const weight=(cells[weightIndex]||'').trim();if(weight&&parseSupplierWeight(weight)===null)add(row,'Weight_kg','invalid_weight','Ağırlık kg cinsinden sıfırdan büyük bir sayı olmalı; örnek: 0,355.');}
+  for(const issue of report.issues.slice(beforeIssues)){issue.productCode=cells[codeIndex]||'';issue.value=issue.column==='Weight_kg'?(cells[weightIndex]||''):(issue.column==='Buy_Price'?price:(cells[codeIndex]||''));}
   if(report.totalRows%2000===0)await new Promise(resolve=>setTimeout(resolve,0));
  }
  if(!headerSeen)add(1,'','empty_file','Dosya boş.');
@@ -81,6 +85,7 @@ export async function inspectSupplierCsv(file:Blob,signal:AbortSignal):Promise<S
  return report;
 }
 export function supplierCsvIssueCsv(report:SupplierCsvReport){
- // Cells contain generated diagnostics only, never untrusted supplier values.
- return '\uFEFF'+toCsv([['CSV record (header = 1)','Column','Code','Problem'],...report.issues.map(x=>[x.row,x.column,x.code,x.message])]);
+ // Protect spreadsheet readers from supplier-controlled formula cells.
+ const safe=(v:unknown)=>{const s=String(v??'');return /^[=+@-]/.test(s.trimStart())?`'${s}`:s;};
+ return '\uFEFF'+toCsv([['CSV record (header = 1)','Product code','Column','Value','Code','Problem'],...report.issues.map(x=>[x.row,safe(x.productCode),x.column,safe(x.value),x.code,x.message])]);
 }

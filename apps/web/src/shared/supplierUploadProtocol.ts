@@ -40,8 +40,8 @@ export function supplierProcessingInterruptedMessage(tr=false,reason?:string|nul
    'İşleme hizmeti isteği tamamlayamadı veya geçici olarak yanıt vermedi. Dosya ve işlenen satırlar korunuyor. Aynı yükleme kontrol edilerek devam ettirilmeli.',
    'The processing service could not complete the request or was temporarily unavailable. The file and processed rows are preserved. Check and resume this same upload.'],
   SUPPLIER_FAILURE_SOURCE_VALIDATION_FAILED:[
-   'Dosyanın satır kontrolü geçmedi; fiyatlar yayınlanmadı. Ürün kodu, pozitif fiyat, para birimi, tarih veya yinelenen kodlar kontrol edilmeli. Bu kayıt için sorunlu hücre ayrıntısı kaydedilmemiş; dosyanın hatalı satır raporu gerekir.',
-   'The file failed row validation; prices were not published. Check product codes, positive prices, currency, dates and duplicates. Cell-level details were not recorded for this failure; a problematic-row report is required.'],
+   'Dosyanın satır kontrolü tamamlanamadı; fiyatlar yayınlanmadı. Kayıt, sütun, hücre değeri ve düzeltme için aşağıdaki satır kontrol raporunu açın.',
+   'Source row validation did not complete; prices were not published. See the row validation report below for records, columns, cell values and corrections.'],
   SUPPLIER_FAILURE_SOURCE_UNAVAILABLE:[
    'Yüklenen dosya depodan okunamadı. Dosya kaydı korunuyor; bu yüklemenin depolama bağlantısı kontrol edilmeli.',
    'The uploaded file could not be read from storage. Its record is preserved; check the storage connection for this upload.'],

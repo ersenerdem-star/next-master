@@ -1003,7 +1003,7 @@ export function SuppliersPage() {
               <p>{csvReport.totalRows.toLocaleString('tr-TR')} ürün satırı tarandı. Dosya gönderilmedi.</p>
               <ul>{Object.entries(csvReport.counts).map(([code,count])=><li key={code}>{csvReport.issues.find(x=>x.code===code)?.message} — {count.toLocaleString('tr-TR')} kayıt</li>)}</ul>
               <p>Satır numaraları, başlık 1 kabul edilerek CSV kayıt sırasını gösterir. Çok satırlı hücreler veya tamamen boş satırlar varsa Excel satır numarası farklı olabilir.</p>
-              <ul>{csvReport.issues.slice(0,8).map((issue,i)=><li key={i}>Kayıt {issue.row.toLocaleString('tr-TR')} · {issue.column}: {issue.message}</li>)}</ul>
+              <ul>{csvReport.issues.slice(0,8).map((issue,i)=><li key={i}>Kayıt {issue.row.toLocaleString('tr-TR')}{issue.productCode?` · ${issue.productCode}`:''} · {issue.column}{issue.value!==undefined?` [${issue.value}]`:''}: {issue.message}</li>)}</ul>
               {csvReport.issueCount>csvReport.issues.length?<p>Ayrıntı dosyası ilk 100.000 sorunu içerir; yukarıdaki sayılar dosyanın tamamını kapsar.</p>:null}
               <Button variant="secondary" onClick={()=>downloadCsv('supplier-upload-errors.csv',supplierCsvIssueCsv(csvReport))}>Hata listesini indir</Button>
             </section>:null}

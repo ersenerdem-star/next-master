@@ -73,7 +73,14 @@ async function prepareSource({origin,key,release,batchSize,commercialFields,fetc
   const downloaded=await downloadSource({origin,key,bucket:'supplier-price-imports',path:release.source_file_path,
     expectedBytes:Number(release.source_file_bytes),expectedSha:release.source_file_sha256,fetchImpl});
   const validation=await validateCsvWithDuckDB({inputPath:downloaded.file,sourceDate:release.source_date,memoryLimit:'512MB',threads:4,tempDirectory:downloaded.dir,commercialFields});
-  if(Number(validation.totalRows)!==Number(release.total_rows)||validation.publishable!==true) throw Error('LOCAL_STREAM_SOURCE_VALIDATION_FAILED');
+  if(Number(validation.totalRows)!==Number(release.total_rows)||validation.publishable!==true){
+    try{
+      const response=await fetchImpl(`${origin}/rest/v1/rpc/record_supplier_price_source_validation_report`,{method:'POST',headers:{Authorization:`Bearer ${key}`,apikey:key,'content-type':'application/json'},redirect:'error',
+        body:JSON.stringify({input_release_id:release.id,input_handoff_id:release.handoff_id,input_source_sha256:release.source_file_sha256,input_report:{...validation.diagnostics,totalRows:validation.totalRows}})});
+      const saved=await response.json().catch(()=>null);if(!response.ok||saved?.status!=='recorded')throw Error('LOCAL_STREAM_VALIDATION_REPORT_UNCONFIRMED');
+    }finally{await rm(downloaded.dir,{recursive:true,force:true});}
+    throw Error('LOCAL_STREAM_SOURCE_VALIDATION_FAILED');
+  }
   await recordCompatibility({origin,key,release,commercialFields,fetchImpl});
   const normalized=join(downloaded.dir,'normalized.jsonl');
   const output=createWriteStream(normalized,{flags:'wx',mode:0o600});

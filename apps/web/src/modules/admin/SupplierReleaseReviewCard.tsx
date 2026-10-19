@@ -1,3 +1,4 @@
+import {SupplierSourceValidationReport} from './SupplierSourceValidationReport';
 import React,{useState} from 'react';
 import {SupplierCatalogEnrichmentStatus} from './SupplierCatalogEnrichmentStatus';
 import {releaseReviewState, type ReleaseReviewRow, type ReleaseIssueRow, releaseIssueExplanation} from '../../shared/supplierReleaseReview';
@@ -36,6 +37,7 @@ export function SupplierReleaseReviewCard({rows,tr,onDetails,onIssues,actionsEna
       <span>{row.processedRows.toLocaleString()} / {row.totalRows.toLocaleString()} · {translateInterfaceText(row.status,tr?'tr':'en')}</span>
       <span className="operations-subtle">{new Date(row.createdAt).toLocaleString(tr?'tr-TR':'en-US',{dateStyle:'medium',timeStyle:'short'})}</span>
       {state==='processing_interrupted'?<p role="alert">{supplierProcessingInterruptedMessage(tr,row.errorMessage)} {tr?'Son durum':'Last status'}: {new Date(row.updatedAt).toLocaleString(tr?'tr-TR':'en-US')}</p>:null}
+      {row.errorMessage==='SUPPLIER_FAILURE_SOURCE_VALIDATION_FAILED'?<SupplierSourceValidationReport releaseId={row.id} tr={tr}/>:null}
       {typeof row.acceptedRows==='number' ? <div className="operations-subtle">
         {tr ? `Kabul: ${row.acceptedRows.toLocaleString('tr-TR')} · Çakışma: ${(row.conflictRows||0).toLocaleString('tr-TR')} · Reddedilen: ${(row.rejectedRows||0).toLocaleString('tr-TR')} · Uyarı: ${(row.warningRows||0).toLocaleString('tr-TR')}`
           : `Accepted: ${row.acceptedRows.toLocaleString('en-US')} · Conflicts: ${(row.conflictRows||0).toLocaleString('en-US')} · Rejected: ${(row.rejectedRows||0).toLocaleString('en-US')} · Warnings: ${(row.warningRows||0).toLocaleString('en-US')}`}

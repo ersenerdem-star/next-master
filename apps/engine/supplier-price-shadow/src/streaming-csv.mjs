@@ -1,3 +1,5 @@
+import {parseSupplierWeight} from './supplier-weight.mjs';
+import {SOURCE_DIAGNOSTIC_FIELDS} from './source-validation-report.mjs';
 import { createHash } from "node:crypto";
 
 export const SUPPLIER_SOURCE_COMPATIBILITY_POLICY = "supplier-price-commercial-fields-v1";
@@ -181,7 +183,7 @@ export async function* parseCsvRows(readable, options = {}) {
   if (header === null) throw new Error("CSV_MISSING_HEADER");
 }
 
-export function normalizeSupplierPriceRow({ sourceRowNumber, row, buyPriceIsNumeric = false }, { commercialFields = false, sourceDate = null } = {}) {
+export function normalizeSupplierPriceRow({ sourceRowNumber, row, buyPriceIsNumeric = false }, { commercialFields = false, sourceDate = null, onDiagnostic } = {}) {
   const unsupportedFields = [...new Set(Object.entries(row)
     .filter(([header, value]) => UNSUPPORTED_HEADER_TO_FIELD.has(normalizeHeader(header))
       && String(value ?? "").trim() !== "")
@@ -203,7 +205,7 @@ export function normalizeSupplierPriceRow({ sourceRowNumber, row, buyPriceIsNume
   if (!value("buy_price")) errors.push("MISSING_BUY_PRICE");
   else if (parsedBuyPrice.ambiguous) errors.push("AMBIGUOUS_BUY_PRICE_FORMAT");
   else if (buyPrice === null || buyPrice <= 0) errors.push("INVALID_BUY_PRICE");
-  const weight = parseDecimal(value("weight"));
+  const weight = commercialFields ? parseSupplierWeight(value("weight")) : parseDecimal(value("weight"));
   if (value("weight") && weight === null) warnings.push("INVALID_WEIGHT");
   const moq = parseInteger(value("moq"));
   if (value("moq") && moq === null) warnings.push("INVALID_MOQ");
@@ -249,6 +251,9 @@ export function normalizeSupplierPriceRow({ sourceRowNumber, row, buyPriceIsNume
   // v2 includes every commercial key, including NULL, in the immutable hash.
   if (commercialFields) Object.assign(normalized, commercial);
   normalized.row_hash = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
+  if(onDiagnostic)for(const [codes,severity] of [[errors,'error'],[warnings,'warning']])for(const code of codes){
+    const field=SOURCE_DIAGNOSTIC_FIELDS[code];if(field)onDiagnostic({sourceRowNumber,productCode,code,value:value(field[1]),severity});
+  }
   return normalized;
 }
 

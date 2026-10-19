@@ -23,3 +23,8 @@ test('missing headers and empty files fail with actionable issues',async()=>{
 test('cancellation stops preflight',async()=>{
  const c=new AbortController();c.abort();await assert.rejects(check('Product_Code;price\nA;2',c.signal));
 });
+
+test('optional weights accept decimal comma precision and invalid weights identify the exact product and cell',async()=>{
+ const report=await inspectSupplierCsv(new Blob(['Product_Code;Buy_Price_Eur;Weight_kg\nA;1,50;0,355\nB;2,50;2,228\nC;3,50;abc\n']),new AbortController().signal);
+ assert.equal(report.issueCount,1);assert.equal(report.issues[0].row,4);assert.equal(report.issues[0].column,'Weight_kg');assert.equal(report.issues[0].productCode,'C');assert.equal(report.issues[0].value,'abc');
+});

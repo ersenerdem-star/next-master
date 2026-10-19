@@ -1,3 +1,4 @@
+import {createSourceValidationReport,SOURCE_VALIDATION_SAMPLE_LIMIT} from './source-validation-report.mjs';
 import {DuckDBInstance} from '@duckdb/node-api';
 import {createReadStream,createWriteStream} from 'node:fs';
 import {mkdtemp,rm} from 'node:fs/promises';
@@ -22,10 +23,10 @@ const csvCell=value=>{
 
 // Parse with the same delimiter, header aliases, number/date and code rules
 // that stage rows. DuckDB never reinterprets the supplier's original file.
-async function writeNormalizedCsv(inputPath,outputPath,sourceDate,commercialFields){
+async function writeNormalizedCsv(inputPath,outputPath,sourceDate,commercialFields,diagnostics){
  const rows=/\.xlsx$/i.test(inputPath)
-  ?parseNormalizedSupplierPriceRowsFromXlsx(inputPath,{commercialFields,sourceDate})
-  :parseNormalizedSupplierPriceRows(createReadStream(inputPath),{commercialFields,sourceDate});
+  ?parseNormalizedSupplierPriceRowsFromXlsx(inputPath,{commercialFields,sourceDate,onDiagnostic:diagnostics.add})
+  :parseNormalizedSupplierPriceRows(createReadStream(inputPath),{commercialFields,sourceDate,onDiagnostic:diagnostics.add});
  // Resolve the supplier header before opening the output stream. A malformed
  // header must fail without destroying a stream with an in-flight write.
  const first=await rows.next();
@@ -35,10 +36,12 @@ async function writeNormalizedCsv(inputPath,outputPath,sourceDate,commercialFiel
  // before the first drain. Cleanup must wait for this owned stream to close.
  completed.catch(()=>{});
  try{
-  output.write('normalized_code,buy_price,currency,valid_from,row_status,error_message\n');
+  output.write('source_row_number,normalized_code,buy_price,currency,valid_from,row_status,error_message\n');
   const emit=async parsed=>{
    const row=applyReleaseSourceDate(parsed,sourceDate);
-   const line=[row.normalized_code,row.buy_price,row.currency,row.valid_from,row.row_status,row.error_message]
+   if(row.currency&&row.currency!=='EUR')diagnostics.add({sourceRowNumber:row.source_row_number,productCode:row.product_code,code:'UNSUPPORTED_CURRENCY',value:row.currency});
+   if(!row.valid_from&&!row.error_message?.includes('INVALID_VALID_FROM'))diagnostics.add({sourceRowNumber:row.source_row_number,productCode:row.product_code,code:'MISSING_DATE'});
+   const line=[row.source_row_number,row.normalized_code,row.buy_price,row.currency,row.valid_from,row.row_status,row.error_message]
     .map(csvCell).join(',')+'\n';
    if(!output.write(line))await once(output,'drain');
   };
@@ -59,11 +62,12 @@ export async function validateCsvWithDuckDB({inputPath,memoryLimit='512MB',threa
  const path=join(workDir,'normalized.csv');
  let connection;
  try{
-  await writeNormalizedCsv(input,path,sourceDate,commercialFields);
+  const diagnostics=createSourceValidationReport(commercialFields?'measurement-v1':'legacy');
+  await writeNormalizedCsv(input,path,sourceDate,commercialFields,diagnostics);
   const instance=await DuckDBInstance.create(':memory:',{memory_limit:memoryLimit,threads:String(threads),...(tempDirectory?{temp_directory:tempDirectory}:{})});
   connection=await instance.connect();
   const source=`read_csv(${q(path)},auto_detect=false,header=true,delim=',',quote='"',escape='"',
-    columns={'normalized_code':'VARCHAR','buy_price':'VARCHAR','currency':'VARCHAR',
+    columns={'source_row_number':'BIGINT','normalized_code':'VARCHAR','buy_price':'VARCHAR','currency':'VARCHAR',
       'valid_from':'VARCHAR','row_status':'VARCHAR','error_message':'VARCHAR'},
     strict_mode=true,ignore_errors=false,null_padding=false)`;
   const reader=await connection.runAndReadAll(`with rows as (
@@ -100,6 +104,14 @@ export async function validateCsvWithDuckDB({inputPath,memoryLimit='512MB',threa
    &&result.missingPriceRows===0&&result.nonPositivePriceRows===0&&result.invalidCurrencyRows===0
    &&result.nonEurCurrencyRows===0&&result.currencyCount===1&&result.missingDateRows===0
    &&result.invalidDateRows===0&&result.rejectedRows===0&&result.warningRows===0;
+  const duplicateReader=await connection.runAndReadAll(`select source_row_number,normalized_code from (
+    select source_row_number,normalized_code,row_number()over(partition by normalized_code order by source_row_number) occurrence
+    from ${source} where nullif(trim(normalized_code),'') is not null
+   ) where occurrence>1 order by source_row_number limit ${SOURCE_VALIDATION_SAMPLE_LIMIT}`);
+  const duplicates=duplicateReader.getRowObjectsJson();
+  for(const row of duplicates)diagnostics.add({sourceRowNumber:Number(row.source_row_number),productCode:row.normalized_code,code:'DUPLICATE_PRODUCT_CODE',value:row.normalized_code});
+  if(result.duplicateRows>duplicates.length){const extra=result.duplicateRows-duplicates.length;diagnostics.report.issueCount+=extra;diagnostics.report.counts.DUPLICATE_PRODUCT_CODE=result.duplicateRows;diagnostics.report.truncated=true;}
+  result.diagnostics=diagnostics.report;
   return result;
  }finally{connection?.disconnectSync();await rm(workDir,{recursive:true,force:true});}
 }

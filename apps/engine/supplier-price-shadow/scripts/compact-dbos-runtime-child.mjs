@@ -12,7 +12,7 @@ const releaseId = '11111111-1111-4111-8111-111111111111';
 const handoffId = '22222222-2222-4222-8222-222222222222';
 const batchId = '33333333-3333-4333-8333-333333333333';
 const commercialFields = process.env.NM_COMPACT_TEST_COMMERCIAL_FIELDS === '1';
-const version = commercialFields ? 6 : 5;
+const version = commercialFields ? 7 : 5;
 const workflowId = `supplier-compact-runtime-proof-v${version}`;
 const rowCount = 1000;
 const sourceHash = 'a'.repeat(64);
@@ -74,7 +74,7 @@ const workflow = DBOS.registerWorkflow(createCompactVerifiedWorkflow({ DBOS, rpc
 
 async function main() {
   await client.connect();
-  DBOS.setConfig({ name: 'supplier-compact-local-runtime', applicationVersion: commercialFields ? '0.10.0-commercial-fields' : '0.9.0-compact-history',
+  DBOS.setConfig({ name: 'supplier-compact-local-runtime', applicationVersion: commercialFields ? '0.11.0-measurement-diagnostics' : '0.9.0-compact-history',
     executorID: 'supplier-compact-local-runtime-01', systemDatabaseUrl: connection.href,
     logLevel: 'error', logger: { debug() {}, info() {}, warn() {}, error() {} } });
   await DBOS.launch();
