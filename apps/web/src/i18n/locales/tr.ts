@@ -641,6 +641,7 @@ export const trMessages = {
     "orders.loadedOrder": "Satış siparişi {salesOrderNo} {status} durumuyla yüklendi",
     "orders.loadedOrderToast": "Satış siparişi {salesOrderNo} yüklendi",
     "orders.openFailed": "Bu satış siparişi açılamadı. Herhangi bir değişiklik yapılmadı; lütfen tekrar deneyin.",
+    "orders.resyncFromCatalog": "Katalogdan yeniden eşitle",
     "orders.noLinesToResync": "Senkronize edilecek satır yok",
     "orders.resyncingOrder": "Satış siparişi senkronize ediliyor {salesOrderNo}",
     "orders.resyncCompleteBlanksOnly": "Senkronizasyon tamamlandı, yalnızca boşlar",

@@ -1,3 +1,4 @@
+import {isExplicitDiscontinued} from './mira-lifecycle.mts';
 import {exactZfSearchItem,assertZfArticleIdentity,zfArticleWeight,zfReplacementCandidates} from './zf-product-identity.mjs';
 import {
   isCatalogPlaceholderDescription,
@@ -490,7 +491,7 @@ export function boundZfCandidateItems<T>(
 // it never selects the first fuzzy result or writes products/images/relations.
 export async function fetchZfSupplierCatalogFields(brandName:string,productCode:string,requestTimeoutMs=12000) {
   const target=resolveStaticTarget(brandName);
-  const {payload}=await fetchExactZfPayload(target,productCode,100,requestTimeoutMs);
+  const {payload}=await fetchExactZfPayload(target,productCode,100,requestTimeoutMs,fetchImpl);
   const detail=normalizeDetailPayload(target,payload);
   const specs=payload?.specifications?.content?.generalSpecifications?.specifications;
   const originSpec=Array.isArray(specs)?specs.find((s:any)=>/^(country of origin|country of manufacture|manufacturing country)$/i.test(cleanText(s.label))):null;
@@ -719,7 +720,7 @@ async function fetchAllSearchItems(target: any, term: string, searchPageSize: nu
   return dedupeBy(items, (item) => item.normalized_code);
 }
 
-async function fetchSearchPage(target: any, term: string, offset: number, searchPageSize: number, requestTimeoutMs: number) {
+async function fetchSearchPage(target: any, term: string, offset: number, searchPageSize: number, requestTimeoutMs: number, fetchImpl:typeof fetch=fetch) {
   const url = new URL("https://aftermarket.zf.com/api/search");
   url.searchParams.set("term", term);
   url.searchParams.set("country", "TR");
@@ -729,7 +730,7 @@ async function fetchSearchPage(target: any, term: string, offset: number, search
   url.searchParams.set("filters", `brandname=${target.officialFilter}`);
   url.searchParams.set("language", "en");
 
-  const payload = await fetchJson(url.toString(), requestTimeoutMs);
+  const payload = await fetchJson(url.toString(), requestTimeoutMs, {fetchImpl});
   const productPayload = payload?.products;
   if (!productPayload) throw new Error(`ZF search payload missing for ${target.internalName} term ${term}`);
   const items = (productPayload.items || []).map((item: any) => normalizeSearchItem(target, item)).filter((item: any) => item.normalized_code);
@@ -755,27 +756,27 @@ function normalizeSearchItem(target: any, item: any) {
       ? `https://aftermarket.zf.com${String(item.moreDetails?.href || item.productDetailsPageHref || "").trim()}`
       : "",
     image_url: imageUrl,
-    lifecycle_status: normalizeLifecycleStatus(item.status?.value || item.status?.key),
+    lifecycle_status: isExplicitDiscontinued(item.status?.value)?'discontinued':null,
     lifecycle_note: buildLifecycleNoteFromStatus(item.status, null),
   };
 }
 
-async function fetchExactZfPayload(target:any,productCode:string,searchPageSize:number,requestTimeoutMs:number){
-  const search=await fetchSearchPage(target,productCode,0,searchPageSize,requestTimeoutMs);
+async function fetchExactZfPayload(target:any,productCode:string,searchPageSize:number,requestTimeoutMs:number,fetchImpl:typeof fetch=fetch){
+  const search=await fetchSearchPage(target,productCode,0,searchPageSize,requestTimeoutMs,fetchImpl);
   const item=exactZfSearchItem(search.items,productCode,target.officialFilter);
-  const payload=await fetchArticle(target,item.source_article_number,requestTimeoutMs);
+  const payload=await fetchArticle(target,item.source_article_number,requestTimeoutMs,fetchImpl);
   assertZfArticleIdentity(payload,productCode,target.officialFilter);
   return {payload,item};
 }
 
-async function resolveOfficialDetail(target:any,productCode:string,searchPageSize:number,requestTimeoutMs:number){
+async function resolveOfficialDetail(target:any,productCode:string,searchPageSize:number,requestTimeoutMs:number,fetchImpl:typeof fetch=fetch){
   const {payload}=await fetchExactZfPayload(target,productCode,searchPageSize,requestTimeoutMs);
   return normalizeDetailPayload(target,payload);
 }
 
-export async function readZfOfficialProduct(brandName:string,productCode:string,requestTimeoutMs=15000){
+export async function readZfOfficialProduct(brandName:string,productCode:string,requestTimeoutMs=15000,fetchImpl:typeof fetch=fetch){
   const target=resolveStaticTarget(brandName);
-  const {payload,item}=await fetchExactZfPayload(target,productCode,100,requestTimeoutMs);
+  const {payload,item}=await fetchExactZfPayload(target,productCode,100,requestTimeoutMs,fetchImpl);
   const detail=normalizeDetailPayload(target,payload);
   return {brand:target.internalName,code:detail.product_code,fields:detail,raw:payload,
     replacementCandidates:zfReplacementCandidates(payload.details),sourceArticle:item.source_article_number,
@@ -790,12 +791,12 @@ function buildArticleCandidates(target: any, productCode: string) {
   return candidates.filter(Boolean);
 }
 
-async function fetchArticle(target: any, articleCode: string, requestTimeoutMs: number) {
+async function fetchArticle(target: any, articleCode: string, requestTimeoutMs: number,fetchImpl:typeof fetch=fetch) {
   const url = new URL(`https://aftermarket.zf.com/api/articles/${encodeURIComponent(articleCode)}`);
   url.searchParams.set("expand", "specifications,extended");
   url.searchParams.set("country", "TR");
   url.searchParams.set("language", "en");
-  return fetchJson(url.toString(), requestTimeoutMs, { accept404: true });
+  return fetchJson(url.toString(), requestTimeoutMs, { accept404: true,fetchImpl });
 }
 
 function normalizeDetailPayload(target: any, payload: any) {
@@ -870,9 +871,9 @@ function normalizeDetailPayload(target: any, payload: any) {
     origin,
     weight_kg: extractWeightKg(details),
     image_url: imageUrl,
-    lifecycle_status: normalizeLifecycleStatus(status.value || status.key),
+    lifecycle_status: isExplicitDiscontinued(status.value)?'discontinued':null,
     lifecycle_note: buildLifecycleNoteFromStatus(status, replacementCode),
-    replacement_code: replacementCode,
+    replacement_code: "",
     replacement_reason: replacementCode ? `Replacement code: ${replacementCode}. ZF Aftermarket official source.` : "",
     related_codes: relatedCodes,
   };
@@ -971,15 +972,20 @@ async function resolveExtraCodes({
   return items;
 }
 
-async function fetchJson(url: string, requestTimeoutMs: number, options: { accept404?: boolean } = {}) {
+async function fetchJson(url: string, requestTimeoutMs: number, options: { accept404?: boolean;fetchImpl?:typeof fetch } = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
   try {
-    const response = await fetch(url, {
+    const response = await (options.fetchImpl||fetch)(url, {
       headers: requestHeaders,
       signal: controller.signal,
     });
-    const text = await response.text();
+    if(Number(response.headers.get('content-length')||0)>4*1024*1024)throw Error('ZF_RESPONSE_TOO_LARGE');
+    let text='';if(response.body){const reader=response.body.getReader();const chunks:Uint8Array[]=[];let size=0;
+      try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;
+       if(size>4*1024*1024)throw Error('ZF_RESPONSE_TOO_LARGE');chunks.push(value);}}
+      finally{await reader.cancel().catch(()=>{});}
+      const all=new Uint8Array(size);let at=0;for(const chunk of chunks){all.set(chunk,at);at+=chunk.length;}text=new TextDecoder().decode(all);}
     const payload = text ? JSON.parse(text) : {};
     if (options.accept404 && response.status === 404) return payload;
     if (!response.ok) throw new Error(`${response.status} ${payload?.message || payload?.statusMessage || text}`.trim());

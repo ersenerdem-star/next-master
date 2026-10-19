@@ -1,3 +1,4 @@
+import {zfReplacementCandidates} from './zf-product-identity.mjs';
 /** Lifecycle evidence is review-only. Availability and replacement are NOT discontinuation. */
 type Row = Record<string, any>;
 export const LIFECYCLE_FIELDS = ["replacement", "discontinued"] as const;
@@ -69,10 +70,10 @@ export function borgwarnerLifecycle(html:string, article:Row): LifecycleResult {
 export function zfLifecycle(payload:Row,article:Row): LifecycleResult {
   const d=payload.details;
   // Do not interpret numeric status IDs. Only the official human-readable production status.
-  const target=d.replacedBy;
-  const replacedBy=target===undefined ? undefined : target===null ? [] : Array.isArray(target) ? target : [target];
-  return lifecycleEvidence(article,{status:d.status?.value,statusSupported:typeof d.status?.value==="string",
-    replacedBy:replacedBy?.map((r:Row)=>({articleNumber:r?.number,mfrName:r?.brandName && d.brandName && brandKey(r.brandName)===brandKey(d.brandName)?article.mfrName:r?.brandName}))});
+  const candidates=zfReplacementCandidates(d);
+  const entries=(direction:string)=>candidates.filter((r:Row)=>r.direction===direction).map((r:Row)=>({articleNumber:r.code,mfrName:r.brand}));
+  return lifecycleEvidence(article,{status:d.status?.value,statusSupported:typeof d.status?.value==='string',
+    replacedBy:entries('replaced_by'),replaces:entries('replaces')});
 }
 
 export function lifecycleCapability(adapterId:string|undefined) {
