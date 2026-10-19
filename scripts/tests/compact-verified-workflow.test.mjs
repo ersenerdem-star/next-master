@@ -118,16 +118,16 @@ test('commit before checkpoint rescans the same partition and reuses exact SQL r
 });
 
 test('v6 crash replay retains all three fields with exact v2 SQL identity and bounded scalar history',async()=>{
- const f=fixture({commercialFields:true});f.history.crashAfter('compact-scan-stage-v6');
+ const f=fixture({commercialFields:true});f.history.crashAfter('compact-scan-stage-v7');
  await assert.rejects(f.run(),/SIMULATED_PROCESS_EXIT/);assert.equal(f.persisted.size,2);assert.equal(f.state.cursor,0);
  await f.run();assert.equal(f.persisted.size,3);assert.equal(f.state.stageCalls,3);
  const stages=f.calls.filter(c=>c.name==='stage_supplier_price_release_batch_v2');
  assert.deepEqual(stages[0].args,stages[1].args);
  assert.equal(f.calls.some(c=>c.name==='stage_supplier_price_release_batch'),false);
  const first=JSON.parse(f.persisted.get(1));assert.deepEqual([first.stock_qty,first.order_multiple,first.valid_to],[0,3,'2027-10-14']);
- assert.ok(f.history.entries.every(e=>e.name.endsWith('-v6')));assertBoundedHistory(f.history);
+ assert.ok(f.history.entries.every(e=>e.name.endsWith('-v7')));assertBoundedHistory(f.history);
  const before=f.calls.length;await f.run();assert.equal(f.calls.length,before,'completed v6 replay must not restage');
- const changed=fixture({commercialFields:true});changed.history.crashAfter('compact-scan-stage-v6');
+ const changed=fixture({commercialFields:true});changed.history.crashAfter('compact-scan-stage-v7');
  await assert.rejects(changed.run(),/SIMULATED_PROCESS_EXIT/);const original=changed.source.scan;
  changed.source.scan=async args=>{const r=await original(args);r.rows[0].stock_qty=1;return r;};
  await assert.rejects(changed.run(),/ROW_REPLAY_MISMATCH/);assert.equal(changed.state.validationCalls,0);

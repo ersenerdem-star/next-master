@@ -57,9 +57,9 @@ function launch(connectionString, pause, commercialFields) {
   return { child, completion, event };
 }
 
-for (const commercialFields of [false,true]) test(`real DBOS5.2.11 v${commercialFields ? 6 : 5} restarts after stage commit with compact history and one idempotent business effect`,
+for (const commercialFields of [false,true]) test(`real DBOS5.2.11 v${commercialFields ? 7 : 5} restarts after stage commit with compact history and one idempotent business effect`,
   { skip: process.env.RUN_SUPPLIER_COMPACT_DBOS_RUNTIME !== '1', timeout: 180_000 }, async (t) => {
-  const version = commercialFields ? 6 : 5;
+  const version = commercialFields ? 7 : 5;
   const workflowId = `supplier-compact-runtime-proof-v${version}`;
   const sdkPackage = JSON.parse(await readFile(new URL('../../apps/engine/supplier-price-shadow/node_modules/@dbos-inc/dbos-sdk/package.json', import.meta.url), 'utf8'));
   assert.equal(sdkPackage.version, '5.2.11');
@@ -127,12 +127,12 @@ for (const commercialFields of [false,true]) test(`real DBOS5.2.11 v${commercial
 
     // All worker processes have exited. Fixture setup is the only history mutation;
     // each actual pre-launch gate call must leave every DBOS table unchanged.
-    const legacyVersion = commercialFields ? 5 : 4;
+    const legacyVersion = commercialFields ? 6 : 4;
     const legacyId = `supplier-legacy-v${legacyVersion}-drain-fixture`;
     await client.query(`insert into dbos.workflow_status
       select (jsonb_populate_record(null::dbos.workflow_status,to_jsonb(s)||$1::jsonb)).*
       from dbos.workflow_status s where workflow_uuid=$2`, [JSON.stringify({ workflow_uuid: legacyId,
-      name: `supplier-price-verified-release-v${legacyVersion}`, application_version: commercialFields ? '0.9.0-compact-history' : '0.8.0-verified-integrity', status: 'PENDING' }),
+      name: `supplier-price-verified-release-v${legacyVersion}`, application_version: commercialFields ? '0.10.0-commercial-fields' : '0.8.0-verified-integrity', status: 'PENDING' }),
       workflowId]);
     const legacyStatuses = ['PENDING', 'ENQUEUED', 'DELAYED'];
     for (const status of legacyStatuses) {

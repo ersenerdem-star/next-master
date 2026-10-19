@@ -90,7 +90,7 @@ export function compactVerifiedStageCheckpoint({scan,claim,release,receipt,stage
 export function createCompactVerifiedWorkflow({DBOS,rpc,source,requireMode,batchSize,leaseSeconds=120,commercialFields=false}){
  if(!positive(batchSize,10000)||!Number.isInteger(leaseSeconds)||leaseSeconds<30||leaseSeconds>3600
   ||typeof source?.prepare!=='function'||typeof source?.scan!=='function')throw Error('VERIFIED_WORKFLOW_CONFIG');
- const step=(name,fn)=>DBOS.runStep(async()=>bounded(await retryCompactRpcStep(fn)),{name:commercialFields?name.replace(/-v5$/,'-v6'):name});
+ const step=(name,fn)=>DBOS.runStep(async()=>bounded(await retryCompactRpcStep(fn)),{name:commercialFields?name.replace(/-v5$/,'-v7'):name});
  return async input=>{
   requireMode();
   if(!UUID.test(input?.releaseId||'')||!UUID.test(input?.handoffId||''))throw Error('VERIFIED_WORKFLOW_INPUT');
