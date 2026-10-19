@@ -105,20 +105,51 @@ dimensions does not falsely block completion; missing core metadata has a distin
 `completed_missing` status. User-facing details show missing fields and row-level
 reasons. Network failures retain source row/provider and resume checkpoints.
 
-At this point, ten tests passed against real isolated PostgreSQL 17, including
-the actual publication trigger and background-consumer code. A 1,000-row source
-completed with exact origin/tariff values in bounded commits (local timing only).
-The existing template checks and web/Netlify build passed. Production activation
-and same-session uploaded-file evidence remain separate, outstanding gates.
+Thirteen tests pass against real isolated PostgreSQL 17, including the actual
+publication trigger and background consumer. A 1,000-row source completes with
+exact origin/tariff values in 100-row commits (local timing only). The existing
+template checks and web/Netlify build passed. Production activation and the first
+same-session file projection are now evidenced below; whole-source official
+completion is still in progress and is not claimed complete.
 
 The verified upload template now includes existing parser-supported `HS_Code`,
 `EAN`, `Vehicle`, `Vehicle_Model`, `Market_Segment`, `Weight_kg`, `Description_TR`
 and `Dimensions` columns. TR/EN guidance names tariff/dimensions and warns against
 inferring missing values. A template-to-real-parser check preserves leading-zero
-tariff and EAN text, origin, weight, dimensions and Turkish text. This change only
-makes existing source-capture support visible; it does not claim a catalog job,
-provider refresh or live deployment. Historical parser aliases/hashes were not
+tariff and EAN text, origin, weight, dimensions and Turkish text. The template change itself only
+makes existing source-capture support visible; live projection/provider evidence
+is recorded separately below. Historical parser aliases/hashes were not
 changed. The template metadata cells stay blank, avoiding invented defaults.
+
+### First production publication evidence — 2026-10-19
+
+GroupAuto / Sachs, release `f282d252-ee93-4fd8-b0a3-acb25cf0f896`, publication
+`43438ef4-177c-4494-b784-155681684daa`, queued catalog job
+`bb5c625e-4122-42fc-9ee6-ff0114382851` automatically. All 12,669 source rows are
+accepted and active; there are no rejected/conflicting/warning price rows. Source
+fields include 12,608 origins and 12,662 tariffs. Every source row matches a real
+catalog product; nonblank source origins/tariffs have zero catalog mismatches.
+The file phase completed at 12,669 / 12,669 without re-uploading or moving prices.
+
+Production PostgREST inherited the authenticator's 8-second statement timeout.
+Metadata writes intermittently reached that boundary. Failed transactions kept
+atomic checkpoints (2,000, 4,500, then 10,400) and resumed automatically. The
+follow-up reduces file commits from 500 to 100 rows and gives only the service-only
+catalog write RPC a bounded 20-second timeout, below the worker's 25-second
+request deadline. Global role limits and client write denial remain unchanged.
+SQLSTATE 57014 now becomes an actionable catalog timeout reason; lock contention
+and serialization conflicts have their own safe reason. No raw database details
+are exposed. Both migration changes were tested locally and applied/verified on
+staging before production. The production application is `47b3c90c`; the scoped
+DB exception is recorded in migration `20261019171104`.
+
+The same job entered the official phase and persisted actual ZF observations:
+`000331`, `000366`, and `000369` received exact-brand/SKU EAN/OEM/vehicle fields.
+Missing vehicle-model information remains explicit. This proves the official
+adapter executed for this publication; it does not prove all 12,669 official
+lookups completed. Evidence is in `artifacts/catalog-enrichment-release/` in the
+isolated release worktree and the local test logs under
+`artifacts/catalog-enrichment-review-20261019/` in the implementation worktree.
 
 ### Impact and boundaries
 
