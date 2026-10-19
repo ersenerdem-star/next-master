@@ -29,6 +29,7 @@ before(async()=>{
  await db.exec('set check_function_bodies=true');
  await db.exec(await readFile('supabase/migrations/20261019162519_supplier_publication_catalog_enrichment.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20261019170812_supplier_catalog_enrichment_short_transactions.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20261019171104_supplier_catalog_enrichment_scoped_timeout.sql','utf8'));
  await db.query("insert into organizations(id,name)values($1,'Org')",[org]);
  await db.query("insert into suppliers(id,organization_id,name)values($1,$2,'Supplier')",[supplier,org]);
  await db.query("insert into brands(id,organization_id,name)values($1,$2,'Sachs')",[brand,org]);
@@ -133,6 +134,11 @@ test('1000 source rows complete in bounded commits with exact tariffs and persis
  console.log(JSON.stringify({localPostgresRows:1000,elapsedMs:Date.now()-start,productionPerformanceProven:false}));
 }));
 
+
+test('catalog write timeout is bounded and scoped to the service-only RPC',async()=>{
+ const r=(await admin("select proconfig,has_function_privilege('anon',oid,'execute') anon,has_function_privilege('authenticated',oid,'execute') client,has_function_privilege('service_role',oid,'execute') worker from pg_proc where oid='public.apply_supplier_catalog_enrichment_batch(uuid,uuid,text,bigint,jsonb)'::regprocedure")).rows[0];
+ assert.ok(r.proconfig.includes('statement_timeout=20s'));assert.equal(r.anon,false);assert.equal(r.client,false);assert.equal(r.worker,true);
+});
 
 test('database timeouts retain a safe actionable reason without exposing database details',async()=>{
  const original=globalThis.fetch;
