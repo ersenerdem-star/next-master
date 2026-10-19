@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import {ZF_BRANDS,zfBrandKey} from '../../netlify/functions/_shared/catalog/zf-product-identity.mjs';
 import fs from "node:fs";
 import path from "node:path";
 import { canonicalizeBrandName, resolveSparetoBrandQuery } from "../shared/brand/brand-standardization.mjs";
@@ -40,6 +41,7 @@ for (let index = 2; index < process.argv.length; index += 1) {
 
 const inputBrandName = String(args.get("brand-name") || "").trim();
 const requestedBrandName = canonicalizeBrandName(inputBrandName);
+if(ZF_BRANDS[zfBrandKey(requestedBrandName)])throw Error('ZF_OFFICIAL_SOURCE_REQUIRED: use the exact official ZF review engine.');
 const sparetoBrandQuery = String(args.get("brand-query") || resolveSparetoBrandQuery(inputBrandName || requestedBrandName)).trim();
 const importMode = args.has("import");
 const refreshExisting = args.has("refresh-existing");

@@ -30,6 +30,7 @@ test("all six ZF Group brands resolve to the official ZF Aftermarket connector",
     assert.equal(plan.preferredProviderKey, "zf_aftermarket", brand);
     assert.equal(plan.executionProviderKey, "zf_aftermarket", brand);
     assert.equal(plan.preferredSourceType, "official", brand);
+    assert.deepEqual(plan.completionProviders, [], brand);
   }
 });
 
@@ -82,4 +83,11 @@ test("bounded ZF route is tenant-derived, allowlisted, and official-only", () =>
   assert.match(boundedAdminRoute, /sourceMode:\s*"zf_aftermarket_official_only"/);
   assert.match(boundedAdminRoute, /\["trw", "TRW"\]/);
   assert.doesNotMatch(boundedAdminRoute, /TRW Engine Components/);
+});
+
+test('ZF brands cannot enter a marketplace completion or import path',async()=>{
+ const {syncBrandCatalogFromSpareto,completeMissingCatalogFieldsFromSpareto}=await import('../../netlify/functions/_shared/catalog/spareto-sync.mts');
+ for(const brandName of ['Sachs','Boge','TRW','Lemförder','Wabco','ZF']){
+  for(const action of [syncBrandCatalogFromSpareto,completeMissingCatalogFieldsFromSpareto])await assert.rejects(action({brandName,supabaseUrl:'https://unused.invalid',serviceRoleKey:'test'}),/ZF_OFFICIAL_SOURCE_REQUIRED/);
+ }
 });

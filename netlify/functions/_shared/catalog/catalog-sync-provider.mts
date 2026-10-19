@@ -186,7 +186,7 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredProviderLabel: "ZF Aftermarket official catalog",
     preferredSourceType: "official",
     preferredSourceUrl: "https://aftermarket.zf.com/en/catalog/?country=AE",
-    completionProviders: ["spareto"],
+    completionProviders: [],
   },
   wabco: {
     aliases: ["wabco"],
@@ -195,7 +195,7 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     preferredProviderLabel: "ZF Aftermarket official WABCO catalog",
     preferredSourceType: "official",
     preferredSourceUrl: "https://aftermarket.zf.com/en/catalog/?country=AE",
-    completionProviders: ["spareto"],
+    completionProviders: [],
   },
   masterpower: {
     aliases: ["master power", "masterpower"],

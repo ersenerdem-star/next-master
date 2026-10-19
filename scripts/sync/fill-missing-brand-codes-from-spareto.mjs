@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import {ZF_BRANDS,zfBrandKey} from '../../netlify/functions/_shared/catalog/zf-product-identity.mjs';
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,6 +38,7 @@ for (let index = 2; index < process.argv.length; index += 1) {
 }
 
 const requestedBrand = canonicalizeBrandName(String(args.get("brand-name") || "").trim());
+if(ZF_BRANDS[zfBrandKey(requestedBrand)])throw Error('ZF_OFFICIAL_SOURCE_REQUIRED: use the exact official ZF review engine.');
 const importMode = args.has("import");
 const limitArg = args.get("limit");
 const limit = limitArg == null ? 100 : Math.max(1, Number.parseInt(limitArg, 10) || 100);

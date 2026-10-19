@@ -64,6 +64,11 @@ Existing EAN, menşe/tariff and identifiers are preserved or conflict-reported;
 blank source values never erase canonical values. A source weight below half or
 above twice an existing positive weight is held for individual product review;
 exact official identity is not proof that every official attribute is correct.
+A confirmed foreign SKU-prefixed title makes its old weight an untrusted
+baseline: exact official brand/article evidence and a usable non-conflicting
+official EAN can correct it. Numeric technical descriptions without a SKU-title
+separator are not contamination (for example Wabco 4/3 valves). ZF Group
+marketplace completion is disabled, including legacy marketplace entrypoints.
 Raw source payloads remain in receipts; portal projections omit raw bodies, and
 collected receipts are capped at 5 MiB. Each mutation records its
 source and before/after values in a small transaction with a short lock timeout.

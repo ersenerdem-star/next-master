@@ -1,3 +1,4 @@
+import {ZF_BRANDS,zfBrandKey} from './zf-product-identity.mjs';
 import {
   isCatalogPlaceholderDescription,
   normalizeCatalogDescription,
@@ -158,6 +159,7 @@ export async function syncBrandCatalogFromSpareto(input: {
   candidateLimit?: number;
 }) {
   const brandName = canonicalizeInternalBrandName(input.brandName);
+  if(ZF_BRANDS[zfBrandKey(brandName)])throw Error('ZF_OFFICIAL_SOURCE_REQUIRED');
   const brandQuery = resolveSparetoBrandQuery(brandName);
   const brandSlug = resolveSparetoBrandSlug(brandName);
   const refreshExisting = input.refreshExisting !== false;
@@ -362,6 +364,7 @@ export async function completeMissingCatalogFieldsFromSpareto(input: {
   limit?: number;
 }) {
   const brandName = canonicalizeInternalBrandName(input.brandName);
+  if(ZF_BRANDS[zfBrandKey(brandName)])throw Error('ZF_OFFICIAL_SOURCE_REQUIRED');
   const brandQuery = resolveSparetoBrandQuery(brandName);
   const brandSlug = resolveSparetoBrandSlug(brandName);
   const concurrency = Math.max(1, Math.min(input.concurrency ?? 6, 8));
