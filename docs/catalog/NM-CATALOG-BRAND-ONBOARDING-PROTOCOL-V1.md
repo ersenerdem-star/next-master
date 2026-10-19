@@ -43,14 +43,38 @@ legacy direct-write TecAlliance sync or marketplace completion. In Catalog,
 selecting Elring replaces the old resync action with **Elring Catalog Engine**.
 The legacy admin sync API rejects Elring with a pointer to the governed engine.
 
-Input is an explicit exact-product manifest (`--codes 115.100` or
-`--codes-file <JSON array of strings>`). This adapter does not enumerate the
-whole brand from the current exact-identity source authorization. Select one
+The exact-product input is a manifest (`--codes 115.100` or
+`--codes-file <JSON array of strings>`). Select one
 stable `--output` report per manifest; it contains immutable source snapshots,
 request fingerprints, field presence, package receipts and resume checkpoints.
 Packages contain at most 25 products. The runner stops on the first failed
 package. Source calls are serial, at least 1100ms apart, with a 15s timeout and
 a 2MiB response limit. A single operator must own an output report at a time.
+
+Full-brand entry point: `node --import tsx
+scripts/catalog/collect-elring-official-catalog.mjs --confirm-production --publish`.
+The user's 2026-10-19 instruction to collect from the official Elring link
+extends the registered scope to bounded manufacturer collection. This path
+requires `brand_collection_allowed=true` as well as the existing publication
+approval. It uses article-number search type **0**, supplier **10**, prefix
+partitions and 250-row pages; type 10 also matches comparable/OEM numbers and
+cannot establish disjoint manufacturer coverage. Caps are 30,000 products,
+500 requests, 8 MiB per response and at least 1,100 ms between requests.
+Each request, raw response and fingerprint is saved before continuing. The
+unique normalized identities must equal the unfiltered manufacturer's total,
+and an end-of-collection total check must agree before any stage or publication.
+Changing counts, truncated windows, duplicate identities and wrong brands stop
+the run. Resume uses the same output directory and immutable page evidence.
+
+Full-brand collection publishes the **base attributes** profile through the
+existing strict stage, publication, guarded enrichment and lifecycle RPCs.
+It admits missing optional attributes: missing market segment stays null;
+it never assigns all Elring parts to PC or infers compatibility from OEM makes.
+Vehicle/model fitment is explicitly `pending` in the observation and run scope,
+and image candidates remain `review_required`. This state is reported as
+`base_attributes_published_verified`, never as complete vehicle enrichment.
+The exact-product full-fitment publication gate described below is unchanged.
+Both paths preserve existing canonical values and keep prices excluded.
 
 Modes are `probe` (source evidence only), `stage` (durable review staging), and
 `publish` (sealed publication, guarded enrichment and canonical reread).
