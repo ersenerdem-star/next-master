@@ -10,6 +10,7 @@ const migration='supabase/migrations/20261014110614_supplier_price_production_pu
 const db=new PGlite();
 await db.exec(readFileSync('scripts/tests/supplier-production-publication-pg.setup.sql','utf8'));
 await db.exec(readFileSync(migration,'utf8'));
+await db.exec(readFileSync('supabase/migrations/20261019082313_supplier_production_publication_timeout.sql','utf8'));
 const {rows:[initialControl]}=await db.query('select enabled,reversal_enabled from supplier_price_ingestion_internal.production_publication_control');
 const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const org=id(1),supplier=id(2),brand=id(3),actor=id(4),release=id(10),second=id(11),decision=id(20);
@@ -46,6 +47,12 @@ beforeEach(async()=>{
  }
 });
 after(async()=>db.close());
+
+test('publication audit has a bounded worker-only budget without extending reversal or role settings',async()=>{
+ const rows=(await db.query("select proname,proconfig from pg_proc where proname in ('publish_supplier_price_release_production','reverse_supplier_price_publication_production')")).rows;
+ assert.ok(rows.find(r=>r.proname==='publish_supplier_price_release_production').proconfig.includes('statement_timeout=45s'));
+ assert.ok(!rows.find(r=>r.proname==='reverse_supplier_price_publication_production').proconfig.some(c=>c.startsWith('statement_timeout=')));
+});
 
 test('Migration seeds publication disabled and exposes neither private control nor ledger',async()=>{
  assert.deepEqual(initialControl,{enabled:false,reversal_enabled:false});

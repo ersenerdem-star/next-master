@@ -9,7 +9,7 @@ const foundation=await readFile(new URL('../../supabase/migrations/2026101411045
 const start=foundation.indexOf('CREATE OR REPLACE FUNCTION supplier_price_validation_internal.cross_brand_audit(');
 const audit=foundation.slice(start,foundation.indexOf('$captured_function$;',start));
 await db.exec(`create role anon;create role authenticated;create role service_role;
- create schema auth;create schema supplier_price_validation_internal;
+ create schema auth;create schema supplier_price_validation_internal;create schema supplier_price_ingestion_internal;
  create function auth.role() returns text language sql stable as $$select current_setting('request.jwt.claim.role',true)$$;
  create function public.normalize_part_code(text) returns text language sql immutable set search_path to public as $$select regexp_replace(upper(coalesce($1,'')), '[^A-Z0-9]', '', 'g')$$;
  create table brands(id uuid primary key,organization_id uuid,name text);
@@ -17,7 +17,10 @@ await db.exec(`create role anon;create role authenticated;create role service_ro
  create table supplier_price_releases(id uuid primary key,organization_id uuid,supplier_id uuid,brand_id uuid,status text,
    source_verification_required boolean,total_rows bigint,current_cursor bigint,processed_rows bigint,accepted_rows bigint,
    rejected_rows bigint,warning_rows bigint,conflict_rows bigint,brand_identity_audit jsonb,error_code text,error_message text,
-   validated_at timestamptz,updated_at timestamptz,worker_version text,review_revision integer default 0);
+   validated_at timestamptz,published_at timestamptz,uploaded_at timestamptz,source_file_sha256 text,source_file_path text,
+   updated_at timestamptz,worker_version text,review_revision integer default 0);
+ create table supplier_price_ingestion_internal.handoffs(release_id uuid,organization_id uuid,source_sha256 text,source_path text,total_rows bigint);
+ create table supplier_price_release_batches(release_id uuid,status text,row_count integer);
  create table supplier_price_release_rows(release_id uuid,source_row_number bigint,product_code text,normalized_code text,
    row_status text,buy_price numeric,currency text,valid_from date);
  create table supplier_price_release_events(release_id uuid,event_type text,stage text,status text,cursor bigint,processed_rows bigint,total_rows bigint,worker_version text,error_code text,error_message text);
@@ -29,11 +32,12 @@ await db.exec(audit);
 await db.exec(audit.replace('cross_brand_audit(', 'cross_brand_audit_baseline('));
 await db.exec(sql);
 await db.exec(await readFile(new URL('../../supabase/migrations/20261016102920_supplier_brand_audit_single_pass.sql',import.meta.url),'utf8'));
+await db.exec(await readFile(new URL('../../supabase/migrations/20261019082046_supplier_verified_final_validation_recovery.sql',import.meta.url),'utf8'));
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const org=id(1),supplier=id(2),brand=id(3),otherBrand=id(4),release=id(5);
 beforeEach(async()=>{
  await db.exec(`reset role;select set_config('request.jwt.claim.role','service_role',false);
- truncate brands,suppliers,supplier_price_releases,supplier_price_release_rows,supplier_price_release_events,catalog_products,supplier_prices,supplier_current_price_pointers,supplier_price_publications;`);
+ truncate supplier_price_ingestion_internal.handoffs,supplier_price_release_batches,brands,suppliers,supplier_price_releases,supplier_price_release_rows,supplier_price_release_events,catalog_products,supplier_prices,supplier_current_price_pointers,supplier_price_publications;`);
  await db.query('insert into brands values($1,$2,\'FAG\'),($3,$2,\'Other\')',[brand,org,otherBrand]);
  await db.query('insert into suppliers values($1,$2)',[supplier,org]);
 });
@@ -45,6 +49,41 @@ async function seed(codes=['61/1','611']){
 }
 const finish=async(n=2)=>(await db.query('select * from complete_supplier_price_release_duckdb_validation($1,$2,$2,0,0,0,0,0,1)',[release,n])).rows[0];
 const saved=async()=>(await db.query('select * from supplier_price_releases where id=$1',[release])).rows[0];
+
+async function interrupted(codes=['61/1','611']){
+ await seed(codes);
+ await db.query(`update supplier_price_releases set status='failed',error_code='SUPPLIER_PROCESSING_INTERRUPTED',
+   uploaded_at=now(),source_file_path='org/source.csv',source_file_sha256=repeat('a',64) where id=$1`,[release]);
+ await db.query(`insert into supplier_price_ingestion_internal.handoffs values($1,$2,repeat('a',64),'org/source.csv',$3)`,[release,org,codes.length]);
+ await db.query(`insert into supplier_price_release_batches values($1,'completed',$2)`,[release,codes.length]);
+}
+test('completed interrupted source can finish all real checks without publishing or rewriting rows',async()=>{
+ await interrupted();const result=await finish();assert.equal(result.publishable,true);
+ const row=await saved();assert.equal(row.status,'validated');assert.equal(row.error_code,null);
+ assert.equal(row.brand_identity_audit.checked,true);assert.equal(row.published_at,null);
+ assert.equal((await db.query('select count(*)::int n from supplier_price_release_rows')).rows[0].n,2);
+ assert.equal((await db.query('select count(*)::int n from supplier_current_price_pointers')).rows[0].n,0);
+});
+test('interrupted recovery rejects missing source binding, incomplete batches, other failures and bad rows',async()=>{
+ await interrupted();
+ await db.exec("update supplier_price_ingestion_internal.handoffs set source_sha256='wrong'");
+ await assert.rejects(finish(),/RECOVERY_UNCONFIRMED/);
+ await db.exec("update supplier_price_ingestion_internal.handoffs set source_sha256=repeat('a',64);update supplier_price_release_batches set status='running'");
+ await assert.rejects(finish(),/RECOVERY_UNCONFIRMED/);
+ await db.exec("update supplier_price_release_batches set status='completed',row_count=1");
+ await assert.rejects(finish(),/RECOVERY_UNCONFIRMED/);
+ await db.exec("update supplier_price_release_batches set row_count=2;update supplier_price_releases set error_code='OTHER_FAILURE'");
+ await assert.rejects(finish(),/not ready/);
+ await db.exec("update supplier_price_releases set error_code='SUPPLIER_PROCESSING_INTERRUPTED';update supplier_price_release_rows set buy_price=0 where source_row_number=1");
+ await assert.rejects(finish(),/ROW_INTEGRITY_FAILED/);assert.equal((await saved()).status,'failed');
+});
+test('recovered validation retains cross-brand hold and a bounded service-only timeout',async()=>{
+ await interrupted(Array.from({length:100},(_,i)=>`F${i}`));
+ await db.query('insert into catalog_products select $1,$2,product_code from supplier_price_release_rows',[org,otherBrand]);
+ assert.equal((await finish(100)).publishable,false);assert.equal((await saved()).error_code,'CROSS_BRAND_BULK_OVERLAP');
+ const config=(await db.query("select proconfig from pg_proc where proname='complete_supplier_price_release_duckdb_validation'")).rows[0].proconfig;
+ assert.ok(config.includes('statement_timeout=45s'));
+});
 
 test('single-pass audit preserves evidence across all price sources, duplicate codes and tenant boundaries',async()=>{
  const codes=Array.from({length:120},(_,i)=>`SKU-${i}`);
