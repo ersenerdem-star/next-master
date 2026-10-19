@@ -6,6 +6,8 @@ type Status={releaseId:string;status:string;phase:string;totalRows:number;proces
 type Issue={phase:string;source_row_number:number;product_code:string;issues:{field:string;code:string}[];missing_fields?:string[]};
 const fieldNames:Record<string,string>={origin:'Menşe',hs_code:'Tarife',ean:'Barkod',oem_no:'OEM numarası',vehicle:'Araç',vehicle_model:'Araç modeli',weight_kg:'Ağırlık',dimensions:'Boyutlar',description:'Açıklama',description_tr:'Türkçe açıklama',market_segment:'Pazar grubu',source:'Resmî kaynak',product_code:'Parça numarası'};
 const reasons:Record<string,[string,string]>={
+ CATALOG_ENRICHMENT_DATABASE_TIMEOUT:['Katalog kaydı sırasında süre sınırına ulaşıldı; sistem kaldığı yerden otomatik yeniden deniyor. Dosyayı tekrar yüklemeyin.','Catalog write timed out; the system automatically retries from saved progress. Do not upload the file again.'],
+ CATALOG_ENRICHMENT_DATABASE_BUSY:['Katalog veritabanı meşgul; sistem kaldığı yerden otomatik yeniden deniyor.','Catalog database is busy; the system automatically retries from saved progress.'],
  SOURCE_CONFLICT:['Kaynaklarda farklı değerler var; mevcut değer korundu.','Sources disagree; existing value was retained.'],
  OLDER_SOURCE:['Kaynak tarihi mevcut bilgiden eski.','Source predates the existing information.'],
  CATALOG_CHANGED_AFTER_SOURCE:['Katalog son aktarımdan sonra düzenlenmiş; mevcut değer korundu.','Catalog was edited after the previous import; existing value was retained.'],

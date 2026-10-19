@@ -8,7 +8,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import pg from 'pg';
 import {createFullReplayDb} from './fixtures/price-engine-full-replay-db.mjs';
 import {planSupplierCatalogEnrichment,sourceCatalogFields} from '../../netlify/functions/_shared/catalog/supplier-enrichment-plan.mjs';
-import {runSupplierCatalogEnrichment,supplierCatalogTarget,enrichmentDispatchHeaders,requireEnrichmentDispatch} from '../../netlify/functions/_shared/catalog/supplier-enrichment-worker.mts';
+import {runSupplierCatalogEnrichment,catalogEnrichmentRpc,supplierCatalogTarget,enrichmentDispatchHeaders,requireEnrichmentDispatch} from '../../netlify/functions/_shared/catalog/supplier-enrichment-worker.mts';
 import {safeSupplierOfficialObservation} from '../../netlify/functions/_shared/catalog/supplier-official-completion.mts';
 import {fetchZfSupplierCatalogFields} from '../../netlify/functions/_shared/catalog/zf-aftermarket-sync.mts';
 const exec=promisify(execFile),id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
@@ -28,6 +28,7 @@ before(async()=>{
  for(const item of manifest.migration_order)await db.exec(await readFile(item.file,'utf8'));
  await db.exec('set check_function_bodies=true');
  await db.exec(await readFile('supabase/migrations/20261019162519_supplier_publication_catalog_enrichment.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20261019170812_supplier_catalog_enrichment_short_transactions.sql','utf8'));
  await db.query("insert into organizations(id,name)values($1,'Org')",[org]);
  await db.query("insert into suppliers(id,organization_id,name)values($1,$2,'Supplier')",[supplier,org]);
  await db.query("insert into brands(id,organization_id,name)values($1,$2,'Sachs')",[brand,org]);
@@ -124,8 +125,21 @@ test('1000 source rows complete in bounded commits with exact tariffs and persis
  await db.query("insert into supplier_price_release_rows(release_id,source_row_number,normalized_code,product_code,buy_price,currency,valid_from,row_status,row_hash,origin,tariff,market_segment)select $1,n,lpad(n::text,8,'0'),lpad(n::text,8,'0'),10,'EUR','2026-10-19','accepted',repeat('c',64),'TR','00870880','PC' from generate_series(2,1000)n",[id(50)]);
  await db.query('update supplier_price_ingestion_internal.catalog_enrichment_jobs set total_rows=1000');
  const claim=await rpc('claim_supplier_catalog_enrichment'),start=Date.now();
- await runSupplierCatalogEnrichment({rpc,jobId:claim.jobId,token:claim.token,officialProvider:()=>null});
+ const commits:number[]=[];
+ await runSupplierCatalogEnrichment({rpc:async(name,args)=>{if(name==='apply_supplier_catalog_enrichment_batch'&&args?.input_phase==='file')commits.push(args.input_rows.length);return rpc(name,args);},jobId:claim.jobId,token:claim.token,officialProvider:()=>null});
+ assert.equal(commits.length,10);assert.ok(commits.every(n=>n<=100));
  const counts=(await admin("select count(*) count,count(*)filter(where origin='TR') tr,count(*)filter(where hs_code in ('00870880','0087.08.80')) tariffs from catalog_products")).rows[0];assert.equal(Number(counts.count),1000);assert.equal(Number(counts.tr),1000);assert.equal(Number(counts.tariffs),1000);
  assert.equal(Number((await db.query('select processed_rows from supplier_price_ingestion_internal.catalog_enrichment_jobs')).rows[0].processed_rows),1000);
  console.log(JSON.stringify({localPostgresRows:1000,elapsedMs:Date.now()-start,productionPerformanceProven:false}));
 }));
+
+
+test('database timeouts retain a safe actionable reason without exposing database details',async()=>{
+ const original=globalThis.fetch;
+ try{
+  globalThis.fetch=async()=>new Response(JSON.stringify({code:'57014',message:'private database details'}),{status:500});
+  await assert.rejects(catalogEnrichmentRpc({url:'https://example.invalid',key:'test',portal:'https://example.invalid'})('apply_supplier_catalog_enrichment_batch'),/CATALOG_ENRICHMENT_DATABASE_TIMEOUT/);
+  globalThis.fetch=async()=>new Response(JSON.stringify({code:'XX000',message:'private database details'}),{status:500});
+  await assert.rejects(catalogEnrichmentRpc({url:'https://example.invalid',key:'test',portal:'https://example.invalid'})('apply_supplier_catalog_enrichment_batch'),/CATALOG_ENRICHMENT_RPC_UNCONFIRMED/);
+ }finally{globalThis.fetch=original;}
+});

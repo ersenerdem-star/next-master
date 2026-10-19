@@ -16,7 +16,11 @@ export function catalogEnrichmentRpc(target:Target){return async(name:string,arg
  const response=await fetch(`${target.url}/rest/v1/rpc/${name}`,{method:'POST',redirect:'error',headers:supplierUpgradeServiceHeaders(target.key),
   body:JSON.stringify(args),signal:AbortSignal.timeout(25000)});
  const data=await response.json().catch(()=>null);
- if(!response.ok)throw Error(/^CATALOG_ENRICHMENT_[A-Z_]+$/.test(data?.message||'')?data.message:'CATALOG_ENRICHMENT_RPC_UNCONFIRMED');
+ if(!response.ok){
+  if(data?.code==='57014')throw Error('CATALOG_ENRICHMENT_DATABASE_TIMEOUT');
+  if(['55P03','40001','40P01'].includes(data?.code))throw Error('CATALOG_ENRICHMENT_DATABASE_BUSY');
+  throw Error(/^CATALOG_ENRICHMENT_[A-Z_]+$/.test(data?.message||'')?data.message:'CATALOG_ENRICHMENT_RPC_UNCONFIRMED');
+ }
  return data;
 };}
 const signature=(key:string,jobId:string,token:string,timestamp:string)=>createHmac('sha256',key).update(`${ENRICHMENT_POLICY}\n${jobId}\n${token}\n${timestamp}`).digest('hex');
