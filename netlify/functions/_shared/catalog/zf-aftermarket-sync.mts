@@ -485,6 +485,25 @@ export function boundZfCandidateItems<T>(
   return items.slice(0, remaining);
 }
 
+// Exact, read-only completion for publication-bound enrichment. Unlike discovery,
+// it never selects the first fuzzy result or writes products/images/relations.
+export async function fetchZfSupplierCatalogFields(brandName:string,productCode:string,requestTimeoutMs=12000) {
+  const target=resolveStaticTarget(brandName);
+  const exact=(v:unknown)=>String(v??'').trim().replace(/\s+/g,'').toUpperCase();
+  const search=await fetchSearchPage(target,productCode,0,100,requestTimeoutMs);
+  const matches=search.items.filter((r:any)=>exact(r.source_article_number)===exact(productCode));
+  if(matches.length!==1)throw Error('OFFICIAL_EXACT_MATCH_NOT_FOUND');
+  const payload=await fetchArticle(target,matches[0].source_article_number,requestTimeoutMs);
+  if(exact(payload?.details?.number)!==exact(productCode))throw Error('OFFICIAL_EXACT_MATCH_NOT_FOUND');
+  const detail=normalizeDetailPayload(target,payload);
+  const specs=payload?.specifications?.content?.generalSpecifications?.specifications;
+  const originSpec=Array.isArray(specs)?specs.find((s:any)=>/^(country of origin|country of manufacture|manufacturing country)$/i.test(cleanText(s.label))):null;
+  const rawOrigin=originSpec?.values?.map((v:any)=>cleanText(v.text||v)).filter(Boolean);
+  const origin=rawOrigin?.length===1?normalizeOriginCode(rawOrigin[0]):'';
+  return {code:exact(productCode),sourceUrl:detail.source_url,fields:{description:detail.description,ean:detail.ean,
+    oem_no:detail.oem_no,vehicle:detail.vehicle,hs_code:detail.hs_code,origin,weight_kg:detail.weight_kg}};
+}
+
 export async function fetchZfAftermarketOfficialObservation(input: {
   brandName: string;
   productCode: string;

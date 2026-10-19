@@ -1,4 +1,5 @@
 import React,{useState} from 'react';
+import {SupplierCatalogEnrichmentStatus} from './SupplierCatalogEnrichmentStatus';
 import {releaseReviewState, type ReleaseReviewRow, type ReleaseIssueRow, releaseIssueExplanation} from '../../shared/supplierReleaseReview';
 import {translateInterfaceText} from '../../i18n/interfaceMessages';
 import {Button} from '../../presentation/components/common/Button';
@@ -55,7 +56,7 @@ export function SupplierReleaseReviewCard({rows,tr,onDetails,onIssues,actionsEna
       {actionsEnabled?<Button variant="secondary" aria-expanded={expanded===row.id} onClick={()=>setExpanded(expanded===row.id?null:row.id)}>
         {expanded===row.id?(tr?'İncelemeyi kapat':'Close review'):(state==='active'||state==='previous_publication'?(tr?'Yayın ayrıntıları':'Publication details'):(tr?'İncele ve yayınla':'Review and publish'))}
       </Button>:null}
-      {actionsEnabled&&expanded===row.id?<SupplierReleaseActionPanel releaseId={row.id} tr={tr} onChanged={onChanged}/>:null}
+      {actionsEnabled&&expanded===row.id?<><SupplierReleaseActionPanel releaseId={row.id} tr={tr} onChanged={onChanged}/><SupplierCatalogEnrichmentStatus releaseId={row.id} tr={tr}/></>:null}
     </article>;
   })}</div>;
 }

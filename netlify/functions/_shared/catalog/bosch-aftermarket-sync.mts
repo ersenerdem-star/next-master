@@ -53,6 +53,14 @@ const KNOWN_MANUFACTURER_PATTERNS = [
   { label: "Jeep", pattern: /\bJEEP\b/ },
 ];
 
+export async function fetchBoschSupplierCatalogFields(productCode:string,requestTimeoutMs=12000) {
+  const exact=(v:unknown)=>String(v??'').replace(/\s+/g,'').toUpperCase();
+  const detail=await fetchBoschDetail(productCode,requestTimeoutMs,{accept404:true});
+  if(!detail?.productNumber||exact(detail.productNumber)!==exact(productCode))throw Error('OFFICIAL_EXACT_MATCH_NOT_FOUND');
+  return {code:exact(productCode),sourceUrl:`${BOSCH_API_BASE_URL}/${BOSCH_LOCALE_PATH}/search-details/${encodeURIComponent(detail.productNumber)}`,
+    fields:{description:extractBoschDescription(detail,null,null),ean:extractBoschEan(detail,null,null),oem_no:extractBoschOemNumbers(detail)}};
+}
+
 export async function syncBrandCatalogFromBoschAftermarket(input: {
   supabaseUrl: string;
   serviceRoleKey: string;

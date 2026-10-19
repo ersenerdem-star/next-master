@@ -1,6 +1,143 @@
 # Supplier Import Adapter Assessment
 
-Status: PLAT-001E assessment only.
+Status: PLAT-001E assessment only. The original runtime description below is
+legacy; see the 2026-10-19 verified-upload review before applying it to V3.
+
+## 2026-10-19 verified upload and catalog enrichment review
+
+Read-only production checks used project `zjgueqijumzlfioihnkt`; runtime was
+reviewed in `codex/price-engine-integration`, baseline `b547666` with the ongoing
+origin-offer candidate still uncommitted. No catalog or price was modified by
+this review. Canonical policy is §4.1.3 of
+`/Users/ersen/Documents/Next-Master/docs/architecture/NEXT_MASTER_SYSTEM_DEFINITION.md`.
+
+### Findings
+
+1. **P1 — V3 publication does not schedule catalog enrichment.** The deployed
+   `publish_supplier_price_release_production` writes the publication, current
+   pointer, decision and events; it does not call the legacy catalog sync.
+   Production trigger inventory confirms the pointer triggers only notify the
+   portal. Worker source likewise has no catalog consumer. Price availability
+   and catalog existence/freshness therefore diverge.
+2. **P1 — existing catalog fields do not refresh in the legacy supplier sync.**
+   Deployed `sync_supplier_price_catalog_batch` fills description, origin,
+   weight, vehicle and model only when existing values are blank. It does not
+   carry source `tariff` to catalog `hs_code` or source dimensions to the catalog.
+   Full field preservation in verified release rows does not fix this missing
+   projection.
+3. **P1 — stable identifiers have inconsistent merge rules.** Legacy sync keeps
+   a nonempty OEM/vehicle/model unchanged, losing additional identifiers. The
+   modular ZF merge instead chooses nonempty incoming OEM/vehicle over existing
+   values. Neither behavior is an additive, deduplicated merge.
+4. **P1 — origin/tariff require source and offer context.** A single global
+   catalog field cannot identify two manufacturing origins of the same product.
+   The 2026-10-19 Sachs audit found 349 ambiguous second origins; reusing the
+   global catalog origin for each offer would not resolve them. Conflicting
+   suppliers, older source dates and manual corrections need explicit precedence
+   and evidence, rather than a last-writer-wins merge.
+5. **P2 — upload guidance omits usable fields.** Streaming CSV/XLSX normalization
+   and V2 staging preserve tariff, origin, dimensions and other product fields,
+   but the verified template omits most of them. Its UI hint omits tariff and
+   dimensions. `Product_Name_TR` is also not the same recognized alias as
+   `Description_TR`; parser alias changes must be versioned so durable replay
+   does not reinterpret an already sealed source.
+6. **P2 — refresh is not a uniform provider contract.** Modular Spareto prefers
+   existing nonempty origin, tariff and weight even when refresh is enabled.
+   Modular ZF prefers nonempty incoming values. Root and modular provider entry
+   points coexist. A provider refresh button cannot establish consistent field
+   ownership or automatic upload completion.
+7. **P2 — enrichment progress and field history are not part of V3 upload status.**
+   Current admin release review reports import/publication, without a separate
+   durable catalog job, per-field before/after evidence, or source-conflict report.
+   A whole-catalog provider scan inside a short web request is not an acceptable
+   replacement for a resumable job limited to the uploaded exact product codes.
+
+### Production sample (not whole-brand totals)
+
+For the five newest current publications, at most 500 accepted rows per release
+were checked against exact catalog code identity in the same organization/brand.
+All 2,417 sampled source rows lacked origin, tariff, OEM and vehicle/model data.
+They cannot supply those fields without another source. Missing exact catalog
+matches were FAG 5/500, INA 0/500, Lemforder 1/500, LUK 0/500, Vitesco 417/417.
+Vitesco's current publication contains 417 rows, so that sample covers its full
+release. This is evidence of a missing catalog projection, not a claim that all
+brands have the same missing-data rates.
+
+### Required implementation and acceptance
+
+- Publication transaction records one persistent catalog job bound to publication,
+  release, source checksum and tenant. Heavy processing stays outside publication.
+- The consumer rechecks current publication on every bounded transaction, skips
+  superseded work, and persists changes plus cursor atomically. Retry is idempotent.
+- Blank cells preserve data; OEM/vehicle/model merge additively; fresh authoritative
+  variable fields carry before/after provenance and conflict handling. Supplier
+  commercial notes and images do not enter this field projection.
+- File enrichment and optional official-source completion are separate, observable
+  phases. A price-only file can create an exact product shell, but cannot invent
+  origin/tariff. Unknown and conflicting fields remain explicit.
+- Admin details show pending/running/completed/review-required/failed catalog
+  status, changed/unchanged/unmatched/conflict counts and actionable row details.
+- Verify changed origin/tariff, empty values, additive OEM/model, older uploads,
+  two suppliers, origin variants, exact-code collisions, retry/timeout, concurrent
+  publication, authorization and a representative large-file run. Source tests
+  alone do not prove the deployed worker or production catalog outcome.
+
+Evidence: `artifacts/catalog-enrichment-review-20261019/` contains deployed function
+snapshots; no production migration or catalog backfill was run.
+
+### Changes made during this review
+
+The user selected file fields plus official-source completion on 2026-10-19.
+The implementation candidate now includes publication-bound SQL jobs, cursor and
+lease fencing, one active catalog consumer, ingestion priority, atomic field
+patch/history commits, and a scheduled dispatcher for signed background work.
+No whole-brand scrape or marketplace fallback is started. Read-only exact-SKU
+adapters reuse ZF, Bosch, MANN and registered TecAlliance extraction logic.
+Unsupported brands are visible as `OFFICIAL_SOURCE_NOT_CONFIGURED`; unavailable
+official fields remain unknown. The live ZF read-only check for Sachs `317851`
+matched the exact article but supplied no origin/tariff; neither was inferred.
+
+File fields refresh variable metadata with provenance; official observations
+complete blanks and cannot replace file-supplied values. Identifier sets merge
+additively. Newer publication, expired lease, conflicting sources, older evidence
+and concurrent catalog edits are fenced. Missing optional Turkish description or
+dimensions does not falsely block completion; missing core metadata has a distinct
+`completed_missing` status. User-facing details show missing fields and row-level
+reasons. Network failures retain source row/provider and resume checkpoints.
+
+At this point, ten tests passed against real isolated PostgreSQL 17, including
+the actual publication trigger and background-consumer code. A 1,000-row source
+completed with exact origin/tariff values in bounded commits (local timing only).
+The existing template checks and web/Netlify build passed. Production activation
+and same-session uploaded-file evidence remain separate, outstanding gates.
+
+The verified upload template now includes existing parser-supported `HS_Code`,
+`EAN`, `Vehicle`, `Vehicle_Model`, `Market_Segment`, `Weight_kg`, `Description_TR`
+and `Dimensions` columns. TR/EN guidance names tariff/dimensions and warns against
+inferring missing values. A template-to-real-parser check preserves leading-zero
+tariff and EAN text, origin, weight, dimensions and Turkish text. This change only
+makes existing source-capture support visible; it does not claim a catalog job,
+provider refresh or live deployment. Historical parser aliases/hashes were not
+changed. The template metadata cells stay blank, avoiding invented defaults.
+
+### Impact and boundaries
+
+- Operations/UX: price publication and catalog completion need distinct status;
+  users should see exactly which fields failed or need review, without re-uploading
+  an entire file to resume an already accepted job.
+- Architecture: immutable release rows remain source evidence; Catalog owns product
+  truth, while supplier-origin choices remain offer evidence. A field provenance
+  record is required before replacing the current blank-only projection.
+- Pricing/Purchasing/Supply Chain: catalogue enrichment must not reprice existing
+  orders or substitute a selected origin. Later order/invoice changes must consume
+  an explicitly selected, source-bound origin/tariff snapshot.
+- Dimbax/Mira: official-source observations stay behind the existing trust and
+  versioned consumer boundaries. Upload completion does not authorize an external
+  observer to write canonical products directly.
+- Technical debt/platform/DX: consolidate merge policy and provider entry points;
+  do not add another whole-brand scraper or a second hidden sync loop. Durable
+  jobs need bounded transactions, measurable progress and a kill switch. Large-file
+  timing and failure recovery require runtime evidence before activation.
 
 Foundation:
 

@@ -6,6 +6,9 @@ import {SupplierLegacyHistory} from '../../apps/web/src/modules/admin/SupplierLe
 import {downloadSupplierTemplate,VERIFIED_SUPPLIER_IMPORT_COLUMNS} from '../../apps/web/src/shared/importTemplates.ts';
 import {parseCsv} from '../../apps/web/src/shared/csv.ts';
 import {I18nProvider,useI18n} from '../../apps/web/src/i18n/I18nProvider.tsx';
+import {Readable} from 'node:stream';
+import {toCsv} from '../../apps/web/src/shared/csv.ts';
+import {parseNormalizedSupplierPriceRows} from '../../apps/engine/supplier-price-shadow/src/streaming-csv.mjs';
 
 test('verified template round-trips supported commercial fields without inventing supplier stock',async()=>{
  const original={document:globalThis.document,window:globalThis.window,create:URL.createObjectURL,revoke:URL.revokeObjectURL};
@@ -26,6 +29,15 @@ test('verified template round-trips supported commercial fields without inventin
   assert(!legacy[0].includes('Stock_Qty'));assert(!legacy[0].includes('Valid_To'));
   assert(legacy[0].includes('Order_Multiple'));assert.equal(legacy[1][legacy[0].indexOf('Order_Multiple')],'');
   assert.equal(legacy[0].length,legacy[1].length);
+  const sourceValues:Record<string,string>={Origin:'TR',HS_Code:'0087.08.80',EAN:'0123456789012',Vehicle:'Ford',Vehicle_Model:'Focus',Market_Segment:'PC',Weight_kg:'1.25',Description_TR:'Amortisör',Dimensions:'50 x 20 x 10'};
+  for(const field of Object.keys(sourceValues)){assert(verified[0].includes(field));assert.equal(verified[1][verified[0].indexOf(field)],'');}
+  const supplied=verified[1].map((v,i)=>sourceValues[verified[0][i]]??v);
+  const parsed=[];
+  for await(const row of parseNormalizedSupplierPriceRows(Readable.from([toCsv([verified[0],supplied])]),{commercialFields:true}))parsed.push(row);
+  assert.equal(parsed.length,1);assert.equal(parsed[0].row_status,'accepted');
+  assert.equal(parsed[0].origin,'TR');assert.equal(parsed[0].tariff,'0087.08.80');assert.equal(parsed[0].ean,'0123456789012');
+  assert.equal(parsed[0].vehicle,'Ford');assert.equal(parsed[0].vehicle_model,'Focus');assert.equal(parsed[0].description_tr,'Amortisör');
+  assert.equal(parsed[0].weight,1.25);assert.equal(parsed[0].dimensions,'50 x 20 x 10');
  } finally {globalThis.document=original.document;globalThis.window=original.window;URL.createObjectURL=original.create;URL.revokeObjectURL=original.revoke;}
 });
 

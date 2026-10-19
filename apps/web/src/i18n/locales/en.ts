@@ -2017,7 +2017,7 @@ export const enMessages = {
     "suppliers.import.title": "Import Supplier Prices",
     "suppliers.import.subtitle": "Upload supplier buying prices into the selected supplier and brand.",
     "suppliers.import.cloudTarget": "Cloud supplier price target",
-    "suppliers.import.expectedColumns": "Supported price fields: {columns}. Required: Product_Code, Buy_Price_EUR. Additional product fields: EAN, Vehicle, Vehicle_Model, Market_Segment, Weight_kg, Description_TR, Origin.",
+    "suppliers.import.expectedColumns": "Supported fields: {columns}. Required: Product_Code, Buy_Price_EUR. Additional product fields: EAN, Vehicle, Vehicle_Model, Market_Segment, Weight_kg, Description_TR, Origin, HS_Code, Dimensions. Fill origin and tariff columns as text. Product information absent from the file is not inferred automatically.",
     "suppliers.import.requiredHint": "Replace mode retires current active rows for this supplier/brand after validation.",
     "suppliers.import.verifiedRequiredHint": "Upload the complete price list for the selected supplier and brand. Uploading or validating the file does not change active prices; a separate publication step is required.",
     "suppliers.import.verifiedMetadataHint": "Stock_Qty is supplier-reported stock, not our warehouse availability: blank means unknown; 0 means zero. Use whole numbers: Stock_Qty 0–2147483647 and Order_Multiple 1–2147483647. MOQ is the minimum; quantities must also follow the order multiple. Valid_To is inclusive (YYYY-MM-DD), cannot precede Price_Date (or the selected source date when Price_Date is blank), and may be blank for an open-ended price. Additional product details are retained with the supplier source; update catalog information separately through Catalog Import.",

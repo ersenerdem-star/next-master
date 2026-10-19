@@ -500,8 +500,17 @@ async function fetchOfficialListMap(kind: "discontinued" | "new", requestTimeout
   return rows;
 }
 
-async function resolveOfficialProduct(row: any, requestTimeoutMs: number) {
-  const direct = await fetchProductDirect(row.product_code, requestTimeoutMs);
+export async function fetchMannSupplierCatalogFields(productCode:string,requestTimeoutMs=12000) {
+  const product=await fetchProductDirect(productCode,requestTimeoutMs);
+  const designation=product?attributesToMap(product.attributes).sales_designation:'';
+  const exact=(v:unknown)=>String(v??'').replace(/\s+/g,'').toUpperCase();
+  if(!designation||exact(designation)!==exact(productCode))throw Error('OFFICIAL_EXACT_MATCH_NOT_FOUND');
+  const detail=await resolveOfficialProduct({product_code:productCode},requestTimeoutMs,product);
+  return {code:exact(productCode),sourceUrl:detail.source_url,fields:{oem_no:detail.oem_no,vehicle:detail.vehicle,hs_code:detail.hs_code,weight_kg:detail.weight_kg}};
+}
+
+async function resolveOfficialProduct(row: any, requestTimeoutMs: number, providedProduct?:any) {
+  const direct = providedProduct ?? await fetchProductDirect(row.product_code, requestTimeoutMs);
   const shouldSearchForOem = !normalizeTextValue(row.oem_no);
   const aggregateSearch = { crossReferenceItems: [], productCandidates: [] as any[] };
 

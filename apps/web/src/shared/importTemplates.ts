@@ -22,7 +22,8 @@ export function downloadCatalogLifecycleTemplate() {
 }
 
 export const VERIFIED_SUPPLIER_IMPORT_COLUMNS = [
-  "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes", "Stock_Qty", "Valid_To",
+  "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes", "Stock_Qty", "Valid_To", "Origin",
+  "HS_Code", "EAN", "Vehicle", "Vehicle_Model", "Market_Segment", "Weight_kg", "Description_TR", "Dimensions",
 ] as const;
 
 export function downloadSupplierTemplate(options: { verified?: boolean } = {}) {

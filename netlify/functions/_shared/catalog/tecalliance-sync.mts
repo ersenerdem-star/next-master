@@ -98,6 +98,8 @@ type TecAllianceApiMisc = {
 };
 
 type TecAllianceApiArticle = {
+  dataSupplierId?:number;
+  mfrId?:number;
   articleNumber?: string;
   mfrName?: string;
   misc?: TecAllianceApiMisc;
@@ -711,6 +713,18 @@ async function requestTecAllianceArticles(
   };
 
   return fetchTecAllianceJson<TecAllianceArticleSearchResponse>(TECALLIANCE_API_URL, payload, input.requestTimeoutMs, config.requestHeaders);
+}
+
+export async function fetchTecAllianceSupplierCatalogFields(brandName:string,productCode:string,config:TecAllianceSyncConfig,requestTimeoutMs=12000) {
+  const result=await requestTecAllianceArticles({searchQuery:productCode,page:1,perPage:50,requestTimeoutMs,searchMatchType:'prefix_or_suffix'},config);
+  const exact=(v:unknown)=>String(v??'').replace(/\s+/g,'').toUpperCase();
+  const matches=(result.articles||[]).filter((a:any)=>exact(a.articleNumber)===exact(productCode)
+    &&Number(a.dataSupplierId??a.mfrId)===config.dataSupplierId
+    &&(!config.manufacturerNames?.length||config.manufacturerNames.some(n=>n.toUpperCase()===String((a as any).mfrName||'').toUpperCase())));
+  if(matches.length!==1)throw Error('OFFICIAL_EXACT_MATCH_NOT_FOUND');
+  const detail=resolveTecAllianceArticle(matches[0],null,brandName);
+  return {code:exact(productCode),sourceUrl:'https://web.tecalliance.net',fields:{description:detail.description,ean:detail.ean,oem_no:detail.oem_no,
+    vehicle_model:detail.vehicle_model,market_segment:detail.market_segment,weight_kg:detail.weight_kg}};
 }
 
 function resolveTecAllianceArticle(article: TecAllianceApiArticle, current: CatalogRow | null, brandName: string): TecAllianceResolvedItem {

@@ -40,6 +40,9 @@
   background = true
   memory = "2gb"
 
+[functions."supplier-catalog-enrichment-background"]
+  background = true
+
 [[headers]]
   for = "/*"
   [headers.values]
