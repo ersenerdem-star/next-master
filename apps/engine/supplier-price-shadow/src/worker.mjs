@@ -329,7 +329,7 @@ async function main() {
       probe:async({signal})=>{
           const scope={workflowName:VERIFIED_WORKFLOW_NAME,applicationVersion:VERIFIED_APP_VERSION,limit:WORKFLOW_HISTORY_LIMIT,loadInput:true,loadOutput:false};
           const busy=await DBOS.listWorkflows({...scope,status:['PENDING','ENQUEUED','DELAYED']});
-          const failed=await DBOS.listWorkflows({...scope,status:['ERROR','MAX_RECOVERY_ATTEMPTS_EXCEEDED']});
+          const failed=await DBOS.listWorkflows({...scope,status:['ERROR','MAX_RECOVERY_ATTEMPTS_EXCEEDED'],loadOutput:true});
           // A terminal DBOS error remains in history after an explicit operator
           // recovery succeeds. Keep the audit trail; validation/publication
           // is the terminal proof, not merely staging all source rows.

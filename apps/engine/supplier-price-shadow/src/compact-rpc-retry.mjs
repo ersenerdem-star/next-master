@@ -24,16 +24,21 @@ function tagged(rpcName,message,name='Error'){
 
 export function compactRpcTransportError(rpcName,error){
  if(!replaySafeRpcs.has(rpcName))return error;
- if(error?.name==='TimeoutError')return tagged(rpcName,'The operation was aborted due to timeout','TimeoutError');
+ if(error?.name==='TimeoutError')return tagged(rpcName,`SERVICE_RPC_TRANSPORT_TIMEOUT:${rpcName}`,'TimeoutError');
  const code=error?.code??error?.cause?.code;
  if(networkCodes.has(code)
   ||!code&&error?.name==='TypeError'&&error.message==='fetch failed')
-  return tagged(rpcName,'fetch failed','TypeError');
+  return tagged(rpcName,`SERVICE_RPC_TRANSPORT_UNAVAILABLE:${rpcName}`,'TypeError');
  // AbortError may be intentional cancellation; unknown failures stay terminal.
  return error;
 }
 
 export function compactRpcHttpError(rpcName,status,body){
+ // Preserve a reviewed cause and phase, never SQL text or provider details.
+ // A database timeout remains terminal here; automatic mutation retry policy
+ // is unchanged. The failure observer can show the actual bounded cause.
+ if(replaySafeRpcs.has(rpcName)&&body?.code==='57014'&&body.message==='canceling statement due to statement timeout')
+  return new Error(`SERVICE_RPC_DATABASE_TIMEOUT:${rpcName}`);
  const message=`SERVICE_RPC_HTTP_${status}`;
  const transient=status===408||status===425||status===429||status>=500&&status<=599;
  // A structured REST/SQL error can represent an integrity or authorization
@@ -42,7 +47,7 @@ export function compactRpcHttpError(rpcName,status,body){
   &&(Object.keys(body).length===0
    ||Object.keys(body).length===1&&typeof body.raw==='string');
  return replaySafeRpcs.has(rpcName)&&transient&&gatewayBody
-  ?tagged(rpcName,message):new Error(message);
+  ?tagged(rpcName,`${message}:GATEWAY:${rpcName}`):new Error(replaySafeRpcs.has(rpcName)?`${message}:${rpcName}`:message);
 }
 
 export async function retryCompactRpcStep(fn,{sleep=delay}={}){

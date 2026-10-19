@@ -32,6 +32,7 @@ await db.exec(audit);
 await db.exec(audit.replace('cross_brand_audit(', 'cross_brand_audit_baseline('));
 await db.exec(sql);
 await db.exec(await readFile(new URL('../../supabase/migrations/20261016102920_supplier_brand_audit_single_pass.sql',import.meta.url),'utf8'));
+await db.exec(await readFile(new URL('../../supabase/migrations/20261019090317_supplier_brand_audit_bounded_lookup.sql',import.meta.url),'utf8'));
 await db.exec(await readFile(new URL('../../supabase/migrations/20261019082046_supplier_verified_final_validation_recovery.sql',import.meta.url),'utf8'));
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const org=id(1),supplier=id(2),brand=id(3),otherBrand=id(4),release=id(5);
@@ -101,6 +102,11 @@ test('single-pass audit preserves evidence across all price sources, duplicate c
  assert.equal(next.brands[0].matching_codes,110);
  assert.equal(next.review_required,true);
  assert.equal(next.brands[0].sample_codes.length,10);
+ // Force the large-source execution branch over the same fixture. Evidence,
+ // thresholds, tenant boundaries and samples must stay byte-for-byte equal.
+ await db.query('update supplier_price_releases set total_rows=50000 where id=$1',[release]);
+ const large=(await db.query(`select supplier_price_validation_internal.cross_brand_audit($1)-'checked_at' as result`,[release])).rows[0].result;
+ assert.deepEqual(large,old);
 });
 
 test('single-pass audit retains empty input and absolute bulk threshold decisions',async()=>{

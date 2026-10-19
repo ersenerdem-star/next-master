@@ -6,7 +6,7 @@ import {supplierProcessingInterruptedMessage} from '../../shared/supplierUploadP
 import {SupplierReleaseActionPanel} from './SupplierReleaseActionPanel';
 
 export function releaseReviewMessage(row:ReleaseReviewRow, tr:boolean) {
-  if(releaseReviewState(row)==='processing_interrupted')return `${row.brand} / ${row.supplier}: ${supplierProcessingInterruptedMessage(tr)}`;
+  if(releaseReviewState(row)==='processing_interrupted')return `${row.brand} / ${row.supplier}: ${supplierProcessingInterruptedMessage(tr,row.errorMessage)}`;
   const evidence=row.audit?.brands.map(b=>`${b.name}: ${b.matches.toLocaleString(tr?'tr-TR':'en-US')} (${b.percent}%)`).join('; ');
   const counts=typeof row.acceptedRows==='number'
     ? (tr ? `Kabul: ${row.acceptedRows.toLocaleString('tr-TR')}, çakışma: ${(row.conflictRows||0).toLocaleString('tr-TR')}, reddedilen: ${(row.rejectedRows||0).toLocaleString('tr-TR')}`
@@ -34,7 +34,7 @@ export function SupplierReleaseReviewCard({rows,tr,onDetails,onIssues,actionsEna
       <span className={`mark-badge mark-badge--${state==='review_required'||state==='rejected'||state==='processing_interrupted'?'failed':state==='active'||state==='previous_publication'?'completed':'pending'}`}>{labels[state]}</span>
       <span>{row.processedRows.toLocaleString()} / {row.totalRows.toLocaleString()} · {translateInterfaceText(row.status,tr?'tr':'en')}</span>
       <span className="operations-subtle">{new Date(row.createdAt).toLocaleString(tr?'tr-TR':'en-US',{dateStyle:'medium',timeStyle:'short'})}</span>
-      {state==='processing_interrupted'?<p role="status">{supplierProcessingInterruptedMessage(tr)} {tr?'Son durum':'Last status'}: {new Date(row.updatedAt).toLocaleString(tr?'tr-TR':'en-US')}</p>:null}
+      {state==='processing_interrupted'?<p role="alert">{supplierProcessingInterruptedMessage(tr,row.errorMessage)} {tr?'Son durum':'Last status'}: {new Date(row.updatedAt).toLocaleString(tr?'tr-TR':'en-US')}</p>:null}
       {typeof row.acceptedRows==='number' ? <div className="operations-subtle">
         {tr ? `Kabul: ${row.acceptedRows.toLocaleString('tr-TR')} · Çakışma: ${(row.conflictRows||0).toLocaleString('tr-TR')} · Reddedilen: ${(row.rejectedRows||0).toLocaleString('tr-TR')} · Uyarı: ${(row.warningRows||0).toLocaleString('tr-TR')}`
           : `Accepted: ${row.acceptedRows.toLocaleString('en-US')} · Conflicts: ${(row.conflictRows||0).toLocaleString('en-US')} · Rejected: ${(row.rejectedRows||0).toLocaleString('en-US')} · Warnings: ${(row.warningRows||0).toLocaleString('en-US')}`}

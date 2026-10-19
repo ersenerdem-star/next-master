@@ -135,3 +135,16 @@ test('Problem detail rejects transport failure and malformed rows',async()=>{
  await assert.rejects(()=>invokeIssues({rows:[{id:'not-a-number',source_row_number:1}]}),/Invalid issue row/);
  await assert.rejects(()=>invokeIssues({cursor:{sourceRowNumber:-1,id:1}}),/Invalid issue cursor/);
 });
+
+ test('interrupted card visibly explains the safe cause without exposing provider details',()=>{
+ const r={...row,status:'failed',errorCode:'SUPPLIER_PROCESSING_INTERRUPTED',errorMessage:'SUPPLIER_FAILURE_VALIDATION_DATABASE_TIMEOUT',updatedAt:row.createdAt};
+ for(const tr of [true,false]){
+  const html=renderToStaticMarkup(createElement(SupplierReleaseReviewCard,{rows:[r],tr,onDetails:()=>{}}));
+  const visible=html.split('<details')[0];
+  assert.match(visible,tr?/Son satır ve marka kontrolü/:/final row and brand check/);
+  assert.match(visible,tr?/tekrar yüklemeniz gerekmiyor/:/Do not upload the same file/);
+  assert.match(visible,/role="alert"/);
+ }
+ const unknown=releaseReviewMessage({...r,errorMessage:'SECRET SQL url'},true);
+ assert.doesNotMatch(unknown,/SECRET|SQL|url/);
+ });

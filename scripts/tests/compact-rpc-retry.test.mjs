@@ -11,6 +11,14 @@ const heartbeat='heartbeat_supplier_price_release_batch';
 const timeout=()=>Object.assign(Error('secret provider URL must not survive'),{name:'TimeoutError'});
 const transport=(name=heartbeat)=>compactRpcTransportError(name,timeout());
 
+test('SQL cancellation retains only known cause and RPC, with no mutation retry or raw detail',async()=>{
+ const rpc='complete_supplier_price_release_duckdb_validation';let attempts=0;
+ const error=compactRpcHttpError(rpc,500,{code:'57014',message:'canceling statement due to statement timeout',details:'secret SQL, credentials and URL'});
+ assert.equal(error.message,`SERVICE_RPC_DATABASE_TIMEOUT:${rpc}`);
+ await assert.rejects(retryCompactRpcStep(async()=>{attempts++;throw error;},{sleep:async()=>assert.fail('SQL timeout is not a transport retry')}),e=>e===error);
+ assert.equal(attempts,1);assert.doesNotMatch(error.stack,/secret|credentials|private/);
+});
+
 test('only reviewed RPC transport errors retry with four bounded attempts and safe error data',async()=>{
  const sleeps=[];let attempts=0;
  const error=transport();
@@ -188,7 +196,7 @@ test('timeout crossing lease expiry returns stale, then reclaims and exactly res
 
 test('exhausted transport and domain failure stay terminal without false finalization or validation',async()=>{
  for(const options of [{failCount:4},{permanent:true}]){
-  const f=fixture({failName:heartbeat,...options});await assert.rejects(f.run(),/timeout|INTEGRITY_FAILED/);
+  const f=fixture({failName:heartbeat,...options});await assert.rejects(f.run(),/SERVICE_RPC_TRANSPORT_TIMEOUT|INTEGRITY_FAILED/);
   assert.equal(f.state.failures,options.permanent?1:4);assert.equal(f.state.cursor,0);
   assert.equal(f.state.validations,0);assert.equal(f.rows.size,2);
   assert.equal(f.history.some(s=>s.name==='compact-heartbeat-v5'),false);

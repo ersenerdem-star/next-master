@@ -15,6 +15,8 @@ await db.exec(`alter table brands add column organization_id uuid;
  create or replace function public.normalize_catalog_product_code(input_code text)
  returns text language sql immutable as $$select upper(regexp_replace(btrim(input_code),'[[:space:]]+','','g'))$$;`);
 await db.exec(sql);
+await db.exec('alter table supplier_price_release_rows add column valid_to date');
+await db.exec(await readFile('supabase/migrations/20261019090509_supplier_export_existing_validity_index.sql','utf8'));
 const id=n=>'10000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const org=id(1),otherOrg=id(2),brand=id(3),otherBrand=id(4),supplier=id(5),secondSupplier=id(6),thirdSupplier=id(7);
 const legacy=async(n,code,price,options={})=>{
@@ -135,13 +137,19 @@ test('all source and pricing RPCs remain service-only, and the forward can repla
  await db.exec('set role authenticated');await assert.rejects(page(),/permission denied/);await db.exec('reset role');
 });
 
-test('forward installs after actual production baseline and immutable reviewed62 migration chain',async()=>{
+test('forward installs after actual production baseline and current reviewed64 migration chain',async()=>{
  const fixture=await createFullReplayDb();
  try{
   const manifest=JSON.parse(await readFile('scripts/ops/price-engine-production-manifest.json','utf8'));
-  assert.equal(manifest.migration_order.length,62);
+  assert.equal(manifest.migration_order.length,64);
   for(const migration of manifest.migration_order)await fixture.exec(await readFile(migration.file,'utf8'));
   await fixture.exec(sql);await fixture.exec(sql);
   assert.equal((await fixture.query("select count(*)::int n from public.cloud_admin_price_list_brands('10000000-0000-4000-8000-000000000001')")).rows[0].n,0);
  }finally{await fixture.close();}
+});
+
+test('inline index identity is equivalent for null whitespace punctuation and Unicode inputs',async()=>{
+ const codes=[null,'','  ','61/1','611','a-02','ı-İ','é-ß','i\\t z',' A\\nB ','00001'];
+ const result=(await db.query(`select bool_and(public.normalize_catalog_product_code(code)=upper(regexp_replace(code,'[[:space:]]+','','g'))) ok from unnest($1::text[]) code where code is not null`,[codes])).rows[0];
+ assert.equal(result.ok,true);
 });

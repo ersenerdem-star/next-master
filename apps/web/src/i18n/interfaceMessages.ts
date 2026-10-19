@@ -131,6 +131,8 @@ export const trInterfaceMessages: Record<string,string> = {
   "Credit Notes":"Alacak dekontları", "No credit notes available.":"Alacak dekontu bulunamadı.",
   "Vendor Credits":"Tedarikçi alacakları", "No vendor credits available.":"Tedarikçi alacağı bulunamadı.",
   "Download Price List":"Fiyat listesi indir", "Customer Pricing":"Müşteriye özel fiyatlar",
+  "Large price lists":"Büyük fiyat listeleri",
+  "Large lists use multiple sheets in one Excel file. Each sheet holds up to 1,048,575 parts plus its header.":"Büyük listeler aynı Excel dosyasında birden fazla sayfaya bölünür. Her sayfada başlık dışında en fazla 1.048.575 parça bulunur.",
   "Preparing...":"Hazırlanıyor…", "Download Excel":"Excel indir", "How This Download Works":"İndirme bilgileri",
   "Pricing Rule":"Fiyatlandırma kuralı", "Fields":"Alanlar",
   "Part no, description, customer price, price date, and lifecycle are included.":"Parça no, açıklama, müşteriye özel fiyat, fiyat tarihi ve ürün durumu dahildir.",

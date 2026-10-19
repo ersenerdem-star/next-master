@@ -77,7 +77,10 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
     const client=await pool.connect();let begun=false;
     try{
       await client.query('begin isolation level repeatable read');begun=true;
-      await client.query("set local statement_timeout='30s'; set local lock_timeout='5s'; set local idle_in_transaction_session_timeout='60s'");
+      // The first page also computes exact eligibility across the full source.
+      // Keep this bounded below the 120s job lease; continuations checkpoint
+      // committed pages before the background invocation budget expires.
+      await client.query("set local statement_timeout='90s'; set local lock_timeout='5s'; set local idle_in_transaction_session_timeout='120s'");
       const value=await callback(client);
       await client.query('commit');begun=false;
       return value;

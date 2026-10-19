@@ -3710,6 +3710,10 @@ export function PortalPage() {
           </SectionCard>
           <SectionCard title={ui("How This Download Works")}>
             <div className="portal-inline-note portal-inline-note--soft">
+              <span><InterfaceText text={"Large price lists"}/></span>
+              <strong><InterfaceText text={"Large lists use multiple sheets in one Excel file. Each sheet holds up to 1,048,575 parts plus its header."}/></strong>
+            </div>
+            <div className="portal-inline-note portal-inline-note--soft">
               <span><InterfaceText text={"Pricing Rule"}/></span>
               <strong>{ui(portalPricingRuleDescription)}</strong>
             </div>

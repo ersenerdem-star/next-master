@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {observeFailedVerifiedWorkflows} from '../../apps/engine/supplier-price-shadow/src/workflow-failure-observer.mjs';
+import {observeFailedVerifiedWorkflows,workflowFailureReason} from '../../apps/engine/supplier-price-shadow/src/workflow-failure-observer.mjs';
 import {createWorkerService} from '../../apps/engine/supplier-price-shadow/src/worker-service.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 
@@ -27,8 +27,16 @@ test('terminal main workflow emits one exact identity/cursor/timestamp CAS marke
   {name:'get_supplier_price_workflow_failure_context',args:{input_release_ids:[releaseId]}},
   {name:'mark_supplier_price_processing_interrupted',args:{input_release_id:releaseId,input_handoff_id:handoffId,
    input_workflow_id:workflowID,input_expected_cursor:25000,input_expected_updated_at:updatedAt,
-   input_failed_at:'2026-10-14T14:00:00.000Z'}},
+   input_failed_at:'2026-10-14T14:00:00.000Z',input_failure_reason:'unknown'}},
  ]);
+});
+
+test('only bounded known failures survive history; raw provider content is never forwarded',async()=>{
+ const h=harness({failedRows:[{...failed,error:{message:'SERVICE_RPC_DATABASE_TIMEOUT:complete_supplier_price_release_duckdb_validation'}}]});
+ await h.run();assert.equal(h.calls[1].args.input_failure_reason,'validation_database_timeout');
+ assert.equal(workflowFailureReason({message:'SERVICE_RPC_HTTP_503:GATEWAY:heartbeat_supplier_price_release_batch'}),'service_unavailable');
+ for(const message of ['secret-url-token','SERVICE_RPC_HTTP_500:complete_supplier_price_release_duckdb_validation','SERVICE_RPC_DATABASE_TIMEOUT:unknown','SERVICE_RPC_DATABASE_TIMEOUT:complete_supplier_price_release_duckdb_validation secret'])
+  assert.equal(workflowFailureReason({message}),'unknown');
 });
 
 test('active same-input recovery suppresses the original ERROR marker for all active DBOS states',async()=>{

@@ -35,6 +35,7 @@ export default async function handler(req:Request) {
   return json({sessionId,releaseId:r.release_id,uploadStatus:r.upload_status,verificationStatus:r.verification_status,
    transferReady:r.transfer_ready,totalBytes:r.total_bytes,totalRows:r.total_rows,processedRows:r.processed_rows,
    releaseStatus:r.release_status,errorCode:r.error_code,releaseUpdatedAt:r.release_updated_at,
+   failureReason:typeof r.failure_reason==='string'&&/^SUPPLIER_FAILURE_(VALIDATION_DATABASE_TIMEOUT|PROCESSING_DATABASE_TIMEOUT|SERVICE_UNAVAILABLE|SOURCE_VALIDATION_FAILED|SOURCE_UNAVAILABLE)$/.test(r.failure_reason)?r.failure_reason:null,
    expiresAt:r.expires_at,updatedAt:r.updated_at,published:false});
  }catch(error){
   if(error instanceof SupplierUpgradeError) return json({error:error.message},error.status);

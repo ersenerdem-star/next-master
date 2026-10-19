@@ -13,6 +13,16 @@ function inputIdentity(workflow){
 }
 const key=input=>`${input.releaseId}:${input.handoffId}`;
 const abort=signal=>signal?.throwIfAborted();
+export function workflowFailureReason(error){
+ const message=error?.message;
+ if(message==='SERVICE_RPC_DATABASE_TIMEOUT:complete_supplier_price_release_duckdb_validation')return 'validation_database_timeout';
+ if(/^SERVICE_RPC_DATABASE_TIMEOUT:(stage_supplier_price_release_batch(?:_v2)?|claim_supplier_price_verified_release_batch|heartbeat_supplier_price_release_batch|finalize_supplier_price_release_shadow_batch)$/.test(message||''))return 'processing_database_timeout';
+ if(/^SERVICE_RPC_HTTP_(?:408|425|429|5\d\d):GATEWAY:[a-z_]+$/.test(message||'')
+  ||/^SERVICE_RPC_TRANSPORT_(TIMEOUT|UNAVAILABLE):[a-z_]+$/.test(message||''))return 'service_unavailable';
+ if(message==='LOCAL_STREAM_SOURCE_VALIDATION_FAILED')return 'source_validation_failed';
+ if(/^LOCAL_STREAM_SOURCE_FAILED:\d{3}$/.test(message||''))return 'source_unavailable';
+ return 'unknown';
+}
 function knownFailureLineage(workflow,input,byId){
  const main=canonical(input.releaseId),seen=new Set();
  let current=workflow;
@@ -46,7 +56,7 @@ export async function observeFailedVerifiedWorkflows({rpc,failed,busy,workflowNa
   }
   if(active.has(key(input))){summary.skipped++;continue;}
   const previous=candidates.get(key(input));
-  if(!previous||failedAt>previous.failedAt)candidates.set(key(input),{...input,failedAt});
+  if(!previous||failedAt>previous.failedAt)candidates.set(key(input),{...input,failedAt,reason:workflowFailureReason(workflow.error)});
  }
  // Unknown terminal identities may be another recovery generation. Preserve
  // fail-closed behavior rather than marking from a partial interpretation.
@@ -74,6 +84,7 @@ export async function observeFailedVerifiedWorkflows({rpc,failed,busy,workflowNa
    input_release_id:row.id,input_handoff_id:row.handoff_id,input_workflow_id:row.workflow_id,
    input_expected_cursor:row.current_cursor,input_expected_updated_at:row.updated_at,
    input_failed_at:new Date(candidate.failedAt).toISOString(),
+   input_failure_reason:candidate.reason,
   });
   if(!result||!['marked','already_marked','skipped'].includes(result.status)||result.release_id!==row.id||result.published!==false)
    throw Error('SERVICE_FAILURE_MARKER_RESPONSE');

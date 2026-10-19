@@ -2,7 +2,7 @@ export type UploadPhase='hashing'|'admitting'|'uploading'|'verifying'|'queued'|'
 export type UploadProgress={phase:UploadPhase;bytes:number;totalBytes:number;sessionId?:string;releaseId?:string;message:string};
 export type UploadStatus={sessionId:string;releaseId:string;uploadStatus:string;verificationStatus:string;transferReady:boolean;
  totalBytes:number;totalRows:number;processedRows:number;releaseStatus:string;errorCode:string|null;releaseUpdatedAt:string;
- expiresAt:string;updatedAt:string;published:false};
+ expiresAt:string;updatedAt:string;published:false;failureReason?:string|null};
 export const SUPPLIER_PROCESSING_INTERRUPTED='SUPPLIER_PROCESSING_INTERRUPTED';
 export const SUPPLIER_SOURCE_UNSUPPORTED_FIELDS={
  SOURCE_UNSUPPORTED_STOCK_QTY:{column:'Stock_Qty',en:'stock quantity',tr:'stok miktarı'},
@@ -28,7 +28,25 @@ function sourceUnsupportedMessage(code:string|null,tr:boolean):string|null {
   ?`Dosya reddedildi: ${field.column} (${field.tr}) bu yüklemenin işlendiği önceki sürümde desteklenmiyordu. Fiyatlar yayımlanmadı. Ticari açıdan gerekli bilgiyi silmeyin; bu kayıt önceki yüklemenin sonucunu korur.`
   :`File rejected: ${field.column} (${field.en}) was unsupported by the earlier version that processed this upload. Prices were not published. Do not delete meaningful commercial data; this record preserves that earlier upload's outcome.`;
 }
-export function supplierProcessingInterruptedMessage(tr=false) {
+export function supplierProcessingInterruptedMessage(tr=false,reason?:string|null) {
+ const messages:Record<string,[string,string]>={
+  SUPPLIER_FAILURE_VALIDATION_DATABASE_TIMEOUT:[
+   'Son satır ve marka kontrolü veritabanının süre sınırını aştı. Dosya ve alınan satırlar korunuyor. Fiyatlar henüz yayınlanmadı; bu yüklemenin son kontrolü tamamlanmalı. Aynı dosyayı tekrar yüklemeniz gerekmiyor.',
+   'The final row and brand check exceeded the database time limit. The file and received rows are preserved. Prices are not published yet; the final check for this upload must finish. Do not upload the same file again.'],
+  SUPPLIER_FAILURE_PROCESSING_DATABASE_TIMEOUT:[
+   'Satırlar işlenirken veritabanının süre sınırı aşıldı. Dosya ve işlenen satırlar korunuyor. İşlem bu yükleme üzerinden devam ettirilmeli; dosyayı tekrar yüklemeyin.',
+   'The database time limit was exceeded while processing rows. The file and processed rows are preserved. Resume this upload instead of uploading again.'],
+  SUPPLIER_FAILURE_SERVICE_UNAVAILABLE:[
+   'İşleme hizmeti isteği tamamlayamadı veya geçici olarak yanıt vermedi. Dosya ve işlenen satırlar korunuyor. Aynı yükleme kontrol edilerek devam ettirilmeli.',
+   'The processing service could not complete the request or was temporarily unavailable. The file and processed rows are preserved. Check and resume this same upload.'],
+  SUPPLIER_FAILURE_SOURCE_VALIDATION_FAILED:[
+   'Dosyanın satır kontrolü geçmedi; fiyatlar yayınlanmadı. Ürün kodu, pozitif fiyat, para birimi, tarih veya yinelenen kodlar kontrol edilmeli. Bu kayıt için sorunlu hücre ayrıntısı kaydedilmemiş; dosyanın hatalı satır raporu gerekir.',
+   'The file failed row validation; prices were not published. Check product codes, positive prices, currency, dates and duplicates. Cell-level details were not recorded for this failure; a problematic-row report is required.'],
+  SUPPLIER_FAILURE_SOURCE_UNAVAILABLE:[
+   'Yüklenen dosya depodan okunamadı. Dosya kaydı korunuyor; bu yüklemenin depolama bağlantısı kontrol edilmeli.',
+   'The uploaded file could not be read from storage. Its record is preserved; check the storage connection for this upload.'],
+ };
+ if(reason&&Object.hasOwn(messages,reason))return messages[reason][tr?0:1];
  return tr?'Dosyanın işlenmesi durdu; operasyon kontrolü gerekiyor. Yükleme ve işlenen satırlar korunuyor. Aynı yüklemenin durumunu kontrol edin.'
   :'File processing stopped and needs operational review. The upload and processed rows are preserved. Check this same upload.';
 }
@@ -42,7 +60,7 @@ export function supplierUploadStatusView(status:UploadStatus,tr=false):{phase:Up
  const progress=`${status.processedRows.toLocaleString(tr?'tr-TR':'en-US')} / ${status.totalRows.toLocaleString(tr?'tr-TR':'en-US')}`;
  const activity=new Date(status.releaseUpdatedAt).toLocaleString(tr?'tr-TR':'en-US');
  if(status.errorCode===SUPPLIER_PROCESSING_INTERRUPTED)return {phase:'attention',
-  message:`${supplierProcessingInterruptedMessage(tr)} ${progress}. ${tr?'Son durum':'Last status'}: ${activity}.`};
+  message:`${supplierProcessingInterruptedMessage(tr,status.failureReason)} ${progress}. ${tr?'Son durum':'Last status'}: ${activity}.`};
  if(status.errorCode)return {phase:'attention',message:tr
   ?`Dosya inceleme gerektiriyor (${status.errorCode}). ${progress}. Aynı yüklemenin kontrol ayrıntılarını açın.`
   :`File review is required (${status.errorCode}). ${progress}. Open the review details for this same upload.`};

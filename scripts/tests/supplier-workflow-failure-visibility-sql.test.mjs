@@ -5,6 +5,7 @@ import { createFoundationTestDb, seedFoundationTestScope } from './fixtures/pric
 
 const foundation = await readFile(new URL('../../supabase/migrations/20261014110452_price_engine_production_foundation_bootstrap.sql', import.meta.url), 'utf8');
 const migration = await readFile(new URL('../../supabase/migrations/20261014144957_supplier_price_workflow_failure_visibility.sql', import.meta.url), 'utf8');
+const detailed = await readFile(new URL('../../supabase/migrations/20261019090417_supplier_processing_failure_reason.sql', import.meta.url),'utf8');
 const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const release = id(9), session = id(10), handoff = id(12), workflow = `supplier-price-verified:v1:${release}`;
 const code = 'SUPPLIER_PROCESSING_INTERRUPTED';
@@ -59,6 +60,29 @@ async function snapshot(db) {
     'pointers',(SELECT coalesce(jsonb_agg(to_jsonb(p)),'[]') FROM public.supplier_current_price_pointers p),
     'publications',(SELECT coalesce(jsonb_agg(to_jsonb(p)),'[]') FROM public.supplier_price_publications p)) value`,[release])).rows[0].value;
 }
+
+test('detailed marker retains CAS/lease/authority fences and safe status reason with old-worker compatibility',async t=>{
+ const db=await fixture(t);await db.exec(detailed);
+ const values=await args(db);
+ const sql='SELECT public.mark_supplier_price_processing_interrupted($1,$2,$3,$4,$5,$6,$7) value';
+ for(const role of ['anon','authenticated']){
+  await db.exec(`RESET ROLE; SET ROLE ${role}`);
+  await assert.rejects(db.query(sql,[...values,'validation_database_timeout']),/permission denied/);
+ }
+ await assert.rejects(service(db,sql,[...values,'raw SQL secret']),/SUPPLIER_WORKFLOW_OBSERVER_INPUT/);
+ const stale=[...values];stale[3]++;
+ assert.equal((await service(db,sql,[...stale,'validation_database_timeout'])).rows[0].value.status,'skipped');
+ assert.equal((await service(db,sql,[...values,'validation_database_timeout'])).rows[0].value.status,'marked');
+ const after=await snapshot(db);
+ assert.equal(after.release.status,'failed');assert.equal(after.release.error_code,code);
+ assert.equal(after.release.error_message,'SUPPLIER_FAILURE_VALIDATION_DATABASE_TIMEOUT');
+ assert.equal(after.events.length,1);assert.equal(after.rows,0);assert.equal(after.pointers.length,0);
+ const token=(await admin(db,"SELECT floor(extract(epoch from now()))::bigint iat,floor(extract(epoch from now()+interval '1 hour'))::bigint exp")).rows[0];
+ const status=(await service(db,'SELECT public.get_supplier_price_upload_status($1,$2,$3,$4,$5,$6) value',[session,id(7),id(1),id(8),token.iat,token.exp])).rows[0].value;
+ assert.equal(status.failure_reason,'SUPPLIER_FAILURE_VALIDATION_DATABASE_TIMEOUT');
+ assert.equal(status.published,false);
+ assert.equal((await mark(db,values)).status,'skipped');
+});
 
 test('SQL observer is service-only, bounded, sealed to canonical identity, and exposes no source rows', async t => {
   const db = await fixture(t);
