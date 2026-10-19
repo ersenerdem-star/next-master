@@ -27,16 +27,11 @@ export default async(req:Request)=>{
       .eq('organization_id',org).eq('manifest->>brand',brandName).order('created_at',{ascending:false}).limit(10);
     if(jobs.error)throw jobs.error;
     const jobId=params.get('jobId')||jobs.data[0]?.id;
-    const items=jobId?await db.from('catalog_zf_job_items').select('product_code,state,error_message,observation,checkpoint')
+    const items=jobId?await db.from('catalog_zf_review_items').select('product_code,state,error_message,observation,checkpoint')
       .eq('organization_id',org).eq('job_id',jobId).order('item_index'): {data:[],error:null};
     if(items.error)throw items.error;
     return json({sourceUrl:'https://aftermarket.zf.com/en/aftermarket-portal/',readAllowed,publishAllowed,jobs:jobs.data,items:items.data.map(item=>({
-      productCode:item.product_code,state:item.state,error:item.error_message,observation:item.observation?{
-       brand:item.observation.brand,code:item.observation.code,sourceUrl:item.observation.sourceUrl,observedAt:item.observation.observedAt,
-       before:item.observation.before,fields:item.observation.fields,unavailable:item.observation.unavailable,
-       sourceStatus:item.observation.raw?.details?.status?.value,
-       replacements:item.observation.replacements?.map(r=>({code:r.code,direction:r.direction,error:r.error,verified:Boolean(r.target),sourceUrl:r.target?.sourceUrl}))
-      }:null,result:item.checkpoint
+      productCode:item.product_code,state:item.state,error:item.error_message,observation:item.observation,result:item.checkpoint
     }))});
   }
 

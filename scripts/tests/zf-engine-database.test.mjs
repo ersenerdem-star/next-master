@@ -20,8 +20,8 @@ create table catalog_product_source_records(id uuid primary key default gen_rand
 create function record_catalog_product_relation(uuid,uuid,text,text,text,text,text) returns boolean language sql as $$select true$$;
 insert into organizations values('${org}');insert into profiles values('${actor}','${org}','superadmin',true);insert into brands values('${brand}','${org}','Sachs');
 insert into catalog_external_sources(organization_id,source_key,is_active,license_posture,credential_boundary,rate_limit_posture,metadata) values('${org}','zf_group_official_v2',true,'internal_review_required','none','bounded','{"allowed_brands":["Sachs"],"automated_read_only_approved":true,"internal_observation_allowed":true,"internal_catalog_correction_allowed":true,"approval_actor":"user","publication_approval_reference":"request"}');
-insert into catalog_products(organization_id,brand_id,product_code,description,weight_kg,ean) values('${org}','${brand}','318189','Wrong description',99,'4013872954728'),('${org}','${brand}','350038','User corrected',4.33,'4059923045922');`);
-await db.exec(migration);await db.exec("set request.jwt.claim.role='service_role'");return db;}
+insert into catalog_products(organization_id,brand_id,product_code,description,weight_kg,ean) values('${org}','${brand}','318189','Wrong description',4.366,'4013872954728'),('${org}','${brand}','350038','User corrected',4.33,'4059923045922');`);
+await db.exec(migration);await db.exec(readFileSync(new URL('../../supabase/migrations/20261019220052_zf_review_projection_bounds.sql',import.meta.url),'utf8'));await db.exec("set request.jwt.claim.role='service_role'");return db;}
 async function rpc(db,name,args){const placeholders=args.map((_,i)=>'$'+(i+1)).join(',');return (await db.query(`select ${name}(${placeholders}) r`,args)).rows[0].r;}
 async function start(db,codes=['318189']){const key=crypto.randomUUID();const job=await rpc(db,'start_catalog_zf_job',[org,actor,codes,'Sachs',key]);return {job,key};}
 async function receipt(db,code='318189',options={}){
@@ -47,7 +47,7 @@ test('database binds manifests, tenant, leases, immutable receipts and reviewed-
  }finally{await db.close();}});
 test('applies official corrections once, preserves successor/manual mapping, does not confuse availability with discontinued',async()=>{const db=await setup();try{
  await db.query('insert into item_code_references(organization_id,brand_id,old_code,new_code,reason) values($1,$2,$3,$4,$5)',[org,brand,'318189','350038','User manual']);
- const j=await ready(db,await receipt(db));const result=await apply(db,j);assert.equal(result.fields.description,'applied');assert.equal(result.fields.weight_kg,'applied');assert.equal(result.relations[0].status,'existing_mapping_preserved');
+ const j=await ready(db,await receipt(db));const projection=(await db.query('select observation from catalog_zf_review_items where job_id=$1',[j.id])).rows[0].observation;assert.equal(projection.raw,undefined);assert.equal(projection.replacements[0].verified,true);assert.equal(projection.replacements[0].target,undefined);const result=await apply(db,j);assert.equal(result.fields.description,'applied');assert.equal(result.fields.weight_kg,'applied');assert.equal(result.relations[0].status,'existing_mapping_preserved');
  const p=(await db.query("select description,weight_kg::float,lifecycle_status from catalog_products where product_code='318189'")).rows[0];assert.equal(p.weight_kg,4.42);assert.equal(p.lifecycle_status,'active');
  assert.equal((await db.query("select description from catalog_products where product_code='350038'")).rows[0].description,'User corrected');
  assert.deepEqual(await apply(db,j),result);assert.equal((await db.query('select count(*)::int n from catalog_zf_item_applications')).rows[0].n,1);
@@ -69,4 +69,11 @@ test('blocks replacement loops and ambiguous successor sets; does not overwrite 
  await rpc(db,'checkpoint_catalog_zf_job',[org,j.id,j.lease_token,0,obs,{},'completed',null,true,null]);
  await db.query('insert into item_code_references(organization_id,brand_id,old_code,new_code) values($1,$2,$3,$4)',[org,brand,'318189','999999']);
  const obs2=await receipt(db);const j2=await ready(db,obs2);assert.equal((await apply(db,j2)).relations[0].status,'existing_mapping_conflict');
+ }finally{await db.close();}});
+
+test('an explicit but implausibly different official weight is held for product review',async()=>{const db=await setup();try{
+ await db.exec("update catalog_products set weight_kg=48.013 where product_code='318189'");
+ const j=await ready(db,await receipt(db,'318189',{fields:{weight_kg:2}}));const r=await apply(db,j);
+ assert.equal(r.fields.weight_kg,'large_weight_difference_review_required');
+ assert.equal((await db.query("select weight_kg::float w from catalog_products where product_code='318189'")).rows[0].w,48.013);
  }finally{await db.close();}});

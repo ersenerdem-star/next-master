@@ -18,10 +18,12 @@ export async function collectZfObservation({brand,code,before,readArticle=readZf
   if(candidate.brand&&candidate.brand.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase()!==brand.toLowerCase()){
    replacements.push({...candidate,error:'TARGET_BRAND_CONFLICT'});continue;}
   try{const target=await readArticle(brand,candidate.code,15000,fetchImpl);
-   replacements.push({...candidate,target:{brand:target.brand,code:target.code,raw:target.raw,sourceUrl:target.sourceUrl}});
+   replacements.push({...candidate,target:{brand:target.brand,code:target.code,raw:{details:{number:target.raw.details.number,brandName:target.raw.details.brandName,status:target.raw.details.status}},sourceUrl:target.sourceUrl}});
   }catch(e){if(notFound(e))replacements.push({...candidate,error:'TARGET_IDENTITY_NOT_VERIFIED'});else throw e;}
  }
- return {...observation,before,replacements};
+ const receipt={...observation,before,replacements};
+ if(new TextEncoder().encode(JSON.stringify(receipt)).byteLength>5*1024*1024)throw Error('ZF_OBSERVATION_TOO_LARGE');
+ return receipt;
 }
 export async function runZfJob({db,organizationId,jobId,fetchImpl=fetch,readArticle=readZfOfficialProduct,maxMs=10*60*1000,requestDelayMs=1100}){
  const rpc=async(name,args)=>{const r=await db.rpc(name,args);if(r.error)throw Error(r.error.message);return r.data;};

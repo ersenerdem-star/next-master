@@ -61,7 +61,11 @@ Requests are bounded and source snapshots, identities, errors and checkpoints
 are retained. Applying reviewed description/weight corrections requires the
 same field values seen during review; a subsequent manual edit is preserved.
 Existing EAN, menşe/tariff and identifiers are preserved or conflict-reported;
-blank source values never erase canonical values. Each mutation records its
+blank source values never erase canonical values. A source weight below half or
+above twice an existing positive weight is held for individual product review;
+exact official identity is not proof that every official attribute is correct.
+Raw source payloads remain in receipts; portal projections omit raw bodies, and
+collected receipts are capped at 5 MiB. Each mutation records its
 source and before/after values in a small transaction with a short lock timeout.
 No source policy is inferred from successful HTTP access.
 
