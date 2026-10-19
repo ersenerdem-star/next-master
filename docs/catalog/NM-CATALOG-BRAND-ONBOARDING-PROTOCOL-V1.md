@@ -45,8 +45,11 @@ for these six existing brands, not unrestricted catalog collection or public
 republication. The source approval reference is
 `user-zf-group-catalog-order-repair-2026-10-20`.
 
-Every lookup must verify both the requested brand and exact article number in
-search and detail responses. Whitespace is presentation; punctuation remains
+Every lookup verifies the requested brand and exact article number in the
+authoritative detail response; search cards must match too when search is used.
+A six-digit Sachs article may use its known 3+3 official spelling directly,
+with the same exact returned-brand/article check and exact-search fallback.
+Whitespace is presentation; punctuation remains
 identity. No reader may substitute the first fuzzy search result. Use the source
 article spelling in the detail URL. All legacy ZF imports share this reader.
 Weight is the explicitly labelled gross shipping weight in kg; convert grams

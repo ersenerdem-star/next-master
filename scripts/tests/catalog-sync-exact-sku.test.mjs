@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
+import {multiplyMoney,sumMoney,requireUnitPrice,requireQuantity} from "../../shared/order-money.mjs";
 import { exactProductCode } from "../../apps/web/src/shared/currentSupplierPriceSync.mts";
 
 // These UI modules depend on Vite's import.meta.env. Run their actual pure
@@ -27,7 +28,7 @@ test("purchase draft keeps punctuation-distinct SKUs on separate lines", () => {
   const { mergeCatalogLineIntoPurchaseDraft } = loadFunctions(
     "../../apps/web/src/presentation/pages/PurchasesPage.tsx",
     ["purchaseDraftLineKey", "mergeCatalogLineIntoPurchaseDraft"],
-    { exactProductCode },
+    { exactProductCode,multiplyMoney,sumMoney,requireUnitPrice,requireQuantity },
   );
   const slash = { brand: "Clevite", product_code: "61/1", old_code: "", qty: 1, line_total: 8.34 };
   const plain = { brand: "Clevite", product_code: "611", old_code: "", qty: 1, line_total: 405.72 };

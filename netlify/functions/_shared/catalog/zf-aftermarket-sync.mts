@@ -762,6 +762,19 @@ function normalizeSearchItem(target: any, item: any) {
 }
 
 async function fetchExactZfPayload(target:any,productCode:string,searchPageSize:number,requestTimeoutMs:number,fetchImpl:typeof fetch=fetch){
+  // SACHS six-digit articles use the official 3+3 spelling. A detail response
+  // is accepted only when its own manufacturer and full article identity match.
+  // A missing/ambiguous alias falls back to the exact filtered search below.
+  const compact=String(productCode).trim().replace(/\s+/g,'');
+  if(target.internalName==='Sachs'&&/^[0-9]{6}$/.test(compact)){
+    const alias=`${compact.slice(0,3)} ${compact.slice(3)}`;
+    const direct=await fetchArticle(target,alias,requestTimeoutMs,fetchImpl);
+    if(direct?.details){
+      try{assertZfArticleIdentity(direct,productCode,target.officialFilter);
+        return {payload:direct,item:{source_article_number:direct.details.number,source_brand_name:direct.details.brandName}};
+      }catch(error){if(!(error instanceof Error)||error.message!=='OFFICIAL_EXACT_MATCH_NOT_FOUND')throw error;}
+    }
+  }
   const search=await fetchSearchPage(target,productCode,0,searchPageSize,requestTimeoutMs,fetchImpl);
   const item=exactZfSearchItem(search.items,productCode,target.officialFilter);
   const payload=await fetchArticle(target,item.source_article_number,requestTimeoutMs,fetchImpl);
