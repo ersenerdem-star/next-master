@@ -9,6 +9,11 @@ import {parseCsvRows} from '../streaming-csv.mjs';
 const q=value=>`'${String(value).replaceAll("'","''")}'`;
 const csv=value=>{const text=value==null?'':String(value);return /[",\n\r]/.test(text)?`"${text.replaceAll('"','""')}"`:text};
 const safePageSize=value=>Number.isInteger(value)&&value>0&&value<=5000;
+// This CSV is written by us with a fixed nine-column RFC 4180 dialect.
+// Sniffing only the first 20,480 rows can incorrectly infer quote='' and
+// reject a legitimate comma/quote/newline appearing later in a large list.
+// Keep strict parsing and exact rows; never skip or pad problematic records.
+const exportCsvSource=path=>`read_csv(${q(path)},auto_detect=false,header=true,delim=',',quote='"',escape='"',ignore_errors=false,strict_mode=true,columns={'cursor_key':'VARCHAR','code':'VARCHAR','description':'VARCHAR','price':'VARCHAR','currency':'VARCHAR','price_date':'VARCHAR','discontinued':'VARCHAR','replacement_code':'VARCHAR','brand':'VARCHAR'})`;
 
 // Materializes authorized, already-priced export pages to a private CSV and
 // lets DuckDB perform the bounded-memory ordering/projection before the normal
@@ -36,7 +41,7 @@ export async function materializePagedExportWithDuckDB({fetchPage,binding,expect
   const instance=await DuckDBInstance.create(':memory:',{memory_limit:'512MB',threads:'4',temp_directory:tempDirectory});
   const connection=await instance.connect();
   try{
-   await connection.run(`copy (select cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand from read_csv_auto(${q(inputPath)},header=true,all_varchar=true,ignore_errors=false) order by case when nullif(cursor_key,'') is null then 1 else 0 end,cursor_key,code) to ${q(sortedPath)} (header,delimiter ',')`);
+   await connection.run(`copy (select cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand from ${exportCsvSource(inputPath)} order by case when nullif(cursor_key,'') is null then 1 else 0 end,cursor_key,code) to ${q(sortedPath)} (header,delimiter ',')`);
   }finally{connection.disconnectSync();}
   return {engine:'duckdb',binding,expectedRows,processedRows:processed,pageCount,inputPath,sortedPath};
  }catch(error){stream.destroy();throw error;}
@@ -69,7 +74,7 @@ export async function materializeSealedSnapshotWithDuckDB({pool,snapshotId,bindi
   stream.end(); await once(stream,'close');
   const instance=await DuckDBInstance.create(':memory:',{memory_limit:'512MB',threads:'4',temp_directory:tempDirectory});
   const connection=await instance.connect();
-  try{await connection.run(`copy (select cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand from read_csv_auto(${q(inputPath)},header=true,all_varchar=true,ignore_errors=false) order by cursor_key,code) to ${q(sortedPath)} (header,delimiter ',')`);}
+  try{await connection.run(`copy (select cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand from ${exportCsvSource(inputPath)} order by cursor_key,code) to ${q(sortedPath)} (header,delimiter ',')`);}
   finally{connection.disconnectSync();}
   if(assertActive)await assertActive();
   return {engine:'duckdb',binding,expectedRows,processedRows:processed,pageCount:Math.ceil(processed/batchSize),inputPath,sortedPath};
