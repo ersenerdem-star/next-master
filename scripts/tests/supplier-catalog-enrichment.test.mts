@@ -10,6 +10,7 @@ import {createFullReplayDb} from './fixtures/price-engine-full-replay-db.mjs';
 import {planSupplierCatalogEnrichment,sourceCatalogFields} from '../../netlify/functions/_shared/catalog/supplier-enrichment-plan.mjs';
 import {runSupplierCatalogEnrichment,supplierCatalogTarget,enrichmentDispatchHeaders,requireEnrichmentDispatch} from '../../netlify/functions/_shared/catalog/supplier-enrichment-worker.mts';
 import {safeSupplierOfficialObservation} from '../../netlify/functions/_shared/catalog/supplier-official-completion.mts';
+import {fetchZfSupplierCatalogFields} from '../../netlify/functions/_shared/catalog/zf-aftermarket-sync.mts';
 const exec=promisify(execFile),id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const org=id(1),supplier=id(2),brand=id(3),actor=id(4);let db:any,container:string;
 const admin=async(q:string,a:any[]=[])=>{if(/^rollback/i.test(q)){await db.query(q,a);return db.exec('reset role');}await db.exec('reset role');return db.query(q,a);};
@@ -63,6 +64,13 @@ test('background dispatch is signed, environment-bound and rejects replay with a
  const req=new Request(target.portal,{headers});requireEnrichmentDispatch(req,target,id(10),id(11));
  assert.throws(()=>requireEnrichmentDispatch(req,target,id(12),id(11)),/DISPATCH_DENIED/);
  env.NM_PRODUCTION_TARGET='zjgueqijumzlfioihnkt';assert.throws(()=>supplierCatalogTarget(k=>env[k]),/TARGET_DENIED/);
+});
+test('ZF completion rejects a same-number result carrying another brand',async()=>{
+ const original=globalThis.fetch;let calls=0;
+ try{
+  globalThis.fetch=async()=>{calls++;return new Response(JSON.stringify({products:{items:[{productNumber:'317 851',brandName:'TRW'}]}}),{status:200});};
+  await assert.rejects(fetchZfSupplierCatalogFields('Sachs','317851'),/OFFICIAL_EXACT_MATCH_NOT_FOUND/);assert.equal(calls,1);
+ }finally{globalThis.fetch=original;}
 });
 test('publication atomically queues one job; six-column source updates real catalog and unknown official source stays explicit',()=>transaction(async()=>{
  await admin("insert into catalog_products(organization_id,brand_id,product_code,origin,hs_code,oem_no)values($1,$2,'00123','DE','111111','KEEP')",[org,brand]);

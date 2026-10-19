@@ -491,7 +491,8 @@ export async function fetchZfSupplierCatalogFields(brandName:string,productCode:
   const target=resolveStaticTarget(brandName);
   const exact=(v:unknown)=>String(v??'').trim().replace(/\s+/g,'').toUpperCase();
   const search=await fetchSearchPage(target,productCode,0,100,requestTimeoutMs);
-  const matches=search.items.filter((r:any)=>exact(r.source_article_number)===exact(productCode));
+  const matches=search.items.filter((r:any)=>exact(r.source_article_number)===exact(productCode)
+    &&normalizeBrandKey(r.source_brand_name)===normalizeBrandKey(target.officialFilter));
   if(matches.length!==1)throw Error('OFFICIAL_EXACT_MATCH_NOT_FOUND');
   const payload=await fetchArticle(target,matches[0].source_article_number,requestTimeoutMs);
   if(exact(payload?.details?.number)!==exact(productCode))throw Error('OFFICIAL_EXACT_MATCH_NOT_FOUND');
@@ -770,6 +771,7 @@ function normalizeSearchItem(target: any, item: any) {
   return {
     brand_name: target.internalName,
     source_article_number: rawArticleNumber,
+    source_brand_name: cleanText(item.brandName || ''),
     product_code: productCode,
     normalized_code: normalizedCode,
     description: formatOfficialDescription(target, item.name || ""),
