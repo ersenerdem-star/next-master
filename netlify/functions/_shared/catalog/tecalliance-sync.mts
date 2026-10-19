@@ -1,3 +1,4 @@
+import {officialGrossWeightKg} from './official-weight.mjs';
 import {
   normalizeCatalogDescription,
   normalizeCatalogDisplayCode,
@@ -724,7 +725,7 @@ export async function fetchTecAllianceSupplierCatalogFields(brandName:string,pro
   if(matches.length!==1)throw Error('OFFICIAL_EXACT_MATCH_NOT_FOUND');
   const detail=resolveTecAllianceArticle(matches[0],null,brandName);
   return {code:exact(productCode),sourceUrl:'https://web.tecalliance.net',fields:{description:detail.description,ean:detail.ean,oem_no:detail.oem_no,
-    vehicle_model:detail.vehicle_model,market_segment:detail.market_segment,weight_kg:detail.weight_kg}};
+    vehicle_model:detail.vehicle_model,weight_kg:officialGrossWeightKg([...(matches[0].articleCriteria||[]),...(matches[0].logisticsCriteria||[])])}};
 }
 
 function resolveTecAllianceArticle(article: TecAllianceApiArticle, current: CatalogRow | null, brandName: string): TecAllianceResolvedItem {

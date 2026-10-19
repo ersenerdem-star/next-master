@@ -1,10 +1,11 @@
 import {InterfaceText} from "../../i18n/InterfaceText";
 import { useEffect, useMemo, useRef, useState } from "react";
+import {CatalogEngineOverview} from "../components/common/CatalogEngineOverview";
 import { ZfCatalogEngine } from "../components/common/ZfCatalogEngine";
 import { ElringCatalogEngine } from "../components/common/ElringCatalogEngine";
 import { CATALOG_MARKET_SEGMENT_OPTIONS, normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
-import { startBulkBrandCatalogImport, syncBrandCatalog } from "../../infrastructure/api/adminApi";
+import { startBulkBrandCatalogImport } from "../../infrastructure/api/adminApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import {
   CatalogDeleteBlockedError,
@@ -209,6 +210,8 @@ export function CatalogPage() {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showElringEngine, setShowElringEngine] = useState(false);
   const [showZfEngine, setShowZfEngine] = useState(false);
+  const [showBrandEngine, setShowBrandEngine] = useState(false);
+  const [showEngineOverview, setShowEngineOverview] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [exportBrand, setExportBrand] = useState("");
@@ -1369,62 +1372,15 @@ export function CatalogPage() {
     }
   }
 
-  async function handleSyncSelectedBrand() {
-    if (["zf","sachs","boge","trw","lemforder","wabco"].includes(catalogBrand.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase())) { setShowZfEngine(true); return; }
-    if (catalogBrand.trim().toLowerCase() === "elring") { setShowElringEngine(true); return; }
-    if (!isOnline) {
-      const message = t("catalog.errors.connectToSync");
-      setError(message);
-      actionFeedback.fail(message);
-      return;
-    }
-    if (!catalogBrand.trim()) {
-      const message = t("catalog.errors.selectBrandFirst");
-      setError(message);
-      actionFeedback.fail(message);
-      return;
-    }
-
-    setSyncingBrandCatalog(true);
-    setError("");
-    setStatus("");
-    actionFeedback.begin(t("catalog.status.resyncingBrand", { brand: catalogBrand }));
-
-    try {
-      const result = await syncBrandCatalog(catalogBrand, true);
-      const sourceNote = result.fallbackUsed
-        ? t("catalog.status.syncFallbackSource", {
-            preferred: result.preferredProviderLabel,
-            current: result.executionProviderLabel,
-          })
-        : t("catalog.status.syncSource", { source: result.executionProviderLabel });
-      setStatus(
-        t("catalog.status.syncSummary", {
-          brand: result.targetBrandName,
-          synced: formatCount(result.resolvedRows),
-          newRows: formatCount(result.newRowsInListing),
-          discontinued: formatCount(result.discontinuedRows),
-          replacements: formatCount(result.replacementRows),
-          errors: formatCount(result.errorRows),
-          sourceNote,
-        }),
-      );
-      actionFeedback.succeed(
-        t("catalog.status.syncComplete", {
-          brand: result.targetBrandName,
-          rows: formatCount(result.resolvedRows),
-          replacements: formatCount(result.replacementRows),
-        }),
-      );
-      applyCatalogFilters(search, catalogBrand, catalogSegment, false);
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : t("catalog.errors.syncFailed");
-      setError(message);
-      actionFeedback.fail(message);
-    } finally {
-      setSyncingBrandCatalog(false);
-    }
+  function openCatalogEngine(brand:string) {
+    if (!brand.trim()) return;
+    const brandKey=brand.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+    if (["zf","sachs","boge","trw","lemforder","wabco"].includes(brandKey)) { setShowZfEngine(true); return; }
+    if (brandKey === "elring") { setShowElringEngine(true); return; }
+    setShowBrandEngine(true);
   }
+
+  async function handleSyncSelectedBrand() { openCatalogEngine(catalogBrand); }
 
   async function handleBulkImportSelectedBrand(refreshExisting = false) {
     if (!isOnline || catalogBrand.trim().toLowerCase() !== "kolbenschmidt") {
@@ -1547,9 +1503,10 @@ export function CatalogPage() {
             >
               {t("catalog.actions.importCsv")}
             </Button>
+            <Button variant="secondary" onClick={()=>setShowEngineOverview(true)} disabled={!isOnline}>{locale==='tr'?'Marka Motorları':'Brand Engines'}</Button>
             {catalogBrand ? (
               <Button variant="secondary" onClick={() => void handleSyncSelectedBrand()} disabled={!isOnline} busy={syncingBrandCatalog} busyLabel={t("catalog.actions.resyncing")}>
-                {["zf","sachs","boge","trw","lemforder","wabco"].includes(catalogBrand.trim().toLowerCase()) ? (locale === "tr" ? "ZF Grup Katalog Motoru" : "ZF Group Catalog Engine") : catalogBrand.trim().toLowerCase() === "elring" ? (locale === "tr" ? "Elring Katalog Motoru" : "Elring Catalog Engine") : t("catalog.actions.resync")}
+                {["zf","sachs","boge","trw","lemforder","wabco"].includes(catalogBrand.trim().toLowerCase()) ? (locale === "tr" ? "ZF Grup Katalog Motoru" : "ZF Group Catalog Engine") : catalogBrand.trim().toLowerCase() === "elring" ? (locale === "tr" ? "Elring Katalog Motoru" : "Elring Catalog Engine") : (locale === "tr" ? "Katalog Motoru" : "Catalog Engine")}
               </Button>
             ) : null}
             {catalogBrand.trim().toLowerCase() === "kolbenschmidt" ? (
@@ -2012,6 +1969,8 @@ export function CatalogPage() {
         </aside>
       ) : null}
 
+      {showEngineOverview ? <CatalogEngineOverview onClose={()=>setShowEngineOverview(false)} onOpen={brand=>{setShowEngineOverview(false);setCatalogBrand(brand);openCatalogEngine(brand);}}/> : null}
+      {showBrandEngine ? <ZfCatalogEngine engineKind="brand" brand={catalogBrand} defaultCode={selectedCatalogRow?.brand === catalogBrand ? selectedCatalogRow.product_code : ""} onClose={() => setShowBrandEngine(false)} onPublished={() => applyCatalogFilters(search, catalogBrand, catalogSegment, false)} /> : null}
       {showZfEngine ? <ZfCatalogEngine brand={catalogBrand} defaultCode={selectedCatalogRow?.brand === catalogBrand ? selectedCatalogRow.product_code : ""} onClose={() => setShowZfEngine(false)} onPublished={() => applyCatalogFilters(search, catalogBrand, catalogSegment, false)} /> : null}
       {showElringEngine ? <ElringCatalogEngine defaultSegment={catalogSegment} onClose={() => setShowElringEngine(false)} onPublished={() => applyCatalogFilters(search, catalogBrand, catalogSegment, false)} /> : null}
       {showImportDialog ? (

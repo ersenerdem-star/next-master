@@ -31,7 +31,7 @@ export function requireEnrichmentDispatch(req:Request,target:Target,jobId:string
   ||!timingSafeEqual(Buffer.from(value,'hex'),Buffer.from(signature(target.key,jobId,token,ts),'hex')))throw Error('CATALOG_ENRICHMENT_DISPATCH_DENIED');
 }
 type Rpc=(name:string,args?:Record<string,unknown>)=>Promise<any>;
-export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=10*60*1000,officialProvider=supplierOfficialProvider,now=Date.now,officialDelayMs=1100,wait=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms))}:{rpc:Rpc;jobId:string;token:string;budgetMs?:number;officialProvider?:typeof supplierOfficialProvider;now?:()=>number;officialDelayMs?:number;wait?:(ms:number)=>Promise<void>}){
+export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=4*60*1000,officialProvider=supplierOfficialProvider,now=Date.now,officialDelayMs=1100,wait=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms))}:{rpc:Rpc;jobId:string;token:string;budgetMs?:number;officialProvider?:typeof supplierOfficialProvider;now?:()=>number;officialDelayMs?:number;wait?:(ms:number)=>Promise<void>}){
  const start=now(),scope={input_job_id:jobId,input_token:token};
  try{
   while(now()-start<budgetMs){
@@ -57,7 +57,7 @@ export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=10*
       }catch(error){
        if(String((error as Error)?.message).includes('OFFICIAL_EXACT_MATCH_NOT_FOUND'))issues.push({field:'source',code:'OFFICIAL_EXACT_MATCH_NOT_FOUND'});
        else{
-        const text=String((error as Error)?.message||error),code=/429|rate.limit/i.test(text)?'OFFICIAL_SOURCE_RATE_LIMIT':/401|403/.test(text)?'OFFICIAL_SOURCE_ACCESS_DENIED':/timeout|timed.out|abort/i.test(text)?'OFFICIAL_SOURCE_TIMEOUT':'OFFICIAL_SOURCE_UNAVAILABLE';
+        const text=String((error as Error)?.message||error),code=error instanceof ReferenceError||/is not defined|is not a function/.test(text)?'OFFICIAL_PROVIDER_IMPLEMENTATION_ERROR':/^OFFICIAL_OBSERVATION_(IDENTITY|SOURCE)_INVALID$/.test(text)?text:/429|rate.limit/i.test(text)?'OFFICIAL_SOURCE_RATE_LIMIT':/401|403/.test(text)?'OFFICIAL_SOURCE_ACCESS_DENIED':/timeout|timed.out|abort/i.test(text)?'OFFICIAL_SOURCE_TIMEOUT':'OFFICIAL_SOURCE_UNAVAILABLE';
         throw Object.assign(Error(code),{sourceRow:row.rowNumber,provider:provider!.key});
        }
       }

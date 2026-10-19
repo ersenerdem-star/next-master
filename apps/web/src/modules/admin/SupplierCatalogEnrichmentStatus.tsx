@@ -22,6 +22,10 @@ const reasons:Record<string,[string,string]>={
  OFFICIAL_SOURCE_TIMEOUT:['Resmî katalog yanıt süresini aştı; kayıtlı ilerlemeden yeniden denenecek.','Official catalog timed out; retry resumes from saved progress.'],
  OFFICIAL_SOURCE_RATE_LIMIT:['Resmî katalog istek sınırı uyguladı; daha sonra yeniden denenecek.','Official catalog rate limited requests; retry is deferred.'],
  OFFICIAL_SOURCE_ACCESS_DENIED:['Resmî katalog erişim izni istiyor.','Official catalog requires authorized access.'],
+ OFFICIAL_PROVIDER_IMPLEMENTATION_ERROR:['Katalog bağlantısının yazılımında hata var. Dosya ve tamamlanan kayıtlar korundu; destek düzeltmesi gerekiyor.','The catalog connector has a software error. File data and completed records are preserved; a connector fix is required.'],
+ OFFICIAL_SOURCE_OPERATIONAL_HOLD:['Resmî katalog kaynağı koruma amacıyla duraklatılmış. Dosyadaki bilgiler işlendi; kaynak devamı henüz etkin değil.','The official catalog source is paused for operational protection. File fields were processed; source completion is not active.'],
+ OFFICIAL_OBSERVATION_IDENTITY_INVALID:['Resmî kaynaktaki marka ve parça numarası doğrulanamadı; bilgi uygulanmadı.','Official article identity could not be verified; no metadata was applied.'],
+ OFFICIAL_OBSERVATION_SOURCE_INVALID:['Kaynak adresi bu marka için doğrulanmış resmî adres değil; bilgi uygulanmadı.','The source is outside the verified official source boundary; no metadata was applied.'],
  OFFICIAL_SOURCE_UNAVAILABLE:['Resmî katalog şu an erişilebilir değil.','Official catalog is currently unavailable.'],
  CATALOG_IDENTITY_OR_VALUE_CONFLICT:['Ürün kimliği veya alan değeri mevcut katalogla çakışıyor; kayıt değiştirilmedi.','Product identity or value conflicts with catalog constraints; record was retained.'],
 };

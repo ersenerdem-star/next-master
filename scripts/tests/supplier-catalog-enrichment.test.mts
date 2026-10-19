@@ -27,9 +27,11 @@ before(async()=>{
  const manifest=JSON.parse(await readFile('scripts/ops/price-engine-production-manifest.json','utf8'));
  for(const item of manifest.migration_order)await db.exec(await readFile(item.file,'utf8'));
  await db.exec('set check_function_bodies=true');
+ await db.exec('create table if not exists public.catalog_external_sources(organization_id uuid,source_key text,is_active boolean)');
  await db.exec(await readFile('supabase/migrations/20261019162519_supplier_publication_catalog_enrichment.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20261019170812_supplier_catalog_enrichment_short_transactions.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20261019171104_supplier_catalog_enrichment_scoped_timeout.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20261019225659_catalog_enrichment_fair_dispatch.sql','utf8'));
  await db.query("insert into organizations(id,name)values($1,'Org')",[org]);
  await db.query("insert into suppliers(id,organization_id,name)values($1,$2,'Supplier')",[supplier,org]);
  await db.query("insert into brands(id,organization_id,name)values($1,$2,'Sachs')",[brand,org]);
@@ -161,4 +163,10 @@ test('official row success is durably committed before a later source failure',(
  const j=(await admin('select phase,cursor,error_source_row from supplier_price_ingestion_internal.catalog_enrichment_jobs')).rows[0];assert.equal(j.phase,'official');assert.equal(Number(j.cursor),1);assert.equal(Number(j.error_source_row),2);
  assert.equal((await db.query("select description from catalog_products where product_code='00123'")).rows[0].description,'Verified first row');
  assert.equal(Number((await db.query("select count(*) n from supplier_price_ingestion_internal.catalog_enrichment_changes where phase='official'")).rows[0].n),1);
+}));
+
+test('connector implementation failures are distinguished from official source outages',()=>transaction(async()=>{
+ await publish(70);const claim=await rpc('claim_supplier_catalog_enrichment');
+ await assert.rejects(runSupplierCatalogEnrichment({rpc,jobId:claim.jobId,token:claim.token,officialDelayMs:0,officialProvider:()=>({key:'zf',fetch:async()=>{throw new ReferenceError('dependency is not defined');}})}));
+ const j=(await admin('select error_code,cursor,phase from supplier_price_ingestion_internal.catalog_enrichment_jobs')).rows[0];assert.equal(j.error_code,'OFFICIAL_PROVIDER_IMPLEMENTATION_ERROR');assert.equal(j.phase,'official');assert.equal(Number(j.cursor),0);
 }));

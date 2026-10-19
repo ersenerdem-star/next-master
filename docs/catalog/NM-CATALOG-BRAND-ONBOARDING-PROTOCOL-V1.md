@@ -44,6 +44,41 @@ exact reader, durable execution, field coverage, source holds, and live evidence
 separately for each brand. Ask the owner for the official catalogue URL when
 unconfigured; Denso's supplied URL is https://www.denso-am.eu/catalog/pv.
 
+The all-brand entry point is `/api/catalog-brand` with the existing brand selector
+and **Brand Engines** overview. Existing ZF and Elring engines retain their own
+review contracts. Other configured exact readers use `catalog_brand_jobs`,
+immutable job items and application receipts. Admission is tenant-superadmin
+only; execution is service-only, bound to the registered source and exact
+existing product. Sources require explicit `brand_engine_read_allowed` and
+`brand_engine_enrichment_allowed` metadata in addition to their existing policy.
+The new scope must not alter older source collection or automatic-apply grants.
+
+A signed one-minute dispatcher runs bounded jobs without a browser session.
+Leases fence concurrent or expired workers. Each official row is saved before
+continuing, and reviewed publication reuses the sealed observation. Temporary
+network failures have persisted bounded backoff; identity, authorization and
+source-policy errors stop for review. Unknown sources never fall through to a
+marketplace. Scalar completion preserves populated values and concurrent edits;
+EAN conflicts hold all metadata for that product. Identifier additions are
+computed against the reviewed snapshot. One short transaction updates a product
+once and records before/changes/outcomes; prices, lifecycle and operational
+replacement mappings stay outside this generic completion boundary.
+
+Denso uses the public parts endpoint serving the owner-supplied catalogue.
+Require one returned exact article, preserve punctuation and distinguish gross
+from net weights. The observed DCRI100360 response has EAN 8717613058732,
+net 720 g and gross 920 g; only gross 0.92 kg is eligible. Missing origin/tariff
+stays missing. TecAlliance completion likewise requires explicit gross units;
+MANN completion excludes an unlabelled logistics weight and uses product-bound
+OEM references. Legacy collection paths are not promoted to verified readers.
+
+The overview separates registered readers, missing source registrations,
+unimplemented adapters, required official links, authorized-access needs and
+operational holds. PartsFinder for Febi/Swag/Blue Print returned HTTP 401 in the
+current exact-detail probe; do not copy browser tokens or bypass that boundary.
+Unbranded products remain file/manual managed. An engine being connected is
+not proof that all brand products have been enriched.
+
 The supplier-enrichment worker must checkpoint every completed official row
 before the next request, use bounded source pacing, and preserve file progress.
 A source failure on row N must not replay successful earlier observations in
