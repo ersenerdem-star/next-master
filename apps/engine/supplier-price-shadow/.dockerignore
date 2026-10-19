@@ -25,6 +25,8 @@ src/**
 !src/supplier-price-validation-gate.mjs
 !src/storage-scan.mjs
 !src/streaming-csv.mjs
+!src/supplier-weight.mjs
+!src/source-validation-report.mjs
 !src/streaming-xlsx.mjs
 !src/supabase-headers.mjs
 !src/upload-verification-consumer.mjs
