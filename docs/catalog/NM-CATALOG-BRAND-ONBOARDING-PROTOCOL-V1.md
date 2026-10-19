@@ -53,6 +53,14 @@ a 2MiB response limit. A single operator must own an output report at a time.
 
 Full-brand entry point: `node --import tsx
 scripts/catalog/collect-elring-official-catalog.mjs --confirm-production --publish`.
+**Operational hold (2026-10-19):** the Elring source is inactive following a
+portal/database outage during publication. Do not reactivate or resume this
+run until the publication/integrity summary contention and portal health
+limits are repaired and validated. Collection evidence is complete for
+21,543 identities; publication stopped at 17,250 processed identities and
+12,642 inserts. Database restart restored SQL, Auth and authenticated portal
+data access. Caller timeout did not establish server-side cancellation; the
+publication statement timed out later inside product-code normalization.
 The user's 2026-10-19 instruction to collect from the official Elring link
 extends the registered scope to bounded manufacturer collection. This path
 requires `brand_collection_allowed=true` as well as the existing publication
