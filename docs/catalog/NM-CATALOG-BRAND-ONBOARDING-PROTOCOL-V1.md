@@ -34,6 +34,24 @@ the canonical reread passed.
    not a zero, empty success, or guessed value. The package remains visible
    until its review, publication, enrichment and reread states are explicit.
 
+## All-brand engine rollout — 2026-10-20
+
+The Product Decision Owner requested completion of existing upload/enrichment
+jobs followed by an official-source engine for every uncovered brand. Reuse
+shared family connectors with a separate exact brand identity; do not make a
+legacy source URL or marketplace fallback look production-ready. Track source,
+exact reader, durable execution, field coverage, source holds, and live evidence
+separately for each brand. Ask the owner for the official catalogue URL when
+unconfigured; Denso's supplied URL is https://www.denso-am.eu/catalog/pv.
+
+The supplier-enrichment worker must checkpoint every completed official row
+before the next request, use bounded source pacing, and preserve file progress.
+A source failure on row N must not replay successful earlier observations in
+the same batch. Resume retains the same job/release/cursor. Do not clear old
+review-required or failed states merely to display green: missing source fields
+and source access failures remain explicit outcomes. The Elring publication
+hold below remains in force until its cause is repaired and validated.
+
 ## ZF Group exact identity and correction — 2026-10-20
 
 The Product Decision Owner requested repair of order `FU26-R42026` and the

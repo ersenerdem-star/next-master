@@ -31,7 +31,7 @@ export function requireEnrichmentDispatch(req:Request,target:Target,jobId:string
   ||!timingSafeEqual(Buffer.from(value,'hex'),Buffer.from(signature(target.key,jobId,token,ts),'hex')))throw Error('CATALOG_ENRICHMENT_DISPATCH_DENIED');
 }
 type Rpc=(name:string,args?:Record<string,unknown>)=>Promise<any>;
-export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=10*60*1000,officialProvider=supplierOfficialProvider,now=Date.now}:{rpc:Rpc;jobId:string;token:string;budgetMs?:number;officialProvider?:typeof supplierOfficialProvider;now?:()=>number}){
+export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=10*60*1000,officialProvider=supplierOfficialProvider,now=Date.now,officialDelayMs=1100,wait=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms))}:{rpc:Rpc;jobId:string;token:string;budgetMs?:number;officialProvider?:typeof supplierOfficialProvider;now?:()=>number;officialDelayMs?:number;wait?:(ms:number)=>Promise<void>}){
  const start=now(),scope={input_job_id:jobId,input_token:token};
  try{
   while(now()-start<budgetMs){
@@ -43,7 +43,7 @@ export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=10*
    const provider=batch.phase==='official'?officialProvider(batch.brand):null;
    const needsOfficial=batch.phase==='official'&&batch.rows.some((r:any)=>planSupplierCatalogEnrichment({existing:r.existing||{},incoming:{},phase:'official'}).missing.length>0);
    if(needsOfficial&&!provider)return await rpc('finish_supplier_catalog_without_official_source',scope);
-   const rows=await Promise.all(batch.rows.map(async(row:any)=>{
+   const buildRow=async(row:any)=>{
     let incoming=sourceCatalogFields(row.source),evidence:any={},issues:any[]=[];
     const before=row.existing||{};
     const initial=planSupplierCatalogEnrichment({existing:before,incoming:{},phase:'official'});
@@ -51,6 +51,7 @@ export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=10*
      incoming={};evidence={};
      if(initial.missing.length&&row.rowStatus==='accepted'){
       try{
+       await wait(officialDelayMs);
        const observation=safeSupplierOfficialObservation(await provider!.fetch(row.code),row.code,batch.brandId);
        incoming=observation.fields;evidence={...observation.evidence,policy:ENRICHMENT_POLICY,provider:provider!.key};
       }catch(error){
@@ -66,10 +67,25 @@ export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=10*
     if(batch.phase==='file'&&(Object.keys(plan.patch).length||plan.issues.length))evidence={policy:ENRICHMENT_POLICY,authority:'supplier_file'};
     return {rowNumber:row.rowNumber,existing:before,patch:plan.patch,issues:[...issues,...plan.issues],
      missing:batch.phase==='official'&&plan.missing.length>0,missingFields:batch.phase==='official'?plan.missing:[],evidence};
-   }));
-   const result=await rpc('apply_supplier_catalog_enrichment_batch',{...scope,input_phase:batch.phase,input_cursor:batch.cursor,input_rows:rows});
-   if(result?.status==='superseded')return result;
-   if(result?.status!=='applied')throw Error('CATALOG_ENRICHMENT_APPLY_UNCONFIRMED');
+   };
+   if(batch.phase==='official'){
+    // Commit each completed observation before the next source call. A later
+    // timeout cannot discard earlier successful rows in this fetched prefix.
+    let cursor=batch.cursor;
+    for(const row of batch.rows){
+     if(now()-start>=budgetMs){await rpc('release_supplier_catalog_enrichment',scope);return {status:'continuation'};}
+     const built=await buildRow(row);
+     const result=await rpc('apply_supplier_catalog_enrichment_batch',{...scope,input_phase:batch.phase,input_cursor:cursor,input_rows:[built]});
+     if(result?.status==='superseded')return result;
+     if(result?.status!=='applied'||result.cursor!==row.rowNumber)throw Error('CATALOG_ENRICHMENT_APPLY_UNCONFIRMED');
+     cursor=result.cursor;
+    }
+   }else{
+    const rows=await Promise.all(batch.rows.map(buildRow));
+    const result=await rpc('apply_supplier_catalog_enrichment_batch',{...scope,input_phase:batch.phase,input_cursor:batch.cursor,input_rows:rows});
+    if(result?.status==='superseded')return result;
+    if(result?.status!=='applied')throw Error('CATALOG_ENRICHMENT_APPLY_UNCONFIRMED');
+   }
   }
   await rpc('release_supplier_catalog_enrichment',scope);return {status:'continuation'};
  }catch(error){

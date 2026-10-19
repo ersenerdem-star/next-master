@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {ZF_BRANDS,exactZfSearchItem,assertZfArticleIdentity,zfArticleWeight,zfReplacementCandidates} from '../../netlify/functions/_shared/catalog/zf-product-identity.mjs';
-import {readZfOfficialProduct} from '../../netlify/functions/_shared/catalog/zf-aftermarket-sync.mts';
+import {readZfOfficialProduct,fetchZfSupplierCatalogFields} from '../../netlify/functions/_shared/catalog/zf-aftermarket-sync.mts';
 test('every ZF brand requires exact brand and punctuation-preserving article identity',()=>{
  for(const brand of Object.values(ZF_BRANDS)){
   const right={source_article_number:'61 / 1',source_brand_name:brand};
@@ -42,4 +42,13 @@ test('actual reader uses the exact spaced source article URL and checks the retu
   assert.ok(requests.some(url=>url.includes('/api/articles/350%20038')));assert.equal(requests.length,1,'Exact six-digit SACHS details do not need a repeated search');
   wrong=true;await assert.rejects(readZfOfficialProduct('Sachs','350038'),/NOT_FOUND/);
  }finally{globalThis.fetch=original;}
+});
+
+test('supplier-publication completion uses the same exact ZF reader without an undefined fetch dependency',async()=>{
+ const calls=[];const result=await fetchZfSupplierCatalogFields('TRW','GDB1550',15000,async(url)=>{
+ calls.push(String(url));return Response.json(String(url).includes('/api/search')?
+ {products:{items:[{productNumber:'GDB1550',brandName:'TRW'}],pagination:{totalItems:1}}}:
+ {details:{number:'GDB1550',brandName:'TRW',name:'Brake Pad Set',productTypes:[{grossWeight:'1.3',weightUnit:'kg'}]},specifications:{}});
+ });
+ assert.equal(result.code,'GDB1550');assert.equal(result.fields.description,'Brake Pad Set');assert.equal(result.fields.weight_kg,1.3);assert.equal(calls.length,2);
 });

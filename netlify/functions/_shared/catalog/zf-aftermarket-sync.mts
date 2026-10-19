@@ -1,5 +1,5 @@
 import {isExplicitDiscontinued} from './mira-lifecycle.mts';
-import {exactZfSearchItem,assertZfArticleIdentity,zfArticleWeight,zfReplacementCandidates} from './zf-product-identity.mjs';
+import {exactZfCode,exactZfSearchItem,assertZfArticleIdentity,zfArticleWeight,zfReplacementCandidates} from './zf-product-identity.mjs';
 import {
   isCatalogPlaceholderDescription,
   normalizeCatalogEan,
@@ -489,7 +489,7 @@ export function boundZfCandidateItems<T>(
 
 // Exact, read-only completion for publication-bound enrichment. Unlike discovery,
 // it never selects the first fuzzy result or writes products/images/relations.
-export async function fetchZfSupplierCatalogFields(brandName:string,productCode:string,requestTimeoutMs=12000) {
+export async function fetchZfSupplierCatalogFields(brandName:string,productCode:string,requestTimeoutMs=15000,fetchImpl:typeof fetch=fetch) {
   const target=resolveStaticTarget(brandName);
   const {payload}=await fetchExactZfPayload(target,productCode,100,requestTimeoutMs,fetchImpl);
   const detail=normalizeDetailPayload(target,payload);
@@ -497,7 +497,7 @@ export async function fetchZfSupplierCatalogFields(brandName:string,productCode:
   const originSpec=Array.isArray(specs)?specs.find((s:any)=>/^(country of origin|country of manufacture|manufacturing country)$/i.test(cleanText(s.label))):null;
   const rawOrigin=originSpec?.values?.map((v:any)=>cleanText(v.text||v)).filter(Boolean);
   const origin=rawOrigin?.length===1?normalizeOriginCode(rawOrigin[0]):'';
-  return {code:exact(productCode),sourceUrl:detail.source_url,fields:{description:detail.description,ean:detail.ean,
+  return {code:exactZfCode(productCode),sourceUrl:detail.source_url,fields:{description:detail.description,ean:detail.ean,
     oem_no:detail.oem_no,vehicle:detail.vehicle,hs_code:detail.hs_code,origin,weight_kg:detail.weight_kg}};
 }
 

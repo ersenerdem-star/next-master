@@ -71,7 +71,7 @@ test('ZF completion rejects a same-number result carrying another brand',async()
  const original=globalThis.fetch;let calls=0;
  try{
   globalThis.fetch=async()=>{calls++;return new Response(JSON.stringify({products:{items:[{productNumber:'317 851',brandName:'TRW'}]}}),{status:200});};
-  await assert.rejects(fetchZfSupplierCatalogFields('Sachs','317851'),/OFFICIAL_EXACT_MATCH_NOT_FOUND/);assert.equal(calls,1);
+  await assert.rejects(fetchZfSupplierCatalogFields('Sachs','317851'),/OFFICIAL_EXACT_MATCH_NOT_FOUND/);assert.equal(calls,2);
  }finally{globalThis.fetch=original;}
 });
 test('publication atomically queues one job; six-column source updates real catalog and unknown official source stays explicit',()=>transaction(async()=>{
@@ -149,3 +149,16 @@ test('database timeouts retain a safe actionable reason without exposing databas
   await assert.rejects(catalogEnrichmentRpc({url:'https://example.invalid',key:'test',portal:'https://example.invalid'})('apply_supplier_catalog_enrichment_batch'),/CATALOG_ENRICHMENT_RPC_UNCONFIRMED/);
  }finally{globalThis.fetch=original;}
 });
+
+test('official row success is durably committed before a later source failure',()=>transaction(async()=>{
+ await publish(60);await admin('update supplier_price_releases set total_rows=2 where id=$1',[id(60)]);
+ await db.query("insert into supplier_price_release_rows(release_id,source_row_number,normalized_code,product_code,buy_price,currency,valid_from,row_status,row_hash)values($1,2,'00234','00234',10,'EUR','2026-10-19','accepted',repeat('d',64))",[id(60)]);
+ await admin('update supplier_price_ingestion_internal.catalog_enrichment_jobs set total_rows=2');
+ const claim=await rpc('claim_supplier_catalog_enrichment');let calls=0;
+ await assert.rejects(runSupplierCatalogEnrichment({rpc,jobId:claim.jobId,token:claim.token,officialDelayMs:0,officialProvider:()=>({key:'zf',fetch:async(code:string)=>{
+ if(++calls===2)throw Error('HTTP 503');return {code,sourceUrl:'https://aftermarket.zf.com/api/articles/'+code,fields:{description:'Verified first row'}};
+ }})}),/UNCONFIRMED/);
+ const j=(await admin('select phase,cursor,error_source_row from supplier_price_ingestion_internal.catalog_enrichment_jobs')).rows[0];assert.equal(j.phase,'official');assert.equal(Number(j.cursor),1);assert.equal(Number(j.error_source_row),2);
+ assert.equal((await db.query("select description from catalog_products where product_code='00123'")).rows[0].description,'Verified first row');
+ assert.equal(Number((await db.query("select count(*) n from supplier_price_ingestion_internal.catalog_enrichment_changes where phase='official'")).rows[0].n),1);
+}));
