@@ -110,7 +110,7 @@ export function createExportPartsStore({
     const stored=await readText(name);
     if(stored!==body)fail('WRITE_READBACK_MISMATCH');
   }
-  return Object.freeze({binding,prefix,bucket,initialize,readJson,putJsonOnce});
+  return Object.freeze({binding,prefix,bucket,supabaseUrl,initialize,readJson,putJsonOnce});
 }
 
 export function createV3ExportPartsStore(options) {

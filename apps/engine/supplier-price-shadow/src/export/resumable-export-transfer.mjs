@@ -8,9 +8,14 @@ export const EXPORT_TUS_ENDPOINT='https://kaxsqafdevabkxofwdod.storage.supabase.
 export const EXPORT_TUS_CHUNK=6*1024*1024;
 const fail=code=>{throw Error(`EXPORT_TUS_${code}`);};
 const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
-export function safeExportTusUrl(value){
+const TARGETS=new Set(['https://kaxsqafdevabkxofwdod.supabase.co','https://zjgueqijumzlfioihnkt.supabase.co']);
+export function exportTusEndpoint(supabaseUrl){
+  if(!TARGETS.has(supabaseUrl))fail('TARGET_INVALID');
+  return supabaseUrl.replace('.supabase.co','.storage.supabase.co')+'/storage/v1/upload/resumable';
+}
+export function safeExportTusUrl(value,supabaseUrl='https://kaxsqafdevabkxofwdod.supabase.co'){
   try{
-    const u=new URL(value),e=new URL(EXPORT_TUS_ENDPOINT);
+    const u=new URL(value),e=new URL(exportTusEndpoint(supabaseUrl));
     return u.origin===e.origin&&!u.username&&!u.password&&!u.search&&!u.hash
       &&u.pathname.startsWith(e.pathname+'/')&&u.pathname.length>e.pathname.length+1
       &&u.pathname.length<2048&&!/%2f|%5c|%2e/i.test(u.pathname)&&!u.pathname.includes('//');
@@ -29,6 +34,14 @@ async function responseText(response){
 }
 export async function transferExportFile({file,receipt,partsStore,serviceRoleKey,fetchImpl=fetch,timeoutMs=120000,
   checkpoint=()=>{},progress=()=>{}}){
+  // The verified parts store owns the destination. Never fall back to staging
+  // for a production workbook, including saved resumable sessions/redirects.
+  const endpoint=exportTusEndpoint(partsStore?.supabaseUrl);
+  if(typeof serviceRoleKey!=='string'||!serviceRoleKey||/\s/.test(serviceRoleKey))fail('KEY_TARGET_INVALID');
+  if(!serviceRoleKey.startsWith('sb_secret_')){
+    let claims;try{claims=JSON.parse(Buffer.from(serviceRoleKey.split('.')[1],'base64url').toString('utf8'));}catch{fail('KEY_TARGET_INVALID');}
+    if(claims.role!=='service_role'||claims.ref!==new URL(partsStore.supabaseUrl).hostname.split('.')[0])fail('KEY_TARGET_INVALID');
+  }
   if(partsStore.binding!==receipt.binding||receipt.bucket!=='app-exports'
     ||!/^[0-9a-f]{64}$/.test(receipt.sha256)||!receipt.path.endsWith(`/${receipt.sha256}.xlsx`))fail('BINDING_MISMATCH');
   const name=attempt=>`tus-${receipt.sha256}-${String(attempt).padStart(4,'0')}.json`;
@@ -38,7 +51,7 @@ export async function transferExportFile({file,receipt,partsStore,serviceRoleKey
     const p=record?.payload;
     if(!p||record.sha256!==digest(p)||p.schema!=='price-export-tus-v1'||p.binding!==receipt.binding
       ||p.path!==receipt.path||p.bucket!==receipt.bucket||p.bytes!==receipt.bytes||p.sha256!==receipt.sha256
-      ||p.attempt!==index||!safeExportTusUrl(p.uploadUrl))fail('SESSION_INVALID');
+      ||p.attempt!==index||!safeExportTusUrl(p.uploadUrl,partsStore.supabaseUrl))fail('SESSION_INVALID');
     return p;
   }
   for(let index=1;index<=3;index++){
@@ -49,7 +62,7 @@ export async function transferExportFile({file,receipt,partsStore,serviceRoleKey
   // failures. Our bounded, URL-fenced stack rejects those before SDK handling.
   const httpStack={getName:()=> 'BoundedExportFetch',createRequest(method,url){
     if(!['HEAD','POST','PATCH'].includes(method)
-      ||(method==='POST'?url!==EXPORT_TUS_ENDPOINT:!safeExportTusUrl(url)))fail('URL_INVALID');
+      ||(method==='POST'?url!==endpoint:!safeExportTusUrl(url,partsStore.supabaseUrl)))fail('URL_INVALID');
     const headers={},controller=new AbortController();
     return {getMethod:()=>method,getURL:()=>url,getHeader:key=>headers[key],setHeader:(key,value)=>{headers[key]=value;},
       setProgressHandler:()=>{},getUnderlyingObject:()=>null,abort:async()=>controller.abort(),
@@ -75,8 +88,8 @@ export async function transferExportFile({file,receipt,partsStore,serviceRoleKey
         }else if(method==='POST'){
           if(status!==201)fail('CREATE_STATUS_INVALID');
           const location=response.headers.get('Location');
-          const uploadUrl=location?new URL(location,EXPORT_TUS_ENDPOINT).href:'';
-          if(!safeExportTusUrl(uploadUrl))fail('URL_INVALID');
+          const uploadUrl=location?new URL(location,endpoint).href:'';
+          if(!safeExportTusUrl(uploadUrl,partsStore.supabaseUrl))fail('URL_INVALID');
           const payload={schema:'price-export-tus-v1',binding:receipt.binding,bucket:receipt.bucket,path:receipt.path,
             bytes:receipt.bytes,sha256:receipt.sha256,uploadUrl,attempt:attempt+1};
           await partsStore.putJsonOnce(name(attempt+1),{payload,sha256:digest(payload)});
@@ -97,7 +110,7 @@ export async function transferExportFile({file,receipt,partsStore,serviceRoleKey
   let upload;
   try{
     await new Promise((resolve,reject)=>{
-      upload=new Upload(source,{endpoint:EXPORT_TUS_ENDPOINT,uploadUrl:latest?.uploadUrl??null,uploadSize:receipt.bytes,
+      upload=new Upload(source,{endpoint,uploadUrl:latest?.uploadUrl??null,uploadSize:receipt.bytes,
         httpStack,chunkSize:EXPORT_TUS_CHUNK,parallelUploads:1,uploadDataDuringCreation:false,
         storeFingerprintForResuming:false,removeFingerprintOnSuccess:false,retryDelays:[100,500],
         metadata:{bucketName:receipt.bucket,objectName:receipt.path,contentType:receipt.contentType,cacheControl:'0'},
