@@ -38,7 +38,7 @@ test('actual reader uses the exact spaced source article URL and checks the retu
   {details:{...details,brandName:wrong?'BOGE':'SACHS'},specifications:{}});};
  try{
   const result=await readZfOfficialProduct('Sachs','350038');
-  assert.equal(result.fields.weight_kg,4.33);assert.equal(result.fields.ean,'4059923045922');assert.equal(result.fields.description,details.name);
+  assert.equal(result.sourceUrl,requests[0],'Source evidence links to the exact official article response that was read');assert.equal(result.fields.weight_kg,4.33);assert.equal(result.fields.ean,'4059923045922');assert.equal(result.fields.description,details.name);
   assert.ok(requests.some(url=>url.includes('/api/articles/350%20038')));assert.equal(requests.length,1,'Exact six-digit SACHS details do not need a repeated search');
   wrong=true;await assert.rejects(readZfOfficialProduct('Sachs','350038'),/NOT_FOUND/);
  }finally{globalThis.fetch=original;}

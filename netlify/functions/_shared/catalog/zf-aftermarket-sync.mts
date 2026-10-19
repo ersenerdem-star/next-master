@@ -876,7 +876,7 @@ function normalizeDetailPayload(target: any, payload: any) {
   return {
     product_code: detailNumber,
     description: formatOfficialDescription(target, details.name || ""),
-    source_url: detailNumber ? `https://aftermarket.zf.com/tr/catalog/products/${encodeURIComponent(detailNumber)}` : "",
+    source_url: detailNumber ? `https://aftermarket.zf.com/api/articles/${encodeURIComponent(String(details.number).trim())}?expand=specifications%2Cextended&country=TR&language=en` : "",
     ean,
     oem_no: sanitizeCatalogOemNumbers(dedupeStrings(oemNumbers).join(", ")),
     vehicle,
