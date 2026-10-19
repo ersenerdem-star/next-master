@@ -30,8 +30,8 @@ test("purchase draft keeps punctuation-distinct SKUs on separate lines", () => {
     ["purchaseDraftLineKey", "mergeCatalogLineIntoPurchaseDraft"],
     { exactProductCode,multiplyMoney,sumMoney,requireUnitPrice,requireQuantity },
   );
-  const slash = { brand: "Clevite", product_code: "61/1", old_code: "", qty: 1, line_total: 8.34 };
-  const plain = { brand: "Clevite", product_code: "611", old_code: "", qty: 1, line_total: 405.72 };
+  const slash = { brand: "Clevite", product_code: "61/1", old_code: "", qty: 1, buy_price: 8.34, line_total: 8.34 };
+  const plain = { brand: "Clevite", product_code: "611", old_code: "", qty: 1, buy_price: 405.72, line_total: 405.72 };
   const original = { lines: [slash], line_count: 1, total_amount: 8.34 };
   const separate = mergeCatalogLineIntoPurchaseDraft(original, plain);
   assert.deepEqual(separate.lines.map((line) => line.product_code), ["611", "61/1"]);
