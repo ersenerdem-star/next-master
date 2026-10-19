@@ -17,7 +17,7 @@ export function ZfCatalogEngine({brand,defaultCode='',onClose,onPublished}:{bran
  const explain=(value:string)=>{
   if(/EXACT_MATCH_NOT_FOUND/.test(value))return tr?'Resmî kaynakta aynı marka ve parça numarasıyla doğrulanamadı. Kod ve marka seçimini kontrol edin.':'No exact official brand/article match. Check the code and brand.';
   if(/TIME_WINDOW/.test(value))return tr?'Çalışma aralığı doldu. Devam et ile aynı işten sürdürün.':'Time window reached. Resume the same job.';
-  if(/lease|busy|lock timeout/i.test(value))return tr?'Başka işlem sürüyor. Tamamlanan ürünler korundu; bu işe Devam et ile dönebilirsiniz.':'Another operation is running. Completed products are preserved; resume this job.';
+  if(/\blease\b|\bbusy\b|lock timeout/i.test(value))return tr?'Başka işlem sürüyor. Tamamlanan ürünler korundu; bu işe Devam et ile dönebilirsiniz.':'Another operation is running. Completed products are preserved; resume this job.';
   if(/IDENTITY_MISSING|identity missing|identity changed/i.test(value))return tr?'Katalogda bu marka ve tam parça numarası tekil olarak bulunamadı. Önce ürün kaydını kontrol edin.':'The exact catalog product is missing or ambiguous. Check the product first.';
   if(/Abort|Timeout|fetch|HTTP|429|50[0-9]/i.test(value))return tr?'Resmî kaynak bağlantısı tamamlanamadı. Aynı işe Devam et ile yeniden bağlanın.':'Official connection failed. Resume the same job to retry.';
   if(/AUTH|authorization|authorized|source unavailable/i.test(value))return tr?'Katalog yöneticisi oturumunu veya kayıtlı kaynak iznini kontrol edin.':'Check the catalog administrator session and source authorization.';

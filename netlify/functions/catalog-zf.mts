@@ -1,7 +1,7 @@
 import type {Config} from '@netlify/functions';
 import {createClient} from '@supabase/supabase-js';
 import {requireCallerProfile} from './_shared/auth.mts';
-import {json,readJson} from './_shared/http.mts';
+import {json,readJson,HttpRequestError} from './_shared/http.mts';
 import {assertZfSource,ZF_SOURCE} from './_shared/catalog/zf-job-worker.mjs';
 import {requireZfBrand} from './_shared/catalog/zf-product-identity.mjs';
 
@@ -57,6 +57,6 @@ export default async(req:Request)=>{
     }catch{return json({job,dispatchPending:true},202);}
   }
   return json({job,dispatchPending:false},202);
- }catch(error){console.error('catalog-zf request failed',error instanceof Error?error.name:'error');return json({error:'ZF catalog request failed. Please retry.'},500);}
+ }catch(error){if(error instanceof HttpRequestError&&[401,403].includes(error.status))return json({error:'AUTH_REQUIRED'},401);console.error('catalog-zf request failed',error instanceof Error?error.name:'error');return json({error:'ZF catalog request failed. Please retry.'},500);}
 };
 export const config:Config={path:'/api/catalog-zf'};
