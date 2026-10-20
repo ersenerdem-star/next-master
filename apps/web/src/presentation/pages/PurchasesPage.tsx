@@ -26,6 +26,7 @@ import {
   upsertPaymentMade,
   upsertPurchaseOrder,
 } from "../../infrastructure/api/ordersApi";
+import { PurchaseSupplierChoice } from "../components/purchases/PurchaseSupplierChoice";
 import { VendorsPage } from "./VendorsPage";
 import { SuppliersPage } from "./SuppliersPage";
 import { SectionCard } from "../components/common/SectionCard";
@@ -257,7 +258,7 @@ export function PurchasesPage({
   selectedPurchaseOrderId: externalSelectedPurchaseOrderId = "",
   selectedBillId: externalSelectedBillId = "",
 }: PurchasesPageProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const p = (key: string, params?: Record<string, string | number>) => t(`purchases.${key}`, params);
   const actionFeedback = useActionFeedback();
   const [activeTab, setLocalActiveTab] = useState<"Vendors" | "Supplier Prices" | "Purchase Orders" | "Bills" | "Payments Made">(activeTabProp);
@@ -271,6 +272,8 @@ export function PurchasesPage({
   const [selectedPurchaseOrderIds, setSelectedPurchaseOrderIds] = useState<string[]>([]);
   const [purchaseOrderActionsOpen, setPurchaseOrderActionsOpen] = useState(false);
   const [purchaseOrderDraft, setPurchaseOrderDraft] = useState<LocalPurchaseOrder | null>(null);
+  const purchaseOrderDraftRef = useRef(purchaseOrderDraft);
+  purchaseOrderDraftRef.current = purchaseOrderDraft;
   const [purchaseOrderSourceSnapshot, setPurchaseOrderSourceSnapshot] = useState("");
   const [selectedBillId, setSelectedBillId] = useState("");
   const [billDraft, setBillDraft] = useState<LocalBill | null>(null);
@@ -293,6 +296,7 @@ export function PurchasesPage({
   const documentExportInFlight = useRef(false);
   const [purchaseOrdersView, setPurchaseOrdersView] = useState<"list" | "detail">("list");
   const [billsView, setBillsView] = useState<"list" | "detail">("list");
+  const [supplierChoiceOpen, setSupplierChoiceOpen] = useState(false);
   const [purchaseLinePreview, setPurchaseLinePreview] = useState<LocalPurchaseOrderLine | null>(null);
   const [billLinePreview, setBillLinePreview] = useState<LocalBillLine | null>(null);
   const [purchaseOrderResyncOnlyFillBlanks, setPurchaseOrderResyncOnlyFillBlanks] = useState(true);
@@ -1181,6 +1185,14 @@ export function PurchasesPage({
     await nextAction();
   }
 
+  async function refreshUnchangedPurchaseDetail(id: string, expectedSnapshot: string) {
+    const fresh = await refreshAfterCommit(() => fetchPurchaseOrderById(id));
+    const current = purchaseOrderDraftRef.current;
+    if (!fresh || !current || current.id !== id || serializePurchaseOrderForDirtyCheck(current) !== expectedSnapshot) return;
+    setPurchaseOrderDraft(fresh);
+    setPurchaseOrderSourceSnapshot(serializePurchaseOrderForDirtyCheck(fresh));
+  }
+
   async function savePurchaseOrderDraft() {
     if (!purchaseOrderDraft) return null;
     const previousStatus = purchaseOrders.find((item) => item.id === purchaseOrderDraft.id)?.status || "";
@@ -1590,15 +1602,31 @@ export function PurchasesPage({
             </>
           ) : null}
 
+          {supplierChoiceOpen && purchaseOrderDraft && <PurchaseSupplierChoice key={purchaseOrderDraft.id} order={purchaseOrderDraft} orders={purchaseOrders}
+            onClose={() => {
+              setSupplierChoiceOpen(false);
+              void refreshUnchangedPurchaseDetail(purchaseOrderDraft.id, serializePurchaseOrderForDirtyCheck(purchaseOrderDraft));
+              void refreshAfterCommit(fetchPurchaseOrderSummaries).then(fresh => { if (fresh) setPurchaseOrders(fresh); });
+            }}
+            onCommitted={(result) => {
+              setSupplierChoiceOpen(false);
+              setPurchaseOrderDraft(result.target);
+              setSelectedPurchaseOrderId(result.target.id);
+              setPurchaseOrderSourceSnapshot(serializePurchaseOrderForDirtyCheck(result.target));
+              setPurchaseOrders(current => [result.target, ...(result.source.id !== result.target.id ? [result.source] : []), ...current.filter(o => o.id !== result.source.id && o.id !== result.target.id)]);
+              actionFeedback.succeed(locale === "tr" ? `Tedarikçi değişikliği kaydedildi: ${result.target.supplier_name} · ${result.target.id}${result.source.status === "closed" ? " · Boşalan kaynak PO kapatıldı." : ""}` : `Supplier change saved: ${result.target.supplier_name} · ${result.target.id}`);
+              void refreshAfterCommit(fetchPurchaseOrderSummaries).then(fresh => { if (fresh) setPurchaseOrders(fresh); });
+              if (result.replayed) void refreshUnchangedPurchaseDetail(result.target.id, serializePurchaseOrderForDirtyCheck(result.target));
+            }} />}
           {purchaseOrderDraft && purchaseOrdersView === "detail" ? (
-            <div className="invoice-editor-block">
-                <div className="invoice-edit-shell">
-                  <div className="toolbar toolbar--wrap">
-                    <Button variant="secondary" onClick={() => void confirmPurchaseOrderNavigation(() => setPurchaseOrdersView("list"))}>
-                      {p("actions.backToList")}
-                    </Button>
-                  </div>
-                <div className="document-marks document-marks--header">
+            <div className="invoice-editor-block purchase-order-workspace">
+                <div className="invoice-edit-shell quote-editor-panel">
+                  <div className="purchase-order-heading">
+                    <div>
+                      <span className="purchase-order-eyebrow">{locale === "tr" ? "SATIN ALMA SİPARİŞİ" : "PURCHASE ORDER"}</span>
+                      <h2>{purchaseOrderDraft.id}</h2>
+                      <p>{purchaseOrderDraft.supplier_name} · {purchaseOrderDraft.sales_order_no}</p>
+                      <div className="document-marks document-marks--header">
                   <span className={`mark-badge ${purchaseOrderDraft.status === "confirmed" || purchaseOrderDraft.status === "closed" ? "mark-badge--success" : ""}`}>
                     {statusLabel(purchaseOrderDraft.status)}
                   </span>
@@ -1608,10 +1636,28 @@ export function PurchasesPage({
                     </span>
                   ) : null}
                 </div>
+                    </div>
+                    <div className="purchase-order-grand-total">
+                      <span>{locale === "tr" ? "Sipariş toplamı" : "Order total"}</span>
+                      <strong>{formatMoney(recomputePurchaseOrderTotals(purchaseOrderDraft).total_amount, purchaseOrderDraft.currency)}</strong>
+                      <small>{purchaseOrderDraft.lines.length} {locale === "tr" ? "satır" : "lines"} · {purchaseOrderDraft.lines.reduce((sum, line) => sum + Number(line.qty || 0), 0)} {locale === "tr" ? "adet" : "units"}</small>
+                    </div>
+                  </div>
+                  <div className="toolbar toolbar--wrap">
+                    <Button variant="secondary" onClick={() => void confirmPurchaseOrderNavigation(() => setPurchaseOrdersView("list"))}>
+                      {p("actions.backToList")}
+                    </Button>
+                    <Button variant="secondary" disabled={!purchaseOrderSourceSnapshot || purchaseOrderHasUnsavedChanges || purchaseOrderDraft.status !== "draft" || purchaseOrderDraft.currency !== "EUR" || !purchaseOrderDraft.sales_order_id || !purchaseOrderDraft.lines.length}
+                      onClick={() => setSupplierChoiceOpen(true)}>{locale === "tr" ? "Tedarikçi alternatifleri / değiştir" : "Compare / change supplier"}</Button>
+                    {purchaseOrderHasUnsavedChanges && <span className="purchase-sourcing-hint">{locale === "tr" ? "Alternatifleri açmadan önce değişiklikleri kaydet." : "Save changes before comparing suppliers."}</span>}
+                    {purchaseOrderDraft.status !== "draft" && <span className="purchase-sourcing-hint">{locale === "tr" ? "Tedarikçi değişikliği yalnızca taslak siparişlerde yapılabilir." : "Supplier changes are available for draft orders only."}</span>}
+                  </div>
                 <div className="invoice-meta-grid">
-                  <Input label={p("fields.poNo")} value={purchaseOrderDraft.id} onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, id: value } : current))} />
+                  <Input label={p("fields.poNo")} disabled={Boolean(purchaseOrderSourceSnapshot)} value={purchaseOrderDraft.id} onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, id: value } : current))} />
+                  {purchaseOrderSourceSnapshot && purchaseOrderDraft.sales_order_id ? <Input label={p("fields.vendor")} value={purchaseOrderDraft.supplier_name} disabled onChange={() => {}} /> : (
                   <Select
                     label={p("fields.vendor")}
+                    disabled={Boolean(purchaseOrderSourceSnapshot && purchaseOrderDraft.sales_order_id)}
                     value={purchaseOrderDraft.vendor_id || findVendorByName(purchaseOrderDraft.supplier_name)?.id || purchaseOrderDraft.supplier_name}
                     options={[
                       ...vendors.map((vendor) => {
@@ -1630,13 +1676,14 @@ export function PurchasesPage({
                       } : current);
                     }}
                   />
+                  )}
                   <Input
                     label={p("fields.purchaseCompany")}
                     value={purchaseOrderDraft.purchase_company}
                     onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, purchase_company: value } : current))}
                   />
-                  <Input label={p("fields.salesOrder")} value={purchaseOrderDraft.sales_order_no} onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, sales_order_no: value } : current))} />
-                  <Input label={p("fields.customer")} value={purchaseOrderDraft.customer_name} onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, customer_name: value } : current))} />
+                  <Input label={p("fields.salesOrder")} disabled={Boolean(purchaseOrderDraft.sales_order_id)} value={purchaseOrderDraft.sales_order_no} onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, sales_order_no: value } : current))} />
+                  <Input label={p("fields.customer")} disabled={Boolean(purchaseOrderDraft.sales_order_id)} value={purchaseOrderDraft.customer_name} onChange={(value) => setPurchaseOrderDraft((current) => (current ? { ...current, customer_name: value } : current))} />
                   <Select
                     label={p("fields.status")}
                     value={purchaseOrderDraft.status}
@@ -1652,7 +1699,7 @@ export function PurchasesPage({
                     onChange={setReceiveWarehouseId}
                   />
                 </div>
-                    <table className="simple-edit-table">
+                    <div className="purchase-lines-scroll"><table className="simple-edit-table purchase-order-lines">
                       <thead>
                         <tr>
                           <th>{p("columns.code")}</th>
@@ -1672,7 +1719,7 @@ export function PurchasesPage({
                                 {line.product_code}
                               </button>
                             </td>
-                            <td>{line.description || "-"}</td>
+                            <td><strong>{line.description || "—"}</strong><small className="purchase-line-meta">{line.brand} · {line.supplier_name || purchaseOrderDraft.supplier_name}</small></td>
                             <td>
                               <input
                                 className="inline-edit-input inline-edit-input--qty"
@@ -1746,9 +1793,10 @@ export function PurchasesPage({
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </table></div>
 
                 <div className="toolbar toolbar--wrap">
+                  <details className="purchase-order-advanced"><summary>{locale === "tr" ? "Katalog araçları" : "Catalog tools"}</summary><div className="toolbar toolbar--wrap">
                   <label className="checkbox-field quote-toolbar-checkbox">
                     <input type="checkbox" checked={purchaseOrderResyncOnlyFillBlanks} onChange={(event) => setPurchaseOrderResyncOnlyFillBlanks(event.target.checked)} />
                     <span className="field__label">{p("fields.onlyFillBlanks")}</span>
@@ -1760,6 +1808,7 @@ export function PurchasesPage({
                   <Button variant="secondary" onClick={() => void handleResyncPurchaseOrderFromCatalog()} busy={resyncingPurchaseOrder} busyLabel={p("busy.resyncing")}>
                     {p("actions.resyncFromCatalog")}
                   </Button>
+                  </div></details>
                   <Button variant="secondary" onClick={() => handlePrintPurchaseOrder(purchaseOrderDraft)} busy={printingPurchaseOrder} busyLabel={p("busy.openingPdf")}>
                     {p("actions.pdfPrint")}
                   </Button>

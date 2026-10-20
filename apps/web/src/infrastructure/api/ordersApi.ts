@@ -1139,3 +1139,35 @@ export async function upsertPaymentMade(payment: LocalPaymentMade, previousId?: 
   if (!result?.payment) throw new Error("Payment made save failed");
   return mapPaymentMadeRow(result.payment);
 }
+
+export async function fetchPurchaseSupplierOffers(order: LocalPurchaseOrder) {
+  const rows: import("../../shared/purchaseSourcing").PurchaseSupplierOffer[][] = [];
+  for (let offset = 0; offset < order.lines.length; offset += 25) {
+    const batch = order.lines.slice(offset, offset + 25);
+    const result = await callAppRpc<Array<{ request_index: number; options: import("../../shared/purchaseSourcing").PurchaseSupplierOffer[] }>>(
+      "cloud_current_supplier_price_options_batch", { input_requests: batch.map(l => ({ code: l.product_code, brand: l.brand })) });
+    for (let i = 0; i < batch.length; i++) {
+      const matches = result.filter(r => r.request_index === i);
+      if (matches.length !== 1 || !Array.isArray(matches[0].options)) throw new Error("Supplier price response incomplete");
+      rows.push(matches[0].options);
+    }
+  }
+  return rows;
+}
+export interface PurchaseSupplierChangeRequest {
+  decision_id: string;
+  source_order_id: string;
+  expected_source_updated_at: string;
+  target_order_id: string | null;
+  expected_target_updated_at: string | null;
+  supplier_id: string;
+  line_indices: number[];
+  expected_prices: Array<{ line_index: number; buy_price: number }>;
+  reason: string;
+}
+export async function reassignPurchaseSupplier(payload: PurchaseSupplierChangeRequest) {
+  const result = await callAppRpc<{ source_order: Record<string, unknown>; target_order: Record<string, unknown>; replayed: boolean }>(
+    "reassign_purchase_order_supplier_atomic", { payload });
+  if (!result?.source_order || !result?.target_order) throw new Error("Supplier change response incomplete");
+  return { source: mapPurchaseOrderRow(result.source_order), target: mapPurchaseOrderRow(result.target_order), replayed: result.replayed };
+}

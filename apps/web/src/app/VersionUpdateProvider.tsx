@@ -94,6 +94,7 @@ const SENSITIVE_RPC_PREFIXES = [
   "insert_",
   "queue_",
   "refresh_",
+  "reassign_",
   "save_",
   "set_",
   "submit_",
