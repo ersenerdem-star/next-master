@@ -130,6 +130,15 @@ timeout, a 250ms lock timeout, no automatic retries, and auth/data health checks
 every five batches. A response over two seconds stops further publication.
 An image-only update now preserves derived search text when all search inputs
 are unchanged; edits to search inputs and inserts still rebuild search text.
+For recovery runs, use explicit small cohorts: `--batch=10 --max-batches=50`
+(500 staged rows), reducing to five rows per transaction when latency rises.
+Between cohorts, inspect/maintain the six existing catalog trigram indexes.
+Run `gin_clean_pending_list` separately from Product writes, with a 250ms lock
+budget and a bounded maintenance timeout (up to 45 seconds), monitoring live
+data access and cancelling the specifically tagged maintenance backend if its
+health check exceeds two seconds. Never increase the image-write timeout to
+accommodate index cleanup. Renew an expired image approval only after a new
+operator instruction; preserve the existing job cursor and audit records.
 The report shows image candidates separately from canonical image coverage.
 Prices are excluded. Lifecycle and directional relations use the separate
 Elring lifecycle step described below. `reread_verified`
