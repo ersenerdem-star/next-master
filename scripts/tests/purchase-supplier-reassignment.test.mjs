@@ -33,8 +33,8 @@ async function setup() {
  insert into sales_orders(id,organization_id,sales_order_no,status,sales_total,lines) values('SO-1','${org}','SO-1','confirmed',12345,'[{"sell_price":12345,"product_code":"000366"}]');
  insert into test_offers values('${org}','${supplier}','TPM','000366','SACHS',12,'2026-10-19',1,1,1000,null),('${org}','${supplier}','TPM','000369','SACHS',15,'2026-10-19',1,1,1000,null);
  `);
- await db.exec(readFileSync('supabase/migrations/20261020183558_purchase_order_supplier_reassignment.sql','utf8'));
- await db.exec(readFileSync('supabase/migrations/20261020185703_purchase_order_sourcing_plan.sql','utf8'));
+ await db.exec(readFileSync('supabase/migrations/20261020191443_purchase_order_supplier_reassignment.sql','utf8'));
+ await db.exec(readFileSync('supabase/migrations/20261020191445_purchase_order_sourcing_plan.sql','utf8'));
  await db.query(`insert into purchase_orders(id,organization_id,supplier_name,supplier_key,purchase_company,sales_order_id,sales_order_no,status,currency,total_amount,line_count,lines) values('PO-R',$1,'Romany','romany','Next','SO-1','SO-1','draft','EUR',40,2,$2)`,[org,JSON.stringify([line(),line('000369')])]);
  return db;
 }
