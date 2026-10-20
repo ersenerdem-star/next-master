@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {PGlite} from '@electric-sql/pglite';
-const migration=readFileSync(new URL('../../supabase/migrations/20261020174458_elring_completion_audit.sql',import.meta.url),'utf8');
+const migration=readFileSync(new URL('../../supabase/migrations/20261020174809_elring_completion_audit.sql',import.meta.url),'utf8');
 const org='00000000-0000-0000-0000-000000000001',brand='00000000-0000-0000-0000-000000000002',source='00000000-0000-0000-0000-000000000003',run='00000000-0000-0000-0000-000000000004';
 test('completion preserves image history, source pause, populated fields and atomic cursor',async()=>{
  const db=new PGlite();try{
@@ -69,11 +69,11 @@ test('completion preserves image history, source pause, populated fields and ato
  where product_code=$1->0->>'product_code';return '{}'::jsonb;end $$;
  update catalog_import_stage set source_payload=jsonb_set(source_payload,'{raw,genericArticles}','[{"legacyArticleId":42,"linkageTargetTypes":["V"]}]');
  update catalog_products set vehicle='MANUAL',vehicle_model='Existing model' where product_code='000';`);
- await db.exec(readFileSync(new URL('../../supabase/migrations/20261020175239_catalog_provider_conflict_fields.sql',import.meta.url),'utf8'));
- await db.exec(readFileSync(new URL('../../supabase/migrations/20261020180048_catalog_provider_conflict_fields_validate.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../supabase/migrations/20261020175304_catalog_provider_conflict_fields.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../supabase/migrations/20261020180122_catalog_provider_conflict_fields_validate.sql',import.meta.url),'utf8'));
  await assert.rejects(db.exec("insert into product_attribute_conflicts(field_name) values('arbitrary_field')"),/check constraint/);
- await db.exec(readFileSync(new URL('../../supabase/migrations/20261020175001_elring_complete_fitment_apply.sql',import.meta.url),'utf8'));
- await db.exec(readFileSync(new URL('../../supabase/migrations/20261020182818_elring_fitment_set_coverage.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../supabase/migrations/20261020175215_elring_complete_fitment_apply.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../supabase/migrations/20261020182833_elring_fitment_set_coverage.sql',import.meta.url),'utf8'));
  await db.query(`insert into catalog_elring_completion_jobs(run_id,phase,organization_id,source_id,brand_id,manifest_fingerprint,approval_reference,approved_until) values($1,'fitment',$2,$3,$4,'proof','explicit instruction',now()+interval '1 day')`,[run,org,source,brand]);
  const fitment={product_code:'000',stage_fingerprint:'fp0',complete:true,evidence_manifest_sha256:'a'.repeat(64),coverage:[{article_id:42,target_type:'PO',pairs_count:1,resolved_count:1,target_keys:['P:123'],pairs_fingerprint:'b'.repeat(64),complete:true}],vehicles:[{target_type:'P',target_id:123,manuDesc:'AUDI',modelDesc:'A4'}]};
  const fit=(index,evidence)=>db.query('select apply_elring_complete_vehicle_fitment($1,$2,$3) as result',[run,index,evidence]);
@@ -94,7 +94,7 @@ test('completion preserves image history, source pause, populated fields and ato
  assert.equal((await db.query("select vehicle_model from catalog_products where product_code='001'")).rows[0].vehicle_model,'AUDI A4');
  assert.equal((await db.query('select is_active from catalog_external_sources')).rows[0].is_active,false);
  for(const role of ['anon','authenticated'])assert.equal((await db.query(`select has_function_privilege($1,'apply_elring_complete_vehicle_fitment(uuid,integer,jsonb)','execute') as allowed`,[role])).rows[0].allowed,false);
- await db.exec(readFileSync(new URL('../../supabase/migrations/20261020175739_elring_bounded_index_maintenance.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../supabase/migrations/20261020175836_elring_bounded_index_maintenance.sql',import.meta.url),'utf8'));
  await assert.rejects(db.query('select maintain_elring_completion_index($1,$2)',[run,'unrelated_index']),/Unapproved maintenance index/);
  await db.exec("create index idx_catalog_products_search_text_trgm on catalog_products using gin(to_tsvector('english',description))");
  assert.equal((await db.query('select maintain_elring_completion_index($1,$2) result',[run,'idx_catalog_products_search_text_trgm'])).rows[0].result.pages,0);
@@ -105,7 +105,7 @@ test('completion preserves image history, source pause, populated fields and ato
  update catalog_import_runs set input_scope=input_scope||'{"brand_name":"Elring"}';
  create or replace function apply_catalog_provider_enrichment_protocol(jsonb,text,text) returns jsonb language sql as $$select jsonb_build_object('product_code',$1->0->>'product_code')$$;`);
  await db.exec(readFileSync(new URL('../../supabase/migrations/20261019184009_catalog_elring_guarded_enrichment.sql',import.meta.url),'utf8'));
- await db.exec(readFileSync(new URL('../../supabase/migrations/20261020181048_elring_enrichment_keyset.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../supabase/migrations/20261020181122_elring_enrichment_keyset.sql',import.meta.url),'utf8'));
  const keyed=(await db.query('select enrich_elring_provider_stage_batch($1,$2,1,1) result',[run,brand])).rows[0].result;
  assert.equal(keyed.processed,1);assert.equal(keyed.next_offset,2);assert.equal(keyed.results[0].product_code,'001');
  assert.match((await db.query("select pg_get_functiondef('enrich_elring_provider_stage_batch(uuid,uuid,integer,integer)'::regprocedure) def")).rows[0].def,/and row_index >= input_offset/);
