@@ -61,6 +61,29 @@ limits are repaired and validated. Collection evidence is complete for
 12,642 inserts. Database restart restored SQL, Auth and authenticated portal
 data access. Caller timeout did not establish server-side cancellation; the
 publication statement timed out later inside product-code normalization.
+
+**Bounded recovery completed (2026-10-20):** the Product Decision Owner's
+instruction to complete missing products authorized operator-only continuation
+through `scripts/catalog/elring-bounded-recovery.sql`. A five-row canary and
+25-row transactions used a three-second statement budget and 250ms lock budget,
+with Auth/REST health checked at least every five batches. Activation and
+deactivation occurred inside the same transaction; the source remained inactive
+to other sessions. The original sealed stage, approval identity, insert-only
+publisher, integrity queue, summary deltas and provenance rules were preserved.
+The final 13-row transaction rolled back under the ordinary three-second limit
+because full-run postflight needed longer. Read-only EXPLAIN ANALYZE measured
+21,530 provenance matches in 3.69 seconds, with product heap/index reads the
+dominant cost. A single monitored final transaction used a 12-second budget
+for the existing mandatory postflight and committed in 4.76 seconds; Auth/REST
+checks stayed below two seconds. No publisher definition, schema, source stage,
+or global timeout was changed. This is a bounded operational recovery, not a
+proven fix of the original outage's root cause.
+Publication is now completed: 21,543 processed, 16,367 cumulative inserts,
+21,543 provenance rows; this continuation inserted 3,725 products. Independent
+rereads in 22 bounded windows matched all 21,543 identities and source records.
+The source remains inactive. Deferred images on 3,310 newly available products,
+scalar enrichment, full fitment and lifecycle application remain separate work.
+
 The user's 2026-10-19 instruction to collect from the official Elring link
 extends the registered scope to bounded manufacturer collection. This path
 requires `brand_collection_allowed=true` as well as the existing publication
