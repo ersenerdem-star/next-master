@@ -1,5 +1,5 @@
 import { multiplyMoney } from "../../../../shared/order-money.mjs";
-import { exactPurchaseCode, offerBlockReason, type PurchaseSupplierOffer } from "./purchaseSourcing";
+import { exactPurchaseCode, type PurchaseSupplierOffer } from "./purchaseSourcing";
 import type { ExportRows, WorkbookOptions } from "./xlsxCore";
 
 export type SalesPurchaseAnalysisLine = {
@@ -54,10 +54,9 @@ export function buildSalesPurchaseAnalysis(input: {
     ["Supplier columns: current unit buy prices in EUR. Blank = no exact current offer. Order prices are snapshots; alternatives do not update the order."],
     ["Check MOQ, order multiples, stock and payment / logistics terms before ordering. This file does not assign or send purchase orders."],
     ["Part number", "Brand", "Description", "Quantity", "Order supplier", `Order unit buy (${input.currency})`, `Sales unit price (${input.currency})`, `Sales line total (${input.currency})`,
-      ...suppliers.map(s => `${s.supplier_name}${suppliers.filter(o => o.supplier_name === s.supplier_name).length > 1 ? ` [${s.supplier_id}]` : ""} buy (EUR)`), "Supplier conditions / price dates"],
+      ...suppliers.map(s => `${s.supplier_name}${suppliers.filter(o => o.supplier_name === s.supplier_name).length > 1 ? ` [${s.supplier_id}]` : ""} buy (EUR)`)],
     ...input.lines.map((l,index) => [l.code,l.brand,l.description,l.qty,l.supplier,l.buyPrice,l.sellPrice,l.sellPrice == null ? null : multiplyMoney(l.sellPrice,l.qty),
-      ...suppliers.map(s => prices[index].get(s.supplier_id)?.buy_price ?? null),
-      [...prices[index].values()].map(o => `${o.supplier_name}: ${o.price_date || "date unspecified"}; MOQ ${o.moq ?? "—"}; multiple ${o.order_multiple ?? 1}; stock ${o.stock_qty ?? "—"}; valid to ${o.valid_to || "—"}${offerBlockReason(o,l.qty) ? `; CHECK ${offerBlockReason(o,l.qty)}` : ""}${o.notes ? `; ${o.notes}` : ""}`).join("\n")]),
+      ...suppliers.map(s => prices[index].get(s.supplier_id)?.buy_price ?? null)]),
   ];
   const numericColumns = [3,5,6,7,...suppliers.map((_,i) => 8+i)];
   const options: WorkbookOptions = { headerRow:4,dataEndRow:rows.length-1,expectedRows:input.lines.length,dataRows:input.lines.length,

@@ -25,7 +25,7 @@ test('supplier matrix keeps actual identities in stable numeric columns, exact c
  assert.equal(ws.A6.v,'000123');assert.equal(ws.A6.t,'s');assert.equal(ws.A7.v,'001-23');
  assert.equal(ws.C7.t,'s');assert.equal(ws.C7.f,undefined);assert.equal(ws.C7.v,'=untrusted text');
  assert.equal(ws.I6.t,'n');assert.equal(ws.I6.v,7.5);assert.equal(ws.K7.v,'');assert.equal(ws.G6.v,12.5);assert.equal(ws.H6.v,25);
- assert.equal(ws['!autofilter']?.ref,'A5:L7');
+ assert.equal(ws['!autofilter']?.ref,'A5:K7');
  assert.throws(()=>buildSalesPurchaseAnalysis({number:'SO',currency:'EUR',lines,offers:[],generatedAt:''}),/incomplete/);
  assert.throws(()=>buildSalesPurchaseAnalysis({number:'SO',currency:'EUR',lines:[lines[0]],offers:[[offer('000123','T','TPM',8),offer('000123','T','TPM',9)]],generatedAt:''}),/Ambiguous/);
 });
