@@ -1140,7 +1140,7 @@ export async function upsertPaymentMade(payment: LocalPaymentMade, previousId?: 
   return mapPaymentMadeRow(result.payment);
 }
 
-export async function fetchPurchaseSupplierOffers(order: LocalPurchaseOrder) {
+export async function fetchPurchaseSupplierOffers(order: LocalPurchaseOrder, onProgress?: (count: number) => void) {
   const rows: import("../../shared/purchaseSourcing").PurchaseSupplierOffer[][] = [];
   for (let offset = 0; offset < order.lines.length; offset += 25) {
     const batch = order.lines.slice(offset, offset + 25);
@@ -1151,6 +1151,7 @@ export async function fetchPurchaseSupplierOffers(order: LocalPurchaseOrder) {
       if (matches.length !== 1 || !Array.isArray(matches[0].options)) throw new Error("Supplier price response incomplete");
       rows.push(matches[0].options);
     }
+    onProgress?.(rows.length);
   }
   return rows;
 }
@@ -1170,4 +1171,19 @@ export async function reassignPurchaseSupplier(payload: PurchaseSupplierChangeRe
     "reassign_purchase_order_supplier_atomic", { payload });
   if (!result?.source_order || !result?.target_order) throw new Error("Supplier change response incomplete");
   return { source: mapPurchaseOrderRow(result.source_order), target: mapPurchaseOrderRow(result.target_order), replayed: result.replayed };
+}
+
+export interface PurchaseSourcingPlanRequest {
+  decision_id: string;
+  source_order_id: string;
+  expected_source_updated_at: string;
+  reason: string;
+  groups: Array<Pick<PurchaseSupplierChangeRequest, "supplier_id" | "target_order_id" | "expected_target_updated_at" | "line_indices" | "expected_prices">>;
+}
+export async function applyPurchaseSourcingPlan(payload: PurchaseSourcingPlanRequest) {
+  const result = await callAppRpc<{ source_order: Record<string, unknown>; target_orders: Record<string, unknown>[]; replayed: boolean }>(
+    "apply_purchase_order_sourcing_plan_atomic", { payload });
+  if (!result?.source_order || !Array.isArray(result.target_orders) || !result.target_orders.length) throw new Error("Supplier plan response incomplete");
+  const targets = result.target_orders.map(mapPurchaseOrderRow);
+  return { source: mapPurchaseOrderRow(result.source_order), target: targets[0], targets, replayed: result.replayed };
 }

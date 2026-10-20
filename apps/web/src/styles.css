@@ -13389,3 +13389,47 @@ body {
 .purchase-comparison-table .purchase-comparison-selected { background: #eaf4fd; box-shadow: inset 2px 0 #327db9; }
 .purchase-comparison-table .purchase-comparison-notes { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 280px; }
 .purchase-comparison-excluded td { opacity: .65; }
+
+/* Large purchase orders use a compact decision list; terms expand on demand. */
+.purchase-planning-dialog { width: min(1480px, calc(100vw - 32px)); padding: 20px; }
+.purchase-planning-dialog > .purchase-sourcing-header { margin-bottom: 12px; }
+.purchase-planner-metrics { display: flex; flex-wrap: wrap; gap: 12px 24px; padding: 12px 0; font-size: 12px; color: #53647c; }
+.purchase-planner-metrics strong { color: #142b43; }
+.purchase-planner-tools { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(200px, 1.2fr) minmax(180px, 1fr) 180px; gap: 12px; padding: 12px 0; }
+.purchase-planner-tools label { display: grid; gap: 5px; font-size: 11px; font-weight: 700; color: #53647c; }
+.purchase-planner input[type=search], .purchase-planner select { border: 1px solid #d7e0ec; border-radius: 7px; padding: 8px 10px; background: #fff; color: #142b43; min-width: 0; font: inherit; font-size: 12px; }
+.purchase-planner-bulk { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; background: #edf4fb; padding: 10px; border-radius: 9px; font-size: 12px; margin: 4px 0 12px; }
+.purchase-planner-bulk .button, .purchase-planner-pages .button { padding: 7px 10px; min-height: 32px; font-size: 11px; }
+.purchase-planner .purchase-planner-notice { font-size: 12px; padding: 8px 10px; background: #f2f7fb; }
+.purchase-planner-table-scroll { max-height: min(54dvh, 610px); overflow: auto; border: 1px solid #e0e6ef; border-radius: 8px; }
+.purchase-planner-table { width: 100%; min-width: 970px; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.purchase-planner-table th { position: sticky; top: 0; z-index: 1; text-align: left; background: #edf2f8; color: #53647c; font-size: 10px; padding: 10px; white-space: nowrap; }
+.purchase-planner-table td { padding: 7px 10px; border-bottom: 1px solid #e9edf3; font-variant-numeric: tabular-nums; vertical-align: middle; }
+.purchase-planner-table tbody tr:hover { background: #f6f9fc; }
+.purchase-planner-table small { display: block; font-size: 10px; color: #667990; margin-top: 3px; }
+.purchase-planner-table td:first-child { width: 30px; }
+.purchase-planner-table td:nth-child(2) { min-width: 125px; }
+.purchase-planner-table td:nth-child(5) { min-width: 220px; }
+.purchase-planner-table select { width: 100%; padding: 6px; font-size: 11px; }
+.purchase-planner-detail-button { border: 0; background: transparent; color: #176995; font-size: 11px; cursor: pointer; text-decoration: underline; padding: 7px 0; white-space: nowrap; }
+.purchase-planner-offers { display: flex; flex-wrap: wrap; gap: 12px; padding: 12px; background: #f4f8fc; }
+.purchase-planner-offers > p { flex-basis: 100%; margin: 0; }
+.purchase-planner-offers article { display: grid; align-content: start; gap: 7px; width: 250px; padding: 14px; border: 1px solid #dce5ef; border-radius: 9px; background: #fff; font-size: 11px; }
+.purchase-planner-offers article span { white-space: pre-wrap; overflow-wrap: anywhere; color: #60718a; }
+.purchase-planner-offers article .button { justify-self: start; padding: 6px 9px; font-size: 11px; }
+.purchase-planner-pages { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 12px 0; font-size: 11px; color: #60718a; }
+.purchase-planner-pages > span:first-child { margin-right: auto; }
+.purchase-plan-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; position: sticky; bottom: -20px; padding: 16px 0; background: #fff; border-top: 1px solid #dce5ef; z-index: 2; }
+.purchase-plan-footer > div { display: grid; gap: 6px; margin-right: auto; font-size: 13px; }
+.purchase-plan-footer small { color: #60718a; font-size: 12px; }
+.purchase-saving { color: #13813d !important; }
+.purchase-plan-review-groups { display: grid; grid-template-columns: repeat(auto-fit,minmax(270px,1fr)); gap: 14px; margin: 20px 0; }
+.purchase-plan-review-groups article { border: 1px solid #dce5ef; border-radius: 10px; padding: 16px; background: #f6f9fc; }
+.purchase-plan-review-groups h4 { margin: 0; }
+.purchase-plan-review-groups small { display: block; color: #60718a; margin-top: 12px; }
+@media (max-width: 850px) {
+  .purchase-planner-tools { grid-template-columns: 1fr; }
+  .purchase-planner-pages { flex-wrap: wrap; }
+  .purchase-planner-pages > span:first-child { flex-basis: 100%; }
+  .purchase-plan-footer { bottom: -16px; }
+}

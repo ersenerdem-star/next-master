@@ -34,6 +34,7 @@ async function setup() {
  insert into test_offers values('${org}','${supplier}','TPM','000366','SACHS',12,'2026-10-19',1,1,1000,null),('${org}','${supplier}','TPM','000369','SACHS',15,'2026-10-19',1,1,1000,null);
  `);
  await db.exec(readFileSync('supabase/migrations/20261020183558_purchase_order_supplier_reassignment.sql','utf8'));
+ await db.exec(readFileSync('supabase/migrations/20261020185703_purchase_order_sourcing_plan.sql','utf8'));
  await db.query(`insert into purchase_orders(id,organization_id,supplier_name,supplier_key,purchase_company,sales_order_id,sales_order_no,status,currency,total_amount,line_count,lines) values('PO-R',$1,'Romany','romany','Next','SO-1','SO-1','draft','EUR',40,2,$2)`,[org,JSON.stringify([line(),line('000369')])]);
  return db;
 }
@@ -103,5 +104,75 @@ test('audit receipts are tenant-scoped and authenticated clients cannot rewrite 
  await assert.rejects(db.exec("update purchase_order_supplier_changes set reason='rewritten'"),/permission denied/);
  await assert.rejects(db.exec('delete from purchase_order_supplier_changes'),/permission denied/);
  await db.exec(`set test.org='${other}'`);
+ assert.equal((await db.query('select count(*) n from purchase_order_supplier_changes')).rows[0].n,0);
+}));
+
+const ga='00000000-0000-0000-0000-000000000006', gaVendor='00000000-0000-0000-0000-000000000007';
+async function groupAuto(db) {
+ await db.exec(`insert into suppliers values('${ga}','${org}','GroupAuto');insert into vendors(id,organization_id,display_name,company_name,vendor_number) values('${gaVendor}','${org}','GroupAuto','GroupAuto','GA');
+ insert into test_offers values('${org}','${ga}','GroupAuto','000366','SACHS',13,'2026-10-19',1,1,1000,null),('${org}','${ga}','GroupAuto','000369','SACHS',17,'2026-10-19',1,1,1000,null)`);
+}
+async function plan(db,groups) {
+ const base=await request(db);
+ return {decision_id:base.decision_id,source_order_id:base.source_order_id,expected_source_updated_at:base.expected_source_updated_at,reason:base.reason,groups};
+}
+const group=(supplier_id,indices,prices,extra={})=>({supplier_id,target_order_id:null,expected_target_updated_at:null,line_indices:indices,expected_prices:indices.map((i,n)=>({line_index:i,buy_price:prices[n]})),...extra});
+async function planRpc(db,p){return (await db.query('select apply_purchase_order_sourcing_plan_atomic($1::jsonb) result',[JSON.stringify(p)])).rows[0].result;}
+
+test('one plan routes original line identities to different supplier POs atomically and replays safely',()=>withDb(async db=>{
+ await groupAuto(db);const stamp=await target(db);
+ const before=(await db.query('select to_jsonb(s) data from sales_orders s')).rows[0].data;
+ const p=await plan(db,[group(supplier,[0],[12],{target_order_id:'PO-T',expected_target_updated_at:stamp}),group(ga,[1],[17])]);
+ const r=await planRpc(db,p);assert.equal(r.target_orders.length,2);
+ assert.equal(r.target_orders[0].total_amount,144);assert.equal(r.target_orders[1].total_amount,34);
+ assert.equal(r.target_orders[1].lines[0].product_code,'000369');assert.equal(r.target_orders[1].lines[0].supplier_name,'GroupAuto');
+ assert.equal((await planRpc(db,p)).replayed,true);
+ assert.equal((await db.query('select count(*) n from purchase_order_sourcing_plans')).rows[0].n,1);
+ assert.equal((await db.query('select count(*) n from purchase_order_supplier_changes')).rows[0].n,2);
+ await assert.rejects(planRpc(db,{...p,reason:'Other reason'}),/REPLAY_CONFLICT/);
+ assert.deepEqual((await db.query('select to_jsonb(s) data from sales_orders s')).rows[0].data,before);
+}));
+test('a late second-supplier price failure rolls back the first PO and all receipts',()=>withDb(async db=>{
+ await groupAuto(db);
+ const p=await plan(db,[group(supplier,[0],[12]),group(ga,[1],[999])]);
+ await assert.rejects(planRpc(db,p),/PRICE_CHANGED/);
+ const rows=(await db.query('select * from purchase_orders')).rows;
+ assert.equal(rows.length,1);assert.equal(rows[0].supplier_name,'Romany');assert.equal(rows[0].lines.length,2);
+ assert.equal((await db.query('select count(*) n from purchase_order_supplier_changes')).rows[0].n,0);
+ assert.equal((await db.query('select count(*) n from purchase_order_sourcing_plans')).rows[0].n,0);
+}));
+test('duplicate original line allocation and stale source are rejected before routing any demand',()=>withDb(async db=>{
+ await groupAuto(db);
+ await assert.rejects(planRpc(db,await plan(db,[group(supplier,[0],[12]),group(ga,[0],[13])])),/PLAN_INVALID/);
+ const p=await plan(db,[group(supplier,[0],[12])]);await db.exec("update purchase_orders set updated_at=updated_at+interval '1 second'");
+ await assert.rejects(planRpc(db,p),/ORDER_CHANGED/);
+ assert.equal((await db.query('select count(*) n from purchase_order_supplier_changes')).rows[0].n,0);
+}));
+test('200-line two-supplier plan preserves repeated SKU demand identity across index remapping',()=>withDb(async db=>{
+ await groupAuto(db);
+ const lines=Array.from({length:200},(_,i)=>({...line(i%2?'000369':'000366',1),notes:`original-${i}`}));
+ await db.query("update purchase_orders set lines=$1,line_count=200,total_amount=2000 where id='PO-R'",[JSON.stringify(lines)]);
+ const even=Array.from({length:100},(_,i)=>i*2),odd=even.map(i=>i+1);
+ const r=await planRpc(db,await plan(db,[group(supplier,even,even.map(()=>12)),group(ga,odd,odd.map(()=>17))]));
+ assert.deepEqual(r.target_orders[0].lines.map(l=>l.notes),even.map(i=>`original-${i}`));
+ assert.deepEqual(r.target_orders[1].lines.map(l=>l.notes),odd.map(i=>`original-${i}`));
+ assert.equal(r.target_orders[0].total_amount,1200);assert.equal(r.target_orders[1].total_amount,1700);
+}));
+test('plan receipts enforce tenant and immutable-client boundaries',()=>withDb(async db=>{
+ const p=await plan(db,[group(supplier,[0],[12])]);
+ await db.exec("set test.role='customer'");await assert.rejects(planRpc(db,p),/ACCESS_DENIED/);await db.exec(`set test.role='sales';set test.org='${other}'`);await assert.rejects(planRpc(db,p),/ORDER_NOT_FOUND/);
+ await db.exec(`set test.org='${org}'`);await planRpc(db,p);
+ assert.equal((await db.query("select has_function_privilege('anon','apply_purchase_order_sourcing_plan_atomic(jsonb)','execute') allowed")).rows[0].allowed,false);
+ await db.exec('set role authenticated');await assert.rejects(db.exec('delete from purchase_order_sourcing_plans'),/permission denied/);
+ await db.exec(`set test.org='${other}'`);assert.equal((await db.query('select count(*) n from purchase_order_sourcing_plans')).rows[0].n,0);
+}));
+
+test('stale second destination rolls back earlier groups and the source snapshot',()=>withDb(async db=>{
+ await groupAuto(db);const stamp=await target(db);
+ const p=await plan(db,[group(ga,[0],[13]),group(supplier,[1],[15],{target_order_id:'PO-T',expected_target_updated_at:stamp})]);
+ await db.exec("update purchase_orders set updated_at=updated_at+interval '1 second' where id='PO-T'");
+ await assert.rejects(planRpc(db,p),/TARGET_CHANGED/);
+ assert.equal((await db.query("select line_count from purchase_orders where id='PO-R'")).rows[0].line_count,2);
+ assert.equal((await db.query('select count(*) n from purchase_orders')).rows[0].n,2);
  assert.equal((await db.query('select count(*) n from purchase_order_supplier_changes')).rows[0].n,0);
 }));

@@ -2,103 +2,131 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { LocalVendor } from "../../../types/vendors";
 import type { LocalPurchaseOrder } from "../../../types/orders";
 import { useI18n } from "../../../i18n/I18nProvider";
-import { fetchPurchaseSupplierOffers, reassignPurchaseSupplier, type PurchaseSupplierChangeRequest } from "../../../infrastructure/api/ordersApi";
-import { PurchaseSupplierComparison } from "./PurchaseSupplierComparison";
-import { compatiblePurchaseTargets, offerBlockReason, offerForLine, sourcingTotals, type PurchaseSupplierOffer } from "../../../shared/purchaseSourcing";
+import { applyPurchaseSourcingPlan, fetchPurchaseSupplierOffers, type PurchaseSourcingPlanRequest } from "../../../infrastructure/api/ordersApi";
+import { compatiblePurchaseTargets, purchaseDecisionRows, purchasePlanSummary, purchaseVendorPaymentTerms, type PurchaseAssignments, type PurchaseSupplierOffer } from "../../../shared/purchaseSourcing";
+import { PurchaseSourcingPlanner } from "./PurchaseSourcingPlanner";
 
-const copy = {
-  tr: { title: "Tedarikçi alternatifleri", intro: "Satırları seç, güncel maliyeti karşılaştır ve uygun taslak siparişe aktar. Müşterinin satış fiyatı korunur.", loading: "Güncel tedarikçi fiyatları yükleniyor…", supplier: "Yeni tedarikçi", choose: "Tedarikçi seç", target: "Hedef satın alma siparişi", own: "Aynı PO / seçili satırlar için yeni taslak", reason: "Değişiklik nedeni", placeholder: "Örn. lojistik, minimum sipariş tutarı, sevkiyat birleştirme", code: "Parça / marka", qty: "Adet", current: "Mevcut birim", next: "Yeni birim", rules: "Koşullar / fiyat tarihi", before: "Seçili satırların mevcut toplamı", after: "Yeni toplam", diff: "Maliyet farkı", apply: "Tedarikçiyi değiştir ve kaydet", retry: "İşlemin sonucunu kontrol et / yeniden dene", saving: "Kontrol ediliyor ve kaydediliyor…", cancel: "Kapat", empty: "Bu satırlar için farklı bir tedarikçinin güncel fiyatı bulunamadı.", price: "Güncel fiyat yok", quantity: "MOQ / sipariş katı uygun değil", stock: "Stok yetersiz", expired: "Fiyatın geçerliliği dolmuş", merge: "Satırlar seçilen taslak PO’ya eklenecek. Kaynak PO’da satır kalmazsa kaynak PO kapatılacak.", replace: "Tüm satırlar seçiliyse mevcut PO’nun tedarikçisi değişir. Kısmi seçimde yeni taslak PO açılır.", failed: "İşlem tamamlanamadı. Aynı kararla tekrar deneyebilirsin; sunucu fiyatı, siparişi ve işlem sonucunu yeniden kontrol eder.", selectAll: "Tüm satırları seç", unavailable: "Seçili satırların tamamı için uygun fiyat gerekli.", noChange: "Tedarikçi değişikliği yalnızca kaydedilmiş, EUR, taslak ve onaylı satış siparişine bağlı PO’larda yapılabilir.", date: "Tarih", noDate: "Tarih yok" },
-  en: { title: "Supplier alternatives", intro: "Select lines, compare current costs and move them to a suitable draft order. Customer sale prices are preserved.", loading: "Loading current supplier prices…", supplier: "New supplier", choose: "Select supplier", target: "Target purchase order", own: "Same PO / new draft for selected lines", reason: "Reason for change", placeholder: "E.g. logistics, minimum order value, consolidate shipment", code: "Part / brand", qty: "Qty", current: "Current unit", next: "New unit", rules: "Terms / price date", before: "Current selected total", after: "New total", diff: "Cost difference", apply: "Change supplier and save", retry: "Check outcome / retry", saving: "Checking and saving…", cancel: "Close", empty: "No current alternative supplier prices found for these lines.", price: "No current price", quantity: "MOQ / order multiple not met", stock: "Insufficient stock", expired: "Price expired", merge: "Lines will be added to the selected draft PO. An empty source PO will be closed.", replace: "Selecting all lines changes the supplier on this PO. A partial selection creates a new draft PO.", failed: "The operation could not complete. Retry the same decision; the server checks the price, order and committed outcome again.", selectAll: "Select all lines", unavailable: "Every selected line needs an eligible price.", noChange: "Supplier changes require a saved EUR draft PO linked to a confirmed sales order.", date: "Date", noDate: "No date" },
-};
 export function PurchaseSupplierChoice({ order, orders, vendors, onClose, onCommitted }: {
   order: LocalPurchaseOrder; orders: LocalPurchaseOrder[]; vendors: LocalVendor[]; onClose: () => void;
-  onCommitted: (result: Awaited<ReturnType<typeof reassignPurchaseSupplier>>) => void;
+  onCommitted: (result: Awaited<ReturnType<typeof applyPurchaseSourcingPlan>>) => void;
 }) {
   const { locale } = useI18n();
-  const c = copy[locale === "tr" ? "tr" : "en"];
+  const tr = locale === "tr";
   const dialog = useRef<HTMLDialogElement>(null);
-  const request = useRef<PurchaseSupplierChangeRequest | null>(null);
+  const request = useRef<PurchaseSourcingPlanRequest | null>(null);
   const inFlight = useRef(false);
   const [rows, setRows] = useState<PurchaseSupplierOffer[][]>([]);
+  const [loaded, setLoaded] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [supplierId, setSupplierId] = useState("");
-  const [targetId, setTargetId] = useState("");
+  const [assignments, setAssignments] = useState<PurchaseAssignments>({});
+  const [targetIds, setTargetIds] = useState<Record<string,string>>({});
   const [reason, setReason] = useState("");
-  const [indices, setIndices] = useState(order.lines.map((_, i) => i));
+  const [review, setReview] = useState(false);
   const [busy, setBusy] = useState(false);
   const [attempted, setAttempted] = useState(false);
-  useEffect(() => { dialog.current?.showModal(); return () => dialog.current?.close(); }, []);
+  const [canRefreshPrices, setCanRefreshPrices] = useState(false);
+  const [notice, setNotice] = useState("");
+  const decisions = useMemo(() => purchaseDecisionRows(order,rows,assignments), [order,rows,assignments]);
+  const summary = useMemo(() => purchasePlanSummary(order,decisions,assignments), [order,decisions,assignments]);
+  const money = (n:number) => new Intl.NumberFormat(locale,{style:"currency",currency:order.currency}).format(n);
+  const diff = (n:number) => `${n>0?"+":""}${money(n)}`;
+  function targetFor(supplierId:string,supplierName:string) {
+    const candidates = compatiblePurchaseTargets(orders,order,supplierName);
+    const chosen = targetIds[supplierId];
+    return chosen === undefined ? (candidates.length === 1 ? candidates[0] : null) : candidates.find(t => t.id===chosen) || null;
+  }
+  useEffect(() => {
+    const element = dialog.current;
+    element?.showModal();
+    return () => element?.close();
+  }, []);
   useEffect(() => {
     let active = true;
-    fetchPurchaseSupplierOffers(order).then(data => { if (active) setRows(data); })
-      .catch(e => { if (active) setError(e instanceof Error ? e.message : c.failed); })
+    fetchPurchaseSupplierOffers(order, count => { if (active) setLoaded(count); })
+      .then(data => { if (active) setRows(data); })
+      .catch(e => { if (active) {setCanRefreshPrices(true);setError(e instanceof Error ? e.message : (tr ? "Fiyatlar yüklenemedi." : "Prices could not be loaded."));} })
       .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    return () => { active=false; };
   }, [order]);
-  const suppliers = useMemo(() => [...new Map(rows.flat().filter(o => o.supplier_id && o.supplier_name.trim().toLowerCase() !== order.supplier_name.trim().toLowerCase()).map(o => [o.supplier_id, o])).values()], [rows, order.supplier_name]);
-  const supplier = suppliers.find(s => s.supplier_id === supplierId);
-  const targets = compatiblePurchaseTargets(orders, order, supplier?.supplier_name || "");
-  const offers = order.lines.map((l, i) => offerForLine(rows[i] || [], supplierId, l.product_code));
-  const totals = sourcingTotals(order, indices, offers);
-  const money = (v: number) => new Intl.NumberFormat(locale, { style: "currency", currency: order.currency }).format(v);
-  const target = targets.find(t => t.id === targetId);
-  const errorMessage = (error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    const messages: Array<[string, string, string]> = [
-      ["ORDER_CHANGED", "Sipariş değişmiş. Kapatıp güncel siparişle tekrar karşılaştır.", "The order changed. Close and compare the refreshed order."],
-      ["TARGET_CHANGED", "Hedef PO değişmiş veya artık uygun değil. Kapatıp tekrar karşılaştır.", "The target PO changed or is no longer eligible. Close and compare again."],
-      ["PRICE_CHANGED", "Tedarikçi fiyatı değişmiş. Kapatıp güncel fiyatları tekrar karşılaştır.", "Supplier prices changed. Close and compare the current prices again."],
-      ["PRICE_UNAVAILABLE", "Seçili satırlardan birinde güncel fiyat bulunmuyor.", "A selected line no longer has a current price."],
-      ["QUANTITY_UNAVAILABLE", "Stok, MOQ veya sipariş katı uygun değil. Hedef PO’daki mevcut adetler de kontrol edilir.", "Stock, MOQ or order multiple is not met. Existing quantities in the target PO are also checked."],
-      ["VENDOR_MAPPING_REQUIRED", "Bu fiyat tedarikçisi için tek bir satın alma tedarikçisi kaydı bulunmalı. Tedarikçi kayıtlarını kontrol et.", "This price supplier needs one matching purchase vendor. Check vendor records."],
-      ["ALREADY_ISSUED", "PO için fatura, teslim alma veya gönderim kaydı var; tedarikçi değiştirilemez.", "This PO has a bill, receipt or sending record; its supplier cannot be changed."],
-      ["CONFIRMED_SALE_REQUIRED", "Bağlı satış siparişi onaylı olmalı.", "The linked sales order must be confirmed."],
-      ["EUR_DRAFT_REQUIRED", "Bu işlem yalnızca EUR taslak PO’larda yapılabilir.", "This operation requires a draft EUR PO."],
-      ["ACCESS_DENIED", "Bu işlem için yetkin bulunmuyor.", "You do not have permission for this operation."],
-    ];
-    const match = messages.find(([code]) => message.includes(code));
-    return match ? match[locale === "tr" ? 1 : 2] : c.failed;
-  };
-  function selectSupplier(id: string) {
-    setSupplierId(id);
-    const name = suppliers.find(s => s.supplier_id === id)?.supplier_name || "";
-    const matches = compatiblePurchaseTargets(orders, order, name);
-    setTargetId(matches.length === 1 ? matches[0].id : "");
+  const ready = summary.changed>0 && !summary.invalid && summary.groups.length<=50;
+  async function refreshPrices() {
+    if (inFlight.current || !canRefreshPrices) return;
+    inFlight.current=true;setBusy(true);setLoading(true);
+    try {
+      const fresh=await fetchPurchaseSupplierOffers(order,count => setLoaded(count));
+      setRows(fresh);setReview(false);setAttempted(false);request.current=null;
+      setError("");setCanRefreshPrices(false);
+      setNotice(tr?"Güncel fiyatlar yüklendi; atamaların korundu. Tutar farkını tekrar kontrol et.":"Prices refreshed; supplier choices were kept. Review the cost difference again.");
+    } catch {setError(tr?"Fiyatlar yenilenemedi; tekrar dene.":"Could not refresh prices; try again.");}
+    finally {inFlight.current=false;setBusy(false);setLoading(false);}
   }
-  const ready = supplier && indices.length > 0 && totals.newTotal != null && reason.trim().length >= 3 && reason.trim().length <= 1000;
   async function submit() {
-    if (inFlight.current || (!request.current && !ready)) return;
+    if (inFlight.current || (!request.current && (!ready || reason.trim().length<3))) return;
     if (!request.current) {
-      const target = targets.find(t => t.id === targetId);
-      request.current = { decision_id: crypto.randomUUID(), source_order_id: order.id, expected_source_updated_at: order.updated_at,
-        target_order_id: target?.id || null, expected_target_updated_at: target?.updated_at || null, supplier_id: supplierId,
-        line_indices: [...indices], expected_prices: indices.map(i => ({ line_index: i, buy_price: offers[i]!.buy_price })), reason: reason.trim() };
+      request.current = {
+        decision_id:crypto.randomUUID(), source_order_id:order.id, expected_source_updated_at:order.updated_at, reason:reason.trim(),
+        groups:summary.groups.map(g => {
+          const target=targetFor(g.supplierId,g.supplierName);
+          return {supplier_id:g.supplierId,target_order_id:target?.id||null,expected_target_updated_at:target?.updated_at||null,
+            line_indices:[...g.indices],expected_prices:g.indices.map(i => ({line_index:i,buy_price:decisions[i].assigned!.buy_price}))};
+        }),
+      };
     }
-    inFlight.current = true; setBusy(true); setAttempted(true); setError("");
-    try { const result = await reassignPurchaseSupplier(request.current); onCommitted(result); }
-    catch (e) { setError(errorMessage(e)); }
-    finally { inFlight.current = false; setBusy(false); }
+    inFlight.current=true; setBusy(true); setAttempted(true); setError("");setNotice("");setCanRefreshPrices(false);
+    try { onCommitted(await applyPurchaseSourcingPlan(request.current)); }
+    catch(e) {
+      const message=e instanceof Error?e.message:String(e);
+      const codes: Array<[string,string,string]> = [
+        ["ORDER_CHANGED","Kaynak PO değişmiş. Plan kaydedilmedi; kapatıp güncel siparişle tekrar dene.","The source PO changed. Nothing was saved; close and reload."],
+        ["TARGET_CHANGED","Hedef PO değişmiş veya uygun değil. Plan kaydedilmedi; kapatıp tekrar karşılaştır.","A target PO changed or is ineligible. Nothing was saved; close and compare again."],
+        ["PRICE_CHANGED","Bir tedarikçi fiyatı değişmiş. Planın tamamı durduruldu; güncel fiyatlarla tekrar karşılaştır.","A supplier price changed. The whole plan was stopped; compare current prices again."],
+        ["PRICE_UNAVAILABLE","Bir satırda güncel fiyat yok. Planın tamamı durduruldu.","A line no longer has a current offer. The whole plan was stopped."],
+        ["QUANTITY_UNAVAILABLE","Stok / MOQ / sipariş katı uygun değil. Hedef PO’daki adetler de kontrol edilir. Plan kaydedilmedi.","Stock / MOQ / multiple is not met, including existing target quantities. Nothing was saved."],
+        ["VENDOR_MAPPING_REQUIRED","Tedarikçi kaydı tek bir satın alma tedarikçisiyle eşleşmeli. Plan kaydedilmedi.","A supplier needs one matching purchase vendor. Nothing was saved."],
+        ["ALREADY_ISSUED","Bir PO’da fatura, teslim alma veya gönderim kaydı var. Plan kaydedilmedi.","A PO has bill, receipt or sending records. Nothing was saved."],
+        ["ACCESS_DENIED","Bu işlem için yetkin bulunmuyor.","You do not have permission for this operation."],
+      ];
+      const known=codes.find(([code]) => message.includes(code));
+      // Only explicit transactional rejections authorize replacing the request.
+      // An unknown/lost response must retry the original idempotent plan.
+      setCanRefreshPrices(["PRICE_CHANGED","PRICE_UNAVAILABLE","QUANTITY_UNAVAILABLE"].some(code => message.includes(code)));
+      setError(known ? known[tr?1:2] : (tr ? "İşlem sonucu alınamadı. Aynı planla sonucu kontrol et / yeniden dene; önceki kayıt varsa tekrar uygulanmaz." : "The outcome could not be retrieved. Retry the same plan to check its outcome; an already committed plan is not applied twice."));
+    } finally { inFlight.current=false; setBusy(false); }
   }
-  return <dialog ref={dialog} className="purchase-sourcing-dialog" aria-labelledby="purchase-sourcing-title" onCancel={e => { e.preventDefault(); if (!inFlight.current) onClose(); }}>
-    <div className="purchase-sourcing-header"><div><h2 id="purchase-sourcing-title">{c.title}</h2><p>{order.id} · {order.supplier_name} · {order.sales_order_no}</p></div><button className="button button--secondary" disabled={busy} onClick={onClose}>{c.cancel}</button></div>
-    <p>{c.intro}</p>
-    {error && <p role="alert" className="purchase-sourcing-error">{error}</p>}
-    {loading ? <p role="status">{c.loading}</p> : <>
-      {!suppliers.length && <p>{c.empty}</p>}
-      <fieldset disabled={busy || attempted} className="purchase-sourcing-fields">
-        <div className="purchase-sourcing-selects">
-          <label className="field"><span className="field__label">{c.supplier}</span><select className="field__input" value={supplierId} onChange={e => selectSupplier(e.target.value)}><option value="">{c.choose}</option>{suppliers.map(s => <option key={s.supplier_id} value={s.supplier_id}>{s.supplier_name} · {indices.filter(i => !offerBlockReason(offerForLine(rows[i] || [], s.supplier_id, order.lines[i].product_code), order.lines[i].qty)).length}/{indices.length}</option>)}</select></label>
-          <label className="field"><span className="field__label">{c.target}</span><select className="field__input" value={targetId} onChange={e => setTargetId(e.target.value)}><option value="">{c.own}</option>{targets.map(t => <option key={t.id} value={t.id}>{t.id} · {money(t.total_amount)}</option>)}</select></label>
-        </div>
-        <PurchaseSupplierComparison order={order} vendors={vendors} rows={rows} indices={indices} supplierId={supplierId} locale={locale}
-          onSelectSupplier={selectSupplier} onSelectLines={setIndices} />
-        <label className="field"><span className="field__label">{c.reason}</span><textarea className="field__input" value={reason} maxLength={1000} placeholder={c.placeholder} onChange={e => setReason(e.target.value)} /></label>
+  return <dialog ref={dialog} className="purchase-sourcing-dialog purchase-planning-dialog" aria-labelledby="purchase-sourcing-title" onCancel={e => {e.preventDefault(); if(!inFlight.current) onClose();}}>
+    <div className="purchase-sourcing-header"><div><h2 id="purchase-sourcing-title">{tr ? "Satın alma karar listesi" : "Purchase decision list"}</h2><p>{order.id} · {order.supplier_name} · {order.sales_order_no}</p></div><button type="button" className="button button--secondary" disabled={busy} onClick={onClose}>{tr?"Kapat":"Close"}</button></div>
+    {error && <div className="purchase-plan-error"><p role="alert" className="purchase-sourcing-error">{error}</p>{canRefreshPrices && <button type="button" className="button button--secondary" disabled={busy} onClick={() => void refreshPrices()}>{tr?"Güncel fiyatları yükle · kararları koru":"Refresh prices · keep decisions"}</button>}</div>}
+    {notice && <p role="status" className="purchase-planner-notice">{notice}</p>}
+    {loading ? <p role="status">{tr?"Güncel fiyatlar yükleniyor":"Loading current prices"}… {loaded}/{order.lines.length}</p> : <>
+      <fieldset disabled={busy||attempted} className="purchase-sourcing-fields">
+        {!review ? <PurchaseSourcingPlanner order={order} rows={rows} assignments={assignments} vendors={vendors} locale={locale} onChange={setAssignments} /> : <section className="purchase-plan-review" aria-label={tr?"PO dağılımını gözden geçir":"Review PO allocation"}>
+          <h3>{tr?"Dağılımı kontrol et, tek seferde kaydet":"Review the allocation, save once"}</h3>
+          <p>{tr ? `${summary.changed} satır, ${summary.groups.length} tedarikçiye aktarılacak. ${order.lines.length-summary.changed} satır mevcut tedarikçide kalacak. Müşterinin satış fiyatı korunur.` : `${summary.changed} lines move to ${summary.groups.length} suppliers. ${order.lines.length-summary.changed} lines stay with the current supplier. Customer sale prices are preserved.`}</p>
+          <div className="purchase-plan-review-groups">{summary.groups.map(g => {
+            const candidates=compatiblePurchaseTargets(orders,order,g.supplierName);
+            const target=targetFor(g.supplierId,g.supplierName);
+            return <article key={g.supplierId}><h4>{g.supplierName} · {g.indices.length} {tr?"satır":"lines"}</h4>
+              <small>{tr?"Kayıtlı ödeme şartı":"Vendor payment terms"}: {purchaseVendorPaymentTerms(g.supplierName,vendors) || (tr?"Belirtilmemiş":"Not specified")}</small>
+              <p>{money(g.oldTotal)} → <strong>{money(g.newTotal)}</strong> · {diff(g.newTotal-g.oldTotal)}</p>
+              <label className="field"><span className="field__label">{tr?"Hedef PO":"Target PO"}</span><select className="field__input" value={target?.id||""} onChange={e => setTargetIds(current => ({...current,[g.supplierId]:e.target.value}))}>
+                <option value="">{tr?"Ayrı taslak / mevcut PO’yu değiştir":"Separate draft / retarget source PO"}</option>{candidates.map(t => <option key={t.id} value={t.id}>{t.id} · {money(t.total_amount)}</option>)}
+              </select></label>
+              {target && <small>{tr?"Birleşmiş hedef PO toplamı":"Combined target PO total"}: <strong>{money(target.total_amount+g.newTotal)}</strong></small>}
+            </article>;
+          })}</div>
+          <p>{tr?"Bu işlem taslak PO’ları düzenler; tedarikçilere sipariş göndermez. Bir fiyat veya koşul değişirse planın tamamı durdurulur.":"This updates draft POs; no orders are sent. If a price or condition changes, the entire plan is stopped."}</p>
+          <label className="field"><span className="field__label">{tr?"Değişiklik nedeni":"Reason for change"}</span><textarea className="field__input" value={reason} maxLength={1000} placeholder={tr?"Örn. lojistik, sevkiyat birleştirme, ödeme şartı":"E.g. logistics, consolidated shipment, payment terms"} onChange={e => setReason(e.target.value)} /></label>
+        </section>}
       </fieldset>
-      <div className="purchase-sourcing-totals"><div>{c.before}<strong>{money(totals.oldTotal)}</strong></div><div>{c.after}<strong>{totals.newTotal == null ? "—" : money(totals.newTotal)}</strong></div><div>{c.diff}<strong>{totals.newTotal == null ? "—" : `${totals.newTotal - totals.oldTotal > 0 ? "+" : ""}${money(totals.newTotal - totals.oldTotal)}`}</strong></div>{target && <div>{locale === "tr" ? "Hedef PO yeni toplamı" : "New target PO total"}<strong>{totals.newTotal == null ? "—" : money(target.total_amount + totals.newTotal)}</strong></div>}</div>
-      <p>{targetId ? c.merge : c.replace}</p>
-      {supplierId && totals.newTotal == null && <p>{c.unavailable}</p>}
-      <div className="purchase-sourcing-footer"><button className="button button--secondary" disabled={busy} onClick={onClose}>{c.cancel}</button><button className="button button--primary" disabled={busy || (!attempted && !ready)} onClick={() => void submit()}>{busy ? c.saving : attempted ? c.retry : c.apply}</button></div>
+      <footer className="purchase-plan-footer">
+        <div><strong>{summary.changed} {tr?"satır değişecek":"lines change"} · {summary.groups.length} {tr?"tedarikçi":"suppliers"}</strong><small>{tr?`Bu ${order.lines.length} satırın toplamı`:`Total for these ${order.lines.length} lines`}: {money(summary.oldTotal)} → {money(summary.newTotal)} · {tr?"Fark":"Difference"}: {diff(summary.delta)}</small></div>
+        {summary.invalid>0 && <span role="alert" className="purchase-sourcing-error">{summary.stockIssues.length ? summary.stockIssues.map(g => `${g.supplier} · ${g.code}: ${g.qty} > ${g.stock}`).join("; ") : (tr?"Uygun fiyatı olmayan kararlar var.":"Some choices have no eligible offer.")}</span>}
+        {!review ? <button type="button" className="button button--primary" disabled={!ready} onClick={() => setReview(true)}>{tr?"Planı gözden geçir":"Review plan"}</button> : <>
+          <button type="button" className="button button--secondary" disabled={busy||attempted} onClick={() => setReview(false)}>{tr?"Kararlara dön":"Back to decisions"}</button>
+          <button type="button" className="button button--primary" disabled={busy||(!attempted&&(!ready||reason.trim().length<3))} onClick={() => void submit()}>{busy?(tr?"Kontrol ediliyor ve kaydediliyor…":"Checking and saving…"):attempted?(tr?"Sonucu kontrol et / yeniden dene":"Check outcome / retry"):(tr?"Planın tamamını kaydet":"Save entire plan")}</button>
+        </>}
+      </footer>
     </>}
   </dialog>;
 }

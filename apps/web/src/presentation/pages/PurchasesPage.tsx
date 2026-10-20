@@ -1613,8 +1613,8 @@ export function PurchasesPage({
               setPurchaseOrderDraft(result.target);
               setSelectedPurchaseOrderId(result.target.id);
               setPurchaseOrderSourceSnapshot(serializePurchaseOrderForDirtyCheck(result.target));
-              setPurchaseOrders(current => [result.target, ...(result.source.id !== result.target.id ? [result.source] : []), ...current.filter(o => o.id !== result.source.id && o.id !== result.target.id)]);
-              actionFeedback.succeed(locale === "tr" ? `Tedarikçi değişikliği kaydedildi: ${result.target.supplier_name} · ${result.target.id}${result.source.status === "closed" ? " · Boşalan kaynak PO kapatıldı." : ""}` : `Supplier change saved: ${result.target.supplier_name} · ${result.target.id}`);
+              setPurchaseOrders(current => [...result.targets, ...(result.targets.some(t => t.id === result.source.id) ? [] : [result.source]), ...current.filter(o => o.id !== result.source.id && !result.targets.some(t => t.id === o.id))]);
+              actionFeedback.succeed(locale === "tr" ? `Satın alma planı kaydedildi: ${result.targets.length} tedarikçi${result.source.status === "closed" ? " · Boşalan kaynak PO kapatıldı." : ""}` : `Sourcing plan saved: ${result.targets.length} suppliers`);
               void refreshAfterCommit(fetchPurchaseOrderSummaries).then(fresh => { if (fresh) setPurchaseOrders(fresh); });
               if (result.replayed) void refreshUnchangedPurchaseDetail(result.target.id, serializePurchaseOrderForDirtyCheck(result.target));
             }} />}
