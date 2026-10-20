@@ -1,6 +1,12 @@
 import {createHash} from 'node:crypto';
 export const codeKey=s=>String(s||'').replace(/[^a-z0-9]/gi,'').toUpperCase();
 export const sha=s=>createHash('sha256').update(s).digest('hex');
+export function sameProductRedirect(from,location){
+ const a=new URL(from),b=new URL(location,a),route=/^\/products\/elring-[a-z0-9-]+\/[a-z0-9-]+$/;
+ if(a.origin!=='https://spareto.com'||b.origin!==a.origin||b.search||b.hash||!route.test(a.pathname)||!route.test(b.pathname)
+  ||codeKey(a.pathname.split('/').at(-1))!==codeKey(b.pathname.split('/').at(-1)))throw Error('SPARETO_REDIRECT_SCOPE');
+ return b.toString();
+}
 export const decode=s=>String(s).replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#(\d+);/g,(_,n)=>String.fromCodePoint(+n));
 const clean=s=>decode(String(s).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim());
 const unique=a=>[...new Set(a.filter(Boolean))].sort();

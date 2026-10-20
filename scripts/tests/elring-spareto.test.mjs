@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
-import {PGlite} from '@electric-sql/pglite';import {parseElringSpareto,validGtin} from '../catalog/lib/elring-spareto.mjs';
+import {PGlite} from '@electric-sql/pglite';import {parseElringSpareto,validGtin,sameProductRedirect} from '../catalog/lib/elring-spareto.mjs';
 const url='https://spareto.com/products/elring-bolt-kit-cylinder-head/758-300';
 const item={item_id:'758.300',item_brand:'ELRING',item_list_id:'variant',item_category:'engine'};
 const html=`<div data-variant-card-gtm-item-value='${JSON.stringify(item)}'></div><table><tr><td>Weight</td><td>1.101 Kg</td></tr><tr><td>Customs Code</td><td>731815</td></tr><tr><td>Country of Origin</td><td>Argentina</td></tr></table><meta content='https://cdn.spareto.com/variants/images/a.jpg' property='og:image'><script type='application/ld+json'>{"@type":"Product","sku":"OTHER","gtin13":"4041248893999"}</script>`;
@@ -13,6 +13,11 @@ test('exact-detail identity, unit-aware mass and country are captured without in
  assert.deepEqual(parseElringSpareto(repeated,url,'758.300').raw_properties['for turbocharger with OE number'],['ONE','TWO']);
  assert.throws(()=>parseElringSpareto(html+'<tr><td>Weight</td><td>9 Kg</td></tr>',url,'758.300'),/AMBIGUOUS/);
 });
+test('canonical product redirects keep HTTPS, the same source brand and normalized article identity',()=>{
+ const from='https://spareto.com/products/elring-gasket-cylinder-head-cover/036-164';
+ assert.equal(sameProductRedirect(from,'https://spareto.com/products/elring-sealing-substance/036-164'),'https://spareto.com/products/elring-sealing-substance/036-164');
+ for(const target of ['https://other.com/products/elring-gasket/036-164','http://spareto.com/products/elring-gasket/036-164','https://spareto.com/products/other-gasket/036-164','https://spareto.com/products/elring-gasket/036-165'])assert.throws(()=>sameProductRedirect(from,target),/REDIRECT_SCOPE/);
+});
 test('secondary RPC enforces approval, row identity, empty-only updates, exact receipts and official-first vehicles',async()=>{
  const db=new PGlite();const run='11111111-1111-4111-8111-111111111111',org='22222222-2222-4222-8222-222222222222',brand='33333333-3333-4333-8333-333333333333',source='44444444-4444-4444-8444-444444444444',product='55555555-5555-4555-8555-555555555555';
  try{await db.exec(`create role anon;create role authenticated;create role service_role;create schema auth;create function auth.role() returns text language sql as $$select current_setting('test.role',true)$$;
@@ -25,7 +30,7 @@ test('secondary RPC enforces approval, row identity, empty-only updates, exact r
  create table catalog_product_source_records(id uuid primary key default gen_random_uuid(),organization_id uuid,catalog_product_id uuid,source_key text,source_url text,source_product_id text,source_version text,payload_fingerprint text,unique(organization_id,catalog_product_id,source_key,payload_fingerprint));
  create table catalog_elring_completion_events(run_id uuid,phase text,row_index integer);
  create table catalog_elring_completion_jobs(run_id uuid,phase text,status text);
- create table product_attribute_conflicts(organization_id uuid,product_id uuid,brand_id uuid,product_code text,field_name text,existing_value text,incoming_value text,normalized_incoming_value text,source_type text,source_reference text,status text default 'pending_review',last_detected_at timestamptz,detection_count integer default 1);
+ create table product_attribute_conflicts(organization_id uuid,product_id uuid,brand_id uuid,product_code text,field_name text,existing_value text,incoming_value text,normalized_incoming_value text,source_type text,source_reference text,status text default 'pending_review',last_detected_at timestamptz,detection_count integer default 1,resolved_at timestamptz,resolution_note text);
  create unique index conflict_key on product_attribute_conflicts(organization_id,product_id,field_name,normalized_incoming_value) where status='pending_review';
  create function normalize_product_conflict_value(text,text) returns text language sql as $$select lower($2)$$;
  create function normalize_part_code(text) returns text language sql as $$select upper(regexp_replace($1,'[^a-zA-Z0-9]','','g'))$$;
@@ -38,6 +43,7 @@ test('secondary RPC enforces approval, row identity, empty-only updates, exact r
  insert into catalog_products(id,organization_id,brand_id,normalized_code,product_code,hs_code,image_url) values('${product}','${org}','${brand}','758300','758.300','8484900000','https://official/image.jpg');`);
  await db.exec(readFileSync(new URL('../../supabase/migrations/20261020184008_elring_spareto_missing_only_completion.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../supabase/migrations/20261020184247_elring_spareto_source_code_identity.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../supabase/migrations/20261020190531_elring_spareto_customs_authority.sql',import.meta.url),'utf8'));
  await db.exec(`insert into catalog_elring_spareto_jobs(run_id,organization_id,brand_id,source_id,manifest_fingerprint,approval_reference,approved_until,expected_products) values('${run}','${org}','${brand}','${source}','proof','explicit user request',now()+interval '1 day',1)`);
  const e={...parseElringSpareto(html,url,'758.300'),stage_fingerprint:'stage-proof'};e.fields.vehicle='CITROËN';e.fields.vehicle_model='AX';
  e.raw_item.item_id='758300';e.source_product_code='758300';
@@ -53,6 +59,14 @@ test('secondary RPC enforces approval, row identity, empty-only updates, exact r
  assert.equal((await call('vehicle')).rows[0].result.status,'waiting_for_official_vehicle');
  await db.exec(`insert into catalog_elring_completion_events values('${run}','fitment',0)`);await call('vehicle');assert.equal((await db.query('select vehicle from catalog_products')).rows[0].vehicle,'CITROËN');
  assert.equal((await db.query('select count(*)::int n from catalog_product_source_records')).rows[0].n,1);assert.equal((await db.query('select scalar_processed,vehicle_processed from catalog_elring_spareto_jobs')).rows[0].scalar_processed,1);
+ await assert.rejects(call('tariff'),/Customs authority approval/);
+ await db.exec("update catalog_elring_spareto_jobs set tariff_approval_reference='user-elring-all-customs-code-authority-2026-10-20',tariff_approved_until=now()-interval '1 second'");await assert.rejects(call('tariff'),/Customs authority approval/);
+ await db.exec("update catalog_elring_spareto_jobs set tariff_approved_until=now()+interval '1 day'");
+ await assert.rejects(call('tariff',{...e,fields:{...e.fields,hs_code:'3926904510'}}),/Customs Code field evidence/);
+ const corrected=(await call('tariff')).rows[0].result;assert.deepEqual(corrected.applied_fields,['hs_code']);
+ const after=(await db.query('select * from catalog_products')).rows[0];assert.equal(after.hs_code,'731815');assert.equal(after.image_url,p.image_url);assert.equal(Number(after.weight_kg),1.101);
+ assert.equal((await db.query("select status from product_attribute_conflicts where field_name='hs_code'")).rows[0].status,'resolved');
+ assert.equal((await call('tariff')).rows[0].result.status,'already_applied');
  await assert.rejects(db.query('select finish_elring_spareto_completion($1)',[run]),/Official vehicles incomplete/);
  await db.exec(`insert into catalog_elring_completion_jobs values('${run}','fitment','completed')`);await db.query('select finish_elring_spareto_completion($1)',[run]);
  for(const role of ['anon','authenticated'])assert.equal((await db.query("select has_function_privilege($1,'apply_elring_spareto_completion(uuid,integer,text,jsonb)','execute') allowed",[role])).rows[0].allowed,false);

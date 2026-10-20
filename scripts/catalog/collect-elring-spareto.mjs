@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs/promises';import path from 'node:path';import {gunzipSync,gzipSync} from 'node:zlib';import {setTimeout as sleep} from 'node:timers/promises';
-import {codeKey,sha,decode,parseElringSpareto} from './lib/elring-spareto.mjs';
+import {codeKey,sha,decode,parseElringSpareto,sameProductRedirect} from './lib/elring-spareto.mjs';
 const root='/Users/ersen/Developer/next-master/artifacts/elring',dir=path.join(root,'spareto-completion-2026-10-20');
 await fs.mkdir(path.join(dir,'html'),{recursive:true});await fs.mkdir(path.join(dir,'evidence'),{recursive:true});await fs.mkdir(path.join(dir,'sitemaps'),{recursive:true});
 const lockFile=path.join(dir,'collector.lock');try{const p=JSON.parse(await fs.readFile(lockFile,'utf8'));try{process.kill(p.pid,0);throw Error('COLLECTOR_ALREADY_RUNNING');}catch(e){if(e.code!=='ESRCH')throw e;}await fs.unlink(lockFile);}catch(e){if(e.code!=='ENOENT')throw e;}
@@ -8,8 +8,14 @@ await fs.writeFile(lockFile,JSON.stringify({pid:process.pid}),{flag:'wx',mode:0o
 let status={status:'discovering',pid:process.pid,requests:0,processed:0,started_at:new Date().toISOString()};try{status={...JSON.parse(await fs.readFile(path.join(dir,'collection-status.json'),'utf8')),status:'discovering',pid:process.pid};}catch(e){if(e.code!=='ENOENT')throw e;}
 const save=async()=>{status.updated_at=new Date().toISOString();await fs.writeFile(path.join(dir,'collection-status.json.tmp'),JSON.stringify(status,null,2));await fs.rename(path.join(dir,'collection-status.json.tmp'),path.join(dir,'collection-status.json'));};
 let last=Date.now();async function get(url){const u=new URL(url);if(u.origin!=='https://spareto.com')throw Error('SOURCE_HOST');
- for(let attempt=0;attempt<3;attempt++){await sleep(Math.max(0,1000-(Date.now()-last)));last=Date.now();status.requests++;await save();
-  try{const r=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(30000),headers:{'user-agent':'NextMaster authorized Elring secondary completion/1.0'}});if(r.status===404)return null;if(!r.ok){const e=new Error('SOURCE_HTTP_'+r.status);e.retry=[429,500,502,503,504].includes(r.status);throw e;}const b=Buffer.from(await r.arrayBuffer());if(b.length>16*1024*1024)throw Error('SOURCE_SIZE');return b;}
+ for(let attempt=0;attempt<3;attempt++){
+  try{let current=url;const redirects=[];for(let hop=0;hop<4;hop++){
+   await sleep(Math.max(0,1000-(Date.now()-last)));last=Date.now();status.requests++;await save();
+   const r=await fetch(current,{redirect:'manual',signal:AbortSignal.timeout(30000),headers:{'user-agent':'NextMaster authorized Elring secondary completion/1.0'}});
+   if([301,302,303,307,308].includes(r.status)){const target=sameProductRedirect(current,r.headers.get('location')||'');if(target===current)throw Error('SOURCE_REDIRECT_LOOP');redirects.push({from:current,to:target,status:r.status});current=target;continue;}
+   if(r.status===404)return null;if(!r.ok){const e=new Error('SOURCE_HTTP_'+r.status);e.retry=[429,500,502,503,504].includes(r.status);throw e;}
+   const b=Buffer.from(await r.arrayBuffer());if(b.length>16*1024*1024)throw Error('SOURCE_SIZE');b.source_url=current;b.redirect_chain=redirects;return b;
+  }throw Error('SOURCE_REDIRECT_LIMIT');}
   catch(e){if(attempt===2||(!e.retry&&!['TypeError','TimeoutError'].includes(e.name)))throw e;await sleep((attempt+1)*3000);}
  }}
 try{
@@ -40,7 +46,7 @@ try{
  status.priority='official_image_missing_first';await save();
  for(const p of ordered){status.current_product=p.product_code;const file=path.join(dir,'evidence',p.row_index+'.json');let evidence;
   try{evidence=JSON.parse(await fs.readFile(file,'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;const b=await get(p.source_url);if(!b)evidence={product_code:p.product_code,source_url:p.source_url,status:'source_404'};
-   else{const html=b.toString();try{evidence=parseElringSpareto(html,p.source_url,p.product_code);}catch(e){
+   else{const html=b.toString();try{evidence=parseElringSpareto(html,b.source_url||p.source_url,p.product_code);if(b.redirect_chain?.length){evidence.sitemap_url=p.source_url;evidence.redirect_chain=b.redirect_chain;}}catch(e){
     if(!['SPARETO_EXACT_IDENTITY','SPARETO_AMBIGUOUS_PROPERTY'].includes(e.message))throw e;
     evidence={product_code:p.product_code,source_url:p.source_url,status:'source_rejected',reason:e.message,html_sha256:sha(html),fields:{}};
    }evidence.stage_fingerprint=p.source_fingerprint;await fs.writeFile(path.join(dir,'html',p.row_index+'.html.gz'),gzipSync(b));}

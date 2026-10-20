@@ -327,19 +327,42 @@ per-phase evidence and before/after fields in `catalog_elring_spareto_events`.
 Robots-advertised product sitemaps discovered 18,816 exact-code candidates
 within the 21,543-product official manifest. A sitemap URL is only a candidate:
 the detail page must independently identify ELRING and the exact article code.
+Up to three canonical product redirects may be followed only on HTTPS Spareto
+Elring paths with the same normalized article code. Each hop is rate-limited
+and retained with the original sitemap URL and final detail URL; cross-brand,
+cross-host and changed-code redirects fail closed.
 No new identities or prices are imported. Raw HTML is retained compressed with
 its SHA-256 alongside parsed identity, raw properties and source URL. Repeated
 technical criteria remain arrays. Contradictory target values or mismatched
 identities are quarantined without canonical writes; other products continue,
 but unresolved quarantine rows prevent an overall completed claim.
 
-Weight, origin, tariff, EAN, OEM, image, vehicle/model and explicit market segment
+Weight, origin, EAN, OEM, image, vehicle/model and explicit market segment
 may fill empty canonical fields. Existing values are preserved; differences
 are audited, with supported technical conflicts queued for review. Shipping
 weight requires an explicit unit; country names map to ISO alpha-2 only when
 recognized. Six-digit customs codes remain six digits. Product category
 `engine` must never become market segment `engines`. EAN requires an explicit
 table value or an exact-SKU Product JSON-LD record plus a valid GTIN checksum.
+
+**Explicit Customs Code authority revision (2026-10-20):** the user identified
+Elring 003.360, whose Spareto page displays both `Goods tariff number` 3926904510
+and Shipping Details / `Customs Code` 401693, then explicitly extended the
+correction to all Elring products. Canonical `hs_code` now takes each exact
+product's own Spareto **Customs Code**, including replacement of populated,
+different tariffs. Do not substitute one fixed code across the brand. The
+technical Goods tariff number remains unmodified raw source evidence.
+
+The separate `tariff` phase requires the expiring approval
+`user-elring-all-customs-code-authority-2026-10-20` on the scoped job. Its RPC
+compares the candidate directly to `raw_properties["Customs Code"]`, allows
+only the HS field to replace a populated value, records immutable before/after
+events and resolves the matching accepted conflict. Other fields keep the
+empty-only policy. Source-missing tariffs are recorded without invented values.
+Already processed products receive the same tariff pass as newly collected
+products. Completion requires all three secondary phases (scalars, tariff,
+vehicle) and the independent final reread. The verifier accepts a nonempty HS
+replacement only through that approved, exact-source tariff audit chain.
 
 Spareto vehicle/model fields are page-level make/model summaries, not normalized
 individual vehicle fitments. Their write phase waits for each product's

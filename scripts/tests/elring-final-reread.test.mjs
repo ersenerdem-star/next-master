@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';import os from 'node:os';import path from 'node:path';
-import {finalizeElringCompletion,acceptedSecondaryFill} from '../catalog/lib/elring-final-reread.mjs';
+import {finalizeElringCompletion,acceptedSecondaryFill,acceptedCustomsCorrection} from '../catalog/lib/elring-final-reread.mjs';
 async function fixture(drift){
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'elring-final-'));await fs.mkdir(path.join(root,'full-catalog-2026-10-19'));
  const source=[{product_code:'001',image_url:'https://official/image.jpg',replacements:[{source_relation:'replaces',old_code:'002',new_code:'001'}]},
@@ -35,6 +35,15 @@ test('only an audited prior-empty secondary fill with exact provenance can expla
  assert.equal(acceptedSecondaryFill(e,{...r,payload_fingerprint:'tampered'},p,'origin',null),false);
  assert.equal(acceptedSecondaryFill({...e,before_fields:{origin:'FR'}},r,p,'origin',null),false);
  assert.equal(acceptedSecondaryFill(e,r,{...p,origin:'GB'},'origin',null),false);
+});
+test('explicit Customs Code authority permits an audited HS replacement only, with original value and source field intact',()=>{
+ const p={id:'p',product_code:'003.360',hs_code:'401693'},r={id:'r',catalog_product_id:'p',source_key:'spareto_elring_product_catalog',source_version:'elring-spareto.v1',payload_fingerprint:'fp',source_url:'https://spareto.com/products/elring-seal-ring/003360'},job={tariff_approval_reference:'user-elring-all-customs-code-authority-2026-10-20'};
+ const e={phase:'tariff',product_id:'p',product_code:'003.360',source_record_id:'r',evidence_fingerprint:'fp',applied_fields:['hs_code'],before_fields:{hs_code:'3926904510'},after_fields:{hs_code:'401693'},evidence:{brand:'ELRING',raw_item:{item_id:'003360',item_brand:'ELRING'},source_url:r.source_url,fields:{hs_code:'401693'},raw_properties:{'Goods tariff number':'3926904510','Customs Code':'401693'}}};
+ assert.equal(acceptedCustomsCorrection(e,r,p,'hs_code','3926904510',job),true);
+ assert.equal(acceptedCustomsCorrection(e,r,p,'hs_code','3926904510',{}),false);
+ assert.equal(acceptedCustomsCorrection(e,r,p,'hs_code','unknown',job),false);
+ assert.equal(acceptedCustomsCorrection(e,r,p,'origin','3926904510',job),false);
+ assert.equal(acceptedCustomsCorrection({...e,evidence:{...e.evidence,raw_properties:{'Customs Code':'392690'}}},r,p,'hs_code','3926904510',job),false);
 });
 test('metadata drift prevents a completed claim even when all worker cursors are complete',async()=>{
  const f=await fixture(true);try{
