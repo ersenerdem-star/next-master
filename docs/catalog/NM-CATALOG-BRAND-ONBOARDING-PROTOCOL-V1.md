@@ -169,6 +169,69 @@ means accepted identities were reread and each source/canonical field outcome
 was recorded; individual missing/conflicting fields and pending images remain
 explicit and do not imply complete brand coverage.
 
+### Approved Elring completion after base publication
+
+The Product Decision Owner's 2026-10-20 instruction additionally authorizes the
+3,310 deferred images, source-backed scalar enrichment, directional replacement
+and lifecycle processing, and full official vehicle make/model collection for
+the sealed 21,543-product run. `catalog_elring_completion_jobs` records the
+time-limited approval, exact manifest, phase cursor and counts. Separate
+`catalog_elring_completion_events` preserve before/after fields and evidence;
+the original image job and its `product_missing` history remain immutable.
+The service-only tables deny frontend roles; both completion RPCs verify the
+sealed run, completed base publication, tenant/brand and paused allowed source.
+`run_elring_completion_batch` admits 1–25 rows, uses the existing guarded
+enrichment/lifecycle functions, and retains a three-second statement budget
+and 250ms lock budget. Source activation for those existing functions is
+contained within the transaction. Run the write phases serially: their shared
+source/summary locks must not compete. Source reads can proceed independently.
+
+The old conflict field constraint admitted only five scalar fields even though
+guarded OEM, vehicle/model, dimensions and lifecycle writers also record
+conflicts. The explicit field allowlist now includes those existing writer
+fields; the replacement constraint is validated. Existing canonical values
+remain protected, and unknown conflict fields remain rejected.
+
+`complete-elring-catalog.mjs` checks Auth/REST health at least every five batches
+and stops after failed/slow writes. Every 500 rows at batch 25 it separately
+maintains the six fixed Catalog GIN indexes, outside Product transactions.
+Maintenance is service-only, approval-scoped, capped at 45 seconds per index
+and watched through independent health requests. A failed health check cancels
+only the backend tagged for that run. No arbitrary index or backend identifier
+is accepted. A dropped read socket may retry once; batch-advance writes never
+automatically replay after an ambiguous response.
+
+`collect-complete-elring-fitment.mjs` keeps immutable official request/response
+files and a vehicle descriptor cache under the run's artifact folder. The
+official client defines `PO` as passenger plus commercial vehicles. The linked
+target service accepts an unfiltered manufacturer list, avoiding a separate
+request for every brand; detail requests remain bounded to 25 pairs. Cached
+intrinsic vehicle descriptors may be reused only after each product's own
+official target list proves the exact target identity. All declared vehicle
+generic articles must be covered, every target resolved and every response
+validated before publishing a make/model list. Country GB and language en match
+the sealed source manifest. Engine (`M`) and axle (`A`) compatibility are
+separate target classes and are not claimed as vehicle-model coverage.
+
+Source reads are serial, at least 1,100ms apart, capped at 500,000 requests,
+15 seconds and 8 MiB per response. Transient read failures permit at most three
+attempts with backoff; malformed identities or incomplete evidence stop.
+Vehicle publication waits for the other completion write phases. Its exact
+row/evidence replay key differs from a batch-advance RPC: after an ambiguous
+response, the operator runner verifies the durable cursor and audit receipt.
+It acknowledges a matching committed receipt, or permits one exact replay
+after an unchanged checkpoint, fresh health checks and isolated maintenance.
+Conflicting receipts stop. A process lock prevents duplicate collectors.
+
+The deferred-image phase applied all 3,310 candidates, bringing official image
+coverage to 20,616; 927 source products have no image. Lifecycle processed all
+21,543 products and inserted 546 directed replacement relations, with no
+rejected relations or explicit production-discontinued signals. Future phaseout
+and nondelivery statements do not change lifecycle status. Scalar and vehicle
+completion must be established through their own live cursors and rereads;
+neither these source totals nor a single completed vehicle sample proves the
+whole brand complete.
+
 ### Elring lifecycle and directional replacement
 
 The `elring-official.v2` manifest explicitly requests `includeReplacesArticles`
