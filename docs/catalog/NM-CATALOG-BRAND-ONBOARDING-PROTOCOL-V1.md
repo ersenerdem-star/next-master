@@ -185,6 +185,10 @@ enrichment/lifecycle functions, and retains a three-second statement budget
 and 250ms lock budget. Source activation for those existing functions is
 contained within the transaction. Run the write phases serially: their shared
 source/summary locks must not compete. Source reads can proceed independently.
+Guarded enrichment seeks directly to the immutable stage row index when
+resuming. Strict stage rows are densely numbered from zero; this preserves
+the existing offset contract while avoiding repeated scans of all preceding
+rows. Admission rules, field guards, timeout and execute grants are unchanged.
 
 The old conflict field constraint admitted only five scalar fields even though
 guarded OEM, vehicle/model, dimensions and lifecycle writers also record

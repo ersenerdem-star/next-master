@@ -95,5 +95,16 @@ test('completion preserves image history, source pause, populated fields and ato
  await db.exec("create index idx_catalog_products_search_text_trgm on catalog_products using gin(to_tsvector('english',description))");
  assert.equal((await db.query('select maintain_elring_completion_index($1,$2) result',[run,'idx_catalog_products_search_text_trgm'])).rows[0].result.pages,0);
  for(const fn of ['maintain_elring_completion_index(uuid,text)','cancel_elring_completion_maintenance(uuid)'])for(const role of ['anon','authenticated'])assert.equal((await db.query('select has_function_privilege($1,$2,$3) allowed',[role,fn,'execute'])).rows[0].allowed,false);
+ await db.exec(`alter table catalog_external_sources add column credential_boundary text default 'none',add column rate_limit_posture text default 'bounded';
+ alter table catalog_provider_stage_publications add column approval_actor text default 'owner',add column approval_reference text default 'approved';
+ update catalog_external_sources set is_active=true,metadata=metadata||'{"approval_actor":"owner","publication_approval_reference":"approved"}';
+ update catalog_import_runs set input_scope=input_scope||'{"brand_name":"Elring"}';
+ create or replace function apply_catalog_provider_enrichment_protocol(jsonb,text,text) returns jsonb language sql as $$select jsonb_build_object('product_code',$1->0->>'product_code')$$;`);
+ await db.exec(readFileSync(new URL('../../supabase/migrations/20261019184009_catalog_elring_guarded_enrichment.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../supabase/migrations/20261020181048_elring_enrichment_keyset.sql',import.meta.url),'utf8'));
+ const keyed=(await db.query('select enrich_elring_provider_stage_batch($1,$2,1,1) result',[run,brand])).rows[0].result;
+ assert.equal(keyed.processed,1);assert.equal(keyed.next_offset,2);assert.equal(keyed.results[0].product_code,'001');
+ assert.match((await db.query("select pg_get_functiondef('enrich_elring_provider_stage_batch(uuid,uuid,integer,integer)'::regprocedure) def")).rows[0].def,/and row_index >= input_offset/);
+ await db.exec('update catalog_external_sources set is_active=false');
  }finally{await db.close();}
 });
