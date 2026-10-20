@@ -1,6 +1,6 @@
 import {InterfaceText} from "../../../i18n/InterfaceText";
 import { useMemo, useState } from "react";
-import { resolveNamedLogo } from "./logoAssets";
+import { resolveVehicleLogo } from "./logoAssets";
 
 type VehicleBadgeMeta = {
   label: string;
@@ -102,7 +102,7 @@ export function VehicleBadges({
   return (
     <div className={`vehicle-badge-list${compact ? " vehicle-badge-list--compact" : ""}${logoOnly ? " vehicle-badge-list--logo-only" : ""}${className ? ` ${className}` : ""}`}>
       {visibleItems.map((item) => {
-        const logoAsset = resolveNamedLogo(item.label);
+        const logoAsset = resolveVehicleLogo(item.label);
         return (
           <span
             key={item.label}
