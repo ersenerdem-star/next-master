@@ -14,6 +14,14 @@ test('index maintenance is separate, bounded and health checked',async()=>{
  assert.deepEqual(calls.map(c=>c.body.input_index),indexes);assert.ok(calls.every(c=>c.timeout===50000));assert.equal(checks,12);
  assert.ok(calls.every(c=>c.path.endsWith('/maintain_elring_completion_index')));
 });
+test('contended maintenance retries its fixed index once without replaying Product writes',async()=>{
+ const calls=[],waits=[];let first=true;
+ await maintainIndexes({run:'run',health:async()=>{},wait:async ms=>{waits.push(ms);},request:async(path,body)=>{
+  calls.push({path,body});if(first){first=false;throw Error('HTTP_500 {"code":"55P03"}');}return{data:{pages:0}};
+ }});
+ assert.equal(calls.length,7);assert.equal(calls[0].body.input_index,calls[1].body.input_index);assert.ok(waits.includes(1000));
+ assert.ok(calls.every(c=>c.path.endsWith('/maintain_elring_completion_index')));
+});
 test('unhealthy portal cancels only the tagged run maintenance and stops',async()=>{
  let checks=0,finish;const calls=[];
  await assert.rejects(maintainIndexes({run:'approved-run',health:async()=>{if(++checks===2)throw Error('PORTAL_LATENCY_GUARD');},

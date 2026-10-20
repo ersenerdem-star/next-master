@@ -226,6 +226,13 @@ response, the operator runner verifies the durable cursor and audit receipt.
 It acknowledges a matching committed receipt, or permits one exact replay
 after an unchanged checkpoint, fresh health checks and isolated maintenance.
 Conflicting receipts stop. A process lock prevents duplicate collectors.
+Vehicle target membership is compared as sets, avoiding a quadratic JSON scan
+on products with thousands of linked vehicles. A slow acknowledged vehicle
+write holds further writes for a five-second cooldown, verifies the exact audit
+receipt and fresh portal health, and completes isolated maintenance before
+continuing. It never replays that acknowledged write. A contended maintenance
+lock permits one fixed-index cleanup retry after fresh health; another failure
+stops the runner. Product write timeouts and admission rules are unchanged.
 
 The deferred-image phase applied all 3,310 candidates, bringing official image
 coverage to 20,616; 927 source products have no image. Lifecycle processed all

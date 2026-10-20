@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readOfficialRequest} from '../catalog/lib/elring-source-request.mjs';
-import {applyConfirmedFitment} from '../catalog/lib/elring-fitment-apply.mjs';
+import {applyConfirmedFitment,verifySlowFitmentAcknowledgement} from '../catalog/lib/elring-fitment-apply.mjs';
 test('official source retries only transient reads and counts each bounded attempt',async()=>{
  const attempts=[],waits=[];let calls=0;
  const response=await readOfficialRequest({read:'only'},{beforeAttempt:async a=>attempts.push(a),wait:async ms=>waits.push(ms),
@@ -11,6 +11,13 @@ test('official source retries only transient reads and counts each bounded attem
  calls=0;await assert.rejects(readOfficialRequest({}, {fetchImpl:async()=>{calls++;throw new TypeError('fetch failed');},wait:async()=>{}}),/fetch failed/);assert.equal(calls,3);
 });
 const evidence={evidence_manifest_sha256:'proof',stage_fingerprint:'stage'};
+test('slow acknowledged vehicle write holds further writes until health, receipt and separate maintenance pass',async()=>{
+ let waited=0,checks=0,maintained=0;const calls=[];
+ const result=await verifySlowFitmentAcknowledgement({run:'run',row:0,evidence,wait:async ms=>{waited=ms;},health:async()=>{checks++;},maintenance:async()=>{maintained++;},
+  request:async(path,body)=>{assert.equal(body,undefined);calls.push(path);return{data:path.includes('completion_jobs')?[{cursor:0}]:[{after_fields:{evidence_manifest_sha256:'proof'},evidence_fingerprint:'stage'}]};}});
+ assert.equal(waited,5000);assert.equal(checks,2);assert.equal(maintained,1);assert.equal(calls.length,2);assert.equal(result.cursor,0);
+ await assert.rejects(verifySlowFitmentAcknowledgement({run:'run',row:0,evidence,wait:async()=>{},health:async()=>{},maintenance:async()=>{throw Error('Must not maintain after invalid receipt');},request:async()=>({data:[]})}),/SLOW_FITMENT_RECEIPT_MISMATCH/);
+});
 test('ambiguous fitment response is acknowledged through exact committed receipt without replay',async()=>{
  let posts=0,maintenance=0;const recovery=[];
  const result=await applyConfirmedFitment({run:'run',row:0,evidence,health:async()=>{},maintenance:async()=>{maintenance++;},onRecovery:async r=>recovery.push(r),

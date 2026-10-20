@@ -73,6 +73,7 @@ test('completion preserves image history, source pause, populated fields and ato
  await db.exec(readFileSync(new URL('../../supabase/migrations/20261020180048_catalog_provider_conflict_fields_validate.sql',import.meta.url),'utf8'));
  await assert.rejects(db.exec("insert into product_attribute_conflicts(field_name) values('arbitrary_field')"),/check constraint/);
  await db.exec(readFileSync(new URL('../../supabase/migrations/20261020175001_elring_complete_fitment_apply.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../supabase/migrations/20261020182818_elring_fitment_set_coverage.sql',import.meta.url),'utf8'));
  await db.query(`insert into catalog_elring_completion_jobs(run_id,phase,organization_id,source_id,brand_id,manifest_fingerprint,approval_reference,approved_until) values($1,'fitment',$2,$3,$4,'proof','explicit instruction',now()+interval '1 day')`,[run,org,source,brand]);
  const fitment={product_code:'000',stage_fingerprint:'fp0',complete:true,evidence_manifest_sha256:'a'.repeat(64),coverage:[{article_id:42,target_type:'PO',pairs_count:1,resolved_count:1,target_keys:['P:123'],pairs_fingerprint:'b'.repeat(64),complete:true}],vehicles:[{target_type:'P',target_id:123,manuDesc:'AUDI',modelDesc:'A4'}]};
  const fit=(index,evidence)=>db.query('select apply_elring_complete_vehicle_fitment($1,$2,$3) as result',[run,index,evidence]);
@@ -80,6 +81,9 @@ test('completion preserves image history, source pause, populated fields and ato
  await assert.rejects(fit(0,{...fitment,coverage:[]}),/Incomplete vehicle linkage coverage/);
  await assert.rejects(fit(0,{...fitment,vehicles:[]}),/Vehicle target coverage mismatch|Vehicle details missing/);
  await assert.rejects(fit(0,{...fitment,vehicles:[{target_type:'P',target_id:999,manuDesc:'AUDI',modelDesc:'A4'}]}),/Vehicle target coverage mismatch/);
+ const many=Array.from({length:2500},(_,i)=>({target_type:'P',target_id:i+1,manuDesc:'AUDI',modelDesc:'A4'}));
+ const large={...fitment,vehicles:many,coverage:[{...fitment.coverage[0],pairs_count:many.length,resolved_count:many.length,target_keys:many.map(v=>'P:'+v.target_id)}]};
+ await db.exec('begin');assert.equal((await fit(0,large)).rows[0].result.processed,1);await db.exec('rollback');
  assert.equal((await fit(0,fitment)).rows[0].result.processed,1);
  assert.equal((await fit(0,fitment)).rows[0].result.processed,1);
  await assert.rejects(fit(0,{...fitment,evidence_manifest_sha256:'c'.repeat(64)}),/Fitment replay evidence mismatch/);

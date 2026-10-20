@@ -6,7 +6,7 @@ import {hash,collectCompleteVehicles} from './lib/elring-fitment-completion.mjs'
 import {maintainIndexes} from './lib/elring-completion-maintenance.mjs';
 import {readSafeFetch} from './lib/elring-read-fetch.mjs';
 import {readOfficialRequest} from './lib/elring-source-request.mjs';
-import {applyConfirmedFitment} from './lib/elring-fitment-apply.mjs';
+import {applyConfirmedFitment,verifySlowFitmentAcknowledgement} from './lib/elring-fitment-apply.mjs';
 import {finalizeElringCompletion} from './lib/elring-final-reread.mjs';
 const args=Object.fromEntries(process.argv.slice(2).map(a=>{const [k,...v]=a.replace(/^--/,'').split('=');return[k,v.join('=')||true];}));
 if(!args['confirm-production'])throw Error('Explicit production confirmation required');
@@ -59,7 +59,11 @@ try{
   await health();const applied=await applyConfirmedFitment({request:api,health,run,row:i,evidence,
    onRecovery:async recovery=>{report.last_verified_recovery=recovery;await save();}});
   report.status='running';report.processed=applied.data.processed;report.changed=applied.data.changed;report.totals=applied.data.totals;report.cached_vehicle_targets=vehiclesCache.size;report.last_apply_ms=applied.ms;await save();
-  if(applied.ms>2000)throw Error(`FITMENT_WRITE_LATENCY_GUARD ${applied.ms}ms`);
+  if(applied.ms>2000){
+   report.status='holding_writes_after_slow_acknowledgement';await save();
+   report.last_verified_recovery=await verifySlowFitmentAcknowledgement({request:api,health,run,row:i,evidence});
+   report.status='running';await save();
+  }
   if(i%25===0||applied.data.status==='completed')console.log(JSON.stringify({row:i,product_code:row.product_code,processed:report.processed,requests:report.source_requests,cached_vehicles:vehiclesCache.size,vehicle_count:evidence.vehicles.length}));
  }
  report.status='verifying_all_fields';await save();report.final_reread=await finalizeElringCompletion({api,health,root,run,stage});
