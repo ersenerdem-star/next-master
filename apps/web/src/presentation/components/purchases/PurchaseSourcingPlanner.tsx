@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { multiplyMoney } from "../../../../../../shared/order-money.mjs";
+import { multiplyMoney, sumMoney } from "../../../../../../shared/order-money.mjs";
 import type { LocalPurchaseOrder } from "../../../types/orders";
 import type { LocalVendor } from "../../../types/vendors";
 import {
@@ -83,7 +83,7 @@ export function PurchaseSourcingPlanner({ order, rows, assignments, vendors, loc
         const line = order.lines[d.index];
         const comparison = focusSupplier ? d.offers.find(o => o.supplier_id === focusSupplier) : d.best;
         const comparisonIssue = comparison ? offerBlockReason(comparison,line.qty) : null;
-        const selectedDelta = d.assigned ? multiplyMoney(d.assigned.buy_price,line.qty)-multiplyMoney(line.buy_price,line.qty) : 0;
+        const selectedDelta = d.assigned ? sumMoney([multiplyMoney(d.assigned.buy_price,line.qty),-multiplyMoney(line.buy_price,line.qty)]) : 0;
         return <PurchaseDecisionRow key={d.index} expanded={detail === d.index} columns={7}
           row={<>
             <td><input type="checkbox" aria-label={`${line.product_code} ${d.index+1}`} checked={picked.includes(d.index)} onChange={e => setPicked(current => e.target.checked ? [...current,d.index] : current.filter(i => i !== d.index))} /></td>

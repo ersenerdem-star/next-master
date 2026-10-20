@@ -80,7 +80,7 @@ export function purchaseDecisionRows(order: LocalPurchaseOrder, rows: PurchaseSu
     const eligible = offers.filter(o => !offerBlockReason(o, line.qty));
     const best = eligible[0] || null;
     return { index, offers, eligible, best, assigned: eligible.find(o => o.supplier_id === assignments[index]) || null,
-      savings: best ? multiplyMoney(line.buy_price,line.qty)-multiplyMoney(best.buy_price,line.qty) : 0 };
+      savings: best ? sumMoney([multiplyMoney(line.buy_price,line.qty),-multiplyMoney(best.buy_price,line.qty)]) : 0 };
   });
 }
 export function assignPurchaseDecisions(decisions: PurchaseSourcingDecision[], assignments: PurchaseAssignments, indices: number[], supplier: string) {
@@ -118,7 +118,7 @@ export function purchasePlanSummary(order: LocalPurchaseOrder, decisions: Purcha
   const stockIssues=[...stockGroups.values()].filter(g => g.qty>g.stock);
   invalid+=stockIssues.reduce((n,g) => n+g.indices.length,0);
   const oldTotal = sumMoney(order.lines.map(l => multiplyMoney(l.buy_price,l.qty)));
-  const delta = sumMoney(result.map(g => g.newTotal-g.oldTotal));
+  const delta = sumMoney(result.flatMap(g => [g.newTotal,-g.oldTotal]));
   return {groups:result, invalid, stockIssues, changed:result.reduce((n,g) => n+g.indices.length,0), oldTotal, delta, newTotal:sumMoney([oldTotal,delta])};
 }
 
@@ -128,7 +128,7 @@ export function filterPurchaseDecisions(order: LocalPurchaseOrder, decisions: Pu
   const compared = focusSupplier ? decisions.map(d => {
     const best = d.eligible.find(o => o.supplier_id === focusSupplier) || null;
     const line = order.lines[d.index];
-    return {...d,best,savings:best ? multiplyMoney(line.buy_price,line.qty)-multiplyMoney(best.buy_price,line.qty) : 0};
+    return {...d,best,savings:best ? sumMoney([multiplyMoney(line.buy_price,line.qty),-multiplyMoney(best.buy_price,line.qty)]) : 0};
   }) : decisions;
   const filtered = compared.filter(d => {
     const l = order.lines[d.index];

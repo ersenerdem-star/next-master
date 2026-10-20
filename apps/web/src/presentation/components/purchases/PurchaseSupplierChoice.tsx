@@ -1,3 +1,4 @@
+import { sumMoney } from "../../../../../../shared/order-money.mjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LocalVendor } from "../../../types/vendors";
 import type { LocalPurchaseOrder } from "../../../types/orders";
@@ -108,11 +109,11 @@ export function PurchaseSupplierChoice({ order, orders, vendors, onClose, onComm
             const target=targetFor(g.supplierId,g.supplierName);
             return <article key={g.supplierId}><h4>{g.supplierName} · {g.indices.length} {tr?"satır":"lines"}</h4>
               <small>{tr?"Kayıtlı ödeme şartı":"Vendor payment terms"}: {purchaseVendorPaymentTerms(g.supplierName,vendors) || (tr?"Belirtilmemiş":"Not specified")}</small>
-              <p>{money(g.oldTotal)} → <strong>{money(g.newTotal)}</strong> · {diff(g.newTotal-g.oldTotal)}</p>
+              <p>{money(g.oldTotal)} → <strong>{money(g.newTotal)}</strong> · {diff(sumMoney([g.newTotal,-g.oldTotal]))}</p>
               <label className="field"><span className="field__label">{tr?"Hedef PO":"Target PO"}</span><select className="field__input" value={target?.id||""} onChange={e => setTargetIds(current => ({...current,[g.supplierId]:e.target.value}))}>
                 <option value="">{tr?"Ayrı taslak / mevcut PO’yu değiştir":"Separate draft / retarget source PO"}</option>{candidates.map(t => <option key={t.id} value={t.id}>{t.id} · {money(t.total_amount)}</option>)}
               </select></label>
-              {target && <small>{tr?"Birleşmiş hedef PO toplamı":"Combined target PO total"}: <strong>{money(target.total_amount+g.newTotal)}</strong></small>}
+              {target && <small>{tr?"Birleşmiş hedef PO toplamı":"Combined target PO total"}: <strong>{money(sumMoney([target.total_amount,g.newTotal]))}</strong></small>}
             </article>;
           })}</div>
           <p>{tr?"Bu işlem taslak PO’ları düzenler; tedarikçilere sipariş göndermez. Bir fiyat veya koşul değişirse planın tamamı durdurulur.":"This updates draft POs; no orders are sent. If a price or condition changes, the entire plan is stopped."}</p>

@@ -8,6 +8,32 @@ const order:any={supplier_name:'Romany',currency:'EUR',lines:Array.from({length:
 const offer=(i:number,id:string,price:number,stock=1000)=>({supplier_id:id,supplier_name:id,product_code:order.lines[i].product_code,brand:'SACHS',buy_price:price,price_date:'2026-10-20',moq:1,order_multiple:1,stock_qty:stock,valid_to:null});
 const rows=order.lines.map((_:any,i:number)=>[offer(i,'TPM',90),offer(i,'GroupAuto',i%2?95:85)]);
 
+test('successive real decimal price choices keep rendering and sum exact cents across supplier groups',()=>{
+ const small:any={...order,lines:[{...order.lines[0],buy_price:7.60,qty:1},{...order.lines[1],buy_price:25.83,qty:1}]};
+ const prices=[[offer(0,'TPM',8.56),offer(0,'GroupAuto',7.60)],[offer(1,'TPM',28.18),offer(1,'GroupAuto',34.40)]];
+ for(const suppliers of [['TPM','TPM'],['TPM','GroupAuto']]) {
+  let assignments={};
+  for(let index=0;index<2;index++) {
+   const before=purchaseDecisionRows(small,prices,assignments);
+   assignments=assignPurchaseDecisions(before,assignments,[index],suppliers[index]).assignments;
+   const decisions=purchaseDecisionRows(small,prices,assignments);
+   const summary=purchasePlanSummary(small,decisions,assignments);
+   assert.equal(summary.changed,index+1);
+   assert.equal(summary.delta,index===0?0.96:suppliers[1]==='TPM'?3.31:9.53);
+   assert.equal(summary.newTotal,index===0?34.39:suppliers[1]==='TPM'?36.74:42.96);
+   assert.equal(decisions[0].savings,0);
+   assert.equal(decisions[1].savings,-2.35);
+   assert.equal(filterPurchaseDecisions(small,decisions,assignments,'','all','original','TPM')[0].savings,-0.96);
+   const html=renderToStaticMarkup(createElement(PurchaseSourcingPlanner,{order:small,rows:prices,assignments,vendors:[],locale:'tr',onChange:()=>{}}));
+   assert.ok(html.includes(`${index+1}</strong> değişiklik`));
+  }
+ }
+ const cheaper=[[offer(0,'TPM',6.64)],[offer(1,'TPM',23.48)]];
+ const assignments={0:'TPM',1:'TPM'};
+ const summary=purchasePlanSummary(small,purchaseDecisionRows(small,cheaper,assignments),assignments);
+ assert.equal(summary.delta,-3.31);assert.equal(summary.newTotal,30.12);
+});
+
 test('200 lines stay unchanged until explicit decisions and render only 40 compact rows',()=>{
  const decisions=purchaseDecisionRows(order,rows,{});
  assert.equal(purchasePlanSummary(order,decisions,{}).changed,0);
