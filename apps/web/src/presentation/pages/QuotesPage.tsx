@@ -39,6 +39,8 @@ import { salesOrderTotals, multiplyMoney } from "../../../../../shared/order-mon
 import { resyncSalesOrderLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
 import { buildXlsxBlobAsync, downloadBlob } from "../../shared/xlsx";
 import { buildDocumentWorksheet } from "../../shared/documentExport";
+import { buildSalesPurchaseAnalysis, loadSalesPurchaseAnalysisOffers } from "../../shared/salesOrderPurchaseAnalysis";
+import { isSuperadminRole } from "../../shared/roles";
 import { buildBusinessDocumentHtml, openBusinessDocumentPreview } from "../../shared/documentPrint";
 import { buildEntityAlias } from "../../shared/entityAlias";
 import { Select } from "../components/common/Select";
@@ -60,6 +62,7 @@ import { CompactFilterBar, PageHeader, PageShell } from "../components/common/Vi
 type TranslateFn = (path: string, params?: Record<string, string | number>) => string;
 
 type QuotesPageProps = {
+  appRole?: string;
   selectedSalesOrderId?: string;
   onSelectedSalesOrderChange?: (salesOrderId: string) => void;
   selectedQuoteId?: string;
@@ -810,6 +813,7 @@ function buildDraftQuoteHtml(input: {
 }
 
 export function QuotesPage({
+  appRole = "",
   selectedSalesOrderId: externalSelectedSalesOrderId = "",
   onSelectedSalesOrderChange,
   selectedQuoteId: externalSelectedQuoteId = "",
@@ -817,7 +821,7 @@ export function QuotesPage({
   salesOrdersNavTick = 0,
 }: QuotesPageProps) {
   const actionFeedback = useActionFeedback();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const initialWorkspaceCache = typeof window === "undefined" ? null : readSalesOrderWorkspaceCache();
   const initialCachedQuoteId =
     initialWorkspaceCache?.workbenchMode === "new" && !initialWorkspaceCache?.selectedLocalSalesOrderId
@@ -867,6 +871,7 @@ export function QuotesPage({
   const [resolvingLine, setResolvingLine] = useState(false);
   const [importingLines, setImportingLines] = useState(false);
   const [exportingXlsx, setExportingXlsx] = useState(false);
+  const [exportingPurchaseAnalysis, setExportingPurchaseAnalysis] = useState(false);
   const [printingDraft, setPrintingDraft] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [confirmingOrder, setConfirmingOrder] = useState(false);
@@ -2591,6 +2596,25 @@ export function QuotesPage({
     } finally { setExportingXlsx(false); }
   }
 
+  async function handleExportPurchaseAnalysis() {
+    if (!isSuperadminRole(appRole) || exportingPurchaseAnalysis) return;
+    setExportingPurchaseAnalysis(true);
+    const tr = locale === "tr";
+    try {
+      const lines = quoteBuilderLines.map(l => ({code:l.resolvedCode || l.requestedCode,brand:l.brand,description:l.description,
+        qty:l.qty,supplier:l.supplier_name,buyPrice:l.buy_price,sellPrice:l.sell_price}));
+      actionFeedback.begin(tr ? "Güncel tedarikçi alış fiyatları yükleniyor…" : "Loading current supplier buy prices…");
+      const offers = await loadSalesPurchaseAnalysisOffers(lines,args => callAppRpc("sales_order_purchase_analysis_options",args),
+        count => actionFeedback.begin(tr ? `Alış fiyatları: ${count}/${lines.length} satır` : `Buy prices: ${count}/${lines.length} lines`));
+      const model = buildSalesPurchaseAnalysis({number:quoteNo || "sales-order-draft",currency,lines,offers,generatedAt:new Date().toISOString()});
+      const blob = await buildXlsxBlobAsync("Purchase analysis",model.rows,model.numericColumns,model.options);
+      downloadBlob(`${(quoteNo || "sales-order-draft").replace(/[^a-z0-9_-]+/gi,"-")}-purchase-analysis.xlsx`,blob);
+      actionFeedback.succeed(tr ? "Alış alternatifleri Excel dosyası hazır." : "Purchase alternatives Excel is ready.");
+    } catch(caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : (tr ? "Alış analizi hazırlanamadı." : "Purchase analysis export failed."));
+    } finally {setExportingPurchaseAnalysis(false);}
+  }
+
   function handlePrintDraftPdf() {
     if (!quoteBuilderLines.length) {
       actionFeedback.fail("Add quote lines first.");
@@ -3322,6 +3346,11 @@ export function QuotesPage({
               <InterfaceText text={"Sample Template"}/></Button>
             <Button variant="secondary" onClick={handleExportQuoteXlsx} busy={exportingXlsx} busyLabel="Preparing Excel...">
               <InterfaceText text={"Internal Excel"}/></Button>
+            {isSuperadminRole(appRole) && <Button variant="secondary" onClick={() => void handleExportPurchaseAnalysis()} busy={exportingPurchaseAnalysis}
+              busyLabel={locale === "tr" ? "Alış analizi hazırlanıyor…" : "Preparing purchase analysis…"} disabled={!quoteBuilderLines.length}
+              title={locale === "tr" ? "Yalnızca süper yönetici · güncel EUR alış fiyatları; sipariş değişmez" : "Superadmin only · current EUR buy prices; order remains unchanged"}>
+              {locale === "tr" ? "Alış alternatifleri Excel" : "Purchase alternatives Excel"}
+            </Button>}
             <Button variant="secondary" onClick={handlePrintDraftPdf} busy={printingDraft} busyLabel="Opening PDF...">
               <InterfaceText text={"PDF / Print"}/></Button>
             {quoteBuilderLines.length ? (

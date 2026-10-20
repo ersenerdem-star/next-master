@@ -9,6 +9,7 @@ import { cleanupCatalogStorageSource } from "./_shared/catalog-storage.mts";
 import { catalogStorageImportTargetEnabled } from "./_shared/catalog-import-target.mts";
 
 const ALLOWED_RPCS = new Set([
+  "sales_order_purchase_analysis_options",
   "reporting_customer_balance_by_brand_product",
   "reporting_supplier_balance_by_brand_product",
   "reporting_sales_margin_report",
@@ -94,6 +95,7 @@ const ALLOWED_RPCS = new Set([
 ]);
 
 const SUPERADMIN_RPCS = new Set([
+  "sales_order_purchase_analysis_options",
   "admin_list_org_users",
   "admin_list_org_users_with_access",
   "bulk_import_catalog",
@@ -1187,6 +1189,22 @@ export default async (req: Request, context: Context) => {
 
     if (SUPERADMIN_RPCS.has(name) && !isSuperadminRole(caller.role)) {
       return json({ error: "Superadmin access required", code: "SUPERADMIN_ACCESS_REQUIRED" }, 403);
+    }
+
+    // Separate export capability: keep existing operations price lookups
+    // available while restricting this analysis route to live superadmins.
+    if (name === "sales_order_purchase_analysis_options") {
+      const requests = args.input_requests;
+      if (!Array.isArray(requests) || requests.length < 1 || requests.length > 25 || requests.some(r =>
+        !r || typeof r.code !== "string" || typeof r.brand !== "string" || !r.code.trim() || !r.brand.trim() || r.code.length > 100 || r.brand.length > 100)) {
+        return json({ error: "Invalid purchase analysis batch." }, 400);
+      }
+      const data = await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/cloud_current_supplier_price_options_batch`, {
+        method: "POST",
+        headers: { apikey: supabaseAnonKey, Authorization: authorizationHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({ input_requests: requests.map(r => ({code:r.code,brand:r.brand})) }),
+      });
+      return json({ ok:true,data });
     }
 
     if (OPERATIONS_RPCS.has(name) && !canAccessOperationsModules(caller.role, caller.department, caller.permissions)) {

@@ -902,6 +902,7 @@ export function App() {
       <InventoryPage initialTab={inventoryInitialTab} selectedWarehouseId={inventorySelectedWarehouseId} stockSearch={inventoryStockSearch} />
     ) : activePage === "Sales" && canAccessSalesModules(appRole, appDepartment) ? (
       <SalesPage
+        appRole={appRole}
         onNavigateTab={setSalesTab}
         activeTab={salesTab}
         salesOrdersNavTick={salesOrdersNavTick}

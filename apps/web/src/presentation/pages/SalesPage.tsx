@@ -40,6 +40,7 @@ import { recomputeInvoiceTotals as calculateInvoiceTotals, previewInvoiceMoney }
 import { usePaymentDraftEditor } from "../hooks/usePaymentDraftEditor";
 
 type SalesPageProps = {
+  appRole?: string;
   onNavigateTab?: (tab: "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists") => void;
   activeTab?: "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists";
   salesOrdersNavTick?: number;
@@ -53,6 +54,7 @@ type SalesPageProps = {
 };
 
 export function SalesPage({
+  appRole = "",
   activeTab: activeTabProp = "Sales Orders",
   onNavigateTab,
   salesOrdersNavTick = 0,
@@ -837,6 +839,7 @@ export function SalesPage({
     <div className="page-stack">
       {activeTab === "Sales Orders" ? (
         <QuotesPage
+          appRole={appRole}
           salesOrdersNavTick={salesOrdersNavTick}
           selectedSalesOrderId={selectedSalesOrderId}
           onSelectedSalesOrderChange={onSelectedSalesOrderChange}
