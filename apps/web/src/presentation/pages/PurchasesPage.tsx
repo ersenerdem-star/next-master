@@ -1602,7 +1602,7 @@ export function PurchasesPage({
             </>
           ) : null}
 
-          {supplierChoiceOpen && purchaseOrderDraft && <PurchaseSupplierChoice key={purchaseOrderDraft.id} order={purchaseOrderDraft} orders={purchaseOrders}
+          {supplierChoiceOpen && purchaseOrderDraft && <PurchaseSupplierChoice key={purchaseOrderDraft.id} order={purchaseOrderDraft} orders={purchaseOrders} vendors={vendors}
             onClose={() => {
               setSupplierChoiceOpen(false);
               void refreshUnchangedPurchaseDetail(purchaseOrderDraft.id, serializePurchaseOrderForDirtyCheck(purchaseOrderDraft));

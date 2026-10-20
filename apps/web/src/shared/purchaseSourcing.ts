@@ -1,3 +1,4 @@
+import type { LocalVendor } from "../types/vendors";
 import type { LocalPurchaseOrder } from "../types/orders";
 import { multiplyMoney, sumMoney } from "../../../../shared/order-money.mjs";
 
@@ -8,6 +9,7 @@ export interface PurchaseSupplierOffer {
   brand: string;
   buy_price: number;
   price_date: string | null;
+  notes?: string | null;
   moq: number | null;
   order_multiple: number | null;
   stock_qty: number | null;
@@ -36,4 +38,26 @@ export function compatiblePurchaseTargets(orders: LocalPurchaseOrder[], source: 
   return orders.filter(o => o.id !== source.id && o.status === "draft" && o.sales_order_id === source.sales_order_id &&
     o.purchase_company === source.purchase_company && o.currency === source.currency &&
     o.supplier_name.trim().toLowerCase() === supplierName.trim().toLowerCase());
+}
+
+// Keep every alternative visible before a supplier is selected. Each price is
+// that supplier's own current offer; never carry the source PO cost across.
+export function comparePurchaseSuppliers(order: LocalPurchaseOrder, rows: PurchaseSupplierOffer[][], indices: number[]) {
+  const suppliers = [...new Map(rows.flat()
+    .filter(o => o.supplier_id && o.supplier_name.trim().toLowerCase() !== order.supplier_name.trim().toLowerCase())
+    .map(o => [o.supplier_id, o])).values()]
+    .sort((a, b) => a.supplier_name.localeCompare(b.supplier_name));
+  return suppliers.map(supplier => {
+    const offers = order.lines.map((line, i) => offerForLine(rows[i] || [], supplier.supplier_id, line.product_code));
+    const covered = indices.filter(i => !offerBlockReason(offers[i], order.lines[i].qty)).length;
+    const totals = sourcingTotals(order, indices, offers);
+    return { supplier, offers, covered, ...totals };
+  });
+}
+
+export function purchaseVendorPaymentTerms(supplierName: string, vendors: LocalVendor[]) {
+  const name = supplierName.trim().toLowerCase();
+  if (!name) return null;
+  const matches = vendors.filter(v => v.display_name.trim().toLowerCase() === name || v.company_name.trim().toLowerCase() === name);
+  return matches.length === 1 ? matches[0].payment_terms.trim() || null : null;
 }

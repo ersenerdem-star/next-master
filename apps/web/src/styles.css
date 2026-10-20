@@ -13378,3 +13378,14 @@ body {
 .purchase-order-advanced[open] { flex-basis: 100%; }
 @media (max-width: 1000px) { .purchase-order-workspace .invoice-meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 720px) { .purchase-order-workspace .invoice-meta-grid { grid-template-columns: 1fr; } }
+
+.purchase-supplier-comparison h3 { font-size: 15px; margin: 8px 0; }
+.purchase-comparison-table { min-width: 800px; }
+.purchase-comparison-table th, .purchase-comparison-table td { min-width: 210px; vertical-align: top; text-align: left; }
+.purchase-comparison-table th:first-child, .purchase-comparison-table td:first-child { min-width: 36px; width: 36px; }
+.purchase-comparison-table th:nth-child(2), .purchase-comparison-table td:nth-child(2) { min-width: 180px; }
+.purchase-comparison-table th:nth-child(3), .purchase-comparison-table td:nth-child(3) { min-width: 155px; }
+.purchase-comparison-table th .button { margin-bottom: 8px; }
+.purchase-comparison-table .purchase-comparison-selected { background: #eaf4fd; box-shadow: inset 2px 0 #327db9; }
+.purchase-comparison-table .purchase-comparison-notes { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 280px; }
+.purchase-comparison-excluded td { opacity: .65; }
