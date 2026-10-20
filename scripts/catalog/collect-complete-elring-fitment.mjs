@@ -8,9 +8,12 @@ import {readSafeFetch} from './lib/elring-read-fetch.mjs';
 import {readOfficialRequest} from './lib/elring-source-request.mjs';
 import {applyConfirmedFitment,verifySlowFitmentAcknowledgement} from './lib/elring-fitment-apply.mjs';
 import {finalizeElringCompletion} from './lib/elring-final-reread.mjs';
+import {withElringWriteLease} from './lib/elring-write-lease.mjs';
 const args=Object.fromEntries(process.argv.slice(2).map(a=>{const [k,...v]=a.replace(/^--/,'').split('=');return[k,v.join('=')||true];}));
 if(!args['confirm-production'])throw Error('Explicit production confirmation required');
 const root='/Users/ersen/Developer/next-master/artifacts/elring',run='cc0695cd-eb9f-43ef-9a3e-1371834fdb7f';
+const writeLease=fn=>withElringWriteLease(path.join(root,'canonical-write.lock'),fn);
+let stopRequested=false;process.on('SIGTERM',()=>{stopRequested=true;});process.on('SIGINT',()=>{stopRequested=true;});
 const dir=path.join(root,'complete-fitment-2026-10-20');await fs.mkdir(path.join(dir,'requests'),{recursive:true});await fs.mkdir(path.join(dir,'products'),{recursive:true});
 const lockFile=path.join(dir,'collector.lock');
 try{const previous=JSON.parse(await fs.readFile(lockFile,'utf8'));let alive=false;try{process.kill(previous.pid,0);alive=true;}catch(e){if(e.code!=='ESRCH')throw e;}if(alive)throw Error('Fitment collector already running');await fs.unlink(lockFile);}catch(e){if(e.code!=='ENOENT')throw e;}
@@ -45,28 +48,29 @@ try{
  if(!job||job.status==='paused'||(job.status!=='completed'&&new Date(job.approved_until)<new Date()))throw Error('Fitment approval unavailable');
  let stage;try{stage=JSON.parse(await fs.readFile(path.join(dir,'stage-index.json'),'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;stage=[];for(let offset=0;offset<21543;offset+=1000){const rows=(await api(`/rest/v1/catalog_import_stage?run_id=eq.${run}&select=row_index,product_code,source_fingerprint&order=row_index&offset=${offset}&limit=1000`)).data;stage.push(...rows);}if(stage.length!==21543||stage.some((s,i)=>s.row_index!==i||!articles.has(s.product_code)))throw Error('STAGE_IDENTITY_CARDINALITY');await fs.writeFile(path.join(dir,'stage-index.json'),JSON.stringify(stage));}
  if(job.status==='completed'){
-  report.final_reread=await finalizeElringCompletion({api,health,root,run,stage});report.status='completed';await save();await fs.unlink(lockFile);process.exit(0);
+  report.final_reread=await writeLease(()=>finalizeElringCompletion({api,health,root,run,stage}));report.status='completed';await save();await fs.unlink(lockFile);process.exit(0);
  }
  report.status='running';report.processed=job.processed;delete report.error;await save();
  for(let i=job.cursor+1;i<stage.length;i++){
+  if(stopRequested){report.status='stopped_at_checkpoint';await save();break;}
   const row=stage[i];report.current_product=row.product_code;report.current_row=i;await save();
   let evidence;const file=path.join(dir,'products',String(i)+'.json');try{evidence=JSON.parse(await fs.readFile(file,'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;evidence=await collectCompleteVehicles(articles.get(row.product_code),{call,vehiclesCache,saveVehicle});evidence.stage_fingerprint=row.source_fingerprint;await fs.writeFile(file+'.tmp',JSON.stringify(evidence));await fs.rename(file+'.tmp',file);}
   // Source collection is independent; canonical writes wait until the other
   // approved completion phases release the shared Product/summary workload.
   while(true){const jobs=(await api(`/rest/v1/catalog_elring_completion_jobs?run_id=eq.${run}&phase=in.(images,enrichment,lifecycle)&select=phase,status`)).data;
    if(jobs.length===3&&jobs.every(j=>j.status==='completed'))break;report.status='waiting_for_other_phases';await save();await sleep(30000);}
-  if(i%50===0)await maintainIndexes({request:api,health,run,onResult:async r=>{report.last_maintenance=r.data;await save();}});
-  await health();const applied=await applyConfirmedFitment({request:api,health,run,row:i,evidence,
-   onRecovery:async recovery=>{report.last_verified_recovery=recovery;await save();}});
+  if(i%50===0)await writeLease(()=>maintainIndexes({request:api,health,run,onResult:async r=>{report.last_maintenance=r.data;await save();}}));
+  await health();const applied=await writeLease(()=>applyConfirmedFitment({request:api,health,run,row:i,evidence,
+   onRecovery:async recovery=>{report.last_verified_recovery=recovery;await save();}}));
   report.status='running';report.processed=applied.data.processed;report.changed=applied.data.changed;report.totals=applied.data.totals;report.cached_vehicle_targets=vehiclesCache.size;report.last_apply_ms=applied.ms;await save();
   if(applied.ms>2000){
    report.status='holding_writes_after_slow_acknowledgement';await save();
-   report.last_verified_recovery=await verifySlowFitmentAcknowledgement({request:api,health,run,row:i,evidence});
+   report.last_verified_recovery=await writeLease(()=>verifySlowFitmentAcknowledgement({request:api,health,run,row:i,evidence}));
    report.status='running';await save();
   }
   if(i%25===0||applied.data.status==='completed')console.log(JSON.stringify({row:i,product_code:row.product_code,processed:report.processed,requests:report.source_requests,cached_vehicles:vehiclesCache.size,vehicle_count:evidence.vehicles.length}));
  }
- report.status='verifying_all_fields';await save();report.final_reread=await finalizeElringCompletion({api,health,root,run,stage});
- report.status='completed';report.finished_at=new Date().toISOString();await save();
+ if(!stopRequested){report.status='verifying_all_fields';await save();report.final_reread=await writeLease(()=>finalizeElringCompletion({api,health,root,run,stage}));
+ report.status='completed';report.finished_at=new Date().toISOString();await save();}
 }catch(e){report.status='stopped';report.error=e.message;await save();console.error(e.message);process.exitCode=1;}
 finally{await fs.unlink(lockFile).catch(e=>{if(e.code!=='ENOENT')throw e;});}

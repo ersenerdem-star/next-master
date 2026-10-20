@@ -314,6 +314,51 @@ published states, source field coverage, missing fields and lifecycle signals.
 Job APIs never return worker lease tokens or service credentials. New tables
 have RLS and tenant-superadmin read policies; all mutation RPCs are service-only.
 
+## Elring Spareto secondary completion (2026-10-20)
+
+The user's explicit Spareto instruction authorizes a bounded, empty-only
+completion job for the sealed Elring run. The existing
+`spareto_elring_product_catalog` registry entry remains a secondary source;
+its generic automatic-publication and review settings are unchanged.
+The approval, expiry, official manifest and tenant/brand scope are stored in
+`catalog_elring_spareto_jobs`; service-only RPCs record immutable per-product,
+per-phase evidence and before/after fields in `catalog_elring_spareto_events`.
+
+Robots-advertised product sitemaps discovered 18,816 exact-code candidates
+within the 21,543-product official manifest. A sitemap URL is only a candidate:
+the detail page must independently identify ELRING and the exact article code.
+No new identities or prices are imported. Raw HTML is retained compressed with
+its SHA-256 alongside parsed identity, raw properties and source URL. Repeated
+technical criteria remain arrays. Contradictory target values or mismatched
+identities are quarantined without canonical writes; other products continue,
+but unresolved quarantine rows prevent an overall completed claim.
+
+Weight, origin, tariff, EAN, OEM, image, vehicle/model and explicit market segment
+may fill empty canonical fields. Existing values are preserved; differences
+are audited, with supported technical conflicts queued for review. Shipping
+weight requires an explicit unit; country names map to ISO alpha-2 only when
+recognized. Six-digit customs codes remain six digits. Product category
+`engine` must never become market segment `engines`. EAN requires an explicit
+table value or an exact-SKU Product JSON-LD record plus a valid GTIN checksum.
+
+Spareto vehicle/model fields are page-level make/model summaries, not normalized
+individual vehicle fitments. Their write phase waits for each product's
+official vehicle receipt before filling residual blanks. Both local workers
+serialize canonical writes and fixed-index maintenance using the same write
+lease. A dead lease owner stops work for verified recovery. Product transactions
+keep the 3-second statement and 250-ms lock limits; portal health and slow-write
+guards remain active. Ambiguous secondary writes require an exact committed
+receipt and are never blindly retried.
+
+The local source collector and applier are resumable background processes on
+the user's computer, not cloud workers. Current progress is in
+`artifacts/elring/spareto-completion-2026-10-20/{collection-status,apply-status}.json`.
+Source discovery is complete; detail collection and canonical completion remain
+running until every candidate and both phases have audited outcomes. Official
+final verification accepts only separately audited, source-bound, prior-empty
+secondary additions; arbitrary drift still fails. Overall completion remains
+false until the secondary job also completes and canonical fields are reread.
+
 ## CSV contract
 
 The generated catalog template is the canonical import contract. Required
