@@ -231,10 +231,18 @@ The deferred-image phase applied all 3,310 candidates, bringing official image
 coverage to 20,616; 927 source products have no image. Lifecycle processed all
 21,543 products and inserted 546 directed replacement relations, with no
 rejected relations or explicit production-discontinued signals. Future phaseout
-and nondelivery statements do not change lifecycle status. Scalar and vehicle
-completion must be established through their own live cursors and rereads;
-neither these source totals nor a single completed vehicle sample proves the
-whole brand complete.
+and nondelivery statements do not change lifecycle status. Scalar enrichment
+processed all 21,543 products and changed 21,101. Independent rereads matched
+20,624 EANs, 13,772 tariff codes and 6,382 dimension objects, with no empty
+canonical field where a valid source value was supplied and no overwrite of
+populated fields. Description/OEM differences preserve canonical values.
+Weight, origin and market segment were absent from this official snapshot;
+eight component-dimension conflicts remain raw evidence rather than guessed
+single dimensions. Vehicle completion remains a separate long-running phase.
+After that phase, `elring-final-reread.mjs` independently compares every Product
+against its accepted scalar/lifecycle/vehicle audit, official image candidate
+and directed replacement evidence. Only a successful reread updates the overall
+completion manifests; completed cursors alone cannot establish completion.
 
 ### Elring lifecycle and directional replacement
 

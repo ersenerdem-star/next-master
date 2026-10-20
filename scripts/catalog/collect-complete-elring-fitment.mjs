@@ -7,6 +7,7 @@ import {maintainIndexes} from './lib/elring-completion-maintenance.mjs';
 import {readSafeFetch} from './lib/elring-read-fetch.mjs';
 import {readOfficialRequest} from './lib/elring-source-request.mjs';
 import {applyConfirmedFitment} from './lib/elring-fitment-apply.mjs';
+import {finalizeElringCompletion} from './lib/elring-final-reread.mjs';
 const args=Object.fromEntries(process.argv.slice(2).map(a=>{const [k,...v]=a.replace(/^--/,'').split('=');return[k,v.join('=')||true];}));
 if(!args['confirm-production'])throw Error('Explicit production confirmation required');
 const root='/Users/ersen/Developer/next-master/artifacts/elring',run='cc0695cd-eb9f-43ef-9a3e-1371834fdb7f';
@@ -41,9 +42,11 @@ const call=async(method,extra)=>{
 };
 try{
  await health();const job=(await api(`/rest/v1/catalog_elring_completion_jobs?run_id=eq.${run}&phase=eq.fitment&select=*`)).data[0];
- if(!job||job.status==='paused'||new Date(job.approved_until)<new Date())throw Error('Fitment approval unavailable');
- if(job.status==='completed'){report.status='completed';await save();process.exit(0);}
+ if(!job||job.status==='paused'||(job.status!=='completed'&&new Date(job.approved_until)<new Date()))throw Error('Fitment approval unavailable');
  let stage;try{stage=JSON.parse(await fs.readFile(path.join(dir,'stage-index.json'),'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;stage=[];for(let offset=0;offset<21543;offset+=1000){const rows=(await api(`/rest/v1/catalog_import_stage?run_id=eq.${run}&select=row_index,product_code,source_fingerprint&order=row_index&offset=${offset}&limit=1000`)).data;stage.push(...rows);}if(stage.length!==21543||stage.some((s,i)=>s.row_index!==i||!articles.has(s.product_code)))throw Error('STAGE_IDENTITY_CARDINALITY');await fs.writeFile(path.join(dir,'stage-index.json'),JSON.stringify(stage));}
+ if(job.status==='completed'){
+  report.final_reread=await finalizeElringCompletion({api,health,root,run,stage});report.status='completed';await save();await fs.unlink(lockFile);process.exit(0);
+ }
  report.status='running';report.processed=job.processed;delete report.error;await save();
  for(let i=job.cursor+1;i<stage.length;i++){
   const row=stage[i];report.current_product=row.product_code;report.current_row=i;await save();
@@ -59,6 +62,7 @@ try{
   if(applied.ms>2000)throw Error(`FITMENT_WRITE_LATENCY_GUARD ${applied.ms}ms`);
   if(i%25===0||applied.data.status==='completed')console.log(JSON.stringify({row:i,product_code:row.product_code,processed:report.processed,requests:report.source_requests,cached_vehicles:vehiclesCache.size,vehicle_count:evidence.vehicles.length}));
  }
+ report.status='verifying_all_fields';await save();report.final_reread=await finalizeElringCompletion({api,health,root,run,stage});
  report.status='completed';report.finished_at=new Date().toISOString();await save();
 }catch(e){report.status='stopped';report.error=e.message;await save();console.error(e.message);process.exitCode=1;}
 finally{await fs.unlink(lockFile).catch(e=>{if(e.code!=='ENOENT')throw e;});}
