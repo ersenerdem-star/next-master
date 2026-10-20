@@ -1,5 +1,6 @@
 import {InterfaceText} from "../../i18n/InterfaceText";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ElringCatalogEngine } from "../components/common/ElringCatalogEngine";
 import { CATALOG_MARKET_SEGMENT_OPTIONS, normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { startBulkBrandCatalogImport, syncBrandCatalog } from "../../infrastructure/api/adminApi";
@@ -205,6 +206,7 @@ export function CatalogPage() {
   const [importBrand, setImportBrand] = useState("");
   const [importBrandName, setImportBrandName] = useState("");
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showElringEngine, setShowElringEngine] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [exportBrand, setExportBrand] = useState("");
@@ -1366,6 +1368,7 @@ export function CatalogPage() {
   }
 
   async function handleSyncSelectedBrand() {
+    if (catalogBrand.trim().toLowerCase() === "elring") { setShowElringEngine(true); return; }
     if (!isOnline) {
       const message = t("catalog.errors.connectToSync");
       setError(message);
@@ -1543,7 +1546,7 @@ export function CatalogPage() {
             </Button>
             {catalogBrand ? (
               <Button variant="secondary" onClick={() => void handleSyncSelectedBrand()} disabled={!isOnline} busy={syncingBrandCatalog} busyLabel={t("catalog.actions.resyncing")}>
-                {t("catalog.actions.resync")}
+                {catalogBrand.trim().toLowerCase() === "elring" ? (locale === "tr" ? "Elring Katalog Motoru" : "Elring Catalog Engine") : t("catalog.actions.resync")}
               </Button>
             ) : null}
             {catalogBrand.trim().toLowerCase() === "kolbenschmidt" ? (
@@ -2006,6 +2009,7 @@ export function CatalogPage() {
         </aside>
       ) : null}
 
+      {showElringEngine ? <ElringCatalogEngine defaultSegment={catalogSegment} onClose={() => setShowElringEngine(false)} onPublished={() => applyCatalogFilters(search, catalogBrand, catalogSegment, false)} /> : null}
       {showImportDialog ? (
         <div className="modal-backdrop">
           <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">

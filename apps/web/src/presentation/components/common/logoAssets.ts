@@ -15,6 +15,7 @@ type LogoPreset = {
 };
 
 const LOGO_PRESETS: LogoPreset[] = [
+  { match: /elring/i, label: "Elring", wordmark: "ELRING", assetSrc: "/brand-logos/elring.png", bgFrom: "#ffffff", bgTo: "#ffffff", fg: "#e30613" },
   { match: /bosch/i, label: "Bosch", wordmark: "BOSCH", assetSrc: "/brand-logos/bosch_logo.png", bgFrom: "#fff7ed", bgTo: "#ffffff", fg: "#c2410c", stroke: "#fdba74" },
   { match: /\bate\b/i, label: "ATE", wordmark: "ATE", assetSrc: "/brand-logos/ate_logo.png", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#93c5fd" },
   { match: /donaldson/i, label: "Donaldson", wordmark: "DONALDSON", assetSrc: "/brand-logos/donaldson_logo.png", bgFrom: "#fef2f2", bgTo: "#ffffff", fg: "#c81e1e", stroke: "#fca5a5" },
@@ -139,4 +140,24 @@ export function resolveNamedLogo(value: string | null | undefined): NamedLogoAss
     label: preset.label,
     src: preset.assetSrc || buildSvgPreset(preset),
   };
+}
+
+// Vehicle compatibility must never match the parts-supplier presets by substring
+// (for example WIESMANN -> MANN or ALPINA -> INA).
+const VEHICLE_LOGO_NAMES: Record<string, string> = {
+  mercedes: "Mercedes-Benz", mercedesbenz: "Mercedes-Benz", benz: "Mercedes-Benz",
+  man: "MAN", volvo: "Volvo", daf: "DAF", scania: "Scania",
+  volkswagen: "Volkswagen", vw: "Volkswagen", audi: "Audi", bmw: "BMW",
+  ford: "Ford", fordusa: "Ford", nissan: "Nissan", renault: "Renault", renaulttrucks: "Renault",
+  iveco: "Iveco", toyota: "Toyota", citroen: "Citroen", fiat: "Fiat",
+  seat: "Seat", skoda: "Skoda", hyundai: "Hyundai", kia: "Kia",
+  porsche: "Porsche", cummins: "Cummins", irisbus: "Irisbus", neoplan: "Neoplan",
+};
+
+export function resolveVehicleLogo(value: string | null | undefined): NamedLogoAsset | null {
+  const key = String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const label = VEHICLE_LOGO_NAMES[key];
+  if (!label) return null;
+  const preset = LOGO_PRESETS.find((entry) => entry.label === label);
+  return preset ? { label: preset.label, src: preset.assetSrc || buildSvgPreset(preset) } : null;
 }

@@ -1,0 +1,11 @@
+.elring-engine-dialog{width:min(900px,94vw);max-height:90vh;overflow:auto;border:1px solid var(--border-color,#d4dce6);border-radius:14px;padding:24px;background:var(--surface,#fff);color:var(--text-primary,#182338)}
+.elring-engine-dialog::backdrop{background:rgb(15 23 42 / 48%)}
+.elring-engine-header,.elring-engine-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.elring-engine-header h2{margin:0 0 8px}.elring-engine-dialog fieldset{display:grid;gap:14px;border:1px solid #d4dce6;border-radius:8px;padding:16px;margin:20px 0}
+.elring-engine-dialog textarea{width:100%;box-sizing:border-box;resize:vertical}.elring-engine-dialog progress{width:100%;margin-bottom:12px}
+.elring-engine-results{overflow:auto;margin-top:16px}.elring-engine-results table{width:100%;border-collapse:collapse;text-align:left}
+.elring-engine-results th,.elring-engine-results td{padding:10px;border-bottom:1px solid #d4dce6;vertical-align:top}.elring-engine-results td div{font-size:.85em;margin-top:6px}
+.elring-engine-results dl{min-width:220px}.elring-engine-results dl div{display:flex;justify-content:space-between;gap:10px}.elring-engine-results dd{margin:0}
+@media(max-width:600px){.elring-engine-dialog{padding:16px}.elring-engine-actions button{flex:1}}
+
+.elring-engine-brand{display:flex;align-items:center;gap:12px}.elring-engine-logo{width:88px;height:72px;object-fit:contain;background:#fff;border-radius:6px;flex-shrink:0}

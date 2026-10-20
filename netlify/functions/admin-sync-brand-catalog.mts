@@ -17,6 +17,8 @@ export default async (req: Request, _context: Context) => {
       return json({ error: "Brand name is required" }, 400);
     }
 
+    if (brandName.toLowerCase() === "elring") return json({error:"Use the Elring Catalog Engine to collect, review and publish packages.",engine:"elring-official.v2",path:"/api/catalog-elring"},409);
+
     const result = await syncBrandCatalogWithProgressiveBatches({
       supabaseUrl: caller.supabaseUrl,
       serviceRoleKey: caller.serviceRoleKey,
