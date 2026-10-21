@@ -13281,19 +13281,66 @@ body {
   .portal-mobile-bottom-nav__item.has-notifications { animation: none; }
 }
 
-/* The customer hero uses one continuous localized composition; the dark copy
-   overlay keeps the left side readable without exposing an image seam. */
+/* Fade within the artwork layer itself: a viewport-wide mask exposes the
+   bitmap edge on wide screens. Keep the same composition in both languages. */
 .customer-desk-hero--reference::after {
-  -webkit-mask-image: none;
-  mask-image: none;
-  background-position: center right;
-  background-size: auto 100%;
+  left: auto;
+  width: auto;
+  height: 100%;
+  aspect-ratio: 547 / 403;
+  max-width: 52%;
+  background-position: right center;
+  background-size: cover;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, .3) 16%, #000 38%);
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, .3) 16%, #000 38%);
 }
 .customer-desk-hero--reference::before {
-  background: linear-gradient(90deg, rgba(3, 15, 31, .99) 0%, rgba(3, 15, 31, .94) 30%, rgba(3, 15, 31, .66) 50%, rgba(3, 15, 31, .18) 72%, rgba(3, 15, 31, 0) 100%);
+  background: linear-gradient(90deg, #061427 0%, rgba(6, 20, 39, .98) 34%, rgba(6, 20, 39, .65) 49%, rgba(6, 20, 39, 0) 72%);
 }
-
-:root[lang="tr"] .customer-desk-hero--reference::after { background-size: cover; background-position: center; }
+.customer-desk-hero--reference .customer-desk-hero__copy {
+  width: min(790px, 58%);
+  max-width: none;
+}
+.customer-desk-hero--reference .customer-desk-quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 0;
+}
+.customer-desk-hero--reference .customer-desk-hero__part-label--braking {
+  right: clamp(220px, 20vw, 360px);
+}
+:root[lang="tr"] .customer-desk-hero--reference::after {
+  background-size: cover;
+  background-position: right center;
+}
+@media (max-width: 1100px) and (min-width: 769px) {
+  .customer-desk-hero--reference .customer-desk-hero__copy { width: 65%; }
+  .customer-desk-hero--reference .customer-desk-hero__part-label { display: none; }
+}
+@media (max-width: 768px) {
+  .customer-desk-hero--reference {
+    min-height: 690px;
+    padding-bottom: 270px;
+  }
+  .customer-desk-hero--reference::after {
+    top: auto;
+    width: 100%;
+    height: 290px;
+    max-width: none;
+    aspect-ratio: auto;
+    background-position: right bottom;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 38%);
+    mask-image: linear-gradient(180deg, transparent 0%, #000 38%);
+  }
+  .customer-desk-hero--reference::before { background: none; }
+  .customer-desk-hero--reference .customer-desk-hero__copy { width: 100%; }
+  .customer-desk-hero--reference .customer-desk-quick-links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 8px;
+  }
+  .customer-desk-hero--reference .customer-desk-hero__part-label { display: none; }
+}
 
 /* Gray: unavailable. Yellow: ready, awaiting confirmation. Green: can publish. */
 .button.supplier-publish-button:not(:disabled) {
