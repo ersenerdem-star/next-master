@@ -24,7 +24,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  try{const raw=await provider.fetch(item.product_code),safe=safeSupplierOfficialObservation(raw,item.product_code,brand.data.id);
  const plan=planSupplierCatalogEnrichment({existing:rows[0],incoming:safe.fields,phase:'official'});
  observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),sourceUrl:safe.evidence.sourceUrl,observedAt:safe.evidence.observedAt,fingerprint:safe.evidence.fingerprint,before:rows[0],fields:plan.patch,sourceFields:safe.fields,sourceStatus:raw.sourceStatus||null,replacements:[],issues:plan.issues,missing:plan.missing};
- }catch(e:any){if(e.message!=='OFFICIAL_EXACT_MATCH_NOT_FOUND')throw e;observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),before:rows[0],fields:{},replacements:[],observedAt:new Date().toISOString(),unavailable:e.message};}
+ }catch(e:any){if(!['OFFICIAL_EXACT_MATCH_NOT_FOUND','OFFICIAL_PRODUCT_DOMAIN_UNSUPPORTED'].includes(e.message))throw e;observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),before:rows[0],fields:{},replacements:[],observedAt:new Date().toISOString(),unavailable:e.message};}
  await save();
  }
  if(job.mode==='publish'){await rpc('heartbeat_catalog_brand_job',scope);checkpoint=await rpc('apply_catalog_brand_job_item',{...scope,input_index:index});}

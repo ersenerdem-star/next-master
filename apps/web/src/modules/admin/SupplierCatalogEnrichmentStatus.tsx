@@ -18,6 +18,7 @@ const reasons:Record<string,[string,string]>={
  INVALID_FIELD_VALUE:['Alan değeri desteklenen biçimde değil veya çok uzun.','Field value has an unsupported format or is too long.'],
  EAN_CONFLICT:['Mevcut barkod ile kaynak barkodu farklı.','Existing and source barcodes differ.'],
  OFFICIAL_EXACT_MATCH_NOT_FOUND:['Resmî katalogda bu marka ve tam parça numarası eşleşmedi.','Official catalog has no exact brand and part-number match.'],
+ OFFICIAL_PRODUCT_DOMAIN_UNSUPPORTED:['Bu ürün bağlı resmî kataloğun kapsamı dışında. Ürün grubuna uygun resmî kaynak gerekiyor; mevcut bilgiler korundu.','This product is outside the connected official catalog scope. A source for its product domain is required; existing data is preserved.'],
  OFFICIAL_SOURCE_NOT_CONFIGURED:['Bu marka için otomatik resmî kaynak henüz tanımlı değil. Dosyadaki bilgiler işlendi.','No automatic official source is configured for this brand. File fields were processed.'],
  OFFICIAL_SOURCE_TIMEOUT:['Resmî katalog yanıt süresini aştı; kayıtlı ilerlemeden yeniden denenecek.','Official catalog timed out; retry resumes from saved progress.'],
  OFFICIAL_SOURCE_RATE_LIMIT:['Resmî katalog istek sınırı uyguladı; daha sonra yeniden denenecek.','Official catalog rate limited requests; retry is deferred.'],

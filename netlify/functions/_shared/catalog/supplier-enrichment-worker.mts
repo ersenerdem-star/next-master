@@ -55,7 +55,7 @@ export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=4*6
        const observation=safeSupplierOfficialObservation(await provider!.fetch(row.code),row.code,batch.brandId);
        incoming=observation.fields;evidence={...observation.evidence,policy:ENRICHMENT_POLICY,provider:provider!.key};
       }catch(error){
-       if(String((error as Error)?.message).includes('OFFICIAL_EXACT_MATCH_NOT_FOUND'))issues.push({field:'source',code:'OFFICIAL_EXACT_MATCH_NOT_FOUND'});
+       if(['OFFICIAL_EXACT_MATCH_NOT_FOUND','OFFICIAL_PRODUCT_DOMAIN_UNSUPPORTED'].includes(String((error as Error)?.message)))issues.push({field:'source',code:String((error as Error).message)});
        else{
         const text=String((error as Error)?.message||error),code=error instanceof ReferenceError||/is not defined|is not a function/.test(text)?'OFFICIAL_PROVIDER_IMPLEMENTATION_ERROR':/^OFFICIAL_OBSERVATION_(IDENTITY|SOURCE)_INVALID$/.test(text)?text:/429|rate.limit/i.test(text)?'OFFICIAL_SOURCE_RATE_LIMIT':/401|403/.test(text)?'OFFICIAL_SOURCE_ACCESS_DENIED':/timeout|timed.out|abort/i.test(text)?'OFFICIAL_SOURCE_TIMEOUT':'OFFICIAL_SOURCE_UNAVAILABLE';
         throw Object.assign(Error(code),{sourceRow:row.rowNumber,provider:provider!.key});

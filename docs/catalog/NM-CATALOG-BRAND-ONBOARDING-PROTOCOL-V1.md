@@ -109,6 +109,22 @@ eligible new files retain priority. Source pacing and bounded worker windows
 remain unchanged. This separation does not relax generic manual review jobs'
 source, identity or publication approval contracts.
 
+The SKF shared engine uses `skf_official_product_v1`, restricted to the current
+official SKF Automotive product pages and exact SKU/name, SKF brand and canonical
+article URL in Product JSON-LD. This is an automotive source, not the industrial
+bearing catalogue. The production catalogue's VKBA906 was matched against the
+official VKBA906 page. Its product-bound breadcrumb identifies Wheel Bearing
+Kit, with width 37 mm, inner diameter 35 mm and outer diameter 66 mm. Missing
+EAN, origin, tariff and explicit gross weight remain missing; an unqualified
+Weight property must never become gross kg. Existing populated values remain
+protected by the generic reviewed-completion contract. Unsupported product
+domains produce per-row review evidence and allow subsequent rows to continue.
+
+Connector review on 2026-10-21 found Hengst's official homepage returning a
+Cloudflare 403; do not bypass it or activate the old stub. The Donaldson
+A161500 URL returned an unverified generic regional page, not an exact article.
+A 200 homepage or a source URL does not establish a working product reader.
+
 The supplier-enrichment worker must checkpoint every completed official row
 before the next request, use bounded source pacing, and preserve file progress.
 A source failure on row N must not replay successful earlier observations in

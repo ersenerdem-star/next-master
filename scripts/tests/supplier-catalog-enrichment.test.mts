@@ -206,3 +206,19 @@ test('bounded source dispatch retains the existing service-only admission grant'
  const row=(await admin("select has_function_privilege('anon',oid,'execute') anon,has_function_privilege('authenticated',oid,'execute') client,has_function_privilege('service_role',oid,'execute') worker from pg_proc where oid='public.claim_supplier_catalog_enrichment()'::regprocedure")).rows[0];
  assert.deepEqual(row,{anon:false,client:false,worker:true});
 });
+
+test('an unsupported product domain is explicit review evidence and does not stop later source rows',()=>transaction(async()=>{
+ const skf=id(820);await admin("insert into brands(id,organization_id,name)values($1,$2,'SKF')",[skf,org]);
+ await publish(95,'TR','0087.08.80',skf);await admin('update supplier_price_releases set total_rows=2 where id=$1',[id(95)]);
+ await db.query("insert into supplier_price_release_rows(release_id,source_row_number,normalized_code,product_code,buy_price,currency,valid_from,row_status,row_hash)values($1,2,'00234','00234',10,'EUR','2026-10-19','accepted',repeat('e',64))",[id(95)]);
+ await admin('update supplier_price_ingestion_internal.catalog_enrichment_jobs set total_rows=2');
+ const claim=await rpc('claim_supplier_catalog_enrichment');
+ await runSupplierCatalogEnrichment({rpc,jobId:claim.jobId,token:claim.token,officialDelayMs:0,officialProvider:()=>({key:'skf_automotive_official',fetch:async(code:string)=>{
+  if(code==='00123')throw Error('OFFICIAL_PRODUCT_DOMAIN_UNSUPPORTED');return {code,sourceUrl:'https://automotive.skf.com/eur/en/product-catalogue/'+code,fields:{description:'Wheel Bearing Kit'}};
+ }})});
+ const j=(await admin('select cursor,official_checked,review_rows,status,error_code from supplier_price_ingestion_internal.catalog_enrichment_jobs')).rows[0];
+ assert.equal(Number(j.cursor),2);assert.equal(Number(j.official_checked),2);assert.equal(Number(j.review_rows),1);assert.equal(j.status,'review_required');assert.equal(j.error_code,null);
+ const issues=(await db.query("select issues from supplier_price_ingestion_internal.catalog_enrichment_changes where phase='official' and source_row_number=1")).rows[0].issues;
+ assert.deepEqual(issues,[{field:'source',code:'OFFICIAL_PRODUCT_DOMAIN_UNSUPPORTED'}]);
+ assert.equal((await db.query("select description from catalog_products where product_code='00234'")).rows[0].description,'Wheel Bearing Kit');
+}));

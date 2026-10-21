@@ -1,7 +1,7 @@
 import {test}from'node:test';import assert from'node:assert/strict';import{brandEngineDefinition,assertBrandEngineSource,matchesBrandEngineJob}from'../../netlify/functions/_shared/catalog/brand-engine-registry.mts';import{supplierOfficialProvider}from'../../netlify/functions/_shared/catalog/supplier-official-completion.mts';import{listTecAllianceBrandEntries}from'../../netlify/functions/_shared/catalog/tecalliance-brand-registry.mts';import{brandDispatchSignature,requireBrandDispatch}from'../../netlify/functions/_shared/catalog/brand-dispatch.mts';
 test('all mapped families share durable work but keep exact brand/source identity',()=>{
  for(const entry of listTecAllianceBrandEntries())for(const brand of entry.managedBrandNames){const d=brandEngineDefinition(brand);assert.equal(d.sourceKey,entry.preferredProviderKey);assert.equal(d.family,'tecalliance');assert(supplierOfficialProvider(brand));}
- for(const b of ['Denso','Bosch','Mann']){assert.equal(brandEngineDefinition(b).workflow,'brand');assert(supplierOfficialProvider(b));}
+ for(const b of ['Denso','Bosch','Mann','SKF']){assert.equal(brandEngineDefinition(b).workflow,'brand');assert(supplierOfficialProvider(b));}
  assert.equal(brandEngineDefinition('TRW').workflow,'zf');assert.equal(brandEngineDefinition('TRW Engine Components').reader,false);assert.equal(brandEngineDefinition('Elring').workflow,'elring');assert.equal(brandEngineDefinition('New unsupported brand').reader,false);
 });
 test('an existing URL, active legacy source or different brand cannot authorize a generic engine',()=>{
