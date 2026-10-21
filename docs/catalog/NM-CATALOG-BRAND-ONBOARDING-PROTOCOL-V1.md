@@ -313,6 +313,9 @@ dimensions, lifecycle, replacements, prices and orders. Concurrent edits after
 the sealed snapshot are preserved field by field, with a durable before/after
 application and source receipt. Same-brand primary writers defer corrections;
 unrelated supplier-file brands retain their own cursors and leases.
+The correction apply RPC allows a two-second lock wait and an eight-second
+statement budget so existing import summary transactions can finish. Integrity
+and summary triggers remain enabled; a timeout retains the sealed item for retry.
 
 Correction and existing supplemental readers share the existing global Spareto
 transport gate and 1100 ms request spacing.
