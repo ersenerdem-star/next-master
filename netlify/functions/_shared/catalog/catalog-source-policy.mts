@@ -344,6 +344,21 @@ function buildPolicyProfile(providerKey: string, brandName: string): PolicyProfi
     };
   }
 
+  if (providerKey === "schaeffler_aftermarket") {
+    return {
+      executionProfile: "official_blocked_browser_capture",
+      primaryAuthorityKey: "official_provider",
+      helperSourceKeys: [],
+      completionSourceKeys: ["spareto_exact_detail"],
+      fieldPriority: buildDefaultFieldPriority("official_provider"),
+      operationalNotes: [
+        "Schaeffler is the shared official engine for FAG, INA, LuK and Vitesco; exact brand identity stays separate.",
+        "Public catalog navigation works, but the server request returned HTTP 403. Server access and exact reader remain unverified.",
+        "No marketplace-first execution: secondary completion requires a verified exact official receipt.",
+      ],
+    };
+  }
+
   if (providerKey === "hengst_connect") {
     return {
       executionProfile: "official_blocked_browser_capture",
@@ -362,7 +377,6 @@ function buildPolicyProfile(providerKey: string, brandName: string): PolicyProfi
     [
       "ate_official",
       "dayco_official",
-      "schaeffler_aftermarket",
       "knorr_bremse_aftermarket",
       "wabco_customercentre",
       "hepu_official",

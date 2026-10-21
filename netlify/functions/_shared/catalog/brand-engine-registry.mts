@@ -1,6 +1,7 @@
 import {normalizeBrandKey} from './brand-standardization.mts';
 import {resolveTecAllianceBrandEntry} from './tecalliance-brand-registry.mts';
 import {resolveCatalogSyncPlan} from './catalog-sync-provider.mts';
+import {SCHAEFFLER_ENGINE,isSchaefflerBrand} from './schaeffler-family.mts';
 const knownOfficialSources:Record<string,{sourceKey:string;sourceUrl:string;family:string;access?:string}>={
  vag:{family:'vag',sourceKey:'vag_partslink24_authorized',sourceUrl:'https://www.partslink24.com/',access:'authorization_required'},
  febi:{family:'bilstein',sourceKey:'bilstein_group_partsfinder_observation',sourceUrl:'https://partsfinder.bilsteingroup.com/en/',access:'authorization_required'},
@@ -14,6 +15,7 @@ const knownOfficialSources:Record<string,{sourceKey:string;sourceUrl:string;fami
 };
 export function brandEngineDefinition(brand:string){
  const key=normalizeBrandKey(brand),tec=resolveTecAllianceBrandEntry(brand);
+ if(isSchaefflerBrand(brand))return {brand,family:SCHAEFFLER_ENGINE.family,engineName:SCHAEFFLER_ENGINE.name,sourceKey:SCHAEFFLER_ENGINE.sourceKey,sourceUrl:SCHAEFFLER_ENGINE.sourceUrl,reader:false,workflow:'brand',access:'server_access_required'};
  if(['sachs','boge','trw','lemforder','lemfoerder','wabco','zf'].includes(key))return {brand,family:'zf',sourceKey:'zf_group_official_v2',sourceUrl:'https://aftermarket.zf.com/en/aftermarket-portal/',reader:true,workflow:'zf'};
  if(key==='elring')return {brand,family:'elring',sourceKey:'tecalliance_elring',sourceUrl:'https://web.tecalliance.net/elring/en/home',reader:true,workflow:'elring'};
  if(key==='denso')return {brand,family:'denso',sourceKey:'denso_official_v1',sourceUrl:'https://www.denso-am.eu/catalog/pv',reader:true,workflow:'brand'};
@@ -38,6 +40,7 @@ export function brandEngineCapability(def:any,source:any){
  if(def.workflow==='zf')return source?.is_active?'existing_review_engine':'source_registration_required';
  if(def.workflow==='elring')return source?.is_active?'existing_review_engine':'operational_hold';
  if(def.family==='manual')return 'manual_only';if(def.access==='authorization_required')return 'authorized_access_required';
+ if(def.access==='server_access_required')return 'server_access_required';
  if(!def.reader)return def.sourceUrl?'adapter_required':'official_link_required';
  try{assertBrandEngineSource(source,def.brand);return 'ready';}catch{return 'source_registration_required';}
 }

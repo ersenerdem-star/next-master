@@ -135,6 +135,27 @@ hold below remains in force until its cause is repaired and validated.
 
 ## All-brand official-first completion decision — 2026-10-21
 
+### Schaeffler shared family — 2026-10-21
+
+The owner supplied https://vehiclelifetimesolutions.schaeffler.com/en/catalog
+as the common official catalogue for **FAG, INA, LuK and Vitesco**, and named
+the engine **Schaeffler**. Use one `schaeffler_aftermarket` source/family,
+preserving the existing separate brand IDs and exact brand/article identity.
+The overview and selected-brand engine show this shared name. No Schaeffler
+product brand or merged catalogue identities are created.
+
+Normal public browser navigation confirmed all four product-brand links and
+Vitesco article `571 0122 10`, official product `p-TA-4319-5710122100`, EAN
+`4014870798192`, with article status `Normal`. This bounded browser observation
+is not a server-reader proof, a canonical write or whole-brand completion.
+The supplied catalogue and robots URL returned HTTP 403 to the server client.
+Keep the shared source registered but inactive, its reader/publication grants
+off, and report `server_access_required`. Do not copy browser credentials,
+bypass access controls or run a marketplace-first legacy sync. The verified
+official receipt remains mandatory before any Spareto supplemental completion.
+Replacement/discontinued checks remain required; an unavailable source records
+blocked/unsupported coverage rather than a fabricated production state.
+
 Owner instruction `user-official-first-spareto-lifecycle-2026-10-21` applies to
 all brands. First match the exact official brand and product; then use
 `https://spareto.com` for remaining missing attributes. Preserve populated

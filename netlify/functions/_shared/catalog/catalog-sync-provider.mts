@@ -12,6 +12,7 @@ import { syncBrandCatalogFromSkfAutomotive } from "./skf-automotive-sync.mts";
 import { syncBrandCatalogFromTecAllianceBrand } from "./tecalliance-sync.mts";
 import { listTecAllianceBrandEntries, resolveTecAllianceBrandEntry } from "./tecalliance-brand-registry.mts";
 import { canonicalizeInternalBrandName, normalizeBrandKey } from "./brand-standardization.mts";
+import { SCHAEFFLER_ENGINE } from './schaeffler-family.mts';
 import {
   CATALOG_SOURCE_POLICY_VERSION,
   createCatalogSourcePolicy,
@@ -159,14 +160,11 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
   },
   schaeffler: {
     aliases: ["fag", "ina", "luk", "vitesco"],
-    managedBrandNames: ["FAG", "INA", "LuK", "Vitesco"],
-    preferredProviderKey: "schaeffler_aftermarket",
-    preferredProviderLabel: "Schaeffler Vehicle Lifetime Solutions official catalog",
+    managedBrandNames: [...SCHAEFFLER_ENGINE.brands],
+    preferredProviderKey: SCHAEFFLER_ENGINE.sourceKey,
+    preferredProviderLabel: "Schaeffler",
     preferredSourceType: "official",
-    preferredSourceUrl: "https://vehiclelifetimesolutions.schaeffler.com/en/catalog",
-    executionProviderKey: "spareto",
-    executionProviderLabel: "Spareto exact-detail fallback",
-    executionSourceType: "marketplace",
+    preferredSourceUrl: SCHAEFFLER_ENGINE.sourceUrl,
   },
   knorrbremse: {
     aliases: ["knorr-bremse", "knorr bremse"],
@@ -661,6 +659,11 @@ export async function syncBrandCatalog(input: {
   skipCompletion?: boolean;
 }) {
   const plan = resolveCatalogSyncPlan(input.brandName);
+  // A public browser page is not proof of a permitted server-side reader.
+  // Never promote the legacy marketplace-first writer for this shared family.
+  if (plan.preferredProviderKey === SCHAEFFLER_ENGINE.sourceKey) {
+    throw new Error('SCHAEFFLER_OFFICIAL_SERVER_ACCESS_REQUIRED');
+  }
   const tecallianceEntry = resolveTecAllianceBrandEntry(plan.brandName);
   const tecallianceSeedPrefixes =
     input.seedPrefixes?.length
