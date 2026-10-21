@@ -94,6 +94,21 @@ numeric list representations, reject unrelated object shapes, and cover the
 same product response in regression validation before resuming those cursors.
 Do not reset successful prefixes or alter either supplier price publication.
 
+On 2026-10-21 production database statement statistics measured approximately
+24.5 ms per enrichment batch read and 36.0 ms per apply. Do not replace exact
+product-code normalization with the compact generated column to optimize this
+path: punctuation is part of identity and the exact expression already has an
+index. The principal remaining work is the serialized official-source lookup.
+
+Supplier publication enrichment may use two official consumers globally: one
+Denso job and one conservative shared lane for all other official sources,
+including every ZF brand. Two suppliers' Denso lists remain serialized with
+each other. Claim admission keeps its transaction advisory lock and atomic
+lease fencing. File projection drains official consumers and runs exclusively;
+eligible new files retain priority. Source pacing and bounded worker windows
+remain unchanged. This separation does not relax generic manual review jobs'
+source, identity or publication approval contracts.
+
 The supplier-enrichment worker must checkpoint every completed official row
 before the next request, use bounded source pacing, and preserve file progress.
 A source failure on row N must not replay successful earlier observations in

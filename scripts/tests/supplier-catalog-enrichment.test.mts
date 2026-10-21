@@ -32,6 +32,7 @@ before(async()=>{
  await db.exec(await readFile('supabase/migrations/20261019170812_supplier_catalog_enrichment_short_transactions.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20261019171104_supplier_catalog_enrichment_scoped_timeout.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20261019225659_catalog_enrichment_fair_dispatch.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20261021095222_supplier_catalog_bounded_source_lanes.sql','utf8'));
  await db.query("insert into organizations(id,name)values($1,'Org')",[org]);
  await db.query("insert into suppliers(id,organization_id,name)values($1,$2,'Supplier')",[supplier,org]);
  await db.query("insert into brands(id,organization_id,name)values($1,$2,'Sachs')",[brand,org]);
@@ -40,12 +41,12 @@ before(async()=>{
 });
 after(async()=>{try{await db?.close();}finally{if(container)await exec('docker',['rm','--force',container]).catch(()=>{});}});
 async function transaction(fn:()=>Promise<any>){await admin('begin');try{await fn();}finally{await db.exec('rollback;reset role');}}
-async function publish(n:number,origin='TR',tariff='0087.08.80'){
+async function publish(n:number,origin='TR',tariff='0087.08.80',publishBrand=brand,publishSupplier=supplier){
  await admin('update supplier_price_ingestion_internal.catalog_enrichment_control set enabled=true');
- await db.query("insert into supplier_price_releases(id,organization_id,supplier_id,brand_id,status,total_rows,source_date,source_file_sha256,source_file_path,created_by)values($1,$2,$3,$4,'validated',1,'2026-10-19',$5,'fixture/source.csv',$6)",[id(n),org,supplier,brand,n.toString(16).padStart(64,'0'),actor]);
+ await db.query("insert into supplier_price_releases(id,organization_id,supplier_id,brand_id,status,total_rows,source_date,source_file_sha256,source_file_path,created_by)values($1,$2,$3,$4,'validated',1,'2026-10-19',$5,'fixture/source.csv',$6)",[id(n),org,publishSupplier,publishBrand,n.toString(16).padStart(64,'0'),actor]);
  await db.query("insert into supplier_price_release_rows(release_id,source_row_number,normalized_code,product_code,buy_price,currency,valid_from,row_status,row_hash,origin,tariff,market_segment)values($1,1,'00123','00123',10,'EUR','2026-10-19','accepted',$2,$3,$4,'PC')",[id(n),'b'.repeat(64),origin,tariff]);
- await db.query("insert into supplier_price_publications(id,release_id,organization_id,supplier_id,brand_id,status,publication_version,published_at)values($1,$2,$3,$4,$5,'published',$6,now())",[id(n+1000),id(n),org,supplier,brand,n]);
- await db.query('insert into supplier_current_price_pointers(organization_id,supplier_id,brand_id,publication_id,release_id)values($1,$2,$3,$4,$5) on conflict(organization_id,supplier_id,brand_id)do update set publication_id=excluded.publication_id,release_id=excluded.release_id',[org,supplier,brand,id(n+1000),id(n)]);
+ await db.query("insert into supplier_price_publications(id,release_id,organization_id,supplier_id,brand_id,status,publication_version,published_at)values($1,$2,$3,$4,$5,'published',$6,now())",[id(n+1000),id(n),org,publishSupplier,publishBrand,n]);
+ await db.query('insert into supplier_current_price_pointers(organization_id,supplier_id,brand_id,publication_id,release_id)values($1,$2,$3,$4,$5) on conflict(organization_id,supplier_id,brand_id)do update set publication_id=excluded.publication_id,release_id=excluded.release_id',[org,publishSupplier,publishBrand,id(n+1000),id(n)]);
 }
 test('field policy refreshes supplied variable fields and adds identifiers without losing punctuation or old values',()=>{
  const p=planSupplierCatalogEnrichment({existing:{origin:'DE',hs_code:'001234',oem_no:'AA/1; BB2',vehicle_model:'Focus'},incoming:{origin:'TR',hs_code:'0087.08.80',oem_no:'aa/1; CC3',vehicle_model:'Focus; Fiesta',notes:'private',buy_price:2},sourceDate:'2026-10-19'});
@@ -170,3 +171,38 @@ test('connector implementation failures are distinguished from official source o
  await assert.rejects(runSupplierCatalogEnrichment({rpc,jobId:claim.jobId,token:claim.token,officialDelayMs:0,officialProvider:()=>({key:'zf',fetch:async()=>{throw new ReferenceError('dependency is not defined');}})}));
  const j=(await admin('select error_code,cursor,phase from supplier_price_ingestion_internal.catalog_enrichment_jobs')).rows[0];assert.equal(j.error_code,'OFFICIAL_PROVIDER_IMPLEMENTATION_ERROR');assert.equal(j.phase,'official');assert.equal(Number(j.cursor),0);
 }));
+
+test('Denso runs beside the shared ZF queue with two global slots, one job per source and fenced expired workers',()=>transaction(async()=>{
+ const denso=id(800),trw=id(801),secondSupplier=id(802);
+ await admin("insert into brands(id,organization_id,name)values($1,$3,'Denso'),($2,$3,'TRW')",[denso,trw,org]);
+ await db.query("insert into suppliers(id,organization_id,name)values($1,$2,'Second supplier')",[secondSupplier,org]);
+ await publish(80);await publish(81,'TR','0087.08.80',trw);await publish(82,'TR','0087.08.80',denso);await publish(83,'TR','0087.08.80',denso,secondSupplier);
+ await admin("update supplier_price_ingestion_internal.catalog_enrichment_jobs j set phase='official',processed_rows=1,updated_at='2026-01-01'::timestamptz+(select publication_version from supplier_price_publications p where p.id=j.publication_id)*interval '1 second'");
+ const before=(await db.query('select * from supplier_current_price_pointers order by brand_id,supplier_id')).rows;
+ const shared=await rpc('claim_supplier_catalog_enrichment'),independent=await rpc('claim_supplier_catalog_enrichment');
+ assert.equal(shared.releaseId,id(80));assert.equal(independent.releaseId,id(82));assert.equal((await rpc('claim_supplier_catalog_enrichment')).status,'empty');
+ await rpc('release_supplier_catalog_enrichment',{input_job_id:independent.jobId,input_token:independent.token});
+ assert.equal((await rpc('claim_supplier_catalog_enrichment')).releaseId,id(83));
+ await admin("update supplier_price_ingestion_internal.catalog_enrichment_jobs set lease_until=clock_timestamp()-interval '1 second' where id=$1",[shared.jobId]);
+ const nextZf=await rpc('claim_supplier_catalog_enrichment');assert.equal(nextZf.releaseId,id(81));
+ await admin('savepoint expired_claim');
+ await assert.rejects(rpc('read_supplier_catalog_enrichment_batch',{input_job_id:shared.jobId,input_token:shared.token}),/LEASE_LOST/);
+ await db.exec('rollback to savepoint expired_claim;reset role');
+ assert.equal((await rpc('claim_supplier_catalog_enrichment')).status,'empty');
+ assert.deepEqual((await admin('select * from supplier_current_price_pointers order by brand_id,supplier_id')).rows,before);
+}));
+
+test('new file projection drains running official work and stays globally exclusive',()=>transaction(async()=>{
+ const denso=id(810);await admin("insert into brands(id,organization_id,name)values($1,$2,'Denso')",[denso,org]);
+ await publish(90);await admin("update supplier_price_ingestion_internal.catalog_enrichment_jobs set phase='official',processed_rows=1");
+ const shared=await rpc('claim_supplier_catalog_enrichment');await publish(91,'TR','0087.08.80',denso);
+ assert.equal((await rpc('claim_supplier_catalog_enrichment')).status,'empty');
+ await rpc('release_supplier_catalog_enrichment',{input_job_id:shared.jobId,input_token:shared.token});
+ const file=await rpc('claim_supplier_catalog_enrichment');assert.equal(file.releaseId,id(91));assert.equal(file.phase,'file');
+ assert.equal((await rpc('claim_supplier_catalog_enrichment')).status,'empty');
+}));
+
+test('bounded source dispatch retains the existing service-only admission grant',async()=>{
+ const row=(await admin("select has_function_privilege('anon',oid,'execute') anon,has_function_privilege('authenticated',oid,'execute') client,has_function_privilege('service_role',oid,'execute') worker from pg_proc where oid='public.claim_supplier_catalog_enrichment()'::regprocedure")).rows[0];
+ assert.deepEqual(row,{anon:false,client:false,worker:true});
+});
