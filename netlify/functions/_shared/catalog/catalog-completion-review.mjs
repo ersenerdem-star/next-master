@@ -36,7 +36,7 @@ export function catalogReplacementReviewRows(lifecycle,code){
 // Produces a separate review candidate, not an official patch or DB mutation.
 // Exact official identity is a prerequisite, not a marketplace fallback switch.
 export function planSparetoMissingCompletion({brand:requestedBrand,code,existing={},official,secondary}={}){
- const result={policy:COMPLETION_REVIEW_POLICY,status:'review_required',fields:{},provenance:{},issues:[],lifecycle:secondary?.lifecycle??catalogLifecycleReview({}, {unavailable:'SECONDARY_NOT_READ'}),canonicalWrite:false};
+ const result={policy:COMPLETION_REVIEW_POLICY,status:'review_required',fields:{},provenance:{},issues:[],conflicts:[],lifecycle:secondary?.lifecycle??catalogLifecycleReview({}, {unavailable:'SECONDARY_NOT_READ'}),canonicalWrite:false};
  if(!official||official.authority!=='official'||official.unavailable||brand(official.brand)!==brand(requestedBrand)||exactCatalogCode(official.code)!==exactCatalogCode(code)||!official.fingerprint||!official.sourceUrl){result.issues.push('EXACT_OFFICIAL_RECEIPT_REQUIRED');return result;}
  let source;
  try{source=new URL(secondary?.sourceUrl);}catch{result.issues.push('SECONDARY_RECEIPT_REQUIRED');return result;}
@@ -46,12 +46,16 @@ export function planSparetoMissingCompletion({brand:requestedBrand,code,existing
  const primary={...existing};
  // Both current canonical and the official snapshot protect every field.
  for(const field of CATALOG_FIELDS)if(blank(primary[field])&&!blank(official.fields?.[field]))primary[field]=official.fields[field];
+ for(const field of CATALOG_FIELDS)if(!blank(primary[field])&&!blank(secondary.fields?.[field])&&JSON.stringify(primary[field])!==JSON.stringify(secondary.fields[field])){
+  result.conflicts.push({field,preservedValue:primary[field],secondaryValue:secondary.fields[field],sourceUrl:source.href});
+  result.issues.push(field+':EXISTING_OR_OFFICIAL_VALUE_PRESERVED');
+ }
  const eans=[existing.ean,official.fields?.ean,secondary.fields?.ean].filter(v=>!blank(v)).map(v=>String(v).trim());
  if(new Set(eans).size>1){result.issues.push('EAN_IDENTITY_CONFLICT');return result;}
  const incoming=Object.fromEntries(CATALOG_FIELDS.filter(k=>blank(primary[k])&&!blank(secondary.fields?.[k])).map(k=>[k,secondary.fields[k]]));
  const planned=planSupplierCatalogEnrichment({existing:primary,incoming,phase:'official'});
  result.fields=planned.patch;result.issues.push(...planned.issues.map(i=>i.field+':'+i.code));
  for(const field of Object.keys(result.fields))result.provenance[field]={authority:'secondary',source:'Spareto',sourceUrl:source.href,observedAt:secondary.observedAt,fingerprint:secondary.fingerprint};
- result.status='staged_candidate';result.fingerprint=createHash('sha256').update(JSON.stringify({official:official.fingerprint,secondary:secondary.fingerprint,fields:result.fields})).digest('hex');
+ result.status='staged_candidate';result.fingerprint=createHash('sha256').update(JSON.stringify({brand:requestedBrand,code:exactCatalogCode(code),existing,official:official.fingerprint,secondary:secondary.fingerprint,fields:result.fields,conflicts:result.conflicts})).digest('hex');
  return result;
 }

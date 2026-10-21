@@ -44,6 +44,7 @@ test('secondary availability and successor label stay review-only without manufa
 test('Spareto fills only jointly missing fields, with separate source provenance and no canonical write',()=>{
  const r=plan({existing:{origin:'TR',oem_no:'123'}});assert.equal(r.status,'staged_candidate');assert.equal(r.fields.description,undefined);assert.equal(r.fields.origin,undefined);assert.equal(r.fields.ean,undefined);assert.equal(r.fields.hs_code,'870880');assert.equal(r.provenance.hs_code.authority,'secondary');assert.equal(r.provenance.hs_code.sourceUrl,url);assert.equal(r.canonicalWrite,false);
  const both=plan({official:{...official,fields:{...official.fields,hs_code:'009999'}},existing:{hs_code:'001234'}});assert.equal(both.fields.hs_code,undefined);
+ assert.deepEqual(r.conflicts.find(c=>c.field==='origin'),{field:'origin',preservedValue:'TR',secondaryValue:'MX',sourceUrl:url});
 });
 test('existing identifier fields cannot gain arbitrary secondary additions and EAN conflict holds the whole secondary candidate',()=>{
  const secondary=read();secondary.fields.oem_no='WRONG';secondary.fields.vehicle_model='WRONG';

@@ -196,6 +196,12 @@ candidates as review-only. Older completed items are not rewritten.
 This reader/planner does not discover an entire brand, run automatically after
 every official job, or apply secondary candidates to canonical data. Durable
 secondary dispatch, reviewed publication and UI coverage remain rollout work.
+Read-only production checks matched Sachs 280960 and SKF VKBA906 against both
+official and Spareto pages, with canonical rereads unchanged. VKBA906 already
+has origin SE while Spareto reports IT: preserve SE and record both values as
+a secondary-source conflict, rather than treating exact SKU/EAN as proof that
+every origin batch is the same. No secondary candidate was applied in these
+checks.
 
 ## ZF Group exact identity and correction — 2026-10-20
 
