@@ -156,6 +156,32 @@ official receipt remains mandatory before any Spareto supplemental completion.
 Replacement/discontinued checks remain required; an unavailable source records
 blocked/unsupported coverage rather than a fabricated production state.
 
+Reader follow-up: the owner has only the public web catalogue. Normal signed-out
+browser navigation exposed the official `/api/AAM-COM/products/search`,
+`products/{internal-code}` and `products/{internal-code}/oenumbers` routes.
+The shared exact reader is implemented against those response contracts, with
+20-result complete-search limits, separate brand/article/internal-ID checks,
+fixed-origin JSON requests, response caps, request fingerprints and at least
+1100 ms pacing. Product names, EAN and scoped OE numbers are supported. Explicit
+ISO origin, tariff, gross weight and mm-labelled criteria may complete fields;
+net/unqualified weights, unitless dimensions and trade numbers never do.
+Vehicle/model data is not inferred from OE manufacturers. A replacement
+reference contract has not been verified, so that mandatory check remains
+`unsupported`; product availability cannot assert discontinued production.
+
+The actual Vitesco `571 0122 10` response has net weight `0.273` without a unit,
+unitless packaging dimensions and EAN `4014870798192`. Only the qualified
+metadata enters the bounded test fixture. This is browser-derived contract
+validation, not a server-worker or canonical publication result. Generic brand
+jobs now have the reader but require `server_access_verified` plus the existing
+read/publication approvals. Supplier upload execution remains unchanged while
+access is blocked. Schaeffler's Akamai response explicitly reports a security
+block and directs mistaken blocks to `vehiclelifetimesolutions@schaeffler.com`.
+No cookies, credentials, user-agent impersonation or network rerouting is used.
+Keep the source inactive and jobs unstarted until permitted automated access
+has been supplied and verified. The reader being implemented is separate from
+source activation and all-brand enrichment completion.
+
 Owner instruction `user-official-first-spareto-lifecycle-2026-10-21` applies to
 all brands. First match the exact official brand and product; then use
 `https://spareto.com` for remaining missing attributes. Preserve populated

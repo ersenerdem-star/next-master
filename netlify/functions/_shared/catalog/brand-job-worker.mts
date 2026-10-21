@@ -1,8 +1,9 @@
-import {supplierOfficialProvider,safeSupplierOfficialObservation} from './supplier-official-completion.mts';
+import {safeSupplierOfficialObservation} from './supplier-official-completion.mts';
+import {brandOfficialProvider} from './brand-official-provider.mts';
 import {brandEngineDefinition,assertBrandEngineSource} from './brand-engine-registry.mts';
 import {CATALOG_FIELDS,exactCatalogCode,planSupplierCatalogEnrichment} from './supplier-enrichment-plan.mjs';
 import {catalogLifecycleReview,catalogReplacementReviewRows} from './catalog-completion-review.mjs';
-export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,providerFactory=supplierOfficialProvider,delayMs=1100}:any){
+export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,providerFactory=brandOfficialProvider,delayMs=1100}:any){
  const rpc=async(name:string,args:any)=>{const r=await db.rpc(name,args);if(r.error)throw Error(r.error.message);return r.data;};
  const job=await rpc('claim_catalog_brand_job',{input_org:organizationId,input_job:jobId});if(!job)return {claimed:false};
  const started=Date.now(),scope={input_org:organizationId,input_job:jobId,input_token:job.lease_token};

@@ -15,7 +15,7 @@ const knownOfficialSources:Record<string,{sourceKey:string;sourceUrl:string;fami
 };
 export function brandEngineDefinition(brand:string){
  const key=normalizeBrandKey(brand),tec=resolveTecAllianceBrandEntry(brand);
- if(isSchaefflerBrand(brand))return {brand,family:SCHAEFFLER_ENGINE.family,engineName:SCHAEFFLER_ENGINE.name,sourceKey:SCHAEFFLER_ENGINE.sourceKey,sourceUrl:SCHAEFFLER_ENGINE.sourceUrl,reader:false,workflow:'brand',access:'server_access_required'};
+ if(isSchaefflerBrand(brand))return {brand,family:SCHAEFFLER_ENGINE.family,engineName:SCHAEFFLER_ENGINE.name,sourceKey:SCHAEFFLER_ENGINE.sourceKey,sourceUrl:SCHAEFFLER_ENGINE.sourceUrl,reader:true,workflow:'brand',access:'server_access_required'};
  if(['sachs','boge','trw','lemforder','lemfoerder','wabco','zf'].includes(key))return {brand,family:'zf',sourceKey:'zf_group_official_v2',sourceUrl:'https://aftermarket.zf.com/en/aftermarket-portal/',reader:true,workflow:'zf'};
  if(key==='elring')return {brand,family:'elring',sourceKey:'tecalliance_elring',sourceUrl:'https://web.tecalliance.net/elring/en/home',reader:true,workflow:'elring'};
  if(key==='denso')return {brand,family:'denso',sourceKey:'denso_official_v1',sourceUrl:'https://www.denso-am.eu/catalog/pv',reader:true,workflow:'brand'};
@@ -30,6 +30,7 @@ export function brandEngineDefinition(brand:string){
 }
 export function assertBrandEngineSource(source:any,brand:string,{publish=false}={}){
  const def=brandEngineDefinition(brand);
+ if(def.family==='schaeffler'&&source?.metadata?.server_access_verified!==true)throw Error('SCHAEFFLER_OFFICIAL_SERVER_ACCESS_REQUIRED');
  if(!def.reader||def.workflow!=='brand'||source?.source_key!==def.sourceKey||!source.is_active||!['allowed','internal_review_required'].includes(source.license_posture)
   ||source.credential_boundary!=='none'||source.rate_limit_posture!=='bounded'||source.metadata?.brand_engine_read_allowed!==true||!source.metadata?.allowed_brands?.includes(brand))throw Error('OFFICIAL_ENGINE_NOT_CONFIGURED');
  if(publish&&(source.metadata?.brand_engine_enrichment_allowed!==true||!source.metadata?.approval_actor||!source.metadata?.publication_approval_reference))throw Error('OFFICIAL_ENGINE_PUBLICATION_NOT_APPROVED');
@@ -40,7 +41,7 @@ export function brandEngineCapability(def:any,source:any){
  if(def.workflow==='zf')return source?.is_active?'existing_review_engine':'source_registration_required';
  if(def.workflow==='elring')return source?.is_active?'existing_review_engine':'operational_hold';
  if(def.family==='manual')return 'manual_only';if(def.access==='authorization_required')return 'authorized_access_required';
- if(def.access==='server_access_required')return 'server_access_required';
+ if(def.access==='server_access_required'&&source?.metadata?.server_access_verified!==true)return 'server_access_required';
  if(!def.reader)return def.sourceUrl?'adapter_required':'official_link_required';
  try{assertBrandEngineSource(source,def.brand);return 'ready';}catch{return 'source_registration_required';}
 }

@@ -24,9 +24,11 @@ export function supplierOfficialProvider(brand:string){
 export function safeSupplierOfficialObservation(value:any,code:string,brandId:string){
  if(value?.code!==exactCatalogCode(code)||typeof value.sourceUrl!=='string')throw Error('OFFICIAL_OBSERVATION_IDENTITY_INVALID');
  const u=new URL(value.sourceUrl);
- if(u.protocol!=='https:'||!['aftermarket.zf.com','ps.emea.dxtservice.com','www.mann-filter.com','web.tecalliance.net','www.denso-am.eu','automotive.skf.com'].includes(u.hostname)||u.username||u.password)throw Error('OFFICIAL_OBSERVATION_SOURCE_INVALID');
+ if(u.protocol!=='https:'||!['aftermarket.zf.com','ps.emea.dxtservice.com','www.mann-filter.com','web.tecalliance.net','www.denso-am.eu','automotive.skf.com','vehiclelifetimesolutions.schaeffler.com'].includes(u.hostname)||u.username||u.password)throw Error('OFFICIAL_OBSERVATION_SOURCE_INVALID');
  const fields=Object.fromEntries(CATALOG_FIELDS.filter(k=>value.fields?.[k]!=null).map(k=>[k,value.fields[k]]));
  const lifecycle=catalogLifecycleReview(value);
  return {fields,evidence:{authority:'official',code:exactCatalogCode(code),brandId,sourceUrl:u.href,
-  sourceEan:fields.ean??null,lifecycle,observedAt:new Date().toISOString(),fingerprint:createHash('sha256').update(JSON.stringify({code:exactCatalogCode(code),source:u.href,fields,lifecycle})).digest('hex')}};
+  sourceEan:fields.ean??null,lifecycle,observedAt:new Date().toISOString(),fingerprint:createHash('sha256').update(JSON.stringify({code:exactCatalogCode(code),source:u.href,fields,lifecycle})).digest('hex'),
+  ...(typeof value.sourceFingerprint==='string'&&/^[a-f0-9]{64}$/.test(value.sourceFingerprint)?{sourceFingerprint:value.sourceFingerprint}:{}),
+  ...(Array.isArray(value.diagnostics)?{sourceDiagnostics:value.diagnostics.filter((v:any)=>typeof v==='string'&&/^[A-Z_]{1,100}$/.test(v)).slice(0,12)}:{})}};
 }

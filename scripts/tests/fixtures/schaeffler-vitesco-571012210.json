@@ -1,0 +1,19 @@
+{
+  "note": "Bounded public browser response observed 2026-10-21; selected contract fields only. This fixture is not a canonical publication or live server-reader proof.",
+  "product": {
+    "code": "TA-4319-5710122100",
+    "brand": {"code":"33","name":"Vitesco","supplierNumber":"7820"},
+    "catalogArticleNumber": "571 0122 10",
+    "catalogStatus": {"code":"normal","name":"Normal"},
+    "fullName": "NOx Sensor, urea injection",
+    "description": "",
+    "ean": "4014870798192",
+    "dimensions": {"height":96,"length":156,"width":156},
+    "weight": {"net":true,"value":0.273},
+    "classifications": [{"code":"attributes","features":[{"name":"Cable Length [mm]","featureUnit":{"symbol":"mm"},"featureValues":[{"value":"515"}]},{"name":"Number of pins","featureUnit":{"symbol":"-pin connector"},"featureValues":[{"value":"4"}]},{"name":"External Thread [mm]","featureUnit":{"symbol":"mm"},"featureValues":[{"value":"M20x1,5"}]}]}],
+    "productReferences": [],
+    "seoPath": ["exhaust-system","urea-injection","sensor","nox-sensor-urea-injection"],
+    "url": "/AAM-COM/products/TA-4319-5710122100"
+  },
+  "oe": {"oenumbers":[{"manufacturer":{"name":"DAF","uuid":"TA-24"},"numbers":[{"number":"1932 603"},{"number":"1936 258"},{"number":"1973 527"},{"number":"2006 245"},{"number":"2236 408"},{"number":"2293 965"}]}]}
+}
