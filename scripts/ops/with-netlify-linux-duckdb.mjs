@@ -4,6 +4,7 @@ import { mkdtemp, readdir, rename, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { absoluteNetlifyDeployPaths } from "./netlify-deploy-paths.mjs";
 
 // Netlify CLI bundles functions from the caller's macOS node_modules. Hide
 // macOS DuckDB binaries only for that bundle/deploy, then restore them even if
@@ -14,7 +15,7 @@ const cli = join(root, "node_modules", ".bin", "netlify");
 const scratch = await mkdtemp(join(tmpdir(), "netlify-duckdb-deploy-"));
 const hidden = [];
 const delimiter = process.argv.indexOf("--");
-const command = delimiter < 0 ? [] : process.argv.slice(delimiter + 1);
+const command = absoluteNetlifyDeployPaths(delimiter < 0 ? [] : process.argv.slice(delimiter + 1), root);
 if (command.length === 0 && !process.argv.includes("--verify-only")) {
   throw new Error("Expected --verify-only or -- followed by the Netlify deploy command");
 }
