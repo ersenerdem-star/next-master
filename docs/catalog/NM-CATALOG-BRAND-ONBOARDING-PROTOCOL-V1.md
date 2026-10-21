@@ -87,6 +87,13 @@ pointers remained unchanged. The two current supplier enrichment jobs (7,349
 and 9,469 source rows, different suppliers) were requeued at their preserved
 official cursors; this is not proof of whole-list enrichment completion.
 
+On 2026-10-21 both Denso supplier jobs were found stopped at DSN2112
+(source rows 4,854 and 4,602). Its official fitment `items` has sparse numeric
+JSON object keys rather than an array. Preserve every model by accepting both
+numeric list representations, reject unrelated object shapes, and cover the
+same product response in regression validation before resuming those cursors.
+Do not reset successful prefixes or alter either supplier price publication.
+
 The supplier-enrichment worker must checkpoint every completed official row
 before the next request, use bounded source pacing, and preserve file progress.
 A source failure on row N must not replay successful earlier observations in

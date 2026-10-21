@@ -17,3 +17,11 @@ test('DENSO fetch is bounded, official-only and uses the requested exact code',a
  let target;const r=await fetchDensoSupplierCatalogFields(article.name,20000,async(url,init)=>{target=url;assert.equal(init.redirect,'error');assert(init.signal);return Response.json(payload(article));});assert.equal(new URL(target).hostname,'www.denso-am.eu');assert.equal(r.code,article.name);
  await assert.rejects(fetchDensoSupplierCatalogFields(article.name,20000,async()=>new Response('x',{status:429})),/429/);
 });
+test('DSN2112 sparse numeric fitment maps retain every model without interrupting either supplier job',()=>{
+ const a={...article,name:'DSN2112',title:'Starter',criteria:{0:{label:'Gross Weight [g]',val:'3500'}},ref_numbers:{2:{maker:'TOYOTA',numbers:{0:'28100-76002-71'}}},cars:[{title:[null,{lang_tid:4,val:'TOYOTA'}],items:{0:{title:'02-2FD series',items:[]},2:{title:'5FD series',items:[]},8:{title:'6FD series',items:[]}}}]};
+ const mapped=mapDensoArticle(payload(a),'DSN2112');
+ assert.equal(mapped.fields.vehicle_model,'TOYOTA 02-2FD series; TOYOTA 5FD series; TOYOTA 6FD series');
+ assert.equal(mapped.fields.vehicle,'TOYOTA');assert.equal(mapped.fields.weight_kg,3.5);assert.equal(mapped.fields.oem_no,'28100-76002-71');
+ assert.throws(()=>mapDensoArticle(payload({...a,cars:[{title:'TOYOTA',items:{unexpected:{title:'wrong'}}}]}),'DSN2112'),/DENSO_COLLECTION_INVALID/);
+ assert.equal(mapDensoArticle(payload({...a,cars:[{title:'TOYOTA',items:[{title:null}]}]}),'DSN2112').fields.vehicle_model,undefined);
+});
