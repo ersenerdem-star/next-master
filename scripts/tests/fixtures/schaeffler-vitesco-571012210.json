@@ -15,5 +15,5 @@
     "seoPath": ["exhaust-system","urea-injection","sensor","nox-sensor-urea-injection"],
     "url": "/AAM-COM/products/TA-4319-5710122100"
   },
-  "oe": {"oenumbers":[{"manufacturer":{"name":"DAF","uuid":"TA-24"},"numbers":[{"number":"1932 603"},{"number":"1936 258"},{"number":"1973 527"},{"number":"2006 245"},{"number":"2236 408"},{"number":"2293 965"}]}]}
+  "oe": {"oenumbers":[{"manufacturer":{"name":"DAF","uuid":"TA-24"},"numbers":[{"number":"1932 603","exchangeability":"Interchangeable"},{"number":"1936 258","exchangeability":"Interchangeable"},{"number":"1973 527","exchangeability":"Interchangeable"},{"number":"2006 245","exchangeability":"Interchangeable"},{"number":"2236 408","exchangeability":"Interchangeable"},{"number":"2293 965","exchangeability":"Interchangeable"}]}]}
 }

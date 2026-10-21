@@ -43,6 +43,11 @@ test('only explicitly qualified gross kg, ISO origin, tariff and numeric mm crit
  const r=map(p);assert.equal(r.fields.weight_kg,0.45);assert.equal(r.fields.origin,'JP');assert.equal(r.fields.hs_code,'840999');assert.deepEqual(r.fields.dimensions,{width_mm:12.5});
  p.classifications[0].features.push({name:'Gross Weight [kg]',featureUnit:{symbol:'kg'},featureValues:[{value:'9'}]});assert.equal(map(p).fields.weight_kg,undefined);
 });
+test('component-only or unqualified OE references cannot become complete-product interchange numbers',()=>{
+ const oe=structuredClone(fixture.oe);oe.oenumbers[0].numbers.push({number:'KIT-COMPONENT-ONLY',exchangeability:'Reference corresponds to a component'},{number:'UNKNOWN-SCOPE'});
+ const r=mapSchaefflerArticle(copy(),'Vitesco','571012210',{selectedCode:'TA-4319-5710122100',oePayload:oe});
+ assert.equal(r.fields.oem_no,map().fields.oem_no);assert(r.diagnostics.includes('NON_INTERCHANGEABLE_OE_REFERENCE_EXCLUDED'));
+});
 test('normal, unavailable and unrelated kit relations never manufacture a discontinued assertion or successor',()=>{
  for(const name of ['Normal','Unavailable','Not deliverable']){const p=copy();p.catalogStatus.name=name;p.productReferences=[{referenceType:'CONSISTS_OF',target:{code:'KIT'}}];const r=map(p);assert.equal(r.lifecycle.checks.replacement,'unsupported');assert.equal(r.lifecycle.checks.discontinued,'no_explicit_signal');assert.equal(r.fields.lifecycle_status,undefined);}
  const p=copy();p.catalogStatus.name='Production discontinued';assert.equal(map(p).lifecycle.checks.discontinued,'found');

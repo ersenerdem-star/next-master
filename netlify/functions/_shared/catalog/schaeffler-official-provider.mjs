@@ -66,7 +66,16 @@ export function mapSchaefflerArticle(product,brand,code,{selectedCode,oePayload}
  if(oePayload!==undefined){
   if(!Array.isArray(oePayload?.oenumbers)||oePayload.oenumbers.length>500)throw Error('SCHAEFFLER_OE_RESPONSE_INVALID');
   const numbers=[];
-  for(const group of oePayload.oenumbers){if(!Array.isArray(group?.numbers)||group.numbers.length>1000)throw Error('SCHAEFFLER_OE_RESPONSE_INVALID');for(const n of group.numbers){const number=text(n?.number);if(number&&number.length<=100)numbers.push(number);}}
+  for(const group of oePayload.oenumbers){
+   if(!Array.isArray(group?.numbers)||group.numbers.length>1000)throw Error('SCHAEFFLER_OE_RESPONSE_INVALID');
+   for(const n of group.numbers){
+    const number=text(n?.number);if(!number||number.length>100)continue;
+    // A kit may list an OE reference belonging only to one of its components.
+    // Only the source's explicit interchangeable references describe this part.
+    if(n.exchangeability==='Interchangeable')numbers.push(number);
+    else if(!diagnostics.includes('NON_INTERCHANGEABLE_OE_REFERENCE_EXCLUDED'))diagnostics.push('NON_INTERCHANGEABLE_OE_REFERENCE_EXCLUDED');
+   }
+  }
   const oem=[...new Set(numbers)].join('; ');if(oem.length>12000)throw Error('SCHAEFFLER_OE_RESPONSE_TOO_LARGE');if(oem)fields.oem_no=oem;
  }
  const path=array(product.seoPath);const validPath=path.length>0&&path.length<=16&&path.every(v=>typeof v==='string'&&/^[a-z0-9][a-z0-9-]{0,100}$/.test(v));

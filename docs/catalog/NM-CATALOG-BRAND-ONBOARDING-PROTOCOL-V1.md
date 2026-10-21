@@ -168,6 +168,9 @@ net/unqualified weights, unitless dimensions and trade numbers never do.
 Vehicle/model data is not inferred from OE manufacturers. A replacement
 reference contract has not been verified, so that mandatory check remains
 `unsupported`; product availability cannot assert discontinued production.
+OE references marked as component-only or with unknown exchangeability never
+become complete-product OEM interchange numbers; only explicit
+`Interchangeable` references are admitted.
 
 The actual Vitesco `571 0122 10` response has net weight `0.273` without a unit,
 unitless packaging dimensions and EAN `4014870798192`. Only the qualified
