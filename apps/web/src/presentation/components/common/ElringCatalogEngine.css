@@ -9,3 +9,5 @@
 @media(max-width:600px){.elring-engine-dialog{padding:16px}.elring-engine-actions button{flex:1}}
 
 .elring-engine-brand{display:flex;align-items:center;gap:12px}.elring-engine-logo{width:88px;height:72px;object-fit:contain;background:#fff;border-radius:6px;flex-shrink:0}
+.wilmink-engine-summary{display:block;margin:16px 0;padding:16px;border:1px solid var(--border-color,#d4dce6);border-radius:10px;background:var(--surface-alt,#f5f9ff);font-size:14px;line-height:1.5}
+.wilmink-engine-summary p{margin:8px 0}.wilmink-engine-summary>strong{display:block;font-size:15px}.wilmink-engine-summary [role=status]{font-weight:600}.wilmink-engine-summary button{margin-top:4px}
