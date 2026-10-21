@@ -359,7 +359,7 @@ async function resolveQuoteImportRowsOnce(input: {
 
 function isTransientImportError(error: unknown) {
   const message = String(error instanceof Error ? error.message : error || "").toLowerCase();
-  return ["timeout", "timed out", "statement timeout", "canceling statement", "upstream request", "fetch failed", "connection", "504", "503", "502"].some((token) => message.includes(token));
+  return ["timeout", "timed out", "took too long", "statement timeout", "canceling statement", "upstream request", "fetch failed", "connection", "504", "503", "502"].some((token) => message.includes(token));
 }
 
 function delayedQuoteImportLine(row: QuoteImportRow, reason: string): QuoteBuilderLine {

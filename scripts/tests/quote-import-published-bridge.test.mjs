@@ -267,3 +267,37 @@ test("inactive compact policies do not weaken punctuation identity", async () =>
   assert.equal(line.found, false);
   assert.equal(line.qty, 3);
 });
+
+
+test("gateway's user-facing timeout is retried instead of becoming a false unmatched row", async () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = { setTimeout: (callback) => setTimeout(callback, 0) };
+  let attempts = 0;
+  globalThis.__quoteImportMocks = {
+    organizationId: async () => "org-1",
+    codeReferences: async () => new Map(),
+    supabaseClient: tableClient({
+      brands: [{ id: "mann", name: "Mann", organization_id: "org-1" }],
+      product_code_normalization_policies: [{ brand_key: "MANN", policy: "compact_alnum", active: true }],
+    }, []),
+    callAppRpc: async () => {
+      if (++attempts === 1) throw new Error("The request took too long. Please try again.");
+      return [{ request_index: 0, has_published_scope: true, options: [{
+        supplier_id: "supplier", supplier_name: "Supplier", product_code: "WK82019", buy_price: 10,
+        moq: null, order_multiple: null, stock_qty: null, valid_to: null,
+      }] }];
+    },
+  };
+  try {
+    const { batchResolveQuoteImportRows } = await loadQuoteImport();
+    const [line] = await batchResolveQuoteImportRows({
+      rows: [{ code: "WK820/19", brand: "Mann", qty: 11 }], customerType: "A", marginA: 10, marginB: 15,
+    });
+    assert.equal(attempts, 2);
+    assert.equal(line.found, true);
+    assert.equal(line.resolvedCode, "WK82019");
+    assert.equal(line.qty, 11);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
