@@ -203,6 +203,36 @@ a secondary-source conflict, rather than treating exact SKU/EAN as proof that
 every origin batch is the same. No secondary candidate was applied in these
 checks.
 
+## Supplier upload safety correction — 2026-10-21
+
+Owner approval authorizes correcting the four reviewed gaps in sequence, while
+preserving the existing publication/price/order boundaries and active jobs.
+Official EAN conflicts hold **all** metadata at both planner and locked database
+application boundaries; source EAN and the conflict remain in the receipt.
+An older worker lacking source EAN evidence cannot apply an official patch to
+an existing EAN-bearing product. Missing source EAN is recorded explicitly as
+null by the new reader, not guessed to match an existing barcode.
+
+The v2 upload worker requests exact official evidence for every accepted row,
+including metadata-complete products. Every successful or not-found/domain
+outcome records replacement/discontinued coverage; source outages retain the
+same unadvanced checkpoint and actionable error. Lifecycle results remain
+review evidence and do not directly change operational replacements or status.
+The historical `official_checked` is **scanned row progress**, not proof of
+actual requests. New `official_requested` / `lifecycle_recorded` counters begin
+at an explicit `coverage_start_row`. Do not manufacture historical coverage or
+restart already processed rows. Transport signing stays on its existing v1
+protocol so deployment does not invalidate an in-flight invocation.
+
+File projection remains globally exclusive. Under file pressure, completed
+four-minute file turns alternate with one-minute official turns, without
+starting concurrent file/official writers. Existing source lanes still allow
+at most two official consumers when no file waits. Every job keeps its cursor,
+publication and lease fencing; the next turn is a scheduler decision only.
+The currently running file invocation drains normally before the first source
+turn. A source request may complete after the one-minute budget; its row is
+committed before yielding. No official source pacing is relaxed.
+
 ## ZF Group exact identity and correction — 2026-10-20
 
 The Product Decision Owner requested repair of order `FU26-R42026` and the

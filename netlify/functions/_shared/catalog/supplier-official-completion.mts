@@ -28,5 +28,5 @@ export function safeSupplierOfficialObservation(value:any,code:string,brandId:st
  const fields=Object.fromEntries(CATALOG_FIELDS.filter(k=>value.fields?.[k]!=null).map(k=>[k,value.fields[k]]));
  const lifecycle=catalogLifecycleReview(value);
  return {fields,evidence:{authority:'official',code:exactCatalogCode(code),brandId,sourceUrl:u.href,
-  lifecycle,observedAt:new Date().toISOString(),fingerprint:createHash('sha256').update(JSON.stringify({code:exactCatalogCode(code),source:u.href,fields,lifecycle})).digest('hex')}};
+  sourceEan:fields.ean??null,lifecycle,observedAt:new Date().toISOString(),fingerprint:createHash('sha256').update(JSON.stringify({code:exactCatalogCode(code),source:u.href,fields,lifecycle})).digest('hex')}};
 }

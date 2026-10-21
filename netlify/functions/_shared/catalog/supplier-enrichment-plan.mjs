@@ -1,6 +1,6 @@
 // Pure field policy for the versioned supplier publication projection.
 // Source parsing and historical release hashes remain unchanged.
-export const ENRICHMENT_POLICY='supplier-catalog-enrichment-v1';
+export const ENRICHMENT_POLICY='supplier-catalog-enrichment-v2';
 export const CATALOG_FIELDS=['description','description_tr','oem_no','vehicle','vehicle_model','ean','market_segment','weight_kg','dimensions','origin','hs_code'];
 export const CATALOG_COMPLETION_FIELDS=['description','oem_no','vehicle','vehicle_model','ean','weight_kg','origin','hs_code'];
 export const exactCatalogCode=v=>String(v??'').trim().replace(/\s+/g,'').toUpperCase();
@@ -20,6 +20,9 @@ export function planSupplierCatalogEnrichment({existing={},incoming={},phase='fi
  if(!['file','official'].includes(phase))throw Error('CATALOG_ENRICHMENT_PHASE_INVALID');
  const patch={},issues=[];
  const issue=(field,code)=>issues.push({field,code});
+ if(phase==='official'&&!blank(existing.ean)&&!blank(incoming.ean)&&exactCatalogCode(existing.ean)!==exactCatalogCode(incoming.ean)){
+  return {patch,issues:[{field:'ean',code:'EAN_IDENTITY_CONFLICT'}],missing:CATALOG_COMPLETION_FIELDS.filter(k=>blank(existing[k]))};
+ }
  for(const field of CATALOG_FIELDS){
   let value=incoming[field];if(blank(value))continue;
   if(typeof value==='string')value=value.trim();

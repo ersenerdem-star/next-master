@@ -2,6 +2,7 @@ import {createHmac,timingSafeEqual} from 'node:crypto';
 import {supplierUpgradeServiceHeaders} from '../supplier-upgrade-auth.mts';
 import {ENRICHMENT_POLICY,sourceCatalogFields,planSupplierCatalogEnrichment} from './supplier-enrichment-plan.mjs';
 import {supplierOfficialProvider,safeSupplierOfficialObservation} from './supplier-official-completion.mts';
+import {catalogLifecycleReview} from './catalog-completion-review.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function supplierCatalogTarget(read:(name:string)=>string|undefined){
@@ -23,7 +24,9 @@ export function catalogEnrichmentRpc(target:Target){return async(name:string,arg
  }
  return data;
 };}
-const signature=(key:string,jobId:string,token:string,timestamp:string)=>createHmac('sha256',key).update(`${ENRICHMENT_POLICY}\n${jobId}\n${token}\n${timestamp}`).digest('hex');
+// Transport signatures stay stable across metadata-policy versions so a deploy
+// does not invalidate an already-dispatched, still-fenced worker invocation.
+const signature=(key:string,jobId:string,token:string,timestamp:string)=>createHmac('sha256',key).update(`supplier-catalog-enrichment-v1\n${jobId}\n${token}\n${timestamp}`).digest('hex');
 export function enrichmentDispatchHeaders(target:Target,jobId:string,token:string){const timestamp=String(Date.now());return {'Content-Type':'application/json','x-catalog-time':timestamp,'x-catalog-signature':signature(target.key,jobId,token,timestamp)};}
 export function requireEnrichmentDispatch(req:Request,target:Target,jobId:string,token:string){
  const ts=req.headers.get('x-catalog-time')||'',value=req.headers.get('x-catalog-signature')||'';
@@ -32,30 +35,34 @@ export function requireEnrichmentDispatch(req:Request,target:Target,jobId:string
 }
 type Rpc=(name:string,args?:Record<string,unknown>)=>Promise<any>;
 export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=4*60*1000,officialProvider=supplierOfficialProvider,now=Date.now,officialDelayMs=1100,wait=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms))}:{rpc:Rpc;jobId:string;token:string;budgetMs?:number;officialProvider?:typeof supplierOfficialProvider;now?:()=>number;officialDelayMs?:number;wait?:(ms:number)=>Promise<void>}){
+ let effectiveBudgetMs=budgetMs;
  const start=now(),scope={input_job_id:jobId,input_token:token};
  try{
-  while(now()-start<budgetMs){
+  while(now()-start<effectiveBudgetMs){
    const batch=await rpc('read_supplier_catalog_enrichment_batch',scope);
    if(['completed','superseded'].includes(batch?.status))return {status:batch.status};
    if(batch?.status==='deferred')return {status:'continuation'};
    if(batch?.status==='next_phase')continue;
    if(batch?.status!=='batch'||!['file','official'].includes(batch.phase)||!Array.isArray(batch.rows)||!batch.rows.length)throw Error('CATALOG_ENRICHMENT_BATCH_UNCONFIRMED');
+   if(Number.isSafeInteger(batch.turnBudgetMs)&&batch.turnBudgetMs>=1000)effectiveBudgetMs=Math.min(effectiveBudgetMs,batch.turnBudgetMs);
    const provider=batch.phase==='official'?officialProvider(batch.brand):null;
-   const needsOfficial=batch.phase==='official'&&batch.rows.some((r:any)=>planSupplierCatalogEnrichment({existing:r.existing||{},incoming:{},phase:'official'}).missing.length>0);
+   const needsOfficial=batch.phase==='official'&&batch.rows.some((r:any)=>r.rowStatus==='accepted');
    if(needsOfficial&&!provider)return await rpc('finish_supplier_catalog_without_official_source',scope);
    const buildRow=async(row:any)=>{
     let incoming=sourceCatalogFields(row.source),evidence:any={},issues:any[]=[];
     const before=row.existing||{};
-    const initial=planSupplierCatalogEnrichment({existing:before,incoming:{},phase:'official'});
     if(batch.phase==='official'){
      incoming={};evidence={};
-     if(initial.missing.length&&row.rowStatus==='accepted'){
+     if(row.rowStatus==='accepted'){
       try{
        await wait(officialDelayMs);
        const observation=safeSupplierOfficialObservation(await provider!.fetch(row.code),row.code,batch.brandId);
-       incoming=observation.fields;evidence={...observation.evidence,policy:ENRICHMENT_POLICY,provider:provider!.key};
+       incoming=observation.fields;evidence={...observation.evidence,policy:ENRICHMENT_POLICY,provider:provider!.key,sourceRequested:true,sourceOutcome:'matched'};
       }catch(error){
-       if(['OFFICIAL_EXACT_MATCH_NOT_FOUND','OFFICIAL_PRODUCT_DOMAIN_UNSUPPORTED'].includes(String((error as Error)?.message)))issues.push({field:'source',code:String((error as Error).message)});
+       if(['OFFICIAL_EXACT_MATCH_NOT_FOUND','OFFICIAL_PRODUCT_DOMAIN_UNSUPPORTED'].includes(String((error as Error)?.message))){
+        const reason=String((error as Error).message);issues.push({field:'source',code:reason});
+        evidence={policy:ENRICHMENT_POLICY,provider:provider!.key,sourceRequested:true,sourceOutcome:reason==='OFFICIAL_EXACT_MATCH_NOT_FOUND'?'not_found':'unsupported_domain',lifecycle:catalogLifecycleReview({}, {unavailable:reason})};
+       }
        else{
         const text=String((error as Error)?.message||error),code=error instanceof ReferenceError||/is not defined|is not a function/.test(text)?'OFFICIAL_PROVIDER_IMPLEMENTATION_ERROR':/^OFFICIAL_OBSERVATION_(IDENTITY|SOURCE)_INVALID$/.test(text)?text:/429|rate.limit/i.test(text)?'OFFICIAL_SOURCE_RATE_LIMIT':/401|403/.test(text)?'OFFICIAL_SOURCE_ACCESS_DENIED':/timeout|timed.out|abort/i.test(text)?'OFFICIAL_SOURCE_TIMEOUT':'OFFICIAL_SOURCE_UNAVAILABLE';
         throw Object.assign(Error(code),{sourceRow:row.rowNumber,provider:provider!.key});
@@ -73,7 +80,7 @@ export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=4*6
     // timeout cannot discard earlier successful rows in this fetched prefix.
     let cursor=batch.cursor;
     for(const row of batch.rows){
-     if(now()-start>=budgetMs){await rpc('release_supplier_catalog_enrichment',scope);return {status:'continuation'};}
+     if(now()-start>=effectiveBudgetMs){await rpc('release_supplier_catalog_enrichment',scope);return {status:'continuation'};}
      const built=await buildRow(row);
      const result=await rpc('apply_supplier_catalog_enrichment_batch',{...scope,input_phase:batch.phase,input_cursor:cursor,input_rows:[built]});
      if(result?.status==='superseded')return result;

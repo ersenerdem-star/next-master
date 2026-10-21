@@ -33,6 +33,9 @@ before(async()=>{
  await db.exec(await readFile('supabase/migrations/20261019171104_supplier_catalog_enrichment_scoped_timeout.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20261019225659_catalog_enrichment_fair_dispatch.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20261021095222_supplier_catalog_bounded_source_lanes.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20261021162624_supplier_catalog_ean_identity_guard.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20261021162739_supplier_catalog_mandatory_lifecycle_receipts.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20261021162842_supplier_catalog_bounded_fair_turns.sql','utf8'));
  await db.query("insert into organizations(id,name)values($1,'Org')",[org]);
  await db.query("insert into suppliers(id,organization_id,name)values($1,$2,'Supplier')",[supplier,org]);
  await db.query("insert into brands(id,organization_id,name)values($1,$2,'Sachs')",[brand,org]);
@@ -221,4 +224,49 @@ test('an unsupported product domain is explicit review evidence and does not sto
  const issues=(await db.query("select issues from supplier_price_ingestion_internal.catalog_enrichment_changes where phase='official' and source_row_number=1")).rows[0].issues;
  assert.deepEqual(issues,[{field:'source',code:'OFFICIAL_PRODUCT_DOMAIN_UNSUPPORTED'}]);
  assert.equal((await db.query("select description from catalog_products where product_code='00234'")).rows[0].description,'Wheel Bearing Kit');
+}));
+
+
+test('official EAN conflict holds all metadata in the planner',()=>{
+ const p=planSupplierCatalogEnrichment({phase:'official',existing:{ean:'1234567890123'},incoming:{ean:'9999999999999',description:'Wrong identity',weight_kg:2,oem_no:'WRONG'}});
+ assert.deepEqual(p.patch,{});assert.deepEqual(p.issues,[{field:'ean',code:'EAN_IDENTITY_CONFLICT'}]);
+ const equal=planSupplierCatalogEnrichment({phase:'official',existing:{ean:'1234567890123'},incoming:{ean:' 1234567890123 ',weight_kg:2}});assert.equal(equal.patch.weight_kg,2);
+});
+
+test('the database holds conflicting source EAN even if the worker incorrectly proposes a patch',()=>transaction(async()=>{
+ await publish(110);const claim=await rpc('claim_supplier_catalog_enrichment');
+ await admin("insert into catalog_products(organization_id,brand_id,product_code,ean)values($1,$2,'00123','1234567890123')",[org,brand]);
+ await admin("update supplier_price_ingestion_internal.catalog_enrichment_jobs set phase='official',cursor=0 where id=$1",[claim.jobId]);
+ const scope={input_job_id:claim.jobId,input_token:claim.token};const row=(await rpc('read_supplier_catalog_enrichment_batch',scope)).rows[0];
+ const evidence=safeSupplierOfficialObservation({code:'00123',sourceUrl:'https://aftermarket.zf.com/api/articles/00123',fields:{ean:'9999999999999',description:'Wrong identity'}},'00123',brand).evidence;
+ const pointers=(await admin('select * from supplier_current_price_pointers')).rows;
+ await rpc('apply_supplier_catalog_enrichment_batch',{...scope,input_phase:'official',input_cursor:0,input_rows:[{rowNumber:1,existing:row.existing,patch:{description:'Wrong identity',weight_kg:2,oem_no:'WRONG'},issues:[],evidence}]});
+ const product=(await admin("select ean,description,weight_kg,oem_no from catalog_products where product_code='00123'")).rows[0];assert.equal(product.ean,'1234567890123');assert.equal(product.description,null);assert.equal(product.weight_kg,null);assert.equal(product.oem_no,null);
+ const change=(await db.query("select patch,issues,evidence from supplier_price_ingestion_internal.catalog_enrichment_changes where phase='official'")).rows[0];assert.deepEqual(change.patch,{});assert.deepEqual(change.issues,[{field:'ean',code:'EAN_IDENTITY_CONFLICT'}]);assert.equal(change.evidence.sourceEan,'9999999999999');
+ assert.deepEqual((await admin('select * from supplier_current_price_pointers')).rows,pointers);
+}));
+
+
+test('metadata-complete products still obtain a source request and mandatory lifecycle receipt',()=>transaction(async()=>{
+ await publish(120);await admin("insert into catalog_products(organization_id,brand_id,product_code,description,oem_no,vehicle,vehicle_model,ean,weight_kg,origin,hs_code,market_segment)values($1,$2,'00123','Existing','OE1','VW','Model1','1234567890123',1,'TR','0087.08.80','pc')",[org,brand]);
+ const before=(await admin("select to_jsonb(c) v from catalog_products c where product_code='00123'")).rows[0].v;
+ const claim=await rpc('claim_supplier_catalog_enrichment');let calls=0;
+ await runSupplierCatalogEnrichment({rpc,jobId:claim.jobId,token:claim.token,officialDelayMs:0,officialProvider:()=>({key:'zf',fetch:async(code:string)=>{calls++;return {code,sourceUrl:'https://aftermarket.zf.com/api/articles/'+code,fields:{ean:'1234567890123'},sourceStatus:'Production discontinued',replacementCandidates:{replacedBy:['00234']}};}})});
+ assert.equal(calls,1);const proof=(await admin("select evidence from supplier_price_ingestion_internal.catalog_enrichment_changes where phase='official'")).rows[0].evidence;assert.equal(proof.lifecycle.checks.discontinued,'found');assert.equal(proof.lifecycle.checks.replacement,'review_required');
+ const counts=(await db.query('select official_requested,lifecycle_recorded,coverage_start_row from supplier_price_ingestion_internal.catalog_enrichment_jobs')).rows[0];assert.equal(Number(counts.official_requested),1);assert.equal(Number(counts.lifecycle_recorded),1);assert.equal(Number(counts.coverage_start_row),1);
+ const after=(await db.query("select to_jsonb(c) v from catalog_products c where product_code='00123'")).rows[0].v;delete before.updated_at;delete after.updated_at;assert.deepEqual(after,before);
+}));
+
+
+test('a large file yields a bounded official turn without concurrent file writes or cursor resets',()=>transaction(async()=>{
+ const denso=id(850);await admin("insert into brands(id,organization_id,name)values($1,$2,'Denso')",[denso,org]);
+ await publish(130);await publish(131,'TR','0087.08.80',denso);
+ await admin("update supplier_price_ingestion_internal.catalog_enrichment_jobs set phase='official',processed_rows=1,cursor=0 where release_id=$1",[id(131)]);
+ const file=await rpc('claim_supplier_catalog_enrichment');assert.equal(file.releaseId,id(130));assert.equal(file.phase,'file');assert.equal((await rpc('claim_supplier_catalog_enrichment')).status,'empty');
+ await rpc('release_supplier_catalog_enrichment',{input_job_id:file.jobId,input_token:file.token});
+ const official=await rpc('claim_supplier_catalog_enrichment');assert.equal(official.releaseId,id(131));assert.equal(official.phase,'official');assert.equal((await rpc('claim_supplier_catalog_enrichment')).status,'empty');
+ assert.equal((await rpc('read_supplier_catalog_enrichment_batch',{input_job_id:official.jobId,input_token:official.token})).turnBudgetMs,60000);
+ await rpc('release_supplier_catalog_enrichment',{input_job_id:official.jobId,input_token:official.token});
+ const nextFile=await rpc('claim_supplier_catalog_enrichment');assert.equal(nextFile.jobId,file.jobId);assert.equal(nextFile.phase,'file');assert.notEqual(nextFile.token,file.token);
+ assert.equal(Number((await admin('select cursor from supplier_price_ingestion_internal.catalog_enrichment_jobs where id=$1',[file.jobId])).rows[0].cursor),0);
 }));
