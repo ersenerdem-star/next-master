@@ -5,14 +5,18 @@ import {CATALOG_FIELDS,exactCatalogCode,planSupplierCatalogEnrichment} from './s
 import {catalogLifecycleReview,catalogReplacementReviewRows} from './catalog-completion-review.mjs';
 import {runClaimedSparetoCorrection} from './spareto-correction-worker.mts';
 import {SPARETO_CORRECTION_ADAPTER} from './spareto-reviewed-correction.mjs';
+import {WILMINK_SCAN,safeWilminkObservation} from './wilmink-kolbenschmidt.mjs';
+import {runWilminkDiscovery,wilminkProvider} from './wilmink-discovery-worker.mts';
 export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,providerFactory=brandOfficialProvider,delayMs=1100}:any){
  const rpc=async(name:string,args:any)=>{const r=await db.rpc(name,args);if(r.error)throw Error(r.error.message);return r.data;};
  const job=await rpc('claim_catalog_brand_job',{input_org:organizationId,input_job:jobId});if(!job)return {claimed:false};
  if(job.manifest.adapter===SPARETO_CORRECTION_ADAPTER)return runClaimedSparetoCorrection({db,organizationId,job});
+ if(job.manifest.adapter===WILMINK_SCAN)return runWilminkDiscovery({db,organizationId,job});
  const started=Date.now(),scope={input_org:organizationId,input_job:jobId,input_token:job.lease_token};
- const def=brandEngineDefinition(job.manifest.brand),provider=providerFactory(job.manifest.brand);
+ const def=brandEngineDefinition(job.manifest.brand);let provider=providerFactory(job.manifest.brand);
  const source=await db.from('catalog_external_sources').select('*').eq('organization_id',organizationId).eq('source_key',def.sourceKey).single();
  const brand=await db.from('brands').select('id').eq('organization_id',organizationId).eq('name',job.manifest.brand).single();
+ if(def.family==='wilmink_kolbenschmidt'&&!brand.error)provider=wilminkProvider(db,organizationId,brand.data.id);
  for(let index=job.next_index;index<job.total_items;index++){
  const found=await db.from('catalog_brand_job_items').select('*').eq('organization_id',organizationId).eq('job_id',jobId).eq('item_index',index).single();
  if(found.error)throw Error(found.error.message);const item=found.data;let observation=item.observation,checkpoint=item.checkpoint||{};
@@ -26,10 +30,10 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  const current=await db.from('catalog_products').select('id,product_code,'+CATALOG_FIELDS.join(',')).eq('organization_id',organizationId).eq('brand_id',brand.data.id).eq('normalized_code',item.product_code.replace(/[^a-z0-9]/gi,'').toUpperCase());
  if(current.error)throw Error(current.error.message);const rows=(current.data||[]).filter((p:any)=>exactCatalogCode(p.product_code)===exactCatalogCode(item.product_code));if(rows.length!==1)throw Error('CATALOG_IDENTITY_MISSING_OR_AMBIGUOUS');
  await new Promise(r=>setTimeout(r,delayMs));
- try{const raw=await provider.fetch(item.product_code),safe=safeSupplierOfficialObservation(raw,item.product_code,brand.data.id);
+ try{const raw=await provider.fetch(item.product_code),safe=def.family==='wilmink_kolbenschmidt'?safeWilminkObservation(raw,item.product_code):safeSupplierOfficialObservation(raw,item.product_code,brand.data.id);
  const plan=planSupplierCatalogEnrichment({existing:rows[0],incoming:safe.fields,phase:'official'});
- observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),sourceUrl:safe.evidence.sourceUrl,observedAt:safe.evidence.observedAt,fingerprint:safe.evidence.fingerprint,before:rows[0],fields:plan.patch,sourceFields:safe.fields,sourceStatus:raw.sourceStatus||null,lifecycle:safe.evidence.lifecycle,replacements:catalogReplacementReviewRows(safe.evidence.lifecycle,item.product_code),issues:plan.issues,missing:plan.missing};
- }catch(e:any){if(!['OFFICIAL_EXACT_MATCH_NOT_FOUND','OFFICIAL_PRODUCT_DOMAIN_UNSUPPORTED'].includes(e.message))throw e;observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),before:rows[0],fields:{},replacements:[],lifecycle:catalogLifecycleReview({}, {unavailable:e.message}),observedAt:new Date().toISOString(),unavailable:e.message};}
+ observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),sourceUrl:safe.evidence.sourceUrl,observedAt:safe.evidence.observedAt,fingerprint:safe.evidence.fingerprint,before:rows[0],fields:plan.patch,sourceFields:safe.fields,sourceStatus:raw.sourceStatus||null,lifecycle:safe.evidence.lifecycle,replacements:catalogReplacementReviewRows(safe.evidence.lifecycle,item.product_code),issues:plan.issues,missing:plan.missing,...(def.family==='wilmink_kolbenschmidt'?{authority:'distributor',sourceSku:raw.sourceSku,technicalAttributes:raw.technicalAttributes,imageCandidate:raw.imageCandidate}:{})};
+ }catch(e:any){if(!['OFFICIAL_EXACT_MATCH_NOT_FOUND','OFFICIAL_PRODUCT_DOMAIN_UNSUPPORTED','WILMINK_SOURCE_INDEX_MISSING'].includes(e.message))throw e;observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),before:rows[0],fields:{},replacements:[],lifecycle:catalogLifecycleReview({}, {unavailable:e.message}),observedAt:new Date().toISOString(),unavailable:e.message};}
  await save();
  }
  if(job.mode==='publish'){await rpc('heartbeat_catalog_brand_job',scope);checkpoint=await rpc('apply_catalog_brand_job_item',{...scope,input_index:index});}

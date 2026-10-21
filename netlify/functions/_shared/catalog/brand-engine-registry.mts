@@ -15,6 +15,7 @@ const knownOfficialSources:Record<string,{sourceKey:string;sourceUrl:string;fami
 };
 export function brandEngineDefinition(brand:string){
  const key=normalizeBrandKey(brand),tec=resolveTecAllianceBrandEntry(brand);
+ if(key==='kolbenschmidt')return {brand,family:'wilmink_kolbenschmidt',engineName:'Kolbenschmidt · Wilmink',sourceKey:'wilmink_kolbenschmidt_v1',sourceUrl:'https://www.wilminkengineparts.com/en/brands/kolbenschmidt',reader:true,workflow:'brand',authority:'distributor'};
  if(isSchaefflerBrand(brand))return {brand,family:SCHAEFFLER_ENGINE.family,engineName:SCHAEFFLER_ENGINE.name,sourceKey:SCHAEFFLER_ENGINE.sourceKey,sourceUrl:SCHAEFFLER_ENGINE.sourceUrl,reader:true,workflow:'brand',access:'server_access_required'};
  if(['sachs','boge','trw','lemforder','lemfoerder','wabco','zf'].includes(key))return {brand,family:'zf',sourceKey:'zf_group_official_v2',sourceUrl:'https://aftermarket.zf.com/en/aftermarket-portal/',reader:true,workflow:'zf'};
  if(key==='elring')return {brand,family:'elring',sourceKey:'tecalliance_elring',sourceUrl:'https://web.tecalliance.net/elring/en/home',reader:true,workflow:'elring'};

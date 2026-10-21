@@ -1,0 +1,12 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+import {runWilminkDiscovery} from '../../netlify/functions/_shared/catalog/wilmink-discovery-worker.mts';
+const html=readFileSync(new URL('./fixtures/wilmink-kolbenschmidt-41504600.html',import.meta.url),'utf8'),url='https://www.wilminkengineparts.com/en/piston/wg1380527',pageUrl='https://www.wilminkengineparts.com/en/brands/kolbenschmidt';
+test('page discovery checkpoints every product and resumes without rereading successful products or writing canonical rows',async()=>{
+ let checkpoint={},completed=null;const reads=[];let errorOnSecond=true;
+ const job={id:'job',lease_token:'token',mode:'stage',manifest:{adapter:'wilmink-kolbenschmidt-discovery.v1',brand:'Kolbenschmidt',source_key:'wilmink_kolbenschmidt_v1',page_url:pageUrl}};
+ const source={is_active:true,license_posture:'internal_review_required',credential_boundary:'none',rate_limit_posture:'bounded',metadata:{brand_engine_read_allowed:true,allowed_brands:['Kolbenschmidt']}};
+ const db={rpc:async(name,args)=>{if(name==='checkpoint_catalog_brand_job')checkpoint=structuredClone(args.input_checkpoint);if(name==='complete_catalog_wilmink_discovery')completed=args;assert.notEqual(name,'apply_catalog_brand_job_item');return {data:{}};},from(table){const q={select(){return q;},eq(){return q;},single:async()=>({data:table==='catalog_external_sources'?source:table==='brands'?{id:'brand'}:{checkpoint}}),then(resolve){resolve({data:[{id:'product',product_code:'41504600',ean:'4028977841316'}]});}};return q;}};
+ const readHtml=async u=>{reads.push(u);if(u===pageUrl)return `<li class="noscript-product-item"><a href="${url}"><span class="product-brand">Kolbenschmidt</span></a></li><li class="noscript-product-item"><a href="/en/piston/wg999"><span class="product-brand">Kolbenschmidt</span></a></li>`;if(u===url)return html;throw Error(errorOnSecond?'WILMINK_HTTP_503':'WILMINK_HTTP_404');};
+ const first=await runWilminkDiscovery({db,organizationId:'org',job,readHtml});assert.equal(first.status,'paused');assert.equal(checkpoint.captured.length,1);assert.equal(completed,null);
+ errorOnSecond=false;const second=await runWilminkDiscovery({db,organizationId:'org',job,readHtml});assert.equal(second.status,'reviewed');assert.equal(reads.filter(x=>x===url).length,1);assert.equal(reads.filter(x=>x===pageUrl).length,1);assert.equal(completed.input_products.length,2);assert.equal(completed.input_products[1].unavailable,'WILMINK_HTTP_404');
+});

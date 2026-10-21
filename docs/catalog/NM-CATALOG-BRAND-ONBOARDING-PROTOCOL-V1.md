@@ -34,6 +34,41 @@ the canonical reread passed.
    not a zero, empty success, or guessed value. The package remains visible
    until its review, publication, enrichment and reread states are explicit.
 
+## Kolbenschmidt / Wilmink distributor engine — 2026-10-21
+
+The owner explicitly selected Wilmink for the Kolbenschmidt engine. Register
+`wilmink_kolbenschmidt_v1` as distributor evidence, separate from the existing
+`mira_legacy_kolbenschmidt` Motorservice registration and every other brand.
+Use ordinary public HTML with an honest `NextMasterCatalog/1.0` application
+user agent, no login credentials, browser cookies or protected raw API calls.
+The current robots file blocks AI crawler identities and search/account/system
+paths; this application reader is limited to the generic-user-agent-allowed
+Kolbenschmidt brand listing and observed exact product-detail URLs. No training
+crawler, search/account crawl or public redistribution is enabled.
+
+Reuse `catalog_brand_jobs` for fenced page discovery and immutable reviewed
+article packages. Checkpoint each captured product before the next request;
+each completed page atomically seals a source receipt, creates an exact-code
+review package for existing products and queues only the observed next page.
+The shared signed dispatcher retains its existing serialization and prior jobs.
+An ordinary source scan does not create catalog products or publish changes.
+
+Wilmink `WG...` is a supplier SKU, never the manufacturer product code. Require
+agreement between primary Product JSON-LD, SKU/URL, brand, external article and
+EAN in primary specifications. A numeric/blank JSON-LD description must not win
+over the primary product heading. Cross-references and related/alternative
+products are not OEM numbers or directional replacements. Record replacement
+and discontinued coverage as unsupported; availability is not production status.
+
+Technical attributes and packaging values remain separately inspectable.
+An unqualified or packaging weight is not canonical gross product kg; only
+explicit product dimensions enter a candidate. Origin, tariff, segment and full
+fitment require explicit source evidence and remain missing when absent.
+Primary-product images are review candidates; this engine does not relax image
+quarantine. Separate reviewed application fills missing values, adds identifiers
+and preserves current values, EAN conflicts and concurrent edits. No prices,
+supplier publications, orders or other-brand source policies are modified.
+
 ## All-brand engine rollout — 2026-10-20
 
 The Product Decision Owner requested completion of existing upload/enrichment

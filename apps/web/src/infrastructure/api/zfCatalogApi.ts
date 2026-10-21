@@ -1,8 +1,8 @@
 import {supabaseClient} from './supabaseClient';
 export type ZfJob={id:string;mode:'stage'|'publish';status:string;total_items:number;next_index:number;error_message:string|null;lease_expires_at:string|null;manifest:{brand:string;codes:string[]}};
-export type ZfObservation={brand:string;code:string;sourceUrl?:string;observedAt:string;unavailable?:string;sourceStatus?:string;lifecycle?:{checks:Record<string,string>;reviewOnly:boolean};before:Record<string,unknown>;fields:Record<string,unknown>;sourceFields?:Record<string,unknown>;replacements:Array<{code:string;direction:string;error?:string;verified:boolean;sourceUrl?:string}>};
+export type ZfObservation={brand:string;code:string;sourceUrl?:string;observedAt:string;unavailable?:string;sourceStatus?:string;authority?:string;sourceSku?:string;technicalAttributes?:Array<[string,string]>;imageCandidate?:string|null;lifecycle?:{checks:Record<string,string>;reviewOnly:boolean};before:Record<string,unknown>;fields:Record<string,unknown>;sourceFields?:Record<string,unknown>;replacements:Array<{code:string;direction:string;error?:string;verified:boolean;sourceUrl?:string}>};
 export type ZfItem={productCode:string;state:string;error:string|null;observation:ZfObservation|null;result:{fields?:Record<string,string>;relations?:Array<{old:string;new:string;status:string}>;status?:string}};
-export type ZfStatus={capability?:{status:string;reader:boolean;family:string;engineName?:string;workflow:string};correction?:{source:string;total:number;processed:number;applied:number;held:number;failed:number;completed:number;jobs:number;running:number}|null;sourceUrl:string;readAllowed:boolean;publishAllowed:boolean;jobs:ZfJob[];items:ZfItem[]};
+export type ZfStatus={capability?:{status:string;reader:boolean;family:string;engineName?:string;workflow:string};discovery?:{pages:number;lastPage:number|null;observed:number;matched:number;held:number;failed:number;active:number;error?:string|null}|null;correction?:{source:string;total:number;processed:number;applied:number;held:number;failed:number;completed:number;jobs:number;running:number}|null;sourceUrl:string;readAllowed:boolean;publishAllowed:boolean;jobs:ZfJob[];items:ZfItem[]};
 async function request(brand:string,method:string,body?:unknown,jobId?:string,engine:'zf'|'brand'='zf'){
  let {data,error}=await supabaseClient.auth.getSession();
  if(data.session?.expires_at&&data.session.expires_at*1000<Date.now()+30000){const refreshed=await supabaseClient.auth.refreshSession();data=refreshed.data;error=refreshed.error;}
@@ -16,6 +16,6 @@ export const getZfStatus=(brand:string,jobId?:string):Promise<ZfStatus>=>request
 export const actOnZfJob=(brand:string,body:{action:'start'|'resume'|'publish';jobId?:string;codes?:string[];requestId?:string}):Promise<{job:ZfJob;dispatchPending:boolean}>=>request(brand,'POST',{...body,brand});
 
 export const getBrandEngineStatus=(brand:string,jobId?:string):Promise<ZfStatus>=>request(brand,'GET',undefined,jobId,'brand');
-export const actOnBrandEngineJob=(brand:string,body:{action:'start'|'resume'|'publish';jobId?:string;codes?:string[];requestId?:string}):Promise<{job:ZfJob;dispatchPending:boolean}>=>request(brand,'POST',{...body,brand},undefined,'brand');
+export const actOnBrandEngineJob=(brand:string,body:{action:'start'|'resume'|'publish'|'discover';jobId?:string;codes?:string[];requestId?:string}):Promise<{job:ZfJob;dispatchPending:boolean}>=>request(brand,'POST',{...body,brand},undefined,'brand');
 export type CatalogEngineEntry={brand:string;family:string;engineName?:string;sourceUrl:string;sourceKey:string|null;reader:boolean;workflow:string;status:string};
 export const listBrandEngines=async():Promise<CatalogEngineEntry[]> => (await request('','GET',undefined,undefined,'brand')).brands;

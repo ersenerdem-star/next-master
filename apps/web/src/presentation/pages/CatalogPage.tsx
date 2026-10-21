@@ -5,7 +5,6 @@ import { ZfCatalogEngine } from "../components/common/ZfCatalogEngine";
 import { ElringCatalogEngine } from "../components/common/ElringCatalogEngine";
 import { CATALOG_MARKET_SEGMENT_OPTIONS, normalizeCatalogMarketSegment } from "../../domain/shared/catalogSegments";
 import { normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
-import { startBulkBrandCatalogImport } from "../../infrastructure/api/adminApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import {
   CatalogDeleteBlockedError,
@@ -244,7 +243,6 @@ export function CatalogPage() {
   const [bilsteinStageCount, setBilsteinStageCount] = useState("10");
   const [stagingBilsteinProducts, setStagingBilsteinProducts] = useState(false);
   const [bilsteinStageSummary, setBilsteinStageSummary] = useState<CatalogImportStageOnlyResult | null>(null);
-  const [syncingBrandCatalog, setSyncingBrandCatalog] = useState(false);
   const [creatingItem, setCreatingItem] = useState(false);
   const [savingReference, setSavingReference] = useState(false);
   const [referenceOldCodeUsage, setReferenceOldCodeUsage] = useState<CodeReferenceUsage | null>(null);
@@ -1382,34 +1380,6 @@ export function CatalogPage() {
 
   async function handleSyncSelectedBrand() { openCatalogEngine(catalogBrand); }
 
-  async function handleBulkImportSelectedBrand(refreshExisting = false) {
-    if (!isOnline || catalogBrand.trim().toLowerCase() !== "kolbenschmidt") {
-      return;
-    }
-
-    setSyncingBrandCatalog(true);
-    setError("");
-    setStatus("");
-    actionFeedback.begin(
-      t(refreshExisting ? "catalog.status.bulkRefreshStarting" : "catalog.status.bulkImportStarting", {
-        brand: catalogBrand,
-      }),
-    );
-
-    try {
-      const result = await startBulkBrandCatalogImport(catalogBrand, refreshExisting);
-      const startedBrand = result.targetBrandName || catalogBrand;
-      const statusKey = refreshExisting ? "catalog.status.bulkRefreshStarted" : "catalog.status.bulkImportStarted";
-      setStatus(t(statusKey, { brand: startedBrand }));
-      actionFeedback.succeed(t(statusKey, { brand: startedBrand }));
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : t("catalog.errors.syncFailed");
-      setError(message);
-      actionFeedback.fail(message);
-    } finally {
-      setSyncingBrandCatalog(false);
-    }
-  }
 
   return (
     <PageShell className="catalog-page">
@@ -1505,32 +1475,11 @@ export function CatalogPage() {
             </Button>
             <Button variant="secondary" onClick={()=>setShowEngineOverview(true)} disabled={!isOnline}>{locale==='tr'?'Marka Motorları':'Brand Engines'}</Button>
             {catalogBrand ? (
-              <Button variant="secondary" onClick={() => void handleSyncSelectedBrand()} disabled={!isOnline} busy={syncingBrandCatalog} busyLabel={t("catalog.actions.resyncing")}>
-                {["zf","sachs","boge","trw","lemforder","wabco"].includes(catalogBrand.trim().toLowerCase()) ? (locale === "tr" ? "ZF Grup Katalog Motoru" : "ZF Group Catalog Engine") : catalogBrand.trim().toLowerCase() === "elring" ? (locale === "tr" ? "Elring Katalog Motoru" : "Elring Catalog Engine") : (locale === "tr" ? "Katalog Motoru" : "Catalog Engine")}
+              <Button variant="secondary" onClick={() => void handleSyncSelectedBrand()} disabled={!isOnline}>
+                {["zf","sachs","boge","trw","lemforder","wabco"].includes(catalogBrand.trim().toLowerCase()) ? (locale === "tr" ? "ZF Grup Katalog Motoru" : "ZF Group Catalog Engine") : catalogBrand.trim().toLowerCase() === "elring" ? (locale === "tr" ? "Elring Katalog Motoru" : "Elring Catalog Engine") : catalogBrand.trim().toLowerCase() === "kolbenschmidt" ? (locale === "tr" ? "Kolbenschmidt · Wilmink Motoru" : "Kolbenschmidt · Wilmink Engine") : (locale === "tr" ? "Katalog Motoru" : "Catalog Engine")}
               </Button>
             ) : null}
-            {catalogBrand.trim().toLowerCase() === "kolbenschmidt" ? (
-              <>
-                <Button
-                  variant="secondary"
-                  onClick={() => void handleBulkImportSelectedBrand()}
-                  disabled={!isOnline}
-                  busy={syncingBrandCatalog}
-                  busyLabel={t("catalog.actions.bulkImporting")}
-                >
-                  {t("catalog.actions.bulkImport")}
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => void handleBulkImportSelectedBrand(true)}
-                  disabled={!isOnline}
-                  busy={syncingBrandCatalog}
-                  busyLabel={t("catalog.actions.bulkRefreshing")}
-                >
-                  {t("catalog.actions.bulkRefresh")}
-                </Button>
-              </>
-            ) : null}
+
         </PageActions>
       </details>
 
