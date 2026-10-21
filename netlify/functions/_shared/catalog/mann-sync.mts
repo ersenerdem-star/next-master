@@ -508,7 +508,7 @@ export async function fetchMannSupplierCatalogFields(productCode:string,requestT
   const attributes=attributesToMap(product.attributes),tables=customTablesToMap(product.customTables);
   // Product-bound values only: no broad cross-reference search or unlabelled
   // legacy weight enters reviewed official completion.
-  return {code:exact(productCode),sourceUrl:product.urlKey?`https://www.mann-filter.com/uk-en/catalogue/search-results/product.html/${product.urlKey}.html`:'',fields:{
+  return {code:exact(productCode),sourceUrl:product.urlKey?`https://www.mann-filter.com/uk-en/catalogue/search-results/product.html/${product.urlKey}.html`:'',replacementCandidates:{replacedBy:product.successorProduct||null,replaces:product.replacedProduct||null},fields:{
     oem_no:collectOemNumbers(product,[]).join(', '),vehicle:extractVehicleList(attributes.main_application_aa||attributes.application||''),hs_code:extractOfficialHsCode(attributes,tables)}};
 }
 

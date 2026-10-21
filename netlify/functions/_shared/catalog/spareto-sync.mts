@@ -212,7 +212,7 @@ export async function syncBrandCatalogFromSpareto(input: {
           normalized_old_code: normalizeCode(detail.product_code),
           new_code: detail.replacement_code,
           original_number: null,
-          reason: "Automatic replacement. Production stopped by manufacturer.",
+          reason: "Source-reported replacement. Production status requires separate confirmation.",
           is_active: true,
         });
         const replacementNormalizedCode = normalizeCode(detail.replacement_code);
@@ -889,9 +889,9 @@ function extractEanFromJsonLikeText(value: string) {
   return normalizeCatalogEan(direct?.[1] || "");
 }
 
-function extractCurrentLifecycle(html: string, targetBrandSlug: string) {
-  const preAlternatives = html.split("<section class='mb-5' id='nav-alternatives'")[0] || html;
-  const discontinued = /No longer deliverable by the manufacturer/i.test(preAlternatives);
+export function extractCurrentLifecycle(html: string, targetBrandSlug: string) {
+  const preAlternatives = html.split(/<section\b[^>]*\bid=['"]nav-alternatives['"]/i)[0];
+  const discontinued = /\b(?:Production discontinued|No longer produced|Production ended)\b/i.test(cleanText(preAlternatives));
   const replacementIndex = preAlternatives.search(/Product has been replaced by:/i);
   let replacement_code = "";
   let replacement_url = "";

@@ -8,6 +8,7 @@ import {fetchTecAllianceSupplierCatalogFields} from './tecalliance-sync.mts';
 import {resolveTecAllianceBrandEntry} from './tecalliance-brand-registry.mts';
 import {normalizeBrandKey} from './brand-standardization.mts';
 import {CATALOG_FIELDS,exactCatalogCode} from './supplier-enrichment-plan.mjs';
+import {catalogLifecycleReview} from './catalog-completion-review.mjs';
 
 export function supplierOfficialProvider(brand:string){
  const key=normalizeBrandKey(brand);
@@ -25,6 +26,7 @@ export function safeSupplierOfficialObservation(value:any,code:string,brandId:st
  const u=new URL(value.sourceUrl);
  if(u.protocol!=='https:'||!['aftermarket.zf.com','ps.emea.dxtservice.com','www.mann-filter.com','web.tecalliance.net','www.denso-am.eu','automotive.skf.com'].includes(u.hostname)||u.username||u.password)throw Error('OFFICIAL_OBSERVATION_SOURCE_INVALID');
  const fields=Object.fromEntries(CATALOG_FIELDS.filter(k=>value.fields?.[k]!=null).map(k=>[k,value.fields[k]]));
+ const lifecycle=catalogLifecycleReview(value);
  return {fields,evidence:{authority:'official',code:exactCatalogCode(code),brandId,sourceUrl:u.href,
-  observedAt:new Date().toISOString(),fingerprint:createHash('sha256').update(JSON.stringify({code:exactCatalogCode(code),source:u.href,fields})).digest('hex')}};
+  lifecycle,observedAt:new Date().toISOString(),fingerprint:createHash('sha256').update(JSON.stringify({code:exactCatalogCode(code),source:u.href,fields,lifecycle})).digest('hex')}};
 }

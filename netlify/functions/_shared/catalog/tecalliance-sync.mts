@@ -1,4 +1,5 @@
 import {officialGrossWeightKg} from './official-weight.mjs';
+import {tecLifecycle} from './mira-lifecycle.mts';
 import {
   normalizeCatalogDescription,
   normalizeCatalogDisplayCode,
@@ -724,7 +725,7 @@ export async function fetchTecAllianceSupplierCatalogFields(brandName:string,pro
     &&(!config.manufacturerNames?.length||config.manufacturerNames.some(n=>n.toUpperCase()===String((a as any).mfrName||'').toUpperCase())));
   if(matches.length!==1)throw Error('OFFICIAL_EXACT_MATCH_NOT_FOUND');
   const detail=resolveTecAllianceArticle(matches[0],null,brandName);
-  return {code:exact(productCode),sourceUrl:'https://web.tecalliance.net',fields:{description:detail.description,ean:detail.ean,oem_no:detail.oem_no,
+  return {code:exact(productCode),sourceUrl:'https://web.tecalliance.net',lifecycle:tecLifecycle(matches[0]),fields:{description:detail.description,ean:detail.ean,oem_no:detail.oem_no,
     vehicle_model:detail.vehicle_model,weight_kg:officialGrossWeightKg([...(matches[0].articleCriteria||[]),...(matches[0].logisticsCriteria||[])])}};
 }
 

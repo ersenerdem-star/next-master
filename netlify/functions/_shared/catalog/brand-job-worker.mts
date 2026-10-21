@@ -1,6 +1,7 @@
 import {supplierOfficialProvider,safeSupplierOfficialObservation} from './supplier-official-completion.mts';
 import {brandEngineDefinition,assertBrandEngineSource} from './brand-engine-registry.mts';
 import {CATALOG_FIELDS,exactCatalogCode,planSupplierCatalogEnrichment} from './supplier-enrichment-plan.mjs';
+import {catalogLifecycleReview,catalogReplacementReviewRows} from './catalog-completion-review.mjs';
 export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,providerFactory=supplierOfficialProvider,delayMs=1100}:any){
  const rpc=async(name:string,args:any)=>{const r=await db.rpc(name,args);if(r.error)throw Error(r.error.message);return r.data;};
  const job=await rpc('claim_catalog_brand_job',{input_org:organizationId,input_job:jobId});if(!job)return {claimed:false};
@@ -23,8 +24,8 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  await new Promise(r=>setTimeout(r,delayMs));
  try{const raw=await provider.fetch(item.product_code),safe=safeSupplierOfficialObservation(raw,item.product_code,brand.data.id);
  const plan=planSupplierCatalogEnrichment({existing:rows[0],incoming:safe.fields,phase:'official'});
- observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),sourceUrl:safe.evidence.sourceUrl,observedAt:safe.evidence.observedAt,fingerprint:safe.evidence.fingerprint,before:rows[0],fields:plan.patch,sourceFields:safe.fields,sourceStatus:raw.sourceStatus||null,replacements:[],issues:plan.issues,missing:plan.missing};
- }catch(e:any){if(!['OFFICIAL_EXACT_MATCH_NOT_FOUND','OFFICIAL_PRODUCT_DOMAIN_UNSUPPORTED'].includes(e.message))throw e;observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),before:rows[0],fields:{},replacements:[],observedAt:new Date().toISOString(),unavailable:e.message};}
+ observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),sourceUrl:safe.evidence.sourceUrl,observedAt:safe.evidence.observedAt,fingerprint:safe.evidence.fingerprint,before:rows[0],fields:plan.patch,sourceFields:safe.fields,sourceStatus:raw.sourceStatus||null,lifecycle:safe.evidence.lifecycle,replacements:catalogReplacementReviewRows(safe.evidence.lifecycle,item.product_code),issues:plan.issues,missing:plan.missing};
+ }catch(e:any){if(!['OFFICIAL_EXACT_MATCH_NOT_FOUND','OFFICIAL_PRODUCT_DOMAIN_UNSUPPORTED'].includes(e.message))throw e;observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),before:rows[0],fields:{},replacements:[],lifecycle:catalogLifecycleReview({}, {unavailable:e.message}),observedAt:new Date().toISOString(),unavailable:e.message};}
  await save();
  }
  if(job.mode==='publish'){await rpc('heartbeat_catalog_brand_job',scope);checkpoint=await rpc('apply_catalog_brand_job_item',{...scope,input_index:index});}

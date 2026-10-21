@@ -2,6 +2,7 @@ import {normalizeBrandKey} from './brand-standardization.mts';
 import {resolveTecAllianceBrandEntry} from './tecalliance-brand-registry.mts';
 import {resolveCatalogSyncPlan} from './catalog-sync-provider.mts';
 const knownOfficialSources:Record<string,{sourceKey:string;sourceUrl:string;family:string;access?:string}>={
+ vag:{family:'vag',sourceKey:'vag_partslink24_authorized',sourceUrl:'https://www.partslink24.com/',access:'authorization_required'},
  febi:{family:'bilstein',sourceKey:'bilstein_group_partsfinder_observation',sourceUrl:'https://partsfinder.bilsteingroup.com/en/',access:'authorization_required'},
  swag:{family:'bilstein',sourceKey:'bilstein_group_partsfinder_observation',sourceUrl:'https://partsfinder.bilsteingroup.com/en/',access:'authorization_required'},
  blueprint:{family:'bilstein',sourceKey:'bilstein_group_partsfinder_observation',sourceUrl:'https://partsfinder.bilsteingroup.com/en/',access:'authorization_required'},

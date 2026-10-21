@@ -133,6 +133,70 @@ review-required or failed states merely to display green: missing source fields
 and source access failures remain explicit outcomes. The Elring publication
 hold below remains in force until its cause is repaired and validated.
 
+## All-brand official-first completion decision — 2026-10-21
+
+Owner instruction `user-official-first-spareto-lifecycle-2026-10-21` applies to
+all brands. First match the exact official brand and product; then use
+`https://spareto.com` for remaining missing attributes. Preserve populated
+official, supplier-file and manual values. Record a separate secondary receipt
+with the exact product URL, retrieval time, fingerprint, field values and
+conflicts; never label marketplace values as official. A conflicting EAN holds
+the secondary candidate. Preserve punctuation in product identity and the
+separate TRW Engine Components domain. Do not infer an individual VAG marque
+from a number prefix or treat the aggregate VAG price-list brand as an exact
+Spareto manufacturer identity.
+
+This replaces the former blanket ZF marketplace-completion exclusion only for
+the reviewed, missing-only secondary phase. Retired fuzzy/direct-write scripts
+remain retired. Missing official source access is a deferred source review,
+not a successful official match or permission to bypass the official step.
+Spareto requests use exact product pages, bounded requests and at least 1100 ms
+spacing; robots-disallowed brand/per_page listing routes are excluded. Missing
+secondary coverage remains visible. Public access does not itself establish
+redistribution rights or override each registered source's execution grants.
+
+Every brand package must record **replacement** and **discontinued** checks,
+including when the reader does not supply them. Distinguish found,
+no_explicit_signal, unsupported, blocked and review_required. A source 404,
+stock shortage, `No longer available`, or `No longer deliverable by the
+manufacturer` does not establish production discontinuation. A replacement
+also does not imply discontinuation. Keep source wording and directional
+old → successor evidence. Same-brand exact target verification and cycle,
+ambiguity, manual-reference and source-conflict checks precede operational
+replacement changes. Secondary lifecycle signals remain separately attributed
+review candidates; do not silently overwrite official lifecycle evidence.
+The generic scalar completion RPC continues to exclude lifecycle writes.
+
+VAG means Volkswagen, Audi, Skoda, SEAT and Porsche. ETKA's official page
+(`https://www.etka.com/etkaportal/en/about-etka/what-is-etka.html`) directs
+independent operators to partslink24. Its official brand list includes these
+five marques (`https://www.partslink24.com/partlink24mobile/index.html`), with
+market-specific availability. The July 2026 terms, section 6
+(`https://legal.lexcom.de/legaldocs/partslink24-tos/-/10/en/partslink24-tos.html`),
+restrict automated extraction and integration. Record VAG as
+`authorized_access_required`, with **no working reader or new subscription**.
+Licensed data-file/API availability remains unverified. Porsche Classic's
+public model PDFs cover a limited historical subset, not the whole VAG scope.
+
+Deferred final review includes VAG, Febi/Swag/Blue Print authorization,
+Hengst's blocked official source, Donaldson's unverified product detail,
+Elring's operational hold, and all inventory entries without an implemented
+official adapter or verified official source. Continue the already admitted
+Denso and ZF jobs at their existing checkpoints; never restart them merely
+because this policy changed. Existing receipts are not retroactive evidence
+of the new mandatory checks. Runtime rollout and live proof must be reported
+separately from this owner decision.
+
+The first implementation records lifecycle coverage in new generic brand job
+observations and supplier official evidence. TecAlliance/ZF preserve their
+existing parsed lifecycle evidence; MANN/Denso keep unverified successor
+candidates as review-only. Older completed items are not rewritten.
+`spareto-secondary-provider.mjs` reads a supplied exact product URL and
+`planSparetoMissingCompletion` prepares separate missing-only review candidates.
+This reader/planner does not discover an entire brand, run automatically after
+every official job, or apply secondary candidates to canonical data. Durable
+secondary dispatch, reviewed publication and UI coverage remain rollout work.
+
 ## ZF Group exact identity and correction — 2026-10-20
 
 The Product Decision Owner requested repair of order `FU26-R42026` and the

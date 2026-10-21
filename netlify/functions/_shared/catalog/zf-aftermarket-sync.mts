@@ -1,4 +1,4 @@
-import {isExplicitDiscontinued} from './mira-lifecycle.mts';
+import {isExplicitDiscontinued,zfLifecycle} from './mira-lifecycle.mts';
 import {exactZfCode,exactZfSearchItem,assertZfArticleIdentity,zfArticleWeight,zfReplacementCandidates} from './zf-product-identity.mjs';
 import {
   isCatalogPlaceholderDescription,
@@ -497,7 +497,7 @@ export async function fetchZfSupplierCatalogFields(brandName:string,productCode:
   const originSpec=Array.isArray(specs)?specs.find((s:any)=>/^(country of origin|country of manufacture|manufacturing country)$/i.test(cleanText(s.label))):null;
   const rawOrigin=originSpec?.values?.map((v:any)=>cleanText(v.text||v)).filter(Boolean);
   const origin=rawOrigin?.length===1?normalizeOriginCode(rawOrigin[0]):'';
-  return {code:exactZfCode(productCode),sourceUrl:detail.source_url,fields:{description:detail.description,ean:detail.ean,
+  return {code:exactZfCode(productCode),sourceUrl:detail.source_url,lifecycle:zfLifecycle(payload,{mfrName:brandName,articleNumber:productCode}),fields:{description:detail.description,ean:detail.ean,
     oem_no:detail.oem_no,vehicle:detail.vehicle,hs_code:detail.hs_code,origin,weight_kg:detail.weight_kg}};
 }
 
