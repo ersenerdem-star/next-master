@@ -2,12 +2,24 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
 const appRoot = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(appRoot, "../..");
 const packageJson = JSON.parse(readFileSync(resolve(appRoot, "package.json"), "utf8")) as { version?: string };
+
+// A production deploy must never silently select the local example client.
+if ((process.env.VITE_DEPLOY_CONTEXT || process.env.CONTEXT) === "production") {
+  const env = { ...loadEnv("production", appRoot, "VITE_"), ...process.env };
+  const url = env.VITE_SUPABASE_URL || "";
+  const key = env.VITE_SUPABASE_ANON_KEY || "";
+  let publicKey = key.startsWith("sb_publishable_");
+  try { publicKey ||= JSON.parse(Buffer.from(key.split(".")[1] || "", "base64url").toString()).role === "anon"; } catch { /* Not a public JWT. */ }
+  if (!/^https:\/\/[a-z0-9]+\.supabase\.co\/?$/.test(url) || url.includes("example.supabase.co") || !publicKey) {
+    throw new Error("Production Supabase public client configuration is missing or invalid; refusing to build.");
+  }
+}
 
 function readGitValue(command: string, fallback: string) {
   try {
