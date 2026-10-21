@@ -64,3 +64,14 @@ test('fixed-host product URL, response caps and redirects protect the secondary 
 test('VAG has a verified official channel but stays access-required without a reader',()=>{
  const d=brandEngineDefinition('VAG');assert.equal(d.sourceUrl,'https://www.partslink24.com/');assert.equal(d.reader,false);assert.equal(brandEngineCapability(d,null),'authorized_access_required');
 });
+
+
+test('multiple primary GTINs require a known matching barcode; nested review barcodes never enter primary identity',()=>{
+ const html=page().replace("<h1>","<meta content='9999999999999' itemprop='gtin13'><h1>");
+ const input={brand:'Sachs',code:'280960',sourceUrl:url};
+ const unknown=mapSparetoSecondaryPage(html,input);assert.equal(unknown.fields.ean,undefined);assert.equal(unknown.eanCandidates.length,2);
+ assert.equal(mapSparetoSecondaryPage(html,{...input,expectedEan:'4013872371037'}).fields.ean,'4013872371037');
+ assert.throws(()=>mapSparetoSecondaryPage(html,{...input,expectedEan:'1111111111111'}),/EAN_IDENTITY_CONFLICT/);
+ const review=page("<section id='product-reviews'><meta content='8888888888888' itemprop='gtin13'>Production discontinued</section>");
+ const r=mapSparetoSecondaryPage(review,input);assert.equal(r.fields.ean,'4013872371037');assert.equal(r.lifecycle.checks.discontinued,'no_explicit_signal');
+});

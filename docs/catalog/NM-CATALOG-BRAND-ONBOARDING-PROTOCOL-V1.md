@@ -233,6 +233,49 @@ The currently running file invocation drains normally before the first source
 turn. A source request may complete after the one-minute budget; its row is
 committed before yielding. No official source pacing is relaxed.
 
+## Spareto supplemental completion queue — 2026-10-21
+
+The existing upload worker's exact matched official receipts feed a separate
+secondary queue. Only a registered `spareto_secondary_exact_v1` source with
+explicit brand, read, application and field approval can run. Source admission
+does not enable old marketplace writers or change their grants. EAN-conflicting
+primary receipts never enqueue. One globally fenced secondary reader searches
+with the product keyword only, verifies both card brand/code and exact detail
+brand/MPN, spaces every request by at least 1100 ms, caps response size, refuses
+redirects, and records fingerprints. Brand/per_page listing routes are unused.
+
+Secondary completion follows the owner's preapproved missing-only field rule.
+It seals the source observation and candidate before a separately guarded
+application transaction. Only explicitly approved metadata fields may auto-fill;
+existing or concurrently edited values are preserved. Source-policy revocation,
+EAN conflicts and ambiguous identity prevent application. Lifecycle candidates
+and image references do not enter canonical lifecycle/replacement/image fields.
+The manual page action is available for deliberate administrator review, not a
+new approval requirement for every ordinary missing-field completion.
+
+The secondary application uses the primary scheduler's transaction advisory
+lock and defers while a primary catalog lease is active. Read-only source work
+can continue independently, but canonical writers do not overlap an active
+primary turn. A deferred application remains durable for a later dispatcher.
+It cannot change a primary cursor, publication pointer, supplier price or order.
+Short application receipts survive queue/parent-job cleanup independently.
+
+Both transport and job leases are scope-bound. Failed attempts retain their
+request identity/error and bounded retry schedule. Source not-found, schema,
+authorization or ambiguous matches stay explicit per product; a source failure
+does not stop the primary upload. Queue-enqueue failures have a separate counter.
+New official receipts feed this queue automatically after source activation;
+older prefixes are not silently replayed or declared covered.
+
+Product facts are scoped before reviews/related products. Some primary products
+explicitly list more than one GTIN: use a known official/current EAN only when
+it appears in that exact product's GTIN set. Without a known match, do not pick
+an arbitrary barcode; retain the candidate set. A known EAN absent from the set
+holds the product. Source-provided origin/tariff remain secondary evidence;
+shipping or volumetric weight is never guessed to be gross kg. OEM references
+are limited to the OE section, and vehicle/model information is explicitly a
+page-level model summary, not complete variant/VIN fitment.
+
 ## ZF Group exact identity and correction — 2026-10-20
 
 The Product Decision Owner requested repair of order `FU26-R42026` and the
