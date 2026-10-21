@@ -16,7 +16,7 @@ create table price_guard(value numeric);insert into price_guard values(99.25);
 insert into organizations values('${org}');insert into profiles values('${actor}','${org}','superadmin',true);insert into brands values('${brand}','${org}','Kolbenschmidt');
 insert into catalog_products(organization_id,brand_id,product_code,description,ean,origin,hs_code,oem_no)values('${org}','${brand}','41504600','Owner description','4028977841316','TR','001234','OLD');
 insert into catalog_external_sources(organization_id,source_key,is_active,license_posture,credential_boundary,rate_limit_posture,metadata)values('${org}','wilmink_kolbenschmidt_v1',true,'internal_review_required','none','bounded','{"brand_engine_read_allowed":true,"brand_engine_enrichment_allowed":true,"allowed_brands":["Kolbenschmidt"],"allowed_evidence_hosts":["www.wilminkengineparts.com"],"approval_actor":"owner","publication_approval_reference":"request"}');`);
- for(const file of ['20261019225343_catalog_brand_engine.sql','20261019230301_catalog_brand_retry_checkpoints.sql','20261021191250_kolbenschmidt_wilmink_discovery.sql'])await db.exec(readFileSync(new URL('../../supabase/migrations/'+file,import.meta.url),'utf8'));
+ for(const file of ['20261019225343_catalog_brand_engine.sql','20261019230301_catalog_brand_retry_checkpoints.sql','20261021191250_kolbenschmidt_wilmink_discovery.sql','20261021192534_wilmink_ean_hold_reporting.sql'])await db.exec(readFileSync(new URL('../../supabase/migrations/'+file,import.meta.url),'utf8'));
  await db.exec("set request.jwt.claim.role='service_role'");return db;}
 async function ready(db){
  const j=await rpc(db,'start_catalog_wilmink_scan',[org,actor,crypto.randomUUID()]),claim=await rpc(db,'claim_catalog_brand_job',[org,j.id]);
@@ -52,4 +52,8 @@ test('source revocation preserves pending work and an out-of-assortment signal n
  await assert.rejects(rpc(db,'complete_catalog_wilmink_discovery',[org,j.id,j.lease_token,page,[product]]),/SOURCE_UNAVAILABLE/);
  assert.equal((await db.query('select next_index from catalog_brand_jobs where id=$1',[j.id])).rows[0].next_index,0);
  assert.equal((await db.query('select count(*)::int n from catalog_product_source_records')).rows[0].n,0);
+}finally{await db.close();}});
+
+test('EAN conflicts are visible holds while exact article matches remain counted separately',async()=>{const db=await setup();try{
+ await db.exec("update catalog_products set ean='9999999999999'");const {j,page,product}=await ready(db);assert.deepEqual(product.fields,{});await rpc(db,'complete_catalog_wilmink_discovery',[org,j.id,j.lease_token,page,[product]]);const status=await rpc(db,'get_catalog_wilmink_status',[org]);assert.equal(status.matched,1);assert.equal(status.held,1);assert.equal((await db.query('select ean from catalog_products')).rows[0].ean,'9999999999999');
 }finally{await db.close();}});
