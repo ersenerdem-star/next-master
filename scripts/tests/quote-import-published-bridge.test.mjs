@@ -205,3 +205,65 @@ test("expired legacy source cannot resurrect through direct supplier table reads
   assert.equal(line.sell_price, null);
   assert.equal(calls.includes("supplier_prices"), false);
 });
+
+
+test("Mann import follows the active catalog policy before exact supplier lookup", async () => {
+  const codes = ["WK820/19", "CUK26028-2", "HU 718/1 n", "HU6015ZKIT", "W7050"];
+  const canonical = ["WK82019", "CUK260282", "HU7181N", "HU6015ZKIT", "W7050"];
+  const quantities = [11, 21, 4, 130, 70];
+  const rpcCodes = [];
+  globalThis.__quoteImportMocks = {
+    organizationId: async () => "org-1",
+    codeReferences: async () => new Map(),
+    supabaseClient: tableClient({
+      brands: [{ id: "mann", name: "Mann", organization_id: "org-1" }],
+      product_code_normalization_policies: [{ brand_key: "MANN", policy: "compact_alnum", active: true }],
+      catalog_products: canonical.map((code) => ({
+        id: code, product_code: code, normalized_code: code, normalized_oem: "",
+        brand_id: "mann", organization_id: "org-1", description: "Filter",
+      })),
+    }, []),
+    callAppRpc: async (_name, args) => args.input_requests.map(({ code }, request_index) => {
+      rpcCodes.push(code);
+      return { request_index, has_published_scope: true, options: [{
+        supplier_id: "supplier", supplier_name: "Current supplier", product_code: code,
+        buy_price: 10, moq: null, order_multiple: null, stock_qty: null, valid_to: null,
+      }] };
+    }),
+  };
+  const { batchResolveQuoteImportRows } = await loadQuoteImport();
+  const lines = await batchResolveQuoteImportRows({
+    rows: codes.map((code, index) => ({ code, brand: "Mann", qty: quantities[index] })),
+    customerType: "A", marginA: 10, marginB: 15,
+  });
+  assert.ok(lines.every((line) => line.found), JSON.stringify(lines.map((line) => line.notes)));
+  assert.deepEqual(rpcCodes, canonical);
+  assert.deepEqual(lines.map((line) => line.requestedCode), codes);
+  assert.deepEqual(lines.map((line) => line.resolvedCode), canonical);
+  assert.deepEqual(lines.map((line) => line.qty), quantities);
+  assert.ok(lines.every((line) => line.found && line.buy_price === 10 && line.description === "Filter"));
+});
+
+test("inactive compact policies do not weaken punctuation identity", async () => {
+  let requested;
+  globalThis.__quoteImportMocks = {
+    organizationId: async () => "org-1",
+    codeReferences: async () => new Map(),
+    supabaseClient: tableClient({
+      brands: [{ id: "brand", name: "Clevite", organization_id: "org-1" }],
+      product_code_normalization_policies: [{ brand_key: "CLEVITE", policy: "compact_alnum", active: false }],
+    }, []),
+    callAppRpc: async (_name, args) => {
+      requested = args.input_requests[0].code;
+      return [{ request_index: 0, has_published_scope: true, options: [] }];
+    },
+  };
+  const { batchResolveQuoteImportRows } = await loadQuoteImport();
+  const [line] = await batchResolveQuoteImportRows({
+    rows: [{ code: "61/1", brand: "Clevite", qty: 3 }],
+    customerType: "A", marginA: 10, marginB: 15,
+  });
+  assert.equal(requested, "61/1");
+  assert.equal(line.found, false);
+  assert.equal(line.qty, 3);
+});

@@ -44,6 +44,15 @@ type CurrentSupplierPriceBatchRow = {
   options: CurrentSupplierPriceOption[];
 };
 
+// Follow the catalog's explicit brand policy before exact SKU/price checks.
+// The default preserves punctuation, so 61/1 never becomes 611 implicitly.
+function importLookupCode(value: string, policy?: string) {
+  const upper = String(value || "").trim().toUpperCase();
+  if (policy === "compact_alnum") return normalizePartCode(upper);
+  if (policy === "compact_space_dot") return upper.replace(/[\s.]+/g, "");
+  return exactSku(upper);
+}
+
 function exactSku(value: string) {
   return String(value || "").trim().replace(/\s+/g, "").toUpperCase();
 }
@@ -125,6 +134,16 @@ async function resolveQuoteImportRowsOnce(input: {
     canonicalBrandByName.set(normalizedName, String(row.name || "").trim());
   }
 
+  const { data: policyRows, error: policyError } = await supabaseClient
+    .from("product_code_normalization_policies")
+    .select("brand_key,policy")
+    .eq("active", true)
+    .in("brand_key", normalizedBrands.map((brand) => brand.toUpperCase()));
+  if (policyError) throw new Error(policyError.message || "Product code policy lookup failed");
+  const policyByBrand = new Map<string, string>(
+    (policyRows || []).map((policy) => [normalizeBrandKey(policy.brand_key), String(policy.policy)]),
+  );
+
   const baseRows = rows.map((row) => {
     const normalizedBrandName = normalizeBrandKey(row.brand);
     const brandId = brandIdByName.get(normalizedBrandName) || "";
@@ -133,11 +152,13 @@ async function resolveQuoteImportRowsOnce(input: {
       ...row,
       brand: canonicalBrand,
       brandId,
+      codePolicy: policyByBrand.get(normalizedBrandName),
+      lookupCode: importLookupCode(row.code, policyByBrand.get(normalizedBrandName)),
     };
   });
 
   const scopedRows = baseRows.filter((row) => row.brandId);
-  const scopedPrices = await fetchCurrentSupplierPriceBatch(scopedRows.map((row) => ({ code: row.code, brand: row.brand })));
+  const scopedPrices = await fetchCurrentSupplierPriceBatch(scopedRows.map((row) => ({ code: row.lookupCode, brand: row.brand })));
   const pricesByRawRow = new Map<(typeof baseRows)[number], CurrentSupplierPriceBatchRow>();
   scopedRows.forEach((row, index) => pricesByRawRow.set(row, scopedPrices[index]));
 
@@ -147,10 +168,10 @@ async function resolveQuoteImportRowsOnce(input: {
     // Reference lookup uses an alphanumeric key; verify the original SKU before
     // allowing a redirect, including for brands still using legacy prices.
     const referenceMatch = rawReferenceMatch
-      && exactSku(rawReferenceMatch.old_code) !== exactSku(row.code)
+      && importLookupCode(rawReferenceMatch.old_code, row.codePolicy) !== row.lookupCode
       ? null
       : rawReferenceMatch;
-    const targetCode = referenceMatch?.new_code || row.code;
+    const targetCode = importLookupCode(referenceMatch?.new_code || row.code, row.codePolicy);
     return {
       ...row,
       referenceMatch,
@@ -161,7 +182,7 @@ async function resolveQuoteImportRowsOnce(input: {
   });
 
   const redirectedPublishedRows = preparedRows.filter((row) =>
-    row.brandId && exactSku(row.targetCode) !== exactSku(row.code));
+    row.brandId && exactSku(row.targetCode) !== exactSku(row.lookupCode));
   if (redirectedPublishedRows.length) {
     const redirectedPrices = await fetchCurrentSupplierPriceBatch(
       redirectedPublishedRows.map((row) => ({ code: row.targetCode, brand: row.brand })),
