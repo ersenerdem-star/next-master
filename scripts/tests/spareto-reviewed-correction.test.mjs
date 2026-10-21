@@ -45,6 +45,13 @@ test('correction worker seals evidence before publication and advances only afte
  assert.equal(f.calls.at(-1).args.input_advance,true);
 });
 test('busy source transport yields without HTTP and source access blocks never trigger fallbacks',async()=>{
- const busy=workerFixture({busy:true});assert.equal((await runClaimedSparetoCorrection({...busy,organizationId:'org'})).status,'paused');assert(!busy.calls.some(c=>c.name==='fetch'));
+ const busy=workerFixture({busy:true});assert.equal((await runClaimedSparetoCorrection({...busy,organizationId:'org',transportWaitMs:0})).status,'paused');assert(!busy.calls.some(c=>c.name==='fetch'));
  const denied=workerFixture({throwFetch:'SPARETO_HTTP_403'});assert.equal((await runClaimedSparetoCorrection({...denied,organizationId:'org'})).status,'failed');assert.equal(denied.calls.filter(c=>c.name==='fetch').length,1);assert(!denied.calls.some(c=>c.name==='apply_catalog_spareto_correction_item'));
+});
+test('a queued correction keeps its lease while the previous reader drains, preventing starvation',async()=>{
+ const f=workerFixture(),original=f.db.rpc;let attempts=0,waits=0;
+ f.db.rpc=async(name,args)=>name==='reserve_catalog_spareto_correction'?{data:++attempts>1}:original(name,args);
+ const r=await runClaimedSparetoCorrection({...f,organizationId:'org',wait:async()=>{waits++;}});
+ assert.equal(r.status,'completed');assert.equal(waits,1);assert.equal(attempts,2);
+ assert(!f.calls.some(c=>c.name==='checkpoint_catalog_brand_job'&&c.args.input_end_status==='paused'));
 });

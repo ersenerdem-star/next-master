@@ -2,7 +2,7 @@ import {fetchExactSparetoSecondary} from './spareto-secondary-provider.mjs';
 import {planSparetoReviewedCorrection,SPARETO_CORRECTION_SOURCE,SPARETO_CORRECTION_ADAPTER} from './spareto-reviewed-correction.mjs';
 import {exactCatalogCode} from './supplier-enrichment-plan.mjs';
 
-export async function runClaimedSparetoCorrection({db,organizationId,job,maxMs=210000,fetchSecondary=fetchExactSparetoSecondary}:any){
+export async function runClaimedSparetoCorrection({db,organizationId,job,maxMs=210000,transportWaitMs=125000,wait=(ms:number)=>new Promise(r=>setTimeout(r,ms)),fetchSecondary=fetchExactSparetoSecondary}:any){
  const rpc=async(name:string,args:any)=>{const r=await db.rpc(name,args);if(r.error)throw Error(r.error.message);return r.data;};
  const scope={input_org:organizationId,input_job:job.id,input_token:job.lease_token};
  const started=Date.now();let processed=0;
@@ -12,7 +12,14 @@ export async function runClaimedSparetoCorrection({db,organizationId,job,maxMs=2
   const save=(advance=false,endStatus:any=null,error:any=null)=>rpc('checkpoint_catalog_brand_job',{...scope,input_index:index,input_observation:observation,input_checkpoint:checkpoint,input_state:advance?'completed':observation?'observed':'pending',input_advance:advance,input_end_status:endStatus,input_error:error});
   try{
    if(job.manifest.source_key!==SPARETO_CORRECTION_SOURCE||job.manifest.adapter!==SPARETO_CORRECTION_ADAPTER||job.mode!=='publish')throw Error('CORRECTION_MANIFEST_INVALID');
-   const reserved=await rpc('reserve_catalog_spareto_correction',scope);
+   let reserved=await rpc('reserve_catalog_spareto_correction',scope);
+   // Keep this fenced brand lease while an already-running supplemental row
+   // drains. Releasing immediately lets its loop reclaim the transport forever.
+   const transportDeadline=Math.min(started+maxMs,Date.now()+transportWaitMs);
+   while(!reserved&&Date.now()<transportDeadline){
+    await wait(2500);await rpc('heartbeat_catalog_brand_job',scope);
+    reserved=await rpc('reserve_catalog_spareto_correction',scope);
+   }
    if(!reserved){await save(false,'paused');return {status:'paused',reason:'SPARETO_READER_BUSY',processed};}
    await rpc('heartbeat_catalog_brand_job',scope);
    if(!observation){

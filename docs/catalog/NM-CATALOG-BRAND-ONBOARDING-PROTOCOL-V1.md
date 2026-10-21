@@ -315,8 +315,12 @@ application and source receipt. Same-brand primary writers defer corrections;
 unrelated supplier-file brands retain their own cursors and leases.
 
 Correction and existing supplemental readers share the existing global Spareto
-transport gate and 1100 ms request spacing. Jobs run through the existing signed
-scheduled dispatcher, without a browser, new service or new paid subscription.
+transport gate and 1100 ms request spacing.
+The correction retains its fenced job lease for at most 125 seconds while an
+already-running supplemental row drains, so the old reader cannot immediately
+reclaim the gate and starve correction work. No source work is canceled.
+Jobs run through the existing signed scheduled dispatcher, without a browser,
+new service or new paid subscription.
 The brand engine displays the correction's processed/updated/held counts
 separately from the inactive official-reader status. Search cards explicitly
 marked as alternatives are excluded before the 200-primary-card search bound.
