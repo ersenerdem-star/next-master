@@ -285,6 +285,42 @@ committed before yielding. No official source pacing is relaxed.
 
 ## Spareto supplemental completion queue — 2026-10-21
 
+### Owner-reviewed Schaeffler corrections — 2026-10-21
+
+The owner's explicit follow-up authorizes Spareto correction of **description,
+OEM references, market segment and product image for INA, FAG and LUK**, including
+populated descriptions. This is a scoped exception to missing-only completion,
+not an activation of Schaeffler's blocked official web reader. The supplied
+GroupAuto/Schaeffler file remains a separate, price-free source receipt. Vitesco
+and every other brand retain their existing policies.
+
+Use the existing durable brand jobs/items/checkpoints with the separate
+`spareto-reviewed-correction.v1` adapter and a time-limited
+`spareto_schaeffler_correction_v1` source approval. Seal exact product evidence
+before application. Current EAN must occur in the primary product GTIN list;
+unknown, ambiguous and conflicting identity is held individually. Source failures
+and unsupported fields remain visible and never stop later eligible products.
+OEM completion is additive. A segment requires an explicit labelled vehicle
+class; `commercial-groups`, product titles and manufacturer names cannot supply
+it. Preserve the supplier-file segment when Spareto has no such field.
+
+The owner approval includes the exact primary-product Spareto image candidate,
+including correction of a populated image. Only non-placeholder HTTPS raster
+assets under `cdn.spareto.com/variants/images/` present in the primary product's
+image metadata are admitted. This dedicated four-field correction RPC does not
+relax any other image-review route. Preserve EAN, origin, tariff, weight, vehicle,
+dimensions, lifecycle, replacements, prices and orders. Concurrent edits after
+the sealed snapshot are preserved field by field, with a durable before/after
+application and source receipt. Same-brand primary writers defer corrections;
+unrelated supplier-file brands retain their own cursors and leases.
+
+Correction and existing supplemental readers share the existing global Spareto
+transport gate and 1100 ms request spacing. Jobs run through the existing signed
+scheduled dispatcher, without a browser, new service or new paid subscription.
+The brand engine displays the correction's processed/updated/held counts
+separately from the inactive official-reader status. Search cards explicitly
+marked as alternatives are excluded before the 200-primary-card search bound.
+
 The existing upload worker's exact matched official receipts feed a separate
 secondary queue. Only a registered `spareto_secondary_exact_v1` source with
 explicit brand, read, application and field approval can run. Source admission

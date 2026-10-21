@@ -22,6 +22,9 @@ insert into supplier_price_ingestion_internal.catalog_enrichment_jobs(id,organiz
 insert into catalog_external_sources values('${org}','spareto_secondary_exact_v1',true,'internal_review_required','none','bounded','{"allowed_brands":["SKF"],"secondary_review_read_allowed":true,"secondary_review_apply_allowed":true,"approval_actor":"owner","publication_approval_reference":"request"}');`);
 await db.exec(readFileSync('supabase/migrations/20261021163412_supplier_catalog_spareto_review_queue.sql','utf8'));
 await db.exec(readFileSync('supabase/migrations/20261021165225_supplier_secondary_field_provenance.sql','utf8'));
+await db.exec('create table public.catalog_brand_jobs(id uuid,status text,lease_expires_at timestamptz,manifest jsonb)');
+const currentClaim=readFileSync('supabase/migrations/20261021183654_schaeffler_spareto_reviewed_corrections.sql','utf8').match(/create or replace function public\.claim_supplier_catalog_secondary_review\(\)[\s\S]*?\nend\$\$;/)?.[0];
+if(!currentClaim)throw Error('CURRENT_SECONDARY_CLAIM_NOT_FOUND');await db.exec(currentClaim);
 await db.exec(`set request.jwt.claim.role='service_role';set request.org='${org}';set request.jwt.claim.sub='${actor}'`);return db;}
 const rpc=async(db,name,args=[])=> (await db.query(`select ${name}(${args.map((_,i)=>'$'+(i+1)).join(',')}) r`,args)).rows[0].r;
 async function enqueue(db,overrides={}){const evidence={authority:'official',sourceOutcome:'matched',sourceUrl:'https://automotive.skf.com/eur/en/product-catalogue/VKBA906',fingerprint:'a'.repeat(64),sourceEan:'7316575793906',lifecycle:{checks:{replacement:'unsupported',discontinued:'unsupported'}},...overrides};
@@ -59,6 +62,12 @@ await db.exec("update catalog_external_sources set is_active=true;set request.or
 test('transient source failure preserves one queue item with bounded backoff',async()=>{const db=await setup();try{
 await enqueue(db);const c=await rpc(db,'claim_supplier_catalog_secondary_review');const r=await rpc(db,'finish_supplier_catalog_secondary_review',[c.id,c.token,null,null,'SPARETO_HTTP_503']);assert.equal(r.status,'retry_wait');assert.equal(await rpc(db,'claim_supplier_catalog_secondary_review'),null);
 assert.equal((await db.query('select count(*)::int n from supplier_price_ingestion_internal.catalog_secondary_reviews')).rows[0].n,1);
+}finally{await db.close();}});
+test('a reviewed correction job shares the existing reader gate without consuming queued supplemental work',async()=>{const db=await setup();try{
+ await enqueue(db);await db.query("insert into catalog_brand_jobs values($1,'running',now()+interval '60 seconds',$2)",[crypto.randomUUID(),JSON.stringify({adapter:'spareto-reviewed-correction.v1'})]);
+ assert.equal(await rpc(db,'claim_supplier_catalog_secondary_review'),null);
+ assert.equal((await db.query('select status from supplier_price_ingestion_internal.catalog_secondary_reviews')).rows[0].status,'queued');
+ await db.exec("update catalog_brand_jobs set status='completed'");assert.ok((await rpc(db,'claim_supplier_catalog_secondary_review')).id);
 }finally{await db.close();}});
 test('worker checkpoints only supplemental review receipts and its signature is bound to one queue lease',async()=>{
 const id=crypto.randomUUID(),token=crypto.randomUUID(),headers=secondaryDispatchHeaders('key',id,token),req=new Request('https://example.invalid',{headers});requireSecondaryDispatch(req,'key',id,token);assert.throws(()=>requireSecondaryDispatch(req,'key',id,crypto.randomUUID()));

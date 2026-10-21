@@ -39,6 +39,11 @@ export function mapSparetoSecondaryPage(html,{brand,code,sourceUrl,expectedEan})
  const cells=[...main.matchAll(/<tr\b[^>]*>\s*<td\b[^>]*>([\s\S]*?)<\/td>\s*<td\b[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi)].map(m=>[text(m[1]),text(m[2])]);
  const property=label=>one(cells.filter(([name])=>name===label).map(([,value])=>value),'SPARETO_FIELD_AMBIGUOUS');
  const tariff=property('Customs Code');if(/^\d{6,12}$/.test(tariff))fields.hs_code=tariff;
+ // Only a labelled vehicle class can establish a segment. Product-category
+ // slugs such as commercial-groups do not mean commercial vehicles.
+ const segmentNames={'passenger cars':'pc','passenger car':'pc','commercial vehicles':'cv','commercial vehicle':'cv','light commercial vehicles':'lcv','motorcycles':'motorcycle','off-highway':'off_highway'};
+ const segments=[...new Set(cells.filter(([name])=>['Market Segment','Vehicle Type','Vehicle Class'].includes(name)).map(([,v])=>segmentNames[v.toLowerCase()]).filter(Boolean))];
+ if(segments.length===1)fields.market_segment=segments[0];
  const country=property('Country of Origin'),origin=country&&originCode(country);if(origin)fields.origin=origin;
  const dimensions={};
  for(const [label,name]of Object.entries({'Width':'width_mm','Height':'height_mm','Length':'length_mm','Inner Diameter':'inner_diameter_mm','Outer Diameter':'outer_diameter_mm'})){
@@ -75,7 +80,13 @@ export function mapSparetoSecondaryPage(html,{brand,code,sourceUrl,expectedEan})
  const production=text(main).match(/\b(?:Production discontinued|No longer produced|Production ended)\b/i)?.[0];
  if(production){lifecycle.sourceStatus=production;lifecycle.checks.discontinued='review_required';}
  const rawShippingWeights=[...new Set(cells.filter(([name])=>name==='Weight').map(([,value])=>value))];
+ const images=[...identityPrefix.matchAll(/<meta\b[^>]*content=['"]([^'"]+)['"][^>]*itemprop=['"]image['"]/gi)].map(m=>text(m[1]));
+ const primaryImages=[...new Set(images.filter(v=>{try{const u=new URL(v);return u.protocol==='https:'&&u.hostname==='cdn.spareto.com'&&!u.username&&!u.password&&!u.port&&!u.hash&&/^\/variants\/images\/[A-Za-z0-9/_-]+\.(?:jpe?g|png|webp)$/i.test(u.pathname)&&!/(placeholder|no[-_]?image|default)/i.test(u.pathname);}catch{return false;}}))];
+ // Image evidence remains outside CATALOG_FIELDS and the missing-only planner.
+ // Only the separately owner-approved correction workflow may publish it.
  return {brand,code:exactCatalogCode(code),sourceBrand:text(sourceBrand),sourceUrl:url,exactIdentity:true,fields,lifecycle,
+  imageCandidate:primaryImages.length===1?primaryImages[0]:null,imageEvidence:{scope:'primary_product_meta',candidates:primaryImages},
+  segmentEvidence:{status:segments.length===1?'explicit_vehicle_class':segments.length>1?'ambiguous':'source_missing'},
   eanCandidates,observedAt:new Date().toISOString(),fingerprint:createHash('sha256').update(html).digest('hex'),rawShippingWeight:rawShippingWeights.length===1?rawShippingWeights[0]:null,rawShippingWeights,fitmentScope:'page_model_summary',canonicalWrite:false};
 }
 async function fetchHtml(url,{fetchImpl=fetch,timeoutMs=20000}={}){
@@ -91,9 +102,12 @@ export async function fetchSparetoSecondaryPage(input,options={}){return mapSpar
 
 export function findExactSparetoProductUrl(html,{brand,code}){
  const cards=[...html.matchAll(/<div\b[^>]*data-variant-card-gtm-item-value=['"]([^'"]+)['"][^>]*>/gi)],urls=[];
- if(cards.length>200)throw Error('SPARETO_SEARCH_BOUND_EXCEEDED');
+ if(cards.length>4096)throw Error('SPARETO_SEARCH_BOUND_EXCEEDED');
+ let directCards=0;
  for(let i=0;i<cards.length;i++){
   let item;try{item=JSON.parse(text(cards[i][1]));}catch{throw Error('SPARETO_SEARCH_SCHEMA_CHANGED');}
+  if(item.item_list_id&&item.item_list_id!=='search_results_direct')continue;
+  if(++directCards>200)throw Error('SPARETO_SEARCH_BOUND_EXCEEDED');
   if(brandKey(item.item_brand)!==brandKey(brand)||exactCatalogCode(item.item_id)!==exactCatalogCode(code))continue;
   const body=html.slice(cards[i].index+cards[i][0].length,cards[i+1]?.index??html.length);
   const visibleBrand=text(body.match(/<span\b[^>]*class=['"]brand['"][^>]*>([\s\S]*?)<\/span>/i)?.[1]);
