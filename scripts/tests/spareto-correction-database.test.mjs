@@ -20,7 +20,7 @@ async function setup(){
  create table price_guard(price numeric);insert into price_guard values(99.25);
  insert into organizations values('${org}');insert into profiles values('${actor}','${org}','superadmin',true);insert into brands values('${brand}','${org}','INA');
  insert into catalog_products(organization_id,brand_id,product_code,description,ean,origin,hs_code,weight_kg,oem_no,market_segment,image_url)values('${org}','${brand}','712036010','Mounting, manu','4005108359810','TR','84824000',0.037,'002311125','pc','https://cdn.spareto.com/variants/images/old.jpg');`);
- for(const file of ['20261019225343_catalog_brand_engine.sql','20261019230301_catalog_brand_retry_checkpoints.sql','20261021183654_schaeffler_spareto_reviewed_corrections.sql'])await db.exec(readFileSync(new URL('../../supabase/migrations/'+file,import.meta.url),'utf8'));
+ for(const file of ['20261019225343_catalog_brand_engine.sql','20261019230301_catalog_brand_retry_checkpoints.sql','20261021183654_schaeffler_spareto_reviewed_corrections.sql','20261021184629_schaeffler_correction_decimal_codes.sql'])await db.exec(readFileSync(new URL('../../supabase/migrations/'+file,import.meta.url),'utf8'));
  await db.query(`insert into catalog_external_sources(organization_id,source_key,is_active,license_posture,credential_boundary,rate_limit_posture,metadata)values($1,$2,true,'internal_review_required','none','bounded',$3)`,[org,source,JSON.stringify({allowed_brands:['INA','FAG','LUK'],correction_read_allowed:true,correction_apply_allowed:true,approval_actor:actor,publication_approval_reference:'human-request',approval_expires_at:new Date(Date.now()+86400000).toISOString(),approved_fields:['description','oem_no','market_segment','image_url']})]);
  await db.exec("set request.jwt.claim.role='service_role'");return db;
 }
@@ -31,6 +31,10 @@ async function ready(db){
  const observation={brand:'INA',code:'712036010',sourceBrand:'INA',exactIdentity:true,sourceKey:source,sourceUrl:'https://spareto.com/products/ina-bearing/712-0360-10',fingerprint:'a'.repeat(64),before,fields:{description:'Bearing, manual transmission',ean:before.ean,oem_no:'002311125A',origin:'CN',hs_code:'848240',weight_kg:99},eanCandidates:[before.ean],imageCandidate:image,imageEvidence:{scope:'primary_product_meta',candidates:[image]},segmentEvidence:{status:'source_missing'},proposal:{status:'reviewed',patch:{description:'Bearing, manual transmission',oem_no:'002311125; 002311125A',image_url:image}}};
  await rpc(db,'checkpoint_catalog_brand_job',[org,j.id,claim.lease_token,0,observation,{},'observed',null,false,null]);return {j:claim,observation};
 }
+test('decimal commas and existing brand suffixes remain exact article identity during admission',async()=>{const db=await setup();try{
+ await db.query('insert into catalog_products(organization_id,brand_id,product_code)values($1,$2,$3)',[org,brand,'LR17X20X20,5 /INA/']);
+ const j=await rpc(db,'start_catalog_spareto_correction',[org,actor,'INA',['LR17X20X20,5 /INA/'],crypto.randomUUID()]);assert.deepEqual(j.manifest.codes,['LR17X20X20,5 /INA/']);
+}finally{await db.close();}});
 test('owner-approved correction changes populated description/image, adds OEMs, preserves commercial fields and is idempotent',async()=>{const db=await setup();try{
  const {j}=await ready(db);const args=[org,j.id,j.lease_token,0];const r=await rpc(db,'apply_catalog_spareto_correction_item',args);assert.equal(r.status,'completed');assert.equal(r.fields.description,'applied');assert.deepEqual(await rpc(db,'apply_catalog_spareto_correction_item',args),r);
  assert.deepEqual((await db.query('select description,oem_no,image_url,origin,hs_code,weight_kg::float,ean,market_segment from catalog_products')).rows[0],{description:'Bearing, manual transmission',oem_no:'002311125; 002311125A',image_url:image,origin:'TR',hs_code:'84824000',weight_kg:.037,ean:'4005108359810',market_segment:'pc'});
