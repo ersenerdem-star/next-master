@@ -259,6 +259,11 @@ can continue independently, but canonical writers do not overlap an active
 primary turn. A deferred application remains durable for a later dispatcher.
 It cannot change a primary cursor, publication pointer, supplier price or order.
 Short application receipts survive queue/parent-job cleanup independently.
+Applied fields also update the existing enrichment-field ledger with the actual
+normalized value, parent job and source date, so a later authoritative supplier
+file can refresh them without treating the supplemental fill as a manual edit.
+An item whose product identity changed is held individually; it cannot block
+subsequent automatic applications.
 
 Both transport and job leases are scope-bound. Failed attempts retain their
 request identity/error and bounded retry schedule. Source not-found, schema,
