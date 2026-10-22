@@ -346,6 +346,15 @@ This is a catalog metadata rule. Supplier price-release pointers, published
 prices, order totals and source-access requirements are unchanged. New catalog
 adapters must implement the same per-product review behavior.
 
+Manual production client builds must use
+`node scripts/ops/build-production-client.mjs`. Resolve the complete production
+build-scope `VITE_` configuration, including upload/review/enrichment feature
+flags; loading only the Supabase URL/key silently hides those workflows. The
+build refuses missing production feature settings and publishes their public
+capability booleans in `version.json` for verification. Backend secrets never
+enter the public configuration. Deployment paths stay absolute through the
+existing Netlify Linux DuckDB wrapper.
+
 ## Spareto supplemental completion queue — 2026-10-21
 
 ### Owner-reviewed Schaeffler corrections — 2026-10-21

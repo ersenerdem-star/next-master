@@ -8,6 +8,7 @@ import react from "@vitejs/plugin-react";
 const appRoot = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(appRoot, "../..");
 const packageJson = JSON.parse(readFileSync(resolve(appRoot, "package.json"), "utf8")) as { version?: string };
+let productionFeatures: Record<string, boolean> | undefined;
 
 // A production deploy must never silently select the local example client.
 if ((process.env.VITE_DEPLOY_CONTEXT || process.env.CONTEXT) === "production") {
@@ -18,6 +19,18 @@ if ((process.env.VITE_DEPLOY_CONTEXT || process.env.CONTEXT) === "production") {
   try { publicKey ||= JSON.parse(Buffer.from(key.split(".")[1] || "", "base64url").toString()).role === "anon"; } catch { /* Not a public JWT. */ }
   if (!/^https:\/\/[a-z0-9]+\.supabase\.co\/?$/.test(url) || url.includes("example.supabase.co") || !publicKey) {
     throw new Error("Production Supabase public client configuration is missing or invalid; refusing to build.");
+  }
+  if (url.includes("zjgueqijumzlfioihnkt.supabase.co")) {
+    const required = ["VITE_CATALOG_STORAGE_IMPORT_ENABLED", "VITE_CATALOG_STORAGE_IMPORT_PRODUCTION_ENABLED", "VITE_SUPPLIER_CATALOG_ENRICHMENT_ENABLED", "VITE_SUPPLIER_PRICE_RELEASE_ACTIONS_ENABLED", "VITE_SUPPLIER_PRICE_RELEASE_ACTIONS_PRODUCTION_ENABLED", "VITE_SUPPLIER_PRICE_UPLOAD_PRODUCTION_ENABLED", "VITE_SUPPLIER_PRICE_VERIFIED_UPLOAD_ENABLED", "VITE_SUPPLIER_RELEASE_REVIEW_ENABLED"];
+    if (required.some(name => !["true", "false", "1", "0"].includes(env[name] || "")) || env.VITE_NM_PRODUCTION_TARGET !== "zjgueqijumzlfioihnkt") {
+      throw new Error("Production client feature configuration is missing or invalid; use scripts/ops/build-production-client.mjs.");
+    }
+    productionFeatures = {
+      supplierReleaseReview: env.VITE_SUPPLIER_RELEASE_REVIEW_ENABLED === "true",
+      catalogEnrichment: env.VITE_SUPPLIER_CATALOG_ENRICHMENT_ENABLED === "true",
+      verifiedSupplierUpload: env.VITE_SUPPLIER_PRICE_VERIFIED_UPLOAD_ENABLED === "true",
+      supplierReleaseActions: env.VITE_SUPPLIER_PRICE_RELEASE_ACTIONS_ENABLED === "true",
+    };
   }
 }
 
@@ -44,6 +57,7 @@ const buildMeta = {
   apiContractVersion: process.env.VITE_API_CONTRACT_VERSION || "2026-06-30",
   minSupportedVersion: process.env.VITE_MIN_SUPPORTED_VERSION || "",
   forceReload: process.env.VITE_FORCE_RELOAD === "true",
+  features: productionFeatures,
   environment: process.env.VITE_DEPLOY_CONTEXT || process.env.CONTEXT || "local",
   context: process.env.VITE_DEPLOY_CONTEXT || process.env.CONTEXT || "local",
   branch: process.env.HEAD || process.env.BRANCH || readGitValue("git rev-parse --abbrev-ref HEAD", "localhost"),
