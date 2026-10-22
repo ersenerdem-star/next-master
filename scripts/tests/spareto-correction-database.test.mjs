@@ -72,3 +72,19 @@ test('Spareto transport stays globally single-reader and same-brand primary acti
  await db.query('update supplier_price_ingestion_internal.catalog_enrichment_jobs set brand_id=$1',[actor]);
  assert.equal((await rpc(db,'apply_catalog_spareto_correction_item',[org,j.id,j.lease_token,0])).status,'completed');
 }finally{await db.close();}});
+test('an unreadable source row records an idempotent hold and advances without changing the existing product',async()=>{
+ const db=await setup();try{
+  const initial=(await db.query('select to_jsonb(p) p from catalog_products p')).rows[0].p;
+  const created=await rpc(db,'start_catalog_spareto_correction',[org,actor,'INA',['712036010'],crypto.randomUUID()]);
+  const j=await rpc(db,'claim_catalog_brand_job',[org,created.id]);
+  const observation={brand:'INA',code:'712036010',before:initial,unavailable:'SPARETO_RESPONSE_TOO_LARGE',requestEvidence:{requestUrl:'https://spareto.com/products/ina-bearing/712036010',maxResponseBytes:4194304,observedResponseBytes:4194305}};
+  await rpc(db,'checkpoint_catalog_brand_job',[org,j.id,j.lease_token,0,observation,{},'observed',null,false,null]);
+  const args=[org,j.id,j.lease_token,0],result=await rpc(db,'apply_catalog_spareto_correction_item',args);
+  assert.deepEqual(result,{status:'held',reason:'SPARETO_RESPONSE_TOO_LARGE'});assert.deepEqual(await rpc(db,'apply_catalog_spareto_correction_item',args),result);
+  await rpc(db,'checkpoint_catalog_brand_job',[org,j.id,j.lease_token,0,observation,result,'completed',null,true,null]);
+  assert.deepEqual((await db.query('select to_jsonb(p) p from catalog_products p')).rows[0].p,initial);
+  assert.deepEqual((await db.query('select status,next_index from catalog_brand_jobs')).rows[0],{status:'completed',next_index:1});
+  assert.equal((await db.query('select price::float from price_guard')).rows[0].price,99.25);
+  assert.equal((await db.query('select count(*)::int n from catalog_brand_item_applications')).rows[0].n,1);
+ }finally{await db.close();}
+});

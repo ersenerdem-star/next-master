@@ -34,7 +34,7 @@ export async function runClaimedSparetoCorrection({db,organizationId,job,maxMs=2
      }catch(e:any){
       // An absent, ambiguous or mismatched product is a per-item outcome;
       // a security block or transient transport problem is never bypassed.
-      if(!['SPARETO_EXACT_MATCH_NOT_FOUND','SPARETO_EXACT_MATCH_AMBIGUOUS','SPARETO_EXACT_IDENTITY_MISMATCH','SPARETO_EAN_IDENTITY_CONFLICT','SPARETO_SEARCH_BOUND_EXCEEDED','SPARETO_HTTP_404'].includes(e.message))throw e;
+      if(!['SPARETO_EXACT_MATCH_NOT_FOUND','SPARETO_EXACT_MATCH_AMBIGUOUS','SPARETO_EXACT_IDENTITY_MISMATCH','SPARETO_EAN_IDENTITY_CONFLICT','SPARETO_SEARCH_BOUND_EXCEEDED','SPARETO_HTTP_404','SPARETO_FIELD_AMBIGUOUS','SPARETO_RESPONSE_TOO_LARGE'].includes(e.message))throw e;
       observation={brand:job.manifest.brand,code:exactCatalogCode(item.product_code),before:exact[0],unavailable:e.message,requestEvidence:e.evidence||{},observedAt:new Date().toISOString()};
      }
     }
@@ -47,7 +47,7 @@ export async function runClaimedSparetoCorrection({db,organizationId,job,maxMs=2
    if(pause)return {status:'paused',processed};
   }catch(e:any){
    const message=String(e.message||'CORRECTION_FAILED').slice(0,180);
-   const transient=/HTTP[_ ]?(429|5[0-9]{2})|timeout|abort|fetch failed|ECONN|network/i.test(message)&&Number(job.retry_attempts||0)<4;
+   const transient=/HTTP[_ ]?(429|5[0-9]{2})|timeout|timed out|abort|fetch failed|ECONN|network|^terminated$/i.test(message)&&Number(job.retry_attempts||0)<4;
    await save(false,transient?'paused':'failed',message).catch(()=>{});
    return {status:transient?'paused':'failed',error:message,processed};
   }

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mapSparetoSecondaryPage,findExactSparetoProductUrl} from '../../netlify/functions/_shared/catalog/spareto-secondary-provider.mjs';
+import {mapSparetoSecondaryPage,findExactSparetoProductUrl,fetchExactSparetoSecondary} from '../../netlify/functions/_shared/catalog/spareto-secondary-provider.mjs';
 import {planSparetoReviewedCorrection} from '../../netlify/functions/_shared/catalog/spareto-reviewed-correction.mjs';
 import {runClaimedSparetoCorrection} from '../../netlify/functions/_shared/catalog/spareto-correction-worker.mts';
 const image='https://cdn.spareto.com/variants/images/001/123/456/original/product.jpg?123456';
@@ -34,10 +34,11 @@ test('a large alternatives section does not reject LuK direct results or supply 
  assert.throws(()=>findExactSparetoProductUrl(card('search_results_alternatives'),{brand:'LUK',code:'622066200'}),/NOT_FOUND/);
  assert.throws(()=>findExactSparetoProductUrl(Array.from({length:201},()=>card()).join(''),{brand:'LUK',code:'622066200'}),/BOUND_EXCEEDED/);
 });
-function workerFixture({busy=false,throwFetch=null}={}){
- const calls=[],job={id:'job',manifest:{source_key:'spareto_schaeffler_correction_v1',adapter:'spareto-reviewed-correction.v1',brand:'INA',brand_id:'brand'},mode:'publish',next_index:0,total_items:1,lease_token:'lease'};
- const db={rpc:async(name,args)=>{calls.push({name,args});return {data:name==='reserve_catalog_spareto_correction'?!busy:name==='apply_catalog_spareto_correction_item'?{status:'completed',changes:{description:'Bearing'}}:true};},from(table){const q={select(){return q;},eq(){return q;},single:async()=>({data:{product_code:'712036010',observation:null,checkpoint:{}}}),then(resolve){resolve({data:[{...before,product_code:'712036010'}]});}};return q;}};
- const fetchSecondary=async()=>{calls.push({name:'fetch'});if(throwFetch)throw Error(throwFetch);return parse();};return {job,db,calls,fetchSecondary};
+function workerFixture({busy=false,throwFetch=null,codes=['712036010'],retryAttempts=0}={}){
+ const calls=[],job={id:'job',manifest:{source_key:'spareto_schaeffler_correction_v1',adapter:'spareto-reviewed-correction.v1',brand:'INA',brand_id:'brand'},mode:'publish',next_index:0,total_items:codes.length,lease_token:'lease',retry_attempts:retryAttempts};
+ let currentIndex=0,sealed=null;
+ const db={rpc:async(name,args)=>{calls.push({name,args});if(name==='checkpoint_catalog_brand_job')sealed=args.input_observation;return {data:name==='reserve_catalog_spareto_correction'?!busy:name==='apply_catalog_spareto_correction_item'?(sealed?.unavailable?{status:'held',reason:sealed.unavailable}:{status:'completed',changes:{description:'Bearing'}}):true};},from(table){const q={select(){return q;},eq(name,value){if(table==='catalog_brand_job_items'&&name==='item_index')currentIndex=value;return q;},single:async()=>({data:{product_code:codes[currentIndex],observation:null,checkpoint:{}}}),then(resolve){resolve({data:[{...before,product_code:codes[currentIndex]}]});}};return q;}};
+ const fetchSecondary=async({code})=>{calls.push({name:'fetch',code});const error=typeof throwFetch==='function'?throwFetch(code):throwFetch;if(error)throw typeof error==='string'?Error(error):error;return mapSparetoSecondaryPage(html({code}),{brand:'INA',code,sourceUrl:'https://spareto.com/products/ina-bearing/'+code,expectedEan:before.ean});};return {job,db,calls,fetchSecondary};
 }
 test('correction worker seals evidence before publication and advances only after the application',async()=>{
  const f=workerFixture();const r=await runClaimedSparetoCorrection({...f,organizationId:'org'});assert.equal(r.status,'completed');
@@ -54,4 +55,35 @@ test('a queued correction keeps its lease while the previous reader drains, prev
  const r=await runClaimedSparetoCorrection({...f,organizationId:'org',wait:async()=>{waits++;}});
  assert.equal(r.status,'completed');assert.equal(waits,1);assert.equal(attempts,2);
  assert(!f.calls.some(c=>c.name==='checkpoint_catalog_brand_job'&&c.args.input_end_status==='paused'));
+});
+test('an oversized or ambiguous source product is held with evidence while the next exact product continues',async()=>{
+ for(const reason of ['SPARETO_RESPONSE_TOO_LARGE','SPARETO_FIELD_AMBIGUOUS']){
+  const evidence={requestUrl:'https://spareto.com/products/ina-bearing/712036010',observedAt:'2026-10-22T09:00:00Z'};
+  const f=workerFixture({codes:['712036010','712036011'],throwFetch:code=>code==='712036010'?Object.assign(Error(reason),{evidence}):null});
+  const r=await runClaimedSparetoCorrection({...f,organizationId:'org'});assert.equal(r.status,'completed');assert.equal(r.processed,2);
+  const saved=f.calls.filter(c=>c.name==='checkpoint_catalog_brand_job'&&c.args.input_advance);
+  assert.deepEqual(saved.map(c=>c.args.input_index),[0,1]);assert.equal(saved[0].args.input_checkpoint.status,'held');
+  assert.equal(saved[0].args.input_observation.unavailable,reason);assert.deepEqual(saved[0].args.input_observation.requestEvidence,evidence);
+  assert.equal(saved[1].args.input_checkpoint.status,'completed');assert.equal(f.calls.filter(c=>c.name==='fetch').length,2);
+ }
+});
+test('an interrupted response resumes the same cursor with bounded retries and never applies unsealed data',async()=>{
+ for(const [retryAttempts,status]of [[0,'paused'],[4,'failed']]){
+  const f=workerFixture({throwFetch:'terminated',retryAttempts}),r=await runClaimedSparetoCorrection({...f,organizationId:'org'});
+  assert.equal(r.status,status);assert.equal(f.calls.at(-1).args.input_advance,false);assert.equal(f.calls.at(-1).args.input_end_status,status);
+  assert(!f.calls.some(c=>c.name==='apply_catalog_spareto_correction_item'));
+ }
+});
+test('source errors retain the conflicting field or bounded response size without raising the transport cap',async()=>{
+ const ambiguous=html().replace('<table>','<table><tr><td>Width</td><td>50 mm</td></tr><tr><td>Width</td><td>60 mm</td></tr>');
+ assert.throws(()=>mapSparetoSecondaryPage(ambiguous,{brand:'INA',code:'712036010',sourceUrl:'https://spareto.com/products/ina-bearing/712036010'}),error=>{
+  assert.equal(error.message,'SPARETO_FIELD_AMBIGUOUS');assert.equal(error.evidence.fieldLabel,'Width');assert.deepEqual(error.evidence.candidateValues,['50 mm','60 mm']);return true;
+ });
+ for(const declared of [true,false]){
+  let requests=0;
+  await assert.rejects(fetchExactSparetoSecondary({brand:'INA',code:'712036010'},{wait:async()=>{},fetchImpl:async()=>{
+   requests++;return new Response(new Uint8Array(4*1024*1024+1),{headers:declared?{'content-length':String(4*1024*1024+1)}:{}});
+  }}),error=>{assert.equal(error.message,'SPARETO_RESPONSE_TOO_LARGE');assert.equal(error.evidence.maxResponseBytes,4*1024*1024);assert.equal(error.evidence.observedResponseBytes,4*1024*1024+1);assert.match(error.evidence.requestUrl,/keywords=712036010/);return true;});
+  assert.equal(requests,1);
+ }
 });

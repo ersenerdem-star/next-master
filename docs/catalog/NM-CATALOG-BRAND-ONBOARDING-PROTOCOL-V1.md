@@ -363,6 +363,18 @@ The brand engine displays the correction's processed/updated/held counts
 separately from the inactive official-reader status. Search cards explicitly
 marked as alternatives are excluded before the 200-primary-card search bound.
 
+The 2026-10-22 production review found seven stopped correction packages:
+five oversized source responses, one ambiguous product field and one interrupted
+response body (`terminated`). Oversized responses and conflicting source fields
+are held per product with their request URL, observed size limit or conflicting
+field evidence; later eligible products continue. The four MiB response cap and
+all identity/application checks remain in force. An interrupted response body
+uses the existing bounded retry/backoff at the same cursor, without a partial
+observation or canonical write. Resume the existing affected job IDs only after
+the worker fix is deployed; preserve every sealed observation, application,
+completed prefix and price-publication pointer. An access denial still stops the
+job and never becomes a silently skipped product.
+
 The existing upload worker's exact matched official receipts feed a separate
 secondary queue. Only a registered `spareto_secondary_exact_v1` source with
 explicit brand, read, application and field approval can run. Source admission

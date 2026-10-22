@@ -37,7 +37,7 @@ export function mapSparetoSecondaryPage(html,{brand,code,sourceUrl,expectedEan})
  const ean=knownEan&&eanCandidates.includes(knownEan)?knownEan:eanCandidates.length===1?eanCandidates[0]:null;
  if(ean)fields.ean=ean;
  const cells=[...main.matchAll(/<tr\b[^>]*>\s*<td\b[^>]*>([\s\S]*?)<\/td>\s*<td\b[^>]*>([\s\S]*?)<\/td>\s*<\/tr>/gi)].map(m=>[text(m[1]),text(m[2])]);
- const property=label=>one(cells.filter(([name])=>name===label).map(([,value])=>value),'SPARETO_FIELD_AMBIGUOUS');
+ const property=label=>{const values=cells.filter(([name])=>name===label).map(([,value])=>value);try{return one(values,'SPARETO_FIELD_AMBIGUOUS');}catch(error){error.evidence={requestUrl:url,fieldLabel:label,candidateValues:[...new Set(values)],observedAt:new Date().toISOString()};throw error;}};
  const tariff=property('Customs Code');if(/^\d{6,12}$/.test(tariff))fields.hs_code=tariff;
  // Only a labelled vehicle class can establish a segment. Product-category
  // slugs such as commercial-groups do not mean commercial vehicles.
@@ -92,10 +92,12 @@ export function mapSparetoSecondaryPage(html,{brand,code,sourceUrl,expectedEan})
 async function fetchHtml(url,{fetchImpl=fetch,timeoutMs=20000}={}){
  let r;try{r=await fetchImpl(url,{redirect:'error',headers:{accept:'text/html'},signal:AbortSignal.timeout(timeoutMs)});}catch(error){error.evidence={requestUrl:url,observedAt:new Date().toISOString()};throw error;}
  if(!r.ok)throw Object.assign(Error('SPARETO_HTTP_'+r.status),{evidence:{requestUrl:url,httpStatus:r.status,observedAt:new Date().toISOString()}});
- const max=4*1024*1024;if(Number(r.headers.get('content-length')||0)>max)throw Error('SPARETO_RESPONSE_TOO_LARGE');
+ const max=4*1024*1024;
+ const oversized=bytes=>Object.assign(Error('SPARETO_RESPONSE_TOO_LARGE'),{evidence:{requestUrl:url,maxResponseBytes:max,observedResponseBytes:bytes,observedAt:new Date().toISOString()}});
+ if(Number(r.headers.get('content-length')||0)>max){await r.body?.cancel().catch(()=>{});throw oversized(Number(r.headers.get('content-length')));}
  const reader=r.body?.getReader();if(!reader)throw Error('SPARETO_RESPONSE_INVALID');
  const chunks=[];let length=0;
- try{for(;;){const {done,value}=await reader.read();if(done)break;length+=value.byteLength;if(length>max)throw Error('SPARETO_RESPONSE_TOO_LARGE');chunks.push(value);}}finally{await reader.cancel().catch(()=>{});}
+ try{for(;;){const {done,value}=await reader.read();if(done)break;length+=value.byteLength;if(length>max)throw oversized(length);chunks.push(value);}}finally{await reader.cancel().catch(()=>{});}
  return Buffer.concat(chunks).toString('utf8');
 }
 export async function fetchSparetoSecondaryPage(input,options={}){return mapSparetoSecondaryPage(await fetchHtml(productUrl(input.sourceUrl),options),input);}
