@@ -1,3 +1,4 @@
+import {wilminkSupportDefinition} from './wilmink-sources.mjs';
 import {normalizeBrandKey} from './brand-standardization.mts';
 import {resolveTecAllianceBrandEntry} from './tecalliance-brand-registry.mts';
 import {resolveCatalogSyncPlan} from './catalog-sync-provider.mts';
@@ -29,8 +30,12 @@ export function brandEngineDefinition(brand:string){
  const plan=resolveCatalogSyncPlan(brand);
  return {brand,family:'unconfigured',sourceKey:null,sourceUrl:plan.preferredSourceType==='official'?plan.preferredSourceUrl:'',reader:false,workflow:'brand'};
 }
-export function assertBrandEngineSource(source:any,brand:string,{publish=false}={}){
- const def=brandEngineDefinition(brand);
+export function brandEngineForSource(brand:string,sourceKey?:string){
+ const primary=brandEngineDefinition(brand);if(!sourceKey||sourceKey===primary.sourceKey)return primary;
+ const helper=wilminkSupportDefinition(brand,sourceKey);if(!helper)throw Error('BRAND_SOURCE_CONFIGURATION_CHANGED');return helper;
+}
+export function assertBrandEngineSource(source:any,brand:string,{publish=false,sourceKey=undefined as string|undefined}={}){
+ const def=brandEngineForSource(brand,sourceKey);
  if(def.family==='schaeffler'&&source?.metadata?.server_access_verified!==true)throw Error('SCHAEFFLER_OFFICIAL_SERVER_ACCESS_REQUIRED');
  if(!def.reader||def.workflow!=='brand'||source?.source_key!==def.sourceKey||!source.is_active||!['allowed','internal_review_required'].includes(source.license_posture)
   ||source.credential_boundary!=='none'||source.rate_limit_posture!=='bounded'||source.metadata?.brand_engine_read_allowed!==true||!source.metadata?.allowed_brands?.includes(brand))throw Error('OFFICIAL_ENGINE_NOT_CONFIGURED');
@@ -44,6 +49,6 @@ export function brandEngineCapability(def:any,source:any){
  if(def.family==='manual')return 'manual_only';if(def.access==='authorization_required')return 'authorized_access_required';
  if(def.access==='server_access_required'&&source?.metadata?.server_access_verified!==true)return 'server_access_required';
  if(!def.reader)return def.sourceUrl?'adapter_required':'official_link_required';
- try{assertBrandEngineSource(source,def.brand);return 'ready';}catch{return 'source_registration_required';}
+ try{assertBrandEngineSource(source,def.brand,{sourceKey:def.sourceKey});return 'ready';}catch{return 'source_registration_required';}
 }
 export function matchesBrandEngineJob(job:any,definition:any){return job?.manifest?.brand===definition.brand&&job?.manifest?.source_key===definition.sourceKey;}

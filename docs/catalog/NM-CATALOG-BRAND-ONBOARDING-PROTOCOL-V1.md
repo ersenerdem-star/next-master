@@ -69,6 +69,34 @@ quarantine. Separate reviewed application fills missing values, adds identifiers
 and preserves current values, EAN conflicts and concurrent edits. No prices,
 supplier publications, orders or other-brand source policies are modified.
 
+## Elring and INA / Wilmink support — 2026-10-22
+
+The owner approved additive Wilmink support for Elring and INA. Keep the
+primary Elring and Schaeffler definitions, their access holds, existing jobs and
+the Kolbenschmidt source unchanged. Opt in with the separate source keys
+`wilmink_elring_support_v1` and `wilmink_ina_support_v1`; a source-qualified API
+request and every worker manifest must agree on the exact brand and source.
+
+Elring's public brand listing is readable and provides observed next-page URLs.
+The analogous INA listing returns 404; INA support therefore accepts only
+owner/reviewer-supplied public exact product URLs, at most twelve per package.
+Do not crawl search/account/system paths, guess product URLs, claim a full INA
+scan, or infer an INA catalogue denominator from this bounded package. Both
+use the ordinary bounded application reader and existing serialized durable
+brand queue. Stage source receipts before separately reviewed application.
+
+The existing distributor identity/field rules above apply to both brands.
+Primary Product JSON-LD, primary brand/specifications, manufacturer code, WG URL
+and EAN must agree. Wrong/missing product pages, EAN conflicts, duplicate article
+identities and oversized review receipts are per-product holds; eligible
+neighbors continue. Source revocation, access failures and lease loss still
+stop/retry the source job. Apply missing scalar values and reviewed identifier
+additions only; preserve manual/official/file values and concurrent edits.
+Source URL, brand, fingerprint, before/after fields and application outcomes
+remain inspectable. Image quarantine, explicit lifecycle evidence, unknown
+origin/tariff, separate packaging measurements and price/publication boundaries
+are unchanged. No automatic application grant is created by discovery.
+
 ## All-brand engine rollout — 2026-10-20
 
 The Product Decision Owner requested completion of existing upload/enrichment
