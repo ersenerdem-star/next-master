@@ -38,7 +38,7 @@ export function parseWilminkProduct(html,{sourceUrl,expectedCode,expectedBrand='
  // Product dimensions only. Packaging measurements and unqualified weights
  // remain inspectable attributes; neither is silently a product/gross fact.
  const dimensions={};for(const [label,key] of [['Length [mm]','length_mm'],['Width [mm]','width_mm'],['Height [mm]','height_mm']]){const s=get(label);if(/^\d+(?:[.,]\d+)?$/.test(s)&&Number(s.replace(',','.'))>0)dimensions[key]=Number(s.replace(',','.'));}if(Object.keys(dimensions).length)fields.dimensions=dimensions;
- const gross=get('Gross weight (kg)')||get('Gross Weight [kg]');if(/^\d+(?:[.,]\d+)?$/.test(gross)&&Number(gross.replace(',','.'))>0)fields.weight_kg=Number(gross.replace(',','.'));
+ const gross=get('Gross weight (kg)')||get('Gross Weight [kg]');if(/^\d+(?:[.,]\d+)?$/.test(gross)&&Number(gross.replace(',','.'))>0&&Number(gross.replace(',','.'))<=100000)fields.weight_kg=Number(gross.replace(',','.'));
  const country=get('Country of origin');if(/^[A-Z]{2}$/.test(country)&&!['QU','ZZ','XX'].includes(country))fields.origin=country;
  const tariff=get('Customs tariff number')||get('HS Code');if(/^\d[\d.\s-]{1,30}\d$/.test(tariff))fields.hs_code=tariff;
  const segment={ 'Passenger cars':'pc','Commercial vehicles':'cv','Light commercial vehicles':'lcv','Agricultural machinery':'agriculture','Industrial':'industrial','Marine':'marine' }[get('Vehicle type')];if(segment)fields.market_segment=segment;

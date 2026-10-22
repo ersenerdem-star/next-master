@@ -22,11 +22,11 @@ test('support is opt-in and cannot replace primary Schaeffler or Elring source, 
  assert.throws(()=>wilminkPageUrl('https://www.wilminkengineparts.com/en/brands/ina','INA'),/PAGE_URL_INVALID/);
  assert.throws(()=>wilminkPageUrl('https://www.wilminkengineparts.com/en/brands/elring?brands-filter=INA','Elring'),/PAGE_URL_INVALID/);
 });
-test('a missing or wrong-brand product is held while the next exact INA source URL is reviewed',async()=>{
+for(const reason of ['WILMINK_HTTP_404','WILMINK_RESPONSE_TOO_LARGE','WILMINK_DESCRIPTION_MISSING'])test(`${reason} holds one product while the next exact INA source URL is reviewed`,async()=>{
  const [file,url]=fixtures.INA,html=readFileSync(new URL(`./fixtures/wilmink-${file}-product.html`,import.meta.url),'utf8'),bad='https://www.wilminkengineparts.com/en/test/wg999';let cp={},completed;
  const job={id:'job',lease_token:'token',mode:'stage',manifest:{adapter:'wilmink-support-discovery.v1',brand:'INA',source_key:'wilmink_ina_support_v1',urls:[bad,url]}};
  const source={is_active:true,license_posture:'internal_review_required',credential_boundary:'none',rate_limit_posture:'bounded',metadata:{brand_engine_read_allowed:true,allowed_brands:['INA']}};
  const db={rpc:async(name,args)=>{if(name==='checkpoint_catalog_brand_job')cp=structuredClone(args.input_checkpoint);if(name==='complete_catalog_wilmink_support')completed=args;assert.notEqual(name,'apply_catalog_brand_job_item');return {data:{}};},from(table){const q={select(){return q;},eq(){return q;},single:async()=>({data:table==='catalog_external_sources'?source:table==='brands'?{id:'brand'}:{checkpoint:cp}}),then(resolve){resolve({data:[{id:'p',product_code:'530020133',ean:'4005108817549'}]});}};return q;}};
- const result=await runWilminkDiscovery({db,organizationId:'org',job,readHtml:async u=>{if(u===bad)throw Error('WILMINK_HTTP_404');return html;}});
- assert.equal(result.status,'reviewed');assert.equal(completed.input_products[0].unavailable,'WILMINK_HTTP_404');assert.equal(completed.input_products[1].brand,'INA');assert.equal(completed.input_products[1].code,'530020133');assert.equal(cp.captured.length,2);
+ const result=await runWilminkDiscovery({db,organizationId:'org',job,readHtml:async u=>{if(u===bad)throw Error(reason);return html;}});
+ assert.equal(result.status,'reviewed');assert.equal(completed.input_products[0].unavailable,reason);assert.equal(completed.input_products[1].brand,'INA');assert.equal(completed.input_products[1].code,'530020133');assert.equal(cp.captured.length,2);
 });
