@@ -36,6 +36,7 @@ before(async()=>{
  await db.exec(await readFile('supabase/migrations/20261021162624_supplier_catalog_ean_identity_guard.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20261021162739_supplier_catalog_mandatory_lifecycle_receipts.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20261021162842_supplier_catalog_bounded_fair_turns.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20261022092956_catalog_row_review_isolation.sql','utf8'));
  await db.query("insert into organizations(id,name)values($1,'Org')",[org]);
  await db.query("insert into suppliers(id,organization_id,name)values($1,$2,'Supplier')",[supplier,org]);
  await db.query("insert into brands(id,organization_id,name)values($1,$2,'Sachs')",[brand,org]);
@@ -114,9 +115,10 @@ test('a catalog edit between read and commit is retained and cannot be overwritt
  await publish(35);const claim=await rpc('claim_supplier_catalog_enrichment'),scope={input_job_id:claim.jobId,input_token:claim.token};
  const b=await rpc('read_supplier_catalog_enrichment_batch',scope),r=b.rows[0];
  await admin("update catalog_products set origin='JP' where product_code='00123'");
- await admin('savepoint stale');await assert.rejects(rpc('apply_supplier_catalog_enrichment_batch',{...scope,input_phase:'file',input_cursor:0,input_rows:[{rowNumber:1,existing:r.existing,patch:{origin:'TR'},issues:[],evidence:{}}]}),/PRODUCT_CHANGED/);await admin('rollback to savepoint stale');
+ const held=await rpc('apply_supplier_catalog_enrichment_batch',{...scope,input_phase:'file',input_cursor:0,input_rows:[{rowNumber:1,existing:r.existing,patch:{origin:'TR'},issues:[],evidence:{}}]});assert.equal(held.held,1);
  assert.equal((await db.query("select origin from catalog_products where product_code='00123'")).rows[0].origin,'JP');
- assert.equal(Number((await db.query('select cursor from supplier_price_ingestion_internal.catalog_enrichment_jobs')).rows[0].cursor),0);
+ assert.equal(Number((await admin('select cursor from supplier_price_ingestion_internal.catalog_enrichment_jobs')).rows[0].cursor),1);
+ assert.equal((await admin('select issues from supplier_price_ingestion_internal.catalog_enrichment_changes')).rows[0].issues[0].code,'CATALOG_ENRICHMENT_PRODUCT_CHANGED');
 }));
 
 test('a transient official failure preserves file progress and records its exact source row and reason',()=>transaction(async()=>{
@@ -269,4 +271,57 @@ test('a large file yields a bounded official turn without concurrent file writes
  await rpc('release_supplier_catalog_enrichment',{input_job_id:official.jobId,input_token:official.token});
  const nextFile=await rpc('claim_supplier_catalog_enrichment');assert.equal(nextFile.jobId,file.jobId);assert.equal(nextFile.phase,'file');assert.notEqual(nextFile.token,file.token);
  assert.equal(Number((await admin('select cursor from supplier_price_ingestion_internal.catalog_enrichment_jobs where id=$1',[file.jobId])).rows[0].cursor),0);
+}));
+
+test('an oversized existing article is held while the preceding and following source rows commit once',()=>transaction(async()=>{
+ await publish(150);await admin('update supplier_price_releases set total_rows=3 where id=$1',[id(150)]);
+ await admin("insert into supplier_price_release_rows(release_id,source_row_number,normalized_code,product_code,buy_price,currency,valid_from,row_status,row_hash,origin)select $1,n,case n when 2 then '00234' else '00345' end,case n when 2 then '00234' else '00345' end,10,'EUR','2026-10-19','accepted',repeat('a',64),'TR' from generate_series(2,3)n",[id(150)]);
+ await admin('update supplier_price_ingestion_internal.catalog_enrichment_jobs set total_rows=3');
+ await admin("insert into catalog_products(organization_id,brand_id,product_code,origin,oem_no)values($1,$2,'00234','DE',repeat('LONG-OEM; ',9000))",[org,brand]);
+ const before=(await admin("select to_jsonb(p) p from catalog_products p where product_code='00234'")).rows[0].p;
+ const pointers=(await admin('select * from supplier_current_price_pointers')).rows;
+ const prices=(await admin('select product_code,buy_price from supplier_price_release_rows order by source_row_number')).rows;
+ const claim=await rpc('claim_supplier_catalog_enrichment');await runSupplierCatalogEnrichment({rpc,jobId:claim.jobId,token:claim.token,officialProvider:()=>null});
+ assert.deepEqual((await admin("select to_jsonb(p) p from catalog_products p where product_code='00234'")).rows[0].p,before);
+ assert.equal((await db.query("select count(*)::int n from catalog_products where product_code in('00123','00345') and origin='TR'")).rows[0].n,2);
+ const audit=(await db.query("select source_row_number,patch,issues,evidence from supplier_price_ingestion_internal.catalog_enrichment_changes where phase='file' order by source_row_number")).rows;
+ assert.equal(audit.length,3);assert.equal(audit[1].issues[0].code,'CATALOG_ENRICHMENT_RECORD_TOO_LARGE');assert.deepEqual(audit[1].patch,{});
+ assert(audit[1].evidence.entryBytes>64000);assert.equal(audit[1].evidence.entryFingerprint.length,64);assert(JSON.stringify(audit[1]).length<3000);
+ const j=(await db.query('select processed_rows,review_rows,changed_products,status from supplier_price_ingestion_internal.catalog_enrichment_jobs')).rows[0];
+ assert.equal(Number(j.processed_rows),3);assert.equal(Number(j.review_rows),1);assert.equal(Number(j.changed_products),2);assert.equal(j.status,'review_required');
+ assert.deepEqual((await admin('select * from supplier_current_price_pointers')).rows,pointers);
+ assert.deepEqual((await admin('select product_code,buy_price from supplier_price_release_rows order by source_row_number')).rows,prices);
+}));
+
+test('a malformed product patch enters review without creating a blank product or bypassing prefix and lease gates',()=>transaction(async()=>{
+ await publish(160);await admin('update supplier_price_releases set total_rows=2 where id=$1',[id(160)]);
+ await admin("insert into supplier_price_release_rows(release_id,source_row_number,normalized_code,product_code,buy_price,currency,valid_from,row_status,row_hash)values($1,2,'00234','00234',10,'EUR','2026-10-19','accepted',repeat('a',64))",[id(160)]);
+ await admin('update supplier_price_ingestion_internal.catalog_enrichment_jobs set total_rows=2');
+ const claim=await rpc('claim_supplier_catalog_enrichment'),scope={input_job_id:claim.jobId,input_token:claim.token};
+ const rows=[{rowNumber:1,existing:{},patch:{origin:null},issues:[],evidence:{}},{rowNumber:2,existing:{},patch:{origin:'TR'},issues:[],evidence:{}}];
+ const result=await rpc('apply_supplier_catalog_enrichment_batch',{...scope,input_phase:'file',input_cursor:0,input_rows:rows});assert.equal(result.held,1);assert.equal(Number(result.cursor),2);
+ assert.equal((await admin("select count(*)::int n from catalog_products where product_code='00123'")).rows[0].n,0);
+ assert.equal((await db.query("select origin from catalog_products where product_code='00234'")).rows[0].origin,'TR');
+ assert.equal((await db.query("select issues from supplier_price_ingestion_internal.catalog_enrichment_changes where source_row_number=1")).rows[0].issues[0].code,'CATALOG_ENRICHMENT_ROW_INVALID');
+ await admin('savepoint repeated');await assert.rejects(rpc('apply_supplier_catalog_enrichment_batch',{...scope,input_phase:'file',input_cursor:0,input_rows:rows}),/CURSOR_CHANGED/);await admin('rollback to savepoint repeated');
+ await admin('savepoint bad_reason');await assert.rejects(rpc('hold_supplier_catalog_enrichment_product',{...scope,input_phase:'file',input_cursor:2,input_row:{rowNumber:3},input_reason:'OFFICIAL_SOURCE_ACCESS_DENIED'}),/HOLD_REASON_INVALID/);await admin('rollback to savepoint bad_reason');
+ await admin('savepoint missing_reason');await assert.rejects(rpc('hold_supplier_catalog_enrichment_product',{...scope,input_phase:'file',input_cursor:2,input_row:{rowNumber:3},input_reason:null}),/HOLD_REASON_INVALID/);await admin('rollback to savepoint missing_reason');
+ await admin('savepoint wrong_prefix');await assert.rejects(rpc('hold_supplier_catalog_enrichment_product',{...scope,input_phase:'file',input_cursor:2,input_row:{rowNumber:999},input_reason:'CATALOG_ENRICHMENT_PATCH_INVALID'}),/PREFIX_INVALID/);await admin('rollback to savepoint wrong_prefix');
+ await admin('savepoint wrong_lease');await assert.rejects(rpc('hold_supplier_catalog_enrichment_product',{...scope,input_token:id(99999),input_phase:'file',input_cursor:2,input_row:{rowNumber:3},input_reason:'CATALOG_ENRICHMENT_PATCH_INVALID'}),/LEASE_LOST/);await admin('rollback to savepoint wrong_lease');
+ const grants=(await admin("select has_function_privilege('anon','hold_supplier_catalog_enrichment_product(uuid,uuid,text,bigint,jsonb,text)','execute') anon,has_function_privilege('authenticated','hold_supplier_catalog_enrichment_product(uuid,uuid,text,bigint,jsonb,text)','execute') client,has_function_privilege('service_role','supplier_price_ingestion_internal.apply_supplier_catalog_enrichment_batch_strict(uuid,uuid,text,bigint,jsonb)','execute') bypass")).rows[0];assert.deepEqual(grants,{anon:false,client:false,bypass:false});
+}));
+
+test('one ambiguous official article is held with lifecycle coverage while the next exact article completes',()=>transaction(async()=>{
+ await publish(170);await admin('update supplier_price_releases set total_rows=2 where id=$1',[id(170)]);
+ await admin("insert into supplier_price_release_rows(release_id,source_row_number,normalized_code,product_code,buy_price,currency,valid_from,row_status,row_hash)values($1,2,'00234','00234',10,'EUR','2026-10-19','accepted',repeat('a',64))",[id(170)]);
+ await admin('update supplier_price_ingestion_internal.catalog_enrichment_jobs set total_rows=2');
+ const claim=await rpc('claim_supplier_catalog_enrichment');
+ await runSupplierCatalogEnrichment({rpc,jobId:claim.jobId,token:claim.token,officialDelayMs:0,officialProvider:()=>({key:'zf',fetch:async(code:string)=>{
+  if(code==='00123')throw Error('OFFICIAL_EXACT_MATCH_AMBIGUOUS');return {code,sourceUrl:'https://aftermarket.zf.com/api/articles/'+code,fields:{description:'Shock absorber'}};
+ }})});
+ const j=(await admin('select cursor,review_rows,official_checked,official_requested,lifecycle_recorded,status from supplier_price_ingestion_internal.catalog_enrichment_jobs')).rows[0];
+ assert.equal(Number(j.cursor),2);assert.equal(Number(j.review_rows),1);assert.equal(Number(j.official_checked),2);assert.equal(Number(j.official_requested),2);assert.equal(Number(j.lifecycle_recorded),2);assert.equal(j.status,'review_required');
+ const audit=(await db.query("select issues,evidence from supplier_price_ingestion_internal.catalog_enrichment_changes where phase='official' and source_row_number=1")).rows[0];
+ assert.equal(audit.issues[0].code,'OFFICIAL_EXACT_MATCH_AMBIGUOUS');assert.equal(audit.evidence.lifecycle.checks.replacement,'blocked');assert.equal(audit.evidence.lifecycle.checks.discontinued,'blocked');
+ assert.equal((await db.query("select description from catalog_products where product_code='00234'")).rows[0].description,'Shock absorber');
 }));

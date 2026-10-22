@@ -1,0 +1,10 @@
+// Only deterministic failures of one requested article belong in review.
+// Unknown errors, source authorization, transport and database faults stop/retry.
+const reasons=new Set([
+ 'OFFICIAL_EXACT_MATCH_NOT_FOUND','OFFICIAL_EXACT_MATCH_AMBIGUOUS','OFFICIAL_PRODUCT_DOMAIN_UNSUPPORTED',
+ 'OFFICIAL_OBSERVATION_IDENTITY_INVALID','DENSO_BRAND_MISMATCH','DENSO_RESPONSE_TOO_LARGE',
+ 'SKF_PRODUCT_IDENTITY_INVALID','SKF_EAN_AMBIGUOUS','SKF_RESPONSE_TOO_LARGE',
+ 'ELRING_IDENTITY_MISMATCH','ELRING_IDENTITY_AMBIGUOUS','ELRING_PRODUCT_NOT_FOUND','ELRING_RESPONSE_TOO_LARGE',
+ 'WILMINK_SOURCE_INDEX_MISSING','WILMINK_EXACT_IDENTITY_INVALID'
+]);
+export function catalogRowFailure(error){const message=String(error?.message??error??'');return reasons.has(message)?message:null;}

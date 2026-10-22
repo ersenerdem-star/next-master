@@ -3,6 +3,7 @@ import {supplierUpgradeServiceHeaders} from '../supplier-upgrade-auth.mts';
 import {ENRICHMENT_POLICY,sourceCatalogFields,planSupplierCatalogEnrichment} from './supplier-enrichment-plan.mjs';
 import {supplierOfficialProvider,safeSupplierOfficialObservation} from './supplier-official-completion.mts';
 import {catalogLifecycleReview} from './catalog-completion-review.mjs';
+import {catalogRowFailure} from './catalog-row-failures.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function supplierCatalogTarget(read:(name:string)=>string|undefined){
@@ -64,6 +65,9 @@ export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=4*6
         evidence={policy:ENRICHMENT_POLICY,provider:provider!.key,sourceRequested:true,sourceOutcome:reason==='OFFICIAL_EXACT_MATCH_NOT_FOUND'?'not_found':'unsupported_domain',lifecycle:catalogLifecycleReview({}, {unavailable:reason})};
        }
        else{
+        const reason=catalogRowFailure(error);
+        if(reason)return {rowNumber:row.rowNumber,existing:{id:before.id},patch:{},issues:[{field:'source',code:reason}],missing:false,missingFields:[],
+         rowReviewReason:reason,evidence:{policy:ENRICHMENT_POLICY,provider:provider!.key,sourceRequested:true,sourceOutcome:'review_required',lifecycle:catalogLifecycleReview({}, {unavailable:reason})}};
         const text=String((error as Error)?.message||error),code=error instanceof ReferenceError||/is not defined|is not a function/.test(text)?'OFFICIAL_PROVIDER_IMPLEMENTATION_ERROR':/^OFFICIAL_OBSERVATION_(IDENTITY|SOURCE)_INVALID$/.test(text)?text:/429|rate.limit/i.test(text)?'OFFICIAL_SOURCE_RATE_LIMIT':/401|403/.test(text)?'OFFICIAL_SOURCE_ACCESS_DENIED':/timeout|timed.out|abort/i.test(text)?'OFFICIAL_SOURCE_TIMEOUT':'OFFICIAL_SOURCE_UNAVAILABLE';
         throw Object.assign(Error(code),{sourceRow:row.rowNumber,provider:provider!.key});
        }
@@ -82,7 +86,9 @@ export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=4*6
     for(const row of batch.rows){
      if(now()-start>=effectiveBudgetMs){await rpc('release_supplier_catalog_enrichment',scope);return {status:'continuation'};}
      const built=await buildRow(row);
-     const result=await rpc('apply_supplier_catalog_enrichment_batch',{...scope,input_phase:batch.phase,input_cursor:cursor,input_rows:[built]});
+     const result='rowReviewReason' in built
+      ?await rpc('hold_supplier_catalog_enrichment_product',{...scope,input_phase:batch.phase,input_cursor:cursor,input_row:built,input_reason:built.rowReviewReason})
+      :await rpc('apply_supplier_catalog_enrichment_batch',{...scope,input_phase:batch.phase,input_cursor:cursor,input_rows:[built]});
      if(result?.status==='superseded')return result;
      if(result?.status!=='applied'||result.cursor!==row.rowNumber)throw Error('CATALOG_ENRICHMENT_APPLY_UNCONFIRMED');
      cursor=result.cursor;

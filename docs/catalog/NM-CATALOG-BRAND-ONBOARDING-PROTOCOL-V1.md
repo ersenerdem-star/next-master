@@ -318,6 +318,34 @@ The currently running file invocation drains normally before the first source
 turn. A source request may complete after the one-minute budget; its row is
 committed before yielding. No official source pacing is relaxed.
 
+## Product review isolation rule — 2026-10-22
+
+One article's deterministic data failure must not block later eligible articles.
+This applies across brands in the shared supplier-file/official enrichment and
+generic brand-review queues. Hold the product without a canonical change; retain
+its exact code, source row, reason, source identity and a durable review receipt.
+Missing/ambiguous identity and oversized product data belong to product review.
+An access denial, revoked source approval, lost lease, invalid prefix, changed
+publication, infrastructure failure or unknown implementation error remains a
+job-level stop/retry. Do not reinterpret those failures as successful scanning.
+
+The supplier RPC keeps its original strict writer privately, with the same
+public service-only signature and existing size/field/price/identity checks.
+Ordinary batches keep their atomic bulk path. A known product-data failure rolls
+that attempt back and isolates rows in source order. Only the invalid or
+concurrently changed product is held; valid neighbors apply once. An oversized
+before snapshot stays intact in the canonical catalog and is referred to by ID
+and SHA-256 rather than duplicated into the bounded review record. No blank
+canonical product is created for a held source row. Review and cursor movement
+commit together; stale leases, retries and superseded publications cannot skip
+unprocessed rows or double-count work. Held official rows record blocked
+replacement/discontinued checks rather than claiming a successful lifecycle
+check. The reason is visible in the administrator's existing review details.
+
+This is a catalog metadata rule. Supplier price-release pointers, published
+prices, order totals and source-access requirements are unchanged. New catalog
+adapters must implement the same per-product review behavior.
+
 ## Spareto supplemental completion queue — 2026-10-21
 
 ### Owner-reviewed Schaeffler corrections — 2026-10-21

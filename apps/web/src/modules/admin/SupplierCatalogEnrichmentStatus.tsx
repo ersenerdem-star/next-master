@@ -5,8 +5,13 @@ import {SupplierSecondaryCompletionReview} from './SupplierSecondaryCompletionRe
 
 type Status={releaseId:string;status:string;phase:string;totalRows:number;processedRows:number;changedProducts:number;reviewRows:number;officialChecked:number;missingRows:number;officialRequested?:number;lifecycleRecorded?:number;coverageStartRow?:number|null;errorCode:string|null;errorSourceRow:number|null;errorProvider:string|null};
 type Issue={phase:string;source_row_number:number;product_code:string;issues:{field:string;code:string}[];missing_fields?:string[];source_ean?:string|null;before_values?:Record<string,unknown>;lifecycle?:{checks?:Record<string,string>}|null};
-const fieldNames:Record<string,string>={origin:'Menşe',hs_code:'Tarife',ean:'Barkod',oem_no:'OEM numarası',vehicle:'Araç',vehicle_model:'Araç modeli',weight_kg:'Ağırlık',dimensions:'Boyutlar',description:'Açıklama',description_tr:'Türkçe açıklama',market_segment:'Pazar grubu',source:'Resmî kaynak',replacement:'Değişen kod',discontinued:'Üretimin durdurulması',product_code:'Parça numarası'};
+const fieldNames:Record<string,string>={record:'Katalog kaydı',origin:'Menşe',hs_code:'Tarife',ean:'Barkod',oem_no:'OEM numarası',vehicle:'Araç',vehicle_model:'Araç modeli',weight_kg:'Ağırlık',dimensions:'Boyutlar',description:'Açıklama',description_tr:'Türkçe açıklama',market_segment:'Pazar grubu',source:'Resmî kaynak',replacement:'Değişen kod',discontinued:'Üretimin durdurulması',product_code:'Parça numarası'};
 const reasons:Record<string,[string,string]>={
+ CATALOG_ENRICHMENT_RECORD_TOO_LARGE:['Bu parçanın katalog bilgisi kayıt boyutu sınırını aşıyor. Mevcut kayıt korundu; parça incelemeye ayrıldı ve diğer satırlar devam etti.','This article exceeds the catalog record size limit. Its current record was retained; it was held for review while later rows continued.'],
+ CATALOG_ENRICHMENT_ROW_INVALID:['Bu parçanın alanları doğrulanamadı. Kayıt değiştirilmedi; parça incelemeye ayrıldı ve diğer satırlar devam etti.','This article failed field validation. Its current record was retained; it was held for review while later rows continued.'],
+ CATALOG_ENRICHMENT_PRODUCT_CHANGED:['Bu parça okuma sırasında değiştirildi. Güncel kayıt korundu; parça incelemeye ayrıldı ve diğer satırlar devam etti.','This article changed after it was read. The current record was retained; it was held for review while later rows continued.'],
+ OFFICIAL_EXACT_MATCH_AMBIGUOUS:['Resmî kaynakta birden fazla eşleşme var. Parça incelemeye ayrıldı; diğer satırlar devam etti.','The official source returned multiple matches. This article was held for review; later rows continued.'],
+ DENSO_RESPONSE_TOO_LARGE:['Denso ürün yanıtı boyut sınırını aşıyor. Parça incelemeye ayrıldı; diğer satırlar devam etti.','The Denso product response exceeds the size limit. This article was held for review; later rows continued.'],
  LIFECYCLE_UNSUPPORTED:['Kaynak bu bilgiyi sağlamıyor; durum doğrulanamadı.','The source does not supply this information; status is unverified.'],
  LIFECYCLE_NO_EXPLICIT_SIGNAL:['Kaynakta açık bir değişiklik beyanı yok.','No explicit change signal in the source.'],
  LIFECYCLE_FOUND:['Kaynakta beyan bulundu; uygulama ayrı inceleme gerektirir.','Source signal found; application requires separate review.'],
@@ -39,7 +44,11 @@ const reasons:Record<string,[string,string]>={
  OFFICIAL_SOURCE_UNAVAILABLE:['Resmî katalog şu an erişilebilir değil.','Official catalog is currently unavailable.'],
  CATALOG_IDENTITY_OR_VALUE_CONFLICT:['Ürün kimliği veya alan değeri mevcut katalogla çakışıyor; kayıt değiştirilmedi.','Product identity or value conflicts with catalog constraints; record was retained.'],
 };
-export function enrichmentReason(code:string,tr:boolean){return reasons[code]?.[tr?0:1]||(tr?'Katalog kontrolü tamamlanamadı; kayıtlı ilerleme korunuyor.':'Catalog check could not complete; saved progress is retained.');}
+export function enrichmentReason(code:string,tr:boolean){
+ if(!reasons[code]&&/RESPONSE_TOO_LARGE$/.test(code))return tr?'Bu ürünün kaynak yanıtı boyut sınırını aşıyor. Ürün incelemeye ayrıldı; diğer satırlar devam eder.':'This product response exceeds the size limit. It is held for review while other articles continue.';
+ if(!reasons[code]&&/IDENTITY_(INVALID|MISMATCH|AMBIGUOUS)|EAN_AMBIGUOUS|BRAND_MISMATCH/.test(code))return tr?'Bu ürünün marka, kod veya EAN bilgisi doğrulanamadı. Ürün incelemeye ayrıldı; diğer satırlar devam eder.':'This product brand, article or EAN could not be verified. It is held for review while other articles continue.';
+ return reasons[code]?.[tr?0:1]||(tr?'Katalog kontrolü tamamlanamadı; kayıtlı ilerleme korunuyor.':'Catalog check could not complete; saved progress is retained.');
+}
 export function SupplierCatalogEnrichmentStatus({releaseId,tr}:{releaseId:string;tr:boolean}){
  const [status,setStatus]=useState<Status|null>(null),[error,setError]=useState(false),[loaded,setLoaded]=useState(false),[refresh,setRefresh]=useState(0);
  const [issues,setIssues]=useState<Issue[]>([]),[cursor,setCursor]=useState<{phase:string;row:number}|null>(null),[busy,setBusy]=useState(false);
