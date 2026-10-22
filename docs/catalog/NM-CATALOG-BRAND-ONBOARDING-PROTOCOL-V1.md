@@ -117,6 +117,12 @@ existing product. Sources require explicit `brand_engine_read_allowed` and
 The new scope must not alter older source collection or automatic-apply grants.
 
 A signed one-minute dispatcher runs bounded jobs without a browser session.
+Selection rotates between the least recently active organization/source/brand
+lanes, keeping oldest eligible work first within a lane. A backlog from one
+provider must not starve another provider's discovery or reviewed application.
+An organization with a live worker lease is skipped without rescheduling or
+touching pending jobs. Retry backoff, source revocation and the existing single
+worker claim remain authoritative; selection itself is a service-only read.
 Leases fence concurrent or expired workers. Each official row is saved before
 continuing, and reviewed publication reuses the sealed observation. Temporary
 network failures have persisted bounded backoff; identity, authorization and
