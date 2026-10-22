@@ -63,3 +63,12 @@ test('EAN conflicts and changed-since-review facts remain held while neighboring
  const a=await rpc(db,'apply_catalog_brand_job_item',[org,apply.id,apply.lease_token,0]);assert.deepEqual(a.changes,{});
  assert.equal((await db.query('select description from catalog_products where brand_id=$1',[supportBrand])).rows[0].description,'Changed after review');
 }finally{await db.close();}});
+test('Elring listing follows only the observed next page and repeated start resumes its existing scan',async()=>{const db=await setup();try{
+ const first=await supportReady(db);await rpc(db,'complete_catalog_wilmink_support',[org,first.j.id,first.j.lease_token,first.page,[first.product]]);
+ const listing=await rpc(db,'start_catalog_wilmink_support',[org,actor,crypto.randomUUID(),'Elring',[]]);const claim=await rpc(db,'claim_catalog_brand_job',[org,listing.id]);
+ const page={pageUrl:'https://www.wilminkengineparts.com/en/brands/elring',page:1,pageFingerprint:'a'.repeat(64),urls:[supportUrl],nextUrl:'https://www.wilminkengineparts.com/en/brands/elring?page=2',lastPage:712};
+ await rpc(db,'checkpoint_catalog_brand_job',[org,claim.id,claim.lease_token,0,null,{page,captured:[first.product]},'pending',null,false,null]);
+ const result=await rpc(db,'complete_catalog_wilmink_support',[org,claim.id,claim.lease_token,page,[first.product]]);
+ const again=await rpc(db,'start_catalog_wilmink_support',[org,actor,crypto.randomUUID(),'Elring',[]]);assert.equal(again.id,result.next_job);assert.equal(again.manifest.scan_id,listing.manifest.scan_id);
+ const status=await rpc(db,'get_catalog_wilmink_support_status',[org,'Elring']);assert.equal(status.pages,1);assert.equal(status.lastPage,712);assert.equal(status.active,1);
+}finally{await db.close();}});
