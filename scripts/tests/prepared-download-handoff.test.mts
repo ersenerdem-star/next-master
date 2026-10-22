@@ -158,6 +158,7 @@ test("native save picker opens on click and writes the verified bytes to the sel
     const blob = new Blob(["verified"]);
     offerPreparedDownload("order.xlsx", blob);
     assert.equal(pickerCalls, 0); assert.equal(clicks.length, 0);
+    assert.equal(panels[0].children.find((x: any) => x.tag === "a").style.display, "none");
     const save = panels[0].children.find((x: any) => x.textContent === "Choose save location");
     await save.listeners.click();
     assert.equal(pickerCalls, 1); assert.deepEqual(writes, [blob]); assert.equal(closed, 1);
@@ -202,5 +203,6 @@ test("a failed write aborts the file instead of claiming success or downloading 
     assert.equal(aborted, 1); assert.equal(closed, 0); assert.equal(clicks.length, 0);
     assert.match(panels[0].children[2].textContent, /could not be saved/);
     assert.equal(panels[0].children.find((x: any) => x.tag === "a").hidden, false);
+    assert.equal(panels[0].children.find((x: any) => x.tag === "a").style.display, "inline-block");
   });
 });

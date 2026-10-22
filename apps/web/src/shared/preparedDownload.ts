@@ -144,12 +144,16 @@ export function offerPreparedDownload(name: string, blob: Blob) {
         ? (turkish ? "Kaydetme iptal edildi. Tekrar kayıt yeri seçebilirsiniz." : "Save cancelled. You can choose a location again.")
         : (turkish ? "Dosya kaydedilemedi. Tekrar deneyin veya tarayıcı ayarlarında her indirmede kayıt yerini sormayı açıp Dosyayı kaydet’i kullanın."
           : "The file could not be saved. Retry, or enable asking where to save downloads in your browser and use Save file.");
-      if (!(error instanceof Error && error.name === "AbortError")) link.hidden = false;
+      if (!(error instanceof Error && error.name === "AbortError")) {
+        link.hidden = false;
+        link.style.display = "inline-block";
+      }
     } finally {
       save.disabled = false;
     }
   });
   link.hidden = typeof picker === "function";
+  link.style.display = link.hidden ? "none" : "inline-block";
   panel.append(title, filename, hint, ...(typeof picker === "function" ? [save] : []), link, close);
   (document.querySelector?.("dialog[open]") || document.body).appendChild(panel);
   current = file;
