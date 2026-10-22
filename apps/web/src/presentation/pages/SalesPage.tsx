@@ -501,7 +501,7 @@ export function SalesPage({
       });
       const blob = await buildXlsxBlobAsync(row.id, model.rows, model.numericColumns, model.options);
       downloadBlob(`${row.id.replace(/[^a-z0-9_-]+/gi, "-")}.xlsx`, blob);
-      actionFeedback.succeed("Invoice Excel download started.");
+      actionFeedback.succeed("Invoice Excel is ready. Choose where to save it in the file-ready box.");
     } catch (caught) { actionFeedback.fail(caught instanceof Error ? caught.message : "Invoice export failed."); }
     finally { invoiceExportInFlight.current = false; setExportingInvoice(false); }
   }

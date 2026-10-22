@@ -1,3 +1,4 @@
+import {offerPreparedDownload} from "../../../shared/preparedDownload";
 import {catalogReviewOutcome} from './catalogReviewOutcome';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {useI18n} from '../../../i18n/I18nProvider';
@@ -56,7 +57,7 @@ export function ZfCatalogEngine({brand,defaultCode='',onClose,onPublished,engine
   setJobId(result.job.id);setApproved(false);setNotice(result.dispatchPending?(generic?(tr?'İş sıraya alındı; arka plan görevi otomatik başlatacak.':'Job queued; the background scheduler starts it automatically.'):(tr?'İş kaydedildi. Çalıştırmak için Devam et’i kullanın.':'Job saved. Use Resume to start processing.')):'');
   if(action==='start'){requestKey.current=null;setCodes('');}setData(await getStatus(brand,result.job.id));
  }catch(e){setError(e instanceof Error?e.message:'ZF_REQUEST_FAILED');}finally{setBusy(false);}};
- const download=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({brand,job,items:data?.items},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`zf-${brand}-${jobId}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+ const download=()=>offerPreparedDownload(`zf-${brand}-${jobId}.json`,new Blob([JSON.stringify({brand,job,items:data?.items},null,2)],{type:'application/json'}));
  const shown=(value:unknown)=>value==null||value===''?'—':typeof value==='object'?JSON.stringify(value):String(value);
  return <dialog ref={dialog} className="elring-engine-dialog" onCancel={event=>{event.preventDefault();onClose();}} aria-labelledby="zf-engine-title">
   <div className="elring-engine-header"><div><h2 id="zf-engine-title">{generic?`${data?.capability?.engineName?data.capability.engineName+' ':''}${tr?'Katalog Motoru':'Catalog Engine'}`:(tr?'ZF Grup Katalog Motoru':'ZF Group Catalog Engine')} · {brand}</h2>{data?.sourceUrl?<a href={data.sourceUrl} target="_blank" rel="noreferrer">{wilmink?(tr?'Wilmink tedarikçi kataloğu':'Wilmink distributor catalog'):(tr?'Resmî ürün kataloğu':'Official product catalog')}</a>:null}</div><Button variant="secondary" onClick={onClose}>{tr?'Kapat':'Close'}</Button></div>

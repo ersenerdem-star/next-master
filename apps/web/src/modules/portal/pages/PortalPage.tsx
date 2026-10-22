@@ -2516,7 +2516,7 @@ export function PortalPage() {
       );
       const rowCount = result.rowCount || readyJob.rowCount;
       const rowCountLabel = rowCount ? ` (${rowCount.toLocaleString()} rows)` : "";
-      notifyPortal(`${portalPriceListBrand} price list download started${rowCountLabel}. Check your browser downloads for the file.`);
+      notifyPortal(`${portalPriceListBrand} price list is ready${rowCountLabel}. Choose where to save it in the file-ready box.`);
     } catch (caught) {
       if (caught instanceof PortalExportStillPreparingError) {
         setStatus(caught.message);
@@ -3160,7 +3160,7 @@ export function PortalPage() {
       });
       const blob = await buildXlsxBlobAsync(model.rows[0][1] as string, model.rows, model.numericColumns, model.options);
       downloadBlob(`${sanitizeFileName(String(model.rows[0][1]))}.xlsx`, blob);
-      notifyPortal("Document Excel download started. Check your browser downloads.");
+      notifyPortal("Document Excel is ready. Choose where to save it in the file-ready box.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Document Excel export failed.");
     } finally { setPortalOverlay(null); }

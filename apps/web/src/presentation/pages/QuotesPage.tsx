@@ -2590,7 +2590,7 @@ export function QuotesPage({
       });
       const blob = await buildXlsxBlobAsync("Sales Order", model.rows, model.numericColumns, model.options);
       downloadBlob(`${(quoteNo || "sales-order-draft").replace(/[^a-z0-9_-]+/gi, "-")}.xlsx`, blob);
-      actionFeedback.succeed("Sales order Excel download started.");
+      actionFeedback.succeed("Sales order Excel is ready. Choose where to save it in the file-ready box.");
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : "Sales order Excel export failed");
     } finally { setExportingXlsx(false); }

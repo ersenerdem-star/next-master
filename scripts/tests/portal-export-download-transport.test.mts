@@ -55,7 +55,7 @@ async function withBrowserMocks(run: (state: {
   }
 }
 
-test("portal download waits for the complete signed Storage workbook before clicking the link", async () => {
+test("portal download waits for the complete signed Storage workbook before offering a save location", async () => {
   await withBrowserMocks(async ({ clicks, blobs, setFetch }) => {
     let finishTransfer!: () => void;
     const body = new ReadableStream<Uint8Array>({
@@ -77,7 +77,7 @@ test("portal download waits for the complete signed Storage workbook before clic
     assert.equal(clicks.length, 0);
     finishTransfer();
     await downloading;
-    assert.deepEqual(clicks, [{ href: `blob:${site}/1`, name: "price-list.xlsx" }]);
+    assert.equal(clicks.length, 0, "Verified export waits for the user to choose a save location");
     assert.equal(blobs[0].type, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     assert.deepEqual(new Uint8Array(await blobs[0].arrayBuffer()), workbook);
   });
@@ -134,7 +134,7 @@ test("admin signed Storage URLs verify the full workbook before saving", async (
     assert.equal(clicks.length, 0);
     finishTransfer();
     await downloading;
-    assert.deepEqual(clicks, [{ href: `blob:${site}/1`, name: "admin.xlsx" }]);
+    assert.equal(clicks.length, 0, "Verified export waits for the user to choose a save location");
     assert.deepEqual(new Uint8Array(await blobs[0].arrayBuffer()), workbook);
   });
 });
@@ -188,7 +188,7 @@ test("signed CSV exports do not require an XLSX container signature", async () =
       status: 200, headers: { "Content-Length": String(csv.byteLength) },
     }));
     await downloadUrl("catalog.csv", signedUrl, undefined, csv.byteLength);
-    assert.deepEqual(clicks, [{ href: `blob:${site}/1`, name: "catalog.csv" }]);
+    assert.equal(clicks.length, 0, "Verified export waits for the user to choose a save location");
     assert.equal(blobs[0].type, "text/csv;charset=utf-8");
     assert.deepEqual(new Uint8Array(await blobs[0].arrayBuffer()), csv);
   });
@@ -231,7 +231,7 @@ test("multipart download fetches three pieces sequentially and saves the exact a
     finishFirst();
     await downloading;
     assert.deepEqual(requests, parts.map((part) => part.signedUrl));
-    assert.deepEqual(clicks, [{ href: `blob:${site}/1`, name: "master.xlsx" }]);
+    assert.equal(clicks.length, 0, "Verified export waits for the user to choose a save location");
     assert.equal(blobs[0].size, workbook.byteLength);
     assert.deepEqual(new Uint8Array(await blobs[0].arrayBuffer()), workbook);
   });

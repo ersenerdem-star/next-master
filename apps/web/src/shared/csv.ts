@@ -1,3 +1,4 @@
+import { offerPreparedDownload } from "./preparedDownload";
 export function detectDelimiter(text: string) {
   const candidates = [",", ";", "\t", "\x1b"];
   const scored = candidates
@@ -213,15 +214,7 @@ export function toCsv(rows: Array<Array<string | number | null | undefined>>) {
 }
 
 export function downloadCsv(name: string, content: string, type = "text/csv;charset=utf-8") {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 500);
+  offerPreparedDownload(name, new Blob([content], { type }));
 }
 
 export function normalizeText(value: string | null | undefined) {

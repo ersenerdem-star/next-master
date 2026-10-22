@@ -57,19 +57,19 @@ async function browser(run: (state: any) => void | Promise<void>) {
   }
 }
 
-test("blocked automatic handoff leaves an accessible direct save link to the same prepared bytes", async () => {
+test("prepared files wait for a user gesture and keep the same verified bytes", async () => {
   await browser(({ panels, blobs, clicks, revoked }) => {
     const file = new Blob(["verified-file"]);
     offerPreparedDownload("Geba-B.xlsx", file);
-    assert.equal(clicks.length, 1, "Only one automatic attempt");
+    assert.equal(clicks.length, 0, "Preparing a file must not start a download");
     const panel = panels[0], link = panel.children.find((x: any) => x.tag === "a");
     assert.equal(panel.attrs.role, "status"); assert.equal(panel.attrs["aria-live"], "polite");
     assert.equal(link.href, "blob:test/1"); assert.equal(link.download, "Geba-B.xlsx");
-    assert.equal(link.textContent, "Download again");
+    assert.equal(link.textContent, "Save file");
     assert.equal(panel.removed, false); assert.deepEqual(revoked, []);
     link.click(); // Simulates a later user gesture. Native default navigation is preserved.
-    assert.equal(clicks.length, 2); assert.equal(blobs.length, 1); assert.equal(blobs[0], file);
-    assert.deepEqual(clicks[0], clicks[1]);
+    assert.equal(clicks.length, 1); assert.equal(blobs.length, 1); assert.equal(blobs[0], file);
+    assert.deepEqual(clicks[0], { href: link.href, download: link.download });
   });
 });
 
@@ -121,7 +121,7 @@ test("only the latest file stays visible and five-minute expiry releases it", as
     advance(1_000);
     offerPreparedDownload("B.xlsx", new Blob(["b"]));
     assert.equal(panels[0].removed, true); assert.equal(panels[1].removed, false);
-    assert.equal(clicks.length, 2, "Replacing a card does not retry either file");
+    assert.equal(clicks.length, 0, "Neither prepared file downloads automatically");
     advance(29_000); assert.deepEqual(revoked, ["blob:test/1"]);
     advance(271_000); assert.equal(panels[1].removed, true);
     assert.deepEqual(revoked, ["blob:test/1", "blob:test/2"]);
@@ -134,15 +134,73 @@ test("Turkish fallback is keyboard-accessible and filenames remain plain text", 
     offerPreparedDownload("<script>alert(1)</script>.xlsx", new Blob(["file"]));
     const panel = panels[0], link = panel.children.find((x: any) => x.tag === "a");
     assert.equal(panel.children[1].textContent, "<script>alert(1)</script>.xlsx");
-    assert.equal(link.textContent, "İndirme başlamadıysa indir");
+    assert.equal(link.textContent, "Dosyayı kaydet");
     assert.equal(panel.children.find((x: any) => x.tag === "button").textContent, "Kapat");
     assert.ok(link.href && link.download, "Native anchor supports keyboard activation without custom key handlers");
   });
 });
 
 test("price-list feedback describes the handoff rather than claiming a saved file", () => {
-  assert.match(enMessages.sales["priceLists.downloaded"], /Download started.*Download again/);
+  assert.match(enMessages.sales["priceLists.downloaded"], /ready.*Choose where to save/);
   assert.doesNotMatch(enMessages.sales["priceLists.downloaded"], /price list downloaded/);
-  assert.match(trMessages.sales["priceLists.downloaded"], /başlatıldı/);
+  assert.match(trMessages.sales["priceLists.downloaded"], /hazır/);
   assert.doesNotMatch(trMessages.sales["priceLists.downloaded"], /indirildi/);
+});
+
+
+test("native save picker opens on click and writes the verified bytes to the selected file", async () => {
+  await browser(async ({ panels, clicks }) => {
+    const writes: Blob[] = []; let pickerCalls = 0, closed = 0;
+    (window as any).showSaveFilePicker = async (options: any) => {
+      pickerCalls++; assert.equal(options.suggestedName, "order.xlsx");
+      return { createWritable: async () => ({ write: async (blob: Blob) => { writes.push(blob); }, close: async () => { closed++; }, abort: async () => {} }) };
+    };
+    const blob = new Blob(["verified"]);
+    offerPreparedDownload("order.xlsx", blob);
+    assert.equal(pickerCalls, 0); assert.equal(clicks.length, 0);
+    const save = panels[0].children.find((x: any) => x.textContent === "Choose save location");
+    await save.listeners.click();
+    assert.equal(pickerCalls, 1); assert.deepEqual(writes, [blob]); assert.equal(closed, 1);
+    assert.match(panels[0].children[2].textContent, /saved to your chosen location/);
+    assert.equal(clicks.length, 0, "Native save never also triggers a browser download");
+  });
+});
+
+test("cancelling the location picker preserves the file and never falls back to automatic download", async () => {
+  await browser(async ({ panels, clicks, blobs }) => {
+    (window as any).showSaveFilePicker = async () => { throw new DOMException("Cancelled", "AbortError"); };
+    offerPreparedDownload("order.csv", new Blob(["code,qty"]));
+    const save = panels[0].children.find((x: any) => x.textContent === "Choose save location");
+    await save.listeners.click();
+    assert.equal(save.disabled, false); assert.equal(clicks.length, 0); assert.equal(blobs.length, 1);
+    assert.match(panels[0].children[2].textContent, /Save cancelled/);
+    assert.equal(panels[0].removed, false);
+  });
+});
+
+test("logout while choosing a file prevents creating the writable file", async () => {
+  await browser(async ({ panels }) => {
+    let finish: any; let writableCalls = 0;
+    (window as any).showSaveFilePicker = () => new Promise(resolve => { finish = resolve; });
+    offerPreparedDownload("order.xlsx", new Blob(["verified"]));
+    const saving = panels[0].children.find((x: any) => x.textContent === "Choose save location").listeners.click();
+    clearPreparedDownloads();
+    finish({ createWritable: async () => { writableCalls++; } });
+    await saving;
+    assert.equal(writableCalls, 0);
+  });
+});
+
+test("a failed write aborts the file instead of claiming success or downloading elsewhere", async () => {
+  await browser(async ({ panels, clicks }) => {
+    let aborted = 0, closed = 0;
+    (window as any).showSaveFilePicker = async () => ({ createWritable: async () => ({
+      write: async () => { throw Error("Disk full"); }, abort: async () => { aborted++; }, close: async () => { closed++; },
+    }) });
+    offerPreparedDownload("order.xlsx", new Blob(["verified"]));
+    await panels[0].children.find((x: any) => x.textContent === "Choose save location").listeners.click();
+    assert.equal(aborted, 1); assert.equal(closed, 0); assert.equal(clicks.length, 0);
+    assert.match(panels[0].children[2].textContent, /could not be saved/);
+    assert.equal(panels[0].children.find((x: any) => x.tag === "a").hidden, false);
+  });
 });

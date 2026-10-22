@@ -1,3 +1,4 @@
+import {offerPreparedDownload} from "../../../shared/preparedDownload";
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {useI18n} from '../../../i18n/I18nProvider';
 import {CATALOG_MARKET_SEGMENT_OPTIONS} from '../../../domain/shared/catalogSegments';
@@ -36,8 +37,7 @@ export function ElringCatalogEngine({onClose,onPublished,defaultSegment=''}:{onC
   /authorization|source.*(enabled|unavailable)/i.test(error)?(tr?'Resmi kaynak veya yayın yetkisi henüz hazır değil.':'Official source or publication authorization is not ready.'):
   (tr?'İşlem tamamlanamadı. Tamamlanan paketler korundu; yeniden deneyebilirsiniz.':'The request could not complete. Completed packages are preserved; you can retry.')):'';
  const downloadReport=async()=>{setBusy(true);try{const report=await getElringStatus(jobId,true);
-  const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
-  const a=document.createElement('a');a.href=url;a.download=`elring-${jobId}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  offerPreparedDownload(`elring-${jobId}.json`,new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
  }catch(e){setError(e instanceof Error?e.message:'ELRING_REQUEST_FAILED');}finally{setBusy(false);}};
  return <dialog ref={dialog} className="elring-engine-dialog" onCancel={event=>{event.preventDefault();onClose();}} aria-labelledby="elring-engine-title">
   <div className="elring-engine-header"><div className="elring-engine-brand"><img className="elring-engine-logo" src="/brand-logos/elring.png" alt="Elring" /><div><h2 id="elring-engine-title">{tr?'Elring Katalog Motoru':'Elring Catalog Engine'}</h2>
