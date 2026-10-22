@@ -16,7 +16,7 @@ create table price_guard(value numeric);insert into price_guard values(99.25);
 insert into organizations values('${org}');insert into profiles values('${actor}','${org}','superadmin',true);insert into brands values('${brand}','${org}','Kolbenschmidt');
 insert into catalog_products(organization_id,brand_id,product_code,description,ean,origin,hs_code,oem_no)values('${org}','${brand}','41504600','Owner description','4028977841316','TR','001234','OLD');
 insert into catalog_external_sources(organization_id,source_key,is_active,license_posture,credential_boundary,rate_limit_posture,metadata)values('${org}','wilmink_kolbenschmidt_v1',true,'internal_review_required','none','bounded','{"brand_engine_read_allowed":true,"brand_engine_enrichment_allowed":true,"allowed_brands":["Kolbenschmidt"],"allowed_evidence_hosts":["www.wilminkengineparts.com"],"approval_actor":"owner","publication_approval_reference":"request"}');`);
- for(const file of ['20261019225343_catalog_brand_engine.sql','20261019230301_catalog_brand_retry_checkpoints.sql','20261021191250_kolbenschmidt_wilmink_discovery.sql','20261021192534_wilmink_ean_hold_reporting.sql','20261022105853_wilmink_elring_ina_support.sql'])await db.exec(readFileSync(new URL('../../supabase/migrations/'+file,import.meta.url),'utf8'));
+ for(const file of ['20261019225343_catalog_brand_engine.sql','20261019230301_catalog_brand_retry_checkpoints.sql','20261021191250_kolbenschmidt_wilmink_discovery.sql','20261021192534_wilmink_ean_hold_reporting.sql','20261022105853_wilmink_elring_ina_support.sql','20261022111100_wilmink_support_hold_details.sql'])await db.exec(readFileSync(new URL('../../supabase/migrations/'+file,import.meta.url),'utf8'));
  await db.exec("set request.jwt.claim.role='service_role'");return db;}
 
 const supportUrl='https://www.wilminkengineparts.com/en/shaft-seal-crankshaft/wg1194774',supportBrand='00000000-0000-4000-8000-000000000004';
@@ -57,7 +57,7 @@ test('support source, tenant, actor, lease and submitted URLs cannot be crossed'
 test('EAN conflicts and changed-since-review facts remain held while neighboring products remain eligible',async()=>{const db=await setup();try{
  const {j,page,product}=await supportReady(db);product.issues=[{field:'ean',code:'EAN_IDENTITY_CONFLICT'}];product.fields={};
  await db.query('update catalog_brand_job_items set checkpoint=$1 where job_id=$2',[JSON.stringify({page,captured:[product]}),j.id]);
- const r=await rpc(db,'complete_catalog_wilmink_support',[org,j.id,j.lease_token,page,[product]]);assert.equal((await rpc(db,'get_catalog_wilmink_support_status',[org,'Elring'])).held,1);
+ const r=await rpc(db,'complete_catalog_wilmink_support',[org,j.id,j.lease_token,page,[product]]);const status=await rpc(db,'get_catalog_wilmink_support_status',[org,'Elring']);assert.equal(status.held,1);assert.equal(status.heldItems[0].code,'750.330');assert.equal(status.heldItems[0].reason,'EAN_IDENTITY_CONFLICT');assert.equal(status.heldItems[0].sourceUrl,supportUrl);
  await rpc(db,'schedule_catalog_brand_job',[org,r.review_job,true]);const apply=await rpc(db,'claim_catalog_brand_job',[org,r.review_job]);
  await db.query("update catalog_products set description='Changed after review' where brand_id=$1",[supportBrand]);
  const a=await rpc(db,'apply_catalog_brand_job_item',[org,apply.id,apply.lease_token,0]);assert.deepEqual(a.changes,{});
