@@ -33,3 +33,12 @@ test('Schaeffler shares one official source without merging brand-bound jobs or 
  assert.equal(matchesBrandEngineJob({manifest:{brand:'FAG',source_key:'schaeffler_aftermarket'}},brandEngineDefinition('INA')),false);
  assert.equal(brandEngineDefinition('TRW Engine Components').family,'unconfigured');
 });
+
+test('BorgWarner variants stay in the official family and do not fall through to generic Spareto',()=>{
+ for(const brand of ['BorgWarner','BorgWarner (BERU)','BorgWarner (KKK)','BorgWarner (Schwitzer)']){
+  const plan=resolveCatalogSyncPlan(brand);
+  assert.equal(plan.preferredProviderKey,'masterturbo_official');
+  assert.equal(plan.executionProviderKey,'spareto');
+  assert.equal(brandEngineDefinition(brand).reader,false);
+ }
+});

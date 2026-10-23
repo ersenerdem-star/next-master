@@ -71,6 +71,9 @@ export function canonicalizeInternalBrandName(input: string) {
   if (lower === "hepu") return "HEPU";
   if (lower === "holset") return "Holset";
   if (lower === "borgwarner" || lower === "borgwagner") return "BorgWarner";
+  if (lower === "borgwarnerberu" || lower === "borgwarner(beru)") return "BorgWarner (BERU)";
+  if (lower === "borgwarnerkkk" || lower === "borgwarner(kkk)") return "BorgWarner (KKK)";
+  if (lower === "borgwarnerschwitzer" || lower === "borgwarner(schwitzer)") return "BorgWarner (Schwitzer)";
   if (lower === "garrett") return "Garrett";
   if (lower === "kkk") return "KKK";
   if (lower === "schwitzer") return "Schwitzer";

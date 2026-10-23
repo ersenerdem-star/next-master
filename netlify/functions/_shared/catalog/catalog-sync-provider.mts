@@ -215,8 +215,8 @@ const BRAND_SOURCE_CONFIGS: Record<string, BrandSourceConfig> = {
     executionSourceType: "marketplace",
   },
   borgwarner: {
-    aliases: ["borgwarner", "borgwagner", "borg warner"],
-    managedBrandNames: ["BorgWarner"],
+    aliases: ["borgwarner", "borgwagner", "borg warner", "borgwarner beru", "borgwarner kkk", "borgwarner schwitzer"],
+    managedBrandNames: ["BorgWarner", "BorgWarner (BERU)", "BorgWarner (KKK)", "BorgWarner (Schwitzer)"],
     preferredProviderKey: "masterturbo_official",
     preferredProviderLabel: "MasterTurbo TecAlliance official catalog",
     preferredSourceType: "official",
