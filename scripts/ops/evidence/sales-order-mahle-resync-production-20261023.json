@@ -1,0 +1,299 @@
+{
+  "order": "SO-20261023-8705",
+  "status": "draft",
+  "updated_at": "2026-10-23 18:27:42.699411+00",
+  "totalLines": 237,
+  "pricedBefore": 170,
+  "pricedAfter": 199,
+  "newlyFilled": 29,
+  "originalPricedLinesChanged": [],
+  "quantitiesChanged": [],
+  "remainingByBrand": [
+    {
+      "brand": "Continental",
+      "count": 2,
+      "codes": [
+        "6PK1870"
+      ]
+    },
+    {
+      "brand": "Febi",
+      "count": 4,
+      "codes": [
+        "280243",
+        "280203",
+        "280167",
+        "280168"
+      ]
+    },
+    {
+      "brand": "Textar",
+      "count": 22,
+      "codes": [
+        "2500901",
+        "92238305",
+        "92229805",
+        "2431001",
+        "2333403",
+        "92163405",
+        "2497601",
+        "2530701",
+        "92256303",
+        "2519901",
+        "92115405",
+        "91049300"
+      ]
+    },
+    {
+      "brand": "Pierburg",
+      "count": 10,
+      "codes": [
+        "7.07759.65.0",
+        "7.13500.04.0",
+        "7.10942.08.0",
+        "7.14490.01.0",
+        "7.12122.44.0",
+        "7.06032.54.0",
+        "7.06032.35.0"
+      ]
+    }
+  ],
+  "lookupErrors": 0,
+  "filled": [
+    {
+      "lineId": "1792763868780-zv8os8",
+      "brand": "Mahle",
+      "code": "CLC256000S",
+      "buyPrice": 46.35,
+      "sellPrice": 50.99,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763868780-297y1l",
+      "brand": "Mahle",
+      "code": "CLC340000S",
+      "buyPrice": 70.66,
+      "sellPrice": 77.73,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763868780-2x1nrp",
+      "brand": "Mahle",
+      "code": "CLC340000S",
+      "buyPrice": 70.66,
+      "sellPrice": 77.73,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763868780-elk6gj",
+      "brand": "Mahle",
+      "code": "CLC256000S",
+      "buyPrice": 46.35,
+      "sellPrice": 50.99,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763868780-18guc0",
+      "brand": "Mahle",
+      "code": "CRT240000S",
+      "buyPrice": 33.08,
+      "sellPrice": 36.39,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763868780-tjyu55",
+      "brand": "Mahle",
+      "code": "CRT240000S",
+      "buyPrice": 33.08,
+      "sellPrice": 36.39,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763868780-4foy7u",
+      "brand": "Mahle",
+      "code": "CRT240000S",
+      "buyPrice": 33.08,
+      "sellPrice": 36.39,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763868781-q2i88m",
+      "brand": "Mahle",
+      "code": "CRT240000S",
+      "buyPrice": 33.08,
+      "sellPrice": 36.39,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874933-i0319c",
+      "brand": "Mahle",
+      "code": "CRT116000S",
+      "buyPrice": 25.56,
+      "sellPrice": 28.12,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874933-q6es0t",
+      "brand": "Mahle",
+      "code": "TM1397",
+      "buyPrice": 27.32,
+      "sellPrice": 30.05,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874933-y3ziy7",
+      "brand": "Mahle",
+      "code": "TM25108",
+      "buyPrice": 38.64,
+      "sellPrice": 42.5,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-ebrw61",
+      "brand": "Mahle",
+      "code": "AC786000S",
+      "buyPrice": 81.96,
+      "sellPrice": 90.16,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-145ox8",
+      "brand": "Mahle",
+      "code": "ZH501",
+      "buyPrice": 75.92,
+      "sellPrice": 83.51,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-bhu2c1",
+      "brand": "Mahle",
+      "code": "TM25108",
+      "buyPrice": 38.64,
+      "sellPrice": 42.5,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-zopqpr",
+      "brand": "Mahle",
+      "code": "CRT116000S",
+      "buyPrice": 25.56,
+      "sellPrice": 28.12,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-lhwd5b",
+      "brand": "Mahle",
+      "code": "AC786000S",
+      "buyPrice": 81.96,
+      "sellPrice": 90.16,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-ya28or",
+      "brand": "Mahle",
+      "code": "ZH501",
+      "buyPrice": 75.92,
+      "sellPrice": 83.51,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-95i2ux",
+      "brand": "Mahle",
+      "code": "CR988000S",
+      "buyPrice": 93.93,
+      "sellPrice": 103.32,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-4qcuip",
+      "brand": "Mahle",
+      "code": "TM1397",
+      "buyPrice": 27.32,
+      "sellPrice": 30.05,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-4l0rh0",
+      "brand": "Mahle",
+      "code": "AC786000S",
+      "buyPrice": 81.96,
+      "sellPrice": 90.16,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-4lw0u8",
+      "brand": "Mahle",
+      "code": "TM25108",
+      "buyPrice": 38.64,
+      "sellPrice": 42.5,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-eheorw",
+      "brand": "Mahle",
+      "code": "CRT116000S",
+      "buyPrice": 25.56,
+      "sellPrice": 28.12,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-1ddo5k",
+      "brand": "Mahle",
+      "code": "ZH501",
+      "buyPrice": 75.92,
+      "sellPrice": 83.51,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-lcvl9i",
+      "brand": "Mahle",
+      "code": "ACP472000S",
+      "buyPrice": 254.18,
+      "sellPrice": 279.6,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-xtb306",
+      "brand": "Mahle",
+      "code": "CR988000S",
+      "buyPrice": 93.93,
+      "sellPrice": 103.32,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-k7ykxc",
+      "brand": "Mahle",
+      "code": "TM1397",
+      "buyPrice": 27.32,
+      "sellPrice": 30.05,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-fqnm1z",
+      "brand": "Mahle",
+      "code": "ZH501",
+      "buyPrice": 75.92,
+      "sellPrice": 83.51,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-v3rgd2",
+      "brand": "Mahle",
+      "code": "ACP472000S",
+      "buyPrice": 254.18,
+      "sellPrice": 279.6,
+      "supplier": "Romany"
+    },
+    {
+      "lineId": "1792763874934-p69xk2",
+      "brand": "Mahle",
+      "code": "CRT116000S",
+      "buyPrice": 25.56,
+      "sellPrice": 28.12,
+      "supplier": "Romany"
+    }
+  ],
+  "runtimeSource": "07c9f7ab92f39f9bc58fca0aaef0f90cf0647d1b",
+  "screenshot": "artifacts/batch-optimization-20261023/order-mahle-resync-production.jpg",
+  "action": "Authenticated normal UI resync with Fill blanks only and Keep prices checked"
+}
