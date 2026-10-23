@@ -21,6 +21,16 @@ test('Mahle listing is brand-bound and follows only its observed next page; WG a
  const parsed=parseWilminkProduct(readFileSync(new URL('./fixtures/wilmink-mahle-product.html',import.meta.url),'utf8'),{sourceUrl:page.urls[0],expectedBrand:'Mahle'});
  assert.equal(parsed.code,'0615292');assert.notEqual(parsed.code,parsed.sourceSku);assert.equal(parsed.fields.weight_kg,undefined);assert(parsed.technicalAttributes.some(([k])=>k==='Packaging weight (kg)'));
 });
+test('Wilmink public brand lanes expose exact engines for Glyco and Goetze while Nural stays URL-package only',()=>{
+ for(const [brand,key,url] of [
+  ['Glyco','wilmink_glyco_support_v1','https://www.wilminkengineparts.com/en/brands/glyco'],
+  ['Goetze','wilmink_goetze_support_v1','https://www.wilminkengineparts.com/en/brands/goetze'],
+  ['Nural','wilmink_nural_support_v1','https://www.wilminkengineparts.com/en/search-results']
+ ]){
+  const d=brandEngineDefinition(brand);assert.equal(d.sourceKey,key);assert.equal(d.authority,'distributor');
+  assert.equal(d.listingAvailable,brand!=='Nural');assert.equal(d.sourceUrl,url);
+ }
+});
 test('Mahle replacement and discontinued remain explicit official evidence, independent of supplemental Wilmink availability',()=>{
  const article={articleNumber:'0615292',mfrName:'Mahle',misc:{articleStatusDescription:'Production discontinued'},replacedByArticles:[{articleNumber:'0615293',mfrName:'Mahle'},{articleNumber:'0615294',mfrName:'Elring'}]};
  const official=tecLifecycle(article);assert.equal(official.checks.replacement,'found');assert.equal(official.checks.discontinued,'found');
