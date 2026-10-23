@@ -1,0 +1,199 @@
+{
+  "order": "SO-20261023-8705",
+  "sourceCommit": "4c7c1f93808f594bd67c8212900938487c89fe80",
+  "updatedBefore": "2026-10-23 19:02:47.918384+00",
+  "updatedAfter": "2026-10-23 19:20:40.335673+00",
+  "status": "draft",
+  "linesBefore": 236,
+  "linesAfter": 236,
+  "pricedBefore": 200,
+  "pricedAfter": 222,
+  "newlyFilled": [
+    {
+      "lineId": "1792763868781-oquvks",
+      "brand": "Textar",
+      "code": "2500901",
+      "buy_price": 14.85,
+      "sell_price": 16.34,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763871911-ncrh8r",
+      "brand": "Textar",
+      "code": "92238305",
+      "buy_price": 33.26,
+      "sell_price": 36.59,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763871912-4awzmx",
+      "brand": "Textar",
+      "code": "92229805",
+      "buy_price": 43.48,
+      "sell_price": 47.83,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763871912-omoxfa",
+      "brand": "Textar",
+      "code": "92238305",
+      "buy_price": 33.26,
+      "sell_price": 36.59,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763871912-w9o2g5",
+      "brand": "Textar",
+      "code": "2500901",
+      "buy_price": 14.85,
+      "sell_price": 16.34,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-42panm",
+      "brand": "Textar",
+      "code": "2431001",
+      "buy_price": 29.45,
+      "sell_price": 32.4,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-e3qa6x",
+      "brand": "Textar",
+      "code": "2333403",
+      "buy_price": 17.53,
+      "sell_price": 19.28,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-7ww13x",
+      "brand": "Textar",
+      "code": "92163405",
+      "buy_price": 42.31,
+      "sell_price": 46.54,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-7lacxe",
+      "brand": "Textar",
+      "code": "2497601",
+      "buy_price": 29.98,
+      "sell_price": 32.98,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-9bhee4",
+      "brand": "Textar",
+      "code": "2530701",
+      "buy_price": 17.45,
+      "sell_price": 19.2,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-5j4jig",
+      "brand": "Textar",
+      "code": "2530701",
+      "buy_price": 17.45,
+      "sell_price": 19.2,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-i8kbzr",
+      "brand": "Textar",
+      "code": "92163405",
+      "buy_price": 42.31,
+      "sell_price": 46.54,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-jdsvvf",
+      "brand": "Textar",
+      "code": "2333403",
+      "buy_price": 17.53,
+      "sell_price": 19.28,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-u3itkx",
+      "brand": "Textar",
+      "code": "2431001",
+      "buy_price": 29.45,
+      "sell_price": 32.4,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-q0w3gc",
+      "brand": "Textar",
+      "code": "2333403",
+      "buy_price": 17.53,
+      "sell_price": 19.28,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-h6lrn0",
+      "brand": "Textar",
+      "code": "2431001",
+      "buy_price": 29.45,
+      "sell_price": 32.4,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-sjawnh",
+      "brand": "Textar",
+      "code": "92163405",
+      "buy_price": 42.31,
+      "sell_price": 46.54,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-mpa3zf",
+      "brand": "Textar",
+      "code": "92256303",
+      "buy_price": 29.54,
+      "sell_price": 32.49,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-pwvs1m",
+      "brand": "Textar",
+      "code": "2519901",
+      "buy_price": 27.34,
+      "sell_price": 30.07,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-4s1fwd",
+      "brand": "Textar",
+      "code": "92115405",
+      "buy_price": 18.16,
+      "sell_price": 19.98,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-yle5jl",
+      "brand": "Textar",
+      "code": "2530701",
+      "buy_price": 17.45,
+      "sell_price": 19.2,
+      "supplier": "GroupAuto"
+    },
+    {
+      "lineId": "1792763874934-4ku0gk",
+      "brand": "Textar",
+      "code": "91049300",
+      "buy_price": 9.52,
+      "sell_price": 10.47,
+      "supplier": "GroupAuto"
+    }
+  ],
+  "priorPricedChanges": [],
+  "quantityChanges": [],
+  "remaining": {
+    "Febi": 4,
+    "Pierburg": 10
+  },
+  "cause": "Reported error is thrown only in explicit repricing (keepPrices=false). Febi 280243 was unpriced with no saved supplier and has no exact current option; message wording is generic. Full repricing aborts rather than partially saving.",
+  "action": "Normal authenticated UI resync, onlyFillBlanks=true, keepPrices=true",
+  "lookupFailures": 0,
+  "screenshot": "artifacts/batch-optimization-20261023/order-textar-resync-production.jpg"
+}
