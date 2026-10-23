@@ -1,0 +1,190 @@
+{
+  "observedAt": "2026-10-23T20:04:45Z",
+  "organizationId": "1e4c5e99-e387-41aa-a6d3-cbe74558f766",
+  "sourceCommit": "5d584f517c09f60fe752c23a5eb04c5351d81280",
+  "deploy": {
+    "id": "6adbbc8c5e3edcde9a30a621",
+    "state": "ready",
+    "context": "production",
+    "publishedAt": "2026-10-23T19:59:39.013Z"
+  },
+  "branch": "codex/denso-catalog-resume",
+  "enrichmentJobs": [
+    {
+      "id": "981a2c4d-f8ca-419c-9cd2-071ecc63af5e",
+      "brand": "Delphi",
+      "status": "queued",
+      "cursor": 0,
+      "processed_rows": 28151,
+      "total_rows": 28151,
+      "official_checked": 0,
+      "error_code": null,
+      "updated_at": "2026-10-23 20:00:13.999281+00"
+    },
+    {
+      "id": "bb5c625e-4122-42fc-9ee6-ff0114382851",
+      "brand": "Sachs",
+      "status": "running",
+      "cursor": 7958,
+      "processed_rows": 12669,
+      "total_rows": 12669,
+      "official_checked": 7958,
+      "error_code": null,
+      "updated_at": "2026-10-23 20:02:49.341608+00"
+    },
+    {
+      "id": "eae1dc4c-17dd-4c56-8e6b-2f7b92292b90",
+      "brand": "TRW",
+      "status": "queued",
+      "cursor": 4058,
+      "processed_rows": 16633,
+      "total_rows": 16633,
+      "official_checked": 4058,
+      "error_code": null,
+      "updated_at": "2026-10-23 19:52:33.723993+00"
+    }
+  ],
+  "brandJobs": [
+    {
+      "id": "5c7bca9c-8ae6-4ba3-b34b-4d27f9827e2e",
+      "status": "reviewed",
+      "next_index": 1,
+      "total_items": 1,
+      "error_message": null,
+      "manifest": {
+        "brand": "Delphi",
+        "codes": [
+          "25372484-12B1"
+        ],
+        "adapter": "brand-exact.v1",
+        "source_key": "delphi_official_catalog"
+      },
+      "updated_at": "2026-10-23 20:03:34.754001+00"
+    },
+    {
+      "id": "cc9b2360-a174-4480-8c14-d8a60c590f03",
+      "status": "reviewed",
+      "next_index": 1,
+      "total_items": 1,
+      "error_message": null,
+      "manifest": {
+        "brand": "Kolbenschmidt",
+        "adapter": "wilmink-kolbenschmidt-discovery.v1",
+        "scan_id": "d8ad9b68-c5ce-4f5e-8810-c19c602cda4e",
+        "page_url": "https://www.wilminkengineparts.com/en/brands/kolbenschmidt?page=109",
+        "source_key": "wilmink_kolbenschmidt_v1"
+      },
+      "updated_at": "2026-10-23 20:03:31.692501+00"
+    },
+    {
+      "id": "2b3d796e-98b5-4e80-a982-1df2e66fe3cb",
+      "status": "reviewed",
+      "next_index": 1,
+      "total_items": 1,
+      "error_message": null,
+      "manifest": {
+        "brand": "Elring",
+        "adapter": "wilmink-support-discovery.v1",
+        "scan_id": "9ab41a98-6d6e-4ccd-8368-fe2f28145b83",
+        "page_url": "https://www.wilminkengineparts.com/en/brands/elring?page=112",
+        "source_key": "wilmink_elring_support_v1"
+      },
+      "updated_at": "2026-10-23 20:02:44.697178+00"
+    },
+    {
+      "id": "3a9fa82c-aece-44be-a220-db5db7ae83e4",
+      "status": "reviewed",
+      "next_index": 1,
+      "total_items": 1,
+      "error_message": null,
+      "manifest": {
+        "brand": "Kolbenschmidt",
+        "adapter": "wilmink-kolbenschmidt-discovery.v1",
+        "scan_id": "d8ad9b68-c5ce-4f5e-8810-c19c602cda4e",
+        "page_url": "https://www.wilminkengineparts.com/en/brands/kolbenschmidt?page=108",
+        "source_key": "wilmink_kolbenschmidt_v1"
+      },
+      "updated_at": "2026-10-23 20:01:49.420274+00"
+    },
+    {
+      "id": "23b41346-b9de-49af-9612-48fd4c85fd3d",
+      "status": "reviewed",
+      "next_index": 1,
+      "total_items": 1,
+      "error_message": null,
+      "manifest": {
+        "brand": "Elring",
+        "adapter": "wilmink-support-discovery.v1",
+        "scan_id": "9ab41a98-6d6e-4ccd-8368-fe2f28145b83",
+        "page_url": "https://www.wilminkengineparts.com/en/brands/elring?page=111",
+        "source_key": "wilmink_elring_support_v1"
+      },
+      "updated_at": "2026-10-23 20:01:05.805333+00"
+    }
+  ],
+  "pointerCheck": [
+    {
+      "current_price_pointers": 28,
+      "latest_pointer_update": "2026-10-23 19:17:07.724049+00",
+      "changed_during_recovery": 0
+    }
+  ],
+  "security": {
+    "advisorGroupCountBefore": 3,
+    "advisorGroupCountAfter": 3,
+    "unchanged": true,
+    "existingFindings": 189
+  },
+  "actions": {
+    "wilmink": "Resumed original checkpointed jobs with normal schedule_catalog_brand_job service RPC after readable exact listing probes. Retained original scan IDs and nine buffered Kolbenschmidt codes.",
+    "sachsTrw": "Normal authenticated retry from saved cursor after successful exact official source probes; retained fair source lease serialization.",
+    "elringFitment": "Recovered the proven approved-run operator in this worktree; resumed original run and caches after confirming dead local PID. Local detached process 50317; original inactive tecalliance_elring source remains inactive. Does not certify full run completion.",
+    "delphi": "Connected existing licensed official public manufacturer source. Normal UI sample reviewed 1/1 with exact brand and code. Original current-release enrichment job admitted from NOT_CONFIGURED review to queued through guarded DML after live adapter verification. Guard required exact organization/brand/current pointer/release, phase official, cursor zero, file step complete, null lease and licensed source policy. Changed only status/error/consecutive-errors/update time; retained all source rows/cursors/publications."
+  },
+  "tests": {
+    "focusedProviderLifecycleWilmink": 19,
+    "elringCollectorLeaseReplayReread": 13,
+    "build": "passed; pre-existing Vite chunk size warning",
+    "coreGuardian": {
+      "critical": 0,
+      "warning": 0
+    },
+    "linuxDuckdbBundleBytes": 28193506
+  },
+  "blocked": [
+    {
+      "engine": "Spareto INA/FAG/LUK and legacy Elring scalar/vehicle",
+      "reason": "Exact public reader still HTTP 403; checkpoints preserved; inactive source not reactivated."
+    },
+    {
+      "engine": "Textar Brakebook",
+      "reason": "Official linked catalog HTTP 403; no bypass or blind retry."
+    },
+    {
+      "engine": "Gates",
+      "reason": "Official Navigates catalog identified; executable adapter/onboarding still missing."
+    },
+    {
+      "engine": "Febi / Swag / BluePrint",
+      "reason": "Authorized Partsfinder access and executable adapter not verified."
+    },
+    {
+      "engine": "Mercedes-Benz",
+      "reason": "Official integration/license/reader not configured."
+    },
+    {
+      "engine": "Denso",
+      "reason": "Completed cursors with exact official source gaps; not a stale runtime lease. Current DER05012 probe still exact match absent; no whole-brand reset."
+    }
+  ],
+  "lifecycle": "Explicit directional same-brand replacements and discontinuation evidence retained. Unsupported or absent evidence is not an assertion. Mahle support automatic application remains false.",
+  "uiProof": "artifacts/batch-optimization-20261023/delphi-recovery-production.jpg",
+  "localElring": {
+    "pid": 50317,
+    "originalProcessed": 1592,
+    "observedProcessed": 1926,
+    "status": "running",
+    "originalRun": "cc0695cd-eb9f-43ef-9a3e-1371834fdb7f",
+    "localOperator": true
+  }
+}
