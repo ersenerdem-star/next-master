@@ -1,6 +1,6 @@
-# Official multi-platform manifest resolved by BuildKit, 2026-10-05.
+# Official multi-platform manifest resolved by BuildKit, 2026-10-23.
 # Local build is not a remote deployment or a vulnerability certification.
-FROM node:24.15.0-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d
+FROM node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
