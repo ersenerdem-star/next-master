@@ -1,9 +1,11 @@
 import {brandDispatchSignature} from './brand-dispatch.mts';
 export async function dispatchCatalogBrand({db,target,send=fetch,now=Date.now}:any){
+ const admitted=await db.rpc('admit_catalog_wilmink_application',{});
+ if(admitted.error)throw Error('BRAND_DISPATCH_ADMISSION_FAILED');
  const selected=await db.rpc('next_catalog_brand_dispatch',{});
  if(selected.error)throw Error('BRAND_DISPATCH_SELECTION_FAILED');
  const job=selected.data;if(!job)return {status:'idle'};
- if(job.status==='paused'){
+ if(['paused','failed'].includes(job.status)){
   const resumed=await db.rpc('schedule_catalog_brand_job',{input_org:job.organization_id,input_job:job.id,input_publish:false});
   if(resumed.error)throw Error('BRAND_DISPATCH_RESUME_FAILED');
  }

@@ -51,7 +51,8 @@ export function parseWilminkProduct(html,{sourceUrl,expectedCode,expectedBrand='
 }
 export async function readWilminkHtml(url,{fetchImpl=fetch,wait=ms=>new Promise(r=>setTimeout(r,ms)),timeoutMs=20000,brand='Kolbenschmidt'}={}){
  if(new URL(url).pathname.startsWith('/en/brands/'))wilminkPageUrl(url,brand);else wilminkProductUrl(url);
- await wait(1100);const response=await fetchImpl(url,{headers:{accept:'text/html','user-agent':'NextMasterCatalog/1.0 (+https://portal.next-master.com)'},redirect:'error',signal:AbortSignal.timeout(timeoutMs),credentials:'omit'});
+ await wait(1100);const response=await fetchImpl(url,{headers:{accept:'text/html','user-agent':'NextMasterCatalog/1.0 (+https://portal.next-master.com)'},redirect:'manual',signal:AbortSignal.timeout(timeoutMs),credentials:'omit'});
+ if(response.status>=300&&response.status<400){await response.body?.cancel();throw Error(new URL(url).pathname.startsWith('/en/brands/')?'WILMINK_LISTING_REDIRECTED':'WILMINK_PRODUCT_REDIRECTED');}
  if(!response.ok)throw Error('WILMINK_HTTP_'+response.status);if(!/text\/html/i.test(response.headers.get('content-type')||''))throw Error('WILMINK_RESPONSE_INVALID');
  const reader=response.body?.getReader();if(!reader)throw Error('WILMINK_RESPONSE_INVALID');const chunks=[];let size=0;
  try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>4*1024*1024)throw Error('WILMINK_RESPONSE_TOO_LARGE');chunks.push(value);}}finally{await reader.cancel().catch(()=>{});}

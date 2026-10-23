@@ -22,7 +22,7 @@ test('support is opt-in and cannot replace primary Schaeffler or Elring source, 
  assert.throws(()=>wilminkPageUrl('https://www.wilminkengineparts.com/en/brands/ina','INA'),/PAGE_URL_INVALID/);
  assert.throws(()=>wilminkPageUrl('https://www.wilminkengineparts.com/en/brands/elring?brands-filter=INA','Elring'),/PAGE_URL_INVALID/);
 });
-for(const reason of ['WILMINK_HTTP_404','WILMINK_RESPONSE_TOO_LARGE','WILMINK_DESCRIPTION_MISSING'])test(`${reason} holds one product while the next exact INA source URL is reviewed`,async()=>{
+for(const reason of ['WILMINK_HTTP_404','WILMINK_RESPONSE_TOO_LARGE','WILMINK_DESCRIPTION_MISSING','WILMINK_PRODUCT_REDIRECTED'])test(`${reason} holds one product while the next exact INA source URL is reviewed`,async()=>{
  const [file,url]=fixtures.INA,html=readFileSync(new URL(`./fixtures/wilmink-${file}-product.html`,import.meta.url),'utf8'),bad='https://www.wilminkengineparts.com/en/test/wg999';let cp={},completed;
  const job={id:'job',lease_token:'token',mode:'stage',manifest:{adapter:'wilmink-support-discovery.v1',brand:'INA',source_key:'wilmink_ina_support_v1',urls:[bad,url]}};
  const source={is_active:true,license_posture:'internal_review_required',credential_boundary:'none',rate_limit_posture:'bounded',metadata:{brand_engine_read_allowed:true,allowed_brands:['INA']}};

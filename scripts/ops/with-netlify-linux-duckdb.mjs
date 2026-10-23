@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { absoluteNetlifyDeployPaths } from "./netlify-deploy-paths.mjs";
+import {isProductionFunctionDeploy,productionFunctionDeployArguments} from './production-function-deploy-env.mjs';
 
 // Netlify CLI bundles functions from the caller's macOS node_modules. Hide
 // macOS DuckDB binaries only for that bundle/deploy, then restore them even if
@@ -16,6 +17,10 @@ const scratch = await mkdtemp(join(tmpdir(), "netlify-duckdb-deploy-"));
 const hidden = [];
 const delimiter = process.argv.indexOf("--");
 const command = absoluteNetlifyDeployPaths(delimiter < 0 ? [] : process.argv.slice(delimiter + 1), root);
+if(isProductionFunctionDeploy(command)){
+ const resolved=JSON.parse(execFileSync(cli,['env:list','--context','production','--scope','functions','--json'],{cwd:root,encoding:'utf8',stdio:['ignore','pipe','pipe']}));
+ command.push(...productionFunctionDeployArguments(command,resolved));
+}
 if (command.length === 0 && !process.argv.includes("--verify-only")) {
   throw new Error("Expected --verify-only or -- followed by the Netlify deploy command");
 }

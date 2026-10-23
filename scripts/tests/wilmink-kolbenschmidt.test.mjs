@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
-import {parseWilminkProduct,parseWilminkBrandPage,wilminkProductUrl,wilminkPageUrl,readWilminkHtml,safeWilminkObservation,wilminkReview} from '../../netlify/functions/_shared/catalog/wilmink-kolbenschmidt.mjs';
+import {WILMINK_BRAND_URL,parseWilminkProduct,parseWilminkBrandPage,wilminkProductUrl,wilminkPageUrl,readWilminkHtml,safeWilminkObservation,wilminkReview} from '../../netlify/functions/_shared/catalog/wilmink-kolbenschmidt.mjs';
 import {safeSupplierOfficialObservation,supplierOfficialProvider} from '../../netlify/functions/_shared/catalog/supplier-official-completion.mts';
 import {brandEngineDefinition,assertBrandEngineSource} from '../../netlify/functions/_shared/catalog/brand-engine-registry.mts';
 const html=readFileSync(new URL('./fixtures/wilmink-kolbenschmidt-41504600.html',import.meta.url),'utf8'),url='https://www.wilminkengineparts.com/en/piston/wg1380527';
@@ -29,7 +29,9 @@ test('discovery follows observed same-brand listing URLs and next page only; acc
  for(const x of [page.pageUrl+'?page=0',page.pageUrl+'?keywords=test',page.pageUrl+'?page=2&page=3'])assert.throws(()=>wilminkPageUrl(x));
 });
 test('bounded anonymous transport stops on 403 and refuses redirects, non-HTML and oversized responses',async()=>{
- let options,waits=0;await assert.rejects(readWilminkHtml(url,{wait:async()=>{waits++;},fetchImpl:async(u,o)=>{options=o;return new Response('blocked',{status:403});}}),/HTTP_403/);assert.equal(waits,1);assert.equal(options.redirect,'error');assert.equal(options.credentials,'omit');assert.equal(options.headers.authorization,undefined);
+ let options,waits=0;await assert.rejects(readWilminkHtml(url,{wait:async()=>{waits++;},fetchImpl:async(u,o)=>{options=o;return new Response('blocked',{status:403});}}),/HTTP_403/);assert.equal(waits,1);assert.equal(options.redirect,'manual');assert.equal(options.credentials,'omit');assert.equal(options.headers.authorization,undefined);
+ await assert.rejects(readWilminkHtml(url,{wait:async()=>{},fetchImpl:async()=>new Response(null,{status:301,headers:{location:'https://example.invalid/private'}})}),/WILMINK_PRODUCT_REDIRECTED/);
+ await assert.rejects(readWilminkHtml(WILMINK_BRAND_URL,{wait:async()=>{},fetchImpl:async()=>new Response(null,{status:302})}),/WILMINK_LISTING_REDIRECTED/);
  await assert.rejects(readWilminkHtml(url,{wait:async()=>{},fetchImpl:async()=>new Response('{}',{headers:{'content-type':'application/json'}})}),/RESPONSE_INVALID/);
  await assert.rejects(readWilminkHtml(url,{wait:async()=>{},fetchImpl:async()=>new Response('a'.repeat(4*1024*1024+1),{headers:{'content-type':'text/html'}})}),/TOO_LARGE/);
 });

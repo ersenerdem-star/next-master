@@ -1,0 +1,10 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {runBrandJob} from '../../netlify/functions/_shared/catalog/brand-job-worker.mts';
+test('automatic application holds an EAN conflict and applies the next sealed product without source refetch',async()=>{
+ const source={source_key:'wilmink_elring_support_v1',is_active:true,license_posture:'internal_review_required',credential_boundary:'none',rate_limit_posture:'bounded',metadata:{automatic_apply:true,brand_engine_read_allowed:true,brand_engine_enrichment_allowed:true,allowed_brands:['Elring'],approval_actor:'owner',publication_approval_reference:'approved'}};
+ const job={id:'job',lease_token:'lease',mode:'publish',next_index:0,total_items:2,manifest:{brand:'Elring',source_key:source.source_key,adapter:'brand-exact.v1',discovery_job:'sealed-parent',automatic_application:{policy:'wilmink-missing-only.v1'}}};
+ const observations=[{issues:[{code:'EAN_IDENTITY_CONFLICT'}],fields:{},sourceUrl:'https://www.wilminkengineparts.com/en/test/wg1'},{fields:{oem_no:'NEW'},sourceUrl:'https://www.wilminkengineparts.com/en/test/wg2'}],applied=[],saved=[];
+ const db={rpc:async(name,args)=>{if(name==='claim_catalog_brand_job')return {data:job};if(name==='apply_catalog_wilmink_automatic_item'){applied.push(args.input_index);return {data:{status:'completed',changes:{oem_no:'NEW'}}};}if(name==='checkpoint_catalog_brand_job')saved.push(args);return {data:{}};},from(table){let index=0;const q={select(){return q;},eq(key,value){if(key==='item_index')index=value;return q;},single:async()=>({data:table==='catalog_external_sources'?source:table==='brands'?{id:'brand'}:{observation:observations[index],checkpoint:{}}})};return q;}};
+ const done=await runBrandJob({db,organizationId:'org',jobId:job.id,providerFactory:()=>({fetch:()=>{throw Error('must not refetch');}})});
+ assert.equal(done.status,'completed');assert.deepEqual(applied,[1]);assert.equal(saved[0].input_checkpoint.status,'held');assert.equal(saved[0].input_checkpoint.reason,'EAN_IDENTITY_CONFLICT');assert.equal(saved[0].input_advance,true);assert.equal(saved[1].input_checkpoint.changes.oem_no,'NEW');
+});

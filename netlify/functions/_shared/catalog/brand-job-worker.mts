@@ -17,6 +17,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  const started=Date.now(),scope={input_org:organizationId,input_job:jobId,input_token:job.lease_token};
  const def=brandEngineForSource(job.manifest.brand,job.manifest.source_key);let provider=providerFactory(job.manifest.brand);
  const source=await db.from('catalog_external_sources').select('*').eq('organization_id',organizationId).eq('source_key',def.sourceKey).single();
+ const automatic=def.authority==='distributor'&&job.manifest.automatic_application?.policy==='wilmink-missing-only.v1'&&Boolean(job.manifest.discovery_job);
  const brand=await db.from('brands').select('id').eq('organization_id',organizationId).eq('name',job.manifest.brand).single();
  if(def.authority==='distributor'&&!brand.error)provider=wilminkProvider(db,organizationId,brand.data.id,job.manifest.brand);
  for(let index=job.next_index;index<job.total_items;index++){
@@ -26,6 +27,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  try{
  if(job.manifest.source_key!==def.sourceKey)throw Error('BRAND_SOURCE_CONFIGURATION_CHANGED');
  if(source.error||brand.error||!provider)throw Error('OFFICIAL_ENGINE_NOT_CONFIGURED');assertBrandEngineSource(source.data,job.manifest.brand,{publish:job.mode==='publish',sourceKey:def.sourceKey});
+ if(automatic&&source.data.metadata?.automatic_apply!==true)throw Error('WILMINK_AUTOMATIC_APPLICATION_REVOKED');
  await rpc('heartbeat_catalog_brand_job',scope);
  if(!observation){
  if(job.mode!=='stage')throw Error('BRAND_REVIEW_RECEIPT_MISSING');
@@ -40,7 +42,15 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  }
  await save();
  }
- if(job.mode==='publish'){await rpc('heartbeat_catalog_brand_job',scope);checkpoint=await rpc('apply_catalog_brand_job_item',{...scope,input_index:index});}
+ if(job.mode==='publish'){
+ await rpc('heartbeat_catalog_brand_job',scope);
+ const held=automatic&&(observation?.unavailable||observation?.issues?.some((v:any)=>v.code==='EAN_IDENTITY_CONFLICT')&&'EAN_IDENTITY_CONFLICT');
+ if(held)checkpoint={status:'held',reason:held,changes:{},sourceUrl:observation.sourceUrl};
+ else try{checkpoint=await rpc(automatic?'apply_catalog_wilmink_automatic_item':'apply_catalog_brand_job_item',{...scope,input_index:index});}catch(error:any){
+  if(!automatic||!/^Brand catalog identity (missing or ambiguous|changed)$/.test(error.message))throw error;
+  checkpoint={status:'held',reason:'CATALOG_IDENTITY_CHANGED_SINCE_REVIEW',changes:{},sourceUrl:observation.sourceUrl};
+ }
+ }
  const pause=index+1<job.total_items&&Date.now()-started>maxMs;await save(job.mode==='publish'?'completed':'reviewed',true,pause?'paused':null);
  if(pause)return {claimed:true,status:'paused'};
  }catch(e:any){const message=String(e.message||'BRAND_SOURCE_FAILED').slice(0,350);const retry=/HTTP[_ ]?(429|5[0-9]{2})|timeout|timed out|abort|fetch failed|ECONN|network/i.test(message)&&Number(job.retry_attempts||0)<4;try{await save('failed',false,retry?'paused':'failed',message);}catch{}return {claimed:true,status:retry?'paused':'failed',error:message};}

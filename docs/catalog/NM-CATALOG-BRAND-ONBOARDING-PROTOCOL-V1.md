@@ -97,6 +97,36 @@ remain inspectable. Image quarantine, explicit lifecycle evidence, unknown
 origin/tariff, separate packaging measurements and price/publication boundaries
 are unchanged. No automatic application grant is created by discovery.
 
+### Owner-approved autonomous completion — 2026-10-23
+
+The owner explicitly requested activation of autonomous completion for the
+registered Kolbenschmidt, Elring and INA Wilmink sources. Only those previously
+authorized sources receive `wilmink-missing-only.v1`; primary official sources
+and other brands retain their existing policies. A service-only admission step
+validates sealed discovery child packages, then queues the existing guarded
+application worker. Existing scalar values, concurrent edits, prices and
+lifecycle/replacement data remain protected. EAN conflicts and changed product
+identities receive per-product held outcomes while eligible neighbors proceed.
+Source revocation prevents admission and application. Every automatic admission
+has an audit receipt; discovery does not silently authorize new sources.
+
+Product redirects are never followed automatically. They become explicit
+per-product review holds and cannot block the next product or page. A redirected
+brand listing remains a source-level failure. Failed transient Wilmink discovery
+jobs can recover after a 15-minute cooldown using their original checkpoints;
+authorization and malformed-source failures require review. Dispatcher and worker
+logs expose disabled, idle, dispatched and failed outcomes without credentials.
+
+Production deployment must use `scripts/ops/with-netlify-linux-duckdb.mjs`.
+The CLI can publish a manual deploy with `deploy-preview` metadata; production-only
+function gates then disappear at runtime even though minute cron invocations
+continue. The wrapper validates the production target and pins only the two
+non-secret production gates on that specific published deploy. It never passes
+service credentials as command arguments or enables production access on draft
+or staging deployments. Verify actual dispatcher/worker outcomes and database
+cursor/application progress after deployment; cron registration alone is not
+proof of execution.
+
 ## All-brand engine rollout — 2026-10-20
 
 The Product Decision Owner requested completion of existing upload/enrichment
