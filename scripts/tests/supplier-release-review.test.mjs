@@ -69,14 +69,14 @@ const bundled=await build({entryPoints:['apps/web/src/infrastructure/api/supplie
  }
 }]});
 const api=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].contents).toString('base64'));
-async function invoke({releases=[raw()],pointers=[],releaseError=null,pointerError=null,cursor=null,abort=false}={}){
+async function invoke({releases=[raw()],pointers=[],releaseError=null,pointerError=null,cursor=null,abort=false,filters={}}={}){
  const log=[];globalThis.__releaseMock={org,from(table){const chain={};
-  for(const method of ['select','eq','order','limit','or','in','abortSignal'])chain[method]=(...a)=>{log.push({table,method,args:a});return chain;};
+  for(const method of ['select','eq','ilike','gte','lte','order','limit','or','in','abortSignal'])chain[method]=(...a)=>{log.push({table,method,args:a});return chain;};
   chain.then=(resolve,reject)=>Promise.resolve(table==='supplier_price_releases'?{data:releases,error:releaseError}:{data:pointers,error:pointerError}).then(resolve,reject);
   return chain;
  }};
  const controller=new AbortController();if(abort)controller.abort();
- try{return {page:await api.fetchSupplierReleaseReviewPage(cursor,controller.signal),log};}finally{delete globalThis.__releaseMock;}
+ try{return {page:await api.fetchSupplierReleaseReviewPage(cursor,controller.signal,filters),log};}finally{delete globalThis.__releaseMock;}
 }
 async function invokeIssues({rows=[],rowError=null,cursor=null,abort=false}={}){
  const log=[];globalThis.__releaseMock={org,from(table){const chain={};
@@ -174,4 +174,17 @@ test('v3 accepts exactly 5%, blocks strictly greater, ignores absolute count and
  const parsed=a(100,5);
  const html=renderToStaticMarkup(createElement(SupplierReleaseReviewCard,{rows:[{...row,audit:parsed}],tr:true,onDetails:()=>{}}));
  assert.ok(!html.includes('Örtüşen marka'));assert.ok(!html.includes('İnceleme gerekli'));
+});
+
+test('Brand, supplier and Istanbul calendar dates filter the complete release query with pagination',async()=>{
+ const supplier='20000000-0000-0000-0000-000000000001';
+ const {log}=await invoke({filters:{brandSearch:'  Mercedes  ',supplierId:supplier,fromDate:'2026-10-01',toDate:'2026-10-23'},cursor:{id:row.id,createdAt:row.createdAt}});
+ for(const [method,column,value]of [['ilike','brands.name','%Mercedes%'],['eq','supplier_id',supplier],['gte','created_at','2026-10-01T00:00:00+03:00'],['lte','created_at','2026-10-23T23:59:59.999+03:00']]){
+  assert.ok(log.some(call=>call.table==='supplier_price_releases'&&call.method===method&&call.args[0]===column&&call.args[1]===value));
+ }
+ assert.ok(log.some(call=>call.method==='or'));
+ assert.ok(log.some(call=>call.method==='select'&&call.args[0].includes('brands!inner(name)')));
+});
+test('Malformed supplier filters are rejected before a request is sent',async()=>{
+ await assert.rejects(invoke({filters:{supplierId:'not-a-uuid'}}),/Invalid supplier filter/);
 });
