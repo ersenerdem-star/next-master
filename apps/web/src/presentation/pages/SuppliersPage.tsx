@@ -771,7 +771,7 @@ export function SuppliersPage() {
       });
       if (!readyJob.rowCount) throw new Error(p("suppliers.empty.noRows"));
       await downloadExportJob(readyJob.id);
-      actionFeedback.succeed(p("suppliers.feedback.csvDownloaded"));
+      actionFeedback.clear();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : p("suppliers.errors.linesRequestFailed");
       setError(message);

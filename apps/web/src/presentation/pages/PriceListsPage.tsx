@@ -122,7 +122,7 @@ export function PriceListsPage() {
       await downloadExportJob(readyJob.id);
       setStatus(t("sales.priceLists.downloaded", { listType: downloadListType, brandName }));
       setStatusTone("success");
-      actionFeedback.succeed(t("sales.priceLists.downloaded", { listType: downloadListType, brandName }));
+      actionFeedback.clear();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : t("sales.priceLists.downloadFailed");
       setStatus(message);

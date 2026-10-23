@@ -290,7 +290,7 @@ export function MasterPage() {
       });
       if (!readyJob.rowCount) throw new Error(r("master.errors.noRowsForExport"));
       await downloadExportJob(readyJob.id);
-      actionFeedback.succeed(r("master.feedback.exportDownloaded"));
+      actionFeedback.clear();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : r("master.errors.exportFailed");
       setError(message);

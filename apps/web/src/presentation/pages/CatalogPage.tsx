@@ -1361,7 +1361,7 @@ export function CatalogPage() {
       await downloadExportJob(readyJob.id);
       setShowExportDialog(false);
       setStatus(t("catalog.status.exportDownloaded", { format: exportLabel, brand: exportBrand }));
-      actionFeedback.succeed(t("catalog.status.exportDownloaded", { format: exportLabel, brand: exportBrand }));
+      actionFeedback.clear();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : t("catalog.errors.exportFailed");
       setError(message);
