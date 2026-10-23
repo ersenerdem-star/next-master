@@ -2,6 +2,7 @@ import {test} from 'node:test';import assert from 'node:assert/strict';import {r
 import {parseWilminkProduct,parseWilminkBrandPage,wilminkReview,wilminkPageUrl,safeWilminkObservation} from '../../netlify/functions/_shared/catalog/wilmink-kolbenschmidt.mjs';
 import {brandEngineDefinition,brandEngineForSource,assertBrandEngineSource,matchesBrandEngineJob} from '../../netlify/functions/_shared/catalog/brand-engine-registry.mts';
 import {runWilminkDiscovery} from '../../netlify/functions/_shared/catalog/wilmink-discovery-worker.mts';
+import {tecLifecycle} from '../../netlify/functions/_shared/catalog/mira-lifecycle.mts';
 const fixtures={Mahle:['mahle','https://www.wilminkengineparts.com/en/repair-kit-pistoncylinder-liner/wg1104592','0615292'],Elring:['elring','https://www.wilminkengineparts.com/en/shaft-seal-crankshaft/wg1194774','750.330'],INA:['ina','https://www.wilminkengineparts.com/en/water-pump--timing-belt-kit/wg1251435','530020133']};
 for(const [brand,[file,url,code]] of Object.entries(fixtures))test(`${brand} exact product metadata remains distributor evidence with no pricing or inferred lifecycle`,()=>{
  const html=readFileSync(new URL(`./fixtures/wilmink-${file}-product.html`,import.meta.url),'utf8');
@@ -19,6 +20,14 @@ test('Mahle listing is brand-bound and follows only its observed next page; WG a
  assert.throws(()=>wilminkPageUrl(url,'Elring'),/PAGE_URL_INVALID/);
  const parsed=parseWilminkProduct(readFileSync(new URL('./fixtures/wilmink-mahle-product.html',import.meta.url),'utf8'),{sourceUrl:page.urls[0],expectedBrand:'Mahle'});
  assert.equal(parsed.code,'0615292');assert.notEqual(parsed.code,parsed.sourceSku);assert.equal(parsed.fields.weight_kg,undefined);assert(parsed.technicalAttributes.some(([k])=>k==='Packaging weight (kg)'));
+});
+test('Mahle replacement and discontinued remain explicit official evidence, independent of supplemental Wilmink availability',()=>{
+ const article={articleNumber:'0615292',mfrName:'Mahle',misc:{articleStatusDescription:'Production discontinued'},replacedByArticles:[{articleNumber:'0615293',mfrName:'Mahle'},{articleNumber:'0615294',mfrName:'Elring'}]};
+ const official=tecLifecycle(article);assert.equal(official.checks.replacement,'found');assert.equal(official.checks.discontinued,'found');
+ assert.deepEqual(official.evidence.replacement.relations,[{brand:'Mahle',old_code:'0615292',new_code:'0615293',source_relation:'replaced_by'}]);
+ assert.equal(official.values.lifecycle_status,'discontinued');
+ assert.equal(tecLifecycle({...article,misc:{articleStatusDescription:'Unavailable'},replacedByArticles:undefined}).checks.discontinued,'no_explicit_signal');
+ assert.deepEqual(tecLifecycle({articleNumber:'0615292',mfrName:'Mahle'}).checks,{replacement:'unsupported',discontinued:'unsupported'});
 });
 test('support is opt-in and cannot replace primary Schaeffler or Elring source, use another brand, or unlock a revoked source',()=>{
  for(const [brand,[file]] of Object.entries(fixtures)){

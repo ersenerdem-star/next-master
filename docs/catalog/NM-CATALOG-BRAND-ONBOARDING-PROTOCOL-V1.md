@@ -116,6 +116,15 @@ availability, or modify prices or orders. Use sealed observations and the
 existing separately reviewed application. Adding this source does not grant
 the three-source autonomous application policy to Mahle.
 
+The owner explicitly reiterated replacement and discontinued coverage. Retain
+both checks in the primary Mahle/TecAlliance engine, including requested
+`replacedByArticles`, `replacesArticles` and explicit production status. Preserve
+same-manufacturer old-to-new direction and review-only lifecycle evidence.
+Missing/unsupported/blocked checks are not a declaration that a product is active.
+Wilmink supplementation must never downgrade existing official lifecycle facts
+or promote alternatives, related products, unavailability or stock to a successor
+or production-discontinued assertion.
+
 ### Owner-approved autonomous completion — 2026-10-23
 
 The owner explicitly requested activation of autonomous completion for the

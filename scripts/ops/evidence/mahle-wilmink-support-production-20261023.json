@@ -1,0 +1,78 @@
+{
+  "sourceCommit": "8a822fd7d974e8d5cd1c11eb30330aa1a6d5068d",
+  "deploy": {
+    "id": "6adbb8323a89830556d0d158",
+    "context": "production",
+    "state": "ready",
+    "publishedAt": "2026-10-23T19:41:29.447Z"
+  },
+  "source": "wilmink_mahle_support_v1",
+  "primarySource": "tecalliance_mahle",
+  "automaticApply": false,
+  "stagingMigration": "20261023193940",
+  "productionMigration": "20261023193951",
+  "security": {
+    "unchanged": true,
+    "groups": [
+      {
+        "name": "rls_enabled_no_policy",
+        "count": 47
+      },
+      {
+        "name": "extension_in_public",
+        "count": 2
+      },
+      {
+        "name": "authenticated_security_definer_function_executable",
+        "count": 140
+      }
+    ]
+  },
+  "pointerBefore": [
+    {
+      "current_price_pointers": 28,
+      "pointer_digest": "1cd14f480aba6a622c77eddacf743706"
+    }
+  ],
+  "pointerAfter": [
+    {
+      "current_price_pointers": 28,
+      "pointer_digest": "1cd14f480aba6a622c77eddacf743706"
+    }
+  ],
+  "jobs": [
+    {
+      "id": "7583da77-90c0-4ae6-bacb-29bfdec25a7c",
+      "status": "reviewed",
+      "mode": "stage",
+      "code": "WILMINK-SUPPORT",
+      "state": "reviewed"
+    },
+    {
+      "id": "bf1006eb-35bc-4640-aee8-db8bf16e278e",
+      "status": "reviewed",
+      "mode": "stage",
+      "code": "0615292",
+      "state": "reviewed",
+      "lifecycle": {
+        "checks": {
+          "replacement": "unsupported",
+          "discontinued": "unsupported"
+        },
+        "reason": "Distributor availability, related products and cross-references are not manufacturer lifecycle evidence",
+        "reviewOnly": true
+      },
+      "fields": {
+        "ean": "4009026561287",
+        "oem_no": "0551546; 0551547; 551546; 551547",
+        "description": "Repair Kit, piston/cylinder liner"
+      }
+    }
+  ],
+  "acceptance": "One exact public product URL submitted through authenticated UI; scheduled worker produced sealed review package. Existing canonical values unchanged; no automatic or manual application requested.",
+  "lifecycle": "Primary official Mahle includes both replacement directions and explicit discontinued status. Wilmink marks both unsupported; availability and alternatives cannot become lifecycle assertions.",
+  "screenshots": [
+    "artifacts/batch-optimization-20261023/mahle-wilmink-support-production.jpg",
+    "artifacts/batch-optimization-20261023/mahle-wilmink-lifecycle-production.jpg"
+  ]
+}
