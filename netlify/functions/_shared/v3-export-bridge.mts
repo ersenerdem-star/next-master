@@ -10,6 +10,7 @@ import { exportBinding, preparePriceExport, assemblePriceExport } from "../../..
 import { createDuckDbPagedExportSource, materializeSealedSnapshotWithDuckDB } from "../../../apps/engine/supplier-price-shadow/src/export/duckdb-export-source.mjs";
 import { resolvePortalPriceListExportContextFromDb } from "./v3-export-pricing-context.mts";
 import { createThrottledExportProgress } from "./v3-export-progress.mts";
+import { createExportStageTiming } from "./export-stage-timing.mts";
 import { canAccessOperationsModules } from "./roles.mts";
 import { getJson, serviceRoleHeaders } from "./http.mts";
 import { V3_REF, PROD_REF, targetConfig, assertV3ExportAllowed, required } from "./v3-export-dispatch.mts";
@@ -177,6 +178,7 @@ export async function runV3PriceExportJob(jobId: string) {
   }
   const pool = new Pool({ connectionString, max: 2, idleTimeoutMillis: 10000, connectionTimeoutMillis: 10000, ssl: postgresSsl(target) });
   const leaseOwner = randomUUID();
+  const measureStage = createExportStageTiming(job.id, leaseOwner);
   let duckdbExportDirectory: string | null = null;
   let leaseHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let leaseHeartbeatInFlight: Promise<void> | null = null;
@@ -225,7 +227,7 @@ export async function runV3PriceExportJob(jobId: string) {
         }));
       },
     });
-    const spec = await reader.resolveAuthorizedInput(job.id);
+    const spec = await measureStage('authorized-snapshot', () => reader.resolveAuthorizedInput(job.id));
     if (spec.status === "building" || Date.now() >= snapshotDeadline) {
       // The snapshot rows are already committed. Release ownership before
       // dispatching the next invocation. Also yield if the final page was
@@ -254,11 +256,11 @@ export async function runV3PriceExportJob(jobId: string) {
         })
         .finally(() => { leaseHeartbeatInFlight = null; });
     }, 30_000);
-    const duckdbMaterialized = await materializeSealedSnapshotWithDuckDB({
+    const duckdbMaterialized = await measureStage('duckdb-materialize', () => materializeSealedSnapshotWithDuckDB({
       pool, snapshotId: spec.snapshotId, binding, expectedRows: spec.expectedRows,
       outputDir: duckdbExportDirectory, tempDirectory: duckdbExportDirectory,
       assertActive: () => { if (leaseHeartbeatError) throw leaseHeartbeatError; },
-    });
+    }));
     if (leaseHeartbeatInFlight) await leaseHeartbeatInFlight;
     if (leaseHeartbeatError) throw leaseHeartbeatError;
     // This fenced write verifies that the same live lease still owns the job
@@ -288,10 +290,10 @@ export async function runV3PriceExportJob(jobId: string) {
         console.warn("V3_EXPORT_PROGRESS_RETRY", job.id);
       }
     };
-    const prepared = await preparePriceExport({ input: spec, directory: duckdbExportDirectory, fetchPage: duckdbFetchPage, progress: localProgress });
+    const prepared = await measureStage('prepare-partitions', () => preparePriceExport({ input: spec, directory: duckdbExportDirectory, fetchPage: duckdbFetchPage, progress: localProgress }));
     if (!prepared?.manifest || prepared.manifest.rows !== spec.expectedRows) throw new Error("V3_EXPORT_PREPARED_METADATA_INVALID");
-    const receipt = await assemblePriceExport({ input: spec, directory: duckdbExportDirectory, progress: localProgress });
-    const ready = await artifact.commit({ file: join(duckdbExportDirectory, receipt.file), receipt });
+    const receipt = await measureStage('assemble-xlsx', () => assemblePriceExport({ input: spec, directory: duckdbExportDirectory, progress: localProgress }));
+    const ready = await measureStage('commit-artifact', () => artifact.commit({ file: join(duckdbExportDirectory!, receipt.file), receipt }));
     if (!ready || ready.contentType !== MIME || ready.rows !== spec.expectedRows) throw new Error("V3_EXPORT_RECEIPT_INVALID");
     const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
     const brandName = String(job.scope?.brandName || spec.brand);
