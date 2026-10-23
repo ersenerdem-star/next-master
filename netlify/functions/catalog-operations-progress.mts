@@ -5,7 +5,7 @@ import {json,HttpRequestError} from './_shared/http.mts';
 import {readCatalogProgress} from './_shared/catalog/operations-progress.mjs';
 // One cold-start receipt lets operators verify managed runtime security patches.
 // No request, credential or customer data is included.
-console.info(JSON.stringify({event:'catalog_progress_runtime',node:process.versions.node,openssl:process.versions.openssl}));
+console.info(JSON.stringify({event:'catalog_progress_runtime',receipt:'node-security-20261023',node:process.versions.node,openssl:process.versions.openssl}));
 export default async(req:Request)=>{
  if(req.method!=='GET')return json({error:'Method not allowed'},405);
  try{
