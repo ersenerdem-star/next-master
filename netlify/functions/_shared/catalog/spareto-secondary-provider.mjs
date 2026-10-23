@@ -5,6 +5,15 @@ import {catalogLifecycleReview} from './catalog-completion-review.mjs';
 const text=s=>String(s??'').replace(/<[^>]*>/g,' ').replace(/&nbsp;|&#160;/g,' ').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/\s+/g,' ').trim();
 const key=s=>text(s).normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const aliases={febibilstein:'febi',mannfilter:'mann',hengstfilter:'hengst',lemfoerder:'lemforder',schaefflerfag:'fag',schaefflerina:'ina',schaefflerluk:'luk',trwenginecomponent:'trwenginecomponents'};
+export const SPARETO_BRAND_SEARCH_URLS=Object.freeze({
+ LUK:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=LuK',
+ INA:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=INA',
+ FAG:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=FAG',
+});
+export function sparetoBrandSearchUrl(brand,code){
+ const base=SPARETO_BRAND_SEARCH_URLS[String(brand||'').toUpperCase()]||'https://spareto.com/products';
+ const url=new URL(base);url.searchParams.set('keywords',String(code));return url.href;
+}
 const brandKey=s=>aliases[key(s)]||key(s);
 function productUrl(value){const u=new URL(value);if(u.origin!=='https://spareto.com'||u.username||u.password||u.search||u.hash||!/^\/products\/[a-zA-Z0-9._~%/-]+$/.test(u.pathname))throw Error('SPARETO_PRODUCT_URL_INVALID');return u.href;}
 const one=(values,error)=>{const u=[...new Set(values.filter(Boolean))];if(u.length>1)throw Error(error);return u[0]||'';};
@@ -91,7 +100,7 @@ export function mapSparetoSecondaryPage(html,{brand,code,sourceUrl,expectedEan})
 }
 async function fetchHtml(url,{fetchImpl=fetch,timeoutMs=20000}={}){
  let r;try{r=await fetchImpl(url,{redirect:'error',headers:{accept:'text/html'},signal:AbortSignal.timeout(timeoutMs)});}catch(error){error.evidence={requestUrl:url,observedAt:new Date().toISOString()};throw error;}
- if(!r.ok)throw Object.assign(Error('SPARETO_HTTP_'+r.status),{evidence:{requestUrl:url,httpStatus:r.status,observedAt:new Date().toISOString()}});
+ if(!r.ok)throw Object.assign(Error('SPARETO_HTTP_'+r.status),{evidence:{requestUrl:url,searchUrl:url,httpStatus:r.status,observedAt:new Date().toISOString()}});
  const max=4*1024*1024;
  const oversized=bytes=>Object.assign(Error('SPARETO_RESPONSE_TOO_LARGE'),{evidence:{requestUrl:url,maxResponseBytes:max,observedResponseBytes:bytes,observedAt:new Date().toISOString()}});
  if(Number(r.headers.get('content-length')||0)>max){await r.body?.cancel().catch(()=>{});throw oversized(Number(r.headers.get('content-length')));}
@@ -122,7 +131,7 @@ export function findExactSparetoProductUrl(html,{brand,code}){
 }
 export async function fetchExactSparetoSecondary({brand,code,expectedEan},{fetchImpl=fetch,wait=ms=>new Promise(r=>setTimeout(r,ms)),delayMs=1100}={}){
  const exact=exactCatalogCode(code);if(!exact||exact.length>100||/[\x00-\x1f]/.test(String(code)))throw Error('SPARETO_CODE_INVALID');
- const search=new URL('https://spareto.com/products');search.searchParams.set('keywords',String(code));
+ const search=new URL(sparetoBrandSearchUrl(brand,code));
  await wait(Math.max(1100,delayMs));const html=await fetchHtml(search.href,{fetchImpl});
  let sourceUrl;try{sourceUrl=findExactSparetoProductUrl(html,{brand,code});}catch(error){
   error.evidence={requestUrl:search.href,searchUrl:search.href,searchFingerprint:createHash('sha256').update(html).digest('hex'),observedAt:new Date().toISOString()};throw error;

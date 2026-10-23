@@ -1,10 +1,18 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mapSparetoSecondaryPage,findExactSparetoProductUrl,fetchExactSparetoSecondary} from '../../netlify/functions/_shared/catalog/spareto-secondary-provider.mjs';
+import {mapSparetoSecondaryPage,findExactSparetoProductUrl,fetchExactSparetoSecondary,sparetoBrandSearchUrl,SPARETO_BRAND_SEARCH_URLS} from '../../netlify/functions/_shared/catalog/spareto-secondary-provider.mjs';
 import {planSparetoReviewedCorrection} from '../../netlify/functions/_shared/catalog/spareto-reviewed-correction.mjs';
 import {runClaimedSparetoCorrection} from '../../netlify/functions/_shared/catalog/spareto-correction-worker.mts';
 const image='https://cdn.spareto.com/variants/images/001/123/456/original/product.jpg?123456';
 const html=({brand='INA',code='712 0360 10',ean='4005108359810',segment='',asset=image}={})=>`<div itemtype='http://schema.org/Product'><meta content='${ean}' itemprop='gtin13'><meta content='${asset}' itemprop='image'><h1><div><meta content='${brand}' itemprop='name'></div><span itemprop='mpn'>${code}</span><span itemprop='name'>Bearing, manual transmission</span></h1><table>${segment?`<tr><td>Vehicle Type</td><td>${segment}</td></tr>`:''}</table><section id='nav-oe'><h3>OE Numbers</h3><a href='/oe/002311125a'>002311125A</a></section><section id='nav-alternatives'><meta content='https://evil.invalid/wrong.jpg' itemprop='image'></section></div>`;
+test('Schaeffler brands use the owner-provided brand-specific Spareto search URL',()=>{
+ assert.match(sparetoBrandSearchUrl('LUK','622066200'),/brand%5B%5D=LuK/);
+ assert.match(sparetoBrandSearchUrl('INA','712036010'),/brand%5B%5D=INA/);
+ assert.match(sparetoBrandSearchUrl('FAG','713678710'),/brand%5B%5D=FAG/);
+ assert.equal(new URL(sparetoBrandSearchUrl('LUK','622066200')).searchParams.get('brand[]'),'LuK');
+ assert.equal(new URL(sparetoBrandSearchUrl('INA','712036010')).searchParams.get('brand[]'),'INA');
+ assert.equal(new URL(sparetoBrandSearchUrl('FAG','713678710')).searchParams.get('brand[]'),'FAG');
+});
 const parse=(options={})=>mapSparetoSecondaryPage(html(options),{brand:'INA',code:'712036010',sourceUrl:'https://spareto.com/products/ina-bearing/712-0360-10',expectedEan:'4005108359810'});
 const before={id:'product',ean:'4005108359810',description:'Mounting, manu',oem_no:'002311125',market_segment:'pc',image_url:null,origin:'TR',hs_code:'84824000',weight_kg:.037};
 test('owner correction changes the four named fields only, adds OEMs and preserves a missing source segment',()=>{
@@ -85,5 +93,12 @@ test('source errors retain the conflicting field or bounded response size withou
    requests++;return new Response(new Uint8Array(4*1024*1024+1),{headers:declared?{'content-length':String(4*1024*1024+1)}:{}});
   }}),error=>{assert.equal(error.message,'SPARETO_RESPONSE_TOO_LARGE');assert.equal(error.evidence.maxResponseBytes,4*1024*1024);assert.equal(error.evidence.observedResponseBytes,4*1024*1024+1);assert.match(error.evidence.requestUrl,/keywords=712036010/);return true;});
   assert.equal(requests,1);
+ }
+});
+
+test('Exact Spareto search records the selected brand lane in the request evidence',async()=>{
+ for(const [brand,filter] of [['LUK','LuK'],['INA','INA'],['FAG','FAG']]){
+  const urls=[];await assert.rejects(fetchExactSparetoSecondary({brand,code:'712036010'},{wait:async()=>{},fetchImpl:async url=>{urls.push(String(url));return new Response('<html></html>',{status:403});}}),error=>{assert.equal(error.message,'SPARETO_HTTP_403');assert.match(error.evidence.searchUrl,new RegExp('brand%5B%5D='+filter));return true;});
+  assert.match(urls[0],new RegExp('brand%5B%5D='+filter));
  }
 });
