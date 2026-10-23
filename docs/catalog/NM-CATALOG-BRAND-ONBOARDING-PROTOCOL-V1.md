@@ -97,6 +97,25 @@ remain inspectable. Image quarantine, explicit lifecycle evidence, unknown
 origin/tariff, separate packaging measurements and price/publication boundaries
 are unchanged. No automatic application grant is created by discovery.
 
+### Mahle / supplemental Wilmink source — 2026-10-23
+
+The owner requested adding Wilmink to the Mahle catalog engine. Keep
+`tecalliance_mahle` as the primary engine; expose the separate, opt-in
+`wilmink_mahle_support_v1` lane through the existing support workflow. Its
+public brand listing is `https://www.wilminkengineparts.com/en/brands/mahle`.
+The bounded ordinary application reader observed twelve exact Mahle product
+URLs and an explicit next page on 23 October. This is discovery evidence,
+not a claim that all 268 listed pages have been imported or enriched.
+
+Apply the existing distributor identity, missing-only, provenance, EAN conflict,
+image quarantine and packaging-weight rules. The observed WG1104592 product
+is manufacturer article `061 52 92` / exact whitespace key `0615292`, EAN
+4009026561287; its 11.910 kg packaging weight is not gross product weight.
+Do not replace existing manufacturer/manual/file values, derive lifecycle from
+availability, or modify prices or orders. Use sealed observations and the
+existing separately reviewed application. Adding this source does not grant
+the three-source autonomous application policy to Mahle.
+
 ### Owner-approved autonomous completion — 2026-10-23
 
 The owner explicitly requested activation of autonomous completion for the

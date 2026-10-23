@@ -138,7 +138,7 @@ Martex is acceptable as a public technical helper. It is not the top authority o
 
 ### Wilmink
 
-Wilmink exposes strong browser-side search and vehicle contracts, but direct raw API calls are protected. Use it only in browser-assisted analysis, not as a simple backend fetch target.
+Wilmink's protected raw API, search and account endpoints remain unavailable to backend collection. The owner-approved distributor engines described in `catalog/NM-CATALOG-BRAND-ONBOARDING-PROTOCOL-V1.md` use only ordinary public brand/product HTML through the bounded `NextMasterCatalog/1.0` application reader, with explicit brand/source scope, source receipts and guarded missing-only application. The Mahle support lane is additive to its TecAlliance primary source and has no automatic application grant.
 
 ## Onboarding Rule For New Brands
 

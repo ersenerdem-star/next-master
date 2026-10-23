@@ -1475,7 +1475,7 @@ export function CatalogPage() {
               {t("catalog.actions.importCsv")}
             </Button>
             <Button variant="secondary" onClick={()=>setShowEngineOverview(true)} disabled={!isOnline}>{locale==='tr'?'Marka Motorları':'Brand Engines'}</Button>
-            {['Elring','INA'].includes(catalogBrand) ? <Button variant="secondary" disabled={!isOnline} onClick={()=>setShowWilminkSupport(true)}>{locale==='tr'?'Wilmink ile eksikleri tamamla':'Complete missing fields with Wilmink'}</Button> : null}
+            {['Elring','INA','Mahle'].includes(catalogBrand) ? <Button variant="secondary" disabled={!isOnline} onClick={()=>setShowWilminkSupport(true)}>{locale==='tr'?'Wilmink ile eksikleri tamamla':'Complete missing fields with Wilmink'}</Button> : null}
             {catalogBrand ? (
               <Button variant="secondary" onClick={() => void handleSyncSelectedBrand()} disabled={!isOnline}>
                 {["zf","sachs","boge","trw","lemforder","wabco"].includes(catalogBrand.trim().toLowerCase()) ? (locale === "tr" ? "ZF Grup Katalog Motoru" : "ZF Group Catalog Engine") : catalogBrand.trim().toLowerCase() === "elring" ? (locale === "tr" ? "Elring Katalog Motoru" : "Elring Catalog Engine") : catalogBrand.trim().toLowerCase() === "kolbenschmidt" ? (locale === "tr" ? "Kolbenschmidt · Wilmink Motoru" : "Kolbenschmidt · Wilmink Engine") : (locale === "tr" ? "Katalog Motoru" : "Catalog Engine")}
@@ -1921,7 +1921,7 @@ export function CatalogPage() {
       ) : null}
 
       {showEngineOverview ? <CatalogEngineOverview onClose={()=>setShowEngineOverview(false)} onOpen={brand=>{setShowEngineOverview(false);setCatalogBrand(brand);openCatalogEngine(brand);}}/> : null}
-      {showWilminkSupport && ['Elring','INA'].includes(catalogBrand) ? <ZfCatalogEngine engineKind="brand" sourceKey={catalogBrand==='INA'?'wilmink_ina_support_v1':'wilmink_elring_support_v1'} brand={catalogBrand} onClose={()=>setShowWilminkSupport(false)} onPublished={()=>applyCatalogFilters(search,catalogBrand,catalogSegment,false)} /> : null}
+      {showWilminkSupport && ['Elring','INA','Mahle'].includes(catalogBrand) ? <ZfCatalogEngine engineKind="brand" sourceKey={`wilmink_${catalogBrand.toLowerCase()}_support_v1`} brand={catalogBrand} onClose={()=>setShowWilminkSupport(false)} onPublished={()=>applyCatalogFilters(search,catalogBrand,catalogSegment,false)} /> : null}
       {showBrandEngine ? <ZfCatalogEngine engineKind="brand" brand={catalogBrand} defaultCode={selectedCatalogRow?.brand === catalogBrand ? selectedCatalogRow.product_code : ""} onClose={() => setShowBrandEngine(false)} onPublished={() => applyCatalogFilters(search, catalogBrand, catalogSegment, false)} /> : null}
       {showZfEngine ? <ZfCatalogEngine brand={catalogBrand} defaultCode={selectedCatalogRow?.brand === catalogBrand ? selectedCatalogRow.product_code : ""} onClose={() => setShowZfEngine(false)} onPublished={() => applyCatalogFilters(search, catalogBrand, catalogSegment, false)} /> : null}
       {showElringEngine ? <ElringCatalogEngine defaultSegment={catalogSegment} onClose={() => setShowElringEngine(false)} onPublished={() => applyCatalogFilters(search, catalogBrand, catalogSegment, false)} /> : null}

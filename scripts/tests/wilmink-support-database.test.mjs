@@ -16,7 +16,7 @@ create table price_guard(value numeric);insert into price_guard values(99.25);
 insert into organizations values('${org}');insert into profiles values('${actor}','${org}','superadmin',true);insert into brands values('${brand}','${org}','Kolbenschmidt');
 insert into catalog_products(organization_id,brand_id,product_code,description,ean,origin,hs_code,oem_no)values('${org}','${brand}','41504600','Owner description','4028977841316','TR','001234','OLD');
 insert into catalog_external_sources(organization_id,source_key,is_active,license_posture,credential_boundary,rate_limit_posture,metadata)values('${org}','wilmink_kolbenschmidt_v1',true,'internal_review_required','none','bounded','{"brand_engine_read_allowed":true,"brand_engine_enrichment_allowed":true,"allowed_brands":["Kolbenschmidt"],"allowed_evidence_hosts":["www.wilminkengineparts.com"],"approval_actor":"owner","publication_approval_reference":"request"}');`);
- for(const file of ['20261019225343_catalog_brand_engine.sql','20261019230301_catalog_brand_retry_checkpoints.sql','20261021191250_kolbenschmidt_wilmink_discovery.sql','20261021192534_wilmink_ean_hold_reporting.sql','20261022105853_wilmink_elring_ina_support.sql','20261022111100_wilmink_support_hold_details.sql'])await db.exec(readFileSync(new URL('../../supabase/migrations/'+file,import.meta.url),'utf8'));
+ for(const file of ['20261019225343_catalog_brand_engine.sql','20261019230301_catalog_brand_retry_checkpoints.sql','20261021191250_kolbenschmidt_wilmink_discovery.sql','20261021192534_wilmink_ean_hold_reporting.sql','20261022105853_wilmink_elring_ina_support.sql','20261022111100_wilmink_support_hold_details.sql','20261023120415_catalog_wilmink_progress.sql','20261023193751_mahle_wilmink_support.sql'])await db.exec(readFileSync(new URL('../../supabase/migrations/'+file,import.meta.url),'utf8'));
  await db.exec("set request.jwt.claim.role='service_role'");return db;}
 
 const supportUrl='https://www.wilminkengineparts.com/en/shaft-seal-crankshaft/wg1194774',supportBrand='00000000-0000-4000-8000-000000000004';
@@ -71,4 +71,29 @@ test('Elring listing follows only the observed next page and repeated start resu
  const result=await rpc(db,'complete_catalog_wilmink_support',[org,claim.id,claim.lease_token,page,[first.product]]);
  const again=await rpc(db,'start_catalog_wilmink_support',[org,actor,crypto.randomUUID(),'Elring',[]]);assert.equal(again.id,result.next_job);assert.equal(again.manifest.scan_id,listing.manifest.scan_id);
  const status=await rpc(db,'get_catalog_wilmink_support_status',[org,'Elring']);assert.equal(status.pages,1);assert.equal(status.lastPage,712);assert.equal(status.active,1);
+}finally{await db.close();}});
+
+test('Mahle support stages exact existing identity, keeps primary source and rejects another-brand page or revoked source',async()=>{const db=await setup();try{
+ const mid='00000000-0000-4000-8000-000000000005',murl='https://www.wilminkengineparts.com/en/repair-kit-pistoncylinder-liner/wg1104592';
+ await db.query("insert into brands values($1,$2,'Mahle')",[mid,org]);
+ await db.query("insert into catalog_products(organization_id,brand_id,product_code,description,ean) values($1,$2,'061 52 92','Owner description','4009026561287')",[org,mid]);
+ await db.query("insert into catalog_external_sources(organization_id,source_key,is_active,license_posture,credential_boundary,rate_limit_posture,metadata) values($1,'wilmink_mahle_support_v1',true,'internal_review_required','none','bounded',$2)",[org,JSON.stringify({brand_engine_read_allowed:true,brand_engine_enrichment_allowed:true,allowed_brands:['Mahle'],allowed_evidence_hosts:['www.wilminkengineparts.com'],approval_actor:'owner',publication_approval_reference:'request'})]);
+ const j=await rpc(db,'start_catalog_wilmink_support',[org,actor,crypto.randomUUID(),'Mahle',[]]),claim=await rpc(db,'claim_catalog_brand_job',[org,j.id]);
+ assert.equal(j.manifest.source_key,'wilmink_mahle_support_v1');assert.equal(j.manifest.page_url,'https://www.wilminkengineparts.com/en/brands/mahle');
+ const before=(await db.query('select to_jsonb(p)b from catalog_products p where brand_id=$1',[mid])).rows[0].b;
+ const product=wilminkReview(parseWilminkProduct(readFileSync(new URL('./fixtures/wilmink-mahle-product.html',import.meta.url),'utf8'),{sourceUrl:murl,expectedBrand:'Mahle'}),before);
+ const page={pageUrl:j.manifest.page_url,page:1,pageFingerprint:'b'.repeat(64),urls:[murl],nextUrl:j.manifest.page_url+'?page=2',lastPage:268};
+ const checkpoint=async p=>rpc(db,'checkpoint_catalog_brand_job',[org,claim.id,claim.lease_token,0,null,{page:p,captured:[product]},'pending',null,false,null]);
+ const bad={...page,nextUrl:'https://www.wilminkengineparts.com/en/brands/elring?page=2'};await checkpoint(bad);
+ await assert.rejects(rpc(db,'complete_catalog_wilmink_support',[org,claim.id,claim.lease_token,bad,[product]]),/NEXT_PAGE_INVALID/);
+ await checkpoint(page);const result=await rpc(db,'complete_catalog_wilmink_support',[org,claim.id,claim.lease_token,page,[product]]);assert.equal(result.matched,1);
+ assert.deepEqual((await db.query('select to_jsonb(p)b from catalog_products p where brand_id=$1',[mid])).rows[0].b,before);
+ const status=await rpc(db,'get_catalog_wilmink_support_status',[org,'Mahle']);assert.equal(status.pages,1);assert.equal(status.lastPage,268);
+ const next=(await db.query('select manifest from catalog_brand_jobs where id=$1',[result.next_job])).rows[0].manifest;assert.equal(next.page_url,page.nextUrl);assert.equal(next.source_key,'wilmink_mahle_support_v1');
+ await rpc(db,'schedule_catalog_brand_job',[org,result.review_job,true]);const apply=await rpc(db,'claim_catalog_brand_job',[org,result.review_job]);
+ const outcome=await rpc(db,'apply_catalog_brand_job_item',[org,apply.id,apply.lease_token,0]);assert(outcome.changes.oem_no);assert.equal(outcome.changes.weight_kg,undefined);
+ assert.equal((await db.query('select description from catalog_products where brand_id=$1',[mid])).rows[0].description,'Owner description');
+ await db.exec("update catalog_external_sources set is_active=false where source_key='wilmink_mahle_support_v1'");await assert.rejects(rpc(db,'start_catalog_wilmink_support',[org,actor,crypto.randomUUID(),'Mahle',[]]),/SOURCE_UNAVAILABLE/);
+ assert.equal((await db.query('select value::float from price_guard')).rows[0].value,99.25);
+ assert.equal((await db.query("select has_function_privilege('authenticated','start_catalog_wilmink_support(uuid,uuid,uuid,text,jsonb)','execute') allowed")).rows[0].allowed,false);
 }finally{await db.close();}});

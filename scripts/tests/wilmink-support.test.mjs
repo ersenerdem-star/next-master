@@ -1,15 +1,24 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
-import {parseWilminkProduct,wilminkReview,wilminkPageUrl,safeWilminkObservation} from '../../netlify/functions/_shared/catalog/wilmink-kolbenschmidt.mjs';
+import {parseWilminkProduct,parseWilminkBrandPage,wilminkReview,wilminkPageUrl,safeWilminkObservation} from '../../netlify/functions/_shared/catalog/wilmink-kolbenschmidt.mjs';
 import {brandEngineDefinition,brandEngineForSource,assertBrandEngineSource,matchesBrandEngineJob} from '../../netlify/functions/_shared/catalog/brand-engine-registry.mts';
 import {runWilminkDiscovery} from '../../netlify/functions/_shared/catalog/wilmink-discovery-worker.mts';
-const fixtures={Elring:['elring','https://www.wilminkengineparts.com/en/shaft-seal-crankshaft/wg1194774','750.330'],INA:['ina','https://www.wilminkengineparts.com/en/water-pump--timing-belt-kit/wg1251435','530020133']};
+const fixtures={Mahle:['mahle','https://www.wilminkengineparts.com/en/repair-kit-pistoncylinder-liner/wg1104592','0615292'],Elring:['elring','https://www.wilminkengineparts.com/en/shaft-seal-crankshaft/wg1194774','750.330'],INA:['ina','https://www.wilminkengineparts.com/en/water-pump--timing-belt-kit/wg1251435','530020133']};
 for(const [brand,[file,url,code]] of Object.entries(fixtures))test(`${brand} exact product metadata remains distributor evidence with no pricing or inferred lifecycle`,()=>{
  const html=readFileSync(new URL(`./fixtures/wilmink-${file}-product.html`,import.meta.url),'utf8');
- const parsed=parseWilminkProduct(html,{sourceUrl:url,expectedBrand:brand,expectedCode:code});assert.equal(parsed.code,code);assert.equal(parsed.sourceKey,`wilmink_${file}_support_v1`);assert(parsed.fields.oem_no);assert(parsed.fields.vehicle);
+ const parsed=parseWilminkProduct(html,{sourceUrl:url,expectedBrand:brand,expectedCode:code});assert.equal(parsed.code,code);assert.equal(parsed.sourceKey,`wilmink_${file}_support_v1`);assert(parsed.fields.oem_no);if(brand!=='Mahle')assert(parsed.fields.vehicle);
  for(const key of ['price','buy_price_eur','weight_kg','origin','hs_code','image_url'])assert.equal(parsed.fields[key],undefined);
  assert.deepEqual(parsed.lifecycle.checks,{replacement:'unsupported',discontinued:'unsupported'});
  assert.throws(()=>parseWilminkProduct(html,{sourceUrl:url}),/IDENTITY/);assert.throws(()=>safeWilminkObservation(parsed,code,brand==='INA'?'Elring':'INA'),/IDENTITY/);
  assert.deepEqual(wilminkReview(parsed,{ean:'9999999999999'}).fields,{});
+});
+test('Mahle listing is brand-bound and follows only its observed next page; WG and packaging weight never become product identity or gross kg',()=>{
+ const url='https://www.wilminkengineparts.com/en/brands/mahle';
+ const card=brand=>`<li class="noscript-product-item"><a href="/en/repair-kit-pistoncylinder-liner/wg1104592"></a><span class="product-brand">${brand}</span></li>`;
+ const page=parseWilminkBrandPage(card('Mahle')+card('Elring')+'<a href="/en/brands/mahle?page=2">Next</a><a href="/en/brands/elring?page=3">Other</a>',url,'Mahle');
+ assert.equal(page.urls.length,1);assert.equal(page.nextUrl,url+'?page=2');assert.equal(brandEngineDefinition('Mahle').sourceKey,'tecalliance_mahle');
+ assert.throws(()=>wilminkPageUrl(url,'Elring'),/PAGE_URL_INVALID/);
+ const parsed=parseWilminkProduct(readFileSync(new URL('./fixtures/wilmink-mahle-product.html',import.meta.url),'utf8'),{sourceUrl:page.urls[0],expectedBrand:'Mahle'});
+ assert.equal(parsed.code,'0615292');assert.notEqual(parsed.code,parsed.sourceSku);assert.equal(parsed.fields.weight_kg,undefined);assert(parsed.technicalAttributes.some(([k])=>k==='Packaging weight (kg)'));
 });
 test('support is opt-in and cannot replace primary Schaeffler or Elring source, use another brand, or unlock a revoked source',()=>{
  for(const [brand,[file]] of Object.entries(fixtures)){
