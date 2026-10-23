@@ -4,12 +4,12 @@ import { readFileSync } from "node:fs";
 import ts from "typescript";
 import {multiplyMoney,sumMoney,requireUnitPrice,requireQuantity} from "../../shared/order-money.mjs";
 import { exactProductCode } from "../../apps/web/src/shared/currentSupplierPriceSync.mts";
-import { canonicalizePriceProductCode, normalizePartCode } from "../../apps/web/src/domain/shared/normalize.ts";
+import { canonicalizePriceProductCode, canonicalizePriceBrandName, normalizePartCode } from "../../apps/web/src/domain/shared/normalize.ts";
 
 // These UI modules depend on Vite's import.meta.env. Run their actual pure
 // functions in isolation rather than replacing the SKU logic in the test.
 function loadFunctions(relativeFile, functionNames, dependencies) {
-  dependencies = { canonicalizePriceProductCode, ...dependencies };
+  dependencies = { canonicalizePriceProductCode, canonicalizePriceBrandName, ...dependencies };
   const path = new URL(relativeFile, import.meta.url);
   const source = readFileSync(path, "utf8");
   const parsed = ts.createSourceFile(path.pathname, source, ts.ScriptTarget.ES2022, true);

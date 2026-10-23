@@ -1,0 +1,414 @@
+{
+  "sourceCommit": "4c7c1f93808f594bd67c8212900938487c89fe80",
+  "productionDeploy": "6adbadb63d5ffcea3bd35595",
+  "sourceBytes": 423653,
+  "sourceUnchanged": true,
+  "publications": [
+    {
+      "id": "c3f9107c-f16b-404e-949c-0cbe135e8d06",
+      "status": "cancelled",
+      "source_file_sha256": "19ab7282c9bb9519b05f6cbedeb17dc88260edde9a117ef221b9229e1fc4d3b3",
+      "total_rows": 5588,
+      "accepted_rows": 5588,
+      "error_code": "REVIEW_REJECTED",
+      "brand_identity_audit": {
+        "brands": [
+          {
+            "brand_id": "87c6e030-511a-4a07-a383-b3b8828789b6",
+            "brand_name": "Dayco",
+            "sample_codes": [
+              "3PK590",
+              "3PK600",
+              "3PK630",
+              "3PK648",
+              "3PK675",
+              "3PK715",
+              "3PK719",
+              "3PK740",
+              "3PK760",
+              "3PK775"
+            ],
+            "matching_codes": 407,
+            "incoming_percent": 7.28
+          },
+          {
+            "brand_id": "eaa19839-679d-41ff-9562-c2f107f654f6",
+            "brand_name": "Gates",
+            "sample_codes": [
+              "10PK2253",
+              "2PJ800",
+              "2PJ860",
+              "2XPB2050",
+              "2XPB2100",
+              "3PJ891",
+              "3PK560",
+              "3PK648",
+              "3PK675",
+              "3PK683"
+            ],
+            "matching_codes": 324,
+            "incoming_percent": 5.8
+          },
+          {
+            "brand_id": "5134498a-09c0-4114-8e31-02d9fe9adb4c",
+            "brand_name": "Mahle",
+            "sample_codes": [
+              "MS13",
+              "MS18",
+              "MS19",
+              "MS23",
+              "MS24",
+              "MS25",
+              "MS37",
+              "MS43",
+              "MS44",
+              "MS45"
+            ],
+            "matching_codes": 18,
+            "incoming_percent": 0.32
+          }
+        ],
+        "policy": "cross-brand-v3",
+        "checked": true,
+        "checked_at": "2026-10-23T18:42:13.648332+00:00",
+        "review_required": true,
+        "ratio_comparison": "strictly_greater",
+        "historical_brands": [
+          {
+            "brand_id": "eeb63933-5ced-466f-89cc-0e8e903681f9",
+            "brand_name": "Continental CTAM",
+            "sample_codes": [
+              "10PK1045",
+              "10PK1070",
+              "10PK1075",
+              "10PK1108",
+              "10PK1114",
+              "10PK1136",
+              "10PK1145",
+              "10PK1155",
+              "10PK1162",
+              "10PK1213"
+            ],
+            "matching_codes": 5307,
+            "incoming_percent": 94.97
+          },
+          {
+            "brand_id": "eaa19839-679d-41ff-9562-c2f107f654f6",
+            "brand_name": "Gates",
+            "sample_codes": [
+              "MS13",
+              "MS18",
+              "MS19",
+              "MS23",
+              "MS24",
+              "MS25",
+              "MS37",
+              "MS43",
+              "MS44",
+              "MS45"
+            ],
+            "matching_codes": 18,
+            "incoming_percent": 0.32
+          },
+          {
+            "brand_id": "5134498a-09c0-4114-8e31-02d9fe9adb4c",
+            "brand_name": "Mahle",
+            "sample_codes": [
+              "MS32",
+              "MS60"
+            ],
+            "matching_codes": 2,
+            "incoming_percent": 0.04
+          }
+        ],
+        "selected_brand_id": "7f5b43c4-3f35-402d-a708-99b0d51ecea0",
+        "selected_brand_name": "Contitech",
+        "matching_brand_count": 3,
+        "distinct_incoming_codes": 5588,
+        "ratio_threshold_percent": 5,
+        "historical_matching_brand_count": 3
+      },
+      "publication_id": null,
+      "publication_version": null,
+      "published_at": null,
+      "current_pointer": false
+    },
+    {
+      "id": "39da2785-7b63-4bb4-b44b-83c5227c3721",
+      "status": "published",
+      "source_file_sha256": "19ab7282c9bb9519b05f6cbedeb17dc88260edde9a117ef221b9229e1fc4d3b3",
+      "total_rows": 5588,
+      "accepted_rows": 5588,
+      "error_code": null,
+      "brand_identity_audit": {
+        "brands": [
+          {
+            "brand_id": "eaa19839-679d-41ff-9562-c2f107f654f6",
+            "brand_name": "Gates",
+            "sample_codes": [
+              "2PJ800",
+              "2PJ860",
+              "2XPB2050",
+              "2XPB2100",
+              "3PJ891",
+              "6DPK1188",
+              "6DPK1195",
+              "6DPK1215",
+              "6DPK1225",
+              "6DPK1320"
+            ],
+            "matching_codes": 26,
+            "incoming_percent": 0.47
+          },
+          {
+            "brand_id": "5134498a-09c0-4114-8e31-02d9fe9adb4c",
+            "brand_name": "Mahle",
+            "sample_codes": [
+              "MS13",
+              "MS18",
+              "MS19",
+              "MS23",
+              "MS24",
+              "MS25",
+              "MS37",
+              "MS43",
+              "MS44",
+              "MS45"
+            ],
+            "matching_codes": 18,
+            "incoming_percent": 0.32
+          },
+          {
+            "brand_id": "87c6e030-511a-4a07-a383-b3b8828789b6",
+            "brand_name": "Dayco",
+            "sample_codes": [
+              "6DPK1188",
+              "6DPK1195",
+              "6DPK1215",
+              "6DPK1225",
+              "6DPK1320",
+              "6DPK1352",
+              "6DPK1817",
+              "6DPK1825",
+              "6DPK1853",
+              "7DPK1360"
+            ],
+            "matching_codes": 15,
+            "incoming_percent": 0.27
+          }
+        ],
+        "policy": "cross-brand-v3",
+        "checked": true,
+        "checked_at": "2026-10-23T18:59:46.094322+00:00",
+        "review_required": false,
+        "ratio_comparison": "strictly_greater",
+        "historical_brands": [
+          {
+            "brand_id": "eaa19839-679d-41ff-9562-c2f107f654f6",
+            "brand_name": "Gates",
+            "sample_codes": [
+              "MS13",
+              "MS18",
+              "MS19",
+              "MS23",
+              "MS24",
+              "MS25",
+              "MS37",
+              "MS43",
+              "MS44",
+              "MS45"
+            ],
+            "matching_codes": 18,
+            "incoming_percent": 0.32
+          },
+          {
+            "brand_id": "5134498a-09c0-4114-8e31-02d9fe9adb4c",
+            "brand_name": "Mahle",
+            "sample_codes": [
+              "MS32",
+              "MS60"
+            ],
+            "matching_codes": 2,
+            "incoming_percent": 0.04
+          }
+        ],
+        "selected_brand_id": "eeb63933-5ced-466f-89cc-0e8e903681f9",
+        "selected_brand_name": "Continental CTAM",
+        "matching_brand_count": 3,
+        "distinct_incoming_codes": 5588,
+        "ratio_threshold_percent": 5,
+        "shared_dimension_matches": [
+          {
+            "brand_name": "Dayco",
+            "matching_codes": 392
+          },
+          {
+            "brand_name": "Gates",
+            "matching_codes": 298
+          }
+        ],
+        "historical_matching_brand_count": 2
+      },
+      "publication_id": "803c609d-eade-4452-bf73-8284ff536719",
+      "publication_version": 1,
+      "published_at": "2026-10-23 18:59:46.067829+00",
+      "current_pointer": true
+    }
+  ],
+  "order": {
+    "order": "SO-20261023-8705",
+    "status": "draft",
+    "updated_at": "2026-10-23 19:01:33.278431+00",
+    "totalLines": 237,
+    "pricedBefore": 199,
+    "pricedAfter": 201,
+    "newlyFilled": [
+      {
+        "moq": 1,
+        "qty": 10,
+        "brand": "Continental CTAM",
+        "found": true,
+        "notes": "",
+        "lineId": "1792763868780-hdx70x",
+        "oem_no": "11287511476, 11287552233, 11287532145, 11287631810, 7552233, 7532145, 7511476, 7631810, 53002900, 4060735, 0139974692, 0139974792, 9091602504, 90916, 2006, 2026, 044903137",
+        "origin": "DE",
+        "hs_code": "40103300",
+        "buy_price": 9.71,
+        "weight_kg": 0.19,
+        "price_date": "2026-10-23",
+        "sell_price": 10.68,
+        "codeChanged": false,
+        "description": "Multi V-Belt",
+        "c_sell_price": null,
+        "resolvedCode": "6PK1870",
+        "requestedCode": "6PK1870",
+        "requested_qty": null,
+        "supplier_name": "GroupAuto",
+        "lifecycle_note": null,
+        "order_multiple": null,
+        "supplierOptions": [
+          {
+            "moq": 1,
+            "notes": null,
+            "valid_to": null,
+            "buy_price": 9.71,
+            "stock_qty": null,
+            "price_date": "2026-10-23",
+            "sell_price": 10.68,
+            "supplier_id": "bb8aa954-5c9c-4edb-8c25-37e170253a1b",
+            "supplier_name": "GroupAuto",
+            "order_multiple": null
+          }
+        ],
+        "lifecycle_status": "active",
+        "price_sync_issue": null,
+        "codeChangeWarning": "",
+        "lifecycle_warning": null,
+        "quantity_adjusted": false,
+        "selectedSupplierKey": "GroupAuto-0",
+        "quantity_adjustment_note": null
+      },
+      {
+        "moq": 1,
+        "qty": 10,
+        "brand": "Continental CTAM",
+        "found": true,
+        "notes": "",
+        "lineId": "1792763868780-3j0j84",
+        "oem_no": "11287511476, 11287552233, 11287532145, 11287631810, 7552233, 7532145, 7511476, 7631810, 53002900, 4060735, 0139974692, 0139974792, 9091602504, 90916, 2006, 2026, 044903137",
+        "origin": "DE",
+        "hs_code": "40103300",
+        "buy_price": 9.71,
+        "weight_kg": 0.19,
+        "price_date": "2026-10-23",
+        "sell_price": 10.68,
+        "codeChanged": false,
+        "description": "Multi V-Belt",
+        "c_sell_price": null,
+        "resolvedCode": "6PK1870",
+        "requestedCode": "6PK1870",
+        "requested_qty": null,
+        "supplier_name": "GroupAuto",
+        "lifecycle_note": null,
+        "order_multiple": null,
+        "supplierOptions": [
+          {
+            "moq": 1,
+            "notes": null,
+            "valid_to": null,
+            "buy_price": 9.71,
+            "stock_qty": null,
+            "price_date": "2026-10-23",
+            "sell_price": 10.68,
+            "supplier_id": "bb8aa954-5c9c-4edb-8c25-37e170253a1b",
+            "supplier_name": "GroupAuto",
+            "order_multiple": null
+          }
+        ],
+        "lifecycle_status": "active",
+        "price_sync_issue": null,
+        "codeChangeWarning": "",
+        "lifecycle_warning": null,
+        "quantity_adjusted": false,
+        "selectedSupplierKey": "GroupAuto-0",
+        "quantity_adjustment_note": null
+      }
+    ],
+    "originalPricedLinesChanged": [],
+    "quantitiesChanged": [],
+    "remainingByBrand": {
+      "Febi": 4,
+      "Textar": 22,
+      "Pierburg": 10
+    }
+  },
+  "security": {
+    "unchanged": true,
+    "groups": [
+      {
+        "name": "rls_enabled_no_policy",
+        "count": 47
+      },
+      {
+        "name": "extension_in_public",
+        "count": 2
+      },
+      {
+        "name": "authenticated_security_definer_function_executable",
+        "count": 140
+      }
+    ]
+  },
+  "stagingMigrations": [
+    {
+      "version": "20261023185444",
+      "name": "continental_automotive_brand_identity"
+    },
+    {
+      "version": "20261023185909",
+      "name": "continental_dimension_evidence_classification"
+    }
+  ],
+  "productionMigrations": [
+    {
+      "version": "20261023185615",
+      "name": "continental_automotive_brand_identity"
+    },
+    {
+      "version": "20261023185914",
+      "name": "continental_dimension_evidence_classification"
+    }
+  ],
+  "rules": {
+    "canonicalBrand": "Continental CTAM",
+    "alias": "Contitech",
+    "bareContinental": "strict PK automotive belt code only",
+    "separate": [
+      "Continental Tires",
+      "ContiTech Air Spring",
+      "VDO/Continental"
+    ],
+    "review": "strictly greater than 5 percent per other brand; shared strict PK dimensions only within CTAM/Gates/Dayco informational"
+  },
+  "screenshot": "artifacts/batch-optimization-20261023/order-continental-resync-production.jpg"
+}

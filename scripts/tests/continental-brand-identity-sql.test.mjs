@@ -19,6 +19,7 @@ create table catalog_product_source_records(organization_id uuid,catalog_product
 create table supplier_prices(id uuid default gen_random_uuid(),organization_id uuid,supplier_id uuid,brand_id uuid,normalized_code text,product_code text,is_active boolean default true,buy_price numeric,currency text default 'EUR',valid_from date default current_date,valid_to date,description text,notes text,moq integer,order_multiple integer,stock_qty integer);
 `);
 await db.exec(migration);
+await db.exec(await readFile(new URL('../../supabase/migrations/20261023185825_continental_dimension_evidence_classification.sql',import.meta.url),'utf8'));
 await db.exec(`revoke all on function cloud_current_supplier_commercial_options_core(uuid,text,text) from public,anon,authenticated;
 revoke all on function cloud_current_supplier_price_options_batch(jsonb) from public,anon;
 grant execute on function cloud_current_supplier_price_options_batch(jsonb) to authenticated;`);
@@ -68,7 +69,9 @@ async function overlap({incoming='6PK1870',source='6PK1870',other=gates}={}){
  await db.query('insert into supplier_prices(organization_id,supplier_id,brand_id,normalized_code,product_code,buy_price) values($1,$2,$3,normalize_part_code($4),$4,10)',[org,supplier,other,source]);
 }
 test('standard PK dimensions across belt makers are informational with exact-source evidence',async()=>{
- await overlap();const a=await audit();assert.equal(a.policy,'cross-brand-v3');assert.equal(a.review_required,false);assert.deepEqual(a.brands,[]);assert.deepEqual(a.shared_dimension_matches,[{brand_name:'Gates',matching_codes:1}]);
+ await overlap();
+ await db.query("insert into catalog_products(organization_id,brand_id,product_code,normalized_code) values($1,$2,'6PK1870','6PK1870')",[org,gates]);
+ const a=await audit();assert.equal(a.policy,'cross-brand-v3');assert.equal(a.review_required,false);assert.deepEqual(a.brands,[]);assert.deepEqual(a.shared_dimension_matches,[{brand_name:'Gates',matching_codes:1}]);assert.deepEqual(a.historical_brands,[]);
 });
 test('nonstandard punctuation, manufacturer codes and other product families still trigger genuine overlap',async()=>{
  for(const config of [{incoming:'6/PK1870'},{source:'6/PK1870'},{incoming:'CT1234',source:'CT1234'},{other:tires},{other:air}]){
