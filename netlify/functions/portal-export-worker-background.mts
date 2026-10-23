@@ -45,6 +45,9 @@ export const config: Config = {
   // convention is the normal Netlify switch, but an explicit flag protects
   // deploys generated from a function manifest or a different context.
   background: true,
+  // Only the price-list worker follows its EU-West Postgres data source.
+  // Request/auth handlers keep the site's region; memory and leases are unchanged.
+  region: "dub",
   path: "/api/portal-export-worker-background",
   method: "POST",
 };

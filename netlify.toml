@@ -28,6 +28,8 @@
   node_bundler = "esbuild"
 
 [functions."portal-export-worker-background"]
+  # Close to the existing EU-West database; do not move unrelated functions.
+  region = "dub"
   # Large V3 exports must run as a Netlify Background Function.  Without this
   # flag the first invocation is subject to the synchronous function timeout
   # and can stop after a few snapshot pages, leaving the job waiting for a
