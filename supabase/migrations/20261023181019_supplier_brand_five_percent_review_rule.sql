@@ -128,7 +128,12 @@ begin
     'supplier_price_ingestion_internal.admin_publish_staging(text,uuid,uuid,uuid,uuid,uuid,uuid,bigint,uuid)'
   ] loop
     if to_regprocedure(signature) is null then
-      raise exception 'SUPPLIER_PUBLICATION_POLICY_ADAPTER_MISSING: %',signature;
+      -- Staging intentionally has no production publication/reversal adapters.
+      -- Do not install or activate production capabilities there.
+      if signature like 'supplier_price_ingestion_internal.admin_publish_staging(%' then
+        raise exception 'SUPPLIER_PUBLICATION_POLICY_ADAPTER_MISSING: %',signature;
+      end if;
+      continue;
     end if;
     select pg_get_functiondef(to_regprocedure(signature)) into definition;
     if position(old_check in definition)=0 then

@@ -334,3 +334,10 @@ test('actual staging adapter publishes after a fresh v3 audit and unknown policy
  await assert.rejects(execute(db,nextDecision),/PRODUCTION_PUBLICATION_IDENTITY_NOT_CLEAR/);
 
 });
+
+test('five-percent migration supports staging without installing production publication capabilities',async t=>{
+ const db=await fixture(t,{withProduction:false});await currentEvidenceAdapters(db);await db.exec(percentMigration);
+ const missing=(await db.query("select to_regprocedure('public.publish_supplier_price_release_production(text,uuid,uuid,uuid,uuid,uuid,uuid,bigint,uuid)') f")).rows[0];assert.equal(missing.f,null);
+ const release=await seed(db,10,{held:false});await enqueue(db,publishRequest(release,id(30)),'publish');await claim(db);
+ assert.equal((await execute(db,id(30))).published,true);
+});
