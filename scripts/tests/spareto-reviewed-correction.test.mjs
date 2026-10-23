@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mapSparetoSecondaryPage,findExactSparetoProductUrl,fetchExactSparetoSecondary,sparetoBrandSearchUrl,SPARETO_BRAND_SEARCH_URLS} from '../../netlify/functions/_shared/catalog/spareto-secondary-provider.mjs';
+import {mapSparetoSecondaryPage,findExactSparetoProductUrl,fetchExactSparetoSecondary,sparetoBrandSearchUrl} from '../../netlify/functions/_shared/catalog/spareto-secondary-provider.mjs';
 import {planSparetoReviewedCorrection} from '../../netlify/functions/_shared/catalog/spareto-reviewed-correction.mjs';
 import {runClaimedSparetoCorrection} from '../../netlify/functions/_shared/catalog/spareto-correction-worker.mts';
 const image='https://cdn.spareto.com/variants/images/001/123/456/original/product.jpg?123456';
@@ -12,6 +12,10 @@ test('Schaeffler brands use the owner-provided brand-specific Spareto search URL
  assert.equal(new URL(sparetoBrandSearchUrl('LUK','622066200')).searchParams.get('brand[]'),'LuK');
  assert.equal(new URL(sparetoBrandSearchUrl('INA','712036010')).searchParams.get('brand[]'),'INA');
  assert.equal(new URL(sparetoBrandSearchUrl('FAG','713678710')).searchParams.get('brand[]'),'FAG');
+});
+test('Additional owner-provided Spareto brand lanes are exact, including Nural and VAG aliases',()=>{
+ const lanes=[['Elring','ELRING'],['Denso','DENSO'],['Delphi','DELPHI'],['Mahle','MAHLE'],['Glyco','GLYCO'],['Goetze','GOETZE'],['Nural','NÜRAL'],['Mercedes-Benz','Mercedes-Benz'],['VAG','Volkswagen AG']];
+ for(const [brand,filter] of lanes)assert.equal(new URL(sparetoBrandSearchUrl(brand,'X-001')).searchParams.get('brand[]'),filter);
 });
 const parse=(options={})=>mapSparetoSecondaryPage(html(options),{brand:'INA',code:'712036010',sourceUrl:'https://spareto.com/products/ina-bearing/712-0360-10',expectedEan:'4005108359810'});
 const before={id:'product',ean:'4005108359810',description:'Mounting, manu',oem_no:'002311125',market_segment:'pc',image_url:null,origin:'TR',hs_code:'84824000',weight_kg:.037};

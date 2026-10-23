@@ -9,6 +9,17 @@ export const SPARETO_BRAND_SEARCH_URLS=Object.freeze({
  LUK:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=LuK',
  INA:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=INA',
  FAG:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=FAG',
+ ELRING:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=ELRING',
+ DENSO:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=DENSO',
+ DELPHI:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=DELPHI',
+ MAHLE:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=MAHLE',
+ GLYCO:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=GLYCO',
+ GOETZE:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=GOETZE',
+ NURAL:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=N%C3%9CRAL',
+ 'NÜRAL':'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=N%C3%9CRAL',
+ 'MERCEDES-BENZ':'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=Mercedes-Benz',
+ VAG:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=Volkswagen%20AG',
+ 'VOLKSWAGEN AG':'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=Volkswagen%20AG',
 });
 export function sparetoBrandSearchUrl(brand,code){
  const base=SPARETO_BRAND_SEARCH_URLS[String(brand||'').toUpperCase()]||'https://spareto.com/products';
