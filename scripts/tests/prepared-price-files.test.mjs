@@ -20,7 +20,7 @@ async function fixture(){
  product_code text,normalized_code text,description text,buy_price numeric,currency text,valid_from date,valid_to date,is_active boolean,updated_at timestamptz default now());
  create table organizations(id uuid primary key);create table profiles(id uuid primary key);
  create table customers(id uuid primary key,organization_id uuid,price_list_type text,price_list_margin_percent numeric,currency text,custom_fields text);
- create table customer_price_lists(id uuid primary key,organization_id uuid);
+ create table customer_price_lists(id uuid primary key,organization_id uuid,list_type text,margin_percent numeric,is_active boolean,updated_at timestamptz);
  create table portal_invites(id uuid primary key,organization_id uuid,status text,customer_id uuid,access_can_view_orders boolean,allowed_brand_ids jsonb,expires_at timestamptz,seller_company_profile_id uuid);
  create schema storage;create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));`);
  await db.exec(await readFile('supabase/migrations/20261015000000_supplier_price_source_revision.sql','utf8'));
@@ -30,6 +30,7 @@ async function fixture(){
  await db.exec(await readFile('supabase/migrations/20261023161916_prepared_price_artifact_adoption_and_events.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20261023162831_prepared_price_prewarm_failure_backoff.sql','utf8'));
  await db.exec(await readFile('supabase/migrations/20261023162929_supplier_price_revision_distinct_scopes.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20261023164519_prepared_price_profile_event_fairness.sql','utf8'));
  await db.query('insert into organizations values($1)',[org]);await db.query('insert into profiles values($1)',[actor]);
  await db.query('insert into brands(id,name,organization_id) values($1,\'Fixture\',$2)',[brand,org]);
  return db;
@@ -159,5 +160,25 @@ test('bulk legacy price writes advance each affected brand revision once and que
   await db.query('delete from supplier_prices where organization_id=$1 and brand_id=$2',[org,brand]);
   assert.equal(await revision(),'3');
   assert.equal((await db.query('select count(*) n from prepared_price_export_profiles where next_check_at<=now()')).rows[0].n,1);
+ }finally{await db.close();}
+});
+
+test('session/default-card no-op updates never requeue profiles; actual pricing changes do and continuously dirty profiles share the queue',async()=>{
+ const db=await fixture();try{
+  await admit(db);await admit(db,'second-margin','v1',{...scope,marginPercent:.2});
+  await db.query("insert into portal_invites(id,organization_id,status,access_can_view_orders)values($1,$2,'active',true)",[id(20),org]);
+  await db.query("insert into customer_price_lists(id,organization_id,list_type,margin_percent,is_active)values($1,$2,'A',10,true)",[id(21),org]);
+  await db.exec("update prepared_price_export_profiles set revision=0,next_check_at=now()+interval '15 minutes'");
+  await db.query("update portal_invites set status='active',access_can_view_orders=true where id=$1",[id(20)]);
+  await db.query("update customer_price_lists set margin_percent=10,is_active=true,updated_at=clock_timestamp() where id=$1",[id(21)]);
+  assert.ok((await db.query('select revision::int r from prepared_price_export_profiles')).rows.every(x=>x.r===0));
+  await db.query('update customer_price_lists set margin_percent=11 where id=$1',[id(21)]);
+  assert.ok((await db.query('select revision::int r from prepared_price_export_profiles')).rows.every(x=>x.r===1));
+  await db.exec("update app_export_jobs set status='finalized'");
+  const first=(await db.query('select * from claim_prepared_price_profile()')).rows[0];
+  await db.query('select finish_prepared_price_profile($1,$2,$3)',[first.id,first.lease_token,first.revision]);
+  await db.query('update customer_price_lists set margin_percent=12 where id=$1',[id(21)]);
+  const next=(await db.query('select * from claim_prepared_price_profile()')).rows[0];
+  assert.notEqual(first.id,next.id,'already checked profiles cannot starve a never-checked profile');
  }finally{await db.close();}
 });
