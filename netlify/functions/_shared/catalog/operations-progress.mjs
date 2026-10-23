@@ -24,9 +24,15 @@ export function summarizeCatalogProgress(records){
  }
  return [...groups.values()].sort((a,b)=>Number(b.activeJobs>0)-Number(a.activeJobs>0)||String(b.updatedAt).localeCompare(String(a.updatedAt)));
 }
-export async function readCatalogProgress(db,organizationId){
+export async function readCatalogProgress(db,organizationId,brandSearch=''){
  const results=await Promise.all(progressSources.map(async source=>{
-  const read=()=>db.from(source.table).select(source.select).eq('organization_id',organizationId);
+  const search=brandSearch.trim();
+  if(source.kind.startsWith('elring')&&search&&!('elring'.includes(search.toLowerCase())))return {kind:source.kind,rows:[],truncated:false};
+  const read=()=>{
+   let query=db.from(source.table).select(source.select).eq('organization_id',organizationId);
+   if(search&&!source.kind.startsWith('elring'))query=query.ilike('manifest->>brand',`%${search.replace(/[\\%_]/g,'\\$&')}%`);
+   return query;
+  };
   const [active,recent]=await Promise.all([read().in('status',activeProgressStates).order('updated_at',{ascending:false}).limit(201),read().not('status','in',`(${activeProgressStates.join(',')})`).order('updated_at',{ascending:false}).limit(60)]);
   if(active.error||recent.error)throw Error('CATALOG_PROGRESS_UNAVAILABLE');
   const unique=new Map();for(const row of [...(recent.data||[]),...(active.data||[]).slice(0,200)])unique.set(`${row.id||row.run_id}:${row.phase||''}`,row);

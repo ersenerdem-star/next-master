@@ -30,3 +30,10 @@ test('Unavailable source fails visibly instead of pretending zero jobs',async()=
  const db={from(){const chain={};for(const method of ['select','eq','in','not','order','limit'])chain[method]=()=>chain;chain.then=(resolve)=>resolve({data:null,error:{message:'not allowed'}});return chain;}};
  await assert.rejects(readCatalogProgress(db,'org'),/CATALOG_PROGRESS_UNAVAILABLE/);
 });
+
+test('Brand search is applied before the source limits so older brands are not hidden by busy queues',async()=>{
+ const calls=[];const db={from(table){const chain={};for(const method of ['select','eq','ilike','in','not','order','limit'])chain[method]=(...args)=>{calls.push({table,method,args});return chain;};chain.then=resolve=>resolve({data:[],error:null});return chain;}};
+ await readCatalogProgress(db,'org','Denso');
+ assert.ok(calls.every(c=>!c.table.startsWith('catalog_elring')));
+ assert.equal(calls.filter(c=>c.method==='ilike'&&c.args[0]==='manifest->>brand'&&c.args[1]==='%Denso%').length,4);
+});
