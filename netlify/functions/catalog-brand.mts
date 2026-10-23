@@ -20,6 +20,8 @@ export default async(req:Request)=>{
  let jobQuery=db.from('catalog_brand_jobs').select('id,mode,status,total_items,next_index,error_message,created_at,updated_at,lease_expires_at,manifest').eq('organization_id',org).eq('manifest->>brand',brand.name).eq('manifest->>source_key',def.sourceKey||'');
  if(wilmink)jobQuery=jobQuery.eq('manifest->>adapter','brand-exact.v1');
  const jobs=await jobQuery.order('created_at',{ascending:false}).limit(10);if(jobs.error)throw jobs.error;
+ const jobPriority:Record<string,number>={running:0,queued:1,paused:2,reviewed:3,failed:4,completed:5};
+ jobs.data.sort((a,b)=>(jobPriority[a.status]??9)-(jobPriority[b.status]??9)||new Date(b.updated_at).getTime()-new Date(a.updated_at).getTime());
  const discovery=wilmink?await db.rpc(support?'get_catalog_wilmink_support_status':'get_catalog_wilmink_status',support?{input_org:org,input_brand:brand.name}:{input_org:org}):{data:null,error:null};if(discovery.error)throw discovery.error;
  if(discovery.data?.failed){const failed=await db.from('catalog_brand_jobs').select('error_message').eq('organization_id',org).eq('manifest->>source_key',def.sourceKey!).eq('manifest->>adapter',support?'wilmink-support-discovery.v1':'wilmink-kolbenschmidt-discovery.v1').eq('status','failed').order('updated_at',{ascending:false}).limit(1).maybeSingle();if(failed.error)throw failed.error;discovery.data.error=failed.data?.error_message;}
  const correction=!support&&['INA','FAG','LUK'].includes(brand.name)?await db.rpc('get_catalog_spareto_correction_status',{input_org:org,input_brand:brand.name}):{data:null,error:null};
