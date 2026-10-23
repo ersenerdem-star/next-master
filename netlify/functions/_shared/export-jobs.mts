@@ -2,6 +2,7 @@ import { readSupplierCommercialTerms } from "../../../apps/web/src/domain/shared
 import * as XLSX from "xlsx";
 import { createHash } from "node:crypto";
 import { assertCompleteExport, advanceExportPage } from "../../../shared/export-integrity.mjs";
+import { PREPARED_PRICE_VERSION_CONTRACT, priceListVersionRpc, preparedPortalPriceVersionInput } from "../../../shared/prepared-price-export.mjs";
 import { getJson, json, readJson, sendJson, serviceRoleHeaders } from "./http.mts";
 import type { AppCaller } from "./app-auth.mts";
 import { claimRemainingExportJob, startExportJobHeartbeat, assertAndTouchExportJobLease } from "./admin-export-worker.mts";
@@ -1171,11 +1172,11 @@ async function resolveCatalogExportBrand(
   return { id: String(row.id), name: String(row.name || brandName) };
 }
 
-async function getAdminPriceListDataVersion(supabaseUrl: string, serviceRoleKey: string, organizationId: string, brandId: string) {
+async function getAdminPriceListDataVersion(supabaseUrl: string, serviceRoleKey: string, organizationId: string, brandId: string, prepared = false) {
   const version = await rpcJson<string>(
     supabaseUrl,
     serviceRoleKey,
-    "get_admin_price_list_export_version",
+    priceListVersionRpc(prepared ? { versionContract: PREPARED_PRICE_VERSION_CONTRACT } : {}),
     {
       input_organization_id: organizationId,
       input_brand_id: brandId,
@@ -1190,8 +1191,11 @@ async function getPortalPriceListDataVersion(
   serviceRoleKey: string,
   context: PortalPriceListExportContext,
   invite: PortalInviteRow,
+  prepared = false,
+  sourceVersion?: string,
 ) {
-  const baseDataVersion = await getAdminPriceListDataVersion(supabaseUrl, serviceRoleKey, context.organizationId, context.brandId);
+  const baseDataVersion = sourceVersion ?? await getAdminPriceListDataVersion(supabaseUrl, serviceRoleKey, context.organizationId, context.brandId, prepared);
+  if (prepared) return hashObject(preparedPortalPriceVersionInput(baseDataVersion, context));
   return hashObject({
     baseDataVersion,
     customerId: context.customerId,
@@ -1260,7 +1264,7 @@ function isPortalInviteUsableForExport(invite: PortalInviteRow & { expires_at?: 
   return Number.isFinite(timestamp) && timestamp > Date.now();
 }
 
-async function fetchPortalInviteForExport(supabaseUrl: string, serviceRoleKey: string, organizationId: string, inviteId: string) {
+export async function fetchPortalInviteForExport(supabaseUrl: string, serviceRoleKey: string, organizationId: string, inviteId: string) {
   const params = new URLSearchParams({
     select: PORTAL_EXPORT_INVITE_SELECT,
     id: `eq.${inviteId}`,
@@ -1320,7 +1324,8 @@ export async function assertPortalExportJobCurrentContext(
     supabaseUrl, serviceRoleKey, invite, String(job.scope.brandName || ""),
   );
   assertPortalExportJobPricingContext(job, invite, context);
-  const currentDataVersion = await getPortalPriceListDataVersion(supabaseUrl, serviceRoleKey, context, invite);
+  const currentDataVersion = await getPortalPriceListDataVersion(supabaseUrl, serviceRoleKey, context, invite,
+    job.scope.versionContract === PREPARED_PRICE_VERSION_CONTRACT);
   if (currentDataVersion !== job.data_version) {
     throw new Error("Customer prices changed. Start a new export.");
   }
@@ -1353,7 +1358,7 @@ export async function startAdminPriceListExport(
   const priceListType: "A" | "B" = input.priceListType === "B" ? "B" : "A";
   const marginPercent = Number.isFinite(input.marginPercent) ? Number(input.marginPercent) : 0;
   const brand = await resolveAdminPriceListBrand(supabaseUrl, serviceRoleKey, caller.organizationId, brandId);
-  const dataVersion = await getAdminPriceListDataVersion(supabaseUrl, serviceRoleKey, caller.organizationId, brand.id);
+  const dataVersion = await getAdminPriceListDataVersion(supabaseUrl, serviceRoleKey, caller.organizationId, brand.id, true);
   const exportType = "admin_price_list";
   const scope = {
     brandId: brand.id,
@@ -1362,6 +1367,8 @@ export async function startAdminPriceListExport(
     marginPercent,
     format: "xlsx",
     schemaVersion: 4,
+    versionContract: PREPARED_PRICE_VERSION_CONTRACT,
+    sourceVersion: dataVersion,
   };
   const cacheKey = hashObject({
     exportType,
@@ -1369,20 +1376,9 @@ export async function startAdminPriceListExport(
     scope,
     dataVersion,
   });
-  const reusable = await findReusableExportJob(supabaseUrl, serviceRoleKey, caller.organizationId, exportType, cacheKey);
-  if (reusable) return reusable;
-
-  const job = await insertExportJob(supabaseUrl, serviceRoleKey, {
-    organizationId: caller.organizationId,
-    requestedBy: caller.id,
-    audience: "admin",
-    exportType,
-    scope,
-    cacheKey,
-    dataVersion,
-    progressMessage: `Queued ${brand.name || "brand"} ${priceListType} price-list export.`,
-  });
-  return { job, cached: false };
+  return admitPreparedPriceListExport(supabaseUrl, serviceRoleKey, caller.organizationId, caller.id,
+    "admin", exportType, scope, cacheKey, dataVersion,
+    () => getAdminPriceListDataVersion(supabaseUrl, serviceRoleKey, caller.organizationId, brand.id));
 }
 
 export async function startPortalPriceListExport(
@@ -1403,7 +1399,8 @@ export async function startPortalPriceListExport(
   const priceListType: "A" | "B" | "Other" = context.priceListType;
   const marginPercent = priceListType === "B" ? context.effectiveMarginB : context.effectiveMarginA;
   if (!Number.isFinite(marginPercent)) throw new Error("Customer price margin is missing.");
-  const dataVersion = await getPortalPriceListDataVersion(supabaseUrl, serviceRoleKey, context, invite);
+  const sourceVersion = await getAdminPriceListDataVersion(supabaseUrl, serviceRoleKey, context.organizationId, context.brandId, true);
+  const dataVersion = await getPortalPriceListDataVersion(supabaseUrl, serviceRoleKey, context, invite, true, sourceVersion);
   const exportType = "portal_price_list";
   const scope = {
     inviteId: context.inviteId,
@@ -1415,6 +1412,8 @@ export async function startPortalPriceListExport(
     marginPercent,
     format: "xlsx",
     schemaVersion: 4,
+    versionContract: PREPARED_PRICE_VERSION_CONTRACT,
+    sourceVersion,
   };
   const cacheKey = hashObject({
     exportType,
@@ -1422,23 +1421,33 @@ export async function startPortalPriceListExport(
     scope,
     dataVersion,
   });
-  const reusable = await findReusableExportJob(supabaseUrl, serviceRoleKey, context.organizationId, exportType, cacheKey);
-  if (reusable) {
-    assertPortalExportJobForInvite(reusable.job, invite);
-    return reusable;
-  }
+  const admitted = await admitPreparedPriceListExport(supabaseUrl, serviceRoleKey, context.organizationId, null,
+    "portal", exportType, scope, cacheKey, dataVersion,
+    () => getPortalPriceListDataVersion(supabaseUrl, serviceRoleKey, context, invite));
+  assertPortalExportJobForInvite(admitted.job, invite);
+  return admitted;
+}
 
-  const job = await insertExportJob(supabaseUrl, serviceRoleKey, {
-    organizationId: context.organizationId,
-    requestedBy: null,
-    audience: "portal",
-    exportType,
-    scope,
-    cacheKey,
-    dataVersion,
-    progressMessage: `Queued ${context.brandName} customer price-list export.`,
-  });
-  return { job, cached: false };
+async function admitPreparedPriceListExport(
+  supabaseUrl: string, serviceRoleKey: string, organizationId: string, requestedBy: string | null,
+  audience: "admin" | "portal", exportType: string, scope: Record<string, unknown>, cacheKey: string, dataVersion: string,
+  legacyVersion: () => Promise<string>,
+) {
+  const input = {
+    input_organization_id: organizationId, input_requested_by: requestedBy, input_audience: audience,
+    input_export_type: exportType, input_scope: scope, input_cache_key: cacheKey, input_data_version: dataVersion,
+  };
+  type Admission = { job: ExportJobRow; cached: boolean; needsLegacyProbe?: boolean };
+  const existing = await rpcJson<Admission>(supabaseUrl, serviceRoleKey, "admit_prepared_price_list_export", {
+    ...input, input_probe_only: true,
+  }, 15_000);
+  if (!existing.needsLegacyProbe) return existing;
+  const legacyDataVersion = await legacyVersion();
+  const { versionContract: _contract, sourceVersion: _source, ...legacyScope } = scope;
+  const legacyCacheKey = hashObject({ exportType, organizationId, scope: legacyScope, dataVersion: legacyDataVersion });
+  return rpcJson<Admission>(supabaseUrl, serviceRoleKey, "admit_prepared_price_list_export", {
+    ...input, input_legacy_cache_key: legacyCacheKey, input_legacy_data_version: legacyDataVersion,
+  }, 15_000);
 }
 
 export async function startCatalogExport(

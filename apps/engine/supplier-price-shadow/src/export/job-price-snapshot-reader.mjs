@@ -3,6 +3,7 @@
 import {randomUUID,createHash} from 'node:crypto';
 import {performance} from 'node:perf_hooks';
 import {exportSpec,exportBinding,customerSafeExportRow} from './partitioned-price-export.mjs';
+import {PREPARED_PRICE_VERSION_CONTRACT,priceListVersionRpc,preparedPortalPriceVersionInput} from '../../../../../shared/prepared-price-export.mjs';
 const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const stableStringify=value=>{
   if(value===null||typeof value!=='object') return JSON.stringify(value);
@@ -88,10 +89,12 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
       finally{client.release();}
   }
   async function assertSourceVersion(client,authorityState){
-    const {rows}=await client.query('select public.get_admin_price_list_export_version($1,$2) as version',[authorityState.job.organization_id,authorityState.brand.id]);
+    const {rows}=await client.query(`select public.${priceListVersionRpc(authorityState.job.scope)}($1,$2) as version`,[authorityState.job.organization_id,authorityState.brand.id]);
     const baseDataVersion=String(rows[0]?.version||'');
     const expectedDataVersion=authorityState.job.audience==='portal'&&authorityState.job.export_type==='portal_price_list'
-      ? stableDigest({
+      ? authorityState.job.scope.versionContract===PREPARED_PRICE_VERSION_CONTRACT
+        ? stableDigest(preparedPortalPriceVersionInput(baseDataVersion,{...authorityState.context,customerId:authorityState.customerId}))
+        : stableDigest({
           baseDataVersion,
           customerId:authorityState.customerId,
           priceListType:authorityState.context.priceListType,

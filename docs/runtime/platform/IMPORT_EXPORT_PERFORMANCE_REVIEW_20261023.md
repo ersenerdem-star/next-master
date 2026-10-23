@@ -2,6 +2,8 @@
 
 Scope: compare the successful V3 staging engine with the currently deployed production paths, and define reviewable optimization conditions. This review does not change production settings, deployment versions, DBOS history, publication pointers, or order prices.
 
+Subsequent authorized implementation, measured results and current production activation are recorded in [IMPORT_EXPORT_OPTIMIZATION_RESULTS_20261023.md](IMPORT_EXPORT_OPTIMIZATION_RESULTS_20261023.md). The observations below describe the pre-change review baseline.
+
 ## Findings
 
 The engines are connected and used. Production supplier releases record `duckdb-validation-v3`; source verification, durable handoff and batch receipts exist. Render shows the production supplier worker deployed at `8f3fe51cd765e39c04868953c03ab762e31c0e61`, deployment `dep-dbb64kqgjjms73d5pr30`, on 1 CPU / 2 GB. Its five core worker/source/version files match the current checkout. Live Environment confirms `SUPPLIER_PRICE_LOCAL_STREAM_ENABLED=1` and `SUPPLIER_PRICE_SHADOW_BATCH_SIZE=250`.

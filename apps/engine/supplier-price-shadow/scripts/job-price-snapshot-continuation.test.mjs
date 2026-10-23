@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {createJobPriceSnapshotReader} from '../src/export/job-price-snapshot-reader.mjs';
+import {preparedPortalPriceVersionInput} from '../../../../shared/prepared-price-export.mjs';
 
 const jobId='11111111-1111-4111-8111-111111111111';
 const brandId='22222222-2222-4222-8222-222222222222';
@@ -17,7 +18,7 @@ const source=Array.from({length:5},(_,index)=>({
   sales_price:'12.50',price_date:'2026-10-13',lifecycle_status:'active',total_count:index===0?'5':null,
 }));
 
-function fakeDatabase({portal=false,currency='EUR',sourceRows=source,replacementRefs=[]}={}){
+function fakeDatabase({portal=false,prepared=false,currency='EUR',sourceRows=source,replacementRefs=[]}={}){
   const inviteUpdatedAt='2026-10-13T00:00:00.000Z';
   const state={
     job:{id:jobId,organization_id:organizationId,requested_by:actorId,audience:'admin',export_type:'admin_price_list',
@@ -31,6 +32,12 @@ function fakeDatabase({portal=false,currency='EUR',sourceRows=source,replacement
       scope:{brandId,brandName:'Clevite',inviteId:actorId,customerId,priceListType:'Other',marginPercent:12.5,currency},
       data_version:digest({baseDataVersion:'v1',customerId,priceListType:'Other',effectiveMarginA:12.5,
         effectiveMarginB:15,cPriceListIds:[],inviteUpdatedAt})});
+  }
+  if(prepared){
+    state.job.scope.versionContract='publication-v1';
+    if(portal) state.job.data_version=digest(preparedPortalPriceVersionInput('v1',{
+      customerId,priceListType:'Other',currency,effectiveMarginA:12.5,effectiveMarginB:15,
+    }));
   }
   const client={release(){},async query(sql,args=[]){
     if(/^(begin|commit|rollback|set local)/i.test(sql))return {rows:[],rowCount:0};
@@ -46,7 +53,10 @@ function fakeDatabase({portal=false,currency='EUR',sourceRows=source,replacement
       return {rows:[{id:customerId,organization_id:organizationId,
         seller_company_profile_id:null,seller_company_profile_ids:[],updated_at:inviteUpdatedAt}]};
     }
-    if(sql.includes('get_admin_price_list_export_version'))return {rows:[{version:state.sourceVersion}]};
+    if(sql.includes('get_admin_price_list_export_version')||sql.includes('get_prepared_price_list_export_version')){
+      assert.equal(sql.includes('get_prepared_price_list_export_version'),prepared);
+      return {rows:[{version:state.sourceVersion}]};
+    }
     if(sql.includes('from export_snapshot_private.snapshots where job_id=$1'))return {rows:state.snapshot?[{...state.snapshot}]:[]};
     if(sql.includes('insert into export_snapshot_private.snapshots')){
       state.snapshot={id:args[0],job_id:args[1],status:'building',authority_digest:args[2],descriptor:null,binding:null};
@@ -204,4 +214,16 @@ test('replacement for 61/1 cannot attach to distinct SKU 611',async()=>{
   assert.equal(spec.expectedRows,2);
   assert.deepEqual(state.rows.map(row=>[row.payload.code,row.payload.replacementCode]),
     [['61/1','61/2'],['611','']]);
+});
+
+test('publication-bound admin and customer snapshots use the same new version contract at admission and continuation',async()=>{
+  for(const portal of [false,true]){
+    const {state,pool}=fakeDatabase({portal,prepared:true});
+    const first=await reader({state,pool,owner:'worker-1',shouldYieldSnapshot:()=>true}).resolveAuthorizedInput(jobId);
+    assert.equal(first.processed,2);
+    const done=await reader({state,pool,owner:'worker-1'}).resolveAuthorizedInput(jobId);
+    assert.equal(done.expectedRows,5);
+    state.sourceVersion='new-publication';
+    await assert.rejects(reader({state,pool,owner:'worker-1'}).resolveAuthorizedInput(jobId),/EXPORT_SNAPSHOT_SOURCE_CHANGED/);
+  }
 });
