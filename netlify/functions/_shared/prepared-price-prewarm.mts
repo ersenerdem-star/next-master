@@ -25,9 +25,10 @@ export async function runPreparedPricePrewarm(deps: {
     const { job, cached } = await deps.prepare(profile);
     if (job.status === "queued") await deps.dispatch(job.id);
     return { status: "checked", prepared: job.status === "queued" ? 1 : 0, reused: cached ? 1 : 0, failed: 0 };
-  } catch {
+  } catch (error) {
     // No customer details, secrets, upstream payload or unbounded exception text.
-    errorCode = "PREPARED_PRICE_REFRESH_FAILED";
+    errorCode = error instanceof Error && error.message === "PREWARM_NO_PUBLISHED_PRICES"
+      ? "PREPARED_PRICE_SOURCE_UNAVAILABLE" : "PREPARED_PRICE_REFRESH_FAILED";
     return { status: "checked", prepared: 0, reused: 0, failed: 1 };
   } finally {
     await deps.finish(profile, errorCode);
@@ -47,6 +48,10 @@ export async function prewarmPreparedPriceFile(supabaseUrl: string, serviceRoleK
     prepare: async (profile) => {
       const seed = await fetchExportJobById(supabaseUrl, serviceRoleKey, profile.organization_id, profile.seed_job_id);
       if (!seed) throw new Error("PREWARM_PROFILE_UNAVAILABLE");
+      const pricedBrands = await rpc<Array<{ id: string }>>("cloud_admin_price_list_brands", {
+        input_organization_id: profile.organization_id,
+      });
+      if (!pricedBrands.some(brand => brand.id === seed.scope.brandId)) throw new Error("PREWARM_NO_PUBLISHED_PRICES");
       if (seed.audience === "portal" && seed.export_type === "portal_price_list") {
         const invite = await fetchPortalInviteForExport(supabaseUrl, serviceRoleKey, profile.organization_id, String(seed.scope.inviteId || ""));
         return startPortalPriceListExport(supabaseUrl, serviceRoleKey, invite, { brand: String(seed.scope.brandName || "") });

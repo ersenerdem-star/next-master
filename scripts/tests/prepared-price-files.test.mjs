@@ -28,6 +28,8 @@ async function fixture(){
  await db.exec(versions);
  await db.exec(admission);
  await db.exec(await readFile('supabase/migrations/20261023161916_prepared_price_artifact_adoption_and_events.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20261023162831_prepared_price_prewarm_failure_backoff.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/20261023162929_supplier_price_revision_distinct_scopes.sql','utf8'));
  await db.query('insert into organizations values($1)',[org]);await db.query('insert into profiles values($1)',[actor]);
  await db.query('insert into brands(id,name,organization_id) values($1,\'Fixture\',$2)',[brand,org]);
  return db;
@@ -107,7 +109,11 @@ test('prewarm survives expiry, does not duplicate active jobs, preserves a publi
   assert.equal((await db.query('select finish_prepared_price_profile($1,$2,$3) ok',[p.id,p.lease_token,p.revision])).rows[0].ok,true);
   const again=(await claim()).rows[0];assert.ok(again);assert.ok(again.revision>p.revision,'concurrent event was not lost');
   await db.exec("update prepared_price_export_profiles set lease_expires_at='epoch'");
-  assert.ok((await claim()).rows[0],'a crashed tick can be reclaimed');
+  const reclaimed=(await claim()).rows[0];assert.ok(reclaimed,'a crashed tick can be reclaimed');
+  await db.exec("update prepared_price_export_profiles set revision=revision+1");
+  await db.query('select finish_prepared_price_profile($1,$2,$3,$4)',[reclaimed.id,reclaimed.lease_token,reclaimed.revision,'PREPARED_PRICE_REFRESH_FAILED']);
+  // A failing profile must yield even if its source changes during the attempt.
+  assert.equal((await claim()).rows.length,0,'failed profiles back off rather than monopolize the queue');
   for(const name of ['get_prepared_price_list_export_version(uuid,uuid)','admit_prepared_price_list_export(uuid,uuid,text,text,jsonb,text,text,boolean,text,text)','claim_prepared_price_profile()']){
    const r=(await db.query("select has_function_privilege('anon',$1,'execute') a,has_function_privilege('authenticated',$1,'execute') b,has_function_privilege('service_role',$1,'execute') s",[name])).rows[0];
    assert.deepEqual(r,{a:false,b:false,s:true});
@@ -139,4 +145,19 @@ test('prepared portal version uses only effective account pricing; legacy work r
  assert.notDeepEqual(v(),preparedPortalPriceVersionInput('v',{...context,customerId:'other'}));
  assert.equal(priceListVersionRpc({versionContract:'publication-v1'}),'get_prepared_price_list_export_version');
  assert.equal(priceListVersionRpc({}),'get_admin_price_list_export_version');
+});
+
+
+test('bulk legacy price writes advance each affected brand revision once and queue its prepared file',async()=>{
+ const db=await fixture();try{
+  await admit(db);
+  const revision=async()=>(await db.query('select source_revision::text r from supplier_price_source_versions where organization_id=$1 and brand_id=$2',[org,brand])).rows[0]?.r;
+  await db.query("insert into supplier_prices(id,organization_id,supplier_id,brand_id,product_code,buy_price,currency,is_active)select md5(i::text)::uuid,$1,$2,$3,'P'||i,i,'EUR',true from generate_series(1,500)i",[org,supplier,brand]);
+  assert.equal(await revision(),'1');
+  await db.query('update supplier_prices set buy_price=buy_price+1 where organization_id=$1 and brand_id=$2',[org,brand]);
+  assert.equal(await revision(),'2');
+  await db.query('delete from supplier_prices where organization_id=$1 and brand_id=$2',[org,brand]);
+  assert.equal(await revision(),'3');
+  assert.equal((await db.query('select count(*) n from prepared_price_export_profiles where next_check_at<=now()')).rows[0].n,1);
+ }finally{await db.close();}
 });
