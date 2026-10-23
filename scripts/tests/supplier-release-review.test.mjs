@@ -148,3 +148,20 @@ test('Problem detail rejects transport failure and malformed rows',async()=>{
  const unknown=releaseReviewMessage({...r,errorMessage:'SECRET SQL url'},true);
  assert.doesNotMatch(unknown,/SECRET|SQL|url/);
  });
+
+test('v2 historical-only matches remain visible and cannot block a clear audit',()=>{
+ const parsed=parseReleaseAudit(audit({policy:'cross-brand-v2',review_required:false,brands:[],historical_brands:audit().brands}),brand);
+ assert.equal(parsed.reviewRequired,false);assert.equal(parsed.historicalBrands[0].matches,5000);
+ assert.equal(releaseReviewState({...row,audit:parsed}),'awaiting_publication');
+ for(const tr of [true,false]){
+  const html=renderToStaticMarkup(createElement(SupplierReleaseReviewCard,{rows:[{...row,audit:parsed}],tr,onDetails:()=>{}}));
+  assert.match(html,tr?/yayını engellemez/:/do not block publication/);
+  assert.match(html,/Mahle/);assert.ok(!html.includes('mark-badge--completed'));
+ }
+});
+test('v2 rejects missing/malformed historical evidence and still detects strong current matches',()=>{
+ for(const historical_brands of [undefined,null,{},Array(11).fill(audit().brands[0]),[{...audit().brands[0],matching_codes:5001}]]){
+  assert.equal(parseReleaseAudit(audit({policy:'cross-brand-v2',historical_brands}),brand),null);
+ }
+ assert.equal(parseReleaseAudit(audit({policy:'cross-brand-v2',review_required:false,historical_brands:[]}),brand).reviewRequired,true);
+});

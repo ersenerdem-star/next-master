@@ -44,13 +44,17 @@ export function SupplierReleaseReviewCard({rows,tr,onDetails,onIssues,actionsEna
       </div> : null}
       {!row.audit?.checked && state!=='processing_interrupted' && state!=='previous_publication' ? <span>{tr?'Marka karşılaştırması henüz doğrulanmadı.':'Brand comparison has not yet been verified.'}</span> : null}
       {row.errorCode ? <strong className="error-text">{row.errorCode}</strong> : null}
-      {row.errorMessage || row.audit?.brands.length ? <details className="supplier-release-technical-details">
+      {row.errorMessage || row.audit?.brands.length || row.audit?.historicalBrands?.length ? <details className="supplier-release-technical-details">
         <summary>{tr?'Teknik ayrıntılar':'Technical details'}</summary>
         {row.errorMessage ? <span className="operations-subtle">{row.errorMessage}</span> : null}
         <span className="operations-subtle">{tr?'Kayıt kimliği':'Release ID'}: {row.id}</span>
         {row.audit?.brands.length ? <div className="table-wrap"><table className="data-table"><thead><tr>
           <th>{tr?'Örtüşen marka':'Matching brand'}</th><th>{tr?'Farklı kod':'Distinct codes'}</th><th>%</th><th>{tr?'Örnek kodlar':'Sample codes'}</th>
         </tr></thead><tbody>{row.audit.brands.map(b=><tr key={b.id}><td>{b.name}</td><td>{b.matches.toLocaleString()}</td><td>{b.percent}%</td><td>{b.samples.join(', ')}</td></tr>)}</tbody></table></div> : null}
+        {row.audit?.historicalBrands?.length ? <div>
+          <p>{tr?'Kaynağı doğrulanmamış eski katalog eşleşmeleri — yayını engellemez.':'Historical catalog matches without verified sources — do not block publication.'}</p>
+          <ul>{row.audit.historicalBrands.map(b=><li key={b.id}>{b.name}: {b.matches.toLocaleString(tr?'tr-TR':'en-US')} ({b.percent}%) · {b.samples.join(', ')}</li>)}</ul>
+        </div> : null}
       </details> : null}
       {state==='rejected' ? <p>{tr?'Doğru marka ve düzeltilmiş dosyayla yeni yükleme başlatın. Mevcut fiyatlar bu kararla değiştirilmedi.':'Start a new upload with the correct brand and corrected file. This decision did not change existing prices.'}</p> : null}
       {state==='review_required' || state==='unverified' ? <Button variant="secondary" onClick={()=>onDetails(releaseReviewMessage(row,tr))}>{tr?'Uyarıyı aç':'Show warning'}</Button> : null}
