@@ -164,6 +164,35 @@ successful page/application packages. Per-source request delays are unchanged.
 
 ## All-brand engine rollout — 2026-10-20
 
+### Recovery of stopped catalog engines — 2026-10-23
+
+The owner requested sequential recovery of stopped engines. Resume the original
+fenced job and its checkpoints only after its exact source is readable; preserve
+prior observations, publication pointers and current canonical facts. Access
+denials are not retryable product absence and must not be bypassed. Completed
+checks with source gaps are not failed jobs to restart from zero.
+
+Delphi's already registered `delphi_official_catalog` now uses the manufacturer's
+own public `/partscatalogapi/v1/emeacatalog/searchpartnumber` POST contract, observed
+in the public catalogue application. Bound responses to 25 candidates and 4 MiB,
+require one whitespace-exact article with supplier id 89 and manufacturer DELPHI,
+and retain meaningful punctuation. Do not use cookies, credentials, CAPTCHA
+registration lookup, search alternatives or another manufacturer's product.
+Shared conservative TecDoc mapping and explicit same-manufacturer lifecycle
+evidence apply. Missing/unsupported replacement or discontinued signals never
+become an active-production declaration; no images, net/packaging weight, prices,
+origin or tariff are inferred. Manufacturer URL remains inspectable provenance.
+
+The legacy Elring full-fitment operator runner is preserved in this checkout with
+its verified complete-vehicle source collector, bounded request pacing, immutable
+cache fingerprints, live-process lock, shared canonical write lease, current
+server approval checks, latency guard and independent final reread. Its existing
+approved run/cache remains in `/Users/ersen/Developer/next-master/artifacts/elring`.
+Production credentials can be passed only in the child environment without a new
+runtime credential file. This operator process depends on the local host; it is
+not the cloud brand scheduler. A stale running label alone is not proof of a
+live operator process or completed fitment.
+
 The Product Decision Owner requested completion of existing upload/enrichment
 jobs followed by an official-source engine for every uncovered brand. Reuse
 shared family connectors with a separate exact brand identity; do not make a

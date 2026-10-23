@@ -729,6 +729,14 @@ export async function fetchTecAllianceSupplierCatalogFields(brandName:string,pro
     vehicle_model:detail.vehicle_model,weight_kg:officialGrossWeightKg([...(matches[0].articleCriteria||[]),...(matches[0].logisticsCriteria||[])])}};
 }
 
+// Same conservative field boundary for manufacturer-hosted TecDoc responses.
+// No availability, net/packaging weights, images or lifecycle defaults become metadata.
+export function manufacturerTecDocFields(article:TecAllianceApiArticle,brandName:string){
+ const detail=resolveTecAllianceArticle(article,null,brandName);
+ return {description:detail.description,ean:detail.ean,oem_no:detail.oem_no,vehicle_model:detail.vehicle_model,
+  weight_kg:officialGrossWeightKg([...(article.articleCriteria||[]),...(article.articleLogisticsCriteria||[])])};
+}
+
 function resolveTecAllianceArticle(article: TecAllianceApiArticle, current: CatalogRow | null, brandName: string): TecAllianceResolvedItem {
   const productCode = normalizeCatalogDisplayCode(article.articleNumber || current?.product_code || "", brandName);
   const criteria = article.articleCriteria || [];

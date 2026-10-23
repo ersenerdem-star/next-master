@@ -1,0 +1,97 @@
+[
+  {
+    "dataSupplierId": 89,
+    "articleNumber": "25372484-12B1",
+    "mfrId": 1400,
+    "mfrName": "DELPHI",
+    "misc": {
+      "articleStatusId": 1,
+      "articleStatusDescription": "Normal",
+      "articleStatusValidFromDate": 20100716,
+      "quantityPerPackage": 1,
+      "quantityPerPartPerPackage": 1,
+      "isSelfServicePacking": false,
+      "hasMandatoryMaterialCertification": false,
+      "isRemanufacturedPart": false,
+      "isAccessory": false,
+      "batchSize1": 0,
+      "batchSize2": 0
+    },
+    "genericArticles": [
+      {
+        "genericArticleId": 3946,
+        "genericArticleDescription": "Sensor, camshaft position",
+        "assemblyGroupId": 149,
+        "assemblyGroupNodeId": 149,
+        "assemblyGroupName": "Mixture Formation",
+        "legacyArticleId": 1488141792,
+        "linkageTargetTypes": [
+          "V",
+          "O",
+          "M"
+        ]
+      }
+    ],
+    "articleText": [],
+    "replacesArticles": [],
+    "replacedByArticles": [],
+    "articleCriteria": [
+      {
+        "criteriaId": 636,
+        "criteriaDescription": "Number of pins",
+        "criteriaAbbrDescription": "Number of pins",
+        "criteriaUnitDescription": "-pin connector",
+        "criteriaType": "N",
+        "rawValue": "3",
+        "formattedValue": "3",
+        "immediateDisplay": true,
+        "isMandatory": false,
+        "isInterval": false
+      }
+    ],
+    "linkages": [],
+    "partsList": [],
+    "hasPartsListParent": false,
+    "accessoryList": [],
+    "hasAccessoryListParent": false,
+    "pdfs": [
+      {
+        "url": "https://digital-assets.tecalliance.services/pdf/f455ca47134ca76171ef4e6b53523d7b39fd4b0f.pdf?response-content-disposition=inline%3Bfilename%3DD_SENSORS_PP_EN.PDF",
+        "fileName": "D_SENSORS_PP_EN.PDF",
+        "typeDescription": "Article Picture",
+        "headerDescription": "Brochure",
+        "sortNumber": 2,
+        "assetSource": "article"
+      }
+    ],
+    "images": [
+      {
+        "imageURL50": "https://digital-assets.tecalliance.services/images/50/cfb417ac879d8c354631c3dae18bc7d4dbb8e609.jpg",
+        "imageURL100": "https://digital-assets.tecalliance.services/images/100/cfb417ac879d8c354631c3dae18bc7d4dbb8e609.jpg",
+        "imageURL200": "https://digital-assets.tecalliance.services/images/200/cfb417ac879d8c354631c3dae18bc7d4dbb8e609.jpg",
+        "imageURL400": "https://digital-assets.tecalliance.services/images/400/cfb417ac879d8c354631c3dae18bc7d4dbb8e609.jpg",
+        "imageURL800": "https://digital-assets.tecalliance.services/images/800/cfb417ac879d8c354631c3dae18bc7d4dbb8e609.jpg",
+        "imageURL1600": "https://digital-assets.tecalliance.services/images/1600/cfb417ac879d8c354631c3dae18bc7d4dbb8e609.jpg",
+        "imageURL3200": "https://digital-assets.tecalliance.services/images/3200/cfb417ac879d8c354631c3dae18bc7d4dbb8e609.jpg",
+        "fileName": "25372484.JPG",
+        "typeDescription": "Article Picture",
+        "typeKey": 1,
+        "headerDescription": "Picture",
+        "headerKey": 5,
+        "sortNumber": 1,
+        "assetSource": "article"
+      }
+    ],
+    "comparableNumbers": [],
+    "searchQueryMatches": [
+      {
+        "matchType": "ArticleNumber",
+        "description": "Article Number",
+        "match": "25372484-12B1"
+      }
+    ],
+    "links": [],
+    "totalLinkages": 0,
+    "createdOn": "2024-09-17T00:00:00Z"
+  }
+]

@@ -1,4 +1,5 @@
 import {fetchDensoSupplierCatalogFields} from './denso-official-provider.mjs';
+import {fetchDelphiOfficialFields} from './delphi-official-provider.mts';
 import {fetchSkfSupplierCatalogFields} from './skf-official-provider.mjs';
 import {createHash} from 'node:crypto';
 import {fetchZfSupplierCatalogFields} from './zf-aftermarket-sync.mts';
@@ -13,6 +14,7 @@ import {catalogLifecycleReview} from './catalog-completion-review.mjs';
 export function supplierOfficialProvider(brand:string){
  const key=normalizeBrandKey(brand);
  if(key==='denso')return {key:'denso_official',fetch:fetchDensoSupplierCatalogFields};
+ if(key==='delphi')return {key:'delphi_official_catalog',fetch:fetchDelphiOfficialFields};
  if(key==='skf')return {key:'skf_automotive_official',fetch:fetchSkfSupplierCatalogFields};
  if(['sachs','lemforder','zf','trw','boge','wabco','lemfoerder'].includes(key))return {key:'zf',fetch:(code:string)=>fetchZfSupplierCatalogFields(brand,code)};
  if(key==='bosch')return {key:'bosch',fetch:fetchBoschSupplierCatalogFields};
@@ -24,7 +26,7 @@ export function supplierOfficialProvider(brand:string){
 export function safeSupplierOfficialObservation(value:any,code:string,brandId:string){
  if(value?.code!==exactCatalogCode(code)||typeof value.sourceUrl!=='string')throw Error('OFFICIAL_OBSERVATION_IDENTITY_INVALID');
  const u=new URL(value.sourceUrl);
- if(u.protocol!=='https:'||!['aftermarket.zf.com','ps.emea.dxtservice.com','www.mann-filter.com','web.tecalliance.net','www.denso-am.eu','automotive.skf.com','vehiclelifetimesolutions.schaeffler.com'].includes(u.hostname)||u.username||u.password)throw Error('OFFICIAL_OBSERVATION_SOURCE_INVALID');
+ if(u.protocol!=='https:'||!['aftermarket.zf.com','ps.emea.dxtservice.com','www.mann-filter.com','web.tecalliance.net','www.denso-am.eu','automotive.skf.com','vehiclelifetimesolutions.schaeffler.com','www.delphiautoparts.com'].includes(u.hostname)||u.username||u.password)throw Error('OFFICIAL_OBSERVATION_SOURCE_INVALID');
  const fields=Object.fromEntries(CATALOG_FIELDS.filter(k=>value.fields?.[k]!=null).map(k=>[k,value.fields[k]]));
  const lifecycle=catalogLifecycleReview(value);
  return {fields,evidence:{authority:'official',code:exactCatalogCode(code),brandId,sourceUrl:u.href,
