@@ -13,8 +13,9 @@ export default async (req: Request, _context: Context) => {
 
     const body = await readJson<{ brandName?: string; refreshExisting?: boolean }>(req);
     const brandName = String(body.brandName || "").trim();
-    if (brandName.toLowerCase() !== "kolbenschmidt") {
-      return json({ error: "This bounded background import is only enabled for Kolbenschmidt." }, 400);
+    const requestedBrand = canonicalBackgroundBrand(brandName);
+    if (!requestedBrand) {
+      return json({ error: "This background import is enabled for the selected catalog brand lanes only." }, 400);
     }
     const refreshExisting = body.refreshExisting === true;
     // Spareto currently caps this listing at 48 rows even when a larger value is requested.
@@ -35,7 +36,7 @@ export default async (req: Request, _context: Context) => {
             supabaseUrl: caller.supabaseUrl,
             serviceRoleKey: caller.serviceRoleKey,
             organizationId: caller.profile.organization_id,
-            brandName: "Kolbenschmidt",
+            brandName: requestedBrand,
             refreshExisting: false,
             onlyNew: !refreshExisting,
             concurrency: 24,
@@ -71,14 +72,14 @@ export default async (req: Request, _context: Context) => {
       ok: true,
       mode: "background",
       refreshExisting,
-      targetBrandName: "Kolbenschmidt",
+      targetBrandName: requestedBrand,
       listingLastPage: lastPage,
       resolvedRows,
       errorRows,
       replacementRows,
     });
   } catch (error) {
-    return json({ error: sanitizeUserFacingError(error, "Kolbenschmidt bulk import failed") }, 500);
+    return json({ error: sanitizeUserFacingError(error, `${brandName} bulk import failed`) }, 500);
   }
 };
 
@@ -89,4 +90,15 @@ export const config: Config = {
 
 function wait(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function canonicalBackgroundBrand(value: string) {
+  const key = value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const brands: Record<string, string> = {
+    borgwarner: "BorgWarner", borgwarnerberu: "BorgWarner (BERU)", borgwarnerkkk: "BorgWarner (KKK)", borgwarnerschwitzer: "BorgWarner (Schwitzer)",
+    beru: "Beru", kkk: "KKK", schwitzer: "Schwitzer", hella: "Hella", hengst: "Hengst", meyle: "Meyle", nissens: "Nissens", nrf: "NRF",
+    bf: "BF", pierburg: "Pierburg", ae: "AE", fpdiesel: "FP Diesel", trwenginecomponents: "TRW Engine Components",
+    payen: "Payen", clevite: "Clevite", metalleve: "Metal Leve", beral: "Beral", jurid: "Jurid", ferodo: "Ferodo", kolbenschmidt: "Kolbenschmidt",
+  };
+  return brands[key] || null;
 }
