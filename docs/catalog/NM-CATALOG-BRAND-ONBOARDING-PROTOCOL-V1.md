@@ -127,6 +127,13 @@ or staging deployments. Verify actual dispatcher/worker outcomes and database
 cursor/application progress after deployment; cron registration alone is not
 proof of execution.
 
+A completed/reviewed worker immediately requests one next eligible signed job
+through the same admission and fair-selection functions. The existing database
+claim still permits only one live organization worker; duplicate invocations,
+paused jobs and failed jobs cannot recursively dispatch themselves. The minute
+dispatcher remains the recovery watchdog, not a required idle interval between
+successful page/application packages. Per-source request delays are unchanged.
+
 ## All-brand engine rollout — 2026-10-20
 
 The Product Decision Owner requested completion of existing upload/enrichment

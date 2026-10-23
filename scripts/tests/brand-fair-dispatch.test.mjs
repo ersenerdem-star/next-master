@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {dispatchCatalogBrand} from '../../netlify/functions/_shared/catalog/brand-dispatch-worker.mts';
+import {dispatchCatalogBrand,continueCatalogBrand} from '../../netlify/functions/_shared/catalog/brand-dispatch-worker.mts';
 import {requireBrandDispatch} from '../../netlify/functions/_shared/catalog/brand-dispatch.mts';
 const target={portal:'https://portal.next-master.com',key:'test-only-key'},job={id:crypto.randomUUID(),organization_id:crypto.randomUUID(),status:'queued'};
 test('a selected job is signed for its exact organization and leaves claiming to the worker',async()=>{
@@ -17,4 +17,10 @@ test('a busy organization or an empty queue causes no admission or network call'
 test('database and HTTP dispatch failures are reported without fabricating a successful run',async()=>{
  await assert.rejects(dispatchCatalogBrand({db:{rpc:async(name)=>name==='admit_catalog_wilmink_application'?{data:null}:{error:{message:'unavailable'}}},target,send:async()=>{throw Error('must not send');}}),/SELECTION_FAILED/);
  await assert.rejects(dispatchCatalogBrand({db:{rpc:async()=>({data:job})},target,send:async()=>new Response(null,{status:403})}),/HTTP_403/);
+});
+test('completed work chains exactly one signed selection; a duplicate, pause or failure never self-retries',async()=>{
+ let sent=0;const input={db:{rpc:async(name)=>({data:name==='next_catalog_brand_dispatch'?job:null})},target,send:async()=>{sent++;return new Response(null,{status:202});}};
+ assert.equal((await continueCatalogBrand({...input,result:{status:'reviewed'}})).status,'dispatched');assert.equal(sent,1);
+ for(const result of [{claimed:false},{status:'paused'},{status:'failed'},{status:'running'}])assert.equal((await continueCatalogBrand({...input,result})).status,'continuation_not_ready');
+ assert.equal(sent,1);
 });
