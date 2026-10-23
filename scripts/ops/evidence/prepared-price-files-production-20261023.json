@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-23",
+  "scope": "Version-bound private prepared price files; unchanged price calculations and publication pointers",
+  "deployment": {
+    "id": "6adb8e06dddcd44db89092fe",
+    "applicationSource": "fcda1e4ad086c6459150f4705da6c878766dd673",
+    "followupDatabaseSource": "22593a89",
+    "workerRegion": "eu-west-1",
+    "workerMemoryMB": 1024,
+    "newPaidService": false
+  },
+  "localAcceptance": { "passed": 52, "failed": 0 },
+  "staging": {
+    "readyMillionRowResponse": { "jobId": "20ffb058-717a-4c74-b101-eeab9ec4d0b7", "rows": 999997, "cached": true, "requestMs": 4841, "measurement": "Authorized ready-file API response; not full file transfer" },
+    "concurrentAdmission": { "requests": 8, "http200": 8, "uniqueJobs": 1, "snapshots": 1, "jobId": "b283bb5a-af5b-43c7-8d00-9a300068b0a8", "requestWallMs": 3920 },
+    "automaticPriceRefresh": { "syntheticBrand": "PERF Prepared Files 20261023", "sourceChangedAt": "2026-10-23T16:34:12.048474Z", "jobCreatedAt": "2026-10-23T16:35:07.306031Z", "fileReadyAt": "2026-10-23T16:35:10.318Z", "downloadRequested": false, "jobId": "2fd1ee92-c7e7-4649-b5ea-bdd02a52ff18", "workbookPricesVerified": [14.04,23.4,35.1], "workbookSha256": "82860f90e6ec9d090306667899db84dc102269d444e8274588a051ac93a379c0" },
+    "expiredAccessReceipt": { "oldJobId": "e6c29322-f789-4eab-a242-7c3cfa4a9fc6", "newJobId": "164fc47a-2ee7-4c28-984a-6833225984ba", "samePrivateObject": true, "cached": true, "requestMs": 3382, "originalExpiryRestored": true },
+    "sessionNoopRequeueAssertion": "passed on actual staging invite"
+  },
+  "productionAuthenticatedDownloads": [
+    { "audience": "admin", "brand": "VAG", "jobId": "01c9e563-d9dc-4669-9774-9079a77c8cde", "rows": 1615023, "bytes": 40511355, "startedAt": null, "newSnapshots": 0, "sha256": "1cacdf77b16170a0a61f6dddb46519563d53420ae46f952fcf12c5be3579fb30", "sameAsPreviouslyFullyParsedFile": true, "nativeSavePicker": true, "savedQaFile": "admin-prepared-vag-20261023.xlsx" },
+    { "audience": "customer", "brand": "Bosch", "jobId": "c2ad5987-4128-49ff-a69a-b31fe1a9bb20", "rows": 46773, "bytes": 1289517, "startedAt": null, "cachedAuditEvent": true, "sha256": "f45b103ffbba7d165ebe453fd435d2b2a5b4ff1ea520ae7649e4feaf1db9c8f3", "sameAsPreviouslyFullyParsedFile": true, "nativeSavePicker": true, "savedQaFile": "portal-prepared-bosch-20261023.xlsx" }
+  ],
+  "productionPointerIntegrity": { "count": 25, "digestBefore": "4eaf8d8b33082e2f235687a3f8c503e1", "digestAfter": "4eaf8d8b33082e2f235687a3f8c503e1", "recipe": "md5(string_agg(organization_id || ':' || supplier_id || ':' || brand_id || ':' || publication_id || ':' || release_id, ',' order by organization_id,supplier_id,brand_id))" },
+  "initialProfileReconciliationObservation": { "registered": 26, "checked": 4, "errors": 0, "remaining": "continues through deployed scheduler" },
+  "limitations": ["New, never-requested pricing profiles need first preparation.", "Descriptions in prepared price files are snapshots; normal catalog exports retain freshness.", "Ready response timings are distinct from full browser transfer timings.", "Full-million staging ingestion completed in 12m03s after source verification, exceeding the proposed ten-minute target.", "Repository-wide secret scanner reports three pre-existing local Docker password-template false positives; no suppression added."]
+}

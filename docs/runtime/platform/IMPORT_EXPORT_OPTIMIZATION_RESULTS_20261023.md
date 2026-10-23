@@ -1,6 +1,6 @@
 # Import/export optimization results — 23 October 2026
 
-This implements the first measured changes from [the performance review](IMPORT_EXPORT_PERFORMANCE_REVIEW_20261023.md). Work was performed in `/Users/ersen/.codex/worktrees/supplier-catalog-enrichment/next-master`, branch `codex/denso-catalog-resume`; the original dirty checkout was preserved. This is a configuration and measurement change, with unchanged pricing/publication rules and durable workflow semantics.
+This implements the first measured changes from [the performance review](IMPORT_EXPORT_PERFORMANCE_REVIEW_20261023.md). Work was performed in `/Users/ersen/.codex/worktrees/supplier-catalog-enrichment/next-master`, branch `codex/denso-catalog-resume`; the original dirty checkout was preserved. This includes measured configuration changes and prepared-file lifecycle changes, with unchanged price calculations, explicit publication rules and durable ingestion workflow semantics.
 
 ## Upload: compare first, then activate
 
@@ -79,4 +79,41 @@ Previously requested admin and customer profiles are durable. Publication/pricin
 
 No additional hosting service, plan, memory allocation or database tier is introduced. A ready download still includes authorization/signing and network transfer; a universal two-second browser guarantee is not asserted.
 
-Rollout evidence for this phase: 49 local contract, authorization, cache, validity-boundary, continuation and recovery checks passed. All three migrations applied to staging; its 999,997-row source-version check took 50.256 ms. Staging runtime and production rollout verification are recorded after their respective gates, not inferred from these local results.
+Rollout evidence for this phase: 52 local contract, authorization, cache, validity-boundary, bulk revision, event-fairness, continuation and recovery checks passed. All six migrations applied to staging and production. The staging 999,997-row source-version check took 50.256 ms. Runtime evidence follows; it is distinct from local tests.
+
+
+### Prepared-file runtime acceptance
+
+Staging deployment `6adb8c35b7a04b3f3f4ca74a` runs UI/functions source `fcda1e4a`. Exact-target automatic schedule metadata confirms the minute recovery/preparation tick. Its worker is EU-West-1 with 1,024 MB, as reported by the actual deployed function metadata; no resource increase was made.
+
+- A real QA-authenticated 999,997-row admin request adopted existing verified workbook `0296d1da-7e9e-420c-82be-a348b7f8dec9` as receipt `20ffb058-717a-4c74-b101-eeab9ec4d0b7`, already finalized and `cached:true`. The request took 4.841 seconds including authorization/admission. **This is a ready-file API response measurement, not full file transfer time.**
+- Eight parallel, real authorized API requests for one isolated three-row/margin profile returned HTTP 200 and the same job `b283bb5a-af5b-43c7-8d00-9a300068b0a8`; one snapshot was created. Combined request wall time was 3.920 seconds. The actual saved workbook read back prices 11.70, 23.40 and 35.10 EUR.
+- Only the named staging fixture supplier/brand `PERF Prepared Files 20261023` was changed: first buy price 10 → 12 EUR at 16:34:12.048 UTC. Without a download request or manual scheduler invocation, job `2fd1ee92-c7e7-4649-b5ea-bdd02a52ff18` was created at 16:35:07.306 and ready at 16:35:10.318, about 58.27 seconds after the change. Reading the actual new Excel verified 14.04, 23.40 and 35.10 EUR at the same 17% margin; SHA-256 `82860f90e6ec9d090306667899db84dc102269d444e8274588a051ac93a379c0`.
+- A second fixture profile was also prepared automatically. Its newly created access receipt `e6c29322-f789-4eab-a242-7c3cfa4a9fc6` was temporarily expired for testing. The real start API returned fresh finalized receipt `164fc47a-2ee7-4c28-984a-6833225984ba`, `cached:true`, in 3.382 seconds, referencing the exact same 6,146-byte private object. Original expiry was restored; no workbook was deleted or regenerated.
+- A multi-row legacy insert exposed an existing revision trigger bug: `DISTINCT` included volatile `clock_timestamp()`, so one scope could be inserted multiple times. The scoped fix uses statement-stable timestamps. A 500-row insert/update/delete regression verifies one revision per affected brand/statement; the actual staging fixture then inserted successfully.
+- Live portal session/default-card refreshes exposed no-op UPDATE events that repeatedly dirtied every profile. The follow-up migration compares actual relevant fields and selects never/least-recently checked profiles before ties on ID. Local regression and a real staging no-op session update verified zero requeues. Production reconciliation then advanced from Donaldson to Bosch, Corteco and Mercedes with unchanged revision 11, rather than repeatedly selecting one brand. Failure backoff remains fifteen minutes, including events arriving during a failed claim.
+
+### Production prepared-file proof
+
+Production deployment `6adb8e06dddcd44db89092fe` serves UI/functions source `fcda1e4ad086c6459150f4705da6c878766dd673`; the follow-up DB event/fairness migration is recorded in source `22593a89`. All four pre-existing client feature gates remain enabled. The worker is EU-West-1 / 1,024 MB; the site's other functions retain their region. Private server-only RPC grants were reread: anonymous and authenticated roles cannot execute admission, source-version or preparation-claim RPCs.
+
+The existing authenticated Chrome admin requested VAG and saved through the native picker as `admin-prepared-vag-20261023.xlsx`. New finalized receipt `01c9e563-d9dc-4669-9774-9079a77c8cde` was created/finalized at 16:48:58.462/16:48:58.463 UTC, with `started_at` null and **zero snapshots for this receipt**. It references the original immutable object. The actual saved file is 40,511,355 bytes / 1,615,023 rows and SHA-256 `1cacdf77b16170a0a61f6dddb46519563d53420ae46f952fcf12c5be3579fb30`, identical to the previously fully parsed workbook. No seven-minute generation was started by this download.
+
+The existing authenticated Ersen customer requested Bosch and saved `portal-prepared-bosch-20261023.xlsx` through the same native picker flow. Audit event 16:51:46.782 UTC records `cached:true`, job `c2ad5987-4128-49ff-a69a-b31fe1a9bb20`. Its `started_at` is null and creation/finalization were 16:51:46.354/16:51:46.355. The 1,289,517-byte / 46,773-row saved file is byte-identical to the prior fully verified customer workbook, SHA-256 `f45b103ffbba7d165ebe453fd435d2b2a5b4ff1ea520ae7649e4feaf1db9c8f3`. A different Bosch customer profile was independently prepared by the scheduler; it is not treated as the same customer pricing.
+
+At the post-release observation, 26 known profiles were registered, four had been reconciled and no profile errors were recorded. Initial preparation of the remaining profiles continues through the deployed scheduler. This is not a claim that every possible customer/brand/margin combination is already prepared. Production publication pointers remained 25; the same before/after digest recipe returned `4eaf8d8b33082e2f235687a3f8c503e1`. No production price publication, customer margin edit or DBOS reset was performed.
+
+Security advisors were reread after rollout. The three new metadata tables intentionally have default-deny RLS with no browser policies; direct browser grants are absent and only narrow server paths access them. The repository-wide secret scanner still flags three pre-existing local Docker test connection templates interpolating random passwords; none is introduced by these changes, and no scanner suppression or credential change was made.
+
+### Applied migration receipts
+
+MCP allocates hosted history versions when each migration is applied. Match these by name and SQL content; local CLI-generated filenames have different timestamps. Do not replay the create-table migrations blindly as pending solely because hosted timestamps differ.
+
+| Migration | Local filename timestamp | Staging history version | Production history version |
+| --- | --- | --- | --- |
+| prepared_price_list_artifact_versions | 20261023160816 | 20261023161751 | 20261023163919 |
+| prepared_price_list_admission_and_prewarm | 20261023160946 | 20261023161759 | 20261023163933 |
+| prepared_price_artifact_adoption_and_events | 20261023161916 | 20261023162125 | 20261023163938 |
+| prepared_price_prewarm_failure_backoff | 20261023162831 | 20261023162851 | 20261023163943 |
+| supplier_price_revision_distinct_scopes | 20261023162929 | 20261023163033 | 20261023163948 |
+| prepared_price_profile_event_fairness | 20261023164519 | 20261023164655 | 20261023164736 |
