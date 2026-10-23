@@ -5,11 +5,19 @@ import {parseReleaseAudit, type ReleaseReviewRow, type ReleaseIssueRow} from '..
 export type ReleaseReviewCursor={createdAt:string;id:string};
 export type ReleaseIssueCursor={sourceRowNumber:number;id:number};
 const uuid=(value:string)=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-export async function fetchSupplierReleaseReviewPage(cursor:ReleaseReviewCursor|null, signal:AbortSignal):Promise<{rows:ReleaseReviewRow[];next:ReleaseReviewCursor|null}> {
+export async function fetchSupplierReleaseReviewPage(cursor:ReleaseReviewCursor|null, signal:AbortSignal, filters:{brandSearch?:string;supplierId?:string;fromDate?:string;toDate?:string}={}):Promise<{rows:ReleaseReviewRow[];next:ReleaseReviewCursor|null}> {
   const org=await getCurrentOrgId();
   if(signal.aborted) throw new DOMException('Cancelled','AbortError');
-  let query=supabaseClient.from('supplier_price_releases').select('id,brand_id,supplier_id,status,created_at,updated_at,total_rows,processed_rows,accepted_rows,rejected_rows,warning_rows,conflict_rows,error_code,error_message,brand_identity_audit,brands(name),suppliers(name)')
+  let query=supabaseClient.from('supplier_price_releases').select(`id,brand_id,supplier_id,status,created_at,updated_at,total_rows,processed_rows,accepted_rows,rejected_rows,warning_rows,conflict_rows,error_code,error_message,brand_identity_audit,${filters.brandSearch?.trim()?'brands!inner(name)':'brands(name)'},suppliers(name)`)
     .eq('organization_id',org).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(26);
+  if(filters.brandSearch?.trim()) query=query.ilike('brands.name',`%${filters.brandSearch.trim().replace(/[\\%_]/g,'\\$&')}%`);
+  if(filters.supplierId){
+    if(!uuid(filters.supplierId)) throw new Error('Invalid supplier filter');
+    query=query.eq('supplier_id',filters.supplierId);
+  }
+  for(const date of [filters.fromDate,filters.toDate]) if(date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Invalid date filter');
+  if(filters.fromDate) query=query.gte('created_at',`${filters.fromDate}T00:00:00+03:00`);
+  if(filters.toDate) query=query.lte('created_at',`${filters.toDate}T23:59:59.999+03:00`);
   if(cursor){
     if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cursor.id)
       || !/^\d{4}-\d\d-\d\dT[0-9:.]+(?:Z|[+-]\d\d:\d\d)$/.test(cursor.createdAt)

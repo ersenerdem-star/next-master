@@ -332,7 +332,10 @@ export function OperationsStatusPage({onOpenSupplierPrices}:{onOpenSupplierPrice
             {showUploadArchive ? (locale === "tr" ? "Güncel yüklemelere dön" : "Back to current uploads") : (locale === "tr" ? "Yükleme arşivini aç" : "Open upload archive")}
           </Button>
         </div>
-        <SupplierReleaseReviewPanel key={showUploadArchive ? "archive" : "current"} locale={locale} showArchive={showUploadArchive} />
+        <details className="operations-secondary-details supplier-current-upload-details">
+          <summary><span>{showUploadArchive ? (locale === "tr" ? "Yükleme arşivi" : "Upload archive") : (locale === "tr" ? "Güncel tedarikçi yüklemeleri" : "Current supplier uploads")}</span><small>{locale === "tr" ? "Marka, tedarikçi ve tarihe göre süzmek için açın." : "Expand to filter by brand, supplier and date."}</small></summary>
+          <SupplierReleaseReviewPanel key={showUploadArchive ? "archive" : "current"} locale={locale} showArchive={showUploadArchive} filterable />
+        </details>
       </> : null}
       {!releaseReviewEnabled || showUploadArchive ? <SupplierLegacyHistory enabled={releaseReviewEnabled}
         title={t("dashboard.operationsStatus.legacyPipelineTitle")}

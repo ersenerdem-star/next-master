@@ -13480,3 +13480,10 @@ body {
   .purchase-planner-pages > span:first-child { flex-basis: 100%; }
   .purchase-plan-footer { bottom: -16px; }
 }
+
+.supplier-upload-filters { display: grid; grid-template-columns: minmax(180px, 1.5fr) minmax(160px, 1fr) repeat(2, minmax(140px, .8fr)) auto; align-items: end; gap: 12px; margin-bottom: 18px; }
+.supplier-upload-filters label { display: grid; gap: 6px; color: #53647c; font-size: 12px; font-weight: 700; min-width: 0; }
+.supplier-upload-filters input, .supplier-upload-filters select { width: 100%; min-width: 0; min-height: 38px; padding: 8px 10px; border: 1px solid #cfdbea; border-radius: 8px; background: #fff; color: #142b43; font: inherit; }
+.supplier-upload-filters p { grid-column: 1 / -1; }
+@media (max-width: 1100px) { .supplier-upload-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .supplier-upload-filters { grid-template-columns: 1fr; } }
