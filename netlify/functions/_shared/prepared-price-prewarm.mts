@@ -35,7 +35,7 @@ export async function runPreparedPricePrewarm(deps: {
 }
 
 export async function prewarmPreparedPriceFile(supabaseUrl: string, serviceRoleKey: string, dispatch: (jobId: string) => Promise<unknown>) {
-  const rpc = <T>(name: string, body: Record<string, unknown>) => sendJson<T>(`${supabaseUrl}/rest/v1/rpc/${name}`, {
+  const rpc = <T,>(name: string, body: Record<string, unknown>) => sendJson<T>(`${supabaseUrl}/rest/v1/rpc/${name}`, {
     method: "POST", headers: serviceRoleHeaders(serviceRoleKey), body: JSON.stringify(body), timeoutMs: 15_000,
   });
   return runPreparedPricePrewarm({
