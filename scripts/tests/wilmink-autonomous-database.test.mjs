@@ -35,6 +35,7 @@ async function supportReady(db){
 async function activate(db){
  await db.exec("update catalog_external_sources set metadata=metadata||'{\"approval_reference\":\"user-wilmink-support-elring-ina-continue-2026-10-22\"}'::jsonb where source_key='wilmink_elring_support_v1'");
  await db.exec(readFileSync(new URL('../../supabase/migrations/20261023114529_catalog_wilmink_autonomous_completion.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../supabase/migrations/20261023120415_catalog_wilmink_progress.sql',import.meta.url),'utf8'));
 }
 test('autonomous admission queues only sealed owner-approved packages, preserves facts and prices, and is idempotent',async()=>{const db=await setup();try{
  const {j,page,product}=await supportReady(db);const sealed=await rpc(db,'complete_catalog_wilmink_support',[org,j.id,j.lease_token,page,[product]]);
@@ -42,6 +43,7 @@ test('autonomous admission queues only sealed owner-approved packages, preserves
  assert.deepEqual((await db.query('select observation from catalog_brand_job_items where job_id=$1',[admitted.id])).rows[0].observation,product);
  const claim=await rpc(db,'claim_catalog_brand_job',[org,admitted.id]);await db.exec("update catalog_external_sources set metadata=metadata||'{\"automatic_apply\":false}'::jsonb where source_key='wilmink_elring_support_v1'");await assert.rejects(rpc(db,'apply_catalog_wilmink_automatic_item',[org,admitted.id,claim.lease_token,0]),/REVOKED/);await db.exec("update catalog_external_sources set metadata=metadata||'{\"automatic_apply\":true}'::jsonb where source_key='wilmink_elring_support_v1'");
  const applied=await rpc(db,'apply_catalog_wilmink_automatic_item',[org,admitted.id,claim.lease_token,0]);assert(applied.changes.oem_no.startsWith('OLD; '));
+ const progress=await rpc(db,'get_catalog_wilmink_application_progress',[org,'wilmink_elring_support_v1']);assert.equal(progress.updatedProducts,1);assert.equal(progress.pendingProducts,0);assert(progress.lastAppliedAt);assert.equal((await rpc(db,'get_catalog_wilmink_application_progress',[actor,'wilmink_elring_support_v1'])).updatedProducts,0);
  assert.deepEqual((await db.query('select description,origin,hs_code from catalog_products where brand_id=$1',[supportBrand])).rows[0],{description:'Owner description',origin:'TR',hs_code:'001234'});
  assert.equal((await db.query('select value::float from price_guard')).rows[0].value,99.25);
  assert.equal((await db.query("select manifest->'automatic_application'->>'policy' policy from catalog_brand_jobs where id=$1",[admitted.id])).rows[0].policy,'wilmink-missing-only.v1');
