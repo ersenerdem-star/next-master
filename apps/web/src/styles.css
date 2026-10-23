@@ -13492,3 +13492,7 @@ body {
 .catalog-job-progress h3 { margin: 0; }
 .catalog-job-progress p { color: #586e88; font-size: 12px; }
 .catalog-job-progress .error-text { color: #b42318; }
+.catalog-job-progress .catalog-enrichment-table { min-width: 980px; }
+.catalog-job-progress .catalog-enrichment-table th, .catalog-job-progress .catalog-enrichment-table td { white-space: normal; text-align: left; }
+.catalog-job-progress .catalog-enrichment-table td small { display: block; color: #66758b; }
+.catalog-job-progress .catalog-enrichment-table td:last-child { min-width: 130px; }
