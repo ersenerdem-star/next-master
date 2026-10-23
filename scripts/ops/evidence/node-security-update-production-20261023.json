@@ -1,0 +1,203 @@
+{
+  "observedAt": "2026-10-23T20:35:39.990567+00:00",
+  "status": "partial_provider_patch_confirmation_required",
+  "worktree": "/Users/ersen/.codex/worktrees/supplier-catalog-enrichment/next-master",
+  "branch": "codex/denso-catalog-resume",
+  "sourceCommit": "8a537ee35e3e2f4926041b400c73c3eac8f7dbd0",
+  "securityRelease": "https://nodejs.org/en/blog/vulnerability/october-2026-security-releases",
+  "securityMinimums": {
+    "node24": "24.22.1",
+    "node22": "22.23.4"
+  },
+  "local": {
+    "before": "24.15.0",
+    "installed": "24.22.1",
+    "nvmDefault": "24.22.1",
+    "checksumVerified": true,
+    "oldVersionsRetained": true,
+    "runningCollector": {
+      "pid": 59088,
+      "node": "24.22.1",
+      "stoppedAfterProcessed": 2407,
+      "observedProcessed": 3067,
+      "status": "running",
+      "checkpointPreserved": true
+    }
+  },
+  "workerImage": "node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205",
+  "surgicalReleaseCommits": [
+    {
+      "name": "supplier-production",
+      "base": "8f3fe51cd765e39c04868953c03ab762e31c0e61",
+      "commit": "a42ea3a8589fd49fe0ca9cec27a9ca44fe52b4d9",
+      "branch": "codex/node-security-supplier-production-20261023",
+      "files": [
+        "apps/engine/supplier-price-shadow/.nvmrc",
+        "apps/engine/supplier-price-shadow/Dockerfile",
+        "apps/engine/supplier-price-shadow/package-lock.json",
+        "apps/engine/supplier-price-shadow/package.json"
+      ]
+    },
+    {
+      "name": "supplier-staging",
+      "base": "b3d4f3c1bfc39cd0f315daeba11593c92ce51f9f",
+      "commit": "5f42b7ca8b694acd1444727dbce112cd585619f1",
+      "branch": "codex/node-security-supplier-staging-20261023",
+      "files": [
+        "apps/engine/supplier-price-shadow/.nvmrc",
+        "apps/engine/supplier-price-shadow/Dockerfile",
+        "apps/engine/supplier-price-shadow/package-lock.json",
+        "apps/engine/supplier-price-shadow/package.json"
+      ]
+    },
+    {
+      "name": "catalog",
+      "base": "3cfc09e7dcd8436727b1fe007dba6616505b611a",
+      "commit": "948a63ed4d8715e45a51a3a12d9c4f733eadd632",
+      "branch": "codex/node-security-catalog-20261023",
+      "files": [
+        "apps/engine/catalog-import/.nvmrc",
+        "apps/engine/catalog-import/Dockerfile",
+        "apps/engine/catalog-import/package-lock.json",
+        "apps/engine/catalog-import/package.json"
+      ]
+    }
+  ],
+  "render": [
+    {
+      "service": "next-master-supplier-price-production-worker",
+      "serviceId": "srv-db7ps1dg1s2s73be1ofg",
+      "deployId": "dep-dbds3p4s728c738b3i40",
+      "commit": "a42ea3a8589fd49fe0ca9cec27a9ca44fe52b4d9",
+      "node": "24.22.1",
+      "instance": "d5jb9",
+      "healthz": 200,
+      "readyz": 200,
+      "phase": "idle"
+    },
+    {
+      "service": "next-master-supplier-price-staging-worker",
+      "serviceId": "srv-db1m4vvavr4c73cjm1b0",
+      "deployId": "dep-dbds2kss728c738avuig",
+      "commit": "5f42b7ca8b694acd1444727dbce112cd585619f1",
+      "node": "24.22.1",
+      "instance": "rk9ll",
+      "readyz": 200,
+      "phase": "idle"
+    },
+    {
+      "service": "next-master-catalog-import-production",
+      "serviceId": "srv-db7ptlnavr4c73953c2g",
+      "deployId": "dep-dbds3s4ipgvc739uq9gg",
+      "commit": "948a63ed4d8715e45a51a3a12d9c4f733eadd632",
+      "node": "24.22.1",
+      "openssl": "3.5.9",
+      "instance": "rrv45",
+      "state": "live"
+    },
+    {
+      "service": "next-master-catalog-import-staging",
+      "serviceId": "srv-db7bt5dg1s2s739u744g",
+      "deployId": "dep-dbds35gae00c73aqm0rg",
+      "commit": "948a63ed4d8715e45a51a3a12d9c4f733eadd632",
+      "node": "24.22.1",
+      "instance": "2qf6z",
+      "state": "live"
+    }
+  ],
+  "netlify": {
+    "finalDeploy": {
+      "id": "6adbc4bdee882938bfeebddf",
+      "state": "ready",
+      "context": "production",
+      "published": "2026-10-23T20:34:35.587Z",
+      "functions": 75,
+      "runtimes": [
+        "nodejs24.x"
+      ],
+      "regions": [
+        "us-east-1",
+        "eu-west-1"
+      ]
+    },
+    "publicVersion": {
+      "appId": "shared",
+      "appVersion": "0.1.0",
+      "buildVersion": "6adbc4bdee882938bfeebddf",
+      "gitSha": "8a537ee35e3e2f4926041b400c73c3eac8f7dbd0",
+      "deployId": "6adbc4bdee882938bfeebddf",
+      "builtAt": "2026-10-23T20:34:16.703Z",
+      "apiContractVersion": "2026-06-30",
+      "minSupportedVersion": "",
+      "forceReload": false,
+      "features": {
+        "supplierReleaseReview": true,
+        "catalogEnrichment": true,
+        "verifiedSupplierUpload": true,
+        "supplierReleaseActions": true
+      },
+      "environment": "production",
+      "context": "production",
+      "branch": "codex/denso-catalog-resume",
+      "commit": "8a537ee35e3e2f4926041b400c73c3eac8f7dbd0",
+      "deployUrl": "https://6adbc4bdee882938bfeebddf--ersen-quote-desk.netlify.app",
+      "siteUrl": "https://portal.next-master.com"
+    },
+    "buildNode": "24.22.1",
+    "configuredRuntime": "nodejs24.x",
+    "measuredManagedNode24": "24.21.0",
+    "node24EvidenceDeploy": "6adbc23fb2b30043608a548e",
+    "managed22ProbeUs": {
+      "probe": "us",
+      "node": "22.23.2",
+      "openssl": "3.5.7"
+    },
+    "managed22ProbeDub": {
+      "probe": "dub",
+      "node": "22.23.2",
+      "openssl": "3.5.7"
+    },
+    "managed22ProbeDeploy": "6adbc4518c04401b94236c28",
+    "patchStatus": "Unconfirmed: both supported managed runtime branches report versions below the upstream security release; no provider backport attestation obtained. Node 22 was tested only on preview aliases; production remains Node 24. Build version is not runtime proof.",
+    "temporaryAliasesRetired": true,
+    "applicationRuntimeLoggingRemoved": true
+  },
+  "tests": {
+    "node24Focused": 65,
+    "node22Compatibility": 11,
+    "linuxAmd64DuckdbSmoke": [
+      "24.22.1 supplier image",
+      "24.22.1 catalog image",
+      "22.23.4 compatibility image"
+    ],
+    "webBuild": "passed; existing chunk warning retained",
+    "coreGuardian": {
+      "critical": 0,
+      "warning": 0
+    },
+    "linuxDuckdbFunctionBundleBytes": 28193506
+  },
+  "commercialBoundary": {
+    "pricePointers": 28,
+    "latestPointerUpdate": "2026-10-23T19:17:07.724049Z",
+    "changedDuringNodeUpdate": 0,
+    "noOrderOrPricePublicationMutation": true
+  },
+  "unchangedBoundaries": [
+    "source identities and grants",
+    "catalog checkpoints",
+    "tenant authorization",
+    "TLS certificate verification",
+    "DBOS durable versions and history",
+    "production admission gates"
+  ],
+  "supportRequest": {
+    "sent": false,
+    "subject": "Security patch confirmation needed for managed Node.js runtimes after 21 October 2026 release",
+    "body": "Please confirm the active managed Node.js security patch level for site 08d7af8d-484c-4dba-a069-234e52dcfd6c (portal.next-master.com). On 2026-10-23, a deployed nodejs24.x function reported process.versions.node 24.21.0. Separate nodejs22.x probes in us-east-1 and dub/eu-west-1 both reported 22.23.2 with OpenSSL 3.5.7. Upstream security releases are 24.22.1 and 22.23.4, addressing CVE-2026-111497, CVE-2026-105482, CVE-2026-105483, CVE-2026-106069 and related updates including compromised eMudhra CA trust. Our build and self-managed workers are updated to 24.22.1. Please provide evidence of applicable backported fixes if runtime version strings intentionally remain older; otherwise expedite the patched managed runtime rollout and advise how to force adoption safely. No credentials or customer data are included."
+  },
+  "screenshots": [
+    "artifacts/batch-optimization-20261023/node-security-production-supplier.jpg",
+    "artifacts/batch-optimization-20261023/node-security-production-catalog.jpg"
+  ]
+}
