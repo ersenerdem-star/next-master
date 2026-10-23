@@ -2,7 +2,7 @@ import { buildDiscontinuedWarning, normalizeCatalogLifecycleStatus } from "../..
 import { readSupplierCommercialTerms, type SupplierCommercialTerms } from "../../domain/shared/supplierCommercialTerms";
 import { normalizeOrderQuantity } from "../../domain/shared/orderQuantityRules";
 import { markupMoney } from "../../../../../shared/order-money.mjs";
-import { canonicalizeBrandName, normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
+import { canonicalizeBrandName, canonicalizePriceProductCode, normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
 import type { QuoteBuilderLine, QuoteSupplierOption } from "../../types/quoteBuilder";
 import { fetchCodeReferenceMatchesForRows } from "./codeReferencesApi";
 import { callAppRpc } from "./appRpcApi";
@@ -46,11 +46,8 @@ type CurrentSupplierPriceBatchRow = {
 
 // Follow the catalog's explicit brand policy before exact SKU/price checks.
 // The default preserves punctuation, so 61/1 never becomes 611 implicitly.
-function importLookupCode(value: string, policy?: string) {
-  const upper = String(value || "").trim().toUpperCase();
-  if (policy === "compact_alnum") return normalizePartCode(upper);
-  if (policy === "compact_space_dot") return upper.replace(/[\s.]+/g, "");
-  return exactSku(upper);
+function importLookupCode(value: string, policy?: string, brand = "") {
+  return canonicalizePriceProductCode(value, brand, policy);
 }
 
 function exactSku(value: string) {
@@ -153,7 +150,7 @@ async function resolveQuoteImportRowsOnce(input: {
       brand: canonicalBrand,
       brandId,
       codePolicy: policyByBrand.get(normalizedBrandName),
-      lookupCode: importLookupCode(row.code, policyByBrand.get(normalizedBrandName)),
+      lookupCode: importLookupCode(row.code, policyByBrand.get(normalizedBrandName), canonicalBrand),
     };
   });
 
@@ -168,10 +165,10 @@ async function resolveQuoteImportRowsOnce(input: {
     // Reference lookup uses an alphanumeric key; verify the original SKU before
     // allowing a redirect, including for brands still using legacy prices.
     const referenceMatch = rawReferenceMatch
-      && importLookupCode(rawReferenceMatch.old_code, row.codePolicy) !== row.lookupCode
+      && importLookupCode(rawReferenceMatch.old_code, row.codePolicy, row.brand) !== row.lookupCode
       ? null
       : rawReferenceMatch;
-    const targetCode = importLookupCode(referenceMatch?.new_code || row.code, row.codePolicy);
+    const targetCode = importLookupCode(referenceMatch?.new_code || row.code, row.codePolicy, row.brand);
     return {
       ...row,
       referenceMatch,
@@ -262,8 +259,8 @@ async function resolveQuoteImportRowsOnce(input: {
     const key = codeKey(row.brandId, row.normalizedTargetCode);
     const candidates = catalogExact.get(key) || [];
     const oemMatch = catalogOem.get(key);
-    const catalogMatch = candidates.filter((candidate) => exactSku(candidate.product_code) === exactSku(row.targetCode)).at(-1)
-      || (oemMatch && exactSku(oemMatch.product_code) === exactSku(row.targetCode) ? oemMatch : null)
+    const catalogMatch = candidates.filter((candidate) => importLookupCode(candidate.product_code, row.codePolicy, row.brand) === exactSku(row.targetCode)).at(-1)
+      || (oemMatch && importLookupCode(oemMatch.product_code, row.codePolicy, row.brand) === exactSku(row.targetCode) ? oemMatch : null)
       || null;
     return {
       row,
@@ -312,9 +309,9 @@ async function resolveQuoteImportRowsOnce(input: {
     return {
       lineId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       requestedCode: row.code,
-      resolvedCode: String(row.publishedPrice?.has_published_scope
+      resolvedCode: importLookupCode(String(row.publishedPrice?.has_published_scope
         ? supplierMatchesRaw[0]?.product_code || row.targetCode || row.code
-        : catalogMatch?.product_code || row.targetCode || row.code),
+        : catalogMatch?.product_code || row.targetCode || row.code), row.codePolicy, row.brand),
       brand: row.brand,
       description: String(catalogMatch?.description || supplierMatchesRaw[0]?.description || ""),
       qty: quantityAdjustment.corrected,

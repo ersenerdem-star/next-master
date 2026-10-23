@@ -117,3 +117,13 @@ MCP allocates hosted history versions when each migration is applied. Match thes
 | prepared_price_prewarm_failure_backoff | 20261023162831 | 20261023162851 | 20261023163943 |
 | supplier_price_revision_distinct_scopes | 20261023162929 | 20261023163033 | 20261023163948 |
 | prepared_price_profile_event_fairness | 20261023164519 | 20261023164655 | 20261023164736 |
+
+## Sales-order price lookup follow-up: canonical SACHS article keys
+
+Order `SO-20261023-8705` contained eight unpriced SACHS lines using six-digit article presentation codes such as `311.409`; the current published prices use `311409`. The 13 October exact-SKU change (`fe03c501`) replaced the single-line reader's former alphanumeric normalization with punctuation-preserving exact matching to protect distinct products such as `61/1` and `611`. The ZF registry's whitespace-only policy dates to `2abc469d`. The SACHS presentation alias was not represented at the quote lookup boundary.
+
+The shared price-code canonicalizer now accepts only SACHS numeric `DDD.DDD` as `DDDDDD`, retains leading zeros, and preserves other SACHS families and other brands' meaningful punctuation. CSV import, single-line resolution and explicit sales-order resync use this boundary. Uploaded `requestedCode` remains intact; the resolved lookup code is canonical. This does not rewrite catalog products, supplier rows, historical invoices, publication pointers or saved order prices outside an explicit application action.
+
+Resync also bounds price lookups to four concurrent requests and shares exact brand/SKU reads across duplicate order lines while retaining each line's quantity and supplier selection. Its result reports newly filled, still-unpriced and failed-lookup counts instead of an unconditional completion label. Existing-price preservation and fail-closed explicit repricing remain covered.
+
+Validation: 33 focused import, single-line, resync, supplier-commercial and exact-SKU tests passed; TypeScript/Vite production build passed. These local checks are separate from the subsequent production deployment and authenticated runtime acceptance.

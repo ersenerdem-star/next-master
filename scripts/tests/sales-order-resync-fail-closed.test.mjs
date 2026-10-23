@@ -3,12 +3,14 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import { exactProductCode } from "../../apps/web/src/shared/currentSupplierPriceSync.mts";
+import { canonicalizePriceProductCode } from "../../apps/web/src/domain/shared/normalize.ts";
 
-function loadSalesResync(dependencies) {
+function loadSalesResync(dependencies, exportedName = "resyncSalesOrderLinesFromCatalog") {
+  dependencies = { canonicalizePriceProductCode, ...dependencies };
   const path = new URL("../../apps/web/src/shared/salesOrderCatalogSync.ts", import.meta.url);
   const source = readFileSync(path, "utf8");
   const parsed = ts.createSourceFile(path.pathname, source, ts.ScriptTarget.ES2022, true);
-  const names = ["requireRepricingCurrency", "refreshLinePricesFromCatalog", "resyncSalesOrderLinesFromCatalog"];
+  const names = ["requireRepricingCurrency", "salesOrderResyncPriceSummary", "refreshSalesOrderPriceLines", "refreshLinePricesFromCatalog", "resyncSalesOrderLinesFromCatalog"];
   const declarations = names.map((name) => {
     const node = parsed.statements.find((statement) =>
       ts.isFunctionDeclaration(statement) && statement.name?.text === name);
@@ -20,7 +22,7 @@ function loadSalesResync(dependencies) {
   }).outputText;
   const dependencyNames = Object.keys(dependencies);
   return new Function(...dependencyNames,
-    `const exports = {};\n${compiled}\nreturn resyncSalesOrderLinesFromCatalog;`)(...Object.values(dependencies));
+    `const exports = {};\n${compiled}\nreturn ${exportedName};`)(...Object.values(dependencies));
 }
 
 function savedLine(code = "61/1") {
@@ -160,4 +162,61 @@ test('explicit repricing may select a supplier only for a previously unpriced li
   const [result]=await resync([{...savedLine(),supplier_name:'',buy_price:null,sell_price:null,supplierOptions:[],selectedSupplierKey:''}],repriceOptions);
   assert.equal(result.buy_price,10);assert.equal(result.supplier_name,'Sood');
   await assert.rejects(resync([{...savedLine(),supplier_name:'',supplierOptions:[],selectedSupplierKey:''}],repriceOptions),/No exact current price/);
+});
+
+test("237-line sync bounds reads and shares duplicate SKU lookups without changing priced lines or quantities", async () => {
+  const priced = Array.from({ length: 155 }, (_, index) => savedLine(`PRICED-${index}`));
+  const blank = Array.from({ length: 82 }, (_, index) => ({
+    ...savedLine(`BLANK-${index % 41}`), qty: index + 1,
+    supplier_name: "", buy_price: null, sell_price: null, supplierOptions: [], selectedSupplierKey: "",
+  }));
+  const original = [...priced, ...blank];
+  const before = structuredClone(original);
+  let active = 0, peak = 0, calls = 0;
+  const resync = makeResync(async ({ code }) => {
+    calls += 1;
+    active += 1;
+    peak = Math.max(peak, active);
+    await new Promise(setImmediate);
+    active -= 1;
+    return { resolved: { found: true, product_code: code }, supplierOptions: [
+      { supplier_id: "s", supplier_name: "GroupAuto", buy_price: 14.89, sell_price: 16.38 },
+    ] };
+  });
+  const result = await resync(original, { ...repriceOptions, keepPrices: true, hydrateMissingPricesIfKeepingPrices: true });
+  assert.equal(calls, 41);
+  assert.ok(peak > 1 && peak <= 4);
+  assert.deepEqual(result.slice(0, 155), priced);
+  assert.deepEqual(result.map((line) => line.qty), original.map((line) => line.qty));
+  assert.ok(result.slice(155).every((line) => line.buy_price === 14.89 && line.sell_price === 16.38));
+  assert.deepEqual(original, before);
+});
+
+test("sync summary separates newly filled prices, unavailable prices and failed reads", () => {
+  const summarize = loadSalesResync({}, "salesOrderResyncPriceSummary");
+  const blank = { ...savedLine(), buy_price: null, sell_price: null };
+  const before = [savedLine(), blank, blank, blank, blank];
+  const after = [savedLine(), { ...blank, buy_price: 14.89, sell_price: 16.38 },
+    { ...blank, price_sync_issue: "PRICE_NOT_AVAILABLE" },
+    { ...blank, price_sync_issue: "PRICE_LOOKUP_FAILED" },
+    { ...blank, buy_price: 10, sell_price: null }];
+  assert.deepEqual(summarize(before, after), { filled: 1, unavailable: 2, failed: 1, unpriced: 3 });
+});
+
+test("saved SACHS rows canonicalize before metadata and price lookup while retaining the uploaded codes", async () => {
+  const codes = ["311.409", "311.409", "314.880", "315.872", "315.872", "317.333", "802.561", "803.209"];
+  const source = codes.map((code) => ({ ...savedLine(code), brand: "Sachs", supplier_name: "",
+    buy_price: null, sell_price: null, supplierOptions: [], selectedSupplierKey: "", codeChanged: false }));
+  const before = structuredClone(source);
+  const resync = makeResync(async ({ code }) => {
+    assert.match(code, /^\d{6}$/);
+    return { resolved: { found: true, product_code: code, brand: "Sachs" }, supplierOptions: [
+      { supplier_id: "s", supplier_name: "GroupAuto", buy_price: 38.8, sell_price: 42.68 },
+    ] };
+  });
+  const result = await resync(source, { ...repriceOptions, keepPrices: true, hydrateMissingPricesIfKeepingPrices: true });
+  assert.deepEqual(result.map((line) => line.requestedCode), codes);
+  assert.deepEqual(result.map((line) => line.resolvedCode), codes.map((code) => code.replace(".", "")));
+  assert.ok(result.every((line) => line.buy_price === 38.8 && line.codeChanged === false));
+  assert.deepEqual(source, before);
 });

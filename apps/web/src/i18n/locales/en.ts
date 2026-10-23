@@ -668,6 +668,7 @@ export const enMessages = {
     "orders.resyncComplete": "Resync complete",
     "orders.resyncedFromCatalog": "Resynced from catalog",
     "orders.resyncedWithUnpricedRows": "Sync completed; prices could not be fetched for {count} lines. Check the line warnings.",
+    "orders.resyncPriceSummary": "Sync result: {filled} unpriced lines filled; {unavailable} lines still have missing prices; {failed} line price lookups failed.",
     "orders.resyncFailed": "Resync failed",
     "orders.addLinesBeforeSavingDraft": "Add lines before saving the draft",
     "orders.draftSavedAs": "Draft saved as {salesOrderNo}",

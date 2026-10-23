@@ -37,6 +37,35 @@ async function loadQuoteImport() {
   return import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}#${moduleLoadCount}`);
 }
 
+test("bulk SACHS import uses canonical price keys and preserves original uploaded codes", async () => {
+  const codes = ["311.409", "314.880", "315.872", "317.333", "802.561", "803.209"];
+  globalThis.__quoteImportMocks = {
+    organizationId: async () => "org-1",
+    codeReferences: async () => new Map(),
+    supabaseClient: tableClient({
+      brands: [{ id: "sachs", name: "Sachs", organization_id: "org-1" }],
+      product_code_normalization_policies: [{ brand_key: "SACHS", policy: "compact_space", active: true }],
+      catalog_products: codes.map((code) => ({ id: code, product_code: code,
+        normalized_code: code.replace(".", ""), normalized_oem: "", brand_id: "sachs", organization_id: "org-1", description: "Sachs article" })),
+    }, []),
+    callAppRpc: async (_name, args) => args.input_requests.map(({ code }, request_index) => {
+      assert.match(code, /^\d{6}$/);
+      return { request_index, has_published_scope: true, options: [
+        { supplier_id: "s", supplier_name: "GroupAuto", product_code: code, buy_price: 38.8,
+          moq: null, order_multiple: null, stock_qty: null, valid_to: null },
+      ] };
+    }),
+  };
+  const { batchResolveQuoteImportRows } = await loadQuoteImport();
+  const lines = await batchResolveQuoteImportRows({
+    rows: codes.map((code) => ({ code, brand: "Sachs", qty: 2 })), customerType: "A", marginA: 10, marginB: 15,
+  });
+  assert.deepEqual(lines.map((line) => line.requestedCode), codes);
+  assert.deepEqual(lines.map((line) => line.resolvedCode), codes.map((code) => code.replace(".", "")));
+  assert.ok(lines.every((line) => line.buy_price === 38.8 && line.sell_price === 42.68 && line.qty === 2));
+  assert.ok(lines.every((line) => line.description === "Sachs article"));
+});
+
 function tableClient(tables, calls) {
   return {
     from(table) {

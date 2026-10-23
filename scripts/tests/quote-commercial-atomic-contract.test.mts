@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
 import { readSupplierCommercialTerms } from "../../apps/web/src/domain/shared/supplierCommercialTerms.ts";
+import { canonicalizePriceProductCode } from "../../apps/web/src/domain/shared/normalize.ts";
 
 function resolver(options: unknown[], fail = false) {
   const file = new URL("../../apps/web/src/infrastructure/api/quoteResolverApi.ts", import.meta.url);
@@ -14,6 +15,7 @@ function resolver(options: unknown[], fail = false) {
   const compiled = ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   const calls: string[] = [];
   const deps = {
+    canonicalizePriceProductCode,
     canonicalizeBrandName: (v: string) => v,
     normalizePartCode: (v: string) => v.replace(/[^A-Z0-9]/gi, "").toUpperCase(),
     enrichLifecycle: async (v: unknown) => v,

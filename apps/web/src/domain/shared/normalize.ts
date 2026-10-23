@@ -2,6 +2,20 @@ export function normalizePartCode(value: string): string {
   return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+// Price identity is stricter than a search key. Only a named policy or a
+// bounded brand presentation alias may remove identity-bearing punctuation.
+export function canonicalizePriceProductCode(value: string, brand: string, policy?: string): string {
+  let code = String(value || "").trim().toUpperCase().replace(/\s+/g, "");
+  if (policy === "compact_alnum") code = normalizePartCode(code);
+  else if (policy === "compact_space_dot") code = code.replace(/\./g, "");
+  // The six-digit SACHS article presentation uses a 3+3 dot separator.
+  // Do not strip punctuation from other SACHS families or other brands.
+  if (normalizeBrandKey(brand) === "sachs" && /^\d{3}\.\d{3}$/.test(code)) {
+    return code.replace(".", "");
+  }
+  return code;
+}
+
 export function normalizeOriginalNumberSearch(value: string): string {
   const normalized = normalizePartCode(value);
   if (!normalized) return "";

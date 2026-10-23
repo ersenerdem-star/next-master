@@ -36,7 +36,7 @@ import { consumeCatalogTransfer, PENDING_CATALOG_SALES_ITEM_KEY } from "../../sh
 import { buildInvoiceFromSalesOrder, buildLocalSalesOrder, buildPurchaseOrdersFromSalesOrder } from "../../shared/localOrders";
 import { hydrateSalesOrderLines } from "../../shared/hydrateSalesOrderLines";
 import { salesOrderTotals, multiplyMoney } from "../../../../../shared/order-money.mjs";
-import { resyncSalesOrderLinesFromCatalog } from "../../shared/salesOrderCatalogSync";
+import { resyncSalesOrderLinesFromCatalog, salesOrderResyncPriceSummary } from "../../shared/salesOrderCatalogSync";
 import { buildXlsxBlobAsync, downloadBlob } from "../../shared/xlsx";
 import { buildDocumentWorksheet } from "../../shared/documentExport";
 import { buildSalesPurchaseAnalysis, loadSalesPurchaseAnalysisOffers } from "../../shared/salesOrderPurchaseAnalysis";
@@ -1892,13 +1892,11 @@ export function QuotesPage({
         await refreshLocalSalesOrders(saved.id);
       }
 
-      setBuilderStatus(
-        resyncOnlyFillBlanks
-          ? t("sales.orders.resyncCompleteBlanksOnly")
-          : t("sales.orders.resyncComplete"),
-      );
-      const unpriced=syncedLines.filter(line=>line.price_sync_issue).length;
-      actionFeedback.succeed(unpriced?t("sales.orders.resyncedWithUnpricedRows",{count:unpriced}):t("sales.orders.resyncedFromCatalog"));
+      const summary = salesOrderResyncPriceSummary(quoteBuilderLines, syncedLines);
+      const message = t("sales.orders.resyncPriceSummary", summary);
+      setBuilderStatus(message);
+      if (summary.failed) actionFeedback.fail(message);
+      else actionFeedback.succeed(message);
     } catch (caught) {
       actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.resyncFailed"));
     } finally {

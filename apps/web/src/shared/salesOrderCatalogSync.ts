@@ -1,5 +1,5 @@
 import { markupMoney } from "../../../../shared/order-money.mjs";
-import { canonicalizeBrandName, normalizeBrandKey, normalizePartCode } from "../domain/shared/normalize";
+import { canonicalizeBrandName, canonicalizePriceProductCode, normalizeBrandKey, normalizePartCode } from "../domain/shared/normalize";
 import { fetchCatalogMetadataForRows } from "../infrastructure/api/quoteImportApi";
 import { fetchCodeReferenceMatchesForRows } from "../infrastructure/api/codeReferencesApi";
 import { resolveQuoteLine } from "../infrastructure/api/quoteResolverApi";
@@ -111,6 +111,48 @@ function lineHasVisiblePrices(line: QuoteBuilderLine) {
   return Number(line.buy_price ?? 0) > 0 || Number(line.sell_price ?? 0) > 0;
 }
 
+export function salesOrderResyncPriceSummary(before: QuoteBuilderLine[], after: QuoteBuilderLine[]) {
+  const complete = (line: QuoteBuilderLine) =>
+    Number.isFinite(Number(line.buy_price)) && Number(line.buy_price) > 0
+    && Number.isFinite(Number(line.sell_price)) && Number(line.sell_price) > 0;
+  const failed = after.filter((line) => line.price_sync_issue === "PRICE_LOOKUP_FAILED").length;
+  const unpriced = after.filter((line) => !complete(line)).length;
+  return {
+    filled: after.filter((line, index) => complete(line) && before[index] && !complete(before[index])).length,
+    unavailable: after.filter((line) => !complete(line) && line.price_sync_issue !== "PRICE_LOOKUP_FAILED").length,
+    failed,
+    unpriced,
+  };
+}
+
+async function refreshSalesOrderPriceLines(
+  lines: QuoteBuilderLine[], options: SalesOrderCatalogSyncOptions, onlyFillBlanks: boolean,
+): Promise<QuoteBuilderLine[]> {
+  const result = [...lines];
+  const pending = lines.map((_, index) => index).filter((index) =>
+    options.keepPrices === false || !lineHasVisiblePrices(lines[index]));
+  // One lookup per exact brand/SKU for this action. Duplicate order rows keep
+  // their own quantities and supplier selections, but share the read result.
+  const lookups = new Map<string, ReturnType<typeof resolveQuoteLine>>();
+  const lookup: typeof resolveQuoteLine = (input) => {
+    const key = JSON.stringify([normalizeBrandKey(input.brand || ""), exactProductCode(input.code)]);
+    let request = lookups.get(key);
+    if (!request) {
+      request = resolveQuoteLine(input);
+      lookups.set(key, request);
+    }
+    return request;
+  };
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(4, pending.length) }, async () => {
+    while (cursor < pending.length) {
+      const index = pending[cursor++];
+      result[index] = await refreshLinePricesFromCatalog(lines[index], options, onlyFillBlanks, lookup);
+    }
+  }));
+  return result;
+}
+
 async function fetchSupplierPriceMap(rows: CurrentSupplierPriceRequest[]): Promise<Map<string, SelectedSupplierPrice>> {
   return fetchCurrentSupplierPriceMap(rows, (batch) =>
     callAppRpc<CurrentSupplierPriceBatchRow[]>("cloud_current_supplier_price_options_batch", {
@@ -159,20 +201,25 @@ export async function resyncSalesOrderLinesFromCatalog(
     })),
   );
 
-  const mappedLines = lines.map((line) => {
+  const mappedLines = lines.map((savedLine) => {
+    const line = {
+      ...savedLine,
+      resolvedCode: canonicalizePriceProductCode(savedLine.resolvedCode || savedLine.requestedCode, savedLine.brand),
+    };
     const requestedCode = line.requestedCode || line.resolvedCode;
     const referenceMatch = referenceMatches.get(
       `${normalizeBrandKey(line.brand || "")}::${normalizePartCode(requestedCode)}`,
     );
-    if (!referenceMatch || exactProductCode(referenceMatch.old_code) !== exactProductCode(requestedCode)) return line;
-    const changesSku=exactProductCode(referenceMatch.new_code)!==exactProductCode(line.resolvedCode||line.requestedCode);
+    if (!referenceMatch || canonicalizePriceProductCode(referenceMatch.old_code, line.brand)
+        !== canonicalizePriceProductCode(requestedCode, line.brand)) return line;
+    const changesSku=canonicalizePriceProductCode(referenceMatch.new_code,line.brand)!==exactProductCode(line.resolvedCode||line.requestedCode);
     return {
       ...line,
       ...(changesSku?{description:'',oem_no:'',hs_code:'',origin:'',weight_kg:null,found:false,
         buy_price:null,sell_price:null,c_sell_price:null,manual_sell_price:false,price_date:'',
         supplierOptions:[],selectedSupplierKey:'',moq:null,order_multiple:null,stock_qty:null,valid_to:null,
         lifecycle_status:null,lifecycle_note:null,lifecycle_warning:null,price_sync_issue:null}:{}),
-      resolvedCode: referenceMatch.new_code || line.resolvedCode || line.requestedCode,
+      resolvedCode: canonicalizePriceProductCode(referenceMatch.new_code || line.resolvedCode || line.requestedCode, line.brand),
       codeChanged: true,
       codeChangeWarning:
         `Old Code ${referenceMatch.old_code} => New Code ${referenceMatch.new_code}.` +
@@ -190,8 +237,8 @@ export async function resyncSalesOrderLinesFromCatalog(
   const patchedLines = mappedLines.map((line) => {
     const rawCode = line.resolvedCode || line.requestedCode;
     const candidateMetadata = metadataMap.get(`${normalizeBrandKey(line.brand || "")}::${normalizePartCode(rawCode)}`);
-    const metadata = candidateMetadata && exactProductCode(candidateMetadata.product_code) === exactProductCode(rawCode)
-      ? candidateMetadata : undefined;
+    const metadata = candidateMetadata && canonicalizePriceProductCode(candidateMetadata.product_code, line.brand) === exactProductCode(rawCode)
+      ? { ...candidateMetadata, product_code: canonicalizePriceProductCode(candidateMetadata.product_code, line.brand) } : undefined;
     return mergeCatalogMetadata(
       {
         ...line,
@@ -214,30 +261,22 @@ export async function resyncSalesOrderLinesFromCatalog(
       return patchedLines;
     }
 
-    return await Promise.all(
-      patchedLines.map(async (line) => {
-        if (lineHasVisiblePrices(line)) return line;
-        return await refreshLinePricesFromCatalog(line, options, onlyFillBlanks);
-      }),
-    );
+    return refreshSalesOrderPriceLines(patchedLines, options, onlyFillBlanks);
   }
 
-  return await Promise.all(
-    patchedLines.map(async (line) => {
-      return await refreshLinePricesFromCatalog(line, options, onlyFillBlanks);
-    }),
-  );
+  return refreshSalesOrderPriceLines(patchedLines, options, onlyFillBlanks);
 }
 
 async function refreshLinePricesFromCatalog(
   line: QuoteBuilderLine,
   options: SalesOrderCatalogSyncOptions,
   onlyFillBlanks: boolean,
+  lookup: typeof resolveQuoteLine = resolveQuoteLine,
 ) {
   const reprice = options.keepPrices === false;
   const itemName = `${canonicalizeBrandName(line.brand || "") || line.brand} ${line.resolvedCode || line.requestedCode}`.trim();
   try {
-    const { resolved, supplierOptions } = await resolveQuoteLine({
+    const { resolved, supplierOptions } = await lookup({
       code: line.resolvedCode || line.requestedCode,
       brand: canonicalizeBrandName(line.brand || ""),
       customerType: options.customerType,

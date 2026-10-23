@@ -4,10 +4,12 @@ import { readFileSync } from "node:fs";
 import ts from "typescript";
 import {multiplyMoney,sumMoney,requireUnitPrice,requireQuantity} from "../../shared/order-money.mjs";
 import { exactProductCode } from "../../apps/web/src/shared/currentSupplierPriceSync.mts";
+import { canonicalizePriceProductCode, normalizePartCode } from "../../apps/web/src/domain/shared/normalize.ts";
 
 // These UI modules depend on Vite's import.meta.env. Run their actual pure
 // functions in isolation rather than replacing the SKU logic in the test.
 function loadFunctions(relativeFile, functionNames, dependencies) {
+  dependencies = { canonicalizePriceProductCode, ...dependencies };
   const path = new URL(relativeFile, import.meta.url);
   const source = readFileSync(path, "utf8");
   const parsed = ts.createSourceFile(path.pathname, source, ts.ScriptTarget.ES2022, true);
@@ -116,4 +118,33 @@ test("single-line quote resolution refuses a differently priced compact-key SKU"
     resolveQuoteLine({ code: "61/1", brand: "Clevite", customerType: "A", marginA: 10, marginB: 15 }),
     /different product code/,
   );
+});
+
+test("price canonicalization accepts only the bounded SACHS 3+3 numeric dot alias", () => {
+  assert.equal(canonicalizePriceProductCode(" 311 . 409 ", "SACHS"), "311409");
+  assert.equal(canonicalizePriceProductCode("031.409", "Sachs"), "031409");
+  for (const [brand, code] of [["Clevite", "61/1"], ["Pierburg", "7.06032.35.0"],
+    ["Sachs", "2294.001.234"], ["Sachs", "311/409"], ["Sachs", "A311.409"], ["Other", "311.409"]]) {
+    assert.equal(canonicalizePriceProductCode(code, brand), code);
+  }
+  assert.equal(canonicalizePriceProductCode(" 0 281 006 123 ", "Bosch", "compact_alnum"), "0281006123");
+});
+
+test("single-line quote reader sends the canonical SACHS article to its price RPC", async () => {
+  const { resolveQuoteLine } = loadFunctions(
+    "../../apps/web/src/infrastructure/api/quoteResolverApi.ts",
+    ["exactSku", "resolveQuoteLine"],
+    {
+      canonicalizeBrandName: (value) => value,
+      normalizePartCode,
+      callAppRpc: async (_name, args) => {
+        assert.equal(args.input_code, "311409");
+        return [{ found: true, product_code: "311409", brand: "Sachs", buy_price: 38.8 }];
+      },
+      enrichLifecycle: async (row) => row,
+    },
+  );
+  const result = await resolveQuoteLine({ code: "311.409", brand: "Sachs", customerType: "A", marginA: 10, marginB: 15, includeSupplierOptions: false });
+  assert.equal(result.resolved.product_code, "311409");
+  assert.equal(result.resolved.buy_price, 38.8);
 });
