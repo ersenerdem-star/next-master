@@ -1,0 +1,220 @@
+{
+  "source": "07c9f7ab92f39f9bc58fca0aaef0f90cf0647d1b",
+  "deployment": "6adba3f132d0c71fd265fed1",
+  "rule": {
+    "policy": "cross-brand-v3",
+    "supportedOverlapThresholdPercent": 5,
+    "comparison": "strictly_greater",
+    "historicalCatalogMembership": "informational_only"
+  },
+  "migration": {
+    "local": "20261023181019_supplier_brand_five_percent_review_rule.sql",
+    "staging": "20261023181340",
+    "production": "20261023181432"
+  },
+  "tests": {
+    "passed": 75,
+    "skipped": 1,
+    "skipReason": "Optional Docker multi-connection runtime not enabled"
+  },
+  "cause": "Publication adapters refreshed the audit, then rejected clear v2 evidence because of a hard-coded v1 policy condition.",
+  "failedUserDecisionsPreserved": [
+    "7c9bdcea-f6ad-41ca-9d01-23c9f4d6cec8",
+    "111bb3ab-4885-40c5-99f8-eb66dde22c63",
+    "fb5c00aa-9576-4e85-b9ad-8171557225ac"
+  ],
+  "action": {
+    "id": "2cc5b234-20a7-4859-abe5-1970873b6159",
+    "status": "completed",
+    "attempt": 1,
+    "receipt": {
+      "status": "published",
+      "version": 1,
+      "replayed": false,
+      "isCurrent": true,
+      "published": true,
+      "releaseId": "7af25b2e-234e-4d80-847e-cb4fb60a199a",
+      "decisionId": "2cc5b234-20a7-4859-abe5-1970873b6159",
+      "publicationId": "f76e224f-5cef-43cc-9caf-728948a57c76",
+      "reviewRevision": 1,
+      "expectedPreviousPublicationId": null
+    },
+    "error_code": null
+  },
+  "release": {
+    "id": "7af25b2e-234e-4d80-847e-cb4fb60a199a",
+    "audit": {
+      "brands": [
+        {
+          "brand_id": "ad11b51b-74f6-4d18-8782-889f76085a29",
+          "brand_name": "VAG",
+          "sample_codes": [
+            "1019390",
+            "1019700",
+            "MS168",
+            "MS199"
+          ],
+          "matching_codes": 4,
+          "incoming_percent": 0.02
+        },
+        {
+          "brand_id": "5826b167-718e-4ac4-a319-9ae189be06c0",
+          "brand_name": "Lemforder",
+          "sample_codes": [
+            "1019701",
+            "1019801",
+            "4481101"
+          ],
+          "matching_codes": 3,
+          "incoming_percent": 0.01
+        },
+        {
+          "brand_id": "125b006c-f3b3-4efd-a92e-c71c6c3d8c7f",
+          "brand_name": "Hepu",
+          "sample_codes": [
+            "TM1397",
+            "TM1497"
+          ],
+          "matching_codes": 2,
+          "incoming_percent": 0.01
+        },
+        {
+          "brand_id": "f6827605-2ad4-4a3d-8e82-e0c9cf335edf",
+          "brand_name": "Febi",
+          "sample_codes": [
+            "1000100"
+          ],
+          "matching_codes": 1,
+          "incoming_percent": 0
+        }
+      ],
+      "policy": "cross-brand-v3",
+      "checked": true,
+      "checked_at": "2026-10-23T18:15:29.010797+00:00",
+      "review_required": false,
+      "ratio_comparison": "strictly_greater",
+      "historical_brands": [
+        {
+          "brand_id": "eaa19839-679d-41ff-9562-c2f107f654f6",
+          "brand_name": "Gates",
+          "sample_codes": [
+            "0010100",
+            "0010101",
+            "0010110",
+            "0010111",
+            "0010192",
+            "00101G0",
+            "00101G1",
+            "00101N0",
+            "00101N2",
+            "00101V0"
+          ],
+          "matching_codes": 23945,
+          "incoming_percent": 100
+        },
+        {
+          "brand_id": "f61a0b65-7b86-4f21-8dff-f1576f1b1395",
+          "brand_name": "Metal Leve",
+          "sample_codes": [
+            "AL12",
+            "AL14",
+            "AL27",
+            "AL29",
+            "AL41",
+            "HX15",
+            "KC171",
+            "KC18",
+            "KC217",
+            "KC24"
+          ],
+          "matching_codes": 195,
+          "incoming_percent": 0.81
+        },
+        {
+          "brand_id": "59c4375e-eee9-47e4-ad1a-515c3d266e84",
+          "brand_name": "Knecht",
+          "sample_codes": [
+            "AL28",
+            "HC62",
+            "HC8",
+            "HC9",
+            "HX131D",
+            "HX132D",
+            "HX139D",
+            "HX147KIT",
+            "HX147KIT1",
+            "HX150KIT"
+          ],
+          "matching_codes": 63,
+          "incoming_percent": 0.26
+        },
+        {
+          "brand_id": "eeb63933-5ced-466f-89cc-0e8e903681f9",
+          "brand_name": "Continental CTAM",
+          "sample_codes": [
+            "MS12",
+            "MS13",
+            "MS18",
+            "MS19",
+            "MS22",
+            "MS23",
+            "MS24",
+            "MS25",
+            "MS27",
+            "MS28"
+          ],
+          "matching_codes": 16,
+          "incoming_percent": 0.07
+        },
+        {
+          "brand_id": "125b006c-f3b3-4efd-a92e-c71c6c3d8c7f",
+          "brand_name": "Hepu",
+          "sample_codes": [
+            "TM8105"
+          ],
+          "matching_codes": 1,
+          "incoming_percent": 0
+        },
+        {
+          "brand_id": "5826b167-718e-4ac4-a319-9ae189be06c0",
+          "brand_name": "Lemforder",
+          "sample_codes": [
+            "1018701"
+          ],
+          "matching_codes": 1,
+          "incoming_percent": 0
+        }
+      ],
+      "selected_brand_id": "5134498a-09c0-4114-8e31-02d9fe9adb4c",
+      "selected_brand_name": "Mahle",
+      "matching_brand_count": 4,
+      "distinct_incoming_codes": 23945,
+      "ratio_threshold_percent": 5,
+      "historical_matching_brand_count": 6
+    },
+    "status": "published",
+    "error_code": null,
+    "published_at": "2026-10-23T18:15:28.967831+00:00",
+    "accepted_rows": 23949,
+    "source_sha256": "77949ed52bf44854b08d5a2b42c3d29d2b91f20edba8995c8f6564039b23d496",
+    "review_revision": 1
+  },
+  "pointers": {
+    "count": 26,
+    "untouched_scope_digest": "7494558d48d857a03064eaf2c682a8ef"
+  },
+  "publication": {
+    "id": "f76e224f-5cef-43cc-9caf-728948a57c76",
+    "status": "published",
+    "current": true,
+    "version": 1
+  },
+  "retained_source_rows": 23949,
+  "security": {
+    "before": 189,
+    "after": 189,
+    "added": [],
+    "removed": []
+  },
+  "screenshot": "artifacts/batch-optimization-20261023/mahle-five-percent-published-production.jpg"
+}
