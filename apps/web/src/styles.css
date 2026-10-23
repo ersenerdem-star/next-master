@@ -13487,3 +13487,8 @@ body {
 .supplier-upload-filters p { grid-column: 1 / -1; }
 @media (max-width: 1100px) { .supplier-upload-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .supplier-upload-filters { grid-template-columns: 1fr; } }
+
+.catalog-job-progress { padding: 16px; margin: 0 12px 16px; border: 1px solid #d8e5f1; border-radius: 10px; background: #f8fbff; }
+.catalog-job-progress h3 { margin: 0; }
+.catalog-job-progress p { color: #586e88; font-size: 12px; }
+.catalog-job-progress .error-text { color: #b42318; }

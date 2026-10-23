@@ -1,3 +1,4 @@
+import {CatalogJobProgress} from "./CatalogJobProgress";
 import {InterfaceText} from "../../i18n/InterfaceText";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n/I18nProvider";
@@ -525,6 +526,7 @@ export function OperationsStatusPage({onOpenSupplierPrices}:{onOpenSupplierPrice
           <span><small>{t("catalog.integrity.missingImage")}</small><strong>{formatIntegrityCount(catalogIntegrity?.missing_image_count)}</strong></span>
         </div>
         </> : null}
+        {!catalogBrandOperations.length ? <CatalogJobProgress locale={locale} search={enrichmentBrandSearch} /> : null}
         {catalogBrandOperations.length ? (
           <div className="catalog-brand-operations">
             <div className="catalog-brand-operations__heading">
@@ -541,6 +543,7 @@ export function OperationsStatusPage({onOpenSupplierPrices}:{onOpenSupplierPrice
                 {t("catalog.integrity.enrichmentBrandsShown", { count: formatCount(filteredCatalogBrandOperations.length) })}
               </span>
             </div>
+            <CatalogJobProgress locale={locale} search={enrichmentBrandSearch} />
             {filteredCatalogBrandOperations.length ? (
               <div className="catalog-enrichment-table-wrap">
                 <table className="catalog-enrichment-table">
