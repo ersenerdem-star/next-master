@@ -1,0 +1,113 @@
+{
+  "source": "1c7bc02edc5b1e6db96f514b9fc21c31dc66a6f7",
+  "deployment": "6adb9e21c1b09cabbf4ca734",
+  "order": "SO-20261023-8705",
+  "status": "draft",
+  "updated_at": "2026-10-23 17:51:25.656521+00",
+  "lineCount": 237,
+  "pricedBefore": 155,
+  "pricedAfter": 170,
+  "originalPricedLinesChanged": [],
+  "quantitiesChanged": [],
+  "filled": [
+    {
+      "brand": "Sachs",
+      "requestedCode": "803.209",
+      "resolvedCode": "803209",
+      "buyPrice": 15.06
+    },
+    {
+      "brand": "Sachs",
+      "requestedCode": "317.333",
+      "resolvedCode": "317333",
+      "buyPrice": 61.25
+    },
+    {
+      "brand": "Sachs",
+      "requestedCode": "802.561",
+      "resolvedCode": "802561",
+      "buyPrice": 7
+    },
+    {
+      "brand": "Sachs",
+      "requestedCode": "314.880",
+      "resolvedCode": "314880",
+      "buyPrice": 57.2
+    },
+    {
+      "brand": "Sachs",
+      "requestedCode": "311.409",
+      "resolvedCode": "311409",
+      "buyPrice": 38.8
+    },
+    {
+      "brand": "Sachs",
+      "requestedCode": "311.409",
+      "resolvedCode": "311409",
+      "buyPrice": 38.8
+    },
+    {
+      "brand": "Sachs",
+      "requestedCode": "315.872",
+      "resolvedCode": "315872",
+      "buyPrice": 33.58
+    },
+    {
+      "brand": "Delphi",
+      "requestedCode": "LP2162",
+      "resolvedCode": "LP2162",
+      "buyPrice": 12.38
+    },
+    {
+      "brand": "Delphi",
+      "requestedCode": "LP1956",
+      "resolvedCode": "LP1956",
+      "buyPrice": 14.89
+    },
+    {
+      "brand": "Delphi",
+      "requestedCode": "LP2234",
+      "resolvedCode": "LP2234",
+      "buyPrice": 20.06
+    },
+    {
+      "brand": "Delphi",
+      "requestedCode": "LP2162",
+      "resolvedCode": "LP2162",
+      "buyPrice": 12.38
+    },
+    {
+      "brand": "Delphi",
+      "requestedCode": "LP1956",
+      "resolvedCode": "LP1956",
+      "buyPrice": 14.89
+    },
+    {
+      "brand": "Delphi",
+      "requestedCode": "LP2234",
+      "resolvedCode": "LP2234",
+      "buyPrice": 20.06
+    },
+    {
+      "brand": "Sachs",
+      "requestedCode": "315.872",
+      "resolvedCode": "315872",
+      "buyPrice": 33.58
+    },
+    {
+      "brand": "Delphi",
+      "requestedCode": "LP2162",
+      "resolvedCode": "LP2162",
+      "buyPrice": 12.38
+    }
+  ],
+  "missingAfter": 67,
+  "lookupErrors": 0,
+  "publicationPointers": {
+    "countBefore": 25,
+    "countAfter": 25,
+    "digestBefore": "4eaf8d8b33082e2f235687a3f8c503e1",
+    "digestAfter": "4eaf8d8b33082e2f235687a3f8c503e1"
+  },
+  "acceptanceScreenshot": "artifacts/batch-optimization-20261023/order-canonical-live-acceptance.jpg"
+}
