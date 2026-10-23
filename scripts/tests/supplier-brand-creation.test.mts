@@ -50,3 +50,11 @@ test('invalid names cause no registry reads or writes',async()=>{
   await assert.rejects(ensureBrandRecord(name,{find:never,insert:never}),/BRAND_NAME_INVALID/);
  }
 });
+
+test('Contitech creation reuses the canonical automotive brand and leaves air spring names separate',async()=>{
+ const found=[];
+ const result=await ensureBrandRecord('Contitech',{find:async key=>{found.push(key);return {id:'ctam',name:'Continental CTAM'};},insert:async()=>{throw Error('must reuse');}});
+ assert.deepEqual(found,['CONTINENTALCTAM']);assert.equal(result.brand.id,'ctam');
+ const air=await ensureBrandRecord('ContiTech Air Spring',{find:async()=>null,insert:async name=>({id:'air',name})});
+ assert.equal(air.brand.name,'ContiTech Air Spring');
+});

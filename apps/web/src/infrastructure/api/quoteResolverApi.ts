@@ -1,5 +1,5 @@
 import { buildDiscontinuedWarning, normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
-import { canonicalizeBrandName, canonicalizePriceProductCode, normalizePartCode } from "../../domain/shared/normalize";
+import { canonicalizePriceBrandName, canonicalizePriceProductCode, normalizePartCode } from "../../domain/shared/normalize";
 import type { QuoteResolveResult, QuoteSupplierOption } from "../../types/quoteBuilder";
 import { callAppRpc } from "./appRpcApi";
 import { supabaseClient } from "./supabaseClient";
@@ -79,7 +79,7 @@ export async function resolveQuoteLine(input: {
 }): Promise<{ resolved: QuoteResolveResult; supplierOptions: QuoteSupplierOption[] }> {
   // Preserve the supplier's SKU punctuation. `61/1` and `611` can carry
   // different prices even though the legacy loose lookup maps both to `611`.
-  const brand = canonicalizeBrandName(input.brand || "");
+  const brand = canonicalizePriceBrandName(input.brand || "",input.code);
   const code = canonicalizePriceProductCode(input.code, brand);
   const rpcCustomerType = input.customerType === "Other" ? "A" : input.customerType;
   const supplierRpcCustomerType = input.customerType === "B" ? "B" : "A";

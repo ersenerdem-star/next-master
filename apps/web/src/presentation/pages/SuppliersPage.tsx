@@ -3,7 +3,7 @@ import {inspectSupplierCsv,supplierCsvIssueCsv,type SupplierCsvReport} from "../
 import {downloadCsv} from "../../shared/csv";
 import { SupplierReleaseReviewPanel } from "../../modules/admin/SupplierReleaseReviewPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { normalizeBrandName, normalizePartCode } from "../../domain/shared/normalize";
+import { canonicalizeBrandName, normalizeBrandName, normalizePartCode } from "../../domain/shared/normalize";
 import { createCloudBrand, fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCloudCatalog } from "../../infrastructure/api/catalogApi";
 import { assertLegacySupplierPriceWriteAllowed, bulkImportSupplierPrices } from "../../infrastructure/api/importApi";
@@ -396,7 +396,8 @@ export function SuppliersPage() {
         const message='Verified supplier upload requires a complete replacement price list. Merge is not supported.';
         setError(message);actionFeedback.fail(message);return;
       }
-      const brand=brands.find(b=>b.name===activeImportBrand);
+      const canonicalImportBrand=canonicalizeBrandName(activeImportBrand);
+      const brand=brands.find(b=>b.name===canonicalImportBrand) || brands.find(b=>b.name===activeImportBrand);
       if(!brand||importSupplierId==='__new__'||!uploadSourceDate) {
         const message='Select an existing supplier/brand and a source date for verified upload.';
         setError(message);actionFeedback.fail(message);return;

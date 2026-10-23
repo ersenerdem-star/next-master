@@ -1,4 +1,4 @@
-import {normalizeBrandName, normalizePartCode} from '../domain/shared/normalize';
+import {normalizeBrandName, normalizeBrandKey, normalizePartCode} from '../domain/shared/normalize';
 import type {BrandOption} from '../types/brand';
 
 type BrandStore = {
@@ -9,7 +9,8 @@ type BrandStore = {
 // Match the registry's UNIQUE(organization_id, normalize_part_code(name)).
 // A retried or concurrent request must reuse that identity, never rename it.
 export async function ensureBrandRecord(input: string, store: BrandStore) {
-  const name=normalizeBrandName(input);
+  const normalized=normalizeBrandName(input);
+  const name=['contitech','continentalctam'].includes(normalizeBrandKey(normalized))?'Continental CTAM':normalized;
   const key=normalizePartCode(name);
   if (!key || name.length>120 || /[\u0000-\u001f\u007f]/.test(name)) throw Error('BRAND_NAME_INVALID');
   const existing=await store.find(key);

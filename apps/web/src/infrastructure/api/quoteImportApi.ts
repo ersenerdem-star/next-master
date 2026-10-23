@@ -2,7 +2,7 @@ import { buildDiscontinuedWarning, normalizeCatalogLifecycleStatus } from "../..
 import { readSupplierCommercialTerms, type SupplierCommercialTerms } from "../../domain/shared/supplierCommercialTerms";
 import { normalizeOrderQuantity } from "../../domain/shared/orderQuantityRules";
 import { markupMoney } from "../../../../../shared/order-money.mjs";
-import { canonicalizeBrandName, canonicalizePriceProductCode, normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
+import { canonicalizeBrandName, canonicalizePriceBrandName, canonicalizePriceProductCode, normalizeBrandKey, normalizePartCode } from "../../domain/shared/normalize";
 import type { QuoteBuilderLine, QuoteSupplierOption } from "../../types/quoteBuilder";
 import { fetchCodeReferenceMatchesForRows } from "./codeReferencesApi";
 import { callAppRpc } from "./appRpcApi";
@@ -109,7 +109,8 @@ async function resolveQuoteImportRowsOnce(input: {
   marginA: number;
   marginB: number;
 }): Promise<QuoteBuilderLine[]> {
-  const rows = input.rows.filter((row) => row.code.trim() && row.brand.trim());
+  const rows = input.rows.filter((row) => row.code.trim() && row.brand.trim())
+    .map(row=>({...row,brand:canonicalizePriceBrandName(row.brand,row.code)}));
   if (!rows.length) return [];
   if (input.customerType === "C") throw new Error("Customer C price list is retired. Select A, B, or an account margin.");
   const organizationId = await getCurrentOrgId();
@@ -399,7 +400,8 @@ export async function batchResolveQuoteImportRows(input: {
   marginA: number;
   marginB: number;
 }): Promise<QuoteBuilderLine[]> {
-  const rows = input.rows.filter((row) => row.code.trim() && row.brand.trim());
+  const rows = input.rows.filter((row) => row.code.trim() && row.brand.trim())
+    .map(row=>({...row,brand:canonicalizePriceBrandName(row.brand,row.code)}));
   if (!rows.length) return [];
   if (input.customerType === "C") throw new Error("Customer C price list is retired. Select A, B, or an account margin.");
 

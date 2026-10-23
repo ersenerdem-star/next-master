@@ -49,6 +49,7 @@ before(async()=>{
  oldStageHash=(await db.query("select md5(pg_get_functiondef('stage_supplier_price_release_batch(uuid,text,jsonb)'::regprocedure)) hash")).rows[0].hash;
  oldReceiptHash=(await db.query("select md5(pg_get_functiondef('record_supplier_price_source_compatibility(uuid,uuid,text,bigint,text)'::regprocedure)) hash")).rows[0].hash;
  await db.exec(await readFile(dir+ingestion+'.sql','utf8'));await db.exec(await readFile(dir+readers+'.sql','utf8'));
+ await db.exec(await readFile(dir+'20261023185017_continental_automotive_brand_identity.sql','utf8'));
  await db.query("insert into organizations(id,name)values($1,'Org')",[org]);
  await db.query("insert into suppliers(id,organization_id,name)values($1,$2,'Supplier')",[supplier,org]);
  await db.query("insert into brands(id,organization_id,name)values($1,$2,'Brand')",[brand,org]);

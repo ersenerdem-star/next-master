@@ -38,6 +38,8 @@ export function normalizeSearchText(value: string): string {
 }
 
 const BRAND_ALIAS_MAP: Record<string, string> = {
+  contitech: "Continental CTAM",
+  continentalctam: "Continental CTAM",
   bosch: "Bosch",
   donaldson: "Donaldson",
   lemforder: "Lemforder",
@@ -174,4 +176,12 @@ export function matchesOriginalNumberSearch(haystack: string, needle: string): b
         needleVariant.includes(haystackVariant),
     ),
   );
+}
+
+
+export function canonicalizePriceBrandName(value: string, code: string): string {
+  const brand = canonicalizeBrandName(value);
+  const exactCode = String(code || '').trim().replace(/\s+/g, '').toUpperCase();
+  if (normalizeBrandKey(brand) === 'continental' && /^[1-9]\d?PK[1-9]\d{2,4}$/.test(exactCode)) return 'Continental CTAM';
+  return brand;
 }

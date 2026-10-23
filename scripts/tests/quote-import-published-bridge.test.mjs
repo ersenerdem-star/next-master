@@ -330,3 +330,15 @@ test("gateway's user-facing timeout is retried instead of becoming a false unmat
     globalThis.window = previousWindow;
   }
 });
+
+test('automotive aliases share canonical price scope in CSV import without mapping tires or air springs',async()=>{
+ const requests=[];
+ globalThis.__quoteImportMocks={organizationId:async()=> 'org-1',codeReferences:async()=>new Map(),
+ supabaseClient:tableClient({brands:[{id:'ctam',name:'Continental CTAM',organization_id:'org-1'},{id:'air',name:'ContiTech Air Spring',organization_id:'org-1'},{id:'tires',name:'Continental Tires',organization_id:'org-1'}],product_code_normalization_policies:[],catalog_products:[]},[]),
+ callAppRpc:async(_name,args)=>args.input_requests.map((q,request_index)=>{requests.push(q);return {request_index,has_published_scope:true,options:q.brand==='Continental CTAM'?[{supplier_id:'s',supplier_name:'GroupAuto',brand:'Continental CTAM',product_code:q.code,buy_price:10,moq:1,order_multiple:null,stock_qty:null,valid_to:null}]:[]};})};
+ const {batchResolveQuoteImportRows}=await loadQuoteImport();
+ const result=await batchResolveQuoteImportRows({rows:['Contitech','Continental CTAM','Continental','Continental Tires','ContiTech Air Spring'].map(brand=>({brand,code:'6PK1870',qty:2})),customerType:'A',marginA:10,marginB:15});
+ assert.deepEqual(requests.map(x=>x.brand),['Continental CTAM','Continental CTAM','Continental CTAM','Continental Tires','ContiTech Air Spring']);
+ assert.ok(result.slice(0,3).every(x=>x.brand==='Continental CTAM'&&x.buy_price===10&&x.sell_price===11&&x.requestedCode==='6PK1870'));
+ assert.ok(result.slice(3).every(x=>x.buy_price===null));
+});

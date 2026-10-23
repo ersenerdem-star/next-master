@@ -1,5 +1,5 @@
 import { markupMoney } from "../../../../shared/order-money.mjs";
-import { canonicalizeBrandName, canonicalizePriceProductCode, normalizeBrandKey, normalizePartCode } from "../domain/shared/normalize";
+import { canonicalizeBrandName, canonicalizePriceBrandName, canonicalizePriceProductCode, normalizeBrandKey, normalizePartCode } from "../domain/shared/normalize";
 import { fetchCatalogMetadataForRows } from "../infrastructure/api/quoteImportApi";
 import { fetchCodeReferenceMatchesForRows } from "../infrastructure/api/codeReferencesApi";
 import { resolveQuoteLine } from "../infrastructure/api/quoteResolverApi";
@@ -196,7 +196,7 @@ export async function resyncSalesOrderLinesFromCatalog(
   // approved old-code -> new-code mapping before loading catalog metadata.
   const referenceMatches = await fetchCodeReferenceMatchesForRows(
     lines.map((line) => ({
-      brand: canonicalizeBrandName(line.brand || ""),
+      brand: canonicalizePriceBrandName(line.brand || "",line.resolvedCode || line.requestedCode),
       code: line.requestedCode || line.resolvedCode,
     })),
   );
@@ -204,6 +204,7 @@ export async function resyncSalesOrderLinesFromCatalog(
   const mappedLines = lines.map((savedLine) => {
     const line = {
       ...savedLine,
+      brand: canonicalizePriceBrandName(savedLine.brand,savedLine.resolvedCode || savedLine.requestedCode),
       resolvedCode: canonicalizePriceProductCode(savedLine.resolvedCode || savedLine.requestedCode, savedLine.brand),
     };
     const requestedCode = line.requestedCode || line.resolvedCode;

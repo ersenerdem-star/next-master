@@ -3,10 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 import { exactProductCode } from "../../apps/web/src/shared/currentSupplierPriceSync.mts";
-import { canonicalizePriceProductCode } from "../../apps/web/src/domain/shared/normalize.ts";
+import { canonicalizePriceProductCode, canonicalizePriceBrandName } from "../../apps/web/src/domain/shared/normalize.ts";
 
 function loadSalesResync(dependencies, exportedName = "resyncSalesOrderLinesFromCatalog") {
-  dependencies = { canonicalizePriceProductCode, ...dependencies };
+  dependencies = { canonicalizePriceProductCode, canonicalizePriceBrandName, ...dependencies };
   const path = new URL("../../apps/web/src/shared/salesOrderCatalogSync.ts", import.meta.url);
   const source = readFileSync(path, "utf8");
   const parsed = ts.createSourceFile(path.pathname, source, ts.ScriptTarget.ES2022, true);
@@ -219,4 +219,13 @@ test("saved SACHS rows canonicalize before metadata and price lookup while retai
   assert.deepEqual(result.map((line) => line.resolvedCode), codes.map((code) => code.replace(".", "")));
   assert.ok(result.every((line) => line.buy_price === 38.8 && line.codeChanged === false));
   assert.deepEqual(source, before);
+});
+
+test('saved Continental PK belt resync canonicalizes brand, preserves requested SKU and priced quantities',async()=>{
+ const calls=[];const resync=makeResync(async({brand,code})=>{calls.push([brand,code]);return {resolved:{found:true,product_code:code,brand},supplierOptions:[{supplier_id:'s',supplier_name:'GroupAuto',buy_price:10,sell_price:11}]};});
+ const blank={...savedLine('6PK1870'),brand:'Continental',buy_price:null,sell_price:null,supplier_name:'',supplierOptions:[],selectedSupplierKey:''};
+ const priced={...savedLine('6PK1000'),brand:'Continental',qty:7};
+ const result=await resync([blank,priced],{...repriceOptions,keepPrices:true,hydrateMissingPricesIfKeepingPrices:true});
+ assert.deepEqual(calls,[['Continental CTAM','6PK1870']]);assert.equal(result[0].brand,'Continental CTAM');assert.equal(result[0].requestedCode,'6PK1870');assert.equal(result[0].buy_price,10);
+ assert.equal(result[1].buy_price,priced.buy_price);assert.equal(result[1].qty,7);
 });
