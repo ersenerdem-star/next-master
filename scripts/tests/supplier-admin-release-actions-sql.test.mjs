@@ -289,3 +289,48 @@ test('isolated PostgreSQL17 concurrent worker fencing and discarded commit reply
     await exec('docker',['rm','--force',container],{timeout:20000}).catch(()=>{});
   }
 });
+
+async function currentEvidenceAdapters(db){
+ await admin(db,`create table public.catalog_product_source_records(organization_id uuid,catalog_product_id uuid);`);
+}
+const percentMigration=await readFile(new URL('../../supabase/migrations/20261023181019_supplier_brand_five_percent_review_rule.sql',import.meta.url),'utf8');
+test('actual production publish reproduces v2 adapter rejection, then v3 completes the same fenced decision',async t=>{
+ const db=await fixture(t,{target:production});await currentEvidenceAdapters(db);
+ await admin(db,'UPDATE supplier_price_ingestion_internal.production_publication_control SET enabled=true,activation_decision_id=$1,activated_by=$2,activated_at=now()',[id(99),actor]);
+ await db.exec(await readFile(new URL('../../supabase/migrations/20261023175926_supplier_brand_audit_current_source_evidence.sql',import.meta.url),'utf8'));
+ const release=await seed(db,10,{held:false});
+ const definitionBefore=(await admin(db,"select proacl,proconfig,prosecdef from pg_proc where oid='public.publish_supplier_price_release_production(text,uuid,uuid,uuid,uuid,uuid,uuid,bigint,uuid)'::regprocedure")).rows[0];
+ const decision=id(30);await enqueue(db,publishRequest(release,decision),'publish',production);await claim(db,production);
+ await assert.rejects(execute(db,decision,production),/PRODUCTION_PUBLICATION_IDENTITY_NOT_CLEAR/);
+ await db.exec('reset role');await db.exec(percentMigration);
+ const definitionAfter=(await admin(db,"select proacl,proconfig,prosecdef from pg_proc where oid='public.publish_supplier_price_release_production(text,uuid,uuid,uuid,uuid,uuid,uuid,bigint,uuid)'::regprocedure")).rows[0];
+ assert.deepEqual(definitionAfter,definitionBefore);
+ const result=await execute(db,decision,production);assert.equal(result.status,'published');assert.equal(result.published,true);
+ const saved=(await admin(db,'select status,brand_identity_audit from supplier_price_releases where id=$1',[release])).rows[0];
+ assert.equal(saved.status,'published');assert.equal(saved.brand_identity_audit.policy,'cross-brand-v3');assert.equal(saved.brand_identity_audit.review_required,false);
+ assert.equal((await execute(db,decision,production)).replayed,true);
+ assert.equal((await admin(db,'select count(*)::int n from supplier_price_publications')).rows[0].n,1);
+ const nextRelease=await seed(db,11,{held:false}),nextDecision=id(31);
+ await enqueue(db,publishRequest(nextRelease,nextDecision,0,result.publicationId),'publish',production);await claim(db,production);
+ const next=await execute(db,nextDecision,production);
+ await admin(db,'update supplier_price_ingestion_internal.production_publication_control set reversal_enabled=true');
+ const reversed=await rpc(db,'reverse_supplier_price_publication_production',[production,org,supplier,brand,actor,id(90),nextDecision,next.publicationId,0]);
+ assert.equal(reversed.reversed,true);assert.equal(reversed.restored_publication_id,result.publicationId);
+});
+test('actual staging adapter publishes after a fresh v3 audit and unknown policy remains refused',async t=>{
+ const db=await fixture(t);await currentEvidenceAdapters(db);await db.exec('reset role');await db.exec(percentMigration);
+ const release=await seed(db,10,{held:false}),decision=id(30);
+ await enqueue(db,publishRequest(release,decision),'publish');await claim(db);
+ const result=await execute(db,decision);assert.equal(result.status,'published');
+ const audit=(await admin(db,'select brand_identity_audit from supplier_price_releases where id=$1',[release])).rows[0].brand_identity_audit;
+ assert.equal(audit.policy,'cross-brand-v3');
+ const definition=(await admin(db,"select pg_get_functiondef('supplier_price_ingestion_internal.admin_publish_staging(text,uuid,uuid,uuid,uuid,uuid,uuid,bigint,uuid)'::regprocedure) d")).rows[0].d;
+ assert.match(definition,/not in \('cross-brand-v1','cross-brand-v2','cross-brand-v3'\)/);
+ await db.exec('reset role');
+ const auditDef=(await db.query("select pg_get_functiondef('supplier_price_validation_internal.cross_brand_audit(uuid)'::regprocedure) d")).rows[0].d;
+ await db.exec(auditDef.replaceAll('cross-brand-v3','unknown-policy'));
+ const nextRelease=await seed(db,11,{held:false}),nextDecision=id(31);
+ await enqueue(db,publishRequest(nextRelease,nextDecision,0,result.publicationId),'publish');await claim(db);
+ await assert.rejects(execute(db,nextDecision),/PRODUCTION_PUBLICATION_IDENTITY_NOT_CLEAR/);
+
+});

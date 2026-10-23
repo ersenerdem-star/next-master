@@ -165,3 +165,13 @@ test('v2 rejects missing/malformed historical evidence and still detects strong 
  }
  assert.equal(parseReleaseAudit(audit({policy:'cross-brand-v2',review_required:false,historical_brands:[]}),brand).reviewRequired,true);
 });
+
+test('v3 accepts exactly 5%, blocks strictly greater, ignores absolute count and preserves precise comparison',()=>{
+ const a=(n,matches)=>parseReleaseAudit(audit({policy:'cross-brand-v3',review_required:false,distinct_incoming_codes:n,historical_brands:[],brands:[{...audit().brands[0],matching_codes:matches}]}),brand);
+ assert.equal(a(100,5).reviewRequired,false);assert.equal(a(100,6).reviewRequired,true);
+ assert.equal(a(100001,5000).reviewRequired,false);assert.equal(a(100000,5000).reviewRequired,false);assert.equal(a(100000,5001).reviewRequired,true);
+ assert.equal(a(10,1).reviewRequired,true);
+ const parsed=a(100,5);
+ const html=renderToStaticMarkup(createElement(SupplierReleaseReviewCard,{rows:[{...row,audit:parsed}],tr:true,onDetails:()=>{}}));
+ assert.ok(!html.includes('Örtüşen marka'));assert.ok(!html.includes('İnceleme gerekli'));
+});

@@ -25,7 +25,7 @@ await db.exec(`create role anon;create role authenticated;create role service_ro
  create table supplier_current_price_pointers(organization_id uuid,supplier_id uuid,brand_id uuid,release_id uuid,publication_id uuid);
  create table supplier_price_publications(id uuid,organization_id uuid,supplier_id uuid,brand_id uuid,release_id uuid,status text);`);
 
-await db.exec(await readFile(new URL('../../supabase/migrations/20261023175926_supplier_brand_audit_current_source_evidence.sql',import.meta.url),'utf8'));
+await db.exec((await readFile(new URL('../../supabase/migrations/20261023181019_supplier_brand_five_percent_review_rule.sql',import.meta.url),'utf8')).split('DO $policy_contract$')[0]);
 await db.exec(await readFile(new URL('../../supabase/migrations/20261015181100_supplier_verified_completion_brand_audit.sql',import.meta.url),'utf8'));
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const org=id(1),supplier=id(2),brand=id(3),other=id(4),release=id(5);
@@ -43,7 +43,7 @@ const audit=async()=> (await db.query('select supplier_price_validation_internal
 const prove=async(scope=org)=>db.query("insert into catalog_product_source_records select $1,id,'canonical-source' from catalog_products",[scope]);
 test('historical 100% cross-brand catalogue membership is retained and informational; no publication or data rewrite',async()=>{
  const before=(await db.query('select * from catalog_products order by normalized_code')).rows;
- const result=await audit();assert.equal(result.policy,'cross-brand-v2');assert.equal(result.review_required,false);
+ const result=await audit();assert.equal(result.policy,'cross-brand-v3');assert.equal(result.review_required,false);
  assert.deepEqual(result.brands,[]);assert.equal(result.historical_brands[0].matching_codes,100);
  assert.equal(result.historical_brands[0].sample_codes.length,10);
  assert.deepEqual((await db.query('select * from catalog_products order by normalized_code')).rows,before);
@@ -82,7 +82,7 @@ test('duplicate codes and multiple sources count once; samples remain bounded',a
  await db.query("insert into supplier_price_release_rows select $1,200,'AC/1','AC1','accepted',12,'EUR',current_date",[release]);
  const r=await audit();assert.equal(r.distinct_incoming_codes,100);assert.equal(r.brands[0].matching_codes,100);assert.equal(r.brands[0].sample_codes.length,10);
 });
-test('absolute threshold is preserved and empty input remains held',async()=>{
+test('supported majority and empty input remain held',async()=>{
  await db.query('delete from supplier_price_release_rows where release_id=$1',[release]);
  assert.equal((await audit()).review_required,true);
  await db.query("insert into supplier_price_release_rows select $1,n,'X'||n,'X'||n,'accepted',12,'EUR',current_date from generate_series(1,7000)n",[release]);
@@ -100,9 +100,30 @@ test('actual completion guard uses separated evidence and never auto-publishes',
  assert.equal(r.publishable,true);
  const saved=(await db.query('select status,error_code,brand_identity_audit,published_at from supplier_price_releases where id=$1',[release])).rows[0];
  assert.equal(saved.status,'validated');assert.equal(saved.error_code,null);assert.equal(saved.published_at,null);
- assert.equal(saved.brand_identity_audit.policy,'cross-brand-v2');assert.equal(saved.brand_identity_audit.historical_brands[0].matching_codes,100);
+ assert.equal(saved.brand_identity_audit.policy,'cross-brand-v3');assert.equal(saved.brand_identity_audit.historical_brands[0].matching_codes,100);
 });
 test('actual completion guard retains the genuine wrong-brand hold',async()=>{
  await prove();const r=(await db.query('select * from complete_supplier_price_release_duckdb_validation($1,100,100,0,0,0,0,0,1)',[release])).rows[0];
  assert.equal(r.publishable,false);assert.equal((await db.query('select error_code from supplier_price_releases where id=$1',[release])).rows[0].error_code,'CROSS_BRAND_BULK_OVERLAP');
+});
+
+test('exactly 5% and less are normal; strictly above 5% holds without a minimum row count',async()=>{
+ await db.query("insert into catalog_product_source_records select organization_id,id,'canonical' from catalog_products order by normalized_code limit 5");
+ let r=await audit();assert.equal(r.brands[0].matching_codes,5);assert.equal(r.review_required,false);
+ await db.query("insert into catalog_product_source_records select c.organization_id,c.id,'canonical' from catalog_products c where not exists(select 1 from catalog_product_source_records s where s.catalog_product_id=c.id) limit 1");
+ r=await audit();assert.equal(r.brands[0].matching_codes,6);assert.equal(r.review_required,true);
+ await db.exec('truncate catalog_product_source_records,supplier_price_release_rows');
+ await db.query("insert into supplier_price_release_rows select $1,n,'AC-'||n,'AC-'||n,'accepted',12,'EUR',current_date from generate_series(1,10)n",[release]);
+ await db.query("insert into catalog_product_source_records select organization_id,id,'canonical' from catalog_products where normalized_code='AC1'");
+ assert.equal((await audit()).review_required,true);
+});
+test('large absolute count cannot override 5% rule and rounded percentage cannot hide an excess',async()=>{
+ await db.exec('truncate supplier_price_release_rows,catalog_products');
+ await db.query("insert into supplier_price_release_rows select $1,n,'X'||n,'X'||n,'accepted',12,'EUR',current_date from generate_series(1,100001)n",[release]);
+ await db.query("insert into supplier_prices select $1,$2,'X'||n,true from generate_series(1,5000)n",[org,other]);
+ assert.equal((await audit()).review_required,false);
+ await db.query('delete from supplier_price_release_rows where source_row_number=100001');
+ assert.equal((await audit()).review_required,false);
+ await db.query("insert into supplier_prices values($1,$2,'X5001',true)",[org,other]);
+ assert.equal((await audit()).review_required,true);
 });

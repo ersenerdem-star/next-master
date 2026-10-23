@@ -2,6 +2,7 @@
 import {SUPPLIER_PROCESSING_INTERRUPTED} from './supplierUploadProtocol';
 export type ReleaseAudit = {
   checked: boolean; reviewRequired: boolean; totalCodes: number;
+  reviewThresholdPercent?: number;
   historicalBrands?: ReleaseAudit['brands'];
   brands: {id: string; name: string; matches: number; percent: number; samples: string[]}[];
 };
@@ -47,7 +48,7 @@ const record=(v: unknown): Record<string,unknown> | null => v && typeof v==='obj
 const count=(v:unknown)=>typeof v==='number' && Number.isSafeInteger(v) && v>=0 ? v : null;
 export function parseReleaseAudit(value:unknown,brandId:string): ReleaseAudit | null {
   const a=record(value);
-  if (!a || !['cross-brand-v1','cross-brand-v2'].includes(String(a.policy)) || typeof a.checked!=='boolean' || typeof a.review_required!=='boolean') return null;
+  if (!a || !['cross-brand-v1','cross-brand-v2','cross-brand-v3'].includes(String(a.policy)) || typeof a.checked!=='boolean' || typeof a.review_required!=='boolean') return null;
   if (a.checked===false) return {checked:false,reviewRequired:true,totalCodes:0,brands:[]};
   const n=count(a.distinct_incoming_codes);
   if (a.selected_brand_id!==brandId || n===null || !Array.isArray(a.brands) || a.brands.length>10) return null;
@@ -64,10 +65,11 @@ export function parseReleaseAudit(value:unknown,brandId:string): ReleaseAudit | 
     return brands;
   };
   const brands=parseBrands(a.brands);
-  const historicalBrands=a.policy==='cross-brand-v2' ? parseBrands(a.historical_brands) : undefined;
+  const historicalBrands=a.policy!=='cross-brand-v1' ? parseBrands(a.historical_brands) : undefined;
   if (!brands || historicalBrands===null) return null;
-  const detected=n===0 || brands.some(b=>b.matches>=5000 || (b.matches>=100 && b.matches*100>=n*80));
-  return {checked:true,reviewRequired:a.review_required || detected,totalCodes:n,brands,...(historicalBrands ? {historicalBrands} : {})};
+  const percentRule=a.policy==='cross-brand-v3';
+  const detected=n===0 || brands.some(b=>percentRule ? b.matches*100>n*5 : b.matches>=5000 || (b.matches>=100 && b.matches*100>=n*80));
+  return {checked:true,reviewRequired:a.review_required || detected,totalCodes:n,brands,...(percentRule ? {reviewThresholdPercent:5} : {}),...(historicalBrands ? {historicalBrands} : {})};
 }
 export function releaseReviewState(row:ReleaseReviewRow) {
   if (row.status==='cancelled' && row.errorCode==='REVIEW_REJECTED') return 'rejected';

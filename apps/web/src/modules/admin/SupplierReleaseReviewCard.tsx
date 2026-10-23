@@ -31,6 +31,8 @@ export function SupplierReleaseReviewCard({rows,tr,onDetails,onIssues,actionsEna
     : {staged:'File processed — pre-publication review pending',processing_interrupted:'Processing stopped — operational review needed',rejected:'Source rejected — not published',review_required:'Review required — publication held',inactive:'Not active',active:'Current active release',previous_publication:'Previous publication — not current',unverified:'Check not verified',awaiting_publication:'Validated — not yet published',processing:'Processing'};
   return <div className="list-stack">{rows.map(row=>{
     const state=releaseReviewState(row);
+    const visibleBrands=row.audit?.brands.filter(b=>row.audit?.reviewThresholdPercent===5
+      ? b.matches*100>row.audit.totalCodes*5 : true) || [];
     return <article key={row.id} className="list-stack" style={{border:'1px solid var(--border-color, #d8e1ee)',borderRadius:12,padding:16}}>
       <strong>{row.brand} · {row.supplier}</strong>
       <span className={`mark-badge mark-badge--${state==='review_required'||state==='rejected'||state==='processing_interrupted'?'failed':state==='active'||state==='previous_publication'?'completed':'pending'}`}>{labels[state]}</span>
@@ -44,13 +46,13 @@ export function SupplierReleaseReviewCard({rows,tr,onDetails,onIssues,actionsEna
       </div> : null}
       {!row.audit?.checked && state!=='processing_interrupted' && state!=='previous_publication' ? <span>{tr?'Marka karşılaştırması henüz doğrulanmadı.':'Brand comparison has not yet been verified.'}</span> : null}
       {row.errorCode ? <strong className="error-text">{row.errorCode}</strong> : null}
-      {row.errorMessage || row.audit?.brands.length || row.audit?.historicalBrands?.length ? <details className="supplier-release-technical-details">
+      {row.errorMessage || visibleBrands.length || row.audit?.historicalBrands?.length ? <details className="supplier-release-technical-details">
         <summary>{tr?'Teknik ayrıntılar':'Technical details'}</summary>
         {row.errorMessage ? <span className="operations-subtle">{row.errorMessage}</span> : null}
         <span className="operations-subtle">{tr?'Kayıt kimliği':'Release ID'}: {row.id}</span>
-        {row.audit?.brands.length ? <div className="table-wrap"><table className="data-table"><thead><tr>
+        {visibleBrands.length ? <div className="table-wrap"><table className="data-table"><thead><tr>
           <th>{tr?'Örtüşen marka':'Matching brand'}</th><th>{tr?'Farklı kod':'Distinct codes'}</th><th>%</th><th>{tr?'Örnek kodlar':'Sample codes'}</th>
-        </tr></thead><tbody>{row.audit.brands.map(b=><tr key={b.id}><td>{b.name}</td><td>{b.matches.toLocaleString()}</td><td>{b.percent}%</td><td>{b.samples.join(', ')}</td></tr>)}</tbody></table></div> : null}
+        </tr></thead><tbody>{visibleBrands.map(b=><tr key={b.id}><td>{b.name}</td><td>{b.matches.toLocaleString()}</td><td>{b.percent}%</td><td>{b.samples.join(', ')}</td></tr>)}</tbody></table></div> : null}
         {row.audit?.historicalBrands?.length ? <div>
           <p>{tr?'Kaynağı doğrulanmamış eski katalog eşleşmeleri — yayını engellemez.':'Historical catalog matches without verified sources — do not block publication.'}</p>
           <ul>{row.audit.historicalBrands.map(b=><li key={b.id}>{b.name}: {b.matches.toLocaleString(tr?'tr-TR':'en-US')} ({b.percent}%) · {b.samples.join(', ')}</li>)}</ul>
