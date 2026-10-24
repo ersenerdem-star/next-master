@@ -45,6 +45,14 @@ services:
         sync: false
       - key: CATALOG_IMPORT_SERVICE_HISTORY_CONFIRMED
         sync: false
+      # Dayco browser enrichment is opt-in and remains fenced until the
+      # Playwright worker passes its browser/source smoke test.
+      - key: CATALOG_BROWSER_WORKER_ENABLED
+        value: "0"
+      - key: DAYCO_BROWSER_REQUEST_INTERVAL_MS
+        value: "1500"
+      - key: DAYCO_BROWSER_CONCURRENCY
+        value: "1"
 
 databases:
   - name: next-master-catalog-import-production-history
