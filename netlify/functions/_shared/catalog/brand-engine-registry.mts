@@ -22,6 +22,7 @@ export function brandEngineDefinition(brand:string){
  if(['sachs','boge','trw','lemforder','lemfoerder','wabco','zf'].includes(key))return {brand,family:'zf',sourceKey:'zf_group_official_v2',sourceUrl:'https://aftermarket.zf.com/en/aftermarket-portal/',reader:true,workflow:'zf'};
  if(key==='elring')return {brand,family:'elring',sourceKey:'tecalliance_elring',sourceUrl:'https://web.tecalliance.net/elring/en/home',reader:true,workflow:'elring'};
  if(key==='denso')return {brand,family:'denso',sourceKey:'denso_official_v1',sourceUrl:'https://www.denso-am.eu/catalog/pv',reader:true,workflow:'brand'};
+ if(key==='dayco')return {brand,family:'dayco',sourceKey:'dayco_official',sourceUrl:'https://www.dayco.com/emea-en/catalog/',reader:true,workflow:'brand'};
  if(key==='delphi')return {brand,...knownOfficialSources.delphi,reader:true,workflow:'brand'};
  if(key==='skf')return {brand,family:'skf_automotive',sourceKey:'skf_official_product_v1',sourceUrl:'https://automotive.skf.com/eur/en/product-catalogue',reader:true,workflow:'brand'};
  if(key==='bosch')return {brand,family:'bosch',sourceKey:'mira_legacy_bosch',sourceUrl:'https://www.boschaftermarket.com/',reader:true,workflow:'brand'};
