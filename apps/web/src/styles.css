@@ -13495,4 +13495,5 @@ body {
 .catalog-job-progress .catalog-enrichment-table { min-width: 980px; }
 .catalog-job-progress .catalog-enrichment-table th, .catalog-job-progress .catalog-enrichment-table td { white-space: normal; text-align: left; }
 .catalog-job-progress .catalog-enrichment-table td small { display: block; color: #66758b; }
+.catalog-job-progress .catalog-enrichment-table td .catalog-job-progress__id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; overflow-wrap: anywhere; }
 .catalog-job-progress .catalog-enrichment-table td:last-child { min-width: 130px; }
