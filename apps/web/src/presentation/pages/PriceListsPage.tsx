@@ -120,9 +120,13 @@ export function PriceListsPage() {
         setStatus(`${t("sales.priceLists.preparingDownload", { listType: downloadListType, brandName })}${progress}`);
       });
       await downloadExportJob(readyJob.id);
-      setStatus(t("sales.priceLists.downloaded", { listType: downloadListType, brandName }));
+      const downloadedMessage = t("sales.priceLists.downloaded", { listType: downloadListType, brandName });
+      setStatus(downloadedMessage);
       setStatusTone("success");
-      actionFeedback.clear();
+      // Keep the same explicit handoff message as the customer portal. The
+      // verified blob remains in the shared file-ready box until the admin
+      // chooses a save location.
+      actionFeedback.succeed(downloadedMessage);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : t("sales.priceLists.downloadFailed");
       setStatus(message);
