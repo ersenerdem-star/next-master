@@ -74,7 +74,9 @@ for (const commercialFields of [false,true]) test(`real DBOS5.2.11 v${commercial
     const { stdout } = await exec('docker', ['port', container, '5432/tcp']);
     const match = stdout.trim().match(/^127\.0\.0\.1:(\d+)$/);
     assert.ok(match, 'test database must only bind loopback');
-    const connectionString = `postgresql://postgres:${password}@127.0.0.1:${match[1]}/compact_runtime_test`;
+    const connectionUrl = new URL('postgresql://127.0.0.1');
+    connectionUrl.username = 'postgres'; connectionUrl.password = password; connectionUrl.port = match[1]; connectionUrl.pathname = '/compact_runtime_test';
+    const connectionString = connectionUrl.toString();
     for (let attempt = 0; attempt < 60; attempt += 1) {
       const candidate = new pg.Client({ connectionString, connectionTimeoutMillis: 1000 });
       try { await candidate.connect(); client = candidate; break; }

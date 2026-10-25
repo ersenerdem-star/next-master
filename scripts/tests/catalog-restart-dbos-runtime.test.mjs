@@ -43,7 +43,9 @@ test(`actual catalog restart at ${scenario === 'partial' ? 'first nonfinal batch
       { env: { ...process.env, POSTGRES_PASSWORD: password }, timeout: 30_000 });
     const port = (await exec('docker', ['port', container, '5432/tcp'])).stdout.trim().match(/^127\.0\.0\.1:(\d+)$/);
     assert.ok(port);
-    const url = `postgresql://postgres:${password}@127.0.0.1:${port[1]}/catalog_restart_test`;
+    const urlObject = new URL('postgresql://127.0.0.1');
+    urlObject.username = 'postgres'; urlObject.password = password; urlObject.port = port[1]; urlObject.pathname = '/catalog_restart_test';
+    const url = urlObject.toString();
     for (let i = 0; i < 120; i++) {
       const candidate = new pg.Client({ connectionString: url, connectionTimeoutMillis: 1000 });
       try { await candidate.connect(); client = candidate; break; } catch { await candidate.end().catch(() => {}); await delay(250); }

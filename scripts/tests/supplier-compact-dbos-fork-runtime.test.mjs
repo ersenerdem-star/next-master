@@ -150,7 +150,9 @@ if(process.env.NM_COMPACT_FORK_TEST_CHILD){
   await exec('docker',['run','--detach','--rm','--name',container,'--cpus','0.5','--memory','1g','--publish','127.0.0.1::5432',
    '--env','POSTGRES_PASSWORD','--env','POSTGRES_DB=compact_fork_runtime_test','postgres:17'],{env:{...process.env,POSTGRES_PASSWORD:password},timeout:30000});
   const {stdout}=await exec('docker',['port',container,'5432/tcp']);const port=stdout.trim().match(/^127\.0\.0\.1:(\d+)$/)?.[1];assert.ok(port);
-  const connectionString=`postgresql://postgres:${password}@127.0.0.1:${port}/compact_fork_runtime_test`;
+  const connectionUrl = new URL('postgresql://127.0.0.1');
+  connectionUrl.username = 'postgres'; connectionUrl.password = password; connectionUrl.port = port; connectionUrl.pathname = '/compact_fork_runtime_test';
+  const connectionString = connectionUrl.toString();
   for(let attempt=0;attempt<60;attempt++){
    const candidate=new pg.Client({connectionString,connectionTimeoutMillis:1000});
    try{await candidate.connect();client=candidate;break;}catch{await candidate.end().catch(()=>{});await delay(250);}
