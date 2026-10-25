@@ -321,6 +321,7 @@ export function App() {
       if (event === "SIGNED_OUT") {
         clearPreparedDownloads();
         clearCachedAppSession();
+        setAccountIdentity({name:"",email:""});
         setAppRole("");
         setAppDepartment("viewer");
         setAppPermissions({});
@@ -333,6 +334,7 @@ export function App() {
 
       if (!session) {
         clearCachedAppSession();
+        setAccountIdentity({name:"",email:""});
         setAppRole("");
         setAppDepartment("viewer");
         setAppPermissions({});
@@ -397,6 +399,7 @@ export function App() {
         setAppPermissions(session.permissions || {});
       } catch {
         if (!cancelled) {
+          setAccountIdentity({name:"",email:""});
           setAppRole((current) => current || appRoleRef.current || "");
         }
       } finally {
