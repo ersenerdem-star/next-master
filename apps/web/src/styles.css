@@ -13496,4 +13496,10 @@ body {
 .catalog-job-progress .catalog-enrichment-table th, .catalog-job-progress .catalog-enrichment-table td { white-space: normal; text-align: left; }
 .catalog-job-progress .catalog-enrichment-table td small { display: block; color: #66758b; }
 .catalog-job-progress .catalog-enrichment-table td .catalog-job-progress__id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; overflow-wrap: anywhere; }
+.catalog-job-progress__details { margin-top: 6px; }
+.catalog-job-progress__details summary { cursor: pointer; color: #1264a3; font-weight: 700; font-size: 11px; }
+.catalog-job-progress__details dl { margin: 8px 0 0; padding: 8px; border: 1px solid #d8e5f1; border-radius: 7px; background: #fff; min-width: 240px; }
+.catalog-job-progress__details dl div + div { margin-top: 6px; }
+.catalog-job-progress__details dt { color: #586e88; font-size: 10px; font-weight: 700; }
+.catalog-job-progress__details dd { margin: 2px 0 0; color: #1d2b3d; font-size: 11px; line-height: 1.35; }
 .catalog-job-progress .catalog-enrichment-table td:last-child { min-width: 130px; }
