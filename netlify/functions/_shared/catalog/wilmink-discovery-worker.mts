@@ -6,7 +6,18 @@ import {exactCatalogCode} from './supplier-enrichment-plan.mjs';
 
 export async function runWilminkDiscovery({db,organizationId,job,maxMs=210000,readHtml=readWilminkHtml}:any){
  const support=job.manifest.adapter===WILMINK_SUPPORT_SCAN,config=wilminkSource(support?job.manifest.brand:'Kolbenschmidt');
- const read=(url:string)=>readHtml(url,{brand:config.brand});
+ // Keep the distributor crawl strictly serial.  The dispatcher already admits
+ // one brand job per organization; this delay also protects Wilmink when a
+ // single discovery package contains many product pages.
+ const requestIntervalMs=Math.max(1000,Math.min(15000,Number(process.env.WILMINK_REQUEST_INTERVAL_MS||1500)));
+ let lastReadAt=0;
+ const read=async(url:string)=>{
+  const wait=Math.max(0,requestIntervalMs-(Date.now()-lastReadAt));
+  if(wait)await new Promise(resolve=>setTimeout(resolve,wait));
+  const result=await readHtml(url,{brand:config.brand});
+  lastReadAt=Date.now();
+  return result;
+ };
  const scope={input_org:organizationId,input_job:job.id,input_token:job.lease_token},started=Date.now();
  const rpc=async(name:string,args:any)=>{const r=await db.rpc(name,args);if(r.error)throw Error(r.error.message);return r.data;};
  const source=await db.from('catalog_external_sources').select('*').eq('organization_id',organizationId).eq('source_key',config.sourceKey).single();
