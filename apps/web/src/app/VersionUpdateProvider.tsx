@@ -390,7 +390,15 @@ export function VersionUpdateProvider({ children }: { children: ReactNode }) {
   }, [checkForUpdate, performHardReload]);
 
   useEffect(() => {
-    void checkForUpdate("startup", { throttleMs: 0 });
+    let disposed = false;
+    void checkForUpdate("startup", { throttleMs: 0 }).then((startupDecision) => {
+      // Every entry point (admin and customer) uses this provider. Move stale
+      // tabs to the current bundle before the user can submit an action; the
+      // reload marker still prevents a broken deployment from looping forever.
+      if (!disposed && startupDecision.status === "stale") {
+        void performHardReload(startupDecision.deployed);
+      }
+    });
 
     const handleFocus = () => {
       void checkForUpdate("focus");
@@ -414,12 +422,13 @@ export function VersionUpdateProvider({ children }: { children: ReactNode }) {
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
+      disposed = true;
       window.clearInterval(intervalId);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("pageshow", handlePageShow);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [checkForUpdate]);
+  }, [checkForUpdate, performHardReload]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
