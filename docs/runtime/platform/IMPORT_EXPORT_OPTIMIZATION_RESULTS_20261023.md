@@ -266,3 +266,12 @@ Netlify production remains on supported nodejs24.x; the trial nodejs22.x setting
 All 28 current price pointers retain latest update 19:17:07 UTC, with zero pointer changes during the Node update. No order, price, tenant ACL, source authorization, checkpoint or TLS-validation rule was changed. The remaining action is provider confirmation of backported fixes or a rollout to at least 24.22.1 (or 22.23.4 on that supported branch). Build/deploy success is not proof of that action. A concrete support-request draft, including observed versions, affected regions, CVEs and a request for rollout/backport evidence, is saved unsent in `scripts/ops/evidence/node-security-update-production-20261023.json` under `supportRequest`.
 
 Receipt: `scripts/ops/evidence/node-security-update-production-20261023.json`; screenshots: `artifacts/batch-optimization-20261023/node-security-production-supplier.jpg` and `artifacts/batch-optimization-20261023/node-security-production-catalog.jpg`.
+
+
+## Bosch portal prepared-file regression repaired (25 October 2026)
+
+The customer portal had been serving an older production build (`f191e12e5461d0f751b8468edfc6b1120dc1d670`). Its Bosch click sent the legacy `schemaVersion: 3` contract and started a cold V3 job `5928ce82-47ce-4c14-82e3-1395f9768f08`, even though an earlier prepared Bosch A artifact already existed. That job completed 46,773 rows and 1,289,517 bytes, so no data was lost; the delay was avoidable regeneration.
+
+The current branch, which already contains the live customer-screen changes, was deployed through the guarded Linux DuckDB wrapper as production deploy `6ade5da504146470fd60ab65` and public version `af0eec70be6cf8e2a5078c256b00ce164e7fa5b7`. Build, five prepared-download tests and core guardian passed. The deployed `startPortalPriceListExport` path uses schema version 4, the prepared price version contract and the existing cache admission; the next Bosch click should reuse the current matching artifact and return immediately after signing the URL. A cold generation remains valid only when the publication/source version has changed or the artifact is missing/incomplete.
+
+Receipt: `artifacts/batch-optimization-20261025/bosch-prepared-production-receipt.json`.

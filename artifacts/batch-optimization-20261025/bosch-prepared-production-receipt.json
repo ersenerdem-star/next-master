@@ -1,0 +1,35 @@
+{
+  "observedAt": "2026-10-25T19:52:00Z",
+  "worktree": "/Users/ersen/.codex/worktrees/supplier-catalog-enrichment/next-master",
+  "branch": "codex/denso-catalog-resume",
+  "sourceCommit": "af0eec70be6cf8e2a5078c256b00ce164e7fa5b7",
+  "deploy": {
+    "id": "6ade5da504146470fd60ab65",
+    "state": "ready",
+    "context": "production",
+    "publicVersion": "af0eec70be6cf8e2a5078c256b00ce164e7fa5b7"
+  },
+  "preDeploy": {
+    "build": "passed",
+    "preparedPriceTests": "5 passed",
+    "coreGuardian": "0 critical, 0 warnings",
+    "linuxDuckdbBundleBytes": 28193506
+  },
+  "diagnosis": {
+    "oldLiveCommit": "f191e12e5461d0f751b8468edfc6b1120dc1d670",
+    "oldRequestSchemaVersion": 3,
+    "oldJobId": "5928ce82-47ce-4c14-82e3-1395f9768f08",
+    "oldJobFinalized": true,
+    "oldJobRows": 46773,
+    "oldJobBytes": 1289517
+  },
+  "preparedEvidence": {
+    "priorBoschPortalJobId": "c2ad5987-4128-49ff-a69a-b31fe1a9bb20",
+    "schemaVersion": 4,
+    "status": "finalized",
+    "rows": 46773,
+    "bytes": 1289517,
+    "progressMessage": "Prepared price file reused."
+  },
+  "expectedNextClick": "startPortalPriceListExport emits schemaVersion 4 and admits/reuses the prepared current-price artifact; no cold V3 generation unless the source version changes."
+}
