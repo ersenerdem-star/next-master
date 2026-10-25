@@ -31,3 +31,17 @@ test("one bad customer profile yields to the queue without leaking its error or 
   assert.equal(result.failed, 1);
   assert.doesNotMatch(JSON.stringify(result), /credentials/);
 });
+
+test("the shared prewarm runner also supports admin comparison and supplier export profiles", async () => {
+  const profile = { id: "admin-profile", seed_job_id: "seed", organization_id: "org", lease_token: "lease", revision: 1, export_type: "catalog_master" as const };
+  const dispatched: string[] = [];
+  const result = await runPreparedPricePrewarm({
+    claim: async () => [profile],
+    prepare: async () => ({ job: { id: "prepared-admin-export", status: "queued" } as ExportJobRow, cached: false }),
+    dispatch: async id => { dispatched.push(id); },
+    finish: async (claimed, error) => { assert.equal(claimed, profile); assert.equal(error, null); },
+  });
+  assert.deepEqual(dispatched, ["prepared-admin-export"]);
+  assert.equal(result.prepared, 1);
+  assert.equal(result.failed, 0);
+});

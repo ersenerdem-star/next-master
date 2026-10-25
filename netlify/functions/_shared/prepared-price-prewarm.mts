@@ -1,7 +1,8 @@
 import { getJson, sendJson, serviceRoleHeaders } from "./http.mts";
 import { canAccessOperationsModules } from "./roles.mts";
 import {
-  fetchExportJobById, fetchPortalInviteForExport, startAdminPriceListExport, startPortalPriceListExport,
+  fetchExportJobById, fetchPortalInviteForExport, startAdminPriceListExport, startCatalogMasterExport,
+  startPortalPriceListExport, startSupplierPriceListExport,
   type ExportJobRow,
 } from "./export-jobs.mts";
 
@@ -10,13 +11,19 @@ export type PreparedPriceProfile = {
   revision: number; lease_token: string;
 };
 
+export type PreparedAdminExportProfile = {
+  id: string; organization_id: string; seed_job_id: string;
+  export_type: "catalog_master" | "supplier_price_list";
+  revision: number; lease_token: string;
+};
+
 // One profile per scheduled tick, with a durable SQL lease and globally bounded
 // cold generation. An unavailable profile yields to the remaining profiles.
-export async function runPreparedPricePrewarm(deps: {
-  claim: () => Promise<PreparedPriceProfile[]>;
-  prepare: (profile: PreparedPriceProfile) => Promise<{ job: ExportJobRow; cached: boolean }>;
+export async function runPreparedPricePrewarm<T extends { id: string; seed_job_id: string; revision: number; lease_token: string }>(deps: {
+  claim: () => Promise<T[]>;
+  prepare: (profile: T) => Promise<{ job: ExportJobRow; cached: boolean }>;
   dispatch: (jobId: string) => Promise<unknown>;
-  finish: (profile: PreparedPriceProfile, errorCode: string | null) => Promise<unknown>;
+  finish: (profile: T, errorCode: string | null) => Promise<unknown>;
 }) {
   const profile = (await deps.claim())[0];
   if (!profile) return { status: "idle", prepared: 0, reused: 0, failed: 0 };
@@ -75,6 +82,54 @@ export async function prewarmPreparedPriceFile(supabaseUrl: string, serviceRoleK
       }, {
         brandId: String(seed.scope.brandId || ""), brandName: String(seed.scope.brandName || ""),
         priceListType: seed.scope.priceListType === "B" ? "B" : "A", marginPercent: Number(seed.scope.marginPercent),
+      });
+    },
+  });
+}
+
+/**
+ * Keep the requested admin comparison and supplier buy-price workbooks warm.
+ * The profile stores the original scope; each refresh resolves the current
+ * source fingerprint through the normal start function before dispatching.
+ */
+export async function prewarmPreparedAdminExportFile(supabaseUrl: string, serviceRoleKey: string, dispatch: (jobId: string) => Promise<unknown>) {
+  const rpc = <T,>(name: string, body: Record<string, unknown>) => sendJson<T>(`${supabaseUrl}/rest/v1/rpc/${name}`, {
+    method: "POST", headers: serviceRoleHeaders(serviceRoleKey), body: JSON.stringify(body), timeoutMs: 15_000,
+  });
+  return runPreparedPricePrewarm({
+    claim: () => rpc<PreparedAdminExportProfile[]>("claim_prepared_admin_export_profile", {}),
+    dispatch,
+    finish: (profile, errorCode) => rpc("finish_prepared_admin_export_profile", {
+      input_id: profile.id, input_lease_token: profile.lease_token, input_revision: profile.revision, input_error_code: errorCode,
+    }),
+    prepare: async (profile) => {
+      const seed = await fetchExportJobById(supabaseUrl, serviceRoleKey, profile.organization_id, profile.seed_job_id);
+      if (!seed || seed.audience !== "admin" || !seed.requested_by || seed.export_type !== profile.export_type) {
+        throw new Error("PREWARM_PROFILE_UNAVAILABLE");
+      }
+      const query = new URLSearchParams({
+        select: "id,organization_id,role,department,permissions,is_active", id: `eq.${seed.requested_by}`,
+        organization_id: `eq.${profile.organization_id}`, limit: "1",
+      });
+      type Actor = { id: string; role: string; department: string; permissions: Record<string, boolean>; is_active: boolean };
+      const [actor] = await getJson<Actor[]>(`${supabaseUrl}/rest/v1/profiles?${query}`, {
+        headers: serviceRoleHeaders(serviceRoleKey), timeoutMs: 10_000,
+      });
+      if (!actor?.is_active || !canAccessOperationsModules(actor.role, actor.department, actor.permissions)) {
+        throw new Error("PREWARM_PROFILE_UNAVAILABLE");
+      }
+      const caller = { ...actor, email: "", fullName: "", organizationId: profile.organization_id, customerScopeMode: "all" as const };
+      const scope = seed.scope;
+      if (profile.export_type === "catalog_master") {
+        return startCatalogMasterExport(supabaseUrl, serviceRoleKey, caller, {
+          brandId: String(scope.brandId || ""), brandName: String(scope.brandName || ""),
+          search: String(scope.search || ""), scope: scope.scope === "catalog" ? "catalog" : "priced",
+          marginA: Number(scope.marginA ?? 0.1), marginB: Number(scope.marginB ?? 0.15),
+        });
+      }
+      return startSupplierPriceListExport(supabaseUrl, serviceRoleKey, caller, {
+        supplierId: String(scope.supplierId || ""), brandName: String(scope.brandName || ""),
+        search: String(scope.search || ""), freshness: String(scope.freshness || "all"), format: "csv",
       });
     },
   });
