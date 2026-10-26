@@ -94,7 +94,7 @@ function mergeCatalogMetadata(
     lifecycle_warning:
       metadata.lifecycle_status === "discontinued"
         ? `Production ended for ${metadata.product_code || line.resolvedCode || line.requestedCode}.${metadata.lifecycle_note ? ` ${metadata.lifecycle_note}` : ""}`
-        : line.lifecycle_warning ?? null,
+        : metadata.lifecycle_status === "active" ? null : line.lifecycle_warning ?? null,
     found: line.found || Boolean(metadata.product_code || metadata.description || metadata.oem_no),
   };
 }

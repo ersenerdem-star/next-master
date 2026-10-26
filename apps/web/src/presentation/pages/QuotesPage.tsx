@@ -1896,7 +1896,8 @@ export function QuotesPage({
       const summary = salesOrderResyncPriceSummary(quoteBuilderLines, syncedLines);
       const codeChanges = syncedLines.filter((line, index) =>
         (line.resolvedCode || line.requestedCode) !== (quoteBuilderLines[index]?.resolvedCode || quoteBuilderLines[index]?.requestedCode)).length;
-      const message = `${t("sales.orders.resyncCodeChanges", { count: codeChanges })} ${t("sales.orders.resyncPriceSummary", summary)}${preservedOtherPrices ? ` ${t("sales.orders.resyncOtherPricesPreserved")}` : ""}`;
+      const discontinuedCount = syncedLines.filter((line) => line.lifecycle_status === "discontinued").length;
+      const message = `${t("sales.orders.resyncCodeChanges", { count: codeChanges })} ${t("sales.orders.resyncDiscontinuedCount", { count: discontinuedCount })} ${t("sales.orders.resyncPriceSummary", summary)}${preservedOtherPrices ? ` ${t("sales.orders.resyncOtherPricesPreserved")}` : ""}`;
       setBuilderStatus(message);
       if (summary.failed) actionFeedback.fail(message);
       else actionFeedback.succeed(message);

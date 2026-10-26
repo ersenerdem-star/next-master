@@ -10,7 +10,7 @@ function loadSalesResync(dependencies, exportedName = "resyncSalesOrderLinesFrom
   const path = new URL("../../apps/web/src/shared/salesOrderCatalogSync.ts", import.meta.url);
   const source = readFileSync(path, "utf8");
   const parsed = ts.createSourceFile(path.pathname, source, ts.ScriptTarget.ES2022, true);
-  const names = ["requireRepricingCurrency", "salesOrderResyncPriceSummary", "refreshSalesOrderPriceLines", "refreshLinePricesFromCatalog", "resyncSalesOrderLinesFromCatalog", "resyncSalesOrderWithCodeReferenceFallback"];
+  const names = ["requireRepricingCurrency", "salesOrderResyncPriceSummary", "mergeCatalogMetadata", "refreshSalesOrderPriceLines", "refreshLinePricesFromCatalog", "resyncSalesOrderLinesFromCatalog", "resyncSalesOrderWithCodeReferenceFallback"];
   const declarations = names.map((name) => {
     const node = parsed.statements.find((statement) =>
       ts.isFunctionDeclaration(statement) && statement.name?.text === name);
@@ -36,17 +36,16 @@ function savedLine(code = "61/1") {
   };
 }
 
-function makeResync(resolveQuoteLine, references = new Map(), exportedName = "resyncSalesOrderLinesFromCatalog") {
+function makeResync(resolveQuoteLine, references = new Map(), exportedName = "resyncSalesOrderLinesFromCatalog", metadata = new Map()) {
   return loadSalesResync({
     exactProductCode,
     normalizePartCode: (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, ""),
     normalizeBrandKey: (value) => String(value || "").trim().toLowerCase(),
     canonicalizeBrandName: (value) => String(value || "").trim(),
     fetchCodeReferenceMatchesForRows: async () => references,
-    fetchCatalogMetadataForRows: async () => new Map(),
-    mergeCatalogMetadata: (line) => line,
-    fillText: (current, next) => next || current,
-    fillNumber: (current, next) => next ?? current,
+    fetchCatalogMetadataForRows: async () => metadata,
+    fillText: (current, next, onlyFillBlanks) => onlyFillBlanks ? current || next : next || current,
+    fillNumber: (current, next, onlyFillBlanks) => onlyFillBlanks ? current ?? next : next ?? current,
     getSelectedSupplierName: (line) => String(line.supplier_name || "").trim().toLowerCase(),
     lineHasVisiblePrices: (line) => Number(line.buy_price ?? 0) > 0 || Number(line.sell_price ?? 0) > 0,
     normalizeOrderQuantity: (qty) => ({ corrected: qty, adjusted: false, requested: qty }),
@@ -175,6 +174,28 @@ test('a Sachs replacement sync survives an unrelated full-order price failure an
   assert.equal(result.lines[0].buy_price,42);
   assert.equal(result.lines[1].buy_price,8.34);
   assert.deepEqual(original,before);
+});
+
+test('blanks-only sync still applies replacements and current discontinued status without overwriting filled descriptions',async()=>{
+  const refs=new Map([['sachs::313739',{old_code:'313739',new_code:'560119',reason:'Replacement'}]]);
+  const metadata=new Map([
+    ['sachs::560119',{product_code:'560119',description:'Replacement part',oem_no:'',hs_code:'',origin:'',weight_kg:null,lifecycle_status:'discontinued',lifecycle_note:'No longer supplied'}],
+    ['sachs::ACTIVE',{product_code:'ACTIVE',description:'Catalog description',oem_no:'',hs_code:'',origin:'',weight_kg:null,lifecycle_status:'active'}],
+  ]);
+  const old={...savedLine('313739'),brand:'Sachs',supplier_name:'Romany'};
+  const active={...savedLine('ACTIVE'),brand:'Sachs',lifecycle_status:'discontinued',lifecycle_warning:'Production ended for ACTIVE.'};
+  const sync=makeResync(async({code})=>({resolved:{found:true,product_code:code,brand:'Sachs',lifecycle_status:'discontinued'},supplierOptions:[
+    {supplier_id:'romany',supplier_name:'Romany',buy_price:42,sell_price:46.2},
+  ]}),refs,'resyncSalesOrderLinesFromCatalog',metadata);
+  const result=await sync([old,active],{...repriceOptions,keepPrices:true,onlyFillBlanks:true,hydrateMissingPricesIfKeepingPrices:true});
+  assert.equal(result[0].requestedCode,'313739');
+  assert.equal(result[0].resolvedCode,'560119');
+  assert.equal(result[0].codeChanged,true);
+  assert.equal(result[0].lifecycle_status,'discontinued');
+  assert.match(result[0].lifecycle_warning,/No longer supplied/);
+  assert.equal(result[1].description,'Old description');
+  assert.equal(result[1].lifecycle_status,'active');
+  assert.equal(result[1].lifecycle_warning,null);
 });
 
 test('replacement sync refuses to save when the old supplier has no current successor price',async()=>{
