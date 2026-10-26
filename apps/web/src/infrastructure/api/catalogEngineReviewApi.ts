@@ -48,9 +48,23 @@ async function request<T>(url: string, method: 'GET' | 'POST', body?: unknown): 
   return payload as T;
 }
 
+async function retryTransient<T>(work: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try { return await work(); }
+    catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (/^(AUTH_|REVIEW_|Invalid |Duplicate )/.test(message) || attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
 export function getEngineReviewQueue(brand: string, status: string, offset: number, limit = 50) {
   const params = new URLSearchParams({ brand, status, offset: String(offset), limit: String(limit) });
-  return request<EngineReviewQueue>(`/api/catalog/engine-review?${params}`, 'GET');
+  return retryTransient(() => request<EngineReviewQueue>(`/api/catalog/engine-review?${params}`, 'GET'));
 }
 
 export function decideEngineReviewItem(item: EngineReviewItem, decision: 'approved' | 'rejected') {
@@ -69,7 +83,9 @@ export function engineReviewItemKey(item: EngineReviewItem) {
 }
 
 export function decideEngineReviewBatch(items: EngineReviewItem[], decision: 'approved' | 'rejected') {
-  return request<{ results: EngineReviewBatchResult[] }>(
+  // The server decision RPC is idempotent for the same fingerprint and choice.
+  // Retrying a lost response therefore retrieves the result without deciding twice.
+  return retryTransient(() => request<{ results: EngineReviewBatchResult[] }>(
     '/api/catalog/engine-review', 'POST', {
       decision,
       items: items.map((item) => ({
@@ -77,5 +93,5 @@ export function decideEngineReviewBatch(items: EngineReviewItem[], decision: 'ap
         receiptIndex: item.receiptIndex, fingerprint: item.fingerprint,
       })),
     },
-  );
+  ));
 }

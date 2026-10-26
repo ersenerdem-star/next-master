@@ -69,15 +69,16 @@ export function CatalogEngineReviewQueue({ onOpenLegacy }: { onOpenLegacy: () =>
     setLoading(true);
     setError('');
     getEngineReviewQueue(brand, status, offset, PAGE_SIZE).then((result) => {
-      if (live) setQueue(result);
+      if (live) { setQueue(result); setBulkFailures([]); }
     }).catch((caught) => {
-      if (live) { setQueue(null); setError(caught instanceof Error ? caught.message : String(caught)); }
+      if (live) setError(caught instanceof Error ? caught.message : String(caught));
     }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
   }, [brand, status, offset, tick]);
 
   function chooseBrand(value: string) {
     setBrand(value);
+    setQueue(null);
     setBrandSearch(value);
     setOffset(0);
     setSelected(null);
@@ -130,9 +131,9 @@ export function CatalogEngineReviewQueue({ onOpenLegacy }: { onOpenLegacy: () =>
     const failed: string[] = [];
     const failedKeys = new Set<string>();
     let succeeded = 0;
-    for (let start = 0; start < items.length; start += 20) {
-      const batch = items.slice(start, start + 20);
-      setBulkProgress(`${Math.min(start + batch.length, items.length)} / ${items.length}`);
+    for (let start = 0; start < items.length; start += 8) {
+      const batch = items.slice(start, start + 8);
+      setBulkProgress(`${start} / ${items.length}`);
       try {
         const response = await decideEngineReviewBatch(batch, decision);
         response.results.forEach((result, index) => {
@@ -142,6 +143,7 @@ export function CatalogEngineReviewQueue({ onOpenLegacy }: { onOpenLegacy: () =>
             failed.push(`${batch[index].productCode}: ${result.error || 'REVIEW_DECISION_FAILED'}`);
           }
         });
+        setBulkProgress(`${start + batch.length} / ${items.length}`);
       } catch (caught) {
         const message = caught instanceof Error ? caught.message : String(caught);
         batch.forEach((item) => { failedKeys.add(engineReviewItemKey(item)); failed.push(`${item.productCode}: ${message}`); });
@@ -208,7 +210,7 @@ export function CatalogEngineReviewQueue({ onOpenLegacy }: { onOpenLegacy: () =>
       </div>
     </div>
     {error ? <InlineAlert tone="danger" title={tr ? 'İşlem tamamlanamadı' : 'Action failed'}>{error}</InlineAlert> : null}
-    <div className="catalog-engine-review-count"><strong>{brand}</strong> · {words[status]}: {(queue?.total ?? 0).toLocaleString(locale === 'tr' ? 'tr-TR' : 'en-US')}
+    <div className="catalog-engine-review-count"><strong>{brand}</strong> · {words[status]}: {queue ? queue.total.toLocaleString(locale === 'tr' ? 'tr-TR' : 'en-US') : '—'}
       <span>{tr ? 'Karar beklerken motor çalışmaya devam eder.' : 'The engine continues while decisions are pending.'}</span></div>
     {status === 'pending' && queue?.items.length ? <div className="catalog-engine-review-bulkbar">
       <strong>{selectedItems.length} {words.selectedCount}</strong>
@@ -246,7 +248,7 @@ export function CatalogEngineReviewQueue({ onOpenLegacy }: { onOpenLegacy: () =>
       <div className="catalog-engine-review-pagination"><Button variant="secondary" disabled={offset === 0 || bulkBusy} onClick={() => { setSelectedKeys(new Set()); setOffset(Math.max(0, offset - PAGE_SIZE)); }}>{words.previous}</Button>
         <span>{offset + 1}–{Math.min(offset + PAGE_SIZE, queue.total)} / {queue.total}</span>
         <Button variant="secondary" disabled={offset + PAGE_SIZE >= queue.total || bulkBusy} onClick={() => { setSelectedKeys(new Set()); setOffset(offset + PAGE_SIZE); }}>{words.next}</Button></div>
-    </> : <EmptyState title={words.empty} />}
+    </> : error && !queue ? null : <EmptyState title={words.empty} />}
     {selected ? <div className="catalog-engine-review-detail"><strong>{selected.productCode.startsWith('https://') ? (tr ? 'Kod doğrulanamadı' : 'Code unverified') : selected.productCode}</strong><p>{reasonLabel(selected.reason, tr)}</p>
       <div>{words.current}: <strong>{selected.currentEan || '—'}</strong> → {words.proposed}: <strong>{selected.sourceEan || '—'}</strong></div>
       <div>{selected.currentDescription || '—'} → {selected.sourceDescription || '—'}</div>
