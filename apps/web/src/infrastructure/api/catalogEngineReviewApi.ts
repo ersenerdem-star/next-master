@@ -61,3 +61,21 @@ export function decideEngineReviewItem(item: EngineReviewItem, decision: 'approv
     },
   );
 }
+
+export type EngineReviewBatchResult = { key: string; ok: boolean; error?: string };
+
+export function engineReviewItemKey(item: EngineReviewItem) {
+  return `${item.engine}:${item.jobId}:${item.itemIndex}:${item.receiptIndex}`;
+}
+
+export function decideEngineReviewBatch(items: EngineReviewItem[], decision: 'approved' | 'rejected') {
+  return request<{ results: EngineReviewBatchResult[] }>(
+    '/api/catalog/engine-review', 'POST', {
+      decision,
+      items: items.map((item) => ({
+        engine: item.engine, jobId: item.jobId, itemIndex: item.itemIndex,
+        receiptIndex: item.receiptIndex, fingerprint: item.fingerprint,
+      })),
+    },
+  );
+}

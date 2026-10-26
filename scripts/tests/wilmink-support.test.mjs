@@ -58,3 +58,17 @@ for(const reason of ['WILMINK_HTTP_404','WILMINK_RESPONSE_TOO_LARGE','WILMINK_DE
  const result=await runWilminkDiscovery({db,organizationId:'org',job,readHtml:async u=>{if(u===bad)throw Error(reason);return html;}});
  assert.equal(result.status,'reviewed');assert.equal(completed.input_products[0].unavailable,reason);assert.equal(completed.input_products[1].brand,'INA');assert.equal(completed.input_products[1].code,'530020133');assert.equal(cp.captured.length,2);
 });
+test('one Wilmink WG article under two SEO URLs is one source record, not a duplicate manufacturer article',async()=>{
+ const html=readFileSync(new URL('./fixtures/wilmink-elring-product.html',import.meta.url),'utf8');
+ const urls=['https://www.wilminkengineparts.com/en/shaft-seal-crankshaft/wg1194774','https://www.wilminkengineparts.com/en/shaft-seal/wg1194774'];
+ const parsed=parseWilminkProduct(html,{sourceUrl:urls[0],expectedBrand:'Elring'});
+ const first=wilminkReview(parsed,{id:'p',product_code:'750.330',ean:'9999999999999'});
+ let checkpoint={page:{urls},captured:[first,{...first,sourceUrl:urls[1]}]},completed;
+ const job={id:'job',lease_token:'token',mode:'stage',manifest:{adapter:'wilmink-support-discovery.v1',brand:'Elring',source_key:'wilmink_elring_support_v1',urls}};
+ const source={is_active:true,license_posture:'internal_review_required',credential_boundary:'none',rate_limit_posture:'bounded',metadata:{brand_engine_read_allowed:true,allowed_brands:['Elring']}};
+ const db={rpc:async(name,args)=>{if(name==='checkpoint_catalog_brand_job')checkpoint=structuredClone(args.input_checkpoint);if(name==='complete_catalog_wilmink_support')completed=args;return {data:{}};},from(table){const q={select(){return q;},eq(){return q;},single:async()=>({data:table==='catalog_external_sources'?source:table==='brands'?{id:'brand'}:{checkpoint}}),then(resolve){resolve({data:[{id:'p',product_code:'750.330',ean:'9999999999999'}]});}};return q;}};
+ const result=await runWilminkDiscovery({db,organizationId:'org',job,readHtml:async()=>html});
+ assert.equal(result.status,'reviewed');assert.equal(completed.input_products.length,1);
+ assert.equal(completed.input_products[0].code,'750.330');
+ assert.notEqual(completed.input_products[0].unavailable,'WILMINK_DUPLICATE_ARTICLE');
+});

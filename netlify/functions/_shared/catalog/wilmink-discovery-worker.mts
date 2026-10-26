@@ -41,7 +41,18 @@ export async function runWilminkDiscovery({db,organizationId,job,maxMs=210000,re
    await save();
    if(Date.now()-started>=maxMs){await save('paused');return {status:'paused',captured:checkpoint.captured.length};}
   }
-  {const counts=new Map<string,number>();for(const v of checkpoint.captured)if(v.code&&!v.unavailable)counts.set(v.code,(counts.get(v.code)||0)+1);for(const v of checkpoint.captured)if((counts.get(v.code)||0)>1){v.fields={};v.unavailable='WILMINK_DUPLICATE_ARTICLE';}await save();}
+  // The same Wilmink WG article can appear under several SEO slugs. Treat
+  // identical article/EAN aliases as one source record before checking whether
+  // a manufacturer code really maps to multiple distributor articles.
+  {const aliases=new Set<string>();checkpoint.captured=checkpoint.captured.filter((v:any)=>{
+    if(!v.code||!v.sourceSku||!v.sourceFields?.ean||v.unavailable)return true;
+    const identity=`${v.code}|${v.sourceSku}|${v.sourceFields.ean}`;
+    if(aliases.has(identity))return false;
+    aliases.add(identity);return true;
+   });
+   const counts=new Map<string,number>();for(const v of checkpoint.captured)if(v.code&&!v.unavailable)counts.set(v.code,(counts.get(v.code)||0)+1);
+   for(const v of checkpoint.captured)if((counts.get(v.code)||0)>1){v.fields={};v.unavailable='WILMINK_DUPLICATE_ARTICLE';}
+   await save();}
   const result=await rpc(support?'complete_catalog_wilmink_support':'complete_catalog_wilmink_discovery',{...scope,input_page:checkpoint.page,input_products:checkpoint.captured});
   return {status:'reviewed',...result};
  }catch(e:any){const message=String(e.message||'WILMINK_DISCOVERY_FAILED').slice(0,200),transient=/HTTP_(429|5\d\d)|timeout|abort|fetch failed|ECONN|network/i.test(message)&&Number(job.retry_attempts||0)<4;

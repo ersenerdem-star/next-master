@@ -41,31 +41,52 @@ export default async (req: Request) => {
       return json({ total, items });
     }
     const body = await readJson<Record<string, unknown>>(req);
-    if (!body || !['approved', 'rejected'].includes(String(body.decision))
-      || !/^[0-9a-f-]{36}$/i.test(String(body.jobId || ''))
-      || !Number.isInteger(body.itemIndex) || !Number.isInteger(body.receiptIndex)
-      || String(body.fingerprint || '').length > 128 || !String(body.fingerprint || '')) {
+    const decision = String(body?.decision || '');
+    const validItem = (item: Record<string, unknown>) =>
+      /^[0-9a-f-]{36}$/i.test(String(item.jobId || ''))
+      && Number.isInteger(item.itemIndex) && Number(item.itemIndex) >= 0
+      && Number.isInteger(item.receiptIndex) && Number(item.receiptIndex) >= 0
+      && Boolean(String(item.fingerprint || '')) && String(item.fingerprint).length <= 128
+      && ['brand', 'zf', 'elring'].includes(String(item.engine || 'brand'));
+    if (!body || !['approved', 'rejected'].includes(decision)) {
       return json({ error: 'Invalid review decision' }, 400);
     }
-    const legacyEngine = String(body.engine || 'brand');
-    if (!['brand', 'zf', 'elring'].includes(legacyEngine)) return json({ error: 'Invalid review engine' }, 400);
-    const { data, error } = legacyEngine === 'brand'
-      ? await db.rpc('decide_catalog_engine_review_item', {
-        input_org: organizationId, input_actor: caller.profile.id,
-        input_job: body.jobId, input_index: body.itemIndex,
-        input_receipt_index: body.receiptIndex,
-        input_fingerprint: body.fingerprint, input_decision: body.decision,
-      })
-      : await db.rpc('decide_catalog_legacy_engine_review_item', {
-        input_org: organizationId, input_actor: caller.profile.id,
-        input_engine: legacyEngine, input_job: body.jobId, input_index: body.itemIndex,
-        input_fingerprint: body.fingerprint, input_decision: body.decision,
-      });
-    if (error) {
-      const known = /REVIEW_[A-Z_]+/.exec(error.message || '')?.[0];
-      return json({ error: known || 'REVIEW_DECISION_FAILED' }, 409);
+    const decide = async (item: Record<string, unknown>) => {
+      const legacyEngine = String(item.engine || 'brand');
+      const { data, error } = legacyEngine === 'brand'
+        ? await db.rpc('decide_catalog_engine_review_item', {
+          input_org: organizationId, input_actor: caller.profile.id,
+          input_job: item.jobId, input_index: item.itemIndex,
+          input_receipt_index: item.receiptIndex,
+          input_fingerprint: item.fingerprint, input_decision: decision,
+        })
+        : await db.rpc('decide_catalog_legacy_engine_review_item', {
+          input_org: organizationId, input_actor: caller.profile.id,
+          input_engine: legacyEngine, input_job: item.jobId, input_index: item.itemIndex,
+          input_fingerprint: item.fingerprint, input_decision: decision,
+        });
+      if (error) throw Error(/REVIEW_[A-Z_]+/.exec(error.message || '')?.[0] || 'REVIEW_DECISION_FAILED');
+      return data;
+    };
+    if (Array.isArray(body.items)) {
+      const items = body.items as Record<string, unknown>[];
+      if (items.length < 1 || items.length > 20 || items.some((item) => !item || typeof item !== 'object' || !validItem(item))) {
+        return json({ error: 'Invalid review batch' }, 400);
+      }
+      const identities = items.map((item) => `${item.engine || 'brand'}:${item.jobId}:${item.itemIndex}:${item.receiptIndex}`);
+      if (new Set(identities).size !== items.length) return json({ error: 'Duplicate review item in batch' }, 400);
+      const results: Array<{ key: string; ok: boolean; result?: unknown; error?: string }> = new Array(items.length);
+      // Decision RPCs lock the same catalog job. Process a batch in order to
+      // avoid lock-timeout failures when several selected rows share a job.
+      for (let index = 0; index < items.length; index++) {
+        try { results[index] = { key: identities[index], ok: true, result: await decide(items[index]) }; }
+        catch (error) { results[index] = { key: identities[index], ok: false, error: error instanceof Error ? error.message : 'REVIEW_DECISION_FAILED' }; }
+      }
+      return json({ results });
     }
-    return json(data);
+    if (!validItem(body)) return json({ error: 'Invalid review decision' }, 400);
+    try { return json(await decide(body)); }
+    catch (error) { return json({ error: error instanceof Error ? error.message : 'REVIEW_DECISION_FAILED' }, 409); }
   } catch (error) {
     if (error instanceof HttpRequestError && [401, 403].includes(error.status)) return json({ error: 'AUTH_REQUIRED' }, 401);
     console.error('catalog-engine-review failed', error instanceof Error ? error.name : 'error');
