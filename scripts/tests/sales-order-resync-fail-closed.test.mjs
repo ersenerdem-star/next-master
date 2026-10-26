@@ -10,7 +10,7 @@ function loadSalesResync(dependencies, exportedName = "resyncSalesOrderLinesFrom
   const path = new URL("../../apps/web/src/shared/salesOrderCatalogSync.ts", import.meta.url);
   const source = readFileSync(path, "utf8");
   const parsed = ts.createSourceFile(path.pathname, source, ts.ScriptTarget.ES2022, true);
-  const names = ["requireRepricingCurrency", "salesOrderResyncPriceSummary", "refreshSalesOrderPriceLines", "refreshLinePricesFromCatalog", "resyncSalesOrderLinesFromCatalog"];
+  const names = ["requireRepricingCurrency", "salesOrderResyncPriceSummary", "refreshSalesOrderPriceLines", "refreshLinePricesFromCatalog", "resyncSalesOrderLinesFromCatalog", "resyncSalesOrderWithCodeReferenceFallback"];
   const declarations = names.map((name) => {
     const node = parsed.statements.find((statement) =>
       ts.isFunctionDeclaration(statement) && statement.name?.text === name);
@@ -36,7 +36,7 @@ function savedLine(code = "61/1") {
   };
 }
 
-function makeResync(resolveQuoteLine, references = new Map()) {
+function makeResync(resolveQuoteLine, references = new Map(), exportedName = "resyncSalesOrderLinesFromCatalog") {
   return loadSalesResync({
     exactProductCode,
     normalizePartCode: (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, ""),
@@ -51,7 +51,7 @@ function makeResync(resolveQuoteLine, references = new Map()) {
     lineHasVisiblePrices: (line) => Number(line.buy_price ?? 0) > 0 || Number(line.sell_price ?? 0) > 0,
     normalizeOrderQuantity: (qty) => ({ corrected: qty, adjusted: false, requested: qty }),
     resolveQuoteLine,
-  });
+  }, exportedName);
 }
 
 const repriceOptions = { customerType: "A", marginA: 10, marginB: 15, currency: "EUR", keepPrices: false };
@@ -155,6 +155,34 @@ test('changing SKU discards old product fields and prices before exact successor
   assert.equal(result.requestedCode,'318189');assert.equal(result.resolvedCode,'350038');assert.equal(result.buy_price,67.76);
   assert.equal(result.description,'Correct successor');assert.equal(result.weight_kg,4.18);assert.equal(result.oem_no,'NEW-OEM');assert.equal(result.origin,'');
   assert.deepEqual(old,before);
+});
+
+test('a Sachs replacement sync survives an unrelated full-order price failure and preserves other saved prices',async()=>{
+  const refs=new Map([['sachs::313739',{old_code:'313739',new_code:'560119',reason:'Replacement'}]]);
+  const original=[{...savedLine('313739'),brand:'Sachs',supplier_name:'Romany',buy_price:41.38,sell_price:45.52},savedLine('OTHER')];
+  const before=structuredClone(original);
+  const sync=makeResync(async({code})=>{
+    if(code==='OTHER')throw Error('RPC unavailable');
+    return {resolved:{found:true,product_code:code,brand:'Sachs'},supplierOptions:[
+      {supplier_id:'romany',supplier_name:'Romany',buy_price:42,sell_price:46.2},
+    ]};
+  },refs,'resyncSalesOrderWithCodeReferenceFallback');
+  const result=await sync(original,repriceOptions);
+  assert.equal(result.preservedOtherPrices,true);
+  assert.equal(result.lines[0].requestedCode,'313739');
+  assert.equal(result.lines[0].resolvedCode,'560119');
+  assert.equal(result.lines[0].supplier_name,'Romany');
+  assert.equal(result.lines[0].buy_price,42);
+  assert.equal(result.lines[1].buy_price,8.34);
+  assert.deepEqual(original,before);
+});
+
+test('replacement sync refuses to save when the old supplier has no current successor price',async()=>{
+  const refs=new Map([['sachs::313739',{old_code:'313739',new_code:'560119'}]]);
+  const sync=makeResync(async({code})=>({resolved:{found:true,product_code:code,brand:'Sachs'},supplierOptions:[
+    {supplier_id:'other',supplier_name:'Other',buy_price:1,sell_price:1.1},
+  ]}),refs,'resyncSalesOrderWithCodeReferenceFallback');
+  await assert.rejects(sync([{...savedLine('313739'),brand:'Sachs',supplier_name:'Romany'}],repriceOptions),/price could not be verified.*560119/);
 });
 
 test('explicit repricing may select a supplier only for a previously unpriced line with no saved supplier',async()=>{

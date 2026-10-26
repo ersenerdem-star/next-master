@@ -36,7 +36,7 @@ import { consumeCatalogTransfer, PENDING_CATALOG_SALES_ITEM_KEY } from "../../sh
 import { buildInvoiceFromSalesOrder, buildLocalSalesOrder, buildPurchaseOrdersFromSalesOrder } from "../../shared/localOrders";
 import { hydrateSalesOrderLines } from "../../shared/hydrateSalesOrderLines";
 import { salesOrderTotals, multiplyMoney } from "../../../../../shared/order-money.mjs";
-import { resyncSalesOrderLinesFromCatalog, salesOrderResyncPriceSummary } from "../../shared/salesOrderCatalogSync";
+import { resyncSalesOrderWithCodeReferenceFallback, salesOrderResyncPriceSummary } from "../../shared/salesOrderCatalogSync";
 import { buildXlsxBlobAsync, downloadBlob } from "../../shared/xlsx";
 import { buildDocumentWorksheet } from "../../shared/documentExport";
 import { buildSalesPurchaseAnalysis, loadSalesPurchaseAnalysisOffers } from "../../shared/salesOrderPurchaseAnalysis";
@@ -1849,7 +1849,7 @@ export function QuotesPage({
       if (customerPricingIssue) throw new Error(customerPricingIssue);
       setResyncingCatalog(true);
       actionFeedback.begin(t("sales.orders.resyncingOrder", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
-      const syncedLines = await resyncSalesOrderLinesFromCatalog(quoteBuilderLines, {
+      const { lines: syncedLines, preservedOtherPrices } = await resyncSalesOrderWithCodeReferenceFallback(quoteBuilderLines, {
         customerType,
         marginA: effectiveMarginA,
         marginB: effectiveMarginB,
@@ -1858,8 +1858,6 @@ export function QuotesPage({
         keepPrices: resyncKeepPrices,
         hydrateMissingPricesIfKeepingPrices: true,
       });
-      setQuoteBuilderLines(syncedLines);
-
       if (selectedLocalSalesOrderId) {
         const order = buildLocalSalesOrder({
           id: selectedLocalSalesOrderId,
@@ -1888,12 +1886,17 @@ export function QuotesPage({
           lines: syncedLines,
         });
         const saved = await upsertSalesOrder(order);
+        setQuoteBuilderLines(syncedLines);
         setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(saved));
         await refreshLocalSalesOrders(saved.id);
+      } else {
+        setQuoteBuilderLines(syncedLines);
       }
 
       const summary = salesOrderResyncPriceSummary(quoteBuilderLines, syncedLines);
-      const message = t("sales.orders.resyncPriceSummary", summary);
+      const codeChanges = syncedLines.filter((line, index) =>
+        (line.resolvedCode || line.requestedCode) !== (quoteBuilderLines[index]?.resolvedCode || quoteBuilderLines[index]?.requestedCode)).length;
+      const message = `${t("sales.orders.resyncCodeChanges", { count: codeChanges })} ${t("sales.orders.resyncPriceSummary", summary)}${preservedOtherPrices ? ` ${t("sales.orders.resyncOtherPricesPreserved")}` : ""}`;
       setBuilderStatus(message);
       if (summary.failed) actionFeedback.fail(message);
       else actionFeedback.succeed(message);

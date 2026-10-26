@@ -649,6 +649,8 @@ export const trMessages = {
     "orders.resyncedFromCatalog": "Katalogdan yeniden senkronize edildi",
     "orders.resyncedWithUnpricedRows": "Senkronizasyon tamamlandı; {count} satırın fiyatı alınamadı. Satır uyarılarını kontrol edin.",
     "orders.resyncPriceSummary": "Eşitleme sonucu: {filled} boş satıra fiyat getirildi; {unavailable} satırın fiyatı eksik; {failed} satırın fiyat sorgusu başarısız.",
+    "orders.resyncCodeChanges": "{count} satırın parça kodu güncellendi.",
+    "orders.resyncOtherPricesPreserved": "Tüm siparişin fiyat yenilemesi tamamlanamadı; diğer satırların kayıtlı fiyatları korundu.",
     "orders.resyncFailed": "Senkronizasyon başarısız",
     "orders.addLinesBeforeSavingDraft": "Taslağı kaydetmeden önce satır ekleyin",
     "orders.draftSavedAs": "Taslak {salesOrderNo} olarak kaydedildi",

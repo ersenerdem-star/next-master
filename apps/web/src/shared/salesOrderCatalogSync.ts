@@ -268,6 +268,34 @@ export async function resyncSalesOrderLinesFromCatalog(
   return refreshSalesOrderPriceLines(patchedLines, options, onlyFillBlanks);
 }
 
+export async function resyncSalesOrderWithCodeReferenceFallback(
+  lines: QuoteBuilderLine[], options: SalesOrderCatalogSyncOptions,
+): Promise<{ lines: QuoteBuilderLine[]; preservedOtherPrices: boolean }> {
+  try {
+    return { lines: await resyncSalesOrderLinesFromCatalog(lines, options), preservedOtherPrices: false };
+  } catch (error) {
+    // A full price refresh can fail on an unrelated order row. Still allow an
+    // approved replacement code to be saved when its own current price exists.
+    if (options.keepPrices !== false || !(error instanceof Error)
+        || !error.message.startsWith("Current supplier price refresh failed")) throw error;
+    const synced = await resyncSalesOrderLinesFromCatalog(lines, {
+      ...options, keepPrices: true, hydrateMissingPricesIfKeepingPrices: true,
+    });
+    const changed = synced.map((line, index) => ({ line, previous: lines[index] }))
+      .filter(({ line, previous }) => previous
+        && exactProductCode(line.resolvedCode || line.requestedCode)
+          !== exactProductCode(previous.resolvedCode || previous.requestedCode));
+    if (!changed.length) throw error;
+    for (const { line } of changed) {
+      if (line.price_sync_issue || !Number.isFinite(Number(line.buy_price)) || Number(line.buy_price) <= 0
+          || !Number.isFinite(Number(line.sell_price)) || Number(line.sell_price) <= 0) {
+        throw new Error(`Current price could not be verified for replacement ${line.brand} ${line.resolvedCode}. The order was not changed.`);
+      }
+    }
+    return { lines: synced, preservedOtherPrices: true };
+  }
+}
+
 async function refreshLinePricesFromCatalog(
   line: QuoteBuilderLine,
   options: SalesOrderCatalogSyncOptions,
@@ -303,7 +331,7 @@ async function refreshLinePricesFromCatalog(
     const selectUnpricedSupplier=!selectedSupplierName&&!lineHasVisiblePrices(line);
     const selected = reprice
       ? selectUnpricedSupplier ? supplierOptions[0]||null : matchingOptions.length === 1 ? matchingOptions[0] : null
-      : matchingOptions[0] || supplierOptions[0] || null;
+      : matchingOptions[0] || (selectedSupplierName ? null : supplierOptions[0] || null);
     if ((!resolved.found
         || exactProductCode(resolved.product_code) !== exactProductCode(line.resolvedCode || line.requestedCode)
         || (!selectUnpricedSupplier&&!selectedSupplierName) || !selected
