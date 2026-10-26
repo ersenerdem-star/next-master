@@ -13503,3 +13503,23 @@ body {
 .catalog-job-progress__details dt { color: #586e88; font-size: 10px; font-weight: 700; }
 .catalog-job-progress__details dd { margin: 2px 0 0; color: #1d2b3d; font-size: 11px; line-height: 1.35; }
 .catalog-job-progress .catalog-enrichment-table td:last-child { min-width: 130px; }
+
+.catalog-engine-review-toolbar { display: flex; align-items: end; gap: 14px; flex-wrap: wrap; padding: 16px; border: 1px solid #dbe5ef; border-radius: 14px; background: #fff; }
+.catalog-engine-review-toolbar .field { min-width: 190px; max-width: 270px; margin: 0; }
+.catalog-engine-review-brands, .catalog-engine-review-tabs, .catalog-engine-review-row-actions, .catalog-engine-review-pagination { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.catalog-engine-review-brands { flex: 1; max-height: 95px; overflow-y: auto; }
+.catalog-engine-review-tabs { margin-left: auto; }
+.catalog-engine-review-count { display: flex; gap: 8px; align-items: center; margin: 14px 0; font-size: 15px; }
+.catalog-engine-review-count span { margin-left: auto; color: #60738a; font-size: 12px; }
+.catalog-engine-review-table-wrap { max-height: 66vh; overflow: auto; border-radius: 12px; }
+.catalog-engine-review-table td { vertical-align: middle; }
+.catalog-engine-review-table td:first-child small, .catalog-engine-review-table td:nth-child(2) a { display: block; margin-top: 5px; }
+.catalog-engine-review-row-actions { min-width: 260px; }
+.catalog-engine-review-pagination { justify-content: flex-end; margin: 12px 0; }
+.catalog-engine-review-detail { padding: 14px 18px; border: 1px solid #dbe5ef; border-radius: 12px; background: #f8fbff; }
+.catalog-engine-review-detail p { margin: 7px 0; }
+.catalog-engine-review-confirm { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgb(4 22 43 / 65%); }
+.catalog-engine-review-confirm__card { width: min(540px, 100%); padding: 24px; border-radius: 16px; background: #fff; box-shadow: 0 20px 70px rgb(0 0 0 / 25%); }
+.catalog-engine-review-confirm__card .toolbar { justify-content: flex-end; }
+.wilmink-review-link a { display: inline-flex; padding: 9px 13px; border-radius: 9px; background: #e7f3ff; color: #075ca5; font-weight: 700; text-decoration: none; }
+@media (max-width: 900px) { .catalog-engine-review-table-wrap { overflow-x: auto; } .catalog-engine-review-table { min-width: 900px; } .catalog-engine-review-count { flex-wrap: wrap; } .catalog-engine-review-count span { margin-left: 0; } }

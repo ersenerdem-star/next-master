@@ -898,7 +898,7 @@ export function App() {
 
   const pageContent =
     isCatalogReviewRoute ? (
-      <CatalogObservationReviewPage />
+      <CatalogObservationReviewPage role={appRole} />
     ) : activePage === "Items" && (canAccessSystemModules(appRole) || Boolean(appPermissions["catalog.view"])) ? (
       <ItemsPage activeTab={itemsTab} />
     ) : activePage === "Inventory" && canAccessInventoryModules(appRole, appDepartment) ? (

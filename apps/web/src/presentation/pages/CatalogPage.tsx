@@ -781,6 +781,10 @@ export function CatalogPage() {
     announce = true,
     nextIntegrityFilter: CatalogIntegrityFilter = integrityFilter,
   ) {
+    // Keep the completion feedback quiet until the request effect has actually
+    // returned. Otherwise the next render can briefly see searching=true and
+    // loading=false and announce a false 0-row result.
+    setLoading(true);
     setSearchingCatalog(true);
     setPreviewSelection(null);
     setSelectedCatalogProductId("");
@@ -1375,7 +1379,7 @@ export function CatalogPage() {
     if (!brand.trim()) return;
     const brandKey=brand.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
     if (["zf","sachs","boge","trw","lemforder","wabco"].includes(brandKey)) { setShowZfEngine(true); return; }
-    if (brandKey === "elring") { setShowElringEngine(true); return; }
+    if (brandKey === "elring") { setShowWilminkSupport(true); return; }
     setShowBrandEngine(true);
   }
 
@@ -1475,10 +1479,10 @@ export function CatalogPage() {
               {t("catalog.actions.importCsv")}
             </Button>
             <Button variant="secondary" onClick={()=>setShowEngineOverview(true)} disabled={!isOnline}>{locale==='tr'?'Marka Motorları':'Brand Engines'}</Button>
-            {['Elring','INA','Mahle','Glyco','Goetze','Nural'].includes(catalogBrand) ? <Button variant="secondary" disabled={!isOnline} onClick={()=>setShowWilminkSupport(true)}>{locale==='tr'?'Wilmink ile eksikleri tamamla':'Complete missing fields with Wilmink'}</Button> : null}
+            {['INA','Mahle','Glyco','Goetze','Nural'].includes(catalogBrand) ? <Button variant="secondary" disabled={!isOnline} onClick={()=>setShowWilminkSupport(true)}>{locale==='tr'?'Wilmink ile eksikleri tamamla':'Complete missing fields with Wilmink'}</Button> : null}
             {catalogBrand ? (
               <Button variant="secondary" onClick={() => void handleSyncSelectedBrand()} disabled={!isOnline}>
-                {["zf","sachs","boge","trw","lemforder","wabco"].includes(catalogBrand.trim().toLowerCase()) ? (locale === "tr" ? "ZF Grup Katalog Motoru" : "ZF Group Catalog Engine") : catalogBrand.trim().toLowerCase() === "elring" ? (locale === "tr" ? "Elring Katalog Motoru" : "Elring Catalog Engine") : catalogBrand.trim().toLowerCase() === "kolbenschmidt" ? (locale === "tr" ? "Kolbenschmidt · Wilmink Motoru" : "Kolbenschmidt · Wilmink Engine") : (locale === "tr" ? "Katalog Motoru" : "Catalog Engine")}
+                {["zf","sachs","boge","trw","lemforder","wabco"].includes(catalogBrand.trim().toLowerCase()) ? (locale === "tr" ? "ZF Grup Katalog Motoru" : "ZF Group Catalog Engine") : catalogBrand.trim().toLowerCase() === "elring" ? (locale === "tr" ? "Elring · Wilmink İncelemesi" : "Elring · Wilmink Review") : catalogBrand.trim().toLowerCase() === "kolbenschmidt" ? (locale === "tr" ? "Kolbenschmidt · Wilmink Motoru" : "Kolbenschmidt · Wilmink Engine") : (locale === "tr" ? "Katalog Motoru" : "Catalog Engine")}
               </Button>
             ) : null}
 

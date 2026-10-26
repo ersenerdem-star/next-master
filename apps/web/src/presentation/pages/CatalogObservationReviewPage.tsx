@@ -18,6 +18,7 @@ import {
   type CatalogObservationReviewResponse,
 } from "../../types/catalogObservationReview";
 import { useI18n } from "../../i18n/I18nProvider";
+import { CatalogEngineReviewQueue } from "./CatalogEngineReviewQueue";
 import { sanitizeUserFacingMessage } from "../../shared/userMessage";
 import { Button } from "../components/common/Button";
 import { useActionFeedback } from "../components/common/ActionFeedback";
@@ -388,9 +389,16 @@ function mergeDecisionHistoryEntries(current: DecisionAuditEntry[], next: Decisi
 
 type CatalogObservationReviewPageProps = {
   loadReview?: typeof fetchCatalogObservationReview;
+  role?: string;
 };
 
-export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservationReview }: CatalogObservationReviewPageProps) {
+export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservationReview, role = 'superadmin' }: CatalogObservationReviewPageProps) {
+  const [showLegacy, setShowLegacy] = useState(() => role !== 'superadmin' || Boolean(new URLSearchParams(window.location.search).get('run_id')) || loadReview !== fetchCatalogObservationReview);
+  if (!showLegacy) return <CatalogEngineReviewQueue onOpenLegacy={() => setShowLegacy(true)} />;
+  return <LegacyCatalogObservationReviewPage loadReview={loadReview} onBack={() => setShowLegacy(false)} allowBack={role === 'superadmin'} />;
+}
+
+function LegacyCatalogObservationReviewPage({ loadReview, onBack, allowBack }: { loadReview: typeof fetchCatalogObservationReview; onBack: () => void; allowBack: boolean }) {
   const { locale, t } = useI18n();
   const actionFeedback = useActionFeedback();
   const [filters, setFilters] = useState<ReviewFilters>(() => readFiltersFromUrl());
@@ -776,6 +784,7 @@ export function CatalogObservationReviewPage({ loadReview = fetchCatalogObservat
         }
         actions={
           <>
+            {allowBack ? <Button variant="secondary" onClick={onBack}>{locale === 'tr' ? 'Motor incelemelerine dön' : 'Back to engine reviews'}</Button> : null}
             <Button variant="secondary" onClick={clearFilters} disabled={!hasActiveFilters || refreshing || commandSubmitting}>
               {c("actions.clearFilters")}
             </Button>

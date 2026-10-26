@@ -1,0 +1,174 @@
+import { useEffect, useMemo, useState } from 'react';
+import { decideEngineReviewItem, getEngineReviewQueue, type EngineReviewItem, type EngineReviewQueue } from '../../infrastructure/api/catalogEngineReviewApi';
+import { listBrandEngines } from '../../infrastructure/api/zfCatalogApi';
+import { useI18n } from '../../i18n/I18nProvider';
+import { Button } from '../components/common/Button';
+import { useActionFeedback } from '../components/common/ActionFeedback';
+import { EmptyState, InlineAlert, LoadingState, PageHeader, PageShell, StatusBadge } from '../components/common/VisualPrimitives';
+
+const PAGE_SIZE = 50;
+
+function reasonLabel(reason: string, tr: boolean) {
+  const labels: Record<string, [string, string]> = {
+    EAN_IDENTITY_CONFLICT: ['EAN çelişkisi', 'EAN conflict'],
+    WILMINK_DUPLICATE_ARTICLE: ['Aynı parça koduna birden fazla kaynak kaydı', 'Duplicate source article'],
+    WILMINK_EXACT_IDENTITY_INVALID: ['Ürün kimliği doğrulanamadı', 'Product identity could not be verified'],
+    CATALOG_PRODUCT_NOT_REGISTERED: ['Katalogda ürün yok', 'Product is not in the catalog'],
+    CATALOG_IDENTITY_AMBIGUOUS: ['Katalog eşleşmesi belirsiz', 'Ambiguous catalog match'],
+    WILMINK_HTTP_404: ['Kaynak sayfası bulunamadı', 'Source page not found'],
+  };
+  return labels[reason]?.[tr ? 0 : 1] || reason.replaceAll('_', ' ');
+}
+
+function sourceLabel(sourceKey: string) {
+  return sourceKey.replace(/_v\d+$/, '').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function initialBrand() {
+  const requested = new URLSearchParams(window.location.search).get('brand');
+  return requested?.trim() || 'Elring';
+}
+
+export function CatalogEngineReviewQueue({ onOpenLegacy }: { onOpenLegacy: () => void }) {
+  const { locale } = useI18n();
+  const tr = locale === 'tr';
+  const feedback = useActionFeedback();
+  const [brand, setBrand] = useState(initialBrand);
+  const [brandSearch, setBrandSearch] = useState(initialBrand);
+  const [brands, setBrands] = useState<string[]>([]);
+  const [status, setStatus] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  const [offset, setOffset] = useState(0);
+  const [queue, setQueue] = useState<EngineReviewQueue | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busyKey, setBusyKey] = useState('');
+  const [error, setError] = useState('');
+  const [tick, setTick] = useState(0);
+  const [confirmItem, setConfirmItem] = useState<EngineReviewItem | null>(null);
+  const [selected, setSelected] = useState<EngineReviewItem | null>(null);
+  const visibleBrands = useMemo(() => brands.filter((name) => name.toLocaleLowerCase().includes(brandSearch.toLocaleLowerCase())).slice(0, 16), [brands, brandSearch]);
+
+  useEffect(() => {
+    let live = true;
+    listBrandEngines().then((entries) => {
+      if (live) setBrands(entries.map((entry) => entry.brand).sort((a, b) => a.localeCompare(b)));
+    }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+
+  useEffect(() => {
+    let live = true;
+    setLoading(true);
+    setError('');
+    getEngineReviewQueue(brand, status, offset, PAGE_SIZE).then((result) => {
+      if (live) setQueue(result);
+    }).catch((caught) => {
+      if (live) { setQueue(null); setError(caught instanceof Error ? caught.message : String(caught)); }
+    }).finally(() => { if (live) setLoading(false); });
+    return () => { live = false; };
+  }, [brand, status, offset, tick]);
+
+  function chooseBrand(value: string) {
+    setBrand(value);
+    setBrandSearch(value);
+    setOffset(0);
+    setSelected(null);
+    setConfirmItem(null);
+    const url = new URL(window.location.href);
+    url.searchParams.set('brand', value);
+    window.history.replaceState(null, '', url);
+  }
+
+  async function decide(item: EngineReviewItem, decision: 'approved' | 'rejected') {
+    const key = `${item.jobId}:${item.itemIndex}:${item.receiptIndex}`;
+    setBusyKey(key);
+    setError('');
+    try {
+      const result = await decideEngineReviewItem(item, decision);
+      setConfirmItem(null);
+      setSelected(null);
+      feedback.succeed(decision === 'approved'
+        ? (result.application.status === 'applied' ? (tr ? `${item.productCode}: kaynak EAN'ı kataloğa kaydedildi.` : `${item.productCode}: source EAN saved to catalog.`) : (tr ? 'Onay kaydedildi.' : 'Approval recorded.'))
+        : (tr ? `${item.productCode}: kaynak önerisi reddedildi; katalog kaydı korundu.` : `${item.productCode}: source suggestion rejected; catalog data preserved.`));
+      if (queue?.items.length === 1 && offset > 0) setOffset(Math.max(0, offset - PAGE_SIZE));
+      else setTick((value) => value + 1);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      setError(message);
+      feedback.fail(message);
+    } finally {
+      setBusyKey('');
+    }
+  }
+
+  const words = tr ? {
+    title: 'Gözlem İncelemesi', sub: 'Motorların beklettiği ürünleri markaya göre inceleyin. Yinelenen kaynak bağlantıları ve sonradan çözülen kayıtlar tekilleştirilir. Tarama ve güvenli zenginleştirme arka planda devam eder.',
+    search: 'Marka ara', pending: 'Bekleyen', approved: 'Onaylanan', rejected: 'Reddedilen', refresh: 'Yenile',
+    item: 'Ürün', source: 'Kaynak', reason: 'Neden', current: 'Mevcut EAN', proposed: 'Kaynak EAN', action: 'Karar',
+    apply: 'Kaynak EAN’ını uygula', reject: 'Reddet', detail: 'İncele', empty: 'Bu markada bu durumda kayıt yok.',
+    cannot: 'Bu kayıt için doğrulanmış kaynak EAN’ı yok; katalog değişikliği uygulanamaz.',
+    confirm: 'Bu EAN değişikliği katalog kaydına hemen yazılır. Mevcut ve kaynak değerlerini kontrol edin.',
+    save: 'Değişikliği kaydet', cancel: 'Vazgeç', legacy: 'Diğer gözlem kayıtları', next: 'Sonraki', previous: 'Önceki',
+  } : {
+    title: 'Observation Review', sub: 'Review held catalog products by brand. Duplicate source links and subsequently resolved records are excluded. Scanning and safe enrichment continue in the background.',
+    search: 'Search brand', pending: 'Pending', approved: 'Approved', rejected: 'Rejected', refresh: 'Refresh',
+    item: 'Product', source: 'Source', reason: 'Reason', current: 'Current EAN', proposed: 'Source EAN', action: 'Decision',
+    apply: 'Apply source EAN', reject: 'Reject', detail: 'Review', empty: 'No records in this state for this brand.',
+    cannot: 'This item has no verified source EAN, so a catalog change cannot be applied.',
+    confirm: 'This EAN change will be written to the catalog immediately. Check both values first.',
+    save: 'Save change', cancel: 'Cancel', legacy: 'Other observations', next: 'Next', previous: 'Previous',
+  };
+
+  return <PageShell className="catalog-engine-review-page">
+    <PageHeader eyebrow={words.title} title={words.title} subtitle={words.sub} actions={<>
+      <Button variant="secondary" onClick={onOpenLegacy}>{words.legacy}</Button>
+      <Button onClick={() => setTick((value) => value + 1)} busy={loading}>{words.refresh}</Button>
+    </>} />
+    <div className="catalog-engine-review-toolbar">
+      <label className="field"><span className="field__label">{words.search}</span>
+        <input className="field__input" value={brandSearch} onChange={(event) => setBrandSearch(event.target.value)}
+          onKeyDown={(event) => { if (event.key === 'Enter') { const exact = brands.find((name) => name.toLocaleLowerCase() === brandSearch.toLocaleLowerCase()); if (exact) chooseBrand(exact); } }} />
+      </label>
+      <div className="catalog-engine-review-brands" aria-label={words.search}>
+        {visibleBrands.map((name) => <Button key={name} variant={name === brand ? 'primary' : 'secondary'} className="button--compact" onClick={() => chooseBrand(name)}>{name}</Button>)}
+      </div>
+      <div className="catalog-engine-review-tabs" role="tablist">
+        {(['pending', 'approved', 'rejected'] as const).map((value) => <Button key={value} variant={status === value ? 'primary' : 'secondary'} className="button--compact" onClick={() => { setStatus(value); setOffset(0); setSelected(null); }}>{words[value]}</Button>)}
+      </div>
+    </div>
+    {error ? <InlineAlert tone="danger" title={tr ? 'İşlem tamamlanamadı' : 'Action failed'}>{error}</InlineAlert> : null}
+    <div className="catalog-engine-review-count"><strong>{brand}</strong> · {words[status]}: {(queue?.total ?? 0).toLocaleString(locale === 'tr' ? 'tr-TR' : 'en-US')}
+      <span>{tr ? 'Karar beklerken motor çalışmaya devam eder.' : 'The engine continues while decisions are pending.'}</span></div>
+    {loading ? <LoadingState title={tr ? 'İnceleme kayıtları yükleniyor' : 'Loading review items'} /> : queue?.items.length ? <>
+      <div className="table-wrap catalog-engine-review-table-wrap"><table className="data-table catalog-engine-review-table"><thead><tr>
+        <th>{words.item}</th><th>{words.source}</th><th>{words.reason}</th><th>{words.current}</th><th>{words.proposed}</th><th>{words.action}</th>
+      </tr></thead><tbody>{queue.items.map((item) => {
+        const key = `${item.jobId}:${item.itemIndex}:${item.receiptIndex}`;
+        return <tr key={key} className={selected?.reviewKey === item.reviewKey ? 'data-table__row--active' : ''}>
+          <td><strong>{item.productCode.startsWith('https://') ? (tr ? 'Kod doğrulanamadı' : 'Code unverified') : item.productCode}</strong><small>{item.currentDescription || '—'}</small></td>
+          <td>{sourceLabel(item.sourceKey)}{item.sourceUrl?.startsWith('https://') ? <a href={item.sourceUrl} target="_blank" rel="noreferrer">{tr ? 'Kaynağı aç' : 'Open source'}</a> : null}</td>
+          <td><StatusBadge tone="warning">{reasonLabel(item.reason, tr)}</StatusBadge></td>
+          <td>{item.currentEan || '—'}</td><td><strong>{item.sourceEan || '—'}</strong></td>
+          <td><div className="catalog-engine-review-row-actions">
+            <Button variant="secondary" className="button--compact" onClick={() => setSelected(selected?.reviewKey === item.reviewKey ? null : item)}>{words.detail}</Button>
+            {status === 'pending' ? <><Button className="button--compact" disabled={!item.canApprove || Boolean(busyKey)} onClick={() => setConfirmItem(item)}>{words.apply}</Button>
+              <Button variant="secondary" className="button--compact" disabled={Boolean(busyKey)} onClick={() => void decide(item, 'rejected')}>{words.reject}</Button></> : <StatusBadge tone={status === 'approved' ? 'success' : 'neutral'}>{words[status]}</StatusBadge>}
+          </div></td>
+        </tr>;
+      })}</tbody></table></div>
+      <div className="catalog-engine-review-pagination"><Button variant="secondary" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>{words.previous}</Button>
+        <span>{offset + 1}–{Math.min(offset + PAGE_SIZE, queue.total)} / {queue.total}</span>
+        <Button variant="secondary" disabled={offset + PAGE_SIZE >= queue.total} onClick={() => setOffset(offset + PAGE_SIZE)}>{words.next}</Button></div>
+    </> : <EmptyState title={words.empty} />}
+    {selected ? <div className="catalog-engine-review-detail"><strong>{selected.productCode.startsWith('https://') ? (tr ? 'Kod doğrulanamadı' : 'Code unverified') : selected.productCode}</strong><p>{reasonLabel(selected.reason, tr)}</p>
+      <div>{words.current}: <strong>{selected.currentEan || '—'}</strong> → {words.proposed}: <strong>{selected.sourceEan || '—'}</strong></div>
+      <div>{selected.currentDescription || '—'} → {selected.sourceDescription || '—'}</div>
+      {!selected.canApprove && status === 'pending' ? <p>{words.cannot}</p> : null}
+    </div> : null}
+    {confirmItem ? <div className="catalog-engine-review-confirm" role="dialog" aria-modal="true" aria-label={words.apply}>
+      <div className="catalog-engine-review-confirm__card"><strong>{confirmItem.productCode} · {words.apply}</strong><p>{words.confirm}</p>
+        <p>{words.current}: <strong>{confirmItem.currentEan || '—'}</strong> → {words.proposed}: <strong>{confirmItem.sourceEan}</strong></p>
+        <div className="toolbar toolbar--wrap"><Button variant="secondary" onClick={() => setConfirmItem(null)} disabled={Boolean(busyKey)}>{words.cancel}</Button>
+          <Button onClick={() => void decide(confirmItem, 'approved')} busy={Boolean(busyKey)}>{words.save}</Button></div>
+      </div></div> : null}
+  </PageShell>;
+}

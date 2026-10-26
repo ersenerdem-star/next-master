@@ -21,7 +21,7 @@ test("Catalog observation review route and role guard are wired", async () => {
   assert.match(app, /errors\.catalogReviewAccessDenied/);
   assert.match(appShell, /CatalogReview/);
   assert.match(roles, /export function canAccessCatalogReviewModules/);
-  assert.match(roles, /return isAdminLikeRole\(role\)/);
+  assert.match(roles, /return permissionAllows\(permissions, "catalog\.manage"\) \?\? isAdminLikeRole\(role, department\)/);
   assert.doesNotMatch(app, /CatalogZfStagingReviewPage|CATALOG_ZF_STAGING_REVIEW_PATH|ZF Staging Evidence/);
 });
 
