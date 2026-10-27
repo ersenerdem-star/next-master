@@ -46,3 +46,15 @@ test('paused ZF lifecycle job resumes and dispatches to fixed portal',async()=>{
  const request=new Request(sent.url,{headers:sent.init.headers});
  assert.doesNotThrow(()=>requireZfDispatch(request,target.key,job,org));
 });
+
+test('after reviewed packages, scheduler creates one next package and dispatches it',async()=>{
+ let jobQuery=0,sent=0,rpcCount=0;
+ const chain=data=>({eq(){return this;},in(){return this;},gt(){return this;},lt(){return this;},order(){return this;},limit(){return Promise.resolve({data,error:null});}});
+ const db={
+  from(table){return {select(){return table==='catalog_external_sources'?chain([{organization_id:org}]):chain((++jobQuery,[]));}};},
+  rpc(name,args){assert.equal(name,'enqueue_next_catalog_zf_lifecycle_job');assert.equal(args.input_org,org);rpcCount++;
+   return Promise.resolve({data:{id:job,organization_id:org,status:'queued'},error:null});},
+ };
+ const result=await dispatchZfLifecycle({db,target,send:async()=>{sent++;return {ok:true};}});
+ assert.deepEqual(result,{status:'dispatched',jobId:job});assert.equal(rpcCount,1);assert.equal(sent,1);
+});

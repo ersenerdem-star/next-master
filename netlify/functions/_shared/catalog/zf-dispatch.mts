@@ -27,7 +27,17 @@ export async function dispatchZfLifecycle({db,target,send=fetch,now=Date.now}:an
   .lt('lease_expires_at',new Date(now()).toISOString())
   .order('created_at',{ascending:true}).limit(1);
  if(expired.error)throw Error('ZF_DISPATCH_EXPIRED_CHECK_FAILED');
- const job=[...(pending.data||[]),...(expired.data||[])].sort((a,b)=>a.created_at.localeCompare(b.created_at))[0];
+ let job=[...(pending.data||[]),...(expired.data||[])].sort((a,b)=>a.created_at.localeCompare(b.created_at))[0];
+ if(!job){
+  const sources=await db.from('catalog_external_sources').select('organization_id')
+   .eq('source_key','zf_group_official_v2').eq('is_active',true).limit(20);
+  if(sources.error)throw Error('ZF_DISPATCH_SOURCE_CHECK_FAILED');
+  for(const source of sources.data||[]){
+   const created=await db.rpc('enqueue_next_catalog_zf_lifecycle_job',{input_org:source.organization_id});
+   if(created.error)throw Error('ZF_DISPATCH_PACKAGE_FAILED');
+   if(created.data){job={...created.data,organization_id:source.organization_id};break;}
+  }
+ }
  if(!job)return {status:'idle'};
  if(job.status==='paused'){
   const resumed=await db.rpc('schedule_catalog_zf_job',{input_org:job.organization_id,input_job:job.id,input_publish:false});
