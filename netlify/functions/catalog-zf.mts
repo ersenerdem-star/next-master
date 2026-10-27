@@ -36,14 +36,47 @@ export default async(req:Request)=>{
   }
 
   const action=body!.action;
-  if(!['start','resume','publish'].includes(action||''))return json({error:'Invalid ZF action'},400);
+  if(!['start','startLifecycle','startNextLifecycle','resume','publish'].includes(action||''))return json({error:'Invalid ZF action'},400);
   if(!readAllowed)return json({error:'ZF official source is not enabled for observation.'},409);
   if(action==='publish'&&!publishAllowed)return json({error:'ZF publication authorization is not registered.'},409);
-  const args=action==='start'?{input_org:org,input_actor:caller.profile.id,input_codes:body!.codes,input_brand:brandName,input_key:body!.requestId}
-    :{input_org:org,input_job:body!.jobId,input_publish:action==='publish'};
-  const result=await db.rpc(action==='start'?'start_catalog_zf_job':'schedule_catalog_zf_job',args);
-  if(result.error)return json({error:result.error.message},400);
-  const job=result.data;
+  let job;
+  if(action==='startLifecycle'||action==='startNextLifecycle'){
+    if(!/^[0-9a-f-]{36}$/i.test(body!.requestId||''))return json({error:'Request ID required'},400);
+    const prior=await db.from('catalog_zf_jobs').select('id,organization_id,created_by,manifest,mode,status,total_items,next_index,error_message,lease_expires_at')
+      .eq('organization_id',org).eq('idempotency_key',body!.requestId).maybeSingle();
+    if(prior.error)throw prior.error;
+    let codes=body!.codes;
+    if(prior.data)codes=prior.data.manifest?.codes;
+    else if(action==='startNextLifecycle'){
+      const next=await db.rpc('next_catalog_zf_lifecycle_codes',{input_org:org,input_brand:brandName,input_limit:100});
+      if(next.error)return json({error:next.error.message},400);
+      codes=next.data;
+      if(!Array.isArray(codes)||!codes.length)return json({error:'ZF_LIFECYCLE_SCAN_COMPLETE'},409);
+    }
+    const started=prior.data?{data:prior.data,error:null}:await db.rpc('start_catalog_zf_job',{
+      input_org:org,input_actor:caller.profile.id,input_codes:codes,input_brand:brandName,input_key:body!.requestId,
+    });
+    if(started.error)return json({error:started.error.message},400);
+    const current=started.data;
+    if(current.created_by!==caller.profile.id||current.manifest?.brand!==brandName
+      ||JSON.stringify(current.manifest?.codes)!==JSON.stringify(codes)
+      ||(current.manifest?.scope&&current.manifest.scope!=='lifecycle'))return json({error:'ZF request key conflict'},409);
+    if(current.manifest?.scope==='lifecycle')job=current;
+    else{
+      if(current.mode!=='stage'||current.status!=='queued'||current.next_index!==0)return json({error:'ZF lifecycle review cannot change a started job'},409);
+      const scoped=await db.from('catalog_zf_jobs').update({manifest:{...current.manifest,scope:'lifecycle'}})
+        .eq('id',current.id).eq('organization_id',org).eq('mode','stage').eq('status','queued').eq('next_index',0)
+        .select('id,organization_id,created_by,manifest,mode,status,total_items,next_index,error_message,lease_expires_at').single();
+      if(scoped.error)throw scoped.error;
+      job=scoped.data;
+    }
+  }else{
+    const args=action==='start'?{input_org:org,input_actor:caller.profile.id,input_codes:body!.codes,input_brand:brandName,input_key:body!.requestId}
+      :{input_org:org,input_job:body!.jobId,input_publish:action==='publish'};
+    const result=await db.rpc(action==='start'?'start_catalog_zf_job':'schedule_catalog_zf_job',args);
+    if(result.error)return json({error:result.error.message},400);
+    job=result.data;
+  }
   if(job.status==='queued'){
     // Dispatch only to the configured production/deploy origin, never a
     // caller-controlled Host header. The background handler reauthenticates.

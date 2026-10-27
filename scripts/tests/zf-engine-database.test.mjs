@@ -23,7 +23,7 @@ create table catalog_product_relations(id uuid primary key default gen_random_uu
 insert into organizations values('${org}');insert into profiles values('${actor}','${org}','superadmin',true);insert into brands values('${brand}','${org}','Sachs');
 insert into catalog_external_sources(organization_id,source_key,is_active,license_posture,credential_boundary,rate_limit_posture,metadata) values('${org}','zf_group_official_v2',true,'internal_review_required','none','bounded','{"allowed_brands":["Sachs"],"automated_read_only_approved":true,"internal_observation_allowed":true,"internal_catalog_correction_allowed":true,"approval_actor":"user","publication_approval_reference":"request"}');
 insert into catalog_products(organization_id,brand_id,product_code,description,weight_kg,ean) values('${org}','${brand}','318189','Wrong description',4.366,'4013872954728'),('${org}','${brand}','350038','User corrected',4.33,'4059923045922');`);
-await db.exec(readFileSync(new URL('../../supabase/migrations/20261019220300_catalog_relation_digest_schema.sql',import.meta.url),'utf8'));await db.exec(migration);await db.exec(readFileSync(new URL('../../supabase/migrations/20261019220052_zf_review_projection_bounds.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../../supabase/migrations/20261019221432_zf_corrupt_weight_baseline.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../../supabase/migrations/20261019222722_zf_reviewed_metadata_quarantine.sql',import.meta.url),'utf8'));await db.exec("set request.jwt.claim.role='service_role'");return db;}
+await db.exec(readFileSync(new URL('../../supabase/migrations/20261019220300_catalog_relation_digest_schema.sql',import.meta.url),'utf8'));await db.exec(migration);await db.exec(readFileSync(new URL('../../supabase/migrations/20261019220052_zf_review_projection_bounds.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../../supabase/migrations/20261019221432_zf_corrupt_weight_baseline.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../../supabase/migrations/20261027162701_zf_lifecycle_only_review.sql',import.meta.url),'utf8'));await db.exec(readFileSync(new URL('../../supabase/migrations/20261019222722_zf_reviewed_metadata_quarantine.sql',import.meta.url),'utf8'));await db.exec("set request.jwt.claim.role='service_role'");return db;}
 async function rpc(db,name,args){const placeholders=args.map((_,i)=>'$'+(i+1)).join(',');return (await db.query(`select ${name}(${placeholders}) r`,args)).rows[0].r;}
 async function start(db,codes=['318189']){const key=crypto.randomUUID();const job=await rpc(db,'start_catalog_zf_job',[org,actor,codes,'Sachs',key]);return {job,key};}
 async function receipt(db,code='318189',options={}){
@@ -33,7 +33,7 @@ async function receipt(db,code='318189',options={}){
   raw:{details:{number:code,brandName:'SACHS',status:{value:options.status||'no longer deliverable by the manufacturer'},replacedBy:{values:[{text:'350 038'}]}}},
   replacementCandidates:[{code:'350 038',direction:'replaced_by'}],replacements:[{code:'350 038',direction:'replaced_by',target:{raw:{details:{number:'350 038',brandName:'SACHS'}}}}]};
 }
-async function ready(db,obs){const {job}=await start(db,[obs.code]);const claim=await rpc(db,'claim_catalog_zf_job',[org,job.id]);await rpc(db,'checkpoint_catalog_zf_job',[org,job.id,claim.lease_token,0,obs,{},'reviewed',null,true,null]);await rpc(db,'schedule_catalog_zf_job',[org,job.id,true]);return rpc(db,'claim_catalog_zf_job',[org,job.id]);}
+async function ready(db,obs,scope){const {job}=await start(db,[obs.code]);if(scope)await db.query("update catalog_zf_jobs set manifest=manifest||jsonb_build_object('scope',$1::text) where id=$2",[scope,job.id]);const claim=await rpc(db,'claim_catalog_zf_job',[org,job.id]);await rpc(db,'checkpoint_catalog_zf_job',[org,job.id,claim.lease_token,0,obs,{},'reviewed',null,true,null]);await rpc(db,'schedule_catalog_zf_job',[org,job.id,true]);return rpc(db,'claim_catalog_zf_job',[org,job.id]);}
 const apply=(db,j)=>rpc(db,'apply_catalog_zf_job_item',[org,j.id,j.lease_token,0]);
 test('database binds manifests, tenant, leases, immutable receipts and reviewed-before-apply',async()=>{const db=await setup();try{
  const {job,key}=await start(db);assert.equal((await rpc(db,'start_catalog_zf_job',[org,actor,['318189'],'Sachs',key])).id,job.id);
@@ -64,6 +64,31 @@ test('preserves concurrent manual correction, EAN conflicts, and explicit lifecy
  await rpc(db,'checkpoint_catalog_zf_job',[org,j2.id,j2.lease_token,0,obs2,r2,'completed',null,true,null]);
  const obs3=await receipt(db,'318189',{status:'production discontinued'});const j3=await ready(db,obs3);await apply(db,j3);
  assert.equal((await db.query("select lifecycle_status from catalog_products where product_code='318189'")).rows[0].lifecycle_status,'discontinued');
+ }finally{await db.close();}});
+test('lifecycle-only review applies verified replacement and production stop without changing metadata',async()=>{const db=await setup();try{
+ const obs=await receipt(db,'318189',{status:'production discontinued'});
+ const j=await ready(db,obs,'lifecycle');const result=await apply(db,j);
+ assert.equal(result.fields.description,undefined);assert.equal(result.fields.weight_kg,undefined);
+ assert.equal(result.fields.lifecycle_status,'applied');assert.equal(result.relations[0].status,'mapping_added');
+ const p=(await db.query("select description,weight_kg::float,ean,origin,hs_code,lifecycle_status from catalog_products where product_code='318189'")).rows[0];
+ assert.deepEqual(p,{description:'Wrong description',weight_kg:4.366,ean:'4013872954728',origin:null,hs_code:null,lifecycle_status:'discontinued'});
+ const mapping=(await db.query("select old_code,new_code from item_code_references where old_code='318189'")).rows[0];
+ assert.deepEqual(mapping,{old_code:'318189',new_code:'350 038'});
+ }finally{await db.close();}});
+test('lifecycle-only review still blocks an EAN identity conflict',async()=>{const db=await setup();try{
+ const obs=await receipt(db,'318189',{status:'production discontinued',fields:{ean:'9999999999999'}});
+ const j=await ready(db,obs,'lifecycle');const result=await apply(db,j);
+ assert.equal(result.fields.lifecycle_status,'no_explicit_production_stop');
+ assert.notEqual(result.relations[0].status,'mapping_added');
+ assert.equal((await db.query("select lifecycle_status from catalog_products where product_code='318189'")).rows[0].lifecycle_status,'active');
+ }finally{await db.close();}});
+test('next lifecycle package skips codes already queued for that brand',async()=>{const db=await setup();try{
+ assert.deepEqual(await rpc(db,'next_catalog_zf_lifecycle_codes',[org,'Sachs',100]),['318189','350038']);
+ const {job}=await start(db,['318189']);
+ await db.query("update catalog_zf_jobs set manifest=manifest||'{\"scope\":\"lifecycle\"}'::jsonb where id=$1",[job.id]);
+ assert.deepEqual(await rpc(db,'next_catalog_zf_lifecycle_codes',[org,'Sachs',100]),['350038']);
+ await db.exec("set request.jwt.claim.role='anon'");
+ await assert.rejects(rpc(db,'next_catalog_zf_lifecycle_codes',[org,'Sachs',100]),/Service role/);
  }finally{await db.close();}});
 test('blocks replacement loops and ambiguous successor sets; does not overwrite a conflicting manual map',async()=>{const db=await setup();try{
  await db.query('insert into item_code_references(organization_id,brand_id,old_code,new_code) values($1,$2,$3,$4)',[org,brand,'350038','318189']);
