@@ -198,6 +198,34 @@ test('blanks-only sync still applies replacements and current discontinued statu
   assert.equal(result[1].lifecycle_warning,null);
 });
 
+test('keeping prices rechecks an already saved replacement SKU but leaves ordinary priced rows untouched',async()=>{
+  const replacement={...savedLine('313739'),brand:'Sachs',resolvedCode:'560119',codeChanged:true,
+    supplier_name:'Romany',buy_price:41.38,sell_price:45.52,price_date:'2026-09-02'};
+  const other=savedLine('OTHER');
+  const before=structuredClone([replacement,other]);
+  const calls=[];
+  const sync=makeResync(async({code})=>{calls.push(code);return {
+    resolved:{found:true,product_code:code,brand:'Sachs'},
+    supplierOptions:[{supplier_id:'romany',supplier_name:'Romany',buy_price:50,sell_price:55,price_date:'2026-10-27'}],
+  };});
+  const result=await sync([replacement,other],{...repriceOptions,keepPrices:true,onlyFillBlanks:true,hydrateMissingPricesIfKeepingPrices:true});
+  assert.deepEqual(calls,['560119']);
+  assert.equal(result[0].buy_price,50);
+  assert.equal(result[0].sell_price,55);
+  assert.equal(result[0].price_date,'2026-10-27');
+  assert.deepEqual(result[1],other);
+  assert.deepEqual([replacement,other],before);
+});
+
+test('an already saved replacement cannot silently retain its old price when the current lookup fails',async()=>{
+  const replacement={...savedLine('313739'),brand:'Sachs',resolvedCode:'560119',codeChanged:true,
+    supplier_name:'Romany',buy_price:41.38,sell_price:45.52};
+  const sync=makeResync(async()=>({resolved:{found:false,product_code:'560119'},supplierOptions:[]}));
+  await assert.rejects(sync([replacement],{...repriceOptions,keepPrices:true,hydrateMissingPricesIfKeepingPrices:true}),
+    /price could not be verified for replacement Sachs 560119/);
+  assert.equal(replacement.buy_price,41.38);
+});
+
 test('replacement sync refuses to save when the old supplier has no current successor price',async()=>{
   const refs=new Map([['sachs::313739',{old_code:'313739',new_code:'560119'}]]);
   const sync=makeResync(async({code})=>({resolved:{found:true,product_code:code,brand:'Sachs'},supplierOptions:[

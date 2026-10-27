@@ -127,10 +127,12 @@ export function salesOrderResyncPriceSummary(before: QuoteBuilderLine[], after: 
 
 async function refreshSalesOrderPriceLines(
   lines: QuoteBuilderLine[], options: SalesOrderCatalogSyncOptions, onlyFillBlanks: boolean,
+  replacementIndexes: Set<number> = new Set(),
 ): Promise<QuoteBuilderLine[]> {
   const result = [...lines];
   const pending = lines.map((_, index) => index).filter((index) =>
-    options.keepPrices === false || !lineHasVisiblePrices(lines[index]));
+    options.keepPrices === false || replacementIndexes.has(index)
+    || (options.hydrateMissingPricesIfKeepingPrices && !lineHasVisiblePrices(lines[index])));
   // One lookup per exact brand/SKU for this action. Duplicate order rows keep
   // their own quantities and supplier selections, but share the read result.
   const lookups = new Map<string, ReturnType<typeof resolveQuoteLine>>();
@@ -250,7 +252,15 @@ export async function resyncSalesOrderLinesFromCatalog(
     );
   });
 
+  // A replacement must use the successor's current supplier price on every
+  // sync, including when the saved row already contains the successor code.
+  // "Keep prices" applies to other rows, not to a changed product identity.
+  const replacementIndexes = new Set(patchedLines.map((line, index) =>
+    line.codeChanged && exactProductCode(line.requestedCode) !== exactProductCode(line.resolvedCode)
+      ? index : -1).filter((index) => index >= 0));
+
   const refreshesCurrentPrice = !keepPrices
+    || replacementIndexes.size > 0
     || (options.hydrateMissingPricesIfKeepingPrices && patchedLines.some((line) => !lineHasVisiblePrices(line)));
   if (refreshesCurrentPrice && options.customerType === "C") {
     throw new Error("The retired C price list cannot be refreshed. Set A, B, or Other on the customer account.");
@@ -258,11 +268,19 @@ export async function resyncSalesOrderLinesFromCatalog(
   if (refreshesCurrentPrice) requireRepricingCurrency(options.currency);
 
   if (keepPrices) {
-    if (!options.hydrateMissingPricesIfKeepingPrices) {
+    if (!options.hydrateMissingPricesIfKeepingPrices && !replacementIndexes.size) {
       return patchedLines;
     }
 
-    return refreshSalesOrderPriceLines(patchedLines, options, onlyFillBlanks);
+    const refreshed = await refreshSalesOrderPriceLines(patchedLines, options, onlyFillBlanks, replacementIndexes);
+    for (const index of replacementIndexes) {
+      const line = refreshed[index];
+      if (line.price_sync_issue || !Number.isFinite(Number(line.buy_price)) || Number(line.buy_price) <= 0
+          || !Number.isFinite(Number(line.sell_price)) || Number(line.sell_price) <= 0) {
+        throw new Error(`Current supplier price could not be verified for replacement ${line.brand} ${line.resolvedCode}. The order was not changed.`);
+      }
+    }
+    return refreshed;
   }
 
   return refreshSalesOrderPriceLines(patchedLines, options, onlyFillBlanks);

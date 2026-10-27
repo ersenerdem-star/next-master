@@ -671,6 +671,7 @@ export const enMessages = {
     "orders.resyncPriceSummary": "Sync result: {filled} unpriced lines filled; {unavailable} lines still have missing prices; {failed} line price lookups failed.",
     "orders.resyncCodeChanges": "Part codes updated on {count} lines.",
     "orders.resyncDiscontinuedCount": "{count} lines are marked discontinued.",
+    "orders.resyncReplacementPrices": "Current prices for {checked} replacements were checked at the selected suppliers: {changed} changed, {unchanged} stayed the same.",
     "orders.resyncOtherPricesPreserved": "The full order price refresh could not finish; saved prices on other lines were preserved.",
     "orders.resyncFailed": "Resync failed",
     "orders.addLinesBeforeSavingDraft": "Add lines before saving the draft",

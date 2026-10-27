@@ -53,6 +53,10 @@ test("sales-order resync refuses colliding code references and catalog metadata"
     fetchCodeReferenceMatchesForRows: async () => new Map([["clevite::611", { old_code: "611", new_code: "NEW", reason: "" }]]),
     fetchCatalogMetadataForRows: async () => new Map([["clevite::611", { product_code: "611", description: "plain metadata" }]]),
     mergeCatalogMetadata: (line, metadata) => ({ ...line, description: metadata?.description || line.description }),
+    lineHasVisiblePrices: (line) => Number(line.buy_price ?? 0) > 0 || Number(line.sell_price ?? 0) > 0,
+    requireRepricingCurrency: () => {},
+    refreshSalesOrderPriceLines: async (lines) => lines.map((line) => line.resolvedCode === "NEW"
+      ? { ...line, buy_price: 10, sell_price: 11, price_sync_issue: null } : line),
   };
   const { resyncSalesOrderLinesFromCatalog } = loadFunctions(
     "../../apps/web/src/shared/salesOrderCatalogSync.ts",
@@ -63,11 +67,12 @@ test("sales-order resync refuses colliding code references and catalog metadata"
     { brand: "Clevite", requestedCode: "61/1", resolvedCode: "61/1", description: "slash metadata", buy_price: 8.34, sell_price: 9.17 },
     { brand: "Clevite", requestedCode: "611", resolvedCode: "611", description: "plain", buy_price: 405.72, sell_price: 446.29 },
   ];
-  const result = await resyncSalesOrderLinesFromCatalog(input, { customerType: "A", marginA: 10, marginB: 15 });
+  const result = await resyncSalesOrderLinesFromCatalog(input, { customerType: "A", marginA: 10, marginB: 15, currency: "EUR" });
   assert.equal(result[0].resolvedCode, "61/1");
   assert.equal(result[0].description, "slash metadata");
   assert.equal(result[0].buy_price, 8.34);
   assert.equal(result[1].resolvedCode, "NEW");
+  assert.equal(result[1].buy_price, 10);
 });
 
 test("single-line code reference lookup rejects a compact-key SKU collision", async () => {

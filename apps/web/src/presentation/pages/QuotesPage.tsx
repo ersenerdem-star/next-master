@@ -1897,7 +1897,17 @@ export function QuotesPage({
       const codeChanges = syncedLines.filter((line, index) =>
         (line.resolvedCode || line.requestedCode) !== (quoteBuilderLines[index]?.resolvedCode || quoteBuilderLines[index]?.requestedCode)).length;
       const discontinuedCount = syncedLines.filter((line) => line.lifecycle_status === "discontinued").length;
-      const message = `${t("sales.orders.resyncCodeChanges", { count: codeChanges })} ${t("sales.orders.resyncDiscontinuedCount", { count: discontinuedCount })} ${t("sales.orders.resyncPriceSummary", summary)}${preservedOtherPrices ? ` ${t("sales.orders.resyncOtherPricesPreserved")}` : ""}`;
+      const replacements = syncedLines.map((line, index) => ({ line, previous: quoteBuilderLines[index] }))
+        .filter(({ line }) => line.codeChanged && line.requestedCode !== line.resolvedCode);
+      const changedReplacementPrices = replacements.filter(({ line, previous }) =>
+        Number(line.buy_price) !== Number(previous?.buy_price)
+        || Number(line.sell_price) !== Number(previous?.sell_price)).length;
+      const replacementPriceMessage = replacements.length
+        ? ` ${t("sales.orders.resyncReplacementPrices", {
+          checked: replacements.length, changed: changedReplacementPrices,
+          unchanged: replacements.length - changedReplacementPrices,
+        })}` : "";
+      const message = `${t("sales.orders.resyncCodeChanges", { count: codeChanges })} ${t("sales.orders.resyncDiscontinuedCount", { count: discontinuedCount })}${replacementPriceMessage} ${t("sales.orders.resyncPriceSummary", summary)}${preservedOtherPrices ? ` ${t("sales.orders.resyncOtherPricesPreserved")}` : ""}`;
       setBuilderStatus(message);
       if (summary.failed) actionFeedback.fail(message);
       else actionFeedback.succeed(message);
