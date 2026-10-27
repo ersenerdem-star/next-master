@@ -5,6 +5,7 @@ export type DocumentKind = "sales-order" | "invoice" | "purchase-order" | "bill"
 export type DocumentExportLine = {
   code: string; brand?: string; description?: string; qty: number; unitPrice: number;
   amount?: number; origin?: string; weight?: number | null; tariff?: string; orderNo?: string;
+  oldCode?: string; lifecycleStatus?: "active" | "discontinued" | null; productNotice?: string;
 };
 export type DocumentExportInput = {
   kind: DocumentKind; audience: "admin" | "customer" | "supplier"; number: string; party: string;
@@ -34,12 +35,18 @@ export function buildDocumentWorksheet(input: DocumentExportInput) {
   if (!/^[A-Z]{3}$/.test(input.currency)) throw new Error("Document currency is invalid.");
   const totals = documentAmounts(input.lines, input.shipping, input.discount, input.total);
   const sourceOrder = input.kind === "invoice" || input.kind === "bill";
-  const headers = ["Code", "Brand", "Description", "Qty", "Origin", "Weight kg", "Tariff", ...(sourceOrder ? ["Source Order"] : []), `${buying ? "Buy" : "Unit"} Price ${input.currency}`, `Line Total ${input.currency}`];
+  const salesOrder = input.kind === "sales-order";
+  const headers = ["Code", ...(salesOrder ? ["Old Code"] : []), "Brand", "Description",
+    ...(salesOrder ? ["Product Status", "Product Notice"] : []),
+    "Qty", "Origin", "Weight kg", "Tariff", ...(sourceOrder ? ["Source Order"] : []),
+    `${buying ? "Buy" : "Unit"} Price ${input.currency}`, `Line Total ${input.currency}`];
   const priceColumn = headers.length - 2;
   const rows: ExportRows = [
     [input.kind, input.number], ["Party", input.party], ["Currency", input.currency],
     ["Date", input.date || ""], ["Status", input.status || ""], [], headers,
-    ...input.lines.map((line, i) => [line.code, line.brand || "", line.description || "", line.qty, line.origin || "", line.weight ?? "", line.tariff || "", ...(sourceOrder ? [line.orderNo || ""] : []), line.unitPrice, totals.amounts[i]]),
+    ...input.lines.map((line, i) => [line.code, ...(salesOrder ? [line.oldCode || ""] : []), line.brand || "", line.description || "",
+      ...(salesOrder ? [[line.oldCode ? "Replacement" : "", line.lifecycleStatus === "discontinued" ? "Discontinued" : ""].filter(Boolean).join("; "), line.productNotice || ""] : []),
+      line.qty, line.origin || "", line.weight ?? "", line.tariff || "", ...(sourceOrder ? [line.orderNo || ""] : []), line.unitPrice, totals.amounts[i]]),
   ];
   const dataEndRow = rows.length - 1;
   rows.push([]);
@@ -47,5 +54,7 @@ export function buildDocumentWorksheet(input: DocumentExportInput) {
     const row: (string | number)[] = Array(headers.length).fill("");
     row[0] = label; row[headers.length - 1] = amount; rows.push(row);
   }
-  return { rows, numericColumns: [3, 5, priceColumn, priceColumn + 1], options: { headerRow: 6, dataEndRow, expectedRows: input.lines.length, dataRows: input.lines.length, fullWidthTextColumns: [2], numberFormats: { 3: "General", [priceColumn]: "0.00####", [priceColumn + 1]: "0.00" } }, totals };
+  const qtyColumn = headers.indexOf("Qty");
+  const weightColumn = headers.indexOf("Weight kg");
+  return { rows, numericColumns: [qtyColumn, weightColumn, priceColumn, priceColumn + 1], options: { headerRow: 6, dataEndRow, expectedRows: input.lines.length, dataRows: input.lines.length, fullWidthTextColumns: [headers.indexOf("Description")], numberFormats: { [qtyColumn]: "General", [priceColumn]: "0.00####", [priceColumn + 1]: "0.00" } }, totals };
 }

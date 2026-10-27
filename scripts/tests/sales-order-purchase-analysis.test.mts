@@ -52,6 +52,30 @@ test('ordinary sales Excel keeps accepted sales prices and excludes supplier alt
  assert.ok(!JSON.stringify(data).includes('GroupAuto'));assert.ok(!JSON.stringify(data).includes('TPM'));assert.ok(!JSON.stringify(data).includes('7.6'));
 });
 
+test('sales order Excel identifies replacement and discontinued rows without changing amounts or other document layouts',()=>{
+ const model=buildDocumentWorksheet({kind:'sales-order',audience:'admin',number:'FU26-FRT172026',party:'Fort',currency:'EUR',
+  lines:[
+   {code:'WK8058',oldCode:'WK8020',brand:'Mann',description:'Fuel filter',qty:1,unitPrice:10,
+    lifecycleStatus:'active',productNotice:'Old Code WK8020 => New Code WK8058. MANN-FILTER official source.'},
+   {code:'CU24005',brand:'Mann',description:'Filter, interior air',qty:1,unitPrice:20,
+    lifecycleStatus:'discontinued',productNotice:'Production ended for CU24005. Not in production since 2022-05.'},
+   {code:'C2676',brand:'Mann',description:'Air filter',qty:1,unitPrice:30,
+    lifecycleStatus:'discontinued',productNotice:'Production ended for C2676.'},
+  ],total:60});
+ const wb=XLSX.read(buildWorkbookBytes('Sales Order',model.rows,model.numericColumns,model.options),{type:'array'});
+ const ws=wb.Sheets['Sales Order'];
+ assert.equal(ws.B7.v,'Old Code');assert.equal(ws.E7.v,'Product Status');assert.equal(ws.F7.v,'Product Notice');
+ assert.equal(ws.A8.v,'WK8058');assert.equal(ws.B8.v,'WK8020');assert.equal(ws.E8.v,'Replacement');
+ assert.match(ws.F8.v,/WK8020 => New Code WK8058/);
+ assert.equal(ws.E9.v,'Discontinued');assert.match(ws.F9.v,/2022-05/);
+ assert.equal(ws.E10.v,'Discontinued');assert.equal(ws.K8.v,10);assert.equal(ws.L10.v,30);
+ assert.equal(ws.L15.v,60);assert.equal(ws['!autofilter']?.ref,'A7:L10');
+ const invoice=buildDocumentWorksheet({kind:'invoice',audience:'admin',number:'INV',party:'Fort',currency:'EUR',
+  lines:[{code:'WK8058',qty:1,unitPrice:10}],total:10});
+ assert.equal(invoice.rows[6].length,10);
+ assert.ok(!invoice.rows[6].includes('Product Status'));
+});
+
 test('analysis gateway rejects every non-superadmin and forwards only bounded price inputs with the actual caller JWT',async()=>{
  const savedFetch=globalThis.fetch;const savedNetlify=(globalThis as any).Netlify;
  let role='sales',active=true,dispatched=0;

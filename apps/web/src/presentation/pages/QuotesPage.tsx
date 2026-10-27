@@ -2643,6 +2643,9 @@ export function QuotesPage({
           code: line.resolvedCode, brand: line.brand, description: line.description,
           qty: line.qty, unitPrice: Number(line.sell_price || 0),
           origin: line.origin, weight: line.weight_kg, tariff: line.hs_code,
+          oldCode: line.codeChanged && line.requestedCode !== line.resolvedCode ? line.requestedCode : "",
+          lifecycleStatus: line.lifecycle_status,
+          productNotice: buildSalesOrderPrintAlerts(line).map((alert) => alert.text).join(" | "),
         })),
         shipping: draftTotals.shipping, discount: draftTotals.discount, total: draftTotals.totalAmount,
       });
