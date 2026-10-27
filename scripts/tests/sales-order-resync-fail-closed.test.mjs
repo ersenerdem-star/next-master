@@ -226,12 +226,19 @@ test('an already saved replacement cannot silently retain its old price when the
   assert.equal(replacement.buy_price,41.38);
 });
 
-test('replacement sync refuses to save when the old supplier has no current successor price',async()=>{
+test('replacement sync selects the successor current supplier when the old supplier does not carry it',async()=>{
   const refs=new Map([['sachs::313739',{old_code:'313739',new_code:'560119'}]]);
   const sync=makeResync(async({code})=>({resolved:{found:true,product_code:code,brand:'Sachs'},supplierOptions:[
-    {supplier_id:'other',supplier_name:'Other',buy_price:1,sell_price:1.1},
+    {supplier_id:'groupauto',supplier_name:'GroupAuto',buy_price:34.14,sell_price:37.55},
   ]}),refs,'resyncSalesOrderWithCodeReferenceFallback');
-  await assert.rejects(sync([{...savedLine('313739'),brand:'Sachs',supplier_name:'Romany'}],repriceOptions),/price could not be verified.*560119/);
+  const original={...savedLine('313739'),brand:'Sachs',supplier_name:'Romany'};
+  const result=await sync([original],{...repriceOptions,keepPrices:true,onlyFillBlanks:true});
+  assert.equal(result.lines[0].requestedCode,'313739');
+  assert.equal(result.lines[0].resolvedCode,'560119');
+  assert.equal(result.lines[0].supplier_name,'GroupAuto');
+  assert.equal(result.lines[0].buy_price,34.14);
+  assert.equal(result.lines[0].sell_price,37.55);
+  assert.equal(original.supplier_name,'Romany');
 });
 
 test('explicit repricing may select a supplier only for a previously unpriced line with no saved supplier',async()=>{

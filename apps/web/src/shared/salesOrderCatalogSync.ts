@@ -219,6 +219,7 @@ export async function resyncSalesOrderLinesFromCatalog(
     return {
       ...line,
       ...(changesSku?{description:'',oem_no:'',hs_code:'',origin:'',weight_kg:null,found:false,
+        supplier_name:'',
         buy_price:null,sell_price:null,c_sell_price:null,manual_sell_price:false,price_date:'',
         supplierOptions:[],selectedSupplierKey:'',moq:null,order_multiple:null,stock_qty:null,valid_to:null,
         lifecycle_status:null,lifecycle_note:null,lifecycle_warning:null,price_sync_issue:null}:{}),
