@@ -45,6 +45,9 @@
 [functions."supplier-catalog-enrichment-background"]
   background = true
 
+[functions."catalog-zf-worker-background"]
+  background = true
+
 [[headers]]
   for = "/*"
   [headers.values]
