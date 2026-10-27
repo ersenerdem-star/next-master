@@ -23,14 +23,27 @@ export default async(req:Request)=>{
   try{if(source.error)throw source.error;assertZfSource(source.data,brandName);readAllowed=true;
     assertZfSource(source.data,brandName,{apply:true});publishAllowed=true;}catch{}
   if(req.method==='GET'){
-    const jobs=await db.from('catalog_zf_jobs').select('id,mode,status,total_items,next_index,error_message,created_at,updated_at,lease_expires_at,manifest')
+    const columns='id,mode,status,total_items,next_index,error_message,created_at,updated_at,lease_expires_at,manifest';
+    const jobs=await db.from('catalog_zf_jobs').select(columns)
       .eq('organization_id',org).eq('manifest->>brand',brandName).order('created_at',{ascending:false}).limit(10);
     if(jobs.error)throw jobs.error;
+    const pending=await db.from('catalog_zf_jobs').select(columns,{count:'exact'})
+      .eq('organization_id',org).eq('manifest->>brand',brandName).eq('manifest->>scope','lifecycle')
+      .eq('status','reviewed').order('created_at',{ascending:true}).limit(10);
+    if(pending.error)throw pending.error;
     const jobId=params.get('jobId')||jobs.data[0]?.id;
+    const merged=new Map([...jobs.data,...pending.data].map(job=>[job.id,job]));
+    if(jobId&&!merged.has(jobId)){
+      const chosen=await db.from('catalog_zf_jobs').select(columns)
+        .eq('organization_id',org).eq('manifest->>brand',brandName).eq('id',jobId).maybeSingle();
+      if(chosen.error)throw chosen.error;
+      if(chosen.data)merged.set(chosen.data.id,chosen.data);
+    }
     const items=jobId?await db.from('catalog_zf_review_items').select('product_code,state,error_message,observation,checkpoint')
       .eq('organization_id',org).eq('job_id',jobId).order('item_index'): {data:[],error:null};
     if(items.error)throw items.error;
-    return json({sourceUrl:'https://aftermarket.zf.com/en/aftermarket-portal/',readAllowed,publishAllowed,jobs:jobs.data,items:items.data.map(item=>({
+    return json({sourceUrl:'https://aftermarket.zf.com/en/aftermarket-portal/',readAllowed,publishAllowed,
+      jobs:[...merged.values()],reviewPendingCount:pending.count||0,items:items.data.map(item=>({
       productCode:item.product_code,state:item.state,error:item.error_message,observation:item.observation,result:item.checkpoint
     }))});
   }
