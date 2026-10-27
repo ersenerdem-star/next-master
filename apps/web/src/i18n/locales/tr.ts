@@ -652,6 +652,7 @@ export const trMessages = {
     "orders.resyncCodeChanges": "{count} satırın parça kodu güncellendi.",
     "orders.resyncDiscontinuedCount": "{count} satır üretimden kalkmış görünüyor.",
     "orders.resyncReplacementPrices": "{checked} değişen kodun seçili tedarikçideki güncel fiyatı kontrol edildi: {changed} değişti, {unchanged} aynı kaldı.",
+    "orders.supplierChoiceSaveDraft": "Tedarikçi ve satır fiyatı değişti. Kalıcı olması için taslağı kaydedin.",
     "orders.resyncOtherPricesPreserved": "Tüm siparişin fiyat yenilemesi tamamlanamadı; diğer satırların kayıtlı fiyatları korundu.",
     "orders.resyncFailed": "Senkronizasyon başarısız",
     "orders.addLinesBeforeSavingDraft": "Taslağı kaydetmeden önce satır ekleyin",

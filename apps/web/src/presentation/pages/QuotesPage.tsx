@@ -2068,6 +2068,37 @@ export function QuotesPage({
     return saved;
   }
 
+  function chooseAttentionLineSupplier(lineId: string, nextKey: string) {
+    setQuoteBuilderLines((current) => current.map((item) => {
+      if (item.lineId !== lineId) return item;
+      const selected = item.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === nextKey);
+      if (!selected) return item;
+      const adjustment = normalizeOrderQuantity(item.qty, selected);
+      return {
+        ...item,
+        selectedSupplierKey: nextKey,
+        qty: adjustment.corrected,
+        requested_qty: adjustment.adjusted ? adjustment.requested : null,
+        moq: selected.moq ?? null,
+        order_multiple: selected.order_multiple ?? null,
+        quantity_adjusted: adjustment.adjusted,
+        quantity_adjustment_note: orderQuantityAdjustmentMessage(adjustment, (key, params) => t(key, params)),
+        supplier_name: selected.supplier_name || "",
+        buy_price: selected.buy_price ?? null,
+        sell_price: item.manual_sell_price
+          ? item.sell_price
+          : shouldUseCPricePricing
+            ? item.c_sell_price ?? item.sell_price
+            : selected.buy_price != null
+              ? markupMoney(selected.buy_price, customerType === "B" ? effectiveMarginB : effectiveMarginA)
+              : selected.sell_price ?? null,
+        price_date: selected.price_date || "",
+        notes: selected.notes || "",
+      };
+    }));
+    setBuilderStatus(t("sales.orders.supplierChoiceSaveDraft"));
+  }
+
   async function confirmSalesOrderNavigation(nextAction: () => void | Promise<void>) {
     if (!salesOrderHasUnsavedChanges) {
       await nextAction();
@@ -2305,6 +2336,21 @@ export function QuotesPage({
       { key: "description", header: t("sales.orders.description"), render: (row: QuoteBuilderLine) => row.description || "-" },
       { key: "qty", header: t("sales.orders.qty"), render: (row: QuoteBuilderLine) => row.qty },
       {
+        key: "supplierChoice",
+        header: t("sales.orders.purchaseOption"),
+        render: (row: QuoteBuilderLine) => row.supplierOptions.length > 1 ? (
+          <select className="inline-edit-input" value={row.selectedSupplierKey}
+            aria-label={`${row.resolvedCode || row.requestedCode} ${t("sales.orders.purchaseOption")}`}
+            onChange={(event) => chooseAttentionLineSupplier(row.lineId, event.target.value)}>
+            {row.supplierOptions.map((option, index) => (
+              <option key={`${option.supplier_name}-${index}`} value={`${option.supplier_name}-${index}`}>
+                {option.supplier_name} · {t("sales.orders.buy")} {formatMoney(option.buy_price, currency)}
+              </option>
+            ))}
+          </select>
+        ) : `${row.supplier_name || "-"} · ${formatMoney(row.buy_price, currency)}`,
+      },
+      {
         key: "issues",
         header: t("sales.orders.issue"),
         render: (row: QuoteBuilderLine) => (
@@ -2328,7 +2374,7 @@ export function QuotesPage({
       },
       { key: "sell", header: t("sales.orders.sell"), render: (row: QuoteBuilderLine) => formatMoney(row.sell_price, currency) },
     ],
-    [currency, t],
+    [currency, t, customerType, effectiveMarginA, effectiveMarginB, shouldUseCPricePricing],
   );
 
   async function buildBuilderLine(

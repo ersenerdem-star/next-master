@@ -672,6 +672,7 @@ export const enMessages = {
     "orders.resyncCodeChanges": "Part codes updated on {count} lines.",
     "orders.resyncDiscontinuedCount": "{count} lines are marked discontinued.",
     "orders.resyncReplacementPrices": "Current prices for {checked} replacements were checked at the selected suppliers: {changed} changed, {unchanged} stayed the same.",
+    "orders.supplierChoiceSaveDraft": "Supplier and line price changed. Save the draft to keep the change.",
     "orders.resyncOtherPricesPreserved": "The full order price refresh could not finish; saved prices on other lines were preserved.",
     "orders.resyncFailed": "Resync failed",
     "orders.addLinesBeforeSavingDraft": "Add lines before saving the draft",
