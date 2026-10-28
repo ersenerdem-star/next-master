@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fetchAppSession } from "../../infrastructure/api/appSessionApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
+import { fetchCustomers } from "../../infrastructure/api/customersApi";
 import {
   fetchCustomerBalanceByBrandProduct,
   fetchInventoryByBrandProductWarehouse,
@@ -12,6 +13,7 @@ import {
   type ReportingReportFilters,
 } from "../../infrastructure/api/reportingApi";
 import type { BrandOption } from "../../types/brand";
+import type { LocalCustomer } from "../../types/customers";
 import type {
   CustomerBalanceByBrandProductRow,
   InventoryByBrandProductWarehouseRow,
@@ -29,6 +31,7 @@ import { Select } from "../components/common/Select";
 import { useI18n } from "../../i18n/I18nProvider";
 import { commercialUpgradeEnabled } from "../../shared/commercialUpgrade";
 import { sumMoney } from "../../../../../shared/order-money.mjs";
+import { buildXlsxBlobAsync, downloadBlob } from "../../shared/xlsx";
 
 type CoreReportKey =
   | "supplierBalance"
@@ -289,11 +292,16 @@ export function CoreReportsPage() {
   const [brandId, setBrandId] = useState("");
   const [productQuery, setProductQuery] = useState("");
   const [partyQuery, setPartyQuery] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const [customers, setCustomers] = useState<LocalCustomer[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(false);
   const [limit, setLimit] = useState("500");
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [rows, setRows] = useState<CoreReportRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [loadedFiltersKey, setLoadedFiltersKey] = useState("");
   const [error, setError] = useState("");
   const requestVersion = useRef(0);
 
@@ -329,6 +337,19 @@ export function CoreReportsPage() {
   const governedReports = commercialUpgradeEnabled();
   const balanceReport = governedReports && (activeReport === "supplierBalance" || activeReport === "customerBalance");
   const brandOptions = useMemo(() => [{ value: "", label: r("core.filters.allBrands") }, ...brands.map((brand) => ({ value: brand.id, label: brand.name }))], [brands, t]);
+  const customerOptions = useMemo(() => [
+    { value: "", label: r("core.filters.allCustomers") },
+    ...customers
+      .map((customer) => ({ value: customer.id, label: customer.display_name.trim() || customer.company_name.trim() }))
+      .filter((customer) => customer.label)
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  ], [customers, t]);
+  const selectedCustomer = customers.find((customer) => customer.id === customerId);
+  const effectivePartyQuery = activeReport === "salesOpen"
+    ? (selectedCustomer?.display_name.trim() || selectedCustomer?.company_name.trim() || "")
+    : partyQuery;
+  const filtersKey = JSON.stringify([activeReport, organizationId, startDate, endDate, brandId, productQuery, effectivePartyQuery, limit]);
+  const canExport = loaded && rows.length > 0 && loadedFiltersKey === filtersKey && !loading;
 
   useEffect(() => {
     let cancelled = false;
@@ -351,11 +372,26 @@ export function CoreReportsPage() {
   }, []);
 
   useEffect(() => {
+    if (activeReport !== "salesOpen") return;
+    let cancelled = false;
+    setCustomersLoading(true);
+    void fetchCustomers().then((customerRows) => {
+      if (!cancelled) setCustomers(customerRows);
+    }).catch((caught) => {
+      if (!cancelled) setError(caught instanceof Error ? caught.message : r("core.errors.customersLoadFailed"));
+    }).finally(() => {
+      if (!cancelled) setCustomersLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [activeReport]);
+
+  useEffect(() => {
     ++requestVersion.current;
     actionFeedback.clear();
     setLoading(false);
     setRows([]);
     setLoaded(false);
+    setLoadedFiltersKey("");
     setError("");
     return () => { ++requestVersion.current; };
   }, [activeReport]);
@@ -364,6 +400,10 @@ export function CoreReportsPage() {
     const nextOrganizationId = organizationId.trim();
     if (!nextOrganizationId) {
       setError(r("core.errors.organizationRequired"));
+      return;
+    }
+    if (activeReport === "salesOpen" && customerId && !selectedCustomer) {
+      setError(r("core.errors.customerRequired"));
       return;
     }
 
@@ -378,12 +418,13 @@ export function CoreReportsPage() {
         endDate,
         brandId: balanceReport ? "" : brandId,
         productQuery: balanceReport ? "" : productQuery,
-        partyQuery,
+        partyQuery: effectivePartyQuery,
         limit: Number(limit) || 500,
       });
       if (version !== requestVersion.current) return;
       setRows(result);
       setLoaded(true);
+      setLoadedFiltersKey(filtersKey);
       actionFeedback.succeed(r("core.feedback.rowsLoaded", { count: result.length.toLocaleString("en-US"), report: activeReportLabel }));
     } catch (caught) {
       if (version !== requestVersion.current) return;
@@ -394,6 +435,34 @@ export function CoreReportsPage() {
       actionFeedback.fail(message);
     } finally {
       if (version === requestVersion.current) setLoading(false);
+    }
+  }
+
+  async function exportExcel() {
+    if (!canExport) return;
+    setExporting(true);
+    actionFeedback.begin(r("core.feedback.preparingExcel"));
+    try {
+      const columns = activeDefinition.columns;
+      const includesCurrency = rows.some((row) => Boolean(asText(row, "currency")));
+      const sheetRows: Array<Array<string | number>> = [
+        [...columns.map((column) => r(column.headerKey)), ...(includesCurrency ? [r("columns.currency")] : [])],
+        ...rows.map((row) => [
+          ...columns.map((column) => {
+            const value = column.sortValue?.(row) ?? column.render(row);
+            return typeof value === "number" && Number.isFinite(value) ? value : String(value ?? "");
+          }),
+          ...(includesCurrency ? [asText(row, "currency")] : []),
+        ]),
+      ];
+      const numericColumns = columns.flatMap((column, index) => rows.some((row) => typeof column.sortValue?.(row) === "number") ? [index] : []);
+      const blob = await buildXlsxBlobAsync(activeReportLabel.slice(0, 31), sheetRows, numericColumns);
+      downloadBlob(`core-report-${activeReport}-${new Date().toISOString().slice(0, 10)}.xlsx`, blob);
+      actionFeedback.succeed(r("core.feedback.excelReady", { count: rows.length.toLocaleString("en-US") }));
+    } catch (caught) {
+      actionFeedback.fail(caught instanceof Error ? caught.message : r("core.errors.excelFailed"));
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -412,10 +481,15 @@ export function CoreReportsPage() {
             <Input label={r("core.fields.endDate")} type="date" value={endDate} onChange={setEndDate} />
             {!balanceReport ? <Select label={r("columns.brand")} value={brandId} options={brandOptions} onChange={setBrandId} /> : null}
             {!balanceReport ? <Input label={r("columns.product")} value={productQuery} onChange={setProductQuery} placeholder={r("core.placeholders.product")} /> : null}
-            <Input label={activePartyLabel} value={partyQuery} onChange={setPartyQuery} placeholder={activePartyLabel} />
+            {activeReport === "salesOpen"
+              ? <Select label={activePartyLabel} value={customerId} options={customerOptions} onChange={setCustomerId} disabled={customersLoading} />
+              : <Input label={activePartyLabel} value={partyQuery} onChange={setPartyQuery} placeholder={activePartyLabel} />}
             <Select label={r("core.fields.limit")} value={limit} options={limitOptions} onChange={setLimit} />
             <Button onClick={() => void loadReport()} busy={loading} busyLabel={t("common.loadingPage")}>
               {r("core.actions.loadReport")}
+            </Button>
+            <Button variant="secondary" onClick={() => void exportExcel()} disabled={!canExport} busy={exporting} busyLabel={r("core.feedback.preparingExcel")}>
+              {r("core.actions.exportExcel")}
             </Button>
           </div>
         </div>
@@ -425,6 +499,7 @@ export function CoreReportsPage() {
             <span>{loaded ? r("core.meta.total", { label: activeTotalLabel, value: totalByCurrency }) : activeDefinition.source}</span>
             {error ? <span className="error-text">{error}</span> : null}
           </div>
+          {loaded && rows.length >= Number(limit) ? <p>{r("core.meta.rowLimit", { count: limit })}</p> : null}
           {balanceReport ? <p>{r("core.meta.balanceSemantics")}</p> : governedReports && activeReport === "salesMargin" ? <p>{r("core.meta.marginSemantics")}</p> : null}
           <DataTable rows={rows} columns={translatedColumns} emptyText={loading ? t("common.loadingPage") : r("core.empty.noRows")} />
         </div>
