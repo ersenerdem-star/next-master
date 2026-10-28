@@ -26,7 +26,7 @@ export type OrgUserAccess = {
   customerIds: string[];
 };
 
-export type StaffOfficeAccess = { userId: string; enabled: boolean; allowedIps: string[]; activationReady?: boolean };
+export type StaffOfficeAccess = { userId: string; enabled: boolean; allowedIps: string[]; currentIp?: string; currentSupabaseIp?: string };
 
 async function staffOfficeAccessRequest(input: Record<string, unknown>): Promise<StaffOfficeAccess> {
   const accessToken = await getCallerAccessToken();
@@ -40,7 +40,11 @@ async function staffOfficeAccessRequest(input: Record<string, unknown>): Promise
   return payload as StaffOfficeAccess;
 }
 
-export const fetchStaffOfficeAccess = (userId: string) => staffOfficeAccessRequest({ action: "get", userId });
+export async function fetchStaffOfficeAccess(userId: string): Promise<StaffOfficeAccess> {
+  const access = await staffOfficeAccessRequest({ action: "get", userId });
+  const { data, error } = await supabaseClient.rpc("current_staff_client_ip");
+  return { ...access, currentSupabaseIp: error ? "" : String(data || "") };
+}
 export const saveStaffOfficeAccess = (input: StaffOfficeAccess) => staffOfficeAccessRequest({ action: "save", ...input });
 
 export type AdminDiagnostics = {

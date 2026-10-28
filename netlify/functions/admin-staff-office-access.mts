@@ -6,7 +6,7 @@ import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 const isUuid = (value: unknown) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
 
-export default async (req: Request, _context: Context) => {
+export default async (req: Request, context: Context) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   try {
     const caller = await requireCallerProfile(req, ["superadmin"]);
@@ -26,13 +26,13 @@ export default async (req: Request, _context: Context) => {
     if (!target[0]) return json({ error: "Personel bu kuruluşta bulunamadı." }, 404);
 
     const action = String(payload.action || "get").toLowerCase();
-    const activationReady = Netlify.env.get("STAFF_OFFICE_IP_ACTIVATION_READY") === "true";
     if (action === "get") {
       const rows = await getJson<Array<{ enabled: boolean; allowed_ips: string[] }>>(
         buildRestUrl(caller.supabaseUrl, "staff_office_access", { select: "enabled,allowed_ips", profile_id: `eq.${userId}`, limit: "1" }),
         { headers: serviceRoleHeaders(caller.serviceRoleKey) },
       );
-      return json({ ok: true, userId, enabled: rows[0]?.enabled === true, allowedIps: rows[0]?.allowed_ips || [], activationReady });
+      const currentIp = isIP(context.ip || "") ? context.ip : "";
+      return json({ ok: true, userId, enabled: rows[0]?.enabled === true, allowedIps: rows[0]?.allowed_ips || [], currentIp });
     }
     if (action !== "save") return json({ error: "Unsupported action" }, 400);
     if (["admin", "superadmin"].includes(target[0].role) || !["sales", "purchasing"].includes(target[0].department)) {
@@ -44,14 +44,13 @@ export default async (req: Request, _context: Context) => {
       return json({ error: "En fazla 12 geçerli IPv4 veya IPv6 adresi girin; IP aralığı kullanmayın." }, 400);
     }
     const enabled = payload.enabled === true;
-    if (enabled && !activationReady) return json({ error: "Ofis IP kuralı pilot doğrulamadan sonra açılacak. IP adreslerini pasif olarak kaydedebilirsiniz." }, 409);
     if (enabled && !allowedIps.length) return json({ error: "Etkinleştirmeden önce en az bir ofis IP adresi girin." }, 400);
     await sendJson<unknown>(buildRestUrl(caller.supabaseUrl, "staff_office_access", { on_conflict: "profile_id" }), {
       method: "POST",
       headers: { ...serviceRoleHeaders(caller.serviceRoleKey), Prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify({ profile_id: userId, enabled, allowed_ips: allowedIps, updated_at: new Date().toISOString() }),
     });
-    return json({ ok: true, userId, enabled, allowedIps, activationReady });
+    return json({ ok: true, userId, enabled, allowedIps });
   } catch (error) {
     return json({ error: sanitizeUserFacingError(error, "Ofis erişim ayarı kaydedilemedi.") }, 500);
   }

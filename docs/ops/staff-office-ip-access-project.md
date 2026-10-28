@@ -1,6 +1,6 @@
 # Personel Ofis IP Erişimi ve Bölüm Ekranları
 
-**Durum:** UI ve veri/oturum koruma altyapısı ayrı çalışma dalında hazırlandı. IT departmanından ofisin genel IP adresleri ve hedef personel listesi bekleniyor. Migration ve uygulama değişiklikleri üretime alınmadı; üretimde IP kısıtı etkin değil.
+**Durum:** Veritabanı koruması 28 Ekim 2026'da üretime uygulandı; kayıtlı personel/IP kuralı sayısı 0. UI ve Netlify işlevleri henüz dağıtılmadı. Süper admin, dağıtım sonrası Ayarlar > Kullanıcılar bölümünde ofis bağlantısının IP'lerini kendisi ekleyebilecek.
 
 ## Amaç
 
@@ -36,6 +36,7 @@ Süper yöneticinin seçtiği satış ve satın alma personeli, yönetim uygulam
 - Süper admin kullanıcı düzenleme ekranında ofis ağı seçeneği ve IP alanı. Yeni ve mevcut kullanıcıda varsayılan pasif.
 - Netlify oturum ve yönetim API'lerinde güvenilir `Context.ip` kontrolü; Supabase REST/RPC için ön istek kancası; mevcut public RLS tabloları ve personel izin fonksiyonu için ek koruma.
 - Ofis dışı kullanıcıya Türkçe 403 mesajı; açık oturumda ağ değişirse uygulamadan çıkış.
-- Etkinleştirme, `STAFF_OFFICE_IP_ACTIVATION_READY=true` sunucu ayarıyla pilot doğrulama sonrasına kadar kilitli. Süper admin IP'leri pasif olarak kaydedebilir.
+- Süper admin, ofisteyken uygulama ve veri API'sinin gördüğü genel IP'leri tek düğmeyle listeye ekleyebilir; kullanıcı bazında etkinleştirmeyi kendisi yönetir.
+- Üretim veritabanında izinli ve yasak IP SQL kontrolleri geçmiştir; sahte `CF-Connecting-IP` başlığı Supabase girişinde HTTP 403 almıştır. İlk gerçek personel hesabı pilot olarak izlenecektir.
 
 **Not:** Supabase Network Restrictions yalnızca Postgres/pooler bağlantılarını sınırlar; Auth, PostgREST ve `supabase-js` HTTPS isteklerini kapsamaz. Bu ayar personel IP kuralının yerine kullanılmayacak. Kaynak: https://supabase.com/docs/guides/platform/network-restrictions

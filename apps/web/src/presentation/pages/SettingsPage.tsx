@@ -139,7 +139,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const [emailDateTo, setEmailDateTo] = useState("");
   const [editUserDraft, setEditUserDraft] = useState<EditUserDraft | null>(null);
   const [editUserAccess, setEditUserAccess] = useState<{ scopeMode: "all" | "assigned"; permissions: Record<StaffPermissionKey, boolean>; customerIds: string[] } | null>(null);
-  const [editOfficeAccess, setEditOfficeAccess] = useState<{ enabled: boolean; ipText: string; activationReady: boolean } | null>(null);
+  const [editOfficeAccess, setEditOfficeAccess] = useState<{ enabled: boolean; ipText: string; currentIp: string; currentSupabaseIp: string } | null>(null);
   const [loadingUserAccess, setLoadingUserAccess] = useState(false);
   const passwordResetAvailable = isPasswordResetAvailable();
   const newUserEmail = newUserDraft.email.trim().toLowerCase();
@@ -281,7 +281,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     setLoadingUserAccess(true);
     void Promise.all([fetchOrgUserAccess(row.user_id), fetchStaffOfficeAccess(row.user_id)]).then(([access, office]) => {
       setEditUserAccess(access);
-      setEditOfficeAccess({ enabled: office.enabled, ipText: office.allowedIps.join("\n"), activationReady: office.activationReady === true });
+      setEditOfficeAccess({ enabled: office.enabled, ipText: office.allowedIps.join("\n"), currentIp: office.currentIp || "", currentSupabaseIp: office.currentSupabaseIp || "" });
     }).catch((caught) => {
       setUserActionStatus(caught instanceof Error ? caught.message : s("users.errors.loadFailed"));
     }).finally(() => setLoadingUserAccess(false));
@@ -983,15 +983,25 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                   {editOfficeAccess ? (
                     <>
                       <label className="field checkbox-field">
-                        <input type="checkbox" checked={editOfficeAccess.enabled} disabled={!editOfficeAccess.activationReady && !editOfficeAccess.enabled} onChange={(event) => setEditOfficeAccess((current) => current ? { ...current, enabled: event.target.checked } : current)} />
+                        <input type="checkbox" checked={editOfficeAccess.enabled} onChange={(event) => setEditOfficeAccess((current) => current ? { ...current, enabled: event.target.checked } : current)} />
                         <span className="field__label">Yalnızca tanımlı ofis IP adreslerinden erişsin</span>
                       </label>
                       <label className="field">
                         <span className="field__label">İzinli IPv4 / IPv6 adresleri (en fazla 12)</span>
                         <textarea className="field__input field__input--textarea" rows={3} value={editOfficeAccess.ipText} placeholder="IT'den alınacak genel IP adresleri" onChange={(event) => setEditOfficeAccess((current) => current ? { ...current, ipText: event.target.value } : current)} />
                       </label>
+                      <div className="inline-actions">
+                        <span className="meta-row">Uygulama bağlantısı: <strong>{editOfficeAccess.currentIp || "Belirlenemedi"}</strong> · Veri bağlantısı: <strong>{editOfficeAccess.currentSupabaseIp || "Belirlenemedi"}</strong></span>
+                        {editOfficeAccess.currentIp || editOfficeAccess.currentSupabaseIp ? (
+                          <Button variant="secondary" onClick={() => setEditOfficeAccess((current) => {
+                            if (!current) return current;
+                            const ips = current.ipText.split(/[\n,;]+/).map((value) => value.trim()).filter(Boolean);
+                            return { ...current, ipText: [...new Set([...ips, current.currentIp, current.currentSupabaseIp].filter(Boolean))].join("\n") };
+                          })}>Bu bağlantının IP’lerini ekle</Button>
+                        ) : null}
+                      </div>
+                      <div className="meta-row">Bu düğmeyi ofis internetine bağlıyken kullanın. Ev, mobil internet veya VPN farklı IP gösterebilir.</div>
                       {editOfficeAccess.enabled && !editOfficeAccess.ipText.trim() ? <div className="warning-text">Etkinleştirmek için önce en az bir IP adresi girin.</div> : null}
-                      {!editOfficeAccess.activationReady ? <div className="meta-row">IP adresleri şimdiden kaydedilebilir. Güvenlik pilotu tamamlanınca etkinleştirme açılacak.</div> : null}
                     </>
                   ) : <div className="meta-row">Ofis ağı ayarı yükleniyor…</div>}
                 </div>
