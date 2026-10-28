@@ -1,5 +1,5 @@
 import { Component, Suspense, lazy, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
-import { clearCachedAppSession, fetchAppSession, getCachedAppSessionSnapshot } from "../infrastructure/api/appSessionApi";
+import { clearCachedAppSession, fetchAppSession, getCachedAppSessionSnapshot, OfficeNetworkError } from "../infrastructure/api/appSessionApi";
 import { supabaseClient } from "../infrastructure/api/supabaseClient";
 import { touchCurrentUserPresence } from "../infrastructure/api/usersApi";
 import { ActionFeedbackProvider } from "../presentation/components/common/ActionFeedback";
@@ -240,6 +240,7 @@ export function App() {
   const [appSessionReloadTick, setAppSessionReloadTick] = useState(0);
   const [activePage, setActivePage] = useState(initialUiState?.activePage || "Home");
   const [accessNotice, setAccessNotice] = useState("");
+  const [loginNotice, setLoginNotice] = useState("");
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [workspacePath, setWorkspacePath] = useState(initialWorkspacePath);
   const [selectedSalesOrderId, setSelectedSalesOrderId] = useState("");
@@ -397,8 +398,14 @@ export function App() {
         setAppRole(normalizeAppRole(session.role));
         setAppDepartment(String(session.department || "viewer"));
         setAppPermissions(session.permissions || {});
-      } catch {
+      } catch (error) {
         if (!cancelled) {
+          if (error instanceof OfficeNetworkError) {
+            setLoginNotice(error.message);
+            clearCachedAppSession();
+            void supabaseClient.auth.signOut();
+            return;
+          }
           setAccountIdentity({name:"",email:""});
           setAppRole((current) => current || appRoleRef.current || "");
         }
@@ -878,7 +885,9 @@ export function App() {
         <Suspense fallback={renderPageFallback(t("common.loadingSignIn"))}>
           <LoginPage
             recoveryMode={recoveryMode}
+            initialError={loginNotice}
             onSuccess={() => {
+              setLoginNotice("");
               setRecoveryMode(false);
               setLoggedIn(true);
             }}

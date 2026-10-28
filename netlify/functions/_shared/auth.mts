@@ -1,4 +1,5 @@
 import { buildRestUrl, getJson, serviceRoleHeaders } from "./http.mts";
+import { enforceStaffOfficeAccess, OfficeNetworkRequiredError } from "./staff-office-access.mts";
 
 export type CallerProfile = {
   id: string;
@@ -42,6 +43,13 @@ export async function requireCallerProfile(req: Request, allowedRoles: string[])
   const profile = rows[0];
   if (!profile?.is_active || !allowedRoles.includes(profile.role)) {
     return { error: "Forbidden", status: 403 as const };
+  }
+
+  try {
+    await enforceStaffOfficeAccess(supabaseUrl, serviceRoleKey, caller.id, profile.role);
+  } catch (error) {
+    if (error instanceof OfficeNetworkRequiredError) return { error: error.message, status: 403 as const };
+    throw error;
   }
 
   return {

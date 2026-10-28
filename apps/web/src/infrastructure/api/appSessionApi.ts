@@ -16,7 +16,15 @@ type AppSessionResponse = {
     customer_scope_mode?: "all" | "assigned" | string;
   };
   error?: string;
+  code?: string;
 };
+
+export class OfficeNetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OfficeNetworkError";
+  }
+}
 
 type AppSessionSnapshot = {
   fullName?: string;
@@ -72,6 +80,10 @@ export async function fetchAppSession(forceRefresh = false): Promise<AppSessionS
   });
   const data = (await response.json().catch(() => ({}))) as AppSessionResponse;
   if (!response.ok) {
+    if (response.status === 403 && data.code === "OFFICE_NETWORK_REQUIRED") {
+      clearCachedAppSession();
+      throw new OfficeNetworkError(data.error || "Bu hesap yalnızca tanımlı ofis ağından kullanılabilir.");
+    }
     throw new Error(sanitizeUserFacingMessage(data.error || `App session request failed: ${response.status}`, "Session details could not be loaded right now."));
   }
 

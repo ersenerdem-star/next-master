@@ -10,6 +10,8 @@ import {
   updateOrgUser,
   fetchOrgUserAccess,
   saveOrgUserAccess,
+  fetchStaffOfficeAccess,
+  saveStaffOfficeAccess,
   STAFF_PERMISSION_KEYS,
   type StaffPermissionKey,
   type AdminDiagnostics,
@@ -137,6 +139,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
   const [emailDateTo, setEmailDateTo] = useState("");
   const [editUserDraft, setEditUserDraft] = useState<EditUserDraft | null>(null);
   const [editUserAccess, setEditUserAccess] = useState<{ scopeMode: "all" | "assigned"; permissions: Record<StaffPermissionKey, boolean>; customerIds: string[] } | null>(null);
+  const [editOfficeAccess, setEditOfficeAccess] = useState<{ enabled: boolean; ipText: string; activationReady: boolean } | null>(null);
   const [loadingUserAccess, setLoadingUserAccess] = useState(false);
   const passwordResetAvailable = isPasswordResetAvailable();
   const newUserEmail = newUserDraft.email.trim().toLowerCase();
@@ -274,8 +277,12 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
     });
     setUserActionStatus(s("users.feedback.editing", { email: row.email }));
     setEditUserAccess(null);
+    setEditOfficeAccess(null);
     setLoadingUserAccess(true);
-    void fetchOrgUserAccess(row.user_id).then((access) => setEditUserAccess(access)).catch((caught) => {
+    void Promise.all([fetchOrgUserAccess(row.user_id), fetchStaffOfficeAccess(row.user_id)]).then(([access, office]) => {
+      setEditUserAccess(access);
+      setEditOfficeAccess({ enabled: office.enabled, ipText: office.allowedIps.join("\n"), activationReady: office.activationReady === true });
+    }).catch((caught) => {
       setUserActionStatus(caught instanceof Error ? caught.message : s("users.errors.loadFailed"));
     }).finally(() => setLoadingUserAccess(false));
   }
@@ -969,6 +976,26 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                   </>
                 ) : <div className="meta-row"><InterfaceText text={"Access settings could not be loaded."}/></div>}
               </div>
+              {!["admin", "superadmin"].includes(editUserDraft.role) && ["sales", "purchasing"].includes(editUserDraft.department) ? (
+                <div className="field" style={{ gridColumn: "1 / -1" }}>
+                  <strong>Ofis ağı erişimi</strong>
+                  <p className="meta-row">IT tarafından verilen genel çıkış IP adreslerini satır satır girin. Bu kullanıcı için kuralı ayrıca etkinleştirene kadar mevcut erişimi değişmez.</p>
+                  {editOfficeAccess ? (
+                    <>
+                      <label className="field checkbox-field">
+                        <input type="checkbox" checked={editOfficeAccess.enabled} disabled={!editOfficeAccess.activationReady && !editOfficeAccess.enabled} onChange={(event) => setEditOfficeAccess((current) => current ? { ...current, enabled: event.target.checked } : current)} />
+                        <span className="field__label">Yalnızca tanımlı ofis IP adreslerinden erişsin</span>
+                      </label>
+                      <label className="field">
+                        <span className="field__label">İzinli IPv4 / IPv6 adresleri (en fazla 12)</span>
+                        <textarea className="field__input field__input--textarea" rows={3} value={editOfficeAccess.ipText} placeholder="IT'den alınacak genel IP adresleri" onChange={(event) => setEditOfficeAccess((current) => current ? { ...current, ipText: event.target.value } : current)} />
+                      </label>
+                      {editOfficeAccess.enabled && !editOfficeAccess.ipText.trim() ? <div className="warning-text">Etkinleştirmek için önce en az bir IP adresi girin.</div> : null}
+                      {!editOfficeAccess.activationReady ? <div className="meta-row">IP adresleri şimdiden kaydedilebilir. Güvenlik pilotu tamamlanınca etkinleştirme açılacak.</div> : null}
+                    </>
+                  ) : <div className="meta-row">Ofis ağı ayarı yükleniyor…</div>}
+                </div>
+              ) : null}
               <label className="field checkbox-field">
                 <input
                   type="checkbox"
@@ -985,7 +1012,7 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                   <Button
                     busy={savingUserId === editUserDraft.userId}
                     busyLabel={t("common.saving")}
-                    disabled={Boolean(editUserValidationMessage)}
+                    disabled={Boolean(editUserValidationMessage) || loadingUserAccess || !editOfficeAccess}
                     onClick={async () => {
                       if (!editUserDraft) return;
                       if (editUserValidationMessage) {
@@ -1010,6 +1037,13 @@ export function SettingsPage({ onLogout, initialTab = "session", onOpenRelatedRe
                             scopeMode: editUserAccess.scopeMode,
                             permissions: editUserAccess.permissions,
                             customerIds: editUserAccess.customerIds,
+                          });
+                        }
+                        if (editOfficeAccess && !["admin", "superadmin"].includes(editUserDraft.role) && ["sales", "purchasing"].includes(editUserDraft.department)) {
+                          await saveStaffOfficeAccess({
+                            userId: editUserDraft.userId,
+                            enabled: editOfficeAccess.enabled,
+                            allowedIps: editOfficeAccess.ipText.split(/[\n,;]+/).map((value) => value.trim()).filter(Boolean),
                           });
                         }
                         const nextUsers = await fetchOrgUsers();

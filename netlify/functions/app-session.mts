@@ -1,6 +1,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { json } from "./_shared/http.mts";
 import { resolveCaller } from "./_shared/app-auth.mts";
+import { OfficeNetworkRequiredError } from "./_shared/staff-office-access.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
 
 export default async (req: Request, _context: Context) => {
@@ -31,6 +32,7 @@ export default async (req: Request, _context: Context) => {
       },
     });
   } catch (error) {
+    if (error instanceof OfficeNetworkRequiredError) return json({ error: error.message, code: "OFFICE_NETWORK_REQUIRED" }, 403);
     const message = sanitizeUserFacingError(error, "Session details could not be loaded right now.");
     const unauthenticated = /missing session token|session user not found|session has expired/i.test(message);
     return json({ error: message }, unauthenticated ? 401 : 503);

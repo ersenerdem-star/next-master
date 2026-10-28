@@ -1,5 +1,6 @@
 import { getJson, HttpRequestError, serviceRoleHeaders } from "./http.mts";
 import { isTokenRevoked } from "./auth/session-revocation.mts";
+import { enforceStaffOfficeAccess, OfficeNetworkRequiredError } from "./staff-office-access.mts";
 
 export class AppAuthError extends Error {
   readonly status: 401 | 403;
@@ -12,7 +13,7 @@ export class AppAuthError extends Error {
 }
 
 export function getAppAuthStatus(error: unknown): 401 | 403 | undefined {
-  return error instanceof AppAuthError ? error.status : undefined;
+  return error instanceof AppAuthError || error instanceof OfficeNetworkRequiredError ? error.status : undefined;
 }
 
 export type AppCaller = {
@@ -121,6 +122,8 @@ export async function resolveCaller(
   if (isTokenRevoked(accessToken, profile.session_revoked_at || null)) {
     throw new AppAuthError("Your session has expired. Sign in again.");
   }
+
+  await enforceStaffOfficeAccess(supabaseUrl, serviceRoleKey, userId, String(profile.role || ""));
 
   return {
     id: userId,

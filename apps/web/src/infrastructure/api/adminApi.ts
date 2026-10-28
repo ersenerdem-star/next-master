@@ -10,6 +10,7 @@ const syncBrandCatalogUrl = import.meta.env.VITE_ADMIN_SYNC_BRAND_CATALOG_URL ||
 const bulkSyncBrandCatalogUrl =
   import.meta.env.VITE_ADMIN_BULK_SYNC_BRAND_CATALOG_URL || "/api/admin-sync-brand-catalog-background";
 const userAccessUrl = import.meta.env.VITE_ADMIN_USER_ACCESS_URL || "/api/admin-user-access";
+const staffOfficeAccessUrl = "/api/admin-staff-office-access";
 
 export const STAFF_PERMISSION_KEYS = [
   "customers.view", "customers.manage", "catalog.view", "catalog.manage",
@@ -24,6 +25,23 @@ export type OrgUserAccess = {
   permissions: Record<StaffPermissionKey, boolean>;
   customerIds: string[];
 };
+
+export type StaffOfficeAccess = { userId: string; enabled: boolean; allowedIps: string[]; activationReady?: boolean };
+
+async function staffOfficeAccessRequest(input: Record<string, unknown>): Promise<StaffOfficeAccess> {
+  const accessToken = await getCallerAccessToken();
+  const response = await fetch(staffOfficeAccessUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error || "Ofis erişim ayarı alınamadı.");
+  return payload as StaffOfficeAccess;
+}
+
+export const fetchStaffOfficeAccess = (userId: string) => staffOfficeAccessRequest({ action: "get", userId });
+export const saveStaffOfficeAccess = (input: StaffOfficeAccess) => staffOfficeAccessRequest({ action: "save", ...input });
 
 export type AdminDiagnostics = {
   runtime: {

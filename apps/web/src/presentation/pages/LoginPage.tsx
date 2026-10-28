@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabaseClient } from "../../infrastructure/api/supabaseClient";
+import { fetchAppSession } from "../../infrastructure/api/appSessionApi";
 import { Button } from "../components/common/Button";
 import { Input } from "../components/common/Input";
 import { Select } from "../components/common/Select";
@@ -9,6 +10,7 @@ import { NextMasterLogo } from "../components/common/NextMasterBrand";
 type LoginPageProps = {
   onSuccess: () => void;
   recoveryMode?: boolean;
+  initialError?: string;
 };
 
 type AdminLoginBranding = {
@@ -49,7 +51,7 @@ function buildLoginInitials(value: string) {
     .slice(0, 2) || "AO";
 }
 
-export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
+export function LoginPage({ onSuccess, recoveryMode = false, initialError = "" }: LoginPageProps) {
   const { locale, localeOptions, setLocale, t } = useI18n();
   const [branding, setBranding] = useState<AdminLoginBranding>({
     companyName: "Asad Otomotiv",
@@ -61,7 +63,7 @@ export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError);
   const [message, setMessage] = useState("");
   const [forgotMode, setForgotMode] = useState(false);
 
@@ -106,11 +108,20 @@ export function LoginPage({ onSuccess, recoveryMode = false }: LoginPageProps) {
       loginError = error;
     }
 
-    setLoading(false);
     if (loginError) {
+      setLoading(false);
       setError(loginError.message);
       return;
     }
+    try {
+      await fetchAppSession(true);
+    } catch (error) {
+      await supabaseClient.auth.signOut();
+      setLoading(false);
+      setError(error instanceof Error ? error.message : "Giriş doğrulanamadı.");
+      return;
+    }
+    setLoading(false);
     onSuccess();
   }
 
