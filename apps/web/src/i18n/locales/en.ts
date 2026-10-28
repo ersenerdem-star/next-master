@@ -506,7 +506,7 @@ export const enMessages = {
     "orders.listSubtitle": "Review, edit, and convert sales orders",
     "orders.newSalesOrder": "New Sales Order",
     "orders.filterStatus": "Filter status",
-    "orders.searchPlaceholder": "Search sales orders",
+    "orders.searchPlaceholder": "Search order no., customer or brand",
     "orders.searchingFor": "Searching for {term}",
     "orders.allSalesOrders": "All sales orders",
     "orders.searching": "Searching...",

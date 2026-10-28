@@ -490,7 +490,7 @@ export const trMessages = {
     "orders.status": "Durum",
     "orders.brands": "Markalar",
     "orders.amount": "Tutar",
-    "orders.searchPlaceholder": "Satış siparişlerinde ara",
+    "orders.searchPlaceholder": "Sipariş no, müşteri veya marka ara",
     "orders.searchingFor": "{term} aranıyor",
     "orders.allSalesOrders": "Tüm satış siparişleri",
     "orders.searching": "Aranıyor...",

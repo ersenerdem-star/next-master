@@ -148,7 +148,7 @@ function writeSalesOrderWorkspaceCache(cache: PersistedSalesOrderWorkspace | nul
   }
 }
 
-function matchesSalesOrderSearch(order: LocalSalesOrder, search: string) {
+function matchesSalesOrderSearch(order: LocalSalesOrder, search: string, brands: string[] = []) {
   const term = String(search || "").trim();
   if (!term) return true;
 
@@ -162,6 +162,7 @@ function matchesSalesOrderSearch(order: LocalSalesOrder, search: string) {
     order.purchase_company,
     order.status,
     order.source_channel || "",
+    ...brands,
     buildEntityAlias(order.customer_name),
     buildEntityAlias(order.seller_company),
     buildEntityAlias(order.purchase_company),
@@ -831,7 +832,6 @@ export function QuotesPage({
   const workspaceCacheWriteTimeoutRef = useRef<number | null>(null);
   const workspaceCacheSnapshotRef = useRef<PersistedSalesOrderWorkspace | null>(initialWorkspaceCache);
   const [search, setSearch] = useState("");
-  const [submittedSearch, setSubmittedSearch] = useState("");
   const [salesOrdersView, setSalesOrdersView] = useState<"list" | "detail">(
     externalSelectedQuoteId || externalSelectedSalesOrderId ? "detail" : initialWorkspaceCache?.salesOrdersView || "list",
   );
@@ -852,7 +852,6 @@ export function QuotesPage({
   const [loadingQuotes, setLoadingQuotes] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState("");
-  const [searchingQuotes, setSearchingQuotes] = useState(false);
   const [pdfView, setPdfView] = useState(false);
   const [quoteLinePreview, setQuoteLinePreview] = useState<QuoteBuilderLine | null>(null);
 
@@ -1183,7 +1182,7 @@ export function QuotesPage({
       setLoadingQuotes(true);
       setError("");
       try {
-        const result = await fetchCloudQuotes(submittedSearch);
+        const result = await fetchCloudQuotes("");
         if (cancelled) return;
         setQuotes(result);
         setSelectedQuoteId((current) => {
@@ -1209,17 +1208,7 @@ export function QuotesPage({
     return () => {
       cancelled = true;
     };
-  }, [externalSelectedQuoteId, submittedSearch]);
-
-  useEffect(() => {
-    if (!searchingQuotes || loadingQuotes) return;
-    if (error) {
-      actionFeedback.fail(error);
-    } else {
-      actionFeedback.succeed(t("sales.orders.salesOrdersLoaded", { count: quotes.length.toLocaleString("en-US") }));
-    }
-    setSearchingQuotes(false);
-  }, [searchingQuotes, loadingQuotes, error, quotes.length, actionFeedback]);
+  }, [externalSelectedQuoteId]);
 
   useEffect(() => {
     if (externalSelectedQuoteId) {
@@ -2815,6 +2804,10 @@ export function QuotesPage({
   async function refreshLocalSalesOrders(nextSelectedId?: string) {
     const nextSalesOrders = await fetchSalesOrderSummaries();
     setLocalSalesOrders(nextSalesOrders);
+    const nextBrandSummaries = await fetchSalesOrderBrandSummaries().catch(() => null);
+    if (nextBrandSummaries) {
+      setSalesOrderBrandsById(Object.fromEntries(nextBrandSummaries.map((row) => [row.id, row.brands])));
+    }
     if (nextSelectedId) {
       setSelectedLocalSalesOrderId(nextSelectedId);
     }
@@ -2942,7 +2935,7 @@ export function QuotesPage({
   const filteredLocalSalesOrders = useMemo(() => {
     const searchTerm = search.trim();
     return localSalesOrders.filter((order) => {
-      if (!matchesSalesOrderSearch(order, searchTerm)) return false;
+      if (!matchesSalesOrderSearch(order, searchTerm, salesOrderBrandsById[order.id] || [])) return false;
       const poCount = salesOrderDocumentState.purchaseOrderCountBySalesOrderId.get(order.id) || 0;
       const invoiceCount = salesOrderDocumentState.invoiceCountBySalesOrderId.get(order.id) || 0;
       switch (salesOrderFilter) {
@@ -2958,7 +2951,7 @@ export function QuotesPage({
           return true;
       }
     });
-  }, [localSalesOrders, salesOrderDocumentState, salesOrderFilter, search]);
+  }, [localSalesOrders, salesOrderBrandsById, salesOrderDocumentState, salesOrderFilter, search]);
 
   const selectedLocalSalesOrders = useMemo(
     () => localSalesOrders.filter((order) => selectedLocalSalesOrderIds.includes(order.id)),
@@ -3223,19 +3216,13 @@ export function QuotesPage({
               onChange={setSearch}
               placeholder={t("sales.orders.searchPlaceholder")}
               onEnter={() => {
-                setSearchingQuotes(true);
-                actionFeedback.begin(t("sales.orders.searchingFor", { term: search.trim() || t("sales.orders.allSalesOrders") }));
-                setSubmittedSearch(search);
+                actionFeedback.succeed(t("sales.orders.salesOrdersLoaded", { count: filteredLocalSalesOrders.length.toLocaleString("en-US") }));
               }}
             />
             <Button
               onClick={() => {
-                setSearchingQuotes(true);
-                actionFeedback.begin(t("sales.orders.searchingFor", { term: search.trim() || t("sales.orders.allSalesOrders") }));
-                setSubmittedSearch(search);
+                actionFeedback.succeed(t("sales.orders.salesOrdersLoaded", { count: filteredLocalSalesOrders.length.toLocaleString("en-US") }));
               }}
-              busy={searchingQuotes}
-              busyLabel={t("sales.orders.searching")}
             >
               {t("common.search")}
             </Button>

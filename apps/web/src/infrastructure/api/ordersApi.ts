@@ -65,6 +65,7 @@ const SALES_ORDER_SUMMARY_COLUMNS = [
   "source_channel",
   "portal_submitted_at",
   "portal_seen_at",
+  "created_at",
   "updated_at",
   "confirmed_at",
 ].join(",");
@@ -744,11 +745,13 @@ async function fetchOrderCollection<T>(
 ) {
   await bootstrapOrdersFromLocalIfNeeded();
   const organizationId = await getCurrentOrgId();
-  const { data, error } = await supabaseClient
+  const query = supabaseClient
     .from(table)
     .select(columns)
-    .eq("organization_id", organizationId)
-    .order("updated_at", { ascending: false });
+    .eq("organization_id", organizationId);
+  const { data, error } = table === "sales_orders"
+    ? await query.order("quote_date", { ascending: false }).order("created_at", { ascending: false })
+    : await query.order("updated_at", { ascending: false });
 
   if (error) throw new Error(error.message || `${table} load failed`);
   return ((data || []) as unknown as Record<string, unknown>[]).map(mapper);
