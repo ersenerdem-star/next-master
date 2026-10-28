@@ -1,6 +1,6 @@
 # Personel Ofis IP Erişimi ve Bölüm Ekranları
 
-**Durum:** Veritabanı koruması 28 Ekim 2026'da üretime uygulandı; kayıtlı personel/IP kuralı sayısı 0. UI ve Netlify işlevleri henüz dağıtılmadı. Süper admin, dağıtım sonrası Ayarlar > Kullanıcılar bölümünde ofis bağlantısının IP'lerini kendisi ekleyebilecek.
+**Durum:** Veritabanı koruması ve yönetici ekranı 28 Ekim 2026'da üretime alındı (`2525ab51`, Netlify dağıtımı `6ae1ee7b135693cf952fdc6b`). Kayıtlı personel/IP kuralı sayısı 0; kimsenin erişimi kısıtlanmıyor. Süper admin Ayarlar > Kullanıcılar bölümünde ofis bağlantısının IP'lerini kendisi ekleyebilir.
 
 ## Amaç
 
