@@ -1984,7 +1984,7 @@ export function PortalPage() {
       if (catalogResults.length) {
         if (catalogResults[0]) {
           setSelectedCatalogCode(catalogResults[0].code);
-          setPortalPreview({ kind: "catalog", item: catalogResults[0] });
+          setPortalPreview(null);
         }
         notifyPortal("Offline mode active. Showing cached search results. Reconnect to refresh search.", "warning");
       } else {
@@ -2006,13 +2006,13 @@ export function PortalPage() {
       setPortalRecommendations(result.recommendations);
       if (items[0]) {
         setSelectedCatalogCode(items[0].code);
-        setPortalPreview({ kind: "catalog", item: items[0] });
+        setPortalPreview(null);
       } else {
         setSelectedCatalogCode("");
         setPortalPreview(null);
       }
       setPortalOrderStatus(
-        `${items.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} matching product and alternative result(s) found for the sales order flow.${result.recommendations.length ? ` ${result.recommendations.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} stock-backed recommendation(s) added below.` : ""}`,
+        locale === "tr" ? `${items.length.toLocaleString("tr-TR")} ürün bulundu.` : `${items.length.toLocaleString("en-US")} products found.`,
       );
     } catch (caught) {
       if (controller.signal.aborted || portalSearchRequestRef.current.id !== requestId) return;
@@ -3914,7 +3914,6 @@ export function PortalPage() {
                   selectedCode={selectedCatalogCode}
                   onSelect={(item) => {
                     setSelectedCatalogCode(item.code);
-                    setPortalPreview({ kind: "catalog", item });
                   }}
                   onAdd={(item, quantity) => requestPortalCatalogAdd(item, quantity)}
                   onPreview={(item) => setPortalPreview({ kind: "catalog", item })}

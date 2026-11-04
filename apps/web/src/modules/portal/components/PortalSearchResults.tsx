@@ -118,6 +118,7 @@ export function PortalSearchResults({
   const [searchField, setSearchField] = useState<PortalSearchField>(initialSearchField);
   const [addQuantity, setAddQuantity] = useState(1);
   const [showAllResults, setShowAllResults] = useState(false);
+  const [hasSearched, setHasSearched] = useState(results.length > 0);
   const selected = results.find((item) => item.code === selectedCode) || results[0] || null;
   const visibleResults = showAllResults ? results : results.slice(0, 12);
   useEffect(() => setShowAllResults(false), [query, results.length]);
@@ -137,6 +138,7 @@ export function PortalSearchResults({
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setHasSearched(true);
     onSearch(searchField);
   }
 
@@ -162,6 +164,7 @@ export function PortalSearchResults({
             <button
               key={tab.value}
               type="button"
+              role="tab"
               className={searchField === tab.value ? "is-active" : ""}
               aria-selected={searchField === tab.value}
               onClick={() => setSearchField(tab.value)}
@@ -174,11 +177,11 @@ export function PortalSearchResults({
           <select aria-label={ui("Search brand")} value={brand} onChange={(event) => onBrandChange(event.target.value)}>
             {brands.map((option) => <option key={option.value || "all"} value={option.value}>{option.label}</option>)}
           </select>
-          <input aria-label={`${searchTabs.find((tab) => tab.value === searchField)?.label || "Part"} search`} placeholder={searchPlaceholder[searchField]} value={query} onChange={(event) => onQueryChange(event.target.value)} />
+          <input aria-label={`${searchTabs.find((tab) => tab.value === searchField)?.label || "Part"} search`} placeholder={ui(searchPlaceholder[searchField])} value={query} onChange={(event) => onQueryChange(event.target.value)} />
           <button type="button" className="portal-search-result-view__clear" onClick={onClear} aria-label={ui("Clear search")}>×</button>
           <button type="submit" className="portal-search-result-view__submit" disabled={searching}>{searching ? "…" : ui("Search")}</button>
         </form>
-        <div className="portal-search-result-view__actions" aria-label={ui("Import and export tools")}>
+        <details className="portal-search-tools"><summary>{locale === "tr" ? "Excel ile toplu sipariş" : "Bulk order with Excel"}</summary><div className="portal-search-result-view__actions" aria-label={ui("Import and export tools")}>
           <div className="portal-search-result-view__action-group">
             <span className="portal-search-result-view__action-label"><InterfaceText text={"Sales order tools"}/></span>
             <Button type="button" variant="secondary" onClick={onImport}>
@@ -189,7 +192,7 @@ export function PortalSearchResults({
               <InterfaceText text={"Export sales order"}/></Button>
           </div>
           <div className="portal-search-result-view__action-status" aria-live="polite">
-            <strong>{basketCount.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={" sales order line"}/>{basketCount === 1 ? "" : "s"}</strong>
+            <strong>{locale === "tr" ? `${basketCount.toLocaleString("tr-TR")} sipariş satırı` : `${basketCount.toLocaleString("en-US")} order lines`}</strong>
             <span>{orderStatus || ui("Import a file or add a search result to build a sales order.")}</span>
           </div>
         </div>
@@ -197,6 +200,7 @@ export function PortalSearchResults({
           <span><InterfaceText text={"Price lookup limit"}/></span>
           <strong><InterfaceText text={"Price lookups run in batches of up to 200 rows. Larger files are split automatically; save or send each sales order with 200 lines or fewer."}/></strong>
         </div>
+        </details>
         {basketCount > 200 ? (
           <div className="portal-search-result-view__order-limit-warning" role="alert">
             <InterfaceText text={"This sales order has"}/>{basketCount.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={"lines. Split it into 200-line lists before saving or sending."}/></div>
@@ -206,7 +210,7 @@ export function PortalSearchResults({
       <div className="portal-search-result-view__layout">
         <aside className="portal-search-result-rail" aria-label={ui("Search results")}>
           <div className="portal-search-result-rail__summary">
-            {results.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={" result"}/>{results.length === 1 ? "" : "s"} <InterfaceText text={" for “"}/>{query || ui("all parts")}”
+            {locale === "tr" ? `${results.length.toLocaleString("tr-TR")} sonuç${query ? ` · “${query}”` : ""}` : `${results.length.toLocaleString("en-US")} results${query ? ` · “${query}”` : ""}`}
           </div>
           <div className="portal-search-result-rail__items">
             {visibleResults.map((item) => (
@@ -220,7 +224,8 @@ export function PortalSearchResults({
                 <span className="portal-search-result-rail__copy">
                   <strong>{item.code || "-"}</strong>
                   <BrandPill brand={item.brand} compact withLogo className="portal-search-result-rail__brand" />
-                  <span>{compactText(item.description || "Part description", 48)}</span>
+                  <span>{compactText(item.description || ui("Part description"), 48)}</span>
+                  <span>{formatMoney(item.sell_price, item.currency || currency)}</span>
                   <small>{item.available_qty == null ? ui("Stock check") : ui(`${Number(item.available_qty).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} in stock`)}</small>
                 </span>
                 <span className="portal-search-result-rail__chevron">›</span>
@@ -291,10 +296,10 @@ export function PortalSearchResults({
                 <span><InterfaceText text={"Weight "}/>{selected.weight_kg == null ? "-" : `${selected.weight_kg} kg`}</span>
               </div>
             </>
-          ) : <div className="empty-state"><InterfaceText text={"Search by part number, OEM, vehicle or description."}/></div>}
+          ) : <div className="empty-state">{searching ? (locale === "tr" ? "Ürünler aranıyor…" : "Searching products…") : hasSearched && query ? (locale === "tr" ? "Sonuç bulunamadı. Parça numarasını veya marka seçimini kontrol edip tekrar deneyin." : "No results found. Check the part number or brand and try again.") : ui("Search by part number, OEM, vehicle or description.")}</div>}
         </main>
 
-        <aside className="portal-search-result-insights" aria-label={ui("Account insights")}>
+        <aside className="portal-search-result-insights" aria-label={ui("Account insights")} hidden>
           <section className="portal-search-insight-card">
             <h3><InterfaceText text={"Last ordered"}/></h3>
             <small>{formatDate(latestOrder?.updated_at || latestOrder?.quote_date)}</small>
@@ -328,7 +333,7 @@ export function PortalSearchResults({
           </div>
           <div className="portal-order-workspace__header-meta">
             <span className="portal-order-workspace__status">{ui(orderStatus || "Draft")}</span>
-            <strong>{draftLines.length.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={" line"}/>{draftLines.length === 1 ? "" : "s"}</strong>
+            <strong>{locale === "tr" ? `${draftLines.length.toLocaleString("tr-TR")} satır` : `${draftLines.length.toLocaleString("en-US")} lines`}</strong>
           </div>
         </div>
 

@@ -13556,3 +13556,25 @@ body {
 @media (max-width: 768px) {
   .mobile-workspace-menu__panel { position: fixed; top: 64px; left: 14px; width: min(320px, calc(100vw - 28px)); }
 }
+
+/* Search keeps the primary task visible; bulk order tools remain available. */
+.portal-search-tools { border-top: 1px solid #e1e8f1; padding-top: 8px; }
+.portal-search-tools > summary { display: inline-flex; align-items: center; min-height: 44px; padding: 4px 8px; color: #245b91; font-weight: 700; cursor: pointer; }
+.portal-search-tools > summary::before { content: "+"; margin-right: 8px; font-size: 19px; }
+.portal-search-tools[open] > summary::before { content: "−"; }
+.portal-search-result-view__layout { grid-template-columns: minmax(220px, .75fr) minmax(0, 1.65fr); }
+.portal-search-result-insights[hidden] { display: none; }
+.portal-search-result-rail__items { max-height: 620px; overflow-y: auto; }
+.portal-search-result-rail__item { min-height: 82px; }
+.portal-search-result-main__image { min-height: 190px; }
+.portal-search-result-main__image .catalog-thumb--detail { height: 180px; }
+@media (max-width: 760px) {
+  .portal-search-result-view__layout { grid-template-columns: minmax(0, 1fr); }
+  .portal-search-result-rail__items { max-height: 260px; }
+  .portal-search-result-main { padding: 16px; }
+  .portal-search-result-main__hero { gap: 12px; padding: 14px 0; }
+  .portal-search-result-main__image { min-height: 150px; }
+  .portal-search-result-main__image .catalog-thumb--detail { height: 145px; }
+  .portal-search-result-view__types button { min-height: 44px; }
+}
+.portal-search-result-rail__brand .brand-pill__label { display: inline; }
