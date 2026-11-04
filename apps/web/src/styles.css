@@ -13553,3 +13553,6 @@ body {
   .customer-desk-hero--reference { min-height: 0; padding: 26px 18px 24px; }
   .customer-desk-hero--reference h2 { font-size: clamp(30px, 9vw, 40px); }
 }
+@media (max-width: 768px) {
+  .mobile-workspace-menu__panel { position: fixed; top: 64px; left: 14px; width: min(320px, calc(100vw - 28px)); }
+}
