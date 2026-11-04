@@ -168,6 +168,21 @@ export function AppShell({
       </aside>
       <main className="main">
         <header className="topbar topbar--reference">
+          <details className="mobile-workspace-menu" onKeyDown={event => { if (event.key === "Escape") event.currentTarget.removeAttribute("open"); }}>
+            <summary aria-label={locale === "tr" ? "Ana menüyü aç" : "Open main menu"}>☰ <span>{locale === "tr" ? "Menü" : "Menu"}</span></summary>
+            <nav className="mobile-workspace-menu__panel" aria-label={t("common.primaryNavigation")}>
+              {navigation.filter(group => group.key !== "settings").map(group => (
+                <details key={group.key} className="mobile-workspace-menu__group">
+                  <summary>{t(group.labelKey)}</summary>
+                  {group.items.map(item => <button key={`${item.page}:${item.section || "root"}`} type="button"
+                    aria-current={item.page === activePage && (!item.section || item.section === activeSubPage) ? "page" : undefined}
+                    onClick={event => { event.currentTarget.closest(".mobile-workspace-menu")?.removeAttribute("open"); onNavigateTarget ? onNavigateTarget(item.page, item.section) : onNavigate?.(item.page); }}>
+                    {item.label}
+                  </button>)}
+                </details>
+              ))}
+            </nav>
+          </details>
           <div className="topbar-search">
             {navItems.some((item) => item.key === "Items") ? <button type="button" className="module-tab" onClick={() => onNavigateTarget?.("Items", "Catalog")}>
               <NavGlyph name="search" /> {t("nav.catalog")}

@@ -13530,3 +13530,26 @@ body {
 .catalog-engine-review-confirm__codes { max-height: 110px; overflow: auto; padding: 10px; margin: 12px 0; border-radius: 8px; background: #f3f7fb; color: #33465e; font-size: 13px; line-height: 1.5; }
 .wilmink-review-link a { display: inline-flex; padding: 9px 13px; border-radius: 9px; background: #e7f3ff; color: #075ca5; font-weight: 700; text-decoration: none; }
 @media (max-width: 900px) { .catalog-engine-review-table-wrap { overflow-x: auto; } .catalog-engine-review-table { min-width: 900px; } .catalog-engine-review-count { flex-wrap: wrap; } .catalog-engine-review-count span { margin-left: 0; } }
+
+/* Compact, accessible navigation on phones. */
+.mobile-workspace-menu { display: none; }
+@media (max-width: 768px) {
+  .mobile-workspace-menu { display: block; position: relative; flex: none; }
+  .mobile-workspace-menu > summary { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 1px solid #cad8e7; border-radius: 9px; color: #153452; background: #fff; font-weight: 700; cursor: pointer; list-style: none; }
+  .mobile-workspace-menu > summary::-webkit-details-marker { display: none; }
+  .mobile-workspace-menu__panel { position: absolute; top: calc(100% + 8px); left: 0; z-index: 100; width: min(320px, calc(100vw - 28px)); max-height: min(70dvh, 560px); overflow-y: auto; padding: 10px; background: #fff; border: 1px solid #cbd9e8; border-radius: 12px; box-shadow: 0 12px 36px #0b203833; }
+  .mobile-workspace-menu__group > summary { padding: 12px; color: #163652; font-weight: 800; cursor: pointer; }
+  .mobile-workspace-menu__group button { display: block; width: 100%; min-height: 44px; padding: 10px 16px; border: 0; border-radius: 7px; text-align: left; background: #fff; color: #183652; font: inherit; }
+  .mobile-workspace-menu__group button[aria-current="page"] { background: #e8f2fc; color: #155b9c; font-weight: 700; }
+  .mobile-workspace-menu summary:focus-visible, .mobile-workspace-menu button:focus-visible { outline: 3px solid #2586d8; outline-offset: 1px; }
+  .dashboard-command-hero { min-height: 230px !important; padding: 24px 22px !important; }
+  .dashboard-command-hero__copy h2 { font-size: clamp(30px, 9vw, 40px); }
+  .dashboard-command-hero__copy p { font-size: 16px; }
+  .portal-shell--workspace .portal-header { gap: 8px; padding: 10px 14px; }
+  .portal-shell--workspace .portal-header-nav { overflow-x: auto; scrollbar-width: thin; overscroll-behavior-x: contain; }
+  .portal-shell--workspace .portal-header-nav__item { flex: 0 0 auto; }
+  .portal-mobile-bottom-nav__caption { display: none; }
+  .portal-mobile-bottom-nav__item { min-width: 84px; }
+  .customer-desk-hero--reference { min-height: 0; padding: 26px 18px 24px; }
+  .customer-desk-hero--reference h2 { font-size: clamp(30px, 9vw, 40px); }
+}
