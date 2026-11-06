@@ -917,9 +917,11 @@ export function extractCurrentLifecycle(html: string, targetBrandSlug: string) {
   };
 }
 
-function buildCatalogRow(target: SyncBrandTarget, candidate: any, detail: any, existing: any, supportsEanColumn: boolean) {
+export function buildCatalogRow(target: SyncBrandTarget, candidate: any, detail: any, existing: any, supportsEanColumn: boolean) {
+  // fetchSparetoDetail exposes the parsed product name as description.
+  // Keep a usable saved description; replace placeholders with source text.
   const nextDescription =
-    pickCatalogDescription([candidate.description, existing?.description, detail.product_name, candidate.product_name], candidate.product_code) ||
+    pickCatalogDescription([existing?.description, detail.description, candidate.description, detail.product_name, candidate.product_name], candidate.product_code) ||
     "";
   const nextEan = preferCatalogEan(existing?.ean, detail.ean, candidate.ean);
   const nextOemNo = preferCatalogValue(existing?.oem_no, detail.oem_no);
