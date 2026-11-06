@@ -12,7 +12,7 @@ before(async()=>{
  for(const m of manifest.migration_order)await db.exec(await readFile(m.file,'utf8'));
  for(const n of ['20261014162139_supplier_admin_release_action_queue','20261014165817_price_list_legacy_scope_compatibility','20261014171235_master_price_mixed_supplier_scopes','20261014175649_supplier_source_commercial_compatibility_guard','20261014183349_supplier_upload_safe_commercial_error_status','20261014193018_supplier_commercial_fields_v2_ingestion','20261014193456_supplier_commercial_fields_v2_readers','20261023185017_continental_automotive_brand_identity'])await db.exec(await readFile(dir+n+'.sql','utf8'));
  // Latest exact SKU source contract used in production.
- for(const n of ['20261106111617_supplier_price_usage_historical_confirmation','20261106111627_supplier_price_usage_control'])await db.exec(await readFile(dir+n+'.sql','utf8'));
+ for(const n of ['20261106111617_supplier_price_usage_historical_confirmation','20261106111627_supplier_price_usage_control','20261106113154_supplier_price_usage_scoped_rollup_refresh','20261106113533_supplier_price_usage_bounded_rollup_source','20261106113731_supplier_price_usage_rollup_join_plan'])await db.exec(await readFile(dir+n+'.sql','utf8'));
  await query("insert into organizations(id,name)values($1,'Org'),($2,'Other')",[org,otherOrg]);
  await query("insert into suppliers(id,organization_id,name)values($1,$2,'Published'),($3,$2,'Legacy'),($4,$5,'Other')",[pub,org,legacy,id(7),otherOrg]);
  await query("insert into brands(id,organization_id,name)values($1,$2,'Bosch')",[brand,org]);
