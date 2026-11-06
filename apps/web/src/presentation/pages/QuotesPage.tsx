@@ -848,6 +848,14 @@ export function QuotesPage({
   const [quotes, setQuotes] = useState<QuoteSummary[]>([]);
   const [localSalesOrders, setLocalSalesOrders] = useState<LocalSalesOrder[]>([]);
   const [localSalesOrdersLoaded, setLocalSalesOrdersLoaded] = useState(false);
+  const cachedSalesOrderRestoreId = initialWorkspaceCache?.salesOrdersView === "detail" &&
+    !initialWorkspaceCache.quoteBuilderLines?.length ? initialWorkspaceCache.selectedLocalSalesOrderId || "" : "";
+  const cachedSalesOrderRestoreRef = useRef(cachedSalesOrderRestoreId);
+  const salesOrderLoadGenerationRef = useRef(0);
+  const pendingSalesOrderLoadIdRef = useRef("");
+  const failedSalesOrderLoadIdRef = useRef("");
+  const loadedSalesOrderIdRef = useRef("");
+  const [openingSalesOrderId, setOpeningSalesOrderId] = useState(externalSelectedSalesOrderId || cachedSalesOrderRestoreId);
   const [savedPurchaseOrders, setSavedPurchaseOrders] = useState<PurchaseOrderSalesLinkSummary[]>([]);
   const [savedInvoices, setSavedInvoices] = useState<InvoiceSalesLinkSummary[]>([]);
   const [salesOrderBrandsById, setSalesOrderBrandsById] = useState<Record<string, string[]>>({});
@@ -956,7 +964,15 @@ export function QuotesPage({
           setLocalSalesOrdersLoaded(true);
         }
       } catch {
-        if (!cancelled) setLocalSalesOrders([]);
+        if (!cancelled) {
+          setLocalSalesOrders([]);
+          if (cachedSalesOrderRestoreRef.current || externalSelectedSalesOrderId) {
+            cachedSalesOrderRestoreRef.current = "";
+            setOpeningSalesOrderId("");
+            setSalesOrdersView("list");
+            actionFeedback.fail(t("sales.orders.openFailed"));
+          }
+        }
       }
 
       try {
@@ -1094,7 +1110,7 @@ export function QuotesPage({
       }
 
       if (targetOrder) {
-        await loadLocalSalesOrderIntoEditor(targetOrder);
+        if (!await loadLocalSalesOrderIntoEditor(targetOrder)) return;
       } else if (!quoteBuilderLines.length) {
         resetSalesOrderEditor();
         setSelectedLocalSalesOrderId("");
@@ -1227,13 +1243,49 @@ export function QuotesPage({
   }, [externalSelectedQuoteId]);
 
   useEffect(() => {
-    if (!externalSelectedSalesOrderId) return;
-    if (selectedLocalSalesOrderId === externalSelectedSalesOrderId && salesOrdersView === "detail") return;
+    if (!externalSelectedSalesOrderId) {
+      failedSalesOrderLoadIdRef.current = "";
+      return;
+    }
+    if (!localSalesOrdersLoaded) return;
+    if (failedSalesOrderLoadIdRef.current === externalSelectedSalesOrderId || pendingSalesOrderLoadIdRef.current === externalSelectedSalesOrderId) return;
+    if (selectedLocalSalesOrderId === externalSelectedSalesOrderId && salesOrdersView === "detail" &&
+      (quoteBuilderLines.length || loadedSalesOrderIdRef.current === externalSelectedSalesOrderId)) {
+      setOpeningSalesOrderId("");
+      return;
+    }
     const target = localSalesOrders.find((item) => item.id === externalSelectedSalesOrderId);
-    if (!target) return;
+    if (!target) {
+      failedSalesOrderLoadIdRef.current = externalSelectedSalesOrderId;
+      setOpeningSalesOrderId("");
+      setSalesOrdersView("list");
+      onSelectedSalesOrderChange?.("");
+      actionFeedback.fail(t("sales.orders.openFailed"));
+      return;
+    }
     setSalesOrdersView("detail");
     void loadLocalSalesOrderIntoEditor(target);
-  }, [externalSelectedSalesOrderId, localSalesOrders, selectedLocalSalesOrderId, salesOrdersView]);
+  }, [externalSelectedSalesOrderId, localSalesOrders, localSalesOrdersLoaded, selectedLocalSalesOrderId, salesOrdersView]);
+
+  useEffect(() => {
+    const id = cachedSalesOrderRestoreRef.current;
+    if (!id || !localSalesOrdersLoaded) return;
+    cachedSalesOrderRestoreRef.current = "";
+    // Preserve nonempty cached edits. An empty saved-order cache, however,
+    // cannot replace its persisted lines and must be read from the server.
+    if (salesOrdersView !== "detail" || selectedLocalSalesOrderId !== id ||
+      (externalSelectedSalesOrderId && externalSelectedSalesOrderId !== id) || pendingSalesOrderLoadIdRef.current === id) return;
+    const target = localSalesOrders.find((item) => item.id === id);
+    if (target) void loadLocalSalesOrderIntoEditor(target);
+  }, [localSalesOrders, localSalesOrdersLoaded, selectedLocalSalesOrderId, salesOrdersView, externalSelectedSalesOrderId]);
+
+  useEffect(() => () => {
+    salesOrderLoadGenerationRef.current++;
+    if (pendingSalesOrderLoadIdRef.current) {
+      pendingSalesOrderLoadIdRef.current = "";
+      actionFeedback.clear();
+    }
+  }, []);
 
   useEffect(() => {
     setSelectedLocalSalesOrderIds((current) => current.filter((orderId) => localSalesOrders.some((order) => order.id === orderId)));
@@ -1764,59 +1816,89 @@ export function QuotesPage({
   }
 
   async function loadLocalSalesOrderIntoEditor(order: LocalSalesOrder) {
-    const detailOrder = order.lines.length ? order : await fetchSalesOrderById(order.id);
-    // Older rows may only have purchase_company. Hydrate the editor baseline
-    // with the same fallback rendered in the form so merely opening one of
-    // those rows does not look like an unsaved buyer-info edit.
-    const editorOrder = {
-      ...detailOrder,
-      buyer_info: detailOrder.buyer_info || detailOrder.purchase_company || "",
-      supplier_mode: detailOrder.supplier_mode || "Best price",
-      currency: detailOrder.currency || "EUR",
-      lines: hydrateSalesOrderLines(detailOrder.lines || [], detailOrder.id),
-    };
-    setWorkbenchMode("existing");
-    setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(editorOrder));
-    setSelectedLocalSalesOrderId(editorOrder.id);
-    setSelectedQuoteId("");
-    onSelectedQuoteChange?.("");
-    setQuoteNo(detailOrder.sales_order_no);
-    setCustomerName(detailOrder.customer_name);
-    setCustomerSelection(detailOrder.customer_id || detailOrder.customer_name || "");
-    setManualCustomerName("");
-    setSellerCompany(detailOrder.seller_company || "");
-    setQuoteDate(detailOrder.quote_date);
-    setCurrency(editorOrder.currency);
-    setQuoteBrand("");
-    setQuoteBrandSelection("");
-    setCustomerType(detailOrder.customer_type);
-    setShippingCost(String(detailOrder.shipping_cost ?? 0));
-    setDiscountAmount(String(detailOrder.discount_amount ?? 0));
-    setSupplierMode(editorOrder.supplier_mode);
-    setSellerInfo(detailOrder.seller_info || "");
-    setBuyerInfo(editorOrder.buyer_info);
-    setDeliveryTermSelection(toTermSelection(detailOrder.delivery_term || "", DELIVERY_TERM_OPTIONS));
-    setPaymentTermsSelection(toTermSelection(detailOrder.payment_terms || "", PAYMENT_TERM_OPTIONS));
-    setDeliveryTerm(detailOrder.delivery_term || "");
-    setPaymentTerms(detailOrder.payment_terms || "");
-    setPackingDetails(detailOrder.packing_details || "");
-    setQuoteNotes(detailOrder.notes || "");
-    actionFeedback.begin(t("sales.orders.loadingOrder", { salesOrderNo: detailOrder.sales_order_no }));
-    const clonedLines = editorOrder.lines.map((line) => ({ ...line }));
-    if (detailOrder.source_channel === "portal" && detailOrder.portal_submitted_at && !detailOrder.portal_seen_at) {
-      try {
-        const seenOrder = await markSalesOrderPortalSeen(detailOrder.id);
-        if (seenOrder) {
-          setLocalSalesOrders((current) => current.map((item) => (item.id === seenOrder.id ? seenOrder : item)));
-        }
-      } catch {
-        // opening order should continue even if seen state update fails
+    const generation = ++salesOrderLoadGenerationRef.current;
+    pendingSalesOrderLoadIdRef.current = order.id;
+    failedSalesOrderLoadIdRef.current = "";
+    setOpeningSalesOrderId(order.id);
+    actionFeedback.begin(t("sales.orders.loadingOrder", { salesOrderNo: order.sales_order_no }));
+    let timeout: number | undefined;
+    try {
+      const detailOrder = await Promise.race([
+        order.lines.length ? Promise.resolve(order) : fetchSalesOrderById(order.id),
+        new Promise<never>((_resolve, reject) => {
+          timeout = window.setTimeout(() => reject(new Error(t("sales.orders.openFailed"))), 20000);
+        }),
+      ]);
+      if (generation !== salesOrderLoadGenerationRef.current) return false;
+      // Older rows may only have purchase_company. Hydrate the editor baseline
+      // with the same fallback rendered in the form so merely opening one of
+      // those rows does not look like an unsaved buyer-info edit.
+      const editorOrder = {
+        ...detailOrder,
+        buyer_info: detailOrder.buyer_info || detailOrder.purchase_company || "",
+        supplier_mode: detailOrder.supplier_mode || "Best price",
+        currency: detailOrder.currency || "EUR",
+        lines: hydrateSalesOrderLines(detailOrder.lines || [], detailOrder.id),
+      };
+      setWorkbenchMode("existing");
+      setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(editorOrder));
+      setSelectedLocalSalesOrderId(editorOrder.id);
+      setSelectedQuoteId("");
+      onSelectedQuoteChange?.("");
+      setQuoteNo(detailOrder.sales_order_no);
+      setCustomerName(detailOrder.customer_name);
+      setCustomerSelection(detailOrder.customer_id || detailOrder.customer_name || "");
+      setManualCustomerName("");
+      setSellerCompany(detailOrder.seller_company || "");
+      setQuoteDate(detailOrder.quote_date);
+      setCurrency(editorOrder.currency);
+      setQuoteBrand("");
+      setQuoteBrandSelection("");
+      setCustomerType(detailOrder.customer_type);
+      setShippingCost(String(detailOrder.shipping_cost ?? 0));
+      setDiscountAmount(String(detailOrder.discount_amount ?? 0));
+      setSupplierMode(editorOrder.supplier_mode);
+      setSellerInfo(detailOrder.seller_info || "");
+      setBuyerInfo(editorOrder.buyer_info);
+      setDeliveryTermSelection(toTermSelection(detailOrder.delivery_term || "", DELIVERY_TERM_OPTIONS));
+      setPaymentTermsSelection(toTermSelection(detailOrder.payment_terms || "", PAYMENT_TERM_OPTIONS));
+      setDeliveryTerm(detailOrder.delivery_term || "");
+      setPaymentTerms(detailOrder.payment_terms || "");
+      setPackingDetails(detailOrder.packing_details || "");
+      setQuoteNotes(detailOrder.notes || "");
+      loadedSalesOrderIdRef.current = detailOrder.id;
+      setQuoteBuilderLines(editorOrder.lines.map((line) => ({ ...line })));
+      setBuilderStatus(t("sales.orders.loadedOrder", { salesOrderNo: detailOrder.sales_order_no, status: detailOrder.status }));
+      onSelectedSalesOrderChange?.(detailOrder.id);
+      actionFeedback.succeed(t("sales.orders.loadedOrderToast", { salesOrderNo: detailOrder.sales_order_no }));
+      if (detailOrder.source_channel === "portal" && detailOrder.portal_submitted_at && !detailOrder.portal_seen_at) {
+        void markSalesOrderPortalSeen(detailOrder.id).then((seenOrder) => {
+          if (seenOrder && generation === salesOrderLoadGenerationRef.current) {
+            setLocalSalesOrders((current) => current.map((item) => (item.id === seenOrder.id ? seenOrder : item)));
+          }
+        }).catch(() => { /* Opening continues even if the seen acknowledgement fails. */ });
+      }
+      return true;
+    } catch {
+      if (generation !== salesOrderLoadGenerationRef.current) return false;
+      failedSalesOrderLoadIdRef.current = order.id;
+      // A failed empty cache is not an edited, hydrated order. Drop only that
+      // unverified identity so retrying its row cannot trigger a false save.
+      if (selectedLocalSalesOrderId === order.id && !quoteBuilderLines.length) {
+        setSelectedLocalSalesOrderId("");
+        setSalesOrderSourceSnapshot("");
+      }
+      setSalesOrdersView("list");
+      onSelectedSalesOrderChange?.("");
+      actionFeedback.fail(t("sales.orders.openFailed"));
+      return false;
+    } finally {
+      if (timeout !== undefined) window.clearTimeout(timeout);
+      if (generation === salesOrderLoadGenerationRef.current) {
+        pendingSalesOrderLoadIdRef.current = "";
+        setOpeningSalesOrderId("");
       }
     }
-    setQuoteBuilderLines(clonedLines);
-    setBuilderStatus(t("sales.orders.loadedOrder", { salesOrderNo: detailOrder.sales_order_no, status: detailOrder.status }));
-    onSelectedSalesOrderChange?.(detailOrder.id);
-    actionFeedback.succeed(t("sales.orders.loadedOrderToast", { salesOrderNo: detailOrder.sales_order_no }));
   }
 
   function openLocalSalesOrder(order: LocalSalesOrder) {
@@ -2055,14 +2137,26 @@ export function QuotesPage({
       return null;
     }
     const saved = await upsertSalesOrder(buildSalesOrderPayload("draft"));
+    // Publish the committed identity and its row together. Selecting an id
+    // absent from the previous summary list would trigger stale-cache cleanup.
+    setLocalSalesOrders((current) => mergeSavedSalesOrder(current, saved));
+    loadedSalesOrderIdRef.current = saved.id;
+    setQuoteBuilderLines(hydrateSalesOrderLines(saved.lines, saved.id));
     setWorkbenchMode("existing");
     setSelectedLocalSalesOrderId(saved.id);
     setSelectedQuoteId("");
     onSelectedQuoteChange?.("");
     setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(saved));
-    await refreshLocalSalesOrders(saved.id);
+    let listRefreshFailed = false;
+    try {
+      await refreshLocalSalesOrders(saved.id, saved);
+    } catch {
+      listRefreshFailed = true;
+    }
     setQuoteNo(saved.sales_order_no);
-    setBuilderStatus(t("sales.orders.draftSavedAs", { salesOrderNo: saved.sales_order_no }));
+    setBuilderStatus(t("sales.orders.draftSavedAs", { salesOrderNo: saved.sales_order_no }) + (listRefreshFailed
+      ? locale === "tr" ? " Liste yenilenemedi; sipariş kaydedildi. Listeyi tekrar açabilirsiniz." : " The order was saved, but the list could not refresh. You can reopen the list."
+      : ""));
     return saved;
   }
 
@@ -2098,6 +2192,16 @@ export function QuotesPage({
   }
 
   async function confirmSalesOrderNavigation(nextAction: () => void | Promise<void>) {
+    if (openingSalesOrderId) {
+      salesOrderLoadGenerationRef.current++;
+      failedSalesOrderLoadIdRef.current = openingSalesOrderId;
+      pendingSalesOrderLoadIdRef.current = "";
+      cachedSalesOrderRestoreRef.current = "";
+      setOpeningSalesOrderId("");
+      actionFeedback.clear();
+      await nextAction();
+      return;
+    }
     if (!salesOrderHasUnsavedChanges) {
       await nextAction();
       return;
@@ -2764,6 +2868,11 @@ export function QuotesPage({
   }
 
   function resetSalesOrderEditor() {
+    salesOrderLoadGenerationRef.current++;
+    loadedSalesOrderIdRef.current = "";
+    pendingSalesOrderLoadIdRef.current = "";
+    cachedSalesOrderRestoreRef.current = "";
+    setOpeningSalesOrderId("");
     setSalesOrdersView("detail");
     setWorkbenchMode("new");
     setSalesOrderSourceSnapshot("");
@@ -2810,9 +2919,14 @@ export function QuotesPage({
     });
   }
 
-  async function refreshLocalSalesOrders(nextSelectedId?: string) {
+  function mergeSavedSalesOrder(orders: LocalSalesOrder[], saved: LocalSalesOrder) {
+    return [...orders.filter((item) => item.id !== saved.id), saved].sort((left, right) =>
+      right.quote_date.localeCompare(left.quote_date) || right.created_at.localeCompare(left.created_at));
+  }
+
+  async function refreshLocalSalesOrders(nextSelectedId?: string, committedOrder?: LocalSalesOrder) {
     const nextSalesOrders = await fetchSalesOrderSummaries();
-    setLocalSalesOrders(nextSalesOrders);
+    setLocalSalesOrders(committedOrder ? mergeSavedSalesOrder(nextSalesOrders, committedOrder) : nextSalesOrders);
     const nextBrandSummaries = await fetchSalesOrderBrandSummaries().catch(() => null);
     if (nextBrandSummaries) {
       setSalesOrderBrandsById(Object.fromEntries(nextBrandSummaries.map((row) => [row.id, row.brands])));
@@ -3317,7 +3431,13 @@ export function QuotesPage({
       </aside>
       ) : null}
 
-      {salesOrdersView === "detail" ? (
+      {salesOrdersView === "detail" && openingSalesOrderId ? (
+        <section className="quote-editor-panel" aria-busy="true">
+          <p role="status">{t("sales.orders.loadingOrder", { salesOrderNo: localSalesOrders.find((item) => item.id === openingSalesOrderId)?.sales_order_no || openingSalesOrderId })}</p>
+          <Button variant="secondary" onClick={closeSalesOrderEditor}>{t("sales.orders.exit")}</Button>
+        </section>
+      ) : null}
+      {salesOrdersView === "detail" && !openingSalesOrderId ? (
       <section className="quote-editor-panel">
         <div className="quote-editor-panel__header sales-editor-header">
           <div>
