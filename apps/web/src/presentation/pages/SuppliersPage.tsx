@@ -36,6 +36,7 @@ import { downloadSupplierTemplate, VERIFIED_SUPPLIER_IMPORT_COLUMNS } from "../.
 import { useI18n } from "../../i18n/I18nProvider";
 import {uploadVerifiedSupplierFile,fetchVerifiedUploadStatus,fetchVerifiedSupplierUploadOptions,isVerifiedSupplierUploadEnabled,verifiedSupplierUploadRequested} from "../../infrastructure/api/supplierVerifiedUploadApi";
 import {supplierUploadStatusView,type UploadProgress} from "../../shared/supplierUploadProtocol";
+import { fetchSupplierPriceUsage, setSupplierPriceUsage, type SupplierPriceUsage } from "../../infrastructure/api/supplierPriceUsageApi";
 
 const freshnessValues = ["all", "fresh", "aging", "stale", "unknown"] as const;
 
@@ -88,6 +89,12 @@ export function SuppliersPage() {
   const [importSupplierId, setImportSupplierId] = useState("");
   const [importSupplierName, setImportSupplierName] = useState("");
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
+  const [supplierUsage, setSupplierUsage] = useState<SupplierPriceUsage[] | null>(null);
+  const [usageError, setUsageError] = useState('');
+  const [showDisabledSuppliers, setShowDisabledSuppliers] = useState(false);
+  const [usageChange, setUsageChange] = useState<SupplierPriceUsage | null>(null);
+  const [usageReason, setUsageReason] = useState('');
+  const [savingUsage, setSavingUsage] = useState(false);
   const [selectedSupplierId, setSelectedSupplierId] = useState("");
   const [search, setSearch] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");
@@ -124,6 +131,55 @@ export function SuppliersPage() {
     lead_time_days: "",
     notes: "",
   });
+
+  async function refreshSupplierUsage() {
+    try {
+      const result = await fetchSupplierPriceUsage();
+      setSupplierUsage(result);
+      setUsageError('');
+    } catch {
+      setSupplierUsage(null);
+      setUsageError(p('suppliers.usage.unavailable'));
+    }
+  }
+
+  useEffect(() => { void refreshSupplierUsage(); }, []);
+
+  useEffect(() => {
+    if (!showDisabledSuppliers && supplierUsage?.some(row => row.id === selectedSupplierId && !row.price_usage_enabled)) {
+      setSelectedSupplierId('');
+      setRows([]);
+    }
+  }, [supplierUsage, showDisabledSuppliers, selectedSupplierId]);
+
+  async function handlePriceUsageChange() {
+    if (!usageChange || savingUsage || usageReason.trim().length < 3) return;
+    const target = usageChange;
+    setSavingUsage(true);
+    setUsageError('');
+    actionFeedback.begin(p('suppliers.usage.saving'));
+    try {
+      const receipt = await setSupplierPriceUsage({ supplierId: target.id, enabled: !target.price_usage_enabled,
+        expectedEnabled: target.price_usage_enabled, reason: usageReason.trim() });
+      setSupplierUsage(current => current?.map(row => row.id === receipt.supplier_id
+        ? { ...row, price_usage_enabled: receipt.price_usage_enabled } : row) || null);
+      setShowDisabledSuppliers(true);
+      setUsageChange(null);
+      setUsageReason('');
+      const message = p(receipt.price_usage_enabled ? 'suppliers.usage.enabledFeedback' : 'suppliers.usage.disabledFeedback', { supplier: target.name });
+      setStatus(message);
+      actionFeedback.succeed(message);
+    } catch (caught) {
+      const stale = caught instanceof Error && caught.message === 'SUPPLIER_PRICE_USAGE_STALE';
+      const message = p(stale ? 'suppliers.usage.stale' : 'suppliers.usage.failed');
+      setUsageChange(null);
+      setUsageError(message);
+      actionFeedback.fail(message);
+      // A timeout can happen after commit. Re-read the state rather than assume
+      // the old value or automatically send a second mutation.
+      try { setSupplierUsage(await fetchSupplierPriceUsage()); } catch { setSupplierUsage(null); }
+    } finally { setSavingUsage(false); }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -187,6 +243,7 @@ export function SuppliersPage() {
       setLoadingRows(true);
       setError("");
       try {
+        const eligibleSuppliers = suppliers.filter(supplier => showDisabledSuppliers || supplierUsage?.find(row => row.id === supplier.supplier_id)?.price_usage_enabled !== false);
         const result = selectedSupplierId
           ? await fetchCloudSupplierPrices({
               supplierId: selectedSupplierId,
@@ -195,12 +252,12 @@ export function SuppliersPage() {
               page: 1,
               pageSize: 50,
             })
-          : await fetchCloudSupplierPricesAcrossSuppliers({
-              suppliers,
+          : eligibleSuppliers.length ? await fetchCloudSupplierPricesAcrossSuppliers({
+              suppliers: eligibleSuppliers,
               search: submittedSearch,
               freshness,
               pageSizePerSupplier: 10,
-            });
+            }) : [];
         if (!cancelled) setRows(result);
       } catch (caught) {
         if (!cancelled) {
@@ -216,7 +273,7 @@ export function SuppliersPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedSupplierId, submittedSearch, freshness, suppliers]);
+  }, [selectedSupplierId, submittedSearch, freshness, suppliers, supplierUsage, showDisabledSuppliers]);
 
   useEffect(() => {
     if (!searchingSuppliers || loadingRows) return;
@@ -231,11 +288,14 @@ export function SuppliersPage() {
 
   const total = selectedSupplierId && rows.length ? rows[0].total_count : rows.length;
 
+  const usageById = new Map((supplierUsage || []).map(row => [row.id, row]));
+  const browsingSuppliers = suppliers.filter(supplier => showDisabledSuppliers || usageById.get(supplier.supplier_id)?.price_usage_enabled !== false);
+  const selectedSupplierUsage = usageById.get(selectedSupplierId);
   const supplierOptions = [
     { value: "", label: p("suppliers.filters.allSuppliers") },
-    ...suppliers.map((supplier) => ({
+    ...browsingSuppliers.map((supplier) => ({
       value: supplier.supplier_id,
-      label: supplier.name,
+      label: supplier.name + (usageById.get(supplier.supplier_id)?.price_usage_enabled === false ? ` — ${p('suppliers.usage.disabled')}` : ''),
     })),
   ];
   const brandOptions = [
@@ -354,12 +414,12 @@ export function SuppliersPage() {
             page: 1,
             pageSize: 50,
           })
-        : await fetchCloudSupplierPricesAcrossSuppliers({
-            suppliers,
+        : browsingSuppliers.length ? await fetchCloudSupplierPricesAcrossSuppliers({
+            suppliers: browsingSuppliers,
             search: nextSearch,
             freshness: nextFreshness,
             pageSizePerSupplier: 10,
-          });
+          }) : [];
       setRows(result);
     } catch (caught) {
       setRows([]);
@@ -835,6 +895,22 @@ export function SuppliersPage() {
       </section>
       {import.meta.env.VITE_SUPPLIER_RELEASE_REVIEW_ENABLED === "true" ? <SupplierReleaseReviewPanel locale={locale} /> : null}
       <section className="section-card supplier-workspace-card">
+        <div className="section-card__body">
+          <label className="meta-row">
+            <input type="checkbox" checked={showDisabledSuppliers} onChange={event => {
+              setShowDisabledSuppliers(event.target.checked);
+              if (!event.target.checked && selectedSupplierUsage?.price_usage_enabled === false) setSelectedSupplierId('');
+            }} />
+            {p('suppliers.usage.showDisabled')}
+          </label>
+          {selectedSupplierUsage ? <div className="meta-row" role="status">
+            <strong>{selectedSupplierUsage.name}: {p(selectedSupplierUsage.price_usage_enabled ? 'suppliers.usage.enabled' : 'suppliers.usage.disabled')}</strong>
+            <Button variant="secondary" disabled={savingUsage} onClick={() => { setUsageChange(selectedSupplierUsage); setUsageReason(''); }}>
+              {p(selectedSupplierUsage.price_usage_enabled ? 'suppliers.usage.disableAction' : 'suppliers.usage.enableAction')}
+            </Button>
+          </div> : null}
+          {usageError ? <p className="error-text" role="alert">{usageError}</p> : null}
+        </div>
         <div className="section-card__header section-card__header--row">
           <div>
             <h2>{p("suppliers.title")}</h2>
@@ -918,6 +994,22 @@ export function SuppliersPage() {
       </section>
 
 
+      {usageChange ? <div className="modal-backdrop">
+        <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">
+          <div role="dialog" aria-modal="true" aria-labelledby="supplier-price-usage-title">
+            <div className="modal-card__header draggable-surface__handle">
+              <h3 id="supplier-price-usage-title">{usageChange.name} — {p(usageChange.price_usage_enabled ? 'suppliers.usage.disableAction' : 'suppliers.usage.enableAction')}</h3>
+            </div>
+            <p>{p(usageChange.price_usage_enabled ? 'suppliers.usage.disableExplanation' : 'suppliers.usage.enableExplanation')}</p>
+            <Input label={p('suppliers.usage.reason')} value={usageReason} onChange={setUsageReason} disabled={savingUsage} />
+            <div className="modal-actions">
+              <Button variant="secondary" disabled={savingUsage} onClick={() => setUsageChange(null)}>{t('common.cancel')}</Button>
+              <Button busy={savingUsage} busyLabel={p('suppliers.usage.saving')} disabled={usageReason.trim().length < 3 || usageReason.length > 500}
+                onClick={() => void handlePriceUsageChange()}>{p(usageChange.price_usage_enabled ? 'suppliers.usage.confirmDisable' : 'suppliers.usage.confirmEnable')}</Button>
+            </div>
+          </div>
+        </DraggableSurface>
+      </div> : null}
       {showImportDialog ? (
         <div className="modal-backdrop">
           <DraggableSurface className="modal-card" dragHandleSelector=".draggable-surface__handle">

@@ -324,7 +324,8 @@ async function fetchSupplierStatsFromPrices(input: {
   for (const chunk of chunkValues(input.normalizedCodes, 200)) {
     const { data, error } = await supabaseClient
       .from("supplier_prices")
-      .select("id,normalized_code,supplier_id,buy_price,valid_from,updated_at,notes,suppliers(name)")
+      .select("id,normalized_code,supplier_id,buy_price,valid_from,updated_at,notes,suppliers!inner(name,price_usage_enabled)")
+      .eq("suppliers.price_usage_enabled", true)
       .eq("organization_id", input.organizationId)
       .eq("brand_id", input.brandId)
       .eq("is_active", true)

@@ -35,6 +35,7 @@ import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import { consumeCatalogTransfer, PENDING_CATALOG_SALES_ITEM_KEY } from "../../shared/catalogTransfer";
 import { buildInvoiceFromSalesOrder, buildLocalSalesOrder, buildPurchaseOrdersFromSalesOrder } from "../../shared/localOrders";
 import { hydrateSalesOrderLines } from "../../shared/hydrateSalesOrderLines";
+import { fetchPreservedSupplierConfirmationLines } from "../../shared/preservedSupplierConfirmation";
 import { salesOrderTotals, multiplyMoney } from "../../../../../shared/order-money.mjs";
 import { resyncSalesOrderWithCodeReferenceFallback, salesOrderResyncPriceSummary } from "../../shared/salesOrderCatalogSync";
 import { buildXlsxBlobAsync, downloadBlob } from "../../shared/xlsx";
@@ -286,12 +287,19 @@ async function assertCurrentPricesBeforeConfirmation(
   marginA: number,
   marginB: number,
   currency: string,
+  existingOrderId?: string,
+  customerId: string | null = null,
+  customerName = "",
 ) {
   if (customerType === "C") {
     throw new Error("The retired C price list cannot be used to confirm a sales order.");
   }
   const staleLine = (line: QuoteBuilderLine) =>
     new Error(`Current supplier or customer price changed for ${line.brand} ${line.resolvedCode || line.requestedCode}. Refresh this line before confirming the sales order.`);
+  const preservedSupplierLines = await fetchPreservedSupplierConfirmationLines(
+    { orderId: existingOrderId, lines, currency, customerType, customerId, customerName },
+    (request) => callAppRpc<unknown>("cloud_sales_order_preserved_supplier_lines", request),
+  );
 
   for (let offset = 0; offset < lines.length; offset += 25) {
     const batch = lines.slice(offset, offset + 25);
@@ -316,6 +324,7 @@ async function assertCurrentPricesBeforeConfirmation(
     }
 
     batch.forEach((line, index) => {
+      if (preservedSupplierLines.has(offset + index)) return;
       const result = results.get(index);
       if (!result) throw staleLine(line);
       // Older brands still use the established quote workflow until a
@@ -3117,7 +3126,7 @@ export function QuotesPage({
     try {
       setConfirmingOrder(true);
       actionFeedback.begin(t("sales.orders.confirmingAndCreatingPurchaseOrders", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
-      await assertCurrentPricesBeforeConfirmation(quoteBuilderLines, customerType, effectiveMarginA, effectiveMarginB, currency);
+      await assertCurrentPricesBeforeConfirmation(quoteBuilderLines, customerType, effectiveMarginA, effectiveMarginB, currency, selectedLocalSalesOrderId || undefined, selectedCustomerProfile?.id ?? null, resolvedCustomerName);
       const order = buildSalesOrderPayload("confirmed");
       const { salesOrder: saved, purchaseOrders } = await confirmOrderForCapability<{ salesOrder: LocalSalesOrder; purchaseOrders: LocalPurchaseOrder[] }>(commercialUpgradeEnabled(), {
         legacy: async () => {

@@ -1804,7 +1804,8 @@ async function fetchPortalBestSupplierPriceMap(
   const bestByCode = new Map<string, number>();
   for (const chunk of chunkValues(normalizedCodes, 200)) {
     const supplierRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "supplier_prices", {
-      select: "normalized_code,buy_price",
+      select: "normalized_code,buy_price,suppliers!inner(price_usage_enabled)",
+      "suppliers.price_usage_enabled": "eq.true",
       organization_id: `eq.${organizationId}`,
       brand_id: `eq.${brandId}`,
       is_active: "eq.true",
@@ -1849,7 +1850,8 @@ async function fetchPortalBestSupplierOptionMap(
 
   while (true) {
     const supplierRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "supplier_prices", {
-      select: "normalized_code,buy_price,valid_from,notes,suppliers(name)",
+      select: "normalized_code,buy_price,valid_from,notes,suppliers!inner(name,price_usage_enabled)",
+      "suppliers.price_usage_enabled": "eq.true",
       organization_id: `eq.${organizationId}`,
       brand_id: `eq.${brandId}`,
       is_active: "eq.true",
@@ -1989,7 +1991,8 @@ async function fetchPortalBestSupplierPreviewMap(
   for (const brandChunk of chunkValues(brandIds, 50)) {
     for (const codeChunk of chunkValues(normalizedCodes, 200)) {
       const supplierRows = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "supplier_prices", {
-        select: "brand_id,normalized_code,buy_price,valid_from,notes,suppliers(name)",
+        select: "brand_id,normalized_code,buy_price,valid_from,notes,suppliers!inner(name,price_usage_enabled)",
+        "suppliers.price_usage_enabled": "eq.true",
         organization_id: `eq.${organizationId}`,
         brand_id: `in.(${brandChunk.join(",")})`,
         is_active: "eq.true",
