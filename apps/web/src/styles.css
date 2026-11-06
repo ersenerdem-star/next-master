@@ -13127,6 +13127,21 @@ body {
 .customer-message-compose { display: grid; gap: 8px; margin-top: 16px; }
 .customer-message-compose textarea { width: 100%; resize: vertical; padding: 12px; border: 1px solid #adc0d5; border-radius: 8px; font: inherit; }
 .customer-message-compose .toolbar { justify-content: space-between; }
+
+/* Portaled to body so the customer portal's scaled desktop frame cannot move
+   or clip the unread alert. It has no dismiss/expiry: messages clear it. */
+.persistent-message-alert { position: fixed; right: max(20px, env(safe-area-inset-right)); bottom: max(20px, env(safe-area-inset-bottom)); z-index: 90; display: flex; align-items: flex-start; gap: 12px; width: min(360px, calc(100vw - 32px)); padding: 18px; border: 1px solid #b8d9f5; border-left: 4px solid #1676d2; border-radius: 14px; background: #fff; color: #10253e; box-shadow: 0 12px 36px #0b203830; }
+.persistent-message-alert__icon { display: grid; place-items: center; flex: 0 0 38px; height: 38px; border-radius: 10px; background: #e9f4ff; color: #0969b8; font-size: 24px; }
+.persistent-message-alert__body { min-width: 0; flex: 1; }
+.persistent-message-alert strong { display: block; font-size: 15px; line-height: 1.4; }
+.persistent-message-alert p { margin: 4px 0 0; font-size: 13px; line-height: 1.45; }
+.persistent-message-alert__sender { color: #52677f; overflow-wrap: anywhere; }
+.persistent-message-alert .button { margin-top: 12px; min-height: 40px; width: 100%; }
+@media (max-width: 900px) {
+  .persistent-message-alert { right: max(16px, env(safe-area-inset-right)); }
+  .persistent-message-alert--portal { bottom: calc(90px + env(safe-area-inset-bottom)); }
+}
+@media print { .persistent-message-alert { display: none; } }
 .topbar-account-menu { position: relative; }
 .topbar-account-menu > summary { list-style: none; cursor: pointer; }
 .topbar-account-menu > summary::-webkit-details-marker { display: none; }

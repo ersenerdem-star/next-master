@@ -1,6 +1,7 @@
 import {useI18n} from "../../../i18n/I18nProvider";
 import {InterfaceText,useInterfaceText} from "../../../i18n/InterfaceText";
 import {CustomerMessagesPage} from "../../../presentation/pages/CustomerMessagesPage";
+import { PersistentMessageAlert } from "../../../presentation/components/common/PersistentMessageAlert";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from "react";
 import { ActionFeedbackDialog } from "../../../presentation/components/common/ActionFeedbackDialog";
 import { emptyPortalFeedback, portalFeedbackReducer } from "../portalFeedback";
@@ -3365,6 +3366,9 @@ export function PortalPage() {
 
   return (
     <div className={`portal-desktop-stage${shouldScalePortalDesktop ? " portal-desktop-stage--scaled" : ""}`} style={portalDesktopStageStyle}>
+      {activeSnapshot.invite.party_type === "customer" ? (
+        <PersistentMessageAlert portal scopeKey={activeSnapshot.invite.id} onOpenMessages={() => setActiveSection("messages")} />
+      ) : null}
       <div
         ref={portalDesktopFrameRef}
         className={`portal-desktop-frame${shouldScalePortalDesktop ? " portal-desktop-frame--scaled" : ""}`}

@@ -41,6 +41,32 @@ export function createMessagesHandler(portal:boolean,config:MessagingConfig,reso
       const headers=serviceRoleHeaders(config.serviceKey);
       const read=<T,>(table:string,params:Record<string,string>)=>getJson<T>(buildRestUrl(config.url,table,params),{headers,timeoutMs:8000});
       const rpc=<T,>(name:string,args:unknown)=>sendJson<T>(`${config.url}/rest/v1/rpc/${name}`,{method:'POST',headers,body:JSON.stringify(args),timeoutMs:8000});
+      if(body.action==='unread'){
+        // Poll only inbound, unread rows. Do not load the customer directory or
+        // message bodies, and never mark a message read while checking a badge.
+        const scope={organization_id:`eq.${identity.organizationId}`,sender_kind:`eq.${portal?'admin':'customer'}`,read_at:'is.null'};
+        const counted=async<T,>(params:Record<string,string>,head=false)=>{
+          const response=await fetch(buildRestUrl(config.url,'customer_messages',params),{method:head?'HEAD':'GET',headers:{...headers,Prefer:'count=exact'},signal:AbortSignal.timeout(8000)});
+          const data=head?null:await response.json();
+          if(!response.ok)throw new HttpRequestError(response.status,data||{});
+          const range=response.headers.get('content-range')?.match(/^(?:\d+-\d+|\*)\/(\d+)$/);
+          const count=range?Number(range[1]):NaN;
+          // A missing/invalid upstream count is a failed refresh, never zero
+          // unread: clients must retain the last known alert on an outage.
+          if(!Number.isSafeInteger(count)||count<0)throw new Error('Unread count unavailable');
+          return {count,data:data as T};
+        };
+        if(portal){
+          const {count}=await counted({...scope,customer_id:`eq.${identity.customerId}`,select:'id',limit:'1'},true);
+          return reply({totalUnread:count,conversations:[]});
+        }
+        type LatestUnread={customer_id:string;customers:{display_name:string|null;company_name:string|null}};
+        const latest=await counted<LatestUnread[]>({...scope,select:'customer_id,customers!inner(display_name,company_name)','customers.organization_id':`eq.${identity.organizationId}`,order:'created_at.desc,id.desc',limit:'1'});
+        const conversation=latest.data[0];
+        if(!conversation)return reply({totalUnread:latest.count,conversations:[]});
+        const thread=await counted({...scope,customer_id:`eq.${conversation.customer_id}`,select:'id',limit:'1'},true);
+        return reply({totalUnread:latest.count,conversations:[{customer_id:conversation.customer_id,customer_name:conversation.customers.display_name||conversation.customers.company_name||'Customer',unread_count:thread.count}]});
+      }
       if(body.action==='inbox' && !portal){
         const search=String(body.search||'').trim().slice(0,80);
         // Restrict search to a simple substring; never interpolate REST syntax.

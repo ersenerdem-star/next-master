@@ -1,11 +1,11 @@
 import {useInterfaceText} from "../../i18n/InterfaceText";
 import {useEffect,useRef,useState} from 'react';
-import {messagingRequest,type CustomerMessage,type MessageCustomer,type MessageConversation,type MessageCursor} from '../../infrastructure/api/customerMessagesApi';
+import {messagingRequest,notifyMessageRead,type CustomerMessage,type MessageCustomer,type MessageConversation,type MessageCursor} from '../../infrastructure/api/customerMessagesApi';
 import {SectionCard} from '../components/common/SectionCard';
 import {Button} from '../components/common/Button';
 import {useI18n} from '../../i18n/I18nProvider';
 
-export function CustomerMessagesPage({portal=false}:{portal?:boolean}){
+export function CustomerMessagesPage({portal=false,openConversation}:{portal?:boolean;openConversation?:{customerId:string;customerName?:string;requestId:number}}){
   const ui=useInterfaceText();
   const {locale}=useI18n(),tr=locale==='tr';
   const [customers,setCustomers]=useState<MessageCustomer[]>([]),[conversations,setConversations]=useState<MessageConversation[]>([]);
@@ -16,9 +16,12 @@ export function CustomerMessagesPage({portal=false}:{portal?:boolean}){
   const generation=useRef(0),pending=useRef<{id:string;text:string;customerId:string}|null>(null),bottom=useRef<HTMLDivElement|null>(null);
   const active=portal||Boolean(customerId);
   useEffect(()=>{
+    if(!portal&&openConversation?.customerId)setCustomerId(openConversation.customerId);
+  },[portal,openConversation]);
+  useEffect(()=>{
     const timer=window.setInterval(()=>{if(document.visibilityState==='visible')setTick(v=>v+1);},15000);
-    const focus=()=>setTick(v=>v+1);window.addEventListener('focus',focus);
-    return()=>{window.clearInterval(timer);window.removeEventListener('focus',focus);};
+    const focus=()=>{if(document.visibilityState==='visible')setTick(v=>v+1);};window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus);
+    return()=>{window.clearInterval(timer);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus);};
   },[]);
   useEffect(()=>{
     if(portal)return;
@@ -33,7 +36,7 @@ export function CustomerMessagesPage({portal=false}:{portal?:boolean}){
     if(!active)return;
     setLoading(true);const controller=new AbortController();
     void loadMessages(null,version,controller.signal).finally(()=>{if(version===generation.current)setLoading(false);});
-    return()=>controller.abort();
+    return()=>{controller.abort();if(generation.current===version)generation.current++;};
   },[portal,customerId]);
   useEffect(()=>{
     if(!active||!tick)return;
@@ -52,7 +55,10 @@ export function CustomerMessagesPage({portal=false}:{portal?:boolean}){
       const latest=data.messages.at(-1);
       if(latest && document.visibilityState==='visible'){
         void messagingRequest(portal,{action:'read',customerId,through:{createdAt:latest.created_at,id:latest.id}},signal).then(()=>{
-          if(version===generation.current)setConversations(rows=>rows.map(c=>c.customer_id===customerId?{...c,unread_count:0}:c));
+          if(version===generation.current&&!signal?.aborted){
+            setConversations(rows=>rows.map(c=>c.customer_id===customerId?{...c,unread_count:0}:c));
+            notifyMessageRead(portal);
+          }
         }).catch(()=>{/* A read receipt failure never changes the delivered message. */});
       }
     }catch(e){if(version===generation.current&&!signal?.aborted)setError(e instanceof Error?e.message:'Messages unavailable.');}
@@ -72,6 +78,7 @@ export function CustomerMessagesPage({portal=false}:{portal?:boolean}){
   }
   const choices=new Map(customers.map(c=>[c.id,c]));
   for(const c of conversations)if(!choices.has(c.customer_id))choices.set(c.customer_id,{id:c.customer_id,name:c.customer_name});
+  if(!portal&&openConversation?.customerId&&!choices.has(openConversation.customerId))choices.set(openConversation.customerId,{id:openConversation.customerId,name:openConversation.customerName||openConversation.customerId});
   const sorted=[...choices.values()].sort((a,b)=>{
     const ca=conversations.find(c=>c.customer_id===a.id),cb=conversations.find(c=>c.customer_id===b.id);
     return (cb?.last_message_at||'').localeCompare(ca?.last_message_at||'')||a.name.localeCompare(b.name);

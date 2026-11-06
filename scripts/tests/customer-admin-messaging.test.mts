@@ -39,7 +39,8 @@ test('actual SQL enforces service-only storage, idempotency, customer/tenant bin
  }finally{await db.close();}
 });
 
-async function gateway(options:{portal?:boolean;role?:string;active?:boolean;inviteStatus?:string;inviteParty?:string;orgMismatch?:boolean}={},run:(request:(body:unknown,extra?:Record<string,string>)=>Promise<Response>,calls:any[])=>Promise<void>){
+type UnreadFixture={total:number;thread?:number;missingCount?:boolean;failure?:number};
+async function gateway(options:{portal?:boolean;role?:string;active?:boolean;inviteStatus?:string;inviteParty?:string;orgMismatch?:boolean;unread?:UnreadFixture}={},run:(request:(body:unknown,extra?:Record<string,string>)=>Promise<Response>,calls:any[])=>Promise<void>){
  const previous=globalThis.fetch,calls:any[]=[];
  const portal=Boolean(options.portal),updated='2026-10-15T10:00:00Z';
  const token=await createPortalSessionToken(config.sessionSecret,actor,'customer@example.test',org,'portal.fixture.test',updated);
@@ -47,10 +48,20 @@ async function gateway(options:{portal?:boolean;role?:string;active?:boolean;inv
   const u=new URL(String(input));calls.push({url:u,init,body:init?.body?JSON.parse(String(init.body)):undefined});
   if(u.pathname==='/auth/v1/user')return Response.json({id:actor,email:'admin@example.test'});
   if(u.pathname==='/rest/v1/profiles')return Response.json([{organization_id:org,role:options.role||'admin',full_name:'Real Admin',is_active:options.active!==false,permissions:{},session_revoked_at:null}]);
+  if(u.pathname==='/rest/v1/staff_office_access')return Response.json([]);
   if(u.pathname==='/rest/v1/portal_seller_domains')return Response.json([{id:actor,organization_id:org,seller_company_profile_id:null,hostname:'portal.fixture.test'}]);
   if(u.pathname==='/rest/v1/portal_invites')return Response.json([{id:actor,organization_id:options.orgMismatch?'10000000-0000-4000-8000-000000000002':org,customer_id:customer,party_type:options.inviteParty||'customer',status:options.inviteStatus||'active',updated_at:updated,email:'customer@example.test',contact_name:'Portal Customer'}]);
   if(u.pathname==='/rest/v1/customers')return Response.json([{id:customer,display_name:'First customer'}]);
-  if(u.pathname==='/rest/v1/customer_messages')return Response.json(init?.method==='PATCH'?null:[]);
+  if(u.pathname==='/rest/v1/customer_messages'){
+   if(options.unread){
+    const fixture=options.unread;
+    if(fixture.failure)return Response.json({message:'Upstream unavailable'},{status:fixture.failure});
+    const head=init?.method==='HEAD',count=head&&!portal?(fixture.thread??fixture.total):fixture.total;
+    const headers=fixture.missingCount?{}:{'content-range':count?`0-0/${count}`:'*/0'};
+    return new Response(head?null:JSON.stringify(count?[{customer_id:customer,customers:{display_name:'First customer',company_name:''}}]:[]),{headers});
+   }
+   return Response.json(init?.method==='PATCH'?null:[]);
+  }
   if(u.pathname==='/rest/v1/rpc/customer_message_inbox')return Response.json([]);
   if(u.pathname==='/rest/v1/rpc/send_customer_message')return Response.json({id,...calls.at(-1).body});
   throw Error(`Unexpected request: ${u.pathname}`);
@@ -92,5 +103,49 @@ test('admin sends with real profile identity and a bounded keyset page, never br
   const write=calls.find(c=>c.url.pathname.endsWith('/send_customer_message'));assert.equal(write.body.p_sender_kind,'admin');assert.equal(write.body.p_sender_id,actor);assert.equal(write.body.p_sender_name,'Real Admin');
   assert.equal((await request({action:'list',customerId:customer,before:{id,createdAt:'2026-10-15T10:00:00Z'}})).status,200);
   const read=calls.find(c=>c.url.pathname==='/rest/v1/customer_messages');assert.equal(read.url.searchParams.get('limit'),'51');assert.match(read.url.searchParams.get('or'),/id.lt/);assert.equal(read.url.searchParams.get('organization_id'),`eq.${org}`);
+ });
+});
+
+test('admin unread summary counts all inbound unread messages and returns only the latest conversation',async()=>{
+ await gateway({unread:{total:1432,thread:7}},async(request,calls)=>{
+  const response=await request({action:'unread',organizationId:'forged',customerId:other,sender_kind:'admin'});
+  assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');
+  assert.deepEqual(await response.json(),{totalUnread:1432,conversations:[{customer_id:customer,customer_name:'First customer',unread_count:7}]});
+  const queries=calls.filter(c=>c.url.pathname==='/rest/v1/customer_messages');assert.equal(queries.length,2);
+  for(const query of queries){
+   assert.equal(query.url.searchParams.get('organization_id'),`eq.${org}`);assert.equal(query.url.searchParams.get('sender_kind'),'eq.customer');assert.equal(query.url.searchParams.get('read_at'),'is.null');
+   assert.equal(query.init.headers.Prefer,'count=exact');assert.equal(query.url.searchParams.get('limit'),'1');assert(!query.url.searchParams.get('select').includes('body'));
+  }
+  assert.equal(queries[0].init.method,'GET');assert.equal(queries[0].url.searchParams.get('customers.organization_id'),`eq.${org}`);assert.equal(queries[0].url.searchParams.get('order'),'created_at.desc,id.desc');
+  assert.equal(queries[1].init.method,'HEAD');assert.equal(queries[1].url.searchParams.get('customer_id'),`eq.${customer}`);
+  assert(!calls.some(c=>c.url.pathname==='/rest/v1/customers'||c.url.pathname.includes('/rpc/')||c.init?.method==='PATCH'));
+ });
+});
+
+test('portal unread summary uses only cookie-bound customer and inbound admin messages',async()=>{
+ await gateway({portal:true,unread:{total:12}},async(request,calls)=>{
+  const response=await request({action:'unread',organizationId:'forged',customerId:other,sender_kind:'customer'});assert.equal(response.status,200);
+  assert.deepEqual(await response.json(),{totalUnread:12,conversations:[]});
+  const queries=calls.filter(c=>c.url.pathname==='/rest/v1/customer_messages');assert.equal(queries.length,1);
+  const query=queries[0];assert.equal(query.init.method,'HEAD');assert.equal(query.url.searchParams.get('select'),'id');
+  assert.equal(query.url.searchParams.get('organization_id'),`eq.${org}`);assert.equal(query.url.searchParams.get('customer_id'),`eq.${customer}`);assert.equal(query.url.searchParams.get('sender_kind'),'eq.admin');assert.equal(query.url.searchParams.get('read_at'),'is.null');
+  assert(!calls.some(c=>c.url.pathname==='/rest/v1/customers'||c.url.pathname.includes('/rpc/')||c.init?.method==='PATCH'));
+ });
+});
+
+test('empty unread summaries return zero, while count failures fail without inventing a cleared inbox',async()=>{
+ for(const portal of [false,true]){
+  await gateway({portal,unread:{total:0}},async(request,calls)=>{
+   const response=await request({action:'unread'});assert.equal(response.status,200);assert.deepEqual(await response.json(),{totalUnread:0,conversations:[]});assert.equal(calls.filter(c=>c.url.pathname==='/rest/v1/customer_messages').length,1);
+  });
+  for(const unread of [{total:3,missingCount:true},{total:3,failure:503}])await gateway({portal,unread},async(request)=>{
+   const response=await request({action:'unread'});assert.equal(response.status,503);assert.equal((await response.json()).totalUnread,undefined);
+  });
+ }
+});
+
+test('unread summary keeps existing role, active session and portal invite authorization',async()=>{
+ for(const options of [{role:'sales'},{role:'viewer'},{active:false},{portal:true,inviteStatus:'disabled'},{portal:true,inviteParty:'vendor'},{portal:true,orgMismatch:true}])await gateway({...options,unread:{total:4}},async(request,calls)=>{
+  const response=await request({action:'unread'});assert([401,403].includes(response.status));assert(!calls.some(c=>c.url.pathname==='/rest/v1/customer_messages'));
  });
 });

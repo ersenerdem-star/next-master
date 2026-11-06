@@ -5,6 +5,7 @@ import { supabaseClient } from "../infrastructure/api/supabaseClient";
 import { touchCurrentUserPresence } from "../infrastructure/api/usersApi";
 import { ActionFeedbackProvider } from "../presentation/components/common/ActionFeedback";
 import { AppShell } from "../presentation/layout/AppShell";
+import { PersistentMessageAlert } from "../presentation/components/common/PersistentMessageAlert";
 import { resolveWorkspaceDestination, type WorkspaceSections } from "../modules/admin/workspaceNavigation";
 import { useI18n } from "../i18n/I18nProvider";
 import { APP_NAVIGATION_EVENT, type AppNavigationDetail } from "../shared/catalogTransfer";
@@ -233,6 +234,8 @@ export function App() {
   const [sessionReady, setSessionReady] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [appEmail, setAppEmail] = useState(initialAppSession?.email || "");
+  const [messagingScope, setMessagingScope] = useState("");
+  const [messageTarget, setMessageTarget] = useState<{customerId:string;customerName?:string;requestId:number}>();
   const [accountIdentity, setAccountIdentity] = useState({name:initialAppSession?.fullName || "",email:initialAppSession?.email || ""});
   const [appRole, setAppRole] = useState<AppRole>(initialAppRole);
   const [appDepartment, setAppDepartment] = useState<AppDepartment>(initialAppDepartment);
@@ -352,6 +355,8 @@ export function App() {
       setSessionReady(true);
 
       if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+        setMessagingScope("");
+        setMessageTarget(undefined);
         const cachedRole = normalizeAppRole(getCachedAppSessionSnapshot()?.role || "");
         const hasKnownRole = Boolean(appRoleRef.current || cachedRole);
         if (hasKnownRole) {
@@ -374,6 +379,7 @@ export function App() {
 
   useEffect(() => {
     if (!loggedIn || isPortalRoute) {
+      setMessagingScope("");
       setAppRole("");
       setAppDepartment("viewer");
       setAppPermissions({});
@@ -395,6 +401,7 @@ export function App() {
       try {
         const session = await fetchAppSession(true);
         if (cancelled) return;
+        setMessagingScope(`${session.organizationId}:${session.userId}`);
         setAppEmail(session.email);
         setAccountIdentity({name:session.fullName || "",email:session.email});
         setAppRole(normalizeAppRole(session.role));
@@ -944,7 +951,7 @@ export function App() {
         onOpenSupplierComparison={() => setReportsTab("Master")}
       />
     ) : activePage === "Messages" && ["admin","superadmin"].includes(appRole) ? (
-      <CustomerMessagesPage />
+      <CustomerMessagesPage key={messagingScope} openConversation={messageTarget} />
     ) : activePage === "Settings" ? (
       <SettingsPage initialTab={settingsTab} onLogout={handleLogout} onOpenRelatedRecord={openRelatedRecord} />
     ) : activePage === "Mira" && isSuperadminRole(appRole) ? (
@@ -984,6 +991,12 @@ export function App() {
           </PageErrorBoundary>
         </Suspense>
       </AppShell>
+      {messagingScope && ["admin", "superadmin"].includes(appRole) ? (
+        <PersistentMessageAlert scopeKey={messagingScope} onOpenMessages={(customerId, customerName) => {
+          if (customerId) setMessageTarget(current => ({customerId, customerName, requestId:(current?.requestId || 0)+1}));
+          handleMainNavigate("Messages");
+        }} />
+      ) : null}
     </ActionFeedbackProvider>
   );
 }

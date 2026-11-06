@@ -3,6 +3,11 @@ export type CustomerMessage={id:string;sender_kind:'admin'|'customer';sender_nam
 export type MessageCursor={createdAt:string;id:string};
 export type MessageCustomer={id:string;name:string};
 export type MessageConversation={customer_id:string;customer_name:string;last_message_at:string;unread_count:number};
+export type MessageUnreadSummary={totalUnread:number;conversations:Array<Pick<MessageConversation,'customer_id'|'customer_name'|'unread_count'>>};
+export const CUSTOMER_MESSAGES_READ='next-master:customer-messages-read';
+export function notifyMessageRead(portal:boolean){
+  window.dispatchEvent(new CustomEvent(CUSTOMER_MESSAGES_READ,{detail:{portal}}));
+}
 export async function messagingRequest<T>(portal:boolean,payload:Record<string,unknown>,signal?:AbortSignal):Promise<T>{
   const headers:Record<string,string>={'Content-Type':'application/json'};
   if(!portal){const {data,error}=await supabaseClient.auth.getSession();if(error||!data.session)throw Error('Sign in again.');headers.Authorization=`Bearer ${data.session.access_token}`;}
