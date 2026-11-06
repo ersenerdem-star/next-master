@@ -22,6 +22,7 @@ export function PortalAccessReportPage() {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
   const version = useRef(0);
+  const pendingFeedback = useRef(false);
   const anchor = useRef<{ scope: string; asOf?: string }>({ scope: '' });
   const dirty = JSON.stringify(draft) !== JSON.stringify(filters);
   const text = (turkish: string, english: string) => tr ? turkish : english;
@@ -34,6 +35,13 @@ export function PortalAccessReportPage() {
     return text('Portal giriş/çıkış kayıtları alınamadı. Yeniden deneyin.', 'Portal access records could not be loaded. Retry.');
   };
 
+  useEffect(() => () => {
+    if (pendingFeedback.current) {
+      pendingFeedback.current = false;
+      feedback.clear();
+    }
+  }, [feedback]);
+
   useEffect(() => {
     const request = ++version.current;
     const scope = JSON.stringify(filters) + ':' + refresh;
@@ -43,19 +51,28 @@ export function PortalAccessReportPage() {
       if (version.current !== request) return;
       anchor.current.asOf = result.asOf;
       setReport(result);
-      if (refresh) feedback.succeed(text(`${result.total.toLocaleString('tr-TR')} kayıt bulundu.`, `${result.total.toLocaleString('en-GB')} records found.`));
+      // Page navigation is a user action even before the first filter refresh.
+      // Every begin must settle; the initial automatic load needs no success toast.
+      if (pendingFeedback.current) {
+        pendingFeedback.current = false;
+        feedback.succeed(text(`${page}. sayfa yüklendi · ${result.total.toLocaleString('tr-TR')} kayıt.`, `Page ${page} loaded · ${result.total.toLocaleString('en-GB')} records.`));
+      }
     }).catch(caught => {
       if (version.current !== request) return;
+      pendingFeedback.current = false;
       setReport(null); const message = errorMessage(caught); setError(message); feedback.fail(message);
     }).finally(() => { if (version.current === request) setLoading(false); });
     return () => { if (version.current === request) version.current++; };
   }, [filters, page, refresh]);
 
   function applyFilters() {
+    pendingFeedback.current = true;
     feedback.begin(text('Portal oturum kayıtları aranıyor…', 'Searching portal access records…'));
     setPage(1); setFilters({ ...draft }); setRefresh(value => value + 1);
   }
   function changePage(next: number) {
+    if (loading || next === page || next < 1 || next > totalPages) return;
+    pendingFeedback.current = true;
     feedback.begin(text(`${next}. sayfa yükleniyor…`, `Loading page ${next}…`));
     setPage(next);
   }
@@ -97,7 +114,7 @@ export function PortalAccessReportPage() {
         <p className="muted">{text('Saatler İstanbul saatidir. Ülke IP konumuna göredir; VPN nedeniyle kullanıcının fiziksel konumundan farklı olabilir.', 'Times are shown in Istanbul time. Country is based on IP location and can differ from physical location when using a VPN.')}</p>
         <details><summary>{text('Kayıt kapsamı ve eski kayıtlar', 'Coverage and legacy records')}</summary><p>{text('Eski kayıtlarda giriş ile oturum doğrulama ayrımı tutulmuyordu; geçmiş çıkış kaydı yoktur. Eski kayıtların ülkesi bilinmiyor olarak gösterilir. Tarayıcıyı kapatmak açık bir çıkış işlemi sayılmaz. Kurumla ilişkilendirilemeyen başarısız denemeler bu rapora dahil değildir.', 'Legacy records did not distinguish logins from session validations, and historical logout records do not exist. Legacy records have unknown country. Closing a browser is not an explicit sign-out. Failed attempts that cannot be associated with this organization are excluded.')}</p></details>
         {error ? <p className="error-text" role="alert">{error}</p> : null}
-        <div className="meta-row" role="status">{loading ? text('Kayıtlar yükleniyor…', 'Loading records…') : text(`${(report?.total || 0).toLocaleString('tr-TR')} kayıt · Sayfa ${page} / ${totalPages}`, `${(report?.total || 0).toLocaleString('en-GB')} records · Page ${page} / ${totalPages}`)}</div>
+        <div className="meta-row" role="status">{loading ? text('Kayıtlar yükleniyor…', 'Loading records…') : error ? text('Kayıtlar yüklenemedi. Yeniden deneyin.', 'Records could not be loaded. Retry.') : text(`${(report?.total || 0).toLocaleString('tr-TR')} kayıt · Sayfa ${page} / ${totalPages}`, `${(report?.total || 0).toLocaleString('en-GB')} records · Page ${page} / ${totalPages}`)}</div>
         <DataTable rows={loading ? [] : report?.rows || []} rowKey={row => row.id} columns={headers.map((header, index) => ({ key: String(index), header, render: (row: PortalAccessRow) => rowValues(row)[index] }))}
           emptyText={loading ? text('Yükleniyor…', 'Loading…') : error ? text('Kayıtlar yüklenemedi.', 'Records could not be loaded.') : text('Bu filtrelere uygun kayıt yok.', 'No records match these filters.')} />
         <div className="modal-actions">
