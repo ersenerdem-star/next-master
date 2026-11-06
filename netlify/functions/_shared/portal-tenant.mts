@@ -34,6 +34,7 @@ export async function resolvePortalSellerTenant(
   supabaseUrl: string,
   serviceRoleKey: string,
   hostname: string,
+  signal?: AbortSignal,
 ) {
   const normalizedHostname = normalizeHostname(hostname);
   if (!normalizedHostname || isLocalPortalHostname(normalizedHostname)) return null;
@@ -45,7 +46,7 @@ export async function resolvePortalSellerTenant(
       is_active: "eq.true",
       limit: "1",
     }),
-    { headers: serviceRoleHeaders(serviceRoleKey) },
+    { headers: serviceRoleHeaders(serviceRoleKey), signal },
   );
 
   return rows[0] || null;

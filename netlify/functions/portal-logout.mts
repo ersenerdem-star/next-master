@@ -15,7 +15,7 @@ export default async (req: Request, _context: Context) => {
     try {
       const hostname = getPortalRequestHostname(req);
       const { invite } = await resolvePortalInvite(supabaseUrl, serviceRoleKey, sessionSecret, {
-        sessionToken, hostname, touchSession: false,
+        sessionToken, hostname, touchSession: false, signal: AbortSignal.timeout(3_000),
       });
       await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
         ipAddress: _context.ip || null,

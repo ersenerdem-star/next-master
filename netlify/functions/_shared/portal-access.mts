@@ -193,6 +193,7 @@ async function fetchPortalInviteById(
   inviteId: string,
   organizationId = "",
   sellerCompanyProfileId = "",
+  signal?: AbortSignal,
 ) {
   const baseParams = {
     id: `eq.${String(inviteId || "").trim()}`,
@@ -203,13 +204,14 @@ async function fetchPortalInviteById(
   const selectors = [PORTAL_INVITE_SELECT, PORTAL_INVITE_SELECT_ACCESS, PORTAL_INVITE_SELECT_LEGACY];
   let lastError: unknown = null;
   for (const select of selectors) {
+    signal?.throwIfAborted();
     try {
-      const rows = await fetchAll<PortalInviteRow>(supabaseUrl, serviceRoleKey, "portal_invites", {
-        select,
-        ...baseParams,
-      });
+      const rows = await getJson<PortalInviteRow[]>(buildRestUrl(supabaseUrl, "portal_invites", {
+        select, ...baseParams,
+      }), { headers: serviceRoleHeaders(serviceRoleKey), timeoutMs: PORTAL_DB_REQUEST_TIMEOUT_MS, signal });
       return normalizePortalInviteRow(rows[0] || null);
     } catch (error) {
+      if (signal?.aborted) throw error;
       lastError = error;
     }
   }
@@ -778,13 +780,14 @@ export async function resolvePortalInvite(
     // last_used_at on every three-second request. Other portal actions keep
     // the default touch so an active session remains warm.
     touchSession?: boolean;
+    signal?: AbortSignal;
   },
 ) {
   const providedPassword = String(auth.password || "").trim();
   const sessionToken = String(auth.sessionToken || "").trim();
   const providedEmail = String(auth.email || "").trim().toLowerCase();
   const hostname = String(auth.hostname || "").trim().toLowerCase();
-  const tenant = await resolvePortalSellerTenant(supabaseUrl, serviceRoleKey, hostname);
+  const tenant = await resolvePortalSellerTenant(supabaseUrl, serviceRoleKey, hostname, auth.signal);
   if (!tenant && hostname && !isLocalPortalHostname(hostname)) {
     throw new Error("This seller portal domain is not configured.");
   }
@@ -807,6 +810,7 @@ export async function resolvePortalInvite(
       session.invite_id,
       String(session.organization_id || tenant?.organization_id || ""),
       String(tenant?.seller_company_profile_id || ""),
+      auth.signal,
     );
 
     if (!isPortalInviteUsable(invite)) {

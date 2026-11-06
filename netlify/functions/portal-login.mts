@@ -34,7 +34,7 @@ export default async (req: Request, _context: Context) => {
     // Failed attempts are scoped only by the verified seller domain. An email
     // supplied by a failed login must never establish organization ownership.
     try {
-      auditOrganizationId = (await resolvePortalSellerTenant(supabaseUrl, serviceRoleKey, hostname))?.organization_id || null;
+      auditOrganizationId = (await resolvePortalSellerTenant(supabaseUrl, serviceRoleKey, hostname, AbortSignal.timeout(2_500)))?.organization_id || null;
     } catch { /* Audit context lookup must not block the existing login flow. */ }
 
     const rateLimit = await enforcePortalRateLimit(req, supabaseUrl, serviceRoleKey, "login", email);

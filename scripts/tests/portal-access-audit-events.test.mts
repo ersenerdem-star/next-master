@@ -15,10 +15,15 @@ const email='customer@example.invalid';
 const host='seller.example.invalid';
 const response=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status});
 
-async function invoke(kind:'login'|'logout',options:{body?:unknown;token?:string;method?:string;allowed?:boolean;auditFailure?:boolean;abortAudit?:boolean;context?:unknown;headers?:Record<string,string>;noConfig?:boolean;networkFailure?:boolean;disabledInvite?:boolean}={}){
+async function invoke(kind:'login'|'logout',options:{body?:unknown;token?:string;method?:string;allowed?:boolean;auditFailure?:boolean;abortAudit?:boolean;abortVerificationStage?:'tenant'|'invite';context?:unknown;headers?:Record<string,string>;noConfig?:boolean;networkFailure?:boolean;disabledInvite?:boolean}={}){
  const priorFetch=globalThis.fetch,priorNetlify=(globalThis as any).Netlify;
  const priorTimeout=AbortSignal.timeout;const deadlines:number[]=[];
- if(options.abortAudit)AbortSignal.timeout=(ms:number)=>{deadlines.push(ms);return ms===2500?AbortSignal.abort():priorTimeout(ms);};
+ const verificationController=new AbortController();let abortedRequests=0;
+ if(options.abortAudit||options.abortVerificationStage)AbortSignal.timeout=(ms:number)=>{
+  deadlines.push(ms);
+  return ms===2500&&options.abortAudit?AbortSignal.abort()
+   :ms===3000&&options.abortVerificationStage?verificationController.signal:priorTimeout(ms);
+ };
  const audits:Array<Record<string,any>>=[];
  const calls:Array<{url:URL;init?:RequestInit;body?:any}>=[];
  const invite={id:inviteId,organization_id:org,party_type:'customer',party_name:'Fixture customer',customer_id:customerId,vendor_id:null,
@@ -29,6 +34,14 @@ async function invoke(kind:'login'|'logout',options:{body?:unknown;token?:string
  globalThis.fetch=async(input,init)=>{
   const url=new URL(String(input));assert.equal(url.origin,base,'No external transport is permitted');
   const body=init?.body?JSON.parse(String(init.body)):undefined;calls.push({url,init,body});
+  if((options.abortVerificationStage==='tenant'&&url.pathname==='/rest/v1/portal_seller_domains')
+   ||(options.abortVerificationStage==='invite'&&url.pathname==='/rest/v1/portal_invites')){
+   assert.equal(init?.signal,verificationController.signal,'The logout deadline must reach every verification fetch');
+   return await new Promise<Response>((_resolve,reject)=>{
+    init!.signal!.addEventListener('abort',()=>{abortedRequests++;reject(new DOMException('Aborted','AbortError'));},{once:true});
+    queueMicrotask(()=>verificationController.abort());
+   });
+  }
   if(url.pathname==='/rest/v1/portal_seller_domains')return response([{id:'domain',organization_id:org,seller_company_profile_id:null,hostname:host}]);
   if(url.pathname==='/rest/v1/rpc/check_portal_rate_limit')return response([{allowed:options.allowed!==false,retry_after_seconds:60}]);
   if(url.pathname==='/rest/v1/portal_invites'){
@@ -55,7 +68,7 @@ async function invoke(kind:'login'|'logout',options:{body?:unknown;token?:string
   const data=await res.json();
   assert.ok(audits.every(a=>!JSON.stringify(a).includes(password)&&!JSON.stringify(a).includes(secret)&&!JSON.stringify(a).includes('synthetic-service-key')));
   if(options.token)assert.ok(audits.every(a=>!JSON.stringify(a).includes(options.token!)));
-  return {status:res.status,cookie:res.headers.get('set-cookie'),data,audits,calls,deadlines};
+  return {status:res.status,cookie:res.headers.get('set-cookie'),data,audits,calls,deadlines,abortedRequests};
  }finally{globalThis.fetch=priorFetch;(globalThis as any).Netlify=priorNetlify;AbortSignal.timeout=priorTimeout;}
 }
 const token=()=>createPortalSessionToken(secret,inviteId,email,org,host,updated);
@@ -133,6 +146,16 @@ test('bounded audit timeout cannot prevent successful login or cookie-clearing l
   const r=await invoke(kind,{token:kind==='logout'?signed:undefined,abortAudit:true});
   assert.equal(r.status,200);assert.ok(r.deadlines.includes(2500));
   if(kind==='logout')assert.match(r.cookie!,/Max-Age=0/);
+ }
+});
+test('logout verification deadline cancels tenant/invite lookups and stops all legacy fallback attempts',async()=>{
+ const signed=await token();
+ for(const stage of ['tenant','invite'] as const){
+  const r=await invoke('logout',{token:signed,abortVerificationStage:stage});
+  assert.equal(r.status,200);assert.match(r.cookie!,/Max-Age=0/);assert.equal(r.data.ok,true);
+  assert.deepEqual(r.audits,[]);assert.ok(r.deadlines.includes(3000));assert.equal(r.abortedRequests,1);
+  assert.equal(r.calls.filter(c=>c.url.pathname==='/rest/v1/portal_seller_domains').length,1);
+  assert.equal(r.calls.filter(c=>c.url.pathname==='/rest/v1/portal_invites').length,stage==='invite'?1:0);
  }
 });
 test('trusted unknown context location remains unknown despite arbitrary country headers',async()=>{
