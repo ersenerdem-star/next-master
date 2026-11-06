@@ -1,5 +1,6 @@
 import { Component, Suspense, lazy, useEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { clearCachedAppSession, fetchAppSession, getCachedAppSessionSnapshot, OfficeNetworkError } from "../infrastructure/api/appSessionApi";
+import { canViewPortalAccessReport } from "../shared/portalAccessReport";
 import { supabaseClient } from "../infrastructure/api/supabaseClient";
 import { touchCurrentUserPresence } from "../infrastructure/api/usersApi";
 import { ActionFeedbackProvider } from "../presentation/components/common/ActionFeedback";
@@ -84,6 +85,7 @@ const reportsSubNav = [
   { key: "Item Transactions", labelKey: "nav.itemTransactions" },
   { key: "Inventory Analytics", labelKey: "nav.inventoryAnalytics" },
   { key: "Status Center", labelKey: "nav.statusCenter" },
+  { key: "Portal Access", labelKey: "nav.portalAccess" },
 ] as const;
 
 type ReportsTab = (typeof reportsSubNav)[number]["key"];
@@ -175,7 +177,7 @@ function getPurchasesSubNav(role: AppRole, department: AppDepartment = "", permi
 
 function getReportsSubNav(role: AppRole, department: AppDepartment = "", permissions?: AppPermissionMap) {
   if (!canAccessReportModules(role, department, permissions)) return [] as const;
-  return reportsSubNav;
+  return reportsSubNav.filter(item => item.key !== 'Portal Access' || canViewPortalAccessReport(role));
 }
 
 function getSettingsSubNav(role: AppRole, department: AppDepartment = "") {
@@ -930,6 +932,7 @@ export function App() {
       <PurchasesPage onNavigateTab={setPurchasesTab} activeTab={purchasesTab} selectedPurchaseOrderId={selectedPurchaseOrderId} selectedBillId={selectedBillId} />
     ) : activePage === "Reports" && canAccessReportModules(appRole, appDepartment) ? (
       <ReportsPage
+        portalAccessAllowed={canViewPortalAccessReport(appRole)}
         onOpenSupplierPrices={() => handleDashboardNavigate("Purchases", "Supplier Prices")}
         activeTab={reportsTab}
         onOpenSalesOrder={openSalesOrder}

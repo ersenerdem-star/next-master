@@ -129,6 +129,7 @@ export const enMessages = {
     supplierComparison: "Supplier Comparison",
     coreReports: "Core Reports",
     statusCenter: "Status Center",
+    portalAccess: "Portal Access",
     itemTransactions: "Item Transactions",
     inventoryAnalytics: "Inventory Analytics",
     session: "Session",

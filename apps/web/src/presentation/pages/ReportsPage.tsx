@@ -5,10 +5,12 @@ import { MasterPage } from "./MasterPage";
 import { ProcurementDashboardPage } from "./ProcurementDashboardPage";
 import { OperationsStatusPage } from "./OperationsStatusPage";
 import { useI18n } from "../../i18n/I18nProvider";
+import { PortalAccessReportPage } from "./PortalAccessReportPage";
 
 type ReportsPageProps = {
+  portalAccessAllowed?: boolean;
   onOpenSupplierPrices?: () => void;
-  activeTab?: "Procurement Dashboard" | "Master" | "Core Reports" | "Item Transactions" | "Inventory Analytics" | "Status Center";
+  activeTab?: "Procurement Dashboard" | "Master" | "Core Reports" | "Item Transactions" | "Inventory Analytics" | "Status Center" | "Portal Access";
   onOpenSalesOrder?: (salesOrderId: string) => void;
   onOpenPurchaseOrder?: (purchaseOrderId: string) => void;
   onOpenInvoice?: (invoiceId: string) => void;
@@ -19,6 +21,7 @@ type ReportsPageProps = {
 };
 
 export function ReportsPage({
+  portalAccessAllowed = false,
   activeTab = "Procurement Dashboard",
   onOpenSupplierPrices,
   onOpenSalesOrder,
@@ -30,7 +33,7 @@ export function ReportsPage({
   onOpenSupplierComparison,
 }: ReportsPageProps) {
   const { locale, t } = useI18n();
-  const activeLabel = { "Procurement Dashboard": "nav.procurementDashboard", Master: "nav.supplierComparison", "Core Reports": "nav.coreReports", "Item Transactions": "nav.itemTransactions", "Inventory Analytics": "nav.inventoryAnalytics", "Status Center": "nav.statusCenter" }[activeTab];
+  const activeLabel = { "Procurement Dashboard": "nav.procurementDashboard", Master: "nav.supplierComparison", "Core Reports": "nav.coreReports", "Item Transactions": "nav.itemTransactions", "Inventory Analytics": "nav.inventoryAnalytics", "Status Center": "nav.statusCenter", "Portal Access": "nav.portalAccess" }[activeTab];
   return (
     <div className="page-stack reports-workspace">
       <section className="reports-command-banner">
@@ -47,6 +50,7 @@ export function ReportsPage({
       {activeTab === "Procurement Dashboard" ? <ProcurementDashboardPage onOpenSupplierComparison={onOpenSupplierComparison} /> : null}
       {activeTab === "Master" ? <MasterPage /> : null}
       {activeTab === "Core Reports" ? <CoreReportsPage /> : null}
+      {activeTab === "Portal Access" && portalAccessAllowed ? <PortalAccessReportPage /> : null}
       {activeTab === "Item Transactions" ? (
         <ItemTransactionsPage
           onOpenSalesOrder={onOpenSalesOrder}

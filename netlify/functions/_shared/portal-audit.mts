@@ -1,4 +1,5 @@
 import { buildRestUrl, serviceRoleHeaders } from "./http.mts";
+import { isIP } from "node:net";
 
 type PortalAuditEventInput = {
   organizationId?: string | null;
@@ -8,6 +9,9 @@ type PortalAuditEventInput = {
   eventType: string;
   status?: "ok" | "failed" | "rate_limited";
   details?: Record<string, unknown>;
+  ipAddress?: string | null;
+  countryCode?: string | null;
+  countrySource?: "netlify_geo" | null;
 };
 
 function firstForwardedIp(req: Request) {
@@ -23,8 +27,16 @@ export async function writePortalAuditEvent(
   input: PortalAuditEventInput,
 ) {
   try {
+    const contextIp = String(input.ipAddress || "").trim();
+    const ipAddress = Object.prototype.hasOwnProperty.call(input, "ipAddress")
+      ? isIP(contextIp) ? contextIp : null
+      : firstForwardedIp(req) || null;
+    const country = String(input.countryCode || "").trim().toUpperCase();
+    const countryCode = /^[A-Z]{2}$/.test(country) && country !== "ZZ" && country !== "XX"
+      && input.countrySource === "netlify_geo" ? country : null;
     const response = await fetch(buildRestUrl(supabaseUrl, "portal_audit_logs", {}), {
       method: "POST",
+      signal: AbortSignal.timeout(2_500),
       headers: {
         ...serviceRoleHeaders(serviceRoleKey),
         Prefer: "return=minimal",
@@ -37,7 +49,11 @@ export async function writePortalAuditEvent(
           email: String(input.email || "").trim().toLowerCase() || null,
           event_type: input.eventType,
           status: input.status || "ok",
-          ip_address: firstForwardedIp(req) || null,
+          ip_address: ipAddress,
+          ...(Object.prototype.hasOwnProperty.call(input, "countryCode") ? {
+            country_code: countryCode,
+            country_source: countryCode ? "netlify_geo" : null,
+          } : {}),
           user_agent: String(req.headers.get("user-agent") || "").trim() || null,
           details: input.details || {},
         },

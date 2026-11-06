@@ -109,6 +109,7 @@ export const trMessages = {
     supplierComparison: "Tedarikçi Karşılaştırması",
     coreReports: "Temel Raporlar",
     statusCenter: "Durum Merkezi",
+    portalAccess: "Portal Giriş / Çıkış",
     itemTransactions: "Malzeme Hareketleri",
     inventoryAnalytics: "Stok Analitiği",
     session: "Oturum",
