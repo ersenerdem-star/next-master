@@ -7,6 +7,7 @@ import type {
   LocalPaymentReceived,
   LocalPurchaseOrder,
   LocalSalesOrder,
+  PurchaseOrderVendorRecipient,
 } from "../../types/orders";
 import { supabaseClient } from "./supabaseClient";
 import { getCurrentOrgId } from "./organizationApi";
@@ -872,6 +873,39 @@ export async function upsertSalesOrder(order: LocalSalesOrder): Promise<LocalSal
   });
   if (!result?.sales_order) throw new Error("Sales order save failed");
   return mapSalesOrderRow(result.sales_order);
+}
+
+// Preflight every new PO recipient before a legacy confirmation can write
+// the Sales root. Display-name snapshots never imply an alias by themselves.
+export async function resolvePurchaseOrderVendors(supplierNames: readonly string[]): Promise<PurchaseOrderVendorRecipient[]> {
+  const names = [...new Map(supplierNames.map((name) => {
+    if (typeof name !== "string" || !name.trim() || name.trim().length > 180) {
+      throw new Error("Select a supplier for every purchase order line before confirming.");
+    }
+    return [name.trim().toLowerCase(), name.trim()] as const;
+  })).values()];
+  if (!names.length || names.length > 100) throw new Error("Purchase order supplier batch is invalid.");
+  const result = await callAppRpc<unknown>("resolve_purchase_order_vendors", { input_suppliers: names });
+  const failure = () => new Error("Purchase order vendors could not be verified. Check the supplier and vendor setup before confirming.");
+  if (!Array.isArray(result) || result.length !== names.length) throw failure();
+  const expected = new Set(names.map((name) => name.toLowerCase()));
+  const received = new Set<string>();
+  const canonicalNames = new Map<string, string>();
+  const recipients: PurchaseOrderVendorRecipient[] = [];
+  for (const row of result) {
+    if (!row || typeof row.requested_supplier_name !== "string" || typeof row.supplier_name !== "string" || typeof row.vendor_id !== "string") throw failure();
+    const requested = row.requested_supplier_name.trim();
+    const name = row.supplier_name.trim();
+    const vendorId = row.vendor_id.trim();
+    const key = requested.toLowerCase();
+    if (!expected.has(key) || received.has(key) || !name || name.length > 180 ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(vendorId) ||
+      (canonicalNames.has(vendorId) && canonicalNames.get(vendorId) !== name)) throw failure();
+    received.add(key);
+    canonicalNames.set(vendorId, name);
+    recipients.push({ requested_supplier_name: requested, supplier_name: name, vendor_id: vendorId });
+  }
+  return recipients;
 }
 
 export async function confirmSalesOrderWithPurchases(order: LocalSalesOrder, decisionId: string) {

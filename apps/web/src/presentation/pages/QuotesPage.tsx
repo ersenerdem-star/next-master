@@ -17,6 +17,7 @@ import {
   markSalesOrderPortalSeen,
   confirmSalesOrderWithPurchases,
   replacePurchaseOrdersForSalesOrder,
+  resolvePurchaseOrderVendors,
   upsertInvoice,
   upsertSalesOrder,
 } from "../../infrastructure/api/ordersApi";
@@ -3244,10 +3245,11 @@ export function QuotesPage({
       const order = buildSalesOrderPayload("confirmed");
       const { salesOrder: saved, purchaseOrders } = await confirmOrderForCapability<{ salesOrder: LocalSalesOrder; purchaseOrders: LocalPurchaseOrder[] }>(commercialUpgradeEnabled(), {
         legacy: async () => {
-          // Preserve the accepted environment's existing confirmation sequence.
+          // Resolve all recipients before saving the Sales root. Only the
+          // newly derived POs use canonical vendors; saved prices stay intact.
+          const recipients = await resolvePurchaseOrderVendors(order.lines.map((line) => line.supplier_name));
           const saved = await upsertSalesOrder(order);
-          const purchaseOrders = buildPurchaseOrdersFromSalesOrder(saved);
-          await replacePurchaseOrdersForSalesOrder(saved.id, purchaseOrders);
+          const purchaseOrders = await replacePurchaseOrdersForSalesOrder(saved.id, buildPurchaseOrdersFromSalesOrder(saved, recipients));
           return { salesOrder: saved, purchaseOrders };
         },
         atomic: async () => {

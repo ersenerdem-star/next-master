@@ -9,6 +9,7 @@ import { cleanupCatalogStorageSource } from "./_shared/catalog-storage.mts";
 import { catalogStorageImportTargetEnabled } from "./_shared/catalog-import-target.mts";
 
 const ALLOWED_RPCS = new Set([
+  "resolve_purchase_order_vendors",
   "sales_order_purchase_analysis_options",
   "reporting_customer_balance_by_brand_product",
   "reporting_supplier_balance_by_brand_product",
@@ -166,6 +167,7 @@ const OPERATIONS_RPCS = new Set([
 ]);
 
 const CUSTOMER_STAFF_RPCS = new Set([
+  "resolve_purchase_order_vendors",
   "confirm_sales_order_with_purchases_atomic",
   "cloud_quote_supplier_options",
   "cloud_quote_supplier_options_v3",
@@ -1215,6 +1217,15 @@ export default async (req: Request, context: Context) => {
 
     if (CUSTOMER_STAFF_RPCS.has(name) && !canAccessCustomerOps(caller.role, caller.department, caller.permissions)) {
       return json({ error: "Staff access required" }, 403);
+    }
+
+    if (name === "resolve_purchase_order_vendors") {
+      const names = args.input_suppliers;
+      if (!Array.isArray(names) || names.length < 1 || names.length > 100 || names.some((value) =>
+        typeof value !== "string" || !value.trim() || value.trim().length > 180) ||
+        new Set(names.map((value) => value.trim().toLowerCase())).size !== names.length) {
+        return json({ error: "Invalid purchase order supplier batch." }, 400);
+      }
     }
 
     if (name === "queue_supplier_price_rollups_refresh") {

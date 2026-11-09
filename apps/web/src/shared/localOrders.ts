@@ -1,6 +1,6 @@
 import type { QuoteBuilderLine } from "../types/quoteBuilder";
 import { roundMoney, multiplyMoney, sumMoney, marginPercent as decimalMarginPercent, salesOrderTotals, requireUnitPrice, requireQuantity } from "../../../../shared/order-money.mjs";
-import type { LocalBill, LocalBillLine, LocalInvoice, LocalInvoiceLine, LocalPurchaseOrder, LocalPurchaseOrderLine, LocalSalesOrder } from "../types/orders";
+import type { LocalBill, LocalBillLine, LocalInvoice, LocalInvoiceLine, LocalPurchaseOrder, LocalPurchaseOrderLine, LocalSalesOrder, PurchaseOrderVendorRecipient } from "../types/orders";
 
 const SALES_ORDERS_KEY = "master-next-sales-orders";
 const PURCHASE_ORDERS_KEY = "master-next-purchase-orders";
@@ -177,13 +177,32 @@ export function createPurchaseOrdersFromSalesOrder(order: LocalSalesOrder) {
   return orders;
 }
 
-export function buildPurchaseOrdersFromSalesOrder(order: LocalSalesOrder) {
+export function buildPurchaseOrdersFromSalesOrder(order: LocalSalesOrder, recipients?: readonly PurchaseOrderVendorRecipient[]) {
   salesOrderTotals(order.lines, order.shipping_cost, order.discount_amount, true);
-  const grouped = new Map<string, LocalPurchaseOrderLine[]>();
+  const recipientByName = new Map<string, PurchaseOrderVendorRecipient>();
+  const canonicalNameById = new Map<string, string>();
+  for (const recipient of recipients || []) {
+    const key = recipient.requested_supplier_name.trim().toLowerCase();
+    const name = recipient.supplier_name.trim();
+    const vendorId = recipient.vendor_id.trim();
+    if (!key || !name || !vendorId || recipientByName.has(key) ||
+      (canonicalNameById.has(vendorId) && canonicalNameById.get(vendorId) !== name)) {
+      throw new Error("Purchase order vendor resolution is incomplete or ambiguous.");
+    }
+    recipientByName.set(key, { ...recipient, supplier_name: name, vendor_id: vendorId });
+    canonicalNameById.set(vendorId, name);
+  }
+  const grouped = new Map<string, { supplier_name: string; vendor_id?: string; lines: LocalPurchaseOrderLine[] }>();
   order.lines.forEach((line) => {
-    const name = line.supplier_name || "Unassigned Supplier";
-    const key = supplierKey(name);
-    const list = grouped.get(key) || [];
+    const sourceName = line.supplier_name || "Unassigned Supplier";
+    const recipient = recipientByName.get(sourceName.trim().toLowerCase());
+    if (recipients && !recipient) throw new Error(`Purchase order vendor could not be resolved for ${sourceName}.`);
+    const name = recipient?.supplier_name || sourceName;
+    // Resolve only the new PO recipient. The saved SO's supplier snapshots,
+    // selected option and historical commercial values remain untouched.
+    const key = recipient ? `vendor:${recipient.vendor_id}` : supplierKey(name);
+    const group = grouped.get(key) || { supplier_name: name, vendor_id: recipient?.vendor_id, lines: [] };
+    const list = group.lines;
     list.push({
       sales_order_id: order.id,
       sales_order_no: order.sales_order_no,
@@ -196,20 +215,21 @@ export function buildPurchaseOrdersFromSalesOrder(order: LocalSalesOrder) {
       hs_code: line.hs_code || "",
       weight_kg: line.weight_kg ?? null,
       supplier_name: name,
+      ...(recipient && sourceName !== name ? { source_supplier_name: sourceName } : {}),
       buy_price: requireUnitPrice(line.buy_price, true),
       line_total: multiplyMoney(requireUnitPrice(line.buy_price, true), requireQuantity(line.qty)),
       origin: line.origin,
       notes: line.notes,
     });
-    grouped.set(key, list);
+    grouped.set(key, group);
   });
 
-  const orders = Array.from(grouped.entries()).map(([key, lines]) => {
-    const supplier_name = lines[0]?.supplier_name || "Unassigned Supplier";
+  const orders = Array.from(grouped.values()).map(({ supplier_name, vendor_id, lines }) => {
     return {
       id: makeId("po"),
+      ...(vendor_id ? { vendor_id } : {}),
       supplier_name,
-      supplier_key: key,
+      supplier_key: supplierKey(supplier_name),
       purchase_company: order.purchase_company,
       sales_order_id: order.id,
       sales_order_no: order.sales_order_no,

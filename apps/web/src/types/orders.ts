@@ -41,6 +41,12 @@ export type LocalSalesOrder = {
   lines: QuoteBuilderLine[];
 };
 
+export type PurchaseOrderVendorRecipient = {
+  requested_supplier_name: string;
+  supplier_name: string;
+  vendor_id: string;
+};
+
 export type LocalPurchaseOrderLine = {
   sales_order_id: string;
   sales_order_no: string;
@@ -53,6 +59,7 @@ export type LocalPurchaseOrderLine = {
   hs_code: string;
   weight_kg: number | null;
   supplier_name: string;
+  source_supplier_name?: string;
   buy_price: number;
   line_total: number;
   origin: string;
