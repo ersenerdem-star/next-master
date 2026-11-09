@@ -3925,7 +3925,7 @@ export function QuotesPage({
             </div>
             <div className="modal-hint">
               {t("sales.orders.modalCustomerAmount", {
-                customer: pendingConfirmedOrder.customer_name || "-",
+                customerName: pendingConfirmedOrder.customer_name || "-",
                 amount: formatMoney(pendingConfirmedOrder.sales_total, pendingConfirmedOrder.currency),
               })}
             </div>
