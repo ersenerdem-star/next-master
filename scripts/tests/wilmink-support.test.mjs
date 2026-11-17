@@ -66,9 +66,22 @@ test('one Wilmink WG article under two SEO URLs is one source record, not a dupl
  let checkpoint={page:{urls},captured:[first,{...first,sourceUrl:urls[1]}]},completed;
  const job={id:'job',lease_token:'token',mode:'stage',manifest:{adapter:'wilmink-support-discovery.v1',brand:'Elring',source_key:'wilmink_elring_support_v1',urls}};
  const source={is_active:true,license_posture:'internal_review_required',credential_boundary:'none',rate_limit_posture:'bounded',metadata:{brand_engine_read_allowed:true,allowed_brands:['Elring']}};
- const db={rpc:async(name,args)=>{if(name==='checkpoint_catalog_brand_job')checkpoint=structuredClone(args.input_checkpoint);if(name==='complete_catalog_wilmink_support')completed=args;return {data:{}};},from(table){const q={select(){return q;},eq(){return q;},single:async()=>({data:table==='catalog_external_sources'?source:table==='brands'?{id:'brand'}:{checkpoint}}),then(resolve){resolve({data:[{id:'p',product_code:'750.330',ean:'9999999999999'}]});}};return q;}};
+ const db={rpc:async(name,args)=>{if(name==='checkpoint_catalog_brand_job')checkpoint=structuredClone(args.input_checkpoint);if(name==='complete_catalog_wilmink_support'){assert.equal(args.input_products.length,args.input_page.urls.length);assert.deepEqual(args.input_products.map(x=>x.sourceUrl),args.input_page.urls);completed=args;}return {data:{}};},from(table){const q={select(){return q;},eq(){return q;},single:async()=>({data:table==='catalog_external_sources'?source:table==='brands'?{id:'brand'}:{checkpoint}}),then(resolve){resolve({data:[{id:'p',product_code:'750.330',ean:'9999999999999'}]});}};return q;}};
  const result=await runWilminkDiscovery({db,organizationId:'org',job,readHtml:async()=>html});
- assert.equal(result.status,'reviewed');assert.equal(completed.input_products.length,1);
+ assert.equal(result.status,'reviewed');assert.equal(completed.input_products.length,2);
  assert.equal(completed.input_products[0].code,'750.330');
  assert.notEqual(completed.input_products[0].unavailable,'WILMINK_DUPLICATE_ARTICLE');
+ assert.equal(completed.input_products[1].unavailable,'WILMINK_DUPLICATE_SOURCE_ALIAS');
+ assert.deepEqual(completed.input_products.map(x=>x.sourceUrl),urls);
+});
+test('a shortened or misordered saved receipt restarts the page before continuing',async()=>{
+ const html=readFileSync(new URL('./fixtures/wilmink-elring-product.html',import.meta.url),'utf8');
+ const urls=['https://www.wilminkengineparts.com/en/shaft-seal-crankshaft/wg1194774','https://www.wilminkengineparts.com/en/shaft-seal/wg1194774'];
+ let checkpoint={page:{urls},captured:[{sourceUrl:urls[1]}]},completed;
+ const job={id:'job',lease_token:'token',mode:'stage',manifest:{adapter:'wilmink-support-discovery.v1',brand:'Elring',source_key:'wilmink_elring_support_v1',urls}};
+ const source={is_active:true,license_posture:'internal_review_required',credential_boundary:'none',rate_limit_posture:'bounded',metadata:{brand_engine_read_allowed:true,allowed_brands:['Elring']}};
+ const db={rpc:async(name,args)=>{if(name==='checkpoint_catalog_brand_job')checkpoint=structuredClone(args.input_checkpoint);if(name==='complete_catalog_wilmink_support')completed=args;return {data:{}};},from(table){const q={select(){return q;},eq(){return q;},single:async()=>({data:table==='catalog_external_sources'?source:table==='brands'?{id:'brand'}:{checkpoint}}),then(resolve){resolve({data:[{id:'p',product_code:'750.330',ean:'9999999999999'}]});}};return q;}};
+ const result=await runWilminkDiscovery({db,organizationId:'org',job,readHtml:async u=>{if(u===urls[1])throw Error('WILMINK_HTTP_404');return html;}});
+ assert.equal(result.status,'reviewed');assert.deepEqual(completed.input_products.map(x=>x.sourceUrl),urls);
+ assert.equal(completed.input_products[1].unavailable,'WILMINK_HTTP_404');
 });

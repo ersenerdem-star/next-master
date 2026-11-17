@@ -28,6 +28,9 @@ export async function runWilminkDiscovery({db,organizationId,job,maxMs=210000,re
   if(source.error||found.error)throw Error('WILMINK_SOURCE_UNAVAILABLE');
   if(!([WILMINK_SCAN,WILMINK_SUPPORT_SCAN].includes(job.manifest.adapter))||(!support&&config.brand!=='Kolbenschmidt')||job.manifest.brand!==config.brand||job.manifest.source_key!==config.sourceKey||job.mode!=='stage'||!source.data.is_active||!['allowed','internal_review_required'].includes(source.data.license_posture)||source.data.credential_boundary!=='none'||source.data.rate_limit_posture!=='bounded'||source.data.metadata?.brand_engine_read_allowed!==true||!source.data.metadata?.allowed_brands?.includes(config.brand))throw Error('WILMINK_SOURCE_UNAVAILABLE');
   const brand=await db.from('brands').select('id').eq('organization_id',organizationId).eq('name',config.brand).single();if(brand.error)throw Error('WILMINK_BRAND_UNAVAILABLE');
+  // Older workers shortened the saved receipt when the same WG article had
+  // multiple URLs. Restart only this page if its ordered receipt is damaged.
+  if(checkpoint.page&&(!Array.isArray(checkpoint.page.urls)||!Array.isArray(checkpoint.captured)||checkpoint.captured.length>checkpoint.page.urls.length||checkpoint.captured.some((v:any,i:number)=>v.sourceUrl!==checkpoint.page.urls[i]))){checkpoint={};await save();}
   if(!checkpoint.page){const page=job.manifest.urls?{pageUrl:null,page:null,pageFingerprint:createHash('sha256').update(JSON.stringify(job.manifest.urls)).digest('hex'),urls:job.manifest.urls,nextUrl:null,lastPage:null}:parseWilminkBrandPage(await read(job.manifest.page_url),job.manifest.page_url,config.brand);checkpoint={page,captured:[]};await save();}
   for(let n=checkpoint.captured.length;n<checkpoint.page.urls.length;n++){
    await rpc('heartbeat_catalog_brand_job',scope);const url=checkpoint.page.urls[n];
@@ -44,11 +47,11 @@ export async function runWilminkDiscovery({db,organizationId,job,maxMs=210000,re
   // The same Wilmink WG article can appear under several SEO slugs. Treat
   // identical article/EAN aliases as one source record before checking whether
   // a manufacturer code really maps to multiple distributor articles.
-  {const aliases=new Set<string>();checkpoint.captured=checkpoint.captured.filter((v:any)=>{
-    if(!v.code||!v.sourceSku||!v.sourceFields?.ean||v.unavailable)return true;
+  {const aliases=new Set<string>();checkpoint.captured=checkpoint.captured.map((v:any)=>{
+    if(!v.code||!v.sourceSku||!v.sourceFields?.ean||v.unavailable)return v;
     const identity=`${v.code}|${v.sourceSku}|${v.sourceFields.ean}`;
-    if(aliases.has(identity))return false;
-    aliases.add(identity);return true;
+    if(aliases.has(identity))return {sourceUrl:v.sourceUrl,code:v.code,unavailable:'WILMINK_DUPLICATE_SOURCE_ALIAS'};
+    aliases.add(identity);return v;
    });
    const counts=new Map<string,number>();for(const v of checkpoint.captured)if(v.code&&!v.unavailable)counts.set(v.code,(counts.get(v.code)||0)+1);
    for(const v of checkpoint.captured)if((counts.get(v.code)||0)>1){v.fields={};v.unavailable='WILMINK_DUPLICATE_ARTICLE';}
