@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {PGlite} from '@electric-sql/pglite';import {readFile} from 'node:fs/promises';
-const sql=await readFile(new URL('../../supabase/migrations/20261117093404_knorr_guarded_catalog_creation.sql',import.meta.url),'utf8');
+const sql=await readFile(new URL('../../supabase/migrations/20261117115938_knorr_guarded_catalog_creation.sql',import.meta.url),'utf8');
 const org='00000000-0000-0000-0000-000000000001',brand='00000000-0000-0000-0000-000000000002',token='00000000-0000-0000-0000-000000000003';
 const job=n=>`00000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 const fields={description:'Brake',ean:'4068078109397'};
@@ -19,7 +19,7 @@ test('conflicting writer is held without overwriting existing catalog or price',
 test('mismatched untrusted evidence cannot create a product',async()=>{const db=await setup();await add(db,job(3),{...observation,sourceUrl:'https://evil.example/p/K031740N00'});await assert.rejects(call(db,job(3)),/observation invalid/);assert.equal((await db.query('select count(*)::int n from public.catalog_products')).rows[0].n,0);await db.close();});
 test('obsolete or unknown source status cannot silently become an active product',async()=>{for(const status of ['CODE10','CODE20',null]){const db=await setup();await add(db,job(4),{...observation,lifecycle:{evidence:{salesStatusCode:status}}});await assert.rejects(call(db,job(4)),/observation invalid/);assert.equal((await db.query('select count(*)::int n from catalog_products')).rows[0].n,0);await db.close()}});
 test('publication rechecks source ownership and holds a conflicting existing product',async()=>{
- const db=await setup();await db.exec(`create function public.apply_catalog_brand_job_item(uuid,uuid,uuid,integer) returns jsonb language plpgsql as $$begin raise exception 'must not write';end$$;`);await db.exec(await readFile(new URL('../../supabase/migrations/20261117103501_knorr_discovery_automatic_application.sql',import.meta.url),'utf8'));
+ const db=await setup();await db.exec(`create function public.apply_catalog_brand_job_item(uuid,uuid,uuid,integer) returns jsonb language plpgsql as $$begin raise exception 'must not write';end$$;`);await db.exec(await readFile(new URL('../../supabase/migrations/20261117115949_knorr_discovery_automatic_application.sql',import.meta.url),'utf8'));
  const id=job(9),product='00000000-0000-0000-0000-000000000010';await db.query('update catalog_external_sources set metadata=metadata||$1::jsonb',[JSON.stringify({automatic_apply:true,automatic_application_policy:'knorr-official-missing-only.v1',automatic_application_approval_reference:'test'})]);
  await db.query('insert into catalog_products(id,organization_id,brand_id,product_code,description) values($1,$2,$3,$4,$5)',[product,org,brand,'K031740N00','existing']);
  await db.query('insert into catalog_product_source_records values($1,$2,$3,$4,$5,$6,$7)',[org,product,'knorr_bremse_aftermarket','https://mytruckservices.knorr-bremse.com/p/K031740N-00','K031740N-00','v1','a'.repeat(64)]);
@@ -40,7 +40,7 @@ test('existing canonical product safely resynchronizes punctuated official ident
  create function public.normalize_part_code(text) returns text language sql immutable as $$select regexp_replace(upper($1),'[^A-Z0-9]','','g')$$;
  create function public.apply_catalog_brand_job_item(uuid,uuid,uuid,integer) returns jsonb language plpgsql as $$begin raise exception 'unexpected generic path';end$$;`);
  await db.query('update catalog_external_sources set metadata=metadata||$1::jsonb',[JSON.stringify({allowed_evidence_hosts:['mytruckservices.knorr-bremse.com']})]);
- await db.exec(await readFile(new URL('../../supabase/migrations/20261117115102_knorr_existing_canonical_resync.sql',import.meta.url),'utf8'));
+ await db.exec(await readFile(new URL('../../supabase/migrations/20261117115952_knorr_existing_canonical_resync.sql',import.meta.url),'utf8'));
  const product=job(31),id=job(32),raw='0-0927768-3';
  await db.query('insert into catalog_products(id,organization_id,brand_id,product_code) values($1,$2,$3,$4)',[product,org,brand,'009277683']);
  const before=(await db.query('select * from catalog_products where id=$1',[product])).rows[0];

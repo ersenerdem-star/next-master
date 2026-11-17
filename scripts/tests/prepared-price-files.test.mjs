@@ -127,7 +127,7 @@ test('event schedule honors future manual and published dates, retry backoff, an
  const db=await fixture();try{
   await db.exec(`create schema supplier_manual_price_internal;
    create table supplier_manual_price_internal.entries(organization_id uuid,brand_id uuid,active boolean,valid_from date);`);
-  await db.exec(await readFile('supabase/migrations/20261115115050_prepared_price_event_schedule.sql','utf8'));
+  await db.exec(await readFile('supabase/migrations/20261115115312_prepared_price_event_schedule.sql','utf8'));
   await admit(db);
   await db.exec("update app_export_jobs set status='finalized'; update prepared_price_export_profiles set next_check_at='epoch'");
   const claim=async()=>(await db.query('select * from claim_prepared_price_profile()')).rows[0];
@@ -163,7 +163,7 @@ test('manual-only brands require an active effective price and enabled supplier'
    create function public.supplier_price_usage_enabled(uuid,uuid) returns boolean language sql as 'select true';
    create schema supplier_manual_price_internal;
    create table supplier_manual_price_internal.entries(organization_id uuid,brand_id uuid,supplier_id uuid,active boolean,valid_from date,buy_price numeric,currency text,exact_code text,product_code text);`);
-  await db.exec(await readFile('supabase/migrations/20261115115218_prepared_price_manual_brand_support.sql','utf8'));
+  await db.exec(await readFile('supabase/migrations/20261115115319_prepared_price_manual_brand_support.sql','utf8'));
   await db.query("insert into suppliers(id,organization_id,name) values($1,$2,'fixture')",[supplier,org]);
   await db.query("insert into supplier_manual_price_internal.entries values($1,$2,$3,true,current_date+1,10,'EUR','A','A')",[org,brand,supplier]);
   const count=async()=>(await db.query('select count(*)::int n from cloud_admin_price_list_brands($1)',[org])).rows[0].n;
@@ -179,7 +179,7 @@ test('manual-only brands require an active effective price and enabled supplier'
 
 test('shared price files issue isolated receipts only for identical current price scope',async()=>{
  const db=await fixture();try{
-  await db.exec(await readFile('supabase/migrations/20261115124557_shared_prepared_customer_price_artifacts.sql','utf8'));
+  await db.exec(await readFile('supabase/migrations/20261115124854_shared_prepared_customer_price_artifacts.sql','utf8'));
   const src=await version(db), original={...scope,sourceVersion:src,inviteId:id(21),customerId:id(22),currency:'EUR',marginPercent:10};
   const first=(await db.query("select admit_prepared_price_list_export($1,null,'portal','portal_price_list',$2,'owner-key','owner-version') result",[org,original])).rows[0].result.job;
   const path=org+'/fixture/shared.xlsx';
@@ -203,8 +203,8 @@ test('shared price files issue isolated receipts only for identical current pric
 
 test('cold shared work creates one leader, isolated followers, and propagates completion or failure',async()=>{
  const db=await fixture();try{
-  await db.exec(await readFile('supabase/migrations/20261115124557_shared_prepared_customer_price_artifacts.sql','utf8'));
-  await db.exec(await readFile('supabase/migrations/20261115131043_shared_portal_cold_export_coalescing.sql','utf8'));
+  await db.exec(await readFile('supabase/migrations/20261115124854_shared_prepared_customer_price_artifacts.sql','utf8'));
+  await db.exec(await readFile('supabase/migrations/20261115131645_shared_portal_cold_export_coalescing.sql','utf8'));
   const src=await version(db), base={...scope,sourceVersion:src,inviteId:id(21),customerId:id(22),currency:'EUR',marginPercent:10};
   const start=async(s,key)=>(await db.query('select admit_shared_portal_price_work($1,$2,$3,$4) r',[org,s,key,`version-${key}`])).rows[0].r.job;
   const a=await start(base,'a');const b=await start({...base,inviteId:id(31),customerId:id(32)},'b');
@@ -229,8 +229,8 @@ test('cold shared work creates one leader, isolated followers, and propagates co
 
 test('cold followers fail closed on source change and recover from an expired leader',async()=>{
  const db=await fixture();try{
-  await db.exec(await readFile('supabase/migrations/20261115124557_shared_prepared_customer_price_artifacts.sql','utf8'));
-  await db.exec(await readFile('supabase/migrations/20261115131043_shared_portal_cold_export_coalescing.sql','utf8'));
+  await db.exec(await readFile('supabase/migrations/20261115124854_shared_prepared_customer_price_artifacts.sql','utf8'));
+  await db.exec(await readFile('supabase/migrations/20261115131645_shared_portal_cold_export_coalescing.sql','utf8'));
   const src=await version(db),base={...scope,sourceVersion:src,inviteId:id(21),customerId:id(22),currency:'EUR',marginPercent:10};
   const start=async(s,key)=>(await db.query('select admit_shared_portal_price_work($1,$2,$3,$4) r',[org,s,key,`version-${key}`])).rows[0].r.job;
   const leader=await start(base,'leader');const follower=await start({...base,inviteId:id(31),customerId:id(32)},'follower');

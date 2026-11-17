@@ -1,7 +1,8 @@
 import type { Config } from "@netlify/functions";
 import { getJson, json, serviceRoleHeaders } from "./_shared/http.mts";
 import { dispatchV3PriceExportWorker, isProductionExportPaused, required } from "./_shared/v3-export-dispatch.mts";
-import { prewarmPreparedPriceFile, runPreparedPricePrewarmBatch } from "./_shared/prepared-price-prewarm.mts";
+import { dispatchAdminExportWorker } from "./_shared/admin-export-worker.mts";
+import { prewarmPreparedAdminExportFile, prewarmPreparedPriceFile, runPreparedPricePrewarmBatch } from "./_shared/prepared-price-prewarm.mts";
 import {
   isExactExportRecoveryTarget,
   recoverV3ExportJobs,
@@ -39,9 +40,13 @@ export default async (_request: Request) => {
         (jobId) => dispatchV3PriceExportWorker(dispatchRequest, jobId)),
       { deadlineMs: prewarmDeadline },
     );
+    const preparedAdminExport = preparedPrice.prepared === 0 && Date.now() < prewarmDeadline
+      ? await prewarmPreparedAdminExportFile(target.supabaseUrl!, serviceRoleKey, (jobId) => dispatchAdminExportWorker(dispatchRequest, jobId))
+      : { status: "budget_exhausted", prepared: 0, reused: 0, failed: 0 };
+    console.info("prepared admin export tick", preparedAdminExport);
     console.info("v3 export recovery tick", result);
     console.info("prepared price file tick", preparedPrice);
-    return json({ ok: true, ...result, preparedPrice });
+    return json({ ok: true, ...result, preparedPrice, preparedAdminExport });
   } catch (error) {
     console.error("v3 export recovery tick failed", error);
     return json({ ok: false, error: "V3_EXPORT_RECOVERY_FAILED" }, 500);

@@ -21,7 +21,7 @@ test('manual price writes are authorized, tenant-scoped, audited and do not alte
    create function public.current_profile_role() returns text language sql as $$select 'viewer'::text$$;
    create function public.profile_has_permission(text) returns boolean language sql as $$select false$$;
    create function public.normalize_catalog_product_code(text) returns text language sql immutable as $$select upper(regexp_replace(trim($1),'[[:space:]]+','','g'))$$;`);
-  await db.exec((await readFile('supabase/migrations/20261112125119_manual_supplier_price_overlay.sql','utf8')).split('-- Exact, active manual prices')[0]);
+  await db.exec((await readFile('supabase/migrations/20261112133448_manual_supplier_price_overlay.sql','utf8')).split('-- Exact, active manual prices')[0]);
   await db.query('insert into organizations values ($1),($2)',[id(1),id(2)]);
   await db.query('insert into profiles values ($1)',[id(3)]);
   await db.query('insert into suppliers values ($1,$2,true),($3,$4,true)',[id(4),id(1),id(5),id(2)]);

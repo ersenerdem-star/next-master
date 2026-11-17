@@ -65,7 +65,7 @@ test('switch removes legacy and published sources before ranking; preserves poin
 
 test('manual price overrides only its exact supplier and leaves published list intact',async()=>{
  await db.exec("create table if not exists public.prepared_price_catalog_versions(organization_id uuid,brand_id uuid,revision bigint); create table if not exists public.prepared_price_catalog_global_version(singleton boolean,revision bigint); insert into public.prepared_price_catalog_global_version values(true,0)");
- await db.exec(await readFile(dir+'20261112125119_manual_supplier_price_overlay.sql','utf8'));
+ await db.exec(await readFile(dir+'20261112133448_manual_supplier_price_overlay.sql','utf8'));
  const before=(await query('select release_id from supplier_current_price_pointers where supplier_id=$1',[pub])).rows[0].release_id;
  const versionsBefore=(await query('select get_supplier_price_export_version($1,$2,$3) s,get_prepared_price_list_export_version($1,$3) p',[org,pub,brand])).rows[0];
  await query('select save_manual_supplier_price($1,$2,$3,$4,current_date)',[pub,brand,'SKU1',12]);

@@ -37,7 +37,7 @@ async function activate(db){
  await db.exec(readFileSync(new URL('../../supabase/migrations/20261023114529_catalog_wilmink_autonomous_completion.sql',import.meta.url),'utf8'));
  await db.exec(readFileSync(new URL('../../supabase/migrations/20261023120415_catalog_wilmink_progress.sql',import.meta.url),'utf8'));
  await db.exec(`create function public.admit_catalog_knorr_application() returns jsonb language plpgsql as $$begin perform 1 from public.catalog_brand_jobs child join public.catalog_brand_jobs parent on parent.id::text=child.manifest->>'discovery_job' where false;return null;end$$;`);
- await db.exec(readFileSync(new URL('../../supabase/migrations/20261117122420_catalog_dispatch_parent_lookup_performance.sql',import.meta.url),'utf8'));
+ await db.exec(readFileSync(new URL('../../supabase/migrations/20261117122504_catalog_dispatch_parent_lookup_performance.sql',import.meta.url),'utf8'));
 }
 test('autonomous admission queues only sealed owner-approved packages, preserves facts and prices, and is idempotent',async()=>{const db=await setup();try{
  const {j,page,product}=await supportReady(db);const sealed=await rpc(db,'complete_catalog_wilmink_support',[org,j.id,j.lease_token,page,[product]]);

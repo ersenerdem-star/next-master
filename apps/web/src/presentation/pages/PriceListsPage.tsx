@@ -120,9 +120,10 @@ export function PriceListsPage() {
         setStatus(`${t("sales.priceLists.preparingDownload", { listType: downloadListType, brandName })}${progress}`);
       });
       await downloadExportJob(readyJob.id);
-      setStatus(t("sales.priceLists.downloaded", { listType: downloadListType, brandName }));
+      const downloadedMessage = t("sales.priceLists.downloaded", { listType: downloadListType, brandName });
+      setStatus(downloadedMessage);
       setStatusTone("success");
-      actionFeedback.clear();
+      actionFeedback.succeed(downloadedMessage);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : t("sales.priceLists.downloadFailed");
       setStatus(message);
