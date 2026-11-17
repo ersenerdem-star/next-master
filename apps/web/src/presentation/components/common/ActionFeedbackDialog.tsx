@@ -23,11 +23,12 @@ export function getActionFeedbackCopy(kind: ActionFeedbackKind, message: string)
 }
 
 /** One viewport-level presentation for admin and portal; never inside a scaled page. */
-export function ActionFeedbackDialog({ kind, message, title, onClose }: {
+export function ActionFeedbackDialog({ kind, message, title, onClose, progress }: {
   kind: ActionFeedbackKind;
   message: string;
   title?: string;
   onClose?: () => void;
+  progress?: number | null;
 }) {
   const ui=useInterfaceText();
   const id = useId();
@@ -84,6 +85,7 @@ export function ActionFeedbackDialog({ kind, message, title, onClose }: {
           <span className="action-feedback__eyebrow">{ui(copy.eyebrow)}</span>
           <strong id={`${id}-title`}>{ui(title || copy.title)}</strong>
           <span id={`${id}-message`} role={kind === "progress" ? "status" : undefined} aria-live={kind === "progress" ? "polite" : undefined}>{ui(message)}</span>
+          {kind === "progress" && progress != null ? <progress className="action-feedback__progress" aria-label={ui("Download progress")} max={100} value={Math.max(0, Math.min(100, progress))} /> : null}
           {copy.helper ? <small>{ui(copy.helper)}</small> : null}
           {dismissible ? <div className="action-feedback__actions">
             <button type="button" className="action-feedback__button" onClick={onClose}><InterfaceText text={"Close"}/></button>

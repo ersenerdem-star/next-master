@@ -13,6 +13,7 @@ export const SPARETO_BRAND_SEARCH_URLS=Object.freeze({
  DENSO:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=DENSO',
  DELPHI:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=DELPHI',
  MAHLE:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=MAHLE',
+ 'KNORR-BREMSE':'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=Knorr-Bremse',
  GLYCO:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=GLYCO',
  GOETZE:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=GOETZE',
  NURAL:'https://spareto.com/products?utf8=%E2%9C%93&sort_by=&brand%5B%5D=N%C3%9CRAL',

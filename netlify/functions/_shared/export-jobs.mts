@@ -1311,6 +1311,12 @@ export function assertPortalExportJobCurrentContract(job: ExportJobRow, invite: 
   }
 }
 
+export async function failOrphanSharedPortalFollower(supabaseUrl: string, serviceRoleKey: string, organizationId: string, jobId: string) {
+  return rpcJson<ExportJobRow | null>(supabaseUrl, serviceRoleKey, "fail_orphan_shared_portal_follower", {
+    input_organization_id: organizationId, input_job_id: jobId,
+  }, 15_000);
+}
+
 export async function assertPortalExportJobCurrentContext(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -1421,11 +1427,16 @@ export async function startPortalPriceListExport(
     scope,
     dataVersion,
   });
-  const admitted = await admitPreparedPriceListExport(supabaseUrl, serviceRoleKey, context.organizationId, null,
-    "portal", exportType, scope, cacheKey, dataVersion,
-    () => getPortalPriceListDataVersion(supabaseUrl, serviceRoleKey, context, invite));
-  assertPortalExportJobForInvite(admitted.job, invite);
-  return admitted;
+  // The workbook carries no customer identity. Match the full server-derived
+  // pricing/source scope, then create a separate receipt for this invite.
+  const shared = await rpcJson<{ job: ExportJobRow; cached: boolean }>(
+    supabaseUrl, serviceRoleKey, "admit_shared_portal_price_work", {
+      input_organization_id: context.organizationId, input_scope: scope,
+      input_cache_key: cacheKey, input_data_version: dataVersion,
+    }, 15_000,
+  );
+  assertPortalExportJobForInvite(shared.job, invite);
+  return shared;
 }
 
 async function admitPreparedPriceListExport(
@@ -1716,6 +1727,7 @@ export async function runPortalPriceListExportJob(
   }
 
   const scope = job.scope || {};
+  if (scope.sharedLeaderJobId) throw new Error("Shared price follower cannot run an export worker.");
   const inviteId = String(scope.inviteId || "");
   const brandId = String(scope.brandId || "");
   const brandName = String(scope.brandName || "");

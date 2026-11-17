@@ -31,6 +31,7 @@ export type RecoveryJob = {
   updated_at: string | null;
   expires_at: string | null;
   worker_lease_expires_at: string | null;
+  scope?: { sharedLeaderJobId?: string } | null;
 };
 
 const PRICE_EXPORTS = [
@@ -66,10 +67,11 @@ export function recoveryQueryUrls(nowMs: number, databaseUrl = V3_EXPORT_STAGING
   const now = new Date(nowMs).toISOString();
   return PRICE_EXPORTS.flatMap(({ audience, exportType }) => ["queued", "running"].map((status) => {
     const url = new URL("/rest/v1/app_export_jobs", databaseUrl);
-    url.searchParams.set("select", "id,audience,export_type,status,updated_at,expires_at,worker_lease_expires_at");
+    url.searchParams.set("select", "id,audience,export_type,status,updated_at,expires_at,worker_lease_expires_at,scope");
     url.searchParams.set("audience", `eq.${audience}`);
     url.searchParams.set("export_type", `eq.${exportType}`);
     url.searchParams.set("status", `eq.${status}`);
+    url.searchParams.set("scope->>sharedLeaderJobId", "is.null");
     url.searchParams.set("updated_at", `lte.${new Date(nowMs - (status === "queued" ? STALE_QUEUED_MS : STALE_RUNNING_MS)).toISOString()}`);
     url.searchParams.set("expires_at", `gt.${now}`);
     url.searchParams.set("or", `(worker_lease_expires_at.is.null,worker_lease_expires_at.lte.${now})`);
@@ -86,7 +88,7 @@ function isRecoverable(job: RecoveryJob, nowMs: number) {
   const leaseExpires = job.worker_lease_expires_at == null ? -Infinity : Date.parse(job.worker_lease_expires_at);
   const staleMs = job.status === "queued" ? STALE_QUEUED_MS : job.status === "running" ? STALE_RUNNING_MS : Infinity;
   return /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(job.id)
-    && validType && Number.isFinite(updated) && updated <= nowMs - staleMs
+    && validType && !job.scope?.sharedLeaderJobId && Number.isFinite(updated) && updated <= nowMs - staleMs
     && Number.isFinite(expires) && expires > nowMs
     && leaseExpires <= nowMs;
 }

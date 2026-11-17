@@ -6,7 +6,7 @@ import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
 import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
 import { sanitizeUserFacingError } from "./_shared/user-message.mts";
-import { runPortalPriceListExportJob, startPortalPriceListExport, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
+import { assertPortalExportJobCurrentContract, createExportArtifactSignedDownload, runPortalPriceListExportJob, startPortalPriceListExport, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
 import { dispatchV3PriceExportWorker, isProductionExportPaused, isV3ExportBridgeEnabled } from "./_shared/v3-export-dispatch.mts";
 
 export default async (req: Request, context: Context) => {
@@ -55,7 +55,7 @@ export default async (req: Request, context: Context) => {
       hostname: getPortalRequestHostname(req),
     });
     const { job, cached } = await startPortalPriceListExport(supabaseUrl, serviceRoleKey, invite, { brand });
-    if (job.status === "queued") {
+    if (job.status === "queued" && !job.scope?.sharedLeaderJobId) {
       if (isV3ExportBridgeEnabled()) {
         context.waitUntil(dispatchV3PriceExportWorker(req, job.id).catch((error) => {
           console.error("portal export worker dispatch failed", job.id, error);
@@ -76,7 +76,27 @@ export default async (req: Request, context: Context) => {
       status: "ok",
       details: { brand, exportType, jobId: job.id, cached },
     });
-    return json({ ok: true, job: toPublicExportJobStatus(job, cached) }, 200, {
+    // A ready, freshly admitted job has already resolved the same invite and
+    // current price context. Sign it here to avoid authenticating and looking
+    // up that same job a second time. If signing fails, the existing download
+    // endpoint remains available as a bounded fallback.
+    let download: Awaited<ReturnType<typeof createExportArtifactSignedDownload>> | undefined;
+    if (job.status === "finalized") {
+      try {
+        assertPortalExportJobCurrentContract(job, invite);
+        download = await createExportArtifactSignedDownload(supabaseUrl, serviceRoleKey, job);
+        void writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
+          organizationId: invite.organization_id, inviteId: invite.id, partyType: invite.party_type,
+          email: invite.email, eventType: "portal_export_download", status: "ok",
+          details: { jobId: job.id, rowCount: job.row_count },
+        });
+      } catch {
+        // The normal download endpoint repeats the same checks and reports a
+        // safe error if the artifact is unavailable.
+      }
+    }
+    return json({ ok: true, job: toPublicExportJobStatus(job, cached), ...(download ? { download } : {}) }, 200, {
+      "Cache-Control": "no-store",
       "Set-Cookie": buildPortalSessionCookie(nextSessionToken),
     });
   } catch (error) {

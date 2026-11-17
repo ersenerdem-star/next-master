@@ -26,7 +26,7 @@ export function supplierOfficialProvider(brand:string){
 export function safeSupplierOfficialObservation(value:any,code:string,brandId:string){
  if(value?.code!==exactCatalogCode(code)||typeof value.sourceUrl!=='string')throw Error('OFFICIAL_OBSERVATION_IDENTITY_INVALID');
  const u=new URL(value.sourceUrl);
- if(u.protocol!=='https:'||!['aftermarket.zf.com','ps.emea.dxtservice.com','www.mann-filter.com','web.tecalliance.net','www.denso-am.eu','automotive.skf.com','vehiclelifetimesolutions.schaeffler.com','www.delphiautoparts.com'].includes(u.hostname)||u.username||u.password)throw Error('OFFICIAL_OBSERVATION_SOURCE_INVALID');
+ if(u.protocol!=='https:'||!['aftermarket.zf.com','ps.emea.dxtservice.com','www.mann-filter.com','web.tecalliance.net','www.denso-am.eu','automotive.skf.com','vehiclelifetimesolutions.schaeffler.com','www.delphiautoparts.com','mytruckservices.knorr-bremse.com'].includes(u.hostname)||u.username||u.password)throw Error('OFFICIAL_OBSERVATION_SOURCE_INVALID');
  const fields=Object.fromEntries(CATALOG_FIELDS.filter(k=>value.fields?.[k]!=null).map(k=>[k,value.fields[k]]));
  const lifecycle=catalogLifecycleReview(value);
  return {fields,evidence:{authority:'official',code:exactCatalogCode(code),brandId,sourceUrl:u.href,

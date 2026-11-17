@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { createJobPriceSnapshotReader } from "../../../apps/engine/supplier-price-shadow/src/export/job-price-snapshot-reader.mjs";
 import { createExportArtifactStore } from "../../../apps/engine/supplier-price-shadow/src/export/shared-export-artifact.mjs";
 import { exportBinding, preparePriceExport, assemblePriceExport } from "../../../apps/engine/supplier-price-shadow/src/export/partitioned-price-export.mjs";
+import { createCompressedLocalParts } from "../../../apps/engine/supplier-price-shadow/src/export/compressed-local-parts.mjs";
 import { createDuckDbPagedExportSource, materializeSealedSnapshotWithDuckDB } from "../../../apps/engine/supplier-price-shadow/src/export/duckdb-export-source.mjs";
 import { resolvePortalPriceListExportContextFromDb } from "./v3-export-pricing-context.mts";
 import { createThrottledExportProgress } from "./v3-export-progress.mts";
@@ -173,6 +174,7 @@ export async function runV3PriceExportJob(jobId: string) {
   );
   const job = await fetchJob(supabaseUrl, serviceRoleKey, jobId);
   if (!job || !["queued", "running"].includes(String(job.status))) return { status: "ignored", reason: "job-not-queued" };
+  if (job.scope?.sharedLeaderJobId) return { status: "ignored", reason: "shared-price-follower" };
   if (!((job.audience === "admin" && job.export_type === "admin_price_list") || (job.audience === "portal" && job.export_type === "portal_price_list"))) {
     throw new Error("V3_EXPORT_TYPE_UNSUPPORTED");
   }
@@ -263,6 +265,9 @@ export async function runV3PriceExportJob(jobId: string) {
     }));
     if (leaseHeartbeatInFlight) await leaseHeartbeatInFlight;
     if (leaseHeartbeatError) throw leaseHeartbeatError;
+    // The sorted snapshot is complete and independently verified. Its input
+    // CSV is job-owned scratch and is no longer read by the remaining stages.
+    await rm(duckdbMaterialized.inputPath, { force: true });
     // This fenced write verifies that the same live lease still owns the job
     // after materialization, before any artifact can become downloadable.
     await patchJob(supabaseUrl, serviceRoleKey, job.id, {}, { leaseOwner });
@@ -290,9 +295,11 @@ export async function runV3PriceExportJob(jobId: string) {
         console.warn("V3_EXPORT_PROGRESS_RETRY", job.id);
       }
     };
-    const prepared = await measureStage('prepare-partitions', () => preparePriceExport({ input: spec, directory: duckdbExportDirectory, fetchPage: duckdbFetchPage, progress: localProgress }));
+    const partsStore = createCompressedLocalParts(duckdbExportDirectory, binding);
+    const prepared = await measureStage('prepare-partitions', () => preparePriceExport({ input: spec, directory: duckdbExportDirectory, partsStore, fetchPage: duckdbFetchPage, progress: localProgress }));
     if (!prepared?.manifest || prepared.manifest.rows !== spec.expectedRows) throw new Error("V3_EXPORT_PREPARED_METADATA_INVALID");
-    const receipt = await measureStage('assemble-xlsx', () => assemblePriceExport({ input: spec, directory: duckdbExportDirectory, progress: localProgress }));
+    await rm(duckdbMaterialized.sortedPath, { force: true });
+    const receipt = await measureStage('assemble-xlsx', () => assemblePriceExport({ input: spec, directory: duckdbExportDirectory, partsStore, progress: localProgress }));
     const ready = await measureStage('commit-artifact', () => artifact.commit({ file: join(duckdbExportDirectory!, receipt.file), receipt }));
     if (!ready || ready.contentType !== MIME || ready.rows !== spec.expectedRows) throw new Error("V3_EXPORT_RECEIPT_INVALID");
     const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");

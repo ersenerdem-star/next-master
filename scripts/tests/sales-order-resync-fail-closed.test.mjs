@@ -313,3 +313,11 @@ test('saved Continental PK belt resync canonicalizes brand, preserves requested 
  assert.deepEqual(calls,[['Continental CTAM','6PK1870']]);assert.equal(result[0].brand,'Continental CTAM');assert.equal(result[0].requestedCode,'6PK1870');assert.equal(result[0].buy_price,10);
  assert.equal(result[1].buy_price,priced.buy_price);assert.equal(result[1].qty,7);
 });
+
+
+test('keeping a customer selling price fills its missing supplier and buy price',async()=>{
+ const line={...savedLine('2004336240'),brand:'Bosch',supplier_name:'',buy_price:null,sell_price:7.11,supplierOptions:[],selectedSupplierKey:''};
+ const resync=makeResync(async({code})=>({resolved:{found:true,product_code:code,brand:'Bosch'},supplierOptions:[{supplier_id:'gnk',supplier_name:'GNK',buy_price:6.46,sell_price:8.00}]}));
+ const [result]=await resync([line],{...repriceOptions,keepPrices:true,hydrateMissingPricesIfKeepingPrices:true});
+ assert.equal(result.supplier_name,'GNK');assert.equal(result.buy_price,6.46);assert.equal(result.sell_price,7.11);assert.equal(line.buy_price,null);
+});

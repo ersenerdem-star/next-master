@@ -9,6 +9,8 @@ export async function continueCatalogBrand({result,...input}:any){
 export async function dispatchCatalogBrand({db,target,send=fetch,now=Date.now}:any){
  const admitted=await db.rpc('admit_catalog_wilmink_application',{});
  if(admitted.error)throw Error('BRAND_DISPATCH_ADMISSION_FAILED');
+ const knorr=await db.rpc('admit_catalog_knorr_application',{});
+ if(knorr.error)throw Error('KNORR_DISPATCH_ADMISSION_FAILED');
  const selected=await db.rpc('next_catalog_brand_dispatch',{});
  if(selected.error)throw Error('BRAND_DISPATCH_SELECTION_FAILED');
  const job=selected.data;if(!job)return {status:'idle'};
@@ -17,7 +19,7 @@ export async function dispatchCatalogBrand({db,target,send=fetch,now=Date.now}:a
   if(resumed.error)throw Error('BRAND_DISPATCH_RESUME_FAILED');
  }
  const time=String(now());
- const response=await send(target.portal+'/api/catalog-brand-worker-background',{method:'POST',redirect:'error',
+ const response=await send(target.portal+'/api/catalog-brand-worker-v2-background',{method:'POST',redirect:'error',
   headers:{'content-type':'application/json','x-catalog-time':time,'x-catalog-signature':brandDispatchSignature(target.key,job.id,job.organization_id,time)},
   body:JSON.stringify({jobId:job.id,organizationId:job.organization_id}),signal:AbortSignal.timeout(8000)});
  if(!response.ok)throw Error('BRAND_DISPATCH_HTTP_'+response.status);

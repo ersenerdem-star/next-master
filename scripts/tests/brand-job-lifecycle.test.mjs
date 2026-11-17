@@ -6,7 +6,7 @@ function fixture(brand='Denso',sourceKey='denso_official_v1',code='DCRI100360',c
  const source={source_key:sourceKey,is_active:true,license_posture:'internal_review_required',credential_boundary:'none',rate_limit_posture:'bounded',metadata:{brand_engine_read_allowed:true,allowed_brands:[brand]}};
  const row={id:'product-id',product_code:code,origin:'TR'};
  let index=0;
- const db={rpc:async(name,args)=>{if(name==='claim_catalog_brand_job')return {data:job};if(name==='checkpoint_catalog_brand_job')saves.push(structuredClone(args));return {data:{}};},from(table){const q={select(){return q;},eq(name,value){if(table==='catalog_brand_job_items'&&name==='item_index')index=value;return q;},single:async()=>({data:table==='catalog_external_sources'?source:table==='brands'?{id:'brand-id'}:{product_code:codes[index],observation:null}}),then(resolve){resolve({data:missingCodes.includes(codes[index])?[]:[{...row,product_code:codes[index]}]});}};return q;}};
+ const db={rpc:async(name,args)=>{if(name==='claim_catalog_brand_job')return {data:job};if(name==='checkpoint_catalog_brand_job')saves.push(structuredClone(args));return {data:{}};},from(table){const q={select(){return q;},limit(){return q;},eq(name,value){if(table==='catalog_brand_job_items'&&name==='item_index')index=value;return q;},single:async()=>({data:table==='catalog_external_sources'?source:table==='brands'?{id:'brand-id'}:{product_code:codes[index],observation:null}}),then(resolve){resolve({data:missingCodes.includes(codes[index])?[]:[{...row,product_code:codes[index]}]});}};return q;}};
  return {db,saves,source};
 }
 test('generic worker seals lifecycle coverage and directional candidates alongside exact official fields',async()=>{
@@ -37,4 +37,57 @@ test('an official access denial stops at the same cursor rather than being mista
  const {db,saves}=fixture('Denso','denso_official_v1','DCRI100360',['DCRI100360','DCRI100510']);let requests=0;
  const result=await runBrandJob({db,organizationId:org,jobId,delayMs:0,providerFactory:()=>({fetch:async()=>{requests++;throw Error('DENSO_HTTP_403');}})});
  assert.equal(result.status,'failed');assert.equal(requests,1);assert.equal(saves.at(-1).input_advance,false);assert.equal(saves.at(-1).input_observation,null);
+});
+test('Knorr brand job records exact Spareto candidates after official evidence without changing official patch',async()=>{
+ const {db,saves,source}=fixture('Knorr-Bremse','knorr_bremse_aftermarket','K031740N00');source.metadata.secondary_spareto_read_allowed=true;
+ const official={code:'K031740N00',sourceUrl:'https://mytruckservices.knorr-bremse.com/p/K031740N00',fields:{description:'Brake',ean:'4068078109397'}};
+ let secondaryCalls=0;
+ const r=await runBrandJob({db,organizationId:org,jobId,delayMs:0,providerFactory:()=>({fetch:async()=>official}),fetchSecondary:async({expectedEan})=>{secondaryCalls++;assert.equal(expectedEan,official.fields.ean);return {brand:'Knorr-Bremse',code:official.code,sourceUrl:'https://spareto.com/products/example',fingerprint:'evidence',observedAt:new Date().toISOString(),exactIdentity:true,fields:{ean:expectedEan,oem_no:'OE-1',vehicle:'DAF',weight_kg:12}};}});
+ assert.equal(r.status,'reviewed');const obs=saves[0].input_observation;assert.equal(secondaryCalls,1);assert.deepEqual(obs.secondary.fields,{oem_no:'OE-1',vehicle:'DAF'});assert.equal(obs.secondary.canonicalWrite,false);assert.equal(obs.fields.oem_no,undefined);
+});
+test('Knorr secondary source failure preserves the official observation',async()=>{
+ const {db,saves,source}=fixture('Knorr-Bremse','knorr_bremse_aftermarket','K031740N00');source.metadata.secondary_spareto_read_allowed=true;
+ const r=await runBrandJob({db,organizationId:org,jobId,delayMs:0,providerFactory:()=>({fetch:async()=>({code:'K031740N00',sourceUrl:'https://mytruckservices.knorr-bremse.com/p/K031740N00',fields:{description:'Brake'}})}),fetchSecondary:async()=>{throw Error('SPARETO_HTTP_403');}});
+ assert.equal(r.status,'reviewed');assert.equal(saves[0].input_observation.fields.description,'Brake');assert.equal(saves[0].input_observation.secondary.reason,'SPARETO_HTTP_403');
+});
+
+test('Knorr secondary stays disabled until source access is verified',async()=>{
+ const {db,saves}=fixture('Knorr-Bremse','knorr_bremse_aftermarket','K031740N00');let requests=0;
+ const r=await runBrandJob({db,organizationId:org,jobId,delayMs:0,providerFactory:()=>({fetch:async()=>({code:'K031740N00',sourceUrl:'https://mytruckservices.knorr-bremse.com/p/K031740N00',fields:{description:'Brake'}})}),fetchSecondary:async()=>{requests++;throw Error('unexpected');}});
+ assert.equal(r.status,'reviewed');assert.equal(requests,0);assert.equal(saves[0].input_observation.secondary,undefined);
+});
+test('Knorr background job admits only registered Wilmink evidence and leaves it review-only',async()=>{
+ const f=fixture('Knorr-Bremse','knorr_bremse_aftermarket','K031740N00');f.source.metadata.secondary_wilmink_read_allowed=true;
+ const original=f.db.from;let helperKey='',catalogId='';
+ f.db.from=table=>{
+  if(table==='catalog_external_sources')return {select(){return this},eq(k,v){if(k==='source_key')helperKey=v;return this},single:async()=>({data:f.source}),maybeSingle:async()=>({data:{source_key:helperKey,is_active:true,license_posture:'internal_review_required',credential_boundary:'none',rate_limit_posture:'bounded',metadata:{brand_engine_read_allowed:true,allowed_brands:['Knorr-Bremse']}}})};
+  if(table==='catalog_product_source_records')return {select(){return this},eq(k,v){if(k==='catalog_product_id')catalogId=v;return this},order(){return this},limit(){return this},maybeSingle:async()=>({data:{source_url:'https://www.wilminkengineparts.com/en/valve/wg123'}})};
+  return original(table);
+ };
+ let calls=0;const result=await runBrandJob({db:f.db,organizationId:org,jobId,delayMs:0,providerFactory:()=>({fetch:async()=>({code:'K031740N00',sourceUrl:'https://mytruckservices.knorr-bremse.com/p/K031740N00',fields:{description:'Brake'}})}),fetchWilmink:async input=>{calls++;assert.equal(input.official.authority,'official');assert.equal(catalogId,'product-id');return {status:'review_required',fields:{},canonicalWrite:false}}});
+ assert.equal(result.status,'reviewed');assert.equal(calls,1);assert.equal(f.saves[0].input_observation.wilmink.canonicalWrite,false);
+});
+test('missing Knorr article is staged from exact official identity for guarded creation',async()=>{
+ const f=fixture('Knorr-Bremse','knorr_bremse_aftermarket','K031740N00',['K031740N00'],['K031740N00']);
+ const r=await runBrandJob({db:f.db,organizationId:org,jobId,delayMs:0,providerFactory:()=>({fetch:async()=>({code:'K031740N00',sourceUrl:'https://mytruckservices.knorr-bremse.com/p/K031740N00',fields:{description:'Brake',ean:'4068078109397'}})})});
+ assert.equal(r.status,'reviewed');const o=f.saves[0].input_observation;assert.equal(o.missingCatalogProduct,true);assert.deepEqual(o.before,{});assert.equal(o.fields.description,'Brake');assert.equal(o.unavailable,undefined);
+});
+test('published missing Knorr observation dispatches the guarded creation RPC',async()=>{
+ const orgId='test-org',id='test-job',calls=[];const source={source_key:'knorr_bremse_aftermarket',is_active:true,license_posture:'internal_review_required',credential_boundary:'none',rate_limit_posture:'bounded',metadata:{brand_engine_read_allowed:true,brand_engine_enrichment_allowed:true,approval_actor:'owner',publication_approval_reference:'test',allowed_brands:['Knorr-Bremse']}};
+ const observation={missingCatalogProduct:true,brand:'Knorr-Bremse',code:'K031740N00',lifecycle:{evidence:{salesStatusCode:'CODE30'}},before:{},fields:{description:'Brake'}};
+ const job={manifest:{brand:'Knorr-Bremse',source_key:source.source_key},next_index:0,total_items:1,mode:'publish',lease_token:'lease'};
+ const db={rpc:async(name)=>{calls.push(name);return {data:name==='claim_catalog_brand_job'?job:name==='apply_catalog_knorr_create_item'?{status:'created'}:{}}},from(table){const q={select(){return q},eq(){return q},single:async()=>({data:table==='catalog_external_sources'?source:table==='brands'?{id:'brand-id'}:{product_code:'K031740N00',observation}})};return q;}};
+ const r=await runBrandJob({db,organizationId:orgId,jobId:id,delayMs:0,providerFactory:()=>({fetch:async()=>{throw Error('must use sealed observation')}})});assert.equal(r.status,'completed');assert(calls.includes('apply_catalog_knorr_create_item'));assert(!calls.includes('apply_catalog_brand_job_item'));
+});
+test('punctuated Knorr identity never reaches a publication RPC without reviewed mapping',async()=>{
+ const calls=[];const source={source_key:'knorr_bremse_aftermarket',is_active:true,license_posture:'internal_review_required',credential_boundary:'none',rate_limit_posture:'bounded',metadata:{brand_engine_read_allowed:true,brand_engine_enrichment_allowed:true,approval_actor:'owner',publication_approval_reference:'test',allowed_brands:['Knorr-Bremse']}};
+ const observation={missingCatalogProduct:true,brand:'Knorr-Bremse',code:'0-0066506-3',identity:{requiresCollisionReview:true},before:{},fields:{}};
+ const job={manifest:{brand:'Knorr-Bremse',source_key:source.source_key},next_index:0,total_items:1,mode:'publish',lease_token:'lease'};
+ const db={rpc:async(name,args)=>{calls.push({name,args});return {data:name==='claim_catalog_brand_job'?job:{}}},from(table){const q={select(){return q},eq(){return q},single:async()=>({data:table==='catalog_external_sources'?source:table==='brands'?{id:'brand-id'}:{product_code:observation.code,observation}})};return q;}};
+ const r=await runBrandJob({db,organizationId:org,jobId,delayMs:0,providerFactory:()=>({fetch:async()=>{throw Error('unexpected')}})});assert.equal(r.status,'completed');assert(!calls.some(c=>c.name==='apply_catalog_knorr_create_item'||c.name==='apply_catalog_brand_job_item'));const save=calls.find(c=>c.name==='checkpoint_catalog_brand_job');assert.equal(save.args.input_checkpoint.reason,'KNORR_CANONICAL_IDENTITY_REVIEW_REQUIRED');
+});
+test('Knorr recorded source collision is sealed and never published',async()=>{
+ const f=fixture('Knorr-Bremse','knorr_bremse_aftermarket','K031740N00');const original=f.db.from;
+ f.db.from=table=>{if(table!=='catalog_product_source_records')return original(table);const q={select(){return q},eq(){return q},limit(){return q},then(resolve){resolve({data:[{source_key:'knorr_bremse_aftermarket',source_product_id:'K031740N-00',payload_fingerprint:'a'.repeat(64)}]})}};return q};
+ const r=await runBrandJob({db:f.db,organizationId:org,jobId,delayMs:0,providerFactory:()=>({fetch:async()=>({code:'K031740N00',sourceUrl:'https://mytruckservices.knorr-bremse.com/p/K031740N00',fields:{description:'Brake'}})})});assert.equal(r.status,'reviewed');assert.equal(f.saves[0].input_observation.recordedOwnership.status,'collision');
 });

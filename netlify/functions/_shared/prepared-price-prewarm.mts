@@ -10,8 +10,8 @@ export type PreparedPriceProfile = {
   revision: number; lease_token: string;
 };
 
-// One profile per scheduled tick, with a durable SQL lease and globally bounded
-// cold generation. An unavailable profile yields to the remaining profiles.
+// A durable SQL lease and the database's active-job guard bound cold generation.
+// An unavailable profile yields to the remaining profiles.
 export async function runPreparedPricePrewarm(deps: {
   claim: () => Promise<PreparedPriceProfile[]>;
   prepare: (profile: PreparedPriceProfile) => Promise<{ job: ExportJobRow; cached: boolean }>;
@@ -23,8 +23,9 @@ export async function runPreparedPricePrewarm(deps: {
   let errorCode: string | null = null;
   try {
     const { job, cached } = await deps.prepare(profile);
-    if (job.status === "queued") await deps.dispatch(job.id);
-    return { status: "checked", prepared: job.status === "queued" ? 1 : 0, reused: cached ? 1 : 0, failed: 0 };
+    const needsDispatch = job.status === "queued" && !job.scope?.sharedLeaderJobId;
+    if (needsDispatch) await deps.dispatch(job.id);
+    return { status: "checked", prepared: needsDispatch ? 1 : 0, reused: cached ? 1 : 0, failed: 0 };
   } catch (error) {
     // No customer details, secrets, upstream payload or unbounded exception text.
     errorCode = error instanceof Error && error.message === "PREWARM_NO_PUBLISHED_PRICES"
@@ -33,6 +34,29 @@ export async function runPreparedPricePrewarm(deps: {
   } finally {
     await deps.finish(profile, errorCode);
   }
+}
+
+// Recheck several inexpensive cached/unavailable profiles per scheduled tick.
+// Stop immediately after starting a cold build; the database remains the
+// authority for cross-invocation concurrency and active jobs.
+export async function runPreparedPricePrewarmBatch(
+  runOne: () => ReturnType<typeof runPreparedPricePrewarm>,
+  options: { deadlineMs: number; now?: () => number; maxProfiles?: number },
+) {
+  const now = options.now ?? Date.now;
+  const maxProfiles = options.maxProfiles ?? 8;
+  const result = { status: "idle", checked: 0, prepared: 0, reused: 0, failed: 0 };
+  while (result.checked < maxProfiles && now() < options.deadlineMs) {
+    const item = await runOne();
+    if (item.status === "idle") break;
+    result.status = "checked";
+    result.checked++;
+    result.prepared += item.prepared;
+    result.reused += item.reused;
+    result.failed += item.failed;
+    if (item.prepared) break;
+  }
+  return result;
 }
 
 export async function prewarmPreparedPriceFile(supabaseUrl: string, serviceRoleKey: string, dispatch: (jobId: string) => Promise<unknown>) {

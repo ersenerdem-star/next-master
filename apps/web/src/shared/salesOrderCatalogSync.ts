@@ -132,7 +132,7 @@ async function refreshSalesOrderPriceLines(
   const result = [...lines];
   const pending = lines.map((_, index) => index).filter((index) =>
     options.keepPrices === false || replacementIndexes.has(index)
-    || (options.hydrateMissingPricesIfKeepingPrices && !lineHasVisiblePrices(lines[index])));
+    || (options.hydrateMissingPricesIfKeepingPrices && (!Number.isFinite(Number(lines[index].buy_price)) || Number(lines[index].buy_price) <= 0)));
   // One lookup per exact brand/SKU for this action. Duplicate order rows keep
   // their own quantities and supplier selections, but share the read result.
   const lookups = new Map<string, ReturnType<typeof resolveQuoteLine>>();
@@ -262,7 +262,7 @@ export async function resyncSalesOrderLinesFromCatalog(
 
   const refreshesCurrentPrice = !keepPrices
     || replacementIndexes.size > 0
-    || (options.hydrateMissingPricesIfKeepingPrices && patchedLines.some((line) => !lineHasVisiblePrices(line)));
+    || (options.hydrateMissingPricesIfKeepingPrices && patchedLines.some((line) => !Number.isFinite(Number(line.buy_price)) || Number(line.buy_price) <= 0));
   if (refreshesCurrentPrice && options.customerType === "C") {
     throw new Error("The retired C price list cannot be refreshed. Set A, B, or Other on the customer account.");
   }
@@ -347,7 +347,7 @@ async function refreshLinePricesFromCatalog(
     const matchingOptions = supplierOptions.filter((option) => selectedSupplierId
       ? String(option.supplier_id || "").trim() === selectedSupplierId
       : String(option.supplier_name || "").trim().toLowerCase() === selectedSupplierName);
-    const selectUnpricedSupplier=!selectedSupplierName&&!lineHasVisiblePrices(line);
+    const selectUnpricedSupplier=!selectedSupplierName&&(!Number.isFinite(Number(line.buy_price)) || Number(line.buy_price)<=0);
     const selected = reprice
       ? selectUnpricedSupplier ? supplierOptions[0]||null : matchingOptions.length === 1 ? matchingOptions[0] : null
       : matchingOptions[0] || (selectedSupplierName ? null : supplierOptions[0] || null);
@@ -361,7 +361,8 @@ async function refreshLinePricesFromCatalog(
     }
     const quantityAdjustment = normalizeOrderQuantity(line.qty, selected || {});
 
-    const nextSellPrice = reprice ? selected!.sell_price : selected?.sell_price ?? resolved.sell_price ?? line.sell_price;
+    const replacement = line.codeChanged && exactProductCode(line.requestedCode) !== exactProductCode(line.resolvedCode);
+    const nextSellPrice = reprice || replacement ? selected!.sell_price : Number(line.sell_price) > 0 ? line.sell_price : selected?.sell_price ?? resolved.sell_price ?? line.sell_price;
 
     const refreshed = mergeCatalogMetadata(
       {

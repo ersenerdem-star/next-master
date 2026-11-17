@@ -11,16 +11,23 @@ const invite: PortalInviteRow = {
   access_can_view_payments: true, access_can_view_orders: true, allowed_brand_ids: [],
 };
 const source = "https://commercial-portal.example.invalid";
-async function fixture(check: (state: { terms: Record<string, unknown>; writes: string[]; expired: boolean }) => Promise<void>) {
+async function fixture(check: (state: { terms: Record<string, unknown>; writes: string[]; expired: boolean; saved: Record<string, any> | null; loseResponse: boolean }) => Promise<void>) {
   const previous = globalThis.fetch;
-  const state = { terms: { moq: 5, order_multiple: 4, stock_qty: 0, valid_to: "2026-12-31" } as Record<string, unknown>, writes: [] as string[], expired: false };
+  const state = { terms: { moq: 5, order_multiple: 4, stock_qty: 0, valid_to: "2026-12-31" } as Record<string, unknown>, writes: [] as string[], expired: false, saved: null as Record<string, any> | null, loseResponse:false };
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
     assert.equal(url.origin, source);
     if (init?.method && !["GET", "POST"].includes(init.method)) state.writes.push(url.pathname);
     if (url.pathname.endsWith("/sales_orders") && init?.method === "POST") state.writes.push(url.pathname);
     let data: unknown = [];
-    if (url.pathname.endsWith("/customers")) data = [{ id: invite.customer_id, display_name: "Customer", currency: "EUR", custom_fields: "", price_list_type: "Other", price_list_margin_percent: 20 }];
+    if (url.pathname.endsWith('/sales_orders') && init?.method === 'POST') {
+      if (state.saved) return Response.json({message:'duplicate'}, {status:409});
+      state.saved=JSON.parse(String(init.body));
+      if (state.loseResponse) throw new Error('connection lost after commit');
+      return Response.json([{id:state.saved!.id}]);
+    }
+    if (url.pathname.endsWith('/sales_orders') && url.searchParams.has('id')) data=state.saved ? [state.saved] : [];
+    else if (url.pathname.endsWith("/customers")) data = [{ id: invite.customer_id, display_name: "Customer", currency: "EUR", custom_fields: "", price_list_type: "Other", price_list_margin_percent: 20 }];
     else if (url.pathname.endsWith("/brands")) data = [{ id: "commercial-brand", name: "Geba" }];
     else if (url.pathname.endsWith("/company_profiles")) data = [{ company_name: "Seller" }];
     else if (url.pathname.endsWith("/catalog_products")) data = [{ id: "product-1", product_code: "10131", description: "Pump", brand_id: "commercial-brand", normalized_code: "10131" }];
@@ -34,6 +41,35 @@ async function fixture(check: (state: { terms: Record<string, unknown>; writes: 
   };
   try { await check(state); } finally { globalThis.fetch = previous; }
 }
+test('first save recovers a lost response and retry returns the same order without another write',async()=>{
+  await fixture(async state=>{
+    state.loseResponse=true;
+    const input={mode:'draft' as const,rows:[row(8)],autoSaveIntent:'a'.repeat(32),expectedPrices:[{code:'10131',brand:'Geba',qty:8,sell_price:12}]};
+    const first=await submitPortalSalesOrder(source,'test-key',invite,input);
+    assert.ok(first.orderId.startsWith('portal-auto-'));
+    const second=await submitPortalSalesOrder(source,'test-key',invite,input);
+    assert.equal(second.orderId,first.orderId);
+    assert.equal(state.writes.filter(x=>x.endsWith('/sales_orders')).length,1);
+    await assert.rejects(submitPortalSalesOrder(source,'test-key',invite,{...input,expectedPrices:[{...input.expectedPrices[0],qty:9}]}),/changed/);
+  });
+});
+test('concurrent first-save attempts converge on one draft',async()=>{
+  await fixture(async state=>{
+    state.loseResponse=true;
+    const input={mode:'draft' as const,rows:[row(8)],autoSaveIntent:'b'.repeat(32),expectedPrices:[{code:'10131',brand:'Geba',qty:8,sell_price:12}]};
+    const results=await Promise.all([submitPortalSalesOrder(source,'test-key',invite,input),submitPortalSalesOrder(source,'test-key',invite,input)]);
+    assert.equal(results[0].orderId,results[1].orderId);
+    assert.equal(state.saved?.id,results[0].orderId);
+  });
+});
+test('first save rejects a changed customer price before creating anything',async()=>{
+  await fixture(async state=>{
+    const input={mode:'draft' as const,rows:[row(8)],autoSaveIntent:'c'.repeat(32),expectedPrices:[{code:'10131',brand:'Geba',qty:8,sell_price:11}]};
+    await assert.rejects(submitPortalSalesOrder(source,'test-key',invite,input),/price or quantity changed/);
+    assert.equal(state.saved,null);
+    assert.equal(state.writes.filter(x=>x.endsWith('/sales_orders')).length,0);
+  });
+});
 const row = (qty: number) => ({ code: "10131", brand: "Geba", qty });
 
 test("portal preparation exposes accepted MOQ/multiple quantity and keeps supplier stock private", async () => {

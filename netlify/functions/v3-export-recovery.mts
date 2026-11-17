@@ -1,7 +1,7 @@
 import type { Config } from "@netlify/functions";
 import { getJson, json, serviceRoleHeaders } from "./_shared/http.mts";
 import { dispatchV3PriceExportWorker, isProductionExportPaused, required } from "./_shared/v3-export-dispatch.mts";
-import { prewarmPreparedPriceFile } from "./_shared/prepared-price-prewarm.mts";
+import { prewarmPreparedPriceFile, runPreparedPricePrewarmBatch } from "./_shared/prepared-price-prewarm.mts";
 import {
   isExactExportRecoveryTarget,
   recoverV3ExportJobs,
@@ -10,6 +10,7 @@ import {
 } from "./_shared/v3-export-recovery.mts";
 
 export default async (_request: Request) => {
+  const prewarmDeadline = Date.now() + 12_000;
   const target = {
     siteId: process.env.SITE_ID,
     siteUrl: process.env.URL,
@@ -33,8 +34,11 @@ export default async (_request: Request) => {
       }),
       dispatchJob: (jobId) => dispatchV3PriceExportWorker(dispatchRequest, jobId),
     });
-    const preparedPrice = await prewarmPreparedPriceFile(target.supabaseUrl!, serviceRoleKey,
-      (jobId) => dispatchV3PriceExportWorker(dispatchRequest, jobId));
+    const preparedPrice = await runPreparedPricePrewarmBatch(
+      () => prewarmPreparedPriceFile(target.supabaseUrl!, serviceRoleKey,
+        (jobId) => dispatchV3PriceExportWorker(dispatchRequest, jobId)),
+      { deadlineMs: prewarmDeadline },
+    );
     console.info("v3 export recovery tick", result);
     console.info("prepared price file tick", preparedPrice);
     return json({ ok: true, ...result, preparedPrice });

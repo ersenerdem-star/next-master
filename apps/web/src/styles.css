@@ -5278,6 +5278,11 @@ select {
   font-size: 12px;
 }
 
+.portal-notification-panel__item time {
+  color: #475569;
+  font-size: 12px;
+}
+
 .portal-warning-list {
   border-top: 1px solid #edf2f7;
   padding-top: 12px;
@@ -6345,6 +6350,13 @@ body {
   display: grid;
   gap: 6px;
   min-width: 0;
+}
+
+.action-feedback__progress {
+  width: 100%;
+  height: 10px;
+  margin-top: 6px;
+  accent-color: var(--nm-blue);
 }
 
 .action-feedback__eyebrow {
@@ -13572,6 +13584,28 @@ body {
   .mobile-workspace-menu__panel { position: fixed; top: 64px; left: 14px; width: min(320px, calc(100vw - 28px)); }
 }
 
+/* Keep navigation within its own grid cell, including translated labels and
+   long customer names. At narrower desktop widths it gets a separate row. */
+.portal-shell--workspace .portal-header-nav {
+  min-width: 0;
+  overflow-x: auto;
+  justify-content: flex-start;
+  overscroll-behavior-x: contain;
+}
+.portal-shell--workspace .portal-header-nav__item { flex: 0 0 auto; }
+@media (min-width: 769px) and (max-width: 1550px) {
+  .portal-shell--workspace .portal-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0 16px;
+    padding-top: 8px;
+  }
+  .portal-shell--workspace .portal-brand { grid-column: 1; grid-row: 1; }
+  .portal-header__account { grid-column: 2; grid-row: 1; }
+  .portal-shell--workspace .portal-header-nav { grid-column: 1 / -1; grid-row: 2; width: 100%; }
+  .portal-shell--workspace .portal-header-nav__item { min-height: 48px; }
+  .portal-shell--workspace .portal-header-nav__item.active::after { bottom: 3px; }
+}
+
 /* Search keeps the primary task visible; bulk order tools remain available. */
 .portal-search-tools { border-top: 1px solid #e1e8f1; padding-top: 8px; }
 .portal-search-tools > summary { display: inline-flex; align-items: center; min-height: 44px; padding: 4px 8px; color: #245b91; font-weight: 700; cursor: pointer; }
@@ -13593,3 +13627,12 @@ body {
   .portal-search-result-view__types button { min-height: 44px; }
 }
 .portal-search-result-rail__brand .brand-pill__label { display: inline; }
+
+.supplier-operations { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+.supplier-operation { display:flex; flex-direction:column; align-items:flex-start; gap:10px; padding:20px; border:1px solid #d7e2ef; border-radius:16px; background:#fff; }
+.supplier-operation h3 { margin:0; font-size:1.1rem; }
+.supplier-operation p { margin:0; color:#596b83; line-height:1.5; flex:1; }
+.supplier-operation__actions { display:flex; flex-wrap:wrap; gap:8px; }
+.supplier-operation__link { color:#176dc4; font-weight:700; padding:10px 0; }
+#supplier-price-browse { scroll-margin-top:100px; }
+@media (max-width: 900px) { .supplier-operations { grid-template-columns:1fr; } }

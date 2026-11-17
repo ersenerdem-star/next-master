@@ -3,25 +3,29 @@ import type { ExportRows } from "./xlsxCore";
 
 export type DocumentKind = "sales-order" | "invoice" | "purchase-order" | "bill";
 export type DocumentExportLine = {
-  code: string; brand?: string; description?: string; qty: number; unitPrice: number;
-  amount?: number; origin?: string; weight?: number | null; tariff?: string; orderNo?: string;
+  code: string; brand?: string; description?: string; qty: number; unitPrice: number | null;
+  amount?: number | null; origin?: string; weight?: number | null; tariff?: string; orderNo?: string;
   oldCode?: string; lifecycleStatus?: "active" | "discontinued" | null; productNotice?: string;
 };
 export type DocumentExportInput = {
   kind: DocumentKind; audience: "admin" | "customer" | "supplier"; number: string; party: string;
   currency: string; date?: string; status?: string; lines: DocumentExportLine[];
   discount?: number; shipping?: number; total?: number;
+  allowMissingPrices?: boolean;
+  unsavedQuantityEdits?: boolean;
 };
 
-export function documentAmounts(lines: Array<Pick<DocumentExportLine, "qty" | "unitPrice" | "amount">>, shipping = 0, discount = 0, total?: number) {
+export function documentAmounts(lines: Array<Pick<DocumentExportLine, "qty" | "unitPrice" | "amount">>, shipping = 0, discount = 0, total?: number, allowMissingPrices = false) {
   if (!lines.length) throw new Error("Line details are not loaded. Reload the document before exporting.");
   const amounts = lines.map((line) => {
+    if (line.unitPrice == null && allowMissingPrices) { requireQuantity(line.qty); return null; }
+    if (line.unitPrice == null) throw new Error("Document price is missing.");
     const amount = multiplyMoney(requireUnitPrice(line.unitPrice), requireQuantity(line.qty));
     if (line.amount != null && roundMoney(line.amount) !== amount) throw new Error("Document line totals are inconsistent. Refresh or correct the document before exporting.");
     return amount;
   });
   if (!Number.isFinite(shipping) || !Number.isFinite(discount) || shipping < 0 || discount < 0) throw new Error("Invalid document shipping or discount.");
-  const subtotal = sumMoney(amounts);
+  const subtotal = sumMoney(amounts.filter((amount): amount is number => amount !== null));
   const calculatedTotal = sumMoney([subtotal, roundMoney(shipping), -roundMoney(discount)]);
   if (calculatedTotal < 0 || (total != null && roundMoney(total) !== calculatedTotal)) throw new Error("Document total is inconsistent. Refresh or correct the document before exporting.");
   return { amounts, subtotal, total: calculatedTotal };
@@ -33,7 +37,8 @@ export function buildDocumentWorksheet(input: DocumentExportInput) {
   const buying = input.kind === "purchase-order" || input.kind === "bill";
   if ((input.audience === "customer" && buying) || (input.audience === "supplier" && !buying)) throw new Error("This document is not available for this audience.");
   if (!/^[A-Z]{3}$/.test(input.currency)) throw new Error("Document currency is invalid.");
-  const totals = documentAmounts(input.lines, input.shipping, input.discount, input.total);
+  const totals = documentAmounts(input.lines, input.shipping, input.discount, input.total, input.allowMissingPrices);
+  const incomplete = input.lines.some((line) => line.unitPrice == null);
   const sourceOrder = input.kind === "invoice" || input.kind === "bill";
   const salesOrder = input.kind === "sales-order";
   const headers = ["Code", ...(salesOrder ? ["Old Code"] : []), "Brand", "Description",
@@ -46,10 +51,12 @@ export function buildDocumentWorksheet(input: DocumentExportInput) {
     ["Date", input.date || ""], ["Status", input.status || ""], [], headers,
     ...input.lines.map((line, i) => [line.code, ...(salesOrder ? [line.oldCode || ""] : []), line.brand || "", line.description || "",
       ...(salesOrder ? [[line.oldCode ? "Replacement" : "", line.lifecycleStatus === "discontinued" ? "Discontinued" : ""].filter(Boolean).join("; "), line.productNotice || ""] : []),
-      line.qty, line.origin || "", line.weight ?? "", line.tariff || "", ...(sourceOrder ? [line.orderNo || ""] : []), line.unitPrice, totals.amounts[i]]),
+      line.qty, line.origin || "", line.weight ?? "", line.tariff || "", ...(sourceOrder ? [line.orderNo || ""] : []), line.unitPrice ?? "", totals.amounts[i] ?? ""]),
   ];
   const dataEndRow = rows.length - 1;
   rows.push([]);
+  if (input.unsavedQuantityEdits) rows.push(["Preview: quantity changes shown here have not been saved to the order."]);
+  if (incomplete) rows.push(["Prices missing for some items; totals include priced items only."]);
   for (const [label, amount] of [["Subtotal", totals.subtotal], ["Discount", input.discount || 0], ["Shipping", input.shipping || 0], ["Total Amount", totals.total]] as const) {
     const row: (string | number)[] = Array(headers.length).fill("");
     row[0] = label; row[headers.length - 1] = amount; rows.push(row);

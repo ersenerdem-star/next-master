@@ -2,7 +2,7 @@ import type { Config, Context } from "@netlify/functions";
 import { json } from "./_shared/http.mts";
 import { resolvePortalInvite } from "./_shared/portal-access.mts";
 import { writePortalAuditEvent } from "./_shared/portal-audit.mts";
-import { assertPortalExportJobCurrentContract, fetchExportJobById, isExportJobUnexpired, runPortalPriceListExportJob, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
+import { assertPortalExportJobCurrentContext, assertPortalExportJobCurrentContract, failOrphanSharedPortalFollower, fetchExportJobById, isExportJobUnexpired, runPortalPriceListExportJob, toPublicExportJobStatus } from "./_shared/export-jobs.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
 import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
@@ -46,7 +46,7 @@ export default async (req: Request, context: Context) => {
       hostname: getPortalRequestHostname(req),
       touchSession: false,
     });
-    const job = await fetchExportJobById(supabaseUrl, serviceRoleKey, invite.organization_id, jobId);
+    let job = await fetchExportJobById(supabaseUrl, serviceRoleKey, invite.organization_id, jobId);
     if (!job) return json({ error: "Export job not found." }, 404, { "Set-Cookie": buildPortalSessionCookie(nextSessionToken) });
     // Status is polled while a large export is being built.  Recomputing the
     // full pricing/data-version fingerprint here turns every status poll into a
@@ -54,12 +54,29 @@ export default async (req: Request, context: Context) => {
     // worker performs the full source/context fence before writing snapshot
     // rows; this request only needs the cheap tenant/job ownership check.
     assertPortalExportJobCurrentContract(job, invite);
-    if (isExportJobUnexpired(job) && (job.status === "queued" || job.status === "running") && isStaleExportJob(job.status, job.updated_at)
+    const sharedLeaderId = String(job.scope?.sharedLeaderJobId || "");
+    let leader = sharedLeaderId && (job.status === "queued" || job.status === "running")
+      ? await fetchExportJobById(supabaseUrl, serviceRoleKey, invite.organization_id, sharedLeaderId) : null;
+    if (sharedLeaderId && (job.status === "queued" || job.status === "running") && (!leader || !isExportJobUnexpired(leader) || !["queued","running"].includes(leader.status))) {
+      job = await failOrphanSharedPortalFollower(supabaseUrl, serviceRoleKey, invite.organization_id, job.id)
+        || await fetchExportJobById(supabaseUrl, serviceRoleKey, invite.organization_id, job.id);
+      if (!job) throw new Error("Export job not found.");
+      assertPortalExportJobCurrentContract(job, invite);
+      leader = null;
+    }
+    if (sharedLeaderId && job.status === "finalized") await assertPortalExportJobCurrentContext(supabaseUrl, serviceRoleKey, job, invite);
+    if (sharedLeaderId && (job.status === "queued" || job.status === "running") && (!leader || leader.scope?.sharedLeaderJobId
+      || leader.audience !== "portal" || leader.export_type !== "portal_price_list"
+      || leader.scope?.brandId !== job.scope?.brandId || leader.scope?.sourceVersion !== job.scope?.sourceVersion
+      || leader.scope?.priceListType !== job.scope?.priceListType || leader.scope?.marginPercent !== job.scope?.marginPercent
+      || leader.scope?.currency !== job.scope?.currency)) throw new Error("Shared price file is unavailable. Please retry.");
+    const work = leader || job;
+    if (isExportJobUnexpired(work) && (work.status === "queued" || work.status === "running") && isStaleExportJob(work.status, work.updated_at)
       && !(isV3ExportBridgeEnabled() && isProductionExportPaused())) {
       context.waitUntil(
         (isV3ExportBridgeEnabled()
-          ? dispatchV3PriceExportWorker(req, job.id)
-          : runPortalPriceListExportJob(supabaseUrl, serviceRoleKey, job.id)
+          ? dispatchV3PriceExportWorker(req, work.id)
+          : runPortalPriceListExportJob(supabaseUrl, serviceRoleKey, work.id)
         ).catch((error) => {
           console.error("portal export retry failed", job.id, error);
         }),
@@ -68,7 +85,10 @@ export default async (req: Request, context: Context) => {
     // Polling is intentionally not written to the audit table.  A 3s poll
     // interval would create thousands of audit writes for one download and
     // add another remote round-trip to the hot status path.
-    return json({ ok: true, job: toPublicExportJobStatus(job) }, 200, {
+    const display = leader && (leader.status === "queued" || leader.status === "running")
+      ? { ...job, status: leader.status, progress_done: leader.progress_done, progress_total: leader.progress_total,
+          row_count: leader.row_count, progress_message: leader.progress_message } : job;
+    return json({ ok: true, job: toPublicExportJobStatus(display) }, 200, {
       "Set-Cookie": buildPortalSessionCookie(nextSessionToken),
     });
   } catch (error) {

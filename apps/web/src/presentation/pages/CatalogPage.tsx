@@ -227,6 +227,7 @@ export function CatalogPage() {
   const [integrityFilter, setIntegrityFilter] = useState<CatalogIntegrityFilter>("");
   const [submittedIntegrityFilter, setSubmittedIntegrityFilter] = useState<CatalogIntegrityFilter>("");
   const [catalogPage, setCatalogPage] = useState(1);
+  const [catalogSearchRequest, setCatalogSearchRequest] = useState(0);
   const [previewSelection, setPreviewSelection] = useState<{ brand: string; codes: string[] } | null>(null);
   const [rows, setRows] = useState<CatalogRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, CatalogRowDraft>>({});
@@ -470,7 +471,7 @@ export function CatalogPage() {
     return () => {
       cancelled = true;
     };
-  }, [isOnline, submittedSearch, submittedCatalogBrand, submittedCatalogSegment, submittedIntegrityFilter, catalogPage, previewSelection, t, numberLocale]);
+  }, [isOnline, submittedSearch, submittedCatalogBrand, submittedCatalogSegment, submittedIntegrityFilter, catalogPage, previewSelection, catalogSearchRequest, t, numberLocale]);
 
   useEffect(() => {
     if (!searchingCatalog || loading) return;
@@ -802,6 +803,10 @@ export function CatalogPage() {
     setSubmittedCatalogBrand(nextBrand);
     setSubmittedCatalogSegment(normalizeCatalogMarketSegment(nextSegment) || "");
     setSubmittedIntegrityFilter(nextIntegrityFilter);
+    // The same filters can be submitted again. React does not rerun the
+    // request effect for identical values, so each explicit search needs its
+    // own request revision to settle the loading and feedback state.
+    setCatalogSearchRequest((request) => request + 1);
   }
 
   function queueCatalogItemForSalesOrder() {

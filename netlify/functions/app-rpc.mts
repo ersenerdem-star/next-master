@@ -9,6 +9,7 @@ import { cleanupCatalogStorageSource } from "./_shared/catalog-storage.mts";
 import { catalogStorageImportTargetEnabled } from "./_shared/catalog-import-target.mts";
 
 const ALLOWED_RPCS = new Set([
+  "save_manual_supplier_price",
   "resolve_purchase_order_vendors",
   "sales_order_purchase_analysis_options",
   "reporting_customer_balance_by_brand_product",
@@ -97,6 +98,7 @@ const ALLOWED_RPCS = new Set([
 ]);
 
 const SUPERADMIN_RPCS = new Set([
+  "save_manual_supplier_price",
   "sales_order_purchase_analysis_options",
   "admin_list_org_users",
   "admin_list_org_users_with_access",

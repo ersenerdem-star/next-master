@@ -22,6 +22,7 @@ const PORTAL_RATE_LIMITS: Record<string, PortalRateLimitConfig> = {
   // (200 requests per ten minutes) without making the portal retry storm-prone.
   prepare: { limit: 200, windowSeconds: 600, blockSeconds: 900 },
   submit: { limit: 20, windowSeconds: 600, blockSeconds: 1200 },
+  quantity_autosave: { limit: 240, windowSeconds: 600, blockSeconds: 60 },
   delete: { limit: 20, windowSeconds: 600, blockSeconds: 1200 },
   price_list: { limit: 10, windowSeconds: 600, blockSeconds: 1800 },
   export_status: { limit: 600, windowSeconds: 600, blockSeconds: 900 },

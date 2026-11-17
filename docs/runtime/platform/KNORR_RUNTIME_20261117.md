@@ -1,0 +1,13 @@
+# Knorr-Bremse catalog runtime — 17 November 2026
+
+Production runs the Knorr exact/discovery worker on Netlify through the existing fenced Supabase brand queue. The separate `catalog-brand-worker-v2-background` endpoint prevents preview and production worker-name collisions; the prior background endpoint remains deployed for in-flight compatibility. The production deployment preserves the existing static site, unrelated functions, the eight schedules, and the Dublin region of the prepared-price worker.
+
+The official Knorr source has approved missing-only automatic catalog application. Product identifiers retain their official raw code and use a compact catalog key only after source identity checks. Existing nonempty attributes and supplier/manual prices are preserved; uncertain identity, EAN and lifecycle cases are held. Wilmink's Knorr support source remains registered but not enabled for reads. Replacement is recorded only on explicit official evidence; sales-status codes are not automatically interpreted as production discontinuation.
+
+A real production scheduler processed and applied the existing `0-0927768-3` / `009277683` test case with no catalog field changes. A previous production-DB test created that catalog article with official source provenance, with no corresponding supplier price rows before or after. Automated test suites cover fenced admission, concurrent identity, missing-only changes and price preservation. These checks do not prove all production prices are unchanged.
+
+The manufacturer response for pagination page 1 included 107 rows but only 100 distinct codes (page 2: 105 rows, 100 distinct). The reader removes only identical source-code repetitions and still requires the full expected distinct count. It retains punctuation distinctions, page consistency checks and source fingerprints. A failed page 1 was requeued after deployment; check production job records for the actual current progress before drawing completeness conclusions.
+
+Production releases: `6afc4bdcd9a2d859b1354a1b` for the isolated worker deployment; `6afc4d3b2ec62664fb676fd7` for the duplicate-code pagination fix. Static `version.json` reflects the prior UI build because no client assets changed. A later Git deployment can replace manually deployed functions; reconcile these changes into the actual production branch before the next Git-connected release.
+
+Live continuation verification: page 1 completed after the fix, recorded seven identical duplicate codes, queued page 2 and a 100-article review job. The first 100-article job was admitted for automatic missing-only application; at observation it was progressing, with source lifecycle holds preserved for uncertain cases. This is a partial scan, not complete manufacturer coverage.

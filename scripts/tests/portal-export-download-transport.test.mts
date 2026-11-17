@@ -83,6 +83,36 @@ test("portal download waits for the complete signed Storage workbook before offe
   });
 });
 
+test("download progress reflects actual bytes before the verified save is offered", async () => {
+  await withBrowserMocks(async ({ blobs, setFetch }) => {
+    let finish!: () => void;
+    setFetch(async () => new Response(new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(workbook.slice(0, 4));
+      finish = () => { controller.enqueue(workbook.slice(4)); controller.close(); };
+    } }), { headers: { "Content-Length": "8" } }));
+    const progress: Array<{ receivedBytes: number; totalBytes: number | null }> = [];
+    const pending = downloadUrl("price-list.xlsx", signedUrl, fallbackUrl, 8, undefined, value => progress.push(value));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(progress, [{ receivedBytes: 0, totalBytes: 8 }, { receivedBytes: 4, totalBytes: 8 }]);
+    assert.equal(blobs.length, 0);
+    finish(); await pending;
+    assert.deepEqual(progress.at(-1), { receivedBytes: 8, totalBytes: 8 });
+    assert.deepEqual(new Uint8Array(await blobs[0].arrayBuffer()), workbook);
+  });
+});
+
+test("multipart progress reports cumulative bytes and a stable total", async () => {
+  await withBrowserMocks(async ({ setFetch }) => {
+    const pieces = [workbook.slice(0, 4), workbook.slice(4)];
+    const parts = pieces.map((piece, i) => ({ signedUrl: signedUrl.replace("file.xlsx", `part-${i}`), byteSize: piece.length }));
+    let index = 0;
+    setFetch(async () => new Response(pieces[index++]));
+    const progress: Array<{ receivedBytes: number; totalBytes: number | null }> = [];
+    await downloadUrl("price-list.xlsx", parts[0].signedUrl, undefined, 8, parts, value => progress.push(value));
+    assert.deepEqual(progress, [{receivedBytes:0,totalBytes:8},{receivedBytes:4,totalBytes:8},{receivedBytes:4,totalBytes:8},{receivedBytes:8,totalBytes:8}]);
+  });
+});
+
 test("portal HTTP errors and incomplete transfers never trigger a download", async () => {
   await withBrowserMocks(async ({ clicks, setFetch }) => {
     setFetch(async () => new Response("expired", { status: 401 }));

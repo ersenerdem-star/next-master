@@ -9,6 +9,7 @@ const CSV_TYPE = "text/csv;charset=utf-8";
 const MAX_EXPORT_DOWNLOAD_BYTES = 128 * 1024 * 1024;
 
 export type ExportDownloadPart = { signedUrl: string; byteSize: number };
+export type ExportDownloadProgress = { receivedBytes: number; totalBytes: number | null };
 
 export function buildXlsxBlob(sheetName: string, rows: ExportRows, numericColumns: number[] = [], options: WorkbookOptions = {}) {
   return new Blob([buildWorkbookBytes(sheetName, rows, numericColumns, options)], { type: XLSX_TYPE });
@@ -41,7 +42,7 @@ function signedStorageTarget(signedUrl: string) {
   return target;
 }
 
-async function fetchSignedStorageChunks(target: URL, expectedByteSize?: number) {
+async function fetchSignedStorageChunks(target: URL, expectedByteSize?: number, onProgress?: (receivedBytes: number, expectedBytes: number | null) => void) {
   // A Netlify function cannot stream a workbook above its 20 MB response
   // limit. Supabase Storage permits CORS reads of this short-lived signed URL.
   // Fetching it avoids Chrome extensions blocking anchor navigation while
@@ -71,12 +72,14 @@ async function fetchSignedStorageChunks(target: URL, expectedByteSize?: number) 
   const chunks: BlobPart[] = [];
   let receivedBytes = 0;
   const maxBytes = expectedBytes || MAX_EXPORT_DOWNLOAD_BYTES;
+  onProgress?.(0, expectedBytes || null);
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       receivedBytes += value.byteLength;
       if (receivedBytes > maxBytes) throw new Error("Export download exceeded the expected file size.");
+      onProgress?.(receivedBytes, expectedBytes || null);
       // Fetch streams provide ArrayBuffer-backed byte chunks in browsers.
       // Keep those chunks without another full-workbook copy.
       chunks.push(value as Uint8Array<ArrayBuffer>);
@@ -93,7 +96,7 @@ async function fetchSignedStorageChunks(target: URL, expectedByteSize?: number) 
   return { chunks, receivedBytes };
 }
 
-async function downloadSignedStorageUrl(name: string, signedUrl: string, expectedByteSize: number | undefined, parts: ExportDownloadPart[] | undefined, generation: number) {
+async function downloadSignedStorageUrl(name: string, signedUrl: string, expectedByteSize: number | undefined, parts: ExportDownloadPart[] | undefined, generation: number, onProgress?: (progress: ExportDownloadProgress) => void) {
   const target = signedStorageTarget(signedUrl);
   const chunks: BlobPart[] = [];
   let receivedBytes = 0;
@@ -116,13 +119,14 @@ async function downloadSignedStorageUrl(name: string, signedUrl: string, expecte
     }
     if (totalBytes > MAX_EXPORT_DOWNLOAD_BYTES) throw new Error("Export is too large for browser download.");
     for (let index = 0; index < parts.length; index += 1) {
-      const result = await fetchSignedStorageChunks(targets[index], parts[index].byteSize);
+      const completedBytes = receivedBytes;
+      const result = await fetchSignedStorageChunks(targets[index], parts[index].byteSize, (bytes) => onProgress?.({ receivedBytes: completedBytes + bytes, totalBytes }));
       for (const chunk of result.chunks) chunks.push(chunk);
       receivedBytes += result.receivedBytes;
     }
     if (receivedBytes !== totalBytes) throw new Error("Export download was incomplete.");
   } else {
-    const result = await fetchSignedStorageChunks(target, expectedByteSize);
+    const result = await fetchSignedStorageChunks(target, expectedByteSize, (bytes, totalBytes) => onProgress?.({ receivedBytes: bytes, totalBytes }));
     for (const chunk of result.chunks) chunks.push(chunk);
     receivedBytes = result.receivedBytes;
   }
@@ -140,7 +144,7 @@ async function downloadSignedStorageUrl(name: string, signedUrl: string, expecte
   downloadBlob(name, blob);
 }
 
-export async function downloadUrl(name: string, url: string, fallbackUrl?: string, expectedByteSize?: number, parts?: ExportDownloadPart[]) {
+export async function downloadUrl(name: string, url: string, fallbackUrl?: string, expectedByteSize?: number, parts?: ExportDownloadPart[], onProgress?: (progress: ExportDownloadProgress) => void) {
   const generation = preparedDownloadGeneration();
   const signed = new URL(url, window.location.href);
   if (parts !== undefined || (signed.protocol === "https:" && signed.pathname.includes("/storage/v1/object/sign/")
@@ -148,7 +152,7 @@ export async function downloadUrl(name: string, url: string, fallbackUrl?: strin
     // Portal and admin exports both carry a short-lived signed Storage URL.
     // Verify the complete workbook before reporting that download began so a
     // browser extension or partial transfer cannot be mistaken for success.
-    await downloadSignedStorageUrl(name, url, expectedByteSize, parts, generation);
+    await downloadSignedStorageUrl(name, url, expectedByteSize, parts, generation, onProgress);
     return;
   }
   let lastError: unknown = null;

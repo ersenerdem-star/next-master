@@ -1,7 +1,7 @@
 import type { Config } from "@netlify/functions";
 import { resolvePortalInvite } from "./_shared/portal-access.mts";
 import { writePortalAuditEvent } from "./_shared/portal-audit.mts";
-import { assertPortalExportJobCurrentContract, downloadExportArtifact, fetchExportJobById } from "./_shared/export-jobs.mts";
+import { assertPortalExportJobCurrentContext, assertPortalExportJobCurrentContract, downloadExportArtifact, fetchExportJobById } from "./_shared/export-jobs.mts";
 import { enforcePortalRateLimit } from "./_shared/portal-rate-limit.mts";
 import { buildExpiredPortalSessionCookie, buildPortalSessionCookie, readPortalSessionCookie } from "./_shared/portal-security.mts";
 import { getPortalRequestHostname } from "./_shared/portal-tenant.mts";
@@ -33,6 +33,7 @@ export default async (req: Request) => {
     // See portal-export-download: the worker fences the immutable artifact;
     // keep the same-origin fallback bounded to the cheap scope check.
     assertPortalExportJobCurrentContract(job, invite);
+    if (job.scope?.sharedLeaderJobId) await assertPortalExportJobCurrentContext(supabaseUrl, serviceRoleKey, job, invite);
     if (job.status !== "finalized") return new Response("Export file is not ready yet.", { status: 409 });
 
     const response = await downloadExportArtifact(supabaseUrl, serviceRoleKey, job);

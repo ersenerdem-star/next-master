@@ -4,6 +4,7 @@ import {downloadCsv} from "../../shared/csv";
 import { SupplierReleaseReviewPanel } from "../../modules/admin/SupplierReleaseReviewPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { canonicalizeBrandName, normalizeBrandName, normalizePartCode } from "../../domain/shared/normalize";
+import { callAppRpc } from "../../infrastructure/api/appRpcApi";
 import { createCloudBrand, fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCloudCatalog } from "../../infrastructure/api/catalogApi";
 import { assertLegacySupplierPriceWriteAllowed, bulkImportSupplierPrices } from "../../infrastructure/api/importApi";
@@ -734,24 +735,21 @@ export function SuppliersPage() {
       setError("");
       setStatus("");
       actionFeedback.begin(p("suppliers.feedback.savingSupplierPrice", { code: productCode }));
-      await assertLegacySupplierPriceWriteAllowed(activeBrand);
-      await bulkImportSupplierPrices([
-        {
-          supplier_name: supplier.name,
-          brand: activeBrand,
-          product_code: productCode,
-          description: normalizeText(manualPriceDraft.description),
-          oem_no: normalizeText(manualPriceDraft.oem_no),
-          buy_price: buyPrice,
-          currency: "EUR",
-          moq: normalizeNumber(manualPriceDraft.moq),
-          order_multiple: normalizeNumber(manualPriceDraft.order_multiple),
-          lead_time_days: normalizeNumber(manualPriceDraft.lead_time_days),
-          notes: normalizeText(manualPriceDraft.notes),
-          valid_from: normalizeText(manualPriceDraft.price_date),
-          is_active: true,
-        },
-      ]);
+      const selectedBrand = brands.find((brand) => brand.name === activeBrand);
+      if (!selectedBrand) throw new Error(locale === "tr" ? "Marka bulunamadı." : "Brand not found.");
+      await callAppRpc("save_manual_supplier_price", {
+        input_supplier_id: supplierId,
+        input_brand_id: selectedBrand.id,
+        input_product_code: productCode,
+        input_description: normalizeText(manualPriceDraft.description),
+        input_oem_no: normalizeText(manualPriceDraft.oem_no),
+        input_buy_price: buyPrice,
+        input_moq: normalizeNumber(manualPriceDraft.moq),
+        input_order_multiple: normalizeNumber(manualPriceDraft.order_multiple),
+        input_lead_time_days: normalizeNumber(manualPriceDraft.lead_time_days),
+        input_notes: normalizeText(manualPriceDraft.notes),
+        input_valid_from: normalizeText(manualPriceDraft.price_date) || null,
+      });
 
       const refreshedSuppliers = await fetchCloudSuppliers();
       setSuppliers(refreshedSuppliers);
@@ -893,8 +891,31 @@ export function SuppliersPage() {
           <div><strong>{verifiedUploadEnabled ? "3" : "2"}</strong><span><InterfaceText text={"release gates"}/></span></div>
         </div>
       </section>
+      <section className="supplier-operations" aria-label={locale === "tr" ? "Fiyat işlemleri" : "Price actions"}>
+        <article className="supplier-operation">
+          <h3>{locale === "tr" ? "Fiyat listesi yükle" : "Upload a price list"}</h3>
+          <p>{locale === "tr" ? "Tedarikçiden gelen dosyayı yükle, kontrol et ve yayınla." : "Upload, review and publish a supplier file."}</p>
+          <div className="supplier-operation__actions">
+            <Button onClick={() => setShowImportDialog(true)}>{locale === "tr" ? "Dosya yükle" : "Upload file"}</Button>
+            <Button variant="secondary" onClick={() => { downloadSupplierTemplate({ verified: verifiedUploadEnabled }); actionFeedback.succeed(p("suppliers.feedback.templateDownloaded")); }}>{p("suppliers.actions.downloadTemplate")}</Button>
+          </div>
+        </article>
+        <article className="supplier-operation">
+          <h3>{locale === "tr" ? "Tek fiyat ekle" : "Add a single price"}</h3>
+          <p>{locale === "tr" ? "Mevcut listeyi koruyarak bir parça için manuel fiyat yayınla." : "Publish one manual price while keeping the existing list."}</p>
+          <div className="supplier-operation__actions"><Button variant="secondary" onClick={() => {
+            setManualPriceDraft(current => ({ ...current, supplier_id: selectedSupplierId || current.supplier_id || suppliers[0]?.supplier_id || "", brand: current.brand || exportBrand || rows[0]?.brand || "", product_code: search.trim() || current.product_code }));
+            setShowManualPriceDialog(true);
+          }}>{locale === "tr" ? "Manuel fiyat ekle" : "Add manual price"}</Button></div>
+        </article>
+        <article className="supplier-operation">
+          <h3>{locale === "tr" ? "Fiyat listesini indir" : "Download a price list"}</h3>
+          <p>{locale === "tr" ? "Aşağıda tedarikçi ve marka seçerek güncel listeyi indir." : "Choose a supplier and brand below to download the current list."}</p>
+          <a className="supplier-operation__link" href="#supplier-price-browse">{locale === "tr" ? "Listeyi seç ve indir ↓" : "Select and download ↓"}</a>
+        </article>
+      </section>
       {import.meta.env.VITE_SUPPLIER_RELEASE_REVIEW_ENABLED === "true" ? <SupplierReleaseReviewPanel locale={locale} /> : null}
-      <section className="section-card supplier-workspace-card">
+      <section id="supplier-price-browse" className="section-card supplier-workspace-card">
         <div className="section-card__body">
           <label className="meta-row">
             <input type="checkbox" checked={showDisabledSuppliers} onChange={event => {
@@ -940,37 +961,10 @@ export function SuppliersPage() {
               {t("common.search")}
             </Button>
             <Button variant="secondary" onClick={() => void handleSupplierExport()} disabled={!selectedSupplierId || !exportBrand} busy={exportingSuppliers} busyLabel={p("busy.preparing")}>
-              {p("actions.exportCsv")}
+              {locale === "tr" ? "Fiyat listesini indir (CSV)" : "Download price list (CSV)"}
             </Button>
           </div>
-          <div className="supplier-toolbar supplier-toolbar--actions">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setManualPriceDraft((current) => ({
-                  ...current,
-                  supplier_id: selectedSupplierId || current.supplier_id || suppliers[0]?.supplier_id || "",
-                  brand: current.brand || rows[0]?.brand || "",
-                  product_code: search.trim() || current.product_code,
-                }));
-                setShowManualPriceDialog(true);
-              }}
-            >
-              {p("suppliers.actions.addManualPrice")}
-            </Button>
-            <Button variant="secondary" onClick={() => setShowImportDialog(true)}>
-              {p("suppliers.actions.importCsv")}
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                downloadSupplierTemplate({ verified: verifiedUploadEnabled });
-                actionFeedback.succeed(p("suppliers.feedback.templateDownloaded"));
-              }}
-            >
-              {p("suppliers.actions.downloadTemplate")}
-            </Button>
-          </div>
+
         </div>
         <div className="section-card__body">
           <p className="muted-text">{p("suppliers.export.scopeHint")}</p>
@@ -1254,7 +1248,7 @@ export function SuppliersPage() {
                     : p("suppliers.manual.noCatalogMatch")}
               </div>
             ) : null}
-            <div className="modal-hint">{p("suppliers.manual.pipelineHint")}</div>
+            <div className="modal-hint">{locale === "tr" ? "Bu fiyat yalnızca seçilen tedarikçi, marka ve parçaya uygulanır. Yeni yayınlanan dosyada aynı parça varsa dosya fiyatı geçerli olur; diğer manuel fiyatlar korunur." : "This price applies only to the selected supplier, brand and part. A newly published file replaces it only when it contains the same part; other manual prices remain."}</div>
             <div className="modal-actions">
               <Button
                 variant="secondary"

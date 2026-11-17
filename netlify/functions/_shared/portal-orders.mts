@@ -1,5 +1,6 @@
 import { buildRestUrl, getJson, sendJson, serviceRoleHeaders } from "./http.mts";
-import { buildPortalSnapshot } from "./portal-access.mts";
+import { buildPortalSnapshot, fetchPortalSalesOrderDetail } from "./portal-access.mts";
+import { assertFirstSaveMatchesPreview, firstSaveOrderId } from "./portal-first-save-guard.mts";
 import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./catalog-standardization.mts";
 import { roundMoney, multiplyMoney, sumMoney, marginPercent as orderMarginPercent, markupMoney } from "../../../shared/order-money.mjs";
 import { normalizeOrderQuantity } from "../../../apps/web/src/domain/shared/orderQuantityRules.ts";
@@ -2526,11 +2527,28 @@ export async function submitPortalSalesOrder(
     packingDetails?: string;
     notes?: string;
     rows: PortalOrderInputRow[];
+    autoSaveIntent?: string;
+    expectedPrices?: Array<{code:string;brand:string;qty:number;sell_price:number|null}>;
   },
 ) {
+  const autoId = input.autoSaveIntent ? firstSaveOrderId(invite.organization_id, invite.id, input.autoSaveIntent) : null;
+  const recoverFirstSave = async () => {
+    if (!autoId) return null;
+    const saved = await fetchPortalSalesOrderDetail(supabaseUrl, serviceRoleKey, invite, autoId);
+    if (!saved) return null;
+    if (String(saved.status).toLowerCase() !== 'draft' || saved.portal_submitted_at || !Array.isArray(saved.lines)) throw new Error('The original draft is no longer editable.');
+    assertFirstSaveMatchesPreview(input.expectedPrices || [], saved.lines.map((line) => ({requestedCode:String(line.requested_code || line.code || ''),brand:String(line.brand || ''),qty:Number(line.qty),sell_price:line.sell_price == null ? null : Number(line.sell_price)})));
+    return {orderId:autoId, order:saved, snapshot:null};
+  };
+  if (autoId) {
+    if (input.mode !== 'draft' || input.orderId) throw new Error('Invalid automatic save request.');
+    const recovered = await recoverFirstSave();
+    if (recovered) return recovered;
+  }
   const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite, "fresh");
   const prepared = await preparePortalOrderLines(supabaseUrl, serviceRoleKey, invite, input.rows);
   const lines = prepared.lines.filter((line) => line.qty > 0 && line.resolvedCode);
+  if (autoId) assertFirstSaveMatchesPreview(input.expectedPrices || [], lines);
   if (!lines.length) throw new Error("No valid order lines found");
   const adjustedLine = lines.find((line) => line.quantity_adjusted);
   if (adjustedLine) {
@@ -2576,7 +2594,7 @@ export async function submitPortalSalesOrder(
     `PORTAL-${today.replaceAll("-", "")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
   const payload = {
-    id: String(existing?.id || input.orderId || makeId("so")),
+    id: String(autoId || existing?.id || input.orderId || makeId("so")),
     organization_id: invite.organization_id,
     sales_order_no: salesOrderNo,
     customer_id: context.customer.id,
@@ -2616,17 +2634,22 @@ export async function submitPortalSalesOrder(
   let rows: Array<Record<string, unknown>>;
   try {
     rows = await sendJson<Array<Record<string, unknown>>>(
-      `${buildRestUrl(supabaseUrl, "sales_orders", { on_conflict: "id", select: "id" })}`,
+      `${buildRestUrl(supabaseUrl, "sales_orders", autoId ? {select:"id"} : { on_conflict: "id", select: "id" })}`,
       {
         method: "POST",
         headers: {
           ...serviceRoleHeaders(serviceRoleKey),
-          Prefer: "resolution=merge-duplicates,return=representation",
+          Prefer: autoId ? "return=representation" : "resolution=merge-duplicates,return=representation",
         },
         body: JSON.stringify(payload),
       },
     );
   } catch (error) {
+    if (autoId) {
+      const recovered = await recoverFirstSave();
+      if (recovered) return recovered;
+      throw error;
+    }
     const message = error instanceof Error ? error.message : String(error);
     if (!message.toLowerCase().includes("customer_id")) {
       throw error;
@@ -2658,7 +2681,7 @@ export async function submitPortalSalesOrder(
     quote_date: today,
     currency: context.currency,
     sales_total: totalAmount,
-    subtotal: roundMoney(totalAmount + discountAmount - shippingCost),
+    subtotal,
     discount_amount: discountAmount,
     shipping_cost: shippingCost,
     source_channel: "portal",

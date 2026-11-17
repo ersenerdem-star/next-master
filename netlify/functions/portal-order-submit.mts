@@ -64,6 +64,8 @@ export default async (req: Request, _context: Context) => {
       packingDetails: body?.packingDetails ? String(body.packingDetails) : "",
       notes: body?.notes ? String(body.notes) : "",
       rows,
+      autoSaveIntent: body?.autoSaveIntent ? String(body.autoSaveIntent) : undefined,
+      expectedPrices: Array.isArray(body?.expectedPrices) ? body.expectedPrices : undefined,
     });
     await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       organizationId: invite.organization_id,

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "../i18n/I18nProvider";
+import { portalIdleForReload, runGuardedPortalReload } from "./portalAutoReload";
 
 type BuildMetadata = {
   appId: string;
@@ -29,6 +30,7 @@ type VersionUpdateContextValue = {
   checkForUpdate: (reason?: string) => Promise<VersionDecision>;
   requireFreshClient: (reason?: string) => Promise<void>;
   reloadNow: () => Promise<void>;
+  setPortalAutoReloadSafe: (safe: boolean) => void;
 };
 
 const VERSION_JSON_PATH = "/version.json";
@@ -51,6 +53,7 @@ const SENSITIVE_API_PATHS = new Set([
   "/api/portal-order-delete",
   "/api/portal-order-prepare",
   "/api/portal-order-submit",
+  "/api/portal-order-quantities",
   "/api/portal-password-reset-confirm",
   "/api/portal-password-reset-request",
   "/api/portal-price-list",
@@ -276,6 +279,10 @@ export function VersionUpdateProvider({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   const [decision, setDecision] = useState<VersionDecision | null>(null);
   const [reloading, setReloading] = useState(false);
+  const [portalAutoReloadSafe, setPortalAutoReloadSafe] = useState(false);
+  const portalAutoReloadSafeRef = useRef(false);
+  portalAutoReloadSafeRef.current = portalAutoReloadSafe;
+  const lastInteractionRef = useRef(Date.now());
   const decisionRef = useRef<VersionDecision | null>(null);
   const lastCheckAtRef = useRef(0);
   const checkInFlightRef = useRef<Promise<VersionDecision> | null>(null);
@@ -344,7 +351,7 @@ export function VersionUpdateProvider({ children }: { children: ReactNode }) {
   );
 
   const performHardReload = useCallback(
-    async (deployed: BuildMetadata) => {
+    async (deployed: BuildMetadata, automatic = false) => {
       if (shouldBlockReloadLoop(deployed.buildVersion)) {
         const blockedDecision: VersionDecision = {
           status: "reload-blocked",
@@ -357,9 +364,18 @@ export function VersionUpdateProvider({ children }: { children: ReactNode }) {
       }
 
       setReloading(true);
-      writeReloadMarker(deployed.buildVersion);
-      await clearAppOwnedCaches();
-      window.location.replace(buildReloadUrl(deployed.buildVersion));
+      const stillSafe = () => {
+        if (!automatic) return true;
+        const active = document.activeElement;
+        const editableFocused = active instanceof HTMLElement && (active.matches("input, textarea, select") || active.isContentEditable);
+        return portalAutoReloadSafeRef.current && decisionRef.current?.status === "stale" &&
+          portalIdleForReload(Date.now(), lastInteractionRef.current, editableFocused);
+      };
+      const didReload = await runGuardedPortalReload(clearAppOwnedCaches, stillSafe, () => {
+        writeReloadMarker(deployed.buildVersion);
+        window.location.replace(buildReloadUrl(deployed.buildVersion));
+      });
+      if (!didReload) setReloading(false);
     },
     [setNextDecision],
   );
@@ -388,6 +404,27 @@ export function VersionUpdateProvider({ children }: { children: ReactNode }) {
     }
     window.location.reload();
   }, [checkForUpdate, performHardReload]);
+
+  useEffect(() => {
+    const noteInteraction = () => { lastInteractionRef.current = Date.now(); };
+    window.addEventListener("pointerdown", noteInteraction, true);
+    window.addEventListener("keydown", noteInteraction, true);
+    return () => {
+      window.removeEventListener("pointerdown", noteInteraction, true);
+      window.removeEventListener("keydown", noteInteraction, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (decision?.status !== "stale" || !portalAutoReloadSafe || reloading) return;
+    const timer = window.setInterval(() => {
+      const active = document.activeElement;
+      const editableFocused = active instanceof HTMLElement && (active.matches("input, textarea, select") || active.isContentEditable);
+      if (!portalIdleForReload(Date.now(), lastInteractionRef.current, editableFocused)) return;
+      void performHardReload(decision.deployed, true);
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [decision, portalAutoReloadSafe, reloading, performHardReload]);
 
   useEffect(() => {
     void checkForUpdate("startup", { throttleMs: 0 });
@@ -447,6 +484,7 @@ export function VersionUpdateProvider({ children }: { children: ReactNode }) {
       checkForUpdate: (reason?: string) => checkForUpdate(reason, { throttleMs: 0 }),
       requireFreshClient,
       reloadNow,
+      setPortalAutoReloadSafe,
     }),
     [checkForUpdate, decision, reloadNow, requireFreshClient],
   );

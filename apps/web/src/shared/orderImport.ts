@@ -21,9 +21,14 @@ function normalizeHeader(value: string) {
     .replace(/[^a-z0-9]+/g, "_");
 }
 
-function normalizeQty(value: unknown) {
-  const parsed = Number(String(value ?? "").trim().replace(",", "."));
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+function normalizeQty(value: unknown, code: string) {
+  const text = String(value ?? "").trim();
+  if (!text) return 1;
+  const parsed = Number(text.replace(",", "."));
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 2147483647) {
+    throw new Error(`Invalid quantity for ${code}. Enter a whole number between 1 and 2147483647.`);
+  }
+  return parsed;
 }
 
 function mapRows(rawRows: Array<Record<string, unknown>>, fallbackBrand = "") {
@@ -39,10 +44,11 @@ function mapRows(rawRows: Array<Record<string, unknown>>, fallbackBrand = "") {
           "",
       );
       const brand = String(normalized.brand || fallbackBrand || "").trim();
-      const qty = normalizeQty(normalized.qty || normalized.quantity || normalized.amount || 1);
+      if (!code) return null;
+      const qty = normalizeQty(normalized.qty ?? normalized.quantity ?? normalized.amount, code);
       return { code, brand, qty };
     })
-    .filter((row) => row.code);
+    .filter((row): row is ImportedOrderRow => row !== null);
 }
 
 function rowsFromCsv(text: string) {

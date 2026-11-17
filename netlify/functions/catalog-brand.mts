@@ -33,11 +33,14 @@ export default async(req:Request)=>{
  }
  if(!readAllowed)return json({error:'OFFICIAL_ENGINE_NOT_CONFIGURED'},409);
  const action=body?.action;
+ if(action==='discover'&&def.family==='knorr_bremse'){
+  const result=await db.rpc('start_catalog_knorr_discovery',{input_org:org,input_actor:caller.profile.id,input_key:body.requestId,input_page:body.page??0});if(result.error)return json({error:result.error.message},400);return json({job:result.data,dispatchPending:true},202);
+ }
  if(action==='discover'&&wilmink){
   const result=await db.rpc(support?'start_catalog_wilmink_support':'start_catalog_wilmink_scan',{input_org:org,input_actor:caller.profile.id,input_key:body.requestId,...(support?{input_brand:brand.name,input_urls:body.urls||[]}:{} )});if(result.error)return json({error:result.error.message},400);return json({job:result.data,dispatchPending:true},202);
  }
  if(!['start','resume','publish'].includes(action))return json({error:'Invalid action'},400);if(action==='publish'&&!publishAllowed)return json({error:'OFFICIAL_ENGINE_PUBLICATION_NOT_APPROVED'},409);
- if(action!=='start'){const selected=await db.from('catalog_brand_jobs').select('manifest').eq('id',body.jobId).eq('organization_id',org).maybeSingle();if(selected.error||!matchesBrandEngineJob(selected.data,def)||(wilmink&&selected.data?.manifest?.adapter!=='brand-exact.v1'))return json({error:'BRAND_JOB_SCOPE_MISMATCH'},400);}
+ if(action!=='start'){const selected=await db.from('catalog_brand_jobs').select('manifest').eq('id',body.jobId).eq('organization_id',org).maybeSingle();if(selected.error||!matchesBrandEngineJob(selected.data,def)||(wilmink&&selected.data?.manifest?.adapter!=='brand-exact.v1'))return json({error:'BRAND_JOB_SCOPE_MISMATCH'},400);if(action==='publish'&&selected.data?.manifest?.adapter==='knorr-official-discovery.v1')return json({error:'KNORR_DISCOVERY_REVIEW_ONLY'},409);}
  const args=action==='start'?{input_org:org,input_actor:caller.profile.id,input_codes:body.codes,input_brand:brand.name,input_key:body.requestId,input_source:def.sourceKey}:{input_org:org,input_job:body.jobId,input_publish:action==='publish'};
  const result=await db.rpc(action==='start'?'start_catalog_brand_job':'schedule_catalog_brand_job',args);if(result.error)return json({error:result.error.message},400);
  // A service-signed scheduled dispatcher owns execution; no user session is

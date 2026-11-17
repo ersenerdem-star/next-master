@@ -1,4 +1,7 @@
 import type { PortalCredentials, PortalSnapshot } from "../../types/portalSession";
+import type { ExportDownloadPart } from "../../shared/xlsx";
+
+export type PortalExportDownload = { signedUrl: string; fallbackUrl?: string; fileName: string; rowCount: number; byteSize: number; expiresIn: number; parts?: ExportDownloadPart[] };
 
 export type PortalCatalogSearchItem = {
   code: string;
@@ -48,6 +51,7 @@ export type PortalExportJobStatus = {
   updatedAt: string;
   finalizedAt: string | null;
   cached: boolean;
+  download?: PortalExportDownload;
 };
 
 export type PortalPreparedLine = {
@@ -84,6 +88,8 @@ export type PortalPreparedLine = {
 };
 
 type PortalOrderResponse = {
+  updatedAt?: string;
+  salesTotal?: number;
   ok?: boolean;
   error?: string;
   items?: PortalCatalogSearchItem[];
@@ -107,6 +113,7 @@ type PortalOrderResponse = {
   }>;
   rowsCompact?: Array<[string, string, string, "A" | "B" | "C" | "Other", number | null, string | null, "active" | "discontinued", string | null]>;
   job?: PortalExportJobStatus;
+  download?: PortalExportDownload;
   signedUrl?: string;
   url?: string;
   fallbackUrl?: string;
@@ -114,7 +121,15 @@ type PortalOrderResponse = {
   rowCount?: number;
   byteSize?: number;
   expiresIn?: number;
+  parts?: ExportDownloadPart[];
 };
+
+export async function savePortalOrderQuantities(credentials: PortalCredentials, input: {orderId:string;updatedAt:string;edits:Array<{index:number;code:string;previousQty:number;qty:number}>}) {
+  const data = await postPortalOrderJson('/api/portal-order-quantities',{...credentials,...input});
+  if (!data.updatedAt || typeof data.salesTotal !== 'number') throw new Error('Quantity save could not be verified.');
+  return {updatedAt:data.updatedAt,salesTotal:data.salesTotal};
+}
+
 
 type PortalRequestOptions = {
   signal?: AbortSignal;
@@ -207,6 +222,8 @@ export async function submitPortalOrder(
     packingDetails: string;
     notes: string;
     rows: PortalOrderInputRow[];
+    autoSaveIntent?: string;
+    expectedPrices?: Array<{code:string;brand:string;qty:number;sell_price:number|null}>;
   },
   options: PortalRequestOptions = {},
 ) {
@@ -293,7 +310,7 @@ export async function startPortalPriceListExport(credentials: PortalCredentials,
     data = await postPortalOrderJson("/api/portal-export-start", payload);
   }
   if (!data.job) throw new Error("Portal export job response is missing.");
-  return data.job;
+  return { ...data.job, ...(data.download && data.job.status === "finalized" ? { download: data.download } : {}) };
 }
 
 export async function getPortalExportJobStatus(credentials: PortalCredentials, jobId: string) {
@@ -319,6 +336,7 @@ export async function downloadPortalExportJob(credentials: PortalCredentials, jo
     rowCount: Number(data.rowCount || 0),
     byteSize: Number(data.byteSize || 0),
     expiresIn: Number(data.expiresIn || 0),
+    parts: data.parts,
   };
 }
 

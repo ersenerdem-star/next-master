@@ -34,8 +34,8 @@ type PrintLine = {
     tone?: "warning" | "danger" | "muted";
   }>;
   qty: number;
-  unitPrice: number;
-  amount: number;
+  unitPrice: number | null;
+  amount: number | null;
 };
 
 type PrintTotals = {
@@ -58,6 +58,8 @@ type BuildBusinessDocumentInput = {
   totalQty?: number;
   totalWeight?: number | null;
   sourceOrderColumn?: boolean;
+  allowMissingPrices?: boolean;
+  unsavedQuantityEdits?: boolean;
 };
 
 function safeText(value: unknown) {
@@ -102,7 +104,7 @@ function formatMoney(value: number, currency = "EUR", unitPrice = false) {
 export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
   const currency = input.totals.currency || "EUR";
   if (!/^[A-Z]{3}$/.test(currency)) throw new Error("Document currency is invalid.");
-  const checked = documentAmounts(input.lines, input.totals.shipping, input.totals.discount, input.totals.total);
+  const checked = documentAmounts(input.lines, input.totals.shipping, input.totals.discount, input.totals.total, input.allowMissingPrices);
   if (input.totals.subtotal != null && input.totals.subtotal !== checked.subtotal) throw new Error("Document subtotal is inconsistent. Refresh before exporting.");
   const logo = input.company.logoDataUrl
     ? `<img src="${safeText(input.company.logoDataUrl)}" alt="Logo" style="max-height:52px; max-width:138px; object-fit:contain;" />`
@@ -137,8 +139,8 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
           <td>${safeText(line.weight || "")}</td>
           <td>${safeText(line.gtip || "")}</td>
           <td>${safeText(line.qty)}</td>
-          <td>${formatMoney(line.unitPrice, currency, true)}</td>
-          <td>${formatMoney(line.amount, currency)}</td>
+          <td>${line.unitPrice == null ? "—" : formatMoney(line.unitPrice, currency, true)}</td>
+          <td>${line.amount == null ? "—" : formatMoney(line.amount, currency)}</td>
         </tr>
       `;
       },
@@ -155,6 +157,7 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
     )
     .join("");
   const totalsRows = [
+    input.unsavedQuantityEdits ? `<div class="totals-row"><span>Preview: quantity changes have not been saved to the order.</span></div>` : "",
     typeof input.totals.subtotal === "number"
       ? `<div class="totals-row"><span>Sub Total</span><strong>${formatMoney(input.totals.subtotal, currency)}</strong></div>`
       : "",
@@ -164,7 +167,7 @@ export function buildBusinessDocumentHtml(input: BuildBusinessDocumentInput) {
     typeof input.totals.shipping === "number"
       ? `<div class="totals-row"><span>Shipping & Handling</span><strong>${formatMoney(input.totals.shipping, currency)}</strong></div>`
       : "",
-    `<div class="totals-row grand"><span>Total Amount ${safeText(currency)}</span><strong>${formatMoney(input.totals.total, currency)}</strong></div>`,
+    `<div class="totals-row grand"><span>${input.lines.some((line) => line.unitPrice == null) ? "Total for priced items only" : "Total Amount"} ${safeText(currency)}</span><strong>${formatMoney(input.totals.total, currency)}</strong></div>`,
   ]
     .filter(Boolean)
     .join("");

@@ -21,6 +21,7 @@ export function brandEngineDefinition(brand:string){
  if(isSchaefflerBrand(brand))return {brand,family:SCHAEFFLER_ENGINE.family,engineName:SCHAEFFLER_ENGINE.name,sourceKey:SCHAEFFLER_ENGINE.sourceKey,sourceUrl:SCHAEFFLER_ENGINE.sourceUrl,reader:true,workflow:'brand',access:'server_access_required'};
  if(['sachs','boge','trw','lemforder','lemfoerder','wabco','zf'].includes(key))return {brand,family:'zf',sourceKey:'zf_group_official_v2',sourceUrl:'https://aftermarket.zf.com/en/aftermarket-portal/',reader:true,workflow:'zf'};
  if(key==='elring')return {brand,family:'elring',sourceKey:'tecalliance_elring',sourceUrl:'https://web.tecalliance.net/elring/en/home',reader:true,workflow:'elring'};
+ if(key==='knorrbremse')return {brand,family:'knorr_bremse',sourceKey:'knorr_bremse_aftermarket',sourceUrl:'https://mytruckservices.knorr-bremse.com/',reader:true,workflow:'brand'};
  if(key==='denso')return {brand,family:'denso',sourceKey:'denso_official_v1',sourceUrl:'https://www.denso-am.eu/catalog/pv',reader:true,workflow:'brand'};
  if(key==='dayco')return {brand,family:'dayco',sourceKey:'dayco_official',sourceUrl:'https://www.dayco.com/emea-en/catalog/',reader:true,workflow:'brand'};
  if(key==='delphi')return {brand,...knownOfficialSources.delphi,reader:true,workflow:'brand'};

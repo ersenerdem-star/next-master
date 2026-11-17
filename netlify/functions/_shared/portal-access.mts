@@ -2,6 +2,7 @@ import { buildRestUrl, getJson, serviceRoleHeaders } from "./http.mts";
 import { normalizeLifecycleStatus, sanitizeCatalogOemNumbers } from "./catalog-standardization.mts";
 import { createPortalSessionToken, hashPortalToken, verifyPortalSessionToken } from "./portal-security.mts";
 import { assertPortalTenantInvite, isLocalPortalHostname, resolvePortalSellerTenant, type PortalSellerTenant } from "./portal-tenant.mts";
+import { multiplyMoney } from "../../../shared/order-money.mjs";
 
 export type PortalInviteRow = {
   id: string;
@@ -584,15 +585,15 @@ function normalizeStoredLines(lines: unknown) {
   }
 }
 
-function mapSalesOrderLines(lines: unknown) {
+export function mapSalesOrderLines(lines: unknown) {
   const normalizedLines = normalizeStoredLines(lines);
   if (!Array.isArray(normalizedLines)) return [];
   return normalizedLines.map((line) => {
     const row = (line || {}) as Record<string, unknown>;
     const qty = toNumber(row.qty);
     const sellPrice = row.sell_price == null ? null : toNumber(row.sell_price);
-    const purchaseTotal = row.buy_price == null ? null : toNumber(row.buy_price) * qty;
-    const salesTotal = sellPrice == null ? null : sellPrice * qty;
+    const purchaseTotal = row.buy_price == null ? null : multiplyMoney(toNumber(row.buy_price), qty);
+    const salesTotal = sellPrice == null ? null : multiplyMoney(sellPrice, qty);
     const lifecycleStatus = normalizeLifecycleStatus(`${String(row.lifecycle_status || "")} ${String(row.lifecycle_note || "")}`);
     const lifecycleNote = String(row.lifecycle_note || "").trim() || null;
     // Portal-created lines use resolvedCode/requestedCode; admin-created

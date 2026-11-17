@@ -52,7 +52,8 @@ export function planSparetoMissingCompletion({brand:requestedBrand,code,existing
  }
  const eans=[existing.ean,official.fields?.ean,secondary.fields?.ean].filter(v=>!blank(v)).map(v=>String(v).trim());
  if(new Set(eans).size>1){result.issues.push('EAN_IDENTITY_CONFLICT');return result;}
- const incoming=Object.fromEntries(CATALOG_FIELDS.filter(k=>blank(primary[k])&&!blank(secondary.fields?.[k])).map(k=>[k,secondary.fields[k]]));
+ const secondaryFields=brand(requestedBrand).replace(/[^a-z0-9]/g,'')==='knorrbremse'?['oem_no','vehicle','vehicle_model']:CATALOG_FIELDS;
+ const incoming=Object.fromEntries(secondaryFields.filter(k=>blank(primary[k])&&!blank(secondary.fields?.[k])).map(k=>[k,secondary.fields[k]]));
  const planned=planSupplierCatalogEnrichment({existing:primary,incoming,phase:'official'});
  result.fields=planned.patch;result.issues.push(...planned.issues.map(i=>i.field+':'+i.code));
  for(const field of Object.keys(result.fields))result.provenance[field]={authority:'secondary',source:'Spareto',sourceUrl:source.href,observedAt:secondary.observedAt,fingerprint:secondary.fingerprint};

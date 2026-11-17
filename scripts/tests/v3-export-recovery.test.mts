@@ -96,6 +96,7 @@ test("recovery queries only stale, unexpired portal and admin price jobs with re
   for (const url of urls) {
     assert.equal(url.origin, target.supabaseUrl);
     assert.equal(url.searchParams.get("limit"), "2");
+    assert.equal(url.searchParams.get("scope->>sharedLeaderJobId"), "is.null");
     assert.match(url.searchParams.get("or") || "", /worker_lease_expires_at\.is\.null/);
     assert.equal(url.searchParams.get("expires_at"), `gt.${new Date(nowMs).toISOString()}`);
   }
@@ -117,6 +118,7 @@ test("recovery skips active leases, fresh and expired jobs, and caps signed disp
     job(6, { status: "running", updated_at: new Date(nowMs - 60_000).toISOString() }),
     job(7, { expires_at: new Date(nowMs - 1).toISOString() }),
     job(8, { export_type: "catalog_export" }),
+    job(9, { scope: { sharedLeaderJobId: "shared-leader" }, updated_at: new Date(nowMs - 500_000).toISOString() }),
   ];
   assert.deepEqual(selectRecoverableJobs([...eligible, ...ignored], nowMs).map((row) => row.id), [eligible[0].id, eligible[1].id]);
   const dispatched: string[] = [];
