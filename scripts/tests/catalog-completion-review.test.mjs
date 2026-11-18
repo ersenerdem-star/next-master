@@ -18,6 +18,7 @@ test('missing lifecycle is explicitly unsupported, not active or no replacement'
  assert.deepEqual(catalogLifecycleReview({}, {unavailable:'SOURCE_403'}).checks,{replacement:'blocked',discontinued:'blocked'});
  for(const status of ['No longer available','No longer deliverable by the manufacturer','0','Replaced'])assert.notEqual(catalogLifecycleReview({sourceStatus:status}).checks.discontinued,'found');
  assert.equal(catalogLifecycleReview({sourceStatus:'Production discontinued'}).checks.discontinued,'found');
+ assert.equal(catalogLifecycleReview({sourceStatus:'Active',lifecycle:{checks:{discontinued:'found'}}}).checks.discontinued,'found');
  assert.equal(catalogLifecycleReview({replacementCandidates:{replacedBy:['123']}}).checks.replacement,'review_required');
 });
 test('parsed official relations retain direction and checks independently from discontinued',()=>{

@@ -17,7 +17,9 @@ export function catalogLifecycleReview(raw={}, {unavailable=null}={}){
   for(const k of Object.keys(checks))if(valid.includes(parsed.checks[k]))checks[k]=parsed.checks[k];
  }
  const status=String(raw.sourceStatus??'').trim();
- if(status)checks.discontinued=productionEnded(status)?'found':'no_explicit_signal';
+ // An affirmative official discontinuation signal must survive a conflicting
+ // generic source status; otherwise an apparent "active" value can mask it.
+ if(status)checks.discontinued=productionEnded(status)||checks.discontinued==='found'?'found':'no_explicit_signal';
  const candidates=raw.replacementCandidates;
  const hasCandidates=candidates&&Object.values(candidates).some(v=>Array.isArray(v)?v.length>0:!!v);
  if(hasCandidates&&checks.replacement!=='found')checks.replacement='review_required';
