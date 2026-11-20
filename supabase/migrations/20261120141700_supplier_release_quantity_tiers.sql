@@ -61,7 +61,9 @@ begin
   end if;
   if target.status <> 'validated' or target.accepted_rows <> target.total_rows or target.total_rows < 1
      or target.rejected_rows <> 0 or target.conflict_rows <> 0 or target.warning_rows <> 0
-     or target.error_code is not null or row_count <= target.accepted_rows then
+     or (target.error_code is not null and target.error_code not in
+       ('CROSS_BRAND_BULK_OVERLAP','BRAND_IDENTITY_COMPARISON_UNAVAILABLE'))
+     or row_count <= target.accepted_rows then
     raise exception 'QUANTITY_TIERS_RELEASE_NOT_READY';
   end if;
   if exists (
@@ -103,24 +105,14 @@ grant execute on function public.stage_verified_supplier_quantity_tiers(uuid,uui
 
 -- Quantity-aware callers retain the existing purchase options, including
 -- manual-price precedence. Only a current, exact published base can supply tiers.
-create function public.cloud_current_supplier_quantity_options_service(
+create function supplier_price_ingestion_internal.current_supplier_quantity_options(
   input_organization_id uuid, input_code text, input_brand text, input_quantity integer
 ) returns table (
   supplier_id uuid, supplier_name text, brand_id uuid, brand text, product_code text,
   description text, buy_price numeric, price_date date, notes text, moq integer,
   order_multiple integer, stock_qty integer, valid_to date, applied_min_quantity integer
 )
-language plpgsql stable security definer set search_path = '' as $$
-begin
-  if (select auth.role()) is distinct from 'service_role' then
-    raise exception 'QUANTITY_TIERS_SERVICE_REQUIRED';
-  end if;
-  if input_organization_id is null or input_quantity is null or input_quantity < 1
-     or btrim(coalesce(input_code,'')) = '' or btrim(coalesce(input_brand,'')) = '' then
-    raise exception 'QUANTITY_TIERS_SCOPE_REQUIRED';
-  end if;
-
-  return query
+language sql stable set search_path = '' as $$
     select offer.supplier_id, offer.supplier_name, offer.brand_id, offer.brand, offer.product_code,
       offer.description, coalesce(tier.unit_price, offer.buy_price), offer.price_date, offer.notes,
       offer.moq, offer.order_multiple, offer.stock_qty, offer.valid_to, tier.minimum_quantity
@@ -147,7 +139,31 @@ begin
       order by q.minimum_quantity desc
       limit 1
     ) tier on true
-    order by coalesce(tier.unit_price, offer.buy_price), offer.price_date desc, offer.supplier_id;
+    order by coalesce(tier.unit_price, offer.buy_price), offer.price_date desc, offer.supplier_id
+$$;
+revoke all on function supplier_price_ingestion_internal.current_supplier_quantity_options(uuid,text,text,integer)
+  from public, anon, authenticated, service_role;
+
+create function public.cloud_current_supplier_quantity_options_service(
+  input_organization_id uuid, input_code text, input_brand text, input_quantity integer
+) returns table (
+  supplier_id uuid, supplier_name text, brand_id uuid, brand text, product_code text,
+  description text, buy_price numeric, price_date date, notes text, moq integer,
+  order_multiple integer, stock_qty integer, valid_to date, applied_min_quantity integer
+)
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  if (select auth.role()) is distinct from 'service_role' then
+    raise exception 'QUANTITY_TIERS_SERVICE_REQUIRED';
+  end if;
+  if input_organization_id is null or input_quantity is null or input_quantity < 1
+     or btrim(coalesce(input_code,'')) = '' or btrim(coalesce(input_brand,'')) = '' then
+    raise exception 'QUANTITY_TIERS_SCOPE_REQUIRED';
+  end if;
+
+  return query
+    select * from supplier_price_ingestion_internal.current_supplier_quantity_options(
+      input_organization_id,input_code,input_brand,input_quantity);
 end;
 $$;
 

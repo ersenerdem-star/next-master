@@ -1182,7 +1182,7 @@ export async function fetchPurchaseSupplierOffers(order: LocalPurchaseOrder, onP
   for (let offset = 0; offset < order.lines.length; offset += 25) {
     const batch = order.lines.slice(offset, offset + 25);
     const result = await callAppRpc<Array<{ request_index: number; options: import("../../shared/purchaseSourcing").PurchaseSupplierOffer[] }>>(
-      "cloud_current_supplier_price_options_batch", { input_requests: batch.map(l => ({ code: l.product_code, brand: l.brand })) });
+      "cloud_current_supplier_price_options_batch", { input_requests: batch.map(l => ({ code: l.product_code, brand: l.brand, quantity: l.qty })) });
     for (let i = 0; i < batch.length; i++) {
       const matches = result.filter(r => r.request_index === i);
       if (matches.length !== 1 || !Array.isArray(matches[0].options)) throw new Error("Supplier price response incomplete");

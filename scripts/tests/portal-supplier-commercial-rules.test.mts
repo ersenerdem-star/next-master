@@ -28,7 +28,7 @@ async function fixture(check: (state: { terms: Record<string, unknown>; writes: 
     }
     if (url.pathname.endsWith('/sales_orders') && url.searchParams.has('id')) data=state.saved ? [state.saved] : [];
     else if (url.pathname.endsWith("/customers")) data = [{ id: invite.customer_id, display_name: "Customer", currency: "EUR", custom_fields: "", price_list_type: "Other", price_list_margin_percent: 20 }];
-    else if (url.pathname.endsWith("/brands")) data = [{ id: "commercial-brand", name: "Geba" }];
+    else if (url.pathname.endsWith("/brands")) data = [{ id: "commercial-brand", name: "Geba" }, { id: "wahler-brand", name: "Wahler" }];
     else if (url.pathname.endsWith("/company_profiles")) data = [{ company_name: "Seller" }];
     else if (url.pathname.endsWith("/catalog_products")) data = [{ id: "product-1", product_code: "10131", description: "Pump", brand_id: "commercial-brand", normalized_code: "10131" }];
     else if (url.pathname.endsWith("/warehouse_stock_snapshots")) data = [];
@@ -37,9 +37,11 @@ async function fixture(check: (state: { terms: Record<string, unknown>; writes: 
       const quantityAware = url.pathname.endsWith("/cloud_current_supplier_quantity_options_service");
       if(quantityAware) assert.ok(Number.isInteger(body.input_quantity) && body.input_quantity > 0);
       const {input_quantity:quantity,...scope}=body;
-      assert.deepEqual(scope, { input_organization_id: invite.organization_id, input_code: "10131", input_brand: "Geba" });
+      const wahler = scope.input_brand === "Wahler";
+      assert.deepEqual(scope, { input_organization_id: invite.organization_id,
+        input_code: wahler ? "411471.103D" : "10131", input_brand: wahler ? "Wahler" : "Geba" });
       const tier = quantityAware && quantity >= 16 && typeof state.terms.tier_price === "number";
-      data = state.expired ? [] : [{ supplier_id: "supplier-geba", supplier_name: "GEBA", brand_id: "commercial-brand", brand: "Geba", product_code: "10131", description: "Pump", buy_price: tier ? state.terms.tier_price : 10, price_date: "2026-10-14", notes: "private", ...state.terms }];
+      data = state.expired ? [] : [{ supplier_id: "supplier-geba", supplier_name: wahler ? "GroupAuto" : "GEBA", brand_id: wahler ? "wahler-brand" : "commercial-brand", brand: scope.input_brand, product_code: scope.input_code, description: "Pump", buy_price: tier ? state.terms.tier_price : 10, applied_min_quantity: tier ? 16 : null, price_date: "2026-10-14", notes: "private", ...state.terms }];
     } else if (url.pathname.includes("supplier_price_options") || url.pathname.endsWith("/supplier_prices")) throw new Error("Legacy price fallback is forbidden");
     return Response.json(data);
   };
@@ -82,8 +84,26 @@ test('portal drafts price all 17 units from the eligible threshold and keep the 
   const result=await prepareCustomerPortalOrderLines(source,"test-key",invite,[row(17)]);
   assert.equal(result.lines[0].qty,17);
   assert.equal(result.lines[0].sell_price,9.6);
+  assert.equal(result.lines[0].applied_min_quantity,16);
   assert.equal(state.writes.length,0);
  });
+});
+
+test("Wahler confirmation refuses stale displayed prices and charges the entire line at the live tier",async()=>{
+  await fixture(async state=>{
+    state.terms={moq:1,order_multiple:null,stock_qty:null,tier_price:29.68,valid_to:null};
+    const row={code:"411471.103D",brand:"Wahler",qty:17};
+    const order={mode:"confirm" as const,rows:[row]};
+    await assert.rejects(submitPortalSalesOrder(source,"test-key",invite,order),/list changed/i);
+    await assert.rejects(submitPortalSalesOrder(source,"test-key",invite,{...order,expectedPrices:[{...row,sell_price:36.70}]}),/price or quantity changed/i);
+    assert.equal(state.saved,null);
+    const preview=await prepareCustomerPortalOrderLines(source,"test-key",invite,[row]);
+    const {sell_price}=preview.lines[0];
+    assert.equal(sell_price,35.62);
+    await submitPortalSalesOrder(source,"test-key",invite,{...order,expectedPrices:[{...row,sell_price}]});
+    assert.equal(state.saved?.purchase_total,504.56);
+    assert.equal(state.saved?.sales_total,605.54);
+  });
 });
 
 test("portal preparation exposes accepted MOQ/multiple quantity and keeps supplier stock private", async () => {

@@ -8,6 +8,7 @@ export type QuoteSupplierOption = {
   sell_price: number | null;
   notes: string | null;
   moq?: number | null;
+  applied_min_quantity?: number | null;
   order_multiple?: number | null;
   stock_qty?: number | null;
   valid_to?: string | null;

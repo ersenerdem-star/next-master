@@ -55,6 +55,7 @@ const ALLOWED_RPCS = new Set([
   "cloud_quote_supplier_options",
   "cloud_quote_supplier_options_v3",
   "cloud_quote_supplier_commercial_options_v3",
+  "cloud_quote_supplier_quantity_options",
   "cloud_current_supplier_price_options",
   "cloud_current_supplier_price_options_batch",
   "cloud_sales_order_preserved_supplier_lines",
@@ -174,6 +175,7 @@ const CUSTOMER_STAFF_RPCS = new Set([
   "cloud_quote_supplier_options",
   "cloud_quote_supplier_options_v3",
   "cloud_quote_supplier_commercial_options_v3",
+  "cloud_quote_supplier_quantity_options",
   "cloud_current_supplier_price_options",
   "cloud_current_supplier_price_options_batch",
   "cloud_sales_order_preserved_supplier_lines",
@@ -1208,7 +1210,7 @@ export default async (req: Request, context: Context) => {
       const data = await sendJson<unknown>(`${supabaseUrl}/rest/v1/rpc/cloud_current_supplier_price_options_batch`, {
         method: "POST",
         headers: { apikey: supabaseAnonKey, Authorization: authorizationHeader, "Content-Type": "application/json" },
-        body: JSON.stringify({ input_requests: requests.map(r => ({code:r.code,brand:r.brand})) }),
+        body: JSON.stringify({ input_requests: requests.map(r => ({code:r.code,brand:r.brand,...(typeof r.quantity === "number" ? {quantity:r.quantity} : {})})) }),
       });
       return json({ ok:true,data });
     }

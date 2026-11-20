@@ -176,3 +176,33 @@ test('stale second destination rolls back earlier groups and the source snapshot
  assert.equal((await db.query('select count(*) n from purchase_orders')).rows[0].n,2);
  assert.equal((await db.query('select count(*) n from purchase_order_supplier_changes')).rows[0].n,0);
 }));
+
+test('atomic Wahler purchase reassignment verifies the saved quantity tier and preserves the confirmed sale',()=>withDb(async db=>{
+ await groupAuto(db);
+ await db.exec(`
+  create schema supplier_price_ingestion_internal;
+  create function supplier_price_ingestion_internal.current_supplier_quantity_options(uuid,text,text,integer)
+   returns table(supplier_id uuid,supplier_name text, product_code text, buy_price numeric, price_date date,
+     notes text,moq integer,order_multiple integer,stock_qty integer,valid_to date,applied_min_quantity integer)
+   language sql as $$
+     select o.supplier_id,o.supplier_name,o.product_code,
+       case when (o.brand='Wahler' and $4>=16) then 29.68 else o.buy_price end,
+       o.price_date,null::text,o.moq,o.order_multiple,o.stock_qty,o.valid_to,
+       case when (o.brand='Wahler' and $4>=16) then 16 end
+     from public.cloud_current_supplier_commercial_options_core($1,$2,$3) o
+   $$;
+  insert into test_offers values('${org}','${ga}','GroupAuto','411471.103D','Wahler',30.58,'2026-11-12',1,1,1000,null);
+ `);
+ await db.exec(readFileSync('supabase/migrations/20261120141900_quantity_tier_order_readers.sql','utf8'));
+ const rows=[{...line('411471.103D',17),brand:'Wahler'}];
+ await db.query("update purchase_orders set lines=$1,line_count=1,total_amount=170 where id='PO-R'",[JSON.stringify(rows)]);
+ const sale=(await db.query('select to_jsonb(s) data from sales_orders s')).rows[0].data;
+ const input=await request(db,{supplier_id:ga,line_indices:[0],expected_prices:[{line_index:0,buy_price:30.58}]});
+ await assert.rejects(rpc(db,input),/PURCHASE_SUPPLIER_PRICE_CHANGED/);
+ assert.equal((await db.query("select total_amount from purchase_orders where id='PO-R'")).rows[0].total_amount,'170.00');
+ const result=await rpc(db,{...input,expected_prices:[{line_index:0,buy_price:29.68}]});
+ assert.equal(result.target_order.total_amount,504.56);
+ assert.equal(result.target_order.lines[0].qty,17);
+ assert.equal(result.target_order.lines[0].buy_price,29.68);
+ assert.deepEqual((await db.query('select to_jsonb(s) data from sales_orders s')).rows[0].data,sale);
+}));

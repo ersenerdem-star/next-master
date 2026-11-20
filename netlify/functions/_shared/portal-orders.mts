@@ -133,6 +133,7 @@ type PreparedPortalLine = {
   order_multiple?: number | null;
   quantity_adjusted?: boolean;
   quantity_adjustment_note?: string | null;
+  applied_min_quantity?: number | null;
   oem_no: string;
   hs_code: string;
   origin: string;
@@ -155,6 +156,7 @@ type PreparedPortalLine = {
   replacement_reason?: string | null;
   replacement_warning?: string | null;
   supplierOptions: Array<SupplierCommercialTerms & {
+    applied_min_quantity?: number | null;
     supplier_id?: string | null;
     supplier_name: string;
     buy_price: number | null;
@@ -2279,6 +2281,7 @@ async function resolvePortalCatalogSupplierData(
       if (!String(item.supplier_id || "").trim()) throw new Error("Supplier commercial rules could not be verified.");
       return {
         ...readSupplierCommercialTerms(item),
+        applied_min_quantity: typeof item.applied_min_quantity === "number" ? item.applied_min_quantity : null,
         supplier_id: item.supplier_id == null ? null : String(item.supplier_id),
         supplier_name: String(item.supplier_name || ""),
         product_code: String(item.product_code || ""),
@@ -2425,6 +2428,7 @@ async function resolvePreparedLine(
     qty: quantityAdjustment.corrected,
     requested_qty: quantityAdjustment.adjusted ? row.qty : null,
     moq: fallbackSupplier?.moq ?? null,
+    ...(fallbackSupplier?.applied_min_quantity ? { applied_min_quantity: fallbackSupplier.applied_min_quantity } : {}),
     order_multiple: fallbackSupplier?.order_multiple ?? null,
     quantity_adjusted: quantityAdjustment.adjusted,
     quantity_adjustment_note: quantityAdjustment.adjusted
@@ -2557,6 +2561,13 @@ export async function submitPortalSalesOrder(
   const prepared = await preparePortalOrderLines(supabaseUrl, serviceRoleKey, invite, input.rows);
   const lines = prepared.lines.filter((line) => line.qty > 0 && line.resolvedCode);
   if (autoId) assertFirstSaveMatchesPreview(input.expectedPrices || [], lines);
+  if (input.mode === "confirm") {
+    const wahler = lines.filter(line => line.brand.trim().toLowerCase() === "wahler");
+    if (wahler.length) {
+      const expected = (input.expectedPrices || []).filter(line => typeof line?.brand === "string" && line.brand.trim().toLowerCase() === "wahler");
+      assertFirstSaveMatchesPreview(expected,wahler);
+    }
+  }
   if (!lines.length) throw new Error("No valid order lines found");
   const adjustedLine = lines.find((line) => line.quantity_adjusted);
   if (adjustedLine) {

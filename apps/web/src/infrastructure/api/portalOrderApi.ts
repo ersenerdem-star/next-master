@@ -67,6 +67,7 @@ export type PortalPreparedLine = {
   order_multiple?: number | null;
   quantity_adjusted?: boolean;
   quantity_adjustment_note?: string | null;
+  applied_min_quantity?: number | null;
   oem_no: string;
   hs_code: string;
   origin: string;

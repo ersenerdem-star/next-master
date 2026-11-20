@@ -1,6 +1,13 @@
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { previewQuantityPriceList } from './quantity-price-preview.mjs';
+
+export async function readWahlerQuantitySource(path, file, size, sourceDate) {
+  if (!path.split('/').at(-1)?.startsWith('wahler-quantity-tiers-')) return null;
+  if (!/\.csv$/i.test(path) || size > 1024 * 1024) throw new Error('QUANTITY_TIERS_INVALID_SOURCE');
+  return prepareSupplierQuantityRelease(await readFile(file), sourceDate);
+}
 
 const checksum = bytes => createHash('sha256').update(bytes).digest('hex');
 

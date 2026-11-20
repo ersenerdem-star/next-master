@@ -2245,6 +2245,35 @@ export function PortalPage() {
     }
   }
 
+  async function reviewWahlerConfirmationPrices(rows: Array<{code:string;brand:string;qty:number;sell_price:number|null}>) {
+    const wahler = rows.filter(row => row.brand.trim().toLowerCase() === "wahler");
+    if (!wahler.length) return [];
+    const key = (code:string) => code.trim().toUpperCase().replace(/\s+/g, "");
+    const current = new Map(wahler.map(row => [key(row.code),row]));
+    const prepared = await preparePortalOrderLinesApi(credentials,wahler.map(({code,brand,qty}) => ({code,brand,qty})));
+    if (prepared.lines.some(line => line.sell_price == null || line.sell_price <= 0)) {
+      throw new Error(ui("A live customer price is required before confirming Wahler lines."));
+    }
+    const expected = prepared.lines.map(line => ({
+      code:line.requestedCode,brand:line.brand,qty:line.qty,sell_price:line.sell_price,
+    }));
+    const changed = expected.filter(line => {
+      const previous = current.get(key(line.code));
+      return previous?.qty !== line.qty || previous.sell_price !== line.sell_price;
+    });
+    if (changed.length || expected.length !== wahler.length) {
+      const previousTotal = sumMoney(wahler.map(line => multiplyMoney(line.sell_price ?? 0,line.qty)));
+      const nextTotal = sumMoney(expected.map(line => multiplyMoney(line.sell_price ?? 0,line.qty)));
+      const currency = prepared.pricingProfile?.currency || activeSnapshot?.pricingProfile?.currency || "EUR";
+      const prices = changed.slice(0,5).map(line => `${line.code} · ${line.qty} × ${formatMoneyForLocale(Number(line.sell_price),currency,locale)}`).join("\n");
+      const remaining = changed.length > 5 ? `\n+ ${changed.length - 5}` : "";
+      const total = `${formatMoneyForLocale(previousTotal,currency,locale)} → ${formatMoneyForLocale(nextTotal,currency,locale)}`;
+      const message = locale === "tr" ? "Wahler satırlarının fiyatı veya adedi güncellendi. Sipariş bu tutarla gönderilsin mi?" : "Wahler prices or quantities changed. Submit the order with these amounts?";
+      if (!window.confirm(`${message}\n\n${prices}${remaining}\n${total}`)) return null;
+    }
+    return expected;
+  }
+
   async function handleSubmitPortalOrder(
     mode: "draft" | "confirm",
     overrides: {
@@ -2304,10 +2333,15 @@ export function PortalPage() {
         title: mode === "confirm" ? "Submitting Sales Order" : "Saving Sales Order",
         message: mode === "confirm" ? "Submitting the sales order and sending it to the internal team." : "Saving current sales order lines and details.",
       });
+      const expectedPrices = mode === "confirm" ? await reviewWahlerConfirmationPrices(orderLines.map(line => ({
+        code:line.requestedCode || line.resolvedCode,brand:line.brand,qty:line.qty,sell_price:line.sell_price,
+      }))) : [];
+      if (expectedPrices === null) return;
       const result = await submitPortalOrder(credentials, {
         orderId: effectiveOrderId || undefined,
         salesOrderNo: effectiveSalesOrderNo || undefined,
         mode,
+        ...(expectedPrices.length ? {expectedPrices} : {}),
         deliveryTerm: effectiveDeliveryTerm,
         paymentTerms: effectivePaymentTerms,
         packingDetails: effectivePackingDetails,
@@ -2848,10 +2882,16 @@ export function PortalPage() {
       setConfirmingPortalOrder(true);
       setError("");
       setPortalOverlay({ title: ui("Confirming Sales Order"), message: "Sending the order with the current quantities to the internal team." });
+      const expectedPrices = await reviewWahlerConfirmationPrices((row.lines || []).map((line,index) => ({
+        code:String(line.requested_code || line.old_code || line.code || "").trim(),brand:String(line.brand || "").trim(),
+        qty:getPortalDetailQuantity(row.id,index,line.qty),sell_price:line.sell_price == null ? null : Number(line.sell_price),
+      })).filter(line => line.code && line.qty > 0));
+      if (expectedPrices === null) return;
       const result = await submitPortalOrder(credentials, {
         orderId: row.id,
         salesOrderNo: row.sales_order_no || row.id,
         mode: "confirm",
+        ...(expectedPrices.length ? {expectedPrices} : {}),
         deliveryTerm: "delivery_term" in row ? String(row.delivery_term || "") : "",
         paymentTerms: "payment_terms" in row ? String(row.payment_terms || "") : "",
         packingDetails: "packing_details" in row ? String(row.packing_details || "") : "",
@@ -3969,7 +4009,7 @@ export function PortalPage() {
                   onDeliveryTermChange={setPortalDeliveryTerm}
                   onPaymentTermsChange={setPortalPaymentTerms}
                   onPackingDetailsChange={setPortalPackingDetails}
-                  onQuantityChange={(lineId, quantity) => setPortalDraftLines((current) => current.map((line) => (line.lineId === lineId ? { ...line, qty: quantity, quantity_adjusted: false, quantity_adjustment_note: null, requested_qty: null } : line)))}
+                  onQuantityChange={(lineId, quantity) => setPortalDraftLines((current) => current.map((line) => (line.lineId === lineId ? { ...line, qty: quantity, quantity_adjusted: false, quantity_adjustment_note: null, requested_qty: null, applied_min_quantity: null } : line)))}
                   onSaveBasket={() => void handleSubmitPortalOrder("draft")}
                   onClearBasket={handleClearPortalBuilder}
                   onConfirmBasket={() => void handleSubmitPortalOrder("confirm")}

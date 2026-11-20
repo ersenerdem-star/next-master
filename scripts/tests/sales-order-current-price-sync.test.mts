@@ -77,3 +77,18 @@ test("current-price RPC requests are deduplicated and capped at 25", async () =>
   assert.deepEqual(sizes, [25, 2]);
   assert.equal(prices.size, 27);
 });
+
+test("GroupAuto / Wahler requests retain line quantities and price thresholds", async () => {
+  const first = { brand: "Wahler", productCode: "411471.103D", supplierName: "GroupAuto", quantity: 15 };
+  const second = { ...first, quantity: 17 };
+  const prices = await fetchCurrentSupplierPriceMap([first, second, first], async items => {
+    assert.deepEqual(items.map(row => row.quantity), [15, 17]);
+    return items.map((item, index) => ({
+      request_index: index,
+      has_published_scope: true,
+      options: [{supplier_name:"GroupAuto",product_code:item.code,buy_price:index ? 29.68 : 30.58,price_date:null,notes:null}],
+    }));
+  });
+  assert.equal(prices.get(currentSupplierPriceKey(first))?.buy_price,30.58);
+  assert.equal(prices.get(currentSupplierPriceKey(second))?.buy_price,29.68);
+});

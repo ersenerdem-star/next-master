@@ -6,6 +6,7 @@ import { resolveQuoteLine } from "../infrastructure/api/quoteResolverApi";
 import { callAppRpc } from "../infrastructure/api/appRpcApi";
 import {
   currentSupplierPriceKey,
+  currentSupplierQuantity,
   exactProductCode,
   fetchCurrentSupplierPriceMap,
   type CurrentSupplierPriceBatchRow,
@@ -133,11 +134,10 @@ async function refreshSalesOrderPriceLines(
   const pending = lines.map((_, index) => index).filter((index) =>
     options.keepPrices === false || replacementIndexes.has(index)
     || (options.hydrateMissingPricesIfKeepingPrices && (!Number.isFinite(Number(lines[index].buy_price)) || Number(lines[index].buy_price) <= 0)));
-  // One lookup per exact brand/SKU for this action. Duplicate order rows keep
-  // their own quantities and supplier selections, but share the read result.
+  // Share lookups only when the exact SKU and quantity agree.
   const lookups = new Map<string, ReturnType<typeof resolveQuoteLine>>();
   const lookup: typeof resolveQuoteLine = (input) => {
-    const key = JSON.stringify([normalizeBrandKey(input.brand || ""), exactProductCode(input.code)]);
+    const key = JSON.stringify([normalizeBrandKey(input.brand || ""), exactProductCode(input.code), currentSupplierQuantity(input.brand || "", input.quantity)]);
     let request = lookups.get(key);
     if (!request) {
       request = resolveQuoteLine(input);
@@ -331,6 +331,7 @@ async function refreshLinePricesFromCatalog(
       marginA: options.marginA,
       marginB: options.marginB,
       includeSupplierOptions: true,
+      quantity: line.qty,
     });
 
     const selectedFromSavedOptions = line.supplierOptions.find((option, index) =>
@@ -433,6 +434,7 @@ export async function resyncInvoiceLinesFromCatalog(
           brand: canonicalizeBrandName(line.brand || "") || line.brand,
           productCode: line.product_code || line.old_code,
           supplierName: line.supplier_name || "",
+          quantity: line.qty,
         })),
       );
 
@@ -444,7 +446,7 @@ export async function resyncInvoiceLinesFromCatalog(
     const canonicalBrand = canonicalizeBrandName(line.brand || "") || line.brand;
     const supplierPrice = keepPrices
       ? null
-      : supplierPriceMap.get(currentSupplierPriceKey({ brand: canonicalBrand, productCode: rawCode, supplierName: line.supplier_name || "" }));
+      : supplierPriceMap.get(currentSupplierPriceKey({ brand: canonicalBrand, productCode: rawCode, supplierName: line.supplier_name || "", quantity: line.qty }));
     if (!keepPrices && !supplierPrice) throw new Error(`Current supplier price is missing for ${canonicalBrand} ${rawCode}.`);
     const nextBuyPrice = keepPrices ? line.buy_price : supplierPrice!.buy_price;
     const nextBuyPriceValue = Number(nextBuyPrice ?? 0) || 0;
@@ -505,6 +507,7 @@ export async function resyncPurchaseOrderLinesFromCatalog(
           brand: canonicalizeBrandName(line.brand || "") || line.brand,
           productCode: line.product_code || line.old_code,
           supplierName: line.supplier_name || "",
+          quantity: line.qty,
         })),
       );
 
@@ -516,7 +519,7 @@ export async function resyncPurchaseOrderLinesFromCatalog(
     const canonicalBrand = canonicalizeBrandName(line.brand || "") || line.brand;
     const supplierPrice = keepPrices
       ? null
-      : supplierPriceMap.get(currentSupplierPriceKey({ brand: canonicalBrand, productCode: rawCode, supplierName: line.supplier_name || "" }));
+      : supplierPriceMap.get(currentSupplierPriceKey({ brand: canonicalBrand, productCode: rawCode, supplierName: line.supplier_name || "", quantity: line.qty }));
     if (!keepPrices && !supplierPrice) throw new Error(`Current supplier price is missing for ${canonicalBrand} ${rawCode}.`);
     const nextBuyPrice = keepPrices ? line.buy_price : supplierPrice!.buy_price;
     const nextBuyPriceValue = Number(nextBuyPrice ?? 0) || 0;

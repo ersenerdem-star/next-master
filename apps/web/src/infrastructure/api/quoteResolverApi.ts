@@ -1,3 +1,4 @@
+import { currentSupplierQuantity } from "../../shared/currentSupplierPriceSync.mjs";
 import { buildDiscontinuedWarning, normalizeCatalogLifecycleStatus } from "../../domain/shared/lifecycle";
 import { canonicalizePriceBrandName, canonicalizePriceProductCode, normalizePartCode } from "../../domain/shared/normalize";
 import type { QuoteResolveResult, QuoteSupplierOption } from "../../types/quoteBuilder";
@@ -76,6 +77,7 @@ export async function resolveQuoteLine(input: {
   marginA: number;
   marginB: number;
   includeSupplierOptions?: boolean;
+  quantity?: number;
 }): Promise<{ resolved: QuoteResolveResult; supplierOptions: QuoteSupplierOption[] }> {
   // Preserve the supplier's SKU punctuation. `61/1` and `611` can carry
   // different prices even though the legacy loose lookup maps both to `611`.
@@ -107,7 +109,11 @@ export async function resolveQuoteLine(input: {
   const includeSupplierOptions = input.includeSupplierOptions !== false;
 
   if (resolved.found && includeSupplierOptions) {
-    const optionRows = await callAppRpc<QuoteSupplierOption[]>("cloud_quote_supplier_commercial_options_v3", {
+    const quantity = currentSupplierQuantity(brand || resolved.brand || "", input.quantity);
+    const quantityScoped = quantity !== undefined;
+    const operation = quantityScoped ? "cloud_quote_supplier_quantity_options" : "cloud_quote_supplier_commercial_options_v3";
+    const optionRows = await callAppRpc<QuoteSupplierOption[]>(operation, {
+      ...(quantityScoped ? { input_quantity: quantity } : {}),
       input_code: code,
       input_brand: brand || resolved.brand || "",
       input_customer_type: supplierRpcCustomerType,
@@ -118,6 +124,7 @@ export async function resolveQuoteLine(input: {
       if (!String(option.supplier_id || "").trim()) throw new Error("Supplier commercial rules could not be verified.");
       return {
         ...readSupplierCommercialTerms(option),
+        ...(option.applied_min_quantity ? { applied_min_quantity: option.applied_min_quantity } : {}),
         supplier_id: option.supplier_id || null,
         supplier_name: option.supplier_name || "",
         buy_price: option.buy_price ?? null,

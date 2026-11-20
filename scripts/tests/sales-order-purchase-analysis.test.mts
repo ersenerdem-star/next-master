@@ -84,12 +84,13 @@ test('analysis gateway rejects every non-superadmin and forwards only bounded pr
   const url=new URL(String(input));
   if(url.pathname==='/auth/v1/user')return Response.json({id:'actor',email:'test@example.invalid'});
   if(url.pathname==='/rest/v1/profiles')return Response.json([{organization_id:'org',role,department:'purchasing',permissions:{'purchasing.orders':true},is_active:active}]);
+  if(url.pathname==='/rest/v1/staff_office_access')return Response.json([]);
   assert.equal(url.pathname,'/rest/v1/rpc/cloud_current_supplier_price_options_batch');
   assert.equal(new Headers(init?.headers).get('Authorization'),'Bearer caller-fixture');assert.equal(new Headers(init?.headers).get('apikey'),'anon-fixture');
-  assert.deepEqual(JSON.parse(String(init?.body)),{input_requests:[{code:'000123',brand:'Sachs'}]});
+  assert.deepEqual(JSON.parse(String(init?.body)),{input_requests:[{code:'000123',brand:'Sachs',quantity:17}]});
   dispatched++;return Response.json([{request_index:0,options:[offer('000123','T','TPM',8.56)]}]);
  };
- const request=(input_requests:any=[{code:'000123',brand:'Sachs',organization_id:'other'}],token=true)=>new Request('https://portal.example.invalid/api/app-rpc',{
+ const request=(input_requests:any=[{code:'000123',brand:'Sachs',quantity:17,organization_id:'other'}],token=true)=>new Request('https://portal.example.invalid/api/app-rpc',{
   method:'POST',headers:{...(token?{Authorization:'Bearer caller-fixture'}:{}),'Content-Type':'application/json'},
   body:JSON.stringify({name:'sales_order_purchase_analysis_options',args:{input_requests,organization_id:'other'}})});
  try {

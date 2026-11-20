@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
-import { exactProductCode } from "../../apps/web/src/shared/currentSupplierPriceSync.mts";
+import { currentSupplierQuantity, exactProductCode } from "../../apps/web/src/shared/currentSupplierPriceSync.mts";
 import { canonicalizePriceProductCode, canonicalizePriceBrandName } from "../../apps/web/src/domain/shared/normalize.ts";
 
 function loadSalesResync(dependencies, exportedName = "resyncSalesOrderLinesFromCatalog") {
@@ -39,6 +39,7 @@ function savedLine(code = "61/1") {
 function makeResync(resolveQuoteLine, references = new Map(), exportedName = "resyncSalesOrderLinesFromCatalog", metadata = new Map()) {
   return loadSalesResync({
     exactProductCode,
+    currentSupplierQuantity,
     normalizePartCode: (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, ""),
     normalizeBrandKey: (value) => String(value || "").trim().toLowerCase(),
     canonicalizeBrandName: (value) => String(value || "").trim(),

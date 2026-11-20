@@ -1,7 +1,14 @@
+export function currentSupplierQuantity(brand: string, quantity?: number) {
+  if (brand.trim().toLowerCase() !== "wahler" || typeof quantity !== "number"
+    || !Number.isInteger(quantity) || quantity < 1 || quantity > 2147483647) return undefined;
+  return quantity;
+}
+
 export type CurrentSupplierPriceRequest = {
   brand: string;
   productCode: string;
   supplierName: string;
+  quantity?: number;
 };
 
 export type CurrentSupplierPriceOption = {
@@ -33,6 +40,7 @@ export function currentSupplierPriceKey(request: CurrentSupplierPriceRequest): s
     request.brand.trim().toLowerCase(),
     exactProductCode(request.productCode),
     request.supplierName.trim().toLowerCase(),
+    currentSupplierQuantity(request.brand, request.quantity),
   ]);
 }
 
@@ -44,7 +52,7 @@ function requirePriceRequest(request: CurrentSupplierPriceRequest): void {
 
 export async function fetchCurrentSupplierPriceMap(
   requests: CurrentSupplierPriceRequest[],
-  fetchBatch: (items: Array<{ code: string; brand: string }>) => Promise<CurrentSupplierPriceBatchRow[]>,
+  fetchBatch: (items: Array<{ code: string; brand: string; quantity?: number }>) => Promise<CurrentSupplierPriceBatchRow[]>,
 ): Promise<Map<string, SelectedSupplierPrice>> {
   const unique = new Map<string, CurrentSupplierPriceRequest>();
   for (const request of requests) {
@@ -56,7 +64,10 @@ export async function fetchCurrentSupplierPriceMap(
   const pending = [...unique.entries()];
   for (let offset = 0; offset < pending.length; offset += 25) {
     const batch = pending.slice(offset, offset + 25);
-    const response = await fetchBatch(batch.map(([, request]) => ({ code: request.productCode, brand: request.brand })));
+    const response = await fetchBatch(batch.map(([, request]) => {
+      const quantity = currentSupplierQuantity(request.brand, request.quantity);
+      return { code: request.productCode, brand: request.brand, ...(quantity === undefined ? {} : { quantity }) };
+    }));
     if (!Array.isArray(response) || response.length !== batch.length) {
       throw new Error("Current supplier price lookup returned incomplete data.");
     }

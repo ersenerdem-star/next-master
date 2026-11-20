@@ -9,7 +9,7 @@ export type SalesPurchaseAnalysisLine = {
 type PriceBatch = Array<{ request_index: number; options: PurchaseSupplierOffer[] }>;
 export async function loadSalesPurchaseAnalysisOffers(
   lines: SalesPurchaseAnalysisLine[],
-  request: (args: { input_requests: Array<{ code: string; brand: string }> }) => Promise<PriceBatch>,
+  request: (args: { input_requests: Array<{ code: string; brand: string; quantity: number }> }) => Promise<PriceBatch>,
   progress?: (count: number) => void,
 ) {
   if (!lines.length) throw new Error("Add order lines before exporting.");
@@ -17,7 +17,7 @@ export async function loadSalesPurchaseAnalysisOffers(
   const rows: PurchaseSupplierOffer[][] = [];
   for (let offset = 0; offset < lines.length; offset += 25) {
     const batch = lines.slice(offset, offset + 25);
-    const result = await request({ input_requests: batch.map(l => ({ code: l.code, brand: l.brand })) });
+    const result = await request({ input_requests: batch.map(l => ({ code: l.code, brand: l.brand, quantity: l.qty })) });
     if (!Array.isArray(result) || result.length !== batch.length) throw new Error("Supplier price response incomplete. No file was downloaded.");
     for (let i = 0; i < batch.length; i++) {
       const matches = result.filter(r => r.request_index === i);
@@ -51,7 +51,7 @@ export function buildSalesPurchaseAnalysis(input: {
   const rows: ExportRows = [
     ["Sales Order purchase analysis · internal / superadmin", input.number],
     ["Price snapshot (UTC)", input.generatedAt],
-    ["Supplier columns: current unit buy prices in EUR. Blank = no exact current offer. Order prices are snapshots; alternatives do not update the order."],
+    ["Supplier columns: current unit buy prices in EUR for the quantity shown. Blank = no exact current offer. Order prices are snapshots; alternatives do not update the order."],
     ["Check MOQ, order multiples, stock and payment / logistics terms before ordering. This file does not assign or send purchase orders."],
     ["Part number", "Brand", "Description", "Quantity", "Order supplier", `Order unit buy (${input.currency})`, `Sales unit price (${input.currency})`, `Sales line total (${input.currency})`,
       ...suppliers.map(s => `${s.supplier_name}${suppliers.filter(o => o.supplier_name === s.supplier_name).length > 1 ? ` [${s.supplier_id}]` : ""} buy (EUR)`)],

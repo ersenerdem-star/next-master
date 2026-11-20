@@ -469,15 +469,26 @@ export function SuppliersPage() {
       setImportingSupplier(true);setError('');setStatus('');setWarning('');
       try {
         setCsvReport(null);setVerifiedProgress(null);
+        let uploadFile = file;
         if(/\.csv$/i.test(file.name)){
+          const isWahlerQuantity = activeSupplierName.trim().toLowerCase() === 'groupauto'
+            && canonicalImportBrand.trim().toLowerCase() === 'wahler'
+            && file.size <= 1024 * 1024
+            && (await file.slice(0,256).text()).replace(/^\uFEFF/,'').split(/\r?\n/,1)[0]
+              .split(';').map(cell => cell.trim().toLowerCase()).join(';') === 'product_code;moq;buy_price_eur';
           setStatus('Dosya kontrol ediliyor: ürün kodları, fiyatlar ve tekrarlar…');
-          const report=await inspectSupplierCsv(file,controller.signal);setCsvReport(report);
+          const quantityReport = isWahlerQuantity ? await inspectSupplierCsv(file,controller.signal,true) : null;
+          const report = quantityReport ?? await inspectSupplierCsv(file,controller.signal);
+          setCsvReport(report);
           if(report.issueCount){
             const message=`Dosyada ${report.issueCount.toLocaleString('tr-TR')} sorun bulundu. Aşağıdaki satır ayrıntılarını kontrol edin veya hata listesini indirin.`;
             setError(message);setStatus('Dosya gönderilmedi. Hataları düzelttikten sonra tekrar seçin.');actionFeedback.fail(message);return;
           }
+          if (quantityReport && quantityReport.tieredProductCount > 0) {
+            uploadFile = new File([file],`wahler-quantity-tiers-${file.name}`,{type:file.type,lastModified:file.lastModified});
+          }
         }
-        const result=await uploadVerifiedSupplierFile(file,{supplierId:importSupplierId,brandId:brand.id,
+        const result=await uploadVerifiedSupplierFile(uploadFile,{supplierId:importSupplierId,brandId:brand.id,
           mode:importMode,sourceDate:uploadSourceDate},controller.signal,
           progress=>{setVerifiedProgress(progress);setStatus(progress.message);});
         const resultView=supplierUploadStatusView(result,locale==='tr');

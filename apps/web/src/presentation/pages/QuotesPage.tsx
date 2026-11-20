@@ -308,6 +308,7 @@ async function assertCurrentPricesBeforeConfirmation(
       input_requests: batch.map((line) => ({
         code: String(line.resolvedCode || line.requestedCode || "").trim(),
         brand: String(line.brand || "").trim(),
+        quantity: line.qty,
       })),
     });
     if (!Array.isArray(response) || response.length !== batch.length) {
@@ -1763,6 +1764,7 @@ export function QuotesPage({
         code: line.resolvedCode || line.requestedCode,
         brand: line.brand || "",
         customerType: orderCustomerType,
+        quantity: line.qty,
         marginA: effectiveMarginA,
         marginB: effectiveMarginB,
       });
@@ -2343,7 +2345,7 @@ export function QuotesPage({
                 const optionKey = `${option.supplier_name}-${index}`;
                 return (
                   <option key={optionKey} value={optionKey}>
-                    {option.supplier_name} | {t("sales.orders.buy")} {option.buy_price ?? "-"} | {t("sales.orders.sell")} {option.sell_price ?? "-"}
+                    {option.supplier_name} | {t("sales.orders.buy")} {option.buy_price ?? "-"} | {t("sales.orders.sell")} {option.sell_price ?? "-"}{option.applied_min_quantity ? ` · ${option.applied_min_quantity}+` : ""}
                   </option>
                 );
               })}
@@ -2501,6 +2503,7 @@ export function QuotesPage({
       marginA: effectiveMarginA,
       marginB: effectiveMarginB,
       includeSupplierOptions: options?.includeSupplierOptions,
+      quantity: input.qty,
     });
 
     let cSellPrice: number | null = null;
