@@ -21,7 +21,7 @@ import { fetchCatalogProductDetails } from "../../infrastructure/api/catalogDeta
 import { createCodeReference, fetchCatalogReferenceCoverage, inspectCodeReferenceUsage } from "../../infrastructure/api/codeReferencesApi";
 import { bulkImportCatalogStorage, bulkImportCatalogStream, catalogStorageImportEnabled, type CatalogImportResult, type CatalogImportStageOnlyResult } from "../../infrastructure/api/importApi";
 import { stageBilsteinGroupProducts } from "../../infrastructure/api/bilsteinGroupProductStageApi";
-import { matchesOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
+import { changedCatalogOemValue, matchesOriginalNumberSearch, normalizePartCode } from "../../domain/shared/normalize";
 import type { BrandOption } from "../../types/brand";
 import type {
   CatalogIntegrityFilter,
@@ -876,7 +876,7 @@ export function CatalogPage() {
           ean: draft.ean || null,
           description: draft.description || null,
           description_tr: draft.description_tr || null,
-          oem_no: draft.oem_no || null,
+          oem_no: changedCatalogOemValue(row.oem_no, draft.oem_no),
           vehicle: draft.vehicle || null,
           vehicle_model: draft.vehicle_model || null,
           hs_code: draft.hs_code || null,
@@ -943,7 +943,7 @@ export function CatalogPage() {
         brand: draft.brand,
         description: draft.description || null,
         description_tr: draft.description_tr || null,
-        oem_no: draft.oem_no || null,
+        oem_no: changedCatalogOemValue(row.oem_no, draft.oem_no),
         vehicle: draft.vehicle || null,
         hs_code: draft.hs_code || null,
         origin: draft.origin || null,

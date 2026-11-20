@@ -470,7 +470,7 @@ export async function updateCloudCatalogRow(
     ean?: string | null;
     description: string | null;
     description_tr?: string | null;
-    oem_no: string | null;
+    oem_no?: string | null;
     vehicle: string | null;
     vehicle_model?: string | null;
     hs_code: string | null;
@@ -492,7 +492,7 @@ export async function updateCloudCatalogRow(
       ean: updates.ean?.trim() || null,
       description: updates.description ? normalizeCatalogDescription(updates.description) : null,
       description_tr: updates.description_tr?.trim() || null,
-      oem_no: sanitizeCatalogOemNumbers(updates.oem_no),
+      ...(updates.oem_no === undefined ? {} : { oem_no: sanitizeCatalogOemNumbers(updates.oem_no) }),
       vehicle: updates.vehicle?.trim() || null,
       vehicle_model: updates.vehicle_model?.trim() || null,
       hs_code: updates.hs_code,

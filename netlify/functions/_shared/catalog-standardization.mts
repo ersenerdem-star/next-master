@@ -306,18 +306,7 @@ export function sanitizeCatalogOemNumbers(value: unknown): string {
     .map((part) => part.trim())
     .filter(Boolean);
 
-  const values = new Set<string>();
-  for (const part of parts.length ? parts : [raw]) {
-    const digitGroups = part.match(/\d+/g) || [];
-    if (!digitGroups.length) continue;
-    const longGroups = digitGroups.filter((group) => group.length >= 4);
-    if (longGroups.length >= 2) {
-      for (const group of longGroups) values.add(group);
-      continue;
-    }
-    const compact = digitGroups.join("");
-    if (compact.length >= 4) values.add(compact);
-  }
-
-  return [...values].join(", ");
+  // Keep each OEM identifier intact; punctuation and letters can be part of
+  // the manufacturer's code. Only explicit list separators are rewritten.
+  return [...new Set(parts.filter((part) => /[a-z0-9]/i.test(part) && !/^(?:n\/?a|none|null)$/i.test(part)))].join(", ");
 }

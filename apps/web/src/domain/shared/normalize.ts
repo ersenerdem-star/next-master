@@ -105,20 +105,16 @@ export function sanitizeCatalogOemNumbers(value: string | null | undefined): str
     .map((part) => part.trim())
     .filter(Boolean);
 
-  const values = new Set<string>();
-  for (const part of parts.length ? parts : [raw]) {
-    const digitGroups = part.match(/\d+/g) || [];
-    if (!digitGroups.length) continue;
-    const longGroups = digitGroups.filter((group) => group.length >= 4);
-    if (longGroups.length >= 2) {
-      for (const group of longGroups) values.add(group);
-      continue;
-    }
-    const compact = digitGroups.join("");
-    if (compact.length >= 4) values.add(compact);
-  }
+  // OEM numbers are identifiers, not numbers. Preserve letters, leading
+  // zeroes and punctuation; only the explicit list separators are rewritten.
+  return [...new Set(parts.filter((part) => /[a-z0-9]/i.test(part) && !/^(?:n\/?a|none|null)$/i.test(part)))].join(", ");
+}
 
-  return [...values].join(", ");
+// Catalog rows may display source identifiers when the scalar OEM field is
+// blank. Do not write that display fallback back on an unrelated edit.
+export function changedCatalogOemValue(original: string | null | undefined, draft: string | null | undefined): string | null | undefined {
+  if (String(original || "") === String(draft || "")) return undefined;
+  return sanitizeCatalogOemNumbers(draft) || null;
 }
 
 export function splitOriginalNumberCandidates(value: string): string[] {
