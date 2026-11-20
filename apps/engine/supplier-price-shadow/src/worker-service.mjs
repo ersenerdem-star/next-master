@@ -43,6 +43,7 @@ export const SERVICE_RPC_NAMES = new Set([
   'stage_supplier_price_release_batch','stage_supplier_price_release_batch_v2','heartbeat_supplier_price_release_batch',
   'finalize_supplier_price_release_shadow_batch',
   'complete_supplier_price_release_duckdb_validation',
+  'record_verified_wahler_quantity_source',
 ]);
 
 const RELEASE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
