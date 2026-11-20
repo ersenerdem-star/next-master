@@ -1619,12 +1619,18 @@ async function fetchCurrentSupplierPriceOptions(
   brand: string,
   code: string,
   timeoutMs?: number,
+  quantity?: number,
 ) {
   return callRpc<Array<Record<string, unknown>>>(
     supabaseUrl,
     serviceRoleKey,
-    "cloud_current_supplier_commercial_options_service",
-    { input_organization_id: organizationId, input_code: code, input_brand: brand },
+    quantity === undefined ? "cloud_current_supplier_commercial_options_service" : "cloud_current_supplier_quantity_options_service",
+    {
+      input_organization_id: organizationId,
+      input_code: code,
+      input_brand: brand,
+      ...(quantity === undefined ? {} : { input_quantity: quantity }),
+    },
     timeoutMs,
   );
 }
@@ -2257,6 +2263,8 @@ async function resolvePortalCatalogSupplierData(
       context.organizationId,
       row.brand,
       codeToResolve,
+      undefined,
+      row.qty,
     ),
   ]);
 

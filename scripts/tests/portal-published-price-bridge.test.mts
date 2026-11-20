@@ -19,7 +19,7 @@ test("portal keeps published SKUs separate and prices exact order/search request
       data = [{ id: "brand-1", name: "Clevite" }];
     } else if (url.pathname.endsWith("/supplier_current_price_pointers")) {
       data = [{ release_id: "published-release-1" }];
-    } else if (url.pathname.endsWith("/cloud_current_supplier_commercial_options_service")) {
+    } else if (/\/cloud_current_supplier_(?:commercial|quantity)_options_service$/.test(url.pathname)) {
       const body = JSON.parse(String(init?.body || "{}")) as Record<string, string>;
       assert.equal(body.input_organization_id, "org-1");
       assert.equal(body.input_brand, "Clevite");

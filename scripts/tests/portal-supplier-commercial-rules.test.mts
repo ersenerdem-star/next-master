@@ -32,10 +32,14 @@ async function fixture(check: (state: { terms: Record<string, unknown>; writes: 
     else if (url.pathname.endsWith("/company_profiles")) data = [{ company_name: "Seller" }];
     else if (url.pathname.endsWith("/catalog_products")) data = [{ id: "product-1", product_code: "10131", description: "Pump", brand_id: "commercial-brand", normalized_code: "10131" }];
     else if (url.pathname.endsWith("/warehouse_stock_snapshots")) data = [];
-    else if (url.pathname.endsWith("/cloud_current_supplier_commercial_options_service")) {
+    else if (/\/cloud_current_supplier_(?:commercial|quantity)_options_service$/.test(url.pathname)) {
       const body = JSON.parse(String(init?.body));
-      assert.deepEqual(body, { input_organization_id: invite.organization_id, input_code: "10131", input_brand: "Geba" });
-      data = state.expired ? [] : [{ supplier_id: "supplier-geba", supplier_name: "GEBA", brand_id: "commercial-brand", brand: "Geba", product_code: "10131", description: "Pump", buy_price: 10, price_date: "2026-10-14", notes: "private", ...state.terms }];
+      const quantityAware = url.pathname.endsWith("/cloud_current_supplier_quantity_options_service");
+      if(quantityAware) assert.ok(Number.isInteger(body.input_quantity) && body.input_quantity > 0);
+      const {input_quantity:quantity,...scope}=body;
+      assert.deepEqual(scope, { input_organization_id: invite.organization_id, input_code: "10131", input_brand: "Geba" });
+      const tier = quantityAware && quantity >= 16 && typeof state.terms.tier_price === "number";
+      data = state.expired ? [] : [{ supplier_id: "supplier-geba", supplier_name: "GEBA", brand_id: "commercial-brand", brand: "Geba", product_code: "10131", description: "Pump", buy_price: tier ? state.terms.tier_price : 10, price_date: "2026-10-14", notes: "private", ...state.terms }];
     } else if (url.pathname.includes("supplier_price_options") || url.pathname.endsWith("/supplier_prices")) throw new Error("Legacy price fallback is forbidden");
     return Response.json(data);
   };
@@ -71,6 +75,16 @@ test('first save rejects a changed customer price before creating anything',asyn
   });
 });
 const row = (qty: number) => ({ code: "10131", brand: "Geba", qty });
+
+test('portal drafts price all 17 units from the eligible threshold and keep the requested quantity',async()=>{
+ await fixture(async state=>{
+  state.terms={moq:1,order_multiple:null,stock_qty:null,tier_price:8,valid_to:null};
+  const result=await prepareCustomerPortalOrderLines(source,"test-key",invite,[row(17)]);
+  assert.equal(result.lines[0].qty,17);
+  assert.equal(result.lines[0].sell_price,9.6);
+  assert.equal(state.writes.length,0);
+ });
+});
 
 test("portal preparation exposes accepted MOQ/multiple quantity and keeps supplier stock private", async () => {
   await fixture(async (state) => {
