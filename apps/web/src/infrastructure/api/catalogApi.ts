@@ -62,27 +62,36 @@ async function loadCatalogOemFallbacks(organizationId: string, productIds: strin
   const ids = Array.from(new Set(productIds.map((value) => String(value || "").trim()).filter(Boolean)));
   if (!ids.length) return new Map<string, string>();
 
-  const { data, error } = await supabaseClient
-    .from("catalog_product_identifiers")
-    .select("catalog_product_id,value")
-    .eq("organization_id", organizationId)
-    .eq("identifier_type", "oem")
-    .in("catalog_product_id", ids)
-    .order("created_at", { ascending: true });
-
-  if (error) {
-    // Product browsing/export remains available if an older deployment has
-    // not exposed the identifier table yet; canonical oem_no is still used.
-    return new Map<string, string>();
-  }
-
   const grouped = new Map<string, string[]>();
-  for (const row of (data || []) as CatalogOemIdentifierRow[]) {
-    const value = String(row.value || "").trim();
-    if (!value) continue;
-    const current = grouped.get(row.catalog_product_id) || [];
-    if (!current.includes(value)) current.push(value);
-    grouped.set(row.catalog_product_id, current);
+  // PostgREST caps individual result sets. Page identifiers independently of
+  // product rows so large exports do not silently lose OE values.
+  for (let start = 0; start < ids.length; start += 200) {
+    const batch = ids.slice(start, start + 200);
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await supabaseClient
+        .from("catalog_product_identifiers")
+        .select("catalog_product_id,value")
+        .eq("organization_id", organizationId)
+        .eq("identifier_type", "oem")
+        .in("catalog_product_id", batch)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(offset, offset + 499);
+
+      if (error) {
+        // Product browsing remains available on older deployments.
+        return new Map<string, string>();
+      }
+      const page = (data || []) as CatalogOemIdentifierRow[];
+      for (const row of page) {
+        const value = String(row.value || "").trim();
+        if (!value) continue;
+        const current = grouped.get(row.catalog_product_id) || [];
+        if (!current.includes(value)) current.push(value);
+        grouped.set(row.catalog_product_id, current);
+      }
+      if (page.length < 500) break;
+    }
   }
 
   return new Map(
@@ -100,7 +109,9 @@ async function mergeCatalogOemFallbacks<T extends { product_id: string; oem_no: 
   const fallbacks = await loadCatalogOemFallbacks(organizationId, rows.map((row) => row.product_id));
   return rows.map((row) => ({
     ...row,
-    oem_no: row.oem_no.trim() || fallbacks.get(row.product_id) || "",
+    // A product can have both a canonical OE number and additional verified
+    // source identifiers. Keep each identifier separate for display/search.
+    oem_no: sanitizeCatalogOemNumbers([row.oem_no, fallbacks.get(row.product_id)].filter(Boolean).join(", ")),
   }));
 }
 
@@ -626,6 +637,26 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     throw new Error(`Brand not found: ${brandName}`);
   }
 
+  // Use the same indexed OE-aware search as the catalog screen for filtered
+  // exports; filtering only catalog_products.oem_no misses multi-OE records.
+  if (input.search?.trim()) {
+    const matchingRows: CatalogRow[] = [];
+    const pageSize = 250;
+    for (let page = 1; ; page += 1) {
+      const batch = await fetchCloudCatalog({
+        search: input.search,
+        brandName,
+        marketSegment: input.marketSegment,
+        page,
+        pageSize,
+      });
+      matchingRows.push(...batch);
+      const total = batch[0]?.total_count;
+      if (batch.length < pageSize || (total != null && total >= 0 && matchingRows.length >= total)) break;
+    }
+    return matchingRows;
+  }
+
   const allRows: Array<{
     id: string;
     product_code: string;
@@ -703,7 +734,7 @@ export async function fetchCatalogExportRows(input: { brandName: string; search?
     const oemFallbacks = await loadCatalogOemFallbacks(organizationId, batch.map((row) => row.id));
     allRows.push(...batch.map((row) => ({
       ...row,
-      oem_no: row.oem_no || oemFallbacks.get(row.id) || null,
+      oem_no: sanitizeCatalogOemNumbers([row.oem_no, oemFallbacks.get(row.id)].filter(Boolean).join(", ")) || null,
     })));
     if (batch.length < pageSize) break;
     from += pageSize;

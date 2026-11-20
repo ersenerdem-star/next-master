@@ -12,6 +12,7 @@ const ALLOWED_RPCS = new Set([
   "save_manual_supplier_price",
   "resolve_purchase_order_vendors",
   "sales_order_purchase_analysis_options",
+  "sales_order_exact_oe_candidates",
   "reporting_customer_balance_by_brand_product",
   "reporting_supplier_balance_by_brand_product",
   "reporting_sales_margin_report",
@@ -169,6 +170,7 @@ const OPERATIONS_RPCS = new Set([
 ]);
 
 const CUSTOMER_STAFF_RPCS = new Set([
+  "sales_order_exact_oe_candidates",
   "resolve_purchase_order_vendors",
   "confirm_sales_order_with_purchases_atomic",
   "cloud_quote_supplier_options",
@@ -899,7 +901,7 @@ async function fetchCloudCatalogPageViaRest(
   }
   const strictCodeSearch = shouldStrictlyFilterCodeSearch(search);
   const searchBrandId = strictCodeSearch ? "" : selectedBrandId;
-  const fetchLimit = search && strictCodeSearch ? Math.max(pageSize * 2, 80) : pageSize;
+  const fetchLimit = search && strictCodeSearch ? Math.min(1000, Math.max((page + 1) * pageSize, 80)) : pageSize;
   const shouldConstrainCodeExpansion = strictCodeSearch;
   const select =
     "id,product_code,description,oem_no,vehicle,hs_code,origin,market_segment,weight_kg,image_url,brand_id,normalized_code,normalized_oem,lifecycle_status,lifecycle_note";
@@ -908,7 +910,8 @@ async function fetchCloudCatalogPageViaRest(
     organization_id: `eq.${caller.organizationId}`,
     order: "product_code.asc",
     limit: String(fetchLimit),
-    offset: String(offset),
+    // Search results are merged and paginated after relevance filtering below.
+    offset: String(search ? 0 : offset),
   };
   if (searchBrandId) baseParams.brand_id = `eq.${searchBrandId}`;
   if (marketSegment) baseParams.market_segment = `eq.${marketSegment}`;
@@ -1103,6 +1106,53 @@ async function fetchCloudCatalogPageViaRest(
   }
 
   const filteredByRelevance = filterCatalogRowsBySearchRelevance(rows, search, replacementRowsByKey);
+  // The REST recovery path must also find individual OE identifiers. Query
+  // exact normalized identifiers first, then fetch products within the same
+  // tenant; never combine multiple source identifiers into a searchable code.
+  if (search && normalizedSearch.length >= 3) {
+    const identifiers = await fetchRestRows<{ catalog_product_id: string; value: string }>(
+      supabaseUrl, serviceRoleKey, "catalog_product_identifiers", {
+        select: "catalog_product_id,value",
+        organization_id: `eq.${caller.organizationId}`,
+        identifier_type: "eq.oem",
+        normalized_value: `eq.${normalizedSearch}`,
+        limit: "1000",
+      },
+    );
+    const oemByProduct = new Map<string, string>();
+    for (const identifier of identifiers) {
+      if (/^[0-9a-f-]{36}$/i.test(identifier.catalog_product_id)) {
+        oemByProduct.set(identifier.catalog_product_id, identifier.value);
+      }
+    }
+    const ids = [...oemByProduct.keys()];
+    const exactOemRows: CatalogSourceRow[] = [];
+    for (let start = 0; start < ids.length; start += 200) {
+      const batch = ids.slice(start, start + 200);
+      const matchedProducts = await fetchRestRows<CatalogSourceRow>(supabaseUrl, serviceRoleKey, "catalog_products", {
+        select,
+        organization_id: `eq.${caller.organizationId}`,
+        id: `in.(${batch.join(",")})`,
+        ...(selectedBrandId ? { brand_id: `eq.${selectedBrandId}` } : {}),
+        ...(marketSegment ? { market_segment: `eq.${marketSegment}` } : {}),
+        limit: String(batch.length),
+      });
+      exactOemRows.push(...matchedProducts.map((row) => ({
+        ...row,
+        oem_no: sanitizeCatalogOemNumbers([row.oem_no, oemByProduct.get(String(row.id || ""))].filter(Boolean).join(", ")),
+      })));
+    }
+    const exactSkuRows = filteredByRelevance.filter((row) => String(row.normalized_code || normalizePartCode(String(row.product_code || ""))) === normalizedSearch);
+    const exactSkuIds = new Set(exactSkuRows.map((row) => row.id));
+    filteredByRelevance.unshift(...exactSkuRows, ...sortCatalogRowsByProductCode(exactOemRows.filter((row) => !exactSkuIds.has(row.id))));
+    // Prefer the hydrated exact rows and keep each catalog product only once.
+    const seen = new Set<string>();
+    for (let index = 0; index < filteredByRelevance.length;) {
+      const id = String(filteredByRelevance[index].id || "");
+      if (id && seen.has(id)) filteredByRelevance.splice(index, 1);
+      else { if (id) seen.add(id); index++; }
+    }
+  }
   totalCount = filteredByRelevance.length;
   rows = filteredByRelevance.slice(offset, offset + pageSize);
 
