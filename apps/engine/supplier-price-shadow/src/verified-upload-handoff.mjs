@@ -8,6 +8,7 @@ import {Readable,Transform} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {parseNormalizedSupplierPriceRows} from './streaming-csv.mjs';
 import {parseNormalizedSupplierPriceRowsFromXlsx} from './streaming-xlsx.mjs';
+import {readWahlerQuantitySource} from './prepare-supplier-quantity-release.mjs';
 import {supabaseApiHeaders} from './supabase-headers.mjs';
 
 export const VERIFIED_QUEUE='supplier-price-verified-shadow';
@@ -50,9 +51,18 @@ export async function verifySupplierPriceUpload({sessionId,organizationId,actorI
     }}),createWriteStream(file),{signal:controller.signal});
     if(bytes!==Number(c.source_file_bytes))throw Error('VERIFIED_SIZE_MISMATCH');
     if(hash.digest('hex')!==c.source_file_sha256)throw Error('VERIFIED_CHECKSUM_MISMATCH');
+    const quantity = await readWahlerQuantitySource(path,file,bytes,c.source_date);
+    if (quantity) {
+      const recorded = await rpc('record_verified_wahler_quantity_source', {
+        input_organization_id:organizationId, input_release_id:c.release_id,
+        input_original_sha256:quantity.originalSha256, input_rows:quantity.rows,
+      });
+      if (Number(recorded) !== quantity.rows.length) throw Error('QUANTITY_TIERS_SOURCE_UNCONFIRMED');
+    }
     // Single streaming parse; never materialize a workbook/all rows in RAM.
     parser=/\.xlsx$/i.test(path)?parseNormalizedSupplierPriceRowsFromXlsx(file,{commercialFields,sourceDate:c.source_date})
-      :parseNormalizedSupplierPriceRows(createReadStream(file),{commercialFields,sourceDate:c.source_date});
+      :parseNormalizedSupplierPriceRows(quantity ? Readable.from([quantity.baseCsv]) : createReadStream(file),
+        {commercialFields,sourceDate:c.source_date});
     for await(const row of parser){
       controller.signal.throwIfAborted();rows++;
       if(!safeInt(rows)||row.source_row_number!==rows)throw Error('VERIFIED_ROW_SEQUENCE_INVALID');

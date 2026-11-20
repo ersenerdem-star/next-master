@@ -7,7 +7,7 @@
 // vulnerable to Storage rate limits.
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Readable, Transform } from 'node:stream';
@@ -17,6 +17,7 @@ import { parseNormalizedSupplierPriceRowsFromXlsx } from './streaming-xlsx.mjs';
 import { parseNormalizedSupplierPriceRows } from './streaming-csv.mjs';
 import { applyReleaseSourceDate } from './storage-scan.mjs';
 import { validateCsvWithDuckDB } from './duckdb-validation.mjs';
+import { readWahlerQuantitySource } from './prepare-supplier-quantity-release.mjs';
 import { SUPPLIER_SOURCE_COMPATIBILITY_POLICY, SUPPLIER_SOURCE_COMMERCIAL_POLICY } from './streaming-csv.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -72,39 +73,47 @@ async function prepareSource({origin,key,release,batchSize,commercialFields,fetc
   if(cached)return cached.receipt;
   const downloaded=await downloadSource({origin,key,bucket:'supplier-price-imports',path:release.source_file_path,
     expectedBytes:Number(release.source_file_bytes),expectedSha:release.source_file_sha256,fetchImpl});
-  const validation=await validateCsvWithDuckDB({inputPath:downloaded.file,sourceDate:release.source_date,memoryLimit:'512MB',threads:4,tempDirectory:downloaded.dir,commercialFields});
-  if(Number(validation.totalRows)!==Number(release.total_rows)||validation.publishable!==true){
-    try{
-      const response=await fetchImpl(`${origin}/rest/v1/rpc/record_supplier_price_source_validation_report`,{method:'POST',headers:{Authorization:`Bearer ${key}`,apikey:key,'content-type':'application/json'},redirect:'error',
-        body:JSON.stringify({input_release_id:release.id,input_handoff_id:release.handoff_id,input_source_sha256:release.source_file_sha256,input_report:{...validation.diagnostics,totalRows:validation.totalRows}})});
-      const saved=await response.json().catch(()=>null);if(!response.ok||saved?.status!=='recorded')throw Error('LOCAL_STREAM_VALIDATION_REPORT_UNCONFIRMED');
-    }finally{await rm(downloaded.dir,{recursive:true,force:true});}
-    throw Error('LOCAL_STREAM_SOURCE_VALIDATION_FAILED');
-  }
-  await recordCompatibility({origin,key,release,commercialFields,fetchImpl});
-  const normalized=join(downloaded.dir,'normalized.jsonl');
-  const output=createWriteStream(normalized,{flags:'wx',mode:0o600});
-  const completed=once(output,'close');
-  const index=[]; let cursor=0; let byteOffset=0; let batch=null; let batchNumber=0;
-  const parser=/\.xlsx$/i.test(downloaded.file)
-    ?parseNormalizedSupplierPriceRowsFromXlsx(downloaded.file,{commercialFields,sourceDate:release.source_date})
-    :parseNormalizedSupplierPriceRows(createReadStream(downloaded.file),{commercialFields,sourceDate:release.source_date});
-  for await(const parsed of parser){
-    const row=applyReleaseSourceDate(parsed,release.source_date);
-    const line=Buffer.from(JSON.stringify(row)+'\n');
-    if(!output.write(line))await once(output,'drain');
-    if(!batch)batch={start:cursor+1,startByte:byteOffset};
-    cursor++; byteOffset+=line.length;
-    if(cursor===release.total_rows||cursor-batch.start+1>=batchSize){
-      batchNumber++; index.push({...batch,batchNumber,end:cursor,endByte:byteOffset,rowCount:cursor-batch.start+1}); batch=null;
+  try {
+    const quantity = await readWahlerQuantitySource(release.source_file_path,downloaded.file,Number(release.source_file_bytes),release.source_date);
+    const normalizedSource = quantity ? join(downloaded.dir,'base.csv') : downloaded.file;
+    if (quantity) await writeFile(normalizedSource,quantity.baseCsv,{flags:'wx',mode:0o600});
+    const validation=await validateCsvWithDuckDB({inputPath:normalizedSource,sourceDate:release.source_date,memoryLimit:'512MB',threads:4,tempDirectory:downloaded.dir,commercialFields});
+    if(Number(validation.totalRows)!==Number(release.total_rows)||validation.publishable!==true){
+      try{
+        const response=await fetchImpl(`${origin}/rest/v1/rpc/record_supplier_price_source_validation_report`,{method:'POST',headers:{Authorization:`Bearer ${key}`,apikey:key,'content-type':'application/json'},redirect:'error',
+          body:JSON.stringify({input_release_id:release.id,input_handoff_id:release.handoff_id,input_source_sha256:release.source_file_sha256,input_report:{...validation.diagnostics,totalRows:validation.totalRows}})});
+        const saved=await response.json().catch(()=>null);if(!response.ok||saved?.status!=='recorded')throw Error('LOCAL_STREAM_VALIDATION_REPORT_UNCONFIRMED');
+      }finally{await rm(downloaded.dir,{recursive:true,force:true});}
+      throw Error('LOCAL_STREAM_SOURCE_VALIDATION_FAILED');
     }
+    await recordCompatibility({origin,key,release,commercialFields,fetchImpl});
+    const normalized=join(downloaded.dir,'normalized.jsonl');
+    const output=createWriteStream(normalized,{flags:'wx',mode:0o600});
+    const completed=once(output,'close');
+    const index=[]; let cursor=0; let byteOffset=0; let batch=null; let batchNumber=0;
+    const parser=/\.xlsx$/i.test(downloaded.file)
+      ?parseNormalizedSupplierPriceRowsFromXlsx(downloaded.file,{commercialFields,sourceDate:release.source_date})
+      :parseNormalizedSupplierPriceRows(createReadStream(normalizedSource),{commercialFields,sourceDate:release.source_date});
+    for await(const parsed of parser){
+      const row=applyReleaseSourceDate(parsed,release.source_date);
+      const line=Buffer.from(JSON.stringify(row)+'\n');
+      if(!output.write(line))await once(output,'drain');
+      if(!batch)batch={start:cursor+1,startByte:byteOffset};
+      cursor++; byteOffset+=line.length;
+      if(cursor===release.total_rows||cursor-batch.start+1>=batchSize){
+        batchNumber++; index.push({...batch,batchNumber,end:cursor,endByte:byteOffset,rowCount:cursor-batch.start+1}); batch=null;
+      }
+    }
+    output.end(); await completed;
+    if(cursor!==Number(release.total_rows))throw Error(`LOCAL_STREAM_ROW_COUNT_MISMATCH:${cursor}`);
+    const manifest=JSON.stringify({version:1,release_id:release.id,source_sha256:release.source_file_sha256,total_rows:cursor,batch_size:batchSize,index});
+    const receipt={bucket:'supplier-price-local',key:`${release.id}/manifest.json`,sha256:digest(manifest),validation};
+    states.set(receipt.sha256,{release:{...release},batchSize,commercialFields,dir:downloaded.dir,file:normalized,index,receipt,manifest});
+    return receipt;
+  } catch (error) {
+    await rm(downloaded.dir,{recursive:true,force:true});
+    throw error;
   }
-  output.end(); await completed;
-  if(cursor!==Number(release.total_rows))throw Error(`LOCAL_STREAM_ROW_COUNT_MISMATCH:${cursor}`);
-  const manifest=JSON.stringify({version:1,release_id:release.id,source_sha256:release.source_file_sha256,total_rows:cursor,batch_size:batchSize,index});
-  const receipt={bucket:'supplier-price-local',key:`${release.id}/manifest.json`,sha256:digest(manifest),validation};
-  states.set(receipt.sha256,{release:{...release},batchSize,commercialFields,dir:downloaded.dir,file:normalized,index,receipt,manifest});
-  return receipt;
 }
 
 async function readRows(state,claim){
