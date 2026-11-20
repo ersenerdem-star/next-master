@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import ExcelJS from 'exceljs';
+import {preparePriceExport,assemblePriceExport,exportBinding} from '../../apps/engine/supplier-price-shadow/src/export/partitioned-price-export.mjs';
+import {quantityTierLabels} from '../../shared/wahler-price-tiers.mjs';
 import {
   materializeSealedSnapshotWithDuckDB,
   materializePagedExportWithDuckDB,
@@ -109,5 +112,35 @@ for(const kind of ['sealed','paged'])test(`${kind} export preserves rare commas/
    if(page.done)break;after=page.nextCursor;
   }
   assert.equal(count,values.length);
+ }finally{await rm(directory,{recursive:true,force:true});}
+});
+
+test('Wahler ready workbook carries selling tiers through DuckDB with one base row',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'wahler-ready-workbook-'));
+ const input={tenantId:'org',requesterId:'invite',customerId:'customer',audience:'customer',
+  snapshotId:'wahler-snapshot',pricingVersion:'test',brand:'Wahler',currency:'EUR',expectedRows:1};
+ const binding=exportBinding(input);
+ const tiers=quantityTierLabels([
+  {code:'411471.103D',minimum_quantity:256,unit_buy_price:28.82},
+  {code:'411471.103D',minimum_quantity:16,unit_buy_price:'29.68'},
+ ],10);
+ const row={cursorKey:'000000000001',code:'411471.103D',brand:'Wahler',description:'Thermostat',
+  price:'33.64',priceDate:'2026-11-12',currency:'EUR',discontinued:false,
+  quantityTiers:tiers.get('411471.103D')};
+ try{
+  const result=await materializePagedExportWithDuckDB({
+   outputDir:directory,binding,expectedRows:1,fetchPage:async()=>({binding,rows:[row],done:true,nextCursor:null}),
+  });
+  const fetchPage=createDuckDbPagedExportSource({sortedPath:result.sortedPath,binding,expectedRows:1});
+  await preparePriceExport({input,directory,fetchPage});
+  const artifact=await assemblePriceExport({input,directory});
+  const workbook=new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(join(directory,artifact.file));
+  const sheet=workbook.worksheets[0];
+  assert.equal(sheet.rowCount,2);
+  assert.equal(sheet.getCell('F1').value,'Quantity_Prices_EUR');
+  assert.equal(sheet.getCell('A2').value,'411471.103D');
+  assert.equal(sheet.getCell('C2').value,33.64);
+  assert.equal(sheet.getCell('F2').value,'16+: 32.65 | 256+: 31.70');
  }finally{await rm(directory,{recursive:true,force:true});}
 });

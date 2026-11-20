@@ -1,3 +1,5 @@
+import { isWahlerBrand, type QuantityCurveRow } from "../../../shared/wahler-price-tiers.mjs";
+import { resolveQuantityPrice } from "../../../shared/quantity-pricing.mjs";
 import { buildRestUrl, getJson, sendJson, serviceRoleHeaders } from "./http.mts";
 import { buildPortalSnapshot, fetchPortalSalesOrderDetail } from "./portal-access.mts";
 import { assertFirstSaveMatchesPreview, firstSaveOrderId } from "./portal-first-save-guard.mts";
@@ -134,6 +136,8 @@ type PreparedPortalLine = {
   quantity_adjusted?: boolean;
   quantity_adjustment_note?: string | null;
   applied_min_quantity?: number | null;
+  quantity_priced_at_qty?: number;
+  quantity_suggestion?: {quantity:number; unitPrice:number; total:number; savings:number};
   oem_no: string;
   hs_code: string;
   origin: string;
@@ -2464,11 +2468,20 @@ async function resolvePreparedLine(
   };
 }
 
+export function fetchWahlerQuantityPrices(supabaseUrl: string, serviceRoleKey: string,
+  organizationId: string, brandId: string, codes: string[], supplierId: string | null = null) {
+  return callRpc<QuantityCurveRow[]>(supabaseUrl,serviceRoleKey,"cloud_wahler_quantity_price_curves",{
+    input_organization_id: organizationId,input_brand_id:brandId,
+    input_codes:[...new Set(codes)],input_supplier_id:supplierId,
+  });
+}
+
 export async function preparePortalOrderLines(
   supabaseUrl: string,
   serviceRoleKey: string,
   invite: PortalInviteRow,
   rows: PortalOrderInputRow[],
+  includeSuggestions = false,
 ) {
   const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
   const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
@@ -2502,6 +2515,26 @@ export async function preparePortalOrderLines(
     });
   }
 
+  if (includeSuggestions && context.customerType !== "C") {
+    const candidates = prepared.filter(line => isWahlerBrand(line.brand)
+      && line.sell_price != null && line.sell_price > 0
+      && !line.quantity_adjusted && line.lifecycle_status !== "discontinued");
+    const brandId = brandMap.byName.get("wahler");
+    if (brandId && candidates.length) {
+      const curves = await fetchWahlerQuantityPrices(supabaseUrl,serviceRoleKey,invite.organization_id,
+        brandId,candidates.map(line=>line.resolvedCode));
+      for (const line of candidates) {
+        line.quantity_priced_at_qty = line.qty;
+        const laterTiers = curves.filter(row=>row.code===line.resolvedCode && row.minimum_quantity>line.qty)
+          .map(row=>({minQuantity:row.minimum_quantity,unitPrice:computeSellFromBuy(Number(row.unit_buy_price),context)!}));
+        if (!laterTiers.length) continue;
+        const {suggestion} = resolveQuantityPrice([{minQuantity:line.qty,unitPrice:line.sell_price!},...laterTiers],line.qty);
+        if (suggestion) line.quantity_suggestion = {
+          quantity:suggestion.quantity,unitPrice:suggestion.unitPrice,total:suggestion.total,savings:suggestion.savings,
+        };
+      }
+    }
+  }
   return {
     lines: prepared,
     pricingProfile: {
@@ -2519,7 +2552,7 @@ export async function prepareCustomerPortalOrderLines(
   invite: PortalInviteRow,
   rows: PortalOrderInputRow[],
 ) {
-  const prepared = await preparePortalOrderLines(supabaseUrl, serviceRoleKey, invite, rows);
+  const prepared = await preparePortalOrderLines(supabaseUrl, serviceRoleKey, invite, rows, true);
   return {
     ...prepared,
     lines: prepared.lines.map(toCustomerPortalPreparedLine),

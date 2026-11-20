@@ -1,3 +1,4 @@
+import { isWahlerBrand, quantityTierLabels } from "../../../shared/wahler-price-tiers.mjs";
 import { readSupplierCommercialTerms } from "../../../apps/web/src/domain/shared/supplierCommercialTerms.ts";
 import * as XLSX from "xlsx";
 import { createHash } from "node:crypto";
@@ -9,6 +10,7 @@ import { claimRemainingExportJob, startExportJobHeartbeat, assertAndTouchExportJ
 import { createCsvExportStream, createXlsxExportStream, type StreamingExportWriter } from "./admin-export-stream.mts";
 import {
   resolvePortalPriceListExportContext,
+  fetchWahlerQuantityPrices,
   type PortalInviteRow,
   type PortalPriceListExportContext,
 } from "./portal-orders.mts";
@@ -704,7 +706,7 @@ function buildAdminPriceListWorkbook(rows: AdminPriceListWorkbookRow[], brandNam
   }) as Buffer;
 }
 
-function createAdminPriceListWorksheet() {
+function createAdminPriceListWorksheet(tiers: boolean = false) {
   const worksheet = XLSX.utils.aoa_to_sheet([
     [
       "New_Code",
@@ -720,6 +722,7 @@ function createAdminPriceListWorksheet() {
       "Price_Date",
       "Lifecycle_Status",
       "Lifecycle_Note",
+      ...(tiers ? ["Quantity_Prices_EUR"] : []),
     ],
   ]);
   worksheet["!cols"] = [
@@ -736,6 +739,7 @@ function createAdminPriceListWorksheet() {
     { wch: 14 },
     { wch: 16 },
     { wch: 28 },
+    ...(tiers ? [{wch:48}] : []),
   ];
   return worksheet;
 }
@@ -745,6 +749,7 @@ function appendAdminPriceListWorksheetRows(
   rows: AdminPriceListPageRow[],
   brandName: string,
   priceListType: "A" | "B",
+  tierLabels?: Map<string,string>,
 ) {
   XLSX.utils.sheet_add_aoa(
     worksheet,
@@ -762,6 +767,7 @@ function appendAdminPriceListWorksheetRows(
       row.priceDate || "",
       row.lifecycleStatus || "active",
       row.lifecycleNote || "",
+      ...(tierLabels ? [tierLabels.get(row.productCode) || ""] : []),
     ]),
     { origin: -1 },
   );
@@ -800,14 +806,15 @@ type PortalPriceListPageRow = {
   totalCount: number | null;
 };
 
-function createPortalPriceListWorksheet(currency: string) {
-  const worksheet = XLSX.utils.aoa_to_sheet([["Part_No", "Description", `Price_${currency || "EUR"}`, "Price_Date", "Lifecycle"]]);
+function createPortalPriceListWorksheet(currency: string, tiers: boolean = false) {
+  const worksheet = XLSX.utils.aoa_to_sheet([["Part_No", "Description", `Price_${currency || "EUR"}`, "Price_Date", "Lifecycle", ...(tiers ? [`Quantity_Prices_${currency}`] : [])]]);
   worksheet["!cols"] = [
     { wch: 22 },
     { wch: 44 },
     { wch: 14 },
     { wch: 14 },
     { wch: 24 },
+    ...(tiers ? [{wch:48}] : []),
   ];
   return worksheet;
 }
@@ -816,6 +823,7 @@ function appendPortalPriceListWorksheetRows(
   worksheet: XLSX.WorkSheet,
   rows: PortalPriceListPageRow[],
   brandName: string,
+  tierLabels?: Map<string,string>,
 ) {
   XLSX.utils.sheet_add_aoa(
     worksheet,
@@ -825,6 +833,7 @@ function appendPortalPriceListWorksheetRows(
       row.salesPrice ?? "",
       row.priceDate || "",
       row.lifecycleStatus === "discontinued" ? row.lifecycleNote || "Discontinued" : "Active",
+      ...(tierLabels ? [tierLabels.get(row.productCode) || ""] : []),
     ]),
     { origin: -1 },
   );
@@ -1576,7 +1585,7 @@ export async function startSupplierPriceListExport(
     search,
     freshness,
     format: "csv",
-    schemaVersion: 3,
+    schemaVersion: isWahlerBrand(brand.name) ? 4 : 3,
   };
   const cacheKey = hashObject({ exportType, organizationId: caller.organizationId, scope, dataVersion });
   const reusable = await findReusableExportJob(supabaseUrl, serviceRoleKey, caller.organizationId, exportType, cacheKey);
@@ -1627,7 +1636,7 @@ export async function runAdminPriceListExportJob(
   });
 
   try {
-    const worksheet = createAdminPriceListWorksheet();
+    const worksheet = createAdminPriceListWorksheet(isWahlerBrand(brandName));
     let rowCount = 0;
     let progressTotal: number | null = null;
     let afterNormalizedCode = "";
@@ -1646,7 +1655,9 @@ export async function runAdminPriceListExportJob(
       if (!pageRows.length) break;
 
       const page = advanceExportPage(pageRows, afterNormalizedCode, progressTotal);
-      appendAdminPriceListWorksheetRows(worksheet, pageRows, brandName, priceListType);
+      const tierLabels = isWahlerBrand(brandName) ? quantityTierLabels(await fetchWahlerQuantityPrices(supabaseUrl,
+        serviceRoleKey,job.organization_id,brandId,pageRows.map(row=>row.productCode)),marginPercent*100) : undefined;
+      appendAdminPriceListWorksheetRows(worksheet, pageRows, brandName, priceListType,tierLabels);
       rowCount += pageRows.length;
       progressTotal = page.total;
       afterNormalizedCode = page.cursor;
@@ -1754,7 +1765,7 @@ export async function runPortalPriceListExportJob(
     let workbook: Buffer;
 
     {
-      const worksheet = createPortalPriceListWorksheet(currency);
+      const worksheet = createPortalPriceListWorksheet(currency,isWahlerBrand(brandName));
       let afterNormalizedCode = "";
 
       while (rowCount < PORTAL_PRICE_LIST_EXPORT_MAX_ROWS) {
@@ -1770,7 +1781,9 @@ export async function runPortalPriceListExportJob(
         if (!pageRows.length) break;
 
         const page = advanceExportPage(pageRows, afterNormalizedCode, progressTotal);
-        appendPortalPriceListWorksheetRows(worksheet, pageRows, brandName);
+        const tierLabels = isWahlerBrand(brandName) ? quantityTierLabels(await fetchWahlerQuantityPrices(supabaseUrl,
+          serviceRoleKey,job.organization_id,brandId,pageRows.map(row=>row.productCode)),marginPercent) : undefined;
+        appendPortalPriceListWorksheetRows(worksheet, pageRows, brandName,tierLabels);
         rowCount += pageRows.length;
         progressTotal = page.total;
         afterNormalizedCode = page.cursor;
@@ -1921,8 +1934,9 @@ async function runPagedRemainingAdminExportJob(
     const format = exportType === "catalog_master" || (exportType === "catalog_export" && scope.format === "xlsx") ? "xlsx" : "csv";
     if (!brandId || (exportType === "supplier_price_list" && !supplierId)) throw new Error("Export job is missing its supplier or brand scope.");
     const includeSupplierTerms = exportType === "supplier_price_list" && Number(scope.schemaVersion || 2) >= 3;
+    const includeQuantityTiers = exportType === "supplier_price_list" && isWahlerBrand(brandName) && Number(scope.schemaVersion) >= 4;
     const headers = exportType === "supplier_price_list"
-      ? ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes", ...(includeSupplierTerms ? ["Stock_Qty", "Valid_To"] : [])]
+      ? ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes", ...(includeSupplierTerms ? ["Stock_Qty", "Valid_To"] : []), ...(includeQuantityTiers ? ["Quantity_Buy_Prices_EUR"] : [])]
       : exportType === "catalog_export" ? CATALOG_EXPORT_HEADERS : CATALOG_MASTER_EXPORT_HEADERS;
     writer = format === "csv"
       ? await createCsvExportStream(headers, { bom: true })
@@ -1949,9 +1963,11 @@ async function runPagedRemainingAdminExportJob(
         nextCode = String(last.product_code || "");
         nextId = String(last.price_id || "");
         if (page.some((r) => !r.product_code || !r.price_id || !r.brand)) throw new Error("Invalid supplier export source row.");
+        const tierLabels = includeQuantityTiers ? quantityTierLabels(await fetchWahlerQuantityPrices(supabaseUrl,
+          serviceRoleKey,job.organization_id,brandId,page.map(row=>String(row.product_code)),supplierId)) : null;
         sheetRows = page.map((r) => {
           const terms = includeSupplierTerms ? readSupplierCommercialTerms(r) : null;
-          return [supplierName, normalizeAdminExportProductCode(String(r.product_code), String(r.brand || brandName)), String(r.brand || brandName), r.description || "", r.oem_no || "", r.buy_price ?? "", r.price_date || "", r.moq ?? "", r.order_multiple ?? "", r.lead_time_days ?? "", r.notes || "", ...(terms ? [terms.stock_qty ?? "", terms.valid_to ?? ""] : [])];
+          return [supplierName, normalizeAdminExportProductCode(String(r.product_code), String(r.brand || brandName)), String(r.brand || brandName), r.description || "", r.oem_no || "", r.buy_price ?? "", r.price_date || "", r.moq ?? "", r.order_multiple ?? "", r.lead_time_days ?? "", r.notes || "", ...(terms ? [terms.stock_qty ?? "", terms.valid_to ?? ""] : []), ...(tierLabels ? [tierLabels.get(String(r.product_code)) || ""] : [])];
         });
       } else if (exportType === "catalog_export") {
         const payload = await rpcJson<unknown>(supabaseUrl, serviceRoleKey, "cloud_catalog_export_chunk_v3", {

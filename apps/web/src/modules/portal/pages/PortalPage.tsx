@@ -2245,6 +2245,24 @@ export function PortalPage() {
     }
   }
 
+  async function refreshWahlerBasketPrice(line: PortalPreparedLine, quantity: number) {
+    try {
+      const prepared = await preparePortalOrderLinesApi(credentials,[{
+        code:line.requestedCode || line.resolvedCode,brand:line.brand,qty:quantity,market_segment:line.market_segment,
+      }]);
+      const priced = prepared.lines[0];
+      if (!priced || priced.sell_price == null) throw new Error(ui("A live Wahler price is unavailable."));
+      if (quantity !== line.qty && (!line.quantity_suggestion || priced.qty !== quantity ||
+        priced.sell_price !== line.quantity_suggestion.unitPrice)) {
+        throw new Error(ui("The suggested price has changed. Review the current quantity before retrying."));
+      }
+      setPortalDraftLines(current => current.map(row =>
+        row.lineId === line.lineId && row.qty === line.qty ? {...priced,lineId:row.lineId} : row));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : ui("Wahler price could not be updated."));
+    }
+  }
+
   async function reviewWahlerConfirmationPrices(rows: Array<{code:string;brand:string;qty:number;sell_price:number|null}>) {
     const wahler = rows.filter(row => row.brand.trim().toLowerCase() === "wahler");
     if (!wahler.length) return [];
@@ -4009,7 +4027,8 @@ export function PortalPage() {
                   onDeliveryTermChange={setPortalDeliveryTerm}
                   onPaymentTermsChange={setPortalPaymentTerms}
                   onPackingDetailsChange={setPortalPackingDetails}
-                  onQuantityChange={(lineId, quantity) => setPortalDraftLines((current) => current.map((line) => (line.lineId === lineId ? { ...line, qty: quantity, quantity_adjusted: false, quantity_adjustment_note: null, requested_qty: null, applied_min_quantity: null } : line)))}
+                  onWahlerQuantityPrice={(line,quantity) => void refreshWahlerBasketPrice(line,quantity)}
+                  onQuantityChange={(lineId, quantity) => setPortalDraftLines((current) => current.map((line) => (line.lineId === lineId ? { ...line, qty: quantity, quantity_adjusted: false, quantity_adjustment_note: null, requested_qty: null, applied_min_quantity: null, quantity_suggestion: undefined } : line)))}
                   onSaveBasket={() => void handleSubmitPortalOrder("draft")}
                   onClearBasket={handleClearPortalBuilder}
                   onConfirmBasket={() => void handleSubmitPortalOrder("confirm")}

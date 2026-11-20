@@ -1,5 +1,6 @@
 // C3 LOCAL integration gate only. No import-time launch, provisioning or API.
 // Reuses existing pricing RPCs; application Auth/context bridge is injected.
+import {isWahlerBrand,quantityTierLabels} from '../../../../../shared/wahler-price-tiers.mjs';
 import {randomUUID,createHash} from 'node:crypto';
 import {performance} from 'node:perf_hooks';
 import {exportSpec,exportBinding,customerSafeExportRow} from './partitioned-price-export.mjs';
@@ -196,13 +197,19 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
         timing.replacementLookupMs=performance.now()-replacementStarted;
         const replacements=new Map(replacementRows.map(r=>[r.exact_old_code,r.new_code]));
         if(replacements.size!==replacementRows.length)fail('REPLACEMENT_CONFLICT');
+        const tierLabels = isWahlerBrand(a.brand.name)
+          ? quantityTierLabels((await client.query(
+            'select * from supplier_price_ingestion_internal.wahler_quantity_price_curves($1,$2,$3,null)',
+            [a.job.organization_id,a.brand.id,page.map(row=>row.product_code)],
+          )).rows,a.context.margin * (a.context.unit==='decimal' ? 100 : 1))
+          : null;
         const records=[];let nextAfter=after,nextProcessed=processed;
         for(const row of page){
           if(typeof row.normalized_code!=='string'||!row.normalized_code.trim()||row.normalized_code===nextAfter)fail('SOURCE_CURSOR');
           nextProcessed++;
           const safe=customerSafeExportRow({code:row.product_code,cursorKey:cursor(nextProcessed),brand:row.brand,description:row.description,
             price:row.sales_price,currency:nextSpec.currency,priceDate:row.price_date,discontinued:row.lifecycle_status==='discontinued',
-            replacementCode:replacements.get(row.normalized_code)??''},exportSpec(nextSpec));
+            replacementCode:replacements.get(row.normalized_code)??'',quantityTiers:tierLabels?.get(row.product_code)},exportSpec(nextSpec));
           records.push({ordinal:nextProcessed,source_key:row.normalized_code,payload:safe});nextAfter=row.normalized_code;
         }
         if(Buffer.byteLength(JSON.stringify(records))>8*1024*1024)fail('PAGE_BYTE_BUDGET');

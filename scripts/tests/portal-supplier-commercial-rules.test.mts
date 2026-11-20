@@ -32,7 +32,15 @@ async function fixture(check: (state: { terms: Record<string, unknown>; writes: 
     else if (url.pathname.endsWith("/company_profiles")) data = [{ company_name: "Seller" }];
     else if (url.pathname.endsWith("/catalog_products")) data = [{ id: "product-1", product_code: "10131", description: "Pump", brand_id: "commercial-brand", normalized_code: "10131" }];
     else if (url.pathname.endsWith("/warehouse_stock_snapshots")) data = [];
-    else if (/\/cloud_current_supplier_(?:commercial|quantity)_options_service$/.test(url.pathname)) {
+    else if (url.pathname.endsWith("/cloud_wahler_quantity_price_curves")) {
+      const body = JSON.parse(String(init?.body));
+      assert.deepEqual(body,{input_organization_id:invite.organization_id,input_brand_id:"wahler-brand",
+        input_codes:["411471.103D"],input_supplier_id:null});
+      data = state.terms.testPriceCurves ? [
+        {code:"411471.103D",minimum_quantity:16,unit_buy_price:29.68},
+        {code:"411471.103D",minimum_quantity:256,unit_buy_price:28.82},
+      ] : [];
+    } else if (/\/cloud_current_supplier_(?:commercial|quantity)_options_service$/.test(url.pathname)) {
       const body = JSON.parse(String(init?.body));
       const quantityAware = url.pathname.endsWith("/cloud_current_supplier_quantity_options_service");
       if(quantityAware) assert.ok(Number.isInteger(body.input_quantity) && body.input_quantity > 0);
@@ -87,6 +95,20 @@ test('portal drafts price all 17 units from the eligible threshold and keep the 
   assert.equal(result.lines[0].applied_min_quantity,16);
   assert.equal(state.writes.length,0);
  });
+});
+
+test("Wahler suggests more units only when the customer total falls",async()=>{
+  await fixture(async state=>{
+    state.terms={moq:1,order_multiple:null,stock_qty:null,tier_price:29.68,valid_to:null,testPriceCurves:true};
+    const row={code:"411471.103D",brand:"Wahler",qty:255};
+    const {lines:[line]}=await prepareCustomerPortalOrderLines(source,"test-key",invite,[row]);
+    assert.equal(line.qty,255);
+    assert.deepEqual(line.quantity_suggestion,{quantity:256,unitPrice:34.58,total:8852.48,savings:230.62});
+    assert.equal(Object.hasOwn(line.quantity_suggestion,"unit_buy_price"),false);
+    const {lines:[lower]}=await prepareCustomerPortalOrderLines(source,"test-key",invite,[{...row,qty:17}]);
+    assert.equal(lower.quantity_suggestion,undefined);
+    assert.equal(state.writes.length,0);
+  });
 });
 
 test("Wahler confirmation refuses stale displayed prices and charges the entire line at the live tier",async()=>{

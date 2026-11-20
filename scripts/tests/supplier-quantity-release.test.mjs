@@ -69,6 +69,7 @@ test('verified base matches every product; publish pointer enables tiers and man
     await db.exec(await readFile('supabase/migrations/20261120141700_supplier_release_quantity_tiers.sql','utf8'));
     await db.exec(await readFile('supabase/migrations/20261120141900_quantity_tier_order_readers.sql','utf8'));
     await db.exec(await readFile('supabase/migrations/20261120142000_verified_wahler_quantity_upload.sql','utf8'));
+    await db.exec(await readFile('supabase/migrations/20261120143946_wahler_quantity_price_curves.sql','utf8'));
     const original = process.env.WAHLER_QUANTITY_SOURCE ? await readFile(process.env.WAHLER_QUANTITY_SOURCE) : source;
     const file = await prepareSupplierQuantityRelease(original, date);
     const base = [];
@@ -107,6 +108,13 @@ test('verified base matches every product; publish pointer enables tiers and man
     assert.equal(batch.rows[1].options[0].buy_price,30.58);
     const sale = await db.query("select * from public.cloud_quote_supplier_quantity_options('411471.103D','Wahler','A',0.1,0.1,17)");
     assert.equal(Number(sale.rows[0].sell_price),32.65);
+    const curve = () => db.query("select * from public.cloud_wahler_quantity_price_curves($1,$2,$3,$4)",[
+      org,brand,['411471.103D','411471103D'],supplier,
+    ]);
+    assert.deepEqual((await curve()).rows.map(row=>[row.code,row.minimum_quantity,Number(row.unit_buy_price)]),[
+      ['411471.103D',16,29.68],['411471.103D',256,28.82],
+    ]);
+
     await db.query("insert into supplier_price_releases values($1,$2,$3,$4,$5,true,'replace','staged',$6,$6,0,0,0,null,'a/wahler-quantity-tiers-fixture.csv',$7)",
       [marked,org,supplier,brand,file.originalSha256,base.length,original.length]);
     const validate = () => db.query("update supplier_price_releases set status='validated' where id=$1",[marked]);
@@ -162,6 +170,7 @@ test('verified base matches every product; publish pointer enables tiers and man
     assert.equal((await db.query("select count(*)::int n from supplier_price_ingestion_internal.pending_wahler_quantity_sources")).rows[0].n,0);
     await db.query("insert into supplier_manual_price_internal.entries values ($1,$2,$3,true,$4,'411471.103D')",[org,supplier,brand,date]);
     assert.equal(Number((await quote(17)).buy_price),30.58);
+    assert.deepEqual((await curve()).rows,[]);
     await db.exec('delete from supplier_manual_price_internal.entries');
     await db.query('update supplier_current_price_pointers set release_id=$1',[other]);
     assert.equal(Number((await quote(17)).buy_price),30.58);

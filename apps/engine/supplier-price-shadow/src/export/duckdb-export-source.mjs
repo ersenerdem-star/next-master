@@ -9,11 +9,11 @@ import {parseCsvRows} from '../streaming-csv.mjs';
 const q=value=>`'${String(value).replaceAll("'","''")}'`;
 const csv=value=>{const text=value==null?'':String(value);return /[",\n\r]/.test(text)?`"${text.replaceAll('"','""')}"`:text};
 const safePageSize=value=>Number.isInteger(value)&&value>0&&value<=5000;
-// This CSV is written by us with a fixed nine-column RFC 4180 dialect.
+// This CSV is written by us with a fixed-column RFC 4180 dialect.
 // Sniffing only the first 20,480 rows can incorrectly infer quote='' and
 // reject a legitimate comma/quote/newline appearing later in a large list.
 // Keep strict parsing and exact rows; never skip or pad problematic records.
-const exportCsvSource=path=>`read_csv(${q(path)},auto_detect=false,header=true,delim=',',quote='"',escape='"',ignore_errors=false,strict_mode=true,columns={'cursor_key':'VARCHAR','code':'VARCHAR','description':'VARCHAR','price':'VARCHAR','currency':'VARCHAR','price_date':'VARCHAR','discontinued':'VARCHAR','replacement_code':'VARCHAR','brand':'VARCHAR'})`;
+const exportCsvSource=path=>`read_csv(${q(path)},auto_detect=false,header=true,delim=',',quote='"',escape='"',ignore_errors=false,strict_mode=true,columns={'cursor_key':'VARCHAR','code':'VARCHAR','description':'VARCHAR','price':'VARCHAR','currency':'VARCHAR','price_date':'VARCHAR','discontinued':'VARCHAR','replacement_code':'VARCHAR','brand':'VARCHAR','quantity_tiers':'VARCHAR'})`;
 
 // Materializes authorized, already-priced export pages to a private CSV and
 // lets DuckDB perform the bounded-memory ordering/projection before the normal
@@ -24,7 +24,7 @@ export async function materializePagedExportWithDuckDB({fetchPage,binding,expect
  const inputPath=join(tempDirectory,'authorized-export-input.csv');
  const sortedPath=join(outputDir,'duckdb-export-sorted.csv');
  const stream=createWriteStream(inputPath,{flags:'wx',mode:0o600});
- stream.write('cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand\n');
+ stream.write('cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand,quantity_tiers\n');
  let after=null,processed=0,pageCount=0;
  try{
   while(processed<expectedRows){
@@ -32,7 +32,7 @@ export async function materializePagedExportWithDuckDB({fetchPage,binding,expect
    if(!page||page.binding!==binding||!Array.isArray(page.rows)||!page.rows.length||page.rows.length>pageSize||page.done!==(processed+page.rows.length===expectedRows)||page.nextCursor!==(page.done?null:String(page.rows.at(-1).cursorKey??page.rows.at(-1).code)))throw Error('DUCKDB_EXPORT_PAGE_INVALID');
    for(const row of page.rows){
     if(typeof row.code!=='string'||typeof row.brand!=='string'||typeof row.currency!=='string'||typeof row.price!=='string'||typeof row.priceDate!=='string'||typeof row.discontinued!=='boolean')throw Error('DUCKDB_EXPORT_ROW_INVALID');
-    const line=[row.cursorKey??'',row.code,row.description??'',row.price,row.currency,row.priceDate,row.discontinued?'true':'false',row.replacementCode??'',row.brand].map(csv).join(',')+'\n';
+    const line=[row.cursorKey??'',row.code,row.description??'',row.price,row.currency,row.priceDate,row.discontinued?'true':'false',row.replacementCode??'',row.brand,row.quantityTiers??''].map(csv).join(',')+'\n';
     if(!stream.write(line))await once(stream,'drain');
    }
    processed+=page.rows.length; pageCount++; after=page.nextCursor;
@@ -41,7 +41,7 @@ export async function materializePagedExportWithDuckDB({fetchPage,binding,expect
   const instance=await DuckDBInstance.create(':memory:',{memory_limit:'512MB',threads:'4',temp_directory:tempDirectory});
   const connection=await instance.connect();
   try{
-   await connection.run(`copy (select cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand from ${exportCsvSource(inputPath)} order by case when nullif(cursor_key,'') is null then 1 else 0 end,cursor_key,code) to ${q(sortedPath)} (header,delimiter ',')`);
+   await connection.run(`copy (select cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand,quantity_tiers from ${exportCsvSource(inputPath)} order by case when nullif(cursor_key,'') is null then 1 else 0 end,cursor_key,code) to ${q(sortedPath)} (header,delimiter ',')`);
   }finally{connection.disconnectSync();}
   return {engine:'duckdb',binding,expectedRows,processedRows:processed,pageCount,inputPath,sortedPath};
  }catch(error){stream.destroy();throw error;}
@@ -56,7 +56,7 @@ export async function materializeSealedSnapshotWithDuckDB({pool,snapshotId,bindi
  const inputPath=join(tempDirectory,'authorized-snapshot-input.csv');
  const sortedPath=join(outputDir,'duckdb-export-sorted.csv');
  const stream=createWriteStream(inputPath,{flags:'wx',mode:0o600});
- stream.write('cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand\n');
+ stream.write('cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand,quantity_tiers\n');
  const client=await pool.connect(); let processed=0,lastOrdinal=0;
  try{
   while(processed<expectedRows){
@@ -66,7 +66,7 @@ export async function materializeSealedSnapshotWithDuckDB({pool,snapshotId,bindi
    for(const row of result.rows){
     const ordinal=Number(row.ordinal),payload=row.payload;
     if(ordinal!==lastOrdinal+1||payload?.cursorKey!==String(ordinal).padStart(12,'0')||typeof payload.code!=='string'||typeof payload.brand!=='string'||typeof payload.currency!=='string'||typeof payload.price!=='string'||typeof payload.priceDate!=='string'||typeof payload.discontinued!=='boolean')throw Error('DUCKDB_SNAPSHOT_ROW_INVALID');
-    const line=[payload.cursorKey,payload.code,payload.description??'',payload.price,payload.currency,payload.priceDate,payload.discontinued?'true':'false',payload.replacementCode??'',payload.brand].map(csv).join(',')+'\n';
+    const line=[payload.cursorKey,payload.code,payload.description??'',payload.price,payload.currency,payload.priceDate,payload.discontinued?'true':'false',payload.replacementCode??'',payload.brand,payload.quantityTiers??''].map(csv).join(',')+'\n';
     if(!stream.write(line))await once(stream,'drain');
     lastOrdinal=ordinal; processed++;
    }
@@ -74,7 +74,7 @@ export async function materializeSealedSnapshotWithDuckDB({pool,snapshotId,bindi
   stream.end(); await once(stream,'close');
   const instance=await DuckDBInstance.create(':memory:',{memory_limit:'512MB',threads:'4',temp_directory:tempDirectory});
   const connection=await instance.connect();
-  try{await connection.run(`copy (select cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand from ${exportCsvSource(inputPath)} order by cursor_key,code) to ${q(sortedPath)} (header,delimiter ',')`);}
+  try{await connection.run(`copy (select cursor_key,code,description,price,currency,price_date,discontinued,replacement_code,brand,quantity_tiers from ${exportCsvSource(inputPath)} order by cursor_key,code) to ${q(sortedPath)} (header,delimiter ',')`);}
   finally{connection.disconnectSync();}
   if(assertActive)await assertActive();
   return {engine:'duckdb',binding,expectedRows,processedRows:processed,pageCount:Math.ceil(processed/batchSize),inputPath,sortedPath};
@@ -100,7 +100,7 @@ export function createDuckDbPagedExportSource({sortedPath,binding,expectedRows,p
    const next=await source.next();
    if(next.done){done=true;break;}
    const raw=next.value?.row;
-   rows.push({cursorKey:String(raw.cursor_key||'')||undefined,code:raw.product_code,description:raw.description,price:String(raw.buy_price),currency:raw.currency,priceDate:raw.valid_from,discontinued:String(raw.discontinued)==='true',replacementCode:raw.replacement_code||'',brand:raw.brand});
+   rows.push({cursorKey:String(raw.cursor_key||'')||undefined,code:raw.product_code,description:raw.description,price:String(raw.buy_price),currency:raw.currency,priceDate:raw.valid_from,discontinued:String(raw.discontinued)==='true',replacementCode:raw.replacement_code||'',brand:raw.brand,...(raw.quantity_tiers ? {quantityTiers:raw.quantity_tiers} : {})});
    consumed++;
   }
   if(!rows.length||consumed>expectedRows)throw Error('DUCKDB_EXPORT_SOURCE_COUNT_INVALID');

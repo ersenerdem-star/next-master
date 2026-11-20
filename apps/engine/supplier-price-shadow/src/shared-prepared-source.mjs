@@ -8,6 +8,7 @@ import {join} from 'node:path';
 import {Readable,Transform} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {setTimeout as delay} from 'node:timers/promises';
+import {readWahlerQuantitySource} from './prepare-supplier-quantity-release.mjs';
 import {prepareSupplierPricePartitions,scanPreparedSupplierPriceBatch} from './prepared-partitions.mjs';
 import {supabaseApiHeaders} from './supabase-headers.mjs';
 import {validateCsvWithDuckDB,requirePublishableSupplierPriceValidation} from './duckdb-validation.mjs';
@@ -190,7 +191,10 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
      hash.update(chunk);done(null,chunk);
     }}),createWriteStream(file,{flags:'wx',mode:0o600}));
     if(bytes!==context.source_bytes||hash.digest('hex')!==context.source_sha256)throw Error('SHARED_PREPARED_SOURCE_MISMATCH');
-    const validation=await validateCsvWithDuckDB({inputPath:file,sourceDate:context.source_date,
+    const quantity = await readWahlerQuantitySource(context.source_path,file,bytes,context.source_date);
+    const stagedFile = quantity ? join(dir,'base.csv') : file;
+    if (quantity) await writeFile(stagedFile,quantity.baseCsv,{flags:'wx',mode:0o600});
+    const validation=await validateCsvWithDuckDB({inputPath:stagedFile,sourceDate:context.source_date,
       memoryLimit:'512MB',threads:4,tempDirectory:dir,commercialFields});
     requirePublishableSupplierPriceValidation(validation,context.total_rows);
     // This runs only after downloading/checksumming and parsing ALL original
@@ -198,8 +202,8 @@ export function createSharedPreparedSource({supabaseUrl,serviceRoleKey,fetchImpl
     // Retry uses the same immutable receipt identity; unknown outcomes stop.
     await recordCompatibility(context);
     if(ready)return {...ready.receipt,validation};
-    const prepared=await prepareSupplierPricePartitions({inputPath:file,outputDir:join(dir,'parts'),batchSize,
-     sourceDate:context.source_date,expectedRows:context.total_rows,expectedChecksum:context.source_sha256,
+    const prepared=await prepareSupplierPricePartitions({inputPath:stagedFile,outputDir:join(dir,'parts'),batchSize,
+     sourceDate:context.source_date,expectedRows:context.total_rows,expectedChecksum:quantity?.baseSha256 ?? context.source_sha256,
      releaseId:context.release_id,sourcePath:context.source_path,commercialFields});
     const {input_path:_local,...m}=prepared.manifest;
     const manifest={...m,...context};validateSharedPreparedManifest(manifest,release,batchSize,{commercialFields});

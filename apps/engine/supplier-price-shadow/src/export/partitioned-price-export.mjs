@@ -1,5 +1,6 @@
 // C1/C2a artifact core, NOT an authenticated production endpoint.
 // DBOS will own orchestration; these functions own immutable data artifacts only.
+import {isWahlerBrand} from '../../../../../shared/wahler-price-tiers.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, readFile, open, link, unlink, lstat } from 'node:fs/promises';
@@ -55,7 +56,8 @@ function safeRow(row, spec) {
     ||Number(row.cursorKey)<1||Number(row.cursorKey)>spec.expectedRows))fail('ROW_CURSOR_INVALID');
   return { code, ...(row.cursorKey==null?{}:{cursorKey:row.cursorKey}),brand: spec.brand, description: text(row.description ?? '',32767,true),
     price: row.price, currency: spec.currency, priceDate: date,
-    discontinued: row.discontinued, replacementCode: text(row.replacementCode ?? '',160,true) };
+    discontinued: row.discontinued, replacementCode: text(row.replacementCode ?? '',160,true),
+    ...(isWahlerBrand(spec.brand) && row.quantityTiers ? {quantityTiers:text(row.quantityTiers,32767)} : {}) };
 }
 export {safeRow as customerSafeExportRow};
 async function fileHash(path) {
@@ -180,11 +182,15 @@ export async function assemblePriceExport({ input,directory,partsStore,progress 
   const writer = new DeterministicWorkbookWriter({ stream:output,useStyles:true,useSharedStrings:false,zip:{zlib:{level:6}} });
   let writerError;
   output.on('error',error => { writerError = error; });
+  const includesTiers = isWahlerBrand(spec.brand);
+  const lastColumn = includesTiers ? 'F' : 'E';
   let sheet, sheetRows = 0, sheets = 0, processed = 0, cursor = null;
   function newSheet() {
     sheet = writer.addWorksheet(`Price List ${++sheets}`,{views:[{state:'frozen',ySplit:1}]});
     sheet.columns = [{width:24,style:{numFmt:'@'}},{width:58},{width:18,style:{numFmt:'0.00####'}},{width:16,style:{numFmt:'@'}},{width:34}];
-    const header = sheet.addRow(['Part_No','Description',`Price_${spec.currency}`,'Price_Date','Lifecycle']);
+    if (includesTiers) sheet.getColumn(6).width = 48;
+    const header = sheet.addRow(['Part_No','Description',`Price_${spec.currency}`,'Price_Date','Lifecycle',
+      ...(includesTiers ? [`Quantity_Prices_${spec.currency}`] : [])]);
     header.font = {name:'Arial',size:11,bold:true,color:{argb:'FFFFFFFF'}};
     header.fill = {type:'pattern',pattern:'solid',fgColor:{argb:'FF142238'}}; header.commit(); sheetRows = 0;
   }
@@ -196,9 +202,10 @@ export async function assemblePriceExport({ input,directory,partsStore,progress 
       const entry = { index:i+1,rows:part.rows.length,sha256:record.sha256,endKey:part.endKey };
       if (JSON.stringify(entry) !== JSON.stringify(manifest.parts[i])) fail('MANIFEST_PART_MISMATCH');
       for (const row of part.rows) {
-        if (sheetRows === spec.sheetRows) { sheet.autoFilter=`A1:E${sheetRows+1}`; sheet.commit(); newSheet(); }
+        if (sheetRows === spec.sheetRows) { sheet.autoFilter=`A1:${lastColumn}${sheetRows+1}`; sheet.commit(); newSheet(); }
         sheet.addRow([row.code,row.description,Number(row.price),row.priceDate,
-          row.discontinued ? `Discontinued${row.replacementCode ? '; replacement: '+row.replacementCode : ''}` : 'Active']).commit();
+          row.discontinued ? `Discontinued${row.replacementCode ? '; replacement: '+row.replacementCode : ''}` : 'Active',
+          ...(includesTiers ? [row.quantityTiers ?? ''] : [])]).commit();
         sheetRows++; processed++;
         if (processed % 100 === 0) { await yieldEventLoop(); if (writerError) throw writerError; }
       }
@@ -207,7 +214,7 @@ export async function assemblePriceExport({ input,directory,partsStore,progress 
       if (afterPartition) await afterPartition({index:i+1,processed});
     }
     if (processed !== spec.expectedRows) fail('FINAL_COUNT_MISMATCH');
-    sheet.autoFilter=`A1:E${sheetRows+1}`; sheet.commit(); await writer.commit();
+    sheet.autoFilter=`A1:${lastColumn}${sheetRows+1}`; sheet.commit(); await writer.commit();
     if (writerError) throw writerError;
     const completedFile = await open(path,'r');
     try { await completedFile.sync(); } finally { await completedFile.close(); }
